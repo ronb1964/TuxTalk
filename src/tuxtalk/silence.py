@@ -34,6 +34,46 @@ _TAIL_KEEP_S = 0.3
 _NOISE_RISE_PER_S = 1.5
 
 
+def block_rms(block, sample_rate: int):
+    """(loudness as int16 RMS, duration in seconds) of one block of int16 samples."""
+    samples = np.frombuffer(block, dtype=np.int16).astype(np.float64)
+    if samples.size == 0:
+        return 0.0, 0.0
+    return float(np.sqrt(np.mean(samples ** 2))), samples.size / sample_rate
+
+
+class NoiseFloor:
+    """The room's background noise, learned as blocks arrive, and the loudness
+    that counts as speech over it. Shared by auto-stop (SilenceDetector) and
+    chunked dictation (chunking.PauseDetector), so both hear the room alike."""
+
+    def __init__(self):
+        self.level = None
+
+    def threshold(self) -> float:
+        """The loudness (int16 RMS) that counts as speech in this room."""
+        return max(_MIN_SPEECH_RMS, (self.level or 0.0) * _SPEECH_OVER_NOISE)
+
+    def update(self, rms: float, duration: float) -> bool:
+        """Learn from one block; True if the block is speech.
+
+        The floor is the quietest level heard so far, allowed to rise slowly
+        while it is quiet. Speech has short gaps between syllables where only
+        the room is heard, so even when someone starts talking the instant
+        recording begins, the floor settles on the room within a word or two.
+        """
+        if self.level is None:
+            # The first block may already be speech (talking the instant the
+            # key goes down), so the first guess is capped at a quiet level;
+            # in a noisier room it rises to the real noise within a second.
+            self.level = min(rms, _MIN_SPEECH_RMS)
+        elif rms < self.level:
+            self.level = rms
+        elif rms < self.threshold():
+            self.level = min(rms, self.level * (_NOISE_RISE_PER_S ** duration))
+        return rms >= self.threshold()
+
+
 class SilenceDetector:
     """Feed it audio blocks as they arrive; it says when the speaker is done."""
 
@@ -47,12 +87,20 @@ class SilenceDetector:
     def __init__(self, silence_seconds: float, sample_rate: int):
         self.silence_seconds = float(silence_seconds)
         self.sample_rate = int(sample_rate)
-        self.noise_floor = None
+        self._floor = NoiseFloor()
         self.speech_time = 0.0
         self.silence_time = 0.0
         self.elapsed = 0.0
         self.fired = False
         self.nothing_said = False
+
+    @property
+    def noise_floor(self):
+        return self._floor.level
+
+    @noise_floor.setter
+    def noise_floor(self, value):
+        self._floor.level = value
 
     @property
     def armed(self) -> bool:
@@ -61,16 +109,14 @@ class SilenceDetector:
 
     def _threshold(self) -> float:
         """The loudness (int16 RMS) that counts as speech in this room."""
-        return max(_MIN_SPEECH_RMS, (self.noise_floor or 0.0) * _SPEECH_OVER_NOISE)
+        return self._floor.threshold()
 
     def feed(self, block) -> bool:
         """Add one block of int16 samples. True exactly once: when the speaker
         has been silent for silence_seconds after having talked."""
-        samples = np.frombuffer(block, dtype=np.int16).astype(np.float64)
-        if samples.size == 0:
+        rms, duration = block_rms(block, self.sample_rate)
+        if duration == 0:
             return False
-        duration = samples.size / self.sample_rate
-        rms = float(np.sqrt(np.mean(samples ** 2)))
         self.elapsed += duration
 
         if self.fired:
@@ -79,22 +125,7 @@ class SilenceDetector:
             self.silence_time = self.silence_time + duration if rms < self._threshold() else 0.0
             return False
 
-        # Learn the background noise: the quietest level heard so far, allowed
-        # to rise slowly while it is quiet. Speech has short gaps between
-        # syllables where only the room is heard, so even when someone starts
-        # talking the instant recording begins, the floor settles on the room
-        # within the first word or two.
-        if self.noise_floor is None:
-            # The first block may already be speech (talking the instant the
-            # key goes down), so the first guess is capped at a quiet level;
-            # in a noisier room it rises to the real noise within a second.
-            self.noise_floor = min(rms, _MIN_SPEECH_RMS)
-        elif rms < self.noise_floor:
-            self.noise_floor = rms
-        elif rms < self._threshold():
-            self.noise_floor = min(rms, self.noise_floor * (_NOISE_RISE_PER_S ** duration))
-
-        if rms >= self._threshold():
+        if self._floor.update(rms, duration):
             self.speech_time += duration
             self.silence_time = 0.0
             return False

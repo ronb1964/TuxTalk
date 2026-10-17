@@ -51,13 +51,20 @@ def get_entries():
         return []
 
 
-def add_entry(text):
-    """Remember *text* as the newest dictation. Never raises: history is a
-    convenience and must not get in the way of the dictation itself."""
-    text = (text or "").replace(_LINE_BREAK_MARKER, "\n").strip()
+def _clean(text):
+    return (text or "").replace(_LINE_BREAK_MARKER, "\n").strip()
+
+
+def add_entry(text, replaces=None):
+    """Remember *text* as the newest dictation. *replaces* is an entry it grew
+    out of (Type at pause: the same recording, a phrase shorter), which goes.
+    Never raises: history is a convenience and must not get in the way of
+    the dictation itself."""
+    text = _clean(text)
     if not text:
         return
-    entries = [text] + [e for e in get_entries() if e != text]
+    old = _clean(replaces)
+    entries = [text] + [e for e in get_entries() if e != text and e != old]
     try:
         path = _history_path()
         # Write to a temp file and rename, so a reader never sees half a file.

@@ -441,6 +441,27 @@ Labs is where new features are tried out before they're finished. They are
 won't always get it right. Turn them on in <b>Preferences → Advanced → TuxTalk Labs</b>.
 Your feedback decides what gets finished: <a href="{FEEDBACK_URL}">TuxTalk Discussions</a>.
 
+<span size="large"><b>Type at Pause</b></span>
+Each phrase is typed as soon as you pause, while you go on talking, instead of
+all of it when you stop. Nothing that was typed changes afterwards.
+
+<b>How it works</b>
+  • A pause of about a second ends a phrase, and it's typed right away.
+  • Whether that pause ends a sentence is decided once your next words are heard:
+    then a period goes in, or a comma, or the sentence just carries on.
+  • "delete last sentence" and the other commands work on the phrase before them.
+
+<b>Fine-tuning</b>
+  • <b>Pause length</b>: how long a silence ends a phrase.
+  • <b>Noise filter</b>: raise it in a noisy room, lower it for a soft voice or a quiet
+    microphone.
+  • <b>Punctuation from context</b>: off types each phrase as it was heard, which is
+    quicker on a slow graphics chip but puts a period at more pauses.
+  • <b>Test</b>: talk and stop now and then, and nothing is typed. The bar moves with
+    your voice, which should go past the green line, and it flashes green wherever a
+    phrase would be typed. If it never flashes when you pause, raise the noise filter.
+    If it flashes while you're still talking, lower it.
+
 <span size="large"><b>Voice Editing</b></span>
 Change text by saying how you want it changed.
 

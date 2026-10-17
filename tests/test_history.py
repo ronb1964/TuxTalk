@@ -40,6 +40,14 @@ def test_repeating_a_dictation_moves_it_to_the_top_instead_of_duplicating():
     assert history.get_entries() == ["one", "two"]
 
 
+def test_an_entry_can_replace_the_one_it_grew_out_of():
+    """Type at pause: a recording's entry grows phrase by phrase."""
+    history.add_entry("earlier")
+    history.add_entry("We meet")
+    history.add_entry("We meet. The end.", replaces="We meet ")
+    assert history.get_entries() == ["We meet. The end.", "earlier"]
+
+
 def test_spoken_line_breaks_are_stored_as_real_newlines():
     history.add_entry("First line.\xa7SHIFT_ENTER\xa7Second line. ")
     assert history.get_entries() == ["First line.\nSecond line."]

@@ -669,6 +669,22 @@ def _is_bare_cue(sentence: str) -> bool:
     return bool(m) and not sentence[m.end():].strip()
 
 
+def is_bare_cue(sentence: str) -> bool:
+    """True if *sentence* is only a correction phrase ("No wait."), so the
+    corrected value is still to come."""
+    return _is_bare_cue(sentence.strip())
+
+
+def opens_with_correction(before: str, sentence: str) -> bool:
+    """True if *sentence* opens by correcting *before*: "No wait, four",
+    "I mean Tuesday", or a bare "Actually" that restates it. Type at pause asks
+    this of each phrase, so a correction said after a pause still reaches the
+    phrase it corrects."""
+    sentence = sentence.strip()
+    return bool(_RE_OPENS_WITH_CORRECTION.match(sentence)) or _restates_with_actually(
+        before.strip(), sentence)
+
+
 def _join_split_correction(before: str, correction: str) -> str:
     """Join a correction that a period split off back onto its sentence, for
     the AI only: "Meet me at three." + "No wait. Four o'clock." gives
