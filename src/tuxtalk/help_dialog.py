@@ -23,6 +23,8 @@ from gi.repository import GLib, Gtk
 # points to the same page.
 FEEDBACK_URL = "https://github.com/ronb1964/TuxTalk/discussions"
 ISSUES_URL = "https://github.com/ronb1964/TuxTalk/issues"
+# A link in Help that opens Report a Problem instead of a web page.
+REPORT_LINK = "tuxtalk:report"
 
 
 def _install_facts():
@@ -167,6 +169,13 @@ def show_help_dialog(tab=None):
     notebook.set_scrollable(True)
     content.pack_start(notebook, True, True, 0)
 
+    def _on_link(_label, uri):
+        if uri != REPORT_LINK:
+            return False        # a web page: GTK opens it
+        from .problem_report_window import ReportWindow
+        ReportWindow(dialog)
+        return True
+
     # Helper function to create a tab with scrolled content
     def create_tab(title, markup_text):
         scrolled = Gtk.ScrolledWindow()
@@ -178,6 +187,7 @@ def show_help_dialog(tab=None):
 
         label = Gtk.Label()
         label.set_markup(markup_text)
+        label.connect("activate-link", _on_link)
         label.set_line_wrap(True)
         label.set_xalign(0)
         label.set_valign(Gtk.Align.START)
@@ -616,9 +626,11 @@ Saying only <b>press enter</b> there still presses Enter, to log in after you ty
     A terminal asking for one (sudo) doesn't tell it: there, don't dictate.
 
 <b>Bug reports and feedback</b>
+  • <b>Something not working?</b> <a href="{REPORT_LINK}">Report a problem</a> gathers what helps
+    find it: your system, your settings and the end of TuxTalk's log. You see all of
+    it first, then copy it, save it, or open a GitHub issue with it.
   • <b>Report bugs:</b> <a href="{ISSUES_URL}">TuxTalk issues on GitHub</a>
   • <b>Questions, ideas, or just how it's working for you:</b> <a href="{FEEDBACK_URL}">TuxTalk Discussions</a>
-  • <b>Include:</b> your Linux distro, desktop environment, and TuxTalk version
   • <b>Log file:</b> {f["log_path"]}''')
 
     # Plain string, not an f-string: the brace commands below contain { and }.

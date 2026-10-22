@@ -1,0 +1,173 @@
+"""Report a Problem: one place that gathers what helps find a problem, shown
+in full before the person shares it anywhere. TuxTalk sends nothing itself.
+"""
+import time
+import urllib.parse
+
+import pytest
+
+gi = pytest.importorskip("gi")
+gi.require_version("Gtk", "3.0")
+from gi.repository import GLib, Gtk  # noqa: E402
+
+from tuxtalk import help_dialog, problem_report, problem_report_window  # noqa: E402
+from tuxtalk.config import Settings  # noqa: E402
+
+HOME = "/home/archer"
+
+
+@pytest.fixture
+def report(monkeypatch, tmp_path):
+    """build() on a made-up computer: settings, a log, and facts that answer
+    without asking the real system."""
+    from tuxtalk import config, desktop_detect, keyboard_layout, recommend, secure_input
+    from tuxtalk import uinput_helper, update_checker
+    monkeypatch.setattr(config, "load_config", lambda: Settings(model="parakeet-v3"))
+    monkeypatch.setenv("TUXTALK_LOG_DIR", str(tmp_path))
+    monkeypatch.setenv("XDG_SESSION_TYPE", "x11")
+    monkeypatch.setenv("XDG_CURRENT_DESKTOP", "LXQt")
+    monkeypatch.setattr(problem_report, "os_name", lambda: "Fedora Linux 44 (LXQt)")
+    monkeypatch.setattr(desktop_detect, "get_desktop_environment", lambda: "unknown")
+    monkeypatch.setattr(keyboard_layout, "active_layout", lambda: ("us", ""))
+    monkeypatch.setattr(recommend, "detect_hardware", lambda cfg: recommend.Hardware("Intel graphics"))
+    monkeypatch.setattr(secure_input, "is_installed", lambda: True)
+    monkeypatch.setattr(secure_input, "running_version", lambda: "1.4")
+    monkeypatch.setattr(uinput_helper, "typing_blocked_reason", lambda: None)
+    monkeypatch.setattr(update_checker, "get_install_type", lambda: "appimage")
+    log = tmp_path / "tuxtalk.log"
+    log.write_text("".join(f"line {n} {HOME}/AppImages/TuxTalk.AppImage\n" for n in range(400)))
+    return lambda: problem_report.build(home=HOME, user="archer")
+
+
+def test_the_report_says_what_helps_find_a_problem(report):
+    text = report()
+    for wanted in ("Version: ", "Installed as: appimage", "Hotkey helper: running, version 1.4",
+                   "Typing: can type", "System: Fedora Linux 44 (LXQt)", "LXQt", "x11",
+                   "Keyboard layout: us", "Graphics: Intel graphics", "model = 'parakeet-v3'"):
+        assert wanted in text
+
+
+def test_it_ends_with_the_last_lines_of_the_log(report):
+    text = report()
+    assert f"line {400 - problem_report.LOG_LINES} " in text
+    assert f"line {399 - problem_report.LOG_LINES} " not in text
+
+
+def test_the_home_folder_and_user_name_are_taken_out(report):
+    text = report()
+    assert HOME not in text and "archer" not in text
+    assert "~/AppImages/TuxTalk.AppImage" in text
+
+
+def test_a_user_name_inside_another_word_is_left_alone():
+    assert problem_report.scrub("environment ron", "/home/ron", "ron") == "environment <user>"
+
+
+def test_a_fact_that_cant_be_read_doesnt_stop_the_rest(report, monkeypatch):
+    from tuxtalk import keyboard_layout
+
+    def broken():
+        raise OSError("no layout")
+    monkeypatch.setattr(keyboard_layout, "active_layout", broken)
+    text = report()
+    assert "Keyboard layout: couldn't tell (OSError: no layout)" in text
+    assert "Graphics: Intel graphics" in text
+
+
+def test_no_log_yet_says_so(report, tmp_path):
+    (tmp_path / "tuxtalk.log").unlink()
+    assert "(no log yet)" in report()
+
+
+def test_the_bug_form_opens_with_what_tuxtalk_knows(monkeypatch):
+    from tuxtalk import desktop_detect
+    monkeypatch.setattr(desktop_detect, "get_desktop_environment", lambda: "kde")
+    monkeypatch.setattr(problem_report, "os_name", lambda: "Nobara Linux 44")
+    monkeypatch.setenv("XDG_SESSION_TYPE", "wayland")
+    url = problem_report_window.issue_url()
+    fields = dict(urllib.parse.parse_qsl(urllib.parse.urlparse(url).query))
+    assert url.startswith("https://github.com/ronb1964/TuxTalk/issues/new?")
+    assert fields["template"] == "bug_report.yml"
+    assert (fields["desktop"], fields["display"], fields["distro"]) == (
+        "KDE Plasma", "Wayland", "Nobara Linux 44")
+
+
+# --- the window -------------------------------------------------------------------------
+
+@pytest.fixture
+def window(monkeypatch):
+    if not Gtk.init_check()[0]:
+        pytest.skip("no display")
+    from tuxtalk import config
+    monkeypatch.setattr(Gtk.Window, "show_all", lambda self: None)   # never on screen
+    monkeypatch.setattr(problem_report, "build", lambda: "the report")
+    settings = Settings()
+    monkeypatch.setattr(config, "load_config", lambda: settings)
+
+    def make(log_transcripts=False):
+        settings.log_transcripts = log_transcripts
+        win = problem_report_window.ReportWindow()
+        for _ in range(200):    # the report is gathered on a thread
+            GLib.MainContext.default().iteration(False)
+            if win._text() == "the report":
+                break
+            time.sleep(0.01)
+        made.append(win)
+        return win
+    made = []
+    yield make
+    for win in made:
+        win.window.destroy()
+
+
+def _labels(widget):
+    if isinstance(widget, Gtk.Label):
+        yield widget.get_label()
+    if isinstance(widget, Gtk.Container):
+        for child in widget.get_children():
+            yield from _labels(child)
+
+
+def test_the_window_shows_the_report_before_anything_is_shared(window):
+    win = window()
+    assert win._text() == "the report"
+    assert win.copy_button.get_sensitive() and win.issue_button.get_sensitive()
+
+
+def test_it_warns_when_the_log_holds_what_was_dictated(window):
+    assert not any("what you dictated" in t for t in _labels(window().window))
+    assert any("what you dictated" in t for t in _labels(window(log_transcripts=True).window))
+
+
+def test_opening_an_issue_copies_the_report_and_opens_the_form(window, monkeypatch):
+    win = window()
+    copied, opened = [], []
+    monkeypatch.setattr(win, "_copy", lambda: copied.append(win._text()))
+    monkeypatch.setattr(Gtk, "show_uri_on_window", lambda w, uri, t: opened.append(uri))
+    win._on_issue(None)
+    assert copied == ["the report"]
+    assert opened and opened[0].startswith(problem_report_window.ISSUE_URL)
+    assert "Log Output" in win.status.get_text()
+
+
+def test_help_problems_opens_it(monkeypatch):
+    if not Gtk.init_check()[0]:
+        pytest.skip("no display")
+    shown, opened = [], []
+    monkeypatch.setattr(Gtk.Dialog, "show_all", lambda self: shown.append(self))
+    monkeypatch.setattr(Gtk.Dialog, "present", lambda self: None)
+    monkeypatch.setattr(problem_report_window, "ReportWindow", lambda parent: opened.append(parent))
+    help_dialog.show_help_dialog()
+    dialog = shown[0]
+    try:
+        def labels(widget):
+            if isinstance(widget, Gtk.Label):
+                yield widget
+            if isinstance(widget, Gtk.Container):
+                for child in widget.get_children():
+                    yield from labels(child)
+        problems = next(l for l in labels(dialog) if help_dialog.REPORT_LINK in l.get_label())
+        assert problems.emit("activate-link", help_dialog.REPORT_LINK) is True
+        assert opened == [dialog]
+    finally:
+        dialog.destroy()

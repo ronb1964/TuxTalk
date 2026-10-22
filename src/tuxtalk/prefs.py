@@ -3,7 +3,7 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 gi.require_version("Pango", "1.0")
 from gi.repository import Gtk, Gdk, GLib, Pango
-from .ui_style import Fold, message_dialog
+from .ui_style import WARNING_AMBER, Fold, message_dialog
 import datetime
 import os
 import subprocess
@@ -506,10 +506,6 @@ def hotkey_label(key):
     """'F5 (reloads the page in browsers)', or just the key."""
     clash = HOTKEY_CLASHES.get(key)
     return f"{key} ({clash})" if clash else key
-
-
-# The amber of TuxTalk's warnings (an unsafe setting, a backup never saved).
-WARNING_AMBER = "#e6aa3c"
 
 
 def hotkey_change_message(cfg, changed, refused, apps=None):
