@@ -36,7 +36,8 @@ def report(monkeypatch, tmp_path):
     monkeypatch.setattr(update_checker, "get_install_type", lambda: "appimage")
     log = tmp_path / "tuxtalk.log"
     log.write_text("".join(f"line {n} {HOME}/AppImages/TuxTalk.AppImage\n" for n in range(400)))
-    return lambda: problem_report.build(home=HOME, user="archer")
+    return lambda: problem_report.build(problem_report.fact(problem_report.layout_text),
+                                        home=HOME, user="archer")
 
 
 def test_the_report_says_what_helps_find_a_problem(report):
@@ -59,8 +60,14 @@ def test_the_home_folder_and_user_name_are_taken_out(report):
     assert "~/AppImages/TuxTalk.AppImage" in text
 
 
-def test_a_user_name_inside_another_word_is_left_alone():
-    assert problem_report.scrub("environment ron", "/home/ron", "ron") == "environment <user>"
+@pytest.mark.parametrize("text, scrubbed", [
+    ("environment ron", "environment <user>"),           # not inside a word
+    ("Ron's AirPods", "<user>'s AirPods"),                # a headset named after them
+    ("/home/ron/x and /home/ronald/data", "~/x and /home/ronald/data"),
+    ("ron_usb_input", "<user>_usb_input"),
+])
+def test_the_home_folder_and_user_name_go_and_nothing_else(text, scrubbed):
+    assert problem_report.scrub(text, "/home/ron", "ron") == scrubbed
 
 
 def test_a_fact_that_cant_be_read_doesnt_stop_the_rest(report, monkeypatch):
@@ -100,16 +107,15 @@ def window(monkeypatch):
         pytest.skip("no display")
     from tuxtalk import config
     monkeypatch.setattr(Gtk.Window, "show_all", lambda self: None)   # never on screen
-    monkeypatch.setattr(problem_report, "build", lambda: "the report")
-    settings = Settings()
-    monkeypatch.setattr(config, "load_config", lambda: settings)
+    monkeypatch.setattr(config, "load_config", lambda: Settings())
+    monkeypatch.setattr(problem_report, "layout_text", lambda: "us")
 
-    def make(log_transcripts=False):
-        settings.log_transcripts = log_transcripts
+    def make(report="the report"):
+        monkeypatch.setattr(problem_report, "build", lambda layout: report)
         win = problem_report_window.ReportWindow()
         for _ in range(200):    # the report is gathered on a thread
             GLib.MainContext.default().iteration(False)
-            if win._text() == "the report":
+            if win._text() == report:
                 break
             time.sleep(0.01)
         made.append(win)
@@ -135,8 +141,17 @@ def test_the_window_shows_the_report_before_anything_is_shared(window):
 
 
 def test_it_warns_when_the_log_holds_what_was_dictated(window):
-    assert not any("what you dictated" in t for t in _labels(window().window))
-    assert any("what you dictated" in t for t in _labels(window(log_transcripts=True).window))
+    """Also when logging dictations is off now: the old lines are still there."""
+    hidden = window("Raw transcription (Parakeet): [hidden, 25 chars]")
+    shown = window("Raw transcription (Parakeet): 'my secret is swordfish'")
+    assert not hidden.warning.get_visible()
+    assert shown.warning.get_visible()
+
+
+def test_closing_it_before_the_report_is_in_is_fine(window):
+    win = window()
+    win.window.destroy()
+    assert win._show_report("late") is False
 
 
 def test_opening_an_issue_copies_the_report_and_opens_the_form(window, monkeypatch):

@@ -43,7 +43,7 @@ def issue_url():
 
 class ReportWindow:
     def __init__(self, parent=None):
-        from .config import load_config
+        from .problem_report import fact, layout_text
         from .ui_style import WARNING_AMBER
         self.window = Gtk.Window(title="Report a Problem")
         if parent is not None:
@@ -62,14 +62,14 @@ class ReportWindow:
                        "unless you copy it, save it or send it yourself, so read it first.")
         box.pack_start(intro, False, False, 0)
 
-        if load_config().log_transcripts:
-            warning = Gtk.Label(xalign=0)
-            warning.set_line_wrap(True)
-            warning.set_markup(
-                f"<span foreground='{WARNING_AMBER}'><b>The log below has what you dictated in it</b>, "
-                "because logging it is on (Preferences → Advanced). Check it, or turn that "
-                "off and clear the log first.</span>")
-            box.pack_start(warning, False, False, 0)
+        # Shown once the report is in, if its log holds dictated words.
+        self.warning = Gtk.Label(xalign=0, no_show_all=True)
+        self.warning.set_line_wrap(True)
+        self.warning.set_markup(
+            f"<span foreground='{WARNING_AMBER}'><b>The log below has some of what you "
+            "dictated in it</b>, from when logging it was on (Preferences → Advanced). "
+            "Check it, or clear the log there first.</span>")
+        box.pack_start(self.warning, False, False, 0)
 
         self.view = Gtk.TextView(editable=False, cursor_visible=False, monospace=True)
         self.view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
@@ -99,17 +99,25 @@ class ReportWindow:
         buttons.pack_end(close_button, False, False, 0)
         box.pack_start(buttons, False, False, 0)
 
+        self.closed = False
+        self.window.connect("destroy", lambda _w: setattr(self, "closed", True))
         self.window.show_all()
         # The graphics card and the hotkey helper take a moment to ask.
-        threading.Thread(target=self._gather, name="problem-report", daemon=True).start()
+        layout = fact(layout_text)
+        threading.Thread(target=self._gather, args=(layout,), name="problem-report",
+                         daemon=True).start()
 
-    def _gather(self):
+    def _gather(self, layout):
         from . import problem_report
-        text = problem_report.build()
+        text = problem_report.build(layout)
         GLib.idle_add(self._show_report, text)
 
     def _show_report(self, text):
+        from .problem_report import has_dictations
+        if self.closed:
+            return False
         self.view.get_buffer().set_text(text)
+        self.warning.set_visible(has_dictations(text))
         for button in (self.issue_button, self.copy_button, self.save_button):
             button.set_sensitive(True)
         return False
