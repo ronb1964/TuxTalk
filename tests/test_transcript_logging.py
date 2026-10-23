@@ -352,18 +352,35 @@ def test_a_voice_edit_never_writes_the_words(monkeypatch, caplog, capsys):
     assert _leaks(caplog, capsys) == []
 
 
-def _engine(kind):
-    """A loaded speech model of each kind the service runs, hearing the secret."""
+def _engine(kind, monkeypatch):
+    """A loaded speech model of each kind the service runs, hearing the
+    secret: TuxTalk's own engine code is real, and only what it drives (the
+    ONNX model, the graphics helper process, the whisper-server reply,
+    faster-whisper) is faked."""
+    import io
+    import json
+    import threading
     import types
+    from tuxtalk import whisper_vulkan
     from tuxtalk.parakeet_engine import ParakeetModel
-    from tuxtalk.whisper_vulkan import VulkanWhisperModel
+    from tuxtalk.parakeet_gpu import ParakeetGpuModel
     heard = "zanzibar quokka password hunter two"
+    running = types.SimpleNamespace(poll=lambda: None, stdin=io.BytesIO())
     if kind == "parakeet":
         engine = ParakeetModel.__new__(ParakeetModel)
-        engine.recognize = lambda audio: heard
-    elif kind == "vulkan":
-        engine = VulkanWhisperModel.__new__(VulkanWhisperModel)
-        engine.transcribe = lambda audio, language, **k: (heard, 0.0)
+        engine._model = types.SimpleNamespace(recognize=lambda audio, sample_rate: heard)
+    elif kind == "parakeet on the graphics chip":
+        engine = ParakeetGpuModel.__new__(ParakeetGpuModel)
+        engine._lock, engine._cpu, engine._proc = threading.Lock(), None, running
+        engine._words = engine._sent_words = ()
+        engine._read_reply = lambda timeout: {"text": heard}
+    elif kind == "whisper on vulkan":
+        engine = whisper_vulkan.VulkanWhisperModel.__new__(
+            whisper_vulkan.VulkanWhisperModel)
+        engine._lock, engine._proc, engine._port = threading.RLock(), running, 1
+        reply = json.dumps({"segments": [{"text": heard, "no_speech_prob": 0.0}]}).encode()
+        monkeypatch.setattr(whisper_vulkan.urllib.request, "urlopen",
+                            lambda request, timeout: io.BytesIO(reply))
     else:
         segment = types.SimpleNamespace(text=heard, no_speech_prob=0.0)
         info = types.SimpleNamespace(language="en", all_language_probs=None)
@@ -371,14 +388,14 @@ def _engine(kind):
     return engine
 
 
-@pytest.mark.parametrize("kind", ["parakeet", "vulkan", "whisper"])
+@pytest.mark.parametrize("kind", ["parakeet", "parakeet on the graphics chip",
+                                  "whisper on vulkan", "faster-whisper"])
 def test_no_speech_engine_writes_the_words(monkeypatch, caplog, capsys, kind):
     import logging
     import numpy as np
     from tuxtalk import app
     monkeypatch.setattr(app, "_log_transcripts", False)
-    monkeypatch.setattr(app, "model", _engine(kind))
-    monkeypatch.setattr("tuxtalk.parakeet_gpu._steer", lambda engine, words: None)
+    monkeypatch.setattr(app, "model", _engine(kind, monkeypatch))
     with caplog.at_level(logging.DEBUG, logger="tuxtalk"):
         raw = app._transcribe_audio(np.full(16000, 0.2, dtype=np.float32), language=None)
     assert raw and "quokka" in raw
