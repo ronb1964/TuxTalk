@@ -6,16 +6,6 @@ OFFERED_MODELS fixes the display order and is what every model picker must
 build from, so a separate hardcoded list can't drift and hide a model.
 """
 
-import pathlib
-
-ROOT = pathlib.Path(__file__).resolve().parent.parent
-
-# First run has no full picker: its card offers three models chosen
-# by recommend.py, and points to Preferences for the rest.
-SCREENS_WITH_MODEL_PICKERS = [
-    "src/tuxtalk/prefs.py",
-]
-
 
 def test_offered_models_matches_what_can_actually_be_downloaded():
     from tuxtalk.model_helper import MODEL_REPOS, OFFERED_MODELS
@@ -38,18 +28,13 @@ def test_offered_models_has_no_duplicates():
     )
 
 
-def test_every_model_picker_builds_from_the_shared_list():
-    """No picker may keep its own hardcoded list, or the lists drift apart."""
-    offenders = []
-    for path in SCREENS_WITH_MODEL_PICKERS:
-        if "OFFERED_MODELS" not in (ROOT / path).read_text():
-            offenders.append(path)
-
-    assert not offenders, (
-        f"{offenders} build a model picker without using OFFERED_MODELS. Two "
-        f"hardcoded lists drift — that is exactly how 'base' went missing from "
-        f"the first-run setup screen."
-    )
+def test_every_model_picker_builds_from_the_shared_list(prefs_window):
+    """No picker may keep its own hardcoded list, or the lists drift apart:
+    that is how 'base' went missing from the first-run setup screen. (First
+    run has no full picker: its card offers the models recommend.py picks.)"""
+    from tuxtalk.model_helper import OFFERED_MODELS
+    offered = [row[0] for row in prefs_window().model_combo.get_model()]
+    assert offered == list(OFFERED_MODELS)
 
 
 def test_the_setup_line_names_the_model_and_where_it_runs():

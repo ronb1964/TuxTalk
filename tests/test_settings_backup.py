@@ -441,12 +441,26 @@ def test_nothing_is_restored_when_the_undo_copy_cannot_be_saved(home, monkeypatc
     assert sb.snapshot_if_changed() is None             # startup copy still never raises
 
 
-def test_preferences_shows_a_refused_restore_as_a_message():
-    import pathlib
-    text = (pathlib.Path(sb.__file__).parent / "prefs.py").read_text()
-    body = text[text.index("def _restore_backup"):]
-    body = body[:body.index("\n    def ")]
-    assert "settings_backup.BackupError" in body
+@pytest.mark.parametrize("problem", [sb.BackupError("This isn't a TuxTalk backup."),
+                                     OSError(28, "No space left on device")])
+def test_preferences_shows_a_refused_restore_as_a_message(prefs_window, monkeypatch, problem):
+    """Preferences stays open and says why; nothing restarts."""
+    import gi
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import Gtk
+    from gtk_text import shown_text
+    shown = []
+
+    def refuse(path):
+        raise problem
+    monkeypatch.setattr(sb, "restore", refuse)
+    monkeypatch.setattr(Gtk.Dialog, "run", lambda d: shown.append(shown_text(d)))
+    window = prefs_window()
+    monkeypatch.setattr(window, "restart_service", lambda: pytest.fail("restarted"))
+    window._restore_backup("/backups/tuxtalk-settings.zip")
+    assert len(shown) == 1
+    assert "The settings weren't restored" in shown[0] and str(problem) in shown[0]
+    assert window.window.get_visible()
 
 
 def test_saving_a_backup_makes_its_folder_the_backup_folder(home):

@@ -23,7 +23,6 @@ import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 CSS = ROOT / "src/tuxtalk/prefs_style.css"
-PREFS = ROOT / "src/tuxtalk/prefs.py"
 
 SCOPE_CLASS = "talktype-prefs"
 
@@ -53,27 +52,19 @@ def test_every_selector_is_scoped_to_the_prefs_window():
     )
 
 
-def test_stylesheet_is_installed_screen_wide():
-    """A window-scoped provider never reaches child widgets."""
-    text = PREFS.read_text()
-    loader = text.split("def _load_css", 1)[1].split("\n    def ", 1)[0]
-    assert "add_provider_for_screen" in loader, (
-        "_load_css does not install the stylesheet screen-wide, so it cannot "
-        "reach any child widget and the whole file is dead again."
-    )
+def test_stylesheet_reaches_the_widgets_inside_the_window(prefs_window):
+    """A window-scoped provider never reaches child widgets: a label would
+    keep the theme's colour instead of the sheet's #d4d4d4."""
+    from gi.repository import Gtk
+    from gtk_text import find
+    label = find(prefs_window().window, Gtk.Label, "Paste Last Dictation:")
+    color = label.get_style_context().get_color(Gtk.StateFlags.NORMAL)
+    assert [round(c * 255) for c in (color.red, color.green, color.blue)] == [0xd4] * 3
 
 
-def test_prefs_window_carries_the_scope_class():
+def test_prefs_window_carries_the_scope_class(prefs_window):
     """Without the class, every scoped selector matches nothing."""
-    text = PREFS.read_text()
-    assert f'add_class(PREFS_STYLE_CLASS)' in text, (
-        "The Preferences window never gets the scope class added, so the "
-        "scoped stylesheet matches nothing at all."
-    )
-    assert f'PREFS_STYLE_CLASS = "{SCOPE_CLASS}"' in text, (
-        f"PREFS_STYLE_CLASS must stay in step with the .{SCOPE_CLASS} prefix "
-        f"used throughout prefs_style.css."
-    )
+    assert prefs_window().window.get_style_context().has_class(SCOPE_CLASS)
 
 
 def test_stylesheet_parses():

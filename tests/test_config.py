@@ -184,16 +184,15 @@ def test_parakeet_is_the_default_model():
     assert Settings().device == "cpu"   # the graphics card is chosen at setup
 
 
-def test_first_run_and_preferences_recommend_parakeet():
+def test_first_run_and_preferences_recommend_parakeet(prefs_window):
     """Parakeet, not Small, is the recommended model in Preferences; first
     run recommends through recommend.py (the welcome card)."""
-    import pathlib
     from tuxtalk import recommend
     assert recommend.recommend("en", recommend.Hardware(None)).model == "parakeet-v3"
-    src = pathlib.Path(__file__).resolve().parent.parent / "src" / "tuxtalk"
-    prefs = (src / "prefs.py").read_text()
-    assert '"small":    "small — recommended balance"' not in prefs
-    assert "Parakeet — recommended" in prefs
+    labels = {row[0]: row[1] for row in prefs_window().model_combo.get_model()}
+    assert "recommended" in labels["parakeet-v3"]
+    assert not [model for model, label in labels.items()
+                if "recommended" in label and model != "parakeet-v3"]
 
 
 def test_power_saving_defaults_on_with_a_battery_only(tmp_path):

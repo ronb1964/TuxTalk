@@ -10,12 +10,7 @@ So Preferences must not grey out the position dropdown on Wayland just because
 the GNOME extension is absent, or tell the user positioning "requires the
 GNOME extension".
 """
-
-import pathlib
-
 import pytest
-
-ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 
 def test_positioning_available_follows_the_x_display(monkeypatch):
@@ -47,10 +42,19 @@ def test_positioning_does_not_depend_on_the_gnome_extension(monkeypatch):
     )
 
 
-def test_prefs_uses_the_helper_rather_than_guessing_from_the_session():
-    """Not an `is_wayland and not has_extension` guess."""
-    text = (ROOT / "src/tuxtalk/prefs.py").read_text()
-    assert "positioning_available" in text, (
-        "prefs.py must ask whether positioning actually works instead of "
-        "inferring it from the session type and the GNOME extension."
-    )
+@pytest.mark.parametrize("available", [True, False])
+def test_prefs_uses_the_helper_rather_than_guessing_from_the_session(
+        prefs_window, monkeypatch, available):
+    """Not an `is_wayland and not has_extension` guess: the Position dropdown
+    works exactly when positioning_available() says it does."""
+    from gi.repository import Gtk
+    from gtk_text import beside, find, shown_text
+    from tuxtalk import recording_indicator
+    monkeypatch.setattr(recording_indicator, "positioning_available", lambda: available)
+    window = prefs_window()
+    position = beside(find(window.indicator_grid, Gtk.Label, "Position:"))
+    assert position.get_sensitive() is available
+    warned = [t for t in shown_text(window.indicator_grid) if "XWayland is not available" in t]
+    assert bool(warned) is not available
+
+

@@ -53,9 +53,13 @@ def test_option_rows_follow_the_graphics_card_choice():
     assert on["parakeet-v3"] == off["parakeet-v3"] == "about 670 MB"
 
 
-def test_help_readme_and_preferences_show_the_real_sizes():
-    texts = [(ROOT / p).read_text() for p in
-             ("src/tuxtalk/help_dialog.py", "README.md", "src/tuxtalk/prefs.py")]
-    for text in texts:
+def test_help_readme_and_preferences_show_the_real_sizes(help_pages, prefs_window):
+    from gtk_text import shown_text
+    window = prefs_window()
+    models = [row[1] for row in window.model_combo.get_model()]
+    texts = {"Help": "\n".join(help_pages.values()),
+             "README": (ROOT / "README.md").read_text(),
+             "Preferences": "\n".join(shown_text(window.window) + models)}
+    for name, text in texts.items():
         for old in ("39 MB", "74 MB", "244 MB", "769 MB"):
-            assert not re.search(rf"\b{old}\b", text), old
+            assert not re.search(rf"\b{old}\b", text), (name, old)

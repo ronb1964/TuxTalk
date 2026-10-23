@@ -52,10 +52,19 @@ def test_parakeet_can_stay_put(prefs, monkeypatch):
     assert stub.config == {"model": "parakeet-v3", "device": "vulkan"}
 
 
-def test_the_download_no_longer_writes_the_config_itself():
-    import pathlib
-    src = (pathlib.Path(__file__).resolve().parent.parent / "src/tuxtalk/cuda_helper.py").read_text()
-    assert "Automatically enable GPU mode" not in src
+def test_the_download_no_longer_writes_the_config_itself(prefs, monkeypatch):
+    """Switching to CUDA is Preferences' job, through Apply, so the service
+    restarts onto it: a download that saved device = "cuda" itself moved the
+    baseline Apply compares against, and nothing restarted."""
+    from gi.repository import GLib
+    from tuxtalk import config, cuda_helper
+    switched = []
+    monkeypatch.setattr(cuda_helper, "download_cuda_libraries", lambda **k: True)
+    monkeypatch.setattr(config, "save_config", lambda cfg: pytest.fail("the download saved settings"))
+    monkeypatch.setattr(GLib, "idle_add", lambda *a: None)
+    monkeypatch.setattr(prefs.Gtk.Dialog, "run", lambda d: prefs.Gtk.ResponseType.OK)
+    assert cuda_helper.show_cuda_download_dialog(on_success_callback=lambda: switched.append(1))
+    assert switched == [1]
 
 
 def test_the_question_offers_every_whisper_model_with_large_v3_picked(prefs, monkeypatch):

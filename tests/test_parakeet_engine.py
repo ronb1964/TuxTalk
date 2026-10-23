@@ -6,13 +6,9 @@ own special cases. These tests pin down the places where it genuinely differs
 from Whisper: how "is it downloaded?" is answered and how dictation audio
 reaches it. Where its files come from is tests/test_parakeet_ultra.py.
 """
-import re
-from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
-
-ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_parakeet_is_offered_valid_and_downloadable():
@@ -25,17 +21,13 @@ def test_parakeet_is_offered_valid_and_downloadable():
     assert PARAKEET_MODEL in MODEL_DISPLAY_SIZES
 
 
-def test_every_offered_model_has_a_label_on_every_picker():
+def test_every_offered_model_has_a_label_on_every_picker(prefs_window):
     """The picker indexes a label dict by model id; a missing key crashes the
     screen as it opens. (First run's card has no full picker.)"""
     from tuxtalk.model_helper import OFFERED_MODELS
-
-    for path, dict_name in (("src/tuxtalk/prefs.py", "_MODEL_DISPLAY"),):
-        source = (ROOT / path).read_text()
-        body = re.search(dict_name + r" = \{(.*?)\n\s*\}", source, re.S).group(1)
-        keys = set(re.findall(r'"([^"]+)":', body))
-        missing = set(OFFERED_MODELS) - keys
-        assert not missing, f"{path} {dict_name} has no label for {sorted(missing)}"
+    rows = {row[0]: row[1] for row in prefs_window().model_combo.get_model()}
+    assert set(rows) == set(OFFERED_MODELS)
+    assert all(label.strip() for label in rows.values()), rows
 
 
 def test_whisper_downloads_are_not_filtered(monkeypatch):
