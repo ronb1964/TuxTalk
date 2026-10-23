@@ -66,12 +66,58 @@ def test_a_stopped_service_falls_back_to_the_settings(svc):
     assert svc.GetCurrentModel() == "parakeet-v3" and svc.GetDeviceType() == "vulkan"
 
 
-def test_the_service_records_every_load_path():
-    """Each "Model loaded" point records the engine, and main reports it."""
-    import pathlib
-    src = (pathlib.Path(__file__).resolve().parent.parent / "src" / "tuxtalk" / "app.py").read_text()
-    assert src.count("_record_engine(") >= 5        # def + 4 load points
-    assert "_notify_tray_running_engine()" in src
+@pytest.fixture
+def loads(monkeypatch):
+    """The service's model loading with every engine faked; returns the
+    engine the service then says is running."""
+    from tuxtalk import app, config, cuda_helper, model_helper, parakeet_gpu, whisper_vulkan
+    monkeypatch.setattr(app, "_running_engine", None)
+    monkeypatch.setattr(app, "_notify", lambda *a: None)
+    monkeypatch.setattr(whisper_vulkan, "is_installed", lambda m: True)
+    monkeypatch.setattr(whisper_vulkan, "find_device", lambda: 0)
+    monkeypatch.setattr(whisper_vulkan, "VulkanWhisperModel", lambda m, d: "whisper on vulkan")
+    monkeypatch.setattr(parakeet_gpu, "ParakeetGpuModel", lambda d: "parakeet on vulkan")
+    monkeypatch.setattr(cuda_helper, "has_cuda_libraries", lambda: True)
+    monkeypatch.setattr(config, "load_config", config.Settings)
+    monkeypatch.setattr(config, "save_config", lambda cfg: None)
+
+    def load(model, device, cuda_fails=False):
+        def download(name, device, **k):
+            if device == "cuda" and cuda_fails:
+                raise RuntimeError("CUDA driver missing")
+            return f"{name} on {device}"
+        monkeypatch.setattr(model_helper, "download_model_with_progress", download)
+        assert app.build_model(config.Settings(model=model, device=device))
+        return app._running_engine
+    return load
+
+
+@pytest.mark.parametrize("model,device,cuda_fails,running", [
+    ("small", "vulkan", False, ("small", "vulkan")),
+    ("parakeet-v3", "vulkan", False, ("parakeet-v3", "vulkan")),
+    ("small", "cpu", False, ("small", "cpu")),
+    ("parakeet-v3", "cuda", False, ("parakeet-v3", "cpu")),
+    ("large-v3", "cuda", False, ("large-v3", "cuda")),
+    ("large-v3", "cuda", True, ("large-v3", "cpu")),
+])
+def test_the_service_records_every_load_path(loads, model, device, cuda_fails, running):
+    """Each way a model loads records what really runs."""
+    assert loads(model, device, cuda_fails) == running
+
+
+def test_the_service_tells_the_tray_once_the_model_is_loaded(service_main):
+    started = service_main()
+    assert started.index("loads the speech model") < started.index("tells the tray what runs")
+
+
+def test_the_tray_is_told_what_was_loaded(monkeypatch):
+    from tuxtalk import app
+    told = []
+    monkeypatch.setattr(app, "_running_engine", ("small", "cpu"))
+    monkeypatch.setattr(app, "_get_tray_dbus_proxy", lambda: types.SimpleNamespace(
+        NotifyRunningEngine=lambda *engine, **k: told.append(engine)))
+    app._notify_tray_running_engine()
+    assert told == [("small", "cpu")]
 
 
 @pytest.mark.parametrize("cfg_model,cfg_device,running,expected", [

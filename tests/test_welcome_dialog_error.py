@@ -32,9 +32,11 @@ def test_a_broken_welcome_dialog_quits_the_loop(monkeypatch):
     assert quits == [True]
 
 
-def test_the_tray_starts_the_service_after_an_onboarding_error():
-    import pathlib
-    src = (pathlib.Path(wd.__file__).parent / "tray.py").read_text()
-    body = src[src.index("def show_first_run_setup"):]
-    body = body[:body.index("GLib.timeout_add(1500, show_first_run_setup)")]
-    assert "except Exception" in body.split("show_welcome_and_install()")[1][:200]
+def test_the_tray_starts_the_service_after_an_onboarding_error(tray_main):
+    """The welcome comes back next launch: the error counts as a cancel."""
+    def broken():
+        raise RuntimeError("missing icon")
+    started = tray_main(first_run=True, welcome=broken)
+    started.run_timers()
+    assert "starts the service" in started
+    assert "marks setup done" not in started

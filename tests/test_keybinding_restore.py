@@ -128,5 +128,5 @@ def test_the_restore_runs_from_a_finally_block():
     )
 
 
-def test_the_tray_repairs_left_over_bindings_at_start():
-    assert "restore_left_over()" in (SRC / "tray.py").read_text()
+def test_the_tray_repairs_left_over_bindings_at_start(tray_main):
+    assert "restores GNOME keybindings" in tray_main()

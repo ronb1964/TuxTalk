@@ -110,12 +110,22 @@ def test_startup_run_picks_dev_folders_from_dev_mode(tmp_path):
     assert os.path.isdir(f"{h}/.config/tuxtalk-dev")
 
 
-def test_package_import_runs_the_migration_before_anything_else():
-    import pathlib
-    src = (pathlib.Path(rm.__file__).parent / "__init__.py").read_text()
-    body = src.split('"""', 2)[2]                      # after the docstring
-    first_code = [l for l in body.splitlines() if l.strip() and not l.startswith("#")]
-    assert "rename_migration" in "\n".join(first_code[:4])
+def test_package_import_runs_the_migration_before_anything_else(tmp_path):
+    """Importing any TuxTalk module moves the old folders first, so the
+    logger (or anything else) can't create the new ones ahead of the move."""
+    import subprocess
+    import sys
+    h = str(tmp_path)
+    _mk(f"{h}/.config/talktype", "config.toml")
+    env = {k: v for k, v in os.environ.items()
+           if k not in ("TUXTALK_NO_MIGRATE", "TUXTALK_LOG_DIR", "DEV_MODE")
+           and not k.startswith("XDG_")}
+    env["HOME"] = h
+    subprocess.run([sys.executable, "-c",
+                    "from tuxtalk.logger import setup_logger; setup_logger('tuxtalk.t').info('up')"],
+                   env=env, check=True, timeout=60)
+    assert os.path.isfile(f"{h}/.config/tuxtalk/config.toml")
+    assert os.path.islink(f"{h}/.config/talktype")
 
 
 # --- the one-time "TalkType is now TuxTalk" notice ----------------------------
@@ -173,11 +183,21 @@ def test_the_notice_is_shown_once(tmp_path):
     assert not rm.notice_pending(f"{h}/.config/tuxtalk")
 
 
-def test_the_tray_shows_it():
-    import pathlib
-    tray = (pathlib.Path(rm.__file__).parent / "tray.py").read_text()
-    assert "rename_migration.notice_pending(" in tray
-    assert "TalkType is now TuxTalk" in tray
+def test_the_tray_shows_it(tray_main, tmp_path, monkeypatch):
+    """Shown from the tray's start, once: the marker goes after it is seen."""
+    import gi
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import Gtk
+    from gtk_text import shown_text
+    from tuxtalk import config
+    monkeypatch.setattr(config, "CONFIG_PATH", str(tmp_path / "config.toml"))
+    rm._ask_for_notice(str(tmp_path))
+    shown = []
+    monkeypatch.setattr(Gtk.Dialog, "run",
+                        lambda dialog: shown.append(shown_text(dialog)) or Gtk.ResponseType.OK)
+    tray_main().run_timers()
+    assert len(shown) == 1 and "TalkType is now TuxTalk" in shown[0]
+    assert not rm.notice_pending(str(tmp_path))
 
 
 def test_the_plasma_script_uses_its_own_bus_connection(monkeypatch):
@@ -206,13 +226,10 @@ def test_the_plasma_script_uses_its_own_bus_connection(monkeypatch):
     assert calls == [("open", {"private": True}), ("close", {})]
 
 
-def test_preferences_sets_the_dbus_main_loop_before_anything_else():
+def test_preferences_sets_the_dbus_main_loop_before_anything_else(prefs_main):
     """0.15.0 testing: Test Hotkeys crashed on opening ("D-Bus connections must
     be attached to a main loop"). Something in Preferences opened the shared
     connection first, and the dialog's own DBusGMainLoop call can't reach a
     connection that already exists. main() must set it before the window."""
-    import inspect
-    from tuxtalk import prefs
-    body = inspect.getsource(prefs.main)
-    assert "DBusGMainLoop(set_as_default=True)" in body
-    assert body.index("DBusGMainLoop(set_as_default=True)") < body.index("PreferencesWindow()")
+    started = prefs_main()
+    assert started.index("sets the D-Bus main loop") < started.index("opens the window")

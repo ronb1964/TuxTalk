@@ -65,40 +65,18 @@ def test_set_model_rejects_an_unknown_model(monkeypatch):
 
 # --- the dictation service's own implementation -----------------------------
 
-def test_the_service_does_not_write_a_phantom_settings_json():
-    """AppInstance.set_model must not write ~/.config/talktype/settings.json,
-    a file this app never reads. Real settings go to config.toml through
-    config.save_config(); anything else is gone after the restart it tells
-    the user is required.
-
-    Checked structurally because AppInstance is defined inline inside app.py's
-    startup path and cannot be constructed in isolation.
-    """
-    import ast
-    import pathlib
-
-    src = (pathlib.Path(__file__).resolve().parent.parent
-           / "src" / "tuxtalk" / "app.py").read_text()
-    tree = ast.parse(src)
-
-    # Docstrings may mention the path when explaining the rule; only real
-    # string values in code count.
-    docstrings = set()
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef,
-                             ast.AsyncFunctionDef)):
-            first = node.body[0] if node.body else None
-            if (isinstance(first, ast.Expr)
-                    and isinstance(first.value, ast.Constant)
-                    and isinstance(first.value.value, str)):
-                docstrings.add(id(first.value))
-
-    offenders = [
-        n.value for n in ast.walk(tree)
-        if isinstance(n, ast.Constant) and isinstance(n.value, str)
-        and id(n) not in docstrings and "settings.json" in n.value
-    ]
-
-    assert not offenders, (
-        f"app.py still references the phantom settings.json in code: {offenders}"
-    )
+def test_the_service_does_not_write_a_phantom_settings_json(service_main, monkeypatch, tmp_path):
+    """SetModel with no tray running reaches the service's own stand-in, which
+    must save through config.save_config, not to a settings.json this app never
+    reads: anything else is gone after the restart it tells the user is required."""
+    from tuxtalk import config
+    saved = []
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(config, "load_config", config.Settings)
+    monkeypatch.setattr(config, "save_config", lambda cfg: saved.append(cfg.model))
+    service = service_main().app_instance
+    service.set_model("medium")
+    service.set_model("not-a-real-model")
+    assert saved == ["medium"]
+    assert service.config.model == "medium"
+    assert not list(tmp_path.rglob("settings.json"))

@@ -61,11 +61,9 @@ def test_a_failure_leaves_it_to_try_again_next_start(tmp_path):
     assert not marker.exists()
 
 
-def test_tray_repins_on_start():
-    import pathlib
-    src = (pathlib.Path(rm.__file__).parent / "tray.py").read_text()
-    main = src[src.index("def main():"):]
-    assert "repin_launchers(" in main[:3500]
+def test_tray_repins_on_start(tray_main):
+    started = tray_main()
+    assert started.index("adopts the old install") < started.index("repins launchers")
 
 
 def _apps(tmp_path, *names):

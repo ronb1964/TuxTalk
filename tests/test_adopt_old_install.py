@@ -95,11 +95,9 @@ def test_second_run_does_nothing(tmp_path):
     assert rm.adopt_old_install(home=h) == []
 
 
-def test_tray_adopts_the_old_install_on_start():
-    import pathlib
-    src = (pathlib.Path(rm.__file__).parent / "tray.py").read_text()
-    main = src[src.index("def main():"):]
-    assert "adopt_old_install(" in main[:3000]
+def test_tray_adopts_the_old_install_on_start(tray_main):
+    started = tray_main()
+    assert started.index("adopts the old install") < started.index("makes the tray")
 
 
 # --- Ubuntu VM test, 2026-10-13: renamed entries finished off on a later start ---

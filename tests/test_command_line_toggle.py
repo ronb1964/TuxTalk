@@ -420,15 +420,15 @@ def test_with_no_tray_a_ready_service_toggles_at_once(service):
     assert service.app._cmd_start_recording.is_set()
 
 
-def test_ready_is_said_after_stale_toggles_are_cleared():
+def test_ready_is_said_after_stale_toggles_are_cleared(service_main):
     """Said before the clear, a toggle sent in between would be thrown away;
     after the input backend starts, it would come too late to help."""
-    src = (ROOT / "src" / "tuxtalk" / "app.py").read_text()
-    main = src[src.index("def main():"):]
-    clear = main.index("_cmd_start_from_toggle_key.clear()")
-    ready = main.index("_mark_service_ready()")
-    backend = main.index("get_input_backend(")
-    assert clear < ready < backend
+    from tuxtalk import app
+    app._cmd_start_from_toggle_key.set()        # pressed while the model loaded
+    app._cmd_start_recording.set()
+    started = service_main()
+    assert ("says it is ready", False) in started
+    assert started.index(("says it is ready", False)) < started.index("listens for hotkeys")
 
 
 @pytest.mark.parametrize("appimage,expected", [

@@ -3,7 +3,6 @@
 Doing nothing when Preferences is already open would leave a window hidden
 behind a browser looking like Preferences had failed to open.
 """
-import inspect
 import os
 import signal
 
@@ -76,12 +75,11 @@ def test_bring_to_front_reports_a_vanished_window(monkeypatch):
     assert prefs_ipc.bring_to_front(42) is False
 
 
-def test_prefs_handles_the_signal_before_it_announces_its_pid():
+def test_prefs_handles_the_signal_before_it_announces_its_pid(prefs_main):
     """SIGUSR1 terminates a process that doesn't handle it. The pidfile is how
     others find Preferences, so the handlers must be installed first."""
-    from tuxtalk import prefs
-    src = inspect.getsource(prefs.main)
-    assert src.index("unix_signal_add") < src.index("_acquire_prefs_singleton(")
+    started = prefs_main()
+    assert started.index("handles bring-to-front") < started.index("announces its pid")
 
 
 def test_a_second_launch_forwards_and_exits(tmp_path, monkeypatch):

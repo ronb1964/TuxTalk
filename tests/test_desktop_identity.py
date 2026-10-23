@@ -13,7 +13,6 @@ differently:
   dev        ~/.local/share/applications/tuxtalk-dev.desktop
 """
 import pathlib
-import re
 
 import pytest
 
@@ -61,14 +60,12 @@ def test_apply_never_raises(monkeypatch):
     desktop_identity.apply()
 
 
-@pytest.mark.parametrize("module", ["tray", "prefs", "app"])
-def test_every_program_with_windows_names_itself_first(module):
+@pytest.mark.parametrize("program", ["tray_main", "prefs_main", "service_main"])
+def test_every_program_with_windows_names_itself_first(program, request):
     """The tray (and its dialogs), Preferences and the dictation service (the
-    recording indicator) each run as their own process."""
-    src = (ROOT / "src" / "tuxtalk" / f"{module}.py").read_text()
-    body = re.search(r"\ndef main\(\):\n(.*?)(?=\ndef |\nif __name__)", src, re.S).group(1)
-    first_lines = [l for l in body.splitlines() if l.strip() and not l.strip().startswith("#")][:3]
-    assert any("desktop_identity.apply()" in l for l in first_lines), first_lines
+    recording indicator) each run as their own process, and each names itself
+    before it opens anything."""
+    assert request.getfixturevalue(program)()[0] == "names itself"
 
 
 def test_apply_does_not_query_the_package_database(monkeypatch):

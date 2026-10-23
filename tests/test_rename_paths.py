@@ -37,13 +37,18 @@ def test_help_points_at_the_new_log_and_settings_folder(monkeypatch):
     assert facts["log_path"] == "~/.config/tuxtalk/tuxtalk.log"
 
 
-def test_tray_logs_what_the_migration_did():
+def test_tray_logs_what_the_migration_did(tray_main, monkeypatch):
     # The migration runs at package import, before any logger exists; the
     # tray writes its lines once its logger is up, so a support log shows it.
-    import pathlib
-    src = (pathlib.Path(config.__file__).parent / "tray.py").read_text()
-    main = src[src.index("def main():"):]
-    assert "MIGRATION_LOG" in main[:3000]
+    import types
+    import tuxtalk
+    from tuxtalk import tray
+    logged = []
+    monkeypatch.setattr(tuxtalk, "MIGRATION_LOG", [".config/talktype -> .config/tuxtalk"])
+    monkeypatch.setattr(tray, "logger", types.SimpleNamespace(
+        info=logged.append, warning=logged.append, debug=logged.append, error=logged.append))
+    tray_main()
+    assert "Rename to TuxTalk: .config/talktype -> .config/tuxtalk" in logged
 
 
 def test_clearing_the_log_also_removes_the_pre_rename_logs(tmp_path):

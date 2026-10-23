@@ -504,18 +504,19 @@ def prefs_main(monkeypatch):
         def select_tab(self, tab):
             done.append(f"shows the {tab} tab")
 
-    monkeypatch.setattr(desktop_identity, "apply", lambda: done.append("names itself"))
-    monkeypatch.setattr(ui_style, "prepare_windows", lambda: done.append("prepares windows"))
-    monkeypatch.setattr(dbus.mainloop.glib, "DBusGMainLoop",
-                        lambda **k: done.append("sets the D-Bus main loop"))
-    monkeypatch.setattr(prefs.GLib, "unix_signal_add",
-                        lambda *a: done.append("handles bring-to-front"))
     monkeypatch.setattr(prefs, "_acquire_prefs_singleton",
                         lambda tab: done.append("announces its pid"))
     monkeypatch.setattr(prefs, "PreferencesWindow", Window)
-    monkeypatch.setattr(prefs.Gtk, "main", lambda: done.append("runs"))
 
     def run(*argv):
+        # Shared with the other programs' main(), so patched for this run.
+        monkeypatch.setattr(desktop_identity, "apply", lambda: done.append("names itself"))
+        monkeypatch.setattr(ui_style, "prepare_windows", lambda: done.append("prepares windows"))
+        monkeypatch.setattr(dbus.mainloop.glib, "DBusGMainLoop",
+                            lambda **k: done.append("sets the D-Bus main loop"))
+        monkeypatch.setattr(prefs.GLib, "unix_signal_add",
+                            lambda *a: done.append("handles bring-to-front"))
+        monkeypatch.setattr(prefs.Gtk, "main", lambda: done.append("runs"))
         monkeypatch.setattr(sys, "argv", ["tuxtalk-prefs", *argv])
         prefs.main()
         return done
@@ -541,6 +542,7 @@ def tray_main(monkeypatch):
     """The tray's main(), on a start that isn't the first unless
     run(first_run=True); *welcome* stands in for the welcome screens."""
     import sys
+    import types
     import dbus.mainloop.glib
     from tuxtalk import (autostart, control, cuda_helper, desktop_identity,
                          gnome_keybindings, rename_migration, service_launcher,
@@ -562,9 +564,6 @@ def tray_main(monkeypatch):
         show_menu_window_if_no_tray = step("shows the menu window")
         auto_check_for_updates = step("checks for updates")
 
-    monkeypatch.setattr(desktop_identity, "apply", step("names itself"))
-    monkeypatch.setattr(ui_style, "prepare_windows", step("prepares windows"))
-    monkeypatch.setattr(dbus.mainloop.glib, "DBusGMainLoop", step("sets the D-Bus main loop"))
     monkeypatch.setattr(tray, "_acquire_tray_singleton", step("takes the tray lock"))
     monkeypatch.setattr(tray, "_handle_old_talktype_flatpak", lambda: None)
     monkeypatch.setattr(tray, "_refresh_kde_menu_cache", lambda: None)
@@ -585,13 +584,18 @@ def tray_main(monkeypatch):
     monkeypatch.setattr(cuda_helper, "mark_first_run_complete", step("marks setup done"))
     monkeypatch.setattr(control, "report", lambda status: None)
     monkeypatch.setattr(tray, "DictationTray", Tray)
-    monkeypatch.setattr(tray.time, "sleep", lambda s: None)
-    monkeypatch.setattr(tray.GLib, "timeout_add",
-                        lambda ms, fn, *args: done.timers.append((ms, fn, args)))
-    monkeypatch.setattr(tray.Gtk, "main", step("runs"))
+    # Its own name for the time module: time.sleep stays real for other threads.
+    monkeypatch.setattr(tray, "time", types.SimpleNamespace(sleep=lambda s: None))
     monkeypatch.delenv("FLATPAK_ID", raising=False)
 
     def run(*argv, first_run=False, welcome=lambda: {"continue": True}):
+        # Shared with the other programs' main(), so patched for this run.
+        monkeypatch.setattr(desktop_identity, "apply", step("names itself"))
+        monkeypatch.setattr(ui_style, "prepare_windows", step("prepares windows"))
+        monkeypatch.setattr(dbus.mainloop.glib, "DBusGMainLoop", step("sets the D-Bus main loop"))
+        monkeypatch.setattr(tray.GLib, "timeout_add",
+                            lambda ms, fn, *args: done.timers.append((ms, fn, args)))
+        monkeypatch.setattr(tray.Gtk, "main", step("runs"))
         monkeypatch.setattr(sys, "argv", ["tuxtalk", *argv])
         monkeypatch.setattr(cuda_helper, "is_first_run", lambda: first_run)
         monkeypatch.setattr(welcome_dialog, "show_welcome_and_install", welcome)
@@ -647,8 +651,6 @@ def service_main(monkeypatch):
                      app._cmd_start_recording.is_set() or app._cmd_stop_recording.is_set()
                      or app._cmd_start_from_toggle_key.is_set()))
 
-    monkeypatch.setattr(desktop_identity, "apply", step("names itself"))
-    monkeypatch.setattr(ui_style, "prepare_windows", step("prepares windows"))
     monkeypatch.setattr(app, "_acquire_single_instance", step("takes the service lock"))
     monkeypatch.setattr(app, "_install_signal_handlers", lambda: None)
     monkeypatch.setattr(app, "_guard_large_v3_without_cuda", lambda cfg: None)
@@ -669,6 +671,8 @@ def service_main(monkeypatch):
     monkeypatch.delenv("FLATPAK_ID", raising=False)
 
     def run(cached=True, **settings):
+        monkeypatch.setattr(desktop_identity, "apply", step("names itself"))
+        monkeypatch.setattr(ui_style, "prepare_windows", step("prepares windows"))
         monkeypatch.setattr(app, "load_config", lambda: config.Settings(**settings))
         monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda m: cached)
         app.main()

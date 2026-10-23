@@ -6,7 +6,6 @@ by the Ready screen, so the tray writes a hidden entry first, which the Ready
 screen then replaces with the real launcher.
 """
 import pathlib
-import re
 
 import pytest
 
@@ -73,12 +72,11 @@ def test_a_failure_never_raises(home, monkeypatch):
     assert not uc.create_hidden_desktop_entry()
 
 
-def test_the_tray_writes_it_after_the_rename_and_before_any_window():
-    src = (ROOT / "src" / "tuxtalk" / "tray.py").read_text()
-    body = re.search(r"\ndef main\(\):\n(.*?)(?=\ndef |\nif __name__)", src, re.S).group(1)
-    call = body.index("create_hidden_desktop_entry()")
+def test_the_tray_writes_it_after_the_rename_and_before_any_window(tray_main):
+    started = tray_main()
     # The rename moves talktype.desktop only while tuxtalk.desktop is missing.
-    assert body.index("adopt_old_install(") < call < body.index("DictationTray()")
+    assert (started.index("adopts the old install") < started.index("writes the hidden menu entry")
+            < started.index("makes the tray"))
 
 
 @pytest.mark.parametrize("name", ["My Apps/TuxTalk-v0.15.0-x86_64.AppImage",

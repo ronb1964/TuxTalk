@@ -5,15 +5,11 @@ too, not taken for a CUDA failure that the CUDA fallback answers by
 downloading without asking. And a startup download's dialogs run before
 Gtk.main() is live on another thread, or they crash the service.
 """
-import re
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from tuxtalk import app, model_helper
-
-ROOT = Path(__file__).resolve().parent.parent
 
 
 def _settings(model="small", device="cuda"):
@@ -90,13 +86,16 @@ def test_a_real_cuda_failure_still_falls_back_to_cpu(monkeypatch):
     assert calls == ["cuda", "cpu"]
 
 
-def test_a_needed_download_happens_before_the_gtk_thread_starts():
+def test_a_needed_download_happens_before_the_gtk_thread_starts(service_main):
     """Only one thread may drive GTK: the download dialogs must run before
     Gtk.main() starts on its background thread."""
-    main_src = (ROOT / "src/tuxtalk/app.py").read_text().split("\ndef main():", 1)[1]
-    early_build = main_src.index("if not is_model_cached_fast(cfg.model):")
-    thread_start = main_src.index("gtk_thread.start()")
-    assert early_build < thread_start
+    started = service_main(cached=False)
+    assert started.index("loads the speech model") < started.index("starts the GTK loop")
+
+
+def test_a_downloaded_model_loads_after_the_gtk_thread_starts(service_main):
+    started = service_main(cached=True)
+    assert started.index("starts the GTK loop") < started.index("loads the speech model")
 
 
 @pytest.mark.parametrize("wanted,downloaded,cuda,expected", [
@@ -147,14 +146,20 @@ def test_a_cancelled_cpu_retry_is_a_missing_model_not_a_crash(monkeypatch):
         app.build_model(_settings(device="cuda"))
 
 
-def test_a_model_load_error_is_not_reported_as_a_gtk_failure():
+def test_a_model_load_error_is_not_reported_as_a_gtk_failure(service_main, monkeypatch, caplog):
     """The early build must not sit inside the GTK setup's try, or a load
     error is logged as "GTK initialization failed", the GTK loop never starts,
     and the model is then built a second time."""
-    main_src = (ROOT / "src/tuxtalk/app.py").read_text().split("\ndef main():", 1)[1]
-    gtk_except = main_src.index('logger.error(f"GTK initialization failed')
-    early_build = main_src.index("if not is_model_cached_fast(cfg.model):")
-    assert gtk_except < early_build
+    builds = []
+
+    def broken(cfg):
+        builds.append(cfg.model)
+        raise RuntimeError("bad model.bin")
+    monkeypatch.setattr(app, "_build_model_or_exit", broken)
+    with pytest.raises(RuntimeError, match="bad model.bin"):
+        service_main(cached=False)
+    assert builds == ["parakeet-v3"]
+    assert "GTK initialization failed" not in caplog.text
 
 
 def test_broken_files_raise_instead_of_opening_dialogs_off_the_gtk_thread(monkeypatch):
