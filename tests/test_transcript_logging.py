@@ -288,3 +288,96 @@ def test_prefs_has_clear_log_button(prefs_window, dialogs, monkeypatch):
     find(window.window, Gtk.Button, "Clear log now").clicked()
     assert cleared == [True]
     assert dialogs[0] == Gtk.MessageType.WARNING
+
+
+# --- whole dictations: no path writes the words ----------------------------
+
+SECRET = ("zanzibar", "quokka", "hunter")
+
+
+def _leaks(caplog, capsys):
+    """The secret words found in the log records or on stdout and stderr."""
+    out = capsys.readouterr()
+    everything = "\n".join([caplog.text, out.out, out.err]).lower()
+    return [word for word in SECRET if word in everything]
+
+
+def test_a_dictation_never_writes_the_words(monkeypatch, caplog, capsys, keyboard):
+    """Every log line and print on the way from the recording to the typed
+    text, with transcript logging off (the default)."""
+    import logging
+    import numpy as np
+    from tuxtalk import app
+    monkeypatch.setattr(app, "_log_transcripts", False)
+    monkeypatch.setattr(app, "_transcribe_audio",
+                        lambda audio, language: "zanzibar quokka password hunter two")
+    monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.kwrite")
+    frames = [(np.ones(app.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
+    with caplog.at_level(logging.DEBUG, logger="tuxtalk"):
+        app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=False,
+                                   smart_quotes=False, notify_on=False)
+    assert keyboard.typed_keys(), "the dictation was not typed"
+    assert "[hidden" in caplog.text                     # it did log, redacted
+    assert _leaks(caplog, capsys) == []
+
+
+def test_a_voice_edit_never_writes_the_words(monkeypatch, caplog, capsys):
+    """The selection, the spoken instruction and the AI's rewrite."""
+    import logging
+    import numpy as np
+    from tuxtalk import app
+    from tuxtalk import clipboard as cb
+    typed = []
+    engine = type("Engine", (), {"is_ready": lambda self: True,
+                                 "edit": lambda self, text, instruction: "Quokka hunter, formally."})()
+    monkeypatch.setattr(app, "_log_transcripts", False)
+    monkeypatch.setattr(app, "_ai_engine", engine)
+    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "make the zanzibar formal")
+    monkeypatch.setattr("tuxtalk.silence.is_speechless_tap", lambda a, sr: False)
+    monkeypatch.setattr(cb, "copy_selection",
+                        lambda send_copy: ("zanzibar quokka hunter", lambda also=(): None))
+    monkeypatch.setattr(app, "_inject_text", lambda text, mode, t0, one_block=False:
+                        typed.append(text) or "ok")
+    monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
+    monkeypatch.setattr(app, "EDIT_RESTORE_DELAY_S", 0)
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.kwrite")
+    monkeypatch.setattr(app, "_is_wayland_session", lambda: True)
+    frames = [np.full(16000, 1000, dtype=np.int16).tobytes()]
+    with caplog.at_level(logging.DEBUG, logger="tuxtalk"):
+        app._transcribe_and_edit(frames, 16000, False, "", "type")
+    assert typed == ["Quokka hunter, formally."]
+    assert _leaks(caplog, capsys) == []
+
+
+def _engine(kind):
+    """A loaded speech model of each kind the service runs, hearing the secret."""
+    import types
+    from tuxtalk.parakeet_engine import ParakeetModel
+    from tuxtalk.whisper_vulkan import VulkanWhisperModel
+    heard = "zanzibar quokka password hunter two"
+    if kind == "parakeet":
+        engine = ParakeetModel.__new__(ParakeetModel)
+        engine.recognize = lambda audio: heard
+    elif kind == "vulkan":
+        engine = VulkanWhisperModel.__new__(VulkanWhisperModel)
+        engine.transcribe = lambda audio, language, **k: (heard, 0.0)
+    else:
+        segment = types.SimpleNamespace(text=heard, no_speech_prob=0.0)
+        info = types.SimpleNamespace(language="en", all_language_probs=None)
+        engine = types.SimpleNamespace(transcribe=lambda audio, **k: ([segment], info))
+    return engine
+
+
+@pytest.mark.parametrize("kind", ["parakeet", "vulkan", "whisper"])
+def test_no_speech_engine_writes_the_words(monkeypatch, caplog, capsys, kind):
+    import logging
+    import numpy as np
+    from tuxtalk import app
+    monkeypatch.setattr(app, "_log_transcripts", False)
+    monkeypatch.setattr(app, "model", _engine(kind))
+    monkeypatch.setattr("tuxtalk.parakeet_gpu._steer", lambda engine, words: None)
+    with caplog.at_level(logging.DEBUG, logger="tuxtalk"):
+        raw = app._transcribe_audio(np.full(16000, 0.2, dtype=np.float32), language=None)
+    assert raw and "quokka" in raw
+    assert _leaks(caplog, capsys) == []
