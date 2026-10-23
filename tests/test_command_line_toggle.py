@@ -440,9 +440,10 @@ def test_help_names_the_command_for_this_install(appimage, expected):
     assert control.shortcut_command(appimage_env=appimage, home="/home/u") == expected
 
 
-def test_help_mentions_the_command():
-    src = (ROOT / "src" / "tuxtalk" / "help_dialog.py").read_text()
-    assert "shortcut_command()" in src and "{shortcut_line}" in src
+def test_help_mentions_the_command(help_pages):
+    """Help names the command for this install (shortcut_command, above)."""
+    terminals = next(text for title, text in help_pages.items() if "Terminals" in title)
+    assert control.shortcut_command() in terminals
     assert "tuxtalk --toggle" in (ROOT / "README.md").read_text()
 
 

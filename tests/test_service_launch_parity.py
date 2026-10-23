@@ -12,17 +12,6 @@ the wrong subsystem: "changing the indicator position does nothing unless I
 quit and restart the app".
 """
 
-import pathlib
-import re
-
-import pytest
-
-ROOT = pathlib.Path(__file__).resolve().parent.parent
-SRC = ROOT / "src/tuxtalk"
-
-# Modules that start the dictation service.
-LAUNCHERS = ["tray.py", "prefs.py"]
-
 
 def test_service_launcher_module_exists():
     from tuxtalk import service_launcher
@@ -61,28 +50,17 @@ def test_launcher_does_not_inherit_a_stale_backend(monkeypatch):
     )
 
 
-@pytest.mark.parametrize("module", LAUNCHERS)
-def test_no_module_spawns_the_service_on_its_own(module):
+def test_the_tray_and_preferences_start_the_service_the_same_way(monkeypatch):
     """A second hand-rolled spawn would let the two paths drift apart."""
-    text = (SRC / module).read_text()
-
-    # Popen calls naming the service directly, outside the shared launcher.
-    offenders = [
-        line.strip()
-        for line in text.splitlines()
-        if "Popen" in line and ("tuxtalk.app" in line or "dictate_script" in line)
-    ]
-    assert not offenders, (
-        f"{module} spawns the dictation service directly ({offenders}). Use "
-        f"service_launcher.launch_dictation_service() so every launch path sets "
-        f"the same environment."
-    )
-
-
-@pytest.mark.parametrize("module", LAUNCHERS)
-def test_every_launcher_uses_the_shared_helper(module):
-    text = (SRC / module).read_text()
-    assert "launch_dictation_service" in text, (
-        f"{module} starts the dictation service but does not use the shared "
-        f"launcher, so its environment can drift from the other call site."
-    )
+    import types
+    from tuxtalk import prefs, service_launcher, tray
+    started = []
+    monkeypatch.delenv("GDK_BACKEND", raising=False)
+    monkeypatch.setattr(service_launcher.subprocess, "Popen", lambda argv, env=None, **k:
+                        started.append((argv, (env or {}).get("GDK_BACKEND"))) or types.SimpleNamespace(pid=1))
+    monkeypatch.setattr(service_launcher, "stop_dictation_service", lambda: None)
+    tray.DictationTray._launch_service(types.SimpleNamespace())
+    assert prefs.PreferencesWindow.restart_service(types.SimpleNamespace()) is True
+    assert len(started) == 2 and started[0] == started[1]
+    argv, backend = started[0]
+    assert argv[1:] == ["-m", "tuxtalk.app"] and backend.startswith("x11")

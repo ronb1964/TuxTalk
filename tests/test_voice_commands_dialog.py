@@ -42,16 +42,14 @@ def test_literal_names_words_it_really_covers():
         assert word in normalize.LITERAL_REPLACEMENTS, word
 
 
-def test_help_lists_exactly_the_literal_words():
+def test_help_lists_exactly_the_literal_words(help_pages):
     """Help must not say "Works with any punctuation or formatting command",
     or that "literal new line" types "newline" (it types "new line")."""
-    from pathlib import Path
-    from tuxtalk import help_dialog
-    source = Path(help_dialog.__file__).read_text()
-    line = next(l for l in source.splitlines() if l.startswith("Works with: "))
+    commands = next(text for title, text in help_pages.items() if "Commands" in title)
+    line = next(l for l in commands.splitlines() if l.startswith("Works with: "))
     listed = line[len("Works with: "):].rstrip(".").replace(" and ", ", ").split(", ")
     assert sorted(listed) == sorted(normalize.LITERAL_REPLACEMENTS)
-    assert '<b>literal new line</b> → "new line"' in source
+    assert 'literal new line → "new line"' in commands
     assert normalize.normalize_text("literal new line").lower().startswith("new line")
 
 

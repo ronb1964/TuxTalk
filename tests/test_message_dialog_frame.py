@@ -50,11 +50,45 @@ def test_a_question_that_adds_its_own_buttons_keeps_its_close_button(Gtk):
     assert dialog.get_deletable()
 
 
-def test_the_tray_progress_boxes_stay_without_one():
-    source = (SRC / "tray.py").read_text()
-    for text in ('"Checking for Updates..."', '"Installing Update..."'):
-        call = source[source.rindex("message_dialog(", 0, source.index(text)):source.index(text)]
-        assert "closable=False" in call, text
+def _open_box(Gtk, text):
+    """The visible message box whose main text is *text*, or None."""
+    return next((w for w in Gtk.Window.list_toplevels()
+                 if isinstance(w, Gtk.MessageDialog) and w.props.text == text
+                 and w.get_visible()), None)
+
+
+def test_checking_for_updates_has_no_close_button(Gtk, monkeypatch):
+    import types
+    from gi.repository import GLib
+    from tuxtalk import tray, update_checker
+    monkeypatch.setattr(update_checker, "check_for_updates", lambda: {"success": False})
+    monkeypatch.setattr(GLib, "idle_add", lambda *a: None)     # the result never comes
+    tray.DictationTray.check_for_updates_clicked(types.SimpleNamespace(), None)
+    box = _open_box(Gtk, "Checking for Updates...")
+    try:
+        assert box is not None and not box.get_deletable()
+    finally:
+        box.destroy()
+
+
+def test_installing_an_update_has_no_close_button(Gtk, monkeypatch):
+    import queue
+    import types
+    from gi.repository import GLib
+    from tuxtalk import tray, update_checker
+    waiting, seen = queue.Queue(), []
+    monkeypatch.setattr(GLib, "idle_add", lambda fn, *args: waiting.put(fn))
+    monkeypatch.setattr(update_checker, "download_update", lambda *a, **k: "/u/TuxTalk.AppImage")
+
+    def install(path):
+        box = _open_box(Gtk, "Installing Update...")
+        seen.append(box is not None and not box.get_deletable())
+        return True, ""
+    monkeypatch.setattr(update_checker, "install_appimage_update", install)
+    tray.DictationTray._download_update(types.SimpleNamespace(restart_app=lambda: None),
+                                        {"appimage_url": "https://x/TuxTalk.AppImage"})
+    waiting.get(timeout=5)()
+    assert seen == [True]
 
 
 def test_an_explicit_title_is_kept(Gtk):
@@ -66,7 +100,7 @@ def test_no_module_builds_a_message_dialog_directly():
     """One stock Gtk.MessageDialog anywhere brings the square box back."""
     offenders = [
         f"{path.name}:{n}"
-        for path in SRC.glob("*.py") if path.name != "ui_style.py"
+        for path in SRC.rglob("*.py") if path.name != "ui_style.py"
         for n, line in enumerate(path.read_text().splitlines(), 1)
         if re.search(r"\bGtk\.MessageDialog\(", line)
     ]

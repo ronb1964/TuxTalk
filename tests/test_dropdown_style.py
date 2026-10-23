@@ -27,11 +27,7 @@ Three things are easy to get wrong here, and all are covered below:
    which the compositor places, and the menu is made as wide as the button.
 """
 
-import pathlib
-
 import pytest
-
-ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 
 @pytest.fixture
@@ -211,18 +207,22 @@ def test_helper_is_idempotent(gtk):
     apply_dropdown_list_style()  # must not raise or stack providers unboundedly
 
 
-@pytest.mark.parametrize(
-    "module",
-    [
-        "src/tuxtalk/prefs.py",           # Model, Device, Language, hotkeys
-        "src/tuxtalk/welcome_dialog.py",  # first-run model picker
-        "src/tuxtalk/fix_word_dialog.py", # which recent dictation
-    ],
-)
-def test_every_window_with_dropdowns_applies_the_style(module):
-    """Both live in different processes; neither inherits the other's CSS."""
-    text = (ROOT / module).read_text()
-    assert "apply_dropdown_list_style" in text, (
-        f"{module} builds dropdowns but never calls apply_dropdown_list_style(), "
-        f"so its popups will still open in menu mode covering the row above."
-    )
+def _fix_word_window(request):
+    from tuxtalk import fix_word_dialog
+    dialog = fix_word_dialog._FixWordDialog(["see you at noon"], 0, lambda text: None)
+    request.addfinalizer(dialog.window.destroy)
+
+
+@pytest.mark.parametrize("build", [
+    lambda request: request.getfixturevalue("prefs_window")(),       # Model, Device, Language, hotkeys
+    lambda request: request.getfixturevalue("welcome_window"),       # first-run language picker
+    _fix_word_window,                                                # which recent dictation
+], ids=["preferences", "first run", "fix a word"])
+def test_every_window_with_dropdowns_applies_the_style(gtk, monkeypatch, request, build):
+    """Each runs in its own process; none inherits another's CSS."""
+    from tuxtalk import ui_style
+    applied = []
+    monkeypatch.setattr(ui_style, "apply_dropdown_list_style", lambda: applied.append(True))
+    build(request)
+    assert applied, ("this window builds dropdowns without apply_dropdown_list_style(), "
+                     "so its popups open in menu mode covering the row above")

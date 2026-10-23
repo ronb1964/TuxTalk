@@ -134,6 +134,26 @@ def test_old_or_unknown_ids_are_ignored(env, old_id):
     assert saved == [] and t.restarted == 0
 
 
+def test_the_tray_never_loads_a_model_on_its_main_loop(env, monkeypatch):
+    """The tray owns the D-Bus name the dictation service calls into, from its
+    input thread while it holds a grab on every keyboard. A model loaded on
+    the tray's main loop (seconds and gigabytes for large-v3, just to ask
+    "is it downloaded?") would freeze the user's keyboard system-wide. A
+    downloaded model is recognised by its files."""
+    from tuxtalk import model_helper
+
+    def loads(*a, **k):
+        pytest.fail("loaded a speech model on the main loop")
+    monkeypatch.setattr("faster_whisper.WhisperModel", loads)
+    monkeypatch.setattr(model_helper, "load_parakeet_model", loads)
+    cfg, saved = env
+    menu = tray_mod.DictationTray.build_menu(tray_mod.DictationTray.__new__(tray_mod.DictationTray))
+    menu.destroy()
+    t = FakeTray()
+    t.set_performance_preset("lightest")
+    assert saved == [("base", "cpu")] and t.restarted == 1
+
+
 def test_current_preset_uses_match_preset(env):
     cfg, _ = env
     cfg.model, cfg.device = "parakeet-v3", "vulkan"
