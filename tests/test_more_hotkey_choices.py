@@ -331,6 +331,31 @@ def test_a_dictation_stopped_by_a_stuck_key_stays_in_recent_dictations(
     assert any("Recent Dictations" in note for note in notes)
 
 
+def test_a_stuck_key_types_nothing_another_way(keyboard, stuck_right_ctrl, monkeypatch):
+    """wtype would type the text as the shortcuts the wait was there to
+    prevent (and put it in a process's arguments); the clipboard fallback
+    would overwrite what the user had copied."""
+    import subprocess
+
+    import pyperclip
+    stuck_right_ctrl()
+    ran = []
+    monkeypatch.setattr(app, "_which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: ran.append(a) or 1 / 0)
+    monkeypatch.setattr(pyperclip, "copy", lambda text: ran.append(text))
+    monkeypatch.setattr(app, "_determine_injection_method", lambda mode: ("type", "test"))
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "kwrite")
+    assert app._inject_text("hello there", "type", 0.0) == "key_held"
+    assert ran == [] and keyboard.events == []
+    assert "Right Ctrl" in app._UNDELIVERED_NOTICES["key_held"]
+
+
+def test_undo_under_a_stuck_key_deletes_nothing_and_says_so(keyboard, stuck_right_ctrl):
+    stuck_right_ctrl()
+    assert app._send_backspaces(3) is False
+    assert keyboard.events == []
+
+
 class Grabbable(Keyboard):
     """A keyboard the hotkey loop can grab, as a hold recording does; with
     *grabs* False the grab fails (another program holds it)."""

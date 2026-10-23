@@ -91,7 +91,7 @@ def _give_up(held) -> None:
         logger.warning(f"{names} has been down for {HELD_LIMIT_S:g} s, so typing stopped; "
                        "the dictation is in Recent Dictations")
         _stuck.update(held)
-    raise GaveUp()
+    raise GaveUp("key_held")
 
 
 def right_alt_alone(event, dictation_keys, held_modifiers) -> bool:

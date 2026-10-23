@@ -1651,7 +1651,9 @@ def _send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY
 
     With *raise_if_partial*, a keyboard that failed partway raises
     virtual_keyboard.StoppedPartway instead of returning False, for a caller
-    that must tell "none of the keys were sent" from "some of them were".
+    that must tell "none of the keys were sent" from "some of them were";
+    and a wait that gave up raises virtual_keyboard.GaveUp: the text must
+    not go out another way (wtype, the clipboard) either.
     """
     before_press = None if under_hotkey else modifier_hotkeys.wait_while_held()
     try:
@@ -1662,6 +1664,8 @@ def _send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY
             raise
         return False
     except virtual_keyboard.GaveUp:
+        if raise_if_partial:
+            raise
         return False        # nothing sent: the key stayed down (logged there)
     if not sent:
         logger.error(f"Couldn't send {what}: TuxTalk's virtual keyboard isn't working")
@@ -1934,7 +1938,9 @@ def _type_text_raw(text: str) -> bool:
     layout) is pasted instead, which works on any layout. Without a virtual
     keyboard (no access to /dev/uinput), wtype, where the desktop has one.
     Raises virtual_keyboard.StoppedPartway when the keyboard failed partway:
-    some of the text is in the app, and nothing may type it again."""
+    some of the text is in the app, and nothing may type it again; and
+    virtual_keyboard.GaveUp when typing stopped for a dictation key held
+    down (_send_keys)."""
     from . import keyboard_layout
     events = None
     try:
@@ -2341,8 +2347,8 @@ def _paste_text(text: str) -> bool:
                 # isn't lost either way.
                 if keeping:
                     _clipboard_keeper.after_paste(text)
-    except virtual_keyboard.StoppedPartway:
-        raise       # the paste may have happened: nothing may deliver it again
+    except (virtual_keyboard.StoppedPartway, virtual_keyboard.GaveUp):
+        raise       # the paste may have happened, or must not: nothing may deliver it now
     except subprocess.TimeoutExpired as e:
         logger.error(f"Paste injection timeout: {e}")
     except Exception as e:
@@ -2427,8 +2433,11 @@ def _send_backspaces(count: int) -> bool:
     if count <= 0:
         return True
     # KEY_BACKSPACE = 14, pressed and released once per character.
-    return _send_keys([(14, 1), (14, 0)] * count, what=f"{count} backspaces",
-                      delay_ms=_key_delay(), raise_if_partial=True)
+    try:
+        return _send_keys([(14, 1), (14, 0)] * count, what=f"{count} backspaces",
+                          delay_ms=_key_delay(), raise_if_partial=True)
+    except virtual_keyboard.GaveUp:
+        return False        # none sent, and there's no other way to send them
 
 # Key names voice_navigation uses -> Linux key codes (the letter A is looked up
 # on the active layout, as Ctrl shortcuts are matched by letter).
@@ -2842,27 +2851,9 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
     """
     try:
         outcome = _deliver_text(text, injection_mode, t0, one_block)
-    except virtual_keyboard.StoppedPartway:
-        # An unknown part of the text is in the app. Typing or pasting it
-        # again would double that part, and undo or "select that" counting
-        # on it would eat the user's own text.
-        logger.error("The virtual keyboard stopped partway through the dictation")
-        state.last_inserted_text = ""
-        state.continue_mid_sentence = False
-        state.nav_context = None
-        _forget_shown()
-        outcome = "partial"
-    except PasswordFieldNow:
-        # The lines before it are in the app, but which form they took
-        # (pasted, typed after a failed paste) isn't tracked: undo then
-        # deletes nothing rather than the wrong amount.
-        logger.warning("Stopped typing: a password field has the focus now")
-        state.last_inserted_text = ""
-        state.continue_mid_sentence = False
-        state.nav_context = None
-        _forget_shown()
-        outcome = "password_field"
-    if outcome not in ("failed", "password_field"):
+    except (virtual_keyboard.StoppedPartway, virtual_keyboard.GaveUp, PasswordFieldNow) as stop:
+        outcome = _delivery_stopped(stop)
+    if outcome in ("ok", "partial"):
         try:
             landed = _query_focused_window_class()
         except Exception:
@@ -2872,6 +2863,29 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
                 logger.info(f"The text landed in {landed!r}, not {state.last_inserted_window!r}")
             state.last_inserted_window = landed
     return outcome
+
+
+def _delivery_stopped(stop) -> str:
+    """The outcome of a delivery that *stop* ended early, after forgetting
+    what undo, "select that" and the next dictation's capital count on.
+
+    StoppedPartway: an unknown part of the text is in the app; typing or
+    pasting it again would double that part. PasswordFieldNow: the lines
+    before it are in the app, but in which form (pasted, typed after a
+    failed paste) isn't tracked. GaveUp: a Right Ctrl or Right Alt dictation
+    key stayed down (modifier_hotkeys), and typing on any other way (wtype,
+    the clipboard) would do what the wait was there to prevent."""
+    state.last_inserted_text = ""
+    state.continue_mid_sentence = False
+    state.nav_context = None
+    _forget_shown()
+    if isinstance(stop, virtual_keyboard.GaveUp):
+        return stop.reason          # logged where it gave up
+    if isinstance(stop, PasswordFieldNow):
+        logger.warning("Stopped typing: a password field has the focus now")
+        return "password_field"
+    logger.error("The virtual keyboard stopped partway through the dictation")
+    return "partial"
 
 
 def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = False) -> str:
@@ -3242,6 +3256,7 @@ _UNDELIVERED_TITLES = {
     "failed": "Couldn't type the dictation",
     "partial": "Only part of the dictation was typed",
     "password_field": PASSWORD_FIELD_TITLE,
+    "key_held": "Typing stopped: a dictation key stayed down",
 }
 _UNDELIVERED_NOTICES = {
     "failed": "It's saved in Recent Dictations in the TuxTalk menu: click it to copy, "
@@ -3250,6 +3265,10 @@ _UNDELIVERED_NOTICES = {
                "it to copy, then paste with Ctrl+V.",
     # Said its own way, with a label over the window (_password_field_refused).
     "password_field": PASSWORD_FIELD_NOTICE,
+    "key_held": f"Right Ctrl or Right Alt read as held down for "
+                f"{modifier_hotkeys.HELD_LIMIT_S:g} seconds, and the text would have gone "
+                "in as shortcuts. It's saved in Recent Dictations in the TuxTalk menu: "
+                "click it to copy, then paste with Ctrl+V.",
 }
 
 

@@ -51,7 +51,12 @@ class StoppedPartway(Exception):
 class GaveUp(Exception):
     """Raised by the wait a send's *before_press* asked for, to stop the
     typing: the keys held are let go, and send passes it on, or raises
-    StoppedPartway when some keys had already gone out."""
+    StoppedPartway when some keys had already gone out. Its *reason* is
+    the caller's, for what it tells the user."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
 
 
 _lock = threading.Lock()
