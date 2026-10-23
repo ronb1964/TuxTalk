@@ -49,12 +49,14 @@ def test_a_notice_goes_to_the_desktops_notification_service(monkeypatch):
         Dictionary=lambda items, signature: dict(items))
     monkeypatch.setitem(sys.modules, "dbus", fake_dbus)
     import importlib
+    before = dict(vars(notify))              # conftest's held-back _send among them
     real = importlib.reload(notify)          # the real _send, not the held-back one
     try:
         real._send("TuxTalk", "Heard only silence")
     finally:
-        importlib.reload(notify)
-        notify._send = lambda title, body: None   # held back again
+        # The module as it was, so notify.notify is again the function
+        # app._notify holds and _send is held back, whatever runs next.
+        vars(notify).update(before)
     assert calls[0] == ("org.freedesktop.Notifications", "/org/freedesktop/Notifications")
     args, kwargs = calls[1]
     assert args[3:5] == ("TuxTalk", "Heard only silence")
