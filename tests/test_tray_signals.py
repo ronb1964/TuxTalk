@@ -56,34 +56,28 @@ def test_extension_version_is_bumped_whenever_extension_js_changes():
     """The in-app updater compares only this integer.
 
     Without a bump, every GNOME user who has installed the extension is told
-    "up to date" forever and never receives the newer menu. This test fails
-    the build if extension.js is committed at a newer revision than the last
-    version bump.
+    "up to date" forever and never receives the newer menu. So when anything
+    in the extension differs from the last release, its version must be
+    higher than that release's.
     """
     import json
     import pathlib
     import subprocess
 
     root = pathlib.Path(__file__).resolve().parent.parent
-    ext_dir = root / "gnome-extension" / "talktype@ronb1964.github.io"
-    metadata = ext_dir / "metadata.json"
-    extension_js = ext_dir / "extension.js"
+    ext = "gnome-extension/talktype@ronb1964.github.io"
 
-    version = json.loads(metadata.read_text())["version"]
+    def git(*args):
+        return subprocess.run(["git", *args], cwd=root, capture_output=True, text=True)
 
-    def last_commit(path):
-        out = subprocess.run(
-            ["git", "log", "-1", "--format=%ct", "--", str(path)],
-            cwd=root, capture_output=True, text=True,
-        )
-        return int(out.stdout.strip() or 0)
-
-    js_time = last_commit(extension_js)
-    meta_time = last_commit(metadata)
-
-    if js_time and meta_time and js_time > meta_time:
-        pytest.fail(
-            f"extension.js was committed after metadata.json was last bumped "
-            f"(version is still {version}). Bump it, or GNOME users will never "
-            f"be offered the update."
-        )
+    tag = git("describe", "--tags", "--abbrev=0", "--match", "v[0-9]*", "HEAD").stdout.strip()
+    if not tag:
+        pytest.skip("no release tag in this checkout (CI fetches them with fetch-depth 0)")
+    changed = git("diff", "--quiet", tag, "--", ext, f":(exclude){ext}/metadata.json").returncode
+    if changed == 0:
+        return
+    released = json.loads(git("show", f"{tag}:{ext}/metadata.json").stdout)["version"]
+    version = json.loads((root / ext / "metadata.json").read_text())["version"]
+    assert version > released, (
+        f"The extension changed since {tag} but its version is still {version}. "
+        f"Bump it, or GNOME users will never be offered the update.")
