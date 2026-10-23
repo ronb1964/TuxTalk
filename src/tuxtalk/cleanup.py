@@ -9,8 +9,8 @@ are handled separately by the optional AI step (ai_cleanup.py).
 
 Runs on the normalized text, after spoken commands have been turned into
 punctuation, so an intentional "new line new line" (two line breaks) has
-already become markers and is never mistaken for a stutter. A spoken "tab"
-is a real tab character by then, so these rules only ever touch spaces.
+already become markers and is never mistaken for a stutter. A spoken "press
+tab" is a real tab character by then, so these rules only ever touch spaces.
 """
 import re
 
@@ -105,7 +105,7 @@ def _collapse_repeats(text: str) -> str:
 def _tidy(text: str, original: str) -> str:
     """Fix the spacing, punctuation and capitals the deletions left behind."""
     text = re.sub(r" {2,}", " ", text)
-    text = re.sub(r" +([,.!?;:])", r"\1", text)           # "word ," -> "word,"
+    text = re.sub(r" +([,.!?;:\t])", r"\1", text)         # "word ," -> "word,"
     text = re.sub(r",( *[,.!?;:])", r"\1", text)          # ",." or ",," -> "."
     text = re.sub(r"^[ ,]+", "", text)                      # leading comma/space
     # Keep the original's trailing space (auto-space adds one).

@@ -83,17 +83,18 @@ def test_cleanup_runs_in_prepare_text_only_when_enabled(monkeypatch):
     assert app._prepare_text("um so the the van is ready", False, True, False) == "So the van is ready."
 
 
-# A spoken "tab" is a real tab character by the time cleanup runs, and the
-# tidy-up step must keep it rather than treat it as stray whitespace.
+# A spoken "press tab" is a real tab character by the time cleanup runs, and
+# the tidy-up step must keep it rather than treat it as stray whitespace, and
+# leave no space before it where a filler was taken out.
 @pytest.mark.parametrize("said, want", [
-    ("hello tab world", "Hello \t world."),
-    ("name tab tab age", "Name \t \t age."),
-    ("tab tab indented", "\t\t Indented."),
-    ("first tab second tab third", "First \t second \t third."),
-    ("total tab total", "Total \t total."),
-    ("hello tab um world", "Hello \t world."),
-    ("hello um tab world", "Hello \t world."),
-    ("tab um hello there", "\tHello there."),
+    ("hello press tab world", "Hello\tworld."),
+    ("name press tab press tab age", "Name\t\tage."),
+    ("press tab press tab indented", "\t\tIndented."),
+    ("first press tab second press tab third", "First\tsecond\tthird."),
+    ("total press tab total", "Total\ttotal."),
+    ("hello press tab um world", "Hello\tworld."),
+    ("hello um press tab world", "Hello\tworld."),
+    ("press tab um hello there", "\tHello there."),
 ])
 def test_spoken_tabs_survive_cleanup(said, want):
     from tuxtalk.normalize import normalize_text

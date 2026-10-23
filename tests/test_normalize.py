@@ -22,11 +22,10 @@ def test_ellipsis_and_caps():
     assert normalize_text(s) == "This is fine\u2026 Next sentence."
 
 def test_newlines_tabs():
-    s = "first line newline tab indented second line period"
+    s = "first line newline press tab indented second line period"
     # \u00a7SHIFT_ENTER\u00a7 markers are converted to keypresses by app.py
     # Auto-period adds periods at line ends
-    # There's a space after tab because capitalize logic adds it
-    assert normalize_text(s) == "First line.\u00a7SHIFT_ENTER\u00a7\t Indented second line."
+    assert normalize_text(s) == "First line.\u00a7SHIFT_ENTER\u00a7\tIndented second line."
 
 def test_return_commands():
     """Test various voice commands for line breaks"""
@@ -209,20 +208,27 @@ def test_return_verb_not_treated_as_command():
     assert "§SHIFT_ENTER§" not in out
 
 
-def test_tab_noun_not_treated_as_command():
-    """Common noun uses of 'tab' must not insert a tab character."""
-    out = normalize_text("open a new tab in the browser")
-    assert "\t" not in out
-    assert "tab" in out
+@pytest.mark.parametrize("said, typed", [
+    ("every tab shows", "Every tab shows."),
+    ("the tabs in Claude Desktop", "The tabs in Claude Desktop."),
+    ("open a new tab in the browser", "Open a new tab in the browser."),
+    ("tab hello world", "Tab hello world."),
+    ("first tab second tab third", "First tab second tab third."),
+    # Talking about the key, not pressing it.
+    ("press the tab key to indent", "Press the tab key to indent."),
+    ("press tab key to indent", "Press tab key to indent."),
+])
+def test_tab_on_its_own_is_typed_as_the_word(said, typed):
+    assert normalize_text(said) == typed
 
-    out = normalize_text("press the tab key to indent")
-    assert "\t" not in out
-    assert "tab key" in out
+
+def test_press_tab_at_the_start_indents_the_line():
+    assert normalize_text("press tab hello world") == "\tHello world."
+    assert normalize_text("press tab press tab hello") == "\t\tHello."
 
 
-def test_tab_command_still_works():
-    """Bare 'tab' at the start of dictation still produces a tab character."""
-    assert normalize_text("tab hello world").startswith("\t")
+def test_literal_press_tab_types_the_words():
+    assert normalize_text("literal press tab to continue") == "Press tab to continue."
 
 
 # --- append_auto_punct: auto-period/space placement around line-break markers ---
@@ -266,9 +272,16 @@ def test_return_command_before_sentence_starter_still_works():
     assert "This is a test." in out
 
 
-def test_tab_field_separator_still_works():
-    """'first tab second tab third' — tab as field separator must keep working."""
-    assert normalize_text("first tab second tab third").count("\t") == 2
+@pytest.mark.parametrize("said, typed", [
+    ("name press tab address", "Name\taddress."),
+    # The engine's commas and periods around the command go with it, and the
+    # next field doesn't start with a space.
+    ("Name, press tab, address.", "Name\taddress."),
+    ("Name. Press Tab. Address.", "Name.\tAddress."),
+    ("first press tab second press tab third", "First\tsecond\tthird."),
+])
+def test_press_tab_between_fields_types_a_tab(said, typed):
+    assert normalize_text(said) == typed
 
 
 def test_line_starting_with_protected_word_is_capitalized():
@@ -753,7 +766,7 @@ def test_an_engine_dash_between_words_keeps_its_spaces():
 
 
 def test_a_tab_before_a_spoken_dash_is_kept():
-    assert normalize_text("first tab dash second") == "First \t-second."
+    assert normalize_text("first press tab dash second") == "First\t-second."
 
 
 @pytest.mark.parametrize("said, expected", [

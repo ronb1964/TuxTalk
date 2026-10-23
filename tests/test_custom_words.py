@@ -301,7 +301,7 @@ def test_after_tidying_a_hyphen_is_the_users_own():
     assert cw.fix_spelling("tux talk.", ["TuxTalk"], hyphens=False) == "TuxTalk."
 
 
-@pytest.mark.parametrize("spoken", ["I like tux tab talk", "I like tux dash talk"])
+@pytest.mark.parametrize("spoken", ["I like tux press tab talk", "I like tux dash talk"])
 def test_a_spoken_tab_or_dash_survives(spoken, monkeypatch):
     monkeypatch.setattr(app, "_custom_words", ["TuxTalk"])
     monkeypatch.setattr(app, "_custom_commands", {})

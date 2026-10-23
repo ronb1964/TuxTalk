@@ -21,7 +21,7 @@ _RE_QUOTED_TEXT = re.compile(
 LITERAL_REPLACEMENTS = {
     "period": "__LIT_PERIOD__",
     "comma": "__LIT_COMMA__",
-    "tab": "__LIT_TAB__",
+    "press tab": "__LIT_PRESS_TAB__",
     "newline": "__LIT_NEWLINE__",
     "new line": "__LIT_NEW_LINE__",
     "return": "__LIT_RETURN__",
@@ -100,20 +100,6 @@ _CONTEXT_PROTECT_PATTERNS = [
         re.IGNORECASE,
     ), r"__LIT_RETURN__\1"),
 
-    # "[article/adj] tab" — browser/UI noun usage ("a new tab", "the wrong
-    # tab"). Ordinals are deliberately NOT protected: "first tab second tab
-    # third" is tab-as-field-separator dictation and must keep working.
-    (re.compile(
-        r"\b(a|an|the|this|that|these|those|my|his|her|its|our|their|your|"
-        r"new|another|current|wrong|right|same|other|browser|chrome|firefox)\s+tab\b",
-        re.IGNORECASE,
-    ), r"\1 __LIT_TAB__"),
-    # "tab [key/bar/...]" — noun compounds ("press tab key" is about the key name)
-    (re.compile(
-        r"\btab\s+(key|bar|stop|order|character|button|group|title)\b",
-        re.IGNORECASE,
-    ), r"__LIT_TAB__ \1"),
-
     # "[article/adj] dash"
     (re.compile(
         r"\b(a|an|the|this|that|my|his|her|every|each|any|some|"
@@ -162,7 +148,11 @@ _MULTI_WORD_REPLACEMENTS = [
     (re.compile(r"[,\s]*\b(?:new\s*line|return|line\s+break)\b[,.:;\s]*", re.IGNORECASE), "§SHIFT_ENTER§"),
     (re.compile(r"[,.\s]*\bnew\s+paragraph\b[,.:;\s]*|\bparagraph\s+break\b[,.:;\s]*", re.IGNORECASE), "§SHIFT_ENTER§§SHIFT_ENTER§"),
     (re.compile(r"[,.\s]*\bsoft\s+break\b[,.\s]*|\bsoft\s+line\b[,.\s]*", re.IGNORECASE), "   "),
-    (re.compile(r"\btab\b", re.IGNORECASE), "\t"),
+    # Only "press tab" is a Tab: a bare "tab" is far more often the word ("every
+    # tab shows"). Like "new line", it takes the spaces and punctuation the
+    # engine wrote around it, so the next field doesn't start with a space.
+    # "press tab key" and "press the tab key" are someone talking about the key.
+    (re.compile(r"[, ]*\bpress\s+tab\b(?!\s+key\b)[,.:; ]*", re.IGNORECASE), "\t"),
     # The engine often ends the sentence itself before a spoken mark ("Send
     # it. Question mark."): the spoken mark replaces that period, or the text
     # came out as "Send it. ?". Only a period right after a word and before a

@@ -3116,7 +3116,7 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
             # Split on §SHIFT_ENTER§ (line-break voice command) and \n so
             # we send actual Shift+Enter keystrokes between text chunks
             # instead of typing the marker literally.
-            # Tab characters (from the "tab" voice command) are converted to
+            # Tab characters (from the "press tab" command) are converted to
             # 4 spaces here: a real Tab keypress moves focus from Claude Desktop's
             # chat textarea to the Send button, and the next typed space then
             # activates it — submitting the message mid-dictation.

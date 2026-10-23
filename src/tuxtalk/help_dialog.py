@@ -661,7 +661,7 @@ is in the TuxTalk menu → Voice Commands....
 <b>Formatting:</b>
 • Say <b>new line</b>, <b>newline</b>, <b>return</b>, or <b>line break</b> for a line break
 • Say <b>new paragraph</b> or <b>paragraph break</b> for a double line break
-• Say <b>tab</b> for a tab character (indent)
+• Say <b>press tab</b> for a tab (indent, or the next box); <b>tab</b> alone is the word
 • Say <b>soft break</b> or <b>soft line</b> for three spaces
 • End with <b>press enter</b> or <b>hit enter</b> to type the dictation and then press
   Enter, which sends a chat message or runs a terminal command (the Chatting tab
@@ -672,12 +672,12 @@ To output the word instead of executing the command, say <b>literal</b> or <b>th
 
 • <b>literal period</b> or <b>the word period</b> → "period" (not .)
 • <b>literal comma</b> or <b>the word comma</b> → "comma" (not ,)
-• <b>literal tab</b> or <b>the word tab</b> → "tab" (not a tab character)
+• <b>literal press tab</b> → "press tab" (not a tab character)
 • <b>literal new line</b> → "new line", <b>the word newline</b> → "newline" (not a line break)
 • <b>literal question mark</b> → "question mark" (not ?)
 • <b>literal exclamation point</b> → "exclamation point" (not !)
 
-Works with: period, comma, colon, semicolon, question mark, exclamation point, exclamation mark, apostrophe, quote, hyphen, dash, ellipsis, dot dot dot, tab, return, new line, newline, line break, new paragraph and paragraph break.
+Works with: period, comma, colon, semicolon, question mark, exclamation point, exclamation mark, apostrophe, quote, hyphen, dash, ellipsis, dot dot dot, press tab, return, new line, newline, line break, new paragraph and paragraph break.
 
 <b>Usage Examples:</b>
 Say: <i>Hello world comma how are you question mark</i>

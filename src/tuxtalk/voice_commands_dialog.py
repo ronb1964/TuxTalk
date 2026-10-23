@@ -130,7 +130,7 @@ The commands are English words, whatever language you dictate in.
 <b>Formatting</b>
   <b>new line</b> / <b>newline</b> / <b>return</b> / <b>line break</b> → line break
   <b>new paragraph</b> / <b>paragraph break</b> → double line break
-  <b>tab</b> → tab character
+  <b>press tab</b> → tab character (just <b>tab</b> is the word)
   <b>soft break</b> → three spaces
   <b>press enter</b> / <b>hit enter</b> at the end → types it, then presses Enter (sends a message, runs a command)
 
