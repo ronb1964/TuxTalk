@@ -451,8 +451,6 @@ def test_a_time_ending_the_sentence_keeps_its_period():
 
 # --- append_auto_punct edge cases ------------------------------------------
 
-from tuxtalk.normalize import append_auto_punct
-
 
 def test_auto_punct_leaves_a_trailing_colon_alone():
     assert append_auto_punct("here is the plan:", True, False) == "here is the plan:"

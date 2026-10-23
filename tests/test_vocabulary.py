@@ -175,7 +175,6 @@ def test_refixing_a_word_swaps_the_old_spelling_out(commands_file):
 
 
 def test_an_unreadable_words_file_is_left_alone(commands_file):
-    from tuxtalk import custom_words
     words = commands_file.parent / "custom_words.txt"
     words.write_bytes(b"caf\xe9\n")
     vocabulary.save_fix("bamboo studio", "BambuStudio")

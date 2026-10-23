@@ -8,7 +8,6 @@ doesn't exist. Now:
   * opening TuxTalk again shows its menu as a window (menu_window.py);
   * the launcher has right-click shortcuts (tuxtalk --open NAME / --quit).
 """
-import os
 import re
 import types
 from pathlib import Path

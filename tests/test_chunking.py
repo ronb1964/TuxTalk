@@ -176,7 +176,6 @@ def test_the_room_level_follows_a_room_that_gets_noisier():
     assert len(fired) <= 3
 
 
-
 def test_tiny_audio_blocks_still_get_boundaries():
     """The service's callback on cbox delivered ~6 ms blocks; a block that
     small is too noisy a measurement, so the level is taken over fixed 20 ms
@@ -198,7 +197,6 @@ def test_lone_noise_spikes_do_not_hide_a_pause():
                             loud_room(1.5)])
     fired, _ = run_pauses(audio)
     assert len(fired) == 2
-
 
 
 def test_higher_sensitivity_db_hears_less_as_speech():

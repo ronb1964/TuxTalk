@@ -19,8 +19,6 @@ no dropdowns at all — only progress and notice dialogs.
 
 import pathlib
 import re
-import subprocess
-import sys
 import types
 
 import pytest

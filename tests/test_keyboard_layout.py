@@ -10,7 +10,6 @@ library the compositor uses to turn key presses into characters, including
 dead-key composition, so these check the text a user would actually get.
 """
 import ctypes as C
-import json
 
 import pytest
 

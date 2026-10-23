@@ -339,7 +339,6 @@ def test_dbus_restart_app_reaches_the_tray():
     assert calls == ["restart_app"]
 
 
-
 def test_the_tray_answers_restart_app(monkeypatch):
     from tuxtalk import tray
     registered, restarted = [], []

@@ -6,7 +6,6 @@ internet connection.
 """
 import urllib.error
 
-import pytest
 
 from tuxtalk import update_checker as uc
 

@@ -1,7 +1,6 @@
 """Tests for logger module"""
 import os
 import logging
-from pathlib import Path
 from tuxtalk.logger import setup_logger
 
 

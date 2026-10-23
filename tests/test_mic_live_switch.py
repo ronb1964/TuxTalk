@@ -15,7 +15,6 @@ there is one owner rather than a snapshot and a parameter that disagree.
 
 import types
 
-import pytest
 
 from tuxtalk import app
 

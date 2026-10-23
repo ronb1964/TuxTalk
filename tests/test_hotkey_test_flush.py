@@ -7,7 +7,6 @@ therefore never terminates: it spins a thread at 100% CPU and never reaches
 the monitoring loop below it, so the hotkey test detects nothing.
 """
 
-import pytest
 
 from tuxtalk.welcome_dialog import _flush_pending_events
 

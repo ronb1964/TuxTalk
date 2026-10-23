@@ -125,7 +125,6 @@ def test_the_labs_help_page_explains_it():
         dialog.destroy()
 
 
-
 # --- the Audio tab's position, inside the window ---------------------------------------------
 
 WIN = Rect(1000, 200, 800, 600)

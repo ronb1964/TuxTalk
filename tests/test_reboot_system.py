@@ -7,7 +7,6 @@ returns False so the UI can fall back to asking the user to restart manually.
 
 import types
 
-import pytest
 
 from tuxtalk import uinput_helper as uh
 

@@ -17,7 +17,6 @@ repaint unrelated windows.
 """
 
 import pathlib
-import re
 
 import pytest
 

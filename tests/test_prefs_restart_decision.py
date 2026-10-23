@@ -8,11 +8,8 @@ These tests drive the decision helpers directly with a stub `self`, so they
 exercise the real logic without constructing a GTK window.
 """
 
-import types
 
 import pytest
-
-from tuxtalk import config
 
 
 @pytest.fixture

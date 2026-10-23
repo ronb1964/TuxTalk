@@ -493,7 +493,7 @@ def test_a_connection_that_never_says_hello_is_dropped(setup, monkeypatch):
 def test_a_full_house_makes_room_for_the_user_at_the_screen(setup, monkeypatch):
     helper, _kb, connect, say, heard, _seat = setup
     monkeypatch.setattr(hh, "MAX_CLIENTS", 2)
-    first = _ready(connect, say, heard)
+    _ready(connect, say, heard)
     _ready(connect, say, heard)
     next(c for c in helper.clients.values() if c.sock.fileno() >= 0).uid = os.getuid() + 1
     third = connect()

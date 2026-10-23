@@ -6,7 +6,6 @@ otherwise multi-gigabyte downloads carry on in background threads writing to
 disk, invisible, uncancellable, and reported to the caller as failures.
 """
 
-import threading
 
 from tuxtalk.download_progress_dialog import DownloadTask, UnifiedDownloadDialog
 

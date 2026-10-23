@@ -9,7 +9,6 @@ which the shell reads on its next start.
 
 import types
 
-import pytest
 
 from tuxtalk import desktop_detect as dd
 

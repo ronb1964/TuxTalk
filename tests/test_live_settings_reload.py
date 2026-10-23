@@ -14,7 +14,6 @@ A damaged config must never take down a running dictation session: the reload
 keeps the previous settings and carries on.
 """
 
-import types
 
 import pytest
 

@@ -12,7 +12,6 @@ import subprocess
 import sys
 import textwrap
 
-from tuxtalk import notify
 
 SCRIPT = textwrap.dedent("""
     import sys, types

@@ -12,10 +12,6 @@ never added to 'input', so the section would claim "configured - please
 restart" and DISABLE the only button that would add them.
 """
 
-import types
-
-import pytest
-
 
 class _FakeLabel:
     def __init__(self):

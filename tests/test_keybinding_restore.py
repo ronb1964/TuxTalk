@@ -15,7 +15,6 @@ import pytest
 from tuxtalk import gnome_keybindings as G
 
 
-
 class FakeGsettings:
     """Stands in for the gsettings command line."""
 

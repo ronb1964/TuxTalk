@@ -57,7 +57,6 @@ def test_the_voice_window_shows_only_the_newest_dictation(monkeypatch):
     assert built["before_show"] is explain.place_over_active_window
 
 
-
 # --- fixing it in the text (Ron, 2026-10-14) ----------------------------------------------
 
 @pytest.fixture

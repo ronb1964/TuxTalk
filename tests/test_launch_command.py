@@ -13,8 +13,6 @@ earlier in PATH can never be written into autostart in place of ours.
 
 import types
 
-import pytest
-
 
 def _make_prefs(
     monkeypatch,

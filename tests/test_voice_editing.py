@@ -511,7 +511,6 @@ def test_declining_the_download_unticks_only_this_box(monkeypatch):
     import gi
     gi.require_version("Gtk", "3.0")
     from gi.repository import Gtk
-    from tuxtalk import prefs
     monkeypatch.setattr(ai_cleanup, "is_installed", lambda: False)
     monkeypatch.setattr(Gtk.Dialog, "run", lambda self: Gtk.ResponseType.CANCEL)
     saved = []
@@ -664,7 +663,6 @@ def test_a_window_change_while_the_ai_works_keeps_the_rewrite_safe(edit_env, mon
     assert "Recent Dictations" in edit_env["notices"][0]
 
 
-
 # --- primary selection, links, pasted rewrites and the toggle key ---------------------------
 
 def test_an_app_without_primary_selection_keeps_a_line_selection(monkeypatch):
@@ -697,7 +695,6 @@ def test_tapping_the_toggle_key_during_a_hold_edit_lets_go_of_the_keyboard(keylo
     key(F8, 1, {SHIFT})                      # hold edit: keyboards grabbed
     key(F9, 1, set())                        # brush the toggle key
     assert keyloop["stops"] == 1 and released
-
 
 
 # --- pasting a rewrite, and nothing said ----------------------------------------------------
