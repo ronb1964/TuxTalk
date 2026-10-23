@@ -391,6 +391,30 @@ def _no_real_history_or_stats(monkeypatch, tmp_path_factory):
     monkeypatch.setattr(stats, "stats_path", lambda: str(folder / "stats.json"))
 
 
+@pytest.fixture(autouse=True)
+def _no_real_settings(monkeypatch, tmp_path_factory, request):
+    """Settings and the data folder in a throwaway folder for every test.
+
+    Loading the settings can set aside a damaged config.toml and write a
+    repaired one, and the windows read the backups, first-run flag and
+    downloads beside it. Every test gets it, so one that builds a window
+    directly (Welcome, Help, the menu window) can't forget to ask.
+    test_flatpak_private_paths checks the real path functions and reads no
+    settings.
+    """
+    if request.module.__name__.rpartition(".")[2] == "test_flatpak_private_paths":
+        return
+    from tuxtalk import config, prefs
+    folder = tmp_path_factory.mktemp("settings")
+    path = str(folder / "tuxtalk" / "config.toml")
+    for module in (config, prefs):          # prefs keeps its own name for the path
+        monkeypatch.setattr(module, "CONFIG_PATH", path)
+    monkeypatch.setattr(config, "get_data_dir", lambda: str(folder / "TuxTalk"))
+    monkeypatch.setattr(config, "_config_cache", None)
+    monkeypatch.setattr(config, "_config_mtime", 0.0)
+    monkeypatch.setattr(config, "_config_read_failed", False)
+
+
 class FakeKeyboard:
     """Stands in for TuxTalk's virtual keyboard: keeps the key events instead
     of typing them. *fail_after* makes writes fail after that many events, as
@@ -454,25 +478,7 @@ def keyboard(monkeypatch):
 # would break when the code moves and pass when the label no longer shows.
 
 @pytest.fixture
-def private_settings(monkeypatch, tmp_path_factory):
-    """Settings and the data folder in a throwaway folder, for tests that
-    build TuxTalk's windows or run its start: loading the settings can repair
-    or set aside a damaged config.toml, and the windows read the backups,
-    first-run flag and downloads beside it."""
-    from tuxtalk import config, prefs
-    folder = tmp_path_factory.mktemp("settings")
-    path = str(folder / "tuxtalk" / "config.toml")
-    for module in (config, prefs):          # prefs keeps its own name for the path
-        monkeypatch.setattr(module, "CONFIG_PATH", path)
-    monkeypatch.setattr(config, "get_data_dir", lambda: str(folder / "TuxTalk"))
-    monkeypatch.setattr(config, "_config_cache", None)
-    monkeypatch.setattr(config, "_config_mtime", 0.0)
-    monkeypatch.setattr(config, "_config_read_failed", False)
-    return folder
-
-
-@pytest.fixture
-def prefs_window(monkeypatch, private_settings):
+def prefs_window(monkeypatch):
     """Build Preferences from the default settings, changed by any keyword
     arguments: prefs_window(model="small"). Destroyed after the test, with
     the checks it scheduled on the main loop (GPU, typing, extension)
@@ -512,7 +518,7 @@ def prefs_window(monkeypatch, private_settings):
 
 
 @pytest.fixture
-def help_pages(monkeypatch, private_settings):
+def help_pages(monkeypatch):
     """Help as the user reads it, {tab title: its text}, from default settings."""
     from gi.repository import Gtk
     from gtk_text import find, shown_text
@@ -528,7 +534,7 @@ def help_pages(monkeypatch, private_settings):
 
 
 @pytest.fixture
-def tray_menu(monkeypatch, private_settings):
+def tray_menu(monkeypatch):
     """The tray's menu as built from default settings, without starting a tray."""
     from tuxtalk import config, tray
     monkeypatch.setattr(config, "load_config", config.Settings)
@@ -553,7 +559,7 @@ def _main_loop_step(done):
 
 
 @pytest.fixture
-def prefs_main(monkeypatch, private_settings):
+def prefs_main(monkeypatch):
     """Preferences' main(): its window and the tab asked for on the command line."""
     import sys
     import dbus.mainloop.glib
@@ -600,7 +606,7 @@ class _Steps(list):
 
 
 @pytest.fixture
-def tray_main(monkeypatch, private_settings):
+def tray_main(monkeypatch):
     """The tray's main(), on a start that isn't the first unless
     run(first_run=True); *welcome* stands in for the welcome screens."""
     import sys
@@ -667,7 +673,7 @@ def tray_main(monkeypatch, private_settings):
 
 
 @pytest.fixture
-def service_main(monkeypatch, private_settings):
+def service_main(monkeypatch):
     """The dictation service's main(): *cached* says whether the speech model
     is already downloaded. The service's own globals are put back afterwards."""
     import types
@@ -744,7 +750,7 @@ def service_main(monkeypatch, private_settings):
 
 
 @pytest.fixture
-def about_window(monkeypatch, private_settings):
+def about_window(monkeypatch):
     """The tray's About window, built for real, without fetching release notes."""
     import types
     from gi.repository import Gtk
@@ -758,7 +764,7 @@ def about_window(monkeypatch, private_settings):
 
 
 @pytest.fixture
-def welcome_window(monkeypatch, private_settings):
+def welcome_window(monkeypatch):
     """The first-run welcome screen, built for an English system with an
     NVIDIA card (any graphics card gets the same card and choices)."""
     from tuxtalk import recommend, welcome_dialog
@@ -776,7 +782,7 @@ def welcome_window(monkeypatch, private_settings):
 
 
 @pytest.fixture
-def setup_complete(monkeypatch, private_settings):
+def setup_complete(monkeypatch):
     """Show Setup Complete (the last first-run screen) and return what it
     showed; *click* names a button to press while it is open."""
     from gi.repository import Gtk
@@ -799,7 +805,7 @@ def setup_complete(monkeypatch, private_settings):
 
 
 @pytest.fixture
-def first_run(monkeypatch, private_settings):
+def first_run(monkeypatch):
     """First-run setup after the welcome screen (show_welcome_and_install),
     from an AppImage in Downloads, with each screen and download faked.
     Returns the steps it took, in order."""

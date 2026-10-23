@@ -11,10 +11,10 @@ from tuxtalk.cuda_helper import (
 
 
 def test_get_appdir_cuda_path():
-    """Test CUDA path returns expected location"""
-    path = get_appdir_cuda_path()
-    assert path.endswith(".local/share/TuxTalk/cuda")
-    assert os.path.expanduser("~") in path
+    """The CUDA download goes in TuxTalk's data folder (where that folder is
+    on the computer: test_flatpak_private_paths)."""
+    from tuxtalk import config
+    assert get_appdir_cuda_path() == os.path.join(config.get_data_dir(), "cuda")
 
 
 @patch('subprocess.run')
