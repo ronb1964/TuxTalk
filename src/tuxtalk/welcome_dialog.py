@@ -1918,11 +1918,18 @@ def _open_key_devices(list_devices, input_device):
             devices.append(dev)
             logger.info(f"Opened input device: {dev.name} at {path}")
         else:
-            try:
-                dev.close()
-            except Exception:
-                pass
+            _close_devices([dev])
     return devices
+
+
+def _close_devices(devices):
+    """Close input devices the hotkey test opened; one unplugged meanwhile
+    is closed already."""
+    for dev in devices:
+        try:
+            dev.close()
+        except OSError:
+            pass
 
 
 def _hotkey_test_helper(ecodes, connect=None):
@@ -2219,13 +2226,7 @@ def show_hotkey_test_dialog():
                 if not stop_evdev.is_set():
                     logger.debug(f"Select error: {e}")
                 time.sleep(0.1)
-
-        # Close devices
-        for dev in keyboards:
-            try:
-                dev.close()
-            except Exception:
-                pass
+        _close_devices(keyboards)
 
     # GTK key handlers: they cover keys when evdev can't open the keyboards.
     # Modifier mask: reject Alt (MOD1), Ctrl, Super — GNOME delivers Alt+F8
@@ -2389,12 +2390,7 @@ def show_hotkey_test_dialog():
         if evdev_thread is not None:
             evdev_thread.join(timeout=1.0)
         else:
-            # The reader thread closes the devices; without it, close them here.
-            for dev in keyboards:
-                try:
-                    dev.close()
-                except Exception:
-                    pass
+            _close_devices(keyboards)    # the reader thread closes them otherwise
 
         # Whatever closed the dialog, never leave the settings without a
         # hotkey: the service then watches no key at all.
