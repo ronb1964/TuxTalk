@@ -10,8 +10,8 @@ from .config import HOTKEY_CHOICES
 
 # The keys the test may write to the log. Without the hotkey helper it reads
 # every keyboard, so a password typed in another window must not get there.
-_TEST_KEYS = ({f"F{n}" for n in range(1, 25)} | {"Escape", "Pause", "Scroll_Lock"}
-              | set(HOTKEY_CHOICES))
+# Scroll Lock is among HOTKEY_CHOICES, the name both readers give it.
+_TEST_KEYS = {f"F{n}" for n in range(1, 25)} | {"Escape", "Pause"} | set(HOTKEY_CHOICES)
 
 # GTK's names for the dictation keys that aren't F-keys.
 _GTK_KEY_NAMES = {"Control_R": "Right Ctrl", "Alt_R": "Right Alt",

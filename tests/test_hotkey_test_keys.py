@@ -28,9 +28,16 @@ def test_ordinary_keys_pressed_during_the_test_stay_out_of_the_log(key):
     assert htk.loggable_key(key) == "another key"
 
 
-@pytest.mark.parametrize("key", ["F8", "F12", "Escape", "Pause", "Scroll_Lock", "Right Ctrl"])
+@pytest.mark.parametrize("key", ["F8", "F12", "Escape", "Pause", "Scroll Lock", "Right Ctrl"])
 def test_the_keys_the_test_is_about_are_still_logged(key):
     assert htk.loggable_key(key) == key
+
+
+def test_the_log_names_scroll_lock_as_the_settings_do():
+    """Both readers turn GTK's "Scroll_Lock" into "Scroll Lock" first, so
+    the raw name is never one the test has to let through."""
+    assert htk.loggable_key(htk.gtk_key_name("Scroll_Lock")) == "Scroll Lock"
+    assert htk.loggable_key("Scroll_Lock") == "another key"
 
 
 @pytest.mark.parametrize("key", ["F10", "Right Ctrl", "Right Alt", "Scroll Lock"])
