@@ -48,6 +48,12 @@ class StoppedPartway(Exception):
     """The keyboard failed after some of the keys had reached the app."""
 
 
+class GaveUp(Exception):
+    """Raised by a send's *before_press* to stop the typing: the keys held
+    are let go, and send passes it on, or raises StoppedPartway when some
+    keys had already gone out."""
+
+
 _lock = threading.Lock()
 _device = None
 _ready_at = 0.0
@@ -122,7 +128,8 @@ def start() -> bool:
 def send(events, delay_ms: float = KEY_DELAY_MS, before_press=None) -> bool:
     """Press and release keys: *events* is [(evdev key code, 1 down / 0 up)].
     *before_press*, if given, is called before each key goes down and may
-    wait (app._send_keys: until a Right Ctrl dictation key is let go).
+    wait (app._send_keys: until a Right Ctrl dictation key is let go), or
+    raise GaveUp.
 
     Waits *delay_ms* after each event, on a schedule kept from the start, so
     sleeping a little long doesn't add up over a long text. When this process
@@ -174,6 +181,11 @@ def send(events, delay_ms: float = KEY_DELAY_MS, before_press=None) -> bool:
             if sent:
                 raise StoppedPartway(f"{sent} of {len(events)} key events")
             return False
+        except GaveUp:
+            _release(device, down)
+            if sent:
+                raise StoppedPartway(f"{sent} of {len(events)} key events") from None
+            raise
         if down:
             logger.warning(f"Letting go of keys left down: {list(down)}")
             _release(device, down)

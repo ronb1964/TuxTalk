@@ -515,7 +515,7 @@
   },
   "app.py::_transcribe_and_inject": {
    "decisions": 70,
-   "lines": 267
+   "lines": 265
   },
   "app.py::_transcribe_audio": {
    "decisions": 25,

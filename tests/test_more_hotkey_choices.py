@@ -225,6 +225,78 @@ def test_an_unplugged_keyboard_never_holds_typing_up(keyboard, no_hotkeys_noted)
     assert keyboard.typed_keys() == [ecodes.KEY_A]
 
 
+@pytest.fixture
+def stuck_right_ctrl(keyboard, monkeypatch):
+    """Right Ctrl reads as down from the *start*-th look on, as a KVM switch
+    or a remapper can leave it, and comes up only after minutes (so typing
+    that waits for it fails a test instead of hanging it); the waits run on
+    the keyboard's fake clock."""
+    monkeypatch.setattr(modifier_hotkeys, "_noted", ([], frozenset()))
+    monkeypatch.setattr(modifier_hotkeys, "_stuck", set())
+    monkeypatch.setattr(modifier_hotkeys, "time", keyboard.clock)
+
+    def stick(start=1):
+        board = Keyboard(lambda look: start <= look < 10_000)
+        modifier_hotkeys.note([board], RCTRL, ecodes.KEY_F9)
+        return board
+    return stick
+
+
+def test_a_stuck_right_ctrl_stops_typing_after_a_while(keyboard, stuck_right_ctrl, caplog):
+    """Typing used to wait for it forever, with nothing in the log."""
+    stuck_right_ctrl()
+    with caplog.at_level("WARNING", logger="tuxtalk.modifier_hotkeys"):
+        assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a") is False
+    assert keyboard.events == []
+    assert modifier_hotkeys.HELD_LIMIT_S <= keyboard.clock.now < modifier_hotkeys.HELD_LIMIT_S + 1
+    assert "Right Ctrl has been down" in caplog.text
+
+
+def test_a_key_stuck_partway_lets_go_of_shift_and_says_partway(keyboard, stuck_right_ctrl):
+    """The first letter went out, so the caller must not type it all again,
+    and the Shift held for the capital doesn't stay down."""
+    from tuxtalk import virtual_keyboard
+    stuck_right_ctrl(start=3)
+    shift = ecodes.KEY_LEFTSHIFT
+    events = [(ecodes.KEY_A, 1), (ecodes.KEY_A, 0), (shift, 1), (ecodes.KEY_B, 1),
+              (ecodes.KEY_B, 0), (shift, 0)]
+    with pytest.raises(virtual_keyboard.StoppedPartway):
+        app._send_keys(events, what="aB", raise_if_partial=True)
+    assert keyboard.typed_keys() == [ecodes.KEY_A, shift]
+    assert keyboard.events[-1] == (shift, 0)
+
+
+def test_while_the_key_stays_stuck_the_next_typing_gives_up_at_once(keyboard, stuck_right_ctrl):
+    """A paste that fails and falls back to typing would wait twice."""
+    stuck_right_ctrl()
+    app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
+    waited = keyboard.clock.now
+    assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a") is False
+    assert keyboard.clock.now - waited < 1
+
+
+def test_a_dictation_stopped_by_a_stuck_key_stays_in_recent_dictations(
+        keyboard, stuck_right_ctrl, monkeypatch):
+    import numpy as np
+    from tuxtalk import history
+    stuck_right_ctrl()
+    kept, notes = [], []
+    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, language: "hello there")
+    monkeypatch.setattr(app, "_determine_injection_method", lambda mode: ("type", "test"))
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
+    monkeypatch.setattr(app, "_focused_is_password", lambda: False)
+    monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
+    monkeypatch.setattr(app, "_notify", lambda title, body: notes.append(body))
+    monkeypatch.setattr(app, "_press_enter_after", False)
+    monkeypatch.setattr(history, "add_entry", lambda text, replaces=None: kept.append(text))
+    frames = [(np.ones(app.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
+    app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=False, smart_quotes=False,
+                               notify_on=False)
+    assert keyboard.events == []
+    assert kept == ["Hello there. "]
+    assert any("Recent Dictations" in note for note in notes)
+
+
 def test_the_right_alt_guard_goes_while_right_alt_is_held(keyboard, no_hotkeys_noted):
     modifier_hotkeys.note([Keyboard(lambda look: True, code=RALT)], RALT, None)
     app._guard_alt_tap()

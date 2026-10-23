@@ -1776,11 +1776,11 @@ def _send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY
     True only if all of them were sent: keystrokes that never happened must
     not reach the undo buffer.
 
-    Each key waits while a Right Ctrl or Right Alt dictation key is down,
-    however long: pressed under it, letters are shortcuts (Ctrl+W closes the
-    tab). Hiding it from the desktop can't cover this: typing on the hotkey
-    loop's own thread, TuxTalk hasn't read the press yet. *under_hotkey* is
-    for the keys meant to go with it.
+    Each key waits while a Right Ctrl or Right Alt dictation key is down
+    (modifier_hotkeys): pressed under it, letters are shortcuts (Ctrl+W closes
+    the tab). Hiding it from the desktop can't cover this: typing on the
+    hotkey loop's own thread, TuxTalk hasn't read the press yet. *under_hotkey*
+    is for the keys meant to go with it.
 
     With *raise_if_partial*, a keyboard that failed partway raises
     virtual_keyboard.StoppedPartway instead of returning False, for a caller
@@ -1794,6 +1794,8 @@ def _send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY
         if raise_if_partial:
             raise
         return False
+    except virtual_keyboard.GaveUp:
+        return False        # nothing sent: the key stayed down (logged there)
     if not sent:
         logger.error(f"Couldn't send {what}: TuxTalk's virtual keyboard isn't working")
     return sent
@@ -3983,8 +3985,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # Beep to confirm transcription is done
         if chunk_role != "middle":
             _beep(beeps_on, *READY_BEEP)
-            _ellipsis = "…"
-            if notify_on: _notify("Transcribed", f"{text[:80]}{_ellipsis if len(text)>80 else ''}")
+            if notify_on: _notify("Transcribed", f"{text[:80]}{'…' if len(text) > 80 else ''}")
 
         # Stage 4: Inject text into the active application. It goes into the
         # Recent Dictations list first, so it can be recovered even if the
@@ -4042,8 +4043,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # like _report_undelivered: nothing was typed, and the "done" beep
         # would sound like it worked.
         _beep(beeps_on, *CANCEL_BEEP)
-        _ellipsis = "…"
-        _notify("Transcription failed", f"{str(e)[:120]}{_ellipsis if len(str(e))>120 else ''}")
+        _notify("Transcription failed", f"{str(e)[:120]}{'…' if len(str(e)) > 120 else ''}")
 
 
 def stop_recording(

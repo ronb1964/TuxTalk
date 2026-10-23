@@ -9,12 +9,31 @@ import time
 
 from evdev import ecodes
 
+from .config import HOTKEY_CHOICES
 from .hotkey_keys import MODIFIER_CODES, keys_down
+from .logger import setup_logger
 from .uinput_helper import is_keyboard_device
+from .virtual_keyboard import GaveUp
+
+logger = setup_logger(__name__)
 
 # The keyboards the hotkey loop reads and its dictation keys that are
 # modifiers; set by note().
 _noted = ([], frozenset())
+
+# How long typing waits for the key to come up. Pressing it again to dictate
+# the next sentence while the last one is still being typed holds typing up
+# for as long as that dictation, so this is longer than nearly any; a key
+# that reads as down for longer is stuck (a KVM switch, a remapper's
+# keyboard that never sent the release). Typing then stops, and the
+# dictation stays in Recent Dictations: typing on would turn the rest into
+# Ctrl shortcuts wherever the desktop sees the key down too.
+HELD_LIMIT_S = 30.0
+# Keys found stuck: the next keys give up at once while they stay down,
+# rather than each fallback (paste, then typing) waiting all over again.
+_stuck = set()
+# Key codes to the names Preferences shows ("Right Ctrl"), for the log.
+_NAMES = {ecodes.ecodes[key]: name for name, key in HOTKEY_CHOICES.items()}
 
 
 def note(devices, *keys) -> None:
@@ -26,17 +45,30 @@ def note(devices, *keys) -> None:
 
 def wait_while_held():
     """A function for virtual_keyboard.send to call before each key: it waits
-    while a Right Ctrl or Right Alt dictation key is down, however long.
-    None when neither is a dictation key."""
+    while a Right Ctrl or Right Alt dictation key is down, up to HELD_LIMIT_S,
+    then raises virtual_keyboard.GaveUp. None when neither is a dictation key."""
     devices, modifiers = _noted
     if not modifiers:
         return None
     keyboards = [d for d in list(devices) if is_keyboard_device(d)]
 
     def before_press():
-        while keys_down(keyboards) & modifiers:
+        give_up_at = time.monotonic() + HELD_LIMIT_S
+        while held := keys_down(keyboards) & modifiers:
+            if held & _stuck or time.monotonic() >= give_up_at:
+                _give_up(held)
             time.sleep(0.02)
+        _stuck.clear()
     return before_press
+
+
+def _give_up(held) -> None:
+    if not held & _stuck:
+        names = " and ".join(sorted(_NAMES.get(code, str(code)) for code in held))
+        logger.warning(f"{names} has been down for {HELD_LIMIT_S:g} s, so typing stopped; "
+                       "the dictation is in Recent Dictations")
+        _stuck.update(held)
+    raise GaveUp()
 
 
 def right_alt_alone(event, dictation_keys, held_modifiers) -> bool:
