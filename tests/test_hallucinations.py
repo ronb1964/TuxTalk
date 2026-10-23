@@ -6,7 +6,7 @@ for a bare verb, nor for sign-offs people really say, which are only stripped
 when Whisper reports the audio was probably not speech.
 """
 
-from tuxtalk.app import _strip_hallucinations
+from tuxtalk import hallucinations
 
 
 # --- ordinary sentences must survive ---------------------------------------
@@ -14,38 +14,38 @@ from tuxtalk.app import _strip_hallucinations
 def test_a_sentence_ending_in_subscribe_keeps_the_word():
     """"subscribe" is not on the always-strip list, so a dictation ending in
     it keeps the word instead of silently losing it."""
-    assert _strip_hallucinations("tell them to subscribe", 0.0) == "tell them to subscribe"
+    assert hallucinations.strip("tell them to subscribe", 0.0) == "tell them to subscribe"
 
 
 def test_asking_someone_to_subscribe_survives():
-    assert _strip_hallucinations("remind me to subscribe", 0.0) == "remind me to subscribe"
+    assert hallucinations.strip("remind me to subscribe", 0.0) == "remind me to subscribe"
 
 
 def test_subscribe_mid_sentence_survives():
     text = "the subscribe button is broken"
-    assert _strip_hallucinations(text, 0.0) == text
+    assert hallucinations.strip(text, 0.0) == text
 
 
 # --- genuine YouTube outros are still stripped ------------------------------
 
 def test_like_and_subscribe_is_still_stripped():
-    out = _strip_hallucinations("here is my point like and subscribe", 0.0)
+    out = hallucinations.strip("here is my point like and subscribe", 0.0)
     assert "subscribe" not in out
     assert out.strip() == "here is my point"
 
 
 def test_please_subscribe_is_still_stripped():
-    out = _strip_hallucinations("here is my point please subscribe", 0.0)
+    out = hallucinations.strip("here is my point please subscribe", 0.0)
     assert out.strip() == "here is my point"
 
 
 def test_dont_forget_to_subscribe_is_still_stripped():
-    out = _strip_hallucinations("here is my point don't forget to subscribe", 0.0)
+    out = hallucinations.strip("here is my point don't forget to subscribe", 0.0)
     assert out.strip() == "here is my point"
 
 
 def test_a_whole_text_outro_is_still_dropped():
-    assert _strip_hallucinations("Like and subscribe.", 0.0) == ""
+    assert hallucinations.strip("Like and subscribe.", 0.0) == ""
 
 
 # --- sign-offs people really dictate ----------------------------------------
@@ -55,47 +55,47 @@ def test_a_whole_text_outro_is_still_dropped():
 
 def test_a_dictated_sign_off_is_kept():
     text = "Great meeting today, see you next time."
-    assert _strip_hallucinations(text, 0.0) == text
+    assert hallucinations.strip(text, 0.0) == text
 
 
 def test_a_script_ending_in_thanks_for_watching_is_kept():
     text = "That is the whole demo, thanks for watching!"
-    assert _strip_hallucinations(text, 0.0) == text
+    assert hallucinations.strip(text, 0.0) == text
 
 
 def test_a_dictated_sign_off_on_its_own_is_kept():
-    assert _strip_hallucinations("Thanks for listening.", 0.0) == "Thanks for listening."
+    assert hallucinations.strip("Thanks for listening.", 0.0) == "Thanks for listening."
 
 
 def test_a_sign_off_invented_from_silence_is_dropped():
-    assert _strip_hallucinations("Thanks for listening.", 0.9) == ""
+    assert hallucinations.strip("Thanks for listening.", 0.9) == ""
 
 
 def test_a_sign_off_appended_to_speech_in_silence_is_stripped():
     text = "That covers everything we planned for the release this week. Thanks for watching!"
-    out = _strip_hallucinations(text, 0.9)
+    out = hallucinations.strip(text, 0.9)
     assert out == "That covers everything we planned for the release this week."
 
 
 def test_stripping_keeps_the_sentences_own_closing_mark():
     """The period belongs to the sentence, not to the phrase that was cut."""
     text = "We shipped the update to every user on Tuesday, like and subscribe."
-    assert _strip_hallucinations(text, 0.0) == "We shipped the update to every user on Tuesday."
+    assert hallucinations.strip(text, 0.0) == "We shipped the update to every user on Tuesday."
 
 
 def test_the_cut_lands_in_the_right_place_after_a_dotted_capital_i():
     """"İ".lower() is two characters, so an index found in a lower-cased copy
     would point past the phrase in the original and cut real words."""
     text = "İstanbul İzmir İzmit İnegöl like and subscribe"
-    assert _strip_hallucinations(text, 0.0) == "İstanbul İzmir İzmit İnegöl"
+    assert hallucinations.strip(text, 0.0) == "İstanbul İzmir İzmit İnegöl"
 
 
 # --- the whole-text and trailing tiers --------------------------------------
 
 def test_a_silent_recording_transcribed_as_thank_you_is_dropped():
-    assert _strip_hallucinations("thank you", 0.9).strip() == ""
+    assert hallucinations.strip("thank you", 0.9).strip() == ""
 
 
 def test_a_deliberate_thank_you_is_kept():
     """Low no_speech_prob means Whisper heard real speech."""
-    assert _strip_hallucinations("thank you", 0.0).strip() == "thank you"
+    assert hallucinations.strip("thank you", 0.0).strip() == "thank you"
