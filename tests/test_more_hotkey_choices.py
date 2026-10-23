@@ -11,6 +11,7 @@ import pytest
 from evdev import ecodes
 
 from tuxtalk import app, cosmic_hotkeys, gnome_hotkeys, keyboard_layout, x11_hotkeys
+from tuxtalk.hotkey_keys import keycode_from_name, track_modifier
 from tuxtalk import kwin_hotkeys as kh
 from tuxtalk.config import HOTKEY_CHOICES
 from tuxtalk.prefs import hotkey_label
@@ -63,8 +64,7 @@ def service(monkeypatch):
 
 def key(code, value, held, hold=F8, toggle=None):
     """One key event as the main loop delivers it: modifier state first."""
-    if code in app._MODIFIER_CODES:
-        (held.add if value else held.discard)(code)
+    track_modifier(held, Event(code, value))
     app._handle_key_event(Event(code, value), "hold", hold, toggle,
                           None, held, [], Cfg(), 0)
 
@@ -74,13 +74,13 @@ def key(code, value, held, hold=F8, toggle=None):
 @pytest.mark.parametrize("name,code", [("Right Ctrl", RCTRL), ("right alt", RALT),
                                        ("Scroll Lock", ecodes.KEY_SCROLLLOCK), ("F8", F8)])
 def test_the_service_listens_for_the_key_picked(name, code):
-    assert app._keycode_from_name(name) == code
+    assert keycode_from_name(name) == code
 
 
 def test_pause_is_not_a_dictation_key():
     """Most keyboards send Pause's release as soon as it's pressed: it can't be held."""
     assert "Pause" not in HOTKEY_CHOICES
-    assert app._keycode_from_name("Pause") is None
+    assert keycode_from_name("Pause") is None
 
 
 def test_holding_right_ctrl_dictates_and_letting_go_types(service):

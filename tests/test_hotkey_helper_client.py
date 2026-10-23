@@ -11,6 +11,7 @@ import pytest
 
 from tuxtalk import app, hotkey_helper as hh
 from tuxtalk.hotkey_helper_client import HelperKeyboard, connect_helper, watch_specs
+from tuxtalk.hotkey_keys import track_modifier
 from test_hotkey_helper import FakeKeyboard
 
 F8, F9, ESC = 66, 67, 1
@@ -99,8 +100,7 @@ def rig(tmp_path, monkeypatch):
                 for event in events:
                     if app._is_own_injected_event(dev, event):
                         continue
-                    if event.code in app._MODIFIER_CODES:
-                        (held.add if event.value else held.discard)(event.code)
+                    track_modifier(held, event)
                     app._handle_key_event(event, "hold", F8, F9, None, held,
                                           [client], Cfg, None)
 

@@ -93,7 +93,7 @@ def binding(qt_sequence):
     Scroll Lock as "Scroll_Lock".
     cosmic-comp matches a binding by keysym alone (it ignores a binding's
     keycode), so a letter is held on the key that types it in the active
-    layout, which is the key app._keycode_from_name listens to."""
+    layout, which is the key hotkey_keys.keycode_from_name listens to."""
     *mods, key = qt_sequence.split("+")
     return (tuple(_COSMIC_MODIFIERS[m] for m in mods),
             key.lower() if len(key) == 1 else QT_KEYSYMS.get(key, key))

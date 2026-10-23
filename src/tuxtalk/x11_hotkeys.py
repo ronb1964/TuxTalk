@@ -77,7 +77,7 @@ def x_grab(qt_sequence):
     mask = 0
     for mod in mods:
         mask |= _MODIFIER_MASKS[mod]
-    # A letter is the key that types it, as app._keycode_from_name listens for.
+    # A letter is the key that types it, as hotkey_keys.keycode_from_name listens for.
     code = shortcut_keycode(key.lower()) if len(key) == 1 else ecodes.ecodes[f"KEY_{key.upper()}"]
     return code + _EVDEV_TO_X_KEYCODE, mask
 

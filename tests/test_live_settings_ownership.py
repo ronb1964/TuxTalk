@@ -19,7 +19,7 @@ import types
 
 import pytest
 
-from tuxtalk import app
+from tuxtalk import app, hotkey_keys
 
 
 def _idle(monkeypatch):
@@ -78,7 +78,7 @@ class TestChangeSignalHasOneOwner:
         live = app._service_tick(cfg, app._ServiceState(cfg))
 
         assert live is not None, "the tick must return what it reloaded"
-        assert live.hold_key == app._keycode_from_name("F9")
+        assert live.hold_key == hotkey_keys.keycode_from_name("F9")
 
 
 class _Engine:

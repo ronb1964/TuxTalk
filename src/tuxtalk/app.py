@@ -32,6 +32,8 @@ from .logger import setup_logger, redact_text
 from .recording_indicator import RecordingIndicator
 from .undo import detect_undo_command, calculate_undo_length
 from . import virtual_keyboard
+from .hotkey_keys import (MODIFIER_CODES, check_modifiers_held, keycode_from_name, keys_down,
+                          parse_hotkey_combo, track_modifier)
 import threading
 
 logger = setup_logger(__name__)
@@ -1035,81 +1037,6 @@ def _feed_indicator(indicator, indata, spectrum_processor):
 _spectrum_processor = None
 
 
-# The dictation keys by upper-case name ("RIGHT CTRL"), as evdev codes.
-_HOTKEY_CODES = {name.upper(): ecodes.ecodes[key]
-                 for name, key in config_module.HOTKEY_CHOICES.items()}
-
-
-def _keycode_from_name(name: str) -> int | None:
-    """Convert key name to evdev keycode. Returns None if name is empty (no hotkey configured)."""
-    if not name or not name.strip():
-        return None  # No hotkey configured - don't activate any key
-    n = name.strip().upper()
-    if n in _HOTKEY_CODES:
-        return _HOTKEY_CODES[n]
-    if len(n) == 1 and "A" <= n <= "Z":
-        # The key that types the letter, which is the one KDE, GNOME and COSMIC
-        # hold back for us (they match shortcuts by letter): on a German
-        # keyboard Ctrl+Alt+Y is the key US keyboards have Z on.
-        from .keyboard_layout import shortcut_keycode
-        return shortcut_keycode(n.lower())
-    return None  # Unknown key name - don't activate
-
-
-# Modifier key evdev codes for tracking combo hotkeys
-_MODIFIER_CODES = {
-    ecodes.KEY_LEFTCTRL, ecodes.KEY_RIGHTCTRL,
-    ecodes.KEY_LEFTSHIFT, ecodes.KEY_RIGHTSHIFT,
-    ecodes.KEY_LEFTALT, ecodes.KEY_RIGHTALT,
-    ecodes.KEY_LEFTMETA, ecodes.KEY_RIGHTMETA,
-}
-
-# Map modifier names to their evdev code pairs (left + right)
-_MODIFIER_NAMES = {
-    "CTRL":  (ecodes.KEY_LEFTCTRL,  ecodes.KEY_RIGHTCTRL),
-    "SHIFT": (ecodes.KEY_LEFTSHIFT, ecodes.KEY_RIGHTSHIFT),
-    "ALT":   (ecodes.KEY_LEFTALT,   ecodes.KEY_RIGHTALT),
-    "SUPER": (ecodes.KEY_LEFTMETA,  ecodes.KEY_RIGHTMETA),
-}
-
-
-def _parse_hotkey_combo(combo_str: str) -> tuple[set[str], int | None] | None:
-    """Parse a hotkey combo string like 'Ctrl+Shift+H' into (modifier_names, keycode).
-
-    Returns None if the string is empty or invalid.
-    modifier_names is a set of uppercase modifier names (e.g. {'CTRL', 'SHIFT'}).
-    keycode is the evdev keycode for the non-modifier key.
-    """
-    if not combo_str or not combo_str.strip():
-        return None
-
-    parts = [p.strip().upper() for p in combo_str.split("+")]
-    if len(parts) < 2:
-        return None  # Need at least one modifier + one key
-
-    # Last part is the main key, everything before is a modifier
-    modifiers = set()
-    for part in parts[:-1]:
-        if part in _MODIFIER_NAMES:
-            modifiers.add(part)
-        else:
-            return None  # Unknown modifier
-
-    main_key = _keycode_from_name(parts[-1])
-    if main_key is None:
-        return None  # Unknown key
-
-    return (modifiers, main_key)
-
-
-def _check_modifiers_held(required_mods: set[str], held_keys: set[int]) -> bool:
-    """Check if all required modifiers are currently held down."""
-    for mod_name in required_mods:
-        left, right = _MODIFIER_NAMES[mod_name]
-        if left not in held_keys and right not in held_keys:
-            return False
-    return True
-
 def _pick_input_device(mic_substring: str | None):
     """Return device index for the best matching input device.
 
@@ -1415,16 +1342,16 @@ def _reload_live_settings(cfg, indicator):
             )
 
         vc_hotkey_str = getattr(cfg, "voice_commands_hotkey", "")
-        voice_cmds_combo = _parse_hotkey_combo(vc_hotkey_str)
+        voice_cmds_combo = parse_hotkey_combo(vc_hotkey_str)
 
         return LiveSettings(
-            hold_key=_keycode_from_name(cfg.hotkey),
-            toggle_key=_keycode_from_name(cfg.toggle_hotkey) if cfg.toggle_hotkey else None,
+            hold_key=keycode_from_name(cfg.hotkey),
+            toggle_key=keycode_from_name(cfg.toggle_hotkey) if cfg.toggle_hotkey else None,
             vc_hotkey_str=vc_hotkey_str,
             voice_cmds_combo=voice_cmds_combo,
             voice_cmds_main_key=voice_cmds_combo[1] if voice_cmds_combo else None,
             mode=cfg.mode.lower().strip(),
-            paste_last_combo=_parse_hotkey_combo(getattr(cfg, "paste_last_hotkey", "")),
+            paste_last_combo=parse_hotkey_combo(getattr(cfg, "paste_last_hotkey", "")),
         )
     except Exception as e:
         logger.warning(f"Could not apply reloaded settings: {e}", exc_info=True)
@@ -1850,7 +1777,7 @@ _modifier_hotkeys = ([], frozenset())
 
 def _note_modifier_hotkeys(devices, *keys) -> None:
     global _modifier_hotkeys
-    _modifier_hotkeys = (devices, frozenset(k for k in keys if k in _MODIFIER_CODES))
+    _modifier_hotkeys = (devices, frozenset(k for k in keys if k in MODIFIER_CODES))
 
 
 def _send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY_MS,
@@ -1875,7 +1802,7 @@ def _send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY
         keyboards = [d for d in list(devices) if _is_keyboard_device(d)]
 
         def before_press():
-            while _keys_down(keyboards) & modifiers:
+            while keys_down(keyboards) & modifiers:
                 time.sleep(0.02)
     try:
         sent = virtual_keyboard.send(events, delay_ms, before_press)
@@ -4706,23 +4633,12 @@ _SHIFT_CODES = frozenset({ecodes.KEY_LEFTSHIFT, ecodes.KEY_RIGHTSHIFT})
 EDIT_SHIFT_WAIT_S = 2.0
 
 
-def _keys_down(keyboards) -> set:
-    """The keys down on *keyboards*; one that's gone has none."""
-    down = set()
-    for dev in keyboards:
-        try:
-            down |= set(dev.active_keys())
-        except Exception:
-            pass
-    return down
-
-
 def _wait_for_keys_up(devices, codes, timeout) -> bool:
     """Wait until none of *codes* is down on any keyboard. False on timeout."""
     keyboards = [d for d in devices if _is_keyboard_device(d)]
     deadline = time.time() + timeout
     while True:
-        if not _keys_down(keyboards) & set(codes):
+        if not keys_down(keyboards) & set(codes):
             return True
         if time.time() >= deadline:
             return False
@@ -4805,7 +4721,7 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
     if pending is not None:
         if time.time() - pending["at"] > PASTE_LAST_EXPIRY_S:
             state.paste_last = pending = None
-        elif event.value == 0 and (event.code == pending["key"] or event.code in _MODIFIER_CODES):
+        elif event.value == 0 and (event.code == pending["key"] or event.code in MODIFIER_CODES):
             # Only the combo's own keys are waited for. Any other release
             # goes on to the handlers below: swallowing it would lose a hold
             # key's key-up and leave that recording running.
@@ -4818,7 +4734,7 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
             return
     if paste_last_combo and event.value == 1 and not state.is_recording:
         required_mods, main_key = paste_last_combo
-        if event.code == main_key and _check_modifiers_held(required_mods, held_modifiers):
+        if event.code == main_key and check_modifiers_held(required_mods, held_modifiers):
             # Same brief grab as the Voice Commands combo below, so the key
             # press doesn't reach the focused app.
             _grab_keyboards_hiding(devices, {main_key, *held_modifiers})
@@ -4831,7 +4747,7 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
     # would also drop the ones a hold recording depends on.
     if voice_cmds_combo and event.value == 1 and not state.is_recording:
         required_mods, main_key = voice_cmds_combo
-        if event.code == main_key and _check_modifiers_held(required_mods, held_modifiers):
+        if event.code == main_key and check_modifiers_held(required_mods, held_modifiers):
             # Briefly grab the keyboards (not the pointer) to stop the keypress
             # leaking into the focused app. The same tracked grabs as recording,
             # and a finally that always releases, so a failing tray call can't
@@ -4851,7 +4767,7 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
     # hides itself when it starts a dictation (below). Kept until it's let
     # go, or until something lets go of every grab sooner; the desktop has
     # been told it's up either way.
-    if event.code in _MODIFIER_CODES and event.code in (hold_key, toggle_key):
+    if event.code in MODIFIER_CODES and event.code in (hold_key, toggle_key):
         if (event.value == 1 and not _grabbed_devices
                 and (event.code == toggle_key or state.is_recording)):
             _grab_keyboards_hiding(devices, {event.code})
@@ -5188,14 +5104,14 @@ def _loop_evdev(cfg: Settings, input_device_idx, keyboards=None):
         print("Onboarding not complete. No hotkeys will be active until setup is finished.")
         return
 
-    hold_key = _keycode_from_name(cfg.hotkey)
-    toggle_key = _keycode_from_name(cfg.toggle_hotkey) if cfg.toggle_hotkey else None
+    hold_key = keycode_from_name(cfg.hotkey)
+    toggle_key = keycode_from_name(cfg.toggle_hotkey) if cfg.toggle_hotkey else None
 
     # Voice commands hotkey supports combos like "Ctrl+Shift+H"
     vc_hotkey_str = getattr(cfg, 'voice_commands_hotkey', '')
-    voice_cmds_combo = _parse_hotkey_combo(vc_hotkey_str)
+    voice_cmds_combo = parse_hotkey_combo(vc_hotkey_str)
     voice_cmds_main_key = voice_cmds_combo[1] if voice_cmds_combo else None
-    paste_last_combo = _parse_hotkey_combo(getattr(cfg, "paste_last_hotkey", ""))
+    paste_last_combo = parse_hotkey_combo(getattr(cfg, "paste_last_hotkey", ""))
 
     if hold_key is None:
         logger.info("No hotkey configured - service will not monitor any keys")
@@ -5265,12 +5181,7 @@ def _loop_evdev(cfg: Settings, input_device_idx, keyboards=None):
                         # come back through this same read; they are not input.
                         if _is_own_injected_event(dev, event):
                             continue
-                        # Track modifier key state for combo detection
-                        if event.code in _MODIFIER_CODES:
-                            if event.value in (1, 2):  # press or repeat
-                                held_modifiers.add(event.code)
-                            elif event.value == 0:  # release
-                                held_modifiers.discard(event.code)
+                        track_modifier(held_modifiers, event)
 
                         # Any hotkey counts as activity, whether or not the
                         # auto-timeout is on now: it can be switched on later,
