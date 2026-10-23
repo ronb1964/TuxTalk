@@ -181,6 +181,9 @@ before 0.15.0, so older entries use that name.
   moment, and TuxTalk sometimes took it for the window you were in, so the
   terminal got an ordinary app's paste key instead of its own. "Sending in
   2 s" could be placed over that tiny window too.
+- The welcome screen said "Hold F8" as if F8 were the only choice. It now
+  says the key can be picked in the next step, and Setup Complete says where
+  to change the keys later.
 
 ## [0.17.0] - 2026-10-20
 

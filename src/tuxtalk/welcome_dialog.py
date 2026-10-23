@@ -627,7 +627,7 @@ class WelcomeDialog:
         quickstart_box.set_margin_start(20)
         quickstart_box.set_margin_top(5)
 
-        key = "your Hold-to-talk key" if self.is_flatpak else "<b>F8</b>"
+        key = "your Hold-to-talk key" if self.is_flatpak else "<b>F8</b> (or a key you pick next)"
         tips = [
             f"1. Hold {key}",
             "2. Talk",
@@ -3140,7 +3140,7 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
     settings_label = Gtk.Label()
     settings_label.set_markup(
         '<span><i>⚙️ Open the TuxTalk menu ('
-        f'{GLib.markup_escape_text(_menu_location())}) for settings</i></span>'
+        f'{GLib.markup_escape_text(_menu_location())}) to change these keys and more</i></span>'
     )
     settings_label.set_halign(Gtk.Align.START)
     settings_label.set_margin_top(2)

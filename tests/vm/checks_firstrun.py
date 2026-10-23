@@ -32,12 +32,14 @@ def welcome(run):
     problems = []
     if not (card and english):
         problems.append(f"card line: {card!r}, mentions English: {english}")
-    if not ("1. Hold F8" in lines and "2. Talk" in lines
+    if not ("1. Hold F8 (or a key you pick next)" in lines and "2. Talk" in lines
             and any(t.startswith("3. Let go") for t in lines)):
-        problems.append("How It Works doesn't read 1. Hold F8, 2. Talk, 3. Let go")
+        problems.append("How It Works doesn't read 1. Hold F8 (or a key you pick next), "
+                        "2. Talk, 3. Let go")
     if problems:
         return Outcome("fail", "; ".join(problems), screenshot=shot)
-    return Outcome("pass", f"Card: “{card}”, For English; 1. Hold F8, 2. Talk, 3. Let go",
+    return Outcome("pass", f"Card: “{card}”, For English; 1. Hold F8 (or a key you pick next), "
+                   "2. Talk, 3. Let go",
                    screenshot=shot)
 
 

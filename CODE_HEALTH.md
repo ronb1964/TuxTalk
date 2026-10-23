@@ -42,6 +42,8 @@ Merge the more-hotkey-choices branch first: it changes the same files.
 | 11 | Hotkey helper code findings in one version bump (8 small items) | S | open |
 | 12 | Docs: README, ROADMAP, icons/README; delete unused icons and the Flathub manifest (Ron's OK) | S | open |
 | 13 | Try CUDA without cuDNN on an NVIDIA card; if it works, drop cuDNN from the download | S | open |
+| 14 | Tests get a throwaway home folder before anything is imported: importing app.py runs the CUDA setup against the real data folder, and child processes the tests start see the real home | S | open |
+| 15 | Flatpak only: Setup Complete says the TuxTalk menu changes the keys, but there the desktop's settings do. Goes with the decision to keep or drop the Flatpak code | S | open |
 
 Full findings, with each one's user effect, fix, risk and effort, are in the
 audit's verified tables (kept outside the repository; they name Ron's machine).

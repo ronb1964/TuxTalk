@@ -318,7 +318,7 @@
 
     <div class="feature" style="margin-top:44px">
       <div class="prose">
-        <h3>Type at pause <span class="tag">New in 0.16</span></h3>
+        <h3>Type at pause</h3>
         <p>Each phrase gets typed when you pause, instead of all at once when you're done. Put it together with hands-free on F9 and you can say a message, look it over, say "edit that, make it friendlier", and say "press enter" to send it. No keyboard at all. guelz built this one.</p>
         <h3 style="margin-top:14px">Voice editing</h3>
         <p>Select some text, hold Shift+F8 and say what you want changed. Or skip the selecting: right after you dictate, say "edit that, make it shorter". There's no fixed wording, and Ctrl+Z puts it back if you don't like it. Jobs like all caps or taking out commas are done exactly in code. Rewording goes to a small AI model that runs on your computer, and that one's a download you only get if you turn it on.</p>
@@ -359,12 +359,13 @@
       <div><h3>Pauses your music</h3><p>Music and videos pause while you dictate and pick back up when you're done. I had a YouTube video going once and it turned "isn't it" into "Venezuela".</p></div>
       <div><h3>Turns other sounds down</h3><p>For what pausing can't reach, like a Discord call or a game. It's off until you turn it on, and it only changes what you hear. A call still hears your mic.</p></div>
       <div><h3>Says when the mic is silent</h3><p>Muted mic, unplugged headset, wrong input picked? TuxTalk tells you it heard nothing but silence instead of just typing nothing.</p></div>
-      <div><h3>Easy on a laptop battery</h3><p>On a laptop it turns dictation off after a few minutes you're not using it, and tells you when it does. On a desktop that's off, so F8 always works.</p></div>
+      <div><h3>Easy on a laptop battery</h3><p>On a laptop it lets go of the speech model when you haven't dictated for a while. F8 still works, the first dictation after just takes a few seconds longer. On a desktop that's off.</p></div>
       <div><h3>Recent Dictations</h3><p>Your last 20 are in the tray menu, one click to copy. They're only kept in memory and they're gone when you log out.</p></div>
       <div><h3>Your Stats</h3><p>How many words you've dictated and about how much typing that saved you. Only the numbers get kept, never what you said.</p></div>
       <div><h3>Settings backup</h3><p>Save all your settings and words to one file and load it on another computer. It keeps your last 10 settings on its own too, in case a change goes wrong.</p></div>
       <div><h3>An indicator you can style</h3><p>Orb, waveform, frequency bars or radial, any color, anywhere on the screen. It moves with your voice so you know it's hearing you.</p></div>
       <div><h3>Only the languages you speak</h3><p>Whisper picks from 99 languages and on a short dictation it sometimes guesses wrong. Tick the ones you actually speak and it sticks to those.</p></div>
+      <div><h3>Stays out of password boxes</h3><p>If your cursor is in a password field, TuxTalk types nothing and says why. That works in most GTK apps, in KDE apps and Firefox with accessibility on, and in your desktop's own admin password prompt.</p></div>
       <div><h3>It tells you why</h3><p>If a dictation can't be typed into a window, TuxTalk says why and what fixes it instead of just doing nothing.</p></div>
       <div><h3>No tray? Still works</h3><p>On a desktop with no system tray, like plain GNOME, opening TuxTalk from your apps brings up its menu in a small window.</p></div>
       <div><h3>A command for your own shortcut</h3><p><code>tuxtalk --toggle</code>, plus <code>--start</code> and <code>--stop</code>, if you'd rather use your desktop's shortcuts or a script.</p></div>
@@ -518,7 +519,7 @@
       <p>TuxTalk's hotkey helper reads the key straight from the keyboard instead of asking the desktop for it, so hold-to-talk works on Wayland and X11 with no setup. On GNOME you get a proper panel menu, everywhere else a tray icon, and on a desktop with neither, a small menu window.</p>
     </div>
     <ul class="desktops">
-      <li>GNOME</li><li>KDE Plasma</li><li>Sway</li><li>Hyprland</li><li>Cinnamon</li><li>Other X11 desktops</li>
+      <li>GNOME</li><li>KDE Plasma</li><li>COSMIC</li><li>Sway</li><li>Hyprland</li><li>Cinnamon</li><li>Other X11 desktops</li>
     </ul>
 
     <div class="prose" id="uninstall" style="margin-top:64px">

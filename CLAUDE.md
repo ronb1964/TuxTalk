@@ -131,7 +131,7 @@ Claude checks every item against the log too
 First run (since 0.14.2 it recommends one setup; CUDA is not offered here):
 - [ ] Welcome screen appears, and its card names the graphics card and language ("Parakeet on your NVIDIA ..., For English")
 - [ ] Other options: changing the language, model or graphics-card tickbox updates the card and its download size. The language list reads "Spanish (Español)", "Japanese (日本語)" and so on, with no flags; Preferences → General → Change model, device or language → Language shows the same list
-- [ ] Welcome screen's "How It Works" reads 1. Hold F8, 2. Talk, 3. Let go. Hotkey test, then straight to the downloads: no "You're All Set!" screen before them
+- [ ] Welcome screen's "How It Works" reads 1. Hold F8 (or a key you pick next), 2. Talk, 3. Let go. Hotkey test, then straight to the downloads: no "You're All Set!" screen before them
 - [ ] Downloads show progress bars: the Vulkan engine and Parakeet for the graphics card. The log must show a real download, not "cached": "Parakeet Ultra downloaded for vulkan"
 - [ ] The speed check runs, and the log shows its result (`Speed check (parakeet-v3): graphics …s, processor …s`)
 - [ ] Default settings are correct (model=parakeet-v3, device=vulkan when the card won, auto_period=True, auto_timeout 5 min, language_mode=auto)

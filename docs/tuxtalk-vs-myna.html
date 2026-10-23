@@ -58,7 +58,7 @@
       <div class="prose">
         <h2>Who's writing this</h2>
         <p>I'm Ron, and I make TuxTalk. I don't write the code, though. Claude, Anthropic's AI, writes it, and I decide what it does, test it on real machines and use it for nearly everything I type.</p>
-        <p>I hold Claude to one rule on the code. An experienced developer should be able to open any file and find code they'd respect, not an AI mess, so it has to be easy to read and there can't be anything left lying around that isn't used. Every change also has to get through over 3,600 automated tests. There's more on that on the About page, under <a href="about.html#clean-code">Keeping the code clean</a>.</p>
+        <p>I hold Claude to one rule on the code. An experienced developer should be able to open any file and find code they'd respect, not an AI mess, so it has to be easy to read and there can't be anything left lying around that isn't used. Every change also has to get through over 3,700 automated tests. There's more on that on the About page, under <a href="about.html#clean-code">Keeping the code clean</a>.</p>
         <p>So keep in mind this comparison is written by the guy who makes the other app. I've tried hard to be fair to Myna, and every fact about it below links to where I got it, mostly Canonical's own announcement and Myna's code and release notes.</p>
 
         <h2>What Myna is</h2>
@@ -76,7 +76,7 @@
 
         <h2>Where TuxTalk is different</h2>
         <p>With TuxTalk you hold F8, talk and let go. Myna had hold-to-talk and dropped it in 0.2.0, so now you tap its shortcut to start and tap again to stop (<a href="https://github.com/canonical/myna/releases/tag/v0.2.0" target="_blank" rel="noopener">0.2.0 release notes</a>). TuxTalk does that too, on F9, if you'd rather.</p>
-        <p>It isn't tied to one desktop or one distro. It works on KDE, GNOME, Sway, Hyprland, Cinnamon and other X11 desktops, and there's a .deb, an .rpm, an AppImage and an AUR package, so Mint, Fedora and Arch are covered as well as Ubuntu.</p>
+        <p>It isn't tied to one desktop or one distro. It works on KDE, GNOME, COSMIC, Sway, Hyprland, Cinnamon and other X11 desktops, and there's a .deb, an .rpm, an AppImage and an AUR package, so Mint, Fedora and Arch are covered as well as Ubuntu.</p>
         <p>It isn't just for NVIDIA. Myna's graphics card engine is NVIDIA only, and for Parakeet it wants a Turing or newer card with more than 4 GB and driver 580 or later (<a href="https://github.com/canonical/myna/blob/8ce817b961d305dcae40a44ce02fb23920d03fe9/parakeet-snap/README.md" target="_blank" rel="noopener">Parakeet snap</a>). Canonical says support for more is planned (<a href="https://ubuntu.com/blog/myna-speech-to-text-technology-preview-available" target="_blank" rel="noopener">Ubuntu blog</a>). TuxTalk runs Parakeet and Whisper on AMD, Intel or NVIDIA cards through Vulkan, and on the processor if there's no card it can use.</p>
         <p>You can teach it your words. A custom word list is the very first issue on Myna's GitHub, and its developer says it's their number one request (<a href="https://github.com/canonical/myna/issues/1" target="_blank" rel="noopener">issue #1</a>). TuxTalk has Your Words for names it should know, and Fix a Word for one it keeps getting wrong.</p>
         <p>Canonical is keeping Myna to dictation on purpose. It isn't a voice assistant and doesn't control the desktop by voice (<a href="https://ubuntu.com/blog/myna-speech-to-text-technology-preview-available" target="_blank" rel="noopener">Ubuntu blog</a>). TuxTalk takes "comma", "new paragraph" and "press enter", and in TuxTalk Labs you can say "edit that, make it more formal" right after you dictate. It can also turn a recording or a video into text with Transcribe a File.</p>
@@ -91,7 +91,7 @@
           <tr><th scope="row">Made by</th><td>Canonical</td><td>Ron Brand, with the code written by Claude</td></tr>
           <tr><th scope="row">License</th><td>AGPL-3.0</td><td>MIT</td></tr>
           <tr><th scope="row">Stage</th><td>Technology preview, 0.2.4</td><td>0.17.0</td></tr>
-          <tr><th scope="row">Runs on</th><td>Ubuntu 24.04 and newer, GNOME on Wayland (Xubuntu experimental)</td><td>Most distros: KDE, GNOME, Sway, Hyprland, Cinnamon, X11</td></tr>
+          <tr><th scope="row">Runs on</th><td>Ubuntu 24.04 and newer, GNOME on Wayland (Xubuntu experimental)</td><td>Most distros: KDE, GNOME, COSMIC, Sway, Hyprland, Cinnamon, X11</td></tr>
           <tr><th scope="row">Install</th><td>PPA, then snaps from the edge channel</td><td>.deb, .rpm, AppImage, AUR</td></tr>
           <tr><th scope="row">Start and stop</th><td>Tap a shortcut to start, tap to stop</td><td>Hold F8, or tap F9 to start and stop</td></tr>
           <tr><th scope="row">Words as you speak</th><td>Yes, in the text field</td><td>Each phrase as you pause, with Type at pause in Labs</td></tr>
