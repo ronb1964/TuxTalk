@@ -84,3 +84,21 @@ def test_the_hands_free_option_names_the_toggle_key():
     assert hands_free_label("F9") == "Double-tap F9 for hands-free: stop after"
     assert hands_free_label("F10").startswith("Double-tap F10 ")
     assert hands_free_label("") == "Double-tap the toggle key for hands-free: stop after"
+
+
+def test_right_ctrl_with_an_older_hotkey_helper_says_to_update_it_first():
+    """Helper 1.4 doesn't report Right Ctrl: the key would do nothing."""
+    cfg = dict(CFG, hotkey="Right Ctrl")
+    _title, text, offer_test, _clash = hotkey_change_message(cfg, {"hotkey"}, [], old_helper=True)
+    assert offer_test and "Right Ctrl needs the hotkey helper this TuxTalk brings" in text
+    _title, text, _test, _clash = hotkey_change_message(cfg, {"hotkey"}, [])
+    assert "hotkey helper" not in text
+    _title, text, _test, _clash = hotkey_change_message(CFG, {"hotkey"}, [], old_helper=True)
+    assert "hotkey helper" not in text      # F7 works with any helper
+
+
+def test_helpers_before_1_5_dont_hear_right_ctrl_and_alt():
+    from tuxtalk import secure_input
+    assert not secure_input.hears_right_ctrl_and_alt("1.4")
+    assert secure_input.hears_right_ctrl_and_alt("1.5")
+    assert secure_input.hears_right_ctrl_and_alt(None)      # no helper: TuxTalk reads the keys

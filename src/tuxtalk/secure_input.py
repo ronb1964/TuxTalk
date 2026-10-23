@@ -299,6 +299,12 @@ def is_older(running):
     return running is not None and _version(running) < _version(VERSION)
 
 
+def hears_right_ctrl_and_alt(running):
+    """Whether the running helper (version *running*, None when there is
+    none) reports Right Ctrl and Right Alt as dictation keys: 1.5 and newer."""
+    return running is None or _version(running) >= (1, 5)
+
+
 def _run_as_root(script, what):
     """(ok, message) after running *script* through pkexec. (Tests replace
     this, so a test can never open a password prompt; _pkexec is the work.)"""
