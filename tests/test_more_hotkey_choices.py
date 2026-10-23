@@ -171,55 +171,53 @@ def test_the_hotkey_test_sees_a_right_ctrl_toggle_and_nothing_else_happens(servi
 
 
 class Keyboard:
-    """A keyboard whose keys are down for the first *polls* looks."""
+    """A real keyboard as the hotkey loop sees it, with Right Ctrl down while
+    *pressed(look)* says so; *looks* counts how often TuxTalk checked."""
 
-    def __init__(self, down, polls):
-        self.down, self.polls, self.looks = set(down), polls, 0
+    def __init__(self, pressed, code=RCTRL):
+        self.pressed, self.code, self.looks = pressed, code, 0
 
     def capabilities(self, verbose=False):
         return {ecodes.EV_KEY: [ecodes.KEY_A, ecodes.KEY_M, ecodes.KEY_Z]}
 
     def active_keys(self):
         self.looks += 1
-        return sorted(self.down) if self.looks <= self.polls else []
+        return [self.code] if self.pressed(self.looks) else []
 
 
 @pytest.fixture
-def typing(monkeypatch):
-    sent = []
-    monkeypatch.setattr(app.virtual_keyboard, "send",
-                        lambda events, delay: sent.append(list(events)) or True)
+def no_hotkeys_noted(monkeypatch):
     monkeypatch.setattr(app, "_modifier_hotkeys", ([], frozenset()))
-    return sent
+    monkeypatch.setattr(app.time, "sleep", lambda s: None)
 
 
-def test_nothing_is_typed_until_a_right_ctrl_dictation_key_is_let_go(typing):
+def test_typing_waits_while_right_ctrl_is_pressed_mid_text(keyboard, no_hotkeys_noted):
     """Typing on the hotkey loop's thread, TuxTalk can't hide a Right Ctrl
-    pressed meanwhile, so it waits: under a held Ctrl, letters are shortcuts."""
-    keyboard = Keyboard({RCTRL}, polls=3)
-    app._note_modifier_hotkeys([keyboard], RCTRL, ecodes.KEY_F9)
+    pressed meanwhile: each key waits for it, or the rest of the paragraph
+    would arrive as Ctrl shortcuts (Ctrl+W closes the tab)."""
+    written_at_look = {}
+
+    def pressed(look):
+        written_at_look[look] = len(keyboard.events)
+        return 3 <= look <= 6           # pressed before the third key, held a while
+
+    app._note_modifier_hotkeys([Keyboard(pressed)], RCTRL, ecodes.KEY_F9)
+    assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)] * 4, what="aaaa")
+    assert written_at_look[3] == written_at_look[6] == written_at_look[7] == 4
+    assert keyboard.typed_keys() == [ecodes.KEY_A] * 4
+
+
+def test_f_keys_never_hold_typing_up(keyboard, no_hotkeys_noted):
+    hotkeys = Keyboard(lambda look: True, code=F8)
+    app._note_modifier_hotkeys([hotkeys], F8, ecodes.KEY_F9)
     assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
-    assert keyboard.looks == 4 and typing == [[(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)]]
+    assert hotkeys.looks == 0
 
 
-def test_a_right_ctrl_held_on_and_on_gets_nothing_typed(typing, monkeypatch):
-    monkeypatch.setattr(app, "HOTKEY_UP_WAIT_S", 0.05)
-    app._note_modifier_hotkeys([Keyboard({RCTRL}, polls=10**6)], RCTRL, None)
-    assert not app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
-    assert typing == []
-
-
-def test_f_keys_never_hold_typing_up(typing):
-    keyboard = Keyboard({F8}, polls=10**6)
-    app._note_modifier_hotkeys([keyboard], F8, ecodes.KEY_F9)
-    assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
-    assert keyboard.looks == 0
-
-
-def test_the_right_alt_guard_goes_while_right_alt_is_held(typing):
-    app._note_modifier_hotkeys([Keyboard({RALT}, polls=10**6)], RALT, None)
+def test_the_right_alt_guard_goes_while_right_alt_is_held(keyboard, no_hotkeys_noted):
+    app._note_modifier_hotkeys([Keyboard(lambda look: True, code=RALT)], RALT, None)
     app._guard_alt_tap()
-    assert typing == [[(LCTRL, 1), (LCTRL, 0)]]
+    assert keyboard.events == [(LCTRL, 1), (LCTRL, 0)]
 
 
 # --- the desktops hold Scroll Lock back from the focused app ------------------------

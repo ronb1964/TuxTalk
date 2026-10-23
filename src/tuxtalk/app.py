@@ -1847,8 +1847,6 @@ def _key_delay() -> int:
 # The keyboards the hotkey loop reads and its dictation keys that are
 # modifiers (Right Ctrl, Right Alt), for _send_keys; set by _note_modifier_hotkeys.
 _modifier_hotkeys = ([], frozenset())
-# How long _send_keys waits for such a key to be let go.
-HOTKEY_UP_WAIT_S = 10.0
 
 
 def _note_modifier_hotkeys(devices, *keys) -> None:
@@ -1862,24 +1860,26 @@ def _send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY
     True only if all of them were sent: keystrokes that never happened must
     not reach the undo buffer.
 
-    A Right Ctrl or Right Alt dictation key that's down is let go of first:
-    pressed under it, letters are shortcuts (Ctrl+W closes the tab). Hiding
-    it from the desktop can't cover this: typing on the hotkey loop's own
-    thread, TuxTalk hasn't read the press yet. *under_hotkey* is for the keys
-    meant to go with it.
+    Each key waits while a Right Ctrl or Right Alt dictation key is down,
+    however long: pressed under it, letters are shortcuts (Ctrl+W closes the
+    tab). Hiding it from the desktop can't cover this: typing on the hotkey
+    loop's own thread, TuxTalk hasn't read the press yet. *under_hotkey* is
+    for the keys meant to go with it.
 
     With *raise_if_partial*, a keyboard that failed partway raises
     virtual_keyboard.StoppedPartway instead of returning False, for a caller
     that must tell "none of the keys were sent" from "some of them were".
     """
     devices, modifiers = _modifier_hotkeys
-    if (modifiers and not under_hotkey
-            and not _wait_for_keys_up(list(devices), modifiers, HOTKEY_UP_WAIT_S)):
-        logger.warning(f"Didn't send {what}: a Right Ctrl or Right Alt dictation key "
-                       f"stayed down for {HOTKEY_UP_WAIT_S:.0f}s")
-        return False
+    before_press = None
+    if modifiers and not under_hotkey:
+        keyboards = [d for d in list(devices) if _is_keyboard_device(d)]
+
+        def before_press():
+            while _keys_down(keyboards) & modifiers:
+                time.sleep(0.02)
     try:
-        sent = virtual_keyboard.send(events, delay_ms)
+        sent = virtual_keyboard.send(events, delay_ms, before_press)
     except virtual_keyboard.StoppedPartway:
         logger.error(f"{what}: the virtual keyboard stopped partway")
         if raise_if_partial:
@@ -4689,18 +4689,23 @@ _SHIFT_CODES = frozenset({ecodes.KEY_LEFTSHIFT, ecodes.KEY_RIGHTSHIFT})
 EDIT_SHIFT_WAIT_S = 2.0
 
 
+def _keys_down(keyboards) -> set:
+    """The keys down on *keyboards*; one that's gone has none."""
+    down = set()
+    for dev in keyboards:
+        try:
+            down |= set(dev.active_keys())
+        except Exception:
+            pass
+    return down
+
+
 def _wait_for_keys_up(devices, codes, timeout) -> bool:
     """Wait until none of *codes* is down on any keyboard. False on timeout."""
     keyboards = [d for d in devices if _is_keyboard_device(d)]
     deadline = time.time() + timeout
     while True:
-        down = set()
-        for dev in keyboards:
-            try:
-                down |= set(dev.active_keys())
-            except Exception:
-                pass
-        if not down & set(codes):
+        if not _keys_down(keyboards) & set(codes):
             return True
         if time.time() >= deadline:
             return False

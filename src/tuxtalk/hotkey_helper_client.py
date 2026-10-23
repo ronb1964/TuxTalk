@@ -200,7 +200,8 @@ class HelperKeyboard:
     # -- what app._loop_evdev calls -------------------------------------------------
 
     def fileno(self):
-        return self.sock.fileno() if self.sock is not None else self._idle_r
+        sock = self.sock    # once: a typing thread may drop it meanwhile
+        return sock.fileno() if sock is not None else self._idle_r
 
     @property
     def fd(self):
