@@ -11,6 +11,7 @@ from types import SimpleNamespace
 import pytest
 
 pytest.importorskip("gi")
+from gtk_text import widgets  # noqa: E402
 from tuxtalk import uinput_helper  # noqa: E402
 from tuxtalk import welcome_dialog as wd  # noqa: E402
 
@@ -104,18 +105,6 @@ def test_the_notice_points_to_fix_typing_when_setup_is_not_done(monkeypatch):
     assert "restart" in notice
 
 
-def _labels(widget):
-    """Every Gtk.Label under *widget*."""
-    from gi.repository import Gtk
-    found = []
-    if isinstance(widget, Gtk.Label):
-        found.append(widget)
-    if isinstance(widget, Gtk.Container):
-        for child in widget.get_children():
-            found.extend(_labels(child))
-    return found
-
-
 def _run_dialog_with_f8_release(monkeypatch, evdev_paths, denied=()):
     """Run the real dialog; while it is up, release F8 through GTK and
     return the visible label texts."""
@@ -144,7 +133,7 @@ def _run_dialog_with_f8_release(monkeypatch, evdev_paths, denied=()):
         event.key.keyval = Gdk.KEY_F8
         event.key.window = dialog.get_window()
         dialog.emit("key-release-event", event)
-        seen["texts"] = [lb.get_text() for lb in _labels(dialog) if lb.get_visible()]
+        seen["texts"] = [w.get_text() for w in widgets(dialog) if isinstance(w, Gtk.Label) and w.get_visible()]
         return Gtk.ResponseType.OK
 
     monkeypatch.setattr(Gtk.Dialog, "run", fake_run)

@@ -109,17 +109,13 @@ def test_the_labs_help_page_explains_it():
     import gi
     gi.require_version("Gtk", "3.0")
     from gi.repository import Gtk
+    from gtk_text import find, shown_text
     from tuxtalk import help_dialog
     dialog = help_dialog.show_help_dialog(tab="start")
     try:
-        def walk(w):
-            yield w
-            if isinstance(w, Gtk.Container):
-                for c in w.get_children():
-                    yield from walk(c)
-        notebook = next(w for w in walk(dialog) if isinstance(w, Gtk.Notebook))
+        notebook = find(dialog, Gtk.Notebook)
         page = notebook.get_nth_page(notebook.get_current_page())
-        text = " ".join(w.get_text() for w in walk(page) if isinstance(w, Gtk.Label))
+        text = " ".join(shown_text(page))
         assert "Indicator Follows Your Window" in text
     finally:
         dialog.destroy()

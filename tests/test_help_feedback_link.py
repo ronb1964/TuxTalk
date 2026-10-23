@@ -10,14 +10,8 @@ gi = pytest.importorskip("gi")
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
 
+from gtk_text import widgets  # noqa: E402
 from tuxtalk import help_dialog  # noqa: E402
-
-
-def _widgets(widget):
-    yield widget
-    if isinstance(widget, Gtk.Container):
-        for child in widget.get_children():
-            yield from _widgets(child)
 
 
 @pytest.fixture
@@ -34,32 +28,32 @@ def dialog(monkeypatch):
 
 
 def test_help_has_a_feedback_link_to_discussions(dialog):
-    links = [w for w in _widgets(dialog) if isinstance(w, Gtk.LinkButton)]
+    links = [w for w in widgets(dialog) if isinstance(w, Gtk.LinkButton)]
     assert [l.get_uri() for l in links] == [help_dialog.FEEDBACK_URL]
     assert help_dialog.FEEDBACK_URL == "https://github.com/ronb1964/TuxTalk/discussions"
 
 
 def test_the_link_is_outside_the_tabs_so_every_tab_shows_it(dialog):
-    link = next(w for w in _widgets(dialog) if isinstance(w, Gtk.LinkButton))
-    notebook = next(w for w in _widgets(dialog) if isinstance(w, Gtk.Notebook))
-    assert link not in list(_widgets(notebook))
+    link = next(w for w in widgets(dialog) if isinstance(w, Gtk.LinkButton))
+    notebook = next(w for w in widgets(dialog) if isinstance(w, Gtk.Notebook))
+    assert link not in list(widgets(notebook))
 
 
 def test_clicking_the_link_does_not_close_help(dialog):
     """Action-area buttons close Help (its response handler destroys it), so
     the link must not be one of them."""
-    link = next(w for w in _widgets(dialog) if isinstance(w, Gtk.LinkButton))
+    link = next(w for w in widgets(dialog) if isinstance(w, Gtk.LinkButton))
     assert dialog.get_response_for_widget(link) == Gtk.ResponseType.NONE
 
 
 def test_troubleshooting_links_can_be_clicked(dialog):
-    markup = " ".join(w.get_label() or "" for w in _widgets(dialog) if isinstance(w, Gtk.Label))
+    markup = " ".join(w.get_label() or "" for w in widgets(dialog) if isinstance(w, Gtk.Label))
     assert '<a href="https://github.com/ronb1964/TuxTalk/issues"' in markup
     assert f'<a href="{help_dialog.FEEDBACK_URL}"' in markup
 
 
 def _help_labels(dialog):
-    return [w for w in _widgets(dialog) if isinstance(w, Gtk.Label) and w.get_use_markup()]
+    return [w for w in widgets(dialog) if isinstance(w, Gtk.Label) and w.get_use_markup()]
 
 
 def test_every_help_tab_is_valid_markup(dialog):
@@ -99,7 +93,7 @@ def test_every_tab_shows_without_scroll_arrows_when_the_screen_allows(monkeypatc
     help_dialog.show_help_dialog()
     dialog = shown[0]
     try:
-        notebook = next(w for w in _widgets(dialog) if isinstance(w, Gtk.Notebook))
+        notebook = next(w for w in widgets(dialog) if isinstance(w, Gtk.Notebook))
         assert notebook.get_scrollable() is arrows
         if not arrows:
             assert dialog.get_default_size()[0] >= dialog.get_preferred_width()[0]

@@ -761,25 +761,18 @@ def test_help_explains_labs_and_voice_editing_on_the_writing_tab():
     import gi
     gi.require_version("Gtk", "3.0")
     from gi.repository import Gtk
+    from gtk_text import find, shown_text
     from tuxtalk import help_dialog
     dialog = help_dialog.show_help_dialog(tab="writing")
     try:
-        notebook = next(w for w in _walk(dialog) if isinstance(w, Gtk.Notebook))
+        notebook = find(dialog, Gtk.Notebook)
         page = notebook.get_nth_page(notebook.get_current_page())
         assert "Writing" in notebook.get_tab_label_text(page)
-        text = " ".join(w.get_text() for w in _walk(page) if isinstance(w, Gtk.Label))
+        text = " ".join(shown_text(page))
         for must in ("experimental", "Shift", "Ctrl+Z", "make this more formal", "terminal"):
             assert must in text, must
     finally:
         dialog.destroy()
-
-
-def _walk(widget):
-    from gi.repository import Gtk
-    yield widget
-    if isinstance(widget, Gtk.Container):
-        for child in widget.get_children():
-            yield from _walk(child)
 
 
 def test_preferences_has_a_labs_section_with_both_links(prefs_window, monkeypatch):

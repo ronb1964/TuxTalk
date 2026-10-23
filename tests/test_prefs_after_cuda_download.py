@@ -10,6 +10,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from gtk_text import widgets
+
 
 @pytest.fixture
 def prefs():
@@ -75,11 +77,6 @@ def test_the_question_offers_every_whisper_model_with_large_v3_picked(prefs, mon
     def run_and_record(box):
         # On a short screen the content sits in a scroller (ui_style), so
         # look through all of it.
-        def widgets(w):
-            yield w
-            if isinstance(w, prefs.Gtk.Container):
-                for child in w.get_children():
-                    yield from widgets(child)
         radios = [w for w in widgets(box.get_content_area())
                   if isinstance(w, prefs.Gtk.RadioButton)]
         shown["labels"] = [r.get_label() for r in radios]

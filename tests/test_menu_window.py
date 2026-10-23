@@ -270,27 +270,14 @@ def _menu_window(**kw):
 
 
 def _buttons(win):
-    found = []
-
-    def walk(w):
-        if isinstance(w, Gtk.Button) and not isinstance(w, Gtk.Switch):
-            found.append(w)
-        elif isinstance(w, Gtk.Container):
-            w.foreach(walk)
-    walk(win.window)
-    return found
+    from gtk_text import widgets
+    return [w for w in widgets(win.window)
+            if isinstance(w, Gtk.Button) and not isinstance(w, Gtk.Switch)]
 
 
 def _texts(win):
-    found = []
-
-    def walk(w):
-        if isinstance(w, Gtk.Label):
-            found.append(w.get_text())
-        if isinstance(w, Gtk.Container):
-            w.foreach(walk)
-    walk(win.window)
-    return found
+    from gtk_text import widgets
+    return [w.get_text() for w in widgets(win.window) if isinstance(w, Gtk.Label)]
 
 
 def test_menu_window_has_the_tray_menu_in_order():

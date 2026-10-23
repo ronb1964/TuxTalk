@@ -7,6 +7,7 @@ Alt are still held would turn each letter into a Ctrl+Alt shortcut.
 import pytest
 from evdev import ecodes
 
+from gtk_text import tree_text
 from tuxtalk import app, config, history, kwin_hotkeys
 
 P = ecodes.KEY_P
@@ -193,20 +194,6 @@ def test_the_tray_tells_the_extension_the_key(monkeypatch):
     assert dbus_service.TuxTalkDBusService.GetPasteLastHotkey(object()) == "Ctrl+Super+P"
 
 
-def _labels(widget):
-    """Every label's text inside a GTK widget or menu."""
-    from gi.repository import Gtk
-    out = []
-    if isinstance(widget, Gtk.Label):
-        out.append(widget.get_text())
-    if isinstance(widget, Gtk.MenuItem) and widget.get_label():
-        out.append(widget.get_label())
-    if isinstance(widget, Gtk.Container):
-        for child in widget.get_children():
-            out += _labels(child)
-    return out
-
-
 def test_the_tray_menu_line_really_appears(monkeypatch):
     """Runs the real menu code: a missing import here only fails when a user
     opens Recent Dictations."""
@@ -221,7 +208,7 @@ def test_the_tray_menu_line_really_appears(monkeypatch):
                                  _build_history_entry_submenu=lambda text, i: Gtk.Menu(),
                                  _clear_history=lambda: None)
     tray.DictationTray._fill_history_menu(fake, fake.history_menu)
-    assert "Ctrl+Alt+P types the newest one again" in _labels(fake.history_menu)
+    assert "Ctrl+Alt+P types the newest one again" in tree_text(fake.history_menu)
 
 
 def test_the_setup_tip_really_appears(monkeypatch):
@@ -233,7 +220,7 @@ def test_the_setup_tip_really_appears(monkeypatch):
     seen = []
 
     def fake_run(dialog):
-        seen.extend(_labels(dialog))
+        seen.extend(tree_text(dialog))
         return Gtk.ResponseType.OK
     monkeypatch.setattr(Gtk.Dialog, "run", fake_run)
     welcome_dialog.show_setup_complete_dialog()
