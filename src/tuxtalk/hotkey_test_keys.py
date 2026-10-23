@@ -100,8 +100,16 @@ def evdev_key_action(event, held_modifiers, modifier_codes, code_to_name):
 
 def service_hears(keyboards, keyname):
     """Whether the dictation service will hear *keyname*, with *keyboards*
-    being what the test could open: the service can read them, and through a
-    hotkey helper too old for Right Ctrl and Right Alt
-    (secure_input.hears_key) it won't hear those."""
+    being what the test could open. A hotkey helper too old for Right Ctrl
+    and Right Alt (secure_input.hears_key) won't report those, and the
+    service reads the keys through a running helper even where the test
+    could open the keyboards itself (input_backends.get_input_backend): an
+    older install still in the "input" group, say."""
+    if not keyboards:
+        return False
+    if keyname not in secure_input.RIGHT_MODIFIER_KEYS:
+        return True
     version = next((k.helper_version for k in keyboards if hasattr(k, "helper_version")), None)
-    return bool(keyboards) and secure_input.hears_key(version, keyname)
+    if version is None:
+        version = secure_input.running_version()
+    return secure_input.hears_key(version, keyname)

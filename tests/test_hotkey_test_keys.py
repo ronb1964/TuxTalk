@@ -132,3 +132,32 @@ def test_evdev_names_the_keys_as_the_settings_do():
     assert htk.evdev_key_name(ecodes.KEY_F8) == "F8"
     assert htk.evdev_key_name(ecodes.KEY_A) == "a"
     assert htk.evdev_key_name(ecodes.KEY_PAUSE) is None
+
+
+class _RawKeyboard:
+    """A keyboard the test opened itself (the user is in the "input" group)."""
+
+
+class _Helper:
+    def __init__(self, version):
+        self.helper_version = version
+
+
+@pytest.mark.parametrize("running,works", [(None, True), ("1.4", False), ("1.5", True)])
+def test_right_ctrl_works_only_if_the_helper_the_service_uses_reports_it(monkeypatch,
+                                                                         running, works):
+    """The service reads the keys through a running helper even where the
+    test could read the keyboards itself, and helper 1.4 never reports Right
+    Ctrl: "Working!" there would be wrong."""
+    from tuxtalk import secure_input
+    monkeypatch.setattr(secure_input, "running_version", lambda: running)
+    assert htk.service_hears([_RawKeyboard()], "Right Ctrl") is works
+    assert htk.service_hears([_RawKeyboard()], "F8") is True
+
+
+def test_the_helper_the_test_reads_through_answers_for_itself(monkeypatch):
+    from tuxtalk import secure_input
+    monkeypatch.setattr(secure_input, "running_version", lambda: 1 / 0)
+    assert htk.service_hears([_Helper("1.4")], "Right Alt") is False
+    assert htk.service_hears([_Helper("1.5")], "Right Alt") is True
+    assert htk.service_hears([], "F8") is False

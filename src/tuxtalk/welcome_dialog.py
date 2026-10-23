@@ -1948,8 +1948,9 @@ def _hotkey_test_helper(ecodes, connect=None):
 
 
 def _key_seen_markup(service_can_read):
-    """A tested key's status. Without evdev access only this dialog saw the
-    key, and the dictation service, which reads evdev alone, would not."""
+    """A tested key's status. Only this dialog saw the key when the
+    dictation service can't read the keyboards, or reads them through a
+    hotkey helper too old for the key (hotkey_test_keys.service_hears)."""
     if service_can_read:
         return '<span color="#4CAF50">✓ Working!</span>'
     return '<span color="#FF9800">✓ Seen, not active yet</span>'
