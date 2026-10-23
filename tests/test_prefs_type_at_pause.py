@@ -1,6 +1,5 @@
 """Preferences → Advanced → TuxTalk Labs → Type at pause: the switch, the
 fine-tuning, and the live test (with a fake microphone stream)."""
-import inspect
 from types import SimpleNamespace
 
 import gi
@@ -163,15 +162,20 @@ def test_a_slider_change_applies_to_a_running_test(win):
     assert win._pause_test._detector.speech_over_room == pytest.approx(10 ** (12 / 20))
 
 
-def test_the_advanced_tab_builds_it():
-    assert "_build_type_at_pause" in inspect.getsource(PreferencesWindow.create_advanced_tab)
+def test_the_advanced_tab_builds_it(prefs_window):
+    from gtk_text import below, find
+    window = prefs_window()
+    labs = below(find(window.window, Gtk.Label, "🧪 TuxTalk Labs"))
+    switch = find(window.window, Gtk.CheckButton, "Type each phrase when you pause")
+    assert switch in labs
+    switch.set_active(True)
+    assert window.config["chunked_dictation"] is True
 
 
-def test_help_explains_type_at_pause():
-    from tuxtalk import help_dialog
-    source = inspect.getsource(help_dialog)
-    assert "<b>Type at Pause</b>" in source
-    assert "Fine-tuning" in source
+def test_help_explains_type_at_pause(help_pages):
+    hands_free = next(text for title, text in help_pages.items() if "Hands-free" in title)
+    assert "Type at Pause" in hands_free
+    assert "Fine-tuning (under Type at pause → Adjust Settings)" in hands_free
 
 
 # --- final review fixes ------------------------------------------------------

@@ -8,50 +8,58 @@ recording indicator (it's a cyan orb by default), Fix a Word under a
 """
 import pathlib
 
+import pytest
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-HELP = (ROOT / "src" / "tuxtalk" / "help_dialog.py").read_text()
 README = (ROOT / "README.md").read_text()
 
 
-def test_first_run_is_the_recommended_setup():
-    assert "Offers to use your NVIDIA graphics card" not in HELP
-    assert "recommends a setup for your computer" in HELP
+@pytest.fixture
+def help_text(help_pages):
+    """Every tab of Help, as one text."""
+    return "\n".join(help_pages.values())
+
+
+def test_first_run_is_the_recommended_setup(help_text):
+    assert "Offers to use your NVIDIA graphics card" not in help_text
+    assert "recommends a setup for your computer" in help_text
     assert "it asks which one you want" not in README
 
 
-def test_parakeet_not_small_is_recommended():
-    assert "General use (recommended)" not in HELP
+def test_parakeet_not_small_is_recommended(help_text):
+    assert "General use (recommended)" not in help_text
     assert "| **small** | 244 MB | Balanced | Very Good | **Recommended** |" not in README
     assert 'Start with "small"' not in README
 
 
-def test_no_red_indicator_or_dimmed_icon():
-    assert "red microphone icon" not in HELP
-    assert "Red recording indicator" not in HELP
-    assert "dimmed = stopped" not in HELP
-    assert "Preferences → Audio" in HELP
+def test_no_red_indicator_or_dimmed_icon(help_text):
+    assert "red microphone icon" not in help_text
+    assert "Red recording indicator" not in help_text
+    assert "dimmed = stopped" not in help_text
+    assert "Preferences → Audio" in help_text
 
 
-def test_fix_a_word_lives_on_the_words_tab():
-    assert "Preferences → Voice Commands" not in HELP
-    assert "Preferences → Words → Fix a Word" in HELP
+def test_fix_a_word_lives_on_the_words_tab(help_text):
+    assert "Preferences → Voice Commands" not in help_text
+    assert "Preferences → Words → Fix a Word" in help_text
 
 
-def test_quote_lines_show_curly_quotes():
-    assert 'Smart quotes (" " instead of " ")' not in HELP
-    assert "open quotes</b> for \\u201c" in HELP or "open quotes</b> for “" in HELP
-    assert "close quotes</b> for \\u201d" in HELP or "close quotes</b> for ”" in HELP
+def test_quote_lines_show_curly_quotes(help_text):
+    assert 'Smart quotes (" " instead of " ")' not in help_text
+    assert "open quotes for “" in help_text
+    assert "close quotes for ”" in help_text
 
 
-def test_no_menu_items_or_presets_that_do_not_exist():
-    assert "Stop Service then Start Service" not in HELP
+def test_no_menu_items_or_presets_that_do_not_exist(help_text):
+    assert "Stop Service then Start Service" not in help_text
     assert "Fast &amp; Accurate" not in README and "Fast & Accurate" not in README
-    assert "98 point 6" not in HELP          # a model's habit, not something TuxTalk does
+    assert "98 point 6" not in help_text          # a model's habit, not something TuxTalk does
 
 
-def test_voice_commands_tab_mentions_english_and_self_corrections():
-    assert "English words" in HELP
-    assert "no wait" in HELP.split("Voice Commands Reference")[1]
+def test_voice_commands_tab_mentions_english_and_self_corrections(help_pages):
+    commands = next(text for title, text in help_pages.items() if "Commands" in title)
+    assert "English words" in commands
+    assert "no wait" in commands
 
 
 def test_readme_config_example_uses_real_setting_names():

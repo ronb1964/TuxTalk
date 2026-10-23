@@ -4,6 +4,7 @@ The model itself is never trusted, so these tests use a fake engine that
 returns chosen answers, good and bad, and check that only safe edits land.
 """
 import os
+import types
 
 import pytest
 
@@ -232,10 +233,23 @@ def test_orphaned_engines_are_killed_but_live_ones_are_left_alone(monkeypatch):
     assert killed == [(100, _signal.SIGKILL)]
 
 
-def test_parent_death_uses_sigkill():
-    """llama-server can stall in graceful shutdown and ignore SIGTERM."""
-    import inspect
-    assert "signal.SIGKILL" in inspect.getsource(ai._set_parent_death_signal)
+def test_parent_death_uses_sigkill(monkeypatch):
+    """The engine dies with the service: llama-server can stall in graceful
+    shutdown and ignore SIGTERM, so it is SIGKILL."""
+    import ctypes
+    import signal as _signal
+    asked = []
+    monkeypatch.setattr(ctypes, "CDLL", lambda name, **k: types.SimpleNamespace(
+        prctl=lambda option, sig: asked.append((option, sig))))
+    ai._set_parent_death_signal()
+    assert asked == [(1, _signal.SIGKILL)]          # PR_SET_PDEATHSIG
+
+
+def test_the_engine_starts_with_the_parent_death_signal(dead_engine, monkeypatch):
+    options = []
+    monkeypatch.setattr(ai.subprocess, "Popen", lambda *a, **k: options.append(k) or _Proc())
+    dead_engine.start(_replacing=dead_engine._proc)
+    assert options[0]["preexec_fn"] is ai._set_parent_death_signal
 
 
 # --- "Actually" with no comma -----------------------------------------------

@@ -156,8 +156,19 @@ def test_edit_waits_for_the_engine_to_be_ready(engine):
 def test_the_engine_has_room_for_a_selection(monkeypatch):
     """2048 tokens held the self-correction prompt; an edit carries up to
     MAX_EDIT_CHARS of text plus the answer."""
-    import inspect
-    assert '"-c", "4096"' in inspect.getsource(ai_cleanup.CorrectionEngine.start)
+    import types
+    started = []
+    engine = ai_cleanup.CorrectionEngine()
+    monkeypatch.setattr(ai_cleanup, "is_installed", lambda: True)
+    monkeypatch.setattr(ai_cleanup, "kill_orphaned_engines", lambda: 0)
+    monkeypatch.setattr(ai_cleanup, "_server_binary", lambda: "/x/llama-server")
+    monkeypatch.setattr(ai_cleanup, "_model_path", lambda: "/x/model.gguf")
+    monkeypatch.setattr(ai_cleanup.subprocess, "Popen",
+                        lambda argv, **k: started.append(argv) or types.SimpleNamespace(pid=42))
+    monkeypatch.setattr(engine, "_wait_until_ready", lambda: None)
+    engine.start()
+    argv = started[0]
+    assert int(argv[argv.index("-c") + 1]) >= 4096
 
 
 # --- 3. the setting and the engine --------------------------------------------------
@@ -510,10 +521,21 @@ def test_declining_the_download_unticks_only_this_box(monkeypatch):
     assert box.active is False and saved == [("voice_editing", False)]
 
 
-def test_the_advanced_tab_has_the_switch():
-    import pathlib
-    prefs = (pathlib.Path(app.__file__).parent / "prefs.py").read_text()
-    assert "self.voice_editing_check" in prefs and "_on_voice_editing_toggled" in prefs
+def _labs(window):
+    """What Preferences shows under its TuxTalk Labs heading."""
+    from gi.repository import Gtk
+    from gtk_text import below, find
+    return below(find(window.window, Gtk.Label, "🧪 TuxTalk Labs"))
+
+
+def test_the_advanced_tab_has_the_switch(prefs_window, monkeypatch):
+    from gi.repository import Gtk
+    monkeypatch.setattr(ai_cleanup, "is_installed", lambda: True)
+    window = prefs_window()
+    switch = next(w for w in _labs(window) if isinstance(w, Gtk.CheckButton)
+                  and w.get_label().startswith("Voice editing"))
+    switch.set_active(True)
+    assert window.config["voice_editing"] is True
 
 
 # --- Shift release, the clipboard, terminals and window changes --------------------------
@@ -736,11 +758,6 @@ def test_a_selection_with_nothing_said_says_so(edit_env, monkeypatch):
 
 # --- TuxTalk Labs: experimental features, with Help and feedback ---------------------------
 
-import pathlib
-
-SRC = pathlib.Path(app.__file__).parent
-
-
 def test_help_explains_labs_and_voice_editing_on_the_writing_tab():
     """Help is sorted by situation since the 0.16 simplicity review: voice
     editing is explained where people write, marked as Labs."""
@@ -768,21 +785,34 @@ def _walk(widget):
             yield from _walk(child)
 
 
-def test_preferences_has_a_labs_section_with_both_links():
-    prefs = (SRC / "prefs.py").read_text()
-    labs = prefs[prefs.index("# ===== TUXTALK LABS ====="):]
-    labs = labs[:labs.index("return grid")]
-    assert "TuxTalk Labs" in labs and "experimental" in labs.lower()
-    assert "self.voice_editing_check" in labs
-    assert 'show_help_dialog(tab="writing")' in labs
-    assert "FEEDBACK_URL" in labs
-    assert 'os.environ.get("FLATPAK_ID")' in labs
+def test_preferences_has_a_labs_section_with_both_links(prefs_window, monkeypatch):
+    from gi.repository import Gtk
+    from gtk_text import find, shown_text
+    from tuxtalk import help_dialog
+    opened = []
+    monkeypatch.setattr(help_dialog, "show_help_dialog", lambda tab=None: opened.append(tab))
+    labs = _labs(prefs_window())
+    assert any("Experimental" in text for w in labs for text in shown_text(w))
+    assert any(isinstance(w, Gtk.CheckButton) and w.get_label().startswith("Voice editing")
+               for w in labs)
+    next(w for w in labs if isinstance(w, Gtk.Button) and w.get_label() == "How these work").clicked()
+    assert opened == ["writing"]
+    feedback = next(w for w in labs if isinstance(w, Gtk.LinkButton))
+    assert feedback.get_label() == "Send feedback" and feedback.get_uri() == help_dialog.FEEDBACK_URL
 
 
-def test_voice_editing_is_in_labs_not_with_the_cleanup_options():
-    prefs = (SRC / "prefs.py").read_text()
-    regular = prefs[prefs.index("# ===== TEXT SECTION ====="):prefs.index("# ===== TUXTALK LABS =====")]
-    assert "voice_editing_check" not in regular
+def test_the_flatpak_has_no_labs(prefs_window, monkeypatch):
+    """Its portal input can't see Shift or send Ctrl+C, so none of them work there yet."""
+    from gtk_text import shown_text
+    monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TuxTalk")
+    shown = shown_text(prefs_window().window)
+    assert "🧪 TuxTalk Labs" not in shown
+    assert not [text for text in shown if text.startswith("Voice editing")]
+
+
+def test_voice_editing_is_in_labs_not_with_the_cleanup_options(prefs_window):
+    window = prefs_window()
+    assert window.voice_editing_check in _labs(window)
 
 
 # --- lines the AI must not lose ------------------------------------------------------------

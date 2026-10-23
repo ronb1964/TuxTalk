@@ -427,3 +427,251 @@ def keyboard(monkeypatch):
     monkeypatch.setattr(virtual_keyboard, "_make_device", lambda: fake)
     return fake
 
+
+# --- TuxTalk's windows, built for real (under xvfb-run) ---------------------------
+# For tests of what a window shows or does. Reading the source for a label
+# would break when the code moves and pass when the label no longer shows.
+
+@pytest.fixture
+def prefs_window(monkeypatch):
+    """Build Preferences from the default settings, changed by any keyword
+    arguments: prefs_window(model="small"). Destroyed after the test."""
+    from dataclasses import asdict
+    from tuxtalk import config, prefs
+    built = []
+
+    def build(**settings):
+        values = asdict(config.Settings())
+        values.update(settings)
+        monkeypatch.setattr(prefs.PreferencesWindow, "load_config", lambda self: dict(values))
+        monkeypatch.setattr(prefs, "load_custom_commands", lambda: {})
+        monkeypatch.setattr(prefs.PreferencesWindow, "_watch_custom_commands_file",
+                            lambda self: None)
+        window = prefs.PreferencesWindow()
+        built.append(window)
+        return window
+
+    yield build
+    for window in built:
+        window.indicator_grid.destroy()     # not in the window until Customize… opens it
+        window.window.destroy()
+
+
+@pytest.fixture
+def help_pages(monkeypatch):
+    """Help as the user reads it, {tab title: its text}, from default settings."""
+    from gi.repository import Gtk
+    from gtk_text import find, shown_text
+    from tuxtalk import config, help_dialog
+    monkeypatch.setattr(config, "load_config", config.Settings)
+    dialog = help_dialog.show_help_dialog()
+    try:
+        notebook = find(dialog, Gtk.Notebook)
+        return {notebook.get_tab_label_text(page): "\n".join(shown_text(page))
+                for page in notebook.get_children()}
+    finally:
+        dialog.destroy()
+
+
+@pytest.fixture
+def tray_menu(monkeypatch):
+    """The tray's menu as built from default settings, without starting a tray."""
+    from tuxtalk import config, tray
+    monkeypatch.setattr(config, "load_config", config.Settings)
+    menu = tray.DictationTray.build_menu(tray.DictationTray.__new__(tray.DictationTray))
+    yield menu
+    menu.destroy()
+
+
+# --- each program's start, run with nothing real behind it ------------------------
+# Each returns run(*argv) -> the list of what main() did, in order, so a test
+# can check that one step comes before another. Steps are named for what the
+# user would notice; the fakes stand in for the parts that would reach the
+# desktop, the bus or the disk.
+
+@pytest.fixture
+def prefs_main(monkeypatch):
+    """Preferences' main(): its window and the tab asked for on the command line."""
+    import sys
+    import dbus.mainloop.glib
+    from tuxtalk import desktop_identity, prefs, ui_style
+    done = []
+
+    class Window:
+        def __init__(self):
+            done.append("opens the window")
+
+        def select_tab(self, tab):
+            done.append(f"shows the {tab} tab")
+
+    monkeypatch.setattr(desktop_identity, "apply", lambda: done.append("names itself"))
+    monkeypatch.setattr(ui_style, "prepare_windows", lambda: done.append("prepares windows"))
+    monkeypatch.setattr(dbus.mainloop.glib, "DBusGMainLoop",
+                        lambda **k: done.append("sets the D-Bus main loop"))
+    monkeypatch.setattr(prefs.GLib, "unix_signal_add",
+                        lambda *a: done.append("handles bring-to-front"))
+    monkeypatch.setattr(prefs, "_acquire_prefs_singleton",
+                        lambda tab: done.append("announces its pid"))
+    monkeypatch.setattr(prefs, "PreferencesWindow", Window)
+    monkeypatch.setattr(prefs.Gtk, "main", lambda: done.append("runs"))
+
+    def run(*argv):
+        monkeypatch.setattr(sys, "argv", ["tuxtalk-prefs", *argv])
+        prefs.main()
+        return done
+    return run
+
+
+class _Steps(list):
+    """What a main() did, in order, and the timers it set: run_timers() runs
+    them as the main loop would, one after another."""
+
+    def __init__(self):
+        super().__init__()
+        self.timers = []
+
+    def run_timers(self):
+        while self.timers:
+            _ms, fn, args = self.timers.pop(0)
+            fn(*args)
+
+
+@pytest.fixture
+def tray_main(monkeypatch):
+    """The tray's main(), on a start that isn't the first unless
+    run(first_run=True); *welcome* stands in for the welcome screens."""
+    import sys
+    import dbus.mainloop.glib
+    from tuxtalk import (autostart, control, cuda_helper, desktop_identity,
+                         gnome_keybindings, rename_migration, service_launcher,
+                         settings_backup, tray, ui_style, uinput_helper, update_checker,
+                         welcome_dialog)
+    done = _Steps()
+
+    def step(name, result=None):
+        return lambda *a, **k: done.append(name) or result
+
+    class Tray:
+        def __init__(self):
+            self.onboarding_in_progress = False
+            done.append("makes the tray")
+
+        _auto_start_service = step("starts the service")
+        quit_app = step("quits")
+        refresh_menu = step("refreshes the menu")
+        show_menu_window_if_no_tray = step("shows the menu window")
+        auto_check_for_updates = step("checks for updates")
+
+    monkeypatch.setattr(desktop_identity, "apply", step("names itself"))
+    monkeypatch.setattr(ui_style, "prepare_windows", step("prepares windows"))
+    monkeypatch.setattr(dbus.mainloop.glib, "DBusGMainLoop", step("sets the D-Bus main loop"))
+    monkeypatch.setattr(tray, "_acquire_tray_singleton", step("takes the tray lock"))
+    monkeypatch.setattr(tray, "_handle_old_talktype_flatpak", lambda: None)
+    monkeypatch.setattr(tray, "_refresh_kde_menu_cache", lambda: None)
+    monkeypatch.setattr(rename_migration, "adopt_old_install", step("adopts the old install", []))
+    monkeypatch.setattr(rename_migration, "repin_launchers", step("repins launchers", []))
+    monkeypatch.setattr(update_checker, "create_hidden_desktop_entry",
+                        step("writes the hidden menu entry"))
+    monkeypatch.setattr(update_checker, "add_launcher_actions", step("adds launcher actions"))
+    monkeypatch.setattr(update_checker, "check_just_updated", lambda: None)
+    monkeypatch.setattr(settings_backup, "snapshot_if_changed", step("snapshots the settings"))
+    monkeypatch.setattr(uinput_helper, "retire_ydotoold", step("retires ydotoold"))
+    monkeypatch.setattr(gnome_keybindings, "restore_left_over",
+                        step("restores GNOME keybindings"))
+    monkeypatch.setattr(autostart, "repair_stale_appimage_autostart", lambda: False)
+    monkeypatch.setattr(autostart, "refresh_autostart_comment", lambda: False)
+    monkeypatch.setattr(service_launcher, "stop_dictation_service",
+                        step("stops a running service"))
+    monkeypatch.setattr(cuda_helper, "mark_first_run_complete", step("marks setup done"))
+    monkeypatch.setattr(control, "report", lambda status: None)
+    monkeypatch.setattr(tray, "DictationTray", Tray)
+    monkeypatch.setattr(tray.time, "sleep", lambda s: None)
+    monkeypatch.setattr(tray.GLib, "timeout_add",
+                        lambda ms, fn, *args: done.timers.append((ms, fn, args)))
+    monkeypatch.setattr(tray.Gtk, "main", step("runs"))
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+
+    def run(*argv, first_run=False, welcome=lambda: {"continue": True}):
+        monkeypatch.setattr(sys, "argv", ["tuxtalk", *argv])
+        monkeypatch.setattr(cuda_helper, "is_first_run", lambda: first_run)
+        monkeypatch.setattr(welcome_dialog, "show_welcome_and_install", welcome)
+        tray.main()
+        return done
+    return run
+
+
+@pytest.fixture
+def service_main(monkeypatch):
+    """The dictation service's main(): *cached* says whether the speech model
+    is already downloaded. The service's own globals are put back afterwards."""
+    import types
+    from tuxtalk import (app, config, custom_words, desktop_identity, input_backends,
+                         model_helper, ui_style, virtual_keyboard)
+    import tuxtalk.dbus_service
+    from tuxtalk import audio_duck
+    done = _Steps()
+
+    def step(name, result=None):
+        return lambda *a, **k: done.append(name) or result
+
+    for name in ("model", "_gtk_loop_running", "dbus_service", "recording_indicator",
+                 "_spectrum_processor", "_key_delay_ms", "_log_transcripts", "_usage_stats",
+                 "_restore_clipboard", "_pause_media", "_duck_audio", "_paste_last_hotkey",
+                 "_custom_commands", "_custom_words"):
+        monkeypatch.setattr(app, name, getattr(app, name))
+    monkeypatch.setattr(app, "model", None)
+
+    class Bus:
+        def __init__(self, instance, primary=True):
+            self.instance = instance
+            done.append("offers its D-Bus service")
+            instance_holder.append(instance)
+
+        emit_service_state = emit_model_changed = lambda self, *a: None
+
+    instance_holder = []
+
+    class Indicator:
+        def __init__(self, **options):
+            done.append(("shows the indicator", options))
+
+    class Thread:
+        def __init__(self, target, daemon=None):
+            self.target = target
+
+        def start(self):
+            done.append("starts the GTK loop")
+
+    def ready():
+        done.append(("says it is ready",
+                     app._cmd_start_recording.is_set() or app._cmd_stop_recording.is_set()
+                     or app._cmd_start_from_toggle_key.is_set()))
+
+    monkeypatch.setattr(desktop_identity, "apply", step("names itself"))
+    monkeypatch.setattr(ui_style, "prepare_windows", step("prepares windows"))
+    monkeypatch.setattr(app, "_acquire_single_instance", step("takes the service lock"))
+    monkeypatch.setattr(app, "_install_signal_handlers", lambda: None)
+    monkeypatch.setattr(app, "_guard_large_v3_without_cuda", lambda cfg: None)
+    monkeypatch.setattr(app, "_apply_cleanup_settings", lambda cfg: None)
+    monkeypatch.setattr(app, "_pick_input_device", lambda mic: None)
+    monkeypatch.setattr(app, "load_custom_commands", lambda: {})
+    monkeypatch.setattr(custom_words, "load", lambda: [])
+    monkeypatch.setattr(virtual_keyboard, "start", lambda: None)
+    monkeypatch.setattr(audio_duck, "restore_left_over", lambda: None)
+    monkeypatch.setattr(tuxtalk.dbus_service, "TuxTalkDBusService", Bus)
+    monkeypatch.setattr(app, "RecordingIndicator", Indicator)
+    monkeypatch.setattr(app, "threading", types.SimpleNamespace(Thread=Thread))
+    monkeypatch.setattr(app, "_build_model_or_exit", step("loads the speech model", "model"))
+    monkeypatch.setattr(app, "_notify_tray_running_engine", step("tells the tray what runs"))
+    monkeypatch.setattr(app, "_mark_service_ready", ready)
+    monkeypatch.setattr(input_backends, "get_input_backend",
+                        lambda **k: types.SimpleNamespace(start=step("listens for hotkeys")))
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+
+    def run(cached=True, **settings):
+        monkeypatch.setattr(app, "load_config", lambda: config.Settings(**settings))
+        monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda m: cached)
+        app.main()
+        done.app_instance = instance_holder[0] if instance_holder else None
+        return done
+    return run

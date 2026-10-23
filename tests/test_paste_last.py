@@ -134,20 +134,20 @@ def test_kde_and_gnome_hold_it_back_from_the_focused_app():
     assert any("paste-last" in n for n in names)
 
 
-def test_preferences_offers_it():
-    import pathlib
-    prefs = (pathlib.Path(app.__file__).parent / "prefs.py").read_text()
-    assert '"paste_last_hotkey"' in prefs
-    assert "Paste Last Dictation" in prefs
+def test_preferences_offers_it(prefs_window):
+    from gi.repository import Gtk
+    from gtk_text import beside, find
+    window = prefs_window()
+    keys = beside(find(window.window, Gtk.Label, "Paste Last Dictation:"))
+    keys.set_active_id("Ctrl+Super+P")
+    assert window.config["paste_last_hotkey"] == "Ctrl+Super+P"
+    keys.set_active_id("")
+    assert window.config["paste_last_hotkey"] == ""
 
 
 # --- telling people it exists ------------------------------------------------------
 # Where they'd need it: the "couldn't type that" notification, the Recent
 # Dictations menu, and the tips at the end of first-time setup.
-
-import pathlib
-
-SRC = pathlib.Path(app.__file__).parent
 
 
 @pytest.mark.parametrize("outcome", ["failed", "partial"])
@@ -178,10 +178,12 @@ def test_the_hint_text():
     assert history.paste_last_hint("") is None
 
 
-def test_the_recent_dictations_menu_says_so_in_both_menus():
-    tray = (SRC / "tray.py").read_text()
-    assert "paste_last_hint(" in tray
-    ext = next((SRC.parent.parent / "gnome-extension").glob("*/extension.js")).read_text()
+def test_the_gnome_menu_says_so_too():
+    """The tray's line is checked by building it, below; the extension's is
+    JavaScript, read as text."""
+    import pathlib
+    root = pathlib.Path(__file__).resolve().parent.parent
+    ext = next((root / "gnome-extension").glob("*/extension.js")).read_text()
     assert "GetPasteLastHotkey" in ext and "types the newest one again" in ext
 
 
@@ -189,11 +191,6 @@ def test_the_tray_tells_the_extension_the_key(monkeypatch):
     from tuxtalk import dbus_service
     monkeypatch.setattr(config, "load_config", lambda: config.Settings(paste_last_hotkey="Ctrl+Super+P"))
     assert dbus_service.TuxTalkDBusService.GetPasteLastHotkey(object()) == "Ctrl+Super+P"
-
-
-def test_the_setup_tips_mention_it():
-    welcome = (SRC / "welcome_dialog.py").read_text()
-    assert "to type it again" in welcome and "paste_last_hotkey" in welcome
 
 
 def _labels(widget):

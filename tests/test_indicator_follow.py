@@ -2,14 +2,12 @@
 into, centred near its bottom edge. Uses the same active-window position as
 the floating messages (window_geometry).
 """
-import pathlib
+import types
 
 import pytest
 
 from tuxtalk import config, recording_indicator as ri, window_geometry as wg
 from tuxtalk.window_geometry import Rect
-
-SRC = pathlib.Path(wg.__file__).parent
 
 
 # --- where the active window is, as a rectangle --------------------------------------
@@ -80,16 +78,31 @@ def test_off_by_default_and_applied_without_a_restart():
     assert "indicator_follow_window" in config.LIVE_APPLIED_KEYS
 
 
-def test_the_service_passes_it_to_the_indicator():
-    app_src = (SRC / "app.py").read_text()
-    assert app_src.count("follow_window=getattr(cfg, \"indicator_follow_window\", False)") == 2
+def test_the_service_passes_it_to_the_indicator(service_main):
+    started = service_main(recording_indicator=True, indicator_follow_window=True)
+    options = next(step[1] for step in started if step[0] == "shows the indicator")
+    assert options["follow_window"] is True
 
 
-def test_it_is_a_labs_switch():
-    prefs = (SRC / "prefs.py").read_text()
-    labs = prefs[prefs.index("# ===== TUXTALK LABS ====="):]
-    labs = labs[:labs.index("return grid")]
-    assert '"indicator_follow_window"' in labs
+def test_a_changed_setting_reaches_the_running_indicator(monkeypatch):
+    from tuxtalk import app
+    applied = []
+    indicator = types.SimpleNamespace(apply_settings=lambda *a, **k: applied.append(k))
+    monkeypatch.setattr(app, "load_config", lambda: config.Settings(indicator_follow_window=True))
+    app._reload_live_settings(config.Settings(), indicator)
+    assert applied[0]["follow_window"] is True
+
+
+def test_it_is_a_labs_switch(prefs_window):
+    from gi.repository import Gtk
+    from gtk_text import below, find
+    window = prefs_window()
+    labs = below(find(window.window, Gtk.Label, "🧪 TuxTalk Labs"))
+    switch = next(w for w in labs if isinstance(w, Gtk.CheckButton)
+                  and w.get_label() == "Follows the window you\u2019re dictating into")
+    assert not switch.get_active()
+    switch.set_active(True)
+    assert window.config["indicator_follow_window"] is True
 
 
 def test_the_labs_help_page_explains_it():

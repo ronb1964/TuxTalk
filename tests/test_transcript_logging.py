@@ -5,12 +5,15 @@ for troubleshooting. That is a standing plaintext record of everything the user
 dictates. It must be redacted by default and only revealed when the user opts in
 via the `log_transcripts` setting (which pops a warning before it turns on).
 """
-import pathlib
+import gi
+import pytest
 
-from tuxtalk import config
-from tuxtalk import logger as tlog
+gi.require_version("Gtk", "3.0")
+from gi.repository import Gtk  # noqa: E402
 
-PREFS = pathlib.Path(__file__).resolve().parent.parent / "src/tuxtalk/prefs.py"
+from gtk_text import find, shown_text  # noqa: E402
+from tuxtalk import config  # noqa: E402
+from tuxtalk import logger as tlog  # noqa: E402
 
 
 # --- config flag -----------------------------------------------------------
@@ -77,28 +80,52 @@ def test_custom_command_log_line_redacts_the_text(monkeypatch, caplog):
 
 # --- prefs UI: opt-in checkbox with a warning gate -------------------------
 
-def test_prefs_has_log_transcripts_checkbox():
-    text = PREFS.read_text()
-    assert "Log transcribed text" in text
-    assert "log_transcripts" in text
-    assert "_on_log_transcripts_toggled" in text
+@pytest.fixture
+def dialogs(monkeypatch):
+    """Answers every dialog Preferences runs with dialogs.answer, and keeps
+    each one's message type."""
+    class Dialogs(list):
+        answer = Gtk.ResponseType.OK
+    seen = Dialogs()
+
+    def run(dialog):
+        seen.append(dialog.props.message_type)
+        return seen.answer
+    monkeypatch.setattr(Gtk.Dialog, "run", run)
+    return seen
 
 
-def test_enabling_logging_is_gated_by_a_warning_dialog():
+def _log_check(window):
+    return find(window.window, Gtk.CheckButton, "Log transcribed text (for troubleshooting)")
+
+
+def test_prefs_has_log_transcripts_checkbox(prefs_window, dialogs):
+    window = prefs_window()
+    check = _log_check(window)
+    assert not check.get_active()
+    check.set_active(True)
+    assert window.config["log_transcripts"] is True
+    check.set_active(False)
+    assert window.config["log_transcripts"] is False
+
+
+def test_enabling_logging_is_gated_by_a_warning_dialog(prefs_window, dialogs):
     """Turning ON transcript logging must confirm via a WARNING dialog before it
     writes the config, so the user is fully aware their dictation will be saved."""
-    text = PREFS.read_text()
-    assert "MessageType.WARNING" in text
-    # The handler that shows the warning references the setting it guards.
-    assert "_on_log_transcripts_toggled" in text
+    window = prefs_window()
+    dialogs.answer = Gtk.ResponseType.CANCEL
+    check = _log_check(window)
+    check.set_active(True)
+    assert dialogs == [Gtk.MessageType.WARNING]
+    assert not check.get_active() and window.config["log_transcripts"] is False
 
 
-def test_injection_tooltip_tells_the_truth_about_password_fields():
+def test_injection_tooltip_tells_the_truth_about_password_fields(prefs_window):
     """0.18 recognises password fields; the tooltip had kept saying nothing
     can detect them."""
-    text = PREFS.read_text()
-    assert "it cannot detect password fields" not in text
-    assert "doesn't type into password fields" in text
+    shown = "\n".join(shown_text(prefs_window().window))
+    assert "it cannot detect password fields" not in shown
+    assert "doesn't type into password fields" in shown
 
 
 # --- the enable gate is enforced (drives the real handler) -----------------
@@ -250,7 +277,14 @@ def test_a_quoted_false_turns_a_setting_off_not_on():
     assert config._apply_toml(s, {"beeps": "loud"}) == ["beeps"]
 
 
-def test_prefs_has_clear_log_button():
-    text = PREFS.read_text()
-    assert "Clear log" in text
-    assert "_on_clear_log_clicked" in text
+def test_prefs_has_clear_log_button(prefs_window, dialogs, monkeypatch):
+    cleared = []
+    monkeypatch.setattr(tlog, "clear_log", lambda: cleared.append(True) or True)
+    window = prefs_window()
+    dialogs.answer = Gtk.ResponseType.CANCEL
+    find(window.window, Gtk.Button, "Clear log now").clicked()
+    assert cleared == []
+    dialogs.answer = Gtk.ResponseType.OK
+    find(window.window, Gtk.Button, "Clear log now").clicked()
+    assert cleared == [True]
+    assert dialogs[0] == Gtk.MessageType.WARNING
