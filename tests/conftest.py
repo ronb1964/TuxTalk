@@ -474,10 +474,16 @@ def private_settings(monkeypatch, tmp_path_factory):
 @pytest.fixture
 def prefs_window(monkeypatch, private_settings):
     """Build Preferences from the default settings, changed by any keyword
-    arguments: prefs_window(model="small"). Destroyed after the test."""
+    arguments: prefs_window(model="small"). Destroyed after the test, with
+    the checks it scheduled on the main loop (GPU, typing, extension)
+    removed, so a later test that runs the loop never runs them."""
     from dataclasses import asdict
+    from gi.repository import GLib
     from tuxtalk import config, prefs
-    built = []
+    built, timers = [], []
+
+    def scheduled(add):
+        return lambda *args: timers.append(add(*args)) or timers[-1]
 
     def build(**settings):
         values = asdict(config.Settings())
@@ -486,11 +492,17 @@ def prefs_window(monkeypatch, private_settings):
         monkeypatch.setattr(prefs, "load_custom_commands", lambda: {})
         monkeypatch.setattr(prefs.PreferencesWindow, "_watch_custom_commands_file",
                             lambda self: None)
-        window = prefs.PreferencesWindow()
+        with monkeypatch.context() as m:
+            for name in ("timeout_add", "timeout_add_seconds", "idle_add"):
+                m.setattr(prefs.GLib, name, scheduled(getattr(GLib, name)))
+            window = prefs.PreferencesWindow()
         built.append(window)
         return window
 
     yield build
+    for timer in timers:
+        if GLib.MainContext.default().find_source_by_id(timer):
+            GLib.source_remove(timer)
     for window in built:
         window.indicator_grid.destroy()     # not in the window until Customize… opens it
         window.window.destroy()
