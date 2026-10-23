@@ -12,10 +12,10 @@ from evdev import ecodes
 
 from tuxtalk import (app, cosmic_hotkeys, gnome_hotkeys, keyboard_layout, modifier_hotkeys,
                      x11_hotkeys)
-from tuxtalk.hotkey_keys import keycode_from_name, track_modifier
 from tuxtalk import kwin_hotkeys as kh
 from tuxtalk.config import HOTKEY_CHOICES
-from tuxtalk.prefs import hotkey_label
+from tuxtalk.hotkey_keys import keycode_from_name, track_modifier
+from tuxtalk.hotkey_labels import hotkey_label
 
 RCTRL, RALT, LCTRL = ecodes.KEY_RIGHTCTRL, ecodes.KEY_RIGHTALT, ecodes.KEY_LEFTCTRL
 F8 = ecodes.KEY_F8

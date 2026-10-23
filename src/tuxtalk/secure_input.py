@@ -309,6 +309,15 @@ def hears_key(running, key):
     return running is None or key not in RIGHT_MODIFIER_KEYS or _version(running) >= (1, 5)
 
 
+def unheard_keys(keys):
+    """Those of dictation *keys* the running hotkey helper is too old to
+    report; the helper is asked its version only when one could be."""
+    if not set(keys) & set(RIGHT_MODIFIER_KEYS):
+        return []
+    running = running_version()
+    return [k for k in keys if not hears_key(running, k)]
+
+
 def _run_as_root(script, what):
     """(ok, message) after running *script* through pkexec. (Tests replace
     this, so a test can never open a password prompt; _pkexec is the work.)"""

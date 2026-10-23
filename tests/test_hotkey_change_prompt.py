@@ -4,7 +4,8 @@ in the log only."""
 import pytest
 
 pytest.importorskip("gi")
-from tuxtalk.prefs import hotkey_change_message, hotkey_label  # noqa: E402
+from tuxtalk.hotkey_labels import hands_free_label, hotkey_label  # noqa: E402
+from tuxtalk.prefs import hotkey_change_message  # noqa: E402
 
 CFG = {"hotkey": "F7", "toggle_hotkey": "F9", "voice_commands_hotkey": "Ctrl+Alt+V"}
 
@@ -80,7 +81,6 @@ def test_no_clash_asks_to_try_the_key():
 
 
 def test_the_hands_free_option_names_the_toggle_key():
-    from tuxtalk.prefs import hands_free_label
     assert hands_free_label("F9") == "Double-tap F9 for hands-free: stop after"
     assert hands_free_label("F10").startswith("Double-tap F10 ")
     assert hands_free_label("") == "Double-tap the toggle key for hands-free: stop after"
@@ -103,3 +103,13 @@ def test_helpers_before_1_5_dont_hear_right_ctrl_and_alt():
     assert secure_input.hears_key("1.4", "F8") and secure_input.hears_key("1.4", "Scroll Lock")
     assert secure_input.hears_key("1.5", "Right Ctrl")
     assert secure_input.hears_key(None, "Right Ctrl")    # no helper: TuxTalk reads the keys
+
+
+def test_only_a_helper_too_old_for_the_new_key_is_named(monkeypatch):
+    """Preferences asks the running helper its version only for Right Ctrl
+    or Right Alt, and names just the keys that helper won't report."""
+    from tuxtalk import secure_input
+    asked = []
+    monkeypatch.setattr(secure_input, "running_version", lambda: asked.append(1) or "1.4")
+    assert secure_input.unheard_keys(["F7", "F9"]) == [] and not asked
+    assert secure_input.unheard_keys(["Right Ctrl", "F9"]) == ["Right Ctrl"]

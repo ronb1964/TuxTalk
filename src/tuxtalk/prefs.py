@@ -5,6 +5,7 @@ gi.require_version("Pango", "1.0")
 from gi.repository import Gtk, Gdk, GLib, Pango
 from .ui_style import Fold, message_dialog
 from .whisper_vulkan import ENGINE_SIZE_TEXT
+from .hotkey_labels import dropdown_entries, hands_free_label
 import datetime
 import os
 import subprocess
@@ -16,7 +17,7 @@ from dataclasses import asdict
 from .config import (CONFIG_PATH, ConfigNotLoadedError, Settings, changed_keys, merge_changed_keys,
                      load_custom_commands, save_custom_commands, write_text_atomic,
                      merge_custom_command_edits,
-                     _toml_value, CLASSIC_CYAN_HEX)
+                     _toml_value, CLASSIC_CYAN_HEX, HOTKEY_CHOICES)
 
 # Set on the Preferences window so prefs_style.css — which must be installed
 # screen-wide to reach child widgets — matches only this window's widgets.
@@ -485,42 +486,18 @@ def model_setting_warning(model, device, language_mode, language, language_name=
     return "\n".join(notes)
 
 
-# What else a key does, named in the hotkey dropdowns so nobody picks one
-# blind: dictating with F5 also reloads the page in a browser. Right Ctrl or
-# Right Alt pressed with another key still starts or stops a dictation, so it
-# can't be both.
-HOTKEY_CLASHES = {
-    "F1": "opens Help in many apps",
-    "F5": "reloads the page in browsers",
-    "F11": "full screen in browsers",
-    "F12": "developer tools in browsers",
-    "Right Ctrl": "stops working as Ctrl",
-    "Right Alt": "stops working as Alt",
-}
-
-
-def hands_free_label(toggle_key):
-    """The hands-free tickbox's words, naming the toggle key: "Double-tap F9
-    for hands-free: stop after" (its seconds box and "seconds of silence"
-    follow it)."""
-    key = toggle_key or "the toggle key"
-    return f"Double-tap {key} for hands-free: stop after"
-
-
-def hotkey_label(key, altgr_types=None):
-    """'F5 (reloads the page in browsers)', or just the key. *altgr_types*:
-    when the keyboard layout's Right Alt is AltGr, the characters it types
-    that picking it takes away ("@", "€"; keyboard_layout.altgr_characters)."""
-    clash = HOTKEY_CLASHES.get(key)
-    if key == "Right Alt" and altgr_types is not None:
-        clash = "your AltGr key"
-        if altgr_types:
-            clash += f": stops typing {' and '.join(altgr_types)}"
-    return f"{key} ({clash})" if clash else key
-
-
 # The amber of TuxTalk's warnings (an unsafe setting, a backup never saved).
 WARNING_AMBER = "#e6aa3c"
+
+
+def _newer_helper_lines(unheard):
+    """For hotkey_change_message: what to do about *unheard*, new keys the
+    running hotkey helper is too old to report."""
+    if not unheard:
+        return []
+    return [f"{' and '.join(unheard)} need{'s' if len(unheard) == 1 else ''} "
+            "the hotkey helper this TuxTalk brings. "
+            f"Update it first: Advanced tab, Show system check, {UPDATE_HELPER_LABEL}."]
 
 
 def hotkey_change_message(cfg, changed, refused, apps=None, unheard=()):
@@ -557,11 +534,7 @@ def hotkey_change_message(cfg, changed, refused, apps=None, unheard=()):
     new_keys = [f"Your {what} is now {cfg.get(key)}." for key, what in roles
                 if key in changed and cfg.get(key)]
     offer_test = bool(new_keys)
-    lines += new_keys
-    if unheard:
-        lines.append(f"{' and '.join(unheard)} need{'s' if len(unheard) == 1 else ''} "
-                     "the hotkey helper this TuxTalk brings. "
-                     f"Update it first: Advanced tab, Show system check, {UPDATE_HELPER_LABEL}.")
+    lines += new_keys + _newer_helper_lines(unheard)
     if offer_test:
         lines.append("Try it once in the test to make sure it reaches TuxTalk. On some "
                      "laptops the F-keys change the brightness or volume unless you hold Fn; "
@@ -1085,12 +1058,9 @@ class PreferencesWindow:
         self.hotkey_combo.connect("button-press-event", self._on_combo_button_press)
         self._block_combo_scroll(self.hotkey_combo)
 
-        from .config import HOTKEY_CHOICES
-        from .keyboard_layout import altgr_characters
-        hotkeys = list(HOTKEY_CHOICES)
-        altgr_types = altgr_characters()
-        for key in hotkeys:
-            self.hotkey_combo.append(key, hotkey_label(key, altgr_types))
+        hotkeys = dropdown_entries()
+        for key, label in hotkeys:
+            self.hotkey_combo.append(key, label)
 
         # Selection for both combos is set once the toggle combo exists, by
         # _apply_hotkey_fallbacks — see there for why the fallback must also
@@ -1113,11 +1083,11 @@ class PreferencesWindow:
         self._block_combo_scroll(self.toggle_combo)
 
         # Add same options for toggle key
-        for key in hotkeys:
-            self.toggle_combo.append(key, hotkey_label(key, altgr_types))
-            
+        for key, label in hotkeys:
+            self.toggle_combo.append(key, label)
+
         # Both combos exist now, so set their selections together.
-        self._apply_hotkey_fallbacks(hotkeys)
+        self._apply_hotkey_fallbacks(HOTKEY_CHOICES)
 
         self.toggle_combo.connect("changed", lambda x: self.update_config("toggle_hotkey", x.get_active_id()))
         # The tooltip is on the label: on the combo it gets in the way of the popup
@@ -6860,12 +6830,8 @@ class PreferencesWindow:
             return False
         from .kwin_hotkeys import app_shortcuts_since
         refused = self._kde_refused(since)
-        from . import secure_input
-        new_keys = [self.config.get(k) for k in HOTKEY_KEYS if k in changed]
-        unheard = []
-        if set(new_keys) & set(secure_input.RIGHT_MODIFIER_KEYS):
-            running = secure_input.running_version()
-            unheard = [k for k in new_keys if not secure_input.hears_key(running, k)]
+        from .secure_input import unheard_keys
+        unheard = unheard_keys([self.config.get(k) for k in HOTKEY_KEYS if k in changed])
         message = hotkey_change_message(self.config, set(changed), refused,
                                         app_shortcuts_since(since) if refused else None,
                                         unheard)
