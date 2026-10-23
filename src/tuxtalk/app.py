@@ -328,6 +328,9 @@ class RecordingState:
     # come up (_type_owed_space), or None. Typed while the key is down, GNOME
     # without the extension sees the key too and the space is lost.
     owed_space: object = None
+    # A Right Ctrl or Right Alt dictation key that's down and hidden from
+    # the desktop (see _handle_key_event), or None.
+    hidden_key: int = None
     # The last Enter TuxTalk pressed: {"at", "automatic"}, or None
     # (_press_enter_key). "edit that" just after it explains itself.
     sent: object = None
@@ -1032,13 +1035,18 @@ def _feed_indicator(indicator, indata, spectrum_processor):
 _spectrum_processor = None
 
 
+# The dictation keys by upper-case name ("RIGHT CTRL"), as evdev codes.
+_HOTKEY_CODES = {name.upper(): ecodes.ecodes[key]
+                 for name, key in config_module.HOTKEY_CHOICES.items()}
+
+
 def _keycode_from_name(name: str) -> int | None:
     """Convert key name to evdev keycode. Returns None if name is empty (no hotkey configured)."""
     if not name or not name.strip():
         return None  # No hotkey configured - don't activate any key
     n = name.strip().upper()
-    fkeys = {f"F{i}": getattr(ecodes, f"KEY_F{i}") for i in range(1,13)}
-    if n in fkeys: return fkeys[n]
+    if n in _HOTKEY_CODES:
+        return _HOTKEY_CODES[n]
     if len(n) == 1 and "A" <= n <= "Z":
         # The key that types the letter, which is the one KDE, GNOME and COSMIC
         # hold back for us (they match shortcuts by letter): on a German
@@ -1835,18 +1843,42 @@ def _key_delay() -> int:
     return max(1, min(50, _key_delay_ms))
 
 
+# The keyboards the hotkey loop reads and its dictation keys that are
+# modifiers (Right Ctrl, Right Alt), for _send_keys; set by _note_modifier_hotkeys.
+_modifier_hotkeys = ([], frozenset())
+
+
+def _note_modifier_hotkeys(devices, *keys) -> None:
+    global _modifier_hotkeys
+    _modifier_hotkeys = (devices, frozenset(k for k in keys if k in _MODIFIER_CODES))
+
+
 def _send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY_MS,
-               raise_if_partial: bool = False) -> bool:
+               raise_if_partial: bool = False, under_hotkey: bool = False) -> bool:
     """Press keys [(evdev code, 1 down / 0 up)] on TuxTalk's virtual keyboard.
     True only if all of them were sent: keystrokes that never happened must
     not reach the undo buffer.
+
+    Each key waits while a Right Ctrl or Right Alt dictation key is down,
+    however long: pressed under it, letters are shortcuts (Ctrl+W closes the
+    tab). Hiding it from the desktop can't cover this: typing on the hotkey
+    loop's own thread, TuxTalk hasn't read the press yet. *under_hotkey* is
+    for the keys meant to go with it.
 
     With *raise_if_partial*, a keyboard that failed partway raises
     virtual_keyboard.StoppedPartway instead of returning False, for a caller
     that must tell "none of the keys were sent" from "some of them were".
     """
+    devices, modifiers = _modifier_hotkeys
+    before_press = None
+    if modifiers and not under_hotkey:
+        keyboards = [d for d in list(devices) if _is_keyboard_device(d)]
+
+        def before_press():
+            while _keys_down(keyboards) & modifiers:
+                time.sleep(0.02)
     try:
-        sent = virtual_keyboard.send(events, delay_ms)
+        sent = virtual_keyboard.send(events, delay_ms, before_press)
     except virtual_keyboard.StoppedPartway:
         logger.error(f"{what}: the virtual keyboard stopped partway")
         if raise_if_partial:
@@ -4674,22 +4706,37 @@ _SHIFT_CODES = frozenset({ecodes.KEY_LEFTSHIFT, ecodes.KEY_RIGHTSHIFT})
 EDIT_SHIFT_WAIT_S = 2.0
 
 
+def _keys_down(keyboards) -> set:
+    """The keys down on *keyboards*; one that's gone has none."""
+    down = set()
+    for dev in keyboards:
+        try:
+            down |= set(dev.active_keys())
+        except Exception:
+            pass
+    return down
+
+
 def _wait_for_keys_up(devices, codes, timeout) -> bool:
     """Wait until none of *codes* is down on any keyboard. False on timeout."""
     keyboards = [d for d in devices if _is_keyboard_device(d)]
     deadline = time.time() + timeout
     while True:
-        down = set()
-        for dev in keyboards:
-            try:
-                down |= set(dev.active_keys())
-            except Exception:
-                pass
-        if not down & set(codes):
+        if not _keys_down(keyboards) & set(codes):
             return True
         if time.time() >= deadline:
             return False
         time.sleep(0.02)
+
+
+def _guard_alt_tap() -> None:
+    """Press Ctrl while a Right Alt dictation key is down. To the desktop and
+    apps a lone tap of Alt opens the menu bar (Firefox, LibreOffice), and what
+    TuxTalk types next would go into the menu. Any key between Alt's press and
+    release makes it a shortcut instead; Ctrl+Alt alone does nothing. keyd
+    does the same for the same reason."""
+    _send_keys([(ecodes.KEY_LEFTCTRL, 1), (ecodes.KEY_LEFTCTRL, 0)],
+               what="Ctrl to keep Right Alt from opening a menu", under_hotkey=True)
 
 
 def _held_shift(held_modifiers) -> set:
@@ -4734,6 +4781,12 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
     returned, so that every way recording can end — release, toggle, ESC, or an
     exception inside start_recording — releases the keyboard.
     """
+    # Not with another modifier held: the key isn't dictating then, and if
+    # Left Ctrl is down, the guard letting go of it could let it go there too.
+    if (event.value == 1 and event.code == ecodes.KEY_RIGHTALT and event.code in (hold_key, toggle_key)
+            and not held_modifiers - {ecodes.KEY_RIGHTALT}):
+        _guard_alt_tap()
+
     # --- Hotkey test mode: report presses via D-Bus instead of recording ---
     if event.value == 1 and _hotkey_test_active():
         key_name = None
@@ -4791,10 +4844,26 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
                 _release_all_grabs()
             return
 
+    # Right Ctrl or Right Alt as a dictation key is hidden from the desktop as
+    # soon as it's down: what TuxTalk types meanwhile (the dictation a tap
+    # stops, a phrase of hands-free, a send counting down) would otherwise
+    # arrive as Ctrl or Alt shortcuts (Ctrl+W closes the tab). The hold key
+    # hides itself when it starts a dictation (below). Kept until it's let
+    # go, or until something lets go of every grab sooner; the desktop has
+    # been told it's up either way.
+    if event.code in _MODIFIER_CODES and event.code in (hold_key, toggle_key):
+        if (event.value == 1 and not _grabbed_devices
+                and (event.code == toggle_key or state.is_recording)):
+            _grab_keyboards_hiding(devices, {event.code})
+            state.hidden_key = event.code
+        elif event.value == 0 and event.code == state.hidden_key:
+            state.hidden_key = None
+            _release_all_grabs()
+
     # --- Hold-to-talk: hold key down to record, release to stop ---
     if event.code == hold_key:
         if (event.value == 1 and not state.is_recording
-                and not _someone_elses_shortcut(held_modifiers)):
+                and not _someone_elses_shortcut(held_modifiers - {hold_key})):
             # Grab the keyboards so the hotkey doesn't reach the focused app,
             # without leaving the desktop thinking the key is still held (see
             # _grab_keyboards_hiding). start_recording releases the grabs itself
@@ -4827,7 +4896,7 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
         _type_owed_space()   # the tap that held the send is over
 
     if (toggle_key and event.code == toggle_key and event.value == 1
-            and not _someone_elses_shortcut(held_modifiers)):
+            and not _someone_elses_shortcut(held_modifiers - {toggle_key})):
         shift = _held_shift(held_modifiers) if _voice_editing else set()
         if not state.is_recording and not shift and _hold_pending_send(announce=True):
             return   # the tap only held the send: no recording
@@ -5145,6 +5214,7 @@ def _loop_evdev(cfg: Settings, input_device_idx, keyboards=None):
         print(f"Voice Commands hotkey: {vc_hotkey_str}")
         logger.info(f"Voice Commands hotkey: {vc_hotkey_str}")
     _helper_watch(devices, hold_key, toggle_key, voice_cmds_combo, paste_last_combo)
+    _note_modifier_hotkeys(devices, hold_key, toggle_key)
 
     # Have the desktop hold the hotkeys back from the focused app (see
     # _claim_desktop_hotkeys). They are released by stop_dictation_service,
@@ -5183,6 +5253,7 @@ def _loop_evdev(cfg: Settings, input_device_idx, keyboards=None):
             # and comparing would mean a second copy of the hotkey fields.
             _claim_desktop_hotkeys(cfg)
             _helper_watch(devices, hold_key, toggle_key, voice_cmds_combo, paste_last_combo)
+            _note_modifier_hotkeys(devices, hold_key, toggle_key)
             logger.info("Applied settings change without restarting")
 
         # Read the devices that have key events waiting.

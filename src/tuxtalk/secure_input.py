@@ -299,6 +299,16 @@ def is_older(running):
     return running is not None and _version(running) < _version(VERSION)
 
 
+# The dictation keys helpers before 1.5 don't report.
+RIGHT_MODIFIER_KEYS = ("Right Ctrl", "Right Alt")
+
+
+def hears_key(running, key):
+    """Whether the running helper (version *running*, None when there is
+    none) reports dictation key *key* ("F8", "Right Ctrl")."""
+    return running is None or key not in RIGHT_MODIFIER_KEYS or _version(running) >= (1, 5)
+
+
 def _run_as_root(script, what):
     """(ok, message) after running *script* through pkexec. (Tests replace
     this, so a test can never open a password prompt; _pkexec is the work.)"""

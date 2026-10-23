@@ -119,8 +119,10 @@ def start() -> bool:
         return _open() is not None
 
 
-def send(events, delay_ms: float = KEY_DELAY_MS) -> bool:
+def send(events, delay_ms: float = KEY_DELAY_MS, before_press=None) -> bool:
     """Press and release keys: *events* is [(evdev key code, 1 down / 0 up)].
+    *before_press*, if given, is called before each key goes down and may
+    wait (app._send_keys: until a Right Ctrl dictation key is let go).
 
     Waits *delay_ms* after each event, on a schedule kept from the start, so
     sleeping a little long doesn't add up over a long text. When this process
@@ -151,6 +153,8 @@ def send(events, delay_ms: float = KEY_DELAY_MS) -> bool:
         sent = 0
         try:
             for code, value in events:
+                if value and before_press is not None:
+                    before_press()
                 device.write(ecodes.EV_KEY, code, value)
                 # Counted before the SYN: the event may reach the app even
                 # if the SYN after it fails.

@@ -135,6 +135,9 @@ class KeyPlanner:
             raise ValueError(f"unknown keyboard layout {layout}({variant})")
         self._keys = {}         # keysym -> (evdev keycode, shift, altgr)
         self._by_char = {}      # character -> the same, for _keysym misses
+        # Keysyms a key of an ordinary keyboard types without AltGr. Layouts
+        # also put € on KEY_EURO (435), which few keyboards have.
+        self._without_altgr = set()
         self._altgr = None
         self._index()
 
@@ -164,6 +167,8 @@ class KeyPlanner:
                     if sym == _ISO_LEVEL3_SHIFT and mask == 0:
                         altgr_keys.append(kc - _EVDEV_OFFSET)
                     entry = (kc - _EVDEV_OFFSET, bool(mask & shift_bit), bool(mask & altgr_bit))
+                    if not entry[2] and entry[0] < 0x100:
+                        self._without_altgr.add(sym)
                     if sym not in self._keys or _cost(entry) < _cost(self._keys[sym]):
                         self._keys[sym] = entry
         # A character can have two keysyms (€ is 0x20ac and 0x13a4): Ubuntu
@@ -191,6 +196,14 @@ class KeyPlanner:
         tokens += [(keycode, 1), (keycode, 0)]
         tokens += [(k, 0) for k in reversed(held)]
         return True
+
+    def altgr_only(self, chars):
+        """Those of *chars* this layout types with AltGr and no other way, or
+        None when its Right Alt isn't AltGr."""
+        if self._altgr != _KEY_RIGHTALT:
+            return None
+        return [c for c in chars if self._keysym(c) in self._keys
+                and self._keysym(c) not in self._without_altgr]
 
     def _keysym(self, char):
         return 0x20 if char == " " else _lib().xkb_utf32_to_keysym(ord(char))
@@ -490,6 +503,19 @@ def layout_key_events(text):
     if tokens is None:
         raise UntypableText(layout, blocker)
     return tokens
+
+
+def altgr_characters():
+    """When the active layout's Right Alt is AltGr, up to two common
+    characters it types only with AltGr ("@", "€"), which picking Right Alt
+    as a dictation key takes away; None when it isn't AltGr (US)."""
+    try:
+        planner = planner_for(active_layout() or US)
+    except (OSError, ValueError) as e:
+        logger.debug(f"Could not tell whether Right Alt is AltGr: {e}")
+        return None
+    found = planner.altgr_only("@€{}[]\\|~")
+    return None if found is None else tuple(found[:2])
 
 
 # Where the letters sit on a US keyboard (evdev key codes).

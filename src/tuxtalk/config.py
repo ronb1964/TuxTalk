@@ -91,6 +91,20 @@ VALID_MODELS = {
 
 VALID_DEVICES = {"cpu", "cuda", "vulkan"}   # vulkan: any GPU through whisper.cpp (whisper_vulkan.py)
 VALID_MODES = {"hold", "toggle"}
+
+# The dictation keys (hotkey, toggle_hotkey), by the name the settings save and
+# Preferences and Help show, with the key's evdev name. Many laptops and
+# compact keyboards send F1-F12 only with Fn held (Discussion #18), so three
+# keys that never need Fn come after them. Pause isn't one: most keyboards
+# send its release the moment it's pressed, so it can't be held. Nor are
+# Insert (a press that reached an editor would turn on overwrite) or Menu
+# (the Compose key on many setups).
+HOTKEY_CHOICES = {
+    **{f"F{i}": f"KEY_F{i}" for i in range(1, 13)},
+    "Right Ctrl": "KEY_RIGHTCTRL",
+    "Right Alt": "KEY_RIGHTALT",
+    "Scroll Lock": "KEY_SCROLLLOCK",
+}
 VALID_INJECTION_MODES = {"type", "paste", "auto"}
 
 VALID_INDICATOR_POSITIONS = {

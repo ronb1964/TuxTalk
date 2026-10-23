@@ -40,7 +40,7 @@ import re
 import tempfile
 
 from . import desktop_detect
-from .kwin_hotkeys import wanted_shortcuts
+from .kwin_hotkeys import QT_KEYSYMS, wanted_shortcuts
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -89,13 +89,14 @@ def _default_paths():
 
 def binding(qt_sequence):
     """(modifiers, key) for a key from wanted_shortcuts ("Shift+F8") as COSMIC
-    names them: (("Shift",), "F8"). Letters are keysyms, so lower case.
+    names them: (("Shift",), "F8"). Keys are keysyms: letters in lower case,
+    Scroll Lock as "Scroll_Lock".
     cosmic-comp matches a binding by keysym alone (it ignores a binding's
     keycode), so a letter is held on the key that types it in the active
     layout, which is the key app._keycode_from_name listens to."""
     *mods, key = qt_sequence.split("+")
     return (tuple(_COSMIC_MODIFIERS[m] for m in mods),
-            key.lower() if len(key) == 1 else key)
+            key.lower() if len(key) == 1 else QT_KEYSYMS.get(key, key))
 
 
 def _taken(text):

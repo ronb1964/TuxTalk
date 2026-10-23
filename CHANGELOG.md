@@ -5,6 +5,21 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- You can pick Right Ctrl, Right Alt or Scroll Lock as a dictation key now,
+  in Preferences, General, next to F1 to F12. On a lot of laptops and small
+  keyboards the F-keys only work with Fn held, and these three never need it.
+  Thanks to Tony for asking, on the Mint forum and in Discussion #18.
+- Pick Right Ctrl or Right Alt and it's TuxTalk's key, so it doesn't work as
+  Ctrl or Alt any more. Where your keyboard layout uses Right Alt as AltGr
+  (German, French and most of Europe) the list says which characters you'd
+  lose, like @ and €. TuxTalk hides the key from your apps the moment it goes
+  down, so nothing it types while you hold it turns into a Ctrl shortcut.
+- Pause isn't on the list. Most keyboards send it as let go the moment it's
+  pressed, so you can't hold it.
+- The hotkey helper is version 1.5, because it has to report Right Ctrl and
+  Right Alt on their own now. Preferences offers the update, and you're asked
+  for your password once. Until then Right Ctrl and Right Alt do nothing, and
+  Preferences says so when you pick one.
 - Saying "tab" in a sentence ("every tab shows", "the tabs in Claude
   Desktop") typed a tab character instead of the word, almost every time.
   Now only "press tab" makes a tab, and "tab" on its own is just the word.

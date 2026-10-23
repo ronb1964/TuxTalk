@@ -116,8 +116,8 @@ def _ready(connect, say, heard, specs="66 67 1 CA:25"):
 
 # --- what may be watched --------------------------------------------------------------
 
-@pytest.mark.parametrize("spec", ["66", "88", "183", "194", "1", "119", "70", "CA:25", "CA:30",
-                                  "CM:30", "AM:30", "CAS:30", "S:66", "C:66"])
+@pytest.mark.parametrize("spec", ["66", "88", "183", "194", "1", "119", "70", "97", "100",
+                                  "CA:25", "CA:30", "CM:30", "AM:30", "CAS:30", "S:66", "C:66"])
 def test_hotkeys_and_modifier_combos_can_be_watched(spec):
     hh.parse_spec(spec)
 
@@ -134,7 +134,10 @@ def test_hotkeys_and_modifier_combos_can_be_watched(spec):
     "M:20",
     "CS:30",    # Shift doesn't count as the second one
     "AS:30",
-    "42",       # a modifier on its own
+    "42",       # a modifier on its own: Shift types capitals
+    "29",       # Left Ctrl and Left Alt: only Right Ctrl and Right Alt are dictation keys
+    "56",
+    "125",
     "C:29",     # a modifier as the key
     "X:30",     # not a modifier letter
     "CC:30",    # a repeated one
@@ -861,3 +864,69 @@ def test_a_keyboard_turned_away_as_one_too_many_gets_in_later(setup, monkeypatch
     (folder / "event0").unlink()
     helper.scan()
     assert waiting in helper.keyboards
+
+
+# --- Right Ctrl and Right Alt as dictation keys ---------------------------------------
+
+RCTRL = 97
+
+
+def test_right_ctrl_on_its_own_is_reported_down_and_up(setup):
+    """For keyboards whose F-keys need Fn: Right Ctrl alone is a hotkey."""
+    _helper, kb, connect, say, heard, _seat = setup
+    sock = _ready(connect, say, heard, "97 100")
+    kb.press(RCTRL)
+    kb.press(RCTRL, 0)
+    kb.press(LSHIFT)
+    kb.press(RALT)                       # with Shift: a voice edit
+    kb.press(RALT, 0)
+    kb.press(LSHIFT, 0)
+    assert heard(sock) == ["DOWN 97 -", "UP 97", "DOWN 100 42", "UP 100", "UP 42"]
+
+
+def test_left_ctrl_and_alt_stay_unreported_beside_a_right_ctrl_hotkey(setup):
+    _helper, kb, connect, say, heard, _seat = setup
+    sock = _ready(connect, say, heard, "97")
+    for code in (LCTRL, LALT, LSHIFT):
+        kb.press(code)
+        kb.press(code, 0)
+    assert heard(sock) == []
+
+
+def test_a_right_ctrl_hotkey_still_makes_shortcuts_with_left_alt(setup):
+    _helper, kb, connect, say, heard, _seat = setup
+    sock = _ready(connect, say, heard, "97 CA:25")
+    kb.press(RCTRL)
+    kb.press(LALT)
+    kb.press(P)
+    assert heard(sock) == ["DOWN 97 -", "DOWN 25 56,97"]
+
+
+def test_a_held_right_ctrl_hotkey_is_hidden_like_f8(setup):
+    helper, kb, connect, say, heard, _seat = setup
+    sock = _ready(connect, say, heard, "97")
+    kb.press(RCTRL)
+    heard(sock)
+    say(sock, "HIDE 97")
+    assert heard(sock) == ["OK HIDE"]
+    assert kb.calls == [("inject", RCTRL, 0), ("grab", True), ("inject", RCTRL, 1)]
+    kb.press(A)                          # Ctrl+A doesn't reach the desktop
+    kb.press(A, 0)
+    kb.press(RCTRL, 0)
+    say(sock, "UNHIDE")
+    assert heard(sock) == ["UP 97", "OK UNHIDE"]
+    assert helper.hide is None
+
+
+def test_a_right_ctrl_held_with_another_hotkey_comes_up_once(setup):
+    """Right Ctrl is the reported key and F9's modifier at once: one UP."""
+    _helper, kb, connect, say, heard, _seat = setup
+    sock = _ready(connect, say, heard, "97 67")
+    kb.press(RCTRL)
+    kb.press(F9)
+    kb.press(F9, 0)
+    kb.press(RCTRL, 0)
+    say(sock, "WATCH 66")                # back to F8
+    kb.press(RCTRL)
+    kb.press(RCTRL, 0)
+    assert heard(sock) == ["DOWN 97 -", "DOWN 67 97", "UP 67", "UP 97", "OK WATCH"]

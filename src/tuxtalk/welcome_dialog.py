@@ -22,6 +22,7 @@ gi.require_version('GdkPixbuf', '2.0')
 from gi.repository import Gtk, Gdk, GLib, GdkPixbuf
 from .ui_style import Fold, message_dialog, more_below_bar
 
+from .config import HOTKEY_CHOICES
 from .logger import setup_logger
 from .uinput_helper import (
     check_all_device_permissions,
@@ -1869,13 +1870,8 @@ def show_welcome_dialog(parent=None):
     return result_container[0]
 
 
-# The keys the hotkey test accepts: the F1-F12 that Preferences offers. The
-# service understands only F-keys and letters, and a letter as a hotkey would
-# start dictation whenever that letter is typed.
-HOTKEY_CHOICES = tuple(f"F{i}" for i in range(1, 13))
-
-
-_TEST_KEYS = {f"F{n}" for n in range(1, 25)} | {"Escape", "Pause", "Scroll_Lock"}
+_TEST_KEYS = ({f"F{n}" for n in range(1, 25)} | {"Escape", "Pause", "Scroll_Lock"}
+              | set(HOTKEY_CHOICES))
 
 
 def _loggable_key(keyname):
@@ -1884,9 +1880,11 @@ def _loggable_key(keyname):
 
 
 def _captured_key_problem(keyname, other_key):
-    """Why *keyname* can't become a hotkey, or None if it can."""
+    """Why *keyname* can't become a hotkey, or None if it can: the hotkey
+    test takes the keys Preferences offers."""
     if keyname not in HOTKEY_CHOICES:
-        return "That key can't be used for dictation. Pick F1 to F12."
+        return ("That key can't be used for dictation. Pick F1 to F12, Right Ctrl, "
+                "Right Alt or Scroll Lock.")
     if keyname == other_key:
         return f"{keyname} is already your other hotkey. Pick a different key."
     return None
@@ -1913,15 +1911,15 @@ def _evdev_key_action(event, held_modifiers, modifier_codes, code_to_name):
     """(keyname, "press" or "release") for one evdev event, or None to ignore it.
 
     Tracks Alt, Ctrl and Super in *held_modifiers*, so Alt+F8 doesn't count as
-    F8, as on the GTK side. Auto-repeat (value 2) is ignored.
+    F8, as on the GTK side. Auto-repeat (value 2) is ignored. Right Ctrl and
+    Right Alt are keys of their own too (HOTKEY_CHOICES), when pressed alone.
     """
     if event.code in modifier_codes:
         if event.value == 1:
             held_modifiers.add(event.code)
         elif event.value == 0:
             held_modifiers.discard(event.code)
-        return None
-    if event.value not in (0, 1) or held_modifiers:
+    if event.value not in (0, 1) or held_modifiers - {event.code}:
         return None
     keyname = code_to_name(event.code)
     if not keyname:
@@ -1986,7 +1984,8 @@ def _open_key_devices(list_devices, input_device):
 def _hotkey_test_helper(ecodes, connect=None):
     """The hotkey helper as a keyboard for the hotkey test, or None when it
     isn't running. It reports only the keys it's asked to watch, so ask for
-    every key the test accepts on its own: F1 to F24, Esc, Pause, Scroll Lock."""
+    every key the test accepts on its own: F1 to F24, Esc, Pause, Scroll Lock,
+    Right Ctrl and Right Alt (helper 1.5 and newer)."""
     try:
         if connect is None:
             from .hotkey_helper_client import connect_helper as connect
@@ -1994,7 +1993,8 @@ def _hotkey_test_helper(ecodes, connect=None):
         if helper is None:
             return None
         codes = [getattr(ecodes, f"KEY_F{n}") for n in range(1, 25)]
-        codes += [ecodes.KEY_ESC, ecodes.KEY_PAUSE, ecodes.KEY_SCROLLLOCK]
+        codes += [ecodes.KEY_ESC, ecodes.KEY_PAUSE, ecodes.KEY_SCROLLLOCK,
+                  ecodes.KEY_RIGHTCTRL, ecodes.KEY_RIGHTALT]
         helper.watch([str(code) for code in codes])
         logger.info("Hotkey test: reading the keys through the hotkey helper")
         return helper
@@ -2088,10 +2088,10 @@ def show_hotkey_test_dialog():
         """Convert evdev key code to human-readable name."""
         if not EVDEV_AVAILABLE:
             return None
-        # Function keys
-        for i in range(1, 13):
-            if code == getattr(ecodes, f"KEY_F{i}"):
-                return f"F{i}"
+        # The dictation keys, by the names the settings use
+        for name, key in HOTKEY_CHOICES.items():
+            if code == ecodes.ecodes[key]:
+                return name
         # Letter keys
         for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
             if code == getattr(ecodes, f"KEY_{c}", None):
@@ -2187,12 +2187,20 @@ def show_hotkey_test_dialog():
 
     # Capture instruction (hidden initially)
     capture_instruction = Gtk.Label()
-    _capture_prompt = ('<span background="#FFA500" color="white"> Press F1 to F12 to set the '
-                       'hotkey... (ESC to cancel) </span>')
+    _capture_prompt = ('<span background="#FFA500" color="white"> Press F1 to F12, Right Ctrl, '
+                       'Right Alt or Scroll Lock to set the hotkey... (ESC to cancel) </span>')
     capture_instruction.set_markup(_capture_prompt)
     capture_instruction.set_margin_top(10)
     capture_instruction.set_no_show_all(True)
     content.pack_start(capture_instruction, False, False, 0)
+
+    def service_hears(keyname):
+        """Whether the dictation service will hear *keyname*: it can read the
+        keyboards, and through a hotkey helper too old for Right Ctrl and
+        Right Alt (secure_input.hears_key) it won't hear those."""
+        from . import secure_input
+        version = next((k.helper_version for k in keyboards if hasattr(k, "helper_version")), None)
+        return bool(keyboards) and secure_input.hears_key(version, keyname)
 
     def update_ui_for_key(keyname, is_capture_mode, action="press"):
         """Update UI when a key is pressed or released.
@@ -2228,11 +2236,11 @@ def show_hotkey_test_dialog():
             if capturing_key[0] == "hold":
                 current_hold_key[0] = keyname
                 hold_label.set_markup(f'<b>Push-to-talk:</b> {keyname}')
-                hold_status.set_markup(_key_seen_markup(bool(keyboards)))
+                hold_status.set_markup(_key_seen_markup(service_hears(keyname)))
             elif capturing_key[0] == "toggle":
                 current_toggle_key[0] = keyname
                 toggle_label.set_markup(f'<b>Toggle mode:</b> {keyname}')
-                toggle_status.set_markup(_key_seen_markup(bool(keyboards)))
+                toggle_status.set_markup(_key_seen_markup(service_hears(keyname)))
 
             capturing_key[0] = None
             capture_instruction.hide()
@@ -2245,9 +2253,9 @@ def show_hotkey_test_dialog():
             # release → green "✓ Working!" (requires a physical press+release, phantom-proof)
             if action == "release":
                 if keyname == current_hold_key[0]:
-                    hold_status.set_markup(_key_seen_markup(bool(keyboards)))
+                    hold_status.set_markup(_key_seen_markup(service_hears(keyname)))
                 elif keyname == current_toggle_key[0]:
-                    toggle_status.set_markup(_key_seen_markup(bool(keyboards)))
+                    toggle_status.set_markup(_key_seen_markup(service_hears(keyname)))
 
         return False  # Don't repeat
 
@@ -2312,6 +2320,16 @@ def show_hotkey_test_dialog():
     _NO_MODIFIER_MASK = (Gdk.ModifierType.MOD1_MASK |
                          Gdk.ModifierType.CONTROL_MASK |
                          Gdk.ModifierType.SUPER_MASK)
+    # GTK's names for the dictation keys that aren't F-keys, and the modifier
+    # each one sets itself, which its own release carries.
+    _GTK_KEY_NAMES = {"Control_R": "Right Ctrl", "Alt_R": "Right Alt",
+                      "ISO_Level3_Shift": "Right Alt", "Scroll_Lock": "Scroll Lock"}
+    _OWN_MODIFIER = {"Right Ctrl": Gdk.ModifierType.CONTROL_MASK,
+                     "Right Alt": Gdk.ModifierType.MOD1_MASK}
+
+    def gtk_key_name(event):
+        name = Gtk.accelerator_name(event.keyval, 0)
+        return _GTK_KEY_NAMES.get(name, name)
 
     # Track currently-held hardware key codes to suppress GTK auto-repeat.
     # GTK sends repeated KEY_PRESS events while a key is held — there's no
@@ -2332,7 +2350,7 @@ def show_hotkey_test_dialog():
             return True
         _held_keycodes.add(event.hardware_keycode)
 
-        keyname = Gtk.accelerator_name(event.keyval, 0)
+        keyname = gtk_key_name(event)
 
         is_capture = capturing_key[0] is not None
         update_ui_for_key(keyname, is_capture, action="press")
@@ -2343,10 +2361,10 @@ def show_hotkey_test_dialog():
         _held_keycodes.discard(event.hardware_keycode)
         if not dialog_ready[0]:
             return False
-        if event.state & _NO_MODIFIER_MASK:
-            return False
         # Release = physical action confirmed — mark the key as working
-        keyname = Gtk.accelerator_name(event.keyval, 0)
+        keyname = gtk_key_name(event)
+        if event.state & _NO_MODIFIER_MASK & ~_OWN_MODIFIER.get(keyname, 0):
+            return False
         is_capture = capturing_key[0] is not None
         update_ui_for_key(keyname, is_capture, action="release")
         return False

@@ -20,9 +20,14 @@ that loop makes:
 If the helper goes away (restarted, updated), every key it said was down is
 released here, so a recording can't hang on a key-up that will never come,
 and it reconnects within a second or so.
+
+active_keys() is also asked from the threads that type (app._send_keys
+waits for a Right Ctrl dictation key to come up), so what the helper said is
+taken in under a lock.
 """
 import os
 import socket
+import threading
 import time
 from collections import deque, namedtuple
 
@@ -78,6 +83,7 @@ class HelperKeyboard:
         self.to_hide = []
         self.reconnect_at = 0.0
         self.helper_version = None
+        self._lock = threading.RLock()
         # Stands in for the socket in select() while disconnected: never readable.
         self._idle_r, self._idle_w = os.pipe()
 
@@ -125,43 +131,45 @@ class HelperKeyboard:
         self.held.clear()
 
     def _send(self, line):
-        if self.sock is None:
+        with self._lock:
+            if self.sock is None:
+                return False
+            try:
+                self.sock.sendall(line.encode() + b"\n")
+                return True
+            except BlockingIOError:
+                # A handful of bytes to a local socket: only a stuck helper
+                # fills the buffer, and then it's as good as gone.
+                self._disconnected("not reading")
+            except OSError as e:
+                self._disconnected(e)
             return False
-        try:
-            self.sock.sendall(line.encode() + b"\n")
-            return True
-        except BlockingIOError:
-            # A handful of bytes to a local socket: only a stuck helper
-            # fills the buffer, and then it's as good as gone.
-            self._disconnected("not reading")
-        except OSError as e:
-            self._disconnected(e)
-        return False
 
     def _pump(self):
         """Take in whatever the helper has said, without waiting."""
-        if self.sock is None:
-            if time.monotonic() >= self.reconnect_at:
-                if self.connect():
-                    logger.info("Hotkey helper connected again")
-                else:
-                    self.reconnect_at = time.monotonic() + RECONNECT_S
-            return
-        while True:
-            try:
-                data = self.sock.recv(4096)
-            except BlockingIOError:
-                break
-            except OSError as e:
-                self._disconnected(e)
+        with self._lock:
+            if self.sock is None:
+                if time.monotonic() >= self.reconnect_at:
+                    if self.connect():
+                        logger.info("Hotkey helper connected again")
+                    else:
+                        self.reconnect_at = time.monotonic() + RECONNECT_S
                 return
-            if not data:
-                self._disconnected("closed")
-                return
-            self.inbuf += data
-        while b"\n" in self.inbuf:
-            line, self.inbuf = self.inbuf.split(b"\n", 1)
-            self._handle(line.decode("ascii", "replace").split())
+            while True:
+                try:
+                    data = self.sock.recv(4096)
+                except BlockingIOError:
+                    break
+                except OSError as e:
+                    self._disconnected(e)
+                    return
+                if not data:
+                    self._disconnected("closed")
+                    return
+                self.inbuf += data
+            while b"\n" in self.inbuf:
+                line, self.inbuf = self.inbuf.split(b"\n", 1)
+                self._handle(line.decode("ascii", "replace").split())
 
     def _handle(self, words):
         if not words:
@@ -192,7 +200,8 @@ class HelperKeyboard:
     # -- what app._loop_evdev calls -------------------------------------------------
 
     def fileno(self):
-        return self.sock.fileno() if self.sock is not None else self._idle_r
+        sock = self.sock    # once: a typing thread may drop it meanwhile
+        return sock.fileno() if sock is not None else self._idle_r
 
     @property
     def fd(self):
@@ -204,16 +213,18 @@ class HelperKeyboard:
         return bool(self.queue) or (self.sock is None and time.monotonic() >= self.reconnect_at)
 
     def read(self):
-        self._pump()
-        if not self.queue:
-            raise BlockingIOError
-        events = list(self.queue)
-        self.queue.clear()
-        return iter(events)
+        with self._lock:
+            self._pump()
+            if not self.queue:
+                raise BlockingIOError
+            events = list(self.queue)
+            self.queue.clear()
+            return iter(events)
 
     def active_keys(self):
-        self._pump()
-        return sorted(self.held)
+        with self._lock:
+            self._pump()
+            return sorted(self.held)
 
     def capabilities(self, verbose=False):
         """Enough for uinput_helper.is_keyboard_device: letter keys, no pointer."""
@@ -221,12 +232,13 @@ class HelperKeyboard:
         return {EV_KEY: sorted(LETTER_KEYS)}
 
     def write(self, event_type, code, value):
-        if event_type != EV_KEY:
-            return
-        # Echo it, as the kernel would, for _is_own_injected_event to skip.
-        self.queue.append(KeyEvent(EV_KEY, code, value))
-        if value == 0:
-            self.to_hide.append(code)
+        with self._lock:
+            if event_type != EV_KEY:
+                return
+            # Echo it, as the kernel would, for _is_own_injected_event to skip.
+            self.queue.append(KeyEvent(EV_KEY, code, value))
+            if value == 0:
+                self.to_hide.append(code)
 
     def grab(self):
         codes, self.to_hide = self.to_hide or sorted(self.held), []
