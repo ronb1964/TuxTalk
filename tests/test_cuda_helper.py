@@ -49,20 +49,12 @@ def test_detect_nvidia_gpu_timeout(mock_run):
     assert result is False
 
 
-def test_first_run_flag(tmp_path):
-    """Test first run flag management"""
-    flag_file = tmp_path / ".first_run_done"
-
-    with patch('tuxtalk.cuda_helper.os.path.expanduser') as mock_expand:
-        mock_expand.return_value = str(tmp_path / ".local/share/TuxTalk/.first_run_done")
-
-        # Should be first run initially
-        with patch('os.path.exists', return_value=False):
-            assert is_first_run() is True
-
-        # After marking complete, should not be first run
-        with patch('os.path.exists', return_value=True):
-            assert is_first_run() is False
+def test_first_run_flag(tmp_path, monkeypatch):
+    """First-run setup shows until it is marked done, then never again."""
+    monkeypatch.setattr("tuxtalk.config.get_data_dir", lambda: str(tmp_path / "TuxTalk"))
+    assert is_first_run() is True
+    mark_first_run_complete()
+    assert is_first_run() is False
 
 
 @patch('tuxtalk.cuda_helper.get_appdir_cuda_path', return_value='/nonexistent/cuda')
