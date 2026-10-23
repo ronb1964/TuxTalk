@@ -67,13 +67,25 @@ def test_extension_version_is_bumped_whenever_extension_js_changes():
     root = pathlib.Path(__file__).resolve().parent.parent
     ext = "gnome-extension/talktype@ronb1964.github.io"
 
-    def git(*args):
-        return subprocess.run(["git", *args], cwd=root, capture_output=True, text=True)
+    def git(*args, ok=(0,)):
+        out = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True)
+        assert out.returncode in ok, f"git {' '.join(args)}: {out.stderr.strip()}"
+        return out
 
-    tag = git("describe", "--tags", "--abbrev=0", "--match", "v[0-9]*", "HEAD").stdout.strip()
+    def last_release(before):
+        out = git("describe", "--tags", "--abbrev=0", "--match", "v[0-9]*", before, ok=(0, 128))
+        if out.returncode == 0:
+            return out.stdout.strip()
+        assert "No names found" in out.stderr or "cannot describe" in out.stderr, out.stderr
+        return None
+
+    tag = last_release("HEAD")
+    if tag and git("rev-parse", f"{tag}^{{commit}}").stdout == git("rev-parse", "HEAD").stdout:
+        tag = last_release(f"{tag}^")      # the release itself: compare with the one before
     if not tag:
         pytest.skip("no release tag in this checkout (CI fetches them with fetch-depth 0)")
-    changed = git("diff", "--quiet", tag, "--", ext, f":(exclude){ext}/metadata.json").returncode
+    changed = git("diff", "--quiet", tag, "--", ext, f":(exclude){ext}/metadata.json",
+                  ok=(0, 1)).returncode
     if changed == 0:
         return
     released = json.loads(git("show", f"{tag}:{ext}/metadata.json").stdout)["version"]
