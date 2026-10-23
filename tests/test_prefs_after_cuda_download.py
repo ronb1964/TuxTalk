@@ -21,7 +21,7 @@ def prefs():
     return prefs
 
 
-def _stub(prefs, model, answer, monkeypatch):
+def _stub(model, answer):
     stub = SimpleNamespace(config={"model": model, "device": "vulkan"}, window=None,
                            applied=[], asked=[])
     stub._ask_whisper_model_for_cuda = lambda: stub.asked.append(True) or answer
@@ -30,25 +30,25 @@ def _stub(prefs, model, answer, monkeypatch):
     return stub
 
 
-def test_a_whisper_model_switches_to_cuda_through_apply(prefs, monkeypatch):
-    stub = _stub(prefs, "small", "unused", monkeypatch)
+def test_a_whisper_model_switches_to_cuda_through_apply(prefs):
+    stub = _stub("small", "unused")
     prefs.PreferencesWindow._after_cuda_download(stub)
     assert stub.asked == []
     assert stub.applied == [{"model": "small", "device": "cuda"}]
 
 
 @pytest.mark.parametrize("picked", ["small", "large-v3", "tiny"])
-def test_parakeet_is_asked_and_moves_to_the_model_picked(prefs, monkeypatch, picked):
+def test_parakeet_is_asked_and_moves_to_the_model_picked(prefs, picked):
     """Any Whisper model can be picked, not only Small, so wanting another
     one doesn't mean downloading Small first."""
-    stub = _stub(prefs, "parakeet-v3", picked, monkeypatch)
+    stub = _stub("parakeet-v3", picked)
     prefs.PreferencesWindow._after_cuda_download(stub)
     assert len(stub.asked) == 1
     assert stub.applied == [{"model": picked, "device": "cuda"}]
 
 
-def test_parakeet_can_stay_put(prefs, monkeypatch):
-    stub = _stub(prefs, "parakeet-v3", None, monkeypatch)
+def test_parakeet_can_stay_put(prefs):
+    stub = _stub("parakeet-v3", None)
     prefs.PreferencesWindow._after_cuda_download(stub)
     assert stub.applied == []
     assert stub.config == {"model": "parakeet-v3", "device": "vulkan"}

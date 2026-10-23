@@ -25,15 +25,6 @@ def test_logger_has_handlers():
     assert len(logger.handlers) >= 1
 
 
-def test_logger_file_handler_exists(tmp_path):
-    """Test that file handler creates log file"""
-    # conftest points the log at a temporary folder (TUXTALK_LOG_DIR), so this
-    # only checks that a file handler is attached.
-    logger = setup_logger("test_file")
-    file_handlers = [h for h in logger.handlers if isinstance(h, logging.FileHandler)]
-    assert len(file_handlers) > 0
-
-
 def test_logger_file_handler_level():
     """Test that file handler is set to DEBUG level"""
     logger = setup_logger("test_file_level")

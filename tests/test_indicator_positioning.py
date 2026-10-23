@@ -57,5 +57,3 @@ def test_prefs_uses_the_helper_rather_than_guessing_from_the_session(
     assert position.get_sensitive() is available
     warned = [t for t in shown_text(window.indicator_grid) if "XWayland is not available" in t]
     assert bool(warned) is not available
-
-

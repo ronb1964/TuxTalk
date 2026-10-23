@@ -219,7 +219,8 @@ def _fix_word_window(request):
     _fix_word_window,                                                # which recent dictation
 ], ids=["preferences", "first run", "fix a word"])
 def test_every_window_with_dropdowns_applies_the_style(gtk, monkeypatch, request, build):
-    """Each runs in its own process; none inherits another's CSS."""
+    """Each window installs the style itself: none may rely on another
+    window having installed it earlier in the same process."""
     from tuxtalk import ui_style
     applied = []
     monkeypatch.setattr(ui_style, "apply_dropdown_list_style", lambda: applied.append(True))
