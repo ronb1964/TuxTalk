@@ -305,10 +305,19 @@ def _leaks(caplog, capsys):
     return [word for word in SECRET if word in everything]
 
 
+def _hear_every_level(caplog):
+    """Capture DEBUG lines too, from every TuxTalk module. setup_logger()
+    pins each module's logger at INFO, so lowering only the package logger
+    left their DEBUG lines unwritten, and unchecked."""
+    import logging
+    for name in list(logging.root.manager.loggerDict):
+        if name == "tuxtalk" or name.startswith("tuxtalk."):
+            caplog.set_level(logging.DEBUG, logger=name)
+
+
 def test_a_dictation_never_writes_the_words(monkeypatch, caplog, capsys, keyboard):
     """Every log line and print on the way from the recording to the typed
     text, with transcript logging off (the default)."""
-    import logging
     import numpy as np
     from tuxtalk import app
     monkeypatch.setattr(app, "_log_transcripts", False)
@@ -317,9 +326,9 @@ def test_a_dictation_never_writes_the_words(monkeypatch, caplog, capsys, keyboar
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.kwrite")
     frames = [(np.ones(app.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
-    with caplog.at_level(logging.DEBUG, logger="tuxtalk"):
-        app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=False,
-                                   smart_quotes=False, notify_on=False)
+    _hear_every_level(caplog)
+    app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=False,
+                               smart_quotes=False, notify_on=False)
     assert keyboard.typed_keys(), "the dictation was not typed"
     assert "[hidden" in caplog.text                     # it did log, redacted
     assert _leaks(caplog, capsys) == []
@@ -327,7 +336,6 @@ def test_a_dictation_never_writes_the_words(monkeypatch, caplog, capsys, keyboar
 
 def test_a_voice_edit_never_writes_the_words(monkeypatch, caplog, capsys):
     """The selection, the spoken instruction and the AI's rewrite."""
-    import logging
     import numpy as np
     from tuxtalk import app
     from tuxtalk import clipboard as cb
@@ -347,8 +355,8 @@ def test_a_voice_edit_never_writes_the_words(monkeypatch, caplog, capsys):
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.kwrite")
     monkeypatch.setattr(app, "_is_wayland_session", lambda: True)
     frames = [np.full(16000, 1000, dtype=np.int16).tobytes()]
-    with caplog.at_level(logging.DEBUG, logger="tuxtalk"):
-        app._transcribe_and_edit(frames, 16000, False, "", "type")
+    _hear_every_level(caplog)
+    app._transcribe_and_edit(frames, 16000, False, "", "type")
     assert typed == ["Quokka hunter, formally."]
     assert _leaks(caplog, capsys) == []
 
@@ -392,12 +400,11 @@ def _engine(kind, monkeypatch):
 @pytest.mark.parametrize("kind", ["parakeet", "parakeet on the graphics chip",
                                   "whisper on vulkan", "faster-whisper"])
 def test_no_speech_engine_writes_the_words(monkeypatch, caplog, capsys, kind):
-    import logging
     import numpy as np
     from tuxtalk import app
     monkeypatch.setattr(app, "_log_transcripts", False)
     monkeypatch.setattr(app, "model", _engine(kind, monkeypatch))
-    with caplog.at_level(logging.DEBUG, logger="tuxtalk"):
-        raw = app._transcribe_audio(np.full(16000, 0.2, dtype=np.float32), language=None)
+    _hear_every_level(caplog)
+    raw = app._transcribe_audio(np.full(16000, 0.2, dtype=np.float32), language=None)
     assert raw and "quokka" in raw
     assert _leaks(caplog, capsys) == []
