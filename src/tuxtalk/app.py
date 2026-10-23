@@ -1275,15 +1275,17 @@ def _grab_keyboards_hiding(devices, codes) -> None:
     released (a very fast tap), the desktop saw that release and nothing is owed.
     """
     keyboards = [d for d in devices if _is_keyboard_device(d)]
-    held = []
+    held, shown = [], set()     # shown: keys the desktop may still see down
     for dev in keyboards:
         try:
             down = set(dev.active_keys())
         except Exception:
             continue
-        for code in codes:
-            if code in down and _inject_key(dev, code, 0):
+        for code in codes & down:
+            if _inject_key(dev, code, 0):
                 held.append((dev, code))
+            else:
+                shown.add(code)
     _grab_all_devices(keyboards)
     # Mark the keys down again. With the grab in place only we see this, and it
     # lets the kernel pass us the real release when the key comes up. On a
@@ -1291,6 +1293,9 @@ def _grab_keyboards_hiding(devices, codes) -> None:
     # the real release, so it stays balanced either way.
     for dev, code in held:
         _inject_key(dev, code, 1)
+        if dev not in _grabbed_devices:
+            shown.add(code)
+    modifier_hotkeys.note_hidden(set(codes) - shown)
 
 
 def _grab_all_devices(devices) -> None:
@@ -1322,6 +1327,7 @@ def _release_all_grabs() -> None:
         except Exception as e:
             logger.warning(f"Could not ungrab {getattr(dev, 'name', dev)}: {e}")
     _grabbed_devices = []
+    modifier_hotkeys.note_hidden(())
 
 
 def _rediscover_devices(devices) -> int:
@@ -1637,11 +1643,11 @@ def _send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY
     True only if all of them were sent: keystrokes that never happened must
     not reach the undo buffer.
 
-    Each key waits while a Right Ctrl or Right Alt dictation key is down
-    (modifier_hotkeys): pressed under it, letters are shortcuts (Ctrl+W closes
-    the tab). Hiding it from the desktop can't cover this: typing on the
-    hotkey loop's own thread, TuxTalk hasn't read the press yet. *under_hotkey*
-    is for the keys meant to go with it.
+    Each key waits while a Right Ctrl or Right Alt dictation key is down and
+    not yet hidden from the desktop (modifier_hotkeys): pressed under it,
+    letters are shortcuts (Ctrl+W closes the tab). Typing on the hotkey
+    loop's own thread, TuxTalk hasn't read the press yet to hide it.
+    *under_hotkey* is for the keys meant to go with it.
 
     With *raise_if_partial*, a keyboard that failed partway raises
     virtual_keyboard.StoppedPartway instead of returning False, for a caller

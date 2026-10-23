@@ -20,6 +20,8 @@ logger = setup_logger(__name__)
 # The keyboards the hotkey loop reads and its dictation keys that are
 # modifiers; set by note().
 _noted = ([], frozenset())
+# The keys a grab hides from the desktop now; set by note_hidden().
+_hidden = frozenset()
 
 # How long typing waits for the key to come up. Pressing it again to dictate
 # the next sentence while the last one is still being typed holds typing up
@@ -43,10 +45,20 @@ def note(devices, *keys) -> None:
     _noted = (devices, frozenset(k for k in keys if k in MODIFIER_CODES))
 
 
+def note_hidden(codes) -> None:
+    """Remember the keys a grab has just hidden from the desktop
+    (app._grab_keyboards_hiding), or none once it lets go. The desktop has
+    been told they're up, so typing under them is safe: Type at pause types
+    each phrase while the hold key is still held."""
+    global _hidden
+    _hidden = frozenset(codes)
+
+
 def wait_while_held():
     """A function for virtual_keyboard.send to call before each key: it waits
-    while a Right Ctrl or Right Alt dictation key is down, up to HELD_LIMIT_S,
-    then raises virtual_keyboard.GaveUp. None when neither is a dictation key."""
+    while a Right Ctrl or Right Alt dictation key the desktop can see is down,
+    up to HELD_LIMIT_S, then raises virtual_keyboard.GaveUp. None when neither
+    is a dictation key."""
     devices, modifiers = _noted
     if not modifiers:
         return None
@@ -54,7 +66,7 @@ def wait_while_held():
 
     def before_press():
         give_up_at = time.monotonic() + HELD_LIMIT_S
-        while held := keys_down(keyboards) & modifiers:
+        while held := keys_down(keyboards) & (modifiers - _hidden):
             if held & _stuck or time.monotonic() >= give_up_at:
                 _give_up(held)
             time.sleep(0.02)

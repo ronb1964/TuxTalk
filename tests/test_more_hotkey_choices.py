@@ -297,6 +297,72 @@ def test_a_dictation_stopped_by_a_stuck_key_stays_in_recent_dictations(
     assert any("Recent Dictations" in note for note in notes)
 
 
+class Grabbable(Keyboard):
+    """A keyboard the hotkey loop can grab, as a hold recording does; with
+    *grabs* False the grab fails (another program holds it)."""
+    name = path = "keyboard"
+
+    def __init__(self, pressed, code=RCTRL, grabs=True):
+        super().__init__(pressed, code)
+        self.grabs = grabs
+
+    def write(self, *event):
+        pass
+
+    def grab(self):
+        if not self.grabs:
+            raise OSError(16, "Device or resource busy")
+
+    def ungrab(self):
+        pass
+
+
+@pytest.fixture
+def holding(keyboard, stuck_right_ctrl, monkeypatch):
+    """Hold *code* as the hold key, through the real key handler and grab,
+    on one keyboard; recording itself is left out."""
+    monkeypatch.setattr(app, "_hotkey_test_active", lambda: False)
+    monkeypatch.setattr(app, "_grabbed_devices", [])
+    monkeypatch.setattr(modifier_hotkeys, "_hidden", frozenset())
+    monkeypatch.setattr(app, "start_recording",
+                        lambda *a, **k: setattr(app.state, "is_recording", True) or True)
+    app.state.is_recording = False
+
+    def hold(code, grabs=True):
+        board = Grabbable(lambda look: True, code, grabs)
+        modifier_hotkeys.note([board], code, ecodes.KEY_F9)
+        app._handle_key_event(Event(code, 1), "hold", code, ecodes.KEY_F9, None, {code},
+                              [board], Cfg(), 0)
+        assert app.state.is_recording
+    yield hold
+    app._release_all_grabs()
+    app.state.is_recording = False
+
+
+@pytest.mark.parametrize("code", [RCTRL, RALT])
+def test_type_at_pause_types_while_a_hidden_hold_key_is_held(keyboard, holding, code):
+    """The recording's grab has told the desktop the key is up, so a phrase
+    typed at a pause needn't wait for it; waiting typed nothing until the key
+    came up and dropped the phrases after 30 s as a stuck key."""
+    holding(code)
+    assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
+    assert keyboard.typed_keys()[-1] == ecodes.KEY_A
+    assert keyboard.clock.now < 1
+
+
+def test_a_hold_key_the_grab_couldnt_hide_still_holds_typing_up(keyboard, holding):
+    """The desktop still sees it down: letters typed now would be Ctrl shortcuts."""
+    holding(RCTRL, grabs=False)
+    assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a") is False
+    assert keyboard.events == []
+
+
+def test_letting_go_of_the_grab_stops_hiding_the_key(keyboard, holding):
+    holding(RCTRL)
+    app._release_all_grabs()
+    assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a") is False
+
+
 def test_the_right_alt_guard_goes_while_right_alt_is_held(keyboard, no_hotkeys_noted):
     modifier_hotkeys.note([Keyboard(lambda look: True, code=RALT)], RALT, None)
     app._guard_alt_tap()
