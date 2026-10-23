@@ -13,41 +13,40 @@ from types import SimpleNamespace
 
 import pytest
 
-pytest.importorskip("gi")
-from tuxtalk import welcome_dialog as wd  # noqa: E402
+from tuxtalk import hotkey_test_keys as htk
 
 
 @pytest.mark.parametrize("key", ["Pause", "space", "a", "Shift_L", "Control_L", "KP_0", "F13"])
 def test_keys_the_service_cannot_use_are_refused(key):
-    assert wd._captured_key_problem(key, "F9")
+    assert htk.captured_key_problem(key, "F9")
 
 
 @pytest.mark.parametrize("key", ["a", "Z", "space", "BackSpace", "1", "Return"])
 def test_ordinary_keys_pressed_during_the_test_stay_out_of_the_log(key):
     """Without the hotkey helper the test reads every keyboard: a password
     typed in another window while it's open must not end up in the log."""
-    assert wd._loggable_key(key) == "another key"
+    assert htk.loggable_key(key) == "another key"
 
 
 @pytest.mark.parametrize("key", ["F8", "F12", "Escape", "Pause", "Scroll_Lock", "Right Ctrl"])
 def test_the_keys_the_test_is_about_are_still_logged(key):
-    assert wd._loggable_key(key) == key
+    assert htk.loggable_key(key) == key
 
 
 @pytest.mark.parametrize("key", ["F10", "Right Ctrl", "Right Alt", "Scroll Lock"])
 def test_the_keys_preferences_offers_are_accepted(key):
-    assert wd._captured_key_problem(key, "F9") is None
+    assert htk.captured_key_problem(key, "F9") is None
 
 
 def test_a_key_that_needs_no_fn_survives_the_test_closing():
     """Closing the test must not put a Right Ctrl picked in Preferences
     back to F8."""
-    assert wd._hotkeys_to_save(_config("Right Ctrl", "Scroll Lock"), "Right Ctrl",
+    assert htk.hotkeys_to_save(_config("Right Ctrl", "Scroll Lock"), "Right Ctrl",
                                "Scroll Lock", confirmed=False) == ("Right Ctrl", "Scroll Lock")
 
 
 def test_both_hotkeys_cannot_be_the_same_key():
-    assert "other hotkey" in wd._captured_key_problem("F9", "F9")
+    assert "other hotkey" in htk.captured_key_problem("F9", "F9")
 
 
 def _config(hold="", toggle=""):
@@ -55,19 +54,19 @@ def _config(hold="", toggle=""):
 
 
 def test_closing_with_the_x_on_first_run_saves_the_shown_keys():
-    assert wd._hotkeys_to_save(_config(), "F8", "F9", confirmed=False) == ("F8", "F9")
+    assert htk.hotkeys_to_save(_config(), "F8", "F9", confirmed=False) == ("F8", "F9")
 
 
 def test_closing_with_the_x_keeps_keys_already_saved():
-    assert wd._hotkeys_to_save(_config("F6", "F7"), "F10", "F11", confirmed=False) == ("F6", "F7")
+    assert htk.hotkeys_to_save(_config("F6", "F7"), "F10", "F11", confirmed=False) == ("F6", "F7")
 
 
 def test_continue_saves_the_chosen_keys():
-    assert wd._hotkeys_to_save(_config("F6", "F7"), "F10", "F11", confirmed=True) == ("F10", "F11")
+    assert htk.hotkeys_to_save(_config("F6", "F7"), "F10", "F11", confirmed=True) == ("F10", "F11")
 
 
 def test_an_unusable_saved_key_falls_back_to_the_defaults():
-    assert wd._hotkeys_to_save(_config("Pause", "Pause"), "Pause", "Pause",
+    assert htk.hotkeys_to_save(_config("Pause", "Pause"), "Pause", "Pause",
                                confirmed=False) == ("F8", "F9")
 
 
@@ -81,30 +80,48 @@ def _event(code, value):
 
 def test_evdev_releases_are_passed_on():
     held = set()
-    assert wd._evdev_key_action(_event(66, 1), held, MODS, NAMES.get) == ("F8", "press")
-    assert wd._evdev_key_action(_event(66, 0), held, MODS, NAMES.get) == ("F8", "release")
+    assert htk.evdev_key_action(_event(66, 1), held, MODS, NAMES.get) == ("F8", "press")
+    assert htk.evdev_key_action(_event(66, 0), held, MODS, NAMES.get) == ("F8", "release")
 
 
 def test_evdev_alt_f8_does_not_count_as_f8():
     held = set()
-    wd._evdev_key_action(_event(56, 1), held, MODS, NAMES.get)       # Alt down
-    assert wd._evdev_key_action(_event(66, 1), held, MODS, NAMES.get) is None
-    assert wd._evdev_key_action(_event(66, 0), held, MODS, NAMES.get) is None
-    wd._evdev_key_action(_event(56, 0), held, MODS, NAMES.get)       # Alt up
-    assert wd._evdev_key_action(_event(66, 0), held, MODS, NAMES.get) == ("F8", "release")
+    htk.evdev_key_action(_event(56, 1), held, MODS, NAMES.get)       # Alt down
+    assert htk.evdev_key_action(_event(66, 1), held, MODS, NAMES.get) is None
+    assert htk.evdev_key_action(_event(66, 0), held, MODS, NAMES.get) is None
+    htk.evdev_key_action(_event(56, 0), held, MODS, NAMES.get)       # Alt up
+    assert htk.evdev_key_action(_event(66, 0), held, MODS, NAMES.get) == ("F8", "release")
 
 
 def test_evdev_auto_repeat_and_unknown_keys_are_ignored():
-    assert wd._evdev_key_action(_event(66, 2), set(), MODS, NAMES.get) is None
-    assert wd._evdev_key_action(_event(30, 1), set(), MODS, NAMES.get) is None
+    assert htk.evdev_key_action(_event(66, 2), set(), MODS, NAMES.get) is None
+    assert htk.evdev_key_action(_event(30, 1), set(), MODS, NAMES.get) is None
 
 
 def test_right_ctrl_alone_tests_as_a_key_but_not_as_part_of_a_shortcut():
     names = {97: "Right Ctrl", 66: "F8"}
     mods = {29, 97}         # left and right Ctrl
     held = set()
-    assert wd._evdev_key_action(_event(97, 1), held, mods, names.get) == ("Right Ctrl", "press")
-    assert wd._evdev_key_action(_event(97, 0), held, mods, names.get) == ("Right Ctrl", "release")
-    wd._evdev_key_action(_event(29, 1), held, mods, names.get)       # Left Ctrl down
-    assert wd._evdev_key_action(_event(97, 1), held, mods, names.get) is None
-    assert wd._evdev_key_action(_event(66, 1), held, mods, names.get) is None
+    assert htk.evdev_key_action(_event(97, 1), held, mods, names.get) == ("Right Ctrl", "press")
+    assert htk.evdev_key_action(_event(97, 0), held, mods, names.get) == ("Right Ctrl", "release")
+    htk.evdev_key_action(_event(29, 1), held, mods, names.get)       # Left Ctrl down
+    assert htk.evdev_key_action(_event(97, 1), held, mods, names.get) is None
+    assert htk.evdev_key_action(_event(66, 1), held, mods, names.get) is None
+
+
+@pytest.mark.parametrize("gtk_name,key", [("Control_R", "Right Ctrl"), ("Alt_R", "Right Alt"),
+                                          ("ISO_Level3_Shift", "Right Alt"),
+                                          ("Scroll_Lock", "Scroll Lock"), ("F8", "F8")])
+def test_gtk_names_the_keys_as_the_settings_do(gtk_name, key):
+    """On a German layout GTK calls Right Alt ISO_Level3_Shift (AltGr): it
+    must still test as Right Alt, or the test never says it works."""
+    assert htk.gtk_key_name(gtk_name) == key
+
+
+def test_evdev_names_the_keys_as_the_settings_do():
+    ecodes = pytest.importorskip("evdev").ecodes
+    assert htk.evdev_key_name(ecodes.KEY_RIGHTCTRL) == "Right Ctrl"
+    assert htk.evdev_key_name(ecodes.KEY_SCROLLLOCK) == "Scroll Lock"
+    assert htk.evdev_key_name(ecodes.KEY_F8) == "F8"
+    assert htk.evdev_key_name(ecodes.KEY_A) == "a"
+    assert htk.evdev_key_name(ecodes.KEY_PAUSE) is None
