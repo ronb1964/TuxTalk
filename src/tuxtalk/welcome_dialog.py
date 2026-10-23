@@ -22,6 +22,7 @@ gi.require_version('GdkPixbuf', '2.0')
 from gi.repository import Gtk, Gdk, GLib, GdkPixbuf
 from .ui_style import Fold, message_dialog, more_below_bar
 
+from .hotkey_labels import layout_label
 from .hotkey_test_keys import (captured_key_problem, evdev_key_action, evdev_key_name,
                                gtk_key_name, hotkeys_to_save, loggable_key, service_hears)
 from .logger import setup_logger
@@ -2062,7 +2063,7 @@ def show_hotkey_test_dialog():
     # Push-to-talk row
     hold_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
     hold_label = Gtk.Label()
-    hold_label.set_markup(f'<b>Push-to-talk:</b> {current_hold_key[0]}')
+    hold_label.set_markup(f'<b>Push-to-talk:</b> {layout_label(current_hold_key[0])}')
     hold_label.set_xalign(0)
     hold_label.set_size_request(200, -1)
     hold_row.pack_start(hold_label, False, False, 0)
@@ -2081,7 +2082,7 @@ def show_hotkey_test_dialog():
     # Toggle mode row
     toggle_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
     toggle_label = Gtk.Label()
-    toggle_label.set_markup(f'<b>Toggle mode:</b> {current_toggle_key[0]}')
+    toggle_label.set_markup(f'<b>Toggle mode:</b> {layout_label(current_toggle_key[0])}')
     toggle_label.set_xalign(0)
     toggle_label.set_size_request(200, -1)
     toggle_row.pack_start(toggle_label, False, False, 0)
@@ -2156,11 +2157,11 @@ def show_hotkey_test_dialog():
 
             if capturing_key[0] == "hold":
                 current_hold_key[0] = keyname
-                hold_label.set_markup(f'<b>Push-to-talk:</b> {keyname}')
+                hold_label.set_markup(f'<b>Push-to-talk:</b> {layout_label(keyname)}')
                 hold_status.set_markup(_key_seen_markup(service_hears(keyboards, keyname)))
             elif capturing_key[0] == "toggle":
                 current_toggle_key[0] = keyname
-                toggle_label.set_markup(f'<b>Toggle mode:</b> {keyname}')
+                toggle_label.set_markup(f'<b>Toggle mode:</b> {layout_label(keyname)}')
                 toggle_status.set_markup(_key_seen_markup(service_hears(keyboards, keyname)))
 
             capturing_key[0] = None

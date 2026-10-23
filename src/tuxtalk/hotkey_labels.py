@@ -1,5 +1,6 @@
-"""How Preferences names the dictation keys: the hotkey dropdowns' entries,
-each saying what else its key does, and the hands-free tickbox's words."""
+"""How Preferences and the first-run hotkey test name the dictation keys:
+the hotkey dropdowns' entries, each saying what else its key does, and the
+hands-free tickbox's words."""
 
 from .config import HOTKEY_CHOICES
 
@@ -35,6 +36,13 @@ def hotkey_label(key, altgr_types=None):
         if altgr_types:
             clash += f": stops typing {' and '.join(altgr_types)}"
     return f"{key} ({clash})" if clash else key
+
+
+def layout_label(key):
+    """hotkey_label for *key* on the active keyboard layout, for the
+    first-run hotkey test: picking Right Alt there takes AltGr away too."""
+    from .keyboard_layout import altgr_characters
+    return hotkey_label(key, altgr_characters() if key == "Right Alt" else None)
 
 
 def dropdown_entries():
