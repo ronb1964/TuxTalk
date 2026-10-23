@@ -418,15 +418,24 @@ class Grabbable(Keyboard):
 
 
 @pytest.fixture
-def holding(keyboard, stuck_right_ctrl, monkeypatch):
-    """Hold *code* as the hold key, through the real key handler and grab,
-    on one keyboard; recording itself is left out."""
+def real_grabs(keyboard, stuck_right_ctrl, monkeypatch):
+    """The key handler's real grabs, on keyboards a test makes; the waits run
+    on the keyboard's fake clock."""
     monkeypatch.setattr(app, "_hotkey_test_active", lambda: False)
     monkeypatch.setattr(app, "_grabbed_devices", [])
     monkeypatch.setattr(modifier_hotkeys, "_hidden", frozenset())
+    app.state.is_recording = False
+    yield
+    app._release_all_grabs()
+    app.state.is_recording = False
+
+
+@pytest.fixture
+def holding(real_grabs, monkeypatch):
+    """Hold *code* as the hold key, through the real key handler and grab,
+    on one keyboard; recording itself is left out."""
     monkeypatch.setattr(app, "start_recording",
                         lambda *a, **k: setattr(app.state, "is_recording", True) or True)
-    app.state.is_recording = False
 
     def hold(code, grabs=True):
         board = Grabbable(lambda look: True, code, grabs)
@@ -434,9 +443,7 @@ def holding(keyboard, stuck_right_ctrl, monkeypatch):
         app._handle_key_event(Event(code, 1), "hold", code, ecodes.KEY_F9, None, {code},
                               [board], Cfg(), 0)
         assert app.state.is_recording
-    yield hold
-    app._release_all_grabs()
-    app.state.is_recording = False
+    return hold
 
 
 @pytest.mark.parametrize("code", [RCTRL, RALT])
@@ -461,6 +468,32 @@ def test_letting_go_of_the_grab_stops_hiding_the_key(keyboard, holding):
     holding(RCTRL)
     app._release_all_grabs()
     assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a") is False
+
+
+@pytest.mark.parametrize("code", [RCTRL, RALT])
+def test_a_double_tap_of_a_right_ctrl_or_alt_toggle_goes_hands_free(keyboard, real_grabs,
+                                                                     monkeypatch, code):
+    """The real key handler and recording start, the microphone left out:
+    two quick taps start a recording that stops by itself when you go quiet,
+    and the second tap's release doesn't stop it."""
+    monkeypatch.setattr(app, "_auto_stop_seconds", 2.0)
+    monkeypatch.setattr(app, "_open_input_stream", lambda idx: None)
+    monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
+    monkeypatch.setattr(app, "_notify_tray_recording_state", lambda *a: None)
+    monkeypatch.setattr(app, "recording_indicator", None, raising=False)
+    stopped = []
+    monkeypatch.setattr(app, "stop_recording", lambda *a, **k: stopped.append(a))
+    board = Grabbable(lambda look: False, code)
+    modifier_hotkeys.note([board], F8, code)
+    held = set()
+    for value in (1, 0, 1, 0):
+        track_modifier(held, Event(code, value))
+        app._handle_key_event(Event(code, value), "hold", F8, code, None, held, [board],
+                              Cfg(), 0)
+        assert app.state.is_recording
+    assert app.state.silence is not None and stopped == []
+    assert app._grabbed_devices == []
+    app.state.silence = None
 
 
 def test_the_right_alt_guard_goes_while_right_alt_is_held(keyboard, no_hotkeys_noted):

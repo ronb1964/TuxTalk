@@ -169,7 +169,7 @@ def no_fn_hold_keys(run):
 
 
 @check(SECTION, "right_ctrl_toggle",
-       "Right Ctrl as the tap key starts and stops when it's let go")
+       "Right Ctrl as the tap key: one tap starts, the next tap stops")
 def right_ctrl_toggle(run):
     run.set_config(toggle_hotkey="Right Ctrl")
     try:
