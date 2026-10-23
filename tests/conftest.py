@@ -25,7 +25,7 @@ os.environ.pop("WAYLAND_DISPLAY", None)
 os.environ["GDK_BACKEND"] = "x11"
 gi.require_version("Gdk", "3.0")
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gdk, Gtk  # noqa: E402,F401  (Gtk opens the display)
+from gi.repository import Gdk, Gtk  # noqa: E402  (Gtk opens the display)
 del os.environ["GDK_BACKEND"]
 
 _LOG_DIR = tempfile.mkdtemp(prefix="talktype-test-logs-")
@@ -92,6 +92,12 @@ def pytest_configure(config):
         raise pytest.UsageError(
             f"Run the tests under xvfb-run and dbus-run-session (DEV_SETUP.md): {problem}. "
             "They build real windows and use the session bus.")
+    # A fold slides open over 150 ms once its window is on screen. Tests read
+    # a window right after the click without running the main loop (that
+    # would run the checks Preferences schedules), so they see the fold as
+    # the user does once it has opened. Only after the check above: reading
+    # the settings starts GLib's helpers on the private bus.
+    Gtk.Settings.get_default().set_property("gtk-enable-animations", False)
 
 
 def _hold_back_notifications():
@@ -527,8 +533,11 @@ def help_pages(monkeypatch):
     dialog = help_dialog.show_help_dialog()
     try:
         notebook = find(dialog, Gtk.Notebook)
-        return {notebook.get_tab_label_text(page): "\n".join(shown_text(page))
-                for page in notebook.get_children()}
+        pages = {}
+        for number, page in enumerate(notebook.get_children()):
+            notebook.set_current_page(number)
+            pages[notebook.get_tab_label_text(page)] = "\n".join(shown_text(page))
+        return pages
     finally:
         dialog.destroy()
 

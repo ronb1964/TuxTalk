@@ -40,6 +40,7 @@ def test_the_preferences_tab_is_called_words(prefs_window):
     window = prefs_window()
     tabs = [window.notebook.get_tab_label_text(page) for page in window.notebook.get_children()]
     assert "Words" in tabs and "Snippets" not in tabs and "Commands" not in tabs
+    window.select_tab("words")
     shown = shown_text(_words_tab(window))
     assert "Add Snippet" in shown and "Add Word" in shown
 

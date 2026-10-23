@@ -781,7 +781,9 @@ def test_preferences_has_a_labs_section_with_both_links(prefs_window, monkeypatc
     from tuxtalk import help_dialog
     opened = []
     monkeypatch.setattr(help_dialog, "show_help_dialog", lambda tab=None: opened.append(tab))
-    labs = _labs(prefs_window())
+    window = prefs_window()
+    window.select_tab("advanced")
+    labs = _labs(window)
     assert any("Experimental" in text for w in labs for text in shown_text(w))
     assert any(isinstance(w, Gtk.CheckButton) and w.get_label().startswith("Voice editing")
                for w in labs)

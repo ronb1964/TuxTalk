@@ -44,15 +44,16 @@ def tree_text(*roots):
 
 def is_shown(widget):
     """Whether *widget* is on screen once its window is: it and every
-    container above it are visible, and no closed fold hides it. A notebook
-    page counts, whichever tab is open: its tab is one click away."""
+    container above it are visible, no closed fold hides it, and it is on
+    the notebook tab that is open. A test reading another tab opens it
+    first, as the user would."""
     while widget is not None:
         parent = widget.get_parent()
         if not widget.get_visible():
             return False
         if isinstance(parent, Gtk.Revealer) and not parent.get_reveal_child():
             return False
-        if not widget.get_child_visible() and not isinstance(parent, Gtk.Notebook):
+        if not widget.get_child_visible():
             return False
         widget = parent
     return True

@@ -124,6 +124,7 @@ def test_injection_tooltip_tells_the_truth_about_password_fields(prefs_window):
     """0.18 recognises password fields; the tooltip had kept saying nothing
     can detect them."""
     window = prefs_window()
+    window.select_tab("advanced")
     find(window.window, Gtk.Button, "Show fine-tuning").clicked()
     shown = "\n".join(shown_text(window.window))
     assert "it cannot detect password fields" not in shown
