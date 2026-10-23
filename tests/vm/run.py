@@ -16,6 +16,7 @@ VMs: silverblue, ubuntu, mint, kde, zorin (see vmlib.VMS). Runs are kept in
 import argparse
 import json
 import subprocess
+import sys
 import time
 import traceback
 from dataclasses import asdict
@@ -163,6 +164,7 @@ def test(keys, appimage, keep_running, as_is=False, only=None):
     save()
     page = report.build(out_dir)
     print(f"Report: {page}")
+    return results
 
 
 def main():
@@ -183,8 +185,11 @@ def main():
     if args.command == "prepare":
         prepare(args.vm)
     elif args.command == "test":
-        test(args.vms, args.appimage.expanduser().resolve(), args.keep_running or args.as_is,
-             args.as_is, args.only)
+        results = test(args.vms, args.appimage.expanduser().resolve(),
+                       args.keep_running or args.as_is, args.as_is, args.only)
+        # Whoever started the run (a person or an agent) sees a failure in
+        # the exit status too, not only in the report.
+        sys.exit(1 if any(r.status in ("fail", "error") for r in results) else 0)
     else:
         print(report.build(args.folder))
 

@@ -219,10 +219,14 @@ class Run:
         while TuxTalk is still busy."""
         mark = self.log_mark()
         self.vm.key_down(key)
-        time.sleep(0.4)
-        self.play(phrase_id)
-        time.sleep(0.3)
-        self.vm.key_up(key)
+        try:
+            time.sleep(0.4)
+            self.play(phrase_id)
+            time.sleep(0.3)
+        finally:
+            # A phrase that failed to play must not leave the key held down
+            # for every check after it.
+            self.vm.key_up(key)
         if not wait:
             return None, None, mark
         typed = self.wait_dictation(mark, sink)

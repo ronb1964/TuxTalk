@@ -211,8 +211,10 @@ class VM:
 
     def tap(self, *qcodes, hold=0.08):
         self.key_down(*qcodes)
-        time.sleep(hold)
-        self.key_up(*qcodes)
+        try:
+            time.sleep(hold)
+        finally:
+            self.key_up(*qcodes)
 
     def move(self, x, y):
         """Put the pointer at screen pixel (x, y); QEMU's tablet counts 0-32767."""
