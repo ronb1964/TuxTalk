@@ -69,8 +69,14 @@ def test_the_kde_cache_rebuild_falls_back_to_kbuildsycoca5(monkeypatch):
     assert ran == ["kbuildsycoca6", "kbuildsycoca5"]
 
 
-def test_the_kde_cache_rebuild_runs_off_the_main_loop():
-    import pathlib
-    src = pathlib.Path(tray_mod.__file__).read_text()
-    assert "threading.Thread(target=_refresh_kde_menu_cache, daemon=True).start()" in src
-    assert 'subprocess.run(["kbuildsycoca6"]' not in src
+def test_the_kde_cache_rebuild_runs_off_the_main_loop(tray_main, monkeypatch):
+    """After first-run setup the rebuild runs on its own thread, so the menu
+    never waits for it."""
+    import threading
+    ran = []
+    done = threading.Event()
+    monkeypatch.setattr(tray_mod, "_refresh_kde_menu_cache",
+                        lambda: ran.append(threading.current_thread()) or done.set())
+    tray_main(first_run=True).run_timers()
+    assert done.wait(5)
+    assert ran[0] is not threading.main_thread()

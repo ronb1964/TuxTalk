@@ -18,6 +18,10 @@ def test_deb_and_rpm_name_the_website():
         assert re.search(r'--url "https://tuxtalk\.app/"', (ROOT / script).read_text()), script
 
 
-def test_about_window_links_the_website_before_github():
-    tray = (ROOT / "src" / "tuxtalk" / "tray.py").read_text()
-    assert tray.index(f'"{SITE}", "Website"') < tray.index('"GitHub Repository"')
+def test_about_window_links_the_website_before_github(about_window):
+    from gi.repository import Gtk
+    from gtk_text import widgets
+    links = [(w.get_uri(), w.get_label()) for w in widgets(about_window)
+             if isinstance(w, Gtk.LinkButton)]
+    assert links[:2] == [(SITE, "Website"),
+                         ("https://github.com/ronb1964/TuxTalk", "GitHub Repository")]

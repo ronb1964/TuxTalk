@@ -6,7 +6,6 @@ that the list stays short and in RAM-backed storage, and that the tray and the
 GNOME extension present it the same way.
 """
 import os
-import re
 import stat
 from pathlib import Path
 
@@ -110,15 +109,14 @@ def test_dictation_is_recorded_before_it_is_typed(monkeypatch):
     assert order == [("typed", ["Hello there."])]
 
 
-def test_tray_and_gnome_extension_place_recent_dictations_first():
+def test_tray_and_gnome_extension_place_recent_dictations_first(tray_menu):
     """CLAUDE.md menu order: the on/off switch, then Recent Dictations, Fix a
     Word, Transcribe a File, in both. Restart Service sits at the end, with
     Help and Check for Updates (0.16 simplicity review)."""
-    tray = (ROOT / "src/tuxtalk/tray.py").read_text()
-    assert re.search(
-        r"self\.service_toggle,\s*history_menu_item,\s*fix_word_item,\s*transcribe_item,\s*"
-        r"Gtk\.SeparatorMenuItem\(\)", tray)
-    assert re.search(r"updates_item,\s*restart_item,\s*Gtk\.SeparatorMenuItem\(\),\s*quit_item", tray)
+    items = [item.get_label() or "---" for item in tray_menu.get_children()]
+    assert items[:5] == ["Dictation on/off", "Recent Dictations", "Fix a Word...",
+                         "Transcribe a File...", "---"]
+    assert items[-4:] == ["Check for Updates...", "Restart Service", "---", "Quit TuxTalk"]
 
     js = (ROOT / "gnome-extension/talktype@ronb1964.github.io/extension.js").read_text()
     switch = js.index("new PopupMenu.PopupSwitchMenuItem('Dictation on/off'")

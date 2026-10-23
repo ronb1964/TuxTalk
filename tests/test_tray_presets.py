@@ -159,10 +159,15 @@ def test_dbus_exposes_presets_and_the_active_one():
     assert svc.GetStatus()["preset"] == "recommended"
 
 
-def test_old_preset_table_is_gone():
-    src = (tray_mod.__file__)
-    text = open(src).read()
-    assert "PERFORMANCE_PRESETS" not in text and "_download_cuda_for_most_accurate" not in text
+def test_the_menu_offers_the_presets_of_this_computer(tray_menu):
+    """The Performance submenu is built from recommend's presets, not a table
+    of its own: Recommended, Lightest and Battery saver, then Custom."""
+    performance = next(item for item in tray_menu.get_children()
+                       if item.get_label() == "Performance")
+    labels = [item.get_label() for item in performance.get_submenu().get_children()]
+    starts = ("Recommended", "Lightest", "Battery saver", "", "Custom (opens Preferences)")
+    assert len(labels) == len(starts)
+    assert all(label.startswith(start) for label, start in zip(labels, starts)), labels
 
 
 def test_preset_radio_sync_always_clears_the_busy_flag():

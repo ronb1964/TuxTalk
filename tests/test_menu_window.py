@@ -41,12 +41,20 @@ def test_open_and_toggle_dont_mix():
 
 def test_every_open_name_has_a_tray_action():
     """The tray must know every window the command line can name."""
-    import inspect
     from tuxtalk import tray
-    source = inspect.getsource(tray.DictationTray.open_window)
+    opened = []
+
+    def opens(window):
+        return lambda *a: opened.append(window)
+    stub = types.SimpleNamespace(
+        show_menu_window=opens("menu"), open_preferences=opens("preferences"),
+        open_transcribe_window=opens("transcribe"), show_fix_word_dialog=opens("fix-word"),
+        show_help=opens("help"))
     for name in control.OPEN_METHODS:
         if name not in control._OWN_OPTION:
-            assert f'"{name}"' in source
+            opened.clear()
+            tray.DictationTray.open_window(stub, name)
+            assert opened == [name]
 
 
 class _FakeBus:

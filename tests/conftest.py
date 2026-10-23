@@ -679,3 +679,17 @@ def service_main(monkeypatch):
         done.app_instance = instance_holder[0] if instance_holder else None
         return done
     return run
+
+
+@pytest.fixture
+def about_window(monkeypatch):
+    """The tray's About window, built for real, without fetching release notes."""
+    import types
+    from gi.repository import Gtk
+    from tuxtalk import tray, update_checker
+    monkeypatch.setattr(update_checker, "fetch_release_by_tag", lambda tag: None)
+    tray.DictationTray.show_about_dialog(types.SimpleNamespace(), None)
+    window = next(w for w in Gtk.Window.list_toplevels()
+                  if w.get_title() == "About TuxTalk" and w.get_visible())
+    yield window
+    window.destroy()

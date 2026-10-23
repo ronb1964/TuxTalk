@@ -34,11 +34,12 @@ def test_version_is_25():
 CUSTOM_LABEL = "Custom (opens Preferences)"
 
 
-def test_both_menus_end_the_presets_with_the_same_custom_item():
+def test_both_menus_end_the_presets_with_the_same_custom_item(tray_menu):
     """Both menus offer the same Custom item, which opens Preferences, so a
     custom setup shows its dot in either menu."""
-    tray = (EXT.parent.parent / "src/tuxtalk/tray.py").read_text()
-    assert f'"{CUSTOM_LABEL}"' in tray and "Custom (via Preferences)" not in tray
+    performance = next(item for item in tray_menu.get_children()
+                       if item.get_label() == "Performance")
+    assert performance.get_submenu().get_children()[-1].get_label() == CUSTOM_LABEL
     assert f"'{CUSTOM_LABEL}'" in JS
     assert "this._presetItems['custom']" in JS
 

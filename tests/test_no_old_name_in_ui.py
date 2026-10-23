@@ -94,8 +94,9 @@ def test_extension_ui_text_says_tuxtalk():
     assert not bad, "\n".join(bad)
 
 
-def test_about_says_formerly_talktype():
-    assert "Formerly TalkType" in (SRC / "tray.py").read_text()
+def test_about_says_formerly_talktype(about_window):
+    from gtk_text import shown_text
+    assert "Formerly TalkType" in shown_text(about_window)
 
 
 def test_issue_templates_say_tuxtalk_and_point_to_the_current_log():
