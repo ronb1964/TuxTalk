@@ -44,12 +44,11 @@ def test_save_never_leaves_a_truncated_file(config_path, monkeypatch):
     def no_space(*args, **kwargs):
         raise OSError(28, "No space left on device")
 
-    monkeypatch.setattr(config.os, "fsync", no_space)
     settings.model = "tiny"
-    with pytest.raises(OSError):
+    with monkeypatch.context() as m, pytest.raises(OSError):
+        m.setattr(config.os, "fsync", no_space)
         config.save_config(settings)
 
-    monkeypatch.undo()
     assert config_path.read_text() == original, "the previous settings were destroyed"
     leftovers = [p.name for p in config_path.parent.iterdir() if ".tmp" in p.name]
     assert not leftovers, f"temp file left behind after a failed save: {leftovers}"
@@ -287,11 +286,10 @@ def test_custom_commands_are_written_atomically(commands_path, monkeypatch):
     def no_space(*args, **kwargs):
         raise OSError(28, "No space left on device")
 
-    monkeypatch.setattr(config.os, "fsync", no_space)
-    with pytest.raises(OSError):
+    with monkeypatch.context() as m, pytest.raises(OSError):
+        m.setattr(config.os, "fsync", no_space)
         config.save_custom_commands({"second": "two"})
 
-    monkeypatch.undo()
     assert commands_path.read_text() == original, "custom commands were destroyed"
 
 

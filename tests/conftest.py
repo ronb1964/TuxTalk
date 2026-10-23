@@ -178,13 +178,10 @@ def _no_real_hotkey_test_flag(monkeypatch):
     Test Hotkeys open in the real Preferences would otherwise turn every key
     press a test sends into a test-mode report. Tests of the flag write here.
     """
-    import sys
-    from tuxtalk import service_launcher
+    from tuxtalk import app, service_launcher
 
     monkeypatch.setattr(service_launcher, "hotkey_test_flag_path", lambda: _HOTKEY_TEST_FLAG)
-    app = sys.modules.get("tuxtalk.app")
-    if app is not None:
-        monkeypatch.setattr(app, "_hotkey_test_flag", None)
+    monkeypatch.setattr(app, "_hotkey_test_flag", None)
     yield
     try:
         os.remove(_HOTKEY_TEST_FLAG)
@@ -193,21 +190,20 @@ def _no_real_hotkey_test_flag(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _no_real_custom_files(monkeypatch, tmp_path):
-    """Keep tests off the user's own Your Words and custom commands.
+def _no_real_snippets_or_words(monkeypatch, tmp_path_factory):
+    """Keep tests off the user's own snippets and Your Words.
 
     custom_words.txt sits beside custom_commands.toml, so one path covers
     both. In 0.15.0 testing, "TuxTalk" saved in the real Your Words reached a
-    Whisper test as a prompt it didn't expect. Tests that need these files
-    point the path at their own folder, as before.
+    Whisper test as a prompt it didn't expect, and building Preferences moves
+    word fixes into Your Words the first time (vocabulary.adopt_fixes): run
+    against the user's real files, a test would do that for real. Tests that
+    need these files point the path at their own folder.
     """
-    import sys
-    from tuxtalk import config
-
-    monkeypatch.setattr(config, "CUSTOM_COMMANDS_PATH", str(tmp_path / "custom_commands.toml"))
-    app = sys.modules.get("tuxtalk.app")
-    if app is not None:
-        monkeypatch.setattr(app, "_custom_words", [])
+    from tuxtalk import app, config
+    folder = tmp_path_factory.mktemp("snippets")
+    monkeypatch.setattr(config, "CUSTOM_COMMANDS_PATH", str(folder / "custom_commands.toml"))
+    monkeypatch.setattr(app, "_custom_words", [])
 
 
 @pytest.fixture(autouse=True)
@@ -301,17 +297,6 @@ def _no_real_history_or_stats(monkeypatch, tmp_path_factory):
     monkeypatch.setattr(stats, "stats_path", lambda: str(folder / "stats.json"))
 
 
-@pytest.fixture(autouse=True)
-def _no_real_snippets_or_words(monkeypatch, tmp_path_factory):
-    """Snippets (custom_commands.toml) and Your Words (custom_words.txt, beside
-    it) live in a throwaway folder for every test. Building Preferences moves
-    word fixes into Your Words the first time (vocabulary.adopt_fixes); run
-    against the user's real files, a test would do that for real."""
-    from tuxtalk import config
-    folder = tmp_path_factory.mktemp("snippets")
-    monkeypatch.setattr(config, "CUSTOM_COMMANDS_PATH", str(folder / "custom_commands.toml"))
-
-
 class FakeKeyboard:
     """Stands in for TuxTalk's virtual keyboard: keeps the key events instead
     of typing them. *fail_after* makes writes fail after that many events, as
@@ -368,3 +353,4 @@ def keyboard(monkeypatch):
     monkeypatch.setattr(virtual_keyboard, "_device", None)
     monkeypatch.setattr(virtual_keyboard, "_make_device", lambda: fake)
     return fake
+
