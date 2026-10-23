@@ -44,7 +44,7 @@ def test_a_warning_beside_the_button_is_not_dimmed():
 
 
 def test_no_window_uses_the_expander_arrow():
-    users = [p.name for p in SRC.glob("*.py") if "Gtk.Expander" in p.read_text()]
+    users = [p.name for p in SRC.rglob("*.py") if "Gtk.Expander" in p.read_text()]
     assert users == []
 
 

@@ -64,7 +64,7 @@ def _strings(tree):
 
 def test_python_ui_text_says_tuxtalk():
     bad = []
-    for f in sorted(SRC.glob("*.py")):
+    for f in sorted(SRC.rglob("*.py")):
         if f.name == "rename_migration.py":
             continue
         for line, s in _strings(ast.parse(f.read_text())):

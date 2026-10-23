@@ -14,7 +14,7 @@ SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tuxtalk"
 def test_no_module_imports_tomllib_without_a_fallback():
     # At the left margin = not inside a try with a 3.10 fallback (config.py
     # and prefs.py do it that way, indented under try:).
-    offenders = [p.name for p in SRC.glob("*.py")
+    offenders = [p.name for p in SRC.rglob("*.py")
                  if re.search(r"^(import tomllib|from tomllib)", p.read_text(), re.M)]
     assert not offenders, (
         f"{offenders} import tomllib, which Python 3.10 (the AppImage's) doesn't "

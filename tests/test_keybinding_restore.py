@@ -8,9 +8,7 @@ TuxTalk. The originals go to a backup file first, and the next start puts them
 back if the restore never happened.
 """
 
-import ast
 import json
-import pathlib
 
 import pytest
 

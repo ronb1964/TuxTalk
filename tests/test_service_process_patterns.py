@@ -193,7 +193,7 @@ class TestNobodyHandRollsItAnyMore:
         """Separate patterns at each call site drift apart, and the substring
         matching pkill/pgrep -f do is wrong in its own right."""
         offenders = []
-        for path in (ROOT / "src" / "tuxtalk").glob("*.py"):
+        for path in (ROOT / "src" / "tuxtalk").rglob("*.py"):
             if path.name == "service_launcher.py":
                 continue
             for line in path.read_text().splitlines():

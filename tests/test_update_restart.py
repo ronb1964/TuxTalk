@@ -103,7 +103,7 @@ def test_install_refuses_when_the_disk_is_too_full(tmp_path, appimages, monkeypa
 
 def test_no_update_path_execs_the_appimage():
     """execv from Preferences or a worker thread breaks the restart."""
-    for path in SRC.glob("*.py"):
+    for path in SRC.rglob("*.py"):
         assert "os.execv(" not in path.read_text(), path.name
     assert not hasattr(uc, "install_update_and_restart")
 

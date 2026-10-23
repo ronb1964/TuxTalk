@@ -265,7 +265,7 @@ def test_every_file_in_the_data_folder_is_sorted_into_personal_or_not():
     unless asked) or here (always deleted), so nobody's data is deleted
     by surprise."""
     names = set()
-    for source in (ROOT / "src/tuxtalk").glob("*.py"):
+    for source in (ROOT / "src/tuxtalk").rglob("*.py"):
         names |= set(re.findall(r'get_data_dir\(\),\s*"([^"]+)"', source.read_text()))
     assert names, "the pattern no longer finds the data folder's files"
     known = set(uninstall.DOWNLOADED_DATA) | set(uninstall.PERSONAL_DATA)
@@ -276,7 +276,7 @@ def test_every_file_in_the_settings_folder_is_known_by_name():
     """A linked settings folder loses only the names in CONFIG_NAMES, so a new
     file TuxTalk writes there has to be added to them."""
     names = set()
-    for source in (ROOT / "src/tuxtalk").glob("*.py"):
+    for source in (ROOT / "src/tuxtalk").rglob("*.py"):
         names |= set(re.findall(r'dirname\((?:config\.)?CONFIG_PATH\),\s*"([^"]+)"',
                                 source.read_text()))
     assert names, "the pattern no longer finds the settings folder's files"

@@ -257,7 +257,7 @@ def test_every_path_that_gives_the_keys_back_releases_cosmic_too():
     import pathlib
     import re
     src = pathlib.Path(ch.__file__).parent
-    direct = [path.name for path in sorted(src.glob("*.py"))
+    direct = [path.name for path in sorted(src.rglob("*.py"))
               if path.name not in ("service_launcher.py", "uninstall.py")
               and re.search(r"\b(kwin|cosmic)_hotkeys\.release\b", path.read_text())]
     assert direct == []

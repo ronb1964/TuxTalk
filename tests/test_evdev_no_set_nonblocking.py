@@ -14,7 +14,7 @@ SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tuxtalk"
 
 
 def test_nothing_calls_the_missing_method():
-    callers = [f"{p.name}:{n}" for p in SRC.glob("*.py")
+    callers = [f"{p.name}:{n}" for p in SRC.rglob("*.py")
                for n, line in enumerate(p.read_text().splitlines(), 1)
                if "set_nonblocking(" in line]
     assert callers == []

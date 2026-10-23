@@ -787,7 +787,7 @@ def _walk(widget):
 
 def test_preferences_has_a_labs_section_with_both_links(prefs_window, monkeypatch):
     from gi.repository import Gtk
-    from gtk_text import find, shown_text
+    from gtk_text import shown_text
     from tuxtalk import help_dialog
     opened = []
     monkeypatch.setattr(help_dialog, "show_help_dialog", lambda tab=None: opened.append(tab))
