@@ -404,7 +404,7 @@ Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--st
 |----------|--------|
 | "new line" | Line break |
 | "new paragraph" | Double line break |
-| "tab" | Tab character |
+| "press tab" | Tab character ("tab" on its own is just the word) |
 
 ### Editing
 | Say This | Result |

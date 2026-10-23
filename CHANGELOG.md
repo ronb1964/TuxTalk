@@ -3,6 +3,14 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
+## [Unreleased]
+
+- Saying "tab" in a sentence ("every tab shows", "the tabs in Claude
+  Desktop") typed a tab character instead of the word, almost every time.
+  Now only "press tab" makes a tab, and "tab" on its own is just the word.
+  Between form fields, say "name press tab address". "literal press tab"
+  types the words.
+
 ## [0.18.0] - 2026-10-23
 
 - Security: on systems where the hotkey helper can't run (no systemd), Fix
