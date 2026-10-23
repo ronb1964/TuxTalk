@@ -59,6 +59,32 @@ def _keys(is_flatpak):
             getattr(cfg, "paste_last_hotkey", ""))
 
 
+def _no_hotkey_tips(is_flatpak, keys_where):
+    """What to try when no dictation key works, as Problems lists it. It
+    differs completely by format: on the Flatpak the desktop assigns the keys.
+    *keys_where* says where the keys are set."""
+    if is_flatpak:
+        return (
+            "• On the Flatpak your keys are assigned by the desktop, not by TuxTalk.\n"
+            f"• Open {keys_where} and make sure a key is set for both "
+            "<b>Hold to talk</b> and <b>Toggle dictation</b>.\n"
+            "• If the assign prompt never appeared on first run, choose Restart Service "
+            "in the TuxTalk menu and it will ask again.")
+    return (
+        "• Open <b>Preferences → Advanced → System check</b>. If Typing setup says "
+        "something needs fixing, click its button. You'll be asked for your password "
+        "once. TuxTalk's hotkey helper then reads the dictation keys, and nothing else, "
+        "with no restart needed.\n"
+        "• On a system without systemd the helper can't be used, and TuxTalk joins you "
+        "to the \"input\" group instead. Then the computer needs a restart: logging out "
+        "is often not enough. Typing setup says when this applies.\n"
+        "• Another app may use the same key: pick another in Preferences → General and "
+        "try it with Test Hotkeys.\n"
+        "• On many laptops and small keyboards the F-keys work only with Fn held. Hold Fn "
+        "with your key, or pick Right Ctrl, Right Alt or Scroll Lock in Preferences → "
+        "General: they never need Fn.")
+
+
 def show_help_dialog(tab=None):
     """Show help dialog with TuxTalk features and instructions. *tab* opens
     it on the tab whose title contains that word ("writing" from Preferences'
@@ -94,28 +120,7 @@ def show_help_dialog(tab=None):
             "Text Injection</b>: Auto picks paste or typing for each app; try "
             "<b>Keystroke Typing</b> or <b>Clipboard Paste</b> there.")
 
-    # "no key works" troubleshooting differs completely by format.
-    if is_flatpak:
-        no_hotkey_block = (
-            "• On the Flatpak your keys are assigned by the desktop, not by TuxTalk.\n"
-            f"• Open {keys_where} and make sure a key is set for both "
-            "<b>Hold to talk</b> and <b>Toggle dictation</b>.\n"
-            "• If the assign prompt never appeared on first run, choose Restart Service "
-            "in the TuxTalk menu and it will ask again.")
-    else:
-        no_hotkey_block = (
-            "• Open <b>Preferences → Advanced → System check</b>. If Typing setup says "
-            "something needs fixing, click its button. You'll be asked for your password "
-            "once. TuxTalk's hotkey helper then reads the dictation keys, and nothing else, "
-            "with no restart needed.\n"
-            "• On a system without systemd the helper can't be used, and TuxTalk joins you "
-            "to the \"input\" group instead. Then the computer needs a restart: logging out "
-            "is often not enough. Typing setup says when this applies.\n"
-            "• Another app may use the same key: pick another in Preferences → General and "
-            "try it with Test Hotkeys.\n"
-            "• On many laptops and small keyboards the F-keys work only with Fn held. Hold Fn "
-            "with your key, or pick Right Ctrl, Right Alt or Scroll Lock in Preferences → "
-            "General: they never need Fn.")
+    no_hotkey_block = _no_hotkey_tips(is_flatpak, keys_where)
 
     # KDE-on-Flatpak: the per-dictation "remote control" popup.
     kde_notice = ""
