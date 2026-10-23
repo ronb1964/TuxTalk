@@ -10,7 +10,8 @@ and Preferences says what each key gives up.
 import pytest
 from evdev import ecodes
 
-from tuxtalk import app, cosmic_hotkeys, gnome_hotkeys, keyboard_layout, x11_hotkeys
+from tuxtalk import (app, cosmic_hotkeys, gnome_hotkeys, keyboard_layout, modifier_hotkeys,
+                     x11_hotkeys)
 from tuxtalk.hotkey_keys import keycode_from_name, track_modifier
 from tuxtalk import kwin_hotkeys as kh
 from tuxtalk.config import HOTKEY_CHOICES
@@ -187,8 +188,8 @@ class Keyboard:
 
 @pytest.fixture
 def no_hotkeys_noted(monkeypatch):
-    monkeypatch.setattr(app, "_modifier_hotkeys", ([], frozenset()))
-    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    monkeypatch.setattr(modifier_hotkeys, "_noted", ([], frozenset()))
+    monkeypatch.setattr(modifier_hotkeys.time, "sleep", lambda s: None)
 
 
 def test_typing_waits_while_right_ctrl_is_pressed_mid_text(keyboard, no_hotkeys_noted):
@@ -201,7 +202,7 @@ def test_typing_waits_while_right_ctrl_is_pressed_mid_text(keyboard, no_hotkeys_
         written_at_look[look] = len(keyboard.events)
         return 3 <= look <= 6           # pressed before the third key, held a while
 
-    app._note_modifier_hotkeys([Keyboard(pressed)], RCTRL, ecodes.KEY_F9)
+    modifier_hotkeys.note([Keyboard(pressed)], RCTRL, ecodes.KEY_F9)
     assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)] * 4, what="aaaa")
     assert written_at_look[3] == written_at_look[6] == written_at_look[7] == 4
     assert keyboard.typed_keys() == [ecodes.KEY_A] * 4
@@ -209,13 +210,23 @@ def test_typing_waits_while_right_ctrl_is_pressed_mid_text(keyboard, no_hotkeys_
 
 def test_f_keys_never_hold_typing_up(keyboard, no_hotkeys_noted):
     hotkeys = Keyboard(lambda look: True, code=F8)
-    app._note_modifier_hotkeys([hotkeys], F8, ecodes.KEY_F9)
+    modifier_hotkeys.note([hotkeys], F8, ecodes.KEY_F9)
     assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
     assert hotkeys.looks == 0
 
 
+def test_an_unplugged_keyboard_never_holds_typing_up(keyboard, no_hotkeys_noted):
+    class Unplugged(Keyboard):
+        def active_keys(self):
+            raise OSError(19, "No such device")
+
+    modifier_hotkeys.note([Unplugged(lambda look: True)], RCTRL, ecodes.KEY_F9)
+    assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
+    assert keyboard.typed_keys() == [ecodes.KEY_A]
+
+
 def test_the_right_alt_guard_goes_while_right_alt_is_held(keyboard, no_hotkeys_noted):
-    app._note_modifier_hotkeys([Keyboard(lambda look: True, code=RALT)], RALT, None)
+    modifier_hotkeys.note([Keyboard(lambda look: True, code=RALT)], RALT, None)
     app._guard_alt_tap()
     assert keyboard.events == [(LCTRL, 1), (LCTRL, 0)]
 

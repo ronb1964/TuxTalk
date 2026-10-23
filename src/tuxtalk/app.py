@@ -31,7 +31,7 @@ from . import config as config_module
 from .logger import setup_logger, redact_text
 from .recording_indicator import RecordingIndicator
 from .undo import detect_undo_command, calculate_undo_length
-from . import virtual_keyboard
+from . import modifier_hotkeys, virtual_keyboard
 from .hotkey_keys import (MODIFIER_CODES, check_modifiers_held, keycode_from_name, keys_down,
                           parse_hotkey_combo, track_modifier)
 import threading
@@ -331,7 +331,7 @@ class RecordingState:
     # without the extension sees the key too and the space is lost.
     owed_space: object = None
     # A Right Ctrl or Right Alt dictation key that's down and hidden from
-    # the desktop (see _handle_key_event), or None.
+    # the desktop (see _hide_modifier_hotkey), or None.
     hidden_key: int = None
     # The last Enter TuxTalk pressed: {"at", "automatic"}, or None
     # (_press_enter_key). "edit that" just after it explains itself.
@@ -1770,16 +1770,6 @@ def _key_delay() -> int:
     return max(1, min(50, _key_delay_ms))
 
 
-# The keyboards the hotkey loop reads and its dictation keys that are
-# modifiers (Right Ctrl, Right Alt), for _send_keys; set by _note_modifier_hotkeys.
-_modifier_hotkeys = ([], frozenset())
-
-
-def _note_modifier_hotkeys(devices, *keys) -> None:
-    global _modifier_hotkeys
-    _modifier_hotkeys = (devices, frozenset(k for k in keys if k in MODIFIER_CODES))
-
-
 def _send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY_MS,
                raise_if_partial: bool = False, under_hotkey: bool = False) -> bool:
     """Press keys [(evdev code, 1 down / 0 up)] on TuxTalk's virtual keyboard.
@@ -1796,14 +1786,7 @@ def _send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY
     virtual_keyboard.StoppedPartway instead of returning False, for a caller
     that must tell "none of the keys were sent" from "some of them were".
     """
-    devices, modifiers = _modifier_hotkeys
-    before_press = None
-    if modifiers and not under_hotkey:
-        keyboards = [d for d in list(devices) if _is_keyboard_device(d)]
-
-        def before_press():
-            while keys_down(keyboards) & modifiers:
-                time.sleep(0.02)
+    before_press = None if under_hotkey else modifier_hotkeys.wait_while_held()
     try:
         sent = virtual_keyboard.send(events, delay_ms, before_press)
     except virtual_keyboard.StoppedPartway:
@@ -4688,6 +4671,31 @@ def _paste_last_dictation(cfg) -> None:
         _report_undelivered(outcome, cfg.beeps)
 
 
+def _report_test_press(code, hold_key, toggle_key) -> None:
+    """In the hotkey test, tell the tray which dictation key *code* is."""
+    if code == hold_key:
+        _notify_tray_hotkey_pressed("hold")
+    elif toggle_key and code == toggle_key:
+        _notify_tray_hotkey_pressed("toggle")
+
+
+def _hide_modifier_hotkey(event, toggle_key, devices) -> None:
+    """Hide a Right Ctrl or Right Alt dictation key from the desktop as soon
+    as it's down: what TuxTalk types meanwhile (the dictation a tap stops, a
+    phrase of hands-free, a send counting down) would otherwise arrive as
+    Ctrl or Alt shortcuts (Ctrl+W closes the tab). The hold key hides itself
+    when it starts a dictation (_handle_key_event). Kept until it's let go,
+    or until something lets go of every grab sooner; the desktop has been
+    told it's up either way."""
+    if (event.value == 1 and not _grabbed_devices
+            and (event.code == toggle_key or state.is_recording)):
+        _grab_keyboards_hiding(devices, {event.code})
+        state.hidden_key = event.code
+    elif event.value == 0 and event.code == state.hidden_key:
+        state.hidden_key = None
+        _release_all_grabs()
+
+
 def _handle_key_event(event, mode, hold_key, toggle_key,
                       voice_cmds_combo, held_modifiers,
                       devices, cfg, input_device_idx, paste_last_combo=None):
@@ -4697,21 +4705,12 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
     returned, so that every way recording can end — release, toggle, ESC, or an
     exception inside start_recording — releases the keyboard.
     """
-    # Not with another modifier held: the key isn't dictating then, and if
-    # Left Ctrl is down, the guard letting go of it could let it go there too.
-    if (event.value == 1 and event.code == ecodes.KEY_RIGHTALT and event.code in (hold_key, toggle_key)
-            and not held_modifiers - {ecodes.KEY_RIGHTALT}):
+    if modifier_hotkeys.right_alt_alone(event, (hold_key, toggle_key), held_modifiers):
         _guard_alt_tap()
 
     # --- Hotkey test mode: report presses via D-Bus instead of recording ---
     if event.value == 1 and _hotkey_test_active():
-        key_name = None
-        if event.code == hold_key:
-            key_name = "hold"
-        elif toggle_key and event.code == toggle_key:
-            key_name = "toggle"
-        if key_name:
-            _notify_tray_hotkey_pressed(key_name)
+        _report_test_press(event.code, hold_key, toggle_key)
         return  # Don't process hotkeys normally in test mode
 
     # --- Paste Last Dictation combo (e.g. Ctrl+Alt+P) ---
@@ -4760,21 +4759,8 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
                 _release_all_grabs()
             return
 
-    # Right Ctrl or Right Alt as a dictation key is hidden from the desktop as
-    # soon as it's down: what TuxTalk types meanwhile (the dictation a tap
-    # stops, a phrase of hands-free, a send counting down) would otherwise
-    # arrive as Ctrl or Alt shortcuts (Ctrl+W closes the tab). The hold key
-    # hides itself when it starts a dictation (below). Kept until it's let
-    # go, or until something lets go of every grab sooner; the desktop has
-    # been told it's up either way.
     if event.code in MODIFIER_CODES and event.code in (hold_key, toggle_key):
-        if (event.value == 1 and not _grabbed_devices
-                and (event.code == toggle_key or state.is_recording)):
-            _grab_keyboards_hiding(devices, {event.code})
-            state.hidden_key = event.code
-        elif event.value == 0 and event.code == state.hidden_key:
-            state.hidden_key = None
-            _release_all_grabs()
+        _hide_modifier_hotkey(event, toggle_key, devices)
 
     # --- Hold-to-talk: hold key down to record, release to stop ---
     if event.code == hold_key:
@@ -5130,7 +5116,7 @@ def _loop_evdev(cfg: Settings, input_device_idx, keyboards=None):
         print(f"Voice Commands hotkey: {vc_hotkey_str}")
         logger.info(f"Voice Commands hotkey: {vc_hotkey_str}")
     _helper_watch(devices, hold_key, toggle_key, voice_cmds_combo, paste_last_combo)
-    _note_modifier_hotkeys(devices, hold_key, toggle_key)
+    modifier_hotkeys.note(devices, hold_key, toggle_key)
 
     # Have the desktop hold the hotkeys back from the focused app (see
     # _claim_desktop_hotkeys). They are released by stop_dictation_service,
@@ -5169,7 +5155,7 @@ def _loop_evdev(cfg: Settings, input_device_idx, keyboards=None):
             # and comparing would mean a second copy of the hotkey fields.
             _claim_desktop_hotkeys(cfg)
             _helper_watch(devices, hold_key, toggle_key, voice_cmds_combo, paste_last_combo)
-            _note_modifier_hotkeys(devices, hold_key, toggle_key)
+            modifier_hotkeys.note(devices, hold_key, toggle_key)
             logger.info("Applied settings change without restarting")
 
         # Read the devices that have key events waiting.
