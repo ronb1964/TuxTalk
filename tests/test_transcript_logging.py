@@ -123,7 +123,9 @@ def test_enabling_logging_is_gated_by_a_warning_dialog(prefs_window, dialogs):
 def test_injection_tooltip_tells_the_truth_about_password_fields(prefs_window):
     """0.18 recognises password fields; the tooltip had kept saying nothing
     can detect them."""
-    shown = "\n".join(shown_text(prefs_window().window))
+    window = prefs_window()
+    find(window.window, Gtk.Button, "Show fine-tuning").clicked()
+    shown = "\n".join(shown_text(window.window))
     assert "it cannot detect password fields" not in shown
     assert "doesn't type into password fields" in shown
 

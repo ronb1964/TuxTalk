@@ -7,7 +7,7 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, Gtk  # noqa: E402
 
-from gtk_text import combo_ids, find, shown_text, widgets  # noqa: E402
+from gtk_text import combo_ids, find, tree_text, widgets  # noqa: E402
 from tuxtalk.config import CLASSIC_CYAN_HEX  # noqa: E402
 
 
@@ -68,7 +68,7 @@ def test_color_dropdown_has_only_two_modes(window):
     third option; it is the classic color in the swatch's preset palette."""
     color = _combo(window, "system")
     assert combo_ids(color) == ["system", "custom"]
-    assert not [text for text in shown_text(color) if "yan" in text]
+    assert not [text for text in tree_text(color) if "yan" in text]
 
 
 def test_an_old_cyan_setting_shows_as_custom(prefs_window):
@@ -119,7 +119,7 @@ def test_reset_to_classic_cyan_control_exists(window):
 
 
 def test_uses_american_spelling_for_color(window):
-    assert not [text for text in shown_text(window.window, window.indicator_grid)
+    assert not [text for text in tree_text(window.window, window.indicator_grid)
                 if "olour" in text], "UI text must use American 'Color'"
 
 

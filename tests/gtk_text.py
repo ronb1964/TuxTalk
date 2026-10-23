@@ -36,9 +36,31 @@ def texts(widget):
     return out
 
 
-def shown_text(*roots):
-    """Everything readable in *roots*, one string per label, entry or tooltip."""
+def tree_text(*roots):
+    """Every text in *roots*, shown or not: for checking that a window never
+    says something, even in a fold that is closed."""
     return [text for root in roots for w in widgets(root) for text in texts(w)]
+
+
+def is_shown(widget):
+    """Whether *widget* is on screen once its window is: it and every
+    container above it are visible, and no closed fold hides it. A notebook
+    page counts, whichever tab is open: its tab is one click away."""
+    while widget is not None:
+        parent = widget.get_parent()
+        if not widget.get_visible():
+            return False
+        if isinstance(parent, Gtk.Revealer) and not parent.get_reveal_child():
+            return False
+        if not widget.get_child_visible() and not isinstance(parent, Gtk.Notebook):
+            return False
+        widget = parent
+    return True
+
+
+def shown_text(*roots):
+    """The text a user can see in *roots*, one string per label, entry or tooltip."""
+    return [text for root in roots for w in widgets(root) if is_shown(w) for text in texts(w)]
 
 
 def find(root, kind, text=None):

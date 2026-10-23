@@ -800,9 +800,9 @@ def test_preferences_has_a_labs_section_with_both_links(prefs_window, monkeypatc
 
 def test_the_flatpak_has_no_labs(prefs_window, monkeypatch):
     """Its portal input can't see Shift or send Ctrl+C, so none of them work there yet."""
-    from gtk_text import shown_text
+    from gtk_text import tree_text
     monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TuxTalk")
-    shown = shown_text(prefs_window().window)
+    shown = tree_text(prefs_window().window)
     assert "🧪 TuxTalk Labs" not in shown
     assert not [text for text in shown if text.startswith("Voice editing")]
 

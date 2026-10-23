@@ -52,6 +52,7 @@ def test_prefs_uses_the_helper_rather_than_guessing_from_the_session(
     from tuxtalk import recording_indicator
     monkeypatch.setattr(recording_indicator, "positioning_available", lambda: available)
     window = prefs_window()
+    find(window.window, Gtk.Button, "Customize…").clicked()
     position = beside(find(window.indicator_grid, Gtk.Label, "Position:"))
     assert position.get_sensitive() is available
     warned = [t for t in shown_text(window.indicator_grid) if "XWayland is not available" in t]

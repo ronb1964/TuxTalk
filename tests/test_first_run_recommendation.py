@@ -47,9 +47,8 @@ def test_run_result_carries_the_setup(dialog, monkeypatch):
 
 
 def test_first_run_never_mentions_cuda(dialog):
-    from gtk_text import shown_text
-    dialog.options_fold.button.clicked()          # every choice in view
-    assert not [text for text in shown_text(dialog.dialog) if "CUDA" in text]
+    from gtk_text import tree_text
+    assert not [text for text in tree_text(dialog.dialog) if "CUDA" in text]
 
 
 def test_options_button_says_what_can_be_changed(dialog):
@@ -90,10 +89,10 @@ def flatpak(monkeypatch):
 
 def test_flatpak_footer_no_longer_promises_a_model_choice(flatpak, welcome_window):
     """The model is chosen on this screen; there is no later picker."""
-    from gtk_text import shown_text
-    shown = "\n".join(shown_text(welcome_window.dialog))
-    assert "choose your speech model" not in shown
-    assert "downloads your speech model, then starts" in shown
+    from gtk_text import shown_text, tree_text
+    assert not [text for text in tree_text(welcome_window.dialog) if "choose your speech model" in text]
+    assert [text for text in shown_text(welcome_window.dialog)
+            if "downloads your speech model, then starts" in text]
 
 
 def test_no_pulse_timer_without_anything_to_pulse(dialog, monkeypatch):

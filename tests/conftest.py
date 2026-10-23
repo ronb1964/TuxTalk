@@ -504,6 +504,9 @@ def prefs_window(monkeypatch, private_settings):
         if GLib.MainContext.default().find_source_by_id(timer):
             GLib.source_remove(timer)
     for window in built:
+        indicator = getattr(window, "_indicator_window", None)    # Customize…
+        if indicator is not None:
+            indicator.destroy()
         window.indicator_grid.destroy()     # not in the window until Customize… opens it
         window.window.destroy()
 
@@ -765,6 +768,9 @@ def welcome_window(monkeypatch, private_settings):
     monkeypatch.setattr(welcome_dialog, "detect_uinput_access", lambda: (True, ""))
     monkeypatch.setattr(welcome_dialog, "detect_portaudio_status", lambda: {"needs_install": False})
     window = welcome_dialog.WelcomeDialog(force_gnome=False)
+    window.dialog.show_all()                # as run() does, without waiting for an answer
+    while Gtk.events_pending():
+        Gtk.main_iteration()
     yield window
     window.destroy()
 

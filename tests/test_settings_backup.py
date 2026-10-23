@@ -448,13 +448,13 @@ def test_preferences_shows_a_refused_restore_as_a_message(prefs_window, monkeypa
     import gi
     gi.require_version("Gtk", "3.0")
     from gi.repository import Gtk
-    from gtk_text import shown_text
+    from gtk_text import tree_text
     shown = []
 
     def refuse(path):
         raise problem
     monkeypatch.setattr(sb, "restore", refuse)
-    monkeypatch.setattr(Gtk.Dialog, "run", lambda d: shown.append(shown_text(d)))
+    monkeypatch.setattr(Gtk.Dialog, "run", lambda d: shown.append(tree_text(d)))
     window = prefs_window()
     monkeypatch.setattr(window, "restart_service", lambda: pytest.fail("restarted"))
     window._restore_backup("/backups/tuxtalk-settings.zip")

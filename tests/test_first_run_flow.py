@@ -52,8 +52,8 @@ def test_processor_setup(env):
 
 def test_no_first_run_screen_picks_a_model_after_the_welcome(welcome_window, setup_complete):
     """The welcome card chooses the model; nothing later asks again."""
-    from gtk_text import shown_text
-    shown = shown_text(welcome_window.dialog) + setup_complete()
+    from gtk_text import tree_text
+    shown = tree_text(welcome_window.dialog) + setup_complete()
     assert not [text for text in shown if "Starting Model" in text]
 
 

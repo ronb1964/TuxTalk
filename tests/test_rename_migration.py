@@ -188,13 +188,13 @@ def test_the_tray_shows_it(tray_main, tmp_path, monkeypatch):
     import gi
     gi.require_version("Gtk", "3.0")
     from gi.repository import Gtk
-    from gtk_text import shown_text
+    from gtk_text import tree_text
     from tuxtalk import config
     monkeypatch.setattr(config, "CONFIG_PATH", str(tmp_path / "config.toml"))
     rm._ask_for_notice(str(tmp_path))
     shown = []
     monkeypatch.setattr(Gtk.Dialog, "run",
-                        lambda dialog: shown.append(shown_text(dialog)) or Gtk.ResponseType.OK)
+                        lambda dialog: shown.append(tree_text(dialog)) or Gtk.ResponseType.OK)
     tray_main().run_timers()
     assert len(shown) == 1 and "TalkType is now TuxTalk" in shown[0]
     assert not rm.notice_pending(str(tmp_path))
