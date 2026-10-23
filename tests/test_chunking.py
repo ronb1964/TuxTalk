@@ -1090,11 +1090,11 @@ def enter(pipeline, monkeypatch):
     from tuxtalk import app
     texts, typed, beeps = pipeline
 
-    def fake_enter(why):
-        typed.append("<ENTER>")
+    def fake_enter(key, why):
+        typed.append(f"<{key}>")
         app.state.last_inserted_text = ""
         return True
-    monkeypatch.setattr(app, "_press_enter_key", fake_enter)
+    monkeypatch.setattr(app, "_press_key", fake_enter)
     monkeypatch.setattr(app, "_press_enter_after", False)
     monkeypatch.setattr(app.state, "chunk_typed", False)
     monkeypatch.setattr(app.state, "held_cue", "")
@@ -1127,6 +1127,30 @@ def test_press_enter_after_a_pause_ends_the_phrase_before_it(enter):
     assert typed == ["We meet at three", ".", "<ENTER>"]
     assert texts == []                       # transcribed once each, no joint pass
     assert app.READY_BEEP not in beeps       # mid-recording: no beep
+    assert app.state.pending_boundary is None
+
+
+def test_press_tab_at_the_end_of_a_phrase_leaves_the_box_without_a_mark(enter):
+    """Hands-free in a form: "john, press tab", a pause, "smith": no period
+    or space in the first box, and the next one starts afresh."""
+    from tuxtalk import app
+    texts, typed, _ = enter
+    texts.extend(["john, press tab", "smith"])
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    assert typed == ["John", "<TAB>"]
+    assert app.state.pending_boundary is None and not app.state.chunk_typed
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    assert typed[2:] == ["Smith"]
+
+
+def test_press_tab_after_a_pause_types_no_mark_before_it(enter):
+    from tuxtalk import app
+    texts, typed, _ = enter
+    texts.extend(["john", "press tab"])
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    assert typed == ["John", "<TAB>"]
+    assert texts == []                       # no context pass against "press tab"
     assert app.state.pending_boundary is None
 
 

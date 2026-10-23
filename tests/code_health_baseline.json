@@ -1,6 +1,6 @@
 {
  "files": {
-  "app.py": 5876,
+  "app.py": 5875,
   "prefs.py": 7127,
   "tray.py": 2548,
   "welcome_dialog.py": 3275
@@ -53,7 +53,6 @@
   "app.py::_resolve_boundary::dated_comment": 1,
   "app.py::_show_voice_commands_via_dbus::swallowed_error": 1,
   "app.py::_strip_hallucinations::long_line": 1,
-  "app.py::_transcribe_and_inject::dated_comment": 1,
   "app.py::_transcribe_and_inject::long_line": 1,
   "app.py::_transcribe_audio::long_line": 5,
   "app.py::_type_text_raw::swallowed_error": 1,
@@ -515,8 +514,8 @@
    "decisions": 20
   },
   "app.py::_transcribe_and_inject": {
-   "decisions": 73,
-   "lines": 271
+   "decisions": 70,
+   "lines": 267
   },
   "app.py::_transcribe_audio": {
    "decisions": 25,

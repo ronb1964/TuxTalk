@@ -1,4 +1,4 @@
-"""Ending a dictation with "press enter" sends a real Enter (enter_command.py).
+"""Ending a dictation with "press enter" sends a real Enter (key_commands.py).
 
 Ron, 2026-10-17: "I really like the press enter, so you can just speak."
 A spoken "new line" stays Shift+Enter, which never sends a chat message.
@@ -6,8 +6,8 @@ A spoken "new line" stays Shift+Enter, which never sends a chat message.
 import numpy as np
 import pytest
 
-from tuxtalk import app, config, enter_command
-from tuxtalk.enter_command import split_press_enter
+from tuxtalk import app, config, key_commands
+from tuxtalk.key_commands import split_key_command
 
 
 @pytest.mark.parametrize("raw, expected", [
@@ -26,7 +26,8 @@ from tuxtalk.enter_command import split_press_enter
     ("Type literal press enter", ("Type press enter", False)),
 ])
 def test_split_press_enter(raw, expected):
-    assert split_press_enter(raw) == expected
+    words, said = expected
+    assert split_key_command(raw) == (words, "ENTER" if said else "")
 
 
 def _dictate(monkeypatch, raw, prepared=None, outcome="ok", window="brave-browser"):
@@ -47,7 +48,7 @@ def _dictate(monkeypatch, raw, prepared=None, outcome="ok", window="brave-browse
         events.append(("typed", text))
         return outcome
     monkeypatch.setattr(app, "_inject_text", inject)
-    monkeypatch.setattr(app, "_press_enter_key", lambda why: events.append(("enter", why)))
+    monkeypatch.setattr(app, "_press_key", lambda key, why: events.append((key.lower(), why)))
     frames = [(np.ones(app.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
     app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=False,
                                smart_quotes=False, notify_on=False)
@@ -134,7 +135,7 @@ def test_saying_press_enter_sends_even_after_and(monkeypatch):
     ("\u201cI said and\u201d", "and"),
 ])
 def test_cut_off_endings(text, word):
-    assert enter_command.ends_unfinished(text) == word
+    assert key_commands.ends_unfinished(text) == word
 
 
 @pytest.mark.parametrize("text", [
@@ -142,7 +143,7 @@ def test_cut_off_endings(text, word):
     "Sounds good!", "", "Command and conquer is a game.",
 ])
 def test_whole_sentences_are_not_cut_off(text):
-    assert enter_command.ends_unfinished(text) == ""
+    assert key_commands.ends_unfinished(text) == ""
 
 
 def test_no_enter_when_the_text_did_not_arrive(monkeypatch):
@@ -164,7 +165,7 @@ def test_press_enter_key_uses_the_output_backend_and_forgets_undo(monkeypatch):
     monkeypatch.setattr(app, "_output_backend", lambda: Backend())
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     app.state.last_inserted_text = "See you at noon."
-    assert app._press_enter_key("test") is True
+    assert app._press_key("ENTER", "test") is True
     assert pressed == [[((), "ENTER")]]
     # A sent message can't be backspaced away.
     assert app.state.last_inserted_text == ""
@@ -218,7 +219,7 @@ def countdown(monkeypatch):
     monkeypatch.setattr(app.threading, "Timer", FakeTimer)
     monkeypatch.setattr(app, "_press_enter_delay", 2.0)
     pressed, labels = [], []
-    monkeypatch.setattr(app, "_press_enter_key", lambda why: pressed.append(why) or True)
+    monkeypatch.setattr(app, "_press_key", lambda key, why: pressed.append(why) or True)
     from tuxtalk import screen_message
     monkeypatch.setattr(screen_message, "show_over_active_window",
                         lambda text, **kw: labels.append(text))

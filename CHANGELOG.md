@@ -25,6 +25,12 @@ before 0.15.0, so older entries use that name.
   Now only "press tab" makes a tab, and "tab" on its own is just the word.
   Between form fields, say "name press tab address". "literal press tab"
   types the words.
+- At the end of a dictation "press tab" presses the real Tab key now, so you
+  can fill in a form one box at a time. "John, press tab" puts John in the
+  box with no period and goes to the next one. Before, it typed nothing at
+  all there, and a tab character pasted into a web form wouldn't have moved
+  you anyway. "Send each dictation automatically" doesn't send a box you
+  left with "press tab".
 
 ## [0.18.0] - 2026-10-23
 

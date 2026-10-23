@@ -46,7 +46,7 @@ Claude, Anthropic's AI, writes the code. I test it and use it every day, and I h
 
 ## New in 0.18
 
-**It won't type into password boxes.** If your cursor is in a password field when you let go of F8, nothing gets typed, and a note over the window says why. Those words stay out of Recent Dictations too. Saying just "press enter" still works there, so you can log in after typing the password yourself. TuxTalk can only tell when the app says it's a password box: GTK apps do, so most of GNOME, Cinnamon and Xfce. KDE apps and Firefox do with accessibility switched on, and Chrome-based apps like Discord mostly don't. The desktop's own box asking for your admin password counts too, on GNOME, KDE, Cinnamon, COSMIC and Xfce.
+**It won't type into password boxes.** If your cursor is in a password field when you let go of F8, nothing gets typed, and a note over the window says why. Those words stay out of Recent Dictations too. Saying just "press enter" or "press tab" still works there, so you can log in after typing the password yourself, or go to the next box. TuxTalk can only tell when the app says it's a password box: GTK apps do, so most of GNOME, Cinnamon and Xfce. KDE apps and Firefox do with accessibility switched on, and Chrome-based apps like Discord mostly don't. The desktop's own box asking for your admin password counts too, on GNOME, KDE, Cinnamon, COSMIC and Xfce.
 
 **Typing is about six times faster, and ydotool is gone.** TuxTalk types with its own virtual keyboard now, so there's no background program to keep running. A 25 letter sentence shows up in about a tenth of a second instead of six tenths. You'll notice it most on X11, like Mint, where TuxTalk types everything.
 
@@ -402,7 +402,7 @@ Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--st
 |----------|--------|
 | "new line" | Line break |
 | "new paragraph" | Double line break |
-| "press tab" | Tab character ("tab" on its own is just the word) |
+| "press tab" | Tab character ("tab" on its own is just the word). At the end of a dictation it presses the Tab key, so in a form you go to the next box |
 
 ### Editing
 | Say This | Result |

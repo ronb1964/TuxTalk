@@ -191,7 +191,7 @@ def test_pressing_enter_remembers_the_send(monkeypatch):
     monkeypatch.setattr(app, "_output_backend", lambda: Backend())
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     monkeypatch.setattr(app.state, "sent", None)
-    app._press_enter_key("Send each dictation automatically is on")
+    app._press_key("ENTER", "Send each dictation automatically is on")
     assert app.state.sent["automatic"] is True
-    app._press_enter_key('said "press enter"')
+    app._press_key("ENTER", 'said "press enter"')
     assert app.state.sent["automatic"] is False

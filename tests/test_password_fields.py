@@ -123,10 +123,28 @@ def test_type_at_pause_types_nothing_of_its_own_into_a_password_field(desktop, m
 def test_saying_only_press_enter_still_presses_enter_there(desktop, monkeypatch):
     """Type the password by hand, then say "press enter" to log in."""
     pressed = []
-    monkeypatch.setattr(app, "_press_enter_key", lambda why: pressed.append(why) or True)
+    monkeypatch.setattr(app, "_press_key", lambda key, why: pressed.append(why) or True)
     desktop["password"] = True
     dictate(monkeypatch, said="press enter")
     assert pressed and desktop["typed"] == [] and desktop["labels"] == []
+
+
+def test_saying_only_press_tab_still_presses_tab_there(desktop, monkeypatch):
+    """Move from the password box to the next one by voice."""
+    pressed = []
+    monkeypatch.setattr(app, "_press_key", lambda key, why: pressed.append(key) or True)
+    desktop["password"] = True
+    dictate(monkeypatch, said="Press tab.")
+    assert pressed == ["TAB"] and desktop["typed"] == [] and desktop["labels"] == []
+
+
+def test_words_before_press_tab_are_not_typed_there(desktop, monkeypatch):
+    pressed = []
+    monkeypatch.setattr(app, "_press_key", lambda key, why: pressed.append(key) or True)
+    desktop["password"] = True
+    dictate(monkeypatch, said="swordfish press tab")
+    assert pressed == [] and desktop["typed"] == [] and desktop["history"] == []
+    assert desktop["labels"] == [app.PASSWORD_FIELD_LABEL]
 
 
 def test_paste_last_dictation_types_nothing_in_a_password_field(desktop, monkeypatch):
@@ -192,7 +210,7 @@ def test_sending_automatically_doesnt_press_enter_in_a_password_field(desktop, m
     """Dictate a username, tab into the password box during the wait: Enter
     there would submit the login form."""
     pressed = []
-    monkeypatch.setattr(app, "_press_enter_key", lambda why: pressed.append(why) or True)
+    monkeypatch.setattr(app, "_press_key", lambda key, why: pressed.append(why) or True)
     pending = {"window": None, "why": "sending automatically", "timer": None}
     monkeypatch.setattr(app.state, "pending_send", pending)
     desktop["password"] = True

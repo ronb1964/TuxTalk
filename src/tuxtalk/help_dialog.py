@@ -617,7 +617,7 @@ then it has what you said in a password box too, though nothing was typed there.
 TuxTalk doesn't type into a password box. Hold <b>{hold}</b> and talk there, let go: you
 hear the low beep, "TuxTalk doesn't type into password fields" shows over the window,
 and nothing is typed or kept in Recent Dictations. Type passwords on the keyboard.
-Saying only <b>press enter</b> there still presses Enter, to log in after you type it.
+Saying only <b>press enter</b> or <b>press tab</b> there still works, to log in or move on.
   • It usually knows a password box in GTK apps (most GNOME, Cinnamon and Xfce apps).
   • In KDE apps and Firefox only while accessibility is on (a screen reader turns it on).
   • In Chrome, Brave and apps built on them (Discord, Slack, VS Code) only if
@@ -669,11 +669,11 @@ is in the TuxTalk menu → Voice Commands....
 <b>Formatting:</b>
 • Say <b>new line</b>, <b>newline</b>, <b>return</b>, or <b>line break</b> for a line break
 • Say <b>new paragraph</b> or <b>paragraph break</b> for a double line break
-• Say <b>press tab</b> for a tab (indent, or the next box); <b>tab</b> alone is the word
+• Say <b>press tab</b> for a tab; <b>tab</b> alone is the word. At the end of a dictation it
+  presses the Tab key, so in a form you go to the next box
 • Say <b>soft break</b> or <b>soft line</b> for three spaces
-• End with <b>press enter</b> or <b>hit enter</b> to type the dictation and then press
-  Enter, which sends a chat message or runs a terminal command (the Chatting tab
-  has more). Say <b>literal press enter</b> to type the words.
+• End with <b>press enter</b> or <b>hit enter</b> to type the dictation and press Enter: it
+  sends a chat message or runs a command. <b>literal press enter</b> types the words.
 
 <b>Literal Words:</b>
 To output the word instead of executing the command, say <b>literal</b> or <b>the word</b> before it:

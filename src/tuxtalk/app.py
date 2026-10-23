@@ -115,7 +115,7 @@ _voice_navigation = False
 # Plain text in terminals and code editors (app_kind, plain_for_app).
 _adapt_to_app = True
 # Press Enter after every dictation, as if each ended with "press enter"
-# (enter_command.py).
+# (key_commands.py).
 _press_enter_after = False
 _press_enter_delay = 2.0    # ...after this many seconds (_send_automatically)
 _hold_key_name = "F8"       # named in the "Sending in 2 s" label
@@ -334,7 +334,7 @@ class RecordingState:
     # the desktop (see _hide_modifier_hotkey), or None.
     hidden_key: int = None
     # The last Enter TuxTalk pressed: {"at", "automatic"}, or None
-    # (_press_enter_key). "edit that" just after it explains itself.
+    # (_press_key). "edit that" just after it explains itself.
     sent: object = None
     # A phrase of this recording has been typed, so a correction said after the
     # next pause ("no wait, four") may change it (app._correct_across_pause).
@@ -1813,19 +1813,22 @@ def _typed_breaks_for(text: str, window_class) -> str:
     return joined
 
 
-def _press_enter_key(why: str) -> bool:
-    """A real Enter after a dictation (enter_command.py): it sends a chat
-    message, runs a terminal command or submits a form, which is the point.
-    Undo can't take back a sent message, so it forgets the dictation."""
+def _press_key(key: str, why: str) -> bool:
+    """A real "ENTER" or "TAB" after a dictation (key_commands.py). Enter
+    sends a chat message, runs a terminal command or submits a form, which is
+    the point; Tab moves on to a form's next box, even in Claude Desktop,
+    whose typed tabs become spaces. Undo can't reach what's behind either, so
+    it forgets the dictation."""
     time.sleep(0.05)   # let the app take in the typed text first
-    ok = _output_backend().press_keys([((), "ENTER")])
+    ok = _output_backend().press_keys([((), key)])
     state.last_inserted_text = ""
-    # "edit that" right after this says why there's nothing to edit.
-    state.sent = {"at": time.time(), "automatic": why.startswith("Send each")}
+    if key == "ENTER":
+        # "edit that" right after this says why there's nothing to edit.
+        state.sent = {"at": time.time(), "automatic": why.startswith("Send each")}
     if ok:
-        logger.info(f"Pressed Enter ({why})")
+        logger.info(f"Pressed {key.title()} ({why})")
     else:
-        logger.warning(f"Couldn't press Enter ({why})")
+        logger.warning(f"Couldn't press {key.title()} ({why})")
     return ok
 
 
@@ -1846,7 +1849,7 @@ def _send_automatically(why: str, space: str = "", injection_mode: str = "type")
     types it, or what's said next sticks to the last word ("delay.All")."""
     delay = _press_enter_delay
     if delay <= 0:
-        _press_enter_key(why)
+        _press_key("ENTER", why)
         return
     pending = {"window": state.last_inserted_window, "why": why,
                "space": space, "mode": injection_mode}
@@ -1931,7 +1934,7 @@ def _send_when_due(pending: dict) -> None:
         screen_message.show_over_active_window(PASSWORD_FIELD_NOT_SENT, warning=False,
                                                tag=SEND_LABEL_TAG, low=True)
         return
-    _press_enter_key(pending["why"])
+    _press_key("ENTER", pending["why"])
 
 
 def _hold_pending_send(announce: bool) -> bool:
@@ -2561,7 +2564,7 @@ def _send_backspaces(count: int) -> bool:
 # Key names voice_navigation uses -> Linux key codes (the letter A is looked up
 # on the active layout, as Ctrl shortcuts are matched by letter).
 _NAV_KEYCODES = {"CTRL": 29, "SHIFT": 42, "LEFT": 105, "RIGHT": 106, "UP": 103,
-                 "DOWN": 108, "HOME": 102, "END": 107, "ENTER": 28}
+                 "DOWN": 108, "HOME": 102, "END": 107, "ENTER": 28, "TAB": 15}
 
 
 def _nav_keycode(name: str) -> int:
@@ -3704,9 +3707,9 @@ def _resolve_boundary(audio_f32, language, injection_mode, raw="", auto_period=T
             mark = found
     except Exception as e:
         logger.warning(f"Couldn't hear the chunk boundary in context: {e}")
-    from .enter_command import split_press_enter
+    from .key_commands import split_key_command
     if (raw and len(raw.split()) <= ENTER_IN_CONTEXT_MAX_WORDS
-            and not split_press_enter(raw)[1] and split_press_enter(joint)[1]):
+            and not split_key_command(raw)[1] and split_key_command(joint)[1] == "ENTER"):
         logger.info(f"Heard \"press enter\" in context ({_loggable(raw)} alone)")
         raw = "press enter"
         # The sentence ends here, as it would after "press enter" said
@@ -3718,9 +3721,9 @@ def _resolve_boundary(audio_f32, language, injection_mode, raw="", auto_period=T
     if joint and len(audio_f32) <= SHORT_CHUNK_S * SAMPLE_RATE:
         from .chunking import words_in_context
         heard = words_in_context(pending["raw"], joint) or ""
-        # Whether to press Enter stays the rule above's call.
+        # Whether to press a key stays the rule above's call.
         if (0 < _word_count(heard) < _word_count(raw)
-                and split_press_enter(heard)[1] == split_press_enter(raw)[1]):
+                and split_key_command(heard)[1] == split_key_command(raw)[1]):
             logger.info(f"Short phrase: {_loggable(raw)} alone, {_loggable(heard)} "
                         "in context; typing what the context heard")
             raw = heard
@@ -3864,29 +3867,31 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             _beep(beeps_on, *CANCEL_BEEP)
             return
 
-        from .enter_command import split_press_enter
-        rest, said_enter = split_press_enter(raw)
-        enter_only = said_enter and not rest.strip()
+        from .key_commands import split_key_command, auto_send
+        rest, said = split_key_command(raw)
+        key_only = not rest.strip() and said
         # A password field gets nothing: not the words, nor what Type at
         # pause would type first (the mark held back from the last phrase, a
         # held "No wait.", backspaces for a correction), and the local AI
-        # never sees them. Only "press enter" on its own still presses
-        # Enter: people type the password by hand, then say it to log in.
+        # never sees them. Only "press enter" or "press tab" on its own still
+        # presses the key: people type the password by hand, then say it to
+        # log in, or move between the boxes.
         if _focused_is_password():
             state.pending_boundary, state.held_cue = None, ""
-            if not enter_only:
+            if not key_only:
                 _password_field_refused(beeps_on)
                 return
 
         # Chunked dictation: the chunk before this one held back its final
         # mark; decide it now, before a command acts on what was typed.
+        # Only "press tab" after the pause leaves the box without one.
         if chunk_role is not None and state.pending_boundary is not None:
-            if enter_only:
+            if key_only == "ENTER":
                 # Only "press enter" after the pause: the sentence before it
                 # ends here (its held-back mark, or the auto-period), with no
                 # space to go out in the sent message.
                 _flush_boundary(auto_period, False, injection_mode)
-            else:
+            elif not key_only:
                 raw = _resolve_boundary(audio_f32, language, injection_mode, raw, auto_period)
 
         # Stage 2: Check for undo commands ("undo that", "undo word", etc.)
@@ -3908,29 +3913,20 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             return
 
         # "... press enter": type the words, then a real Enter that sends the
-        # message or runs the command (enter_command.py). Or every time, when
-        # "Send each dictation automatically" is on.
-        from .enter_command import split_press_enter, ends_unfinished
-        raw, said_enter = split_press_enter(raw)
-        # "Send each dictation automatically" waits for the end of the
+        # message or runs the command; "... press tab" moves on to the next
+        # box (key_commands.py). Or Enter every time, when "Send each
+        # dictation automatically" is on, but only at the end of the
         # recording, not each phrase of Type at pause.
-        press_enter = said_enter or (_press_enter_after and chunk_role != "middle")
-        # Before the text-editor rule below turns the send off, so a text
-        # editor gets no period after the "and" either (Ron, 2026-10-20).
-        cut_off = ends_unfinished(raw) if press_enter and not said_enter else ""
-        if press_enter and not said_enter and is_document_window(_query_focused_window_class()):
-            logger.info("Not sending: Enter only starts a new line in this app")
-            press_enter = False
-        if press_enter and cut_off:
-            # The key came up mid-sentence: type it, but don't send half
-            # a message. Saying "press enter" always sends.
-            logger.info(f'Held back the Enter: the dictation ended on "{cut_off}"')
-            press_enter = False
-        if said_enter and not raw.strip():
-            # Only "press enter" was said.
+        raw, said = split_key_command(raw)
+        press, cut_off = said, ""
+        if not said and _press_enter_after and chunk_role != "middle":
+            sending, cut_off = auto_send(raw, is_document_window(_query_focused_window_class()))
+            press = "ENTER" if sending else ""
+        if said and not raw.strip():
+            # Only "press enter" or "press tab" was said.
             if chunk_role != "middle":
                 _beep(beeps_on, *READY_BEEP)
-            _press_enter_key("said \"press enter\"")
+            _press_key(said, f'said "press {said.lower()}"')
             if chunk_role is not None:
                 _chunk_message_sent()
             return
@@ -3943,8 +3939,10 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # of its own; the last chunk (or _flush_boundary) ends the sentence.
         # "press enter" at the end of one does end it: the message is sent.
         # Cut off on "and": the sentence isn't over either, so no period, and
-        # what's said next carries it on in lowercase.
-        chunk_period = auto_period and (chunk_role != "middle" or said_enter) and not cut_off
+        # what's said next carries it on in lowercase. A form box left with
+        # "press tab" gets none: "John", not "John.".
+        chunk_period = (auto_period and (chunk_role != "middle" or said == "ENTER")
+                        and not cut_off and said != "TAB")
         # A correction said after a pause ("meet at three" ... "no wait,
         # four") goes to the AI together with the phrase it corrects.
         across = _corrects_across_pause(raw, chunk_role)
@@ -3967,11 +3965,12 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             state.question_open = False
             text = _carry_question(text)
         held_mark = None
-        if chunk_role == "middle" and _chunk_context_marks and not said_enter:
+        if chunk_role == "middle" and _chunk_context_marks and not said:
             text, held_mark = _hold_back_boundary(text, raw)
         space_left_off = ""
-        if press_enter:
-            # No auto-space before Enter: it would end up in the sent message.
+        if press:
+            # No auto-space before Enter or Tab: it would end up in the sent
+            # message, or at the end of the box.
             # Kept for a send that's held, which types it after all.
             core = text.rstrip(" ")
             space_left_off, text = text[len(core):], core
@@ -4008,20 +4007,20 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             _remember_shown(state.last_inserted_text, chunked, outcome == "ok")
             if outcome in _UNDELIVERED_NOTICES:
                 _report_undelivered(outcome, beeps_on)
-            elif press_enter:
-                if said_enter:
-                    _press_enter_key("said \"press enter\"")
+            elif press:
+                if said:
+                    _press_key(said, f'said "press {said.lower()}"')
                 else:
                     _send_automatically("Send each dictation automatically is on",
                                         space_left_off, injection_mode)
                 if chunk_role is not None:
                     _chunk_message_sent()
             if chunk_role == "middle" and not _chunk_context_marks and outcome == "ok" \
-                    and not press_enter:
+                    and not press:
                 # Without the context pass the engine's own mark decides: after
                 # a comma or none, the next chunk carries on lowercase.
                 state.continue_mid_sentence = not text.rstrip().endswith(_SENTENCE_ENDS)
-            if chunk_role is not None and outcome == "ok" and not press_enter:
+            if chunk_role is not None and outcome == "ok" and not press:
                 state.chunk_typed = True
             if held_mark is not None and outcome == "ok":
                 # Only the end of the phrase is kept: the engine hears it with
