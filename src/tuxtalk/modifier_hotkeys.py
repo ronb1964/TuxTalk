@@ -23,13 +23,15 @@ _noted = ([], frozenset())
 # The keys a grab hides from the desktop now; set by note_hidden().
 _hidden = frozenset()
 
-# How long typing waits for the key to come up. Pressing it again to dictate
-# the next sentence while the last one is still being typed holds typing up
-# for as long as that dictation, so this is longer than nearly any; a key
-# that reads as down for longer is stuck (a KVM switch, a remapper's
-# keyboard that never sent the release). Typing then stops, and the
-# dictation stays in Recent Dictations: typing on would turn the rest into
-# Ctrl shortcuts wherever the desktop sees the key down too.
+# How long typing waits for the key to come up. Pressed again while the last
+# dictation is still being typed, it holds the rest up for as long as it's
+# held, as if dictating the next sentence; that sentence isn't recorded,
+# though: the hotkey loop is the thread typing, and reads the press only
+# once typing is done (CODE_HEALTH.md). So this is longer than nearly any
+# dictation; a key that reads as down for longer is stuck (a KVM switch, a
+# remapper's keyboard that never sent the release). Typing then stops, and
+# the dictation stays in Recent Dictations: typing on would turn the rest
+# into Ctrl shortcuts wherever the desktop sees the key down too.
 HELD_LIMIT_S = 30.0
 # Keys found stuck: the next keys give up at once while they stay down,
 # rather than each fallback (paste, then typing) waiting all over again.
