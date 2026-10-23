@@ -540,6 +540,15 @@ def tray_menu(monkeypatch, private_settings):
 # user would notice; the fakes stand in for the parts that would reach the
 # desktop, the bus or the disk.
 
+def _main_loop_step(done):
+    """DBusGMainLoop as a step: only set_as_default=True gives the shared
+    connections opened later a main loop, so only that counts."""
+    def main_loop(set_as_default=False):
+        done.append("sets the D-Bus main loop" if set_as_default
+                    else "makes a D-Bus main loop nothing uses")
+    return main_loop
+
+
 @pytest.fixture
 def prefs_main(monkeypatch, private_settings):
     """Preferences' main(): its window and the tab asked for on the command line."""
@@ -563,8 +572,7 @@ def prefs_main(monkeypatch, private_settings):
         # Shared with the other programs' main(), so patched for this run.
         monkeypatch.setattr(desktop_identity, "apply", lambda: done.append("names itself"))
         monkeypatch.setattr(ui_style, "prepare_windows", lambda: done.append("prepares windows"))
-        monkeypatch.setattr(dbus.mainloop.glib, "DBusGMainLoop",
-                            lambda **k: done.append("sets the D-Bus main loop"))
+        monkeypatch.setattr(dbus.mainloop.glib, "DBusGMainLoop", _main_loop_step(done))
         monkeypatch.setattr(prefs.GLib, "unix_signal_add",
                             lambda *a: done.append("handles bring-to-front"))
         monkeypatch.setattr(prefs.Gtk, "main", lambda: done.append("runs"))
@@ -643,7 +651,7 @@ def tray_main(monkeypatch, private_settings):
         # Shared with the other programs' main(), so patched for this run.
         monkeypatch.setattr(desktop_identity, "apply", step("names itself"))
         monkeypatch.setattr(ui_style, "prepare_windows", step("prepares windows"))
-        monkeypatch.setattr(dbus.mainloop.glib, "DBusGMainLoop", step("sets the D-Bus main loop"))
+        monkeypatch.setattr(dbus.mainloop.glib, "DBusGMainLoop", _main_loop_step(done))
         monkeypatch.setattr(tray.GLib, "timeout_add",
                             lambda ms, fn, *args: done.timers.append((ms, fn, args)))
         monkeypatch.setattr(tray.Gtk, "main", step("runs"))

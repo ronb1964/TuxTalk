@@ -81,3 +81,11 @@ def test_extension_version_is_bumped_whenever_extension_js_changes():
     assert version > released, (
         f"The extension changed since {tag} but its version is still {version}. "
         f"Bump it, or GNOME users will never be offered the update.")
+
+
+def test_the_tray_sets_the_dbus_main_loop_before_it_starts(tray_main):
+    """A shared D-Bus connection opened without the GLib main loop can't
+    export the tray's D-Bus service later, and the GNOME extension and the
+    dictation service would find no tray."""
+    started = tray_main()
+    assert started.index("sets the D-Bus main loop") < started.index("makes the tray")
