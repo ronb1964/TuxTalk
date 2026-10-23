@@ -126,6 +126,8 @@ class KeyPlanner:
     """The keys that type text on one layout (layout + variant, e.g. "ch", "")."""
 
     def __init__(self, layout, variant=""):
+        """Load the layout's keymap from libxkbcommon and index its keys;
+        ValueError for a layout libxkbcommon doesn't know."""
         x = _lib()
         self.layout, self.variant = layout, variant or ""
         self.ctx = x.xkb_context_new(0)
@@ -166,11 +168,8 @@ class KeyPlanner:
                         continue        # needs Caps Lock, Level5 or the like: skip
                     if sym == _ISO_LEVEL3_SHIFT and mask == 0:
                         altgr_keys.append(kc - _EVDEV_OFFSET)
-                    entry = (kc - _EVDEV_OFFSET, bool(mask & shift_bit), bool(mask & altgr_bit))
-                    if not entry[2] and entry[0] < 0x100:
-                        self._without_altgr.add(sym)
-                    if sym not in self._keys or _cost(entry) < _cost(self._keys[sym]):
-                        self._keys[sym] = entry
+                    self._add(sym, (kc - _EVDEV_OFFSET, bool(mask & shift_bit),
+                                    bool(mask & altgr_bit)))
         # A character can have two keysyms (€ is 0x20ac and 0x13a4): Ubuntu
         # 22.04's libxkbcommon names € 0x13a4 while the keymap has 0x20ac, and
         # the German layout's … is a keysym no character lookup names. What a
@@ -185,6 +184,15 @@ class KeyPlanner:
         # virtual key to it, which works in the keymap but not on every compositor.
         if altgr_keys:
             self._altgr = _KEY_RIGHTALT if _KEY_RIGHTALT in altgr_keys else altgr_keys[0]
+
+    def _add(self, sym, entry):
+        """Note that key *entry* types keysym *sym*: kept when it's the
+        cheapest key for it so far (_cost), and counted for altgr_only when
+        it needs no AltGr."""
+        if not entry[2] and entry[0] < 0x100:
+            self._without_altgr.add(sym)
+        if sym not in self._keys or _cost(entry) < _cost(self._keys[sym]):
+            self._keys[sym] = entry
 
     def _press(self, entry, tokens):
         """Add the key events for *entry* to *tokens*; False if AltGr is needed but missing."""
