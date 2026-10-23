@@ -596,9 +596,13 @@ setup's Fix Typing gives it that.
 To run the tests (swap in your Python version, `python3 --version` shows it):
 
 ```bash
-PYTHONPATH=./src:/usr/lib64/python3.14/site-packages:/usr/lib/python3.14/site-packages \
-    .venv/bin/python -m pytest tests -q
+xvfb-run -a dbus-run-session -- env \
+    PYTHONPATH=./src:/usr/lib64/python3.14/site-packages:/usr/lib/python3.14/site-packages \
+    .venv/bin/python -m pytest tests -q -p no:cacheprovider
 ```
+
+They open windows, so they run on a hidden screen with a session bus of their
+own, and refuse to start without one.
 
 More in [DEV_SETUP.md](DEV_SETUP.md).
 
