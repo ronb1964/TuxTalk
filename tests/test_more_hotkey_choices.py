@@ -2,10 +2,10 @@
 
 Many laptops and compact keyboards send F1-F12 only with Fn held
 (Discussion #18). These pin what someone picking one of the other keys
-notices: the key starts and stops dictation, Right Ctrl and Right Alt never
-leave TuxTalk typing under a held modifier, Right Alt never opens an app's
-menu bar, the desktops hold Scroll Lock back from the app, and Preferences
-says what each key gives up.
+notices: the key starts and stops dictation, Right Ctrl and Right Alt are
+hidden from the desktop before TuxTalk types anything, Right Alt never
+opens an app's menu bar, the desktops hold Scroll Lock back from the app,
+and Preferences says what each key gives up.
 """
 import pytest
 from evdev import ecodes
@@ -55,8 +55,10 @@ def service(monkeypatch):
     monkeypatch.setattr(app, "stop_recording", stop)
     app.state.is_recording = False
     app.state.pending_send = app.state.owed_space = None
+    app.state.hidden_key = None
     yield done
     app.state.is_recording = False
+    app.state.hidden_key = None
 
 
 def key(code, value, held, hold=F8, toggle=None):
@@ -103,38 +105,121 @@ def test_right_alt_presses_ctrl_before_hiding_so_no_menu_bar_opens(service):
     assert service[:3] == [("keys", [(LCTRL, 1), (LCTRL, 0)]), "grab", "start"]
 
 
+def test_right_alt_with_another_modifier_held_presses_no_ctrl(service):
+    """Left Ctrl+Right Alt isn't dictating, and letting go of the guard's
+    Ctrl could let go of the user's."""
+    held = set()
+    key(LCTRL, 1, held, hold=RALT)
+    key(RALT, 1, held, hold=RALT)
+    assert not [d for d in service if d[0] == "keys"]
+
+
 def test_right_ctrl_needs_no_ctrl_press(service):
     key(RCTRL, 1, set(), hold=RCTRL)
     assert not [d for d in service if d[0] == "keys"]
 
 
-def test_a_right_ctrl_toggle_counts_when_its_let_go(service):
-    """What the tap stops is typed right after: under a held Ctrl the letters
-    would be shortcuts (Ctrl+W closes the tab)."""
+def test_a_right_ctrl_toggle_is_hidden_before_anything_is_typed(service):
+    """The tap that stops a dictation types it at once: under a Ctrl the
+    desktop still saw held, the letters would be shortcuts (Ctrl+W closes
+    the tab)."""
     held = set()
     key(RCTRL, 1, held, toggle=RCTRL)
-    assert service == []
     key(RCTRL, 0, held, toggle=RCTRL)
-    assert service == ["start"]
+    assert service == ["grab", "start", "let go"]
+    service.clear()
     key(RCTRL, 1, held, toggle=RCTRL)
-    assert service == ["start"]
+    assert service.index("grab") < service.index("stop")
     key(RCTRL, 0, held, toggle=RCTRL)
-    assert service[-1] == "stop"
+    assert service[-1] == "let go"
 
 
-def test_a_right_alt_toggle_also_presses_ctrl(service):
+def test_a_right_ctrl_hold_key_pressed_during_hands_free_is_hidden(service):
+    """Hands-free types each phrase as it goes; a Right Ctrl held then
+    would turn it into shortcuts."""
+    app.state.is_recording = True
+    held = set()
+    key(RCTRL, 1, held, hold=RCTRL, toggle=ecodes.KEY_F9)
+    assert service == ["grab"]
+    key(RCTRL, 0, held, hold=RCTRL, toggle=ecodes.KEY_F9)
+    assert service == ["grab", "let go", "let go", "stop"]
+
+
+def test_a_right_ctrl_toggle_holds_a_send_counting_down_when_pressed(service, monkeypatch):
+    """Held on its press, like F9: the Enter can't come while Ctrl is down."""
+    monkeypatch.setattr(app, "_hold_pending_send", lambda announce: service.append("held") or True)
+    held = set()
+    key(RCTRL, 1, held, toggle=RCTRL)
+    assert service == ["grab", "held"]
+    key(RCTRL, 0, held, toggle=RCTRL)
+    assert "start" not in service
+
+
+def test_a_right_alt_toggle_presses_ctrl_then_hides(service):
     key(RALT, 1, set(), toggle=RALT)
-    assert service == [("keys", [(LCTRL, 1), (LCTRL, 0)])]
+    assert service[:3] == [("keys", [(LCTRL, 1), (LCTRL, 0)]), "grab", "start"]
 
 
-def test_the_hotkey_test_never_starts_a_dictation_on_a_toggle_release(service, monkeypatch):
+def test_the_hotkey_test_sees_a_right_ctrl_toggle_and_nothing_else_happens(service, monkeypatch):
     reported = []
     monkeypatch.setattr(app, "_hotkey_test_active", lambda: True)
     monkeypatch.setattr(app, "_notify_tray_hotkey_pressed", reported.append)
     held = set()
     key(RCTRL, 1, held, toggle=RCTRL)
     key(RCTRL, 0, held, toggle=RCTRL)
-    assert reported == ["toggle"] and "start" not in service
+    assert reported == ["toggle"] and service == []
+
+
+class Keyboard:
+    """A keyboard whose keys are down for the first *polls* looks."""
+
+    def __init__(self, down, polls):
+        self.down, self.polls, self.looks = set(down), polls, 0
+
+    def capabilities(self, verbose=False):
+        return {ecodes.EV_KEY: [ecodes.KEY_A, ecodes.KEY_M, ecodes.KEY_Z]}
+
+    def active_keys(self):
+        self.looks += 1
+        return sorted(self.down) if self.looks <= self.polls else []
+
+
+@pytest.fixture
+def typing(monkeypatch):
+    sent = []
+    monkeypatch.setattr(app.virtual_keyboard, "send",
+                        lambda events, delay: sent.append(list(events)) or True)
+    monkeypatch.setattr(app, "_modifier_hotkeys", ([], frozenset()))
+    return sent
+
+
+def test_nothing_is_typed_until_a_right_ctrl_dictation_key_is_let_go(typing):
+    """Typing on the hotkey loop's thread, TuxTalk can't hide a Right Ctrl
+    pressed meanwhile, so it waits: under a held Ctrl, letters are shortcuts."""
+    keyboard = Keyboard({RCTRL}, polls=3)
+    app._note_modifier_hotkeys([keyboard], RCTRL, ecodes.KEY_F9)
+    assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
+    assert keyboard.looks == 4 and typing == [[(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)]]
+
+
+def test_a_right_ctrl_held_on_and_on_gets_nothing_typed(typing, monkeypatch):
+    monkeypatch.setattr(app, "HOTKEY_UP_WAIT_S", 0.05)
+    app._note_modifier_hotkeys([Keyboard({RCTRL}, polls=10**6)], RCTRL, None)
+    assert not app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
+    assert typing == []
+
+
+def test_f_keys_never_hold_typing_up(typing):
+    keyboard = Keyboard({F8}, polls=10**6)
+    app._note_modifier_hotkeys([keyboard], F8, ecodes.KEY_F9)
+    assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
+    assert keyboard.looks == 0
+
+
+def test_the_right_alt_guard_goes_while_right_alt_is_held(typing):
+    app._note_modifier_hotkeys([Keyboard({RALT}, polls=10**6)], RALT, None)
+    app._guard_alt_tap()
+    assert typing == [[(LCTRL, 1), (LCTRL, 0)]]
 
 
 # --- the desktops hold Scroll Lock back from the focused app ------------------------

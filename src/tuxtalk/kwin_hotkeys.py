@@ -69,6 +69,7 @@ _FKEYS = {f"F{i}" for i in range(1, 13)}
 # case) -> Qt's name and code. Right Ctrl and Right Alt aren't among them: a
 # modifier on its own can't be a shortcut, and it types nothing into the app.
 _QT_KEYS = {"SCROLL LOCK": ("ScrollLock", 0x01000026)}
+_QT_KEY_CODES = dict(_QT_KEYS.values())
 # Qt's names for those keys where the X keysym (GNOME, COSMIC) differs.
 QT_KEYSYMS = {"ScrollLock": "Scroll_Lock"}
 
@@ -109,11 +110,10 @@ def qt_key_code(sequence):
     if sequence is None:
         return None
     *mods, key = sequence.split("+")
-    qt_codes = dict(_QT_KEYS.values())
     if key in _FKEYS:
         code = _QT_F1 + int(key[1:]) - 1
     else:
-        code = qt_codes.get(key) or ord(key)
+        code = _QT_KEY_CODES.get(key) or ord(key)
     for mod in mods:
         code |= _QT_MODIFIER_CODES[mod]
     return code

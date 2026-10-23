@@ -299,10 +299,14 @@ def is_older(running):
     return running is not None and _version(running) < _version(VERSION)
 
 
-def hears_right_ctrl_and_alt(running):
+# The dictation keys helpers before 1.5 don't report.
+RIGHT_MODIFIER_KEYS = ("Right Ctrl", "Right Alt")
+
+
+def hears_key(running, key):
     """Whether the running helper (version *running*, None when there is
-    none) reports Right Ctrl and Right Alt as dictation keys: 1.5 and newer."""
-    return running is None or _version(running) >= (1, 5)
+    none) reports dictation key *key* ("F8", "Right Ctrl")."""
+    return running is None or key not in RIGHT_MODIFIER_KEYS or _version(running) >= (1, 5)
 
 
 def _run_as_root(script, what):

@@ -916,3 +916,17 @@ def test_a_held_right_ctrl_hotkey_is_hidden_like_f8(setup):
     say(sock, "UNHIDE")
     assert heard(sock) == ["UP 97", "OK UNHIDE"]
     assert helper.hide is None
+
+
+def test_a_right_ctrl_held_with_another_hotkey_comes_up_once(setup):
+    """Right Ctrl is the reported key and F9's modifier at once: one UP."""
+    _helper, kb, connect, say, heard, _seat = setup
+    sock = _ready(connect, say, heard, "97 67")
+    kb.press(RCTRL)
+    kb.press(F9)
+    kb.press(F9, 0)
+    kb.press(RCTRL, 0)
+    say(sock, "WATCH 66")                # back to F8
+    kb.press(RCTRL)
+    kb.press(RCTRL, 0)
+    assert heard(sock) == ["DOWN 97 -", "DOWN 67 97", "UP 67", "UP 97", "OK WATCH"]

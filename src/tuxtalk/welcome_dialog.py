@@ -2188,6 +2188,14 @@ def show_hotkey_test_dialog():
     capture_instruction.set_no_show_all(True)
     content.pack_start(capture_instruction, False, False, 0)
 
+    def service_hears(keyname):
+        """Whether the dictation service will hear *keyname*: it can read the
+        keyboards, and through a hotkey helper too old for Right Ctrl and
+        Right Alt (secure_input.hears_key) it won't hear those."""
+        from . import secure_input
+        version = next((k.helper_version for k in keyboards if hasattr(k, "helper_version")), None)
+        return bool(keyboards) and secure_input.hears_key(version, keyname)
+
     def update_ui_for_key(keyname, is_capture_mode, action="press"):
         """Update UI when a key is pressed or released.
         action='press'  → no UI change (phantoms only generate presses — ignore them)
@@ -2222,11 +2230,11 @@ def show_hotkey_test_dialog():
             if capturing_key[0] == "hold":
                 current_hold_key[0] = keyname
                 hold_label.set_markup(f'<b>Push-to-talk:</b> {keyname}')
-                hold_status.set_markup(_key_seen_markup(bool(keyboards)))
+                hold_status.set_markup(_key_seen_markup(service_hears(keyname)))
             elif capturing_key[0] == "toggle":
                 current_toggle_key[0] = keyname
                 toggle_label.set_markup(f'<b>Toggle mode:</b> {keyname}')
-                toggle_status.set_markup(_key_seen_markup(bool(keyboards)))
+                toggle_status.set_markup(_key_seen_markup(service_hears(keyname)))
 
             capturing_key[0] = None
             capture_instruction.hide()
@@ -2239,9 +2247,9 @@ def show_hotkey_test_dialog():
             # release → green "✓ Working!" (requires a physical press+release, phantom-proof)
             if action == "release":
                 if keyname == current_hold_key[0]:
-                    hold_status.set_markup(_key_seen_markup(bool(keyboards)))
+                    hold_status.set_markup(_key_seen_markup(service_hears(keyname)))
                 elif keyname == current_toggle_key[0]:
-                    toggle_status.set_markup(_key_seen_markup(bool(keyboards)))
+                    toggle_status.set_markup(_key_seen_markup(service_hears(keyname)))
 
         return False  # Don't repeat
 

@@ -522,19 +522,15 @@ def hotkey_label(key, altgr_types=None):
 WARNING_AMBER = "#e6aa3c"
 
 
-# The dictation keys an older hotkey helper (before 1.5) doesn't report.
-NEW_HELPER_KEYS = ("Right Ctrl", "Right Alt")
-
-
-def hotkey_change_message(cfg, changed, refused, apps=None, old_helper=False):
+def hotkey_change_message(cfg, changed, refused, apps=None, unheard=()):
     """(title, text, offer the test, a key clashes) for the question after OK or
     Apply, or None.
 
     *changed*: the settings keys changed; *refused*: keys KDE already uses
     (kwin_hotkeys.refused_since), None when unknown; *apps*: {key: app} for
-    those that open an app (kwin_hotkeys.app_shortcuts_since); *old_helper*:
-    the running hotkey helper doesn't report NEW_HELPER_KEYS yet. A changed
-    key is offered the same test first run gives it.
+    those that open an app (kwin_hotkeys.app_shortcuts_since); *unheard*: new
+    keys the running hotkey helper is too old to report. A changed key is
+    offered the same test first run gives it.
 
     A key KDE also uses comes first, in the title as well: someone who reads
     only the top of the window must still learn that the key does two things.
@@ -561,9 +557,7 @@ def hotkey_change_message(cfg, changed, refused, apps=None, old_helper=False):
                 if key in changed and cfg.get(key)]
     offer_test = bool(new_keys)
     lines += new_keys
-    unheard = [cfg.get(key) for key, _what in roles
-               if key in changed and cfg.get(key) in NEW_HELPER_KEYS]
-    if old_helper and unheard:
+    if unheard:
         lines.append(f"{' and '.join(unheard)} need{'s' if len(unheard) == 1 else ''} "
                      "the hotkey helper this TuxTalk brings. "
                      f"Update it first: Advanced tab, Show system check, {UPDATE_HELPER_LABEL}.")
@@ -6867,13 +6861,15 @@ class PreferencesWindow:
             return False
         from .kwin_hotkeys import app_shortcuts_since
         refused = self._kde_refused(since)
-        old_helper = False
-        if any(self.config.get(k) in NEW_HELPER_KEYS for k in HOTKEY_KEYS if k in changed):
-            from . import secure_input
-            old_helper = not secure_input.hears_right_ctrl_and_alt(secure_input.running_version())
+        from . import secure_input
+        new_keys = [self.config.get(k) for k in HOTKEY_KEYS if k in changed]
+        unheard = []
+        if set(new_keys) & set(secure_input.RIGHT_MODIFIER_KEYS):
+            running = secure_input.running_version()
+            unheard = [k for k in new_keys if not secure_input.hears_key(running, k)]
         message = hotkey_change_message(self.config, set(changed), refused,
                                         app_shortcuts_since(since) if refused else None,
-                                        old_helper)
+                                        unheard)
         if message is None:
             return False
         title, text, offer_test, clash = message

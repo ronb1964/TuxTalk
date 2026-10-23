@@ -20,8 +20,9 @@ as typing:
 
 * F1-F24, Esc, Pause and Scroll Lock, which never type anything;
 * Right Ctrl and Right Alt on their own, for keyboards whose F-keys need Fn.
-  Neither types a character by itself. Where Right Alt is AltGr, a client
-  learns that a character of its level (€, @) was typed then, never which;
+  Where a layout or an XKB option makes one of them AltGr or Compose, a
+  client learns when it went down, so that a character of that kind (€, @)
+  was typed then, but never which: the keys pressed with it stay unreported;
 * any other key only while two of Ctrl, Alt and Super are held with it,
   having gone down while the desktop could see them, on a real keyboard
   (any of them, as the desktop counts them) or on the same virtual one;
@@ -47,7 +48,7 @@ Everything goes only to the user at the screen: logind's active user on
 seat0, checked by user id (two sessions of the same user count as one), and
 only keyboards of seat0 are read. Letters, numbers, Enter or Shift+letter
 are never reported, so even a hostile program that connects learns nothing
-about what is typed beyond that Right Alt. Each client may ask for four shortcuts at most;
+about what is typed beyond those AltGr presses. Each client may ask for four shortcuts at most;
 TuxTalk asks for two.
 
 Hiding a held hotkey
@@ -615,6 +616,9 @@ class Helper:
             if client.origin.get(code) == keyboard.path:
                 del client.origin[code]
                 client.hideable.discard(code)
+                # A Right Ctrl reported on its own may be owed as another
+                # key's modifier too: this one UP settles both.
+                client.mods_owed.pop(code, None)
                 self.send(client, f"UP {code}")
             elif client.mods_owed.get(code) == keyboard.group and \
                     code not in self.group_mods(keyboard.group) and \

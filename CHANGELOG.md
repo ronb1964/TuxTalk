@@ -12,13 +12,14 @@ before 0.15.0, so older entries use that name.
 - Pick Right Ctrl or Right Alt and it's TuxTalk's key, so it doesn't work as
   Ctrl or Alt any more. Where your keyboard layout uses Right Alt as AltGr
   (German, French and most of Europe) the list says which characters you'd
-  lose, like @ and €. As the tap key they start and stop when you let go, so
-  TuxTalk never types while you're still holding a Ctrl.
+  lose, like @ and €. TuxTalk hides the key from your apps the moment it goes
+  down, so nothing it types while you hold it turns into a Ctrl shortcut.
 - Pause isn't on the list. Most keyboards send it as let go the moment it's
   pressed, so you can't hold it.
 - The hotkey helper is version 1.5, because it has to report Right Ctrl and
   Right Alt on their own now. Preferences offers the update, and you're asked
-  for your password once.
+  for your password once. Until then Right Ctrl and Right Alt do nothing, and
+  Preferences says so when you pick one.
 
 ## [0.18.0] - 2026-10-23
 
