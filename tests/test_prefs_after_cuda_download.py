@@ -64,9 +64,15 @@ def test_the_question_offers_every_whisper_model_with_large_v3_picked(prefs, mon
     shown = {}
 
     def run_and_record(box):
-        area = box.get_content_area()
-        radios = [w for c in area.get_children() if isinstance(c, prefs.Gtk.Box)
-                  for w in c.get_children() if isinstance(w, prefs.Gtk.RadioButton)]
+        # On a short screen the content sits in a scroller (ui_style), so
+        # look through all of it.
+        def widgets(w):
+            yield w
+            if isinstance(w, prefs.Gtk.Container):
+                for child in w.get_children():
+                    yield from widgets(child)
+        radios = [w for w in widgets(box.get_content_area())
+                  if isinstance(w, prefs.Gtk.RadioButton)]
         shown["labels"] = [r.get_label() for r in radios]
         shown["active"] = [r.get_label() for r in radios if r.get_active()]
         return prefs.Gtk.ResponseType.YES
