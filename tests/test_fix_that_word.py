@@ -136,6 +136,7 @@ def test_fix_in_text_leaves_another_window_alone(monkeypatch):
 
 def test_the_checkbox_says_what_it_does(monkeypatch):
     pytest.importorskip("gi")
+    from gtk_text import widgets
     from tuxtalk import fix_word_dialog as fw
     # Built, never shown: a test must not flash windows on the user's screen.
     monkeypatch.setattr(fw.Gtk.Window, "show_all", lambda self: None)
@@ -146,14 +147,8 @@ def test_the_checkbox_says_what_it_does(monkeypatch):
         assert "whole corrected dictation" in tray.copy_check.get_label()
 
         def labels(dialog):
-            out, todo = [], [dialog.window]
-            while todo:
-                w = todo.pop()
-                if isinstance(w, fw.Gtk.Label):
-                    out.append(w.get_text())
-                if isinstance(w, fw.Gtk.Container):
-                    todo.extend(w.get_children())
-            return " ".join(out)
+            return " ".join(w.get_text() for w in widgets(dialog.window)
+                            if isinstance(w, fw.Gtk.Label))
         assert "fix that word" in labels(tray)          # the tray points to the voice command
         assert "fix that word" not in labels(voice)
     finally:

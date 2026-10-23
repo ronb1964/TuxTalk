@@ -9,6 +9,7 @@ import pytest
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
 
+import gtk_text  # noqa: E402
 from tuxtalk.prefs import PreferencesWindow  # noqa: E402
 
 
@@ -56,13 +57,7 @@ def win():
 
 
 def labels(widget):
-    found = []
-    if isinstance(widget, Gtk.Label):
-        found.append(widget.get_text())
-    if isinstance(widget, Gtk.Container):
-        for child in widget.get_children():
-            found += labels(child)
-    return found
+    return [w.get_text() for w in gtk_text.widgets(widget) if isinstance(w, Gtk.Label)]
 
 
 def test_the_entry_has_its_heading_and_switch(win):

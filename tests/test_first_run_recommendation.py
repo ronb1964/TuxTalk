@@ -9,6 +9,7 @@ gi = pytest.importorskip("gi")
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
 
+from gtk_text import find  # noqa: E402
 from tuxtalk import recommend as r  # noqa: E402
 from tuxtalk import welcome_dialog as wd  # noqa: E402
 
@@ -62,23 +63,11 @@ def test_options_button_says_what_can_be_changed(dialog):
     assert dialog.options_fold.button.get_label() == "Hide language, model and graphics card"
 
 
-def _find_button(widget, label):
-    if isinstance(widget, Gtk.Button) and widget.get_label() == label:
-        return widget
-    if isinstance(widget, Gtk.Container):
-        for child in widget.get_children():
-            found = _find_button(child, label)
-            if found:
-                return found
-    return None
-
-
 def test_set_it_up_is_pinned_outside_the_scroll(dialog):
     """Inside the scrolling area, KDE's title bar would leave "Set it up" cut
     off at the window's bottom edge until the user scrolled. Pinned below it,
     the button is always on screen whole."""
-    button = _find_button(dialog.dialog, "Set it up")
-    assert button is not None
+    button = find(dialog.dialog, Gtk.Button, "Set it up")
     assert button.get_ancestor(Gtk.ScrolledWindow) is None
 
 
