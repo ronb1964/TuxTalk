@@ -11,7 +11,22 @@ import os
 import shutil
 import tempfile
 
+import gi
 import pytest
+
+# Every window a test builds must open on xvfb-run's hidden display, never on
+# the user's desktop, where it would take the focus from what they're typing
+# in. GTK prefers Wayland, and libwayland connects to wayland-0 in the runtime
+# folder even with WAYLAND_DISPLAY unset, so the display is opened here, on
+# X11, before any test module imports Gtk. GDK_BACKEND is set only while it
+# opens: the programs tests start must not inherit it. pytest_configure
+# checks that this display is xvfb-run's.
+os.environ.pop("WAYLAND_DISPLAY", None)
+os.environ["GDK_BACKEND"] = "x11"
+gi.require_version("Gdk", "3.0")
+gi.require_version("Gtk", "3.0")
+from gi.repository import Gdk, Gtk  # noqa: E402,F401  (Gtk opens the display)
+del os.environ["GDK_BACKEND"]
 
 _LOG_DIR = tempfile.mkdtemp(prefix="talktype-test-logs-")
 os.environ["TUXTALK_LOG_DIR"] = _LOG_DIR
@@ -19,6 +34,64 @@ os.environ["TUXTALK_LOG_DIR"] = _LOG_DIR
 # suite imports tuxtalk (the rename migration runs on package import).
 os.environ["TUXTALK_NO_MIGRATE"] = "1"
 atexit.register(shutil.rmtree, _LOG_DIR, ignore_errors=True)
+
+
+def _not_private(address):
+    """Why the session bus at *address* isn't a private one, as
+    dbus-run-session starts, or None. A private bus has nobody else on it; the
+    user's own has their desktop (and the same id, whatever the address)."""
+    from gi.repository import Gio, GLib
+
+    def connect(where):
+        return Gio.DBusConnection.new_for_address_sync(
+            where, Gio.DBusConnectionFlags.AUTHENTICATION_CLIENT
+            | Gio.DBusConnectionFlags.MESSAGE_BUS_CONNECTION, None, None)
+
+    def ask(bus, method):
+        return bus.call_sync("org.freedesktop.DBus", "/org/freedesktop/DBus",
+                             "org.freedesktop.DBus", method, None, None,
+                             Gio.DBusCallFlags.NONE, 5000, None).unpack()[0]
+
+    if not address:
+        return "there is no session bus"
+    try:
+        bus = connect(address)
+        names = [n for n in ask(bus, "ListNames")
+                 if not n.startswith(":") and n != "org.freedesktop.DBus"]
+        bus_id = ask(bus, "GetId")
+        bus.close_sync(None)
+    except GLib.Error as e:
+        return f"the session bus can't be reached ({e.message})"
+    if names:
+        return f"other programs are on it ({', '.join(sorted(names)[:3])})"
+    own = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}", "bus")
+    if os.path.exists(own):
+        try:
+            users = connect(f"unix:path={own}")
+            same = ask(users, "GetId") == bus_id
+            users.close_sync(None)
+        except GLib.Error:
+            same = False
+        if same:
+            return "it is the user's own session bus"
+    return None
+
+
+def pytest_configure(config):
+    display = Gdk.Display.get_default()
+    problem = None
+    # xvfb-run points XAUTHORITY at its own temporary folder.
+    if "xvfb-run" not in os.environ.get("XAUTHORITY", ""):
+        problem = "the display isn't xvfb-run's"
+    elif display is None or type(display).__gtype__.name != "GdkX11Display" \
+            or display.get_name() != os.environ.get("DISPLAY"):
+        problem = "GTK didn't open xvfb-run's X display"
+    else:
+        problem = _not_private(os.environ.get("DBUS_SESSION_BUS_ADDRESS", ""))
+    if problem:
+        raise pytest.UsageError(
+            f"Run the tests under xvfb-run and dbus-run-session (DEV_SETUP.md): {problem}. "
+            "They build real windows and use the session bus.")
 
 
 def _hold_back_notifications():

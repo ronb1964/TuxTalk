@@ -82,36 +82,51 @@ def test_list_mode_never_raises_on_odd_input():
     assert is_x11(None) is False
 
 
+_FRESH_PROCESS = """
+import gi
+gi.require_version("Gdk", "3.0")
+gi.require_version("Gtk", "3.0")
+from gi.repository import Gdk, Gtk
+from tuxtalk.ui_style import apply_dropdown_list_style, is_x11
+
+def pump():
+    while Gtk.events_pending():
+        Gtk.main_iteration()
+
+combo = Gtk.ComboBoxText()
+combo.append_text("CPU")
+combo.set_active(0)
+win = Gtk.Window()
+win.add(combo)
+win.show_all()
+pump()
+before = combo.style_get_property("appears-as-list")
+apply_dropdown_list_style()
+pump()
+print(before, combo.style_get_property("appears-as-list"), is_x11(Gdk.Display.get_default()))
+"""
+
+
 def test_helper_sets_the_right_mode_for_this_display(gtk):
-    """A real ComboBox must end up in list mode on X11 and menu mode elsewhere."""
-    from gi.repository import Gdk
-    from tuxtalk.ui_style import apply_dropdown_list_style, is_x11
+    """A real ComboBox must end up in list mode on X11 and menu mode elsewhere.
 
-    combo = gtk.ComboBoxText()
-    combo.append_text("CPU")
-    combo.set_active(0)
-    win = gtk.Window()
-    win.add(combo)
-    win.show_all()
-    while gtk.events_pending():
-        gtk.main_iteration()
-
-    assert combo.style_get_property("appears-as-list") is False, (
+    In a fresh process: the style is screen-wide and stays for good once any
+    window (Preferences, first run) has installed it in this one."""
+    import os
+    import subprocess
+    import sys
+    env = {**os.environ, "GDK_BACKEND": "x11"}     # the test display, as conftest opens it
+    out = subprocess.run([sys.executable, "-c", _FRESH_PROCESS], env=env, capture_output=True,
+                         text=True, timeout=60)
+    assert out.returncode == 0, out.stderr[-800:]
+    before, after, x11 = out.stdout.split()[-3:]
+    assert before == "False", (
         "Expected GTK's default menu mode before the helper runs. If this fails, "
-        "the theme already sets it and this helper may be unnecessary."
-    )
-
-    apply_dropdown_list_style()
-    while gtk.events_pending():
-        gtk.main_iteration()
-
-    expected = is_x11(Gdk.Display.get_default())
-    assert combo.style_get_property("appears-as-list") is expected, (
+        "the theme already sets it and this helper may be unnecessary.")
+    assert after == x11, (
         "appears-as-list did not match the display backend. On X11 GTK may have "
         "finally dropped this deprecated property (cosmetic only); on Wayland it "
-        "must stay off or popups can open off screen (issue #9)."
-    )
-    win.destroy()
+        "must stay off or popups can open off screen (issue #9).")
 
 
 def _pump(gtk):
