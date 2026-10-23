@@ -124,6 +124,27 @@ def _no_remembered_dictation_window(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _dictation_state_put_back():
+    """Each test starts from the dictation state and cleanup settings the
+    last one started from. Tests set app.state.is_recording and the like
+    directly, and run the settings reload (_apply_cleanup_settings), and put
+    them back after their asserts: one failing assert left is_recording on
+    for every later test, so one failure showed as many, depending on order."""
+    import dis
+    from tuxtalk import app
+    fields = {name: list(value) if isinstance(value, list) else value
+              for name, value in vars(app.state).items()}
+    names = {i.argval for i in dis.get_instructions(app._apply_cleanup_settings)
+             if i.opname == "STORE_GLOBAL"}
+    settings = {name: getattr(app, name) for name in names}
+    yield
+    vars(app.state).clear()
+    vars(app.state).update(fields)
+    for name, value in settings.items():
+        setattr(app, name, value)
+
+
+@pytest.fixture(autouse=True)
 def _no_real_speech_model(monkeypatch):
     """Start each test with a stand-in speech model. Starting a recording
     loads the real one when none is in memory (Power Saving, _wake_model):
