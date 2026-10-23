@@ -140,7 +140,5 @@ def test_without_an_installed_copy_the_running_appimage_is_used(monkeypatch):
     assert mod.get_launch_command() == DOWNLOAD
 
 
-def test_onboarding_asks_for_the_installed_copy():
-    from pathlib import Path
-    src = (Path(__file__).resolve().parent.parent / "src/tuxtalk/welcome_dialog.py").read_text()
-    assert "set_autostart(True, prefer_installed_appimage=appimage_installed)" in src
+def test_onboarding_asks_for_the_installed_copy(first_run):
+    assert ("starts at login", True) in first_run()

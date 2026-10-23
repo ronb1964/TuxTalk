@@ -693,3 +693,82 @@ def about_window(monkeypatch):
                   if w.get_title() == "About TuxTalk" and w.get_visible())
     yield window
     window.destroy()
+
+
+@pytest.fixture
+def welcome_window(monkeypatch):
+    """The first-run welcome screen, built for an English system with an
+    NVIDIA card (any graphics card gets the same card and choices)."""
+    from tuxtalk import recommend, welcome_dialog
+    monkeypatch.setattr(recommend, "detect_hardware",
+                        lambda cfg=None: recommend.Hardware("NVIDIA GeForce RTX 4070 SUPER", True))
+    monkeypatch.setattr(recommend, "system_language", lambda env=None: "en")
+    monkeypatch.setattr(welcome_dialog, "detect_uinput_access", lambda: (True, ""))
+    monkeypatch.setattr(welcome_dialog, "detect_portaudio_status", lambda: {"needs_install": False})
+    window = welcome_dialog.WelcomeDialog(force_gnome=False)
+    yield window
+    window.destroy()
+
+
+@pytest.fixture
+def setup_complete(monkeypatch):
+    """Show Setup Complete (the last first-run screen) and return what it
+    showed; *click* names a button to press while it is open."""
+    from gi.repository import Gtk
+    from gtk_text import find, shown_text
+    from tuxtalk import config, welcome_dialog
+    monkeypatch.setattr(config, "load_config", config.Settings)
+
+    def show(click=None, **options):
+        seen = []
+
+        def run(dialog):
+            seen.extend(shown_text(dialog))
+            if click:
+                find(dialog, Gtk.Button, click).clicked()
+            return Gtk.ResponseType.OK
+        monkeypatch.setattr(Gtk.Dialog, "run", run)
+        welcome_dialog.show_setup_complete_dialog(**options)
+        return seen
+    return show
+
+
+@pytest.fixture
+def first_run(monkeypatch):
+    """First-run setup after the welcome screen (show_welcome_and_install),
+    from an AppImage in Downloads, with each screen and download faked.
+    Returns the steps it took, in order."""
+    import types
+    from tuxtalk import autostart, update_checker, welcome_dialog
+    done = _Steps()
+
+    class Thread:
+        def __init__(self, target, name=None, daemon=None):
+            self.daemon = daemon
+
+        def start(self):
+            done.append(("copies the AppImage", self))
+
+    monkeypatch.setattr(welcome_dialog, "threading", types.SimpleNamespace(Thread=Thread))
+    monkeypatch.setattr(welcome_dialog, "_appimage_copy_thread", None)
+    monkeypatch.setattr(welcome_dialog, "show_welcome_dialog", lambda: done.append("welcome") or
+                        {"continue": True, "model": "parakeet-v3", "device": "cpu"})
+    monkeypatch.setattr(welcome_dialog, "show_hotkey_test_dialog",
+                        lambda: done.append("tests the hotkeys"))
+    monkeypatch.setattr(welcome_dialog, "_apply_first_run_setup",
+                        lambda result: done.append("downloads the speech model"))
+    monkeypatch.setattr(welcome_dialog, "show_setup_complete_dialog",
+                        lambda **k: done.append("setup complete"))
+    monkeypatch.setattr(update_checker, "is_running_from_appimage", lambda: True)
+    monkeypatch.setattr(update_checker, "ensure_appimage_in_standard_location",
+                        lambda: (False, "/home/u/Downloads/TuxTalk.AppImage"))
+    monkeypatch.setattr(update_checker, "desktop_launcher_exists", lambda: True)
+    monkeypatch.setattr(autostart, "set_autostart",
+                        lambda enable, prefer_installed_appimage=False:
+                        done.append(("starts at login", prefer_installed_appimage)) and False)
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+
+    def run():
+        welcome_dialog.show_welcome_and_install()
+        return done
+    return run

@@ -37,11 +37,10 @@ def test_no_flags():
                        for ch in label), label
 
 
-def test_preferences_and_first_run_list_the_same_languages():
+def test_preferences_and_first_run_list_the_same_languages(prefs_window, welcome_window):
     """Preferences had its own flagged list, which also lacked Maltese."""
-    pytest.importorskip("gi")
-    import inspect
-    from tuxtalk import prefs, welcome_dialog
-    assert "recommend.LANGUAGES" in inspect.getsource(prefs.PreferencesWindow)
-    assert "rec.LANGUAGES" in inspect.getsource(welcome_dialog)
-    assert "🇺🇸" not in inspect.getsource(prefs)
+    every = [rec.language_label(code) for code, _ in rec.LANGUAGES]
+    preferences = [row[0] for row in prefs_window(model="small").lang_combo.get_model()]
+    first_run = [row[0] for row in welcome_window.lang_combo.get_model()]
+    assert preferences[1:1 + len(every)] == every       # after "Detect automatically"
+    assert first_run == every

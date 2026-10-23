@@ -50,10 +50,11 @@ def test_processor_setup(env):
     assert (cfg.model, cfg.device, cfg.dictation_language) == ("small", "cpu", "ja")
 
 
-def test_tips_dialog_no_longer_picks_a_model():
-    import pathlib
-    src = pathlib.Path(wd.__file__).read_text()
-    assert "Choose Your Starting Model" not in src
+def test_no_first_run_screen_picks_a_model_after_the_welcome(welcome_window, setup_complete):
+    """The welcome card chooses the model; nothing later asks again."""
+    from gtk_text import shown_text
+    shown = shown_text(welcome_window.dialog) + setup_complete()
+    assert not [text for text in shown if "Starting Model" in text]
 
 
 @pytest.fixture
@@ -201,17 +202,17 @@ def test_model_download_reports_a_cancel(monkeypatch):
     assert info == {"cancelled": True}
 
 
-def test_the_ready_screen_names_the_key_the_user_chose(monkeypatch):
+def test_the_ready_screen_names_the_key_the_user_chose(setup_complete, monkeypatch):
     """Not always F8: the hotkey test may have changed the key."""
     monkeypatch.setattr("tuxtalk.config.load_config",
                         lambda: types.SimpleNamespace(hotkey="F10"))
     assert wd._saved_hold_key() == "F10"
+    shown = setup_complete()
+    assert "1. Hold F10" in shown
+    assert not [text for text in shown if "or your hotkey" in text]
     monkeypatch.setattr("tuxtalk.config.load_config",
                         lambda: types.SimpleNamespace(hotkey=""))
     assert wd._saved_hold_key() == "F8"
-    import pathlib
-    src = pathlib.Path(wd.__file__).read_text()
-    assert "Press and hold <b>F8</b> (or your hotkey)" not in src
 
 
 # --- a failed download asks before falling back (VM tests, 2026-10-13) --------

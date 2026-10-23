@@ -3,8 +3,6 @@
 One card says what will be set up, model and graphics card included (AMD and
 Intel too), and Other options change it with every choice explained.
 """
-import pathlib
-
 import pytest
 
 gi = pytest.importorskip("gi")
@@ -14,21 +12,10 @@ from gi.repository import Gtk  # noqa: E402
 from tuxtalk import recommend as r  # noqa: E402
 from tuxtalk import welcome_dialog as wd  # noqa: E402
 
-SRC = (pathlib.Path(wd.__file__)).read_text()
-
 
 @pytest.fixture
-def dialog(monkeypatch):
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
-    monkeypatch.setattr(r, "detect_hardware",
-                        lambda cfg=None: r.Hardware("NVIDIA GeForce RTX 4070 SUPER", True))
-    monkeypatch.setattr(r, "system_language", lambda env=None: "en")
-    monkeypatch.setattr(wd, "detect_uinput_access", lambda: (True, ""))
-    monkeypatch.setattr(wd, "detect_portaudio_status", lambda: {"needs_install": False})
-    d = wd.WelcomeDialog(force_gnome=False)
-    yield d
-    d.destroy()
+def dialog(welcome_window):
+    return welcome_window
 
 
 def test_card_shows_the_recommendation(dialog):
@@ -59,9 +46,10 @@ def test_run_result_carries_the_setup(dialog, monkeypatch):
     assert "download_cuda" not in result and "use_vulkan" not in result
 
 
-def test_first_run_never_mentions_cuda():
-    assert "_build_cuda_option" not in SRC
-    assert "Download CUDA Libraries" not in SRC
+def test_first_run_never_mentions_cuda(dialog):
+    from gtk_text import shown_text
+    dialog.options_fold.button.clicked()          # every choice in view
+    assert not [text for text in shown_text(dialog.dialog) if "CUDA" in text]
 
 
 def test_options_button_says_what_can_be_changed(dialog):
@@ -95,10 +83,17 @@ def test_set_it_up_is_pinned_outside_the_scroll(dialog):
     assert button.get_ancestor(Gtk.ScrolledWindow) is None
 
 
-def test_flatpak_footer_no_longer_promises_a_model_choice():
+@pytest.fixture
+def flatpak(monkeypatch):
+    monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TuxTalk")
+
+
+def test_flatpak_footer_no_longer_promises_a_model_choice(flatpak, welcome_window):
     """The model is chosen on this screen; there is no later picker."""
-    assert "choose your speech model" not in SRC
-    assert "downloads your speech model, then starts" in SRC
+    from gtk_text import shown_text
+    shown = "\n".join(shown_text(welcome_window.dialog))
+    assert "choose your speech model" not in shown
+    assert "downloads your speech model, then starts" in shown
 
 
 def test_no_pulse_timer_without_anything_to_pulse(dialog, monkeypatch):

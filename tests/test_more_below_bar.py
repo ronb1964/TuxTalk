@@ -6,15 +6,13 @@ ended neatly at the window's edge and looked finished: new users clicked
 ui_style.more_below_bar() shows the scrollbar for good and a "More below"
 bar while there's more to see.
 """
-import inspect
-
 import pytest
 
 gi = pytest.importorskip("gi")
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
 
-from tuxtalk import ui_style, welcome_dialog  # noqa: E402
+from tuxtalk import ui_style  # noqa: E402
 
 
 def _scrolled(value, upper, page):
@@ -70,7 +68,14 @@ def test_clicking_the_bar_scrolls_down_without_passing_the_end():
     assert not bar.get_child_visible()
 
 
-@pytest.mark.parametrize("screen", [welcome_dialog.WelcomeDialog._build_dialog,
-                                    welcome_dialog.show_setup_complete_dialog])
-def test_onboarding_screens_that_scroll_use_it(screen):
-    assert "more_below_bar(" in inspect.getsource(screen)
+def _more_below(texts):
+    return [text for text in texts if "More below" in text]
+
+
+def test_the_welcome_screen_uses_it(welcome_window):
+    from gtk_text import shown_text
+    assert _more_below(shown_text(welcome_window.dialog))
+
+
+def test_setup_complete_uses_it(setup_complete):
+    assert _more_below(setup_complete())

@@ -16,7 +16,6 @@ import pytest
 
 from tuxtalk import gnome_keybindings as G
 
-SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tuxtalk"
 
 
 class FakeGsettings:
@@ -108,24 +107,27 @@ def test_nothing_is_cleared_when_the_backup_cannot_be_written(gnome, monkeypatch
     assert gnome.sets == []
 
 
-def test_the_restore_runs_from_a_finally_block():
-    """Structural guard: the restore must not sit on the happy path only."""
-    tree = ast.parse((SRC / "welcome_dialog.py").read_text())
+def test_the_hotkey_test_gives_the_keys_back_after_an_error(monkeypatch):
+    """GNOME's Alt+F8 and Alt+F7 are cleared while the first-run hotkey test
+    is open; an error in the test must still put them back, or they stay dead
+    after a reboot (gsettings persists)."""
+    import types
+    from tuxtalk import config, service_launcher
+    from tuxtalk import welcome_dialog as wd
+    restored = []
+    monkeypatch.setattr(config, "load_config", config.Settings)
+    monkeypatch.setattr(G, "disable_for_hotkey_test", lambda: {"saved": "Alt+F8"})
+    monkeypatch.setattr(G, "restore", restored.append)
+    monkeypatch.setattr(service_launcher, "stop_dictation_service", lambda **k: None)
+    monkeypatch.setattr(service_launcher, "find_service_pids", lambda: [])
+    monkeypatch.setattr(wd, "time", types.SimpleNamespace(sleep=lambda s: None))
 
-    in_finally = False
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Try):
-            for stmt in node.finalbody:
-                for sub in ast.walk(stmt):
-                    if (isinstance(sub, ast.Call)
-                            and getattr(sub.func, "attr", "") == "restore"
-                            and getattr(sub.func.value, "id", "") == "gnome_keybindings"):
-                        in_finally = True
-
-    assert in_finally, (
-        "gnome_keybindings.restore() is not called from a finally block — an "
-        "exception would leave the user's GNOME keybindings disabled for good"
-    )
+    def broken(*a):
+        raise OSError("keyboard went away")
+    monkeypatch.setattr(wd, "_open_key_devices", broken)
+    with pytest.raises(OSError):
+        wd.show_hotkey_test_dialog()
+    assert restored == [{"saved": "Alt+F8"}]
 
 
 def test_the_tray_repairs_left_over_bindings_at_start(tray_main):

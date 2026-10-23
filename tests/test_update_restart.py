@@ -169,11 +169,42 @@ def test_restart_now_goes_straight_on_without_a_copy(monkeypatch):
     assert rebooted == [True]
 
 
-def test_first_run_copy_thread_is_not_a_daemon():
-    source = (SRC / "welcome_dialog.py").read_text()
-    body = source[source.index("_appimage_copy_thread = threading.Thread("):]
-    assert "daemon=False" in body[:200]
-    assert "_after_appimage_copy(reboot_after_copy)" in source
+def test_first_run_copy_thread_is_not_a_daemon(first_run):
+    """Quitting TuxTalk waits for the copy into ~/AppImages instead of
+    cutting it off, and Restart computer now waits for it (below)."""
+    from tuxtalk import welcome_dialog as wd
+    copies = [step[1] for step in first_run() if step[0] == "copies the AppImage"]
+    assert len(copies) == 1 and copies[0].daemon is False
+    assert wd._appimage_copy_thread is copies[0]
+
+
+def test_the_restart_button_waits_for_the_first_run_copy(monkeypatch):
+    """Setup Complete's Restart computer now goes through the wait above."""
+    import gi
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import Gtk
+    from gtk_text import find
+    from tuxtalk import cuda_helper, uinput_helper
+    from tuxtalk import welcome_dialog as wd
+    copying = types.SimpleNamespace(alive=True)
+    copying.is_alive = lambda: copying.alive
+    monkeypatch.setattr(wd, "_appimage_copy_thread", copying)
+    monkeypatch.setattr(cuda_helper, "mark_first_run_complete", lambda: None)
+    rebooted, polls = [], []
+    monkeypatch.setattr(uinput_helper, "reboot_system", lambda: rebooted.append(True) or True)
+    monkeypatch.setattr(wd.GLib, "timeout_add", lambda ms, fn, *a: polls.append(fn))
+
+    def run(dialog):
+        if not isinstance(dialog, Gtk.MessageDialog):       # Setup Complete itself
+            find(dialog, Gtk.Button, "Restart computer now").clicked()
+        return Gtk.ResponseType.OK                          # and "Restart now?"
+    monkeypatch.setattr(Gtk.Dialog, "run", run)
+    wd.show_setup_complete_dialog(needs_restart=True)
+    assert rebooted == []
+    copying.alive = False
+    while polls and polls[0]():
+        pass
+    assert rebooted == [True]
 
 
 def test_a_failed_copy_points_login_back_at_the_running_appimage(monkeypatch):
@@ -262,11 +293,40 @@ def test_tray_keeps_running_when_it_cannot_restart(monkeypatch):
     assert shown, "the user was not told to reopen TuxTalk"
 
 
-def test_tray_download_install_restarts_through_restart_app():
-    source = (SRC / "tray.py").read_text()
-    body = source[source.index("def download_complete():"):source.index("def _download_and_install_package")]
-    assert "install_appimage_update(" in body
-    assert "self.restart_app()" in body
+@pytest.fixture
+def idle_queue(monkeypatch):
+    """GLib.idle_add callbacks from an update's download thread, run on this
+    thread by run_until(), as the main loop would."""
+    import queue
+    from gi.repository import GLib
+    waiting = queue.Queue()
+    monkeypatch.setattr(GLib, "idle_add", lambda fn, *args: waiting.put((fn, args)))
+
+    def run_until(done):
+        while not done():
+            fn, args = waiting.get(timeout=5)
+            fn(*args)
+    return run_until
+
+
+@pytest.mark.parametrize("installed", [True, False])
+def test_tray_download_install_restarts_through_restart_app(monkeypatch, idle_queue, installed):
+    import gi
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import Gtk
+    from tuxtalk import tray
+    steps = []
+    monkeypatch.setattr(uc, "download_update", lambda *a, **k: "/updates/TuxTalk.AppImage")
+    monkeypatch.setattr(uc, "install_appimage_update",
+                        lambda path: steps.append(("install", path)) or (installed, "disk full"))
+    monkeypatch.setattr(Gtk.Dialog, "run", lambda d: steps.append("error shown"))
+    stub = types.SimpleNamespace(restart_app=lambda: steps.append("restart"))
+    tray.DictationTray._download_update(stub, {"appimage_url": "https://x/TuxTalk.AppImage"})
+    idle_queue(lambda: len(steps) >= 2)
+    if installed:
+        assert steps == [("install", "/updates/TuxTalk.AppImage"), "restart"]
+    else:
+        assert steps == [("install", "/updates/TuxTalk.AppImage"), "error shown"]
 
 
 # ---- Preferences asks the tray ------------------------------------------
@@ -278,10 +338,19 @@ def test_dbus_restart_app_reaches_the_tray():
     TuxTalkDBusService.RestartApp(fake)
     assert calls == ["restart_app"]
 
-    source = (SRC / "tray.py").read_text()
-    instance = source[source.index("class TrayAppInstance:"):]
-    assert "def restart_app(self):" in instance
-    assert "self.tray.restart_app" in instance
+
+
+def test_the_tray_answers_restart_app(monkeypatch):
+    from tuxtalk import tray
+    registered, restarted = [], []
+    monkeypatch.setattr(tray, "DBUS_AVAILABLE", True)
+    monkeypatch.setattr(tray, "TuxTalkDBusService", registered.append)
+    monkeypatch.setattr(tray.GLib, "idle_add", lambda fn, *args: fn(*args))
+    stub = types.SimpleNamespace(restart_app=restarted.append,
+                                 _start_kwin_focus_provider=lambda: None)
+    tray.DictationTray._init_dbus_service(stub)
+    registered[0].restart_app()
+    assert restarted == [None]
 
 
 def test_preferences_asks_the_tray_to_restart(monkeypatch):
@@ -306,12 +375,45 @@ def test_preferences_explains_when_the_tray_is_unreachable(monkeypatch):
     assert shown and "open it" in shown[0]
 
 
-def test_preferences_update_paths_use_the_tray():
-    source = (SRC / "prefs.py").read_text()
-    body = source[source.index("def _on_download_update_clicked"):source.index("def _on_view_release_clicked")]
-    assert "install_appimage_update(" in body
-    assert "update_ui.restart_via_tray()" in body
-    assert "restart_callback=update_ui.restart_via_tray" in body
+@pytest.fixture
+def prefs_update(prefs_window, monkeypatch):
+    """Preferences with an update found, its dialogs answered Yes, and the
+    tray's restart recorded."""
+    import gi
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import Gtk
+    from tuxtalk import update_ui
+    asked = []
+    monkeypatch.setattr(Gtk.Dialog, "run", lambda d: Gtk.ResponseType.YES)
+    monkeypatch.setattr(update_ui, "restart_via_tray", lambda: asked.append("restart"))
+    window = prefs_window()
+    window._current_release = {"appimage_url": "https://x/TuxTalk.AppImage",
+                               "html_url": "https://x/release"}
+    window.asked = asked
+    return window
+
+
+def test_preferences_restarts_an_installed_appimage_through_the_tray(
+        prefs_update, monkeypatch, idle_queue):
+    monkeypatch.setattr(uc, "get_install_type", lambda: "appimage")
+    monkeypatch.setattr(uc, "download_update", lambda *a, **k: "/updates/TuxTalk.AppImage")
+    monkeypatch.setattr(uc, "install_appimage_update", lambda path, progress: (True, ""))
+    prefs_update._on_download_update_clicked(None)
+    idle_queue(lambda: prefs_update.asked)
+    assert prefs_update.asked == ["restart"]
+
+
+def test_preferences_package_update_restarts_through_the_tray(prefs_update, monkeypatch):
+    from tuxtalk import update_ui
+    ran = []
+    monkeypatch.setattr(uc, "get_install_type", lambda: "deb")
+    monkeypatch.setattr(update_ui, "run_package_update",
+                        lambda release, kind, restart_callback: ran.append((kind, restart_callback)))
+    prefs_update._on_download_update_clicked(None)
+    kind, restart = ran[0]
+    assert kind == "deb"
+    restart()
+    assert prefs_update.asked == ["restart"]
 
 
 # ---- package updates ----------------------------------------------------
