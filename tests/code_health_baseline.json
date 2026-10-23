@@ -1,9 +1,9 @@
 {
  "files": {
-  "app.py": 5908,
-  "prefs.py": 7137,
+  "app.py": 5876,
+  "prefs.py": 7127,
   "tray.py": 2548,
-  "welcome_dialog.py": 3350
+  "welcome_dialog.py": 3275
  },
  "findings": {
   "ai_cleanup.py::<module>::long_line": 4,
@@ -57,7 +57,6 @@
   "app.py::_transcribe_and_inject::long_line": 1,
   "app.py::_transcribe_audio::long_line": 5,
   "app.py::_type_text_raw::swallowed_error": 1,
-  "app.py::_wait_for_keys_up::swallowed_error": 1,
   "app.py::build_model::long_line": 3,
   "app.py::main.AppInstance.quit::swallowed_error": 1,
   "app.py::main.AppInstance::undocumented": 1,
@@ -465,8 +464,7 @@
   "whisper_vulkan.py::model_path::swallowed_error": 1,
   "window_geometry.py::_reported::swallowed_error": 1,
   "window_geometry.py::_x11_active_rect::swallowed_error": 1,
-  "window_geometry.py::screen_monitors::swallowed_error": 1,
-  "x11_hotkeys.py::<module>::long_line": 1
+  "window_geometry.py::screen_monitors::swallowed_error": 1
  },
  "functions": {
   "ai_cleanup.py::_deletion_allowed": {
@@ -490,7 +488,7 @@
    "decisions": 18
   },
   "app.py::_handle_key_event": {
-   "decisions": 58,
+   "decisions": 57,
    "lines": 140
   },
   "app.py::_handle_spoken_edit": {
@@ -501,8 +499,8 @@
    "lines": 109
   },
   "app.py::_loop_evdev": {
-   "decisions": 30,
-   "lines": 169
+   "decisions": 27,
+   "lines": 166
   },
   "app.py::_paste_text": {
    "decisions": 18
@@ -571,8 +569,7 @@
    "lines": 115
   },
   "help_dialog.py::show_help_dialog": {
-   "decisions": 16,
-   "lines": 692
+   "lines": 674
   },
   "hotkey_helper.py::Helper.deliver_down": {
    "decisions": 23
@@ -590,7 +587,7 @@
    "decisions": 33
   },
   "keyboard_layout.py::KeyPlanner._index": {
-   "decisions": 19
+   "decisions": 17
   },
   "kwin_hotkeys.py::_app_shortcut_clashes": {
    "decisions": 19
@@ -655,7 +652,7 @@
   },
   "prefs.py::PreferencesWindow.create_general_tab": {
    "decisions": 22,
-   "lines": 511
+   "lines": 509
   },
   "prefs.py::PreferencesWindow.create_stats_tab": {
    "lines": 107
@@ -750,7 +747,7 @@
    "lines": 191
   },
   "welcome_dialog.py::show_hotkey_test_dialog": {
-   "lines": 462
+   "lines": 443
   },
   "welcome_dialog.py::show_hotkey_test_dialog.evdev_key_reader": {
    "decisions": 16
