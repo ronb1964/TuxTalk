@@ -208,6 +208,40 @@ def test_typing_waits_while_right_ctrl_is_pressed_mid_text(keyboard, no_hotkeys_
     assert keyboard.typed_keys() == [ecodes.KEY_A] * 4
 
 
+def test_typing_that_waits_for_right_alt_doesnt_hold_up_the_menu_guard(keyboard,
+                                                                       no_hotkeys_noted):
+    """A phrase of Type at pause waits for a Right Alt toggle tapped while it
+    types. The hotkey loop's Ctrl that keeps the tap from opening the menu
+    bar went out only after the wait, too late: Firefox's menu bar took the
+    rest of the phrase as menu letters."""
+    import threading
+    up = threading.Event()
+    modifier_hotkeys.note([Keyboard(lambda look: not up.wait(0.002), code=RALT)],
+                          RALT, None)
+    typer = threading.Thread(target=app._send_keys, args=([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)],))
+    typer.start()
+    try:
+        guard = threading.Thread(target=app._guard_alt_tap)
+        guard.start()
+        guard.join(timeout=2)
+        assert not guard.is_alive(), "the Ctrl waited for the typing"
+        assert keyboard.events == [(LCTRL, 1), (LCTRL, 0)]
+    finally:
+        up.set()
+        typer.join(timeout=2)
+    assert keyboard.events[-2:] == [(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)]
+
+
+def test_a_shift_held_for_a_capital_is_let_go_while_typing_waits(keyboard, no_hotkeys_noted):
+    """Others may type while it waits; under our Shift their letters would be capitals."""
+    shift = ecodes.KEY_LEFTSHIFT
+    modifier_hotkeys.note([Keyboard(lambda look: look in (2, 3))], RCTRL, None)
+    assert app._send_keys([(shift, 1), (ecodes.KEY_B, 1), (ecodes.KEY_B, 0), (shift, 0)],
+                          what="B")
+    assert keyboard.events == [(shift, 1), (shift, 0), (shift, 1), (ecodes.KEY_B, 1),
+                               (ecodes.KEY_B, 0), (shift, 0)]
+
+
 def test_f_keys_never_hold_typing_up(keyboard, no_hotkeys_noted):
     hotkeys = Keyboard(lambda look: True, code=F8)
     modifier_hotkeys.note([hotkeys], F8, ecodes.KEY_F9)

@@ -55,22 +55,33 @@ def note_hidden(codes) -> None:
 
 
 def wait_while_held():
-    """A function for virtual_keyboard.send to call before each key: it waits
-    while a Right Ctrl or Right Alt dictation key the desktop can see is down,
-    up to HELD_LIMIT_S, then raises virtual_keyboard.GaveUp. None when neither
-    is a dictation key."""
+    """A check for virtual_keyboard.send to make before each key: None when
+    no Right Ctrl or Right Alt dictation key the desktop can see is down,
+    otherwise a function that waits until none is, which send runs with the
+    keyboard free for other threads. It gives up after HELD_LIMIT_S and
+    raises virtual_keyboard.GaveUp. wait_while_held itself returns None when
+    neither is a dictation key."""
     devices, modifiers = _noted
     if not modifiers:
         return None
     keyboards = [d for d in list(devices) if is_keyboard_device(d)]
 
-    def before_press():
+    def held():
+        return keys_down(keyboards) & (modifiers - _hidden)
+
+    def wait():
         give_up_at = time.monotonic() + HELD_LIMIT_S
-        while held := keys_down(keyboards) & (modifiers - _hidden):
-            if held & _stuck or time.monotonic() >= give_up_at:
-                _give_up(held)
+        while still := held():
+            if still & _stuck or time.monotonic() >= give_up_at:
+                _give_up(still)
             time.sleep(0.02)
         _stuck.clear()
+
+    def before_press():
+        if held():
+            return wait
+        _stuck.clear()
+        return None
     return before_press
 
 

@@ -49,9 +49,9 @@ class StoppedPartway(Exception):
 
 
 class GaveUp(Exception):
-    """Raised by a send's *before_press* to stop the typing: the keys held
-    are let go, and send passes it on, or raises StoppedPartway when some
-    keys had already gone out."""
+    """Raised by the wait a send's *before_press* asked for, to stop the
+    typing: the keys held are let go, and send passes it on, or raises
+    StoppedPartway when some keys had already gone out."""
 
 
 _lock = threading.Lock()
@@ -127,9 +127,10 @@ def start() -> bool:
 
 def send(events, delay_ms: float = KEY_DELAY_MS, before_press=None) -> bool:
     """Press and release keys: *events* is [(evdev key code, 1 down / 0 up)].
-    *before_press*, if given, is called before each key goes down and may
-    wait (app._send_keys: until a Right Ctrl dictation key is let go), or
-    raise GaveUp.
+    *before_press*, if given, is called before each key goes down, and
+    returns None or a function that waits (app._send_keys: until a Right
+    Ctrl dictation key is let go) and may raise GaveUp; that runs with the
+    keyboard free for others (_wait_unlocked).
 
     Waits *delay_ms* after each event, on a schedule kept from the start, so
     sleeping a little long doesn't add up over a long text. When this process
@@ -160,8 +161,9 @@ def send(events, delay_ms: float = KEY_DELAY_MS, before_press=None) -> bool:
         sent = 0
         try:
             for code, value in events:
-                if value and before_press is not None:
-                    before_press()
+                wait = before_press() if value and before_press is not None else None
+                if wait is not None:
+                    _wait_unlocked(device, down, wait)
                 device.write(ecodes.EV_KEY, code, value)
                 # Counted before the SYN: the event may reach the app even
                 # if the SYN after it fails.
@@ -192,6 +194,27 @@ def send(events, delay_ms: float = KEY_DELAY_MS, before_press=None) -> bool:
         return True
 
 
+def _wait_unlocked(device, down, wait) -> None:
+    """Run *wait* with the lock let go. Taking it meanwhile, the hotkey
+    loop's own keys go out at once: its Ctrl that keeps a Right Alt tap from
+    opening the menu bar (app._guard_alt_tap) came after the tap otherwise.
+    The keys this send holds (Shift for a capital) are let go first and
+    pressed again after, so nothing sent meanwhile gets them."""
+    from evdev import ecodes
+    held = list(down)
+    _release(device, held)
+    down.clear()
+    _lock.release()
+    try:
+        wait()
+    finally:
+        _lock.acquire()
+    for code in held:
+        device.write(ecodes.EV_KEY, code, 1)
+        down[code] = True
+    device.syn()
+
+
 def _release(device, codes) -> None:
     """Let go of *codes* (in the order they went down), the last one first."""
     from evdev import ecodes
@@ -212,5 +235,6 @@ def _close_broken(device, down) -> None:
         device.close()
     except OSError:
         pass
-    _device = None
+    if _device is device:   # not one another thread made while this one waited
+        _device = None
 
