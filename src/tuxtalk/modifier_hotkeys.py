@@ -54,13 +54,19 @@ def note_hidden(codes) -> None:
     _hidden = frozenset(codes)
 
 
-def wait_while_held():
+def wait_while_held(destination=None):
     """A check for virtual_keyboard.send to make before each key: None when
     no Right Ctrl or Right Alt dictation key the desktop can see is down,
     otherwise a function that waits until none is, which send runs with the
     keyboard free for other threads. It gives up after HELD_LIMIT_S and
-    raises virtual_keyboard.GaveUp. wait_while_held itself returns None when
-    neither is a dictation key."""
+    raises virtual_keyboard.GaveUp("key_held"). wait_while_held itself
+    returns None when neither is a dictation key.
+
+    *destination*, if given, says where the keys go (the focused window, a
+    password field or not). It's asked when a wait starts and when it ends,
+    and GaveUp("moved") stops the typing if the answers differ: the checks
+    made before typing began are out of date by then, and the user may have
+    clicked into a password field meanwhile."""
     devices, modifiers = _noted
     if not modifiers:
         return None
@@ -70,12 +76,16 @@ def wait_while_held():
         return keys_down(keyboards) & (modifiers - _hidden)
 
     def wait():
+        where = destination() if destination else None
         give_up_at = time.monotonic() + HELD_LIMIT_S
         while still := held():
             if still & _stuck or time.monotonic() >= give_up_at:
                 _give_up(still)
             time.sleep(0.02)
         _stuck.clear()
+        if destination and destination() != where:
+            logger.info("Typing stopped: the focus moved while it waited for the key")
+            raise GaveUp("moved")
 
     def before_press():
         if held():
@@ -83,6 +93,19 @@ def wait_while_held():
         _stuck.clear()
         return None
     return before_press
+
+
+def wait_until_up() -> bool:
+    """Wait as typing would before its next key (wait_while_held); False when
+    it gave up."""
+    before_press = wait_while_held()
+    wait = before_press() if before_press else None
+    try:
+        if wait:
+            wait()
+    except GaveUp:
+        return False
+    return True
 
 
 def _give_up(held) -> None:

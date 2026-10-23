@@ -1655,7 +1655,7 @@ def _send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY
     and a wait that gave up raises virtual_keyboard.GaveUp: the text must
     not go out another way (wtype, the clipboard) either.
     """
-    before_press = None if under_hotkey else modifier_hotkeys.wait_while_held()
+    before_press = None if under_hotkey else modifier_hotkeys.wait_while_held(_destination)
     try:
         sent = virtual_keyboard.send(events, delay_ms, before_press)
     except virtual_keyboard.StoppedPartway:
@@ -1670,6 +1670,11 @@ def _send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY
     if not sent:
         logger.error(f"Couldn't send {what}: TuxTalk's virtual keyboard isn't working")
     return sent
+
+
+def _destination():
+    """Where keys go now: the focused window, and whether it's a password field."""
+    return _query_focused_window_class(), _focused_is_password()
 
 
 def _typed_breaks_for(text: str, window_class) -> str:
@@ -1787,14 +1792,27 @@ def _cancel_timers(pending: dict) -> None:
 def _send_when_due(pending: dict) -> None:
     """The wait is over and nothing held it: press Enter, but only in the
     window the text went to. Enter in whatever the user switched to could
-    send something else entirely."""
+    send something else entirely.
+
+    A Right Ctrl or Right Alt dictation key down now is waited for first
+    (modifier_hotkeys), with the send still pending: the hotkey loop reads a
+    tap of it meanwhile, and the tap holds the send as it would have."""
+    with _send_lock:
+        if state.pending_send is not pending:
+            return
+    key_stuck = not modifier_hotkeys.wait_until_up()
     with _send_lock:
         if state.pending_send is not pending:
             return
         state.pending_send = None
+    from . import screen_message
+    if key_stuck:
+        logger.info("Not sent: a dictation key stayed down")
+        screen_message.show_over_active_window(HELD_SEND_NOTICE, warning=False,
+                                               tag=SEND_LABEL_TAG, low=True)
+        return
     if _focus_left(pending):
         logger.info("Not sent: another window has the focus now")
-        from . import screen_message
         screen_message.show_over_active_window(SWITCHED_WINDOW_NOTICE, warning=False,
                                                tag=SEND_LABEL_TAG, low=True)
         return
@@ -1803,7 +1821,6 @@ def _send_when_due(pending: dict) -> None:
     # password field gets.
     if _focused_is_password():
         logger.info("Not sent: a password field has the focus now")
-        from . import screen_message
         screen_message.show_over_active_window(PASSWORD_FIELD_NOT_SENT, warning=False,
                                                tag=SEND_LABEL_TAG, low=True)
         return
@@ -2873,8 +2890,9 @@ def _delivery_stopped(stop) -> str:
     pasting it again would double that part. PasswordFieldNow: the lines
     before it are in the app, but in which form (pasted, typed after a
     failed paste) isn't tracked. GaveUp: a Right Ctrl or Right Alt dictation
-    key stayed down (modifier_hotkeys), and typing on any other way (wtype,
-    the clipboard) would do what the wait was there to prevent."""
+    key stayed down, or the focus moved while typing waited for it
+    (modifier_hotkeys); typing on any other way (wtype, the clipboard) would
+    do what the wait was there to prevent."""
     state.last_inserted_text = ""
     state.continue_mid_sentence = False
     state.nav_context = None
@@ -3257,6 +3275,7 @@ _UNDELIVERED_TITLES = {
     "partial": "Only part of the dictation was typed",
     "password_field": PASSWORD_FIELD_TITLE,
     "key_held": "Typing stopped: a dictation key stayed down",
+    "moved": "Not typed: the focus moved",
 }
 _UNDELIVERED_NOTICES = {
     "failed": "It's saved in Recent Dictations in the TuxTalk menu: click it to copy, "
@@ -3269,6 +3288,9 @@ _UNDELIVERED_NOTICES = {
                 f"{modifier_hotkeys.HELD_LIMIT_S:g} seconds, and the text would have gone "
                 "in as shortcuts. It's saved in Recent Dictations in the TuxTalk menu: "
                 "click it to copy, then paste with Ctrl+V.",
+    "moved": "The focus moved to another window or a password field while TuxTalk waited "
+             "for Right Ctrl or Right Alt to come up. The text is saved in Recent Dictations "
+             "in the TuxTalk menu: click it to copy, then paste with Ctrl+V.",
 }
 
 

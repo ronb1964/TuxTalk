@@ -11,7 +11,7 @@ import pytest
 from evdev import ecodes
 
 from tuxtalk import (app, cosmic_hotkeys, gnome_hotkeys, keyboard_layout, modifier_hotkeys,
-                     x11_hotkeys)
+                     virtual_keyboard, x11_hotkeys)
 from tuxtalk import kwin_hotkeys as kh
 from tuxtalk.config import HOTKEY_CHOICES
 from tuxtalk.hotkey_keys import keycode_from_name, track_modifier
@@ -289,7 +289,6 @@ def test_a_stuck_right_ctrl_stops_typing_after_a_while(keyboard, stuck_right_ctr
 def test_a_key_stuck_partway_lets_go_of_shift_and_says_partway(keyboard, stuck_right_ctrl):
     """The first letter went out, so the caller must not type it all again,
     and the Shift held for the capital doesn't stay down."""
-    from tuxtalk import virtual_keyboard
     stuck_right_ctrl(start=3)
     shift = ecodes.KEY_LEFTSHIFT
     events = [(ecodes.KEY_A, 1), (ecodes.KEY_A, 0), (shift, 1), (ecodes.KEY_B, 1),
@@ -354,6 +353,48 @@ def test_undo_under_a_stuck_key_deletes_nothing_and_says_so(keyboard, stuck_righ
     stuck_right_ctrl()
     assert app._send_backspaces(3) is False
     assert keyboard.events == []
+
+
+@pytest.mark.parametrize("now", [("firefox", False), ("kwrite", True)])
+def test_typing_that_waited_stops_if_the_focus_moved_meanwhile(keyboard, no_hotkeys_noted,
+                                                              monkeypatch, now):
+    """Clicked into another window or a password field while Right Ctrl was
+    down: the text was checked for the window it was meant for, not this one."""
+    answers = iter([("kwrite", False), now])
+    monkeypatch.setattr(app, "_destination", lambda: next(answers))
+    modifier_hotkeys.note([Keyboard(lambda look: look <= 3)], RCTRL, None)
+    with pytest.raises(virtual_keyboard.GaveUp) as stop:
+        app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a", raise_if_partial=True)
+    assert stop.value.reason == "moved" and keyboard.events == []
+    assert "Recent Dictations" in app._UNDELIVERED_NOTICES["moved"]
+
+
+def test_typing_that_waited_goes_on_where_it_was_going(keyboard, no_hotkeys_noted, monkeypatch):
+    monkeypatch.setattr(app, "_destination", lambda: ("kwrite", False))
+    modifier_hotkeys.note([Keyboard(lambda look: look <= 3)], RCTRL, None)
+    assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
+    assert keyboard.typed_keys() == [ecodes.KEY_A]
+
+
+def test_a_tap_while_a_due_send_waits_for_right_ctrl_still_holds_it(keyboard, no_hotkeys_noted,
+                                                                    monkeypatch):
+    """The send stays pending while it waits: the tap of a Right Ctrl toggle
+    the hotkey loop reads meanwhile holds it. Taken before the wait, the
+    tap found nothing to hold and the Enter went out after it."""
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "kwrite")
+    held = []
+
+    def pressed(look):
+        if look == 2:                   # the hotkey loop reads the tap
+            held.append(app._hold_pending_send(announce=True))
+        return look <= 3
+    modifier_hotkeys.note([Keyboard(pressed)], ecodes.KEY_F8, RCTRL)
+    pending = {"window": "kwrite", "why": "test", "space": "", "mode": "type",
+               "timer": None, "ticks": []}
+    monkeypatch.setattr(app, "_cancel_timers", lambda pending: None)
+    app.state.pending_send = pending
+    app._send_when_due(pending)
+    assert held == [True] and keyboard.events == []
 
 
 class Grabbable(Keyboard):
