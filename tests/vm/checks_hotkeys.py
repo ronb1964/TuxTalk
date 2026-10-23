@@ -1,5 +1,6 @@
 """Hotkeys the desktop holds back for TuxTalk, and the ones it leaves to the
-app. KDE, GNOME and COSMIC hold a letter shortcut back by its letter, so on
+app, and the dictation keys that need no Fn (Right Ctrl, Right Alt, Scroll
+Lock). KDE, GNOME and COSMIC hold a letter shortcut back by its letter, so on
 a German keyboard Ctrl+Alt+Y is the key labelled Y (where US keyboards have
 Z). And a dictation key pressed with other modifiers (Alt+F8 resizes the
 window on KDE and GNOME) belongs to the app, so it mustn't dictate as well.
@@ -9,7 +10,8 @@ On GNOME these run after the extension is installed: only it holds keys back.
 import json
 import time
 
-from harness import Abort, Outcome, check
+from checks_dictation import type_in_terminal
+from harness import Abort, Outcome, check, heard_in
 from vmlib import REMOTE
 
 SECTION = "Hotkeys and keyboard layouts"
@@ -143,3 +145,56 @@ def modifier_f8_to_app(run):
                        heard=heard, screenshot=shot)
     return Outcome("pass", "No dictation with Alt, Ctrl or Shift held (log: no “Recording "
                    "stopped”); plain F8 still dictates", typed=typed, screenshot=shot)
+
+
+BASIC = "This is a test of the dictation system."
+
+
+@check(SECTION, "no_fn_hold_keys", "Right Ctrl and Right Alt dictate as the hold key")
+def no_fn_hold_keys(run):
+    try:
+        for name, qcode in (("Right Ctrl", "ctrl_r"), ("Right Alt", "alt_r")):
+            run.set_config(hotkey=name)
+            run.sink_ready(fresh=True)
+            typed, heard, _log = run.say("basic", key=qcode)
+            outcome = run.expect_typed("basic", BASIC, typed, heard)
+            if outcome.status != "pass":
+                outcome.detail = f"held {name}: {outcome.detail}".rstrip(": ")
+                outcome.screenshot = run.shot(f"hold-{qcode}")
+                return outcome
+    finally:
+        run.set_config(hotkey="F8")
+    return Outcome("pass", "Held Right Ctrl, then Right Alt: each dictated",
+                   expected=BASIC, typed=typed.rstrip(" "), heard=heard)
+
+
+@check(SECTION, "right_ctrl_toggle",
+       "Right Ctrl as the tap key starts and stops when it's let go")
+def right_ctrl_toggle(run):
+    run.set_config(toggle_hotkey="Right Ctrl")
+    try:
+        run.sink_ready(fresh=True)
+        mark = run.log_mark()
+        run.vm.tap("ctrl_r")
+        time.sleep(0.6)
+        run.play("basic")
+        time.sleep(0.3)
+        run.vm.tap("ctrl_r")
+        typed = run.wait_dictation(mark)
+        heard = heard_in(run.log_since(mark))
+    finally:
+        run.set_config(toggle_hotkey="F9")
+    return run.expect_typed("basic", BASIC, typed, heard)
+
+
+@check(SECTION, "scroll_lock_terminal",
+       "Scroll Lock as the hold key: plain text in a terminal, nothing from the key")
+def scroll_lock_terminal(run):
+    blind = run.window_blind()
+    if blind:
+        return Outcome("skip", blind)
+    run.set_config(hotkey="Scroll Lock")
+    try:
+        return type_in_terminal(run, "terminal-scroll-lock", key="scroll_lock")
+    finally:
+        run.set_config(hotkey="F8")

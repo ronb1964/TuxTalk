@@ -19,6 +19,9 @@ A key is reported only when the desktop itself sees it as a shortcut, never
 as typing:
 
 * F1-F24, Esc, Pause and Scroll Lock, which never type anything;
+* Right Ctrl and Right Alt on their own, for keyboards whose F-keys need Fn.
+  Neither types a character by itself. Where Right Alt is AltGr, a client
+  learns that a character of its level (€, @) was typed then, never which;
 * any other key only while two of Ctrl, Alt and Super are held with it,
   having gone down while the desktop could see them, on a real keyboard
   (any of them, as the desktop counts them) or on the same virtual one;
@@ -44,7 +47,7 @@ Everything goes only to the user at the screen: logind's active user on
 seat0, checked by user id (two sessions of the same user count as one), and
 only keyboards of seat0 are read. Letters, numbers, Enter or Shift+letter
 are never reported, so even a hostile program that connects learns nothing
-about what is typed. Each client may ask for four shortcuts at most;
+about what is typed beyond that Right Alt. Each client may ask for four shortcuts at most;
 TuxTalk asks for two.
 
 Hiding a held hotkey
@@ -98,7 +101,7 @@ import sys
 import time
 
 PROTOCOL = 1
-VERSION = "1.4"
+VERSION = "1.5"
 
 DEFAULT_SOCKET_DIR = "/run/tuxtalk-hotkeys"
 SOCKET_NAME = "hotkeys.sock"
@@ -121,13 +124,15 @@ REL_X = 0
 BTN_LEFT = 0x110
 KEY_MAX = 0x2FF
 KEY_ESC, KEY_SCROLLLOCK, KEY_PAUSE = 1, 70, 119
+KEY_RIGHTCTRL, KEY_RIGHTALT = 97, 100
 BUS_VIRTUAL = 0x06
 
 F_KEYS = frozenset(list(range(59, 69)) + [87, 88] + list(range(183, 195)))   # F1-F24
-BARE_KEYS = F_KEYS | {KEY_ESC, KEY_PAUSE, KEY_SCROLLLOCK}
+# The modifiers that may also be watched on their own (see the rule at the top).
+BARE_MODIFIERS = frozenset({KEY_RIGHTCTRL, KEY_RIGHTALT})
+BARE_KEYS = F_KEYS | BARE_MODIFIERS | {KEY_ESC, KEY_PAUSE, KEY_SCROLLLOCK}
 
-KEY_RIGHTALT = 100
-MODIFIERS = frozenset({29, 97, 42, 54, 56, KEY_RIGHTALT, 125, 126})
+MODIFIERS = frozenset({29, KEY_RIGHTCTRL, 42, 54, 56, KEY_RIGHTALT, 125, 126})
 # The modifiers that can unlock a key, by the letter the protocol uses. Right
 # Alt isn't among them: on most layouts it's AltGr, which types @, €, { and
 # the like. Shift alone never unlocks anything (it types capitals).
@@ -206,7 +211,7 @@ def parse_spec(spec):
         code = int(number)
     except ValueError:
         raise ValueError(f"not a key code: {spec!r}")
-    if not 0 < code <= KEY_MAX or code in MODIFIERS:
+    if not 0 < code <= KEY_MAX or code in MODIFIERS - BARE_MODIFIERS:
         raise ValueError(f"not a key that can be watched: {spec!r}")
     letters = frozenset(mods.upper())
     if mods and (not letters <= set(UNLOCKERS) or len(letters) != len(mods)):
@@ -619,7 +624,7 @@ class Helper:
                 self.send(client, f"UP {code}")
 
     def deliver_down(self, keyboard, code):
-        if code in MODIFIERS:
+        if code in MODIFIERS - BARE_MODIFIERS:
             return
         # Most keys are wanted by nobody: drop them before anything else.
         interested = [c for c in self.clients.values()
@@ -631,8 +636,9 @@ class Helper:
             return
         # Modifiers count only from this keyboard's group (all real keyboards,
         # or this one virtual keyboard), and only those the desktop saw go
-        # down (see Keyboard.trusted).
-        mods = self.group_mods(keyboard.group)
+        # down (see Keyboard.trusted). A Right Ctrl watched on its own isn't
+        # held "with" itself.
+        mods = self.group_mods(keyboard.group) - {code}
         for client in interested:
             if client.uid != active:
                 continue

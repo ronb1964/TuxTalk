@@ -484,13 +484,17 @@ def model_setting_warning(model, device, language_mode, language, language_name=
     return "\n".join(notes)
 
 
-# F-keys that apps already use, named in the hotkey dropdowns so nobody picks
-# one blind: dictating with F5 also reloads the page in a browser.
+# What else a key does, named in the hotkey dropdowns so nobody picks one
+# blind: dictating with F5 also reloads the page in a browser. Right Ctrl or
+# Right Alt pressed with another key still starts or stops a dictation, so it
+# can't be both.
 HOTKEY_CLASHES = {
     "F1": "opens Help in many apps",
     "F5": "reloads the page in browsers",
     "F11": "full screen in browsers",
     "F12": "developer tools in browsers",
+    "Right Ctrl": "stops working as Ctrl",
+    "Right Alt": "stops working as Alt",
 }
 
 
@@ -502,9 +506,15 @@ def hands_free_label(toggle_key):
     return f"Double-tap {key} for hands-free: stop after"
 
 
-def hotkey_label(key):
-    """'F5 (reloads the page in browsers)', or just the key."""
+def hotkey_label(key, altgr_types=None):
+    """'F5 (reloads the page in browsers)', or just the key. *altgr_types*:
+    when the keyboard layout's Right Alt is AltGr, the characters it types
+    that picking it takes away ("@", "€"; keyboard_layout.altgr_characters)."""
     clash = HOTKEY_CLASHES.get(key)
+    if key == "Right Alt" and altgr_types is not None:
+        clash = "your AltGr key"
+        if altgr_types:
+            clash += f": stops typing {' and '.join(altgr_types)}"
     return f"{key} ({clash})" if clash else key
 
 
@@ -548,7 +558,8 @@ def hotkey_change_message(cfg, changed, refused, apps=None):
     lines += new_keys
     if offer_test:
         lines.append("Try it once in the test to make sure it reaches TuxTalk. On some "
-                     "laptops the F-keys change the brightness or volume unless you hold Fn.")
+                     "laptops the F-keys change the brightness or volume unless you hold Fn; "
+                     "Right Ctrl, Right Alt and Scroll Lock never need it.")
         # So Not Now isn't a dead end: the Test Hotkeys button can be below the fold.
         lines.append("You can also test it later with Test Hotkeys, under the hotkeys on "
                      "the General tab.")
@@ -1060,7 +1071,7 @@ class PreferencesWindow:
 
         # Hold-to-talk hotkey
         self.hotkey_label = Gtk.Label(label="Hold Hotkey 💡:", xalign=0)
-        self.hotkey_label.set_tooltip_text("Hold this key while speaking — release to stop and transcribe.\nBoth hotkeys are always active simultaneously.\nRecommended: F8 (default). Avoid: F1, F5, F11, F12.")
+        self.hotkey_label.set_tooltip_text("Hold this key while speaking — release to stop and transcribe.\nBoth hotkeys are always active simultaneously.\nRecommended: F8 (default). Avoid: F1, F5, F11, F12.\nF-keys that need Fn held? Right Ctrl, Right Alt and Scroll Lock don't.")
         grid.attach(self.hotkey_label, 0, row, 1, 1)
 
         self.hotkey_combo = Gtk.ComboBoxText()
@@ -1068,12 +1079,13 @@ class PreferencesWindow:
         self.hotkey_combo.connect("button-press-event", self._on_combo_button_press)
         self._block_combo_scroll(self.hotkey_combo)
 
-        # Add F-key options (most practical for dictation)
-        hotkeys = ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12"]
-        
+        from .config import HOTKEY_CHOICES
+        from .keyboard_layout import altgr_characters
+        hotkeys = list(HOTKEY_CHOICES)
+        altgr_types = altgr_characters()
         for key in hotkeys:
-            self.hotkey_combo.append(key, hotkey_label(key))
-        
+            self.hotkey_combo.append(key, hotkey_label(key, altgr_types))
+
         # Selection for both combos is set once the toggle combo exists, by
         # _apply_hotkey_fallbacks — see there for why the fallback must also
         # be written back into self.config.
@@ -1096,7 +1108,7 @@ class PreferencesWindow:
 
         # Add same options for toggle key
         for key in hotkeys:
-            self.toggle_combo.append(key, hotkey_label(key))
+            self.toggle_combo.append(key, hotkey_label(key, altgr_types))
             
         # Both combos exist now, so set their selections together.
         self._apply_hotkey_fallbacks(hotkeys)

@@ -111,7 +111,10 @@ def show_help_dialog(tab=None):
             "to the \"input\" group instead. Then the computer needs a restart: logging out "
             "is often not enough. Typing setup says when this applies.\n"
             "• Another app may use the same key: pick another in Preferences → General and "
-            "try it with Test Hotkeys.")
+            "try it with Test Hotkeys.\n"
+            "• On many laptops and small keyboards the F-keys work only with Fn held. Hold Fn "
+            "with your key, or pick Right Ctrl, Right Alt or Scroll Lock in Preferences → "
+            "General: they never need Fn.")
 
     # KDE-on-Flatpak: the per-dictation "remote control" popup.
     kde_notice = ""

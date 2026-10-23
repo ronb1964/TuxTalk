@@ -1033,13 +1033,18 @@ def _feed_indicator(indicator, indata, spectrum_processor):
 _spectrum_processor = None
 
 
+# The dictation keys by upper-case name ("RIGHT CTRL"), as evdev codes.
+_HOTKEY_CODES = {name.upper(): ecodes.ecodes[key]
+                 for name, key in config_module.HOTKEY_CHOICES.items()}
+
+
 def _keycode_from_name(name: str) -> int | None:
     """Convert key name to evdev keycode. Returns None if name is empty (no hotkey configured)."""
     if not name or not name.strip():
         return None  # No hotkey configured - don't activate any key
     n = name.strip().upper()
-    fkeys = {f"F{i}": getattr(ecodes, f"KEY_F{i}") for i in range(1,13)}
-    if n in fkeys: return fkeys[n]
+    if n in _HOTKEY_CODES:
+        return _HOTKEY_CODES[n]
     if len(n) == 1 and "A" <= n <= "Z":
         # The key that types the letter, which is the one KDE, GNOME and COSMIC
         # hold back for us (they match shortcuts by letter): on a German
@@ -4675,6 +4680,16 @@ def _wait_for_keys_up(devices, codes, timeout) -> bool:
         time.sleep(0.02)
 
 
+def _guard_alt_tap() -> None:
+    """Press Ctrl while a Right Alt dictation key is down. To the desktop and
+    apps a lone tap of Alt opens the menu bar (Firefox, LibreOffice), and what
+    TuxTalk types next would go into the menu. Any key between Alt's press and
+    release makes it a shortcut instead; Ctrl+Alt alone does nothing. keyd
+    does the same for the same reason."""
+    _send_keys([(ecodes.KEY_LEFTCTRL, 1), (ecodes.KEY_LEFTCTRL, 0)],
+               what="Ctrl to keep Right Alt from opening a menu")
+
+
 def _held_shift(held_modifiers) -> set:
     """The Shift keys among *held_modifiers*: Shift + the dictation key starts
     a voice edit instead of a dictation."""
@@ -4717,14 +4732,22 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
     returned, so that every way recording can end — release, toggle, ESC, or an
     exception inside start_recording — releases the keyboard.
     """
+    # Right Ctrl or Right Alt as the toggle key counts when it's let go: what
+    # the tap stops is typed right after, and typed under a held Ctrl the
+    # letters would be shortcuts (Ctrl+W closes the tab).
+    toggle_tap = 0 if toggle_key in _MODIFIER_CODES else 1
+    if event.value == 1 and event.code == ecodes.KEY_RIGHTALT and event.code in (hold_key, toggle_key):
+        _guard_alt_tap()
+
     # --- Hotkey test mode: report presses via D-Bus instead of recording ---
-    if event.value == 1 and _hotkey_test_active():
+    if ((event.value == 1 or (event.code == toggle_key and event.value == toggle_tap))
+            and _hotkey_test_active()):
         key_name = None
         if event.code == hold_key:
             key_name = "hold"
         elif toggle_key and event.code == toggle_key:
             key_name = "toggle"
-        if key_name:
+        if key_name and event.value == 1:
             _notify_tray_hotkey_pressed(key_name)
         return  # Don't process hotkeys normally in test mode
 
@@ -4777,7 +4800,7 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
     # --- Hold-to-talk: hold key down to record, release to stop ---
     if event.code == hold_key:
         if (event.value == 1 and not state.is_recording
-                and not _someone_elses_shortcut(held_modifiers)):
+                and not _someone_elses_shortcut(held_modifiers - {hold_key})):
             # Grab the keyboards so the hotkey doesn't reach the focused app,
             # without leaving the desktop thinking the key is still held (see
             # _grab_keyboards_hiding). start_recording releases the grabs itself
@@ -4809,10 +4832,12 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
             and state.owed_space is not None and not state.is_recording):
         _type_owed_space()   # the tap that held the send is over
 
-    if (toggle_key and event.code == toggle_key and event.value == 1
-            and not _someone_elses_shortcut(held_modifiers)):
+    if (toggle_key and event.code == toggle_key and event.value == toggle_tap
+            and not _someone_elses_shortcut(held_modifiers - {toggle_key})):
         shift = _held_shift(held_modifiers) if _voice_editing else set()
         if not state.is_recording and not shift and _hold_pending_send(announce=True):
+            if toggle_tap == 0:
+                _type_owed_space()   # already let go
             return   # the tap only held the send: no recording
         if not state.is_recording:
             if shift:

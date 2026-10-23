@@ -79,16 +79,16 @@ def beeps(run):
                    "beep)")
 
 
-def type_in_terminal(run, shot_name):
-    """Dictate "git status" into a terminal; the Outcome: plain text, no
-    stray character from F8."""
+def type_in_terminal(run, shot_name, key="f8"):
+    """Dictate "git status" into a terminal, holding *key* (a QEMU key name);
+    the Outcome: plain text, no stray character from the key."""
     run.vm.ssh(f"rm -f {TERM_FILE}")
     command = run.vm.spec.terminal + ["bash", "-c", f"stty -icanon -echo; exec cat > {TERM_FILE}"]
     run.vm.session_background("terminal", *command)
     time.sleep(4)
     run.vm.click_centre()
     time.sleep(0.5)
-    _typed, _heard, mark = run.say("git_status", wait=False)
+    _typed, _heard, mark = run.say("git_status", key=key, wait=False)
     typed = run.wait_dictation(mark, sink="term")   # reads ~/tt/term.txt
     shot = run.shot(shot_name)
     run.vm.ssh("pkill -x cat", check=False)
