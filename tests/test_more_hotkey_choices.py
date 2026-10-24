@@ -148,11 +148,12 @@ def test_a_right_ctrl_hold_key_pressed_during_hands_free_is_hidden(service):
 
 
 def test_a_right_ctrl_toggle_holds_a_send_counting_down_when_pressed(service, monkeypatch):
-    """Held on its press, like F9: the Enter can't come while Ctrl is down."""
+    """Held on its press, like F9, and before it's hidden: the Enter waiting
+    for the key would go out the moment it was hidden, ahead of the hold."""
     monkeypatch.setattr(app, "_hold_pending_send", lambda announce: service.append("held") or True)
     held = set()
     key(RCTRL, 1, held, toggle=RCTRL)
-    assert service == ["grab", "held", "let go"]     # not left for the backstop to find
+    assert service == ["held"]
     key(RCTRL, 0, held, toggle=RCTRL)
     assert "start" not in service
 
@@ -436,6 +437,60 @@ def test_a_tap_while_a_due_send_waits_for_right_ctrl_still_holds_it(keyboard, no
     app.state.pending_send = pending
     app._send_when_due(pending)
     assert held == [True] and keyboard.events == []
+
+
+@pytest.fixture
+def due_send(keyboard, no_hotkeys_noted, monkeypatch):
+    """A send counting down to Enter in KWrite, its timers left out; Right
+    Ctrl is the toggle key, down while *pressed(look)* says so."""
+    monkeypatch.setattr(app, "_destination", lambda: ("kwrite", False))
+    monkeypatch.setattr(app, "_cancel_timers", lambda pending: None)
+    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    pending = {"window": "kwrite", "why": "test", "space": "", "mode": "type",
+               "timer": None, "ticks": []}
+    app.state.pending_send = pending
+
+    def fire(pressed):
+        modifier_hotkeys.note([Keyboard(pressed)], ecodes.KEY_F8, RCTRL)
+        app._send_when_due(pending)
+    yield fire
+    app.state.pending_send = None
+
+
+def test_a_tap_while_the_enter_itself_waits_for_right_ctrl_still_holds_it(keyboard, due_send,
+                                                                          monkeypatch):
+    """Right Ctrl went down after the first wait, as the Enter was about to
+    go: the Enter waits again, and a tap read meanwhile still holds the send.
+    Taken before the Enter, the tap found nothing to hold, and Enter went."""
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "kwrite")
+    held = []
+
+    def pressed(look):
+        if look == 3:                   # the hotkey loop reads the tap
+            held.append(app._hold_pending_send(announce=True))
+        return look in (2, 3)
+    due_send(pressed)
+    assert held == [True] and keyboard.events == []
+
+
+def test_where_the_enter_goes_is_asked_once_it_has_waited(keyboard, due_send, monkeypatch):
+    """Clicked into another window while the Enter waited for Right Ctrl:
+    asked before the wait, the answer was out of date."""
+    focus = ["kwrite"]
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: focus[0])
+
+    def pressed(look):
+        if look == 3:
+            focus[0] = "firefox"
+        return look in (2, 3)
+    due_send(pressed)
+    assert keyboard.events == [] and app.state.pending_send is None
+
+
+def test_a_due_send_with_nothing_held_presses_enter(keyboard, due_send, monkeypatch):
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "kwrite")
+    due_send(lambda look: False)
+    assert keyboard.typed_keys() == [ecodes.KEY_ENTER] and app.state.pending_send is None
 
 
 class Grabbable(Keyboard):

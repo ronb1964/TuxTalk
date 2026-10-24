@@ -206,20 +206,22 @@ def test_a_dictation_refused_at_the_last_moment_leaves_recent_dictations(desktop
     assert len(forgotten) == 1 and "swordfish" in forgotten[0]
 
 
-def test_sending_automatically_doesnt_press_enter_in_a_password_field(desktop, monkeypatch):
+def test_sending_automatically_doesnt_press_enter_in_a_password_field(desktop, monkeypatch,
+                                                                     keyboard):
     """Dictate a username, tab into the password box during the wait: Enter
     there would submit the login form."""
-    pressed = []
-    monkeypatch.setattr(app, "_press_key", lambda key, why: pressed.append(why) or True)
+    from tuxtalk.output_backends import VirtualKeyboardOutputBackend
+    monkeypatch.setattr(app, "_output_backend", VirtualKeyboardOutputBackend)
+    monkeypatch.setattr(app.time, "sleep", lambda s: None)
     pending = {"window": None, "why": "sending automatically", "timer": None}
     monkeypatch.setattr(app.state, "pending_send", pending)
     desktop["password"] = True
     app._send_when_due(pending)
-    assert pressed == [] and desktop["labels"] == [app.PASSWORD_FIELD_NOT_SENT]
+    assert keyboard.events == [] and desktop["labels"] == [app.PASSWORD_FIELD_NOT_SENT]
     desktop["password"], desktop["labels"] = False, []
     app.state.pending_send = pending
     app._send_when_due(pending)
-    assert pressed == ["sending automatically"]
+    assert keyboard.typed_keys() == [28]          # KEY_ENTER
 
 
 def test_no_wait_doesnt_backspace_in_a_password_field(desktop, monkeypatch):

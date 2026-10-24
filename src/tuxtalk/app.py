@@ -1636,7 +1636,7 @@ def _key_delay() -> int:
 
 
 def _send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY_MS,
-               raise_if_partial: bool = False) -> bool:
+               raise_if_partial: bool = False, claim=None) -> bool:
     """Press keys [(evdev code, 1 down / 0 up)] on TuxTalk's virtual keyboard.
     True only if all of them were sent: keystrokes that never happened must
     not reach the undo buffer.
@@ -1650,11 +1650,12 @@ def _send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY
     virtual_keyboard.StoppedPartway instead of returning False, for a caller
     that must tell "none of the keys were sent" from "some of them were";
     and a wait that gave up raises virtual_keyboard.GaveUp: the text must
-    not go out another way (wtype, the clipboard) either.
+    not go out another way (wtype, the clipboard) either. *claim* is
+    virtual_keyboard.send's.
     """
     before_press = modifier_hotkeys.wait_while_held(_destination)
     try:
-        sent = virtual_keyboard.send(events, delay_ms, before_press)
+        sent = virtual_keyboard.send(events, delay_ms, before_press, claim)
     except virtual_keyboard.StoppedPartway:
         logger.error(f"{what}: the virtual keyboard stopped partway")
         if raise_if_partial:
@@ -1688,16 +1689,17 @@ def _typed_breaks_for(text: str, window_class) -> str:
     return joined
 
 
-def _press_key(key: str, why: str) -> bool:
+def _press_key(key: str, why: str, claim=None) -> bool:
     """A real "ENTER" or "TAB" after a dictation (key_commands.py). Enter
     sends a chat message, runs a terminal command or submits a form, which is
     the point; Tab moves on to a form's next box, even in Claude Desktop,
     whose typed tabs become spaces. Undo can't reach what's behind either, so
-    once the key is pressed it forgets the dictation; one that couldn't be
-    pressed leaves the text where undo still reaches it."""
+    once the key is pressed it forgets the dictation; one that wasn't
+    pressed leaves the text where undo still reaches it. *claim* can still
+    stop it right before it goes down (_claim_send)."""
     time.sleep(0.05)   # let the app take in the typed text first
-    if not _output_backend().press_keys([((), key)]):
-        logger.warning(f"Couldn't press {key.title()} ({why})")
+    if not _output_backend().press_keys([((), key)], claim=claim):
+        logger.warning(f"{key.title()} not pressed ({why})")
         return False
     state.last_inserted_text = ""
     if key == "ENTER":
@@ -1788,40 +1790,51 @@ def _cancel_timers(pending: dict) -> None:
 
 def _send_when_due(pending: dict) -> None:
     """The wait is over and nothing held it: press Enter, but only in the
-    window the text went to. Enter in whatever the user switched to could
-    send something else entirely.
+    window the text went to (_claim_send).
 
     A Right Ctrl or Right Alt dictation key down now is waited for first
-    (modifier_hotkeys), with the send still pending: the hotkey loop reads a
+    (modifier_hotkeys), and again if one goes down before the Enter does,
+    with the send pending until the Enter goes down: the hotkey loop reads a
     tap of it meanwhile, and the tap holds the send as it would have."""
     with _send_lock:
         if state.pending_send is not pending:
             return
-    key_stuck = not modifier_hotkeys.wait_until_up()
+    sent = modifier_hotkeys.wait_until_up() and _press_key(
+        "ENTER", pending["why"], claim=lambda: _claim_send(pending))
+    with _send_lock:
+        unclaimed = state.pending_send is pending
+        if unclaimed:
+            state.pending_send = None
+    if unclaimed and not sent:
+        logger.info("Not sent: a dictation key stayed down, or Enter couldn't be pressed")
+        _show_send_notice(HELD_SEND_NOTICE)
+
+
+def _claim_send(pending: dict) -> None:
+    """Take the send for its Enter, which goes down right after, unless a
+    tap held it meanwhile or the focus moved. Enter in whatever the user
+    switched to could send something else entirely. Raises
+    virtual_keyboard.GaveUp when it mustn't go."""
     with _send_lock:
         if state.pending_send is not pending:
-            return
+            raise virtual_keyboard.GaveUp("held")
         state.pending_send = None
-    from . import screen_message
-    if key_stuck:
-        logger.info("Not sent: a dictation key stayed down")
-        screen_message.show_over_active_window(HELD_SEND_NOTICE, warning=False,
-                                               tag=SEND_LABEL_TAG, low=True)
-        return
     if _focus_left(pending):
         logger.info("Not sent: another window has the focus now")
-        screen_message.show_over_active_window(SWITCHED_WINDOW_NOTICE, warning=False,
-                                               tag=SEND_LABEL_TAG, low=True)
-        return
+        _show_send_notice(SWITCHED_WINDOW_NOTICE)
+        raise virtual_keyboard.GaveUp("moved")
     # Tabbing from a username into the password box during the wait must
     # not submit the form: "press enter" said on its own is the only Enter a
     # password field gets.
     if _focused_is_password():
         logger.info("Not sent: a password field has the focus now")
-        screen_message.show_over_active_window(PASSWORD_FIELD_NOT_SENT, warning=False,
-                                               tag=SEND_LABEL_TAG, low=True)
-        return
-    _press_key("ENTER", pending["why"])
+        _show_send_notice(PASSWORD_FIELD_NOT_SENT)
+        raise virtual_keyboard.GaveUp("moved")
+
+
+def _show_send_notice(text: str) -> None:
+    from . import screen_message
+    screen_message.show_over_active_window(text, warning=False, tag=SEND_LABEL_TAG, low=True)
 
 
 def _hold_pending_send(announce: bool) -> bool:
@@ -1836,11 +1849,10 @@ def _hold_pending_send(announce: bool) -> bool:
     logger.info("Held the send: the dictation stays unsent")
     if pending.get("space"):
         state.owed_space = pending
-    from . import screen_message
     if announce:
-        screen_message.show_over_active_window(HELD_SEND_NOTICE, warning=False,
-                                               tag=SEND_LABEL_TAG, low=True)
+        _show_send_notice(HELD_SEND_NOTICE)
     else:
+        from . import screen_message
         screen_message.hide(SEND_LABEL_TAG)
     return True
 
@@ -2462,11 +2474,12 @@ def _nav_keycode(name: str) -> int:
     return shortcut_keycode(name.lower())
 
 
-def _send_chords(chords) -> bool:
+def _send_chords(chords, claim=None) -> bool:
     """Press [(modifiers, key)] in order. Consecutive keys with the same
     modifiers share one press of them (Shift held once across forty Lefts,
     not pressed forty times), which halves the events and never leaves a
-    modifier flapping. True only if they were delivered."""
+    modifier flapping. True only if they were delivered. *claim* is
+    virtual_keyboard.send's."""
     events = []
     held = ()
     for mods, key in list(chords) + [((), None)]:
@@ -2477,7 +2490,8 @@ def _send_chords(chords) -> bool:
         if key is not None:
             code = _nav_keycode(key)
             events += [(code, 1), (code, 0)]
-    return _send_keys(events, what=f"{len(chords)} navigation keys", delay_ms=_key_delay())
+    return _send_keys(events, what=f"{len(chords)} navigation keys", delay_ms=_key_delay(),
+                      claim=claim)
 
 
 def _transcribe_audio(audio_f32, language: str | None) -> str | None:
@@ -3215,9 +3229,7 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
     if held_ms < MIN_HOLD_MS or (state.held_send and state.released_while_starting):
         if state.held_send:
             cancel_recording(beeps_on, notify_on, HELD_SEND_NOTICE)
-            from . import screen_message
-            screen_message.show_over_active_window(HELD_SEND_NOTICE, warning=False,
-                                                   tag=SEND_LABEL_TAG, low=True)
+            _show_send_notice(HELD_SEND_NOTICE)
         else:
             cancel_recording(beeps_on, notify_on, f"Cancelled (held {held_ms} ms)")
         return None
@@ -4578,6 +4590,17 @@ def _hide_modifier_hotkey(event, toggle_key, devices, held_modifiers) -> None:
             _release_all_grabs()
 
 
+def _toggle_tap_holds_send(event, toggle_key, held_modifiers) -> bool:
+    """A press of the toggle key while a send counts down holds it, and does
+    nothing else. Asked before a Right Ctrl or Right Alt toggle is hidden
+    (_hide_modifier_hotkey): once hidden, the send's Enter, which waits for
+    the key, could go out before the hold."""
+    return (event.code == toggle_key and event.value == 1 and not state.is_recording
+            and not _someone_elses_shortcut(held_modifiers - {toggle_key})
+            and not (_voice_editing and _held_shift(held_modifiers))
+            and _hold_pending_send(announce=True))
+
+
 def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifiers,
                       devices, cfg, input_device_idx, paste_last_combo=None):
     """Handle a single keyboard event. Both hold (F8) and toggle (F9) are always active.
@@ -4640,6 +4663,8 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
                 _release_all_grabs()
             return
 
+    if toggle_key and _toggle_tap_holds_send(event, toggle_key, held_modifiers):
+        return   # the tap only held the send: no recording
     if event.code in MODIFIER_CODES and event.code in (hold_key, toggle_key):
         _hide_modifier_hotkey(event, toggle_key, devices, held_modifiers)
 
@@ -4681,9 +4706,6 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
     if (toggle_key and event.code == toggle_key and event.value == 1
             and not _someone_elses_shortcut(held_modifiers - {toggle_key})):
         shift = _held_shift(held_modifiers) if _voice_editing else set()
-        if not state.is_recording and not shift and _hold_pending_send(announce=True):
-            _release_all_grabs()    # a Right Ctrl toggle's: nothing will be typed
-            return   # the tap only held the send: no recording
         if not state.is_recording:
             if shift:
                 # An edit: no double-tap hands-free, so not "from_toggle".

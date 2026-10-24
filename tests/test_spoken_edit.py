@@ -42,7 +42,7 @@ def editing(monkeypatch):
     pressed, edits, problems = [], [], []
 
     class Backend:
-        def press_keys(self, chords):
+        def press_keys(self, chords, claim=None):
             pressed.extend(chords)
             return True
 
@@ -186,7 +186,7 @@ def test_every_notice_has_a_short_label():
 
 def test_pressing_enter_remembers_the_send(monkeypatch):
     class Backend:
-        def press_keys(self, chords):
+        def press_keys(self, chords, claim=None):
             return True
     monkeypatch.setattr(app, "_output_backend", lambda: Backend())
     monkeypatch.setattr(app.time, "sleep", lambda s: None)

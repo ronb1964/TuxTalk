@@ -39,9 +39,11 @@ class OutputBackend:
         """Send `count` Backspace presses (character-level undo)."""
         raise NotImplementedError
 
-    def press_keys(self, chords) -> bool:
+    def press_keys(self, chords, claim=None) -> bool:
         """Press [(modifiers, key)] in order, by name ("CTRL", "LEFT"), for
-        select and move by voice (voice_navigation.py)."""
+        select and move by voice (voice_navigation.py). *claim*, if given,
+        is called right before the first key and may stop them all by
+        raising virtual_keyboard.GaveUp (app._claim_send)."""
         raise NotImplementedError
 
 
@@ -60,9 +62,9 @@ class VirtualKeyboardOutputBackend(OutputBackend):
         from . import app
         return app._send_backspaces(count)
 
-    def press_keys(self, chords) -> bool:
+    def press_keys(self, chords, claim=None) -> bool:
         from . import app
-        return app._send_chords(chords)
+        return app._send_chords(chords, claim)
 
 
 class LibeiOutputBackend(OutputBackend):
@@ -276,7 +278,13 @@ class LibeiOutputBackend(OutputBackend):
     def backspaces(self, count: int) -> bool:
         return self._with_session(lambda s: s.backspaces(count))
 
-    def press_keys(self, chords) -> bool:
+    def press_keys(self, chords, claim=None) -> bool:
+        from .virtual_keyboard import GaveUp
+        try:
+            if claim is not None:
+                claim()
+        except GaveUp:
+            return False
         return self._with_session(lambda s: s.press_chords(chords))
 
 

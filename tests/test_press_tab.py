@@ -106,7 +106,7 @@ def test_pressing_tab_goes_through_the_output_backend_and_forgets_undo(monkeypat
     pressed = []
 
     class Backend:
-        def press_keys(self, chords):
+        def press_keys(self, chords, claim=None):
             pressed.append(chords)
             return True
     monkeypatch.setattr(app, "_output_backend", lambda: Backend())
@@ -123,7 +123,7 @@ def test_a_key_that_couldnt_be_pressed_leaves_undo_and_no_send(monkeypatch, key)
     """The focus never moved and nothing was sent: undo still reaches the
     text, and "edit that" mustn't say it's already sent."""
     class Backend:
-        def press_keys(self, chords):
+        def press_keys(self, chords, claim=None):
             return False
     monkeypatch.setattr(app, "_output_backend", lambda: Backend())
     monkeypatch.setattr(app.time, "sleep", lambda s: None)

@@ -328,3 +328,18 @@ def test_flatpak_typing_records_what_libei_types_for_undo(monkeypatch):
     assert app._inject_text("Wait… café", "auto", 0.0) == "ok"
     assert typed == ["Wait... cafe"]
     assert app.state.last_inserted_text == "Wait... cafe"
+
+
+def test_libei_backend_presses_nothing_when_the_claim_says_no(monkeypatch):
+    """A send held by a tap during its wait: no portal session is opened, so
+    no Enter goes out (app._claim_send)."""
+    from tuxtalk import virtual_keyboard
+    from tuxtalk.output_backends import LibeiOutputBackend
+    b = LibeiOutputBackend()
+    opened = []
+    monkeypatch.setattr(b, "_run_handshake", lambda: opened.append(True) or (None, None))
+
+    def claim():
+        raise virtual_keyboard.GaveUp("held")
+    assert b.press_keys([((), "ENTER")], claim=claim) is False
+    assert opened == []

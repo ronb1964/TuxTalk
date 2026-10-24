@@ -159,7 +159,7 @@ def test_press_enter_key_uses_the_output_backend_and_forgets_undo(monkeypatch):
     pressed = []
 
     class Backend:
-        def press_keys(self, chords):
+        def press_keys(self, chords, claim=None):
             pressed.append(chords)
             return True
     monkeypatch.setattr(app, "_output_backend", lambda: Backend())
@@ -219,7 +219,16 @@ def countdown(monkeypatch):
     monkeypatch.setattr(app.threading, "Timer", FakeTimer)
     monkeypatch.setattr(app, "_press_enter_delay", 2.0)
     pressed, labels = [], []
-    monkeypatch.setattr(app, "_press_key", lambda key, why: pressed.append(why) or True)
+    press_key = app._press_key
+
+    def press(key, why, **claim):
+        """Pressed on the test keyboard, and noted by why."""
+        if press_key(key, why, **claim):
+            pressed.append(why)
+            return True
+        return False
+    monkeypatch.setattr(app, "_press_key", press)
+    monkeypatch.setattr(app.time, "sleep", lambda s: None)
     from tuxtalk import screen_message
     monkeypatch.setattr(screen_message, "show_over_active_window",
                         lambda text, **kw: labels.append(text))

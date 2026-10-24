@@ -130,12 +130,14 @@ def start() -> bool:
         return _open() is not None
 
 
-def send(events, delay_ms: float = KEY_DELAY_MS, before_press=None) -> bool:
+def send(events, delay_ms: float = KEY_DELAY_MS, before_press=None, claim=None) -> bool:
     """Press and release keys: *events* is [(evdev key code, 1 down / 0 up)].
     *before_press*, if given, is called before each key goes down, and
     returns None or a function that waits (app._send_keys: until a Right
     Ctrl dictation key is let go) and may raise GaveUp; that runs with the
-    keyboard free for others (_wait_unlocked).
+    keyboard free for others (_wait_unlocked). *claim*, if given, runs the
+    same way once, right before the first key goes down, after any wait,
+    and may raise GaveUp too (app._claim_send: a send a tap held meanwhile).
 
     Waits *delay_ms* after each event, on a schedule kept from the start, so
     sleeping a little long doesn't add up over a long text. When this process
@@ -152,14 +154,14 @@ def send(events, delay_ms: float = KEY_DELAY_MS, before_press=None) -> bool:
     events = list(events)
     if not events:
         return True
+    if claim is not None:
+        before_press = _claiming(before_press, claim)
     with _lock:
         device = _open()
         if device is None:
             return False
         from evdev import ecodes
-        wait = _ready_at - time.monotonic()
-        if wait > 0:
-            time.sleep(wait)
+        time.sleep(max(0.0, _ready_at - time.monotonic()))
         step = delay_ms / 1000
         due = time.monotonic()
         down = {}           # keys held, in the order they went down
@@ -218,6 +220,26 @@ def _wait_unlocked(device, down, wait) -> None:
         device.write(ecodes.EV_KEY, code, 1)
         down[code] = True
     device.syn()
+
+
+def _claiming(before_press, claim):
+    """*before_press*, whose answer for the first key is a wait that ends
+    with *claim*."""
+    claimed = False
+
+    def check():
+        nonlocal claimed
+        wait = before_press() if before_press is not None else None
+        if claimed:
+            return wait
+        claimed = True
+
+        def then_claim():
+            if wait is not None:
+                wait()
+            claim()
+        return then_claim
+    return check
 
 
 def _release(device, codes) -> None:
