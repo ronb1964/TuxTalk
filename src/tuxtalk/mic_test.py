@@ -229,14 +229,20 @@ class MicTest:
 
     def start(self, _button=None):
         """Start recording the chosen microphone, once the last recording's
-        stream is closed."""
+        stream is closed. Replay is greyed out from now: it would play into
+        the recording."""
         self._call_off_replay()
         self.start_btn.set_sensitive(False)
+        self.replay_btn.set_sensitive(False)
         self._reopen.when_closed(self._open)
 
     def _open(self):
         """Open the chosen microphone and record from it. On a stream that
-        won't open or start, the test is as it was, and says why."""
+        won't open or start, the test is as it was, and says why. A
+        recording under way is kept: replacing it would leave its stream
+        holding the microphone."""
+        if self._take is not None:
+            return
         stream = None
         try:
             device_idx = self._device()
@@ -264,7 +270,6 @@ class MicTest:
         self.status.set_text("🎤 Recording... speak normally")
         self._set_grade_style(None)
         self.stop_btn.set_sensitive(True)
-        self.replay_btn.set_sensitive(False)
 
     def stop(self, _button=None):
         """Stop recording, and grade it; or call off a recording still
@@ -352,11 +357,14 @@ class MicTest:
         return samples / self._rate + beeps.WAIT_LIMIT_S + beeps.STUCK_S + beeps.MAX_AHEAD_S
 
     def _replay_over(self, replay, error):
-        """Once for each *replay*: played, failed or given up on, whichever is first."""
+        """Once for each *replay*: played, failed or given up on, whichever
+        is first. Start and Replay come back, unless a recording is under way
+        or about to be."""
         if replay is not self._replaying:
             return False
         self._call_off_replay()
-        self._ready()
+        if not (self.recording or self._reopen.waiting):
+            self._ready()
         if error:
             self._show_error("Playback failed!", error)
         return False

@@ -118,3 +118,35 @@ def test_a_recording_called_off_while_it_waits_never_opens_the_microphone(mic, s
     if stop == "stop":
         assert mic.start_btn.get_sensitive()
 
+
+def test_replay_is_greyed_out_while_a_recording_waits_and_while_it_records(mic, monkeypatch):
+    """A replay clicked while Start waited for the last stream played into
+    the recording, and its end turned Start Recording back on during it: a
+    second Start then replaced that recording, whose stream held the mic
+    until Preferences closed."""
+    played = []
+    monkeypatch.setattr(mic_test.beeps, "play", lambda samples, rate, finished, called_off:
+                        played.append(finished))
+    monkeypatch.setattr(mic_test.GLib, "timeout_add", lambda ms, fn, *args: None)
+    mic.start()
+    mic.opened[0].callback(block(0.05), 160, None, None)
+    run_main_loop(mic)
+    mic.release.clear()
+    mic.stop()
+    assert mic.replay_btn.get_sensitive()
+    mic.start()
+    assert not mic.replay_btn.get_sensitive()
+    mic.replay()                                   # had it still been clickable
+    after_the_close(mic)
+    assert mic.recording and not mic.replay_btn.get_sensitive()
+    played[0](None)
+    run_main_loop(mic)
+    assert not mic.start_btn.get_sensitive() and not mic.replay_btn.get_sensitive()
+
+
+def test_a_second_start_keeps_the_recording_under_way(mic):
+    """Replacing it would leave its stream open, holding the microphone."""
+    mic.start()
+    take = mic._take
+    mic.start()
+    assert len(mic.opened) == 1 and mic._take is take
