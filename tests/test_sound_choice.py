@@ -4,7 +4,7 @@
 dropdown now sets both settings, which keep their meaning, so a config with
 both on (pause players, turn a call down) still shows as it was.
 """
-from tuxtalk.prefs import SOUND_CHOICES, sound_choice
+from tuxtalk.prefs_audio import SOUND_CHOICES, sound_choice
 
 
 def test_every_combination_of_the_two_settings_has_an_entry():

@@ -55,7 +55,7 @@ def win(monkeypatch):
         return s
 
     w._pause_stream_factory = factory
-    w.mic_test = MicTest(lambda: 3, lambda title, text: None)
+    w.audio_tab = SimpleNamespace(mic_test=MicTest(lambda: 3, lambda title, text: None))
     w.grid = Gtk.Grid()
     w._build_type_at_pause(w.grid, 0, 20, lambda text: Gtk.Label(label=text))
     return w

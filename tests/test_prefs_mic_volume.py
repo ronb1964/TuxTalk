@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from tuxtalk import mic_volume as V
-from tuxtalk.prefs import PreferencesWindow
+from tuxtalk.prefs_audio import AudioTab
 
 SOURCES = [
     {"name": "alsa_output.pci-0000_14_00.6.analog-stereo.monitor",
@@ -94,7 +94,7 @@ def test_the_slider_follows_the_chosen_mic(monkeypatch, reads):
     monkeypatch.setattr(V, "list_sources", lambda: SOURCES)
     d = _stub("Sennheiser Profile: USB Audio (hw:3,0)", reads)
 
-    PreferencesWindow._refresh_volume_slider(d)
+    AudioTab._refresh_volume_slider(d)
 
     assert d._volume_source == "alsa_input.usb-Sennheiser-00.mono-fallback"
     assert reads == ["alsa_input.usb-Sennheiser-00.mono-fallback"]
@@ -106,7 +106,7 @@ def test_system_default_keeps_the_default_source(monkeypatch, reads):
     monkeypatch.setattr(V, "list_sources", lambda: SOURCES)
     for mic in ("", "pipewire", "default"):
         d = _stub(mic)
-        PreferencesWindow._refresh_volume_slider(d)
+        AudioTab._refresh_volume_slider(d)
         assert d._volume_source == V.DEFAULT_SOURCE
 
 
@@ -116,7 +116,7 @@ def test_a_mic_that_is_no_longer_listed_uses_the_default_source(monkeypatch, rea
     monkeypatch.setattr(V, "list_sources", lambda: SOURCES)
     d = _stub("Unplugged USB Mic (hw:5,0)")
 
-    PreferencesWindow._refresh_volume_slider(d)
+    AudioTab._refresh_volume_slider(d)
 
     assert d._volume_source == V.DEFAULT_SOURCE
     assert d.volume_scale.sensitive
@@ -126,7 +126,7 @@ def test_a_mic_with_no_source_disables_the_slider(monkeypatch, reads):
     monkeypatch.setattr(V, "list_sources", lambda: SOURCES)
     d = _stub("Some USB Mic (hw:9,0)")
 
-    PreferencesWindow._refresh_volume_slider(d)
+    AudioTab._refresh_volume_slider(d)
 
     assert d._volume_source is None
     assert not d.volume_scale.sensitive
@@ -141,11 +141,11 @@ def test_a_drag_sets_the_volume_once_on_the_chosen_source(monkeypatch):
     monkeypatch.setattr(GLib, "timeout_add", lambda ms, fn: timers.append(fn) or len(timers))
     calls = []
     monkeypatch.setattr(V, "set_volume", lambda v, src: calls.append((v, src)) or True)
-    d = SimpleNamespace(_volume_source="alsa_input.x")
-    d._apply_pending_volume = lambda: PreferencesWindow._apply_pending_volume(d)
+    d = SimpleNamespace(_volume_source="alsa_input.x", _volume_timer=None)
+    d._apply_pending_volume = lambda: AudioTab._apply_pending_volume(d)
 
     for value in (10, 20, 30, 40):
-        PreferencesWindow.on_volume_changed(d, SimpleNamespace(get_value=lambda v=value: v))
+        AudioTab.on_volume_changed(d, SimpleNamespace(get_value=lambda v=value: v))
     assert len(timers) == 1
     timers[0]()
 
@@ -158,7 +158,7 @@ def test_a_volume_that_cant_be_read_disables_the_slider(monkeypatch):
     nothing."""
     monkeypatch.setattr(V, "get_volume", lambda source: None)
     d = _stub("")
-    PreferencesWindow._refresh_volume_slider(d)
+    AudioTab._refresh_volume_slider(d)
     assert not d.volume_scale.sensitive and d.volume_note.visible is True
     assert d._volume_source is None             # so a drag sets nothing
 

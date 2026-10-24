@@ -10,14 +10,14 @@ gi.require_version("Gdk", "3.0")
 gi.require_version("Pango", "1.0")
 from gi.repository import Gtk, Gdk, GLib
 import sounddevice as sd
-from . import mic_stream, mic_volume
+from . import mic_stream
 from .chunk_meter import PauseTest, level_to_fraction, threshold_fraction
-from .mic_test import MicReopen, MicTest, SegmentedVUMeter
+from .mic_test import MicReopen, SegmentedVUMeter
 from .ui_style import Fold, message_dialog, show_message
 from .whisper_vulkan import ENGINE_SIZE_TEXT
 from .hotkey_labels import dropdown_entries, hands_free_label
 from .logger import setup_logger
-from .prefs_indicator import IndicatorSettings
+from .prefs_audio import AudioTab
 from .prefs_stats import StatsTab
 from .prefs_tab import WARNING_AMBER, _on_gnome
 from .prefs_updates import UpdatesTab
@@ -167,22 +167,6 @@ class PauseMeter(SegmentedVUMeter):
             cr.set_line_width(3)
             cr.rectangle(1.5, 1.5, width - 3, height - 3)
             cr.stroke()
-
-
-# Other sound while dictating: (label, pause_media, duck_audio). Both on
-# pauses players and turns the rest down, which some people use for calls.
-SOUND_CHOICES = {
-    "pause": ("Pause music and videos", True, False),
-    "pause-duck": ("Pause music and videos, turn the rest down", True, True),
-    "duck": ("Turn everything down", False, True),
-    "leave": ("Leave it alone", False, False),
-}
-
-
-def sound_choice(config):
-    """The SOUND_CHOICES entry for pause_media and duck_audio."""
-    wanted = (bool(config.get("pause_media", True)), bool(config.get("duck_audio", False)))
-    return next(sid for sid, (_label, *flags) in SOUND_CHOICES.items() if tuple(flags) == wanted)
 
 
 # The Numbers dropdown: (label, numbers_as_digits, numbers_small_as_words).
@@ -671,13 +655,13 @@ class PreferencesWindow:
         vbox.pack_start(title, False, False, 0)
 
         notebook = self.notebook = Gtk.Notebook()
-        notebook.connect("switch-page", self.on_tab_switched)
 
         general_tab = self.create_general_tab()
         notebook.append_page(self._scrollable_tab(general_tab), Gtk.Label(label="General"))
 
-        audio_tab = self.create_audio_tab()
-        notebook.append_page(self._scrollable_tab(audio_tab), Gtk.Label(label="Audio"))
+        self.audio_tab = AudioTab(self)
+        notebook.append_page(self._scrollable_tab(self.audio_tab.build()),
+                             Gtk.Label(label="Audio"))
 
         advanced_tab = self.create_advanced_tab()
         notebook.append_page(self._scrollable_tab(advanced_tab), Gtk.Label(label="Advanced"))
@@ -699,6 +683,8 @@ class PreferencesWindow:
         self.updates_tab = UpdatesTab(self)
         updates_tab = self.updates_tab.build()
         notebook.append_page(self._scrollable_tab(updates_tab), Gtk.Label(label="Updates & Backup"))
+        # Connected once every tab is built: appending the first page shows it.
+        notebook.connect("switch-page", self.on_tab_switched)
 
         vbox.pack_start(notebook, True, True, 0)
 
@@ -1300,167 +1286,6 @@ class PreferencesWindow:
 
         return grid
     
-    def create_audio_tab(self):
-        grid = Gtk.Grid()
-        grid.set_column_spacing(10)
-        grid.set_row_spacing(10)
-        grid.set_margin_start(20)
-        grid.set_margin_end(20)
-        grid.set_margin_top(20)
-        grid.set_margin_bottom(20)
-
-        row = 0
-
-        # ===== MICROPHONE SETUP SECTION =====
-        mic_header = Gtk.Label()
-        mic_header.set_markup('<b>Microphone Setup</b>')
-        mic_header.set_xalign(0)
-        mic_header.set_margin_bottom(10)
-        grid.attach(mic_header, 0, row, 2, 1)
-        row += 1
-
-        mic_label = Gtk.Label(label="Microphone:", xalign=0)
-        grid.attach(mic_label, 0, row, 1, 1)
-        mic_combo = Gtk.ComboBoxText()
-        mic_label.set_mnemonic_widget(mic_combo)    # what a screen reader names it by
-        mic_combo.set_can_focus(True)
-        mic_combo.connect("button-press-event", self._on_combo_button_press)
-        self._block_combo_scroll(mic_combo)
-
-        try:
-            devices = sd.query_devices()
-            input_devices = [(i, d) for i, d in enumerate(devices) if d.get("max_input_channels", 0) > 0]
-            self._input_device_names = [d.get("name", f"Device {i}") for i, d in input_devices]
-            mic_combo.append("", "System Default")
-            for device_idx, device_info in input_devices:
-                device_name = device_info.get("name", f"Device {device_idx}")
-                mic_combo.append(device_name, device_name)    # the name is the setting
-        except Exception as e:
-            # Fallback if sounddevice fails
-            mic_combo.append("", "System Default")
-            logger.warning(f"Could not list audio devices: {e}")
-        
-        # The saved microphone, or System Default when it isn't plugged in now.
-        mic_combo.set_active_id(self.config["mic"])
-        if mic_combo.get_active_id() is None:
-            mic_combo.set_active_id("")
-        
-        mic_combo.connect("changed", self._on_mic_changed)
-        grid.attach(mic_combo, 1, row, 1, 1)
-        row += 1
-        
-        # Advanced Microphone Test Section
-        grid.attach(Gtk.Label(label="Microphone Test:", xalign=0), 0, row, 1, 1)
-        
-        mic_test_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
-        
-        # Volume slider
-        volume_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
-        volume_label = Gtk.Label(label="Input Volume:")
-        self.volume_scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL)
-        volume_label.set_mnemonic_widget(self.volume_scale)
-        self.volume_scale.set_range(0, 100)
-        self.volume_scale.set_hexpand(True)
-        self.volume_scale.set_tooltip_text(
-            "Input volume of the microphone chosen above (PipeWire/PulseAudio)")
-        self.volume_scale.connect("value-changed", self.on_volume_changed)
-        volume_box.pack_start(volume_label, False, False, 0)
-        volume_box.pack_start(self.volume_scale, True, True, 0)
-        mic_test_box.pack_start(volume_box, False, False, 0)
-        self.volume_note = Gtk.Label(xalign=0)
-        self.volume_note.set_markup(
-            "<small>Set this microphone's volume in your desktop's sound settings.</small>")
-        self.volume_note.set_no_show_all(True)
-        mic_test_box.pack_start(self.volume_note, False, False, 0)
-        self._refresh_volume_slider()
-        
-        self.mic_test = MicTest(
-            self.get_selected_device_idx,
-            lambda title, text: show_message(self.window, Gtk.MessageType.ERROR, title, text))
-        self.mic_test.build(mic_test_box)
-        grid.attach(mic_test_box, 1, row, 1, 1)
-        row += 1
-
-        # ===== AUDIO FEEDBACK SECTION =====
-        separator1 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-        separator1.set_margin_top(20)
-        separator1.set_margin_bottom(15)
-        grid.attach(separator1, 0, row, 2, 1)
-        row += 1
-
-        feedback_header = Gtk.Label()
-        feedback_header.set_markup('<b>Audio &amp; Visual Feedback</b>')
-        feedback_header.set_xalign(0)
-        feedback_header.set_margin_bottom(10)
-        grid.attach(feedback_header, 0, row, 2, 1)
-        row += 1
-
-        # Beeps
-        beeps_check = Gtk.CheckButton(label="Play beeps for start/stop/ready")
-        beeps_check.set_active(self.config["beeps"])
-        beeps_check.connect("toggled", lambda x: self.update_config("beeps", x.get_active()))
-        beeps_check.set_tooltip_text("Play audio beeps to confirm when recording starts, stops, and when transcription is ready.\nHelps you know the system is responding.")
-        grid.attach(beeps_check, 0, row, 2, 1)
-        row += 1
-
-        # What happens to other sound while you talk: one question, one
-        # dropdown over the two settings (sound_choice), which keep their meaning.
-        sound_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        sound_label = Gtk.Label(label="Other sound while you dictate 💡:", xalign=0)
-        sound_label.set_tooltip_text(
-            "Pause: YouTube, Spotify and other players pause while you talk, so the\n"
-            "microphone hears only you. Only what TuxTalk paused starts again.\n\n"
-            "Turn down: every other app's sound goes down while you talk (to half on\n"
-            "its volume slider) and comes back after: Discord calls, games and anything\n"
-            "pausing can't reach. A call still hears your microphone, so mute yourself there.\n"
-            "A volume you change yourself in the meantime is left as you set it.")
-        sound_combo = Gtk.ComboBoxText()
-        sound_combo.connect("button-press-event", self._on_combo_button_press)
-        self._block_combo_scroll(sound_combo)
-        for sid, (slabel, _pause, _duck) in SOUND_CHOICES.items():
-            sound_combo.append(sid, slabel)
-        sound_combo.set_active_id(sound_choice(self.config))
-
-        def _on_sound_changed(combo):
-            choice = combo.get_active_id()
-            if choice is not None:
-                _label, pause, duck = SOUND_CHOICES[choice]
-                self.update_config("pause_media", pause)
-                self.update_config("duck_audio", duck)
-        sound_combo.connect("changed", _on_sound_changed)
-        sound_row.pack_start(sound_label, False, False, 0)
-        sound_row.pack_start(sound_combo, False, False, 0)
-        grid.attach(sound_row, 0, row, 2, 1)
-        row += 1
-        
-        # Notifications
-        notify_check = Gtk.CheckButton(label="Show desktop notifications")
-        notify_check.set_active(self.config["notify"])
-        notify_check.connect("toggled", lambda x: self.update_config("notify", x.get_active()))
-        notify_check.set_tooltip_text("Show desktop notifications with transcribed text preview.\nUseful to confirm what was transcribed without switching windows.")
-        grid.attach(notify_check, 0, row, 2, 1)
-        row += 1
-
-        # Recording indicator: on or off here; how it looks in its own window.
-        indicator_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        indicator_check = Gtk.CheckButton(label="Show recording indicator")
-        indicator_check.set_active(self.config.get("recording_indicator", True))
-        indicator_check.set_tooltip_text("Show an animated visual indicator while recording.\nHelps you see that dictation is active and responding to your voice.")
-        customize_btn = Gtk.Button(label="Customize\u2026")
-        customize_btn.set_tooltip_text("Its style, size, color and where it appears")
-        customize_btn.set_sensitive(indicator_check.get_active())
-        customize_btn.connect("clicked", lambda _b: self.indicator_settings.show())
-        indicator_check.connect("toggled", lambda x: (
-            self.update_config("recording_indicator", x.get_active()),
-            customize_btn.set_sensitive(x.get_active())))
-        indicator_row.pack_start(indicator_check, False, False, 0)
-        indicator_row.pack_start(customize_btn, False, False, 0)
-        grid.attach(indicator_row, 0, row, 2, 1)
-        # Built now and shown by Customize…, see IndicatorSettings.
-        self.indicator_settings = IndicatorSettings(self)
-        self.indicator_settings.build()
-        return grid
-
     def _swiss_spelling_check(self):
         """The "Swiss German spelling" checkbox, bound to swiss_spelling."""
         check = Gtk.CheckButton(label="Swiss German spelling (ß → ss)")
@@ -2524,55 +2349,6 @@ class PreferencesWindow:
         current_mic = self.config.get("mic", "")
         return find_input_device(current_mic)
     
-    def on_volume_changed(self, scale):
-        """Handle volume slider changes.
-
-        A drag fires this dozens of times and each change runs wpctl or
-        pactl, so only the value the slider rests on is applied.
-        """
-        self._pending_volume = int(scale.get_value())
-        if getattr(self, "_volume_timer", None) is None:
-            self._volume_timer = GLib.timeout_add(150, self._apply_pending_volume)
-
-    def _apply_pending_volume(self):
-        """Apply the slider's latest value once the drag has paused."""
-        self._volume_timer = None
-        if (getattr(self, "_volume_source", None) is not None
-                and not mic_volume.set_volume(self._pending_volume, self._volume_source)):
-            logger.warning("Could not set the microphone's volume")
-        return False
-
-    def _on_mic_changed(self, combo):
-        self.update_config("mic", combo.get_active_id())
-        self._refresh_volume_slider()
-
-    def _refresh_volume_slider(self):
-        """Point the Input Volume slider at the mic TuxTalk records from.
-
-        A mic whose source can't be found, or whose volume can't be read,
-        disables the slider with a note, rather than letting it change the
-        system default mic instead or show a volume that isn't the mic's.
-        """
-        if not hasattr(self, "volume_scale"):
-            return
-        mic = mic_volume.recorded_mic(self.config.get("mic") or "",
-                                      getattr(self, "_input_device_names", []))
-        if mic.lower() in mic_volume.DEFAULT_MIC_NAMES:
-            source = mic_volume.DEFAULT_SOURCE
-        else:
-            source = mic_volume.source_for_mic(mic, mic_volume.list_sources())
-        volume = None if source is None else mic_volume.get_volume(source)
-        self._volume_source = source if volume is not None else None
-        self.volume_scale.set_sensitive(volume is not None)
-        self.volume_note.set_visible(volume is None)
-        if volume is not None:
-            # Showing the mic's current volume must not write it back.
-            self.volume_scale.handler_block_by_func(self.on_volume_changed)
-            try:
-                self.volume_scale.set_value(volume)
-            finally:
-                self.volume_scale.handler_unblock_by_func(self.on_volume_changed)
-    
     def _fill_language_choices(self, model):
         """(Re)build the Language dropdown and select the current choice.
 
@@ -3591,9 +3367,7 @@ class PreferencesWindow:
 
     def _stop_mic_test(self):
         """The window closes: stop the microphone tests and free the mic."""
-        mic_test = getattr(self, "mic_test", None)
-        if mic_test is not None:
-            mic_test.close()
+        self.audio_tab.mic_test.close()
         self._stop_pause_test(wait=True)
 
     def _on_window_active(self, window, _param):
@@ -3601,7 +3375,7 @@ class PreferencesWindow:
         test still holding a direct hw: mic, or about to open it, would make
         that dictation fail with only a beep, so both tests stop."""
         if not window.is_active():
-            self.mic_test.stop()
+            self.audio_tab.mic_test.stop()
             self._stop_pause_test()
 
     # --- TuxTalk Labs: Type at pause (chunking.py) -----------------------------
@@ -4068,9 +3842,8 @@ class PreferencesWindow:
         tab = notebook.get_tab_label_text(page)
         if tab == "Stats":
             self.stats_tab.refresh()
-        # The first tab is shown before the Audio tab and its test are built.
-        if tab != "Audio" and hasattr(self, "mic_test"):
-            self.mic_test.stop()
+        if tab != "Audio":
+            self.audio_tab.mic_test.stop()
         if tab != "Advanced":
             self._stop_pause_test()
 

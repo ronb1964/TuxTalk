@@ -32,11 +32,11 @@ def prefs(prefs_window, monkeypatch):
     monkeypatch.setattr(sounddevice, "InputStream",
                         lambda **settings: Microphone(opened, release, **settings))
     window = prefs_window()
-    window.mic_test._device = lambda: None
+    window.audio_tab.mic_test._device = lambda: None
     window.notebook.set_current_page(AUDIO_TAB)
     window.opened, window.release = opened, release
     yield window
-    window.mic_test.close()          # a start a failed test left waiting opens nothing later
+    window.audio_tab.mic_test.close()          # a start a failed test left waiting opens nothing later
     release.set()
 
 
@@ -61,7 +61,7 @@ def run_main_loop(seconds):
 
 @pytest.mark.parametrize("stop", STOP_PATHS.values(), ids=STOP_PATHS.keys())
 def test_a_recording_stops_and_frees_the_microphone(prefs, stop, monkeypatch):
-    mic = prefs.mic_test
+    mic = prefs.audio_tab.mic_test
     mic.start_btn.clicked()
     assert mic.recording
     stop(prefs, monkeypatch)
@@ -76,7 +76,7 @@ def test_a_recording_waiting_to_start_never_opens_the_microphone(prefs, stop, mo
     """Start again while the last stream is still stopping waits to open the
     mic; going off meanwhile left it waiting, and it opened the mic with
     Preferences in the background."""
-    mic = prefs.mic_test
+    mic = prefs.audio_tab.mic_test
     prefs.release.clear()
     mic.start_btn.clicked()
     mic.stop_btn.clicked()
@@ -93,6 +93,6 @@ def test_a_recording_waiting_to_start_never_opens_the_microphone(prefs, stop, mo
 def test_the_audio_tab_keeps_its_recording(prefs):
     """Showing the Audio tab itself, as when Preferences opens on it, stops nothing."""
     prefs.notebook.set_current_page(0)
-    prefs.mic_test.start_btn.clicked()
+    prefs.audio_tab.mic_test.start_btn.clicked()
     prefs.notebook.set_current_page(AUDIO_TAB)
-    assert prefs.mic_test.recording
+    assert prefs.audio_tab.mic_test.recording

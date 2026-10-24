@@ -209,8 +209,8 @@ def test_a_screen_reader_names_the_microphone_controls_by_their_labels(prefs_win
     window = prefs_window()
     labels = {w.get_text(): w for w in gtk_text.widgets(window.window) if isinstance(w, Gtk.Label)}
     assert isinstance(labels["Microphone:"].get_mnemonic_widget(), Gtk.ComboBoxText)
-    assert labels["Input Volume:"].get_mnemonic_widget() is window.volume_scale
-    assert labels["Input Level:"].get_mnemonic_widget() is window.mic_test.meter
+    assert labels["Input Volume:"].get_mnemonic_widget() is window.audio_tab.volume_scale
+    assert labels["Input Level:"].get_mnemonic_widget() is window.audio_tab.mic_test.meter
     assert [b.get_accessible().get_name() for b in (
-        window.mic_test.start_btn, window.mic_test.stop_btn, window.mic_test.replay_btn)] == [
+        window.audio_tab.mic_test.start_btn, window.audio_tab.mic_test.stop_btn, window.audio_tab.mic_test.replay_btn)] == [
         "Start Recording", "Stop Recording", "Replay"]

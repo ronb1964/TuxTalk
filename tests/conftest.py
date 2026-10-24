@@ -619,7 +619,7 @@ def prefs_window(monkeypatch):
         if GLib.MainContext.default().find_source_by_id(timer):
             GLib.source_remove(timer)
     for window in built:
-        indicator = window.indicator_settings
+        indicator = window.audio_tab.indicator
         if indicator.dialog is not None:                # Customize… opened it
             indicator.dialog.destroy()
         indicator.grid.destroy()        # not in the window until Customize… opens it

@@ -18,7 +18,7 @@ def window(prefs_window):
 
 def _combo(window, entry):
     """The indicator dropdown that offers *entry*."""
-    return next(w for w in widgets(window.indicator_settings.grid)
+    return next(w for w in widgets(window.audio_tab.indicator.grid)
                 if isinstance(w, Gtk.ComboBoxText) and entry in combo_ids(w))
 
 
@@ -43,7 +43,7 @@ def pickers():
 def test_controls_write_the_new_config_keys(window):
     _combo(window, "bars").set_active_id("bars")
     _combo(window, "system").set_active_id("system")
-    find(window.indicator_settings.grid, Gtk.Scale).set_value(1.5)
+    find(window.audio_tab.indicator.grid, Gtk.Scale).set_value(1.5)
     _combo(window, "large").set_active_id("large")
     _combo(window, "top-left").set_active_id("top-left")
     assert window.config["indicator_style"] == "bars"
@@ -57,7 +57,7 @@ def test_a_picked_color_is_saved_as_the_custom_color(window, pickers):
     """Picking a color implies using it, so the mode flips to Custom without
     opening a second picker over the one just used."""
     _combo(window, "system").set_active_id("system")
-    swatch = find(window.indicator_settings.grid, Gtk.ColorButton)
+    swatch = find(window.audio_tab.indicator.grid, Gtk.ColorButton)
     red = Gdk.RGBA()
     red.parse("#ff5252")
     swatch.set_rgba(red)
@@ -92,7 +92,7 @@ def test_custom_color_selection_opens_the_picker(window, pickers):
 def test_swatch_mirrors_the_desktop_accent_in_system_mode(window):
     """In system mode the swatch shows the live accent color, a continuity cue;
     in Custom mode the color picked."""
-    swatch = find(window.indicator_settings.grid, Gtk.ColorButton)
+    swatch = find(window.audio_tab.indicator.grid, Gtk.ColorButton)
     assert _hex(swatch.get_rgba()) == "#ff00ff"
     found, accent = Gtk.Label().get_style_context().lookup_color("theme_selected_bg_color")
     if not found:
@@ -116,14 +116,14 @@ def test_reset_to_classic_cyan_control_exists(window):
     """A plainly-labeled control snaps the color back to the classic cyan, the
     one color whose identity matters, without needing to know a hex code."""
     _combo(window, "system").set_active_id("system")
-    find(window.indicator_settings.grid, Gtk.Button, "Reset to classic cyan").clicked()
+    find(window.audio_tab.indicator.grid, Gtk.Button, "Reset to classic cyan").clicked()
     assert window.config["indicator_color"] == CLASSIC_CYAN_HEX
     assert window.config["indicator_color_mode"] == "custom"
-    assert _hex(find(window.indicator_settings.grid, Gtk.ColorButton).get_rgba()) == CLASSIC_CYAN_HEX
+    assert _hex(find(window.audio_tab.indicator.grid, Gtk.ColorButton).get_rgba()) == CLASSIC_CYAN_HEX
 
 
 def test_uses_american_spelling_for_color(window):
-    assert not [text for text in tree_text(window.window, window.indicator_settings.grid)
+    assert not [text for text in tree_text(window.window, window.audio_tab.indicator.grid)
                 if "olour" in text], "UI text must use American 'Color'"
 
 
@@ -145,7 +145,7 @@ def test_offset_boxes_show_up_and_right_as_positive():
 
 def _offset_box(window, hint):
     """The number box written *hint* sits under."""
-    label = find(window.indicator_settings.grid, Gtk.Label, hint)
+    label = find(window.audio_tab.indicator.grid, Gtk.Label, hint)
     return find(label.get_parent(), Gtk.SpinButton)
 
 
@@ -158,7 +158,7 @@ def test_offset_direction_is_shown_beside_the_boxes_with_a_reset(prefs_window):
     assert (across.get_value(), up.get_value()) == (40, 30)
     up.set_value(50)
     assert window.config["indicator_offset_y"] == -50
-    reset = find(window.indicator_settings.grid, Gtk.Button, "Reset to 0")
+    reset = find(window.audio_tab.indicator.grid, Gtk.Button, "Reset to 0")
     if not reset.get_sensitive():
         pytest.skip("positioning needs XWayland, which this display lacks")
     reset.clicked()
@@ -170,11 +170,11 @@ def test_customize_opens_the_settings_and_done_keeps_them(window):
     Preferences, for OK or Cancel to keep or drop, and it opens again."""
     customize = find(window.window, Gtk.Button, "Customize…")
     customize.clicked()
-    dialog = window.indicator_settings.dialog
+    dialog = window.audio_tab.indicator.dialog
     assert dialog.get_title() == "Recording Indicator" and dialog.get_visible()
     _combo(window, "bars").set_active_id("bars")
     dialog.response(Gtk.ResponseType.CLOSE)
     assert not dialog.get_visible()
     assert window.config["indicator_style"] == "bars"
     customize.clicked()
-    assert window.indicator_settings.dialog is dialog and dialog.get_visible()
+    assert window.audio_tab.indicator.dialog is dialog and dialog.get_visible()
