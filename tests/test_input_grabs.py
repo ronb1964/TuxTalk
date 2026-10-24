@@ -763,21 +763,21 @@ def test_a_microphone_that_never_stops_cannot_freeze_the_service(monkeypatch):
     release = _t.Event()
 
     class StuckStream:
-        def stop(self):
+        def stop(self, ignore_errors=True):
             release.wait(5)
 
-        def close(self):
+        def close(self, ignore_errors=True):
             pass
 
     monkeypatch.setattr(app.mic_stream, "STOP_TIMEOUT_S", 0.1)
-    monkeypatch.setattr(app.mic_stream, "_stuck", [])
+    monkeypatch.setattr(app.mic_stream, "_closing", set())
     stream = StuckStream()
     app.state.stream = stream
     started = app.time.monotonic()
     app._stop_stream_safely()
     assert app.time.monotonic() - started < 1.0
     assert app.state.stream is None
-    assert app.mic_stream._stuck == [stream]
+    assert app.mic_stream._closing == {stream}
     release.set()
 
 
@@ -785,16 +785,16 @@ def test_a_normal_stop_closes_the_stream(monkeypatch):
     calls = []
 
     class Stream:
-        def stop(self):
+        def stop(self, ignore_errors=True):
             calls.append("stop")
 
-        def close(self):
+        def close(self, ignore_errors=True):
             calls.append("close")
 
-    monkeypatch.setattr(app.mic_stream, "_stuck", [])
+    monkeypatch.setattr(app.mic_stream, "_closing", set())
     app.state.stream = Stream()
     app._stop_stream_safely()
-    assert calls == ["stop", "close"] and app.mic_stream._stuck == []
+    assert calls == ["stop", "close"] and app.mic_stream._closing == set()
 
 
 def test_falling_back_to_another_mic_says_so(monkeypatch, quiet_recording):

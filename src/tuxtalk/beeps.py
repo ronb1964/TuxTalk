@@ -32,6 +32,7 @@ import time
 import numpy as np
 import sounddevice as sd
 
+from . import mic_stream
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -340,27 +341,10 @@ def _at_exit():
     """Let a sound that is playing as TuxTalk quits finish first, briefly.
 
     Registered after sounddevice's own exit handler, so it runs before it.
-    That handler ends PortAudio, and ending it under a stream that still
-    plays can hang, or crash when the sound thread then closes the stream.
-    A sound not over by then is stuck: sounddevice is told PortAudio was
-    never started, so its handler leaves it, and the system closes the
-    stream with the process. (atexit.unregister can't stop a handler once
-    exit has begun.)"""
+    That handler ends PortAudio, and a sound not over by then is stuck in
+    PortAudio: it is left to the system (mic_stream.leave_portaudio_running)."""
     if not wait_until_played(EXIT_WAIT_S):
-        sd._initialized = 0
+        mic_stream.leave_portaudio_running()
 
 
-def _check_exit_handler(module):
-    """Whether *module* (sounddevice) counts the times it started PortAudio
-    in _initialized, which its exit handler ends PortAudio by and _at_exit
-    sets to leave it running. A sounddevice that doesn't is logged: a sound
-    stuck as TuxTalk quits can then hold up quitting."""
-    if isinstance(getattr(module, "_initialized", None), int):
-        return True
-    logger.warning("This sounddevice keeps no _initialized count: a sound stuck as TuxTalk "
-                   "quits can hold up quitting")
-    return False
-
-
-_check_exit_handler(sd)
 atexit.register(_at_exit)

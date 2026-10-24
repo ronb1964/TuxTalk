@@ -56,10 +56,10 @@ def test_the_mic_stream_is_closed_even_when_stopping_it_fails(monkeypatch):
     class Stream:
         closed = False
 
-        def stop(self):
+        def stop(self, ignore_errors=True):
             raise OSError("device unplugged")
 
-        def close(self):
+        def close(self, ignore_errors=True):
             Stream.closed = True
 
     monkeypatch.setattr(app.state, "stream", Stream())

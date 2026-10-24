@@ -492,6 +492,7 @@ def test_quitting_waits_for_a_sound_and_leaves_a_stuck_one_to_the_system(sound, 
     """At exit, sounddevice ends PortAudio; under a stream that still plays
     that can hang or crash, so a stuck sound's stream is left alone."""
     system = sound()
+    monkeypatch.setattr(beeps.mic_stream, "sd", system)
     release = threading.Event()
     monkeypatch.setattr(beeps, "_play", lambda *a: release.wait(5))
     monkeypatch.setattr(beeps, "EXIT_WAIT_S", 0.1)
@@ -541,28 +542,3 @@ def test_quitting_during_a_sound(play, printed):
     assert ran.returncode == 0, ran.stderr
     assert ran.stdout.splitlines() == printed
     assert time.monotonic() - started < 10
-
-
-def test_sounddevice_ends_portaudio_as_often_as_it_counts_it_started(monkeypatch):
-    """_at_exit leaves a stuck sound's PortAudio running by setting this
-    count to 0; the installed sounddevice's own exit handler must go by it."""
-    import sounddevice
-    ended = []
-
-    def terminate():
-        sounddevice._initialized -= 1
-        ended.append(1)
-    monkeypatch.setattr(sounddevice, "_terminate", terminate)
-    monkeypatch.setattr(sounddevice, "_last_callback", None)
-    for started in (0, 2):
-        monkeypatch.setattr(sounddevice, "_initialized", started)
-        ended.clear()
-        sounddevice._exit_handler()
-        assert len(ended) == started
-    assert beeps._check_exit_handler(sounddevice)
-
-
-def test_a_sounddevice_without_the_count_is_logged(caplog):
-    caplog.set_level(logging.INFO)
-    assert not beeps._check_exit_handler(types.SimpleNamespace())
-    assert any("keeps no _initialized" in r.getMessage() for r in caplog.records)

@@ -24,10 +24,10 @@ class FakeStream:
     def start(self):
         self.started = True
 
-    def stop(self):
+    def stop(self, ignore_errors=True):
         self.stopped = True
 
-    def close(self):
+    def close(self, ignore_errors=True):
         self.closed = True
 
 
@@ -214,11 +214,11 @@ def test_a_microphone_that_never_stops_doesnt_freeze_the_window(win, monkeypatch
     good. Stop is left to another thread, and closing Preferences waits for
     it only a moment."""
     monkeypatch.setattr(prefs.mic_stream, "STOP_TIMEOUT_S", 0.1)
-    monkeypatch.setattr(prefs.mic_stream, "_stuck", [])
+    monkeypatch.setattr(prefs.mic_stream, "_closing", set())
     release = threading.Event()
 
     class Hangs(FakeStream):
-        def stop(self):
+        def stop(self, ignore_errors=True):
             release.wait(5)
             super().stop()
     win._pause_stream_factory = lambda **kwargs: win.streams.append(Hangs(**kwargs)) or \

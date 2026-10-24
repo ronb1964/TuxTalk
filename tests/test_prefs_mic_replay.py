@@ -179,10 +179,10 @@ def test_a_microphone_that_wont_start_is_freed_and_says_so(monkeypatch):
         def start(self):
             raise OSError("Device unavailable")
 
-        def stop(self):
+        def stop(self, ignore_errors=True):
             pass
 
-        def close(self):
+        def close(self, ignore_errors=True):
             self.closed = True
     mic, _asked, _scheduled, shown = _window(monkeypatch, None)
     monkeypatch.setattr(mic_test.mic_stream, "input_samplerate", lambda device, rate: rate)
