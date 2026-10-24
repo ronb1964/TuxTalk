@@ -4740,36 +4740,36 @@ class PreferencesWindow:
         # is too quiet, a peak over 0.95 clips, and an average under 0.20 is quiet.
 
         if len(speaking_samples) < 5:
-            # Not enough speech detected
             self.level_status.set_text("⚠️ Too quiet - speak louder or move closer to the mic")
             style_context.add_class("level-too-quiet")
         elif peak_level > 0.95:
-            # Clipping detected
             self.level_status.set_text("⚠️ Too loud - reduce volume to avoid distortion")
             style_context.add_class("level-too-loud")
         elif speaking_avg < 0.20:
-            # Speech detected but too quiet
             self.level_status.set_text("⚠️ A bit quiet - try speaking louder for best results")
             style_context.add_class("level-too-quiet")
         else:
-            # Good levels!
             self.level_status.set_text("✓ Good levels - should transcribe well!")
             style_context.add_class("level-good")
     
     def on_replay_recording(self, button):
         """Play the test recording back, three times louder, on the sound
         thread (beeps.play), so it is heard to the end and the window stays
-        free while it plays."""
+        free while it plays. Replay is greyed out until it is over, so a
+        second click can't queue the recording again behind it."""
         if self.recorded_audio is None:
             return
         import numpy as np
         from . import beeps
         louder = np.clip(self.recorded_audio[:, 0] * 3.0, -1.0, 1.0).astype(np.float32)
+        self.replay_btn.set_sensitive(False)
         beeps.play(louder, getattr(self, '_recording_sr', 48000),
-                   failed=lambda error: GLib.idle_add(self._replay_failed, error))
+                   finished=lambda error: GLib.idle_add(self._replay_over, error))
 
-    def _replay_failed(self, error):
-        self.show_error_dialog("Playback failed!", error)
+    def _replay_over(self, error):
+        self.replay_btn.set_sensitive(not self.recording)
+        if error:
+            self.show_error_dialog("Playback failed!", error)
         return False
 
     def show_error_dialog(self, title, message):

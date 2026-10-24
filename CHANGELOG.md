@@ -51,7 +51,8 @@ before 0.15.0, so older entries use that name.
   typing, or your hotkeys for more than a second. The double-tap is timed
   from when you hear the end of the start beep, and that beep is never
   mistaken for a word, however late it plays. The microphone test in
-  Preferences, Audio, plays your recording back to the end too.
+  Preferences, Audio, plays your recording back to the end too, and Replay
+  waits until it's done.
 - On a desktop where TuxTalk can't make its own keyboard and types with
   wtype instead, your dictation was on wtype's command line for a moment,
   where anyone else logged in to the computer could read it. It goes to

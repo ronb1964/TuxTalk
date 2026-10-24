@@ -299,11 +299,11 @@ def test_a_recording_is_played_back_to_the_end_at_the_output_rate(sound, monkeyp
     only_its_own_rate(system, monkeypatch)
     t = np.arange(16000) / 16000
     recording = (np.sin(2 * np.pi * 300 * t) * 0.5).astype(np.float32)   # 1 s at 16 kHz
-    failures = []
-    beeps.play(recording, 16000, failed=failures.append)
+    told = []
+    beeps.play(recording, 16000, finished=told.append)
     assert beeps.wait_until_played(5)
     heard = system.speakers()
-    assert failures == []
+    assert told == [None]
     assert np.count_nonzero(heard) == pytest.approx(48000, abs=48)
 
 
@@ -324,3 +324,26 @@ def test_a_beep_held_up_behind_another_sound_knows_when_it_was_heard(sound, down
         # One latency from when it was handed over: never early, and late
         # by at most the latency when it all went into an empty buffer.
         assert heard_until - 0.03 <= start.heard_until <= heard_until + 0.174 + 0.03
+
+
+def test_sounds_behind_a_stuck_output_never_pile_up(sound, monkeypatch):
+    """Beeps and replays asked for while the output hangs wait for it, but
+    only the newest few; asking never blocks, and a replay that is dropped
+    says so (Preferences then lets Replay be clicked again)."""
+    sound()
+    release = threading.Event()
+    played = []
+    monkeypatch.setattr(beeps, "_play", lambda *a: played.append(1) or release.wait(5))
+    beeps.beep(True, *beeps.START_BEEP)                 # the output hangs on this one
+    while not played:
+        time.sleep(0.01)
+    told = []
+    beeps.play(np.zeros(100, np.float32), RATE, finished=told.append)
+    asked = time.monotonic()
+    for _ in range(beeps.MAX_WAITING):
+        beeps.beep(True, *beeps.CANCEL_BEEP)
+    assert time.monotonic() - asked < 0.05
+    assert told == ["the sound output is held up"]
+    release.set()
+    assert beeps.wait_until_played(5)
+    assert len(played) == 1 + beeps.MAX_WAITING

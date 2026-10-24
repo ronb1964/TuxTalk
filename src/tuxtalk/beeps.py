@@ -24,7 +24,7 @@ Sounds play one after another on one thread of their own. A sound server
 that stops answering holds up only that thread; whoever waits for a sound
 (wait_until_played) waits a bounded time.
 """
-import queue
+import collections
 import sys
 import threading
 import time
@@ -56,6 +56,9 @@ STUCK_S = 2.0
 # PortAudio's word on when a sample is heard, further ahead than this, is no
 # real time (a backend that reports none gives 0).
 MAX_AHEAD_S = 2.0
+# Sounds that may wait for the sound thread. More pile up only behind an
+# output that stopped answering, and then the oldest is dropped.
+MAX_WAITING = 4
 # Where the sound server's own output is, best first. The default device can
 # be a USB microphone with no speaker at all.
 OUTPUT_HINTS = ("pipewire", "pulse", "sysdefault", "default", "analog")
@@ -67,8 +70,8 @@ _latency_logged = False
 _underflow_logged = False
 _failure_logged = False
 
-_jobs = queue.Queue()
-_finished = threading.Condition()
+_finished = threading.Condition()   # guards everything below
+_waiting = collections.deque()      # (job, what, Sound, finished callback), oldest first
 _asked = 0               # sounds asked for so far, and how many of them are over
 _over = 0
 _worker = None
@@ -158,10 +161,10 @@ def beep(enabled: bool, freq, duration):
     return sound
 
 
-def play(samples, rate, failed=None):
+def play(samples, rate, finished=None):
     """Play mono float32 *samples* recorded at *rate*, after any sound
-    before it. Returns at once. *failed* is called with the error's text,
-    on the sound thread, if it couldn't be played."""
+    before it. Returns at once. *finished* is called once the sound is over,
+    on the sound thread, with None, or the text of what stopped it."""
     sound = Sound(len(samples) / rate)
 
     def job():
@@ -171,7 +174,7 @@ def play(samples, rate, failed=None):
             positions = np.linspace(0, len(samples) - 1, int(len(samples) * device_rate / rate))
             resampled = np.interp(positions, np.arange(len(samples)), samples).astype(np.float32)
         _play(resampled, device_rate, device, sound)
-    _submit(job, "a sound", sound, failed)
+    _submit(job, "a sound", sound, finished)
 
 
 def wait_until_played(limit=WAIT_LIMIT_S):
@@ -186,36 +189,52 @@ def wait_until_played(limit=WAIT_LIMIT_S):
     return False
 
 
-def _submit(job, what, sound, failed=None):
+def _submit(job, what, sound, finished=None):
     global _asked, _worker
     with _finished:
         _asked += 1
-        _jobs.put((job, what, sound, failed))
+        dropped = _waiting.popleft() if len(_waiting) >= MAX_WAITING else None
+        _waiting.append((job, what, sound, finished))
+        _finished.notify_all()
         if _worker is None or not _worker.is_alive():
             _worker = threading.Thread(target=_work, name="tt-sounds", daemon=True)
             _worker.start()
+    if dropped:
+        _job, what_dropped, sound_dropped, told = dropped
+        logger.info(f"Skipped {what_dropped}: the sound output is held up")
+        _end(sound_dropped, told, "the sound output is held up")
+
+
+def _end(sound, finished, error):
+    """One sound is over: tell whoever asked for it, and the waiters."""
+    global _over
+    sound.over = True
+    if finished:
+        finished(error)
+    with _finished:
+        _over += 1
+        _finished.notify_all()
 
 
 def _work():
     """The sound thread: plays each sound asked for, in turn. A sound is
     never worth a recording, so any audio error is logged and dropped."""
-    global _over, _failure_logged
+    global _failure_logged
     while True:
-        job, what, sound, failed = _jobs.get()
+        with _finished:
+            _finished.wait_for(lambda: _waiting)
+            job, what, sound, finished = _waiting.popleft()
+        error = None
         try:
             job()
         except Exception as e:
+            error = str(e)
             # A missing output fails every sound: one warning says so.
             if not _failure_logged:
                 _failure_logged = True
                 logger.warning(f"Could not play {what}: {e} (later failures are not logged)")
-            if failed:
-                failed(str(e))
         finally:
-            sound.over = True
-            with _finished:
-                _over += 1
-                _finished.notify_all()
+            _end(sound, finished, error)
 
 
 class _Playback:
