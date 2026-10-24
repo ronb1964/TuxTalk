@@ -1,7 +1,7 @@
 {
  "files": {
   "app.py": 4860,
-  "prefs.py": 3606,
+  "prefs.py": 3361,
   "tray.py": 2477,
   "welcome_dialog.py": 3222
  },
@@ -207,9 +207,7 @@
   "prefs.py::PreferencesWindow._release_pidfile::swallowed_error": 1,
   "prefs.py::PreferencesWindow._scroll_into_view.scroll::undocumented": 1,
   "prefs.py::PreferencesWindow._send_automatically_option::long_line": 1,
-  "prefs.py::PreferencesWindow._start_pause_test::swallowed_error": 1,
   "prefs.py::PreferencesWindow._swiss_spelling_check::long_line": 2,
-  "prefs.py::PreferencesWindow._tap_reconfigure::long_line": 1,
   "prefs.py::PreferencesWindow._update_model_combo_hint::dated_comment": 1,
   "prefs.py::PreferencesWindow._vulkan_offered::swallowed_error": 1,
   "prefs.py::PreferencesWindow.check_and_download_model::long_line": 1,
@@ -220,7 +218,6 @@
   "prefs.py::PreferencesWindow.create_general_tab::undocumented": 1,
   "prefs.py::PreferencesWindow.create_ui::long_line": 1,
   "prefs.py::PreferencesWindow.create_ui::undocumented": 1,
-  "prefs.py::PreferencesWindow::undocumented": 1,
   "prefs.py::_acquire_prefs_singleton._cleanup::swallowed_error": 1,
   "prefs.py::_acquire_prefs_singleton::swallowed_error": 1,
   "prefs.py::_acquire_prefs_singleton::undocumented": 1,
@@ -524,9 +521,6 @@
   },
   "output_backends.py::LibeiOutputBackend._run_handshake": {
    "lines": 106
-  },
-  "prefs.py::PreferencesWindow._build_type_at_pause": {
-   "lines": 107
   },
   "prefs.py::PreferencesWindow._on_model_changed": {
    "decisions": 26,

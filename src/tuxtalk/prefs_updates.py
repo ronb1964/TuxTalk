@@ -7,6 +7,7 @@ import threading
 
 import gi
 gi.require_version("Gtk", "3.0")
+gi.require_version("Pango", "1.0")
 from gi.repository import GLib, Gtk, Pango
 
 from .logger import setup_logger

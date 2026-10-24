@@ -12,9 +12,10 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
 import gtk_text  # noqa: E402
-from tuxtalk import prefs  # noqa: E402
+from tuxtalk import mic_stream  # noqa: E402
 from tuxtalk.mic_test import MicTest  # noqa: E402
 from tuxtalk.prefs import PreferencesWindow  # noqa: E402
+from tuxtalk.prefs_type_at_pause import TypeAtPause  # noqa: E402
 
 
 class FakeStream:
@@ -34,8 +35,8 @@ class FakeStream:
 
 @pytest.fixture
 def win(monkeypatch):
-    """A PreferencesWindow with only what the Labs entry needs."""
-    monkeypatch.setattr(prefs.mic_stream, "input_samplerate", lambda idx, rate: 16000)
+    """The Labs entry, in a PreferencesWindow with only what it needs."""
+    monkeypatch.setattr(mic_stream, "input_samplerate", lambda idx, rate: 16000)
     w = PreferencesWindow.__new__(PreferencesWindow)
     w.config = {"chunked_dictation": False, "chunk_pause_seconds": 0.8,
                 "chunk_speech_db": 6.0, "chunk_context_marks": True, "mic": ""}
@@ -47,18 +48,19 @@ def win(monkeypatch):
 
     w.update_config = update_config
     w.get_selected_device_idx = lambda: 3
-    w.streams = []
+    w.audio_tab = SimpleNamespace(mic_test=MicTest(lambda: 3, lambda title, text: None))
+    tap = w.type_at_pause = TypeAtPause(w)
+    tap.streams = []
 
     def factory(**kwargs):
         s = FakeStream(**kwargs)
-        w.streams.append(s)
+        tap.streams.append(s)
         return s
 
-    w._pause_stream_factory = factory
-    w.audio_tab = SimpleNamespace(mic_test=MicTest(lambda: 3, lambda title, text: None))
-    w.grid = Gtk.Grid()
-    w._build_type_at_pause(w.grid, 0, 20, lambda text: Gtk.Label(label=text))
-    return w
+    tap._pause_stream_factory = factory
+    tap.grid = Gtk.Grid()
+    tap.build(tap.grid, 0, 20, lambda text: Gtk.Label(label=text))
+    return tap
 
 
 def stopped(stream):
@@ -114,16 +116,16 @@ def test_the_switch_greys_the_fine_tuning(win):
     win.tap_check.set_active(True)
     assert win.tap_fine.get_sensitive() is True
     assert win.tap_fold.header.get_sensitive() is True
-    assert ("chunked_dictation", True) in win.updates
+    assert ("chunked_dictation", True) in win.win.updates
 
 
 def test_the_controls_write_their_settings(win):
     win.tap_pause_spin.set_value(1.2)
     win.tap_db_spin.set_value(9)
     win.tap_context_check.set_active(False)
-    assert ("chunk_pause_seconds", 1.2) in win.updates
-    assert ("chunk_speech_db", 9.0) in win.updates
-    assert ("chunk_context_marks", False) in win.updates
+    assert ("chunk_pause_seconds", 1.2) in win.win.updates
+    assert ("chunk_speech_db", 9.0) in win.win.updates
+    assert ("chunk_context_marks", False) in win.win.updates
 
 
 def test_the_test_opens_the_chosen_mic_and_shows_what_it_hears(win):
@@ -145,7 +147,7 @@ def test_the_test_opens_the_chosen_mic_and_shows_what_it_hears(win):
 def test_closing_preferences_stops_the_test(win):
     win.tap_check.set_active(True)
     win.tap_test_btn.clicked()
-    win._stop_mic_test()                 # what OK, Cancel and the X all call
+    win.win._stop_mic_test()                 # what OK, Cancel and the X all call
     assert win.streams[-1].stopped and win.streams[-1].closed
     assert win.tap_test_btn.get_label() == "Test"
 
@@ -174,7 +176,7 @@ def test_leaving_the_advanced_tab_stops_the_test(win):
     win.tap_check.set_active(True)
     win.tap_test_btn.clicked()
     notebook = SimpleNamespace(get_tab_label_text=lambda page: "Audio")
-    win.on_tab_switched(notebook, Gtk.ScrolledWindow(), 1)
+    win.win.on_tab_switched(notebook, Gtk.ScrolledWindow(), 1)
     assert stopped(win.streams[-1])
 
 
@@ -194,7 +196,7 @@ def test_a_mic_that_cant_be_found_says_so(win):
     lookup that failed left the test button doing nothing at all."""
     def no_devices():
         raise OSError("no audio devices")
-    win.get_selected_device_idx = no_devices
+    win.win.get_selected_device_idx = no_devices
     win.tap_check.set_active(True)
     win.tap_test_btn.clicked()
     assert win.tap_status.get_text() == "Couldn't open the microphone: no audio devices"
@@ -232,7 +234,7 @@ def test_leaving_the_window_stops_the_test(win):
     beep, so the test stops then."""
     win.tap_check.set_active(True)
     win.tap_test_btn.clicked()
-    win._on_window_active(SimpleNamespace(is_active=lambda: False), None)
+    win.win._on_window_active(SimpleNamespace(is_active=lambda: False), None)
     assert stopped(win.streams[-1])
 
 
@@ -240,11 +242,11 @@ def test_a_microphone_that_never_stops_doesnt_freeze_the_window(win, monkeypatch
     """A stream that vanished from the audio system can hang stop() for
     good. Stop is left to another thread, and closing Preferences waits for
     it only a moment."""
-    monkeypatch.setattr(prefs.mic_stream, "STOP_TIMEOUT_S", 0.1)
-    monkeypatch.setattr(prefs.mic_stream, "_closing", set())
+    monkeypatch.setattr(mic_stream, "STOP_TIMEOUT_S", 0.1)
+    monkeypatch.setattr(mic_stream, "_closing", set())
     release = slow_to_stop(win)
     win.tap_check.set_active(True)
-    for count, stop in ((1, win.tap_test_btn.clicked), (2, win._stop_mic_test)):
+    for count, stop in ((1, win.tap_test_btn.clicked), (2, win.win._stop_mic_test)):
         win.tap_test_btn.clicked()
         assert opened(win, count)
         started = time.monotonic()
@@ -292,14 +294,14 @@ def test_the_next_test_waits_until_the_last_stream_is_closed(win):
 
 
 STOP_PATHS = {
-    "leaving the window": lambda win: win._on_window_active(
+    "leaving the window": lambda win: win.win._on_window_active(
         SimpleNamespace(is_active=lambda: False), None),
-    "another tab": lambda win: win.on_tab_switched(
+    "another tab": lambda win: win.win.on_tab_switched(
         SimpleNamespace(get_tab_label_text=lambda page: "Audio"),
         Gtk.ScrolledWindow(), 1),
     "hiding the settings": lambda win: win.tap_fold.button.clicked(),
     "turning it off": lambda win: win.tap_check.set_active(False),
-    "closing Preferences": lambda win: win._stop_mic_test(),
+    "closing Preferences": lambda win: win.win._stop_mic_test(),
 }
 
 
@@ -396,7 +398,7 @@ def test_the_title_follows_the_settings(win):
 
 def test_opening_the_settings_scrolls_them_into_view(win, monkeypatch):
     shown = []
-    monkeypatch.setattr(type(win), "_scroll_into_view",
+    monkeypatch.setattr(type(win.win), "_scroll_into_view",
                         lambda self, widget, delay_ms=60: shown.append(widget), raising=False)
     win.tap_check.set_active(True)
     win.tap_fold.button.clicked()

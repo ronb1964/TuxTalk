@@ -2,7 +2,8 @@
 and the speech threshold marked on it."""
 import cairo
 
-from tuxtalk.prefs import PauseMeter, SegmentedVUMeter
+from tuxtalk.mic_test import SegmentedVUMeter
+from tuxtalk.prefs_type_at_pause import PauseMeter
 
 
 def pixel(surface, x, y):
