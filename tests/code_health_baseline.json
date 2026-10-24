@@ -1,6 +1,6 @@
 {
  "files": {
-  "app.py": 5781,
+  "app.py": 5724,
   "prefs.py": 7120,
   "tray.py": 2548,
   "welcome_dialog.py": 3256
@@ -19,7 +19,6 @@
   "app.py::_beep::swallowed_error": 1,
   "app.py::_build_model_or_exit::swallowed_error": 1,
   "app.py::_build_parakeet_gpu_model::swallowed_error": 1,
-  "app.py::_build_vulkan_model::long_line": 1,
   "app.py::_build_vulkan_model::swallowed_error": 1,
   "app.py::_claim_desktop_hotkeys::swallowed_error": 1,
   "app.py::_deliver_text::long_line": 2,
@@ -57,7 +56,7 @@
   "app.py::build_model::long_line": 3,
   "app.py::main.AppInstance.quit::swallowed_error": 1,
   "app.py::main.AppInstance::undocumented": 1,
-  "app.py::main::long_line": 4,
+  "app.py::main::long_line": 2,
   "app.py::main::swallowed_error": 1,
   "app.py::main::undocumented": 1,
   "app.py::stop_recording::long_line": 1,
@@ -472,8 +471,8 @@
    "decisions": 24
   },
   "app.py::_deliver_text": {
-   "decisions": 49,
-   "lines": 245
+   "decisions": 48,
+   "lines": 241
   },
   "app.py::_edit_selection": {
    "decisions": 48,
@@ -483,19 +482,19 @@
    "decisions": 18
   },
   "app.py::_handle_key_event": {
-   "decisions": 57,
-   "lines": 140
+   "decisions": 56,
+   "lines": 139
   },
   "app.py::_handle_spoken_edit": {
    "decisions": 16
   },
   "app.py::_handle_undo": {
    "decisions": 22,
-   "lines": 109
+   "lines": 104
   },
   "app.py::_loop_evdev": {
    "decisions": 27,
-   "lines": 164
+   "lines": 163
   },
   "app.py::_paste_text": {
    "decisions": 18
@@ -510,19 +509,19 @@
    "decisions": 20
   },
   "app.py::_transcribe_and_inject": {
-   "decisions": 70,
-   "lines": 265
+   "decisions": 69,
+   "lines": 262
   },
   "app.py::_transcribe_audio": {
    "decisions": 25,
-   "lines": 120
+   "lines": 116
   },
   "app.py::build_model": {
    "decisions": 20,
-   "lines": 109
+   "lines": 104
   },
   "app.py::main": {
-   "lines": 276
+   "lines": 270
   },
   "audio_duck.py::AudioDucker._restore_now": {
    "decisions": 16
