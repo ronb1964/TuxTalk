@@ -81,7 +81,7 @@ def _no_hotkey_tips(is_flatpak, keys_where):
         "try it with Test Hotkeys.\n"
         "• On many laptops and small keyboards the F-keys work only with Fn held. Hold Fn "
         "with your key, or pick Right Ctrl, Right Alt or Scroll Lock in Preferences → "
-        "General: they never need Fn.")
+        "General: where a laptop has them, they need no Fn.")
 
 
 def tabs():
@@ -160,8 +160,9 @@ def _values():
     else:
         key_choice_tip = (
             "Pick <b>Right Alt</b>, <b>Right Ctrl</b> or <b>Scroll Lock</b> as your key in "
-            "<b>Preferences →\n    General</b>: they never need Fn on a laptop. Where Right Alt "
-            "is AltGr, the list\n    says which characters you'd lose, like @ or €.")
+            "<b>Preferences →\n    General</b>: on a laptop they need no Fn, where it has "
+            "them. Where Right Alt is AltGr,\n    the list says which characters you'd lose, "
+            "like @ or €.")
 
     return {"hold": hold, "toggle": toggle, "paste_tip": paste_tip,
             "paste_line": paste_line, "key_choice_tip": key_choice_tip,
@@ -733,8 +734,8 @@ TIPS = '''<span size="large"><b>Tips</b></span>
   • Have the microphone close to your mouth, or use a headset, above all in a noisy
     room (a fan, a dryer, a busy street). Nothing helps more.
   • Turn off noise filters on the microphone for dictation (noise suppression in
-    EasyEffects, NoiseTorch or an RNNoise plugin). In TuxTalk's tests every one of
-    them made dictation worse, not better.
+    EasyEffects, NoiseTorch or an RNNoise plugin). In TuxTalk's tests none of the
+    filters helped, and RNNoise made dictation clearly worse.
   • Speak at a normal pace, the way you'd talk to someone. No need to slow down.
   • To check your room: <b>Preferences → Audio</b>, Start Recording, talk, Stop. The
     test says when the room is noisy for your voice.

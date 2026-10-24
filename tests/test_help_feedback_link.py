@@ -189,8 +189,9 @@ def test_the_keys_scroll_the_text(shown_help):
 
 
 def test_help_opens_on_the_section_asked_for_with_the_keyboard_there(shown_help):
-    """From Preferences' Labs link: Tips shows, and the keyboard (and a
-    screen reader) is on the Tips row, not on Start Here."""
+    """Opened on a section (Preferences' Labs link opens Writing): it
+    shows, and the keyboard (and a screen reader) is on its row, not on
+    Start Here."""
     dialog = shown_help("tips")
     _, stack = _sections(dialog)
     assert _title(stack) == "💡 Tips"
@@ -212,7 +213,7 @@ def test_help_is_no_wider_with_another_section(monkeypatch):
         pytest.skip("no display")
     from tuxtalk import help_text, ui_style
     monkeypatch.setattr(Gtk.Dialog, "present", lambda self: None)
-    monkeypatch.setattr(ui_style, "workarea_width", lambda near=None: 4000)
+    monkeypatch.setattr(ui_style, "workarea_width", lambda: 4000)
     widths = []
     for extra in (0, 4):
         sections = help_text.tabs() + [(f"Section {n}", "More.") for n in range(extra)]
@@ -223,16 +224,27 @@ def test_help_is_no_wider_with_another_section(monkeypatch):
     assert widths[0] == widths[1] and widths[0] <= 900
 
 
-def test_help_fits_a_narrow_screen(monkeypatch):
+def test_help_fits_a_narrow_screen(monkeypatch, shown_help):
     """With large text or a small screen, Help opens no wider than the
-    screen, its lines wrapping, instead of running off its edge."""
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
+    screen, its lines wrapping, instead of running off its edge: the window
+    as shown, not only the size it asked for."""
     from tuxtalk import ui_style
-    monkeypatch.setattr(Gtk.Dialog, "present", lambda self: None)
-    monkeypatch.setattr(ui_style, "workarea_width", lambda near=None: 640)
-    opened = help_dialog.show_help_dialog()
-    try:
-        assert opened.get_default_size()[0] <= 640 - 40
-    finally:
-        opened.destroy()
+    monkeypatch.setattr(ui_style, "workarea_width", lambda: 640)
+    dialog = shown_help()
+    assert dialog.get_allocated_width() <= 640 - 40
+
+
+def test_the_screen_width_is_the_narrowest_monitors(monkeypatch):
+    """A portrait screen (600 wide, 1600 tall) beside a landscape one: the
+    width came from the shortest monitor, the landscape one, and Help could
+    open 800 px wide on the 600 px screen."""
+    from types import SimpleNamespace as Fake
+    from tuxtalk import ui_style
+
+    def monitor(width, height):
+        area = Fake(width=width, height=height)
+        return Fake(get_workarea=lambda: area, get_geometry=lambda: area)
+    monitors = [monitor(1920, 1080), monitor(600, 1600)]
+    display = Fake(get_n_monitors=lambda: 2, get_monitor=monitors.__getitem__)
+    monkeypatch.setattr(ui_style.Gdk.Display, "get_default", lambda: display)
+    assert ui_style.workarea_width() == 600

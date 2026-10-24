@@ -231,12 +231,16 @@ def workarea_height(near=None):
         return None
 
 
-def workarea_width(near=None):
-    """The usable width, in logical pixels, of the monitor for window *near*
-    (_monitor_for); None when unknown."""
+def workarea_width():
+    """The usable width, in logical pixels, of the narrowest monitor (a
+    window may open on any; _monitor_for picks the shortest, which beside a
+    portrait screen is the wide one); None when unknown."""
     try:
-        monitor = _monitor_for(near)
-        return monitor.get_workarea().width if monitor is not None else None
+        display = Gdk.Display.get_default()
+        if display is None:
+            return None
+        monitors = [display.get_monitor(i) for i in range(display.get_n_monitors())]
+        return min((m.get_workarea().width for m in monitors if m is not None), default=None)
     except Exception as e:
         logger.warning(f"Couldn't read the screen's usable width: {e}")
         return None
