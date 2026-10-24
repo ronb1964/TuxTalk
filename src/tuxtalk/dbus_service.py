@@ -20,6 +20,13 @@ logger = setup_logger(__name__)
 _focused_window_class: str | None = None
 # "x,y,w,h|output|ox,oy,ow,oh" from the same reporters (window_geometry.py).
 _focused_window_geometry: str = ""
+# The compositor's own id for that window (KWin's internalId, Mutter's window
+# id), "" when not known: it tells two windows of one app apart. A reporter
+# sends it (SetFocusedWindowId) right before the class it belongs to, and the
+# class takes it; a reporter that never sends one (an extension from before
+# it did) leaves it "".
+_focused_window_id: str = ""
+_next_window_id: str = ""
 
 # True from a report of wl-copy's brief window (desktop_identity) until the
 # next window's. Its reports are left out, and so is the geometry sent after
@@ -29,9 +36,9 @@ _clipboard_tool_focused = False
 
 
 def focused_window():
-    """(class, frame) as GetFocusedWindow answers, for the dictation service
-    when it holds the bus name itself (no tray running)."""
-    return _focused_window_class or "", _focused_window_geometry
+    """(class, id, frame) as GetFocusedWindow answers, for the dictation
+    service when it holds the bus name itself (no tray running)."""
+    return _focused_window_class or "", _focused_window_id, _focused_window_geometry
 
 
 # The bus identifiers, at module level so providers that fill the focused-window
@@ -246,8 +253,10 @@ class TuxTalkDBusService(dbus.service.Object):
         GetFocusedWindowClass — the dictation engine runs in a separate
         subprocess from this service.
         """
-        global _focused_window_class, _clipboard_tool_focused
+        global _focused_window_class, _focused_window_id, _next_window_id
+        global _clipboard_tool_focused
         from .desktop_identity import is_clipboard_tool_class, is_own_window_class
+        window_id, _next_window_id = _next_window_id, ""
         _clipboard_tool_focused = is_clipboard_tool_class(wm_class)
         if _clipboard_tool_focused:
             return
@@ -258,6 +267,14 @@ class TuxTalkDBusService(dbus.service.Object):
         if new_class != _focused_window_class:
             logger.info(f"Focused window class: {new_class!r}")
         _focused_window_class = new_class
+        _focused_window_id = str(window_id) if new_class else ""
+
+    @dbus.service.method(DBUS_INTERFACE, in_signature='s')
+    def SetFocusedWindowId(self, window_id: str):
+        """The compositor's own id for the window whose class comes next
+        (SetFocusedWindowClass), from the KWin script or GNOME extension."""
+        global _next_window_id
+        _next_window_id = str(window_id or "")
 
     @dbus.service.method(DBUS_INTERFACE, in_signature='s')
     def SetFocusedWindowGeometry(self, geometry: str):
@@ -268,11 +285,11 @@ class TuxTalkDBusService(dbus.service.Object):
         if not _clipboard_tool_focused:
             _focused_window_geometry = str(geometry or "")
 
-    @dbus.service.method(DBUS_INTERFACE, out_signature='ss')
+    @dbus.service.method(DBUS_INTERFACE, out_signature='sss')
     def GetFocusedWindow(self):
-        """The focused window's class and frame, "" for what isn't known: the
-        cache the focus reporters push into, for the dictation service, which
-        runs in a process of its own (focused_window.py)."""
+        """The focused window's class, id and frame, "" for what isn't known:
+        the cache the focus reporters push into, for the dictation service,
+        which runs in a process of its own (focused_window.py)."""
         return focused_window()
 
     @dbus.service.method(DBUS_INTERFACE, out_signature='a(sss)')

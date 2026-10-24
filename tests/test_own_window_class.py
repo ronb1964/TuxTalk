@@ -56,7 +56,7 @@ def test_the_tray_does_not_keep_tuxtalks_own_window_as_the_focus(monkeypatch):
 
 def _reported(monkeypatch, wm_class, asked):
     """The tray says *wm_class*; the compositor, asked, says *asked*."""
-    monkeypatch.setattr(focused_window, "reported", lambda timeout=None: (wm_class, ""))
+    monkeypatch.setattr(focused_window, "reported", lambda timeout=None: (wm_class, "", ""))
     monkeypatch.setattr(compositor_focus, "focused_window", lambda: (asked, None))
 
 

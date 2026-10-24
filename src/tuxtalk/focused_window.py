@@ -7,16 +7,18 @@ to know whether the window is still the one the text went to, so a look
 (look()) says which window it is too, asking each source once:
 
   1. the tray, which the KWin script (kwin_focus.py) and the GNOME extension
-     tell on every focus change: the class and the window's frame;
-  2. Sway, i3, Hyprland, niri, COSMIC or X11 directly (compositor_focus.py).
+     tell on every focus change: the class, the window's own id and its frame;
+  2. when they haven't told it all, Sway, i3, Hyprland, niri, COSMIC or X11
+     directly (compositor_focus.py).
 
 Which window it is, is the compositor's own id for it wherever one is known:
-X11's window, Sway's and i3's con id, Hyprland's address, niri's id. It
-stays the same when the window moves, and tells two windows of one app
-apart. On KDE and GNOME it's the window's frame, so there a window moved or
-resized counts as another, and two maximized windows of one app on one
-screen as the same. COSMIC tells only the class: there two windows of one
-app are the same window to TuxTalk.
+KWin's internalId, Mutter's window id, X11's window, Sway's and i3's con id,
+Hyprland's address, niri's id. It stays the same when the window moves, and
+tells two windows of one app apart. Without one (an extension from before it
+sent the id) it's the window's frame, so there a window moved or resized
+counts as another, and two maximized windows of one app on one screen as the
+same. COSMIC tells only the class: there two windows of one app are the same
+window to TuxTalk, and an automatic send can't tell them apart.
 
 TuxTalk's own windows count as unknown: a stale report of Preferences must
 not pick the paste shortcut for the app the user is really in. So does
@@ -35,9 +37,9 @@ TRAY_TIMEOUT_S = 1.5
 
 
 def reported(timeout: float = TRAY_TIMEOUT_S):
-    """(class, frame) the KWin script or GNOME extension last told the tray,
-    each "" when not told; None when the tray couldn't be asked. The frame
-    is "x,y,w,h|output|ox,oy,ow,oh" (window_geometry.parse_reported)."""
+    """(class, id, frame) the KWin script or GNOME extension last told the
+    tray, each "" when not told; None when the tray couldn't be asked. The
+    frame is "x,y,w,h|output|ox,oy,ow,oh" (window_geometry.parse_reported)."""
     import dbus
     from . import dbus_service
     from .dbus_service import DBUS_INTERFACE, DBUS_NAME, DBUS_PATH
@@ -66,9 +68,12 @@ def look():
     Safe from any thread."""
     from . import compositor_focus
     from .window_geometry import parse_reported
-    wm_class, frame = reported() or ("", "")
-    asked_class, which = compositor_focus.focused_window()
+    wm_class, which, frame = reported() or ("", "", "")
+    if wm_class and which and not _not_a_target(wm_class):
+        return wm_class, which
+    asked_class, asked_id = compositor_focus.focused_window()
     wm_class = next((c for c in (wm_class, asked_class) if c and not _not_a_target(c)), None)
+    which = which or asked_id
     if which is None:
         which = parse_reported(frame)
         if which is None and (rect := compositor_focus.focused_rect()):

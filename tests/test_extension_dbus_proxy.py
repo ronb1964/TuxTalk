@@ -48,7 +48,8 @@ def test_destroy_cancels_a_proxy_still_being_set_up():
 def test_menu_actions_never_call_a_missing_proxy():
     """Before the proxy is ready, a click must not throw a TypeError."""
     unguarded = re.findall(r"this\._proxy\.\w+Remote\(", JS)
-    guarded_by_if = {"SetFocusedWindowClassRemote", "SetFocusedWindowGeometryRemote",
+    guarded_by_if = {"SetFocusedWindowIdRemote", "SetFocusedWindowClassRemote",
+                     "SetFocusedWindowGeometryRemote",
                      "GetStatusRemote", "GetRecentDictationsRemote", "GetPresetsRemote"}
     for call in unguarded:
         name = call[len("this._proxy."):-1]

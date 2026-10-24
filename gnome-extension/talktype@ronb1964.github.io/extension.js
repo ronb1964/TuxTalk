@@ -51,6 +51,9 @@ const TuxTalkIface = `
     <method name="SetModel">
       <arg type="s" direction="in" name="model"/>
     </method>
+    <method name="SetFocusedWindowId">
+      <arg type="s" direction="in" name="window_id"/>
+    </method>
     <method name="SetFocusedWindowClass">
       <arg type="s" direction="in" name="wm_class"/>
     </method>
@@ -255,6 +258,10 @@ class TuxTalkIndicator extends PanelMenu.Button {
         try {
             const win = global.display && global.display.focus_window;
             const wmClass = (win && win.get_wm_class()) || '';
+            // Which window it is, right before its class: two windows of one
+            // app look the same otherwise. An older TuxTalk without the
+            // method answers with an error, which is left unread.
+            this._proxy.SetFocusedWindowIdRemote(win ? String(win.get_id()) : '', () => {});
             this._proxy.SetFocusedWindowClassRemote(wmClass, () => {});
             this._watchFocusedWindow(win);
             this._pushFocusedWindowGeometry();

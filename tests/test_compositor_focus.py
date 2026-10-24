@@ -205,7 +205,7 @@ def test_the_service_asks_the_compositor_when_nobody_reported_focus(monkeypatch)
 
 def test_a_reported_window_wins_over_asking_the_compositor(monkeypatch):
     from tuxtalk import focused_window
-    monkeypatch.setattr(focused_window, "reported", lambda: ("org.kde.konsole", ""))
+    monkeypatch.setattr(focused_window, "reported", lambda: ("org.kde.konsole", "", ""))
     monkeypatch.setattr(cf, "focused_window", lambda: ("Xwayland", 0x400001))
     assert focused_window.window_class() == "org.kde.konsole"
 

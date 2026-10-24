@@ -95,7 +95,7 @@ def _reported():
     """Where the KWin script or GNOME extension last told the tray the
     focused window is, or None."""
     from .focused_window import reported
-    frame = (reported(timeout=_DBUS_TIMEOUT_S) or ("", ""))[1]
+    frame = (reported(timeout=_DBUS_TIMEOUT_S) or ("", "", ""))[-1]
     return frame or None
 
 

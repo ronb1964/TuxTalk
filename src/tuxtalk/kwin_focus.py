@@ -11,8 +11,8 @@ KWin has no D-Bus property for the active window — queryWindowInfo() asks the
 user to click one, and getWindowInfo() needs a UUID you do not have. The usable
 route is a KWin script: it runs inside KWin, can read workspace.activeWindow, and
 can call back out over D-Bus. So this loads a small script that pushes
-resourceClass into the same method the extension calls, leaving everything
-downstream untouched.
+resourceClass, internalId (which window it is) and the frame into the same
+methods the extension calls, leaving everything downstream untouched.
 
 Checked against Plasma 6.7.4 on Wayland: with the script loaded, the cache
 follows focus from window to window.
@@ -92,6 +92,13 @@ function tuxtalkGeometryChanged() {{
 
 function tuxtalkReport(w) {{
     var cls = (w && w.resourceClass) ? String(w.resourceClass) : "";
+    // Which window it is, right before its class: two windows of one app
+    // look the same otherwise (focused_window.py).
+    callDBus("{DBUS_NAME}",
+             "{DBUS_PATH}",
+             "{DBUS_INTERFACE}",
+             "SetFocusedWindowId",
+             (w && w.internalId) ? String(w.internalId) : "");
     callDBus("{DBUS_NAME}",
              "{DBUS_PATH}",
              "{DBUS_INTERFACE}",
