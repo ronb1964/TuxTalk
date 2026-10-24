@@ -101,6 +101,12 @@ class SilenceDetector:
         self.nothing_said = False
         self._busy = 0           # hold() calls not yet released
 
+    def heard_speech(self) -> None:
+        """Count speech said before the detector started (a word before the
+        second tap of a double-tap): going quiet after it then stops the
+        recording to type it, instead of dropping it as nothing said."""
+        self.speech_time = max(self.speech_time, _SPEECH_TO_ARM_S)
+
     def hold(self) -> None:
         """TuxTalk is working on a phrase (Type at pause: transcribing, an AI
         rewrite, typing): the quiet that passes meanwhile is the user waiting
@@ -234,7 +240,13 @@ def is_speechless_tap(audio_f32, sample_rate) -> bool:
     in it, which should be dropped rather than transcribed."""
     if len(audio_f32) >= TAP_MAX_S * sample_rate:
         return False
-    return _loud_seconds(audio_f32, sample_rate) < _TAP_MIN_SPEECH_S
+    return not has_a_word(audio_f32, sample_rate)
+
+
+def has_a_word(audio_f32, sample_rate) -> bool:
+    """Whether *audio_f32* holds at least a word's worth of speech; a key
+    click or a desk thump is too short to count."""
+    return _loud_seconds(audio_f32, sample_rate) >= _TAP_MIN_SPEECH_S
 
 
 def has_no_speech(audio_f32, sample_rate) -> bool:

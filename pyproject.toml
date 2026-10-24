@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "tuxtalk"
-version = "0.18.0"
+version = "0.18.2"
 description = "Voice dictation for Linux: hold a key, talk, and your words are typed for you."
 authors = ["Ron"]
 license = "MIT"

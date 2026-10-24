@@ -48,6 +48,25 @@ before 0.15.0, so older entries use that name.
   lost. Now every beep plays to the end. It takes about 20 ms longer than
   before, however slow the output is.
 
+## [0.18.2] - 2026-10-23
+
+- Hands-free: on a computer where starting a recording takes a moment
+  (finding the microphone, opening it and playing the start beep), the
+  second tap of a double-tap was read only after all that, and by then it
+  counted as too late, so the recording stopped instead. The double-tap is
+  now timed from when the recording is ready. The log says how long each
+  start took. Thanks to Tony for sticking with it (#21).
+
+## [0.18.1] - 2026-10-23
+
+- Hands-free: a double-tap of the toggle key only counted when the second
+  tap came within 0.4 seconds, so at a relaxed pace the second tap stopped
+  the recording instead (the light came on and went straight off). The taps
+  can now be up to 0.7 seconds apart. Thanks to Tony for reporting it (#21).
+- Hands-free: a word said between the two taps of a double-tap, with nothing
+  after it, was thrown away as "nothing said" when the recording stopped
+  itself. It's typed now.
+
 ## [0.18.0] - 2026-10-23
 
 - Security: on systems where the hotkey helper can't run (no systemd), Fix

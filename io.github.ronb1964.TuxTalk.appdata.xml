@@ -95,6 +95,16 @@
   </screenshots>
 
   <releases>
+    <release version="0.18.2" date="2026-10-23">
+      <description>
+        <p>Double-tap hands-free works on computers that are slow to start a recording</p>
+      </description>
+    </release>
+    <release version="0.18.1" date="2026-10-23">
+      <description>
+        <p>Double-tap hands-free works at a relaxed pace</p>
+      </description>
+    </release>
     <release version="0.18.0" date="2026-10-23">
       <description>
         <p>No typing into password boxes, faster typing, and COSMIC</p>

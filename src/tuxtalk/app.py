@@ -268,9 +268,9 @@ _lockfile_handle = None
 SAMPLE_RATE = 16000
 CHANNELS = 1
 MIN_HOLD_MS = 200
-# Two taps of the toggle key closer together than this switch the recording
-# that the first tap started to hands-free, instead of stopping it.
-DOUBLE_TAP_S = 0.4
+# Two toggle taps closer than this make the first tap's recording hands-free.
+# Generous: 0.4 s missed slower hands (#21); a quick word still comes, at auto-stop.
+DOUBLE_TAP_S = 0.7
 
 @dataclass
 class RecordingState:
@@ -1458,7 +1458,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     state.chunker = None
     state.press_t0 = time.time()
     state.released_while_starting = False
-    state.toggle_started_at = state.press_t0 if from_toggle else None
+    state.toggle_started_at = None
     state.edit_mode = edit_mode
     # Set before the stream starts — _sd_callback drops frames unless it's set.
     state.is_recording = True
@@ -1496,8 +1496,6 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
 
     _arm_chunker(getattr(state, "recording_samplerate", SAMPLE_RATE), edit_mode)
     _pause_media_players()
-    print("Recording…")
-    logger.debug("Recording started")
     _beep(beeps_on, *START_BEEP)
     if notify_on: _notify("Recording… speak now", "")
 
@@ -1512,6 +1510,9 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
         except Exception as e:
             logger.error(f"Failed to show recording indicator: {e}", exc_info=True)
 
+    # From here: keys wait on this thread, so a tap made during a slow start counts (#21).
+    state.toggle_started_at = time.time() if from_toggle else None
+    logger.info(f"Recording started in {time.time() - state.press_t0:.2f}s")
     return True
 
 # How long stopping the microphone may take before TuxTalk carries on without
@@ -2722,19 +2723,21 @@ def _toggle_pressed_while_recording(beeps_on: bool) -> bool:
     the second tap of a double-tap and switched the recording to hands-free
     (the caller must then NOT stop it); False means a normal stop.
 
-    A single tap keeps the toggle a plain on/off switch, however long the
-    speaker pauses. Only a double-tap, with the option on, arms auto-stop; a
-    double-tap would otherwise just start and cancel a too-short recording.
+    A single tap keeps the toggle a plain on/off switch. Only a double-tap,
+    with the option on, arms auto-stop. A word said before the second tap
+    counts as speech; the start beep the mic may pick up first does not.
     """
     started = state.toggle_started_at
     if (_auto_stop_seconds <= 0 or started is None or state.silence is not None
             or time.time() - started > DOUBLE_TAP_S):
         return False
-    from .silence import SilenceDetector
-    state.silence = SilenceDetector(
-        _auto_stop_seconds, getattr(state, "recording_samplerate", SAMPLE_RATE))
+    from .silence import SilenceDetector, has_a_word
+    rate = getattr(state, "recording_samplerate", SAMPLE_RATE)
+    detector = SilenceDetector(_auto_stop_seconds, rate)
+    if has_a_word(_frames_f32(list(state.frames))[int(2 * START_BEEP[1] * rate):], rate):
+        detector.heard_speech()
+    state.silence = detector
     logger.info("Double-tap: this recording will stop by itself when you go quiet")
-    print("Hands-free: stops when you stop talking")
     _beep(beeps_on, *HANDS_FREE_BEEP)
     return True
 
@@ -2862,14 +2865,15 @@ def _warn_mic_switched(old_idx, new_idx):
     _notify("Recording from another microphone", notice)
 
 
+def _frames_f32(frames):
+    """Raw int16 recording frames as float samples in -1..1."""
+    return np.frombuffer(b"".join(frames), dtype=np.int16).astype(np.float32) / 32768.0
+
+
 def _frames_are_dead_mic(frames, rec_sr) -> bool:
     """silence.is_dead_mic for raw int16 recording frames."""
     from .silence import is_dead_mic
-    try:
-        pcm = np.frombuffer(b"".join(frames), dtype=np.int16)
-    except Exception:
-        return False
-    return is_dead_mic(pcm.astype(np.float32) / 32768.0, rec_sr)
+    return is_dead_mic(_frames_f32(frames), rec_sr)
 
 
 def _report_undelivered(outcome: str, beeps_on: bool):
@@ -3295,14 +3299,12 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         return True
 
     try:
-        # Convert captured bytes → float32 mono PCM in [-1, 1]
-        pcm_int16 = np.frombuffer(b''.join(frames), dtype=np.int16)
-        if pcm_int16.size == 0:
+        audio_f32 = _frames_f32(frames)
+        if audio_f32.size == 0:
             if _nothing_in_chunk("had no audio"):
                 return
             print("(No audio captured)")
             return
-        audio_f32 = pcm_int16.astype(np.float32) / 32768.0
         if rec_sr != SAMPLE_RATE:
             audio_f32 = _resample_audio(audio_f32, rec_sr, SAMPLE_RATE)
 
@@ -3810,10 +3812,9 @@ def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
     rewrite replaces. Ctrl+Z in the app undoes it."""
     from .silence import is_speechless_tap
     t0 = time.time()
-    pcm_int16 = np.frombuffer(b''.join(frames), dtype=np.int16)
-    if pcm_int16.size == 0:
+    audio_f32 = _frames_f32(frames)
+    if audio_f32.size == 0:
         return
-    audio_f32 = pcm_int16.astype(np.float32) / 32768.0
     if rec_sr != SAMPLE_RATE:
         audio_f32 = _resample_audio(audio_f32, rec_sr, SAMPLE_RATE)
     if is_speechless_tap(audio_f32, SAMPLE_RATE):
