@@ -29,7 +29,7 @@ as typing:
   and no more than two different such keys while those modifiers stay down.
 
 "Two of" because any one modifier can be made to type characters: Right Alt
-is AltGr on most layouts (it never counts here at all), and XKB options turn
+is AltGr on most layouts (it never counts toward the two), and XKB options turn
 Left Alt, Super or Right Ctrl into a third-level key too. "Seen by the
 desktop" and "the same virtual one" because a program can make a virtual
 keyboard: a Ctrl held there, or one the desktop didn't see go down, would

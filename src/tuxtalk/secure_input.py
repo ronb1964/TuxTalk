@@ -49,7 +49,7 @@ KERNEL=="uinput", SUBSYSTEM=="misc", TAG+="uaccess", OPTIONS+="static_node=uinpu
 
 UNIT = f"""\
 [Unit]
-Description=TuxTalk hotkey helper (tells TuxTalk about its hotkeys, nothing else)
+Description=TuxTalk hotkey helper (hotkeys, and Right Ctrl or Right Alt going down; never typing)
 Documentation=https://github.com/ronb1964/TuxTalk
 
 [Service]

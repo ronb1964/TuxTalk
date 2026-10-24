@@ -11,7 +11,9 @@ new line without sending anything.
 
 Only the very end of a dictation counts, so "press enter to continue" in the
 middle of a sentence is typed as words, and a "press tab" mid-sentence types
-a tab character (normalize.py). "literal press enter" types the words too.
+a tab character (normalize.py). "press the tab key" and "press the enter key"
+count at the end too, so "To indent, press the tab key." presses Tab, while
+mid-sentence they're typed as words. "literal press enter" types the words.
 
 "Send each dictation automatically" presses Enter without being asked, so it
 holds back when the dictation was plainly cut off ("... and I think and"):

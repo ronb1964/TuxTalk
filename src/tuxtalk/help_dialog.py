@@ -670,7 +670,7 @@ is in the TuxTalk menu → Voice Commands....
 • Say <b>new line</b>, <b>newline</b>, <b>return</b>, or <b>line break</b> for a line break
 • Say <b>new paragraph</b> or <b>paragraph break</b> for a double line break
 • Say <b>press tab</b> for a tab; <b>tab</b> alone is the word. At the end of a dictation it
-  presses the Tab key, so in a form you go to the next box
+  presses the Tab key (so does <b>press the tab key</b>): in a form you go to the next box
 • Say <b>soft break</b> or <b>soft line</b> for three spaces
 • End with <b>press enter</b> or <b>hit enter</b> to type the dictation and press Enter: it
   sends a chat message or runs a command. <b>literal press enter</b> types the words.

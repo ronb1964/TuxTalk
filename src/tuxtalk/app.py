@@ -332,7 +332,7 @@ class RecordingState:
     owed_space: object = None
     # A Right Ctrl or Right Alt dictation key that's down and hidden from
     # the desktop (see _hide_modifier_hotkey), or None.
-    hidden_key: int = None
+    hidden_key: int | None = None
     # The last Enter TuxTalk pressed: {"at", "automatic"}, or None
     # (_press_key). "edit that" just after it explains itself.
     sent: object = None
@@ -3669,10 +3669,10 @@ def _flush_boundary(auto_period: bool, auto_space: bool, injection_mode: str) ->
 
 
 def _chunk_message_sent() -> None:
-    """Type at pause pressed Enter mid-recording ("... press enter"), or
-    "edit that" rewrote what was typed: what's said next starts afresh. Nothing reaches
-    back across it: no held-back mark, no correction, no lowercase start,
-    and the screen copy starts again."""
+    """Type at pause pressed Enter or Tab mid-recording ("... press enter",
+    "... press tab"), or "edit that" rewrote what was typed: what's said next
+    starts afresh. Nothing reaches back across it: no held-back mark, no
+    correction, no lowercase start, and the screen copy starts again."""
     state.pending_boundary = None
     state.question_open = False
     state.chunk_typed = False
@@ -4603,8 +4603,7 @@ def _hide_modifier_hotkey(event, toggle_key, devices, held_modifiers) -> None:
             _release_all_grabs()
 
 
-def _handle_key_event(event, hold_key, toggle_key,
-                      voice_cmds_combo, held_modifiers,
+def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifiers,
                       devices, cfg, input_device_idx, paste_last_combo=None):
     """Handle a single keyboard event. Both hold (F8) and toggle (F9) are always active.
 
