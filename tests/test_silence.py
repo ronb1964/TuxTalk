@@ -218,6 +218,37 @@ def test_a_quick_second_tap_counts_when_the_recording_was_slow_to_start(monkeypa
     app.state.is_recording = False
 
 
+def _slow_start_beep(monkeypatch):
+    """The start beep takes half a second to be heard, as on a slow output.
+    Returns when each wait for it ended."""
+    from tuxtalk import beeps
+    waits = []
+
+    def wait_until_played(limit=beeps.WAIT_LIMIT_S):
+        time.sleep(0.5)
+        waits.append(time.time())
+        return True
+    monkeypatch.setattr(beeps, "wait_until_played", wait_until_played)
+    return waits
+
+
+def test_the_double_tap_is_timed_from_the_start_beep_heard(monkeypatch):
+    """Issue #21: the user waits for the start beep before the second tap,
+    and on a slow output it comes most of a second after the first."""
+    waits = _slow_start_beep(monkeypatch)
+    app = _start(monkeypatch)
+    assert len(waits) == 1
+    assert app.state.toggle_started_at >= waits[0]
+    app.state.is_recording = False
+
+
+def test_a_hold_start_never_waits_for_the_start_beep(monkeypatch):
+    waits = _slow_start_beep(monkeypatch)
+    app = _start(monkeypatch, from_toggle=False)
+    assert waits == []
+    app.state.is_recording = False
+
+
 def test_a_slow_second_tap_is_a_normal_stop(monkeypatch):
     app = _start(monkeypatch)
     app.state.toggle_started_at -= app.DOUBLE_TAP_S + 0.1
