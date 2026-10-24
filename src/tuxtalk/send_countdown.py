@@ -19,8 +19,10 @@ of TuxTalk's own windows it presses the default button.
      from other typing, the Flatpak's portal getting ready), one claim
      (_claim) makes every check again: the send wasn't held, the same
      window has the focus before the password check and after it, the
-     cursor isn't in a password field, and no other key went out on the
-     keyboard while the checks were made.
+     cursor isn't in a password field, and no other key went out on
+     TuxTalk's keyboard while the checks were made. In the Flatpak, keys go
+     through the desktop's portal (output_backends.LibeiOutputBackend),
+     which this last check can't count.
 
 Anything else, nothing is sent and the notice says why (_why_not). What
 happens where the desktop can't say which window of an app has the focus is

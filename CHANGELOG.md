@@ -42,7 +42,7 @@ before 0.15.0, so older entries use that name.
 - Sending automatically now checks where the Enter would go one last time,
   right before it goes, whatever it waited for first. Click into another
   window while a long dictation is still going in and the text stays where it
-  is, but nothing gets sent. If something else typed into the window during
+  is, but nothing gets sent. If TuxTalk was typing something else during
   that last check, it doesn't send either, and it tells you. With Right Ctrl
   as your toggle key, a tap holds a "Right away" send too. On KDE or GNOME
   under X11, a busy tray could make TuxTalk think you'd switched windows when

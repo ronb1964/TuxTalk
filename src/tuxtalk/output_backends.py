@@ -280,6 +280,10 @@ class LibeiOutputBackend(OutputBackend):
         return self._with_session(lambda s: s.backspaces(count))
 
     def press_keys(self, chords, claim=None) -> bool:
+        """As OutputBackend.press_keys, with one check less: the claim's
+        count of keys sent meanwhile is the virtual keyboard's, and keys sent
+        here go to the portal instead, so it never sees another typing
+        action of the Flatpak's own between the checks and the keys."""
         from .virtual_keyboard import GaveUp
 
         def claimed():
