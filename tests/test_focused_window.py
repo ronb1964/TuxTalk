@@ -213,7 +213,10 @@ def test_one_window_named_by_kwin_and_by_x11_is_still_one_app(monkeypatch):
     (("kwrite", ("tray", "{a}")), ("konsole", ("tray", "{a}")), False),
     (("kwrite", None), ("kwrite", None), None),                       # COSMIC: only the app
     ((None, None), ("kwrite", ("tray", "{a}")), None),                # a look that timed out
-    (("kwrite", ("tray", "{a}")), (None, ("own", "{t}")), False),     # Preferences opened
+    (("kwrite", ("tray", "{a}")), (None, ("own", ("tray", "{t}"))), False),   # Preferences
+    (("cosmic-term", None), (None, ("own", None)), False),            # COSMIC: Preferences
+    ((None, ("own", None)), (None, ("own", None)), None),             # which of TuxTalk's?
+    ((None, None), (None, ("own", None)), None),                      # a look that timed out
 ])
 def test_which_looks_are_one_window(before, after, same):
     assert focused_window.same_window(before, after) is same

@@ -52,9 +52,12 @@ before 0.15.0, so older entries use that name.
   pressed and you're told why. "Press tab" too. Saying only "press enter"
   still presses it wherever you are, so you can still log in after typing a
   password yourself.
-- An automatic Enter never goes into a TuxTalk window now. If Preferences
-  or the Parakeet offer came up during the countdown, the Enter could press
-  its OK button while your message sat there unsent.
+- An automatic Enter, or "press enter" said after your words, doesn't go
+  into a TuxTalk window now. If Preferences or the Parakeet offer came up
+  during the countdown, the Enter could press its OK button while your
+  message sat there unsent. That works wherever the desktop says which
+  window has the focus, which is everywhere but GNOME without TuxTalk's
+  extension and Plasma 5.27 on Wayland.
 - When a send doesn't go, you get a notification as well as the note over
   the window, so a screen reader tells you. And if a phrase in Type at pause
   only got partly typed, the message isn't sent at the end.

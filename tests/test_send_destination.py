@@ -365,6 +365,43 @@ def test_no_enter_goes_into_a_tuxtalk_window(tray, keyboard, monkeypatch, dictat
     assert keyboard.events == [] and notices == [send_countdown.OWN_WINDOW_NOTICE]
 
 
+@pytest.mark.parametrize("told, before, after", [
+    ("tray", ("org.kde.kwrite", "{5c1d}"), ("tuxtalk", "")),              # 0.18's extension
+    ("compositor", ("foot", 42), ("tuxtalk", 57)),                         # Sway, niri, Hyprland
+    ("compositor", ("cosmic-term", None), ("tuxtalk", None)),             # COSMIC
+    ("compositor", ("Kwrite", 0x3200007), ("Tuxtalk", 0x3400004)),        # X11
+])
+@pytest.mark.parametrize("key", ["auto", "enter", "tab"])
+def test_a_tuxtalk_window_however_the_desktop_names_it_gets_no_key(
+        tray, keyboard, monkeypatch, told, before, after, key):
+    """Preferences, or the Parakeet offer that came up by itself, has the
+    focus when the Enter is due. Told only by the compositor, or with no
+    id, TuxTalk's window wasn't known as its own, and the Enter pressed
+    its default button (OK applied the settings)."""
+    notices = []
+    monkeypatch.setattr(send_countdown, "show_notice", notices.append)
+    service = object.__new__(dbus_service.TuxTalkDBusService)
+
+    def focus(wm_class, window_id):
+        if told == "tray":
+            dbus_service.TuxTalkDBusService.SetFocusedWindow(service, wm_class, window_id, "")
+        else:
+            monkeypatch.setattr(focused_window, "reported", lambda: None)
+            monkeypatch.setattr(compositor_focus, "focused_window", lambda: (wm_class, window_id))
+    focus(*before)
+    message = send_countdown.Message(focused_window.destination(), has_words=True)
+    focus(*after)
+    if told == "tray":                    # 0.18's extension: the class alone
+        dbus_service.TuxTalkDBusService.SetFocusedWindowClass(service, "tuxtalk")
+    if key == "auto":
+        send_countdown.send_automatically("test", message, app._press_key, None)
+    else:
+        send_countdown.press_where_sent(key.upper(), "test", message, app._press_key)
+    assert keyboard.events == []
+    assert notices == [send_countdown.OWN_WINDOW_NOTICE if key != "tab"
+                       else "Tab not pressed: a TuxTalk window has the focus."]
+
+
 # --- Where the desktop can't say which window: the open decision -------------------------
 
 def test_where_only_the_app_is_known_it_sends_as_before(chat, keyboard):

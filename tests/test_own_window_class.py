@@ -45,17 +45,19 @@ def test_other_windows_are_not_tuxtalks(wm_class):
     assert not desktop_identity.is_own_window_class(wm_class)
 
 
-def test_the_tray_does_not_keep_tuxtalks_own_window_as_the_focus(monkeypatch):
-    """A report of TuxTalk's own window clears the class, so it can't stay
-    behind as the paste target when the reporter goes away. Its id stays,
-    which says it's TuxTalk's own (focused_window.look)."""
+def test_a_tuxtalk_window_told_to_the_tray_is_its_own_and_no_paste_target(monkeypatch):
+    """Told with its id, or by 0.18's extension without one: no paste
+    shortcut is picked for it, and it's still known to be TuxTalk's."""
     monkeypatch.setattr(dbus_service, "_focus", dbus_service.FocusReport("org.gnome.Ptyxis", "4"))
+    monkeypatch.setattr(focused_window, "reported",
+                        lambda timeout=None: tuple(dbus_service.cached_focus()))
     service = object.__new__(dbus_service.TuxTalkDBusService)
     dbus_service.TuxTalkDBusService.SetFocusedWindow(service, "tuxtalk", "9", "")
-    assert dbus_service.TuxTalkDBusService.GetFocusedWindow(service)[:2] == ("", "9")
+    assert focused_window.look() == (None, ("own", ("tray", "9")))
     dbus_service.TuxTalkDBusService.SetFocusedWindow(service, "org.gnome.Ptyxis", "4", "")
     dbus_service.TuxTalkDBusService.SetFocusedWindowClass(service, "tuxtalk")   # 0.18's extension
-    assert dbus_service.TuxTalkDBusService.GetFocusedWindow(service)[:2] == ("", "")
+    assert focused_window.look() == (None, ("own", None))
+    assert app._query_focused_window_class() is None
 
 
 def _reported(monkeypatch, wm_class, asked):
@@ -73,17 +75,6 @@ def test_a_reported_tuxtalk_window_counts_as_unknown(monkeypatch):
 def test_a_tuxtalk_window_from_the_compositor_counts_as_unknown(monkeypatch):
     _reported(monkeypatch, "", "Tuxtalk")
     assert app._query_focused_window_class() is None
-
-
-def test_a_tuxtalk_window_the_tray_had_still_asks_the_compositor(monkeypatch):
-    """The tray keeps no class for TuxTalk's own window, so the compositor is asked."""
-    monkeypatch.setattr(dbus_service, "_focus", dbus_service.FocusReport())
-    service = object.__new__(dbus_service.TuxTalkDBusService)
-    dbus_service.TuxTalkDBusService.SetFocusedWindow(service, "tuxtalk", "9", "")
-    monkeypatch.setattr(focused_window, "reported",
-                        lambda timeout=None: tuple(dbus_service.cached_focus()))
-    monkeypatch.setattr(compositor_focus, "focused_window", lambda: ("foot", None))
-    assert app._query_focused_window_class() == "foot"
 
 
 def test_the_extension_clears_the_focus_when_it_is_turned_off():

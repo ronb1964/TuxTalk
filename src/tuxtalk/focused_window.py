@@ -23,11 +23,11 @@ which tells only the class: the GNOME extension from before it sent one
 window's frame too, but that changes when the window moves or is resized,
 and two maximized windows of one app share it.
 
-TuxTalk's own windows have no class here: a stale report of Preferences
-must not pick the paste shortcut for the app the user is really in. Which
-window it is still counts (tagged "own"), so an automatic Enter never goes
-into one. wl-copy's brief window, which the tray leaves out of its reports,
-counts as unknown.
+TuxTalk's own windows have no class here: the paste shortcut isn't picked
+for them. That one is TuxTalk's still counts, wherever it was told and with
+or without an id ("own"), so an automatic Enter or a key said after the
+words never goes into one: Enter would press its default button. wl-copy's
+brief window, which the tray leaves out of its reports, counts as unknown.
 """
 import os
 from typing import NamedTuple
@@ -83,25 +83,25 @@ def reported(timeout: float = TRAY_TIMEOUT_S):
     return tuple(str(part) for part in answer)
 
 
-def _not_a_target(wm_class) -> bool:
-    from .desktop_identity import is_clipboard_tool_class, is_own_window_class
-    return is_own_window_class(wm_class) or is_clipboard_tool_class(wm_class)
-
-
 def look():
     """(class, which window) of the focused window, each None when not
-    known. Which window is ("tray", id), ("own", id) for one of TuxTalk's
-    own windows, or ("compositor", id). Safe from any thread."""
+    known. Which window is ("tray", id) or ("compositor", id); one of
+    TuxTalk's own is ("own", that or None when it has no id), with no
+    class. Safe from any thread."""
     from . import compositor_focus
+    from .desktop_identity import is_clipboard_tool_class, is_own_window_class
     wm_class, tray_id, _frame = reported() or ("", "", "")
-    if wm_class and tray_id and not _not_a_target(wm_class):
+    if is_own_window_class(wm_class):
+        return None, ("own", ("tray", tray_id) if tray_id else None)
+    if wm_class and tray_id:
         return wm_class, ("tray", tray_id)
     asked_class, asked_id = compositor_focus.focused_window()
-    wm_class = next((c for c in (wm_class, asked_class) if c and not _not_a_target(c)), None)
-    if tray_id:
-        # An id with no class: the tray keeps only the id of TuxTalk's own.
-        return wm_class, ("own", tray_id)
-    return wm_class, None if asked_id is None else ("compositor", asked_id)
+    asked = None if asked_id is None else ("compositor", asked_id)
+    if not wm_class and is_own_window_class(asked_class):
+        return None, ("own", asked)
+    wm_class = next((c for c in (wm_class, asked_class)
+                     if c and not is_clipboard_tool_class(c)), None)
+    return wm_class, asked
 
 
 def window_class():
@@ -112,23 +112,27 @@ def window_class():
 def same_window(before, after) -> bool | None:
     """Whether two looks at the focused window (look() or destination())
     are of one window: True when the desktop's id says so, False when they
-    are known to differ (another app, another id), None when it can't be
-    told: a part one look didn't get, or ids from two sources."""
+    are known to differ (another app, another id, one TuxTalk's own and the
+    other not), None when it can't be told: a part one look didn't get, or
+    ids from two sources."""
     (class_a, window_a), (class_b, window_b) = before[:2], after[:2]
     # KWin lowercases the class ("google-chrome"); X11 has it as the app
     # set it ("Google-chrome"), and on Plasma's X11 session a look can come
     # from either.
     if class_a is not None and class_b is not None and class_a.casefold() != class_b.casefold():
         return False
-    if window_a is None or window_b is None or _source(window_a) != _source(window_b):
+    if is_own(before) != is_own(after) and None not in (window_a or class_a, window_b or class_b):
+        return False
+    id_a, id_b = _id(window_a), _id(window_b)
+    if id_a is None or id_b is None or id_a[0] != id_b[0]:
         return None
-    return window_a == window_b
+    return id_a == id_b
 
 
-def _source(window) -> str:
-    """Where a look's id came from; TuxTalk's own windows are the tray's
-    too, with the same ids as every other window there."""
-    return "tray" if window[0] == "own" else window[0]
+def _id(window):
+    """A look's (source, id), or None; TuxTalk's own windows have the same
+    ids as every other window from that source."""
+    return window[1] if window is not None and window[0] == "own" else window
 
 
 def is_own(where) -> bool:

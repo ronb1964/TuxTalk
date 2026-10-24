@@ -258,19 +258,14 @@ class TuxTalkDBusService(dbus.service.Object):
         frame (FocusReport), in one call, so a look can't pair one window's
         class with the next one's id."""
         global _focus, _clipboard_tool_focused
-        from .desktop_identity import is_clipboard_tool_class, is_own_window_class
+        from .desktop_identity import is_clipboard_tool_class
         _clipboard_tool_focused = is_clipboard_tool_class(wm_class)
         if _clipboard_tool_focused:
             return
-        # TuxTalk's own window (Preferences) is never a paste target, and its
-        # class kept here would outlive a reporter that stops, such as an
-        # extension uninstalled from Preferences. Its id stays: an id with no
-        # class is how a look knows it's TuxTalk's own window, which an
-        # automatic Enter never goes into (focused_window.look).
+        # TuxTalk's own windows are kept as told: focused_window.look knows
+        # them by their class, with or without an id.
         if not wm_class:
             window_id = ""
-        elif is_own_window_class(wm_class):
-            wm_class = ""
         if wm_class != _focus.wm_class:
             logger.info(f"Focused window class: {wm_class or None!r}")
         _focus = FocusReport(str(wm_class), str(window_id or ""), str(geometry or ""))
