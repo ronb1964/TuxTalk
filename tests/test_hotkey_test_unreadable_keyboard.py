@@ -3,7 +3,7 @@
 The service hears hotkeys only through evdev (/dev/input). Before the user is
 in the input group, evdev opens no keyboard, yet the dialog's GTK fallback
 still sees the keys. Those keys must show as seen but not active yet, with a
-note saying what makes them work, never a plain "Working!".
+note saying what makes them work, never a plain "Working!". It can be used from the keyboard alone, too.
 """
 import os
 from types import SimpleNamespace
@@ -105,10 +105,10 @@ def test_the_notice_points_to_fix_typing_when_setup_is_not_done(monkeypatch):
     assert "restart" in notice
 
 
-def _run_dialog_with_f8_release(monkeypatch, evdev_paths, denied=()):
-    """Run the real dialog; while it is up, release F8 through GTK and
-    return the visible label texts."""
-    from gi.repository import Gdk, Gtk
+def _run_dialog(monkeypatch, evdev_paths, during, denied=()):
+    """Run the real dialog, with the dictation service and the settings left
+    alone, and call *during(dialog)* while it is up."""
+    from gi.repository import Gtk
     if not Gtk.init_check()[0]:
         pytest.skip("no display")
     evdev = pytest.importorskip("evdev")
@@ -126,18 +126,35 @@ def _run_dialog_with_f8_release(monkeypatch, evdev_paths, denied=()):
     monkeypatch.setattr(evdev, "InputDevice", _input_device(denied=denied))
     monkeypatch.setattr(uinput_helper, "_input_group_pending_restart", lambda: True)
 
+    monkeypatch.setattr(Gtk.Dialog, "run", lambda dialog: during(dialog) or Gtk.ResponseType.OK)
+    wd.show_hotkey_test_dialog()
+
+
+def _key(dialog, keyval, signal="key-press-event"):
+    """A key press (or release) as GTK delivers it to the dialog."""
+    from gi.repository import Gdk
+    event = Gdk.Event.new(Gdk.EventType.KEY_PRESS if signal == "key-press-event"
+                          else Gdk.EventType.KEY_RELEASE)
+    event.key.keyval = keyval
+    # GTK finds key bindings (Tab, Space) by the key's code, not its name.
+    found, keys = Gdk.Keymap.get_for_display(dialog.get_display()).get_entries_for_keyval(keyval)
+    if found:
+        event.key.hardware_keycode = keys[0].keycode
+    event.key.window = dialog.get_window()
+    dialog.emit(signal, event)
+
+
+def _run_dialog_with_f8_release(monkeypatch, evdev_paths, denied=()):
+    """Run the real dialog; while it is up, release F8 through GTK and
+    return the visible label texts."""
+    from gi.repository import Gdk, Gtk
     seen = {}
 
-    def fake_run(dialog):
-        event = Gdk.Event.new(Gdk.EventType.KEY_RELEASE)
-        event.key.keyval = Gdk.KEY_F8
-        event.key.window = dialog.get_window()
-        dialog.emit("key-release-event", event)
-        seen["texts"] = [w.get_text() for w in widgets(dialog) if isinstance(w, Gtk.Label) and w.get_visible()]
-        return Gtk.ResponseType.OK
-
-    monkeypatch.setattr(Gtk.Dialog, "run", fake_run)
-    wd.show_hotkey_test_dialog()
+    def during(dialog):
+        _key(dialog, Gdk.KEY_F8, "key-release-event")
+        seen["texts"] = [w.get_text() for w in widgets(dialog)
+                         if isinstance(w, Gtk.Label) and w.get_visible()]
+    _run_dialog(monkeypatch, evdev_paths, during, denied)
     return seen["texts"]
 
 
@@ -160,3 +177,31 @@ def test_dialog_with_keyboard_access_still_says_working(monkeypatch):
     texts = _run_dialog_with_f8_release(monkeypatch, ["/dev/input/event3"])
     assert "✓ Working!" in texts
     assert not any("can't read the keyboard" in t for t in texts)
+
+
+# --- used from the keyboard alone ------------------------------------------------
+
+def test_the_hotkey_test_can_be_used_without_a_mouse(monkeypatch):
+    """Tab goes on to the dialog, to move the focus, and Space presses Change
+    Key; the test used to take every key for itself, so nothing in it could
+    be reached from the keyboard."""
+    from gi.repository import Gdk, Gtk
+    seen = {"dialog got": []}
+
+    def during(dialog):
+        # Connected after the test's own handler: it hears only what that passed on.
+        dialog.connect("key-press-event",
+                       lambda d, e: seen["dialog got"].append(Gdk.keyval_name(e.keyval)))
+        for key in (Gdk.KEY_Tab, Gdk.KEY_ISO_Left_Tab, Gdk.KEY_Return, Gdk.KEY_F8):
+            _key(dialog, key)
+        buttons = [w for w in widgets(dialog)
+                   if isinstance(w, Gtk.Button) and w.get_label() == "Change Key"]
+        buttons[0].grab_focus()
+        _key(dialog, Gdk.KEY_space)
+        _key(dialog, Gdk.KEY_space, "key-release-event")
+        seen["capturing"] = not buttons[0].get_sensitive()
+        seen["names"] = [b.get_accessible().get_name() for b in buttons]
+    _run_dialog(monkeypatch, ["/dev/input/event3"], during)
+    assert seen["dialog got"] == ["Tab", "ISO_Left_Tab", "Return", "space"]
+    assert seen["capturing"]
+    assert seen["names"] == ["Change the push-to-talk key", "Change the toggle mode key"]

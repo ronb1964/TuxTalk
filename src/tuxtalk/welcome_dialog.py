@@ -1955,6 +1955,25 @@ def _hotkey_test_helper(ecodes, connect=None):
         return None
 
 
+def _hotkey_test_row(title, key):
+    """(row, label, button, status) for one key in the hotkey test: "Push-to-
+    talk: F8", a Change Key button a screen reader names by its key, and how
+    the key tested."""
+    row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+    label = Gtk.Label(xalign=0)
+    label.set_markup(f'<b>{title}:</b> {layout_label(key)}')
+    label.set_size_request(200, -1)
+    button = Gtk.Button(label="Change Key")
+    button.set_size_request(120, -1)
+    button.get_accessible().set_name(f"Change the {title.lower()} key")
+    status = Gtk.Label(xalign=0)
+    status.set_markup('<span color="#999999">Not tested</span>')
+    row.pack_start(label, False, False, 0)
+    row.pack_start(button, False, False, 0)
+    row.pack_start(status, True, True, 0)
+    return row, label, button, status
+
+
 def _key_seen_markup(service_can_read):
     """A tested key's status. Only this dialog saw the key when the
     dictation service can't read the keyboards, or reads them through a
@@ -1989,7 +2008,7 @@ def show_hotkey_test_dialog():
     Returns:
         bool: True if user completed the test
     """
-    from tuxtalk.config import load_config, save_config
+    from tuxtalk.config import HOTKEY_CHOICES, load_config, save_config
     from tuxtalk import gnome_keybindings
 
     # The service would intercept F8/F9 before we can detect them. The tray
@@ -2061,41 +2080,11 @@ def show_hotkey_test_dialog():
     hotkey_config_box.set_margin_top(10)
 
     # Push-to-talk row
-    hold_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-    hold_label = Gtk.Label()
-    hold_label.set_markup(f'<b>Push-to-talk:</b> {layout_label(current_hold_key[0])}')
-    hold_label.set_xalign(0)
-    hold_label.set_size_request(200, -1)
-    hold_row.pack_start(hold_label, False, False, 0)
-
-    hold_change_btn = Gtk.Button(label="Change Key")
-    hold_change_btn.set_size_request(120, -1)
-    hold_row.pack_start(hold_change_btn, False, False, 0)
-
-    hold_status = Gtk.Label()
-    hold_status.set_markup('<span color="#999999">Not tested</span>')
-    hold_status.set_xalign(0)
-    hold_row.pack_start(hold_status, True, True, 0)
-
+    hold_row, hold_label, hold_change_btn, hold_status = _hotkey_test_row(
+        "Push-to-talk", current_hold_key[0])
     hotkey_config_box.pack_start(hold_row, False, False, 0)
-
-    # Toggle mode row
-    toggle_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-    toggle_label = Gtk.Label()
-    toggle_label.set_markup(f'<b>Toggle mode:</b> {layout_label(current_toggle_key[0])}')
-    toggle_label.set_xalign(0)
-    toggle_label.set_size_request(200, -1)
-    toggle_row.pack_start(toggle_label, False, False, 0)
-
-    toggle_change_btn = Gtk.Button(label="Change Key")
-    toggle_change_btn.set_size_request(120, -1)
-    toggle_row.pack_start(toggle_change_btn, False, False, 0)
-
-    toggle_status = Gtk.Label()
-    toggle_status.set_markup('<span color="#999999">Not tested</span>')
-    toggle_status.set_xalign(0)
-    toggle_row.pack_start(toggle_status, True, True, 0)
-
+    toggle_row, toggle_label, toggle_change_btn, toggle_status = _hotkey_test_row(
+        "Toggle mode", current_toggle_key[0])
     hotkey_config_box.pack_start(toggle_row, False, False, 0)
 
     content.pack_start(hotkey_config_box, False, False, 0)
@@ -2248,10 +2237,15 @@ def show_hotkey_test_dialog():
     _held_keycodes = set()
 
     def on_key_press(widget, event):
-        if not dialog_ready[0]:
+        """A dictation key for the test, or any key while Change Key waits
+        for one. Other keys are the dialog's own, for using it without a
+        mouse: Tab moves the focus, Space and Enter press the button."""
+        if not dialog_ready[0] or event.type != Gdk.EventType.KEY_PRESS:
             return True
-        if event.type != Gdk.EventType.KEY_PRESS:
-            return True
+        keyname = gtk_key_name(Gtk.accelerator_name(event.keyval, 0))
+        is_capture = capturing_key[0] is not None
+        if not is_capture and keyname not in HOTKEY_CHOICES:
+            return False
         # Ignore events with Alt, Ctrl, or Super held (e.g. GNOME's Alt+F8 begin-resize)
         if event.state & _NO_MODIFIER_MASK:
             return True
@@ -2259,10 +2253,6 @@ def show_hotkey_test_dialog():
         if event.hardware_keycode in _held_keycodes:
             return True
         _held_keycodes.add(event.hardware_keycode)
-
-        keyname = gtk_key_name(Gtk.accelerator_name(event.keyval, 0))
-
-        is_capture = capturing_key[0] is not None
         update_ui_for_key(keyname, is_capture, action="press")
         return True
 
@@ -2279,21 +2269,14 @@ def show_hotkey_test_dialog():
         update_ui_for_key(keyname, is_capture, action="release")
         return False
 
-    # Change button handlers
-    def on_change_hold(button):
-        capturing_key[0] = "hold"
+    def on_change(button, which):
+        capturing_key[0] = which        # "hold" or "toggle"
         capture_instruction.show()
         hold_change_btn.set_sensitive(False)
         toggle_change_btn.set_sensitive(False)
 
-    def on_change_toggle(button):
-        capturing_key[0] = "toggle"
-        capture_instruction.show()
-        hold_change_btn.set_sensitive(False)
-        toggle_change_btn.set_sensitive(False)
-
-    hold_change_btn.connect("clicked", on_change_hold)
-    toggle_change_btn.connect("clicked", on_change_toggle)
+    hold_change_btn.connect("clicked", on_change, "hold")
+    toggle_change_btn.connect("clicked", on_change, "toggle")
 
     # Always connect the GTK key handlers. They return straight away until
     # dialog_ready is set, so events that arrive before the gate opens are

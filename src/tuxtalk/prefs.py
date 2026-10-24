@@ -1052,22 +1052,13 @@ class PreferencesWindow:
         self.hotkey_label = Gtk.Label(label="Hold Hotkey 💡:", xalign=0)
         self.hotkey_label.set_tooltip_text("Hold this key while speaking — release to stop and transcribe.\nBoth hotkeys are always active simultaneously.\nRecommended: F8 (default). Avoid: F1, F5, F11, F12.\nF-keys that need Fn held? Right Ctrl, Right Alt and Scroll Lock don't.")
         grid.attach(self.hotkey_label, 0, row, 1, 1)
-
-        self.hotkey_combo = Gtk.ComboBoxText()
-        self.hotkey_combo.set_can_focus(True)
-        self.hotkey_combo.connect("button-press-event", self._on_combo_button_press)
-        self._block_combo_scroll(self.hotkey_combo)
-
         hotkeys = dropdown_entries()
-        for key, label in hotkeys:
-            self.hotkey_combo.append(key, label)
-
+        self.hotkey_combo = self._hotkey_combo(self.hotkey_label, hotkeys)
         # Selection for both combos is set once the toggle combo exists, by
         # _apply_hotkey_fallbacks — see there for why the fallback must also
         # be written back into self.config.
 
         self.hotkey_combo.connect("changed", lambda x: self.update_config("hotkey", x.get_active_id()))
-        # The tooltip is on the label: on the combo it gets in the way of the popup
         grid.attach(self.hotkey_combo, 1, row, 1, 1)
         row += 1
         
@@ -1077,22 +1068,11 @@ class PreferencesWindow:
                                            "Double-tap it for hands-free (the option under this row):\n"
                                            "the recording stops by itself when you stop talking.\n"
                                            "Both hotkeys are always active simultaneously.\nRecommended: F9 (default).")
-        self.toggle_combo = Gtk.ComboBoxText()
-        self.toggle_combo.set_can_focus(True)
-        self.toggle_combo.connect("button-press-event", self._on_combo_button_press)
-        self._block_combo_scroll(self.toggle_combo)
-
-        # Add same options for toggle key
-        for key, label in hotkeys:
-            self.toggle_combo.append(key, label)
-
+        self.toggle_combo = self._hotkey_combo(self.toggle_label, hotkeys)
         # Both combos exist now, so set their selections together.
         self._apply_hotkey_fallbacks(HOTKEY_CHOICES)
 
         self.toggle_combo.connect("changed", lambda x: self.update_config("toggle_hotkey", x.get_active_id()))
-        # The tooltip is on the label: on the combo it gets in the way of the popup
-
-        # Attach toggle elements to grid
         grid.attach(self.toggle_label, 0, row, 1, 1)
         grid.attach(self.toggle_combo, 1, row, 1, 1)
         row += 1
@@ -4143,6 +4123,19 @@ class PreferencesWindow:
             self._message(Gtk.MessageType.ERROR, "Your snippets weren't saved", str(e))
             return None
     
+    def _hotkey_combo(self, label, hotkeys):
+        """A hotkey dropdown of *hotkeys* [(key, its label)], which a screen
+        reader names by *label*. The tooltip stays on the label: on the
+        combo it gets in the way of the popup."""
+        combo = Gtk.ComboBoxText()
+        combo.set_can_focus(True)
+        combo.connect("button-press-event", self._on_combo_button_press)
+        self._block_combo_scroll(combo)
+        for key, text in hotkeys:
+            combo.append(key, text)
+        label.set_mnemonic_widget(combo)
+        return combo
+
     def _apply_hotkey_fallbacks(self, hotkeys):
         """Select the configured hotkeys, falling back to F8/F9 — and record
         that fallback in self.config, so what the dropdown shows is what OK saves.

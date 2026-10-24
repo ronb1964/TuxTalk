@@ -533,6 +533,14 @@ def test_the_dropdowns_say_what_right_ctrl_and_right_alt_give_up():
     assert hotkey_label("Scroll Lock") == "Scroll Lock"
 
 
+def test_a_screen_reader_names_each_hotkey_dropdown_by_its_label(prefs_window):
+    """The two dropdowns sat beside their labels with nothing linking them,
+    so a screen reader read out two unnamed lists of the same keys."""
+    window = prefs_window()
+    assert window.hotkey_combo.list_mnemonic_labels() == [window.hotkey_label]
+    assert window.toggle_combo.list_mnemonic_labels() == [window.toggle_label]
+
+
 @pytest.mark.parametrize("layout,lost", [(("us", ""), None), (("de", ""), ("@", "€")),
                                          (("gb", ""), ("€",)), (("pl", ""), ("€",))])
 def test_right_alt_warns_where_the_layout_makes_it_altgr(monkeypatch, layout, lost):
