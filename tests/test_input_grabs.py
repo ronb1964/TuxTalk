@@ -12,7 +12,7 @@ These tests pin down the invariant that makes that impossible:
 import pytest
 from evdev import ecodes
 
-from tuxtalk import app
+from tuxtalk import app, send_countdown
 
 
 class FakeDevice:
@@ -754,7 +754,7 @@ def test_a_toggle_tap_during_a_send_countdown_only_holds_it(key_env, monkeypatch
     is held and no recording starts (Ron, 2026-10-18)."""
     started, _ = key_env
     held = []
-    monkeypatch.setattr(app, "_hold_pending_send", lambda announce: held.append(announce) or True)
+    monkeypatch.setattr(send_countdown, "hold", lambda announce: held.append(announce) or True)
     app._handle_key_event(FakeEvent(TOGGLE, 1), HOLD, TOGGLE,
                           None, set(), [keyboard()], FakeConfig(), 0)
     assert held == [True]
@@ -763,7 +763,7 @@ def test_a_toggle_tap_during_a_send_countdown_only_holds_it(key_env, monkeypatch
 
 def test_a_toggle_tap_with_nothing_counting_down_starts_recording(key_env, monkeypatch):
     started, _ = key_env
-    monkeypatch.setattr(app, "_hold_pending_send", lambda announce: False)
+    monkeypatch.setattr(send_countdown, "hold", lambda announce: False)
     app._handle_key_event(FakeEvent(TOGGLE, 1), HOLD, TOGGLE,
                           None, set(), [keyboard()], FakeConfig(), 0)
     assert len(started) == 1
@@ -864,7 +864,7 @@ def test_reopening_the_same_mic_says_nothing(monkeypatch, quiet_recording):
 def test_letting_go_of_the_toggle_key_types_a_held_sends_space(key_env, monkeypatch):
     """The F9 tap that held a send: its space goes in once F9 is up."""
     typed = []
-    monkeypatch.setattr(app, "_type_owed_space", lambda: typed.append(" "))
+    monkeypatch.setattr(send_countdown, "type_owed_space", lambda: typed.append(" "))
     monkeypatch.setattr(app.state, "owed_space", {"space": " "})
     app._handle_key_event(FakeEvent(TOGGLE, 0), HOLD, TOGGLE,
                           None, set(), [keyboard()], FakeConfig(), 0)

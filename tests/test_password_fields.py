@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 from gi.repository import Gio, GLib
 
-from tuxtalk import app, atspi_helper, history, screen_message
+from tuxtalk import app, atspi_helper, history, screen_message, send_countdown
 
 ACTIVE = 1 << atspi_helper._STATE_ACTIVE
 FOCUSED = 1 << atspi_helper._STATE_FOCUSED
@@ -216,11 +216,11 @@ def test_sending_automatically_doesnt_press_enter_in_a_password_field(desktop, m
     pending = {"window": None, "why": "sending automatically", "timer": None}
     monkeypatch.setattr(app.state, "pending_send", pending)
     desktop["password"] = True
-    app._send_when_due(pending)
-    assert keyboard.events == [] and desktop["labels"] == [app.PASSWORD_FIELD_NOT_SENT]
+    send_countdown._send_when_due(pending)
+    assert keyboard.events == [] and desktop["labels"] == [send_countdown.PASSWORD_FIELD_NOT_SENT]
     desktop["password"], desktop["labels"] = False, []
     app.state.pending_send = pending
-    app._send_when_due(pending)
+    send_countdown._send_when_due(pending)
     assert keyboard.typed_keys() == [28]          # KEY_ENTER
 
 

@@ -176,12 +176,12 @@ def _no_real_send_countdown(monkeypatch, request):
     """No floating label on the user's screen and no Enter left counting down
     between tests. Sends happen at once unless a test sets a wait itself.
     test_window_messages tests the label itself, with its own fakes."""
-    from tuxtalk import app, screen_message
+    from tuxtalk import app, screen_message, send_countdown
     if request.module.__name__.rpartition(".")[2] != "test_window_messages":
         monkeypatch.setattr(screen_message, "show_over_active_window", lambda *a, **k: None)
         monkeypatch.setattr(screen_message, "hide", lambda *a, **k: None)
         monkeypatch.setattr(screen_message, "relabel", lambda *a, **k: None)
-    monkeypatch.setattr(app, "_press_enter_delay", 0.0)
+    monkeypatch.setattr(send_countdown, "_delay", 0.0)
     monkeypatch.setattr(app.state, "pending_send", None)
     monkeypatch.setattr(app.state, "held_send", False)
     monkeypatch.setattr(app.state, "owed_space", None)

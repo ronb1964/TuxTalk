@@ -31,7 +31,8 @@ from . import config as config_module
 from .logger import setup_logger, redact_text
 from .recording_indicator import RecordingIndicator
 from .undo import detect_undo_command, calculate_undo_length
-from . import edit_notices, hallucinations, modifier_hotkeys, virtual_keyboard
+from . import (edit_notices, hallucinations, modifier_hotkeys, send_countdown,
+               virtual_keyboard)
 from .hotkey_keys import (MODIFIER_CODES, check_modifiers_held, keycode_from_name, keys_down,
                           parse_hotkey_combo, track_modifier)
 import threading
@@ -116,9 +117,7 @@ _voice_navigation = False
 _adapt_to_app = True
 # Press Enter after every dictation, as if each ended with "press enter"
 # (key_commands.py).
-_press_enter_after = False
-_press_enter_delay = 2.0    # ...after this many seconds (_send_automatically)
-_hold_key_name = "F8"       # named in the "Sending in 2 s" label
+_press_enter_after = False      # after send_countdown's wait
 # The languages auto-detect may pick from, () for any (language_limit.py).
 _auto_languages = ()
 _ai_engine = None
@@ -144,7 +143,7 @@ def _apply_cleanup_settings(cfg):
     stop the AI engine."""
     global _remove_fillers, _ai_engine, _auto_stop_seconds, _ai_corrections, _voice_editing, _swiss_spelling
     global _numbers_mode, _numbers_language, _voice_navigation, _adapt_to_app, _auto_languages
-    global _press_enter_after, _press_enter_delay, _hold_key_name
+    global _press_enter_after
     global _chunk_pause_seconds, _chunk_cfg, _chunk_speech_db, _chunk_context_marks
     _auto_stop_seconds = (float(getattr(cfg, "auto_stop_seconds", 2.0))
                           if getattr(cfg, "auto_stop_silence", False) else 0.0)
@@ -166,8 +165,7 @@ def _apply_cleanup_settings(cfg):
     _voice_navigation = bool(getattr(cfg, "voice_navigation", False))
     _adapt_to_app = bool(getattr(cfg, "adapt_to_app", True))
     _press_enter_after = bool(getattr(cfg, "press_enter_after", False))
-    _press_enter_delay = float(getattr(cfg, "press_enter_delay", 2.0))
-    _hold_key_name = getattr(cfg, "hotkey", "") or "the hotkey"
+    send_countdown.configure(cfg)
     from . import language_limit
     _auto_languages = language_limit.parse(getattr(cfg, "auto_languages", ""))
     if getattr(cfg, "numbers_as_digits", False):
@@ -317,7 +315,7 @@ class RecordingState:
     question_open: bool = False
     # "Send each dictation automatically" is counting down to its Enter:
     # {"timer", "window", "why"} until it presses it or a tap of a hotkey
-    # holds it (_send_automatically), else None. Guarded by _send_lock.
+    # holds it (send_countdown), else None. Guarded by its _send_lock.
     pending_send: object = None
     # This recording's press held a pending send, so a tap that's too short
     # to be a dictation says "Not sent" rather than "Cancelled".
@@ -327,8 +325,9 @@ class RecordingState:
     # start made it read as a longer hold (see the hold key).
     released_while_starting: bool = False
     # The space a held send left off, waiting for the hotkey that held it to
-    # come up (_type_owed_space), or None. Typed while the key is down, GNOME
-    # without the extension sees the key too and the space is lost.
+    # come up (send_countdown.type_owed_space), or None. Typed while the key
+    # is down, GNOME without the extension sees the key too and the space is
+    # lost.
     owed_space: object = None
     # A Right Ctrl or Right Alt dictation key that's down and hidden from
     # the desktop (see _hide_modifier_hotkey), or None.
@@ -1490,7 +1489,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     """
     # Pressing a hotkey while a send counts down holds it: a tap leaves the
     # text unsent, a hold dictates more onto it.
-    state.held_send = _hold_pending_send(announce=False)
+    state.held_send = send_countdown.hold(announce=False)
     state.frames = []
     state.was_cancelled = False
     state.silence = None
@@ -1714,7 +1713,7 @@ def _press_key(key: str, why: str, claim=None) -> bool:
     whose typed tabs become spaces. Undo can't reach what's behind either, so
     once the key is pressed it forgets the dictation; one that wasn't
     pressed leaves the text where undo still reaches it. *claim* can still
-    stop it right before it goes down (_claim_send)."""
+    stop it right before it goes down (send_countdown._claim_send)."""
     time.sleep(0.05)   # let the app take in the typed text first
     if not _output_backend().press_keys([((), key)], claim=claim):
         logger.warning(f"{key.title()} not pressed ({why})")
@@ -1725,183 +1724,6 @@ def _press_key(key: str, why: str, claim=None) -> bool:
         state.sent = {"at": time.time(), "automatic": why.startswith("Send each")}
     logger.info(f"Pressed {key.title()} ({why})")
     return True
-
-
-_send_lock = threading.Lock()
-SEND_LABEL_TAG = "send-countdown"
-HELD_SEND_NOTICE = "Not sent. Press Enter when you're ready."
-
-
-def _send_automatically(why: str, space: str = "", injection_mode: str = "type") -> None:
-    """Enter for "Send each dictation automatically", after its wait.
-
-    Sending can't be taken back, so the wait gives a moment to stop it: a tap
-    of the hold key (or the toggle key) holds the send and the text stays in
-    the box, to fix or add a screenshot to first; holding the key dictates
-    more onto it (_hold_pending_send). Asked for by Ron, 2026-10-18.
-
-    *space* is the auto-space left off so it wouldn't be sent; a held send
-    types it, or what's said next sticks to the last word ("delay.All")."""
-    delay = _press_enter_delay
-    if delay <= 0:
-        _press_key("ENTER", why)
-        return
-    pending = {"window": state.last_inserted_window, "why": why,
-               "space": space, "mode": injection_mode}
-    pending["timer"] = threading.Timer(delay, _send_when_due, args=(pending,))
-    # The label counts down once a second: "Sending in 4 s", 3, 2, 1.
-    pending["ticks"] = [threading.Timer(delay - left, _count_down, args=(pending, left))
-                        for left in range(int(delay) - 1, 0, -1)]
-    for timer in [pending["timer"], *pending["ticks"]]:
-        timer.daemon = True
-    with _send_lock:
-        if state.pending_send is not None:
-            _cancel_timers(state.pending_send)
-        state.pending_send = pending
-    for timer in [pending["timer"], *pending["ticks"]]:
-        timer.start()
-    logger.info(f"Sending in {delay:g}s ({why})")
-    from . import screen_message
-    screen_message.show_over_active_window(
-        _send_label(delay), seconds=delay, warning=False, tag=SEND_LABEL_TAG, low=True)
-
-
-def _send_label(seconds_left: float) -> str:
-    return f"Sending in {seconds_left:g} s. Tap {_hold_key_name} to hold it."
-
-
-SWITCHED_WINDOW_NOTICE = "Not sent: you switched windows."
-PASSWORD_FIELD_NOT_SENT = "Not sent: the cursor is in a password field."
-
-
-def _count_down(pending: dict, seconds_left: int) -> None:
-    """One second less on the "Sending in" label, unless that send is over.
-    Switching windows ends it here, so the label doesn't count down to a send
-    that won't happen (Ron, 2026-10-18)."""
-    with _send_lock:
-        if state.pending_send is not pending:
-            return
-    from . import screen_message
-    if _focus_left(pending):
-        with _send_lock:
-            if state.pending_send is not pending:
-                return
-            state.pending_send = None
-        _cancel_timers(pending)
-        logger.info("Not sent: another window has the focus now")
-        screen_message.relabel(SEND_LABEL_TAG, SWITCHED_WINDOW_NOTICE)
-        return
-    screen_message.relabel(SEND_LABEL_TAG, _send_label(seconds_left))
-
-
-def _focus_left(pending: dict) -> bool:
-    """Whether another window than the one the text went to has the focus."""
-    focused = _query_focused_window_class()
-    return (focused is not None and pending["window"] is not None
-            and focused != pending["window"])
-
-
-def _cancel_timers(pending: dict) -> None:
-    for timer in [pending["timer"], *pending.get("ticks", ())]:
-        timer.cancel()
-
-
-def _send_when_due(pending: dict) -> None:
-    """The wait is over and nothing held it: press Enter, but only in the
-    window the text went to (_claim_send).
-
-    A Right Ctrl or Right Alt dictation key down now is waited for first
-    (modifier_hotkeys), and again if one goes down before the Enter does,
-    with the send pending until the Enter goes down: the hotkey loop reads a
-    tap of it meanwhile, and the tap holds the send as it would have."""
-    with _send_lock:
-        if state.pending_send is not pending:
-            return
-    sent = modifier_hotkeys.wait_until_up() and _press_key(
-        "ENTER", pending["why"], claim=lambda: _claim_send(pending))
-    with _send_lock:
-        unclaimed = state.pending_send is pending
-        if unclaimed:
-            state.pending_send = None
-    if unclaimed and not sent:
-        logger.info("Not sent: a dictation key stayed down, or Enter couldn't be pressed")
-        _show_send_notice(HELD_SEND_NOTICE)
-
-
-def _claim_send(pending: dict) -> None:
-    """Take the send for its Enter, which goes down right after, unless a
-    tap held it meanwhile or the focus moved. Enter in whatever the user
-    switched to could send something else entirely. Raises
-    virtual_keyboard.GaveUp when it mustn't go."""
-    with _send_lock:
-        if state.pending_send is not pending:
-            raise virtual_keyboard.GaveUp("held")
-        state.pending_send = None
-    if _focus_left(pending):
-        logger.info("Not sent: another window has the focus now")
-        _show_send_notice(SWITCHED_WINDOW_NOTICE)
-        raise virtual_keyboard.GaveUp("moved")
-    # Tabbing from a username into the password box during the wait must
-    # not submit the form: "press enter" said on its own is the only Enter a
-    # password field gets.
-    if _focused_is_password():
-        logger.info("Not sent: a password field has the focus now")
-        _show_send_notice(PASSWORD_FIELD_NOT_SENT)
-        raise virtual_keyboard.GaveUp("moved")
-
-
-def _show_send_notice(text: str) -> None:
-    from . import screen_message
-    screen_message.show_over_active_window(text, warning=False, tag=SEND_LABEL_TAG, low=True)
-
-
-def _hold_pending_send(announce: bool) -> bool:
-    """Stop a counting-down send; True when there was one. *announce* says
-    "Not sent" on screen at once (a tap of the toggle key); a press of the
-    hold key waits to see whether it's a tap or more dictation."""
-    with _send_lock:
-        pending, state.pending_send = state.pending_send, None
-    if pending is None:
-        return False
-    _cancel_timers(pending)
-    logger.info("Held the send: the dictation stays unsent")
-    if pending.get("space"):
-        state.owed_space = pending
-    if announce:
-        _show_send_notice(HELD_SEND_NOTICE)
-    else:
-        from . import screen_message
-        screen_message.hide(SEND_LABEL_TAG)
-    return True
-
-
-def _type_space_left_off(pending: dict) -> None:
-    """Type the space a held send left off, in the window its text went to,
-    keeping undo's record of the dictation whole."""
-    space = pending.get("space")
-    if not space:
-        return
-    if _focus_left(pending):
-        return
-    typed = state.last_inserted_text
-    if _inject_text(space, pending["mode"], time.time()) == "ok":
-        state.last_inserted_text = typed + space
-
-
-def _type_owed_space() -> None:
-    """The hotkey that held a send is up: type the space it left off."""
-    pending, state.owed_space = state.owed_space, None
-    if pending is not None:
-        _type_space_left_off(pending)
-
-
-def _with_owed_space(text: str) -> str:
-    """Put a held send's space in front of *text*, the dictation added onto
-    it, when it goes to the same window."""
-    pending, state.owed_space = state.owed_space, None
-    if pending is None or not text or text[0].isspace() or _focus_left(pending):
-        return text
-    return pending["space"] + text
 
 
 def _send_shift_enter():
@@ -3248,11 +3070,11 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
     if state.held_send and state.owed_space is not None and not state.chunks_submitted:
         # The hotkey that held the send is up now; a tap leaves the text as
         # it is, a dictation goes after this space.
-        _type_owed_space()
+        send_countdown.type_owed_space()
     if held_ms < MIN_HOLD_MS or (state.held_send and state.released_while_starting):
         if state.held_send:
-            cancel_recording(beeps_on, notify_on, HELD_SEND_NOTICE)
-            _show_send_notice(HELD_SEND_NOTICE)
+            cancel_recording(beeps_on, notify_on, send_countdown.HELD_NOTICE)
+            send_countdown.show_notice(send_countdown.HELD_NOTICE)
         else:
             cancel_recording(beeps_on, notify_on, f"Cancelled (held {held_ms} ms)")
         return None
@@ -3744,8 +3566,8 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                 # The recording ended in a pause; its phrases are typed, so
                 # "Send each dictation automatically" sends them now.
                 _flush_boundary(auto_period, False, injection_mode)
-                _send_automatically("Send each dictation automatically is on",
-                                    " " if auto_space else "", injection_mode)
+                send_countdown.send_automatically("Send each dictation automatically is on",
+                                                  " " if auto_space else "", injection_mode)
                 _chunk_message_sent()
             else:
                 _flush_boundary(auto_period, auto_space, injection_mode)
@@ -3921,7 +3743,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # Recent Dictations list first, so it can be recovered even if the
         # injection lands in the wrong window or fails outright.
         if text and state.owed_space is not None:
-            text = _with_owed_space(text)
+            text = send_countdown.with_owed_space(text)
         if text:
             chunked = chunk_role is not None
             said_before = _remember_said(text, chunked, taken_back)
@@ -3941,8 +3763,8 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             elif said:
                 _press_said(said, chunk_role)
             elif press:
-                _send_automatically("Send each dictation automatically is on",
-                                    space_left_off, injection_mode)
+                send_countdown.send_automatically("Send each dictation automatically is on",
+                                                  space_left_off, injection_mode)
                 if chunk_role is not None:
                     _chunk_message_sent()
             if chunk_role == "middle" and not _chunk_context_marks and outcome == "ok" \
@@ -4558,7 +4380,7 @@ def _toggle_tap_holds_send(event, toggle_key, held_modifiers) -> bool:
     return (event.code == toggle_key and event.value == 1 and not state.is_recording
             and not _someone_elses_shortcut(held_modifiers - {toggle_key})
             and not (_voice_editing and _held_shift(held_modifiers))
-            and _hold_pending_send(announce=True))
+            and send_countdown.hold(announce=True))
 
 
 def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifiers,
@@ -4661,7 +4483,7 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
     # --- Tap-to-toggle: press once to start, press again to stop ---
     if (toggle_key and event.code == toggle_key and event.value == 0
             and state.owed_space is not None and not state.is_recording):
-        _type_owed_space()   # the tap that held the send is over
+        send_countdown.type_owed_space()   # the tap that held the send is over
 
     if (toggle_key and event.code == toggle_key and event.value == 1
             and not _someone_elses_shortcut(held_modifiers - {toggle_key})):

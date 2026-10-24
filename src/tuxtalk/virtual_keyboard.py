@@ -142,7 +142,7 @@ def send(events, delay_ms: float = KEY_DELAY_MS, before_press=None, claim=None) 
     Ctrl dictation key is let go) and may raise GaveUp; that runs with the
     keyboard free for others (_wait_unlocked). *claim*, if given, runs the
     same way once, right before the first key goes down, after any wait,
-    and may raise GaveUp too (app._claim_send: a send a tap held meanwhile).
+    and may raise GaveUp too (send_countdown._claim_send: a send a tap held meanwhile).
 
     Waits *delay_ms* after each event, on a schedule kept from the start, so
     sleeping a little long doesn't add up over a long text. When this process

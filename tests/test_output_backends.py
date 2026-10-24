@@ -332,7 +332,7 @@ def test_flatpak_typing_records_what_libei_types_for_undo(monkeypatch):
 
 def test_libei_backend_presses_nothing_when_the_claim_says_no(monkeypatch):
     """A send held by a tap during its wait: no portal session is opened, so
-    no Enter goes out (app._claim_send)."""
+    no Enter goes out (send_countdown._claim_send)."""
     from tuxtalk import virtual_keyboard
     from tuxtalk.output_backends import LibeiOutputBackend
     b = LibeiOutputBackend()

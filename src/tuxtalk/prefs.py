@@ -2039,7 +2039,7 @@ class PreferencesWindow:
 
     def _send_automatically_option(self):
         """The "Send each dictation automatically" tickbox with its wait
-        beneath it, greyed while the tickbox is off (app._send_automatically).
+        beneath it, greyed while the tickbox is off (send_countdown).
         Saying "press enter" at the end sends one dictation at once."""
         check = Gtk.CheckButton(label="Send each dictation automatically (press Enter)")
         check.set_active(bool(self.config.get("press_enter_after", False)))

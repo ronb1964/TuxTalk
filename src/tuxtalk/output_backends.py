@@ -43,7 +43,7 @@ class OutputBackend:
         """Press [(modifiers, key)] in order, by name ("CTRL", "LEFT"), for
         select and move by voice (voice_navigation.py). *claim*, if given,
         is called right before the first key and may stop them all by
-        raising virtual_keyboard.GaveUp (app._claim_send)."""
+        raising virtual_keyboard.GaveUp (send_countdown._claim_send)."""
         raise NotImplementedError
 
 
