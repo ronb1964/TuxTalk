@@ -4,11 +4,15 @@ stream is closed, and one called off while it waits never opens it. The
 streams are fakes; nothing is recorded."""
 import threading
 
+import gi
 import numpy as np
 import pytest
 
-from tuxtalk import mic_test
-from tuxtalk.mic_test import MicTest
+gi.require_version("Gtk", "3.0")
+from gi.repository import Gtk  # noqa: E402
+
+from tuxtalk import mic_test  # noqa: E402
+from tuxtalk.mic_test import MicTest  # noqa: E402
 
 
 class Microphone:
@@ -150,3 +154,21 @@ def test_a_second_start_keeps_the_recording_under_way(mic):
     take = mic._take
     mic.start()
     assert len(mic.opened) == 1 and mic._take is take
+
+
+def test_stop_calls_off_a_recording_waiting_to_start(mic):
+    """Start again while the last stream is still stopping: Stop stayed
+    greyed out while it waited, so the user couldn't call it off, and the
+    microphone opened by itself once the close ended."""
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)  # kept: freed, it destroys the buttons
+    mic.build(box)
+    mic.release.clear()
+    mic.start_btn.clicked()
+    mic.stop_btn.clicked()
+    mic.start_btn.clicked()                        # waits for the close
+    assert mic.stop_btn.get_sensitive()
+    mic.stop_btn.clicked()
+    assert mic.start_btn.get_sensitive() and not mic.stop_btn.get_sensitive()
+    after_the_close(mic)
+    assert len(mic.opened) == 1 and not mic.recording
+    assert mic.start_btn.get_sensitive() and not mic.stop_btn.get_sensitive()

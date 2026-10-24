@@ -230,10 +230,12 @@ class MicTest:
     def start(self, _button=None):
         """Start recording the chosen microphone, once the last recording's
         stream is closed. Replay is greyed out from now: it would play into
-        the recording."""
+        the recording. Stop works at once, so a start still waiting for
+        that close can be called off."""
         self._call_off_replay()
         self.start_btn.set_sensitive(False)
         self.replay_btn.set_sensitive(False)
+        self.stop_btn.set_sensitive(True)
         self._reopen.when_closed(self._open)
 
     def _open(self):
@@ -269,7 +271,6 @@ class MicTest:
         take.stream = stream
         self.status.set_text("🎤 Recording... speak normally")
         self._set_grade_style(None)
-        self.stop_btn.set_sensitive(True)
 
     def stop(self, _button=None):
         """Stop recording, and grade it; or call off a recording still
@@ -370,9 +371,10 @@ class MicTest:
         return False
 
     def _ready(self):
-        """Nothing is recording: Start Recording, and Replay if there is a
-        recording to play."""
+        """Nothing is recording or waiting to: Start Recording, and Replay
+        if there is a recording to play, but not Stop."""
         self.start_btn.set_sensitive(True)
+        self.stop_btn.set_sensitive(False)
         self.replay_btn.set_sensitive(self.recorded_audio is not None)
 
     def _call_off_replay(self):
