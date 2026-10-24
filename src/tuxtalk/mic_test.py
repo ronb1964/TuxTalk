@@ -13,6 +13,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
 import numpy as np  # noqa: E402
+import sounddevice as sd  # noqa: E402
 
 from . import beeps, mic_stream  # noqa: E402
 from .logger import setup_logger  # noqa: E402
@@ -37,11 +38,7 @@ class SegmentedVUMeter(Gtk.DrawingArea):
         super().__init__()
         self.num_segments = num_segments
         self.level = 0.0  # 0.0 to 1.0
-
-        # Set minimum size
         self.set_size_request(200, 20)
-
-        # Connect draw signal
         self.connect("draw", self._on_draw)
 
         # Colors for segments based on position (as RGB tuples, 0-1 range)
@@ -58,14 +55,13 @@ class SegmentedVUMeter(Gtk.DrawingArea):
     def set_value(self, level):
         """Set the meter level (0.0 to 1.0)."""
         self.level = max(0.0, min(1.0, level))
-        self.queue_draw()  # Trigger redraw
+        self.queue_draw()
 
     def _get_segment_color(self, segment_index, is_lit):
         """Get the color for a segment based on its position and lit state."""
         if not is_lit:
             return self.color_off
 
-        # Calculate position as percentage (0.0 to 1.0)
         position = segment_index / self.num_segments
 
         if position < 0.60:
@@ -77,20 +73,15 @@ class SegmentedVUMeter(Gtk.DrawingArea):
 
     def _on_draw(self, widget, cr):
         """Draw the segmented meter."""
-        # Get widget dimensions
         width = widget.get_allocated_width()
         height = widget.get_allocated_height()
 
-        # Calculate segment dimensions
-        segment_gap = 2  # Gap between segments
+        segment_gap = 2
         total_gaps = (self.num_segments - 1) * segment_gap
         segment_width = (width - total_gaps) / self.num_segments
         segment_height = height - 4  # Leave some margin
 
-        # Calculate how many segments should be lit
         lit_segments = int(self.level * self.num_segments)
-
-        # Draw each segment
         for i in range(self.num_segments):
             x = i * (segment_width + segment_gap)
             y = 2  # Top margin
@@ -98,20 +89,17 @@ class SegmentedVUMeter(Gtk.DrawingArea):
             is_lit = i < lit_segments
             color = self._get_segment_color(i, is_lit)
 
-            # Draw segment background
             cr.set_source_rgb(*color)
             cr.rectangle(x, y, segment_width, segment_height)
             cr.fill()
 
-            # Draw subtle border around each segment
+            # A subtle border round each segment, like separate LEDs.
             cr.set_source_rgb(*self.color_border)
             cr.rectangle(x, y, segment_width, segment_height)
             cr.set_line_width(1)
             cr.stroke()
 
         return False
-
-
 
 
 class MicTest:
@@ -183,7 +171,6 @@ class MicTest:
         self._call_off_replay()
         stream = None
         try:
-            import sounddevice as sd
             device_idx = self._device()
             self._rate = mic_stream.input_samplerate(device_idx, 16000)
             self.recording = True
