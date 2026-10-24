@@ -137,11 +137,17 @@ class MicTest:
         self.start_btn = Gtk.Button(label="● Start Recording")
         self.stop_btn = Gtk.Button(label="■ Stop Recording")
         self.replay_btn = Gtk.Button(label="▶ Replay")
+        # Without the symbols, which a screen reader reads out ("black circle").
+        for button, name in ((self.start_btn, "Start Recording"),
+                             (self.stop_btn, "Stop Recording"), (self.replay_btn, "Replay")):
+            button.get_accessible().set_name(name)
 
     def build(self, box):
         """Add the meter, the grade and the buttons to *box*, a vertical Gtk.Box."""
         level_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
-        level_box.pack_start(Gtk.Label(label="Input Level:"), False, False, 0)
+        level_label = Gtk.Label(label="Input Level:")
+        level_label.set_mnemonic_widget(self.meter)     # what a screen reader names it by
+        level_box.pack_start(level_label, False, False, 0)
         self.meter.set_hexpand(True)
         self.meter.set_tooltip_text(
             "Green = safe levels, Yellow = getting loud, Red = too loud!\n"

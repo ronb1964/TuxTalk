@@ -161,3 +161,19 @@ def test_the_limit_on_a_replay_that_played_changes_nothing_later(monkeypatch):
     call(*args)
     assert mic.start_btn.get_sensitive() is False
     assert shown == []
+
+
+def test_a_screen_reader_names_the_microphone_controls_by_their_labels(prefs_window):
+    """The microphone dropdown, the volume slider and the level meter sat
+    beside their labels with nothing linking them, and the buttons were
+    read out with their symbols."""
+    import gtk_text
+    from gi.repository import Gtk
+    window = prefs_window()
+    labels = {w.get_text(): w for w in gtk_text.widgets(window.window) if isinstance(w, Gtk.Label)}
+    assert isinstance(labels["Microphone:"].get_mnemonic_widget(), Gtk.ComboBoxText)
+    assert labels["Input Volume:"].get_mnemonic_widget() is window.volume_scale
+    assert labels["Input Level:"].get_mnemonic_widget() is window.mic_test.meter
+    assert [b.get_accessible().get_name() for b in (
+        window.mic_test.start_btn, window.mic_test.stop_btn, window.mic_test.replay_btn)] == [
+        "Start Recording", "Stop Recording", "Replay"]

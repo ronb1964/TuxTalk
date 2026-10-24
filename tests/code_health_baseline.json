@@ -1,7 +1,7 @@
 {
  "files": {
   "app.py": 5196,
-  "prefs.py": 6763,
+  "prefs.py": 6758,
   "tray.py": 2548,
   "welcome_dialog.py": 3256
  },
@@ -616,7 +616,7 @@
   },
   "prefs.py::PreferencesWindow.create_audio_tab": {
    "decisions": 16,
-   "lines": 416
+   "lines": 411
   },
   "prefs.py::PreferencesWindow.create_commands_tab": {
    "lines": 129

@@ -1448,29 +1448,23 @@ class PreferencesWindow:
         grid.attach(mic_header, 0, row, 2, 1)
         row += 1
 
-        # Microphone
-        grid.attach(Gtk.Label(label="Microphone:", xalign=0), 0, row, 1, 1)
+        mic_label = Gtk.Label(label="Microphone:", xalign=0)
+        grid.attach(mic_label, 0, row, 1, 1)
         mic_combo = Gtk.ComboBoxText()
+        mic_label.set_mnemonic_widget(mic_combo)    # what a screen reader names it by
         mic_combo.set_can_focus(True)
         mic_combo.connect("button-press-event", self._on_combo_button_press)
         self._block_combo_scroll(mic_combo)
 
-        # Get available input devices
         try:
             import sounddevice as sd
             devices = sd.query_devices()
             input_devices = [(i, d) for i, d in enumerate(devices) if d.get("max_input_channels", 0) > 0]
             self._input_device_names = [d.get("name", f"Device {i}") for i, d in input_devices]
-            
-            # Add default option
             mic_combo.append("", "System Default")
-            
-            # Add all input devices
             for device_idx, device_info in input_devices:
                 device_name = device_info.get("name", f"Device {device_idx}")
-                # Use device name as ID for matching
-                mic_combo.append(device_name, f"{device_name}")
-                
+                mic_combo.append(device_name, device_name)    # the name is the setting
         except Exception as e:
             # Fallback if sounddevice fails
             mic_combo.append("", "System Default")
@@ -1501,6 +1495,7 @@ class PreferencesWindow:
         volume_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
         volume_label = Gtk.Label(label="Input Volume:")
         self.volume_scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL)
+        volume_label.set_mnemonic_widget(self.volume_scale)
         self.volume_scale.set_range(0, 100)
         self.volume_scale.set_hexpand(True)
         self.volume_scale.set_tooltip_text(
