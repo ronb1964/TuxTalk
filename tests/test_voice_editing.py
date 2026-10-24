@@ -363,7 +363,7 @@ def edit_env(monkeypatch):
             seen["put_back"] += 1
         return selection["text"], put_back
     monkeypatch.setattr(cb, "copy_selection", copy_selection)
-    monkeypatch.setattr(app, "_inject_text", lambda text, mode, one_block=False: seen["typed"].append(text) or "ok")
+    monkeypatch.setattr(app, "_inject_text", lambda text, mode, one_block=False, **kw: seen["typed"].append(text) or "ok")
     monkeypatch.setattr(app, "_notify", lambda title, msg: seen["notices"].append(msg))
     monkeypatch.setattr(app, "_beep", lambda on, *a: seen["beeps"].append(a))
     monkeypatch.setattr(history, "add_entry", lambda text: seen["history"].append(text))
@@ -391,7 +391,7 @@ def test_a_multi_line_rewrite_goes_in_as_one_block(edit_env, monkeypatch):
     """Line by line with Enter in between, KWrite continues each "- " list
     line and the dashes pile up ("- - 2", "- - - 3")."""
     calls = []
-    monkeypatch.setattr(app, "_inject_text", lambda text, mode, one_block=False: calls.append((text, one_block)) or "ok")
+    monkeypatch.setattr(app, "_inject_text", lambda text, mode, one_block=False, **kw: calls.append((text, one_block)) or "ok")
     edit_env["engine"].answer = "- Buy plywood\n- Call George"
     run_edit()
     assert calls == [("- Buy plywood\n- Call George", True)]
@@ -439,7 +439,7 @@ def test_a_rewrite_is_not_typed_or_kept_if_the_focus_moved_to_a_password_field(e
 
 
 def test_the_clipboard_comes_back_even_when_typing_fails(edit_env, monkeypatch):
-    monkeypatch.setattr(app, "_inject_text", lambda text, mode, one_block=False: (_ for _ in ()).throw(RuntimeError("boom")))
+    monkeypatch.setattr(app, "_inject_text", lambda text, mode, one_block=False, **kw: (_ for _ in ()).throw(RuntimeError("boom")))
     run_edit()
     assert edit_env["put_back"] == 1
 

@@ -38,9 +38,9 @@ _OWN_CLASSES = frozenset(name.lower() for name in (
 
 
 def is_own_window_class(wm_class) -> bool:
-    """Whether *wm_class* is one of TuxTalk's own windows. Dictation never
-    goes into those through the paste shortcut, so callers treat it as an
-    unknown window rather than a target."""
+    """Whether *wm_class* is one of TuxTalk's own windows. They get no paste
+    shortcut, and focused_window marks them "own", so an automatic Enter
+    never goes into one."""
     return bool(wm_class) and wm_class.lower() in _OWN_CLASSES
 
 

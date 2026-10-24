@@ -1309,6 +1309,8 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
             _beep(beeps_on, *CANCEL_BEEP)
             if notify_on:
                 _notify("Microphone unavailable", "Check that no other app is using it.")
+            if state.held_send:
+                send_countdown.say_held()   # nothing to dictate onto it: it stays unsent
             return False
 
     _arm_chunker(getattr(state, "recording_samplerate", SAMPLE_RATE), edit_mode)
@@ -1786,10 +1788,8 @@ def _determine_injection_method(injection_mode: str) -> tuple[str, str]:
 
     # If not auto mode, use user's choice directly
     if injection_mode.lower() != "auto":
-        if injection_mode.lower() == "paste":
-            return ("paste", "User selected paste mode")
-        else:
-            return ("type", "User selected type mode")
+        mode = "paste" if injection_mode.lower() == "paste" else "type"
+        return (mode, f"User selected {mode} mode")
 
     # Pasting needs wl-copy, which only talks to a Wayland compositor. On X11
     # every paste would fail and fall back to typing anyway.
@@ -2742,7 +2742,7 @@ def _remember_shown(piece: str, chunked: bool, ok: bool) -> None:
         state.shown_window = state.last_inserted_window
     if state.shown_text is None:
         return
-    if ok and state.last_inserted_window == state.shown_window:
+    if ok and not _not_where_typed(state.shown_window):
         state.shown_text += piece
     else:
         state.shown_text = None
@@ -2920,14 +2920,15 @@ def _flush_boundary(auto_period: bool, auto_space: bool, injection_mode: str) ->
     _type_boundary(pending, mark + (" " if auto_space and not kind else ""), injection_mode)
 
 
-def _chunk_message_sent() -> None:
-    """Type at pause pressed Enter or Tab mid-recording ("... press enter",
-    "... press tab"), or "edit that" rewrote what was typed: what's said next
-    starts afresh. Nothing reaches back across it: no held-back mark, no
-    correction, no lowercase start, and the screen copy starts again."""
+def _start_afresh(new_message: bool = True) -> None:
+    """Type at pause pressed Enter or Tab mid-recording, or "edit that"
+    rewrote what was typed: what's said next reaches back across nothing (no
+    held-back mark, correction, lowercase start or screen copy), and after
+    Enter or Tab it's a *new_message*; a rewrite stays in the unsent one."""
+    if new_message:
+        state.message = send_countdown.Message()
     state.pending_boundary = None
     state.question_open = False
-    state.message = send_countdown.Message()
     state.held_cue = ""
     state.continue_mid_sentence = False
     if state.shown_text is not None and state.shown_serial == state.recording_serial:
@@ -2964,7 +2965,7 @@ def _press_said(key: str, chunk_role, after_words: bool = False) -> None:
     else:
         pressed = _press_key(key, why)
     if pressed and chunk_role is not None:
-        _chunk_message_sent()
+        _start_afresh()
 
 
 def _after_the_words(outcome: str, said: str, press: str, space: str, chunk_role,
@@ -2980,7 +2981,7 @@ def _after_the_words(outcome: str, said: str, press: str, space: str, chunk_role
     elif press:
         _send_automatically(space, injection_mode)
         if chunk_role is not None:
-            _chunk_message_sent()
+            _start_afresh()
 
 
 def _send_automatically(space: str, injection_mode: str) -> None:
@@ -3028,13 +3029,13 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                     cue += "."
                 _inject_text(cue + (" " if auto_space else ""), injection_mode,
                              message=state.message)
-            if (_press_enter_after and state.message.has_words
+            if (_press_enter_after and state.message.has_words and state.message.complete
                     and not is_document_window(_query_focused_window_class())):
                 # The recording ended in a pause; its phrases are typed, so
                 # "Send each dictation automatically" sends them now.
                 _flush_boundary(auto_period, False, injection_mode)
                 _send_automatically(" " if auto_space else "", injection_mode)
-                _chunk_message_sent()
+                _start_afresh()
             else:
                 _flush_boundary(auto_period, auto_space, injection_mode)
             if not _chunk_context_marks:
@@ -3531,7 +3532,7 @@ def _handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: st
     # The text is selected now (and then replaced): undo's count and the
     # screen copy no longer match it, and nothing in it reaches the next phrase.
     state.last_inserted_text = ""
-    _chunk_message_sent()
+    _start_afresh(new_message=False)
     _forget_shown()
     if not selected:
         _edit_problem("shortcut_failed", beeps_on)
@@ -3711,7 +3712,7 @@ def _edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0
         # The selection is still active, so typing or pasting replaces it, in
         # one block (see _inject_text).
         try:
-            outcome = _inject_text(result, injection_mode, one_block=True)
+            outcome = _inject_text(result, injection_mode, one_block=True, message=state.message)
         except Exception as e:
             logger.error(f"Voice edit: typing the rewrite failed: {e}", exc_info=True)
             outcome = "failed"
@@ -4138,9 +4139,8 @@ def _service_tick(cfg, svc: "_ServiceState") -> "LiveSettings | None":
     # Not while a dictation is still being transcribed or typed: every worker
     # holds _inject_lock, and the idle clock starts when the key comes up.
     if (svc.timeout_enabled and not state.is_recording and model is not None
-            and not _inject_lock.locked()):
-        if now - svc.last_activity > svc.timeout_seconds:
-            _rest_model(svc.timeout_minutes)
+            and not _inject_lock.locked() and now - svc.last_activity > svc.timeout_seconds):
+        _rest_model(svc.timeout_minutes)
 
     # Pick up Preferences changes without a restart — indicator style/position,
     # typing delay, etc. The evdev loop (Backend A) does this inline; Backend B

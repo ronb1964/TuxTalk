@@ -66,13 +66,13 @@ def _reported(monkeypatch, wm_class, asked):
     monkeypatch.setattr(compositor_focus, "focused_window", lambda: (asked, None))
 
 
-def test_a_reported_tuxtalk_window_counts_as_unknown(monkeypatch):
+def test_a_reported_tuxtalk_window_gets_no_paste_class(monkeypatch):
     """An older extension still reports TuxTalk's windows."""
     _reported(monkeypatch, "tuxtalk", None)
     assert app._query_focused_window_class() is None
 
 
-def test_a_tuxtalk_window_from_the_compositor_counts_as_unknown(monkeypatch):
+def test_a_tuxtalk_window_from_the_compositor_gets_no_paste_class(monkeypatch):
     _reported(monkeypatch, "", "Tuxtalk")
     assert app._query_focused_window_class() is None
 

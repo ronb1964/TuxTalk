@@ -24,10 +24,11 @@ window's frame too, but that changes when the window moves or is resized,
 and two maximized windows of one app share it.
 
 TuxTalk's own windows have no class here: the paste shortcut isn't picked
-for them. That one is TuxTalk's still counts, wherever it was told and with
-or without an id ("own"), so an automatic Enter or a key said after the
-words never goes into one: Enter would press its default button. wl-copy's
-brief window, which the tray leaves out of its reports, counts as unknown.
+for them. Whether it is one of TuxTalk's still counts, wherever it was told
+and with or without an id ("own"): an automatic Enter never goes into one,
+where it would press its default button, and a key said after the words
+only when they were dictated there. wl-copy's brief window, which the tray
+leaves out of its reports, counts as unknown.
 """
 import os
 from typing import NamedTuple

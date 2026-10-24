@@ -348,7 +348,7 @@ def test_a_voice_edit_never_writes_the_words(monkeypatch, caplog, capsys):
     monkeypatch.setattr("tuxtalk.silence.is_speechless_tap", lambda a, sr: False)
     monkeypatch.setattr(cb, "copy_selection",
                         lambda send_copy: ("zanzibar quokka hunter", lambda also=(): None))
-    monkeypatch.setattr(app, "_inject_text", lambda text, mode, one_block=False:
+    monkeypatch.setattr(app, "_inject_text", lambda text, mode, one_block=False, **kw:
                         typed.append(text) or "ok")
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
     monkeypatch.setattr(app, "EDIT_RESTORE_DELAY_S", 0)

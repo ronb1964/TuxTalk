@@ -51,7 +51,9 @@ SWITCHED_WINDOW_NOTICE = "Not sent: you switched windows."
 # the focus back to the last window by itself while a paste goes in.
 MOVED_NOTICE = "Not sent: the focus moved while the words went in."
 PASSWORD_FIELD_NOT_SENT = "Not sent: the cursor is in a password field."
-UNKNOWN_WINDOW_NOTICE = ("Not sent: this desktop doesn't say which window has the focus. "
+# Not "this desktop doesn't say": a tray too busy to answer in time can't
+# tell either (Preferences opening, a model loading).
+UNKNOWN_WINDOW_NOTICE = ("Not sent: TuxTalk can't tell which window has the focus. "
                          "Press Enter when you're ready.")
 OWN_WINDOW_NOTICE = "Not sent: a TuxTalk window has the focus."
 INCOMPLETE_NOTICE = "Not sent: part of the message didn't go in."
@@ -79,6 +81,10 @@ _pending = None
 # held it to come up (type_owed_space), else None. Typed while the key is
 # down, GNOME without the extension sees the key too and the space is lost.
 _owed = None
+# Whether this session's notifications have said why an automatic send
+# can't go where the focus can't be told: on such a desktop it's every
+# dictation, so after once only the floating notice says so.
+_told_unknown_window = False
 
 
 def configure(cfg) -> None:
@@ -92,9 +98,9 @@ def configure(cfg) -> None:
 
 @dataclass
 class Message:
-    """What a recording has typed since it began, or since Enter, Tab or
-    "edit that" ended the message before it (app._chunk_message_sent): one
-    dictation, or Type at pause's phrases. An automatic Enter and a key said
+    """What a recording has typed since it began, or since Enter or Tab
+    ended the message before it (app._start_afresh): one dictation, or
+    Type at pause's phrases, rewritten by "edit that" or not. An automatic Enter and a key said
     after its words go only where they went, and only while all of them
     went in: a phrase that stopped partway leaves a hole a send would let
     out, and the phrases after it don't fill it."""
@@ -150,8 +156,9 @@ def _why_not(sent_to, now, spoken: bool = False) -> str | None:
     if now.password:
         return "password"
     # Preferences, or an offer that opened by itself: Enter would press its
-    # default button.
-    if focused_window.is_own(now):
+    # default button. A key said after words dictated into one of TuxTalk's
+    # own boxes (Add Word: "ClaudeClaw, press tab") goes there, as anywhere.
+    if focused_window.is_own(now) and not (spoken and focused_window.is_own(sent_to)):
         return "own_window"
     same = focused_window.same_window(sent_to, now)
     if same is False:
@@ -198,15 +205,25 @@ def _say_not_sent(why: str, relabel: bool = False, key: str = "ENTER") -> None:
     """Say why the Enter (or *key*) of a send didn't go: in the log, over
     the window, and as a desktop notification whatever the notifications
     setting. A screen reader reads the notification, not the label, and
-    without XWayland the label can't be shown at all."""
+    without XWayland the label can't be shown at all. The notification goes
+    from a thread of its own, as say_held's does: this runs on the typing
+    thread, which reads the hotkeys."""
+    global _told_unknown_window
     from .notify import notify
     text, notice = _NOT_SENT[why]
     what = "Not sent" if key == "ENTER" else f"{key.title()} not pressed"
     if key != "ENTER":
         notice = f"{what}: {text}."
     logger.info(f"{what}: {text}")
-    notify(f"{what}: {text}",
-           f"The text is still in the box. Press {key.title()} yourself when you're ready.")
+    body = f"The text is still in the box. Press {key.title()} yourself when you're ready."
+    if why == "unknown_window":
+        body = ("TuxTalk can't tell which window has the focus here, so it doesn't press "
+                "Enter by itself. Press Enter yourself, or end with \u201cpress enter\u201d.")
+    once = why == "unknown_window"
+    if not (once and _told_unknown_window):
+        _told_unknown_window = _told_unknown_window or once
+        threading.Thread(target=notify, name="send-not-sent-notice", daemon=True,
+                         args=(f"{what}: {text}", body)).start()
     if relabel:
         from . import screen_message
         screen_message.relabel(LABEL_TAG, notice)
@@ -232,8 +249,9 @@ def type_where_sent(text: str, key: str, message: Message, type_more) -> str | N
     """Type *text* in place of *key* said after *message*'s words (Claude
     Desktop's four spaces for Tab: its Tab key jumps to the Send button), by
     the key's rule: only where the words went. *type_more*(text, mode,
-    into=None) is as for send_automatically. The typing's outcome, or None
-    when it wasn't tried; either way not typed, the notice says why."""
+    into=None) types onto the dictation, into the window *into* only. The
+    typing's outcome, or None when it wasn't tried; either way not typed,
+    the notice says why."""
     why = _incomplete(message) or _why_not(message.to, focused_window.destination(), spoken=True)
     outcome = None if why else type_more(text, "type", into=message.to)
     if why or outcome == "moved":
@@ -259,6 +277,7 @@ def send_automatically(why: str, message: Message, press, type_more, space: str 
     # told.
     if reason := _incomplete(message) or _why_not(message.to, message.to):
         _say_not_sent(reason)
+        _owe_space(pending)
         return
     delay = _delay
     if delay > 0:
@@ -304,13 +323,17 @@ def _count_down(pending: dict, seconds_left: int) -> None:
     with _send_lock:
         if _pending is not pending:
             return
-    if why := _why_not(pending["to"], focused_window.destination()):
+    why = _why_not(pending["to"], focused_window.destination())
+    # A tick that can't tell (the tray busy for a moment) leaves it to the
+    # claim at the Enter, which refuses if it still can't.
+    if why and why != "unknown_window":
         with _send_lock:
             if _pending is not pending:
                 return
             _pending = None
         _cancel_timers(pending)
         _say_not_sent(why, relabel=True)
+        _owe_space(pending)
         return
     screen_message.relabel(LABEL_TAG, _label(seconds_left))
 
@@ -345,6 +368,7 @@ def _send(pending: dict) -> None:
     why = pending.get("refused") or (
         unclaimed and _why_not(pending["to"], focused_window.destination()))
     _say_not_sent(why or "not_pressed")
+    _owe_space(pending)
 
 
 def say_held() -> None:
@@ -386,6 +410,16 @@ def hold(announce: bool) -> bool:
         from . import screen_message
         screen_message.hide(LABEL_TAG)
     return True
+
+
+def _owe_space(pending: dict) -> None:
+    """A send that didn't go owes the space it left off, as a held one does:
+    what's said next into its window starts after it, and doesn't stick to
+    the last word ("noon.How")."""
+    global _owed
+    if pending.get("space"):
+        with _send_lock:
+            _owed = pending
 
 
 def owes_space() -> bool:

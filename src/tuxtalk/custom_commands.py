@@ -86,6 +86,7 @@ def _command_pattern(phrase: str) -> str:
 
     return prefix + "".join(parts) + suffix
 
+
 def apply(text: str, custom_commands: dict[str, str],
           your_words=()) -> tuple[str, dict[str, str]]:
     """

@@ -307,7 +307,7 @@ def notifications(monkeypatch):
 
     def titles():
         for thread in threading.enumerate():
-            if thread.name == "send-held-notice":
+            if thread.name in ("send-held-notice", "send-not-sent-notice"):
                 thread.join(5)
         return sent
     return titles
@@ -344,6 +344,28 @@ def test_a_short_tap_of_the_hold_key_that_holds_the_send_says_so_aloud_once(
     monkeypatch.setattr(app.state, "silence", None)
     monkeypatch.setattr(app.state, "press_t0", app.time.time())
     assert app._finish_capture(False, notify_on) is None
+    assert notices == [send_countdown.HELD_NOTICE] and notifications() == [HELD_TITLE]
+
+
+def test_a_hold_key_press_whose_recording_cant_start_says_the_send_is_held(
+        chat, keyboard, monkeypatch, notifications):
+    """The press held the send to dictate more onto it, then the microphone
+    didn't open: nothing said the message wasn't sent."""
+    focus, heard, typed, notices = chat
+    counting_down(monkeypatch)
+
+    def no_microphone(idx):
+        raise OSError("Device unavailable")
+    monkeypatch.setattr(app, "_open_input_stream", no_microphone)
+    monkeypatch.setattr(app, "_pick_input_device", lambda mic: 0)
+    for name in ("_grab_keyboards_hiding", "_stop_stream_safely", "_release_all_grabs"):
+        monkeypatch.setattr(app, name, lambda *a, **k: None)
+    cfg = types.SimpleNamespace(beeps=False, notify=False)
+    try:
+        app._start_hold_recording(F8, set(), [], cfg, 0)
+    finally:
+        app.state.is_recording = False
+    assert keyboard.events == []
     assert notices == [send_countdown.HELD_NOTICE] and notifications() == [HELD_TITLE]
 
 
@@ -517,6 +539,33 @@ def test_a_tuxtalk_window_however_the_desktop_names_it_gets_no_key(
                            else "Tab not pressed: a TuxTalk window has the focus."]
 
 
+@pytest.mark.parametrize("told, window", [
+    ("tray", ("tuxtalk", "{77a0c4e1}")),                                  # KDE, GNOME
+    ("compositor", ("tuxtalk", 57)),                                       # Sway, niri, Hyprland
+    ("compositor", ("Tuxtalk", 0x3400004)),                                # X11
+])
+@pytest.mark.parametrize("key", ["auto", "enter", "tab"])
+def test_words_dictated_into_a_tuxtalk_box_get_only_the_key_said_after_them(
+        tray, keyboard, monkeypatch, told, window, key):
+    """Preferences → Words → Add Word: "ClaudeClaw, press tab" moves to the
+    next box, as the user asked; an automatic Enter still doesn't go there,
+    where it would press the dialog's default button."""
+    notices = []
+    monkeypatch.setattr(send_countdown, "show_notice", notices.append)
+    if told == "tray":
+        tray(*window)
+    else:
+        monkeypatch.setattr(focused_window, "reported", lambda: None)
+        monkeypatch.setattr(compositor_focus, "focused_window", lambda: window)
+    message = send_countdown.Message(focused_window.destination(), has_words=True)
+    if key == "auto":
+        send_countdown.send_automatically("test", message, app._press_key, None)
+        assert keyboard.events == [] and notices == [send_countdown.OWN_WINDOW_NOTICE]
+    else:
+        send_countdown.press_where_sent(key.upper(), "test", message, app._press_key)
+        assert keyboard.typed_keys() == [getattr(ecodes, f"KEY_{key.upper()}")]
+
+
 # --- Where the desktop can't say which window: no automatic Enter, a spoken one goes ----
 
 # What the tray was told and what the compositor says, (reported, compositor),
@@ -561,6 +610,19 @@ def test_where_the_window_isnt_known_nothing_is_sent_automatically(unknown_windo
     dictate()
     assert len(typed) == 1 and keyboard.events == []
     assert notices == [send_countdown.UNKNOWN_WINDOW_NOTICE]
+
+
+def test_where_the_window_isnt_known_the_next_dictation_keeps_its_space(unknown_window,
+                                                                         keyboard):
+    """The auto-space is left off before an Enter; refused, the Enter took
+    the space with it, and the next dictation stuck to the last word."""
+    focus, heard, typed, notices = unknown_window
+    heard.append("see you at noon")
+    dictate()
+    app._arm_chunker(app.SAMPLE_RATE)               # the next recording starts
+    heard.append("how are you")
+    dictate()
+    assert "".join(text for text, _ in typed).startswith("See you at noon. How are you")
 
 
 def test_where_the_window_is_never_known_no_countdown_runs(chat, keyboard, monkeypatch):
@@ -748,18 +810,59 @@ def test_with_0_18s_extension_a_resized_window_isnt_taken_for_a_switch(
     assert keyboard.events == [] and notices == [send_countdown.UNKNOWN_WINDOW_NOTICE]
 
 
-def test_a_send_that_doesnt_go_says_so_in_a_notification_too(chat, keyboard, monkeypatch):
+def test_a_send_that_doesnt_go_says_so_in_a_notification_too(chat, keyboard, monkeypatch,
+                                                              notifications):
     """A screen reader reads notifications, not the label over the window,
     and without XWayland the label can't be shown at all."""
-    from tuxtalk import notify
     focus, heard, typed, notices = chat
-    sent = []
-    monkeypatch.setattr(notify, "_send", lambda title, body: sent.append(title))
     clicked_away_while_the_words_went_in(monkeypatch, focus)
     heard.append("see you at noon")
     dictate()
     assert keyboard.events == [] and len(notices) == 1
-    assert sent == ["Not sent: the focus moved while the words were delivered"]
+    assert notifications() == ["Not sent: the focus moved while the words were delivered"]
+
+
+def test_where_the_window_is_never_known_the_notification_comes_once(chat, keyboard,
+                                                                      monkeypatch, notifications):
+    """On COSMIC every dictation is refused: a notification after each one,
+    forever, is a nag. The floating notice still says so each time."""
+    focus, heard, typed, notices = chat
+    focus[1] = None                                 # COSMIC: only the app
+    monkeypatch.setattr(send_countdown, "_told_unknown_window", False, raising=False)
+    for words in ("see you at noon", "how are you"):
+        app._arm_chunker(app.SAMPLE_RATE)
+        heard.append(words)
+        dictate()
+    assert notices == [send_countdown.UNKNOWN_WINDOW_NOTICE] * 2
+    assert notifications() == ["Not sent: which window has the focus isn't known"]
+
+
+def test_a_tray_too_busy_for_one_tick_doesnt_call_off_the_countdown(chat, keyboard,
+                                                                    monkeypatch):
+    """Preferences opening or a model loading kept the tray from answering
+    for a second: the countdown gave up on a send that could still go."""
+    focus, heard, typed, notices = chat
+    timers = []
+    monkeypatch.setattr(send_countdown, "_delay", 3.0)
+
+    class Timer:
+        def __init__(self, delay, run, args):
+            self.run, self.args, self.daemon = run, args, False
+            timers.append(self)
+
+        def start(self):
+            pass
+
+        def cancel(self):
+            pass
+    monkeypatch.setattr(send_countdown.threading, "Timer", Timer)
+    send_automatically(focused_window.destination())
+    focus[:] = [None, None]                         # the tray doesn't answer
+    timers[1].run(*timers[1].args)                  # "Sending in 2 s"
+    focus[:] = FIRST
+    timers[2].run(*timers[2].args)
+    timers[0].run(*timers[0].args)                  # the Enter
+    assert keyboard.typed_keys() == [ENTER] and notices == []
 
 
 def test_a_countdown_says_nothing_aloud_until_it_ends(chat, keyboard, monkeypatch):
@@ -798,7 +901,8 @@ def phrases_that_go_in(monkeypatch, *outcomes):
 def test_a_phrase_that_stopped_partway_leaves_the_message_unsent(chat, keyboard, monkeypatch):
     """The second phrase stopped partway, and the notice said the whole
     text is in Recent Dictations. The recording then ended in a pause, and
-    the half message was sent."""
+    the half message was sent. No send is tried, so no second notice says
+    so again."""
     focus, heard, typed, notices = chat
     phrases_that_go_in(monkeypatch, "ok", "partial")
     heard.extend(["See you at noon,", "and bring the cake"])
@@ -806,7 +910,7 @@ def test_a_phrase_that_stopped_partway_leaves_the_message_unsent(chat, keyboard,
     dictate("middle")
     dictate("last", audio=False)
     assert len(typed) == 2 and keyboard.events == []
-    assert notices == [send_countdown.INCOMPLETE_NOTICE]
+    assert notices == []
 
 
 def test_a_phrase_that_went_in_whole_after_one_that_didnt_still_sends_nothing(
@@ -820,7 +924,7 @@ def test_a_phrase_that_went_in_whole_after_one_that_didnt_still_sends_nothing(
         dictate("middle")
     dictate("last", audio=False)
     assert len(typed) == 3 and keyboard.events == []
-    assert notices == [send_countdown.INCOMPLETE_NOTICE]
+    assert notices == []
 
 
 def test_a_phrase_that_failed_then_a_last_one_that_went_in_sends_nothing(
@@ -876,3 +980,62 @@ def test_an_enter_the_keyboard_failed_to_press_says_so(chat, keyboard):
     keyboard.fail_after = 0
     send_automatically(focused_window.destination())
     assert keyboard.events == [] and notices == [send_countdown.HELD_NOTICE]
+
+
+@pytest.fixture
+def edit_that(chat, monkeypatch):
+    """Voice editing on, with the selection and the AI faked: "edit that,
+    ..." rewrites what was typed, in the window that has the focus."""
+    from tuxtalk import clipboard
+
+    class Engine:
+        def is_ready(self):
+            return True
+
+        def edit(self, text, instruction):
+            return "Hope to see you at noon!"
+    monkeypatch.setattr(app, "_voice_editing", True)
+    monkeypatch.setattr(app, "_ai_engine", Engine())
+    monkeypatch.setattr(app, "_is_wayland_session", lambda: True)
+    backend = app._output_backend()
+    # Selecting what was typed is faked; Enter goes to the test's keyboard.
+    monkeypatch.setattr(app, "_output_backend", lambda: types.SimpleNamespace(
+        press_keys=lambda chords, claim=None: (backend.press_keys(chords, claim=claim)
+                                               if chords == [((), "ENTER")] else True)))
+    monkeypatch.setattr(clipboard, "copy_selection",
+                        lambda send_copy: ("See you at noon.", lambda also=(): None))
+    monkeypatch.setattr(app, "EDIT_RESTORE_DELAY_S", 0)
+    return chat
+
+
+def test_after_edit_that_press_enter_alone_in_another_window_isnt_pressed(edit_that, keyboard,
+                                                                          monkeypatch):
+    """Type at pause: a phrase into one Brave window, "edit that, make it
+    friendlier" rewrites it there, a click into the other window, then only
+    "press enter". The rewrite is still unsent in the first window, but the
+    edit forgot the message, so Enter sent the other window's box."""
+    focus, heard, typed, notices = edit_that
+    monkeypatch.setattr(app, "_press_enter_after", False)
+    heard.append("See you at noon.")
+    dictate("middle")
+    heard.append("edit that, make it friendlier")
+    dictate("middle")
+    assert typed[-1] == ("Hope to see you at noon!", FIRST[1])
+    focus[:] = SECOND
+    heard.append("press enter")
+    dictate("last")
+    assert keyboard.events == [] and notices == [send_countdown.SWITCHED_WINDOW_NOTICE]
+
+
+def test_after_edit_that_press_enter_sends_the_rewrite_where_it_is(edit_that, keyboard,
+                                                                  monkeypatch):
+    """The same in one window: Enter sends the rewritten message."""
+    focus, heard, typed, notices = edit_that
+    monkeypatch.setattr(app, "_press_enter_after", False)
+    heard.append("See you at noon.")
+    dictate("middle")
+    heard.append("edit that, make it friendlier")
+    dictate("middle")
+    heard.append("press enter")
+    dictate("last")
+    assert keyboard.typed_keys() == [ENTER] and notices == []
