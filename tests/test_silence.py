@@ -91,9 +91,12 @@ def test_nothing_is_trimmed_unless_it_fired():
 
 
 def test_talking_instantly_with_no_quiet_gaps_still_counts_as_speech():
-    """Even speech whose gaps never get quiet is recognised when it starts at once."""
+    """Even speech whose gaps never get quiet is recognised when it starts at
+    once. Its loudness still swings with the syllables, by 10 dB here: a tone
+    held perfectly steady for two seconds is taken for the room (NoiseFloor)."""
     t = np.arange(int(2.0 * SR)) / SR
-    gapless = (np.sin(2 * np.pi * 220 * t) * 3000).astype(np.int16)
+    syllables = 0.65 + 0.35 * np.sin(2 * np.pi * 4 * t)
+    gapless = (np.sin(2 * np.pi * 220 * t) * 3000 * syllables).astype(np.int16)
     at, _ = run(np.concatenate([gapless, noise(3.0)]), 1.5)
     assert at == pytest.approx(3.5, abs=0.1)
 
@@ -721,3 +724,113 @@ def test_holds_nest_and_release_never_goes_below_zero():
     det.release()
     det.release()                                # an extra release is harmless
     assert _feed(det, noise(1.2)) is not None
+
+
+# --- A noisy room -------------------------------------------------------------
+# With a clothes dryer running nearby hands-free never stopped: its steady
+# noise was louder than speech's threshold, so the floor, learned low, could
+# never rise to it. With a fan it stopped after 4 to 5 s instead of 2: each
+# gust counted as talking and started the wait over. How the rules were
+# measured on recorded speech: NoiseFloor and SilenceDetector.
+
+def rumble(seconds, level):
+    """A dryer: a drum's rumble, mostly below 200 Hz, with a 100 ms thump,
+    8 dB louder, every 0.8 s."""
+    size = int(seconds * SR)
+    pitches = np.fft.rfftfreq(size, 1 / SR)
+    drum = np.fft.irfft(np.fft.rfft(rng.normal(0, 1, size)) / (1 + pitches / 200), size)
+    drum *= level / np.sqrt(np.mean(drum ** 2))
+    for start in np.arange(0.3, seconds - 0.1, 0.8):
+        i = int(start * SR)
+        drum[i:i + int(0.1 * SR)] *= 2.5
+    return drum
+
+
+def fan(seconds, level=300.0, gust=1200.0):
+    """A fan: steady noise with a 60 ms gust, 12 dB louder, every 0.45 s."""
+    audio = rng.normal(0, level, int(seconds * SR))
+    for start in np.arange(0.2, seconds - 0.06, 0.45):
+        i = int(start * SR)
+        audio[i:i + int(0.06 * SR)] = rng.normal(0, gust, int(0.06 * SR))
+    return audio
+
+
+def hum(seconds, level):
+    """Steady noise, as loud as *level* (int16 RMS)."""
+    return rng.normal(0, level, int(seconds * SR))
+
+
+ROOM_NOISES = {"a dryer": lambda s: rumble(s, 1000.0), "a fan": fan,
+               "a loud hum": lambda s: hum(s, 1000.0)}
+
+
+def _in(room, audio):
+    """*audio* with *room*'s noise over all of it, as int16."""
+    return np.clip(audio + ROOM_NOISES[room](len(audio) / SR), -32768, 32767).astype(np.int16)
+
+
+@pytest.mark.parametrize("room", ROOM_NOISES)
+def test_real_words_with_pauses_stop_on_time_in_a_noisy_room(room):
+    """Three words said by a person, a pause shorter than the setting between
+    them: it never stops before the last, and stops the setting after it,
+    half a second later at most."""
+    pause = np.zeros(int(1.2 * SR))
+    said = np.concatenate([np.zeros(int(0.5 * SR)), _real_word("ask"), pause,
+                           _real_word("not"), pause, _real_word("ask")])
+    at, det = run(_in(room, np.concatenate([said, np.zeros(5 * SR)])), 1.5)
+    assert at is not None, "it never stopped"
+    assert len(said) / SR + 1.5 - 0.2 <= at <= len(said) / SR + 1.5 + 0.5
+    assert not det.nothing_said
+
+
+@pytest.mark.parametrize("when", ["running from the start", "switched on while talking"])
+def test_steady_noise_louder_than_speech_s_threshold_becomes_the_room(when):
+    """The floor rises to steady noise even when every block of it is louder
+    than what counts as speech over the floor it had learned."""
+    talk = speech(3.0, level=6000.0)
+    quiet = np.zeros(int(0.5 * SR)) if when == "switched on while talking" else hum(0.5, 1500)
+    room = np.concatenate([np.zeros(int(1.5 * SR)) if when == "switched on while talking"
+                           else hum(1.5, 1500), hum(1.5 + 5.0, 1500)])
+    audio = np.concatenate([quiet, talk, np.zeros(5 * SR)])
+    audio[int(0.5 * SR):] += room[:len(audio) - int(0.5 * SR)]
+    at, _ = run(np.clip(audio, -32768, 32767).astype(np.int16), 1.5)
+    assert at is not None, "it never stopped"
+    assert 3.5 + 1.5 - 0.1 <= at <= 3.5 + 1.5 + 0.5
+
+
+def test_steady_noise_with_nothing_said_still_ends_as_nothing_said():
+    """Steady noise counted as talking until the floor learned it; it is
+    taken back, so the recording ends at the limit and is dropped."""
+    at, det = run(hum(12.0, 1500).astype(np.int16), 1.5)
+    assert at == pytest.approx(SilenceDetector.NOTHING_SAID_S, abs=0.05)
+    assert det.nothing_said
+
+
+def test_a_word_before_the_second_tap_still_counts_in_steady_noise():
+    """What heard_speech() says was said is kept when noise is taken back."""
+    det = SilenceDetector(1.5, SR)
+    det.heard_speech()
+    assert _feed(det, hum(6.0, 1500).astype(np.int16)) is not None
+    assert not det.nothing_said
+
+
+def test_a_gust_does_not_start_the_wait_over_but_a_word_does():
+    """Loud for 60 ms pauses the wait; a word (loud for longer) starts it
+    over. A gust just before the wait runs out is kept in the recording: it
+    might have been a quick word, and only the quiet after it is trimmed."""
+    det = SilenceDetector(2.0, SR)
+    quiet, gust = hum(0.9, 60), hum(0.06, 1500)
+    assert _feed(det, np.concatenate([speech(1.0), quiet, gust, quiet]).astype(np.int16)) is None
+    assert det.silence_time > 1.7, "the gust started the wait over"
+    assert _feed(det, np.concatenate([speech(0.25), hum(1.9, 60)]).astype(np.int16)) is None
+    assert _feed(det, np.concatenate([gust, hum(1.0, 60)]).astype(np.int16)) is not None
+    assert det.tail_to_trim() == 0
+
+
+def test_with_a_short_wait_a_short_sound_still_starts_it_over():
+    """A bump is at most a tenth of the wait: with 0.5 s, the start of a quiet
+    word (100 ms) is speech, and a 0.3 s pause each side of it is no stop."""
+    det = SilenceDetector(0.5, SR)
+    sound = hum(0.1, 1500)
+    audio = np.concatenate([speech(1.0), hum(0.3, 60), sound, hum(0.3, 60)])
+    assert _feed(det, audio.astype(np.int16)) is None
