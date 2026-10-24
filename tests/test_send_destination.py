@@ -549,3 +549,13 @@ def test_a_phrase_that_stopped_partway_leaves_the_message_unsent(chat, keyboard,
     dictate("middle")
     dictate("last", audio=False)
     assert len(typed) == 2 and keyboard.events == [] and notices == []
+
+
+def test_an_enter_the_keyboard_failed_to_press_says_so(chat, keyboard):
+    """Every check passed and the keyboard then failed on the Enter: the
+    countdown label just ran out, and the message sat unsent."""
+    focus, _, _, notices = chat
+    keyboard.fail_after = 0
+    send_countdown.send_automatically("test", focused_window.destination(),
+                                      app._press_key, app._type_onto_dictation)
+    assert keyboard.events == [] and notices == [send_countdown.HELD_NOTICE]

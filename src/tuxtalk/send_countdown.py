@@ -71,7 +71,7 @@ _hold_key_name = "F8"       # named in the "Sending in 2 s" label
 
 # The send counting down to its Enter, until it presses it or a tap of a
 # hotkey holds it, else None: {"to", "why", "press", "type", "space",
-# "mode", "timer", "ticks", "refused"}.
+# "mode", "timer", "ticks", "refused", "stopped"}.
 _pending = None
 # The send a tap held, while the space it left off waits for the hotkey that
 # held it to come up (type_owed_space), else None. Typed while the key is
@@ -228,6 +228,7 @@ def send_automatically(why: str, sent_to, press, type_more, space: str = "",
     with _send_lock:
         if _pending is not None:
             _cancel_timers(_pending)
+            _pending["stopped"] = True
         _pending = pending
     if delay <= 0:
         _send_right_away(pending)
@@ -296,11 +297,13 @@ def _send(pending: dict) -> None:
         unclaimed = _pending is pending
         if unclaimed:
             _pending = None
-    if unclaimed and not sent:
-        # A wait that gave up says nothing of why: the window may have
-        # changed while it waited for the key.
-        why = pending.get("refused") or _why_not(pending["to"], focused_window.destination())
-        _say_not_sent(why or "not_pressed")
+    if sent or pending.get("stopped"):
+        return
+    # A wait that gave up says nothing of why: the window may have changed
+    # while it waited for the key. Claimed, the keyboard failed on the Enter.
+    why = pending.get("refused") or (
+        unclaimed and _why_not(pending["to"], focused_window.destination()))
+    _say_not_sent(why or "not_pressed")
 
 
 def show_notice(text: str) -> None:
@@ -318,6 +321,7 @@ def hold(announce: bool) -> bool:
         pending, _pending = _pending, None
     if pending is None:
         return False
+    pending["stopped"] = True       # its press, if under way, says nothing more
     _cancel_timers(pending)
     logger.info("Held the send: the dictation stays unsent")
     if pending.get("space"):
