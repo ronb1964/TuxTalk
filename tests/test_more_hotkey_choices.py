@@ -379,6 +379,29 @@ def test_a_stuck_key_types_nothing_another_way(keyboard, stuck_right_ctrl, monke
     assert "Right Ctrl" in delivery_notices.NOTICES["key_held"]
 
 
+@pytest.mark.parametrize("enter", ["said", "sent right away"])
+def test_a_stuck_key_that_keeps_back_the_enter_says_so(keyboard, stuck_right_ctrl, monkeypatch,
+                                                       enter):
+    """"See you at noon, press enter" with Right Ctrl stuck, or "Send each
+    dictation automatically" right away: the text is in the box, and only
+    the log said the Enter wasn't pressed."""
+    from tuxtalk.output_backends import VirtualKeyboardOutputBackend
+    stuck_right_ctrl()
+    monkeypatch.setattr(app, "_output_backend", VirtualKeyboardOutputBackend)
+    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    monkeypatch.setattr(app, "_destination", lambda: ("kwrite", None, False))
+    notes = []
+    monkeypatch.setattr(app, "_notify", lambda title, body: notes.append((title, body)))
+    if enter == "said":
+        app._press_said("ENTER", None)
+    else:
+        monkeypatch.setattr(send_countdown, "_delay", 0.0)
+        send_countdown.send_automatically("test")
+    assert keyboard.events == []
+    assert notes == [delivery_notices.key_not_pressed("ENTER")]
+    assert notes[0][0] == "Enter not pressed: a dictation key stayed down"
+
+
 @pytest.fixture
 def typing_into_kwrite(monkeypatch):
     monkeypatch.setattr(app, "_determine_injection_method", lambda mode: ("type", "test"))

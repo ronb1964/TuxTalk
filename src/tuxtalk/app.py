@@ -1711,16 +1711,17 @@ def _typed_breaks_for(text: str, window_class) -> str:
 
 
 def _press_key(key: str, why: str, claim=None) -> bool:
-    """A real "ENTER" or "TAB" after a dictation (key_commands.py). Enter
-    sends a chat message, runs a terminal command or submits a form, which is
-    the point; Tab moves on to a form's next box, even in Claude Desktop,
-    whose typed tabs become spaces. Undo can't reach what's behind either, so
-    once the key is pressed it forgets the dictation; one that wasn't
-    pressed leaves the text where undo still reaches it. *claim* can still
-    stop it right before it goes down (send_countdown._claim_send)."""
+    """A real "ENTER" or "TAB" after a dictation (key_commands.py): Enter
+    sends a chat message, runs a command or submits a form; Tab moves on to
+    a form's next box. Undo can't reach what's behind either, so once pressed
+    it forgets the dictation; not pressed, the text stays where undo reaches
+    it, and a key stuck down says so (an automatic send says it its own way).
+    *claim* can still stop it right before it goes down (send_countdown)."""
     time.sleep(0.05)   # let the app take in the typed text first
     if not _output_backend().press_keys([((), key)], claim=claim):
         logger.warning(f"{key.title()} not pressed ({why})")
+        if claim is None and modifier_hotkeys.stuck():
+            _notify(*delivery_notices.key_not_pressed(key))
         return False
     state.last_inserted_text = ""
     if key == "ENTER":
@@ -1732,9 +1733,8 @@ def _press_key(key: str, why: str, claim=None) -> bool:
 
 def _send_shift_enter():
     """Send Shift+Enter keystrokes to create line break without submitting."""
-    # KEY_LEFTSHIFT (42), KEY_ENTER (28)
-    return _send_keys([(42, 1), (28, 1), (28, 0), (42, 0)], what="shift+enter",
-                      raise_if_partial=True)
+    return _send_keys([(ecodes.KEY_LEFTSHIFT, 1), (ecodes.KEY_ENTER, 1), (ecodes.KEY_ENTER, 0),
+                       (ecodes.KEY_LEFTSHIFT, 0)], what="shift+enter", raise_if_partial=True)
 
 def _ctrl_keys(letter: str, shift: bool = False) -> list:
     """Ctrl+*letter* (Ctrl+Shift with *shift*), on the key that is that letter

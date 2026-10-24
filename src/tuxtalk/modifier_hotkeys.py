@@ -75,6 +75,11 @@ def note_released(code) -> None:
     _stuck.discard(code)
 
 
+def stuck() -> bool:
+    """Whether typing gave up on a key that's still down (HELD_LIMIT_S)."""
+    return bool(_stuck)
+
+
 def wait_while_held(destination=None):
     """A check for virtual_keyboard.send to make before each key: None when
     no Right Ctrl or Right Alt dictation key the desktop can see is down,

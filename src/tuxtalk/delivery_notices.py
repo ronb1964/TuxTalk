@@ -37,3 +37,13 @@ NOTICES = {
              "The text is saved in Recent Dictations in the TuxTalk menu: click it to "
              "copy, then paste with Ctrl+V.",
 }
+
+
+def key_not_pressed(key: str) -> tuple[str, str]:
+    """(title, sentence) for a said "press enter" or "press tab" whose key a
+    dictation key stuck down kept back. The text is in the box."""
+    name = key.title()
+    return (f"{name} not pressed: a dictation key stayed down",
+            f"Right Ctrl or Right Alt read as held down for {HELD_LIMIT_S:g} seconds, and "
+            f"{name} would have gone in as a shortcut. The text is in the box: press "
+            f"{name} yourself when you're ready.")
