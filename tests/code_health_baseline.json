@@ -1,6 +1,6 @@
 {
  "files": {
-  "app.py": 5196,
+  "app.py": 5176,
   "prefs.py": 6753,
   "tray.py": 2548,
   "welcome_dialog.py": 3256
@@ -37,7 +37,6 @@
   "app.py::_notify_tray_running_engine::swallowed_error": 1,
   "app.py::_paste_text::long_line": 1,
   "app.py::_paste_text::swallowed_error": 1,
-  "app.py::_prepare_text::dated_comment": 1,
   "app.py::_rediscover_devices::swallowed_error": 1,
   "app.py::_report_undelivered::swallowed_error": 1,
   "app.py::_resample_audio::long_line": 1,
@@ -96,7 +95,6 @@
   "custom_words.py::_joinable::long_line": 1,
   "custom_words.py::fix_spelling::long_line": 1,
   "dbus_service.py::TuxTalkDBusService.CheckForUpdates.do_check::undocumented": 1,
-  "dbus_service.py::TuxTalkDBusService.owns_name::swallowed_error": 1,
   "desktop_detect.py::_is_extension_enabled_via_dbus::swallowed_error": 1,
   "desktop_detect.py::tray_host_available::swallowed_error": 1,
   "desktop_identity.py::apply::swallowed_error": 1,
@@ -185,7 +183,6 @@
   "notification_help.py::_install_css_once::swallowed_error": 1,
   "notification_help.py::show_notification_help_window::swallowed_error": 1,
   "notify.py::notify::swallowed_error": 1,
-  "output_backends.py::LibeiOutputBackend._close_session::swallowed_error": 1,
   "parakeet_bias.py::WordBooster.__init__::undocumented": 1,
   "parakeet_bias.py::boosted_tdt_decoding._decoding::undocumented": 1,
   "parakeet_engine.py::ParakeetModel.set_words::long_line": 2,
@@ -449,7 +446,7 @@
   },
   "app.py::_deliver_text": {
    "decisions": 47,
-   "lines": 225
+   "lines": 222
   },
   "app.py::_edit_selection": {
    "decisions": 48,
@@ -486,8 +483,8 @@
    "decisions": 20
   },
   "app.py::_transcribe_and_inject": {
-   "decisions": 69,
-   "lines": 256
+   "decisions": 64,
+   "lines": 252
   },
   "app.py::_transcribe_audio": {
    "decisions": 25,

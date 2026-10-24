@@ -43,10 +43,21 @@ before 0.15.0, so older entries use that name.
   right before it goes, whatever it waited for first. Click into another
   window while a long dictation is still going in and the text stays where it
   is, but nothing gets sent. If TuxTalk was typing something else during
-  that last check, it doesn't send either, and it tells you. With Right Ctrl
-  as your toggle key, a tap holds a "Right away" send too. On KDE or GNOME
-  under X11, a busy tray could make TuxTalk think you'd switched windows when
-  you hadn't. That's fixed.
+  that last check, it doesn't send either, and it tells you. A tap of your
+  hotkey holds a "Right away" send now too; before, it often came too late.
+  On KDE or GNOME under X11, a busy tray could make TuxTalk think you'd
+  switched windows when you hadn't. That's fixed.
+- "See you at noon, press enter" goes by the same rule. If you click
+  somewhere else while the words go in, or right after, the Enter isn't
+  pressed and you're told why. "Press tab" too. Saying only "press enter"
+  still presses it wherever you are, so you can still log in after typing a
+  password yourself.
+- An automatic Enter never goes into a TuxTalk window now. If Preferences
+  or the Parakeet offer came up during the countdown, the Enter could press
+  its OK button while your message sat there unsent.
+- When a send doesn't go, you get a notification as well as the note over
+  the window, so a screen reader tells you. And if a phrase in Type at pause
+  only got partly typed, the message isn't sent at the end.
 - In Claude Desktop a tab said in the middle of a dictation is four spaces
   with Keystroke Typing too. It pressed the real Tab, which jumps to the Send
   button. Saying only "press tab" in a password box there presses the real
