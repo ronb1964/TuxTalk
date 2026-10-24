@@ -578,6 +578,24 @@ def test_no_space_into_another_window(countdown, monkeypatch):
     assert TYPED == []
 
 
+
+def test_the_owed_space_keeps_to_the_window_after_the_last_look(countdown, monkeypatch):
+    """The key came up just as the user clicked into a terminal: the look
+    that still found the chat came before the click, the space after it."""
+    monkeypatch.setattr(send_countdown, "_owed", None)
+    start_send("test", " ", "type")
+    send_countdown.hold(announce=True)
+
+    def inject(text, mode, into=None, **kw):
+        """Typed unless *into* is set and the terminal has the focus now."""
+        if into is not None and focused_window.changed(into, ("konsole", None)):
+            return "moved"
+        TYPED.append(text)
+        return "ok"
+    monkeypatch.setattr(app, "_inject_text", inject)
+    send_countdown.type_owed_space()
+    assert TYPED == []
+
 def test_the_dictation_hands_its_left_off_space_to_the_send(monkeypatch):
     monkeypatch.setattr(app, "_press_enter_after", True)
     sends = []

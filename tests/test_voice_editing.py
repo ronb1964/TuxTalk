@@ -1129,3 +1129,17 @@ def test_with_the_labs_switch_off_nothing_selected_still_says_select_first(edit_
     edit_env["selection"]["text"] = ""
     run_edit()
     assert edit_env["notices"] and "Select the text" in edit_env["notices"][0]
+
+
+@pytest.mark.parametrize("answer, typing, went_in", [
+    ("We completed the electrical work today.", "ok", True),
+    (None, "ok", False),                                    # the AI had nothing
+    ("We completed the electrical work today.", "failed", False),
+])
+def test_an_edit_says_whether_the_change_went_in(edit_env, monkeypatch, answer, typing, went_in):
+    """"edit that" holds back the automatic Enter when it didn't (app._handle_spoken_edit)."""
+    edit_env["engine"].answer = answer
+    monkeypatch.setattr(app, "_inject_text", lambda text, mode, **kw: typing)
+    done = app._edit_selection(lambda: "make it more professional", False, "type",
+                               "org.kde.kwrite", 0.0, app.state.message, spoken=True)
+    assert bool(done) is went_in

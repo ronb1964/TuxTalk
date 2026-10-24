@@ -57,6 +57,10 @@ before 0.15.0, so older entries use that name.
   pressed only in a password field: anywhere else it would send whatever is
   in that box. That holds after "edit that" too, which used to forget where
   the message was.
+- "Edit that" that couldn't change your text (the AI had no answer, or the
+  text couldn't be selected) left the message to be sent automatically as it
+  was, the part you wanted changed included. Now it waits for you to press
+  Enter.
 - An automatic Enter never goes into a TuxTalk window now, and neither does
   "press enter" said after words that went somewhere else. If Preferences or
   the Parakeet offer came up during the countdown, the Enter could press its
@@ -124,6 +128,8 @@ before 0.15.0, so older entries use that name.
 - With a loud dryer and pauses almost as long as your setting, it can stop
   at the soft start of your next sentence, the way a loud fan already
   could. A longer setting, or the mic closer, helps.
+- Now and then, in a steady fan's noise close to your voice with a 4 second
+  wait, hands-free that used to stop by itself waits for your tap instead.
 - The microphone test in Preferences, Audio, tells you when your room is
   noisy for your voice, under the level grade: a headset, or the mic closer
   to your mouth, will help. It measures how far your voice stands above the

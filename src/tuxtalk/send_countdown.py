@@ -288,7 +288,9 @@ def send_automatically(why: str, message: Message, press, type_more, space: str 
         _say_not_sent(reason)
         if reason == "unknown_window" and space:
             # No Enter could ever follow: the space goes in now, as with
-            # sending off, and only where the words went. Owed, it would
+            # sending off, and only where the words went, as far as the
+            # desktop tells (on COSMIC, any window of that app; on GNOME
+            # without the extension, wherever the focus is). Owed, it would
             # start the next message after the user's own Enter.
             type_more(space, injection_mode, into=message.to)
         else:
@@ -463,7 +465,8 @@ def type_owed_space() -> None:
     window its text went to."""
     pending = _take_owed()
     if pending is not None and not _focus_left(pending):
-        pending["type"](pending["space"], pending["mode"])
+        # Held to that window up to the key: the focus can move after this look.
+        pending["type"](pending["space"], pending["mode"], into=pending["to"])
 
 
 def with_owed_space(text: str) -> str:

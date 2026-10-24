@@ -1276,7 +1276,7 @@ def test_a_phrase_being_worked_on_holds_hands_free_open(monkeypatch):
     from tuxtalk.config import Settings
     monkeypatch.setattr(app, "_chunk_cfg", Settings())
     monkeypatch.setattr(app, "_transcribe_and_inject", lambda *a, **k: events.append("work"))
-    app._transcribe_chunk([b""], SR, "middle")
+    app._transcribe_chunk([b""], SR, "middle", 1, 0.5, app.state.message)
     assert events == ["hold", "work", "release"]
 
 

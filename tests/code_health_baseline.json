@@ -1,6 +1,6 @@
 {
  "files": {
-  "app.py": 4951,
+  "app.py": 4885,
   "prefs.py": 6738,
   "tray.py": 2548,
   "welcome_dialog.py": 3256
@@ -22,11 +22,9 @@
   "app.py::_deliver_text::long_line": 2,
   "app.py::_device_name::swallowed_error": 1,
   "app.py::_edit_problem::swallowed_error": 1,
-  "app.py::_edit_selection::long_line": 1,
   "app.py::_finish_capture::long_line": 1,
   "app.py::_grab_keyboards_hiding::swallowed_error": 1,
   "app.py::_guard_large_v3_without_cuda::swallowed_error": 1,
-  "app.py::_handle_spoken_edit::dated_comment": 1,
   "app.py::_handle_undo::long_line": 2,
   "app.py::_inject_key::long_line": 1,
   "app.py::_loop_evdev::swallowed_error": 1,
@@ -446,8 +444,8 @@
    "lines": 222
   },
   "app.py::_edit_selection": {
-   "decisions": 48,
-   "lines": 157
+   "decisions": 39,
+   "lines": 126
   },
   "app.py::_finish_capture": {
    "decisions": 18
@@ -455,9 +453,6 @@
   "app.py::_handle_key_event": {
    "decisions": 52,
    "lines": 121
-  },
-  "app.py::_handle_spoken_edit": {
-   "decisions": 16
   },
   "app.py::_handle_undo": {
    "decisions": 20,

@@ -1194,6 +1194,8 @@ def test_where_the_window_is_never_known_the_space_goes_only_where_the_words_did
     dictate()
     assert [text for text, _ in typed] == ["See you at noon."]
     assert app.state.last_inserted_window == "brave-browser"
+    # The refused space didn't wipe what "delete last sentence" works from.
+    assert app.state.last_inserted_text == "See you at noon."
 
 
 def test_a_phrase_cut_at_a_pause_takes_its_recordings_message_to_the_queue(chat, monkeypatch):

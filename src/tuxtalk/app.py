@@ -17,7 +17,6 @@ import fcntl
 import select
 import signal
 import functools
-from dataclasses import dataclass, field
 import numpy as np
 import sounddevice as sd
 from evdev import InputDevice, ecodes, list_devices
@@ -37,6 +36,7 @@ from .chunking import (boundary_mark, carry_question, hold_back_boundary, word_c
 from .key_commands import KEY_CODES, auto_send, split_key_command
 from .logger import setup_logger, redact_text
 from .recording_indicator import RecordingIndicator
+from .recording_state import RecordingState
 from .undo import detect_undo_command, calculate_undo_length
 from . import (custom_commands, delivery_notices, edit_notices, focused_window, hallucinations,
                modifier_hotkeys, secure_input, send_countdown, silence, virtual_keyboard)
@@ -276,97 +276,6 @@ MIN_HOLD_MS = 200
 # Two toggle taps closer than this make the first tap's recording hands-free.
 # Generous: 0.4 s missed slower hands (#21); a quick word still comes, at auto-stop.
 DOUBLE_TAP_S = 0.7
-
-@dataclass
-class RecordingState:
-    """Encapsulates mutable state for recording sessions."""
-    is_recording: bool = False
-    was_cancelled: bool = False
-    frames: list = None
-    stream: object = None
-    press_t0: float = None
-    # Undo history - tracks last inserted text for voice-activated undo
-    last_inserted_text: str = ""
-    # Select and move by voice: the known text (left, right) of the cursor
-    # inside the last dictation after a word or letter move, so the next move
-    # is counted exactly too; None when the cursor is somewhere unknown.
-    nav_context: tuple = None
-    # The window the last dictation was typed into (its class), or None.
-    last_inserted_window: str = None
-    # And which window has it: a focused_window.look() right after it
-    # landed, for Type at pause's mark held back after it.
-    last_inserted_where: tuple = (None, None)
-    # What this recording has typed since it began or since its last
-    # message ended, and where: where an automatic Enter or a key said after
-    # it may go (send_countdown.Message).
-    message: send_countdown.Message = field(default_factory=send_countdown.Message)
-    # Mid-sentence continuation - if True, lowercase the first letter of next dictation
-    continue_mid_sentence: bool = False
-    # Hands-free auto-stop for this recording (a silence.SilenceDetector), or
-    # None unless a double-tap of the toggle key armed it.
-    silence: object = None
-    # When the toggle key started this recording (None for any other start),
-    # so a quick second tap can be told apart from a stop, and its start beep
-    # (what beeps.beep returned, None with beeps off), which the second tap's
-    # clock waits for.
-    toggle_started_at: float = None
-    start_beep: object = None
-    # Paste Last Dictation: {"key", "key_up", "at"} from the combo press until
-    # every key of it is let go, else None (see _handle_key_event).
-    paste_last: object = None
-    # Voice editing: this recording is an instruction for the selected text
-    # (Shift + the dictation key), not dictation.
-    edit_mode: bool = False
-    # Chunked dictation: this recording's pause detector (chunking.PauseDetector)
-    # or None, and how many chunks it has cut so far.
-    chunker: object = None
-    chunks_submitted: int = 0
-    # The last chunk typed held back its final mark (chunking.hold_back_boundary):
-    # {"mark", "audio", "raw", "typed"} until the next chunk decides it, else
-    # None. Belongs to its recording only (cleared by _arm_chunker).
-    pending_boundary: object = None
-    # The "?" held back at the last pause was heard as mid-sentence: the
-    # question goes on, so this phrase ends with it, not a period
-    # (chunking.carry_question). Belongs to its recording only.
-    question_open: bool = False
-    # This recording's press held a pending send, so a tap that's too short
-    # to be a dictation says "Not sent" rather than "Cancelled".
-    held_send: bool = False
-    # The hold key was already up again when this recording had finished
-    # starting, and that took under 2 * MIN_HOLD_MS: a tap, though the
-    # start made it read as a longer hold (see the hold key).
-    released_while_starting: bool = False
-    # A Right Ctrl or Right Alt dictation key that's down and hidden from
-    # the desktop (see _hide_modifier_hotkey), or None.
-    hidden_key: int | None = None
-    # The last Enter TuxTalk pressed: {"at", "automatic"}, or None
-    # (_press_key). "edit that" just after it explains itself.
-    sent: object = None
-    # A phrase that was only a correction cue ("No wait."), not typed yet: the
-    # corrected value comes in the next phrase.
-    held_cue: str = ""
-    # "edit that" said alone as a Type at pause phrase: the next phrase of
-    # this recording says what to change (_handle_spoken_edit).
-    edit_waiting: object = None
-    # Speech the pause detector heard after its last cut, taken at the stop:
-    # 0.0 means the rest of the recording is room noise only.
-    last_chunk_speech: float = None
-    # A recording typed in phrases (Type at pause) is still one dictation.
-    # recording_serial counts recordings (_arm_chunker). said_text is all the
-    # one numbered said_serial has typed or tried to: its Recent Dictations
-    # entry (_remember_said). shown_text is the part of it on screen in
-    # shown_window, ending at the cursor, for "fix that word" to fix in
-    # place; None once that isn't known (_remember_shown).
-    recording_serial: int = 0
-    said_serial: int = -1
-    said_text: str = ""
-    shown_serial: int = -1
-    shown_text: object = None
-    shown_window: object = None
-
-    def __post_init__(self):
-        if self.frames is None:
-            self.frames = []
 
 # Global recording state
 state = RecordingState()
@@ -631,14 +540,13 @@ def _cut_chunk(chunker):
             frames, rec_sr, "middle", number, pause, message))
 
 
-def _transcribe_chunk(frames, rec_sr, role, number=None, pause=None, message=None):
-    """Transcribe and type one chunk cut during the recording, with the
-    settings as they are now, into *message* (_transcribe_and_inject's)."""
-    if number is not None:
-        # Logged here, on the worker, to keep file writes off the audio thread.
-        seconds = sum(len(f) for f in frames) / 2 / rec_sr
-        logger.info(f"Chunk {number}: {seconds:.1f}s of audio, cut after a "
-                    f"{pause:.2f}s pause")
+def _transcribe_chunk(frames, rec_sr, role, number, pause, message):
+    """Transcribe and type chunk *number*, cut during the recording after a
+    *pause* (seconds), with the settings as they are now, into *message*
+    (_transcribe_and_inject's)."""
+    # Logged here, on the worker, to keep file writes off the audio thread.
+    seconds = sum(len(f) for f in frames) / 2 / rec_sr
+    logger.info(f"Chunk {number}: {seconds:.1f}s of audio, cut after a {pause:.2f}s pause")
     cfg = _chunk_cfg
     # Hands-free's "stop when quiet" waits while this phrase is worked on: an
     # AI rewrite can take seconds, and the user is reading, not finished.
@@ -2940,11 +2848,17 @@ def _send_automatically(space: str, injection_mode: str, message) -> None:
 
 def _type_onto_dictation(text: str, injection_mode: str, into=None) -> str:
     """Type *text* right after the dictation, keeping undo's record of it
-    whole; _inject_text's outcome. *into* is _inject_text's."""
-    typed = state.last_inserted_text
+    whole; _inject_text's outcome. *into* is _inject_text's. When none of
+    it went in (a space refused because the focus moved), the dictation is
+    in the app as it was, and so is everything that remembers it."""
+    kept = (state.last_inserted_text, state.continue_mid_sentence, state.nav_context,
+            state.shown_text)
     outcome = _inject_text(text, injection_mode, into=into)
     if outcome == "ok":
-        state.last_inserted_text = typed + text
+        state.last_inserted_text = kept[0] + text
+    elif outcome != "partial":
+        (state.last_inserted_text, state.continue_mid_sentence, state.nav_context,
+         state.shown_text) = kept
     return outcome
 
 
@@ -3438,6 +3352,17 @@ def _spoken_edit_target():
 EDIT_AFTER_SEND_S = 60
 
 
+def _refused_as_sent(beeps_on: bool) -> bool:
+    """"edit that" with nothing just typed: True when TuxTalk pressed Enter a
+    moment ago, said with a notice (typing "Edit that, make it formal" into
+    the box would only add to the confusion); False to type the words."""
+    sent = state.sent
+    if sent is None or time.time() - sent["at"] >= EDIT_AFTER_SEND_S:
+        return False
+    _edit_problem("already_sent_auto" if sent["automatic"] else "already_sent", beeps_on)
+    return True
+
+
 def _handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: str,
                         message) -> bool:
     """Voice editing by voice alone (TuxTalk Labs): a dictation that starts
@@ -3458,14 +3383,7 @@ def _handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: st
             return False
         target = _spoken_edit_target()
         if not target:
-            sent = state.sent
-            if sent is not None and time.time() - sent["at"] < EDIT_AFTER_SEND_S:
-                # Sent a moment ago: typing "Edit that, make it formal" into
-                # the box would only add to the confusion (Ron, 2026-10-18).
-                _edit_problem("already_sent_auto" if sent["automatic"] else "already_sent",
-                              beeps_on)
-                return True
-            return False
+            return _refused_as_sent(beeps_on)
     logger.info(f"Voice command: edit that ({len(target)} characters)")
     if not _is_wayland_session():
         _edit_problem("needs_wayland", beeps_on)
@@ -3481,6 +3399,7 @@ def _handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: st
             logger.info("Voice edit: waiting for the next phrase to say what to change")
         else:
             _edit_problem("edit_that_what", beeps_on)
+            message.add("failed", None)     # asked to change it: not sent as it is
         return True
     plan = nav.plan(nav.parse("select that"), target, "")
     try:
@@ -3495,9 +3414,11 @@ def _handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: st
     _forget_shown()
     if not selected:
         _edit_problem("shortcut_failed", beeps_on)
+    elif _edit_selection(lambda: instruction, beeps_on, injection_mode, focused_class,
+                         time.time(), message, spoken=True):
         return True
-    _edit_selection(lambda: instruction, beeps_on, injection_mode, focused_class,
-                    time.time(), message, spoken=True)
+    # Not changed as asked: no automatic Enter sends it as it was.
+    message.add("failed", None)
     return True
 
 
@@ -3532,12 +3453,57 @@ def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
     _edit_selection(instruction, beeps_on, injection_mode, focused_class, t0, state.message)
 
 
+def _delete_selection(focused_class, beeps_on) -> bool:
+    """"Delete this": Delete on the selection, still selected in
+    *focused_class*. True when it was pressed. Transcribing can take
+    seconds, and Delete must not reach a window the user has switched to
+    meanwhile, so it needs a window to compare with."""
+    if focused_class is None:
+        logger.info("Voice edit: the focused window is unknown, so Delete can't be checked")
+        _edit_problem("cant_check_window", beeps_on)
+        return False
+    if _focus_moved(focused_class):
+        _edit_problem("focus_moved", beeps_on)
+        return False
+    if _refuse_password_field(beeps_on):
+        return False
+    if not _send_keys([(111, 1), (111, 0)], what="delete"):     # KEY_DELETE
+        _edit_problem("shortcut_failed", beeps_on)
+        return False
+    logger.info("Voice edit: deleted the selection")
+    _beep(beeps_on, *READY_BEEP)
+    return True
+
+
+def _format_selection(fmt, focused_class, beeps_on) -> bool:
+    """Bold, italic or underline (*fmt*, voice_edit_rules.formatting) with
+    the app's own shortcut on the selection, still selected. True when it
+    was pressed."""
+    from . import voice_edit_rules
+    if not voice_edit_rules.has_formatting_shortcuts(focused_class):
+        logger.info(f"Voice edit: no formatting shortcuts in {focused_class!r}")
+        _edit_problem("no_shortcuts", beeps_on)
+        return False
+    if _focus_moved(focused_class):
+        _edit_problem("focus_moved", beeps_on)
+        return False
+    if _refuse_password_field(beeps_on):
+        return False
+    if not all(_send_format_shortcut(kind) for kind in fmt):
+        _edit_problem("shortcut_failed", beeps_on)
+        return False
+    logger.info(f"Voice edit: {', '.join(fmt)} with the app's shortcut ({focused_class})")
+    _beep(beeps_on, *READY_BEEP)
+    return True
+
+
 def _edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0, message,
                     spoken=False):
     """Change the text selected in *focused_class* as the instruction
     *get_instruction()* says (called only once a selection is found), and
     type the result over it, as part of *message*. *spoken*: the instruction
-    came after "edit that" in a dictation, which selected the text itself."""
+    came after "edit that" in a dictation, which selected the text itself.
+    True when the change went in."""
     from . import ai_cleanup, clipboard, history, voice_edit_rules
     # Before copying the selection or hearing the instruction; checked
     # again before the rewrite replaces it.
@@ -3570,46 +3536,13 @@ def _edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0
         logger.info(f"Voice edit: {_loggable(instruction)} ({len(selected)} characters)")
         # Deleting, formatting and exact jobs need no AI (voice_edit_rules.py).
         if voice_edit_rules.is_delete(instruction):
-            # Transcribing can take seconds; Delete must not reach a window
-            # the user has switched to meanwhile, so it needs a window to
-            # compare with.
-            if focused_class is None:
-                logger.info("Voice edit: the focused window is unknown, so Delete can't be checked")
-                _edit_problem("cant_check_window", beeps_on)
-                return
-            if _focus_moved(focused_class):
-                _edit_problem("focus_moved", beeps_on)
-                return
-            if _refuse_password_field(beeps_on):
-                return
-            # KEY_DELETE=111: the selection is still selected.
-            if _send_keys([(111, 1), (111, 0)], what="delete"):
-                logger.info("Voice edit: deleted the selection")
-                _beep(beeps_on, *READY_BEEP)
-            else:
-                _edit_problem("shortcut_failed", beeps_on)
-            return
+            return _delete_selection(focused_class, beeps_on)
         fmt = voice_edit_rules.formatting(instruction)
         if fmt == voice_edit_rules.CANT_FORMAT:
             _edit_problem("cant_format", beeps_on)
             return
         if fmt:
-            if not voice_edit_rules.has_formatting_shortcuts(focused_class):
-                logger.info(f"Voice edit: no formatting shortcuts in {focused_class!r}")
-                _edit_problem("no_shortcuts", beeps_on)
-                return
-            if _focus_moved(focused_class):
-                _edit_problem("focus_moved", beeps_on)
-                return
-            if _refuse_password_field(beeps_on):
-                return
-            # The selection is still selected, so the app's shortcut formats it.
-            if all(_send_format_shortcut(kind) for kind in fmt):
-                logger.info(f"Voice edit: {', '.join(fmt)} with the app's shortcut ({focused_class})")
-                _beep(beeps_on, *READY_BEEP)
-            else:
-                _edit_problem("shortcut_failed", beeps_on)
-            return
+            return _format_selection(fmt, focused_class, beeps_on)
         # Deleting and formatting press keys only, so any length will do; a
         # rewrite is typed back, and the AI's context holds only so much.
         if len(selected) > ai_cleanup.MAX_EDIT_CHARS:
@@ -3681,6 +3614,7 @@ def _edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0
             _report_undelivered(outcome, beeps_on)
         else:
             _beep(beeps_on, *READY_BEEP)
+        return outcome == "ok"
     finally:
         # A pasted rewrite may still be on the clipboard, whole or (pasted a
         # line at a time) its last line; that may be replaced.
