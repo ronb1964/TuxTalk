@@ -89,6 +89,26 @@ def test_save_token_creates_missing_data_dir(tmp_path, monkeypatch):
     assert b._load_token() == "restore-token-abc"
 
 
+def test_the_restore_token_is_readable_by_its_user_only(tmp_path, monkeypatch):
+    """The token lets TuxTalk control the keyboard again without asking.
+    Written with the usual umask it was readable by every user of the
+    computer, and a token saved that way before stays so until replaced."""
+    import os
+    from tuxtalk.output_backends import LibeiOutputBackend
+    b = LibeiOutputBackend()
+    token_path = tmp_path / "remote_desktop_token"
+    token_path.write_text("old-token")
+    token_path.chmod(0o644)
+    monkeypatch.setattr(b, "_token_path", lambda: str(token_path))
+    old_umask = os.umask(0o022)
+    try:
+        b._save_token("restore-token-abc")
+    finally:
+        os.umask(old_umask)
+    assert token_path.stat().st_mode & 0o777 == 0o600
+    assert b._load_token() == "restore-token-abc"
+
+
 def test_output_backend_accessor_returns_the_virtual_keyboard_on_host(monkeypatch):
     # No FLATPAK_ID on the host -> the virtual-keyboard backend.
     monkeypatch.delenv("FLATPAK_ID", raising=False)

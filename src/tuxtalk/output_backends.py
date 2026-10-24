@@ -96,18 +96,18 @@ class LibeiOutputBackend(OutputBackend):
             return ""
 
     def _save_token(self, token: str) -> None:
+        """Keep the portal's restore token, readable by this user only: it
+        lets TuxTalk control the keyboard again without asking. A new file
+        replaces the old one, so one saved world-readable before is fixed.
+        The folder is made if need be: on a fresh CPU-only Flatpak install
+        nothing else may have, and without a saved token the desktop asks
+        "Allow remote interaction?" on every dictation."""
         import logging
-        import os
-        path = self._token_path()
+        from .config import write_text_atomic
         try:
-            # On a fresh CPU-only Flatpak install nothing else may have created
-            # the data folder yet, and without a saved restore token the desktop
-            # asks "Allow remote interaction?" on every dictation.
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            with open(path, "w") as f:
-                f.write(token or "")
+            write_text_atomic(self._token_path(), token or "", keep_backup=False)
         except OSError as e:
-            logging.getLogger(__name__).debug("could not save restore token: %s", e)
+            logging.getLogger(__name__).warning("could not save restore token: %s", e)
 
     def _close_session(self, session_path):
         """Close a RemoteDesktop portal session (one is created per dictation)."""
