@@ -1,3 +1,9 @@
+"""The Preferences window: its tabs, and saving and applying what they change.
+
+It runs as its own process (python -m tuxtalk.prefs), started from the tray's
+or the GNOME extension's menu, and restarts the dictation service when a
+change needs it.
+"""
 import gi
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
@@ -10,10 +16,12 @@ from .mic_test import MicReopen, MicTest, SegmentedVUMeter
 from .ui_style import Fold, message_dialog
 from .whisper_vulkan import ENGINE_SIZE_TEXT
 from .hotkey_labels import dropdown_entries, hands_free_label
+from .logger import setup_logger
 import datetime
 import os
 import subprocess
 import sys
+import threading
 import time
 import atexit
 import dbus.mainloop.glib
@@ -28,6 +36,8 @@ from .config import (CONFIG_PATH, ConfigNotLoadedError, Settings, apply_toml, ch
 # screen-wide to reach child widgets — matches only this window's widgets.
 # Every selector in that file is prefixed with it; keep the two in step.
 PREFS_STYLE_CLASS = "talktype-prefs"
+
+logger = setup_logger(__name__)
 
 # Use tomllib (Python 3.11+) or fallback to toml
 try:
@@ -89,7 +99,7 @@ def _list_pulse_sources():
         if result.returncode == 0:
             return _parse_pactl_sources(result.stdout)
     except Exception as e:
-        print(f"Could not list audio sources: {e}")
+        logger.warning(f"Could not list audio sources: {e}")
     return []
 
 
@@ -194,12 +204,12 @@ def _acquire_prefs_singleton(tab=None):
                 # Bring the open one forward rather than silently doing
                 # nothing, which looked like Preferences failed to open.
                 prefs_ipc.bring_to_front(old, tab)
-                print("Preferences is already open; brought it to the front. Exiting.")
+                logger.info("Preferences is already open; brought it to the front")
                 sys.exit(0)
         with open(_PREFS_PIDFILE, "w") as f:
             f.write(str(os.getpid()))
     except Exception as e:
-        print(f"Warning: could not write prefs pidfile: {e}")
+        logger.warning(f"Could not write prefs pidfile: {e}")
     def _cleanup():
         try:
             with open(_PREFS_PIDFILE, "r") as f:
@@ -563,11 +573,10 @@ class PreferencesWindow:
                     css_provider,
                     Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
                 )
-                print("Loaded custom CSS styling (scoped to prefs window)")
             else:
-                print(f"CSS file not found: {css_file}")
+                logger.warning(f"CSS file not found: {css_file}")
         except Exception as e:
-            print(f"Failed to load CSS: {e}")
+            logger.warning(f"Failed to load CSS: {e}")
 
     def _block_combo_scroll(self, combo):
         """
@@ -592,7 +601,7 @@ class PreferencesWindow:
                 config = load_toml(CONFIG_PATH)
                 defaults.update(config)
             except Exception as e:
-                print(f"Error loading config: {e}")
+                logger.warning(f"Could not read the config: {e}")
 
         return _coerce_config_types(defaults)
 
@@ -664,7 +673,7 @@ class PreferencesWindow:
                                  f"as fast as CUDA for a {ENGINE_SIZE_TEXT} download (one-time, "
                                  "with a speed check). Also runs Parakeet on the graphics chip")
         except Exception as e:
-            print(f"Could not check for Vulkan graphics: {e}")
+            logger.warning(f"Could not check for Vulkan graphics: {e}")
         
         # Set active selection and tooltip
         self.device_combo.set_active_id(self.config["device"])
@@ -716,7 +725,7 @@ class PreferencesWindow:
                     # file over config.toml.bak, destroying the last good
                     # copy. Leave it alone; config.load_config()'s repair
                     # path is what knows how to recover this safely.
-                    print(f"Refusing to save over an unreadable config: {e}")
+                    logger.warning(f"Refusing to save over an unreadable config: {e}")
                     self._save_error = f"Your settings file could not be read: {e}"
                     return False
             # Base: window-open snapshot (has every key incl. defaults),
@@ -744,14 +753,14 @@ class PreferencesWindow:
                 except Exception as e:
                     # A read-only home must not cost the user the settings they
                     # just saved — the file is already written at this point.
-                    print(f"Could not update autostart entry: {e}")
+                    logger.warning(f"Could not update autostart entry: {e}")
 
             # Future saves in this window diff against what we just wrote
             self.config = dict(merged)
             self._config_at_open = dict(merged)
             return True
         except Exception as e:
-            print(f"Error saving config: {e}")
+            logger.error(f"Could not save the config: {e}")
             self._save_error = str(e)
             return False
     
@@ -907,12 +916,8 @@ class PreferencesWindow:
         event masks, which Wayland compositors honour inconsistently (kwin does,
         mutter does not). Capture-phase interception is compositor-independent.
         """
-        try:
-            ctrl = Gtk.EventControllerScroll.new(
-                scrolled, Gtk.EventControllerScrollFlags.VERTICAL)
-        except Exception as e:
-            print(f"Could not install capture scroll controller: {e}")
-            return
+        ctrl = Gtk.EventControllerScroll.new(
+            scrolled, Gtk.EventControllerScrollFlags.VERTICAL)
         ctrl.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
         ctrl.connect("scroll", self._on_capture_scroll, scrolled)
         # Keep a reference so the controller is not garbage-collected.
@@ -1456,7 +1461,7 @@ class PreferencesWindow:
         except Exception as e:
             # Fallback if sounddevice fails
             mic_combo.append("", "System Default")
-            print(f"Could not list audio devices: {e}")
+            logger.warning(f"Could not list audio devices: {e}")
         
         # Set current selection
         current_mic = self.config["mic"]
@@ -2643,7 +2648,7 @@ class PreferencesWindow:
         try:
             settings_backup.set_backup_folder(os.path.dirname(path))
         except OSError as e:
-            print(f"Could not remember the backup folder: {e}")
+            logger.warning(f"Could not remember the backup folder: {e}")
         self._show_backup_folder()
         self._show_last_backup()
         self._fill_restore_list()       # saved into the backup folder: listed now
@@ -2733,9 +2738,9 @@ class PreferencesWindow:
         # their word, not among the snippets.
         try:
             if vocabulary.adopt_fixes():
-                print("Word fixes moved under Your Words")
+                logger.info("Word fixes moved under Your Words")
         except Exception as e:
-            print(f"Word fixes not moved under Your Words: {e}")
+            logger.warning(f"Word fixes not moved under Your Words: {e}")
 
         def section(title, text):
             header = Gtk.Label(xalign=0)
@@ -3239,14 +3244,13 @@ class PreferencesWindow:
             if control.open_in_running("uninstall"):
                 return
         except Exception as e:
-            print(f"Could not ask TuxTalk to uninstall: {e}", file=sys.stderr)
+            logger.warning(f"Could not ask TuxTalk to uninstall: {e}")
         from . import uninstall
         if uninstall.run():
             self.on_cancel(None)
 
     def _on_check_updates_clicked(self, button):
         """Handle check for updates button click."""
-        import threading
         from . import update_checker
 
         # Update status and hide action buttons. The status box is hidden
@@ -3353,7 +3357,6 @@ class PreferencesWindow:
 
     def _on_download_update_clicked(self, button):
         """Handle download update button click - downloads, installs, and restarts."""
-        import threading
         from . import update_checker
 
         if not self._current_release:
@@ -3500,7 +3503,6 @@ class PreferencesWindow:
 
     def _on_update_extension_clicked(self, button):
         """Handle Update Extension button click - downloads and installs latest extension."""
-        import threading
         from . import extension_helper
 
         # Create progress dialog
@@ -3803,7 +3805,7 @@ class PreferencesWindow:
                 monitor.connect("changed", lambda *_: GLib.idle_add(self._on_commands_file_changed))
                 self._file_monitors.append(monitor)
             except Exception as e:
-                print(f"Not watching {path} for outside changes: {e}")
+                logger.warning(f"Not watching {path} for outside changes: {e}")
 
     def _on_commands_file_changed(self):
         """Show what was saved from outside this window (Fix a Word), or by
@@ -3959,12 +3961,12 @@ class PreferencesWindow:
         except ConfigNotLoadedError as e:
             # Runs first in both on_apply and on_ok — letting this propagate
             # would abort the whole save and leave the window stuck open.
-            print(f"Custom commands not saved: {e}")
+            logger.warning(f"Custom commands not saved: {e}")
             return False
         except OSError as e:
             # A full disk or read-only config folder: say so. Apply saves the
             # settings anyway; OK stays open so the edits aren't thrown away.
-            print(f"Custom commands not saved: {e}")
+            logger.warning(f"Custom commands not saved: {e}")
             self._message(Gtk.MessageType.ERROR, "Your snippets weren't saved", str(e))
             return None
     
@@ -4139,7 +4141,7 @@ class PreferencesWindow:
         try:
             hw, rec = self._recommendation()
         except Exception as e:
-            print(f"Could not work out the recommended setup: {e}")
+            logger.warning(f"Could not work out the recommended setup: {e}")
             label.get_parent().set_no_show_all(True)
             label.get_parent().hide()
             return
@@ -4491,7 +4493,7 @@ class PreferencesWindow:
                 # wpctl not installed - try PulseAudio
                 pass
             except Exception as e:
-                print(f"wpctl failed: {e}")
+                logger.warning(f"wpctl failed: {e}")
 
         # Try PulseAudio (older/traditional systems)
         try:
@@ -4517,7 +4519,7 @@ class PreferencesWindow:
             # pactl not installed either
             pass
         except Exception as e:
-            print(f"pactl failed: {e}")
+            logger.warning(f"pactl failed: {e}")
 
         # Fallback to 50% if neither wpctl nor pactl work
         return 50
@@ -4543,7 +4545,7 @@ class PreferencesWindow:
                 # wpctl not installed - try PulseAudio
                 pass
             except Exception as e:
-                print(f"wpctl failed: {e}")
+                logger.warning(f"wpctl failed: {e}")
 
         # Try PulseAudio (older systems)
         try:
@@ -4554,9 +4556,9 @@ class PreferencesWindow:
             return  # Success!
         except FileNotFoundError:
             # Neither wpctl nor pactl available
-            print("Volume control not available (neither wpctl nor pactl found)")
+            logger.info("Volume control not available (neither wpctl nor pactl found)")
         except Exception as e:
-            print(f"pactl failed: {e}")
+            logger.warning(f"pactl failed: {e}")
     
     def on_volume_changed(self, scale):
         """Handle volume slider changes.
@@ -5085,7 +5087,7 @@ class PreferencesWindow:
         except Exception as e:
             self.gpu_status_label.set_text(f"Error checking GPU: {e}")
             self.cuda_status_label.set_text("")
-            print(f"GPU check error: {e}")
+            logger.warning(f"Could not check the graphics card: {e}")
 
     def _download_cuda(self):
         """Ask, then download CUDA's 1.4 GB of files with a progress bar.
@@ -5094,11 +5096,7 @@ class PreferencesWindow:
         success the dropdowns are rebuilt and _after_cuda_download() switches
         to CUDA (asking for a Whisper model first on Parakeet).
         """
-        try:
-            from . import cuda_helper
-        except ImportError:
-            return
-
+        from . import cuda_helper
         from tuxtalk.config import get_data_dir
         cuda_path = os.path.join(get_data_dir(), "cuda")
         if self._message(
@@ -5244,7 +5242,7 @@ class PreferencesWindow:
             return True
         except Exception as e:
             self.typing_status_label.set_text(f"Error checking typing: {e}")
-            print(f"Typing check error: {e}")
+            logger.warning(f"Could not check typing: {e}")
             return False
 
     def _on_fix_typing_clicked(self, button):
@@ -5297,7 +5295,7 @@ class PreferencesWindow:
             button.set_sensitive(False)
             button.set_label("Setting up...")
         except Exception as e:
-            print(f"Error fixing typing permissions: {e}")
+            logger.warning(f"Could not fix typing permissions: {e}")
             button.set_sensitive(True)
             button.set_label(FIX_TYPING_LABEL)
             return
@@ -5316,7 +5314,6 @@ class PreferencesWindow:
                 success, message = False, str(e)
             GLib.idle_add(self._finish_fix_typing, button, success, message, needs_restart, switching)
 
-        import threading
         threading.Thread(target=work, daemon=True).start()
 
     def _shortcuts_the_helper_refuses(self):
@@ -5352,7 +5349,6 @@ class PreferencesWindow:
             ok, message = secure_input.leave_input_group_with_pkexec()
             GLib.idle_add(self._finish_leave_group, button, ok, message)
 
-        import threading
         threading.Thread(target=work, daemon=True).start()
 
     def _finish_leave_group(self, button, ok, message):
@@ -5453,18 +5449,7 @@ class PreferencesWindow:
         """Show the GNOME extension's status; True unless it needs fixing.
         Not installed is a choice (the tray works without it), not a problem."""
         try:
-            # Import extension_helper
-            try:
-                from . import extension_helper
-            except ImportError:
-                self.extension_status_label.set_text("Extension support not available")
-                self.install_extension_button.set_sensitive(False)
-                self.uninstall_extension_button.set_sensitive(False)
-                # Restart Info only ever explains how to restart GNOME Shell.
-                self._set_restart_info_sensitive(False)
-                return True
-
-            # Get extension status
+            from . import extension_helper
             status = extension_helper.get_extension_status()
 
             if not status['available']:
@@ -5497,7 +5482,7 @@ class PreferencesWindow:
 
         except Exception as e:
             self.extension_status_label.set_text(f"Error checking extension: {e}")
-            print(f"Extension check error: {e}")
+            logger.warning(f"Could not check the GNOME extension: {e}")
             return False
 
     def _set_restart_info_sensitive(self, sensitive):
@@ -5519,10 +5504,7 @@ class PreferencesWindow:
 
     def _on_install_extension_clicked(self, button):
         """Handle Install Extension button click."""
-        try:
-            from . import extension_helper
-        except ImportError:
-            return
+        from . import extension_helper
 
         # Show confirmation dialog
         dialog = message_dialog(
@@ -5573,7 +5555,6 @@ class PreferencesWindow:
 
             button.set_sensitive(False)
 
-            import threading
 
             def progress_callback(message, percent):
                 """Update progress dialog from download thread."""
@@ -5640,10 +5621,7 @@ class PreferencesWindow:
 
     def _on_uninstall_extension_clicked(self, button):
         """Handle Uninstall Extension button click."""
-        try:
-            from . import extension_helper
-        except ImportError:
-            return
+        from . import extension_helper
 
         # Show confirmation dialog
         dialog = message_dialog(
@@ -5998,11 +5976,11 @@ class PreferencesWindow:
         # runs on every Apply/OK click). A partial cache left by a cancelled
         # or interrupted download reports "not cached".
         if is_model_cached_fast(model_name):
-            print(f"Model {model_name} already cached")
+            logger.info(f"Model {model_name} already cached")
             return (True, False, False)  # Success, but not downloaded
 
         # Model needs downloading - show progress dialog
-        print(f"Model {model_name} not found, downloading...")
+        logger.info(f"Model {model_name} not found, downloading...")
 
         dialog = Gtk.Dialog(title="Downloading Model")
         dialog.set_transient_for(self.window)
@@ -6043,7 +6021,6 @@ class PreferencesWindow:
         # Download in background thread with real cancellation: the
         # model_helper download function checks cancel_event between blocks
         # and aborts within moments.
-        import threading
         cancel_event = threading.Event()
         download_complete = {"done": False, "success": False}
         dialog_closed = {"v": False}
@@ -6062,7 +6039,7 @@ class PreferencesWindow:
                 download_func = make_model_download_func(model_name)
                 download_complete["success"] = download_func(on_progress, cancel_event)
             except Exception as e:
-                print(f"Model download failed: {e}")
+                logger.warning(f"Model download failed: {e}")
                 download_complete["success"] = False
             finally:
                 download_complete["done"] = True
@@ -6083,7 +6060,7 @@ class PreferencesWindow:
         # aborts the download thread at its next block boundary.
         if response != Gtk.ResponseType.OK:
             cancel_event.set()
-            print(f"User cancelled {model_name} model download")
+            logger.info(f"User cancelled {model_name} model download")
 
         dialog_closed["v"] = True
         dialog.destroy()
@@ -6095,7 +6072,7 @@ class PreferencesWindow:
         if _ok:
             _ok = is_model_cached_fast(model_name)
         if _ok:
-            print(f"Model {model_name} downloaded successfully")
+            logger.info(f"Model {model_name} downloaded successfully")
             self._message(Gtk.MessageType.INFO, "Model Downloaded Successfully!",
                           f"The {model_title(model_name)} model has been "
                           "downloaded and is ready to use.")
@@ -6158,7 +6135,7 @@ class PreferencesWindow:
         from .config import needs_service_restart
 
         if not needs_service_restart(changed):
-            print(f"Applied without restart: {sorted(changed) or 'no changes'}")
+            logger.info(f"Applied without restart: {sorted(changed) or 'no changes'}")
             return True
 
         return self.restart_service()
@@ -6166,7 +6143,6 @@ class PreferencesWindow:
     def restart_service(self):
         """Restart the dictation service."""
         try:
-            import time
 
             # Kill existing dictation-service processes
             from .service_launcher import stop_dictation_service
@@ -6183,7 +6159,7 @@ class PreferencesWindow:
             launch_dictation_service()
             return True
         except Exception as e:
-            print(f"Failed to restart service: {e}")
+            logger.warning(f"Failed to restart service: {e}")
             return False
     
     def on_tab_switched(self, notebook, page, page_num):
@@ -6351,7 +6327,6 @@ class PreferencesWindow:
         # Same reason: after the save this no longer names the live setup.
         previous = {k: self._config_at_open.get(k) for k in _DOWNLOAD_KEYS}
 
-        import time
         saved_at = time.time()      # for KDE's verdict on a changed hotkey
         if self.save_config():
             # Check if model needs downloading
@@ -6404,7 +6379,6 @@ class PreferencesWindow:
         """Keys KDE already uses, once the service has registered the new
         ones (kwin_hotkeys saves its verdict), or None: not KDE, dictation
         off, or no answer within a few seconds."""
-        import time
         from . import kwin_hotkeys
         try:
             from .service_launcher import find_service_pids
@@ -6499,7 +6473,6 @@ class PreferencesWindow:
         # Same reason: after the save this no longer names the live setup.
         previous = {k: self._config_at_open.get(k) for k in _DOWNLOAD_KEYS}
 
-        import time
         saved_at = time.time()      # for KDE's verdict on a changed hotkey
         if self.save_config():
             # Check if model needs downloading
@@ -6613,12 +6586,11 @@ class PreferencesWindow:
         # The app's evdev loop detects hotkey presses and sends them to the
         # tray's D-Bus service, which emits the HotkeyPressed signal.
         from .dbus_service import DBUS_INTERFACE, DBUS_NAME, DBUS_PATH
-        dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
         bus = dbus.SessionBus()
 
         def _on_hotkey_signal(key_name):
             """Called when app.py reports a hotkey press via D-Bus signal."""
-            print(f"[hotkey-test] D-Bus signal received: key_name={key_name}", flush=True)
+            logger.debug(f"Hotkey test: TuxTalk heard {key_name}")
             if key_name == "hold" and not tested_keys["hold"]:
                 tested_keys["hold"] = True
                 hold_label.set_markup(f'<b>{hold_key}</b> (Hold-to-talk): <span color="#4CAF50">✓ Working!</span>')
@@ -6661,7 +6633,7 @@ class PreferencesWindow:
                     pass
                 os.utime(flag)
             except OSError as e:
-                print(f"[hotkey-test] Could not refresh the test flag: {e}", flush=True)
+                logger.warning(f"Hotkey test: could not refresh the test flag: {e}")
             return True  # keep the timer running
 
         _refresh_test_flag()
@@ -6697,13 +6669,9 @@ def main():
     # Before anything opens the shared D-Bus connection, as in the tray: one
     # opened without the GLib main loop can't receive signals, and Test
     # Hotkeys (which listens for HotkeyPressed) crashed on opening in 0.15.0
-    # testing. Its own DBusGMainLoop call comes too late for a shared
-    # connection that already exists.
-    try:
-        import dbus.mainloop.glib
-        dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
-    except ImportError:
-        pass
+    # testing. Setting the loop in Test Hotkeys itself came too late for a
+    # shared connection that already existed.
+    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
     import argparse
     parser = argparse.ArgumentParser(description="TuxTalk Preferences")
     parser.add_argument("--tab", choices=["general", "audio", "advanced", "words", "snippets", "commands",
