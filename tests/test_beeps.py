@@ -402,6 +402,39 @@ def test_a_sound_asked_for_as_the_sound_thread_ends_still_plays(sound, monkeypat
     assert heard_in_full(tones(system.speakers())[0], *beeps.START_BEEP)
 
 
+def test_a_sound_thread_that_couldnt_start_doesnt_hold_up_later_sounds(sound, monkeypatch):
+    """With no threads left, or as Python shuts down, starting the sound
+    thread fails. Counted as started all the same, it kept every sound after
+    it waiting for a thread that never ran."""
+    system = sound()
+
+    def ends_the_thread(*args):
+        raise SystemExit
+    real_play = beeps._play
+    monkeypatch.setattr(beeps, "_play", ends_the_thread)
+    beeps.play(np.zeros(100, np.float32), RATE)
+    deadline = time.monotonic() + 5
+    while beeps._worker is not None and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert beeps._worker is None
+    monkeypatch.setattr(beeps, "_play", real_play)
+
+    class CantStart:
+        def __init__(self, **settings):
+            pass
+
+        def start(self):
+            raise RuntimeError("can't start new thread")
+    monkeypatch.setattr(beeps, "threading", types.SimpleNamespace(Thread=CantStart,
+                                                                 Event=threading.Event))
+    with pytest.raises(RuntimeError):
+        beeps.beep(True, *beeps.START_BEEP)
+    monkeypatch.setattr(beeps, "threading", threading)
+    beeps.beep(True, *beeps.HANDS_FREE_BEEP)
+    assert beeps.wait_until_played(5), "the sounds after the failed start never played"
+    assert len(tones(system.speakers())) == 2
+
+
 def test_a_sound_called_off_before_it_starts_never_opens_a_stream(sound):
     system = sound()
     called_off, told = threading.Event(), []

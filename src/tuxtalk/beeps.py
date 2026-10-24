@@ -191,10 +191,13 @@ def _submit(job, what, over, finished=None):
 
 
 def _start_worker():
-    """Start the sound thread; called with _queue held."""
+    """Start the sound thread; called with _queue held. It is the sound
+    thread only once it has started: one that couldn't (no threads left, or
+    Python shutting down) would otherwise keep every later sound waiting."""
     global _worker
-    _worker = threading.Thread(target=_work, name="tt-sounds", daemon=True)
-    _worker.start()
+    worker = threading.Thread(target=_work, name="tt-sounds", daemon=True)
+    worker.start()
+    _worker = worker
 
 
 def _end(over, what, finished, error):
