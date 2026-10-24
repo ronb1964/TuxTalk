@@ -114,7 +114,7 @@ def wait_while_held(destination=None):
             time.sleep(0.02)
         _stuck.clear()
         if destination and window_geometry.changed(where, destination()):
-            logger.info("Typing stopped: the focus moved while it waited for the key")
+            logger.info("Typing stopped: the window changed while it waited for the key")
             raise GaveUp("moved")
 
     def before_press():

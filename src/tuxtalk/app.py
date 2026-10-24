@@ -2726,7 +2726,7 @@ def _delivery_stopped(stop, typed_some: bool) -> str:
     pasting it again would double that part. PasswordFieldNow: the lines
     before it are in the app, but in which form (pasted, typed after a
     failed paste) isn't tracked. GaveUp: a Right Ctrl or Right Alt dictation
-    key stayed down, or the focus moved while typing waited for it
+    key stayed down, or the window changed while typing waited for it
     (modifier_hotkeys); typing on any other way (wtype, the clipboard) would
     do what the wait was there to prevent. *typed_some*: earlier lines were
     typed before it gave up."""

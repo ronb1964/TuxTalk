@@ -17,7 +17,7 @@ TITLES = {
     "partial": "Only part of the dictation was typed",
     "password_field": PASSWORD_FIELD_TITLE,
     "key_held": "Typing stopped: a dictation key stayed down",
-    "moved": "Not typed: the focus moved",
+    "moved": "Not typed: the window changed while waiting",
 }
 NOTICES = {
     "failed": "It's saved in Recent Dictations in the TuxTalk menu: click it to copy, "
@@ -30,7 +30,10 @@ NOTICES = {
                 f"{HELD_LIMIT_S:g} seconds, and the text would have gone "
                 "in as shortcuts. It's saved in Recent Dictations in the TuxTalk menu: "
                 "click it to copy, then paste with Ctrl+V.",
-    "moved": "The focus moved to another window or a password field while TuxTalk waited "
-             "for Right Ctrl or Right Alt to come up. The text is saved in Recent Dictations "
-             "in the TuxTalk menu: click it to copy, then paste with Ctrl+V.",
+    # On KDE and GNOME a window that moved or changed size counts too: there
+    # nothing else tells two windows of one app apart (window_geometry.which_window).
+    "moved": "Another window or a password field took the focus, or the window moved or "
+             "changed size, while TuxTalk waited for Right Ctrl or Right Alt to come up. "
+             "The text is saved in Recent Dictations in the TuxTalk menu: click it to "
+             "copy, then paste with Ctrl+V.",
 }
