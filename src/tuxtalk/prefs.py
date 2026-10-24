@@ -17,9 +17,10 @@ import sys
 import time
 import atexit
 import dbus.mainloop.glib
-from dataclasses import asdict, fields
-from .config import (CONFIG_PATH, ConfigNotLoadedError, Settings, changed_keys, merge_changed_keys,
-                     load_custom_commands, save_custom_commands, write_text_atomic,
+from dataclasses import asdict
+from .config import (CONFIG_PATH, ConfigNotLoadedError, Settings, apply_toml, changed_keys,
+                     merge_changed_keys, load_custom_commands, save_custom_commands,
+                     write_text_atomic,
                      merge_custom_command_edits,
                      _toml_value, CLASSIC_CYAN_HEX, HOTKEY_CHOICES)
 
@@ -42,31 +43,16 @@ except ImportError:
         with open(path, "r") as f:
             return toml.load(f)
 
-_COERCE_BOOL_TRUE = ("true", "1", "yes", "on")
 
 def _coerce_config_types(config: dict) -> dict:
-    """Coerce known Settings keys to their declared field types in place: a
-    hand-edited config can hold '5' for 5, and Gtk.Adjustment(value='5')
-    crashes the window. A value that can't be ("oops" for a number) becomes
-    the setting's default; left as it was, Preferences didn't open."""
-    defaults = asdict(Settings())
-    for fld in fields(Settings):
-        if fld.name not in config:
-            continue
-        value = config[fld.name]
-        try:
-            if fld.type == "bool" and not isinstance(value, bool):
-                config[fld.name] = str(value).strip().lower() in _COERCE_BOOL_TRUE
-            elif fld.type == "int" and not isinstance(value, int):
-                config[fld.name] = int(float(value))     # "5.0" too
-            elif fld.type == "float" and not isinstance(value, float):
-                config[fld.name] = float(value)
-            elif fld.type == "str" and not isinstance(value, str):
-                config[fld.name] = str(value)
-        except (TypeError, ValueError, OverflowError):
-            print(f"Setting {fld.name} = {value!r} isn't a {fld.type}: showing its default")
-            config[fld.name] = defaults[fld.name]
-    return config
+    """*config* with each setting cast to its type as the service reads it
+    (config.apply_toml): a hand-edited config can hold '5' for 5, and
+    Gtk.Adjustment(value='5') crashes the window. A value that won't cast
+    ("oops" for a number) shows its default, which is what the service uses;
+    left as it was, Preferences didn't open. Unknown keys are kept."""
+    settings = Settings()
+    apply_toml(settings, config)
+    return {**config, **asdict(settings)}
 
 
 # The Input Volume slider's target when TuxTalk uses the system default mic.

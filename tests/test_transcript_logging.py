@@ -275,9 +275,9 @@ def test_a_quoted_false_turns_a_setting_off_not_on():
     """bool("false") is True: a hand-edited log_transcripts = "false" wrote
     every dictation to the log."""
     s = config.Settings()
-    assert config._apply_toml(s, {"log_transcripts": "false", "beeps": "TRUE"}) == []
+    assert config.apply_toml(s, {"log_transcripts": "false", "beeps": "TRUE"}) == []
     assert s.log_transcripts is False and s.beeps is True
-    assert config._apply_toml(s, {"beeps": "loud"}) == ["beeps"]
+    assert config.apply_toml(s, {"beeps": "loud"}) == ["beeps"]
 
 
 def test_prefs_has_clear_log_button(prefs_window, dialogs, monkeypatch):
@@ -408,3 +408,11 @@ def test_no_speech_engine_writes_the_words(monkeypatch, caplog, capsys, kind):
     raw = app._transcribe_audio(np.full(16000, 0.2, dtype=np.float32), language=None)
     assert raw and "quokka" in raw
     assert _leaks(caplog, capsys) == []
+
+
+def test_a_quoted_whole_number_is_read_as_preferences_shows_it():
+    """auto_timeout_minutes = "5.0" was the default to the service but 5 in
+    Preferences: both read settings with apply_toml now."""
+    s = config.Settings()
+    assert config.apply_toml(s, {"auto_timeout_minutes": "5.0", "key_delay": "3"}) == []
+    assert s.auto_timeout_minutes == 5 and s.key_delay == 3

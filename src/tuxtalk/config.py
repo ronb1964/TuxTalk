@@ -375,10 +375,15 @@ def _to_bool(value):
     raise ValueError("not true or false")
 
 
-_TYPE_CASTERS = {"str": str, "bool": _to_bool, "int": int, "float": float}
+def _to_int(value):
+    """A TOML integer, or a number a hand edit may have quoted: "5" or "5.0"."""
+    return int(float(value)) if isinstance(value, str) else int(value)
 
 
-def _apply_toml(s: Settings, data: dict) -> list[str]:
+_TYPE_CASTERS = {"str": str, "bool": _to_bool, "int": _to_int, "float": float}
+
+
+def apply_toml(s: Settings, data: dict) -> list[str]:
     """Copy the values in *data* onto *s*, casting each to its field's type.
 
     A value that will not cast (a hand-edited `key_delay = "fast"`) keeps
@@ -435,7 +440,7 @@ def _recover_damaged_config(error: Exception) -> Settings:
         try:
             data = _load_toml_file(backup)
             if data:
-                _apply_toml(recovered, data)
+                apply_toml(recovered, data)
                 restored_from_backup = True
                 logger.info(f"Recovered settings from {backup}")
                 print("    Your previous settings were restored from backup.", file=sys.stderr)
@@ -530,7 +535,7 @@ def load_config() -> Settings:
             if not data:
                 raise ValueError("config file is empty")
             # Apply TOML values using dataclass field types for casting
-            _apply_toml(s, data)
+            apply_toml(s, data)
         except OSError as e:
             # The file could not be READ — permissions, a bad mount, too many
             # open handles. That is not corruption, and it must never trigger
