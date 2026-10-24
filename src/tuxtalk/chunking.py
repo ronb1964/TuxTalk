@@ -289,3 +289,46 @@ def words_in_context(prev_raw: str, joint_raw: str):
         return None
     joint, j = seam
     return joint_raw[joint[j + 1].start():].strip()
+
+
+def word_count(text: str) -> int:
+    return len(re.findall(r"\w+", text))
+
+
+def _last_word(text: str) -> str:
+    words = re.findall(r"\w+", text.casefold())
+    return words[-1] if words else ""
+
+
+def hold_back_boundary(text: str, raw: str):
+    """Split a middle chunk's text into what to type now and the final mark to
+    hold back: (text, mark), or (text, None) when nothing is held back.
+
+    The engine heard the chunk alone, so its final period or question mark is
+    a guess; the next chunk decides it (app._resolve_boundary). The trailing
+    space waits too, so whatever comes next lands right after the last word."""
+    core = text.rstrip(" ")
+    if not core:
+        return text, None
+    m = re.search(r"[.?!…]+$", core)
+    mark = m.group() if m else ""
+    if mark:
+        core = core[:m.start()].rstrip()
+        # A mark the speaker dictated ("Punkt") is theirs, not the engine's
+        # guess: the word before it then isn't the raw text's last word.
+        if not core or _last_word(core) != _last_word(raw):
+            return text, None
+    elif not core[-1].isalnum():
+        return text, None   # ends in a line break, a quote, a bracket...
+    return core, mark
+
+
+def carry_question(text: str) -> str:
+    """End a phrase that finishes an open question with "?" instead of the
+    period. Only a phrase holding one sentence: with a second one in it, the
+    question has already ended somewhere the engine couldn't mark."""
+    m = re.fullmatch(r"([^.?!]*\w)\.(\s*)", text)
+    if not m:
+        return text
+    logger.info("The question goes on across the pause: it ends with ?")
+    return m.group(1) + "?" + m.group(2)

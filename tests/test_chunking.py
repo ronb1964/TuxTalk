@@ -476,21 +476,21 @@ def test_stop_after_a_pause_adds_the_auto_period(pipeline):
 def test_a_dictated_period_is_not_held_back():
     """A voice command ("Punkt" -> ".") made the period: it is the speaker's own,
     not the engine's guess, so it is typed as it is."""
-    from tuxtalk import app
+    from tuxtalk import chunking
     text = "Bei jedem Unterbruch ein. "
-    assert app._hold_back_boundary(text, "bei jedem Unterbruch ein Punkt.") == (text, None)
+    assert chunking.hold_back_boundary(text, "bei jedem Unterbruch ein Punkt.") == (text, None)
 
 
 def test_the_engines_period_is_held_back():
-    from tuxtalk import app
-    assert app._hold_back_boundary("Die Strasse ist nass. ", "die Straße ist nass.") == \
+    from tuxtalk import chunking
+    assert chunking.hold_back_boundary("Die Strasse ist nass. ", "die Straße ist nass.") == \
         ("Die Strasse ist nass", ".")
 
 
 def test_a_line_break_is_not_held_back():
-    from tuxtalk import app
+    from tuxtalk import chunking
     text = "Dear John,\n"
-    assert app._hold_back_boundary(text, "dear john new line") == (text, None)
+    assert chunking.hold_back_boundary(text, "dear john new line") == (text, None)
 
 
 def test_a_command_after_a_pause_sees_the_finished_chunk(pipeline, monkeypatch):

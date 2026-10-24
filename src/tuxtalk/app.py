@@ -30,6 +30,7 @@ from .config import load_config, Settings, load_custom_commands
 from . import config as config_module
 from . import beeps, mic_stream
 from .beeps import START_BEEP, HANDS_FREE_BEEP, CANCEL_BEEP, READY_BEEP, beep as _beep
+from .chunking import carry_question, hold_back_boundary, word_count
 from .logger import setup_logger, redact_text
 from .recording_indicator import RecordingIndicator
 from .undo import detect_undo_command, calculate_undo_length
@@ -314,13 +315,13 @@ class RecordingState:
     # or None, and how many chunks it has cut so far.
     chunker: object = None
     chunks_submitted: int = 0
-    # The last chunk typed held back its final mark (app._hold_back_boundary):
+    # The last chunk typed held back its final mark (chunking.hold_back_boundary):
     # {"mark", "audio", "raw", "typed"} until the next chunk decides it, else
     # None. Belongs to its recording only (cleared by _arm_chunker).
     pending_boundary: object = None
     # The "?" held back at the last pause was heard as mid-sentence: the
     # question goes on, so this phrase ends with it, not a period
-    # (_carry_question). Belongs to its recording only.
+    # (chunking.carry_question). Belongs to its recording only.
     question_open: bool = False
     # This recording's press held a pending send, so a tap that's too short
     # to be a dictation says "Not sent" rather than "Cancelled".
@@ -3016,34 +3017,6 @@ def _correct_across_pause(text: str):
     return fixed, prev
 
 
-def _last_word(text: str) -> str:
-    words = re.findall(r"\w+", text.casefold())
-    return words[-1] if words else ""
-
-
-def _hold_back_boundary(text: str, raw: str):
-    """Split a middle chunk's text into what to type now and the final mark to
-    hold back: (text, mark), or (text, None) when nothing is held back.
-
-    The engine heard the chunk alone, so its final period or question mark is
-    a guess; the next chunk decides it (_resolve_boundary). The trailing space
-    waits too, so whatever comes next lands right after the last word."""
-    core = text.rstrip(" ")
-    if not core:
-        return text, None
-    m = re.search(r"[.?!…]+$", core)
-    mark = m.group() if m else ""
-    if mark:
-        core = core[:m.start()].rstrip()
-        # A mark the speaker dictated ("Punkt") is theirs, not the engine's
-        # guess: the word before it then isn't the raw text's last word.
-        if not core or _last_word(core) != _last_word(raw):
-            return text, None
-    elif not core[-1].isalnum():
-        return text, None   # ends in a line break, a quote, a bracket...
-    return core, mark
-
-
 def _type_boundary(pending: dict, tail: str, injection_mode: str) -> None:
     """Type what goes between a held-back chunk and what follows it, keeping
     an automatic send aimed where the chunk went (unless this saw a move)."""
@@ -3068,10 +3041,6 @@ ENTER_IN_CONTEXT_MAX_WORDS = 3
 # that pass heard fewer words: alone, the engine can make a sentence up
 # around a word or two (chunking.words_in_context).
 SHORT_CHUNK_S = 2.0
-
-
-def _word_count(text: str) -> int:
-    return len(re.findall(r"\w+", text))
 
 
 def _resolve_boundary(audio_f32, language, injection_mode, raw="", auto_period=True) -> str:
@@ -3116,7 +3085,7 @@ def _resolve_boundary(audio_f32, language, injection_mode, raw="", auto_period=T
         from .chunking import words_in_context
         heard = words_in_context(pending["raw"], joint) or ""
         # Whether to press a key stays the rule above's call.
-        if (0 < _word_count(heard) < _word_count(raw)
+        if (0 < word_count(heard) < word_count(raw)
                 and split_key_command(heard)[1] == split_key_command(raw)[1]):
             logger.info(f"Short phrase: {_loggable(raw)} alone, {_loggable(heard)} "
                         "in context; typing what the context heard")
@@ -3129,17 +3098,6 @@ def _resolve_boundary(audio_f32, language, injection_mode, raw="", auto_period=T
     # so the question ends where this phrase does.
     state.question_open = pending["mark"] == "?" and mark not in _SENTENCE_ENDS
     return raw
-
-
-def _carry_question(text: str) -> str:
-    """End a phrase that finishes an open question with "?" instead of the
-    period. Only a phrase holding one sentence: with a second one in it, the
-    question has already ended somewhere the engine couldn't mark."""
-    m = re.fullmatch(r"([^.?!]*\w)\.(\s*)", text)
-    if not m:
-        return text
-    logger.info("The question goes on across the pause: it ends with ?")
-    return m.group(1) + "?" + m.group(2)
 
 
 def _flush_boundary(auto_period: bool, auto_space: bool, injection_mode: str) -> None:
@@ -3386,10 +3344,10 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             text, taken_back = _correct_across_pause(text)
         if state.question_open and chunk_role is not None:
             state.question_open = False
-            text = _carry_question(text)
+            text = carry_question(text)
         held_mark = None
         if chunk_role == "middle" and _chunk_context_marks and not said:
-            text, held_mark = _hold_back_boundary(text, raw)
+            text, held_mark = hold_back_boundary(text, raw)
         space_left_off = ""
         if press:
             # No auto-space before Enter or Tab: it would end up in the sent
