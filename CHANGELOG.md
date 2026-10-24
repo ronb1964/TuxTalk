@@ -52,7 +52,10 @@ before 0.15.0, so older entries use that name.
   somewhere else while the words go in, or right after, the Enter isn't
   pressed and you're told why. "Press tab" too. Saying only "press enter"
   still presses it wherever you are, so you can still log in after typing a
-  password yourself.
+  password yourself. With Type at pause, once phrases of the same recording
+  went into one window, "press enter" said on its own in another window is
+  pressed only in a password field: anywhere else it would send whatever is
+  in that box.
 - An automatic Enter never goes into a TuxTalk window now, and neither does
   "press enter" said after your words wherever the desktop says which window
   has the focus. If Preferences or the Parakeet offer came up during the
@@ -68,8 +71,10 @@ before 0.15.0, so older entries use that name.
   still presses it there, because you asked for it and you're looking at the
   window.
 - When a send doesn't go, you get a notification as well as the note over
-  the window, so a screen reader tells you. And if a phrase in Type at pause
-  only got partly typed, the message isn't sent at the end.
+  the window, so a screen reader tells you. Holding a send with a tap of
+  your hotkey says so in a notification too. And if a phrase in Type at
+  pause only got partly typed, that message isn't sent, not at the end and
+  not with "press enter", even when the phrases after it go in whole.
 - In Claude Desktop a tab said in the middle of a dictation is four spaces
   with Keystroke Typing too. It pressed the real Tab, which jumps to the Send
   button. Saying only "press tab" in a password box there presses the real
