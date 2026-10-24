@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tuxtalk import beeps
+from tuxtalk import beeps, silence
 from tuxtalk.silence import SilenceDetector
 
 SR = 16000
@@ -159,22 +159,40 @@ def test_a_double_tap_at_a_relaxed_pace_still_switches_to_hands_free(monkeypatch
     app.state.is_recording = False
 
 
+def _goes_quiet(app):
+    """After the second tap the room goes quiet: (seconds of quiet until the
+    recording stopped by itself, or None if it didn't; whether it stopped as
+    one in which nothing was said, which drops it instead of typing it)."""
+    quiet = noise(12.0)
+    for i in range(0, len(quiet), BLOCK):
+        app._sd_callback(quiet[i:i + BLOCK].reshape(-1, 1), BLOCK, None, None)
+        if app._cmd_stop_recording.is_set():
+            return (i + BLOCK) / SR, app.state.silence.nothing_said
+    return None, False
+
+
+def _stopped_to_type_it(app):
+    """Going quiet stops the recording the usual way, after the auto-stop
+    setting's second of quiet, to type what was said."""
+    stopped_after, nothing_said = _goes_quiet(app)
+    app._cmd_stop_recording.clear()
+    app.state.is_recording = False
+    return stopped_after == pytest.approx(1.0, abs=0.05) and not nothing_said
+
+
+def _say(app, audio):
+    for i in range(0, len(audio), BLOCK):
+        app._sd_callback(audio[i:i + BLOCK].reshape(-1, 1), BLOCK, None, None)
+
+
 def test_a_word_said_before_the_second_tap_is_kept(monkeypatch):
     """Tap, say a quick word, tap again, then nothing more: the word is
     dictation, so going quiet stops the recording to type it, not to drop
     it as "nothing said"."""
     app = _start(monkeypatch)
-    word = speech(0.4)
-    for i in range(0, len(word), BLOCK):
-        app._sd_callback(word[i:i + BLOCK].reshape(-1, 1), BLOCK, None, None)
+    _say(app, speech(0.4))
     assert app._toggle_pressed_while_recording(beeps_on=False) is True
-    quiet = noise(12.0)
-    for i in range(0, len(quiet), BLOCK):
-        app._sd_callback(quiet[i:i + BLOCK].reshape(-1, 1), BLOCK, None, None)
-    assert app._cmd_stop_recording.is_set()
-    assert not app.state.silence.nothing_said
-    app._cmd_stop_recording.clear()
-    app.state.is_recording = False
+    assert _stopped_to_type_it(app)
 
 
 # --- The start beep, picked up by the microphone -------------------------------
@@ -182,60 +200,67 @@ def test_a_word_said_before_the_second_tap_is_kept(monkeypatch):
 # holds the start beep. Where in the recording is never known for sure: an
 # output or microphone can be slower than it reports (a Bluetooth speaker,
 # the sound server's own buffers), so the beep is told apart by its pitch.
+# How these limits were measured, and where the recorded words come from:
+# tests/data/README.md.
 
-def _real_word(name, gain=1.0):
-    """A quick word said by a person, at *gain*: "ask" or "not", cut from
-    whisper.cpp's sample of John F. Kennedy's inaugural address (1961,
-    public domain)."""
+def _real_word(name, gain=1.0, rate=SR):
+    """A quick word said by a person, at *gain*, at *rate*: "ask" or "not",
+    cut from whisper.cpp's sample of John F. Kennedy's inaugural address."""
     with wave.open(str(Path(__file__).with_name("data") / f"jfk-{name}.wav")) as w:
         assert w.getframerate() == SR
-        return np.frombuffer(w.readframes(w.getnframes()), np.int16) * gain
+        word = np.frombuffer(w.readframes(w.getnframes()), np.int16) * gain
+    return np.interp(np.arange(int(len(word) * rate / SR)) * SR / rate, np.arange(len(word)), word)
 
 
-def _picked_up_beep(level, distorted):
+# How loud the beep reaches the microphone, as (times the level it plays at,
+# what the speaker and microphone do to it). Played, the beep peaks at 0.2 of
+# full scale, so 5.5 times is clipped at 1.1 times full scale and 8 at 1.6.
+BEEP_HEARD = {"faint": (0.1, "clean"), "as played": (1.0, "clean"),
+              "near full scale": (4.0, "clean"), "distorted": (1.0, "distorted"),
+              "distorted near full scale": (4.0, "distorted"),
+              "clipped at 1.1x full scale": (5.5, "clean"),
+              "clipped at 1.6x full scale": (8.0, "clean"),
+              "saturated at 1.6x full scale": (8.0, "saturated")}
+
+
+def _picked_up_beep(level, shape, rate=SR):
     """The start beep as the microphone records it: the tone TuxTalk plays,
-    *level* times as loud; *distorted* by a small speaker, with 2nd and 3rd
-    harmonics 20 dB down, and squashed as it nears full scale."""
+    *level* times as loud; "distorted" by a small speaker, with 2nd and 3rd
+    harmonics 20 dB down, and squashed as it nears full scale; "saturated" by
+    an overloaded microphone, squashed smoothly; "clean" is clipped where it
+    passes full scale, as the recording is (_recording)."""
     freq, length = beeps.START_BEEP
-    heard = beeps.tone(freq, length, SR).astype(np.float64)
-    if distorted:
-        heard += 0.1 * (beeps.tone(2 * freq, length, SR) + beeps.tone(3 * freq, length, SR))
+    heard = beeps.tone(freq, length, rate).astype(np.float64)
+    if shape == "distorted":
+        heard += 0.1 * (beeps.tone(2 * freq, length, rate) + beeps.tone(3 * freq, length, rate))
     heard *= level
-    return (np.tanh(heard) if distorted else heard) * 32767
+    return (heard if shape == "clean" else np.tanh(heard)) * 32767
 
 
-def _recording(sounds, room, seconds=1.2):
+def _recording(sounds, room, seconds=1.2, rate=SR):
     """What the microphone recorded before the second tap: the room (int16
     RMS *room*) and each (sound, where it starts in seconds) of *sounds*,
-    cut off where the recording starts and ends."""
-    heard = np.random.default_rng(1).normal(0, room, int(seconds * SR))
+    cut off where the recording starts and ends, and clipped at full scale."""
+    heard = np.random.default_rng(1).normal(0, room, int(seconds * rate))
     for sound, at in sounds:
-        start = int(at * SR)
+        start = int(at * rate)
         first, last = max(0, start), min(len(heard), start + len(sound))
         heard[first:last] += sound[first - start:last - start]
     return np.clip(heard, -32768, 32767).astype(np.int16)
 
 
-def _nothing_said_after(app):
-    """The recording goes quiet: whether it stops as one in which nothing
-    was said."""
-    quiet = noise(12.0)
-    for i in range(0, len(quiet), BLOCK):
-        app._sd_callback(quiet[i:i + BLOCK].reshape(-1, 1), BLOCK, None, None)
-    app._cmd_stop_recording.clear()
-    app.state.is_recording = False
-    return app.state.silence.nothing_said
-
-
-def _nothing_said(monkeypatch, heard):
+def _nothing_said(monkeypatch, heard, beeps_on=True):
     """The microphone records *heard*, the second tap of a double-tap comes,
     and then the room goes quiet: whether the recording stops as one with
-    nothing said (dropped, rather than typed)."""
-    app = _start(monkeypatch)
-    for i in range(0, len(heard), BLOCK):
-        app._sd_callback(heard[i:i + BLOCK].reshape(-1, 1), BLOCK, None, None)
+    nothing said (dropped, rather than typed). It must stop by itself."""
+    app = _start(monkeypatch, beeps_on=beeps_on)
+    _say(app, heard)
     assert app._toggle_pressed_while_recording(beeps_on=False) is True
-    return _nothing_said_after(app)
+    stopped_after, nothing_said = _goes_quiet(app)
+    app._cmd_stop_recording.clear()
+    app.state.is_recording = False
+    assert stopped_after is not None, "the recording never stopped by itself"
+    return nothing_said
 
 
 # Where the beep reaches the recording: at once; 0.4 and 0.6 s late; already
@@ -245,24 +270,37 @@ BEEP_AT = {"at once": 0.0, "0.4 s late": 0.4, "0.6 s late": 0.6,
 
 
 @pytest.mark.parametrize("room", [6.0, 300.0], ids=["silent room", "noisy room"])
-@pytest.mark.parametrize("distorted", [False, True], ids=["clean", "distorted"])
-@pytest.mark.parametrize("level", [4.0, 1.0, 0.1], ids=["near full scale", "as played", "faint"])
+@pytest.mark.parametrize("level,shape", BEEP_HEARD.values(), ids=BEEP_HEARD.keys())
 @pytest.mark.parametrize("beep_at", BEEP_AT.values(), ids=BEEP_AT.keys())
 def test_the_start_beep_picked_up_by_the_mic_is_not_a_word(
-        monkeypatch, beep_at, level, distorted, room):
+        monkeypatch, beep_at, level, shape, room):
     """A double-tap with nothing said but the start beep is nothing said."""
-    heard = _recording([(_picked_up_beep(level, distorted), beep_at)], room)
+    heard = _recording([(_picked_up_beep(level, shape), beep_at)], room)
     assert _nothing_said(monkeypatch, heard)
 
 
-@pytest.mark.parametrize("level", [4.0, 1.0], ids=["near full scale", "as played"])
-def test_the_start_beep_is_not_a_word_wherever_it_falls_in_a_block(monkeypatch, level):
+@pytest.mark.parametrize("name", ["as played", "near full scale", "clipped at 1.6x full scale"])
+def test_the_start_beep_is_not_a_word_wherever_it_falls_in_a_block(monkeypatch, name):
     """The microphone's sound comes in 20 ms blocks, and the beep starts and
     ends anywhere in one. A beep that clicked as it started and stopped
     counted as a word at some of them."""
     for ms in range(20):
-        heard = _recording([(_picked_up_beep(level, distorted=False), 0.4 + ms / 1000)], 6.0)
+        heard = _recording([(_picked_up_beep(*BEEP_HEARD[name]), 0.4 + ms / 1000)], 6.0)
         assert _nothing_said(monkeypatch, heard), f"the beep {ms} ms into a block"
+
+
+@pytest.mark.parametrize("rate", [16000, 44100, 48000])
+@pytest.mark.parametrize("room", [6.0, 300.0], ids=["silent room", "noisy room"])
+@pytest.mark.parametrize("name", BEEP_HEARD)
+def test_of_a_start_beep_one_block_at_most_counts(name, room, rate):
+    """Wherever it falls in a 20 ms block, and at the rate a microphone that
+    only takes its own records at (often 48 kHz, where the beep has more
+    harmonics): a quarter of the shortest word, so a key click with it is
+    still not one."""
+    for ms in range(20):
+        heard = _recording([(_picked_up_beep(*BEEP_HEARD[name], rate=rate), 0.4 + ms / 1000)],
+                           room, rate=rate) / 32768.0
+        assert silence._loud_seconds(heard, rate, beeps.START_BEEP[0]) <= 0.02, f"{ms} ms"
 
 
 # (where the word starts, where the beep starts), in seconds
@@ -277,9 +315,60 @@ def test_a_quick_word_said_with_the_start_beep_is_kept(monkeypatch, word_at, bee
                                                        gain):
     """A real word said before the second tap counts, wherever the beep the
     mic picked up falls: going quiet after it types it."""
-    heard = _recording([(_picked_up_beep(1.0, distorted=True), beep_at),
+    heard = _recording([(_picked_up_beep(1.0, "distorted"), beep_at),
                         (_real_word(word, gain), word_at)], room=60.0)
-    assert not _nothing_said(monkeypatch, heard)
+    app = _start(monkeypatch, beeps_on=True)
+    _say(app, heard)
+    assert app._toggle_pressed_while_recording(beeps_on=False) is True
+    assert _stopped_to_type_it(app)
+
+
+@pytest.mark.parametrize("beeps_on,beep_heard", [(True, False), (True, True), (False, False)],
+                         ids=["beep not picked up", "beep picked up", "beeps off"])
+def test_a_word_said_very_softly_counts_with_the_start_beep_or_without(
+        monkeypatch, beeps_on, beep_heard):
+    """A soft "not" on a quiet microphone in a silent room is only just loud
+    enough: a filter that took a third of every pitch away made it nothing."""
+    sounds = [(_real_word("not", 0.01), 0.3)]
+    if beep_heard:
+        sounds.append((_picked_up_beep(1.0, "clean"), 0.0))
+    assert not _nothing_said(monkeypatch, _recording(sounds, room=6.0), beeps_on=beeps_on)
+
+
+@pytest.mark.parametrize("rate", [16000, 44100, 48000])
+@pytest.mark.parametrize("gain", [1.0, 0.1, 0.01])
+@pytest.mark.parametrize("word", ["ask", "not"])
+def test_the_filter_for_the_start_beep_takes_nothing_from_a_word(word, gain, rate):
+    """Every block of a quick word that is loud enough to count still counts
+    with the start beep's pitch filtered out, softly said or not."""
+    heard = _recording([(_real_word(word, gain, rate), 0.3)], room=6.0, rate=rate) / 32768.0
+    loud = silence._loud_seconds(heard, rate)
+    assert loud >= 0.08
+    assert silence._loud_seconds(heard, rate, beeps.START_BEEP[0]) == loud
+
+
+def test_with_beeps_off_nothing_is_taken_for_the_start_beep(monkeypatch):
+    """No start beep played, so a sound at its pitch is a sound like any
+    other: someone whistling, or another app's alert."""
+    heard = _recording([(_picked_up_beep(1.0, "clean"), 0.4)], room=6.0)
+    assert not _nothing_said(monkeypatch, heard, beeps_on=False)
+
+
+def test_a_word_kept_with_the_start_beep_is_transcribed(monkeypatch):
+    """Kept, the word goes on to be transcribed, all of it."""
+    word = _recording([(_real_word("ask"), 0.3), (_picked_up_beep(1.0, "distorted"), 0.0)],
+                      room=60.0)
+    app = _start(monkeypatch, beeps_on=True)
+    _say(app, word)
+    assert app._toggle_pressed_while_recording(beeps_on=False) is True
+    stopped_after, nothing_said = _goes_quiet(app)
+    assert stopped_after is not None and not nothing_said
+    monkeypatch.setattr(app, "_stop_stream_safely", lambda: None)
+    app.state.press_t0 = time.time() - 5
+    frames, rate = app._finish_capture(False, False)
+    assert rate == SR
+    assert b"".join(frames).startswith(word.tobytes())
+    app._cmd_stop_recording.clear()
 
 
 def test_a_quick_second_tap_counts_when_the_recording_was_slow_to_start(monkeypatch):

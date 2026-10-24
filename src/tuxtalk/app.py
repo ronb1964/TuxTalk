@@ -2734,8 +2734,8 @@ def _toggle_pressed_while_recording(beeps_on: bool) -> bool:
     from .silence import SilenceDetector, has_a_word
     rate = getattr(state, "recording_samplerate", SAMPLE_RATE)
     detector = SilenceDetector(_auto_stop_seconds, rate)
-    heard = _frames_f32(list(state.frames))
-    if has_a_word(beeps.without_beep(heard, rate, START_BEEP[0]), rate):
+    beep_hz = START_BEEP[0] if state.start_beep is not None else None
+    if has_a_word(_frames_f32(list(state.frames)), rate, ignoring_hz=beep_hz):
         detector.heard_speech()
     state.silence = detector
     logger.info("Double-tap: this recording will stop by itself when you go quiet")

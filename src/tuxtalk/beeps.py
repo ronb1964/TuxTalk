@@ -1,6 +1,5 @@
 """The short tones that say a recording started, went hands-free, finished
-or failed, the player every TuxTalk sound goes through, and the filter that
-takes the start beep back out of a recording.
+or failed, and the player every TuxTalk sound goes through.
 
 A sound has to be heard to the end. sounddevice.play() ended its stream once
 the last samples were handed over, and on PortAudio's ALSA path that threw
@@ -24,13 +23,6 @@ apart. Real PulseAudio reported no time, so only the first applies there.
 Sounds play one after another on one thread of their own. A sound server
 that stops answering holds up only that thread; whoever waits for a sound
 (wait_until_played) waits a bounded time.
-
-A microphone near the speakers records the start beep, and before the
-second tap of a double-tap TuxTalk asks whether a word was said. When the
-beep reached the recording can't be known for sure (an output or a
-microphone can be slower than it reports), so without_beep tells the beep
-apart by its pitch. Each tone fades in and out, so its sound stays at its
-pitch.
 """
 import atexit
 import collections
@@ -53,17 +45,9 @@ READY_BEEP = (1000, 0.09)
 SAMPLE_RATE = 44100
 VOLUME = 0.2
 # A tone that starts or stops at once clicks, and a click is sound at every
-# pitch: picked up by a microphone near the speakers, no filter at the
-# beep's pitch takes it out, and it counts as a word (without_beep).
+# pitch: picked up by a microphone near the speakers, it isn't told apart from
+# a word by the beep's pitch (silence.has_a_word).
 FADE_S = 0.005
-# without_beep's filter. Of a beep picked up anywhere from faint to near
-# full scale, distorted or not, in a silent or a noisy room, at most 20 ms
-# is left (tests/test_silence.py): a quarter of the shortest word
-# silence.has_a_word counts. Of 86 recordings of quick words ("yes", "no",
-# "hi", "it"), by people and computer voices, each lost at most 1.6 dB of
-# its loudness, and all still count as words.
-NOTCH_STOP_HZ = 200
-NOTCH_EASE_HZ = 200
 # The longest wait_until_played waits. Measured in a VM on PipeWire, the
 # start beep took 0.39 s at its usual 0.035 s of latency and 0.53 s at 0.17 s.
 WAIT_LIMIT_S = 1.0
@@ -127,33 +111,13 @@ def _search(samplerate):
 def tone(freq, duration, rate=SAMPLE_RATE):
     """A sine tone at *rate* samples a second that sounds *duration* seconds
     long: it fades in and out over FADE_S, and is *duration* long at half
-    its loudness."""
+    its amplitude."""
     fade = int(rate * FADE_S)
     envelope = np.ones(int(rate * (duration + FADE_S)))
     envelope[:fade] = 0.5 - 0.5 * np.cos(np.pi * np.arange(fade) / fade)
     envelope[-fade:] = envelope[fade - 1::-1]
     t = np.arange(len(envelope)) / rate
     return (np.sin(2 * np.pi * freq * t) * envelope * VOLUME).astype(np.float32)
-
-
-def without_beep(audio, rate, freq):
-    """*audio*, recorded at *rate*, with a beep of *freq* Hz filtered out:
-    what a microphone near the speakers picked up of it, wherever it falls.
-
-    Around the beep's pitch and each of its harmonics, which a speaker's
-    distortion or a microphone overloaded by the beep adds, NOTCH_STOP_HZ
-    either side is taken out and the next NOTCH_EASE_HZ fades back in. A
-    voice spreads over every pitch, so it keeps nearly all its loudness. The
-    recording is padded with silence, so what the filter smears past its end
-    doesn't wrap round to its start."""
-    size = len(audio) + rate // 20
-    spectrum = np.fft.rfft(audio, size)
-    pitches = np.fft.rfftfreq(size, 1 / rate)
-    gain = np.ones(len(pitches))
-    for harmonic in range(1, int(rate / 2 // freq) + 1):
-        away = np.clip((np.abs(pitches - harmonic * freq) - NOTCH_STOP_HZ) / NOTCH_EASE_HZ, 0, 1)
-        gain = np.minimum(gain, 0.5 - 0.5 * np.cos(np.pi * away))
-    return np.fft.irfft(spectrum * gain, size)[:len(audio)].astype(np.float32)
 
 
 def beep(enabled: bool, freq, duration):

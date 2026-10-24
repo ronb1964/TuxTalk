@@ -200,23 +200,79 @@ _TAP_VOICE_RMS = 500.0          # about -36 dBFS: normal speaking level, speech 
 _TAP_MIN_SPEECH_S = 0.08    # a key click is ~10 ms, a desk thump ~50; a word is longer
 
 
-def _loud_seconds(audio_f32, sample_rate) -> float:
-    """Seconds of *audio_f32* clearly louder than its own background.
+def _blocks_rms(audio_f32, sample_rate):
+    """The loudness (int16 RMS) of each whole _TAP_BLOCK_S block of *audio_f32*."""
+    block = max(1, int(_TAP_BLOCK_S * sample_rate))
+    count = len(audio_f32) // block
+    blocks = np.asarray(audio_f32[:count * block], dtype=np.float64).reshape(count, block) * 32768.0
+    return np.sqrt(np.mean(blocks * blocks, axis=1))
+
+
+def _loud_seconds(audio_f32, sample_rate, ignoring_hz=None) -> float:
+    """Seconds of *audio_f32* clearly louder than its own background, not
+    counting what is mostly a tone of *ignoring_hz* Hz (the start beep).
 
     Loudness is judged against the clip's own background (its quietest
     blocks), so a quiet microphone saying a quick word still counts, and
     normal speaking volume counts on its own, so a word that fills the whole
     clip does too."""
-    block = max(1, int(_TAP_BLOCK_S * sample_rate))
-    count = len(audio_f32) // block
-    if count < 3:
+    rms = _blocks_rms(audio_f32, sample_rate)
+    if len(rms) < 3:
         return 0.0                  # under 60 ms: nothing to say in that
-    blocks = np.asarray(audio_f32[:count * block], dtype=np.float64).reshape(count, block) * 32768.0
-    rms = np.sqrt(np.mean(blocks * blocks, axis=1))
     background = np.percentile(rms, 20)
     loud = ((rms > max(background * _TAP_SPEECH_OVER_NOISE, _TAP_MIN_SPEECH_RMS))
             | (rms > _TAP_VOICE_RMS))
+    if ignoring_hz is not None and loud.any():
+        left = _blocks_rms(_without_tone(audio_f32, sample_rate, ignoring_hz), sample_rate)
+        loud &= _share_left(rms, left, background) >= _TONE_SHARE_LEFT
     return loud.sum() * _TAP_BLOCK_S
+
+
+# --- The start beep, picked up by the microphone ------------------------------------
+# A microphone near the speakers records the start beep, and before the second
+# tap of a double-tap TuxTalk asks whether a word was said. When the beep
+# reached the recording can't be known (an output or a microphone can be
+# slower than it reports), so it is told apart by its pitch: a block is the
+# beep where filtering out the beep's pitch and harmonics takes away most of
+# what makes the block louder than the room. Whether a block is loud is still
+# judged on what was recorded, so the filter can't make a soft word softer.
+#
+# The beep is one exact pitch that fades in and out over 5 ms (beeps.FADE_S):
+# 99% of its energy lies within 40 Hz of it, and all but 0.2% within 100 Hz.
+# The harmonics a small speaker or an overloaded microphone adds sit on
+# multiples of it; what clipping aliases off them was under 0.1% at 16, 44.1
+# and 48 kHz. A narrower notch rings on as the beep starts and stops. At
+# 80 Hz either side, eased over another 80 Hz, one 20 ms block of a beep
+# still counted at most, a quarter of a word. Measured as tests/data/README.md
+# describes, beeps from faint to clipped at 1.6 times full scale left at most
+# 0.31 of their loudness over the room in every other block, and no block of
+# 121 recordings of quick phrases and sentences kept less than 0.47.
+_TONE_STOP_HZ = 80          # either side of the pitch and each harmonic: taken out
+_TONE_EASE_HZ = 80          # beyond that: faded back in
+_TONE_SHARE_LEFT = 0.4      # of a block's loudness over the room, left: not the beep
+
+
+def _without_tone(audio_f32, sample_rate, hz):
+    """*audio_f32* with a tone of *hz* Hz and its harmonics filtered out. It
+    is padded with silence, at least 50 ms, so what the filter smears past
+    its end doesn't wrap round to its start."""
+    size = 1 << (len(audio_f32) + sample_rate // 20 - 1).bit_length()
+    pitches = np.fft.rfftfreq(size, 1 / sample_rate)
+    from_harmonic = np.abs((pitches + hz / 2) % hz - hz / 2)
+    gain = 0.5 - 0.5 * np.cos(np.pi * np.clip((from_harmonic - _TONE_STOP_HZ) / _TONE_EASE_HZ,
+                                              0, 1))
+    gain[pitches < hz / 2] = 1.0    # what lies nearest 0 Hz is no harmonic
+    return np.fft.irfft(np.fft.rfft(audio_f32, size) * gain, size)[:len(audio_f32)]
+
+
+def _share_left(raw, left, background):
+    """For each block, of its loudness (*raw*) over the room, the share still
+    there in *left*, as amplitude. The room is the clip's *background*, but
+    one as loud as speaking is the speaker, so the share is then of the
+    whole block."""
+    room = background if background < _TAP_VOICE_RMS else 0.0
+    over_room = np.maximum(raw * raw - room * room, 1.0)
+    return np.sqrt(np.clip(left * left - room * room, 0.0, None) / over_room)
 
 
 # A working microphone is never this quiet: even in a silent room its own
@@ -243,10 +299,12 @@ def is_speechless_tap(audio_f32, sample_rate) -> bool:
     return not has_a_word(audio_f32, sample_rate)
 
 
-def has_a_word(audio_f32, sample_rate) -> bool:
+def has_a_word(audio_f32, sample_rate, ignoring_hz=None) -> bool:
     """Whether *audio_f32* holds at least a word's worth of speech; a key
-    click or a desk thump is too short to count."""
-    return _loud_seconds(audio_f32, sample_rate) >= _TAP_MIN_SPEECH_S
+    click or a desk thump is too short to count. With *ignoring_hz*, the
+    pitch of a beep that played into the recording, the beep isn't speech
+    either; without it nothing is filtered."""
+    return _loud_seconds(audio_f32, sample_rate, ignoring_hz) >= _TAP_MIN_SPEECH_S
 
 
 def has_no_speech(audio_f32, sample_rate) -> bool:

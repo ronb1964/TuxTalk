@@ -55,11 +55,12 @@ before 0.15.0, so older entries use that name.
 - If your microphone picks up the start beep and it got there late, on a
   slow sound output or behind another sound, a double-tap with nothing said
   could take the beep for a word, and hands-free transcribed it instead of
-  dropping the recording. TuxTalk now filters the beep's pitch out before it
-  listens for a word, so it doesn't matter when the beep reaches the
-  microphone, and a word you say before the second tap still counts. The
-  beeps fade in and out over a few thousandths of a second now, so they
-  don't click.
+  dropping the recording. TuxTalk now tells the beep from a word by its
+  pitch, wherever in the recording it lands, even when it's loud enough to
+  distort the microphone. A word you say before the second tap still counts,
+  said softly too. With the beeps turned off nothing is filtered. The beeps
+  fade in and out over a few thousandths of a second now, so they don't
+  click.
 - On a desktop where TuxTalk can't make its own keyboard and types with
   wtype instead, your dictation was on wtype's command line for a moment,
   where anyone else logged in to the computer could read it. It goes to
