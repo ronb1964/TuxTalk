@@ -47,6 +47,12 @@ before 0.15.0, so older entries use that name.
   the sound system, so the slower the sound output, the more of the beep was
   lost. Now every beep plays to the end. It takes about 20 ms longer than
   before, however slow the output is.
+- On a desktop where TuxTalk can't make its own keyboard and types with
+  wtype instead, your dictation was on wtype's command line for a moment,
+  where anyone else logged in to the computer could read it. It goes to
+  wtype privately now. The key that keeps other programs off the AI
+  self-corrections engine was on its command line too, and is now hidden
+  the same way.
 
 ## [0.18.2] - 2026-10-23
 

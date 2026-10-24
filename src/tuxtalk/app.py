@@ -1783,12 +1783,12 @@ def _type_text_raw(text: str) -> bool:
                         f"({delay} ms a key event)")
             return True
     if _which("wtype"):
-        # Report wtype's real exit code so the undo buffer only tracks text
-        # that was actually typed, and bound the wait so a stalled compositor
-        # can't freeze dictation.
-        proc = subprocess.Popen(["wtype", "--", text])
+        # The real exit code, so the undo buffer tracks only typed text; a
+        # bounded wait, so a stalled compositor can't freeze dictation; the
+        # text on stdin ("-"), as every user can read a command line.
+        proc = subprocess.Popen(["wtype", "-"], stdin=subprocess.PIPE)
         try:
-            proc.communicate(timeout=WTYPE_TIMEOUT_S)
+            proc.communicate(text.encode("utf-8"), timeout=WTYPE_TIMEOUT_S)
         except subprocess.TimeoutExpired:
             # Kill and reap, so it cannot come back to life and type into
             # whatever the user has focused by then.

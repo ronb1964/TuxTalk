@@ -129,7 +129,7 @@ class TestWtypeIsBounded:
 
         class HungProc:
             returncode = None
-            def communicate(self, timeout=None):
+            def communicate(self, input=None, timeout=None):
                 if not killed:
                     raise subprocess.TimeoutExpired(cmd="wtype", timeout=timeout)
                 return (b"", b"")

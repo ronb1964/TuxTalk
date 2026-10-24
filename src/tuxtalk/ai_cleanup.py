@@ -518,7 +518,9 @@ class CorrectionEngine:
             with socket.socket() as s:
                 s.bind(("127.0.0.1", 0))
                 self._port = s.getsockname()[1]
-            # A random key so other programs on the machine cannot use it.
+            # A random key so other programs on the machine cannot use it. It
+            # goes in the environment, which only this user can read: every
+            # user can read a command line (/proc/<pid>/cmdline).
             self._key = secrets.token_hex(16)
             binary = _server_binary()
             self._proc = self._launcher.submit(
@@ -526,10 +528,10 @@ class CorrectionEngine:
                 # 4096 tokens: room for a voice edit (MAX_EDIT_CHARS of text and
                 # the rewrite); one slot, so it is all one request's.
                 [binary, "-m", _model_path(), "--host", "127.0.0.1", "--port", str(self._port),
-                 "--api-key", self._key, "-c", "4096", "-np", "1", "--jinja", "-ngl", "99",
-                 "--no-webui"],
+                 "-c", "4096", "-np", "1", "--jinja", "-ngl", "99", "--no-webui"],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                env={**os.environ, "LD_LIBRARY_PATH": os.path.dirname(binary)},
+                env={**os.environ, "LD_LIBRARY_PATH": os.path.dirname(binary),
+                     "LLAMA_API_KEY": self._key},
                 preexec_fn=_set_parent_death_signal,
             ).result()
             logger.info(f"AI cleanup engine starting (pid {self._proc.pid})")

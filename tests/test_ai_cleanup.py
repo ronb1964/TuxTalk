@@ -252,6 +252,18 @@ def test_the_engine_starts_with_the_parent_death_signal(dead_engine, monkeypatch
     assert options[0]["preexec_fn"] is ai._set_parent_death_signal
 
 
+def test_the_engine_key_is_not_on_its_command_line(dead_engine, monkeypatch):
+    """Every user of the computer can read a process's command line; with the
+    key from there, another user could talk to the engine."""
+    calls = []
+    monkeypatch.setattr(ai.subprocess, "Popen", lambda *a, **k: calls.append((a, k)) or _Proc())
+    dead_engine.start(_replacing=dead_engine._proc)
+    (argv,), options = calls[0]
+    assert dead_engine._key not in " ".join(argv)
+    assert "--api-key" not in argv
+    assert options["env"]["LLAMA_API_KEY"] == dead_engine._key
+
+
 # --- "Actually" with no comma -----------------------------------------------
 # Parakeet often writes "Actually book it" with no comma. A sentence opening
 # that way counts as a correction only when the next word repeats a real word
