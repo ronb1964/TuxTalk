@@ -363,4 +363,17 @@ def _at_exit():
         sd._initialized = 0
 
 
+def _check_exit_handler(module):
+    """Whether *module* (sounddevice) counts the times it started PortAudio
+    in _initialized, which its exit handler ends PortAudio by and _at_exit
+    sets to leave it running. A sounddevice that doesn't is logged: a sound
+    stuck as TuxTalk quits can then hold up quitting."""
+    if isinstance(getattr(module, "_initialized", None), int):
+        return True
+    logger.warning("This sounddevice keeps no _initialized count: a sound stuck as TuxTalk "
+                   "quits can hold up quitting")
+    return False
+
+
+_check_exit_handler(sd)
 atexit.register(_at_exit)

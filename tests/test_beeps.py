@@ -449,24 +449,54 @@ def ended():
     print("PortAudio ended", flush=True)
 sounddevice._terminate = ended
 beeps.output_device = lambda rate: (None, rate)
-beeps._play = lambda *a: {play}
+
+def play(*a):
+    {play}
+    print("sound over", flush=True)
+beeps._play = play
 beeps.beep(True, *beeps.START_BEEP)
 time.sleep(0.1)
 print("quitting", flush=True)
 """
 
 
-@pytest.mark.parametrize("play,ends_portaudio", [("time.sleep(0.2)", True),
-                                                  ("threading.Event().wait()", False)])
-def test_quitting_during_a_sound(play, ends_portaudio):
-    """The real exit order: TuxTalk's wait runs before sounddevice ends
-    PortAudio, and a sound that never ends doesn't hold up quitting."""
+@pytest.mark.parametrize("play,printed", [
+    ("time.sleep(0.2)", ["quitting", "sound over", "PortAudio ended"]),
+    ("threading.Event().wait()", ["quitting"])], ids=["sound that ends", "stuck sound"])
+def test_quitting_during_a_sound(play, printed):
+    """The real exit order: TuxTalk waits for a sound that is ending before
+    sounddevice ends PortAudio, and a sound that never ends doesn't hold up
+    quitting: PortAudio is left to the system."""
     import subprocess
     import sys
     started = time.monotonic()
     ran = subprocess.run([sys.executable, "-c", _QUIT_DURING_A_SOUND.format(play=play)],
                          capture_output=True, text=True, timeout=20)
     assert ran.returncode == 0, ran.stderr
-    assert ran.stdout.splitlines()[0] == "quitting"
-    assert ("PortAudio ended" in ran.stdout) is ends_portaudio
+    assert ran.stdout.splitlines() == printed
     assert time.monotonic() - started < 10
+
+
+def test_sounddevice_ends_portaudio_as_often_as_it_counts_it_started(monkeypatch):
+    """_at_exit leaves a stuck sound's PortAudio running by setting this
+    count to 0; the installed sounddevice's own exit handler must go by it."""
+    import sounddevice
+    ended = []
+
+    def terminate():
+        sounddevice._initialized -= 1
+        ended.append(1)
+    monkeypatch.setattr(sounddevice, "_terminate", terminate)
+    monkeypatch.setattr(sounddevice, "_last_callback", None)
+    for started in (0, 2):
+        monkeypatch.setattr(sounddevice, "_initialized", started)
+        ended.clear()
+        sounddevice._exit_handler()
+        assert len(ended) == started
+    assert beeps._check_exit_handler(sounddevice)
+
+
+def test_a_sounddevice_without_the_count_is_logged(caplog):
+    caplog.set_level(logging.INFO)
+    assert not beeps._check_exit_handler(types.SimpleNamespace())
+    assert any("keeps no _initialized" in r.getMessage() for r in caplog.records)
