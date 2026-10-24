@@ -130,5 +130,23 @@ def test_the_end_of_a_test_waits_until_whoever_asked_for_a_sound_was_told():
         threading.Event().wait(0.3)
         told.append(error)
     beeps.play(np.zeros(100, np.float32), 44100, finished=slow_call)
-    assert conftest.drain_sounds(beeps._submit)
+    assert conftest.drain_sounds(beeps._submit, beeps.wait_until_played)
     assert told == [None]
+
+
+def test_the_end_of_a_test_pushes_no_sound_out_of_the_queue(monkeypatch):
+    """The queue holds only the newest few sounds behind one that plays, so
+    a job of the suite's own, put on it while it was full, dropped the oldest
+    of the test's."""
+    import conftest
+    playing, release = threading.Event(), threading.Event()
+    monkeypatch.setattr(beeps, "_play", lambda *a: playing.set() or release.wait(5))
+    beeps.beep(True, *beeps.START_BEEP)
+    assert playing.wait(5)
+    told = []
+    for n in range(beeps.MAX_WAITING):
+        beeps.play(np.zeros(100, np.float32), 44100, finished=lambda error, n=n: told.append(
+            (n, error)))
+    threading.Timer(0.3, release.set).start()
+    assert conftest.drain_sounds(beeps._submit, beeps.wait_until_played)
+    assert told == [(n, None) for n in range(beeps.MAX_WAITING)]

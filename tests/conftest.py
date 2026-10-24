@@ -315,11 +315,15 @@ def _play_to_nobody(samples, rate, device):
     """Stands in for beeps._play: the sound plays at once, and silently."""
 
 
-def drain_sounds(submit):
+def drain_sounds(submit, wait):
     """Whether every sound asked for so far played, and whoever asked for it
-    was told, within 5 s. *submit* (beeps._submit) puts a job of its own on
-    the sound thread, which gets to it only once each sound before it is
-    over and its callback has returned."""
+    was told, within 5 s each. *wait* (beeps.wait_until_played) waits until
+    each is over, which leaves the queue empty, so *submit* (beeps._submit)
+    then pushes none of them out of it with a job of its own. The sound
+    thread gets to that job only once the callback of the last sound before
+    it has returned."""
+    if not wait(5):
+        return False
     drained = threading.Event()
     submit(drained.set, "the end of a test", threading.Event())
     return drained.wait(5)
@@ -331,15 +335,15 @@ def _no_real_sound(request, monkeypatch):
     sound system of its own), and every sound a test asked for is over, and
     whoever asked told so, before the test's fakes are put back: a beep left
     on the sound thread would otherwise run against whatever the next test
-    has. The queue drained is the real one, even where the test faked the
-    wait."""
+    has. The queue drained is the real one, and waited for with the real
+    wait, even where the test faked them."""
     from tuxtalk import beeps
-    submit = beeps._submit
+    submit, wait = beeps._submit, beeps.wait_until_played
     if request.module.__name__.rpartition(".")[2] != "test_beeps":
         monkeypatch.setattr(beeps, "output_device", lambda samplerate: (None, samplerate))
         monkeypatch.setattr(beeps, "_play", _play_to_nobody)
     yield
-    if not drain_sounds(submit):
+    if not drain_sounds(submit, wait):
         pytest.fail("a sound the test asked for was still playing after it")
 
 
