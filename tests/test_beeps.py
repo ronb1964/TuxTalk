@@ -81,6 +81,7 @@ class FakeSoundSystem:
     reached its speakers, a period at a time, and when."""
 
     PortAudioError = OSError
+    _initialized = 1          # sounddevice's count of PortAudio starts, ended at exit
 
     def __init__(self, latency, period, downstream=0.0):
         self.latency, self.period, self.downstream = latency, period, downstream
@@ -347,3 +348,56 @@ def test_sounds_behind_a_stuck_output_never_pile_up(sound, monkeypatch):
     release.set()
     assert beeps.wait_until_played(5)
     assert len(played) == 1 + beeps.MAX_WAITING
+
+
+def test_quitting_waits_for_a_sound_and_leaves_a_stuck_one_to_the_system(sound, monkeypatch):
+    """At exit, sounddevice ends PortAudio; under a stream that still plays
+    that can hang or crash, so a stuck sound's stream is left alone."""
+    system = sound()
+    release = threading.Event()
+    monkeypatch.setattr(beeps, "_play", lambda *a: release.wait(5))
+    monkeypatch.setattr(beeps, "EXIT_WAIT_S", 0.1)
+    beeps._at_exit()
+    assert system._initialized == 1, "with nothing playing, PortAudio is ended as usual"
+    beeps.beep(True, *beeps.START_BEEP)
+    asked = time.monotonic()
+    beeps._at_exit()
+    assert time.monotonic() - asked < 0.5
+    assert system._initialized == 0
+    release.set()
+
+
+_QUIT_DURING_A_SOUND = """
+import threading, time
+import sounddevice
+from tuxtalk import beeps
+
+def ended():
+    sounddevice._initialized -= 1
+    print("PortAudio ended", flush=True)
+sounddevice._terminate = ended
+beeps.output_device = lambda rate: (None, rate)
+beeps._play = lambda *a: {play}
+beeps.beep(True, *beeps.START_BEEP)
+time.sleep(0.1)
+print("quitting", flush=True)
+"""
+
+
+@pytest.mark.parametrize("play,ends_portaudio", [("time.sleep(0.2)", True),
+                                                  ("threading.Event().wait()", False)])
+def test_quitting_during_a_sound(play, ends_portaudio):
+    """The real exit order: TuxTalk's wait runs before sounddevice ends
+    PortAudio, and a sound that never ends doesn't hold up quitting."""
+    import os
+    import subprocess
+    import sys
+    # Nothing here opens a stream; the sound servers are out of reach all the same.
+    env = dict(os.environ, PIPEWIRE_REMOTE="/nonexistent", PULSE_SERVER="unix:/nonexistent")
+    started = time.monotonic()
+    ran = subprocess.run([sys.executable, "-c", _QUIT_DURING_A_SOUND.format(play=play)],
+                         capture_output=True, text=True, timeout=20, env=env)
+    assert ran.returncode == 0, ran.stderr
+    assert ran.stdout.splitlines()[0] == "quitting"
+    assert ("PortAudio ended" in ran.stdout) is ends_portaudio
+    assert time.monotonic() - started < 10

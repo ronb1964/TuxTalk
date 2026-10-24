@@ -24,6 +24,7 @@ Sounds play one after another on one thread of their own. A sound server
 that stops answering holds up only that thread; whoever waits for a sound
 (wait_until_played) waits a bounded time.
 """
+import atexit
 import collections
 import sys
 import threading
@@ -59,6 +60,8 @@ MAX_AHEAD_S = 2.0
 # Sounds that may wait for the sound thread. More pile up only behind an
 # output that stopped answering, and then the oldest is dropped.
 MAX_WAITING = 4
+# How long a sound playing as TuxTalk quits may take to finish.
+EXIT_WAIT_S = 0.5
 # Where the sound server's own output is, best first. The default device can
 # be a USB microphone with no speaker at all.
 OUTPUT_HINTS = ("pipewire", "pulse", "sysdefault", "default", "analog")
@@ -311,3 +314,19 @@ def _play(samples, rate, device, sound):
         except sd.PortAudioError as e:
             logger.warning(f"Could not close a sound stream: {e}")
 
+
+def _at_exit():
+    """Let a sound that is playing as TuxTalk quits finish first, briefly.
+
+    Registered after sounddevice's own exit handler, so it runs before it.
+    That handler ends PortAudio, and ending it under a stream that still
+    plays can hang, or crash when the sound thread then closes the stream.
+    A sound not over by then is stuck: sounddevice is told PortAudio was
+    never started, so its handler leaves it, and the system closes the
+    stream with the process. (atexit.unregister can't stop a handler once
+    exit has begun.)"""
+    if not wait_until_played(EXIT_WAIT_S):
+        sd._initialized = 0
+
+
+atexit.register(_at_exit)
