@@ -73,20 +73,49 @@ _latency_logged = False
 _underflow_logged = False
 _failures_logged = set()  # each kind of audio failure is logged once
 
-_finished = threading.Condition()   # guards everything below
+_queue = threading.Condition()      # guards everything below
 _waiting = collections.deque()      # (job, what, Sound, finished callback), oldest first
-_asked = 0               # sounds asked for so far, and how many of them are over
-_over = 0
+_unfinished = set()      # the Sounds asked for that aren't over
 _worker = None
 
 
 class Sound:
-    """One sound asked for. The sound thread fills in when it is heard."""
+    """One sound asked for: when the speakers play it, and whether it is over.
+
+    The sound's times are written on PortAudio's thread as its samples are
+    handed over, and read on others while it plays: heard() gives them and
+    whether it is over as one snapshot."""
 
     def __init__(self, length):
-        self.length = length        # seconds
-        self.heard_until = None     # time.monotonic() its last sample handed over is heard
-        self.over = False           # played, failed or dropped
+        self.length = length            # seconds
+        self._lock = threading.Lock()
+        self._heard_from = None         # time.monotonic() its first sample is heard
+        self._heard_until = None        # and the last one handed over so far
+        self._over = threading.Event()  # played, failed or dropped
+
+    def note_heard(self, start, end):
+        """The samples just handed over are heard from *start* to *end*; the
+        first of them all was heard at the first *start* noted."""
+        with self._lock:
+            if self._heard_from is None:
+                self._heard_from = start
+            self._heard_until = end
+
+    def end(self):
+        """It is over: played, failed or dropped."""
+        with self._lock:
+            self._over.set()
+
+    def heard(self):
+        """(over, heard from, heard until), at one moment. A time is None
+        while none of the sound has been handed over, and stays None for one
+        that failed or was dropped before it played."""
+        with self._lock:
+            return self._over.is_set(), self._heard_from, self._heard_until
+
+    def wait(self, limit):
+        """Wait at most *limit* seconds for it to be over; whether it is."""
+        return self._over.wait(limit)
 
 
 def output_device(samplerate):
@@ -131,12 +160,15 @@ def heard_in_recording(sound, recorded, rate):
     microphone's own delay. A sound that was never played (None: beeps off)
     is in none of it. One that isn't over may be playing right now, so it
     may be in all of it."""
-    if sound is None or (sound.over and sound.heard_until is None):
+    if sound is None:
         return 0
-    if not sound.over:
+    over, _heard_from, heard_until = sound.heard()
+    if over and heard_until is None:
+        return 0
+    if not over:
         return sys.maxsize
     recorded_from = time.monotonic() - recorded / rate
-    return max(0, int((sound.heard_until + sound.length - recorded_from) * rate))
+    return max(0, int((heard_until + sound.length - recorded_from) * rate))
 
 
 def tone(freq, duration, rate=SAMPLE_RATE):
@@ -167,7 +199,9 @@ def beep(enabled: bool, freq, duration):
 def play(samples, rate, finished=None):
     """Play mono float32 *samples* recorded at *rate*, after any sound
     before it. Returns at once. *finished* is called once the sound is over,
-    on the sound thread, with None, or the text of what stopped it."""
+    with None, or the text of what stopped it: on the sound thread, or, when
+    a later sound pushes it out of the queue, on the thread asking for that
+    one."""
     sound = Sound(len(samples) / rate)
 
     def job():
@@ -180,51 +214,58 @@ def play(samples, rate, finished=None):
     _submit(job, "a sound", sound, finished)
 
 
-def wait_until_played(limit=WAIT_LIMIT_S):
-    """Wait until every sound asked for so far is over: played out to the
-    speakers, as far as the stream can tell, or failed. At most *limit*
-    seconds; False if it took longer."""
-    with _finished:
-        ticket = _asked
-        if _finished.wait_for(lambda: _over >= ticket, limit):
-            return True
+def wait_until_played(limit=WAIT_LIMIT_S, *, sound=None):
+    """Wait until *sound* is over, or without one every sound asked for so
+    far: played out to the speakers, as far as the stream can tell, or
+    failed or dropped. At most *limit* seconds; False if it took longer.
+
+    Each sound is waited for itself: a later one dropped from the queue, and
+    so over first, never ends the wait for one still playing."""
+    with _queue:
+        sounds = [sound] if sound is not None else list(_unfinished)
+    deadline = time.monotonic() + limit
+    if all(s.wait(max(0.0, deadline - time.monotonic())) for s in sounds):
+        return True
     logger.warning(f"A sound took over {limit}s to play; carrying on without it")
     return False
 
 
 def _submit(job, what, sound, finished=None):
-    global _asked, _worker
-    with _finished:
-        _asked += 1
+    global _worker
+    with _queue:
+        _unfinished.add(sound)
         dropped = _waiting.popleft() if len(_waiting) >= MAX_WAITING else None
         _waiting.append((job, what, sound, finished))
-        _finished.notify_all()
+        _queue.notify_all()
         if _worker is None or not _worker.is_alive():
             _worker = threading.Thread(target=_work, name="tt-sounds", daemon=True)
             _worker.start()
     if dropped:
         _job, what_dropped, sound_dropped, told = dropped
         logger.info(f"Skipped {what_dropped}: the sound output is held up")
-        _end(sound_dropped, told, "the sound output is held up")
+        _end(sound_dropped, what_dropped, told, "the sound output is held up")
 
 
-def _end(sound, finished, error):
-    """One sound is over: tell whoever asked for it, and the waiters."""
-    global _over
-    sound.over = True
+def _end(sound, what, finished, error):
+    """One sound is over: it counts as over for the waiters first, then
+    whoever asked for it is told. Their callback failing is logged, so it
+    can neither leave the sound unfinished nor stop the sound thread."""
+    with _queue:
+        _unfinished.discard(sound)
+    sound.end()
     if finished:
-        finished(error)
-    with _finished:
-        _over += 1
-        _finished.notify_all()
+        try:
+            finished(error)
+        except Exception:
+            logger.exception(f"The call after {what} failed")
 
 
 def _work():
     """The sound thread: plays each sound asked for, in turn. A sound is
     never worth a recording, so any audio error is logged and dropped."""
     while True:
-        with _finished:
-            _finished.wait_for(lambda: _waiting)
+        with _queue:
+            _queue.wait_for(lambda: _waiting)
             job, what, sound, finished = _waiting.popleft()
         error = None
         try:
@@ -236,8 +277,7 @@ def _work():
             if (type(e), error) not in _failures_logged:
                 _failures_logged.add((type(e), error))
                 logger.warning(f"Could not play {what}: {e} (not logged again)")
-        finally:
-            _end(sound, finished, error)
+        _end(sound, what, finished, error)
 
 
 class _Playback:
@@ -266,7 +306,7 @@ class _Playback:
         outdata[len(chunk):] = 0
         if len(chunk):
             self.fed += len(chunk)
-            self._note_heard_until(now, time_info, len(chunk))
+            self._note_heard(now, time_info, len(chunk))
         if self.fed < len(self.samples):
             return
         self.silence += frames - len(chunk)
@@ -277,15 +317,15 @@ class _Playback:
         if self.silence >= self.latency * self.rate + self.period:
             self.out_of_buffer.set()
 
-    def _note_heard_until(self, now, time_info, count):
-        """When the last of *count* samples just handed over is heard: when
+    def _note_heard(self, now, time_info, count):
+        """When the *count* samples just handed over are heard: when
         PortAudio says this buffer starts playing, where it says, else one
         latency from now, about what the stream holds ahead of it."""
         ahead = time_info.outputBufferDacTime - time_info.currentTime
         self.reported = 0 < ahead < MAX_AHEAD_S
         if not self.reported:
             ahead = self.latency
-        self.sound.heard_until = now + ahead + count / self.rate
+        self.sound.note_heard(now + ahead, now + ahead + count / self.rate)
 
 
 def _play(samples, rate, device, sound):
@@ -304,7 +344,8 @@ def _play(samples, rate, device, sound):
         if not playback.out_of_buffer.wait(len(samples) / rate + stream.latency + STUCK_S):
             raise TimeoutError("the sound output stopped taking samples")
         if playback.reported:
-            time.sleep(min(max(0.0, sound.heard_until - time.monotonic()), MAX_AHEAD_S))
+            heard_until = sound.heard()[2]
+            time.sleep(min(max(0.0, heard_until - time.monotonic()), MAX_AHEAD_S))
         if playback.underflows and not _underflow_logged:
             _underflow_logged = True    # a gap in a sound, logged once a session
             logger.info(f"The sound output ran dry {playback.underflows} time(s) during a sound")

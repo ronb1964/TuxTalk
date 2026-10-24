@@ -319,12 +319,13 @@ def test_a_beep_held_up_behind_another_sound_knows_when_it_was_heard(sound, down
     assert beeps.wait_until_played(5)
     last = max(i for i, period in enumerate(system.heard) if period.any())
     heard_until = system.heard_at[last] + np.flatnonzero(system.heard[last])[-1] / RATE
+    noted = start.heard()[2]
     if system.reports_time:
-        assert start.heard_until == pytest.approx(heard_until, abs=0.03)
+        assert noted == pytest.approx(heard_until, abs=0.03)
     else:
         # One latency from when it was handed over: never early, and late
         # by at most the latency when it all went into an empty buffer.
-        assert heard_until - 0.03 <= start.heard_until <= heard_until + 0.174 + 0.03
+        assert heard_until - 0.03 <= noted <= heard_until + 0.174 + 0.03
 
 
 def test_sounds_behind_a_stuck_output_never_pile_up(sound, monkeypatch):
@@ -348,6 +349,46 @@ def test_sounds_behind_a_stuck_output_never_pile_up(sound, monkeypatch):
     release.set()
     assert beeps.wait_until_played(5)
     assert len(played) == 1 + beeps.MAX_WAITING
+
+
+def test_a_wait_lasts_while_the_sound_before_it_plays_whatever_is_dropped_after(
+        sound, monkeypatch):
+    """Sounds asked for after a wait began, and dropped from the queue, are
+    over before the one playing; the wait still lasts until that one is.
+    The double-tap is timed from the start beep heard (issue #21)."""
+    sound()
+    release, playing = threading.Event(), threading.Event()
+    monkeypatch.setattr(beeps, "_play", lambda *a: playing.set() or release.wait(5))
+    start = beeps.beep(True, *beeps.START_BEEP)
+    assert playing.wait(5)
+    waits = {}
+    waiters = [threading.Thread(target=lambda key=key: waits.update({key: beeps.wait_until_played(
+        5, sound=start if key == "start beep" else None)})) for key in ("start beep", "all")]
+    for waiter in waiters:
+        waiter.start()
+    for _ in range(beeps.MAX_WAITING + 2):            # two of them pushed out of the queue
+        beeps.beep(True, *beeps.CANCEL_BEEP)
+    time.sleep(0.3)
+    assert waits == {}, "a wait ended while the start beep still played"
+    release.set()
+    for waiter in waiters:
+        waiter.join(5)
+    assert waits == {"start beep": True, "all": True}
+
+
+def test_a_callback_that_fails_leaves_the_sound_over_and_the_sounds_playing(sound, caplog):
+    """Whoever asked for a sound is told after it counts as over, so their
+    callback failing can't hold up a wait, nor stop the sounds after it."""
+    sound()
+    caplog.set_level(logging.INFO)
+
+    def fails(error):
+        raise ValueError("the window is gone")
+    beeps.play(np.zeros(100, np.float32), RATE, finished=fails)
+    after = beeps.beep(True, *beeps.START_BEEP)
+    assert beeps.wait_until_played(limit=5)
+    assert after.heard()[2] is not None, "the beep after it played"
+    assert any(r.exc_info and "the window is gone" in str(r.exc_info[1]) for r in caplog.records)
 
 
 def test_each_kind_of_sound_failure_is_logged_once(sound, caplog):

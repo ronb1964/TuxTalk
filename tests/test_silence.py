@@ -180,7 +180,8 @@ def _start_with_its_start_beep(monkeypatch, held_up, latency):
 
     def play(samples, rate, device, sound):
         time.sleep(held_up)
-        sound.heard_until = time.monotonic() + latency + len(samples) / rate
+        heard_from = time.monotonic() + latency
+        sound.note_heard(heard_from, heard_from + len(samples) / rate)
         time.sleep(latency + len(samples) / rate)          # played out
     monkeypatch.setattr(beeps, "_play", play)
     opened = time.monotonic()
@@ -191,7 +192,7 @@ def _second_tap_after_the_start_beep(app, opened, word_after=None):
     """Speakers next to the mic: it records the room, and the start beep
     where the sound thread says it was heard; then, *word_after* seconds
     after the beep, a word, if any. Then the second tap."""
-    ends = app.state.start_beep.heard_until
+    ends = app.state.start_beep.heard()[2]
     time.sleep(max(0.0, ends + 0.4 - time.monotonic()))
     heard = noise(time.monotonic() - opened)
     t = np.arange(int(app.START_BEEP[1] * SR)) / SR
@@ -239,14 +240,14 @@ def test_a_quick_second_tap_counts_when_the_recording_was_slow_to_start(monkeypa
 
 
 def _slow_start_beep(monkeypatch):
-    """The start beep takes half a second to be heard, as on a slow output.
-    Returns when each wait for it ended."""
+    """Every sound takes half a second to be heard, as on a slow output.
+    Returns each wait for one: what it waited for, and when it ended."""
     from tuxtalk import beeps
     waits = []
 
-    def wait_until_played(limit=beeps.WAIT_LIMIT_S):
+    def wait_until_played(limit=beeps.WAIT_LIMIT_S, sound=None):
         time.sleep(0.5)
-        waits.append(time.time())
+        waits.append((sound, time.time()))
         return True
     monkeypatch.setattr(beeps, "wait_until_played", wait_until_played)
     return waits
@@ -256,15 +257,18 @@ def test_the_double_tap_is_timed_from_the_start_beep_heard(monkeypatch):
     """Issue #21: the user waits for the start beep before the second tap,
     and on a slow output it comes most of a second after the first."""
     waits = _slow_start_beep(monkeypatch)
-    app = _start(monkeypatch)
-    assert len(waits) == 1
-    assert app.state.toggle_started_at >= waits[0]
+    app = _start(monkeypatch, beeps_on=True)
+    (waited_for, ended), = waits
+    assert waited_for is app.state.start_beep is not None
+    assert app.state.toggle_started_at >= ended
     app.state.is_recording = False
 
 
-def test_a_hold_start_never_waits_for_the_start_beep(monkeypatch):
+@pytest.mark.parametrize("from_toggle,beeps_on", [(False, True), (True, False)],
+                         ids=["hold start", "beeps off"])
+def test_no_start_waits_for_a_start_beep_it_doesnt_have_to(monkeypatch, from_toggle, beeps_on):
     waits = _slow_start_beep(monkeypatch)
-    app = _start(monkeypatch, from_toggle=False)
+    app = _start(monkeypatch, from_toggle=from_toggle, beeps_on=beeps_on)
     assert waits == []
     app.state.is_recording = False
 

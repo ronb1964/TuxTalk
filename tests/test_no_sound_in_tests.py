@@ -113,5 +113,6 @@ def test_the_stand_in_player_plays_each_sound_silently_and_says_it_played():
     beeps.play(np.zeros(100, np.float32), 44100, finished=told.append)
     start = beeps.beep(True, *beeps.START_BEEP)
     assert beeps.wait_until_played(limit=5)
+    over, heard_from, _heard_until = start.heard()
     assert told == [None]
-    assert start.heard_until is not None
+    assert over and heard_from is not None

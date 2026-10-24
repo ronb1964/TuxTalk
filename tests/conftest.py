@@ -311,7 +311,8 @@ _no_sound_on_the_speakers()
 
 def _play_to_nobody(samples, rate, device, sound):
     """Stands in for beeps._play: the sound plays at once, and silently."""
-    sound.heard_until = time.monotonic()
+    now = time.monotonic()
+    sound.note_heard(now, now)
 
 
 @pytest.fixture(autouse=True)
