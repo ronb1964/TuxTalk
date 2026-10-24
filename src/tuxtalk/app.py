@@ -23,7 +23,8 @@ from evdev import InputDevice, ecodes, list_devices
 
 from typing import NamedTuple
 
-from .normalize import normalize_text, append_auto_punct, plain_for_app, swiss_spelling
+from .normalize import (normalize_text, append_auto_punct, plain_for_app,
+                        safe_to_lowercase_first_word, swiss_spelling)
 from .config import load_config, Settings, load_custom_commands
 # Imported as a module too, so the live-settings reload can read CONFIG_PATH and
 # LIVE_APPLIED_KEYS without pulling each name in separately.
@@ -2243,44 +2244,6 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
     return True
 
 
-def _safe_to_lowercase_first_word(text: str) -> bool:
-    """True when the leading capital is Whisper's sentence-start capital and
-    nothing more, so undoing it is safe.
-
-    Two kinds of word are capitalized for reasons that have nothing to do with
-    where the sentence begins, and lowercasing them corrupts real text:
-
-      * the pronoun "I" (and I'm / I'll / I've / I'd), which would become "i"
-      * acronyms, where only the first letter would change: "NASA" -> "nASA"
-
-    Proper nouns like "Ron" are genuinely ambiguous — Whisper capitalizes them
-    both as names and as sentence starts — so they are left alone here and
-    remain a known limitation rather than a guess.
-    """
-    first = text.split(maxsplit=1)[0] if text.split() else ""
-    if not first:
-        return False
-
-    # The pronoun "I", bare or contracted.
-    stripped = first.rstrip(".,;:!?")
-    if stripped == "I" or stripped.startswith("I'"):
-        return False
-
-    # Acronyms: more than one capital and no lowercase letters ("NASA", "USA").
-    letters = [c for c in stripped if c.isalpha()]
-    if len(letters) > 1 and all(c.isupper() for c in letters):
-        return False
-
-    # One of Your Words, already spelled the user's way ("TuxTalk",
-    # "New York", "TuxTalk's").
-    if _custom_words:
-        from .custom_words import starts_with_word
-        if starts_with_word(text, _custom_words):
-            return False
-
-    return True
-
-
 def _numbers_to_digits(text: str) -> str:
     """*text* with spoken numbers as digits, when that option is on."""
     if not _numbers_mode:
@@ -2362,7 +2325,7 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
         # noon and" in KWrite mustn't begin with a small letter.
         focused = _query_focused_window_class()
         if (not _not_where_typed(focused) and text[0].isupper()
-                and _safe_to_lowercase_first_word(text)):
+                and safe_to_lowercase_first_word(text, _custom_words)):
             text = text[0].lower() + text[1:]
             logger.info("Lowercased first letter for mid-sentence continuation")
         state.continue_mid_sentence = False
@@ -3004,7 +2967,8 @@ def _correct_across_pause(text: str):
     cue, state.held_cue = state.held_cue, ""
     if cue and cue[-1] not in ".?!,;:":
         cue += ","
-    if cue.endswith(",") and text[:1].isupper() and _safe_to_lowercase_first_word(text):
+    if (cue.endswith(",") and text[:1].isupper()
+            and safe_to_lowercase_first_word(text, _custom_words)):
         text = text[0].lower() + text[1:]      # "No wait, four", not "Four"
     said = f"{cue} {text}" if cue else text
     joined = prev + ("" if prev[-1:].isspace() else " ") + said

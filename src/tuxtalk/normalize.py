@@ -740,3 +740,36 @@ def swiss_spelling(text: str) -> str:
     if "ß" not in text and "ẞ" not in text:
         return text
     return _RE_SHARP_S_WORD.sub(_swiss_word, text)
+
+
+def safe_to_lowercase_first_word(text: str, your_words=()) -> bool:
+    """True when the leading capital is Whisper's sentence-start capital and
+    nothing more, so undoing it is safe.
+
+    Some words are capitalized for reasons that have nothing to do with
+    where the sentence begins, and lowercasing them corrupts real text:
+
+      * the pronoun "I" (and I'm / I'll / I've / I'd), which would become "i"
+      * acronyms, where only the first letter would change: "NASA" -> "nASA"
+      * one of *your_words* (Your Words), already spelled the user's way
+        ("TuxTalk", "New York", "TuxTalk's")
+
+    Proper nouns like "Anna" are genuinely ambiguous — Whisper capitalizes them
+    both as names and as sentence starts — so they are left alone here and
+    remain a known limitation rather than a guess.
+    """
+    first = text.split(maxsplit=1)[0] if text.split() else ""
+    if not first:
+        return False
+    # The pronoun "I", bare or contracted.
+    stripped = first.rstrip(".,;:!?")
+    if stripped == "I" or stripped.startswith("I'"):
+        return False
+    # Acronyms: more than one capital and no lowercase letters ("NASA", "USA").
+    letters = [c for c in stripped if c.isalpha()]
+    if len(letters) > 1 and all(c.isupper() for c in letters):
+        return False
+    if your_words:
+        from .custom_words import starts_with_word
+        return not starts_with_word(text, your_words)
+    return True
