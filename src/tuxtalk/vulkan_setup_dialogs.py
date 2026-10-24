@@ -5,12 +5,13 @@ Shared by Preferences (the Device dropdown, the Large-v3 prompt) and the tray
 (the Recommended preset on a graphics card), so every route to Vulkan asks the
 same questions, downloads the same way, and runs the same speed check.
 """
+import functools
 import threading
 
 import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, GLib
-from .ui_style import message_dialog
+from .ui_style import message_dialog, show_message
 
 from . import whisper_vulkan as wv
 from .logger import setup_logger
@@ -21,15 +22,8 @@ logger = setup_logger(__name__)
 LIGHT, FULL = "vulkan", "cuda"
 
 
-def message(parent, kind, title, text, buttons=Gtk.ButtonsType.OK):
-    """Show a message; returns the response."""
-    dialog = message_dialog(transient_for=parent, modal=True,
-                               message_type=kind, buttons=buttons, text=title)
-    dialog.format_secondary_text(text)
-    dialog.set_keep_above(True)
-    response = dialog.run()
-    dialog.destroy()
-    return response
+# These boxes also open from the tray, with no TuxTalk window to stay over.
+message = functools.partial(show_message, keep_above=True)
 
 
 def choose_light_or_full(parent, model):

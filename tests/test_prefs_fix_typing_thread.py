@@ -53,6 +53,8 @@ def test_pkexec_runs_off_the_gtk_thread_and_a_failure_resets_the_button(monkeypa
                         SimpleNamespace(start=lambda: None))
     monkeypatch.setattr(P.GLib, "idle_add", lambda fn, *a: idle.append((fn, a)))
     monkeypatch.setattr(P, "message_dialog", lambda **k: FakeDialog(P.Gtk.ResponseType.YES))
+    monkeypatch.setattr("tuxtalk.ui_style.message_dialog",
+                        lambda **k: FakeDialog(P.Gtk.ResponseType.YES))
     ran_in = []
     from tuxtalk import secure_input
     # The "input" group route; the hotkey helper's goes the same way.

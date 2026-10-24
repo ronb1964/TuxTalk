@@ -529,6 +529,25 @@ def message_dialog(closable=True, **kwargs):
     return dialog
 
 
+
+def show_message(parent, kind, title, text="", buttons=Gtk.ButtonsType.OK,
+                 keep_above=False):
+    """Show a message box over *parent* and wait for an answer: *title* in
+    bold, *text* under it. Returns the button pressed (a Gtk.ResponseType).
+
+    keep_above keeps it over other windows, for a box shown with no parent
+    of its own (from the tray) that would otherwise open behind them.
+    """
+    dialog = message_dialog(transient_for=parent, modal=True, message_type=kind,
+                            buttons=buttons, text=title)
+    if text:
+        dialog.format_secondary_text(text)
+    if keep_above:
+        dialog.set_keep_above(True)
+    response = dialog.run()
+    dialog.destroy()
+    return response
+
 class Fold(Gtk.Box):
     """Settings most people never need, closed behind a button that names
     them, with a short dim summary beside it. The button opens them right

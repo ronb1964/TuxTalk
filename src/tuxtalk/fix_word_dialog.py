@@ -15,7 +15,7 @@ import time
 import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, GLib
-from .ui_style import message_dialog
+from .ui_style import message_dialog, show_message
 
 from . import vocabulary
 from .config import ConfigNotLoadedError
@@ -51,15 +51,12 @@ def show_fix_word_dialog(index=0, copy_text=None):
         raise_window(_active_dialog.window)
         return
     if not entries:
-        msg = message_dialog(
-            message_type=Gtk.MessageType.INFO, buttons=Gtk.ButtonsType.OK,
-            text="No recent dictations to fix yet")
-        msg.format_secondary_text(
-            "Dictate something first. Then, if TuxTalk gets a word wrong, "
-            "choose Fix a Word in the TuxTalk menu to teach it.")
-        msg.set_keep_above(True)
-        msg.run()
-        msg.destroy()
+        show_message(None,
+                     Gtk.MessageType.INFO,
+                     "No recent dictations to fix yet",
+                     "Dictate something first. Then, if TuxTalk gets a word wrong, "
+                     "choose Fix a Word in the TuxTalk menu to teach it.",
+                     keep_above=True)
         return
     _active_dialog = _FixWordDialog(entries, index, copy_text)
 

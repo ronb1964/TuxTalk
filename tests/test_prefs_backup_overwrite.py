@@ -16,11 +16,12 @@ from tuxtalk import settings_backup  # noqa: E402
 from tuxtalk.prefs import PreferencesWindow  # noqa: E402
 
 
-def _window(typed, answer):
+def _window(monkeypatch, typed, answer):
     asked = []
+    monkeypatch.setattr("tuxtalk.prefs.show_message",
+                        lambda parent, kind, title, text="", buttons=None: asked.append(title) or answer)
     d = SimpleNamespace(
-        _pick_file=lambda title, save_name=None: typed,
-        _message=lambda kind, title, text, buttons=None: asked.append(title) or answer,
+        window=None, _pick_file=lambda title, save_name=None: typed,
         _show_last_backup=lambda: None, _fill_restore_list=lambda: None,
         _show_backup_folder=lambda: None)
     return d, asked
@@ -30,7 +31,7 @@ def test_cancel_keeps_the_existing_backup(tmp_path, monkeypatch):
     (tmp_path / "mybackup.zip").write_text("the old backup")
     written = []
     monkeypatch.setattr(settings_backup, "write_backup", written.append)
-    d, asked = _window(str(tmp_path / "mybackup"), Gtk.ResponseType.CANCEL)
+    d, asked = _window(monkeypatch, str(tmp_path / "mybackup"), Gtk.ResponseType.CANCEL)
 
     PreferencesWindow._on_save_backup_clicked(d, None)
 
@@ -42,7 +43,7 @@ def test_ok_replaces_it(tmp_path, monkeypatch):
     (tmp_path / "mybackup.zip").write_text("the old backup")
     written = []
     monkeypatch.setattr(settings_backup, "write_backup", written.append)
-    d, asked = _window(str(tmp_path / "mybackup"), Gtk.ResponseType.OK)
+    d, asked = _window(monkeypatch, str(tmp_path / "mybackup"), Gtk.ResponseType.OK)
 
     PreferencesWindow._on_save_backup_clicked(d, None)
 
@@ -52,7 +53,7 @@ def test_ok_replaces_it(tmp_path, monkeypatch):
 def test_a_new_name_is_not_questioned(tmp_path, monkeypatch):
     written = []
     monkeypatch.setattr(settings_backup, "write_backup", written.append)
-    d, asked = _window(str(tmp_path / "fresh"), Gtk.ResponseType.OK)
+    d, asked = _window(monkeypatch, str(tmp_path / "fresh"), Gtk.ResponseType.OK)
 
     PreferencesWindow._on_save_backup_clicked(d, None)
 

@@ -13,7 +13,7 @@ import sounddevice as sd
 from . import mic_stream
 from .chunk_meter import PauseTest, level_to_fraction, threshold_fraction
 from .mic_test import MicReopen, MicTest, SegmentedVUMeter
-from .ui_style import Fold, message_dialog
+from .ui_style import Fold, message_dialog, show_message
 from .whisper_vulkan import ENGINE_SIZE_TEXT
 from .hotkey_labels import dropdown_entries, hands_free_label
 from .logger import setup_logger
@@ -1463,16 +1463,10 @@ class PreferencesWindow:
             mic_combo.append("", "System Default")
             logger.warning(f"Could not list audio devices: {e}")
         
-        # Set current selection
-        current_mic = self.config["mic"]
-        if not current_mic:
-            mic_combo.set_active_id("")  # Default
-        else:
-            # Try to find matching device
-            mic_combo.set_active_id(current_mic)
-            if mic_combo.get_active_id() is None:
-                # If exact match not found, set to default
-                mic_combo.set_active_id("")
+        # The saved microphone, or System Default when it isn't plugged in now.
+        mic_combo.set_active_id(self.config["mic"])
+        if mic_combo.get_active_id() is None:
+            mic_combo.set_active_id("")
         
         mic_combo.connect("changed", self._on_mic_changed)
         grid.attach(mic_combo, 1, row, 1, 1)
@@ -1481,7 +1475,6 @@ class PreferencesWindow:
         # Advanced Microphone Test Section
         grid.attach(Gtk.Label(label="Microphone Test:", xalign=0), 0, row, 1, 1)
         
-        # Create a vertical box for the microphone test controls
         mic_test_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
         
         # Volume slider
@@ -1504,7 +1497,9 @@ class PreferencesWindow:
         mic_test_box.pack_start(self.volume_note, False, False, 0)
         self._refresh_volume_slider()
         
-        self.mic_test = MicTest(self.get_selected_device_idx, self.show_error_dialog)
+        self.mic_test = MicTest(
+            self.get_selected_device_idx,
+            lambda title, text: show_message(self.window, Gtk.MessageType.ERROR, title, text))
         self.mic_test.build(mic_test_box)
         grid.attach(mic_test_box, 1, row, 1, 1)
         row += 1
@@ -2619,7 +2614,7 @@ class PreferencesWindow:
         try:
             set_backup_folder(folder)
         except OSError as e:
-            self._message(Gtk.MessageType.ERROR, "The folder wasn't saved", str(e))
+            show_message(self.window, Gtk.MessageType.ERROR, "The folder wasn't saved", str(e))
             return
         self._show_backup_folder()
         self._fill_restore_list()       # the backups already in that folder
@@ -2633,15 +2628,15 @@ class PreferencesWindow:
         if not path.lower().endswith(".zip"):
             path += ".zip"
             # The file dialog only asked about the name as typed, not this one.
-            if os.path.exists(path) and self._message(
-                    Gtk.MessageType.QUESTION, "Replace the existing backup?",
+            if os.path.exists(path) and show_message(
+                    self.window, Gtk.MessageType.QUESTION, "Replace the existing backup?",
                     f"{path} already exists. Saving replaces it.",
                     Gtk.ButtonsType.OK_CANCEL) != Gtk.ResponseType.OK:
                 return
         try:
             settings_backup.write_backup(path)
         except (settings_backup.BackupError, OSError) as e:
-            self._message(Gtk.MessageType.ERROR, "The backup wasn't saved", str(e))
+            show_message(self.window, Gtk.MessageType.ERROR, "The backup wasn't saved", str(e))
             return
         # Saving somewhere else makes that the backup folder too, so the next
         # Save Backup and Load Backup open where this one went.
@@ -2652,8 +2647,8 @@ class PreferencesWindow:
         self._show_backup_folder()
         self._show_last_backup()
         self._fill_restore_list()       # saved into the backup folder: listed now
-        self._message(Gtk.MessageType.INFO, "Backup saved",
-                      f"Your settings, voice commands and stats are in:\n{path}")
+        show_message(self.window, Gtk.MessageType.INFO, "Backup saved",
+                     f"Your settings, voice commands and stats are in:\n{path}")
 
     def _on_load_backup_clicked(self, _button):
         from . import settings_backup
@@ -2663,15 +2658,15 @@ class PreferencesWindow:
         try:
             backup = settings_backup.read_backup(path)
         except settings_backup.BackupError as e:
-            self._message(Gtk.MessageType.ERROR, "That file can't be loaded", str(e))
+            show_message(self.window, Gtk.MessageType.ERROR, "That file can't be loaded", str(e))
             return
         made = backup.created
         try:
             made = settings_backup.when_label(datetime.datetime.fromisoformat(made))
         except ValueError:
             pass
-        if self._message(
-                Gtk.MessageType.QUESTION, "Load these settings?",
+        if show_message(
+                self.window, Gtk.MessageType.QUESTION, "Load these settings?",
                 f"This backup was made {made} by TuxTalk {backup.version or '(unknown version)'}.\n\n"
                 "It replaces your settings, voice commands and Fix a Word words. Its stats "
                 "are added to yours. Your current settings are kept as a copy first, so "
@@ -2688,8 +2683,8 @@ class PreferencesWindow:
         # copy has none, so rolling back a setting keeps today's count.
         stats_note = ("Its stats are added to yours" if point.kind == "file"
                       else "Your stats stay as they are")
-        if self._message(
-                Gtk.MessageType.QUESTION, "Go back to these settings?",
+        if show_message(
+                self.window, Gtk.MessageType.QUESTION, "Go back to these settings?",
                 f"Your settings, voice commands and Fix a Word words go back to how they "
                 f"were {settings_backup.when_label(point.when)}. {stats_note}, and your "
                 f"current settings are kept as a copy first.",
@@ -2699,7 +2694,7 @@ class PreferencesWindow:
         try:
             backup = settings_backup.read_backup(path)
         except settings_backup.BackupError as e:
-            self._message(Gtk.MessageType.ERROR, "That copy can't be restored", str(e))
+            show_message(self.window, Gtk.MessageType.ERROR, "That copy can't be restored", str(e))
             return
         self._restore_backup(backup)
 
@@ -2711,15 +2706,16 @@ class PreferencesWindow:
         try:
             notes = settings_backup.restore(backup)
         except (OSError, settings_backup.BackupError) as e:
-            self._message(Gtk.MessageType.ERROR, "The settings weren't restored", str(e))
+            show_message(self.window, Gtk.MessageType.ERROR, "The settings weren't restored",
+                         str(e))
             return
-        self._message(Gtk.MessageType.INFO, "Settings restored",
-                      "\n\n".join(notes + ["Dictation restarts with them now, and Preferences "
+        show_message(self.window, Gtk.MessageType.INFO, "Settings restored",
+                     "\n\n".join(notes + ["Dictation restarts with them now, and Preferences "
                                            "closes. Open it again to see them."]))
         if not self.restart_service():
-            self._message(Gtk.MessageType.WARNING, "Dictation didn't restart",
-                          "Use Restart Service in the tray menu to start it with the "
-                          "restored settings.")
+            show_message(self.window, Gtk.MessageType.WARNING, "Dictation didn't restart",
+                         "Use Restart Service in the tray menu to start it with the "
+                         "restored settings.")
         self.on_cancel(None)
     
     def create_commands_tab(self):
@@ -3382,21 +3378,15 @@ class PreferencesWindow:
         if not url:
             return
 
-        confirm_dialog = message_dialog(
-            transient_for=self.window,
-            message_type=Gtk.MessageType.QUESTION,
-            buttons=Gtk.ButtonsType.YES_NO,
-            text="Download & Install Update?"
-        )
-        confirm_dialog.format_secondary_text(
-            "TuxTalk will:\n"
-            "1. Download the new version\n"
-            "2. Install it to ~/AppImages/TuxTalk.AppImage\n"
-            "3. Restart automatically\n\n"
-            "Any unsaved preferences changes will be saved first."
-        )
-        response = confirm_dialog.run()
-        confirm_dialog.destroy()
+        response = show_message(self.window,
+                                Gtk.MessageType.QUESTION,
+                                "Download & Install Update?",
+                                "TuxTalk will:\n"
+                                "1. Download the new version\n"
+                                "2. Install it to ~/AppImages/TuxTalk.AppImage\n"
+                                "3. Restart automatically\n\n"
+                                "Any unsaved preferences changes will be saved first.",
+                                buttons=Gtk.ButtonsType.YES_NO)
 
         if response != Gtk.ResponseType.YES:
             return
@@ -3478,18 +3468,11 @@ class PreferencesWindow:
                 f"Please try again or download manually from GitHub."
             )
 
-            dialog = message_dialog(
-                transient_for=self.window,
-                message_type=Gtk.MessageType.ERROR,
-                buttons=Gtk.ButtonsType.OK,
-                text="Update Failed"
-            )
-            dialog.format_secondary_text(
-                f"{error_msg}\n\n"
-                f"You can try again or download the update manually from GitHub."
-            )
-            dialog.run()
-            dialog.destroy()
+            show_message(self.window,
+                         Gtk.MessageType.ERROR,
+                         "Update Failed",
+                         f"{error_msg}\n\n"
+                         f"You can try again or download the update manually from GitHub.")
 
         thread = threading.Thread(target=do_download_and_install, daemon=True)
         thread.start()
@@ -3552,18 +3535,11 @@ class PreferencesWindow:
 
             if success_holder[0]:
                 # Success dialog
-                success_dialog = message_dialog(
-                    transient_for=self.window,
-                    message_type=Gtk.MessageType.INFO,
-                    buttons=Gtk.ButtonsType.OK,
-                    text="Extension Updated!"
-                )
-                success_dialog.format_secondary_text(
-                    "The GNOME extension has been updated.\n\n"
-                    "You need to log out and log back in for the changes to take effect."
-                )
-                success_dialog.run()
-                success_dialog.destroy()
+                show_message(self.window,
+                             Gtk.MessageType.INFO,
+                             "Extension Updated!",
+                             "The GNOME extension has been updated.\n\n"
+                             "You need to log out and log back in for the changes to take effect.")
 
                 # Update UI to reflect new state
                 self.update_extension_btn.hide()
@@ -3573,18 +3549,11 @@ class PreferencesWindow:
                 )
             else:
                 # Error dialog
-                error_dialog = message_dialog(
-                    transient_for=self.window,
-                    message_type=Gtk.MessageType.ERROR,
-                    buttons=Gtk.ButtonsType.OK,
-                    text="Update Failed"
-                )
-                error_dialog.format_secondary_text(
-                    "Failed to update the GNOME extension.\n"
-                    "Check the log file for details."
-                )
-                error_dialog.run()
-                error_dialog.destroy()
+                show_message(self.window,
+                             Gtk.MessageType.ERROR,
+                             "Update Failed",
+                             "Failed to update the GNOME extension.\n"
+                             "Check the log file for details.")
 
         # Start installation in background
         thread = threading.Thread(target=do_install, daemon=True)
@@ -3653,9 +3622,10 @@ class PreferencesWindow:
             return
         for word, phrases in getattr(self, "_word_rows", ()):
             if phrase in phrases:
-                self._message(Gtk.MessageType.WARNING, "That phrase already fixes a word",
-                              f"\u201c{phrase}\u201d is how TuxTalk hears {word}, under "
-                              "Your Words. Change it there, or pick a different phrase.")
+                show_message(self.window, Gtk.MessageType.WARNING,
+                             "That phrase already fixes a word",
+                             f"\u201c{phrase}\u201d is how TuxTalk hears {word}, under "
+                             "Your Words. Change it there, or pick a different phrase.")
                 return
         row_index = int(str(path))
         for i, row in enumerate(self.commands_store):
@@ -3677,9 +3647,9 @@ class PreferencesWindow:
 
         def show():
             self._duplicate_warning_pending = False
-            self._message(Gtk.MessageType.WARNING, "That phrase is already a snippet",
-                          f"You already have a snippet for \u201c{phrase}\u201d. "
-                          "Change that one, or pick a different phrase.")
+            show_message(self.window, Gtk.MessageType.WARNING, "That phrase is already a snippet",
+                         f"You already have a snippet for \u201c{phrase}\u201d. "
+                         "Change that one, or pick a different phrase.")
             return False
         GLib.idle_add(show)
     
@@ -3712,8 +3682,8 @@ class PreferencesWindow:
         Edit... works. Like editing in the list, it's saved with Apply or OK."""
         model, it = self.commands_tree.get_selection().get_selected()
         if it is None:
-            self._message(Gtk.MessageType.INFO, "Pick a snippet first",
-                          "Click a snippet in the list, then Edit.")
+            show_message(self.window, Gtk.MessageType.INFO, "Pick a snippet first",
+                         "Click a snippet in the list, then Edit.")
             return
         path = str(model.get_path(it))
         dialog = Gtk.Dialog(title="Snippet", transient_for=self.window, modal=True)
@@ -3745,8 +3715,8 @@ class PreferencesWindow:
             while dialog.run() == Gtk.ResponseType.OK:
                 phrase, text = (e.get_text() for e in entries)
                 if not phrase.strip():
-                    self._message(Gtk.MessageType.WARNING, "Type what you'll say",
-                                  "A snippet needs a phrase to say.")
+                    show_message(self.window, Gtk.MessageType.WARNING, "Type what you'll say",
+                                 "A snippet needs a phrase to say.")
                     continue
                 if self._apply_snippet_edit(path, phrase, text):
                     break
@@ -3839,8 +3809,8 @@ class PreferencesWindow:
     def _on_edit_word(self, _button):
         row = self._selected_word()
         if row is None:
-            self._message(Gtk.MessageType.INFO, "Pick a word first",
-                          "Click a word in the list, then Edit. Double-clicking it works too.")
+            show_message(self.window, Gtk.MessageType.INFO, "Pick a word first",
+                         "Click a word in the list, then Edit. Double-clicking it works too.")
             return
         self._edit_word_dialog(*row)
 
@@ -3865,7 +3835,7 @@ class PreferencesWindow:
         try:
             vocabulary.remove_word(word)
         except Exception as e:
-            self._message(Gtk.MessageType.ERROR, "That word wasn't removed", str(e))
+            show_message(self.window, Gtk.MessageType.ERROR, "That word wasn't removed", str(e))
         self._on_commands_file_changed()
 
     def _edit_word_dialog(self, old, phrases):
@@ -3921,10 +3891,12 @@ class PreferencesWindow:
                 try:
                     vocabulary.save_word(entry.get_text(), lines, old=old)
                 except vocabulary.WordProblem as e:
-                    self._message(Gtk.MessageType.WARNING, "That word wasn't saved", str(e))
+                    show_message(self.window, Gtk.MessageType.WARNING, "That word wasn't saved",
+                                 str(e))
                     continue
                 except Exception as e:
-                    self._message(Gtk.MessageType.ERROR, "That word wasn't saved", str(e))
+                    show_message(self.window, Gtk.MessageType.ERROR, "That word wasn't saved",
+                                 str(e))
                 break
         finally:
             dialog.destroy()
@@ -3967,7 +3939,7 @@ class PreferencesWindow:
             # A full disk or read-only config folder: say so. Apply saves the
             # settings anyway; OK stays open so the edits aren't thrown away.
             logger.warning(f"Custom commands not saved: {e}")
-            self._message(Gtk.MessageType.ERROR, "Your snippets weren't saved", str(e))
+            show_message(self.window, Gtk.MessageType.ERROR, "Your snippets weren't saved", str(e))
             return None
     
     def _hotkey_combo(self, label, hotkeys):
@@ -4179,15 +4151,14 @@ class PreferencesWindow:
     def _on_update_parakeet_clicked(self, _button):
         """Download Parakeet Ultra, then restart dictation onto it."""
         from .model_helper import download_parakeet_update
-        from .vulkan_setup_dialogs import message
         model = self.model_combo.get_active_id()
         device = self._parakeet_update_device(model)
         if device is None:
             return
         updated = download_parakeet_update(device, self.window)
         if updated is None:
-            message(self.window, Gtk.MessageType.ERROR, "The download did not finish",
-                    "Check your internet connection and try again.")
+            show_message(self.window, Gtk.MessageType.ERROR, "The download did not finish",
+                         "Check your internet connection and try again.")
         self._update_parakeet_row(model)
         if updated:
             self.restart_service()
@@ -4320,8 +4291,8 @@ class PreferencesWindow:
                     else:
                         # No Vulkan here: CUDA is the only route, so ask before
                         # starting a 4.4 GB download.
-                        _choice = FULL if self._message(
-                            Gtk.MessageType.QUESTION, "Downloads Required",
+                        _choice = FULL if show_message(
+                            self.window, Gtk.MessageType.QUESTION, "Downloads Required",
                             "The 'large-v3' model needs two downloads:\n\n"
                             "  • CUDA GPU Libraries   (~1.4GB)\n"
                             "  • Large-v3 AI Model    (~3GB)\n\n"
@@ -4346,8 +4317,9 @@ class PreferencesWindow:
                             self._refresh_device_options()
                 elif self._vulkan_offered():
                     # AMD / Intel graphics: large-v3 can run there through Vulkan.
-                    if self._message(
-                            Gtk.MessageType.QUESTION, "Large-v3 needs your graphics card",
+                    if show_message(
+                            self.window, Gtk.MessageType.QUESTION,
+                            "Large-v3 needs your graphics card",
                             "Large-v3 can run on your AMD or Intel graphics through Vulkan. "
                             f"That's a one-time download of a {ENGINE_SIZE_TEXT} graphics "
                             "engine and Large-v3 in its format (1 GB), then a quick check that "
@@ -4356,20 +4328,13 @@ class PreferencesWindow:
                         self._switch_to_vulkan_for_model(combo, "large-v3", confirm=False)
                     return
                 else:
-                    _dlg = message_dialog(
-                        transient_for=self.window,
-                        flags=0,
-                        message_type=Gtk.MessageType.WARNING,
-                        buttons=Gtk.ButtonsType.OK,
-                        text="Graphics Card Required"
-                    )
-                    _dlg.format_secondary_text(
+                    show_message(
+                        self.window,
+                        Gtk.MessageType.WARNING,
+                        "Graphics Card Required",
                         "The 'large-v3' model needs a graphics card to run at a usable speed.\n\n"
-                        "TuxTalk didn't find one it can use on this computer."
-                    )
-                    _dlg.set_keep_above(True)
-                    _dlg.run()
-                    _dlg.destroy()
+                        "TuxTalk didn't find one it can use on this computer.",
+                        keep_above=True)
                 return
 
         # Show size warning for large-v3 model ONLY if it's not already
@@ -4449,19 +4414,6 @@ class PreferencesWindow:
         from .config import find_input_device
         current_mic = self.config.get("mic", "")
         return find_input_device(current_mic)
-    
-    def show_error_dialog(self, title, message):
-        """Show an error dialog."""
-        dialog = message_dialog(
-            transient_for=self.window,
-            flags=0,
-            message_type=Gtk.MessageType.ERROR,
-            buttons=Gtk.ButtonsType.OK,
-            text=title
-        )
-        dialog.format_secondary_text(message)
-        dialog.run()
-        dialog.destroy()
     
     def get_system_mic_volume(self, source=DEFAULT_SOURCE):
         """
@@ -4846,14 +4798,10 @@ class PreferencesWindow:
 
         self._untick_ai_feature(check, key, handler)
         if not any(r.get("cancelled") for r in results.values()):
-            err = message_dialog(
-                transient_for=self.window, modal=True,
-                message_type=Gtk.MessageType.ERROR, buttons=Gtk.ButtonsType.OK,
-                text="The AI download did not finish")
-            err.format_secondary_text(
-                "Check your internet connection and try turning the option on again.")
-            err.run()
-            err.destroy()
+            show_message(self.window,
+                         Gtk.MessageType.ERROR,
+                         "The AI download did not finish",
+                         "Check your internet connection and try turning the option on again.")
 
     # --- Vulkan (any GPU, whisper_vulkan.py) ---------------------------------
 
@@ -4945,15 +4893,6 @@ class PreferencesWindow:
         self._device_before = "vulkan"
         return True
 
-    def _message(self, kind, title, text, buttons=Gtk.ButtonsType.OK):
-        """Show a modal message dialog and return the button the user pressed."""
-        dialog = message_dialog(transient_for=self.window, modal=True,
-                                   message_type=kind, buttons=buttons, text=title)
-        dialog.format_secondary_text(text)
-        response = dialog.run()
-        dialog.destroy()
-        return response
-
     def _setup_vulkan(self, model, confirm=True):
         """Download and speed-check Vulkan for *model* (vulkan_setup_dialogs).
         True if TuxTalk should use the graphics chip."""
@@ -5033,15 +4972,9 @@ class PreferencesWindow:
         if response == Gtk.ResponseType.OK:
             from .logger import clear_log
             cleared = clear_log()
-            done = message_dialog(
-                transient_for=self.window,
-                modal=True,
-                message_type=Gtk.MessageType.INFO if cleared else Gtk.MessageType.ERROR,
-                buttons=Gtk.ButtonsType.OK,
-                text="Log cleared." if cleared else "Some of the log couldn't be erased.",
-            )
-            done.run()
-            done.destroy()
+            show_message(self.window,
+                         Gtk.MessageType.INFO if cleared else Gtk.MessageType.ERROR,
+                         "Log cleared." if cleared else "Some of the log couldn't be erased.")
 
     def _update_timeout_ui_state(self):
         """Update timeout UI visibility based on checkbox state."""
@@ -5099,8 +5032,8 @@ class PreferencesWindow:
         from . import cuda_helper
         from tuxtalk.config import get_data_dir
         cuda_path = os.path.join(get_data_dir(), "cuda")
-        if self._message(
-                Gtk.MessageType.QUESTION, "Download CUDA Libraries?",
+        if show_message(
+                self.window, Gtk.MessageType.QUESTION, "Download CUDA Libraries?",
                 "CUDA runs the Whisper models on your NVIDIA graphics card. It needs "
                 "about 1.4 GB of NVIDIA's files, a one-time download.\n\n"
                 f"The files will be stored in {cuda_path} and may take several minutes "
@@ -5328,19 +5261,17 @@ class PreferencesWindow:
     def _leave_input_group(self, button):
         """Take the user out of the input group once the helper is doing its job."""
         from . import secure_input
-        dialog = message_dialog(
-            transient_for=self.window, flags=0,
-            message_type=Gtk.MessageType.QUESTION, buttons=Gtk.ButtonsType.YES_NO,
-            text="Leave the 'input' group?")
-        dialog.format_secondary_text(
+        answer = show_message(
+            self.window,
+            Gtk.MessageType.QUESTION,
+            "Leave the 'input' group?",
             "TuxTalk doesn't need it any more: its hotkey helper reads the hotkeys. "
             "Leaving it means other programs can't read your keyboard.\n\n"
             "If some other program you use needs the group (a key remapper, for "
             "instance), it will stop working until you add yourself back.\n\n"
             "It takes effect after you restart your computer. "
-            "You will be prompted for your admin password.")
-        answer = dialog.run()
-        dialog.destroy()
+            "You will be prompted for your admin password.",
+            buttons=Gtk.ButtonsType.YES_NO)
         if answer != Gtk.ResponseType.YES:
             return
         button.set_sensitive(False)
@@ -5354,15 +5285,15 @@ class PreferencesWindow:
     def _finish_leave_group(self, button, ok, message):
         from .secure_input import STILL_IN_GROUP
         if ok and message == STILL_IN_GROUP:
-            self._message(Gtk.MessageType.WARNING, "You're still in the 'input' group",
-                          "TuxTalk couldn't take you out of it. Your system may keep "
-                          "that group somewhere TuxTalk can't change.")
+            show_message(self.window, Gtk.MessageType.WARNING, "You're still in the 'input' group",
+                         "TuxTalk couldn't take you out of it. Your system may keep "
+                         "that group somewhere TuxTalk can't change.")
         elif ok:
-            self._message(Gtk.MessageType.INFO, "You've left the 'input' group",
-                          "Restart your computer to finish. Until then, programs that "
-                          "started before keep the old access.")
+            show_message(self.window, Gtk.MessageType.INFO, "You've left the 'input' group",
+                         "Restart your computer to finish. Until then, programs that "
+                         "started before keep the old access.")
         elif message != "cancelled":
-            self._message(Gtk.MessageType.ERROR, "That didn't work", message)
+            show_message(self.window, Gtk.MessageType.ERROR, "That didn't work", message)
         self._check_typing_status()
         return False
 
@@ -5375,45 +5306,29 @@ class PreferencesWindow:
             "can still read your keyboard. Your system may keep that group "
             "somewhere TuxTalk can't change. Your hotkeys work either way.")
         if success and not needs_restart:
-            msg = message_dialog(
-                transient_for=self.window,
-                modal=True,
-                message_type=Gtk.MessageType.INFO,
-                buttons=Gtk.ButtonsType.OK,
-                text="Hotkeys and Typing Set Up!"
-            )
-            msg.format_secondary_text(
-                "TuxTalk's hotkey helper is installed, and TuxTalk can type into "
-                "your applications. No restart is needed.\n\n"
-                + (still_in_group_text if still_in_group else
-                   "You've also left the 'input' group. Restart your computer when "
-                   "it suits you: until then, programs that were already running "
-                   "keep the old access." if switching else
-                   "Dictation restarts now to use it.")
-            )
-            msg.run()
-            msg.destroy()
+            show_message(self.window,
+                         Gtk.MessageType.INFO,
+                         "Hotkeys and Typing Set Up!",
+                         "TuxTalk's hotkey helper is installed, and TuxTalk can type into "
+                         "your applications. No restart is needed.\n\n"
+                         + (still_in_group_text if still_in_group else
+                            "You've also left the 'input' group. Restart your computer when "
+                            "it suits you: until then, programs that were already running "
+                            "keep the old access." if switching else
+                            "Dictation restarts now to use it."))
             # The service picks its hotkey source when it starts.
             self.restart_service()
             self._check_typing_status()
         elif success:
-            msg = message_dialog(
-                transient_for=self.window,
-                modal=True,
-                message_type=Gtk.MessageType.INFO,
-                buttons=Gtk.ButtonsType.OK,
-                text="Typing Permissions Configured!"
-            )
-            msg.format_secondary_text(
-                "The system has been configured for keystroke injection.\n\n"
-                "IMPORTANT: Restart your computer to apply the changes.\n"
-                "(Logging out and back in is often not enough.)\n"
-                "(Some systems may require a full reboot instead.)\n\n"
-                "After that, TuxTalk will be able to type "
-                "directly into your applications."
-            )
-            msg.run()
-            msg.destroy()
+            show_message(self.window,
+                         Gtk.MessageType.INFO,
+                         "Typing Permissions Configured!",
+                         "The system has been configured for keystroke injection.\n\n"
+                         "IMPORTANT: Restart your computer to apply the changes.\n"
+                         "(Logging out and back in is often not enough.)\n"
+                         "(Some systems may require a full reboot instead.)\n\n"
+                         "After that, TuxTalk will be able to type "
+                         "directly into your applications.")
             self._check_typing_status()
         else:
             button.set_sensitive(True)
@@ -5424,16 +5339,7 @@ class PreferencesWindow:
                     f'{FIX_TYPING_LABEL} to try again</span>'
                 )
             else:
-                msg = message_dialog(
-                    transient_for=self.window,
-                    modal=True,
-                    message_type=Gtk.MessageType.ERROR,
-                    buttons=Gtk.ButtonsType.OK,
-                    text="Setup Failed"
-                )
-                msg.format_secondary_text(message)
-                msg.run()
-                msg.destroy()
+                show_message(self.window, Gtk.MessageType.ERROR, "Setup Failed", message)
         return False
 
     def _initial_extension_check(self):
@@ -5597,19 +5503,11 @@ class PreferencesWindow:
                     else:
                         button.set_sensitive(True)
                         # Show error dialog
-                        error_dialog = message_dialog(
-                            transient_for=self.window,
-                            flags=0,
-                            message_type=Gtk.MessageType.ERROR,
-                            buttons=Gtk.ButtonsType.OK,
-                            text="Installation Failed"
-                        )
-                        error_dialog.format_secondary_text(
-                            "Failed to install GNOME extension.\n\n"
-                            "Please check your internet connection and try again."
-                        )
-                        error_dialog.run()
-                        error_dialog.destroy()
+                        show_message(self.window,
+                                     Gtk.MessageType.ERROR,
+                                     "Installation Failed",
+                                     "Failed to install GNOME extension.\n\n"
+                                     "Please check your internet connection and try again.")
 
                     return False
 
@@ -5648,31 +5546,17 @@ class PreferencesWindow:
                 self._check_extension_status()
 
                 # Show success message
-                info = message_dialog(
-                    transient_for=self.window,
-                    flags=0,
-                    message_type=Gtk.MessageType.INFO,
-                    buttons=Gtk.ButtonsType.OK,
-                    text="Extension Uninstalled"
-                )
-                info.format_secondary_text(
-                    "The GNOME extension has been removed.\n\n"
-                    "To finish: " + extension_reload_steps()
-                )
-                info.run()
-                info.destroy()
+                show_message(self.window,
+                             Gtk.MessageType.INFO,
+                             "Extension Uninstalled",
+                             "The GNOME extension has been removed.\n\n"
+                             "To finish: " + extension_reload_steps())
             else:
                 # Show error
-                error = message_dialog(
-                    transient_for=self.window,
-                    flags=0,
-                    message_type=Gtk.MessageType.ERROR,
-                    buttons=Gtk.ButtonsType.OK,
-                    text="Uninstall Failed"
-                )
-                error.format_secondary_text("Failed to uninstall the extension.")
-                error.run()
-                error.destroy()
+                show_message(self.window,
+                             Gtk.MessageType.ERROR,
+                             "Uninstall Failed",
+                             "Failed to uninstall the extension.")
 
     def _on_restart_info_clicked(self, button):
         """Show information about restarting GNOME Shell."""
@@ -6073,9 +5957,9 @@ class PreferencesWindow:
             _ok = is_model_cached_fast(model_name)
         if _ok:
             logger.info(f"Model {model_name} downloaded successfully")
-            self._message(Gtk.MessageType.INFO, "Model Downloaded Successfully!",
-                          f"The {model_title(model_name)} model has been "
-                          "downloaded and is ready to use.")
+            show_message(self.window, Gtk.MessageType.INFO, "Model Downloaded Successfully!",
+                         f"The {model_title(model_name)} model has been "
+                         "downloaded and is ready to use.")
         return (_ok, _ok, cancelled)  # (success, was_downloaded, cancelled)
 
     def _has_unapplied_changes(self):
@@ -6362,16 +6246,10 @@ class PreferencesWindow:
                 dialog.destroy()
             else:
                 # Show service restart error
-                dialog = message_dialog(
-                    transient_for=self.window,
-                    flags=0,
-                    message_type=Gtk.MessageType.WARNING,
-                    buttons=Gtk.ButtonsType.OK,
-                    text="Settings saved, but service restart failed!"
-                )
-                dialog.format_secondary_text("You may need to manually restart the service.")
-                dialog.run()
-                dialog.destroy()
+                show_message(self.window,
+                             Gtk.MessageType.WARNING,
+                             "Settings saved, but service restart failed!",
+                             "You may need to manually restart the service.")
         else:
             self._show_save_error()
     
@@ -6491,16 +6369,10 @@ class PreferencesWindow:
 
             # Show final status if service restart failed
             if not service_restarted:
-                dialog = message_dialog(
-                    transient_for=self.window,
-                    flags=0,
-                    message_type=Gtk.MessageType.WARNING,
-                    buttons=Gtk.ButtonsType.OK,
-                    text="Settings saved, but service restart failed!"
-                )
-                dialog.format_secondary_text("You may need to manually restart the service.")
-                dialog.run()
-                dialog.destroy()
+                show_message(self.window,
+                             Gtk.MessageType.WARNING,
+                             "Settings saved, but service restart failed!",
+                             "You may need to manually restart the service.")
 
             self.window.destroy()
             Gtk.main_quit()
@@ -6526,18 +6398,12 @@ class PreferencesWindow:
         from .config import unapplied_hotkeys, load_config
         pending = unapplied_hotkeys(self.config, load_config().__dict__)
         if pending:
-            warn = message_dialog(
-                transient_for=self.window, modal=True,
-                message_type=Gtk.MessageType.INFO, buttons=Gtk.ButtonsType.OK,
-                text="Apply your hotkey change first",
-            )
-            warn.format_secondary_text(
-                "You changed a hotkey but haven't applied it yet. Click Apply, "
-                "then test — otherwise the test checks your previous hotkeys and "
-                "the wrong row will light up."
-            )
-            warn.run()
-            warn.destroy()
+            show_message(self.window,
+                         Gtk.MessageType.INFO,
+                         "Apply your hotkey change first",
+                         "You changed a hotkey but haven't applied it yet. Click Apply, "
+                         "then test — otherwise the test checks your previous hotkeys and "
+                         "the wrong row will light up.")
             return
 
         dialog = Gtk.Dialog(title="Test Hotkeys", transient_for=self.window)

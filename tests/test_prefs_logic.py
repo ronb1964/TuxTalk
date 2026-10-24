@@ -409,6 +409,7 @@ def test_an_update_doesnt_start_when_the_changes_couldnt_be_saved(monkeypatch):
     answer = SimpleNamespace(run=lambda: P.Gtk.ResponseType.YES, destroy=lambda: None,
                              format_secondary_text=lambda text: None)
     monkeypatch.setattr(P, "message_dialog", lambda **kw: answer)
+    monkeypatch.setattr("tuxtalk.ui_style.message_dialog", lambda **kw: answer)
     monkeypatch.setattr(update_checker, "get_install_type", lambda: "appimage")
     monkeypatch.setattr(update_checker, "get_update_guidance",
                         lambda kind, version: {"update_method": "appimage"})
@@ -430,6 +431,7 @@ def test_an_update_saves_the_snippets_first(monkeypatch):
     answer = SimpleNamespace(run=lambda: P.Gtk.ResponseType.YES, destroy=lambda: None,
                              format_secondary_text=lambda text: None)
     monkeypatch.setattr(P, "message_dialog", lambda **kw: answer)
+    monkeypatch.setattr("tuxtalk.ui_style.message_dialog", lambda **kw: answer)
     monkeypatch.setattr(update_checker, "get_install_type", lambda: "appimage")
     monkeypatch.setattr(update_checker, "get_update_guidance",
                         lambda kind, version: {"update_method": "appimage"})

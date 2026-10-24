@@ -1,9 +1,9 @@
 {
  "files": {
   "app.py": 4860,
-  "prefs.py": 6706,
+  "prefs.py": 6572,
   "tray.py": 2477,
-  "welcome_dialog.py": 3256
+  "welcome_dialog.py": 3222
  },
  "findings": {
   "ai_cleanup.py::<module>::long_line": 4,
@@ -205,7 +205,6 @@
   "prefs.py::PreferencesWindow._on_cell_editing_started.on_key_press::undocumented": 1,
   "prefs.py::PreferencesWindow._on_download_update_clicked.do_download_and_install::undocumented": 1,
   "prefs.py::PreferencesWindow._on_download_update_clicked.download_failed::long_line": 1,
-  "prefs.py::PreferencesWindow._on_download_update_clicked.download_failed::undocumented": 1,
   "prefs.py::PreferencesWindow._on_fix_typing_clicked.work::long_line": 1,
   "prefs.py::PreferencesWindow._on_fix_typing_clicked.work::swallowed_error": 1,
   "prefs.py::PreferencesWindow._on_install_extension_clicked.install_thread.finish_install::undocumented": 1,
@@ -557,17 +556,17 @@
    "lines": 107
   },
   "prefs.py::PreferencesWindow._on_download_update_clicked": {
-   "lines": 138
+   "lines": 125
   },
   "prefs.py::PreferencesWindow._on_install_extension_clicked": {
-   "lines": 116
+   "lines": 108
   },
   "prefs.py::PreferencesWindow._on_model_changed": {
    "decisions": 26,
-   "lines": 146
+   "lines": 140
   },
   "prefs.py::PreferencesWindow._on_test_hotkeys": {
-   "lines": 146
+   "lines": 140
   },
   "prefs.py::PreferencesWindow._show_typing_status": {
    "decisions": 17,
@@ -580,8 +579,7 @@
    "lines": 484
   },
   "prefs.py::PreferencesWindow.create_audio_tab": {
-   "decisions": 16,
-   "lines": 410
+   "lines": 405
   },
   "prefs.py::PreferencesWindow.create_commands_tab": {
    "lines": 129
@@ -687,7 +685,7 @@
   },
   "welcome_dialog.py::show_setup_complete_dialog": {
    "decisions": 19,
-   "lines": 331
+   "lines": 317
   },
   "welcome_dialog.py::show_welcome_and_install": {
    "decisions": 19,

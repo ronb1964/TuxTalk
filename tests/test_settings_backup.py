@@ -463,7 +463,7 @@ def test_preferences_shows_a_refused_restore_as_a_message(prefs_window, monkeypa
     assert window.window.get_visible()
 
 
-def test_saving_a_backup_makes_its_folder_the_backup_folder(home):
+def test_saving_a_backup_makes_its_folder_the_backup_folder(home, monkeypatch):
     """The folder a backup is saved to becomes the backup folder, where the
     next one goes and where Earlier settings looks; the Backup folder row can
     still set it outright."""
@@ -472,9 +472,9 @@ def test_saving_a_backup_makes_its_folder_the_backup_folder(home):
     folder = home / "USB stick"
     folder.mkdir()
     shown = []
+    monkeypatch.setattr("tuxtalk.prefs.show_message", lambda *a, **k: shown.append(a[2]))
     window = SimpleNamespace(
-        _pick_file=lambda title, save_name=None: str(folder / "tuxtalk-backup"),
-        _message=lambda *a, **k: shown.append(a[1]),
+        window=None, _pick_file=lambda title, save_name=None: str(folder / "tuxtalk-backup"),
         _show_last_backup=lambda: None, _fill_restore_list=lambda: None,
         _show_backup_folder=lambda: None)
     PreferencesWindow._on_save_backup_clicked(window, None)
@@ -483,7 +483,7 @@ def test_saving_a_backup_makes_its_folder_the_backup_folder(home):
     assert [p.kind for p in sb.restore_points()] == ["file"]
 
 
-def test_the_backup_folder_can_be_chosen_outright(home):
+def test_the_backup_folder_can_be_chosen_outright(home, monkeypatch):
     """Ron, 2026-10-18: removing the Backup folder row left no way to pick
     the location except by saving a backup there."""
     from types import SimpleNamespace
@@ -491,9 +491,10 @@ def test_the_backup_folder_can_be_chosen_outright(home):
     folder = home / "Backups"
     folder.mkdir()
     refreshed = []
+    monkeypatch.setattr("tuxtalk.prefs.show_message", lambda *a, **k: pytest.fail("a message"))
     window = SimpleNamespace(
         _pick_file=lambda title, save_name=None, folder_only=False: str(folder) if folder_only else None,
-        _message=lambda *a, **k: None,
+        window=None,
         _show_backup_folder=lambda: refreshed.append("folder"),
         _fill_restore_list=lambda: refreshed.append("list"))
     PreferencesWindow._on_change_backup_folder_clicked(window, None)

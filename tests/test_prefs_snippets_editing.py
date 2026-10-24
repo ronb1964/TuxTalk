@@ -3,6 +3,8 @@ lose a row to a duplicate phrase, or let a write error escape OK/Apply."""
 import types
 from types import SimpleNamespace
 
+import pytest
+
 from tuxtalk import prefs as P
 from tuxtalk.prefs import PreferencesWindow
 
@@ -21,11 +23,18 @@ class FakeStore(list):
         return str(it)
 
 
+@pytest.fixture(autouse=True)
+def shown(monkeypatch):
+    """The titles of the message boxes Preferences showed."""
+    titles = []
+    monkeypatch.setattr(P, "show_message", lambda parent, kind, title, text="", buttons=None: titles.append(title))
+    return titles
+
+
 def _window(rows):
     d = SimpleNamespace(commands_store=FakeStore([list(r) for r in rows]),
-                        _commands_loaded={}, messages=[])
+                        _commands_loaded={}, window=None)
     d.commands_tree = SimpleNamespace(set_cursor=lambda *a: None, get_column=lambda i: i)
-    d._message = lambda kind, title, text, buttons=None: d.messages.append(title)
     for name in ("_commands_from_store", "_fill_commands_store", "_save_custom_commands",
                  "_on_add_command", "_on_phrase_edited", "_warn_duplicate_phrase",
                  "_split_commands", "_fill_words_store", "_apply_snippet_edit"):
@@ -43,7 +52,7 @@ def test_an_untouched_new_row_is_not_saved():
     assert d._commands_from_store() == {"talk type": "TalkType"}
 
 
-def test_a_duplicate_phrase_is_refused_and_explained(monkeypatch):
+def test_a_duplicate_phrase_is_refused_and_explained(monkeypatch, shown):
     """Two rows with one phrase would save as one, silently dropping a row."""
     monkeypatch.setattr(P.GLib, "idle_add", lambda fn, *a: fn(*a))
     d = _window([["talk type", "TalkType"], ["", ""]])
@@ -52,10 +61,10 @@ def test_a_duplicate_phrase_is_refused_and_explained(monkeypatch):
     d._on_phrase_edited(None, "1", "Talk Type")   # focus-out commits it again
 
     assert d.commands_store[1][0] == "", "the duplicate replaced the row's phrase"
-    assert "That phrase is already a snippet" in d.messages
+    assert "That phrase is already a snippet" in shown
 
 
-def test_the_duplicate_warning_shows_once_per_commit(monkeypatch):
+def test_the_duplicate_warning_shows_once_per_commit(monkeypatch, shown):
     pending = []
     monkeypatch.setattr(P.GLib, "idle_add", lambda fn, *a: pending.append(fn))
     d = _window([["talk type", "TalkType"], ["", ""]])
@@ -65,19 +74,19 @@ def test_the_duplicate_warning_shows_once_per_commit(monkeypatch):
     for fn in pending:
         fn()
 
-    assert d.messages == ["That phrase is already a snippet"]
+    assert shown == ["That phrase is already a snippet"]
 
 
-def test_a_row_may_keep_its_own_phrase():
+def test_a_row_may_keep_its_own_phrase(shown):
     d = _window([["talk type", "TalkType"]])
 
     d._on_phrase_edited(None, "0", "Talk Type")
 
     assert d.commands_store[0][0] == "talk type"
-    assert d.messages == []
+    assert shown == []
 
 
-def test_a_write_error_is_reported_not_raised(tmp_path, monkeypatch):
+def test_a_write_error_is_reported_not_raised(tmp_path, monkeypatch, shown):
     """An OSError (full disk, read-only folder) must not escape the OK
     handler, where neither the snippets nor the settings get saved and
     nothing is said."""
@@ -92,7 +101,7 @@ def test_a_write_error_is_reported_not_raised(tmp_path, monkeypatch):
 
     d = _window([["talk type", "TalkType"]])
     assert d._save_custom_commands() is None
-    assert d.messages == ["Your snippets weren't saved"]
+    assert shown == ["Your snippets weren't saved"]
 
 
 def test_ok_stays_open_when_the_snippets_could_not_be_written():
@@ -119,12 +128,12 @@ def test_editing_a_snippet_changes_its_row():
     assert d.commands_store[0] == ["my email", "me@example.com"]
 
 
-def test_editing_a_snippet_onto_another_phrase_is_refused(monkeypatch):
+def test_editing_a_snippet_onto_another_phrase_is_refused(monkeypatch, shown):
     monkeypatch.setattr(P.GLib, "idle_add", lambda fn, *a: fn(*a))
     d = _window([["my email", "me@example.com"], ["sig", "Ron"]])
     assert d._apply_snippet_edit("1", "my email", "Ron Brand") is False
     assert d.commands_store[1] == ["sig", "Ron"], "nothing changes when it's refused"
-    assert "That phrase is already a snippet" in d.messages
+    assert "That phrase is already a snippet" in shown
 
 
 def test_a_snippet_needs_a_phrase():

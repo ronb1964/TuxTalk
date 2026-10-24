@@ -20,7 +20,7 @@ gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
 gi.require_version('GdkPixbuf', '2.0')
 from gi.repository import Gtk, Gdk, GLib, GdkPixbuf
-from .ui_style import Fold, message_dialog, more_below_bar
+from .ui_style import Fold, message_dialog, more_below_bar, show_message
 
 from .hotkey_labels import layout_label
 from .hotkey_test_keys import (captured_key_problem, evdev_key_action, evdev_key_name,
@@ -835,19 +835,12 @@ class WelcomeDialog:
             self.needs_portaudio_install = False
 
             # Show success message
-            msg = message_dialog(
-                transient_for=self.dialog,
-                modal=True,
-                message_type=Gtk.MessageType.INFO,
-                buttons=Gtk.ButtonsType.OK,
-                text="PortAudio Installed!"
-            )
-            msg.format_secondary_text(
+            show_message(
+                self.dialog,
+                Gtk.MessageType.INFO,
+                "PortAudio Installed!",
                 "PortAudio has been installed successfully.\n\n"
-                "TuxTalk can now record audio from your microphone for speech recognition."
-            )
-            msg.run()
-            msg.destroy()
+                "TuxTalk can now record audio from your microphone for speech recognition.")
         else:
             button.set_sensitive(True)
             button.set_label("📦 Install PortAudio (Recommended)")
@@ -1423,21 +1416,13 @@ class WelcomeDialog:
             )
 
             # Show success dialog
-            msg = message_dialog(
-                transient_for=self.dialog,
-                modal=True,
-                message_type=Gtk.MessageType.INFO,
-                buttons=Gtk.ButtonsType.OK,
-                text="Typing Setup Complete!"
-            )
-            msg.format_secondary_text(
-                ("A restart will be needed to activate this — but finish "
-                 "setup first. You'll be reminded at the end.\n\n"
-                 if needs_restart else "")
-                + "TuxTalk can now type directly into your applications!"
-            )
-            msg.run()
-            msg.destroy()
+            show_message(self.dialog,
+                         Gtk.MessageType.INFO,
+                         "Typing Setup Complete!",
+                         ("A restart will be needed to activate this — but finish "
+                          "setup first. You'll be reminded at the end.\n\n"
+                          if needs_restart else "")
+                         + "TuxTalk can now type directly into your applications!")
         else:
             # Failed or cancelled: show what went wrong and let the user try again.
             button.set_sensitive(True)
@@ -2476,17 +2461,12 @@ def _ask_retry_download(model):
 def _tell_using_smaller_model(chosen, used):
     """Say that setup fell back from *chosen* to *used*, and how to go back."""
     from .recommend import model_title
-    msg = message_dialog(
-        message_type=Gtk.MessageType.INFO,
-        buttons=Gtk.ButtonsType.OK,
-        text=f"Using {model_title(used)} for now",
-    )
-    msg.format_secondary_text(
-        f"{model_title(chosen)} couldn't be downloaded, so TuxTalk will use "
-        f"{model_title(used)}. To switch later, open Preferences, General and "
-        "click Use Recommended.")
-    msg.run()
-    msg.destroy()
+    show_message(None,
+                 Gtk.MessageType.INFO,
+                 f"Using {model_title(used)} for now",
+                 f"{model_title(chosen)} couldn't be downloaded, so TuxTalk will use "
+                 f"{model_title(used)}. To switch later, open Preferences, General and "
+                 "click Use Recommended.")
 
 
 # A failed first-run download is offered again at most this many times.
@@ -3157,19 +3137,12 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
                 # re-run the whole wizard on next launch. Keep the working session
                 # and let the user restart manually once things are healthy.
                 logger.error(f"Could not mark first run complete; aborting reboot: {e}")
-                warn = message_dialog(
-                    transient_for=dialog, modal=True,
-                    message_type=Gtk.MessageType.WARNING,
-                    buttons=Gtk.ButtonsType.OK,
-                    text="Couldn't finish setup",
-                )
-                warn.format_secondary_text(
-                    "TuxTalk couldn't save its setup state, so it won't restart "
-                    "automatically. Please restart your computer yourself in a "
-                    "moment to finish."
-                )
-                warn.run()
-                warn.destroy()
+                show_message(dialog,
+                             Gtk.MessageType.WARNING,
+                             "Couldn't finish setup",
+                             "TuxTalk couldn't save its setup state, so it won't restart "
+                             "automatically. Please restart your computer yourself in a "
+                             "moment to finish.")
                 return
             if _appimage_copy_thread is not None and _appimage_copy_thread.is_alive():
                 _widget.set_label("Finishing install…")
@@ -3179,17 +3152,10 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
         def reboot_after_copy():
             from tuxtalk.uinput_helper import reboot_system
             if not reboot_system():
-                warn = message_dialog(
-                    transient_for=dialog, modal=True,
-                    message_type=Gtk.MessageType.WARNING,
-                    buttons=Gtk.ButtonsType.OK,
-                    text="Couldn't restart automatically",
-                )
-                warn.format_secondary_text(
-                    "Please restart your computer yourself to finish setup."
-                )
-                warn.run()
-                warn.destroy()
+                show_message(dialog,
+                             Gtk.MessageType.WARNING,
+                             "Couldn't restart automatically",
+                             "Please restart your computer yourself to finish setup.")
             # On success the machine is going down; nothing more to do here.
 
         later_button = Gtk.Button(label="I'll restart later")

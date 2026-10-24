@@ -50,16 +50,16 @@ def fake_dialog(monkeypatch):
                         lambda name: lambda progress, cancel: True)
 
 
-def _window():
+def _window(monkeypatch):
     shown = []
-    d = SimpleNamespace(window=None,
-                        _message=lambda kind, title, text, buttons=None: shown.append(title))
+    monkeypatch.setattr(P, "show_message", lambda parent, kind, title, text="", buttons=None: shown.append(title))
+    d = SimpleNamespace(window=None)
     return d, shown
 
 
 def test_an_incomplete_download_never_claims_success(fake_dialog, monkeypatch):
     monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda name: False)
-    d, shown = _window()
+    d, shown = _window(monkeypatch)
 
     assert PreferencesWindow.check_and_download_model(d, "small") == (False, False, False)
     assert "Model Downloaded Successfully!" not in shown
@@ -68,7 +68,7 @@ def test_an_incomplete_download_never_claims_success(fake_dialog, monkeypatch):
 def test_a_verified_download_says_so(fake_dialog, monkeypatch):
     checks = iter([False, True])            # not cached before, complete after
     monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda name: next(checks))
-    d, shown = _window()
+    d, shown = _window(monkeypatch)
 
     assert PreferencesWindow.check_and_download_model(d, "parakeet-v3") == (True, True, False)
     assert shown == ["Model Downloaded Successfully!"]

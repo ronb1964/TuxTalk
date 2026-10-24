@@ -162,7 +162,7 @@ def prefs_row(monkeypatch):
     monkeypatch.setattr("tuxtalk.model_helper.parakeet_update_size", lambda device: "669 MB")
     w.restarts, w.messages = [], []
     w.restart_service = lambda: w.restarts.append(True)
-    monkeypatch.setattr("tuxtalk.vulkan_setup_dialogs.message",
+    monkeypatch.setattr("tuxtalk.prefs.show_message",
                         lambda parent, kind, title, text: w.messages.append(title))
     return w, need
 
