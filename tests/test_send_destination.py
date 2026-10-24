@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 from evdev import ecodes
 
-from tuxtalk import app, focused_window, history, modifier_hotkeys, send_countdown
+from tuxtalk import app, atspi_helper, focused_window, history, modifier_hotkeys, send_countdown
 
 ENTER, RCTRL, F8 = ecodes.KEY_ENTER, ecodes.KEY_RIGHTCTRL, ecodes.KEY_F8
 FIRST = ("brave-browser", ("tray", "{5c1d0e2a}"))
@@ -198,6 +198,37 @@ def test_right_away_a_tap_while_the_enter_waits_holds_it(chat, keyboard, right_c
     send_countdown.send_automatically("test", focused_window.Destination(*FIRST),
                                       app._press_key, app._type_onto_dictation)
     assert held == [True] and keyboard.events == []
+
+
+def test_a_click_during_the_password_check_sends_nothing(chat, keyboard, monkeypatch):
+    """The accessibility bus can take a quarter of a second to say whether
+    the cursor is in a password field. Clicked into the other Brave window
+    meanwhile: the window looked at before the check got the Enter."""
+    focus, _, _, notices = chat
+
+    def slow_check():
+        focus[:] = SECOND
+        return False
+    monkeypatch.setattr(atspi_helper, "focused_is_password", slow_check)
+    send_countdown.send_automatically("test", focused_window.Destination(*FIRST),
+                                      app._press_key, app._type_onto_dictation)
+    assert keyboard.events == [] and notices == [send_countdown.SWITCHED_WINDOW_NOTICE]
+
+
+def test_a_click_back_during_the_password_check_sends_nothing(chat, keyboard, monkeypatch):
+    """In the other window as the Enter was due, then back into the chat
+    during the password check: the check may have been asked about the
+    other window, so the chat's field isn't known not to be a password's."""
+    focus, _, _, notices = chat
+    focus[:] = SECOND
+
+    def slow_check():
+        focus[:] = FIRST
+        return False
+    monkeypatch.setattr(atspi_helper, "focused_is_password", slow_check)
+    send_countdown.send_automatically("test", focused_window.Destination(*FIRST),
+                                      app._press_key, app._type_onto_dictation)
+    assert keyboard.events == [] and notices == [send_countdown.SWITCHED_WINDOW_NOTICE]
 
 
 def test_right_away_into_the_other_window_of_the_app_sends_nothing(chat, keyboard):

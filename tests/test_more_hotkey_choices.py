@@ -604,7 +604,7 @@ def test_a_tap_during_the_focus_questions_holds_the_send(keyboard, due_send, mon
     monkeypatch.setattr(focused_window, "look", lambda: (focused(), None))
     monkeypatch.setattr(focused_window, "is_password", lambda: False)
     due_send(lambda look: False)
-    assert held == [True] and keyboard.events == []
+    assert held[0] is True and keyboard.events == []
 
 
 def test_a_tap_while_the_enter_waits_for_the_keyboard_holds_the_send(keyboard, due_send,

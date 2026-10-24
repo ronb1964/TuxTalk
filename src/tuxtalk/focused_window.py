@@ -135,8 +135,14 @@ def changed(before, after) -> bool:
 
 
 def destination() -> Destination:
-    """Where keys go now."""
-    return Destination(*look(), is_password())
+    """Where keys go now. The password check goes first: it can take a
+    while (the accessibility bus has a quarter of a second to answer), and
+    a window looked at before it could have lost the focus by the time the
+    keys go out. A caller for whom that matters looks once more before
+    (send_countdown._claim): a focus that moved during the check may have
+    been asked about the other window."""
+    password = is_password()
+    return Destination(*look(), password)
 
 
 def is_password() -> bool:

@@ -304,7 +304,7 @@ def test_no_enter_into_another_window_of_the_same_app(countdown, monkeypatch):
 def test_a_window_not_known_at_the_send_still_sends(countdown, monkeypatch):
     """COSMIC, or a desktop that didn't answer: nothing says it's another window."""
     pressed, _ = countdown
-    looks = iter([None, ("compositor", 0x3200007)])
+    looks = iter([None, ("compositor", 0x3200007), ("compositor", 0x3200007)])
     monkeypatch.setattr(focused_window, "look", lambda: ("brave-browser", next(looks)))
     start_send("test")
     sends()[0].fire()

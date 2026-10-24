@@ -17,8 +17,9 @@ on a terminal's line; in a password field it submits the form.
      Right Ctrl or Right Alt dictation key held, the keyboard taken back
      from other typing, the Flatpak's portal getting ready), one claim
      (_claim) makes every check again: the send wasn't held, the same
-     window has the focus, the cursor isn't in a password field, and no
-     other key went out on the keyboard while the checks were made.
+     window has the focus before the password check and after it, the
+     cursor isn't in a password field, and no other key went out on the
+     keyboard while the checks were made.
 
 Anything else, nothing is sent and the notice says why (_why_not). What
 happens where the desktop can't say which window of an app has the focus is
@@ -124,7 +125,11 @@ def _claim(pending):
     with the keyboard held, right before the Enter goes down. Either raises
     virtual_keyboard.GaveUp when the Enter mustn't go."""
     start = virtual_keyboard.emitted()
-    if why := _why_not(pending["to"], focused_window.destination()):
+    first = focused_window.look()
+    now = focused_window.destination()
+    # A click during the password check: its answer may be the other window's.
+    why = "switched" if focused_window.changed(first, now) else _why_not(pending["to"], now)
+    if why:
         _refuse(pending, why)
 
     def take():
