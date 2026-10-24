@@ -1,7 +1,7 @@
 {
  "files": {
   "app.py": 5251,
-  "prefs.py": 7120,
+  "prefs.py": 7079,
   "tray.py": 2548,
   "welcome_dialog.py": 3256
  },
@@ -209,7 +209,6 @@
   "prefs.py::PreferencesWindow._desktop_accent_rgba::swallowed_error": 1,
   "prefs.py::PreferencesWindow._download_selected_model::long_line": 1,
   "prefs.py::PreferencesWindow._edit_word_dialog::swallowed_error": 1,
-  "prefs.py::PreferencesWindow._find_playback_device::swallowed_error": 2,
   "prefs.py::PreferencesWindow._fit_to_screen::swallowed_error": 1,
   "prefs.py::PreferencesWindow._get_device_samplerate::swallowed_error": 1,
   "prefs.py::PreferencesWindow._handle_update_result::long_line": 2,
@@ -278,7 +277,6 @@
   "prefs.py::PreferencesWindow.create_updates_tab::long_line": 3,
   "prefs.py::PreferencesWindow.get_system_mic_volume::swallowed_error": 2,
   "prefs.py::PreferencesWindow.load_config::swallowed_error": 1,
-  "prefs.py::PreferencesWindow.on_replay_recording::swallowed_error": 1,
   "prefs.py::PreferencesWindow.on_start_recording::swallowed_error": 1,
   "prefs.py::PreferencesWindow.on_stop_recording::swallowed_error": 1,
   "prefs.py::PreferencesWindow.on_tab_switched::swallowed_error": 1,

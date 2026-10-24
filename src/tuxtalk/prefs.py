@@ -4756,63 +4756,22 @@ class PreferencesWindow:
             self.level_status.set_text("✓ Good levels - should transcribe well!")
             style_context.add_class("level-good")
     
-    def _find_playback_device(self):
-        """Find a working output device and its supported sample rate.
-
-        The default device may be a mic-only USB device that can't play audio.
-        Search for a real output device (PipeWire/PulseAudio) directly to avoid
-        probing the broken default which can leave PortAudio in a bad state.
-        """
-        import sounddevice as sd
-        playback_sr = getattr(self, '_recording_sr', 48000)
-
-        for name_hint in ['pipewire', 'pulse', 'sysdefault', 'default', 'analog']:
-            for i, d in enumerate(sd.query_devices()):
-                if d['max_output_channels'] > 0 and name_hint in d.get('name', '').lower():
-                    try:
-                        sd.check_output_settings(device=i, samplerate=playback_sr, channels=1)
-                        return i, playback_sr
-                    except Exception:
-                        try:
-                            native = int(d['default_samplerate'])
-                            sd.check_output_settings(device=i, samplerate=native, channels=1)
-                            return i, native
-                        except Exception:
-                            continue
-        return None, playback_sr
-
     def on_replay_recording(self, button):
-        """Replay the recorded audio."""
-        try:
-            if self.recorded_audio is not None:
-                import sounddevice as sd
-                import numpy as np
+        """Play the test recording back, three times louder, on the sound
+        thread (beeps.play), so it is heard to the end and the window stays
+        free while it plays."""
+        if self.recorded_audio is None:
+            return
+        import numpy as np
+        from . import beeps
+        louder = np.clip(self.recorded_audio[:, 0] * 3.0, -1.0, 1.0).astype(np.float32)
+        beeps.play(louder, getattr(self, '_recording_sr', 48000),
+                   failed=lambda error: GLib.idle_add(self._replay_failed, error))
 
-                # Amplify the audio for better playback volume (3x boost)
-                amplified_audio = self.recorded_audio * 3.0
+    def _replay_failed(self, error):
+        self.show_error_dialog("Playback failed!", error)
+        return False
 
-                # Ensure we don't clip (values stay between -1 and 1)
-                amplified_audio = np.clip(amplified_audio, -1.0, 1.0)
-
-                # Find a working output device (default may be a mic-only USB device)
-                out_device, out_sr = self._find_playback_device()
-                rec_sr = getattr(self, '_recording_sr', 48000)
-
-                # Resample if playback device needs a different rate
-                if out_sr != rec_sr:
-                    duration = len(amplified_audio) / rec_sr
-                    target_len = int(duration * out_sr)
-                    orig_indices = np.linspace(0, len(amplified_audio) - 1, target_len)
-                    amplified_audio = np.interp(
-                        orig_indices, np.arange(len(amplified_audio)),
-                        amplified_audio.astype(np.float64).flatten()
-                    ).astype(np.float32)
-
-                sd.play(amplified_audio, samplerate=out_sr, device=out_device)
-
-        except Exception as e:
-            self.show_error_dialog("Playback failed!", str(e))
-    
     def show_error_dialog(self, title, message):
         """Show an error dialog."""
         dialog = message_dialog(

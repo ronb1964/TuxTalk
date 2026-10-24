@@ -257,10 +257,17 @@ def _no_real_tuxtalk(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _no_real_sound(request, monkeypatch):
-    """Never let a test beep at the user: a test that starts a recording with
-    beeps on would play the start beep on their speakers. test_beeps gives
-    the player a fake sound system instead."""
+    """Never let a test play a sound to the user: a test that starts a
+    recording with beeps on would beep on their speakers, and a test of the
+    Preferences replay would play a recording. test_beeps gives the player a
+    fake sound system instead."""
+    import sounddevice
     from tuxtalk import beeps
+
+    def refuse(*_a, **_k):
+        raise RuntimeError("tests must not play sound")
+    monkeypatch.setattr(sounddevice, "play", refuse)
+    monkeypatch.setattr(sounddevice, "OutputStream", refuse)
     if request.module.__name__.rpartition(".")[2] != "test_beeps":
         monkeypatch.setattr(beeps, "output_device", lambda samplerate: (None, samplerate))
         monkeypatch.setattr(beeps, "_play", lambda samples, rate, device: None)
