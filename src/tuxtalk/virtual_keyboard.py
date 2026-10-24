@@ -144,9 +144,10 @@ def send(events, delay_ms: float = KEY_DELAY_MS, before_press=None, claim=None) 
     again once it has the keyboard back: one pressed meanwhile is waited for
     too. *claim*, if given, is for a key that must still be stoppable right
     up to its press (send_countdown._claim_send: a send a tap can hold): it
-    runs the same way before the first key, after any wait, for checks that
-    take a while, and returns *take*, which runs with the keyboard held,
-    once nothing is down, right before that key goes down. Either may raise
+    runs the same way before the first key, after any wait and after waiting
+    for another sender to give the keyboard back, for checks that take a
+    while, and returns *take*, which runs with the keyboard held, once
+    nothing is down, right before that key goes down. Either may raise
     GaveUp.
 
     Waits *delay_ms* after each event, on a schedule kept from the start, so
@@ -165,7 +166,7 @@ def send(events, delay_ms: float = KEY_DELAY_MS, before_press=None, claim=None) 
     if not events:
         return True
     if claim is not None:
-        before_press = _claiming(before_press, claim)
+        before_press = _Claim(before_press, claim)
     with _lock:
         device = _open()
         if device is None:
@@ -179,7 +180,7 @@ def send(events, delay_ms: float = KEY_DELAY_MS, before_press=None, claim=None) 
         try:
             for code, value in events:
                 while value and before_press is not None and (wait := before_press()):
-                    _wait_unlocked(device, down, wait)
+                    _wait_unlocked(device, down, wait, before_press)
                 device.write(ecodes.EV_KEY, code, value)
                 # Counted before the SYN: the event may reach the app even
                 # if the SYN after it fails.
@@ -210,12 +211,16 @@ def send(events, delay_ms: float = KEY_DELAY_MS, before_press=None, claim=None) 
         return True
 
 
-def _wait_unlocked(device, down, wait) -> None:
+def _wait_unlocked(device, down, wait, before_press) -> None:
     """Run *wait* with the lock let go. Taking it meanwhile, the hotkey
     loop's own keys go out at once: its Ctrl that keeps a Right Alt tap from
     opening the menu bar (modifier_hotkeys.guard_alt_tap) came after the tap otherwise.
     The keys this send holds (Shift for a capital) are let go first and
-    pressed again after, so nothing sent meanwhile gets them."""
+    pressed again after, so nothing sent meanwhile gets them.
+
+    When another sender had the keyboard as the wait ended, a claim's
+    checks (*before_press* a _Claim) may be out of date by the time it's
+    back: they're made again."""
     from evdev import ecodes
     held = list(down)
     _release(device, held)
@@ -224,39 +229,49 @@ def _wait_unlocked(device, down, wait) -> None:
     try:
         wait()
     finally:
-        _lock.acquire()
+        busy = not _lock.acquire(blocking=False)
+        if busy:
+            _lock.acquire()
     for code in held:
         device.write(ecodes.EV_KEY, code, 1)
         down[code] = True
     device.syn()
+    if busy and isinstance(before_press, _Claim):
+        before_press.out_of_date()
 
 
-def _claiming(before_press, claim):
-    """*before_press*, for a send with a *claim* (see send). Before the first
+class _Claim:
+    """*before_press* for a send with a *claim* (see send). Before the first
     key it answers with a wait that ends with claim's checks, again after
-    each wait for a key pressed meanwhile, and takes the claim once nothing
-    is down: a tap read during the checks, or while the keyboard was busy,
-    can still stop the key."""
-    take, taken = None, False
+    each wait for a key pressed meanwhile and after waiting for another
+    sender to give the keyboard back (the focus may have moved by then), and
+    takes the claim once nothing is down: a tap read during the checks, or
+    while the keyboard was busy, can still stop the key."""
 
-    def check():
+    def __init__(self, before_press, claim):
+        self._before_press, self._claim = before_press, claim
+        self._take, self._taken = None, False
+
+    def out_of_date(self) -> None:
+        """The checks were made before the keyboard was busy: make them again."""
+        if not self._taken:
+            self._take = None
+
+    def __call__(self):
         """The answer for the next key: claim's checks, after any wait,
         until they were made with nothing down since; then take."""
-        nonlocal take, taken
-        wait = before_press() if before_press is not None else None
-        if taken:
+        wait = self._before_press() if self._before_press is not None else None
+        if self._taken:
             return wait
-        if take is None or wait is not None:
+        if self._take is None or wait is not None:
             def then_check():
-                nonlocal take
                 if wait is not None:
                     wait()
-                take = claim()
+                self._take = self._claim()
             return then_check
-        taken = True
-        take()
+        self._taken = True
+        self._take()
         return None
-    return check
 
 
 def _release(device, codes) -> None:

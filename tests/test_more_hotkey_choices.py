@@ -597,6 +597,8 @@ def test_a_tap_while_the_enter_waits_for_the_keyboard_holds_the_send(keyboard, d
     claim_send = send_countdown._claim_send
 
     def claim(pending):
+        if typing.is_set():         # asked again once the keyboard is free
+            return claim_send(pending)
         threading.Thread(target=other_typing).start()
         assert typing.wait(2)
         take = claim_send(pending)
@@ -605,6 +607,37 @@ def test_a_tap_while_the_enter_waits_for_the_keyboard_holds_the_send(keyboard, d
     monkeypatch.setattr(send_countdown, "_claim_send", claim)
     due_send(lambda look: False)
     assert held == [True] and keyboard.events == []
+
+
+def test_a_window_switch_while_another_send_has_the_keyboard_stops_the_enter(
+        keyboard, due_send, monkeypatch):
+    """The questions found KWrite; then another dictation's typing kept the
+    keyboard while the user clicked into Firefox. Taken without asking
+    again, the Enter went into Firefox."""
+    import threading
+    focus = ["kwrite"]
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: focus[0])
+    monkeypatch.setattr(app, "_focused_is_password", lambda: False)
+    typing, checked = threading.Event(), threading.Event()
+
+    def other_typing():
+        with virtual_keyboard._lock:
+            typing.set()
+            assert checked.wait(2)
+            focus[0] = "firefox"
+
+    claim_send = send_countdown._claim_send
+
+    def claim(pending):
+        take = claim_send(pending)
+        if not typing.is_set():
+            threading.Thread(target=other_typing).start()
+            assert typing.wait(2)
+            checked.set()
+        return take
+    monkeypatch.setattr(send_countdown, "_claim_send", claim)
+    due_send(lambda look: False)
+    assert keyboard.events == [] and app.state.pending_send is None
 
 
 def test_a_right_ctrl_pressed_during_the_focus_questions_makes_the_enter_wait(
