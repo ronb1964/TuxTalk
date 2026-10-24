@@ -203,8 +203,11 @@ def _no_real_send_countdown(monkeypatch, request):
     monkeypatch.setattr(app.state, "held_send", False)
     monkeypatch.setattr(send_countdown, "_owed", None)
     monkeypatch.setattr(app.state, "sent", None)
-    # Where an earlier test's text "landed" must not stop this test's send.
+    # Where an earlier test's text "landed" must not stop this test's send,
+    # nor its held-back mark.
+    from tuxtalk import focused_window
     monkeypatch.setattr(app.state, "last_inserted_where", (None, None))
+    monkeypatch.setattr(app.state, "send_to", focused_window.Destination(None, None))
 
 
 @pytest.fixture(autouse=True)

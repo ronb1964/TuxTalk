@@ -8,7 +8,7 @@ is really in the document, or "undo that" deletes the user's own writing.
 
 import pytest
 
-from tuxtalk import app
+from tuxtalk import app, focused_window
 
 MARKER = "\xa7SHIFT_ENTER\xa7"
 
@@ -127,6 +127,7 @@ def test_smart_paste_leaves_out_a_line_break_that_failed(monkeypatch, quiet):
 def test_typing_into_electron_records_the_line_break_that_landed(monkeypatch, quiet):
     monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "Claude")
+    monkeypatch.setattr(focused_window, "look", lambda: ("Claude", None))
     monkeypatch.setattr(app, "_type_text_raw", lambda t: t == "first")
     monkeypatch.setattr(app, "_send_shift_enter", lambda: True)
 

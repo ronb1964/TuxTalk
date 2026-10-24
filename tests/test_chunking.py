@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 
 from tuxtalk.history import add_entry as REAL_ADD_ENTRY
+from tuxtalk import focused_window
 
 SR = 16000
 BLOCK = 320   # 20 ms at 16 kHz
@@ -1090,7 +1091,7 @@ def enter(pipeline, monkeypatch):
     from tuxtalk import app
     texts, typed, beeps = pipeline
 
-    def fake_enter(key, why):
+    def fake_enter(key, why, claim=None):
         typed.append(f"<{key}>")
         app.state.last_inserted_text = ""
         return True
@@ -1278,9 +1279,10 @@ def test_a_held_mark_stays_in_the_window_its_phrase_went_to(pipeline, monkeypatc
     texts, typed, _ = pipeline
     focus = {"now": "brave-browser"}
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: focus["now"])
+    monkeypatch.setattr(focused_window, "look", lambda: (focus["now"], None))
     texts.extend(["what's next?", "what's next?"])
     call(frames_of(speech(1.0)), "middle", auto_period=True)
-    app.state.pending_boundary["window"] = "brave-browser"
+    app.state.pending_boundary["where"] = ("brave-browser", None)
     focus["now"] = "com.anthropic.Claude"             # the click into the chat
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     assert typed == ["What's next", "What's next"]

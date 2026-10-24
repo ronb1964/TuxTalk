@@ -37,6 +37,14 @@ before 0.15.0, so older entries use that name.
   and GNOME that tells two windows of one app apart too, so two maximized
   browser windows aren't mixed up, and moving a window while a send counts
   down doesn't stop it any more. GNOME extension version 27.
+- Sending automatically now checks where the Enter would go one last time,
+  right before it goes, whatever it waited for first. Click into another
+  window while a long dictation is still going in and the text stays where it
+  is, but nothing gets sent. If something else typed into the window during
+  that last check, it doesn't send either, and it tells you. With Right Ctrl
+  as your toggle key, a tap holds a "Right away" send too. On KDE or GNOME
+  under X11, a busy tray could make TuxTalk think you'd switched windows when
+  you hadn't. That's fixed.
 - In Claude Desktop a tab said in the middle of a dictation is four spaces
   with Keystroke Typing too. It pressed the real Tab, which jumps to the Send
   button. Saying only "press tab" in a password box there presses the real

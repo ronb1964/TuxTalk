@@ -220,7 +220,9 @@ def test_flatpak_electron_app_types_via_libei_not_the_virtual_keyboard(monkeypat
     # jumps focus to Claude Desktop's Send button).
     from tuxtalk import app
     monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TalkType")
+    from tuxtalk import focused_window
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "Claude")
+    monkeypatch.setattr(focused_window, "look", lambda: ("Claude", None))
     typed = []
     from tuxtalk.output_backends import OutputBackend
 
@@ -331,7 +333,7 @@ def test_flatpak_typing_records_what_libei_types_for_undo(monkeypatch):
 
 
 def test_libei_backend_presses_nothing_when_the_claim_says_no(monkeypatch):
-    """A send held by a tap during its wait: no Enter goes out (send_countdown._claim_send)."""
+    """A send held by a tap during its wait: no Enter goes out (send_countdown._claim)."""
     from tuxtalk import virtual_keyboard
     b, done = _libei_with_fake_session(monkeypatch)
 

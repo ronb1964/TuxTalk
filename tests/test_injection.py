@@ -320,6 +320,7 @@ def _typing_into(monkeypatch, window_class, mode="type"):
     monkeypatch.setattr(app, "_type_text", lambda t: typed.append(t) or True)
     monkeypatch.setattr(app, "_determine_injection_method", lambda m: (mode, "test"))
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: window_class)
+    monkeypatch.setattr(focused_window, "look", lambda: (window_class, None))
     return typed
 
 

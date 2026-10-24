@@ -198,7 +198,7 @@ def right_ctrl(rig, keyboard, monkeypatch):
     for name, value in (("_noted", ([], frozenset())), ("_hidden", (frozenset(), ())),
                         ("_stuck", set()), ("time", keyboard.clock)):
         monkeypatch.setattr(modifier_hotkeys, name, value)
-    monkeypatch.setattr(focused_window, "destination", lambda: ("kwrite", False))
+    monkeypatch.setattr(focused_window, "destination", lambda: ("kwrite", None, False))
     modifier_hotkeys.note([client], RCTRL, F9)
     return lambda: app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
 

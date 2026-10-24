@@ -49,7 +49,8 @@ def _dictate(monkeypatch, raw, prepared=None, outcome="ok", window="brave-browse
         events.append(("typed", text))
         return outcome
     monkeypatch.setattr(app, "_inject_text", inject)
-    monkeypatch.setattr(app, "_press_key", lambda key, why: events.append((key.lower(), why)))
+    monkeypatch.setattr(app, "_press_key",
+                        lambda key, why, claim=None: events.append((key.lower(), why)))
     frames = [(np.ones(app.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
     app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=False,
                                smart_quotes=False, notify_on=False)
@@ -216,7 +217,7 @@ TYPED = []   # what the countdown fixture's _inject_text was given
 
 def start_send(why="test", space="", mode="type"):
     """An automatic send for a dictation typed into the window focused now."""
-    send_countdown.send_automatically(why, focused_window.look(), app._press_key,
+    send_countdown.send_automatically(why, focused_window.destination(), app._press_key,
                                       app._type_onto_dictation, space, mode)
 
 
@@ -293,9 +294,9 @@ def test_no_enter_into_another_window_of_the_same_app(countdown, monkeypatch):
     """Two Brave windows: the class is the same, the window isn't. The Enter
     would send whatever is in the other one's box."""
     pressed, labels = countdown
-    monkeypatch.setattr(focused_window, "look", lambda: ("brave-browser", 0x3200007))
+    monkeypatch.setattr(focused_window, "look", lambda: ("brave-browser", ("tray", "{3200007}")))
     start_send("test")
-    monkeypatch.setattr(focused_window, "look", lambda: ("brave-browser", 0x3400004))
+    monkeypatch.setattr(focused_window, "look", lambda: ("brave-browser", ("tray", "{3400004}")))
     sends()[0].fire()
     assert pressed == [] and labels[-1] == send_countdown.SWITCHED_WINDOW_NOTICE
 
@@ -303,7 +304,7 @@ def test_no_enter_into_another_window_of_the_same_app(countdown, monkeypatch):
 def test_a_window_not_known_at_the_send_still_sends(countdown, monkeypatch):
     """COSMIC, or a desktop that didn't answer: nothing says it's another window."""
     pressed, _ = countdown
-    looks = iter([None, 0x3200007])
+    looks = iter([None, ("compositor", 0x3200007)])
     monkeypatch.setattr(focused_window, "look", lambda: ("brave-browser", next(looks)))
     start_send("test")
     sends()[0].fire()
@@ -344,7 +345,7 @@ def test_a_tap_too_short_to_dictate_says_not_sent(countdown, monkeypatch):
 
 def sends():
     """The timers that press Enter, not the countdown's ticks."""
-    return [t for t in FakeTimer.made if t.fn is send_countdown._send_when_due]
+    return [t for t in FakeTimer.made if t.fn is send_countdown._send]
 
 
 def test_a_new_send_replaces_one_still_counting(countdown):
@@ -649,10 +650,11 @@ def test_a_pause_at_the_end_after_switching_windows_sends_nothing(monkeypatch, k
     Enter went to whichever window had the focus when the send was set up,
     and ran what was on Konsole's command line."""
     from tuxtalk import history
-    focus = ["brave-browser", 0x3200007]
+    focus = ["brave-browser", ("compositor", 0x3200007)]
     monkeypatch.setattr(focused_window, "look", lambda: tuple(focus))
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: focus[0])
-    monkeypatch.setattr(app, "_deliver_text", lambda text, mode, t0, one_block=False: "ok")
+    monkeypatch.setattr(app, "_deliver_text",
+                        lambda text, mode, t0, one_block=False, *, where: "ok")
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, language: "see you at noon")
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
@@ -666,7 +668,7 @@ def test_a_pause_at_the_end_after_switching_windows_sends_nothing(monkeypatch, k
     frames = [(np.ones(app.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
     app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=False, smart_quotes=False,
                                notify_on=False, chunk_role="middle")
-    focus[:] = ["org.kde.konsole", 0x3400004]           # the click into Konsole
+    focus[:] = ["org.kde.konsole", ("compositor", 0x3400004)]     # the click into Konsole
     app._transcribe_and_inject([], app.SAMPLE_RATE, beeps_on=False, smart_quotes=False,
                                notify_on=False, chunk_role="last")
     for timer in FakeTimer.made:

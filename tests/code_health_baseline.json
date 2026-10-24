@@ -41,7 +41,6 @@
   "app.py::_rediscover_devices::swallowed_error": 1,
   "app.py::_report_undelivered::swallowed_error": 1,
   "app.py::_resample_audio::long_line": 1,
-  "app.py::_resolve_boundary::dated_comment": 1,
   "app.py::_show_voice_commands_via_dbus::swallowed_error": 1,
   "app.py::_transcribe_and_inject::long_line": 1,
   "app.py::_transcribe_audio::long_line": 5,
@@ -450,7 +449,7 @@
   },
   "app.py::_deliver_text": {
    "decisions": 47,
-   "lines": 229
+   "lines": 225
   },
   "app.py::_edit_selection": {
    "decisions": 48,
@@ -481,7 +480,7 @@
    "decisions": 17
   },
   "app.py::_resolve_boundary": {
-   "decisions": 20
+   "decisions": 18
   },
   "app.py::_service_tick": {
    "decisions": 20

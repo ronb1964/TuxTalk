@@ -392,17 +392,21 @@ def test_a_stuck_key_that_keeps_back_the_enter_says_so(keyboard, stuck_right_ctr
     stuck_right_ctrl()
     monkeypatch.setattr(app, "_output_backend", VirtualKeyboardOutputBackend)
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
-    monkeypatch.setattr(focused_window, "destination", lambda: ("kwrite", None, False))
-    notes = []
+    monkeypatch.setattr(focused_window, "destination",
+                        lambda: focused_window.Destination("kwrite", None, False))
+    notes, notices = [], []
     monkeypatch.setattr(app, "_notify", lambda title, body: notes.append((title, body)))
+    monkeypatch.setattr(send_countdown, "show_notice", notices.append)
     if enter == "said":
         app._press_said("ENTER", None)
+        assert notes == [delivery_notices.key_not_pressed("ENTER")]
+        assert notes[0][0] == "Enter not pressed: a dictation key stayed down"
     else:
         monkeypatch.setattr(send_countdown, "_delay", 0.0)
-        send_countdown.send_automatically("test", (None, None), app._press_key, None)
+        send_countdown.send_automatically("test", focused_window.Destination("kwrite", None),
+                                          app._press_key, None)
+        assert notices == [send_countdown.HELD_NOTICE]
     assert keyboard.events == []
-    assert notes == [delivery_notices.key_not_pressed("ENTER")]
-    assert notes[0][0] == "Enter not pressed: a dictation key stayed down"
 
 
 @pytest.fixture
@@ -451,12 +455,12 @@ def test_undo_under_a_stuck_key_deletes_nothing_and_says_so(keyboard, stuck_righ
     assert keyboard.events == []
 
 
-@pytest.mark.parametrize("now", [("firefox", False), ("kwrite", True)])
+@pytest.mark.parametrize("now", [("firefox", None, False), ("kwrite", None, True)])
 def test_typing_that_waited_stops_if_the_focus_moved_meanwhile(keyboard, no_hotkeys_noted,
                                                               monkeypatch, now):
     """Clicked into another window or a password field while Right Ctrl was
     down: the text was checked for the window it was meant for, not this one."""
-    answers = iter([("kwrite", False), now])
+    answers = iter([("kwrite", None, False), now])
     monkeypatch.setattr(focused_window, "destination", lambda: next(answers))
     modifier_hotkeys.note([Keyboard(lambda look: look <= 3)], RCTRL, None)
     with pytest.raises(virtual_keyboard.GaveUp) as stop:
@@ -468,7 +472,7 @@ def test_typing_that_waited_stops_if_the_focus_moved_meanwhile(keyboard, no_hotk
 def test_typing_that_waited_stops_if_another_window_of_the_app_has_the_focus(
         keyboard, no_hotkeys_noted, monkeypatch):
     """Two KWrite windows: the class is the same, the window isn't."""
-    windows = iter(["{4b1e}", "{9c07}"])
+    windows = iter([("tray", "{4b1e}"), ("tray", "{9c07}")])
     monkeypatch.setattr(focused_window, "look", lambda: ("kwrite", next(windows)))
     monkeypatch.setattr(focused_window, "is_password", lambda: False)
     modifier_hotkeys.note([Keyboard(lambda look: look <= 3)], RCTRL, None)
@@ -477,11 +481,11 @@ def test_typing_that_waited_stops_if_another_window_of_the_app_has_the_focus(
     assert stop.value.reason == "moved" and keyboard.events == []
 
 
-@pytest.mark.parametrize("now", [(None, "here", False), ("kwrite", None, False)])
+@pytest.mark.parametrize("now", [(None, ("tray", "{4b1e}"), False), ("kwrite", None, False)])
 def test_a_focus_answer_that_didnt_come_isnt_a_move(keyboard, no_hotkeys_noted, monkeypatch,
                                                      now):
     """A D-Bus question that timed out says None: not known, not another window."""
-    answers = iter([("kwrite", "here", False), now])
+    answers = iter([("kwrite", ("tray", "{4b1e}"), False), now])
     monkeypatch.setattr(focused_window, "destination", lambda: next(answers))
     modifier_hotkeys.note([Keyboard(lambda look: look <= 3)], RCTRL, None)
     assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
@@ -489,7 +493,7 @@ def test_a_focus_answer_that_didnt_come_isnt_a_move(keyboard, no_hotkeys_noted, 
 
 
 def test_typing_that_waited_goes_on_where_it_was_going(keyboard, no_hotkeys_noted, monkeypatch):
-    monkeypatch.setattr(focused_window, "destination", lambda: ("kwrite", False))
+    monkeypatch.setattr(focused_window, "destination", lambda: ("kwrite", None, False))
     modifier_hotkeys.note([Keyboard(lambda look: look <= 3)], RCTRL, None)
     assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
     assert keyboard.typed_keys() == [ecodes.KEY_A]
@@ -509,30 +513,29 @@ def test_a_tap_while_a_due_send_waits_for_right_ctrl_still_holds_it(keyboard, no
             held.append(send_countdown.hold(announce=True))
         return look <= 3
     modifier_hotkeys.note([Keyboard(pressed)], ecodes.KEY_F8, RCTRL)
-    pending = {"window": ("kwrite", None), "why": "test", "press": app._press_key,
-               "space": "", "mode": "type",
-               "timer": None, "ticks": []}
+    pending = {"to": focused_window.Destination("kwrite", None), "why": "test",
+               "press": app._press_key, "space": "", "mode": "type", "timer": None, "ticks": []}
     monkeypatch.setattr(send_countdown, "_cancel_timers", lambda pending: None)
     send_countdown._pending = pending
-    send_countdown._send_when_due(pending)
+    send_countdown._send(pending)
     assert held == [True] and keyboard.events == []
 
 
 @pytest.fixture
 def due_send(keyboard, no_hotkeys_noted, monkeypatch):
     """A send counting down to Enter in KWrite, its timers left out; Right
-    Ctrl is the toggle key, down while *pressed(look)* says so."""
-    monkeypatch.setattr(focused_window, "destination", lambda: ("kwrite", False))
+    Ctrl is the toggle key, down while *pressed(look)* says so. Which window
+    has the focus is focused_window.look's, KWrite unless a test says else."""
+    monkeypatch.setattr(focused_window, "look", lambda: ("kwrite", None))
     monkeypatch.setattr(send_countdown, "_cancel_timers", lambda pending: None)
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
-    pending = {"window": ("kwrite", None), "why": "test", "press": app._press_key,
-               "space": "", "mode": "type",
-               "timer": None, "ticks": []}
+    pending = {"to": focused_window.Destination("kwrite", None), "why": "test",
+               "press": app._press_key, "space": "", "mode": "type", "timer": None, "ticks": []}
     send_countdown._pending = pending
 
     def fire(pressed):
         modifier_hotkeys.note([Keyboard(pressed)], ecodes.KEY_F8, RCTRL)
-        send_countdown._send_when_due(pending)
+        send_countdown._send(pending)
     yield fire
     send_countdown._pending = None
 
@@ -575,7 +578,8 @@ def test_a_send_whose_wait_ended_in_another_window_says_so(keyboard, due_send, m
     when you're ready" as for a key that stayed down."""
     focus = ["kwrite"]
     monkeypatch.setattr(focused_window, "look", lambda: (focus[0], None))
-    monkeypatch.setattr(focused_window, "destination", lambda: (focus[0], None, False))
+    monkeypatch.setattr(focused_window, "destination",
+                        lambda: focused_window.Destination(focus[0], None, False))
     notices = []
     monkeypatch.setattr(send_countdown, "show_notice", notices.append)
 
@@ -620,51 +624,37 @@ def test_a_tap_while_the_enter_waits_for_the_keyboard_holds_the_send(keyboard, d
             assert checked.wait(2)
             held.append(send_countdown.hold(announce=True))
 
-    claim_send = send_countdown._claim_send
+    real_claim = send_countdown._claim
 
     def claim(pending):
-        if typing.is_set():         # asked again once the keyboard is free
-            return claim_send(pending)
         threading.Thread(target=other_typing).start()
         assert typing.wait(2)
-        take = claim_send(pending)
+        take = real_claim(pending)
         checked.set()
         return take
-    monkeypatch.setattr(send_countdown, "_claim_send", claim)
+    monkeypatch.setattr(send_countdown, "_claim", claim)
     due_send(lambda look: False)
     assert held == [True] and keyboard.events == []
 
 
-def test_a_window_switch_while_another_send_has_the_keyboard_stops_the_enter(
-        keyboard, due_send, monkeypatch):
-    """The questions found KWrite; then another dictation's typing kept the
-    keyboard while the user clicked into Firefox. Taken without asking
-    again, the Enter went into Firefox."""
-    import threading
-    focus = ["kwrite"]
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: focus[0])
-    monkeypatch.setattr(focused_window, "look", lambda: (focus[0], None))
-    monkeypatch.setattr(focused_window, "is_password", lambda: False)
-    typing, checked = threading.Event(), threading.Event()
-
-    def other_typing():
-        with virtual_keyboard._lock:
-            typing.set()
-            assert checked.wait(2)
-            focus[0] = "firefox"
-
-    claim_send = send_countdown._claim_send
-
-    def claim(pending):
-        take = claim_send(pending)
-        if not typing.is_set():
-            threading.Thread(target=other_typing).start()
-            assert typing.wait(2)
-            checked.set()
-        return take
-    monkeypatch.setattr(send_countdown, "_claim_send", claim)
-    due_send(lambda look: False)
-    assert keyboard.events == [] and send_countdown._pending is None
+def test_keys_sent_by_another_typing_during_the_checks_stop_the_enter(keyboard, due_send,
+                                                                     monkeypatch, caplog):
+    """Another dictation, or Paste Last Dictation, typed into the window
+    while the checks before the Enter were made, the keyboard let go for
+    them. Gone before the Enter took the keyboard back, it left nothing to
+    wait for, and the Enter sent the message with that text in it."""
+    def kwrite_while_another_types():
+        if not keyboard.events:
+            virtual_keyboard.send([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)])
+        return "kwrite", None
+    monkeypatch.setattr(focused_window, "look", kwrite_while_another_types)
+    notices = []
+    monkeypatch.setattr(send_countdown, "show_notice", notices.append)
+    with caplog.at_level("INFO", logger="tuxtalk.send_countdown"):
+        due_send(lambda look: False)
+    assert keyboard.typed_keys() == [ecodes.KEY_A]
+    assert notices == [send_countdown.HELD_NOTICE] and send_countdown._pending is None
+    assert "Not sent: other keys went out while it was checked" in caplog.text
 
 
 def test_a_right_ctrl_pressed_during_the_focus_questions_makes_the_enter_wait(

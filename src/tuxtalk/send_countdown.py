@@ -4,8 +4,25 @@ wait is over.
 Sending can't be taken back, so the wait gives a moment to stop it, counting
 down on screen ("Sending in 2 s"): a tap of the hold key (or the toggle key)
 holds the send and the text stays in the box, to fix or add a screenshot to
-first; holding the key dictates more onto it. The Enter goes only into the
-window the text went to, and never into a password field.
+first; holding the key dictates more onto it.
+
+Where the Enter may go is one rule, kept here: only where the words went.
+In another window it would send whatever is in that box, or run the command
+on a terminal's line; in a password field it submits the form.
+
+  1. Where the words go is noted before they're delivered and looked at
+     again once they're in (landed). A window that changed meanwhile means
+     they may be in two places, and no send is set up.
+  2. Right before the Enter goes down, after every wait (the countdown, a
+     Right Ctrl or Right Alt dictation key held, the keyboard taken back
+     from other typing, the Flatpak's portal getting ready), one claim
+     (_claim) makes every check again: the send wasn't held, the same
+     window has the focus, the cursor isn't in a password field, and no
+     other key went out on the keyboard while the checks were made.
+
+Anything else, nothing is sent and the notice says why (_why_not). What
+happens where the desktop can't say which window of an app has the focus is
+a decision of its own: SEND_WHEN_ONLY_THE_APP_IS_KNOWN.
 
 The send waiting is _pending, guarded by _send_lock. The typing is app.py's:
 the dictation hands over what presses a key and what types more onto it.
@@ -22,13 +39,29 @@ LABEL_TAG = "send-countdown"
 HELD_NOTICE = "Not sent. Press Enter when you're ready."
 SWITCHED_WINDOW_NOTICE = "Not sent: you switched windows."
 PASSWORD_FIELD_NOT_SENT = "Not sent: the cursor is in a password field."
+UNKNOWN_WINDOW_NOTICE = "Not sent: this desktop doesn't say which window has the focus."
+
+# Why an Enter wasn't sent: (what the log says after "Not sent: ", the notice).
+_NOT_SENT = {
+    "switched": ("another window has the focus now", SWITCHED_WINDOW_NOTICE),
+    "moved": ("the focus moved while the words were delivered", SWITCHED_WINDOW_NOTICE),
+    "password": ("a password field has the focus now", PASSWORD_FIELD_NOT_SENT),
+    "typed_meanwhile": ("other keys went out while it was checked", HELD_NOTICE),
+    "unknown_window": ("which window has the focus isn't known", UNKNOWN_WINDOW_NOTICE),
+    "not_pressed": ("a dictation key stayed down, or Enter couldn't be pressed", HELD_NOTICE),
+}
+
+# The open decision: where the desktop says which app has the focus but not
+# which of its windows, whether an automatic Enter goes when the app is the
+# same (see _when_the_window_is_unknown).
+SEND_WHEN_ONLY_THE_APP_IS_KNOWN = True
 
 _delay = 2.0                # seconds before the Enter (Preferences)
 _hold_key_name = "F8"       # named in the "Sending in 2 s" label
 
 # The send counting down to its Enter, until it presses it or a tap of a
-# hotkey holds it, else None: {"window", "why", "press", "type", "space",
-# "mode", "timer", "ticks"}.
+# hotkey holds it, else None: {"to", "why", "press", "type", "space",
+# "mode", "timer", "ticks", "refused"}.
 _pending = None
 # The send a tap held, while the space it left off waits for the hotkey that
 # held it to come up (type_owed_space), else None. Typed while the key is
@@ -43,37 +76,119 @@ def configure(cfg) -> None:
     _hold_key_name = getattr(cfg, "hotkey", "") or "the hotkey"
 
 
-def send_automatically(why: str, window, press, type_more, space: str = "",
+# --- Where the Enter may go ---------------------------------------------------
+
+def landed(before, after):
+    """Where an automatic Enter may go after words were delivered: *before*
+    (a focused_window.destination() taken before them), or None when
+    *after* (a look once they're in) is known to be another window."""
+    return None if focused_window.changed(before, after) else before
+
+
+def _when_the_window_is_unknown() -> str | None:
+    """None to send, or why not, where the desktop says which app has the
+    focus but can't say which of its windows: COSMIC tells only the app;
+    GNOME with the extension from 0.18 or earlier, still loaded until the
+    user logs out and in after an update, tells the app and where its window
+    is, which two maximized windows of one app share; a desktop that says
+    nothing about the focus (GNOME without the extension), or a tray too
+    busy to answer, leaves even the app unknown.
+
+    Two choices, not made yet; until they are, it sends as it always has:
+      SEND_WHEN_ONLY_THE_APP_IS_KNOWN True: send when nothing says it's
+        another app. Another window of the same app can get the Enter.
+      False: never send there; the words stay, and the notice says to press
+        Enter. On COSMIC, and where the desktop says nothing about the
+        focus, nothing is ever sent automatically."""
+    return None if SEND_WHEN_ONLY_THE_APP_IS_KNOWN else "unknown_window"
+
+
+def _why_not(sent_to, now) -> str | None:
+    """Why an automatic Enter mustn't go into *now* (a destination) for
+    words delivered to *sent_to* (landed()'s answer), or None when it may.
+    A key of _NOT_SENT."""
+    if sent_to is None:
+        return "moved"
+    if now.password:
+        return "password"
+    same = focused_window.same_window(sent_to, now)
+    if same is False:
+        return "switched"
+    return _when_the_window_is_unknown() if same is None else None
+
+
+def _claim(pending):
+    """virtual_keyboard.send's *claim* for the Enter of *pending*: the
+    checks that take a while, made with the keyboard free and the send still
+    pending, so a tap meanwhile still holds it. Returns *take*, which runs
+    with the keyboard held, right before the Enter goes down. Either raises
+    virtual_keyboard.GaveUp when the Enter mustn't go."""
+    start = virtual_keyboard.emitted()
+    if why := _why_not(pending["to"], focused_window.destination()):
+        _refuse(pending, why)
+
+    def take():
+        global _pending
+        with _send_lock:
+            if _pending is not pending:
+                raise virtual_keyboard.GaveUp("held")
+            if virtual_keyboard.emitted() != start:
+                _refuse(pending, "typed_meanwhile")
+            _pending = None
+    return take
+
+
+def _refuse(pending, why: str) -> None:
+    """Stop the Enter of *pending*; it's said why once the press is over
+    (_send), unless a tap held it first."""
+    pending["refused"] = why
+    raise virtual_keyboard.GaveUp("moved")
+
+
+def _say_not_sent(why: str, relabel: bool = False) -> None:
+    text, notice = _NOT_SENT[why]
+    logger.info(f"Not sent: {text}")
+    if relabel:
+        from . import screen_message
+        screen_message.relabel(LABEL_TAG, notice)
+    else:
+        show_notice(notice)
+
+
+# --- The countdown ------------------------------------------------------------
+
+def send_automatically(why: str, sent_to, press, type_more, space: str = "",
                        injection_mode: str = "type") -> None:
-    """Press Enter for the dictation just typed, after the wait (hold), if
-    the window it went to (*window*, a focused_window.look() taken then)
-    still has the focus. *press*(key, why, claim=None) presses it, as
-    app._press_key; *type_more*(text, mode) types onto the dictation.
+    """Press Enter for the dictation just delivered to *sent_to* (landed()'s
+    answer), after the wait (hold), through the one claim. *press*(key,
+    why, claim=None) presses it, as app._press_key; *type_more*(text, mode)
+    types onto the dictation.
 
     *space* is the auto-space left off so it wouldn't be sent; a held send
     types it, or what's said next sticks to the last word ("delay.All")."""
     global _pending
-    pending = {"window": window, "why": why, "press": press, "type": type_more,
-               "space": space, "mode": injection_mode}
-    delay = _delay
-    if delay <= 0:
-        if _focus_left(pending):
-            logger.info("Not sent: another window has the focus now")
-            show_notice(SWITCHED_WINDOW_NOTICE)
-        else:
-            press("ENTER", why)
+    pending = {"to": sent_to, "why": why, "press": press, "type": type_more,
+               "space": space, "mode": injection_mode, "timer": None, "ticks": []}
+    # Nothing to count down to when no Enter could go: the delivery saw the
+    # focus move, or the window can't be told and the policy says no.
+    if reason := _why_not(sent_to, sent_to):
+        _say_not_sent(reason)
         return
-    pending["timer"] = threading.Timer(delay, _send_when_due, args=(pending,))
-    # The label counts down once a second: "Sending in 4 s", 3, 2, 1.
-    pending["ticks"] = [threading.Timer(delay - left, _count_down, args=(pending, left))
-                        for left in range(int(delay) - 1, 0, -1)]
-    for timer in [pending["timer"], *pending["ticks"]]:
-        timer.daemon = True
+    delay = _delay
+    if delay > 0:
+        pending["timer"] = threading.Timer(delay, _send, args=(pending,))
+        # The label counts down once a second: "Sending in 4 s", 3, 2, 1.
+        pending["ticks"] = [threading.Timer(delay - left, _count_down, args=(pending, left))
+                            for left in range(int(delay) - 1, 0, -1)]
     with _send_lock:
         if _pending is not None:
             _cancel_timers(_pending)
         _pending = pending
+    if delay <= 0:
+        _send(pending)
+        return
     for timer in [pending["timer"], *pending["ticks"]]:
+        timer.daemon = True
         timer.start()
     logger.info(f"Sending in {delay:g}s ({why})")
     from . import screen_message
@@ -87,100 +202,52 @@ def _label(seconds_left: float) -> str:
 
 def _count_down(pending: dict, seconds_left: int) -> None:
     """One second less on the "Sending in" label, unless that send is over.
-    Switching windows ends it here, so the label doesn't count down to a send
-    that won't happen."""
+    A send that couldn't go any more (another window, a password field) ends
+    here, so the label doesn't count down to a send that won't happen."""
     global _pending
     from . import screen_message
     with _send_lock:
         if _pending is not pending:
             return
-    if _focus_left(pending):
+    if why := _why_not(pending["to"], focused_window.destination()):
         with _send_lock:
             if _pending is not pending:
                 return
             _pending = None
         _cancel_timers(pending)
-        logger.info("Not sent: another window has the focus now")
-        screen_message.relabel(LABEL_TAG, SWITCHED_WINDOW_NOTICE)
+        _say_not_sent(why, relabel=True)
         return
     screen_message.relabel(LABEL_TAG, _label(seconds_left))
 
 
-def _focus_left(pending: dict) -> bool:
-    """Whether another window than the one the text went to has the focus:
-    another app, or another window of the same app where the desktop tells
-    them apart (focused_window.py)."""
-    return focused_window.changed(pending["window"], focused_window.look())
-
-
 def _cancel_timers(pending: dict) -> None:
-    for timer in [pending["timer"], *pending.get("ticks", ())]:
-        timer.cancel()
+    for timer in [pending["timer"], *pending["ticks"]]:
+        if timer is not None:
+            timer.cancel()
 
 
-def _send_when_due(pending: dict) -> None:
-    """The wait is over and nothing held it: press Enter, but only in the
-    window the text went to (_claim_send).
+def _send(pending: dict) -> None:
+    """The wait is over (or there was none) and nothing held it: press
+    Enter through the claim (_claim).
 
     A Right Ctrl or Right Alt dictation key down now, or going down before
     the Enter does, is waited for first (modifier_hotkeys), with the send
     pending until the Enter goes down: the hotkey loop reads a tap of it
-    meanwhile, and the tap holds the send as it would have. A wait that
-    ended in another window says so, as a switch during the countdown does."""
+    meanwhile, and the tap holds the send as it would have."""
     global _pending
     with _send_lock:
         if _pending is not pending:
             return
-    sent = pending["press"]("ENTER", pending["why"], claim=lambda: _claim_send(pending))
+    sent = pending["press"]("ENTER", pending["why"], claim=lambda: _claim(pending))
     with _send_lock:
         unclaimed = _pending is pending
         if unclaimed:
             _pending = None
     if unclaimed and not sent:
-        if _focus_left(pending):
-            logger.info("Not sent: another window has the focus now")
-            show_notice(SWITCHED_WINDOW_NOTICE)
-        else:
-            logger.info("Not sent: a dictation key stayed down, or Enter couldn't be pressed")
-            show_notice(HELD_NOTICE)
-
-
-def _claim_send(pending: dict):
-    """The checks before a send's Enter, made with the send still pending,
-    so a tap meanwhile still holds it: Enter in whatever the user switched
-    to could send something else entirely. Returns what takes the send,
-    right before the Enter goes down (virtual_keyboard.send's *claim*).
-    Raises virtual_keyboard.GaveUp when it mustn't go."""
-    if _focus_left(pending):
-        _refuse_send(pending, "another window has the focus now", SWITCHED_WINDOW_NOTICE)
-    # Tabbing from a username into the password box during the wait must
-    # not submit the form: "press enter" said on its own is the only Enter a
-    # password field gets.
-    if focused_window.is_password():
-        _refuse_send(pending, "a password field has the focus now", PASSWORD_FIELD_NOT_SENT)
-    return lambda: _take_send(pending)
-
-
-def _take_send(pending: dict) -> None:
-    """Take *pending* for its Enter; GaveUp when a tap held it."""
-    global _pending
-    with _send_lock:
-        if _pending is not pending:
-            raise virtual_keyboard.GaveUp("held")
-        _pending = None
-
-
-def _refuse_send(pending: dict, why: str, notice: str) -> None:
-    """End *pending* unsent and say why, unless a tap held it first."""
-    global _pending
-    with _send_lock:
-        ours = _pending is pending
-        if ours:
-            _pending = None
-    if ours:
-        logger.info(f"Not sent: {why}")
-        show_notice(notice)
-    raise virtual_keyboard.GaveUp("moved")
+        # A wait that gave up says nothing of why: the window may have
+        # changed while it waited for the key.
+        why = pending.get("refused") or _why_not(pending["to"], focused_window.destination())
+        _say_not_sent(why or "not_pressed")
 
 
 def show_notice(text: str) -> None:
@@ -213,6 +280,12 @@ def hold(announce: bool) -> bool:
 def owes_space() -> bool:
     """Whether a held send's space waits for its hotkey to come up."""
     return _owed is not None
+
+
+def _focus_left(pending: dict) -> bool:
+    """Whether another window than the one the text went to is known to
+    have the focus, for the space a held send owes."""
+    return focused_window.changed(pending["to"], focused_window.look())
 
 
 def type_owed_space() -> None:

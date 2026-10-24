@@ -288,9 +288,11 @@ class RecordingState:
     nav_context: tuple = None
     # The window the last dictation was typed into (its class), or None.
     last_inserted_window: str = None
-    # And which window it was, right after the text landed: a
-    # focused_window.look(), for the automatic send's Enter to go only there.
+    # And which window has it: a focused_window.look() right after it
+    # landed, for Type at pause's mark held back after it.
     last_inserted_where: tuple = (None, None)
+    # Where an automatic Enter may follow it (send_countdown.landed).
+    send_to: tuple = None
     # Mid-sentence continuation - if True, lowercase the first letter of next dictation
     continue_mid_sentence: bool = False
     # Hands-free auto-stop for this recording (a silence.SilenceDetector), or
@@ -2384,27 +2386,29 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
 
 def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = False) -> str:
     """Insert *text* into the active app (_deliver_text), then remember the
-    window it really landed in, for undo, "fix that word" and select and move.
+    window it landed in, for undo, "fix that word", select and move, and an
+    automatic Enter after it (send_countdown.landed).
 
     The focus is checked once more after typing because the report from
     before can be out of date. On KDE, clicking the desktop reports
     plasmashell; wl-copy's clipboard window then hands the focus back to the
-    last real window, and the text lands there. Remembering plasmashell made
-    "delete last sentence" refuse in the very window that got the text
-    (Ron, 2026-10-15).
+    last real window, and the text lands there, where "delete last
+    sentence" must work.
     """
+    before = focused_window.destination()
     sends_before = _keys_sent.count
     try:
-        outcome = _deliver_text(text, injection_mode, t0, one_block)
+        outcome = _deliver_text(text, injection_mode, t0, one_block, where=before)
     except (virtual_keyboard.StoppedPartway, virtual_keyboard.GaveUp, PasswordFieldNow) as stop:
         outcome = _delivery_stopped(stop, typed_some=_keys_sent.count != sends_before)
     if outcome in ("ok", "partial"):
-        landed, which = focused_window.look()
-        if landed:
-            if landed != state.last_inserted_window:
-                logger.info(f"The text landed in {landed!r}, not {state.last_inserted_window!r}")
-            state.last_inserted_window = landed
-        state.last_inserted_where = (state.last_inserted_window, which)
+        after = focused_window.look()
+        if after[0]:
+            if after[0] != state.last_inserted_window:
+                logger.info(f"The text landed in {after[0]!r}, not {state.last_inserted_window!r}")
+            state.last_inserted_window = after[0]
+        state.last_inserted_where = (state.last_inserted_window, after[1])
+        state.send_to = send_countdown.landed(before, after)
     return outcome
 
 
@@ -2436,7 +2440,8 @@ def _delivery_stopped(stop, typed_some: bool) -> str:
     return "partial"
 
 
-def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = False) -> str:
+def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = False,
+                  *, where) -> str:
     """Determine the best injection method and insert text into the active app.
 
     Pastes or types as _determine_injection_method decides, typing whatever a
@@ -2449,10 +2454,10 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
     The caller tells the user about anything but "ok", so a dictation that
     never arrived doesn't fail silently.
 
-    The focus may have moved into a password field since the text was made,
-    so that is asked again first, and before each further chunk of a
-    multi-part delivery. What no check can close: the milliseconds between
-    the last answer and the keys that follow it.
+    The focus may have moved into a password field since the text was made:
+    *where* (focused_window.destination, asked right before) says, and so
+    does a check before each further chunk of a multi-part delivery. No check
+    closes the milliseconds between the last answer and the keys after it.
 
     *one_block* (voice editing) pastes text with line breaks in one go, real
     newlines and all. Line by line with Enter in between, an editor continues
@@ -2460,11 +2465,11 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
     as Shift+Enter, since a plain Enter would send a chat message; that holds
     for every typed line break, not only voice editing's.
     """
-    if focused_window.is_password():
+    if where.password:
         return "password_field"
     # Which window this text goes into, so select and move by voice only
     # trusts "what I just said" in that same window.
-    state.last_inserted_window = focused_class = _query_focused_window_class()
+    state.last_inserted_window = focused_class = where.wm_class
     if focused_class in ELECTRON_PASTE_BROKEN_CLASSES:
         # A tab as four spaces, however it's typed: a real Tab moves the
         # focus from Claude Desktop's box to the Send button, and the next
@@ -2474,7 +2479,6 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
     detection_start = time.time()
     actual_mode, reason = _determine_injection_method(injection_mode)
     detection_time = time.time() - detection_start
-    logger.info(f"TIMING: Injection method detection took {detection_time:.3f}s")
     if detection_time > 0.1:
         logger.warning(f"Injection method detection slow: {detection_time:.2f}s")
 
@@ -2485,7 +2489,6 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
     # type instead. Only kicks in for auto/paste — if the user explicitly chose
     # "type", we already use Type mode.
     if injection_mode != "type":
-        logger.info(f"Electron-broken check: focused_class={focused_class!r}")
         if focused_class in ELECTRON_PASTE_BROKEN_CLASSES and not os.environ.get("FLATPAK_ID"):
             logger.info(f"Electron-paste-broken override: class={focused_class!r}, typing")
 
@@ -2608,7 +2611,6 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
             # there; other apps get Shift+Enter.
             remainder = _typed_breaks_for(remainder.replace("\n", marker),
                                           _query_focused_window_class())
-            print(f"Inject (type) remainder len={len(remainder)} [paste failed partway]")
             if _output_backend().type_text(remainder):
                 inject_ok = True  # delivered chunks + typed remainder == full text
             else:
@@ -2629,7 +2631,6 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
     # --- Simple paste (no markers) ---
     elif use_paste and _paste_text(text):
         injection_time = time.time() - injection_start
-        logger.info(f"TIMING: Paste injection completed in {injection_time:.2f}s")
         logger.info(f"Text injected via paste: {len(text)} chars in {injection_time:.2f}s")
         if injection_time > 1.0:
             logger.warning(f"Paste injection slow: {injection_time:.2f}s")
@@ -2647,7 +2648,6 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
         text = backend.typeable(text)
         inject_ok = backend.type_text(text)
         injection_time = time.time() - injection_start
-        logger.info(f"TIMING: Typing injection completed in {injection_time:.2f}s")
         logger.info(f"Text injected via typing: {len(text)} chars in {injection_time:.2f}s")
         if injection_time > 1.0:
             logger.warning(f"Typing injection slow: {injection_time:.2f}s")
@@ -3045,15 +3045,19 @@ def _hold_back_boundary(text: str, raw: str):
 
 
 def _type_boundary(pending: dict, tail: str, injection_mode: str) -> None:
-    """Type what goes between a held-back chunk and what follows it."""
+    """Type what goes between a held-back chunk and what follows it, keeping
+    an automatic send aimed where the chunk went (unless this saw a move)."""
     if not tail:
         return
+    send_to = state.send_to
     _remember_said(tail, chunked=True)
     ok = _inject_text(tail, injection_mode, time.time()) == "ok"
     _remember_shown(tail, chunked=True, ok=ok)
     if ok:
         # Undo and "delete last sentence" then see the whole chunk.
         state.last_inserted_text = pending["typed"] + tail
+    if state.send_to is not None:
+        state.send_to = send_to
 
 
 # A phrase this short that the context pass hears as "press enter" is taken
@@ -3076,12 +3080,10 @@ def _resolve_boundary(audio_f32, language, injection_mode, raw="", auto_period=T
     the chunk's text: "press enter" when only the context pass heard that,
     and for a very short chunk the words the context pass heard."""
     pending, state.pending_boundary = state.pending_boundary, None
-    focused = _query_focused_window_class()
-    if (focused is not None and pending.get("window") is not None
-            and focused != pending["window"]):
+    if focused_window.changed(pending["where"], focused_window.look()):
         # The user switched windows during the pause: that phrase's mark
         # belongs at its end, in the other window, not at the start of this
-        # one ("? What's next?", Ron 2026-10-17). This window starts afresh.
+        # one ("? What's next?"). This window starts afresh.
         logger.info("Chunk boundary: another window has the focus now; "
                     "its mark stays with its phrase")
         state.continue_mid_sentence = False
@@ -3142,14 +3144,14 @@ def _carry_question(text: str) -> str:
 
 def _flush_boundary(auto_period: bool, auto_space: bool, injection_mode: str) -> None:
     """The dictation ended in a pause: type the mark held back after its last
-    chunk, or the auto-period when the engine wrote none."""
+    chunk, or the auto-period when the engine wrote none, in its window only."""
     pending, state.pending_boundary = state.pending_boundary, None
     if pending is None:
         return
-    focused = _query_focused_window_class()
-    if _not_where_typed(focused):
+    now = focused_window.look()
+    if focused_window.changed(pending["where"], now):
         return  # the end of this sentence isn't in the window that has focus
-    kind = app_kind(focused) if _adapt_to_app else ""
+    kind = app_kind(now[0]) if _adapt_to_app else ""
     mark = pending["mark"] or ("." if auto_period and not kind else "")
     _type_boundary(pending, mark + (" " if auto_space and not kind else ""), injection_mode)
 
@@ -3188,11 +3190,9 @@ def _press_said(key: str, chunk_role) -> None:
 
 
 def _send_automatically(space: str, injection_mode: str) -> None:
-    """"Send each dictation automatically": Enter after the wait, only into
-    the window the dictation went to (send_countdown)."""
-    send_countdown.send_automatically("Send each dictation automatically is on",
-                                      state.last_inserted_where, _press_key,
-                                      _type_onto_dictation, space, injection_mode)
+    """"Send each dictation automatically": Enter where the dictation went (send_countdown)."""
+    send_countdown.send_automatically("Send each dictation automatically is on", state.send_to,
+                                      _press_key, _type_onto_dictation, space, injection_mode)
 
 
 def _type_onto_dictation(text: str, injection_mode: str) -> str:
@@ -3447,7 +3447,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                 state.pending_boundary = {"mark": held_mark,
                                           "audio": audio_f32[-_context_samples():],
                                           "raw": raw, "typed": state.last_inserted_text,
-                                          "window": state.last_inserted_window}
+                                          "where": state.last_inserted_where}
             if _usage_stats:
                 # After typing, so saving the counts never delays the text.
                 # Counts only (words, seconds dictating); see stats.py.

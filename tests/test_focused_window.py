@@ -1,6 +1,8 @@
 """Which window has the focus (focused_window.py): one look says what the
 window is and which one, so typing that waited and an automatic send can
 tell the window the text went to from any other."""
+import pytest
+
 from tuxtalk import compositor_focus, focused_window
 from tuxtalk.window_geometry import Rect
 
@@ -12,10 +14,10 @@ def test_the_compositors_window_id_says_which_window_it_is(monkeypatch):
     is re-tiled; without one, where it is stands in."""
     monkeypatch.setattr(focused_window, "reported", lambda: ("", "", FRAME))
     monkeypatch.setattr(compositor_focus, "focused_window", lambda: ("XTerm", 0x2a00003))
-    assert focused_window.look() == ("XTerm", 0x2a00003)
+    assert focused_window.look() == ("XTerm", ("compositor", 0x2a00003))
     monkeypatch.setattr(compositor_focus, "focused_window", lambda: (None, None))
-    assert focused_window.look() == (None, (Rect(0, 0, 800, 600), "DP-1",
-                                            Rect(0, 0, 1920, 1080)))
+    assert focused_window.look() == (None, ("frame", (Rect(0, 0, 800, 600), "DP-1",
+                                                      Rect(0, 0, 1920, 1080))))
 
 
 def test_the_tray_is_asked_with_a_time_limit(monkeypatch):
@@ -94,15 +96,15 @@ def test_an_extension_that_sends_no_id_falls_back_to_the_frame(monkeypatch):
     report = _tray_reports(monkeypatch)
     report("4183", "kwrite", KWRITE_MAXIMIZED)
     report(None, "firefox", "0,0,800,600|DP-1|0,0,1920,1080")
-    assert focused_window.look() == ("firefox", (Rect(0, 0, 800, 600), "DP-1",
-                                                 Rect(0, 0, 1920, 1080)))
+    assert focused_window.look() == ("firefox", ("frame", (Rect(0, 0, 800, 600), "DP-1",
+                                                           Rect(0, 0, 1920, 1080))))
 
 
 def test_wl_copys_brief_window_takes_no_id(monkeypatch):
     report = _tray_reports(monkeypatch)
     report("4183", "kwrite", KWRITE_MAXIMIZED)
     report("4190", "io.github.bugaevc.wl-clipboard", "0,0,1,1|DP-1|0,0,1920,1080")
-    assert focused_window.look() == ("kwrite", "4183")
+    assert focused_window.look() == ("kwrite", ("tray", "4183"))
 
 
 def test_with_the_id_known_the_compositor_isnt_asked(monkeypatch):
@@ -111,7 +113,7 @@ def test_with_the_id_known_the_compositor_isnt_asked(monkeypatch):
     report("4183", "kwrite", KWRITE_MAXIMIZED)
     monkeypatch.setattr(compositor_focus, "focused_window",
                         lambda: (_ for _ in ()).throw(AssertionError("asked the compositor")))
-    assert focused_window.look() == ("kwrite", "4183")
+    assert focused_window.look() == ("kwrite", ("tray", "4183"))
 
 
 def test_the_kwin_script_and_the_extension_send_the_window_in_one_call():
@@ -154,3 +156,37 @@ def test_the_extension_of_0_18_never_pairs_a_class_with_the_last_windows_frame(m
     dbus_service.TuxTalkDBusService.SetFocusedWindowClass(service, "firefox")
     monkeypatch.setattr(compositor_focus, "focused_rect", lambda: None)
     assert focused_window.look() == ("firefox", None)
+
+
+def test_a_tray_id_is_never_compared_with_an_x11_id(monkeypatch):
+    """Plasma X11 or GNOME on Xorg: a tray too busy to answer leaves the look
+    to X11, whose number for the same KWrite window isn't KWin's id. Taken as
+    another window, the countdown said "you switched windows" in the window
+    the user never left."""
+    report = _tray_reports(monkeypatch)
+    report("{5c1d0e2a}", "kwrite", KWRITE_MAXIMIZED)
+    first = focused_window.look()
+    monkeypatch.setattr(focused_window, "reported", lambda: None)
+    monkeypatch.setattr(compositor_focus, "focused_window", lambda: ("kwrite", 0x3200007))
+    now = focused_window.look()
+    assert not focused_window.changed(first, now)
+    assert focused_window.same_window(first, now) is None
+
+
+@pytest.mark.parametrize("before, after, same", [
+    (("kwrite", ("tray", "{a}")), ("kwrite", ("tray", "{a}")), True),
+    (("kwrite", ("tray", "{a}")), ("kwrite", ("tray", "{b}")), False),
+    (("kwrite", ("tray", "{a}")), ("konsole", ("tray", "{a}")), False),
+    (("kwrite", None), ("kwrite", None), None),                       # COSMIC: only the app
+    (("kwrite", ("frame", 1)), ("kwrite", ("frame", 1)), None),       # one frame, two windows?
+    (("kwrite", ("frame", 1)), ("kwrite", ("frame", 2)), False),
+    ((None, None), ("kwrite", ("tray", "{a}")), None),                # a look that timed out
+])
+def test_which_looks_are_one_window(before, after, same):
+    assert focused_window.same_window(before, after) is same
+    assert focused_window.changed(before, after) is (same is False)
+
+
+def test_going_into_a_password_field_changes_where_the_keys_go():
+    before = focused_window.Destination("firefox", ("tray", "{a}"), False)
+    assert focused_window.changed(before, before._replace(password=True))

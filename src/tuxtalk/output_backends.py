@@ -42,7 +42,7 @@ class OutputBackend:
     def press_keys(self, chords, claim=None) -> bool:
         """Press [(modifiers, key)] in order, by name ("CTRL", "LEFT"), for
         select and move by voice (voice_navigation.py). *claim*, if given,
-        is virtual_keyboard.send's (send_countdown._claim_send): made right
+        is virtual_keyboard.send's (send_countdown._claim): made right
         before the first key, it returns *take*, which must be called too,
         last; either may stop them all by raising virtual_keyboard.GaveUp."""
         raise NotImplementedError
@@ -292,7 +292,7 @@ class LibeiOutputBackend(OutputBackend):
                 return False
             return True
         return self._with_session(
-            lambda session: session.press_chords(chords, claim and claimed))
+            lambda session: session.press_chords(chords, claimed if claim is not None else None))
 
 
 def get_output_backend(flatpak_id=None) -> OutputBackend:

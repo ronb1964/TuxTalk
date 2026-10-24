@@ -14,7 +14,7 @@ is saved before injection is even attempted.
 import numpy as np
 import pytest
 
-from tuxtalk import app, window_classes
+from tuxtalk import app, focused_window, window_classes
 
 MARKER = "\xa7SHIFT_ENTER\xa7"
 
@@ -74,6 +74,7 @@ def electron(monkeypatch, quiet):
     """Claude Desktop focused: typed, not pasted."""
     cls = next(iter(window_classes.ELECTRON_PASTE_BROKEN_CLASSES))
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: cls)
+    monkeypatch.setattr(focused_window, "look", lambda: (cls, None))
     _paste_mode(monkeypatch)
 
 

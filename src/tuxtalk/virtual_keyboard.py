@@ -54,10 +54,10 @@ class StoppedPartway(Exception):
 
 
 class GaveUp(Exception):
-    """Raised by the wait a send's *before_press* asked for, to stop the
-    typing: the keys held are let go, and send passes it on, or raises
-    StoppedPartway when some keys had already gone out. Its *reason* is
-    the caller's, for what it tells the user."""
+    """Raised by a wait a send's *before_press* asked for, or by its
+    *claim*, to stop the typing: the keys held are let go, and send passes
+    it on, or raises StoppedPartway when some keys had already gone out. Its
+    *reason* is the caller's, for what it tells the user."""
 
     def __init__(self, reason: str):
         super().__init__(reason)
@@ -68,6 +68,23 @@ _lock = threading.Lock()
 _device = None
 _ready_at = 0.0
 _failure = None     # why the keyboard couldn't be made, logged once
+# Key events written to the keyboard, counted under _lock (emitted()).
+_emitted = 0
+
+
+def emitted() -> int:
+    """How many key events the keyboard has sent so far. A claim (see send)
+    notes it before its checks and compares it in its *take*: a change means
+    other keys went out while the checks were made, with the keyboard free."""
+    return _emitted
+
+
+def _write(device, code: int, value: int) -> None:
+    """One key event, counted for emitted(); the caller holds _lock."""
+    global _emitted
+    from evdev import ecodes
+    device.write(ecodes.EV_KEY, code, value)
+    _emitted += 1
 
 
 def _capabilities():
@@ -140,15 +157,15 @@ def send(events, delay_ms: float = KEY_DELAY_MS, before_press=None, claim=None) 
     *before_press*, if given, is called before each key goes down, and
     returns None or a function that waits (app._send_keys: until a Right
     Ctrl dictation key is let go) and may raise GaveUp; that runs with the
-    keyboard free for others (_wait_unlocked), and the keys are looked at
-    again once it has the keyboard back: one pressed meanwhile is waited for
-    too. *claim*, if given, is for a key that must still be stoppable right
-    up to its press (send_countdown._claim_send: a send a tap can hold): it
-    runs the same way before the first key, after any wait and after waiting
-    for another sender to give the keyboard back, for checks that take a
-    while, and returns *take*, which runs with the keyboard held, once
-    nothing is down, right before that key goes down. Either may raise
-    GaveUp.
+    keyboard free for others (_unlocked), and the keys are looked at again
+    once it has the keyboard back: one pressed meanwhile is waited for too.
+
+    *claim*, if given, is for keys that must still be stoppable right up to
+    their press (send_countdown: an automatic Enter). Before the first key,
+    once nothing is waited for, it runs with the keyboard free, for checks
+    that take a while, and returns *take*, which runs with the keyboard held
+    right before that key goes down. A key pressed during the checks is
+    waited for, then the claim is made again. Either may raise GaveUp.
 
     Waits *delay_ms* after each event, on a schedule kept from the start, so
     sleeping a little long doesn't add up over a long text. When this process
@@ -165,13 +182,10 @@ def send(events, delay_ms: float = KEY_DELAY_MS, before_press=None, claim=None) 
     events = list(events)
     if not events:
         return True
-    if claim is not None:
-        before_press = _Claim(before_press, claim)
     with _lock:
         device = _open()
         if device is None:
             return False
-        from evdev import ecodes
         time.sleep(max(0.0, _ready_at - time.monotonic()))
         step = delay_ms / 1000
         due = time.monotonic()
@@ -179,9 +193,10 @@ def send(events, delay_ms: float = KEY_DELAY_MS, before_press=None, claim=None) 
         sent = 0
         try:
             for code, value in events:
-                while value and before_press is not None and (wait := before_press()):
-                    _wait_unlocked(device, down, wait, before_press)
-                device.write(ecodes.EV_KEY, code, value)
+                if value:
+                    _ready_for_key(device, down, before_press, claim)
+                    claim = None        # made for the first key only
+                _write(device, code, value)
                 # Counted before the SYN: the event may reach the app even
                 # if the SYN after it fails.
                 sent += 1
@@ -211,74 +226,46 @@ def send(events, delay_ms: float = KEY_DELAY_MS, before_press=None, claim=None) 
         return True
 
 
-def _wait_unlocked(device, down, wait, before_press) -> None:
-    """Run *wait* with the lock let go. Taking it meanwhile, the hotkey
-    loop's own keys go out at once: its Ctrl that keeps a Right Alt tap from
-    opening the menu bar (modifier_hotkeys.guard_alt_tap) came after the tap otherwise.
-    The keys this send holds (Shift for a capital) are let go first and
-    pressed again after, so nothing sent meanwhile gets them.
+def _ready_for_key(device, down, before_press, claim) -> None:
+    """Before a key goes down: wait while *before_press* asks to, then make
+    *claim* (see send), if any, and take it."""
+    while True:
+        while before_press is not None and (wait := before_press()):
+            _unlocked(device, down, wait)
+        if claim is None:
+            return
+        take = _unlocked(device, down, claim)
+        if before_press is None or not before_press():
+            take()
+            return
 
-    When another sender had the keyboard as the wait ended, a claim's
-    checks (*before_press* a _Claim) may be out of date by the time it's
-    back: they're made again."""
-    from evdev import ecodes
+
+def _unlocked(device, down, run):
+    """*run*() with the lock let go, and what it returns. Taking it
+    meanwhile, the hotkey loop's own keys go out at once: its Ctrl that
+    keeps a Right Alt tap from opening the menu bar
+    (modifier_hotkeys.guard_alt_tap) came after the tap otherwise. The keys
+    this send holds (Shift for a capital) are let go first and pressed
+    again after, so nothing sent meanwhile gets them."""
     held = list(down)
     _release(device, held)
     down.clear()
     _lock.release()
     try:
-        wait()
+        answer = run()
     finally:
-        busy = not _lock.acquire(blocking=False)
-        if busy:
-            _lock.acquire()
+        _lock.acquire()
     for code in held:
-        device.write(ecodes.EV_KEY, code, 1)
+        _write(device, code, 1)
         down[code] = True
     device.syn()
-    if busy and isinstance(before_press, _Claim):
-        before_press.out_of_date()
-
-
-class _Claim:
-    """*before_press* for a send with a *claim* (see send). Before the first
-    key it answers with a wait that ends with claim's checks, again after
-    each wait for a key pressed meanwhile and after waiting for another
-    sender to give the keyboard back (the focus may have moved by then), and
-    takes the claim once nothing is down: a tap read during the checks, or
-    while the keyboard was busy, can still stop the key."""
-
-    def __init__(self, before_press, claim):
-        self._before_press, self._claim = before_press, claim
-        self._take, self._taken = None, False
-
-    def out_of_date(self) -> None:
-        """The checks were made before the keyboard was busy: make them again."""
-        if not self._taken:
-            self._take = None
-
-    def __call__(self):
-        """The answer for the next key: claim's checks, after any wait,
-        until they were made with nothing down since; then take."""
-        wait = self._before_press() if self._before_press is not None else None
-        if self._taken:
-            return wait
-        if self._take is None or wait is not None:
-            def then_check():
-                if wait is not None:
-                    wait()
-                self._take = self._claim()
-            return then_check
-        self._taken = True
-        self._take()
-        return None
+    return answer
 
 
 def _release(device, codes) -> None:
     """Let go of *codes* (in the order they went down), the last one first."""
-    from evdev import ecodes
     for code in reversed(list(codes)):
-        device.write(ecodes.EV_KEY, code, 0)
+        _write(device, code, 0)
     device.syn()
 
 

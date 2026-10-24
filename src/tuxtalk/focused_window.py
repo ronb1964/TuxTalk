@@ -14,17 +14,20 @@ to know whether the window is still the one the text went to, so a look
 Which window it is, is the compositor's own id for it wherever one is known:
 KWin's internalId, Mutter's window id, X11's window, Sway's and i3's con id,
 Hyprland's address, niri's id. It stays the same when the window moves, and
-tells two windows of one app apart. Without one (an extension from before it
-sent the id) it's the window's frame, so there a window moved or resized
-counts as another, and two maximized windows of one app on one screen as the
-same. COSMIC tells only the class: there two windows of one app are the same
-window to TuxTalk, and an automatic send can't tell them apart.
+tells two windows of one app apart. Each id is tagged with where it came
+from, the tray or the compositor: on an X11 session of KDE or GNOME, a tray
+that didn't answer in time leaves the look to X11, whose number for the same
+window is another one. Without an id (an extension from before it sent one)
+it's the window's frame, so there a window moved or resized counts as
+another, and two maximized windows of one app on one screen can't be told
+apart. COSMIC tells only the class.
 
 TuxTalk's own windows count as unknown: a stale report of Preferences must
 not pick the paste shortcut for the app the user is really in. So does
 wl-copy's brief window, which the tray already leaves out of its reports.
 """
 import os
+from typing import NamedTuple
 
 from .logger import setup_logger
 
@@ -36,6 +39,15 @@ logger = setup_logger(__name__)
 # limit: these questions come from the typing thread, which a wedged session
 # bus would otherwise hold for dbus-python's 25 seconds.
 TRAY_TIMEOUT_S = 1.5
+
+
+class Destination(NamedTuple):
+    """Where keys go: the focused window's class and which window it is
+    (look()), each None when not known, and whether the cursor is in a
+    password field."""
+    wm_class: str | None
+    window: tuple | None
+    password: bool = False
 
 
 def reported(timeout: float = TRAY_TIMEOUT_S):
@@ -71,21 +83,24 @@ def _not_a_target(wm_class) -> bool:
 
 
 def look():
-    """(class, which window) of the focused window, each None when not known.
-    Safe from any thread."""
+    """(class, which window) of the focused window, each None when not
+    known. Which window is ("tray", id), ("compositor", id) or ("frame",
+    window_geometry.parse_reported's answer). Safe from any thread."""
     from . import compositor_focus
     from .window_geometry import parse_reported
-    wm_class, which, frame = reported() or ("", "", "")
-    if wm_class and which and not _not_a_target(wm_class):
-        return wm_class, which
+    wm_class, tray_id, frame = reported() or ("", "", "")
+    if wm_class and tray_id and not _not_a_target(wm_class):
+        return wm_class, ("tray", tray_id)
     asked_class, asked_id = compositor_focus.focused_window()
     wm_class = next((c for c in (wm_class, asked_class) if c and not _not_a_target(c)), None)
-    which = which or asked_id
-    if which is None:
-        which = parse_reported(frame)
-        if which is None and (rect := compositor_focus.focused_rect()):
-            which = (rect, "", None)
-    return wm_class, which
+    if tray_id:
+        return wm_class, ("tray", tray_id)
+    if asked_id is not None:
+        return wm_class, ("compositor", asked_id)
+    where = parse_reported(frame)
+    if where is None and (rect := compositor_focus.focused_rect()):
+        where = (rect, "", None)
+    return wm_class, ("frame", where) if where else None
 
 
 def window_class():
@@ -93,19 +108,35 @@ def window_class():
     return look()[0]
 
 
+def same_window(before, after) -> bool | None:
+    """Whether two looks at the focused window (look() or destination())
+    are of one window: True when the desktop's id says so, False when they
+    are known to differ (another app, another id, another frame), None when
+    it can't be told: a part one look didn't get, ids from two sources, or
+    only the frame, which two maximized windows of one app share."""
+    (class_a, window_a), (class_b, window_b) = before[:2], after[:2]
+    if class_a is not None and class_b is not None and class_a != class_b:
+        return False
+    if window_a is None or window_b is None or window_a[0] != window_b[0]:
+        return None
+    if window_a != window_b:
+        return False
+    return None if window_a[0] == "frame" else True
+
+
 def changed(before, after) -> bool:
-    """Whether two looks at the focused window (tuples, a part None when it
-    wasn't known) differ in a part both know. A D-Bus question that timed
-    out isn't another window, and where only the class is known, nor is
-    TuxTalk's own window: stopping for those would stop a dictation for
-    nothing."""
-    return any(a is not None and b is not None and a != b for a, b in zip(before, after))
+    """Whether two looks are known to be of different windows, or two
+    destinations differ in whether the cursor is in a password field. A
+    D-Bus question that timed out isn't another window, and where only the
+    class is known, nor is TuxTalk's own window: stopping typing for those
+    would stop a dictation for nothing."""
+    return same_window(before, after) is False or any(
+        a != b for a, b in zip(before[2:], after[2:]))
 
 
-def destination():
-    """Where keys go now: (class, which window, each None when not known,
-    and whether the cursor is in a password field)."""
-    return (*look(), is_password())
+def destination() -> Destination:
+    """Where keys go now."""
+    return Destination(*look(), is_password())
 
 
 def is_password() -> bool:
