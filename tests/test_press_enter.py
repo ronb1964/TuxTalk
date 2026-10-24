@@ -111,6 +111,10 @@ def test_a_cut_off_dictation_gets_no_period_in_a_text_editor_either(monkeypatch)
 @pytest.mark.parametrize("window, typed", [
     ("org.kde.kwrite", "this is where it goes on."),
     ("com.anthropic.Claude", "This is where it goes on."),
+    # Plasma X11 with the tray too busy to answer: X11 names the app as
+    # it set itself, KWin lowercased. Taken for another app, it started
+    # the sentence over in the window the user never left.
+    ("org.kde.KWrite", "this is where it goes on."),
 ])
 def test_a_cut_off_sentence_goes_on_in_lowercase_only_in_its_own_window(monkeypatch, window,
                                                                          typed):

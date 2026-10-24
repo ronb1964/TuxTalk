@@ -1435,9 +1435,10 @@ _this_thread = _ThisThread()
 
 def _not_where_typed(focused) -> bool:
     """Whether the window class *focused* is known to be another app than
-    the one the last dictation went to."""
-    return (focused is not None and state.last_inserted_window is not None
-            and focused != state.last_inserted_window)
+    the one the last dictation went to: focused_window's rule, by the class
+    alone, which is all undo, select and the lowercase carry-on keep."""
+    return focused_window.same_window((focused, None),
+                                      (state.last_inserted_window, None)) is False
 
 
 def _typed_breaks_for(text: str, window_class) -> str:
@@ -2215,7 +2216,7 @@ def _inject_text(text: str, injection_mode: str, one_block: bool = False, into=N
     if outcome in ("ok", "partial"):
         after = focused_window.look()
         if after[0]:
-            if after[0] != state.last_inserted_window:
+            if after[0].casefold() != (state.last_inserted_window or "").casefold():
                 logger.info(f"The text landed in {after[0]!r}, not {state.last_inserted_window!r}")
             state.last_inserted_window = after[0]
         state.last_inserted_where = (state.last_inserted_window, after[1])
