@@ -255,22 +255,56 @@ def _no_real_tuxtalk(monkeypatch):
     monkeypatch.setattr(control, "_session_bus", _refuse)
 
 
+# Programs that play sound. TuxTalk's audio ducking runs paplay.
+_SOUND_PLAYERS = {"paplay", "aplay", "pw-play", "pw-cat", "canberra-gtk-play", "ffplay", "mpv"}
+
+
+def _no_sound_on_the_speakers():
+    """No test may play sound on the user's speakers, for the whole run.
+
+    Installed once, at conftest import, and never undone. A fixture's patch
+    is put back when its test ends, while a beep the test asked for can still
+    be waiting on the sound thread; it then played on the real output. Every
+    sounddevice stream that plays (OutputStream, Stream, the Raw ones, and
+    play(), which opens an OutputStream) is refused where they all start, in
+    _StreamBase; recording streams still open. Starting a sound player is
+    refused too."""
+    import subprocess
+    import sounddevice
+    open_stream = sounddevice._StreamBase.__init__
+
+    def refuse_output(self, kind, *args, **kwargs):
+        if kind != "input":
+            raise RuntimeError("tests must not play sound")
+        open_stream(self, kind, *args, **kwargs)
+    sounddevice._StreamBase.__init__ = refuse_output
+
+    start_program = subprocess.Popen.__init__
+
+    def refuse_players(self, args, *rest, **kwargs):
+        first = args[0] if isinstance(args, (list, tuple)) and args else str(args).split(" ")[0]
+        if os.path.basename(str(first)) in _SOUND_PLAYERS:
+            raise RuntimeError(f"tests must not play sound: {first}")
+        start_program(self, args, *rest, **kwargs)
+    subprocess.Popen.__init__ = refuse_players
+
+
+_no_sound_on_the_speakers()
+
+
 @pytest.fixture(autouse=True)
 def _no_real_sound(request, monkeypatch):
-    """Never let a test play a sound to the user: a test that starts a
-    recording with beeps on would beep on their speakers, and a test of the
-    Preferences replay would play a recording. test_beeps gives the player a
-    fake sound system instead."""
-    import sounddevice
+    """Sounds go to a player that plays nothing (test_beeps brings a fake
+    sound system of its own), and every sound a test asked for is over
+    before the test's fakes are put back: a beep left on the sound thread
+    would otherwise run against whatever the next test has."""
     from tuxtalk import beeps
-
-    def refuse(*_a, **_k):
-        raise RuntimeError("tests must not play sound")
-    monkeypatch.setattr(sounddevice, "play", refuse)
-    monkeypatch.setattr(sounddevice, "OutputStream", refuse)
     if request.module.__name__.rpartition(".")[2] != "test_beeps":
         monkeypatch.setattr(beeps, "output_device", lambda samplerate: (None, samplerate))
         monkeypatch.setattr(beeps, "_play", lambda samples, rate, device: None)
+    yield
+    if not beeps.wait_until_played(5):
+        pytest.fail("a sound the test asked for was still playing after it")
 
 
 @pytest.fixture(autouse=True)
