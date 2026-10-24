@@ -518,9 +518,10 @@ class CorrectionEngine:
             with socket.socket() as s:
                 s.bind(("127.0.0.1", 0))
                 self._port = s.getsockname()[1]
-            # A random key so other programs on the machine cannot use it. It
+            # A random key, so other users' programs can't use the engine. It
             # goes in the environment, which only this user can read: every
-            # user can read a command line (/proc/<pid>/cmdline).
+            # user can read a command line (/proc/<pid>/cmdline). This user's
+            # own programs can read either, and are trusted anyway.
             self._key = secrets.token_hex(16)
             binary = _server_binary()
             self._proc = self._launcher.submit(
