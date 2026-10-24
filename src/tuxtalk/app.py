@@ -1670,8 +1670,14 @@ def _send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY
 
 
 def _destination():
-    """Where keys go now: the focused window, and whether it's a password field."""
-    return _query_focused_window_class(), _focused_is_password()
+    """Where keys go now: (the focused window's class, where that window is,
+    whether the cursor is in a password field), None for a part not known.
+    Where the window is tells two windows of one app apart on KDE, GNOME,
+    Sway, i3 and Hyprland, which report it (window_geometry), though not two
+    of them maximized on one screen; elsewhere (X11 desktops, COSMIC, niri)
+    nothing says more about the window than its class."""
+    from .window_geometry import active_window_report
+    return _query_focused_window_class(), active_window_report(), _focused_is_password()
 
 
 def _typed_breaks_for(text: str, window_class) -> str:

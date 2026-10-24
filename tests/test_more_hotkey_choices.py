@@ -411,6 +411,32 @@ def test_typing_that_waited_stops_if_the_focus_moved_meanwhile(keyboard, no_hotk
     assert "Recent Dictations" in app._UNDELIVERED_NOTICES["moved"]
 
 
+def test_typing_that_waited_stops_if_another_window_of_the_app_has_the_focus(
+        keyboard, no_hotkeys_noted, monkeypatch):
+    """Two KWrite windows: the class is the same, where the window is isn't."""
+    from tuxtalk import window_geometry
+    from tuxtalk.window_geometry import Rect
+    places = iter([(Rect(0, 0, 800, 600), "DP-1", None), (Rect(800, 0, 800, 600), "DP-1", None)])
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "kwrite")
+    monkeypatch.setattr(app, "_focused_is_password", lambda: False)
+    monkeypatch.setattr(window_geometry, "active_window_report", lambda: next(places))
+    modifier_hotkeys.note([Keyboard(lambda look: look <= 3)], RCTRL, None)
+    with pytest.raises(virtual_keyboard.GaveUp) as stop:
+        app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a", raise_if_partial=True)
+    assert stop.value.reason == "moved" and keyboard.events == []
+
+
+@pytest.mark.parametrize("now", [(None, "here", False), ("kwrite", None, False)])
+def test_a_focus_answer_that_didnt_come_isnt_a_move(keyboard, no_hotkeys_noted, monkeypatch,
+                                                     now):
+    """A D-Bus question that timed out says None: not known, not another window."""
+    answers = iter([("kwrite", "here", False), now])
+    monkeypatch.setattr(app, "_destination", lambda: next(answers))
+    modifier_hotkeys.note([Keyboard(lambda look: look <= 3)], RCTRL, None)
+    assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
+    assert keyboard.typed_keys() == [ecodes.KEY_A]
+
+
 def test_typing_that_waited_goes_on_where_it_was_going(keyboard, no_hotkeys_noted, monkeypatch):
     monkeypatch.setattr(app, "_destination", lambda: ("kwrite", False))
     modifier_hotkeys.note([Keyboard(lambda look: look <= 3)], RCTRL, None)
