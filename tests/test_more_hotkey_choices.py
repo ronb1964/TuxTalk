@@ -317,6 +317,21 @@ def test_while_the_key_stays_stuck_the_next_typing_gives_up_at_once(keyboard, st
     assert keyboard.clock.now - waited < 1
 
 
+def test_a_stuck_key_let_go_and_pressed_again_is_waited_for(keyboard, stuck_right_ctrl,
+                                                             monkeypatch):
+    """Once the hotkey loop reads its release it isn't stuck: the tap that
+    stops the next dictation, still held as typing starts, is waited for
+    rather than giving up on the dictation at once."""
+    board = stuck_right_ctrl()
+    app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
+    monkeypatch.setattr(app, "_hotkey_test_active", lambda: False)
+    app._handle_key_event(Event(RCTRL, 0), F8, RCTRL, None, set(), [board], Cfg(), 0)
+    looked = board.looks
+    board.pressed = lambda look: look <= looked + 3     # down again, for a moment
+    assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
+    assert keyboard.typed_keys() == [ecodes.KEY_A]
+
+
 def test_a_dictation_stopped_by_a_stuck_key_stays_in_recent_dictations(
         keyboard, stuck_right_ctrl, monkeypatch):
     import numpy as np

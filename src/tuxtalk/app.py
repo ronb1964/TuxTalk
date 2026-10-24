@@ -4596,9 +4596,11 @@ def _hide_modifier_hotkey(event, toggle_key, devices, held_modifiers) -> None:
             and not _someone_elses_shortcut(held_modifiers - {event.code})):
         _grab_keyboards_hiding(devices, {event.code})
         state.hidden_key = event.code
-    elif event.value == 0 and event.code == state.hidden_key:
-        state.hidden_key = None
-        _release_all_grabs()
+    elif event.value == 0:
+        modifier_hotkeys.note_released(event.code)
+        if event.code == state.hidden_key:
+            state.hidden_key = None
+            _release_all_grabs()
 
 
 def _handle_key_event(event, hold_key, toggle_key,

@@ -56,6 +56,13 @@ def note_hidden(codes) -> None:
     _hidden = frozenset(codes)
 
 
+def note_released(code) -> None:
+    """The hotkey loop read *code* come up. A key typing had found stuck
+    isn't any more: the next typing waits for it again rather than giving
+    up at once, also when it's down again by then (a stop tap held)."""
+    _stuck.discard(code)
+
+
 def wait_while_held(destination=None):
     """A check for virtual_keyboard.send to make before each key: None when
     no Right Ctrl or Right Alt dictation key the desktop can see is down,
