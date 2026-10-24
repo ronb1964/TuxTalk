@@ -150,15 +150,16 @@ class AudioTab(Tab):
         """The slider moved. A drag fires this dozens of times and each
         change runs wpctl or pactl, so only the value the slider rests on is
         applied."""
-        self._pending_volume = int(scale.get_value())
+        # With its source: a mic switched before the timer runs keeps its own volume.
+        self._pending_volume = (int(scale.get_value()), self._volume_source)
         if self._volume_timer is None:
             self._volume_timer = GLib.timeout_add(150, self._apply_pending_volume)
 
     def _apply_pending_volume(self):
         """Apply the slider's latest value once the drag has paused."""
         self._volume_timer = None
-        if (self._volume_source is not None
-                and not mic_volume.set_volume(self._pending_volume, self._volume_source)):
+        volume, source = self._pending_volume
+        if source is not None and not mic_volume.set_volume(volume, source):
             logger.warning("Could not set the microphone's volume")
         return False
 

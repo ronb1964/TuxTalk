@@ -460,11 +460,10 @@ class AdvancedTab(Tab):
         """The Numbers dropdown: as the speech model writes them, as digits,
         or digits from 10 up. Three entries over the two settings
         numbers_as_digits and numbers_small_as_words (NUMBER_CHOICES)."""
-        combo = Gtk.ComboBoxText()
+        combo = dropdown(Gtk.ComboBoxText())
         for nid, (nlabel, _digits, _small) in NUMBER_CHOICES.items():
             combo.append(nid, nlabel)
         combo.set_active_id(number_choice(self.config))
-        combo.connect("scroll-event", lambda *a: True)  # no accidental scroll changes
 
         def changed(c):
             choice = c.get_active_id()
@@ -510,7 +509,7 @@ class AdvancedTab(Tab):
             "is sent by itself.\n\n"
             "With this off, end any dictation with \u201cpress enter\u201d to send just that one.")
 
-        waits = Gtk.ComboBoxText()
+        waits = dropdown(Gtk.ComboBoxText())
         for seconds in range(5):
             label = f"After {seconds} second{'s' * (seconds > 1)}" if seconds else "Right away"
             waits.append(str(seconds), label)
@@ -518,7 +517,6 @@ class AdvancedTab(Tab):
         waits.set_active_id(str(min(4, max(0, current))))
         waits.connect("changed", lambda c: self.update_config(
             "press_enter_delay", float(c.get_active_id())) if c.get_active_id() else None)
-        waits.connect("scroll-event", lambda *a: True)  # no accidental scroll changes
 
         choice = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         choice.set_margin_start(28)   # under the tickbox's label, not its box

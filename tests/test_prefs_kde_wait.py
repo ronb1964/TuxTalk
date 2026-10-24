@@ -11,7 +11,8 @@ from tuxtalk.prefs_general import GeneralTab
 
 
 def _tab(window):
-    """The General tab of the stand-in *window*."""
+    """The General tab of the stand-in *window*, whose busy() is the real one."""
+    window.busy = lambda: PreferencesWindow.busy(window)
     return SimpleNamespace(win=window, window=window.window)
 
 
@@ -56,7 +57,7 @@ def test_the_title_bar_close_waits_too(monkeypatch):
     monkeypatch.setattr(service_launcher, "find_service_pids", lambda: [123])
     monkeypatch.setattr(P.Gtk, "main_quit", lambda: closed.append("quit"))
     d = SimpleNamespace(window=SimpleNamespace(set_sensitive=lambda v: None),
-                        _waiting_for_kde=False,
+                        _busy=False,
                         _has_unapplied_changes=lambda: False,
                         _release=lambda: closed.extend(["mic", "pidfile"]))
 

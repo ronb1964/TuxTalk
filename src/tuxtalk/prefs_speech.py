@@ -610,14 +610,12 @@ class SpeechSection(Tab):
             tooltip += ("\n• CUDA (NVIDIA): much faster for the Whisper models, a one-time "
                         "1.4 GB download. Parakeet can't use it")
         # Set to CUDA without its files, the service runs on the processor,
-        # so the dropdown shows CPU rather than claim CUDA.
+        # so the dropdown shows CPU rather than claim CUDA. Only the display
+        # changes: a saved "cuda" stays on disk unless the user picks another
+        # device, so an unrelated OK can't drop the choice while CUDA's files
+        # are missing for a while.
         if self.config["device"] == "cuda" and not self._cuda_ready:
-            self.config["device"] = "cpu"
-            # Only the display changes: a saved "cuda" stays on disk unless
-            # the user picks another device, so an unrelated OK can't drop
-            # the choice while CUDA's files are missing for a while.
-            if self.win._config_at_open.get("device") == "cuda":
-                self.win._config_at_open["device"] = "cpu"
+            self.win.show_without_saving("device", "cpu")
 
         # Any graphics card through Vulkan (whisper_vulkan.py): the only GPU
         # option on AMD / Intel, and the light one on NVIDIA. Offered when a

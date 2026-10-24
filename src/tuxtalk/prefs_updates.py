@@ -557,10 +557,7 @@ class UpdatesTab(Tab):
         if response != Gtk.ResponseType.YES:
             return
         # As the question promised: the restart would lose what isn't saved.
-        if self.win.words_tab.save() is None:
-            return
-        if not self.win.save_config():
-            self.win._show_save_error()
+        if not self.win.save_before_restart():
             return
         self._install_appimage(
             url, self._current_release.get("appimage_name", "TuxTalk-update.AppImage"))

@@ -403,6 +403,13 @@ def test_a_failed_save_says_why(tmp_path, monkeypatch):
     assert "No space left on device" in d._save_error
 
 
+def _window(**parts):
+    """A stand-in window whose save_before_restart is the real one."""
+    win = SimpleNamespace(**parts)
+    win.save_before_restart = lambda: PreferencesWindow.save_before_restart(win)
+    return win
+
+
 def test_an_update_doesnt_start_when_the_changes_couldnt_be_saved(monkeypatch):
     """"Any unsaved preferences changes will be saved first": with the disk
     full or the file unreadable the save failed, the update went ahead, and
@@ -419,7 +426,7 @@ def test_an_update_doesnt_start_when_the_changes_couldnt_be_saved(monkeypatch):
     monkeypatch.setattr(P.Gtk, "Dialog", lambda **kw: pytest.fail("the update started"))
     tab = SimpleNamespace(
         _current_release={"appimage_url": "https://example.invalid/TuxTalk.AppImage"},
-        window=None, win=SimpleNamespace(
+        window=None, win=_window(
             save_config=lambda: False, words_tab=SimpleNamespace(save=lambda: True),
             _show_save_error=lambda: shown.append("save error")))
     UpdatesTab._on_download_update_clicked(tab, None)
@@ -442,7 +449,7 @@ def test_an_update_saves_the_snippets_first(monkeypatch):
     monkeypatch.setattr(P.Gtk, "Dialog", lambda **kw: pytest.fail("the update started"))
     tab = SimpleNamespace(
         _current_release={"appimage_url": "https://example.invalid/TuxTalk.AppImage"},
-        window=None, win=SimpleNamespace(
+        window=None, win=_window(
             words_tab=SimpleNamespace(save=lambda: saved.append("snippets") and None),
             save_config=lambda: saved.append("settings") or True,
             _show_save_error=lambda: saved.append("save error")))

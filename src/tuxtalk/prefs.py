@@ -20,6 +20,7 @@ import os
 import sys
 import time
 import atexit
+from contextlib import contextmanager
 import dbus.mainloop.glib
 from dataclasses import asdict
 from . import prefs_ipc
@@ -90,8 +91,8 @@ class PreferencesWindow:
         # tray made meanwhile survives.
         self.config = self.load_config()
         self._config_at_open = dict(self.config)
-        # Set while Apply waits for KDE's verdict on a new hotkey.
-        self._waiting_for_kde = False
+        # Set while busy() (Apply waiting for KDE's verdict on a new hotkey).
+        self._busy = False
         self._save_error = ""
         self._scroll_controllers = []
 
@@ -445,6 +446,37 @@ class PreferencesWindow:
         if value is not None:
             self.config[key] = value
 
+    def show_without_saving(self, key, value):
+        """Show *value* for *key* while the saved setting stays as it is,
+        unless the user picks something else: the baseline save_config()
+        diffs against takes it too, so it isn't a change."""
+        if self._config_at_open.get(key) == self.config.get(key):
+            self._config_at_open[key] = value
+        self.config[key] = value
+
+    def save_before_restart(self):
+        """Save the snippets and the settings, as something about to restart
+        TuxTalk (an update) must; False, having said why, when either failed."""
+        if self.words_tab.save() is None:
+            return False
+        if not self.save_config():
+            self._show_save_error()
+            return False
+        return True
+
+    @contextmanager
+    def busy(self):
+        """The window can't be used, its close button included, while code
+        inside Apply runs the main loop (KDE's wait): a second Apply, OK or
+        Cancel would otherwise run inside the first."""
+        self.window.set_sensitive(False)
+        self._busy = True
+        try:
+            yield
+        finally:
+            self._busy = False
+            self.window.set_sensitive(True)
+
     def _handle_autostart(self, enable):
         """Create or remove the autostart desktop file. Delegates to
         tuxtalk.autostart so onboarding and Preferences stay in lock-step."""
@@ -496,7 +528,7 @@ class PreferencesWindow:
 
     def on_window_close(self, widget, event):
         """The title bar's close: asks first about changes not applied."""
-        if self._waiting_for_kde:
+        if self._busy:
             return True     # Apply/OK is still using the window
         # Closing with the X used to drop unapplied changes without a word.
         # Ask first, the way KDE's System Settings does. (Cancel still closes

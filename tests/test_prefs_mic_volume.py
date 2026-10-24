@@ -152,6 +152,24 @@ def test_a_drag_sets_the_volume_once_on_the_chosen_source(monkeypatch):
     assert calls == [(40, "alsa_input.x")]
 
 
+def test_a_volume_set_just_before_switching_mics_stays_with_its_mic(monkeypatch):
+    """Move the slider for one mic and pick another before the change is
+    applied: the first mic gets its volume, and the second is left alone."""
+    timers = []
+    from gi.repository import GLib
+    monkeypatch.setattr(GLib, "timeout_add", lambda ms, fn: timers.append(fn) or len(timers))
+    calls = []
+    monkeypatch.setattr(V, "set_volume", lambda v, src: calls.append((v, src)) or True)
+    d = SimpleNamespace(_volume_source="alsa_input.usb", _volume_timer=None)
+    d._apply_pending_volume = lambda: AudioTab._apply_pending_volume(d)
+
+    AudioTab.on_volume_changed(d, SimpleNamespace(get_value=lambda: 15))
+    d._volume_source = "alsa_input.laptop"      # another mic picked
+    timers[0]()
+
+    assert calls == [(15, "alsa_input.usb")]
+
+
 
 def test_a_volume_that_cant_be_read_disables_the_slider(monkeypatch):
     """Neither wpctl nor pactl answered: the slider showed 50 % and moved

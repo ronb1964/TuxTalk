@@ -340,7 +340,7 @@ class WordsTab(Tab):
         Your Words are saved as they're made, so that list is always shown as
         it is on disk. The snippets are left alone while the user has unsaved
         edits there: refilling would throw those away. Saving merges instead
-        (_save_custom_commands), so nothing on disk is lost either way.
+        (save()), so nothing on disk is lost either way.
         """
         on_disk = load_custom_commands()
         rows, _snippets = self._split_commands(on_disk)

@@ -13,7 +13,7 @@ from tuxtalk import prefs
 def _window(unapplied, answer):
     calls = []
     w = SimpleNamespace(
-        _waiting_for_kde=False,
+        _busy=False,
         _has_unapplied_changes=lambda: unapplied,
         _ask_apply_before_closing=lambda: calls.append("asked") or answer,
         on_ok=lambda button: calls.append("ok"),
