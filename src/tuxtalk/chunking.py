@@ -48,15 +48,11 @@ ROOM_START_S = 1.0
 # Levels are measured over windows this long, whatever size of block the audio
 # callback delivers: on cbox it delivered ~6 ms blocks, too short to measure.
 WINDOW_S = 0.02
-# Loud for less than this is a click, a burst of hiss or a dryer's thump, not
-# speech: the pause counting waits through it instead of starting over. A
-# syllable lasts longer. Measured with recorded sentences in generated noise
-# (silence.SilenceDetector says how): at 0.04 s a dryer's thumps started every
-# pause over, so Type at pause typed nothing until the end; at 0.1 s phrases
-# were cut mid-sentence with the noise 10 dB under the voice, and at 0.07 s
-# no more often than at 0.04. With the noise 5 dB under the voice, quiet
-# words drown in it and phrases are cut mid-sentence either way.
-MIN_BURST_S = 0.07
+# Loud for less than this is a click or a burst of hiss, not speech; it does not
+# start a pause over. A consonant lasts longer. Longer limits that let a
+# dryer's thumps through (0.07 s) cut phrases mid-sentence 10 to 19% more
+# often in a quiet room, measured on 125 recorded readers.
+MIN_BURST_S = 0.04
 
 
 class PauseSnapshot(NamedTuple):
@@ -74,12 +70,12 @@ class PauseDetector:
     Unlike silence.SilenceDetector (which ends the recording once), this fires
     at every pause and then waits for new speech before it can fire again.
 
-    The room level is measured differently too. SilenceDetector keeps the
-    quietest block ever heard, so a few blocks of digital silence (the stream
-    starting, an xrun) set it near zero for good, and then a noisy room's hiss
-    counts as speech and no pause is ever found. Here the audio is high-passed,
-    measured over fixed WINDOW_S windows, and the room is a low percentile of
-    those levels over the last ROOM_WINDOW_S, digital silence left out.
+    The room level is measured differently too. SilenceDetector's floor is
+    the quietest block heard, rising only slowly, so a room that gets noisier
+    while you talk is learned late. Here the audio is high-passed, measured
+    over fixed WINDOW_S windows, and the room is a low percentile of those
+    levels over the last ROOM_WINDOW_S, digital silence left out, which
+    follows the room within seconds.
     """
 
     def __init__(self, pause_seconds: float, sample_rate: int,
@@ -174,8 +170,9 @@ class PauseDetector:
             if self._burst >= MIN_BURST_S:
                 self.speech_time += duration
                 self.silence_time = 0.0
-            return False
-        self._burst = 0.0
+                return False
+        else:
+            self._burst = 0.0
         self.silence_time += duration
         if self.speech_time >= MIN_SPEECH_S:
             self.longest_quiet = max(self.longest_quiet, self.silence_time)

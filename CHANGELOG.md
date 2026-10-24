@@ -117,8 +117,6 @@ before 0.15.0, so older entries use that name.
 - Noise that's nearly as loud as your voice is left alone on purpose:
   learning it made hands-free stop during your quiet words. There it still
   doesn't stop by itself, so tap the key when you're done.
-- Type at pause doesn't miss your pauses with a dryer running. Its thumps
-  started every pause over, so nothing was typed until you stopped.
 - The microphone test in Preferences, Audio, tells you when your room is
   noisy for your voice, under the level grade: a headset, or the mic closer
   to your mouth, will help. It measures how far your voice stands above the
