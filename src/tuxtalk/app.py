@@ -290,6 +290,9 @@ class RecordingState:
     nav_context: tuple = None
     # The window the last dictation was typed into (its class), or None.
     last_inserted_window: str = None
+    # And which window it was, right after the text landed: a
+    # focused_window.look(), for the automatic send's Enter to go only there.
+    last_inserted_where: tuple = (None, None)
     # Mid-sentence continuation - if True, lowercase the first letter of next dictation
     continue_mid_sentence: bool = False
     # Hands-free auto-stop for this recording (a silence.SilenceDetector), or
@@ -316,10 +319,6 @@ class RecordingState:
     # question goes on, so this phrase ends with it, not a period
     # (_carry_question). Belongs to its recording only.
     question_open: bool = False
-    # "Send each dictation automatically" is counting down to its Enter:
-    # {"timer", "window", "why"} until it presses it or a tap of a hotkey
-    # holds it (send_countdown), else None. Guarded by its _send_lock.
-    pending_send: object = None
     # This recording's press held a pending send, so a tap that's too short
     # to be a dictation says "Not sent" rather than "Cancelled".
     held_send: bool = False
@@ -327,11 +326,6 @@ class RecordingState:
     # starting, and that took under 2 * MIN_HOLD_MS: a tap, though the
     # start made it read as a longer hold (see the hold key).
     released_while_starting: bool = False
-    # The space a held send left off, waiting for the hotkey that held it to
-    # come up (send_countdown.type_owed_space), or None. Typed while the key
-    # is down, GNOME without the extension sees the key too and the space is
-    # lost.
-    owed_space: object = None
     # A Right Ctrl or Right Alt dictation key that's down and hidden from
     # the desktop (see _hide_modifier_hotkey), or None.
     hidden_key: int | None = None
@@ -2490,14 +2484,12 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
     except (virtual_keyboard.StoppedPartway, virtual_keyboard.GaveUp, PasswordFieldNow) as stop:
         outcome = _delivery_stopped(stop, typed_some=_keys_sent.count != sends_before)
     if outcome in ("ok", "partial"):
-        try:
-            landed = _query_focused_window_class()
-        except Exception:
-            landed = None
+        landed, which = focused_window.look()
         if landed:
             if landed != state.last_inserted_window:
                 logger.info(f"The text landed in {landed!r}, not {state.last_inserted_window!r}")
             state.last_inserted_window = landed
+        state.last_inserted_where = (state.last_inserted_window, which)
     return outcome
 
 
@@ -2843,7 +2835,7 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
         return None
     # Before the space below: the time typing it takes isn't part of the press.
     held_ms = int((time.time() - (state.press_t0 or time.time())) * 1000)
-    if state.held_send and state.owed_space is not None and not state.chunks_submitted:
+    if state.held_send and send_countdown.owes_space() and not state.chunks_submitted:
         # The hotkey that held the send is up now; a tap leaves the text as
         # it is, a dictation goes after this space.
         send_countdown.type_owed_space()
@@ -3281,6 +3273,24 @@ def _press_said(key: str, chunk_role) -> None:
         _chunk_message_sent()
 
 
+def _send_automatically(space: str, injection_mode: str) -> None:
+    """"Send each dictation automatically": Enter after the wait, only into
+    the window the dictation went to (send_countdown)."""
+    send_countdown.send_automatically("Send each dictation automatically is on",
+                                      state.last_inserted_where, _press_key,
+                                      _type_onto_dictation, space, injection_mode)
+
+
+def _type_onto_dictation(text: str, injection_mode: str) -> str:
+    """Type *text* right after the dictation, keeping undo's record of it
+    whole; _inject_text's outcome."""
+    typed = state.last_inserted_text
+    outcome = _inject_text(text, injection_mode, time.time())
+    if outcome == "ok":
+        state.last_inserted_text = typed + text
+    return outcome
+
+
 def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                            language=None, auto_space=True, auto_period=True,
                            injection_mode="type", chunk_role=None):
@@ -3314,8 +3324,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                 # The recording ended in a pause; its phrases are typed, so
                 # "Send each dictation automatically" sends them now.
                 _flush_boundary(auto_period, False, injection_mode)
-                send_countdown.send_automatically("Send each dictation automatically is on",
-                                                  " " if auto_space else "", injection_mode)
+                _send_automatically(" " if auto_space else "", injection_mode)
                 _chunk_message_sent()
             else:
                 _flush_boundary(auto_period, auto_space, injection_mode)
@@ -3490,7 +3499,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # Stage 4: Inject text into the active application. It goes into the
         # Recent Dictations list first, so it can be recovered even if the
         # injection lands in the wrong window or fails outright.
-        if text and state.owed_space is not None:
+        if text and send_countdown.owes_space():
             text = send_countdown.with_owed_space(text)
         if text:
             chunked = chunk_role is not None
@@ -3511,8 +3520,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             elif said:
                 _press_said(said, chunk_role)
             elif press:
-                send_countdown.send_automatically("Send each dictation automatically is on",
-                                                  space_left_off, injection_mode)
+                _send_automatically(space_left_off, injection_mode)
                 if chunk_role is not None:
                     _chunk_message_sent()
             if chunk_role == "middle" and not _chunk_context_marks and outcome == "ok" \
@@ -4224,7 +4232,7 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
 
     # --- Tap-to-toggle: press once to start, press again to stop ---
     if (toggle_key and event.code == toggle_key and event.value == 0
-            and state.owed_space is not None and not state.is_recording):
+            and send_countdown.owes_space() and not state.is_recording):
         send_countdown.type_owed_space()   # the tap that held the send is over
 
     if (toggle_key and event.code == toggle_key and event.value == 1

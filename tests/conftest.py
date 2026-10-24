@@ -182,9 +182,9 @@ def _no_real_send_countdown(monkeypatch, request):
         monkeypatch.setattr(screen_message, "hide", lambda *a, **k: None)
         monkeypatch.setattr(screen_message, "relabel", lambda *a, **k: None)
     monkeypatch.setattr(send_countdown, "_delay", 0.0)
-    monkeypatch.setattr(app.state, "pending_send", None)
+    monkeypatch.setattr(send_countdown, "_pending", None)
     monkeypatch.setattr(app.state, "held_send", False)
-    monkeypatch.setattr(app.state, "owed_space", None)
+    monkeypatch.setattr(send_countdown, "_owed", None)
     monkeypatch.setattr(app.state, "sent", None)
 
 

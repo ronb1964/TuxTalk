@@ -7,11 +7,10 @@ holds the send and the text stays in the box, to fix or add a screenshot to
 first; holding the key dictates more onto it. The Enter goes only into the
 window the text went to, and never into a password field.
 
-The send waiting is app.state.pending_send, guarded by _send_lock; the
-typing and the questions about the focus are app.py's.
+The send waiting is _pending, guarded by _send_lock. The typing is app.py's:
+the dictation hands over what presses a key and what types more onto it.
 """
 import threading
-import time
 
 from . import focused_window, virtual_keyboard
 from .logger import setup_logger
@@ -27,6 +26,15 @@ PASSWORD_FIELD_NOT_SENT = "Not sent: the cursor is in a password field."
 _delay = 2.0                # seconds before the Enter (Preferences)
 _hold_key_name = "F8"       # named in the "Sending in 2 s" label
 
+# The send counting down to its Enter, until it presses it or a tap of a
+# hotkey holds it, else None: {"window", "why", "press", "type", "space",
+# "mode", "timer", "ticks"}.
+_pending = None
+# The send a tap held, while the space it left off waits for the hotkey that
+# held it to come up (type_owed_space), else None. Typed while the key is
+# down, GNOME without the extension sees the key too and the space is lost.
+_owed = None
+
 
 def configure(cfg) -> None:
     """Take the wait and the hold key's name from the settings *cfg*."""
@@ -35,18 +43,26 @@ def configure(cfg) -> None:
     _hold_key_name = getattr(cfg, "hotkey", "") or "the hotkey"
 
 
-def send_automatically(why: str, space: str = "", injection_mode: str = "type") -> None:
-    """Press Enter for the dictation just typed, after the wait (hold).
+def send_automatically(why: str, window, press, type_more, space: str = "",
+                       injection_mode: str = "type") -> None:
+    """Press Enter for the dictation just typed, after the wait (hold), if
+    the window it went to (*window*, a focused_window.look() taken then)
+    still has the focus. *press*(key, why, claim=None) presses it, as
+    app._press_key; *type_more*(text, mode) types onto the dictation.
 
     *space* is the auto-space left off so it wouldn't be sent; a held send
     types it, or what's said next sticks to the last word ("delay.All")."""
-    from . import app
+    global _pending
+    pending = {"window": window, "why": why, "press": press, "type": type_more,
+               "space": space, "mode": injection_mode}
     delay = _delay
     if delay <= 0:
-        app._press_key("ENTER", why)
+        if _focus_left(pending):
+            logger.info("Not sent: another window has the focus now")
+            show_notice(SWITCHED_WINDOW_NOTICE)
+        else:
+            press("ENTER", why)
         return
-    pending = {"window": focused_window.look(), "why": why,
-               "space": space, "mode": injection_mode}
     pending["timer"] = threading.Timer(delay, _send_when_due, args=(pending,))
     # The label counts down once a second: "Sending in 4 s", 3, 2, 1.
     pending["ticks"] = [threading.Timer(delay - left, _count_down, args=(pending, left))
@@ -54,9 +70,9 @@ def send_automatically(why: str, space: str = "", injection_mode: str = "type") 
     for timer in [pending["timer"], *pending["ticks"]]:
         timer.daemon = True
     with _send_lock:
-        if app.state.pending_send is not None:
-            _cancel_timers(app.state.pending_send)
-        app.state.pending_send = pending
+        if _pending is not None:
+            _cancel_timers(_pending)
+        _pending = pending
     for timer in [pending["timer"], *pending["ticks"]]:
         timer.start()
     logger.info(f"Sending in {delay:g}s ({why})")
@@ -73,15 +89,16 @@ def _count_down(pending: dict, seconds_left: int) -> None:
     """One second less on the "Sending in" label, unless that send is over.
     Switching windows ends it here, so the label doesn't count down to a send
     that won't happen."""
-    from . import app, screen_message
+    global _pending
+    from . import screen_message
     with _send_lock:
-        if app.state.pending_send is not pending:
+        if _pending is not pending:
             return
     if _focus_left(pending):
         with _send_lock:
-            if app.state.pending_send is not pending:
+            if _pending is not pending:
                 return
-            app.state.pending_send = None
+            _pending = None
         _cancel_timers(pending)
         logger.info("Not sent: another window has the focus now")
         screen_message.relabel(LABEL_TAG, SWITCHED_WINDOW_NOTICE)
@@ -108,19 +125,24 @@ def _send_when_due(pending: dict) -> None:
     A Right Ctrl or Right Alt dictation key down now, or going down before
     the Enter does, is waited for first (modifier_hotkeys), with the send
     pending until the Enter goes down: the hotkey loop reads a tap of it
-    meanwhile, and the tap holds the send as it would have."""
-    from . import app
+    meanwhile, and the tap holds the send as it would have. A wait that
+    ended in another window says so, as a switch during the countdown does."""
+    global _pending
     with _send_lock:
-        if app.state.pending_send is not pending:
+        if _pending is not pending:
             return
-    sent = app._press_key("ENTER", pending["why"], claim=lambda: _claim_send(pending))
+    sent = pending["press"]("ENTER", pending["why"], claim=lambda: _claim_send(pending))
     with _send_lock:
-        unclaimed = app.state.pending_send is pending
+        unclaimed = _pending is pending
         if unclaimed:
-            app.state.pending_send = None
+            _pending = None
     if unclaimed and not sent:
-        logger.info("Not sent: a dictation key stayed down, or Enter couldn't be pressed")
-        show_notice(HELD_NOTICE)
+        if _focus_left(pending):
+            logger.info("Not sent: another window has the focus now")
+            show_notice(SWITCHED_WINDOW_NOTICE)
+        else:
+            logger.info("Not sent: a dictation key stayed down, or Enter couldn't be pressed")
+            show_notice(HELD_NOTICE)
 
 
 def _claim_send(pending: dict):
@@ -141,20 +163,20 @@ def _claim_send(pending: dict):
 
 def _take_send(pending: dict) -> None:
     """Take *pending* for its Enter; GaveUp when a tap held it."""
-    from . import app
+    global _pending
     with _send_lock:
-        if app.state.pending_send is not pending:
+        if _pending is not pending:
             raise virtual_keyboard.GaveUp("held")
-        app.state.pending_send = None
+        _pending = None
 
 
 def _refuse_send(pending: dict, why: str, notice: str) -> None:
     """End *pending* unsent and say why, unless a tap held it first."""
-    from . import app
+    global _pending
     with _send_lock:
-        ours = app.state.pending_send is pending
+        ours = _pending is pending
         if ours:
-            app.state.pending_send = None
+            _pending = None
     if ours:
         logger.info(f"Not sent: {why}")
         show_notice(notice)
@@ -171,15 +193,15 @@ def hold(announce: bool) -> bool:
     """Stop a counting-down send; True when there was one. *announce* says
     "Not sent" on screen at once (a tap of the toggle key); a press of the
     hold key waits to see whether it's a tap or more dictation."""
-    from . import app
+    global _pending, _owed
     with _send_lock:
-        pending, app.state.pending_send = app.state.pending_send, None
+        pending, _pending = _pending, None
     if pending is None:
         return False
     _cancel_timers(pending)
     logger.info("Held the send: the dictation stays unsent")
     if pending.get("space"):
-        app.state.owed_space = pending
+        _owed = pending
     if announce:
         show_notice(HELD_NOTICE)
     else:
@@ -188,33 +210,25 @@ def hold(announce: bool) -> bool:
     return True
 
 
-def _type_space_left_off(pending: dict) -> None:
-    """Type the space a held send left off, in the window its text went to,
-    keeping undo's record of the dictation whole."""
-    from . import app
-    space = pending.get("space")
-    if not space:
-        return
-    if _focus_left(pending):
-        return
-    typed = app.state.last_inserted_text
-    if app._inject_text(space, pending["mode"], time.time()) == "ok":
-        app.state.last_inserted_text = typed + space
+def owes_space() -> bool:
+    """Whether a held send's space waits for its hotkey to come up."""
+    return _owed is not None
 
 
 def type_owed_space() -> None:
-    """The hotkey that held a send is up: type the space it left off."""
-    from . import app
-    pending, app.state.owed_space = app.state.owed_space, None
-    if pending is not None:
-        _type_space_left_off(pending)
+    """The hotkey that held a send is up: type the space it left off, in the
+    window its text went to."""
+    global _owed
+    pending, _owed = _owed, None
+    if pending is not None and not _focus_left(pending):
+        pending["type"](pending["space"], pending["mode"])
 
 
 def with_owed_space(text: str) -> str:
     """Put a held send's space in front of *text*, the dictation added onto
     it, when it goes to the same window."""
-    from . import app
-    pending, app.state.owed_space = app.state.owed_space, None
+    global _owed
+    pending, _owed = _owed, None
     if pending is None or not text or text[0].isspace() or _focus_left(pending):
         return text
     return pending["space"] + text

@@ -214,6 +214,12 @@ class FakeTimer:
 TYPED = []   # what the countdown fixture's _inject_text was given
 
 
+def start_send(why="test", space="", mode="type"):
+    """An automatic send for a dictation typed into the window focused now."""
+    send_countdown.send_automatically(why, focused_window.look(), app._press_key,
+                                      app._type_onto_dictation, space, mode)
+
+
 @pytest.fixture
 def countdown(monkeypatch):
     FakeTimer.made = []
@@ -244,25 +250,25 @@ def countdown(monkeypatch):
 def test_a_send_waits_and_says_how_to_hold_it(countdown, monkeypatch):
     pressed, labels = countdown
     monkeypatch.setattr(send_countdown, "_hold_key_name", "F8")
-    send_countdown.send_automatically("test")
+    start_send("test")
     assert pressed == []
     assert labels == ["Sending in 2 s. Tap F8 to hold it."]
     assert sends()[0].delay == 2.0
     sends()[0].fire()
     assert pressed == ["test"]
-    assert app.state.pending_send is None
+    assert send_countdown._pending is None
 
 
 def test_right_away_sends_at_once(countdown, monkeypatch):
     pressed, labels = countdown
     monkeypatch.setattr(send_countdown, "_delay", 0.0)
-    send_countdown.send_automatically("test")
+    start_send("test")
     assert pressed == ["test"] and labels == [] and FakeTimer.made == []
 
 
 def test_a_tap_of_the_toggle_key_holds_the_send(countdown):
     pressed, labels = countdown
-    send_countdown.send_automatically("test")
+    start_send("test")
     assert send_countdown.hold(announce=True) is True
     sends()[0].fire()
     assert pressed == []
@@ -276,7 +282,7 @@ def test_nothing_to_hold_without_a_countdown(countdown):
 def test_no_enter_into_another_window(countdown, monkeypatch):
     """Enter in whatever the user switched to could send something else."""
     pressed, _ = countdown
-    send_countdown.send_automatically("test")
+    start_send("test")
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "konsole")
     monkeypatch.setattr(focused_window, "look", lambda: ("konsole", None))
     sends()[0].fire()
@@ -288,7 +294,7 @@ def test_no_enter_into_another_window_of_the_same_app(countdown, monkeypatch):
     would send whatever is in the other one's box."""
     pressed, labels = countdown
     monkeypatch.setattr(focused_window, "look", lambda: ("brave-browser", 0x3200007))
-    send_countdown.send_automatically("test")
+    start_send("test")
     monkeypatch.setattr(focused_window, "look", lambda: ("brave-browser", 0x3400004))
     sends()[0].fire()
     assert pressed == [] and labels[-1] == send_countdown.SWITCHED_WINDOW_NOTICE
@@ -299,7 +305,7 @@ def test_a_window_not_known_at_the_send_still_sends(countdown, monkeypatch):
     pressed, _ = countdown
     looks = iter([None, 0x3200007])
     monkeypatch.setattr(focused_window, "look", lambda: ("brave-browser", next(looks)))
-    send_countdown.send_automatically("test")
+    start_send("test")
     sends()[0].fire()
     assert pressed == ["test"]
 
@@ -307,7 +313,7 @@ def test_a_window_not_known_at_the_send_still_sends(countdown, monkeypatch):
 def test_pressing_the_hold_key_holds_the_send_and_records(countdown, monkeypatch):
     """Holding the key dictates more onto the unsent message."""
     pressed, _ = countdown
-    send_countdown.send_automatically("test")
+    start_send("test")
     monkeypatch.setattr(app, "_open_input_stream", lambda idx: None)
     for name in ("_beep", "_notify", "_notify_tray_recording_state",
                  "_arm_chunker", "_pause_media_players"):
@@ -343,8 +349,8 @@ def sends():
 
 def test_a_new_send_replaces_one_still_counting(countdown):
     pressed, _ = countdown
-    send_countdown.send_automatically("first")
-    send_countdown.send_automatically("second")
+    start_send("first")
+    start_send("second")
     assert sends()[0].cancelled
     sends()[1].fire()
     assert pressed == ["second"]
@@ -358,7 +364,7 @@ def test_the_label_counts_down_each_second(countdown, monkeypatch):
     monkeypatch.setattr(screen_message, "relabel", lambda tag, text: relabels.append(text))
     monkeypatch.setattr(send_countdown, "_delay", 4.0)
     monkeypatch.setattr(send_countdown, "_hold_key_name", "F8")
-    send_countdown.send_automatically("test")
+    start_send("test")
     ticks = [t for t in FakeTimer.made if t.fn is send_countdown._count_down]
     assert [t.delay for t in ticks] == [1.0, 2.0, 3.0]
     for tick in ticks:
@@ -374,7 +380,7 @@ def test_a_held_send_stops_counting(countdown, monkeypatch):
     relabels = []
     monkeypatch.setattr(screen_message, "relabel", lambda tag, text: relabels.append(text))
     monkeypatch.setattr(send_countdown, "_delay", 3.0)
-    send_countdown.send_automatically("test")
+    start_send("test")
     send_countdown.hold(announce=True)
     assert all(t.cancelled for t in FakeTimer.made)
     for tick in [t for t in FakeTimer.made if t.fn is send_countdown._count_down]:
@@ -405,20 +411,20 @@ def test_a_held_send_types_its_space_once_the_key_is_up(countdown, monkeypatch):
     space waits for the hotkey to come up: typed while it's down, GNOME
     without the extension swallowed it (VM release test, 2026-10-18)."""
     monkeypatch.setattr(app.state, "last_inserted_text", "Testing the delay.")
-    monkeypatch.setattr(app.state, "owed_space", None)
-    send_countdown.send_automatically("test", " ", "type")
+    monkeypatch.setattr(send_countdown, "_owed", None)
+    start_send("test", " ", "type")
     send_countdown.hold(announce=True)
     assert TYPED == []                     # the key is still down
     send_countdown.type_owed_space()                 # ...and now it's up
     assert TYPED == [" "]
     # Undo still sees the whole dictation, space included.
     assert app.state.last_inserted_text == "Testing the delay. "
-    assert app.state.owed_space is None
+    assert send_countdown._owed is None
 
 
 def test_a_dictation_added_to_a_held_send_starts_with_its_space(countdown, monkeypatch):
-    monkeypatch.setattr(app.state, "owed_space", None)
-    send_countdown.send_automatically("test", " ", "type")
+    monkeypatch.setattr(send_countdown, "_owed", None)
+    start_send("test", " ", "type")
     send_countdown.hold(announce=False)
     assert send_countdown.with_owed_space("And this part was added. ") == " And this part was added. "
     assert send_countdown.with_owed_space("Next one. ") == "Next one. "    # only once
@@ -428,8 +434,8 @@ def test_a_short_tap_types_the_space_when_released(countdown, monkeypatch):
     reasons = []
     monkeypatch.setattr(app, "cancel_recording",
                         lambda beeps, notify, reason="": reasons.append(reason))
-    monkeypatch.setattr(app.state, "owed_space", None)
-    send_countdown.send_automatically("test", " ", "type")
+    monkeypatch.setattr(send_countdown, "_owed", None)
+    start_send("test", " ", "type")
     monkeypatch.setattr(app.state, "held_send", send_countdown.hold(announce=False))
     monkeypatch.setattr(app.state, "silence", None)
     monkeypatch.setattr(app.state, "chunks_submitted", 0)
@@ -447,8 +453,8 @@ def test_typing_the_space_doesnt_turn_a_tap_into_a_dictation(countdown, monkeypa
                         lambda beeps, notify, reason="": reasons.append(reason))
     monkeypatch.setattr(app, "_inject_text",
                         lambda text, mode, t0: app.time.sleep(0.1) or TYPED.append(text) or "ok")
-    monkeypatch.setattr(app.state, "owed_space", None)
-    send_countdown.send_automatically("test", " ", "type")
+    monkeypatch.setattr(send_countdown, "_owed", None)
+    start_send("test", " ", "type")
     monkeypatch.setattr(app.state, "held_send", send_countdown.hold(announce=False))
     monkeypatch.setattr(app.state, "silence", None)
     monkeypatch.setattr(app.state, "chunks_submitted", 0)
@@ -526,14 +532,14 @@ def test_a_quick_tap_holds_the_send_even_when_recording_starts_slowly(
                  "_pause_media_players", "_resume_media_players", "_stop_stream_safely"):
         monkeypatch.setattr(app, name, lambda *a, **k: None)
     monkeypatch.setattr(app, "recording_indicator", None)
-    monkeypatch.setattr(app.state, "owed_space", None)
+    monkeypatch.setattr(send_countdown, "_owed", None)
     monkeypatch.setattr(app.state, "silence", None)
     monkeypatch.setattr(app.state, "chunks_submitted", 0)
     monkeypatch.setattr(app.state, "frames", [])
     cfg = SimpleNamespace(beeps=False, notify=False, smart_quotes=False, language=None,
                           auto_space=True, auto_period=True, injection_mode="type")
     keyboard = _Keyboard([F8] if still_down else [])
-    send_countdown.send_automatically("test", " ", "type")
+    start_send("test", " ", "type")
     try:
         for value in (1, 0):        # the release was waiting while recording started
             app._handle_key_event(SimpleNamespace(type=ecodes.EV_KEY, code=F8, value=value),
@@ -550,14 +556,14 @@ def test_a_quick_tap_holds_the_send_even_when_recording_starts_slowly(
 
 def test_a_sent_message_never_gets_the_space(countdown):
     pressed, _ = countdown
-    send_countdown.send_automatically("test", " ", "type")
+    start_send("test", " ", "type")
     sends()[0].fire()
     assert pressed == ["test"] and TYPED == []
 
 
 def test_no_space_into_another_window(countdown, monkeypatch):
-    monkeypatch.setattr(app.state, "owed_space", None)
-    send_countdown.send_automatically("test", " ", "type")
+    monkeypatch.setattr(send_countdown, "_owed", None)
+    start_send("test", " ", "type")
     send_countdown.hold(announce=True)
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "konsole")
     monkeypatch.setattr(focused_window, "look", lambda: ("konsole", None))
@@ -569,7 +575,8 @@ def test_the_dictation_hands_its_left_off_space_to_the_send(monkeypatch):
     monkeypatch.setattr(app, "_press_enter_after", True)
     sends = []
     monkeypatch.setattr(send_countdown, "send_automatically",
-                        lambda why, space="", mode="type": sends.append(space))
+                        lambda why, window, press, type_more, space="", mode="type":
+                        sends.append(space))
     events = _dictate(monkeypatch, "Hello there", prepared=lambda r: r + ". ")
     assert ("typed", "Hello there.") in events
     assert sends == [" "]
@@ -588,13 +595,13 @@ def test_switching_windows_stops_the_countdown_at_once(countdown, monkeypatch):
     relabels = []
     monkeypatch.setattr(screen_message, "relabel", lambda tag, text: relabels.append(text))
     monkeypatch.setattr(send_countdown, "_delay", 4.0)
-    send_countdown.send_automatically("test")
+    start_send("test")
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "konsole")
     monkeypatch.setattr(focused_window, "look", lambda: ("konsole", None))
     ticks = [t for t in FakeTimer.made if t.fn is send_countdown._count_down]
     ticks[0].fire()
     assert relabels == [send_countdown.SWITCHED_WINDOW_NOTICE]
-    assert app.state.pending_send is None
+    assert send_countdown._pending is None
     assert all(t.cancelled for t in FakeTimer.made)
     sends()[0].fire()
     assert pressed == []
@@ -602,7 +609,7 @@ def test_switching_windows_stops_the_countdown_at_once(countdown, monkeypatch):
 
 def test_switching_in_the_last_second_says_not_sent(countdown, monkeypatch):
     pressed, labels = countdown
-    send_countdown.send_automatically("test")
+    start_send("test")
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "konsole")
     monkeypatch.setattr(focused_window, "look", lambda: ("konsole", None))
     sends()[0].fire()
@@ -632,3 +639,35 @@ def test_saying_press_enter_still_works_in_a_text_editor(monkeypatch):
 ])
 def test_which_windows_are_documents(window, document):
     assert window_classes.is_document_window(window) is document
+
+
+@pytest.mark.parametrize("wait", [0.0, 2.0])
+def test_a_pause_at_the_end_after_switching_windows_sends_nothing(monkeypatch, keyboard, wait):
+    """Type at pause with "Send each dictation automatically": a phrase typed
+    into Brave, a click into Konsole, and the recording ends in a pause. The
+    Enter went to whichever window had the focus when the send was set up,
+    and ran what was on Konsole's command line."""
+    from tuxtalk import history
+    focus = ["brave-browser", 0x3200007]
+    monkeypatch.setattr(focused_window, "look", lambda: tuple(focus))
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: focus[0])
+    monkeypatch.setattr(app, "_deliver_text", lambda text, mode, t0, one_block=False: "ok")
+    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, language: "see you at noon")
+    monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
+    monkeypatch.setattr(app, "_press_enter_after", True)
+    monkeypatch.setattr(app, "_usage_stats", False)
+    monkeypatch.setattr(history, "add_entry", lambda text, replaces=None: None)
+    monkeypatch.setattr(app.state, "chunk_typed", False)
+    monkeypatch.setattr(send_countdown, "_delay", wait)
+    FakeTimer.made = []
+    monkeypatch.setattr(send_countdown.threading, "Timer", FakeTimer)
+    frames = [(np.ones(app.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
+    app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=False, smart_quotes=False,
+                               notify_on=False, chunk_role="middle")
+    focus[:] = ["org.kde.konsole", 0x3400004]           # the click into Konsole
+    app._transcribe_and_inject([], app.SAMPLE_RATE, beeps_on=False, smart_quotes=False,
+                               notify_on=False, chunk_role="last")
+    for timer in FakeTimer.made:
+        timer.fire()
+    assert keyboard.events == []

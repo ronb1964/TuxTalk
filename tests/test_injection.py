@@ -14,7 +14,7 @@ import subprocess
 
 import pytest
 
-from tuxtalk import app
+from tuxtalk import app, focused_window
 
 
 class FakeCompleted:
@@ -366,6 +366,7 @@ def _focus_moves_on_paste(monkeypatch, before, after):
     monkeypatch.setattr(app, "_paste_text", fake_paste)
     monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: focus["now"])
+    monkeypatch.setattr(focused_window, "look", lambda: (focus["now"], None))
 
 
 def test_the_window_the_text_landed_in_is_remembered(monkeypatch, wayland):
