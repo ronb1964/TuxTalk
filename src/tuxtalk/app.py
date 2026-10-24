@@ -1655,8 +1655,9 @@ def _send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY
     before_press = modifier_hotkeys.wait_while_held(_destination)
     try:
         sent = virtual_keyboard.send(events, delay_ms, before_press, claim)
-    except virtual_keyboard.StoppedPartway:
-        logger.error(f"{what}: the virtual keyboard stopped partway")
+    except virtual_keyboard.StoppedPartway as stop:
+        if stop.reason is None:     # a wait that gave up said why already
+            logger.error(f"{what}: the virtual keyboard stopped partway")
         if raise_if_partial:
             raise
         return False
@@ -1666,7 +1667,19 @@ def _send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY
         return False        # nothing sent: the key stayed down (logged there)
     if not sent:
         logger.error(f"Couldn't send {what}: TuxTalk's virtual keyboard isn't working")
+    else:
+        _keys_sent.count += 1
     return sent
+
+
+class _KeysSent(threading.local):
+    """How many sends went out whole on this thread (_send_keys): a wait
+    that gives up after earlier lines of a dictation were typed stopped it
+    partway, not before it began (_inject_text)."""
+    count = 0
+
+
+_keys_sent = _KeysSent()
 
 
 def _destination():
@@ -2869,10 +2882,11 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
     "delete last sentence" refuse in the very window that got the text
     (Ron, 2026-10-15).
     """
+    sends_before = _keys_sent.count
     try:
         outcome = _deliver_text(text, injection_mode, t0, one_block)
     except (virtual_keyboard.StoppedPartway, virtual_keyboard.GaveUp, PasswordFieldNow) as stop:
-        outcome = _delivery_stopped(stop)
+        outcome = _delivery_stopped(stop, typed_some=_keys_sent.count != sends_before)
     if outcome in ("ok", "partial"):
         try:
             landed = _query_focused_window_class()
@@ -2885,7 +2899,7 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
     return outcome
 
 
-def _delivery_stopped(stop) -> str:
+def _delivery_stopped(stop, typed_some: bool) -> str:
     """The outcome of a delivery that *stop* ended early, after forgetting
     what undo, "select that" and the next dictation's capital count on.
 
@@ -2895,17 +2909,21 @@ def _delivery_stopped(stop) -> str:
     failed paste) isn't tracked. GaveUp: a Right Ctrl or Right Alt dictation
     key stayed down, or the focus moved while typing waited for it
     (modifier_hotkeys); typing on any other way (wtype, the clipboard) would
-    do what the wait was there to prevent."""
+    do what the wait was there to prevent. *typed_some*: earlier lines were
+    typed before it gave up."""
     state.last_inserted_text = ""
     state.continue_mid_sentence = False
     state.nav_context = None
     _forget_shown()
-    if isinstance(stop, virtual_keyboard.GaveUp):
-        return stop.reason          # logged where it gave up
     if isinstance(stop, PasswordFieldNow):
         logger.warning("Stopped typing: a password field has the focus now")
         return "password_field"
-    logger.error("The virtual keyboard stopped partway through the dictation")
+    if isinstance(stop, virtual_keyboard.GaveUp) and not typed_some:
+        return stop.reason          # logged where it gave up
+    if stop.reason:
+        logger.warning(f"Typing stopped partway through the dictation ({stop.reason})")
+    else:
+        logger.error("The virtual keyboard stopped partway through the dictation")
     return "partial"
 
 

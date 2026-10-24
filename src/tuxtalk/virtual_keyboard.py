@@ -45,7 +45,12 @@ SETTLE_S = 0.2
 
 
 class StoppedPartway(Exception):
-    """The keyboard failed after some of the keys had reached the app."""
+    """Typing stopped after some of the keys had reached the app: the
+    keyboard failed (*reason* None), or a wait gave up (GaveUp's reason)."""
+
+    def __init__(self, what: str, reason: str | None = None):
+        super().__init__(what)
+        self.reason = reason
 
 
 class GaveUp(Exception):
@@ -190,10 +195,10 @@ def send(events, delay_ms: float = KEY_DELAY_MS, before_press=None, claim=None) 
             if sent:
                 raise StoppedPartway(f"{sent} of {len(events)} key events")
             return False
-        except GaveUp:
+        except GaveUp as stop:
             _release(device, down)
             if sent:
-                raise StoppedPartway(f"{sent} of {len(events)} key events") from None
+                raise StoppedPartway(f"{sent} of {len(events)} key events", stop.reason) from None
             raise
         if down:
             logger.warning(f"Letting go of keys left down: {list(down)}")

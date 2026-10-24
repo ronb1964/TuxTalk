@@ -379,6 +379,33 @@ def test_a_stuck_key_types_nothing_another_way(keyboard, stuck_right_ctrl, monke
     assert "Right Ctrl" in app._UNDELIVERED_NOTICES["key_held"]
 
 
+@pytest.fixture
+def typing_into_kwrite(monkeypatch):
+    monkeypatch.setattr(app, "_determine_injection_method", lambda mode: ("type", "test"))
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "kwrite")
+    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+
+
+def test_a_key_stuck_after_the_first_line_says_only_part_was_typed(keyboard, stuck_right_ctrl,
+                                                                   typing_into_kwrite):
+    """The first line is in the app: "Not typed" would have the user paste it
+    all again over it."""
+    board = stuck_right_ctrl()
+    board.pressed = lambda look: len(keyboard.events) >= 2      # once "a" is typed
+    assert app._inject_text("a\xa7SHIFT_ENTER\xa7b", "type", 0.0) == "partial"
+    assert keyboard.typed_keys() == [ecodes.KEY_A]
+
+
+def test_a_key_stuck_partway_isnt_blamed_on_the_keyboard(keyboard, stuck_right_ctrl,
+                                                          typing_into_kwrite, caplog):
+    stuck_right_ctrl(start=2)
+    with caplog.at_level("INFO", logger="tuxtalk.app"):
+        assert app._inject_text("ab", "type", 0.0) == "partial"
+    assert keyboard.typed_keys() == [ecodes.KEY_A]
+    assert "virtual keyboard stopped" not in caplog.text
+    assert "Typing stopped partway through the dictation (key_held)" in caplog.text
+
+
 def test_a_clipboard_fallback_that_fails_says_why_in_the_log(monkeypatch, caplog):
     """With no virtual keyboard and no wtype, the last way out is the
     clipboard; when that failed too, the log said only that nothing worked."""
