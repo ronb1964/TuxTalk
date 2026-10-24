@@ -55,24 +55,29 @@ before 0.15.0, so older entries use that name.
   password yourself. With Type at pause, once phrases of the same recording
   went into one window, "press enter" said on its own in another window is
   pressed only in a password field: anywhere else it would send whatever is
-  in that box.
+  in that box. That holds after "edit that" too, which used to forget where
+  the message was.
 - An automatic Enter never goes into a TuxTalk window now, and neither does
-  "press enter" said after your words wherever the desktop says which window
-  has the focus. If Preferences or the Parakeet offer came up during the
-  countdown, the Enter could press its OK button while your message sat
-  there unsent.
-- Where the desktop doesn't say which window has the focus, "Send each
-  dictation automatically" types your words and doesn't send them. You get
-  "Not sent: this desktop doesn't say which window has the focus. Press
-  Enter when you're ready." That's COSMIC, GNOME without TuxTalk's extension
-  or with the old one until you log out and back in after the update, Plasma
-  5.27 on Wayland, and any moment the tray is too busy to answer. A message
-  sent into the wrong chat can't be taken back. Saying "..., press enter"
-  still presses it there, because you asked for it and you're looking at the
-  window.
+  "press enter" said after words that went somewhere else. If Preferences or
+  the Parakeet offer came up during the countdown, the Enter could press its
+  OK button while your message sat there unsent. Dictating into TuxTalk's
+  own boxes still works: "ClaudeClaw, press tab" in Add Word moves on.
+- Where TuxTalk can't tell which window has the focus, "Send each dictation
+  automatically" types your words and doesn't send them. You get "Not sent:
+  TuxTalk can't tell which window has the focus. Press Enter when you're
+  ready." over the window each time, and as a notification once. That's
+  COSMIC, GNOME without TuxTalk's extension or with the old one until you
+  log out and back in after the update, and Plasma 5.27 on Wayland. A
+  message sent into the wrong chat can't be taken back. Saying "..., press
+  enter" still presses it there, because you asked for it and you're
+  looking at the window. Your next dictation still starts after a space;
+  before, it stuck to the last word ("noon.How"). A tray too busy to answer
+  for a moment no longer calls off a countdown; the last check before the
+  Enter decides.
 - When a send doesn't go, you get a notification as well as the note over
   the window, so a screen reader tells you. Holding a send with a tap of
-  your hotkey says so in a notification too. And if a phrase in Type at
+  your hotkey says so in a notification too, and so does a hotkey press that
+  held one when the microphone then couldn't open. And if a phrase in Type at
   pause only got partly typed, that message isn't sent, not at the end and
   not with "press enter", even when the phrases after it go in whole.
 - In Claude Desktop a tab said in the middle of a dictation is four spaces
@@ -111,18 +116,21 @@ before 0.15.0, so older entries use that name.
 - Hands-free stops by itself with a clothes dryer or a gusty fan running.
   Before, each thump or gust counted as you talking and started the wait
   over, so it never stopped. Steady noise is learned as the room once it
-  has gone on for three seconds without you talking, and its thumps and
-  gusts then just pause the wait. So it stops, a second or two later than
-  your setting. In a quiet room nothing changes.
-- Noise that's nearly as loud as your voice is left alone on purpose:
-  learning it made hands-free stop during your quiet words. There it still
-  doesn't stop by itself, so tap the key when you're done.
+  has gone on for about three seconds after you stop talking, and its
+  thumps and gusts then just pause the wait. So it stops, a second or two
+  later than your setting. In a quiet room nothing changes.
+- With a loud dryer and pauses almost as long as your setting, it can stop
+  at the soft start of your next sentence, the way a loud fan already
+  could. A longer setting, or the mic closer, helps.
 - The microphone test in Preferences, Audio, tells you when your room is
   noisy for your voice, under the level grade: a headset, or the mic closer
   to your mouth, will help. It measures how far your voice stands above the
   room in the recording you just made.
 - Preferences opens again when a number in the settings file was edited by
-  hand into something that isn't one. It shows that setting's default.
+  hand into something that isn't one, or into nan or inf. It shows that
+  setting's default, which is what TuxTalk uses for it.
+- Updating from Preferences doesn't start if your unsaved changes couldn't
+  be saved first (a full disk, say). Before, the update's restart lost them.
 - Help lists its sections down the left side now, with the one you pick
   beside it, instead of a row of tabs along the top. The tabs made the
   window wider with every one added, and on Mint it already had to grow
