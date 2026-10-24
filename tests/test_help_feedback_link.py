@@ -206,21 +206,17 @@ def test_a_screen_reader_hears_the_list_named(dialog):
     assert listbox.get_accessible().get_name() == "Help sections"
 
 
-def test_help_is_no_wider_with_another_section(monkeypatch):
+def test_help_is_no_wider_with_another_section(monkeypatch, shown_help):
     """A row of tabs made Help wider with every one added (Mint's font
-    needed more than 760 px for eight). The list down the side doesn't."""
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
+    needed more than 760 px for eight). The list down the side doesn't, as
+    shown, not only in the size asked for."""
     from tuxtalk import help_text, ui_style
-    monkeypatch.setattr(Gtk.Dialog, "present", lambda self: None)
     monkeypatch.setattr(ui_style, "workarea_width", lambda: 4000)
     widths = []
     for extra in (0, 4):
         sections = help_text.tabs() + [(f"Section {n}", "More.") for n in range(extra)]
         monkeypatch.setattr(help_text, "tabs", lambda sections=sections: sections)
-        opened = help_dialog.show_help_dialog()
-        widths.append(opened.get_default_size()[0])
-        opened.destroy()
+        widths.append(shown_help().get_allocated_width())
     assert widths[0] == widths[1] and widths[0] <= 900
 
 

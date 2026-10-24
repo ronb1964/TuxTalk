@@ -339,9 +339,9 @@ def _migrate_settings(s: Settings) -> Settings:
 
 def repaired(s: Settings) -> Settings:
     """*s* as the service uses it: brought forward to the current schema,
-    and each unusable value back at its default. Preferences reads the file
-    this way too, so it shows what the service uses (nan for a number was a
-    float to the caster, and stopped Preferences opening)."""
+    and each unusable value (nan or inf for a number too) back at its
+    default. Preferences reads the file this way as well, so it shows what
+    the service uses."""
     # Before validating, so retired values (the old 'cyan' color mode) become
     # their modern equivalents instead of tripping validation and being reset.
     _migrate_settings(s)

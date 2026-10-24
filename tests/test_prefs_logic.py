@@ -419,3 +419,26 @@ def test_an_update_doesnt_start_when_the_changes_couldnt_be_saved(monkeypatch):
         _show_save_error=lambda: shown.append("save error"))
     PreferencesWindow._on_download_update_clicked(window, None)
     assert shown == ["save error"]
+
+
+def test_an_update_saves_the_snippets_first(monkeypatch):
+    """Snippets are saved apart from the settings: an update after an edited
+    snippet, with no Apply, restarted TuxTalk and lost the edit. A failed
+    snippet save stops the update, as a failed settings save does."""
+    from tuxtalk import update_checker
+    saved = []
+    answer = SimpleNamespace(run=lambda: P.Gtk.ResponseType.YES, destroy=lambda: None,
+                             format_secondary_text=lambda text: None)
+    monkeypatch.setattr(P, "message_dialog", lambda **kw: answer)
+    monkeypatch.setattr(update_checker, "get_install_type", lambda: "appimage")
+    monkeypatch.setattr(update_checker, "get_update_guidance",
+                        lambda kind, version: {"update_method": "appimage"})
+    monkeypatch.setattr(P.Gtk, "Dialog", lambda **kw: pytest.fail("the update started"))
+    window = SimpleNamespace(
+        _current_release={"appimage_url": "https://example.invalid/TuxTalk.AppImage"},
+        window=None, commands_store=object(),
+        _save_custom_commands=lambda: saved.append("snippets") and None,
+        save_config=lambda: saved.append("settings") or True,
+        _show_save_error=lambda: saved.append("save error"))
+    PreferencesWindow._on_download_update_clicked(window, None)
+    assert saved == ["snippets"]

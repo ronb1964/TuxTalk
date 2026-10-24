@@ -1900,13 +1900,14 @@ class PreferencesWindow:
             f"can't be changed with \u201cedit that\u201d, so tap {key} first if you want to.\n\n"
             "If what you said ends on a word like \u201cand\u201d or \u201cthe\u201d, it was probably\n"
             "cut off, so it isn't sent. Where TuxTalk can't tell which window has the focus\n"
-            "(COSMIC, GNOME without TuxTalk's extension), nothing is sent by itself.\n\n"
+            "(COSMIC, GNOME without TuxTalk's extension, Plasma 5.27 on Wayland), nothing\n"
+            "is sent by itself.\n\n"
             "With this off, end any dictation with \u201cpress enter\u201d to send just that one.")
 
         waits = Gtk.ComboBoxText()
         for seconds in range(5):
-            waits.append(str(seconds), f"After {seconds} second{'s' * (seconds > 1)}"
-                         if seconds else "Right away")
+            label = f"After {seconds} second{'s' * (seconds > 1)}" if seconds else "Right away"
+            waits.append(str(seconds), label)
         current = int(round(float(self.config.get("press_enter_delay", 2.0))))
         waits.set_active_id(str(min(4, max(0, current))))
         waits.connect("changed", lambda c: self.update_config(
@@ -1915,7 +1916,9 @@ class PreferencesWindow:
 
         choice = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         choice.set_margin_start(28)   # under the tickbox's label, not its box
-        choice.pack_start(Gtk.Label(label="Send:", xalign=0), False, False, 0)
+        send_label = Gtk.Label(label="Send:", xalign=0)
+        send_label.set_mnemonic_widget(waits)     # a screen reader names the list by it
+        choice.pack_start(send_label, False, False, 0)
         choice.pack_start(waits, False, False, 0)
         choice.set_sensitive(check.get_active())
 
@@ -3376,7 +3379,6 @@ class PreferencesWindow:
         if not url:
             return
 
-        # Confirm with user
         confirm_dialog = message_dialog(
             transient_for=self.window,
             message_type=Gtk.MessageType.QUESTION,
@@ -3396,8 +3398,9 @@ class PreferencesWindow:
         if response != Gtk.ResponseType.YES:
             return
 
-        # As the question promised: an update that restarts TuxTalk would
-        # lose changes it couldn't save.
+        # As the question promised: the restart would lose what isn't saved.
+        if hasattr(self, 'commands_store') and self._save_custom_commands() is None:
+            return
         if not self.save_config():
             self._show_save_error()
             return
@@ -3447,10 +3450,8 @@ class PreferencesWindow:
             GLib.idle_add(lambda: status_label.set_text("Installing update..."))
             GLib.idle_add(lambda: progress_bar.set_fraction(0.9))
 
-            success, message = update_checker.install_appimage_update(
-                downloaded_path,
-                progress_callback
-            )
+            success, message = update_checker.install_appimage_update(downloaded_path,
+                                                                      progress_callback)
 
             if success:
                 GLib.idle_add(installed)
@@ -3474,7 +3475,6 @@ class PreferencesWindow:
                 f"Please try again or download manually from GitHub."
             )
 
-            # Show error dialog
             dialog = message_dialog(
                 transient_for=self.window,
                 message_type=Gtk.MessageType.ERROR,
