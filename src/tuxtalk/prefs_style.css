@@ -459,7 +459,8 @@ window.talktype-prefs {
     font-weight: 600;
 }
 
-.talktype-prefs .level-too-loud {
+.talktype-prefs .level-too-loud,
+.talktype-prefs .level-noisy {
     color: #e6aa3c;
     font-weight: 600;
 }

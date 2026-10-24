@@ -123,6 +123,10 @@ before 0.15.0, so older entries use that name.
   It did before too, when it had learned the room.
 - Type at pause doesn't miss your pauses with a dryer running. Its thumps
   started every pause over, so nothing was typed until you stopped.
+- The microphone test in Preferences, Audio, tells you when your room is
+  noisy for your voice, under the level grade: a headset, or the mic closer
+  to your mouth, will help. It measures how far your voice stands above the
+  room in the recording you just made.
 
 ## [0.18.2] - 2026-10-23
 

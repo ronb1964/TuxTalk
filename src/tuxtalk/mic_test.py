@@ -1,5 +1,6 @@
 """Preferences' microphone test: record yourself, watch the level as you
-talk, get a grade for it, and hear the recording played back.
+talk, get a grade for it (and a word when the room is noisy for your voice),
+and hear the recording played back.
 
 The replay goes through the same player as the beeps (beeps.play), on the
 sound thread, so it is heard to the end (sounddevice.play() lost about one
@@ -15,10 +16,12 @@ from gi.repository import GLib, Gtk  # noqa: E402
 import numpy as np  # noqa: E402
 import sounddevice as sd  # noqa: E402
 
-from . import beeps, mic_stream  # noqa: E402
+from . import beeps, mic_stream, silence  # noqa: E402
 from .logger import setup_logger  # noqa: E402
 
 logger = setup_logger(__name__)
+
+NOISY_ROOM_TIP = "⚠️ Your room is noisy: a headset, or the mic closer to your mouth, will help"
 
 
 class SegmentedVUMeter(Gtk.DrawingArea):
@@ -301,9 +304,9 @@ class MicTest:
 
     def _set_grade_style(self, grade):
         """Colour the grade line: "level-too-quiet", "level-good",
-        "level-too-loud", or none."""
+        "level-too-loud", "level-noisy", or none."""
         style = self.status.get_style_context()
-        for name in ("level-too-quiet", "level-good", "level-too-loud"):
+        for name in ("level-too-quiet", "level-good", "level-too-loud", "level-noisy"):
             style.remove_class(name)
         if grade:
             style.add_class(grade)
@@ -312,7 +315,7 @@ class MicTest:
         """Grade *take* on the peak and the average level while speaking,
         with thresholds tuned for typical speech: under 5 speaking samples
         is too quiet, a peak over 0.95 clips, and an average under 0.20 is
-        quiet."""
+        quiet. With speech in it, say too when the room is noisy for it."""
         if not take.levels:
             self.status.set_text("No audio detected")
             self._set_grade_style("level-too-quiet")
@@ -329,8 +332,22 @@ class MicTest:
                            "level-too-quiet")
         else:
             text, grade = "✓ Good levels - should transcribe well!", "level-good"
+        if len(speaking) >= 5 and self._noisy(take):
+            if grade == "level-good":
+                text, grade = "✓ Good levels", "level-noisy"
+            text += "\n" + NOISY_ROOM_TIP
         self.status.set_text(text)
         self._set_grade_style(grade)
+
+    @staticmethod
+    def _noisy(take):
+        """Whether *take*'s room is noisy for the voice in it, as logged."""
+        audio = np.concatenate(take.frames, axis=0)[:, 0]
+        over_room = silence.speech_over_room_db(audio, take.rate)
+        if over_room is None:
+            return False
+        logger.info(f"Microphone test: speech {over_room:.0f} dB over the room")
+        return over_room < silence.NOISY_ROOM_DB
 
     def replay(self, _button=None):
         """Play the test recording back, three times louder, on the sound

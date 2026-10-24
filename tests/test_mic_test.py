@@ -172,3 +172,42 @@ def test_stop_calls_off_a_recording_waiting_to_start(mic):
     after_the_close(mic)
     assert len(mic.opened) == 1 and not mic.recording
     assert mic.start_btn.get_sensitive() and not mic.stop_btn.get_sensitive()
+
+
+# --- The grade, and a noisy room ------------------------------------------------
+
+def _record(mic, room, talk=True, seconds=4.0, rate=16000):
+    """Record room noise of RMS *room* (full scale 1) for *seconds*, with a
+    voice talking for the middle half of it if *talk*, in 0.1 s blocks, and
+    stop."""
+    rng = np.random.default_rng(1)
+    t = np.arange(int(seconds * rate)) / rate
+    talking = (t > seconds / 4) & (t < seconds * 3 / 4) & ((t % 0.25) < 0.18)
+    voice = 0.08 * np.sin(2 * np.pi * 180 * t) * talking * talk
+    audio = (voice + rng.normal(0, room, t.size)).astype(np.float32).reshape(-1, 1)
+    mic.start()
+    for i in range(0, len(audio), rate // 10):
+        mic.opened[-1].callback(audio[i:i + rate // 10], rate // 10, None, None)
+    run_main_loop(mic)
+    mic.stop()
+    return mic.status.get_text(), mic.status.get_style_context()
+
+
+def test_a_quiet_room_gets_the_grade_alone(mic):
+    text, style = _record(mic, room=0.001)
+    assert text == "✓ Good levels - should transcribe well!"
+    assert style.has_class("level-good")
+
+
+def test_a_noisy_room_is_named_with_what_helps(mic):
+    """The voice about 10 dB over the room: quiet words would be taken for
+    pauses, so the grade says so, in amber, instead of "should transcribe well"."""
+    text, style = _record(mic, room=0.015)
+    assert text == "✓ Good levels\n" + mic_test.NOISY_ROOM_TIP
+    assert style.has_class("level-noisy") and not style.has_class("level-good")
+
+
+def test_a_room_with_nobody_talking_is_only_too_quiet(mic):
+    """With no speech there's nothing to judge the room against."""
+    text, _ = _record(mic, room=0.0005, talk=False)
+    assert text.startswith("⚠️ Too quiet") and mic_test.NOISY_ROOM_TIP not in text

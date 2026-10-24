@@ -516,6 +516,8 @@ user@example.com. Add your own in <b>Preferences → Words → Add Snippet</b>, 
   • Check the microphone: <b>Preferences → Audio</b>, Start Recording, and talk. The
     level should move well past the middle. Input Volume there is the same as your
     desktop's microphone volume.
+  • The test also says when the room is noisy for your voice (a fan, a dryer). A
+    headset, or the microphone closer to your mouth, helps more than anything.
   • Use the setup TuxTalk recommends: <b>Use Recommended</b> in Preferences → General,
     or TuxTalk menu → Performance → Recommended for this computer.
   • Speak more than one language and it picks the wrong one? Preferences → General

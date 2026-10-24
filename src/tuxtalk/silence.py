@@ -492,3 +492,24 @@ def has_no_speech(audio_f32, sample_rate) -> bool:
     speaker's own voice, so it is too blunt to drop real dictation on."""
     return _loud_seconds(audio_f32, sample_rate) < _SPEECH_TO_ARM_S
 
+
+# --- A noisy room, for the microphone test ------------------------------------
+# How far a test recording's loud blocks (its 90th percentile) stand over its
+# quiet ones (its 10th), in dB. Measured on 26 recorded sentences with and
+# without pauses around them, in white, pink, rumble, fan, dryer and vent
+# noise: 22 dB and up in a quiet room, at least 17 dB with the noise 15 dB
+# under the voice, 13 to 16 dB at 10 dB under it and 11 to 14 dB at 8 dB.
+# Under 10 dB, quiet words start to be taken for pauses (hands-free stops
+# during them at 5 dB), so the test warns from there, with a little margin.
+NOISY_ROOM_DB = 16.0
+
+
+def speech_over_room_db(audio_f32, sample_rate):
+    """How much louder a recording's speech is than its room, in dB, or None
+    for a recording under a second, too short to tell. Under NOISY_ROOM_DB
+    the room is noisy for that voice."""
+    rms = _blocks_rms(audio_f32, sample_rate)
+    if len(rms) * _TAP_BLOCK_S < 1.0:
+        return None
+    room, speech = np.percentile(rms, (10, 90))
+    return float(20 * np.log10(max(speech, 1.0) / max(room, 1.0)))
