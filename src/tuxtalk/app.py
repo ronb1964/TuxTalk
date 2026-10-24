@@ -28,7 +28,7 @@ from .config import load_config, Settings, load_custom_commands
 # Imported as a module too, so the live-settings reload can read CONFIG_PATH and
 # LIVE_APPLIED_KEYS without pulling each name in separately.
 from . import config as config_module
-from . import beeps
+from . import beeps, mic_stream
 from .beeps import START_BEEP, HANDS_FREE_BEEP, CANCEL_BEEP, READY_BEEP, beep as _beep
 from .logger import setup_logger, redact_text
 from .recording_indicator import RecordingIndicator
@@ -909,28 +909,6 @@ def _follow_system_default(input_device_idx):
     logger.info(f"The system's default microphone changed to {source!r} (device {idx})")
     return idx
 
-def _get_device_samplerate(device_idx):
-    """Get the native sample rate for a device, falling back to SAMPLE_RATE.
-
-    Some ALSA hw: devices only support their native rate (e.g. 48000 Hz)
-    and reject 16000 Hz. We detect this and record at the native rate,
-    then resample to 16000 Hz afterward.
-    """
-    try:
-        sd.check_input_settings(device=device_idx, samplerate=SAMPLE_RATE, channels=CHANNELS)
-        return SAMPLE_RATE  # Device supports 16kHz directly
-    except sd.PortAudioError:
-        pass
-    # Fall back to device's default sample rate
-    try:
-        info = sd.query_devices(device_idx)
-        native_sr = int(info['default_samplerate'])
-        sd.check_input_settings(device=device_idx, samplerate=native_sr, channels=CHANNELS)
-        print(f"Mic doesn't support {SAMPLE_RATE}Hz, recording at {native_sr}Hz (will resample)")
-        return native_sr
-    except Exception:
-        return SAMPLE_RATE  # Last resort, let it fail naturally
-
 def _resample_audio(audio, orig_sr, target_sr):
     """Resample audio from orig_sr to target_sr using linear interpolation.
 
@@ -1434,7 +1412,7 @@ def _release_grabs_if_not_recording() -> bool:
 def _open_input_stream(device_idx) -> None:
     """Open and start the microphone stream. Raises if the device is unusable."""
     # Use the device's native sample rate (may differ from 16kHz on ALSA hw: devices)
-    state.recording_samplerate = _get_device_samplerate(device_idx)
+    state.recording_samplerate = mic_stream.input_samplerate(device_idx, SAMPLE_RATE)
     sd.default.channels = CHANNELS
     sd.default.samplerate = state.recording_samplerate
     state.stream = sd.InputStream(callback=_sd_callback, dtype='int16', device=device_idx)
@@ -1516,43 +1494,14 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     logger.info(f"Recording started in {time.time() - state.press_t0:.2f}s")
     return True
 
-# How long stopping the microphone may take before TuxTalk carries on without
-# it. On 2026-10-18 a stream vanished from PipeWire mid-recording (Ron, muting
-# the mic) and PortAudio's stop() waited for it forever: the indicator stayed
-# up and no hotkey worked again until the service was restarted.
-STREAM_STOP_TIMEOUT_S = 2.0
-# Streams whose stop() never returned. Kept so nothing tries to close them
-# again from another thread; a few kilobytes each.
-_stuck_streams = []
-
 
 def _stop_stream_safely():
-    """Stop and close the microphone stream. close() runs even when stop()
-    fails (an unplugged mic), so the device is free to be opened again. Both
-    run on a helper thread, so an audio system that stops answering costs
-    STREAM_STOP_TIMEOUT_S, not the whole service."""
+    """Stop and close the microphone stream. An audio system that stops
+    answering costs mic_stream.STOP_TIMEOUT_S, not the whole service."""
     stream, state.stream = state.stream, None
-    if stream is None:
-        return
+    if stream is not None:
+        mic_stream.close(stream)
 
-    def finish():
-        try:
-            stream.stop()
-        except Exception as e:
-            logger.warning(f"Could not stop the microphone stream: {e}")
-        finally:
-            try:
-                stream.close()
-            except Exception as e:
-                logger.warning(f"Could not close the microphone stream: {e}")
-
-    closer = threading.Thread(target=finish, daemon=True, name="tt-mic-stop")
-    closer.start()
-    closer.join(STREAM_STOP_TIMEOUT_S)
-    if closer.is_alive():
-        _stuck_streams.append(stream)
-        logger.error(f"The microphone stream didn't stop within {STREAM_STOP_TIMEOUT_S:g}s "
-                     "(the audio system stopped answering); carrying on without it")
 
 def cancel_recording(beeps_on: bool, notify_on: bool, reason="Cancelled"):
     """End a recording without transcribing it, telling the user *reason*."""

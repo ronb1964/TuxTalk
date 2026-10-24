@@ -3,6 +3,7 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 gi.require_version("Pango", "1.0")
 from gi.repository import Gtk, Gdk, GLib, Pango
+from . import mic_stream
 from .ui_style import Fold, message_dialog
 from .whisper_vulkan import ENGINE_SIZE_TEXT
 from .hotkey_labels import dropdown_entries, hands_free_label
@@ -4592,27 +4593,6 @@ class PreferencesWindow:
         from . import autostart
         autostart.set_autostart(enable)
 
-    def _get_device_samplerate(self, device_idx):
-        """Get the native sample rate for a device, falling back to 16000.
-
-        Some ALSA hw: devices only support their native rate (e.g. 48000 Hz)
-        and reject 16000 Hz. We detect this and record at the native rate,
-        then resample afterward.
-        """
-        import sounddevice as sd
-        try:
-            sd.check_input_settings(device=device_idx, samplerate=16000, channels=1)
-            return 16000
-        except sd.PortAudioError:
-            pass
-        try:
-            info = sd.query_devices(device_idx)
-            native_sr = int(info['default_samplerate'])
-            sd.check_input_settings(device=device_idx, samplerate=native_sr, channels=1)
-            return native_sr
-        except Exception:
-            return 16000
-
     def get_selected_device_idx(self):
         """Get the device index for the currently selected microphone.
 
@@ -4644,8 +4624,7 @@ class PreferencesWindow:
             import numpy as np
 
             device_idx = self.get_selected_device_idx()
-            # Use device's native sample rate (some ALSA devices reject 16kHz)
-            self._recording_sr = self._get_device_samplerate(device_idx)
+            self._recording_sr = mic_stream.input_samplerate(device_idx, 16000)
 
             self.recording = True
             self.recorded_frames = []
@@ -4688,8 +4667,7 @@ class PreferencesWindow:
         try:
             self.recording = False
             if hasattr(self, 'record_stream'):
-                self.record_stream.stop()
-                self.record_stream.close()
+                mic_stream.close(self.record_stream, wait=False)
             if self.recorded_frames:
                 import numpy as np
                 self.recorded_audio = np.concatenate(self.recorded_frames, axis=0)
@@ -6040,12 +6018,8 @@ class PreferencesWindow:
         if hasattr(self, 'recording') and self.recording:
             self.recording = False
             if hasattr(self, 'record_stream'):
-                try:
-                    self.record_stream.stop()
-                    self.record_stream.close()
-                except Exception:
-                    pass
-        self._stop_pause_test()
+                mic_stream.close(self.record_stream)
+        self._stop_pause_test(wait=True)
 
     # --- TuxTalk Labs: Type at pause (chunking.py) -----------------------------
 
@@ -6200,7 +6174,7 @@ class PreferencesWindow:
         stream = None
         try:
             device_idx = self.get_selected_device_idx()
-            sample_rate = self._get_device_samplerate(device_idx)
+            sample_rate = mic_stream.input_samplerate(device_idx, 16000)
             self._pause_test = PauseTest(sample_rate, self.tap_pause_spin.get_value(),
                                          self.tap_db_spin.get_value())
             self._tap_redraw_pending = False
@@ -6221,10 +6195,7 @@ class PreferencesWindow:
         except Exception as e:
             self._pause_test = None
             if stream is not None:
-                try:
-                    stream.close()   # opened but not started: free the mic
-                except Exception:
-                    pass
+                mic_stream.close(stream, wait=False)    # opened but not started: free the mic
             self.tap_status.set_text(f"Couldn't open the microphone: {e}")
             return
         self._pause_test_stream = stream
@@ -6257,8 +6228,10 @@ class PreferencesWindow:
             from .chunk_meter import threshold_fraction
             self.tap_meter.show_snapshot(0.0, threshold_fraction(room, self.tap_db_spin.get_value()))
 
-    def _stop_pause_test(self):
-        """Stop Type at pause's live test, if it is running, and free the mic."""
+    def _stop_pause_test(self, wait=False):
+        """Stop Type at pause's live test, if it is running, and free the mic:
+        off the window's thread, or with *wait* (the window closing) for a
+        moment at most."""
         stream = getattr(self, "_pause_test_stream", None)
         test = getattr(self, "_pause_test", None)
         self._pause_test_stream = None
@@ -6267,11 +6240,7 @@ class PreferencesWindow:
             # Not the live line frozen at its last words: what it found.
             self.tap_status.set_text(test.result_text())
         if stream is not None:
-            try:
-                stream.stop()
-                stream.close()
-            except Exception:
-                pass
+            mic_stream.close(stream, wait=wait)
         if hasattr(self, "tap_test_btn"):
             self.tap_test_btn.set_label("Test")
         if hasattr(self, "tap_meter"):

@@ -1,5 +1,7 @@
 """Preferences → Advanced → TuxTalk Labs → Type at pause: the switch, the
 fine-tuning, and the live test (with a fake microphone stream)."""
+import threading
+import time
 from types import SimpleNamespace
 
 import gi
@@ -10,6 +12,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
 
 import gtk_text  # noqa: E402
+from tuxtalk import prefs  # noqa: E402
 from tuxtalk.prefs import PreferencesWindow  # noqa: E402
 
 
@@ -29,8 +32,9 @@ class FakeStream:
 
 
 @pytest.fixture
-def win():
+def win(monkeypatch):
     """A PreferencesWindow with only what the Labs entry needs."""
+    monkeypatch.setattr(prefs.mic_stream, "input_samplerate", lambda idx, rate: 16000)
     w = PreferencesWindow.__new__(PreferencesWindow)
     w.config = {"chunked_dictation": False, "chunk_pause_seconds": 0.8,
                 "chunk_speech_db": 6.0, "chunk_context_marks": True, "mic": ""}
@@ -42,7 +46,6 @@ def win():
 
     w.update_config = update_config
     w.get_selected_device_idx = lambda: 3
-    w._get_device_samplerate = lambda idx: 16000
     w.streams = []
 
     def factory(**kwargs):
@@ -54,6 +57,15 @@ def win():
     w.grid = Gtk.Grid()
     w._build_type_at_pause(w.grid, 0, 20, lambda text: Gtk.Label(label=text))
     return w
+
+
+def stopped(stream):
+    """Whether *stream* was stopped and closed. Preferences does that off
+    its window's thread, so it is given a moment."""
+    deadline = time.monotonic() + 2
+    while not (stream.stopped and stream.closed) and time.monotonic() < deadline:
+        time.sleep(0.01)
+    return stream.stopped and stream.closed
 
 
 def labels(widget):
@@ -116,7 +128,7 @@ def test_turning_the_feature_off_stops_the_test(win):
     win.tap_check.set_active(True)
     win.tap_test_btn.clicked()
     win.tap_check.set_active(False)
-    assert win.streams[-1].stopped
+    assert stopped(win.streams[-1])
 
 
 def test_the_button_opens_the_settings_and_hiding_them_stops_the_test(win):
@@ -128,7 +140,7 @@ def test_the_button_opens_the_settings_and_hiding_them_stops_the_test(win):
     win.tap_fold.button.clicked()
     assert not win.tap_fold.is_open()
     assert win.tap_fold.button.get_label() == "Adjust Settings"
-    assert win.streams[-1].stopped
+    assert stopped(win.streams[-1])
 
 
 def test_leaving_the_advanced_tab_stops_the_test(win):
@@ -136,7 +148,7 @@ def test_leaving_the_advanced_tab_stops_the_test(win):
     win.tap_test_btn.clicked()
     notebook = SimpleNamespace(get_tab_label_text=lambda page: "Audio")
     win.on_tab_switched(notebook, SimpleNamespace(get_vadjustment=lambda: None), 1)
-    assert win.streams[-1].stopped
+    assert stopped(win.streams[-1])
 
 
 def test_a_mic_that_wont_open_says_so(win):
@@ -194,7 +206,33 @@ def test_leaving_the_window_stops_the_test(win):
     win.tap_check.set_active(True)
     win.tap_test_btn.clicked()
     win._tap_on_window_active(SimpleNamespace(is_active=lambda: False), None)
-    assert win.streams[-1].stopped
+    assert stopped(win.streams[-1])
+
+
+def test_a_microphone_that_never_stops_doesnt_freeze_the_window(win, monkeypatch):
+    """A stream that vanished from the audio system can hang stop() for
+    good. Stop is left to another thread, and closing Preferences waits for
+    it only a moment."""
+    monkeypatch.setattr(prefs.mic_stream, "STOP_TIMEOUT_S", 0.1)
+    monkeypatch.setattr(prefs.mic_stream, "_stuck", [])
+    release = threading.Event()
+
+    class Hangs(FakeStream):
+        def stop(self):
+            release.wait(5)
+            super().stop()
+    win._pause_stream_factory = lambda **kwargs: win.streams.append(Hangs(**kwargs)) or \
+        win.streams[-1]
+    win.tap_check.set_active(True)
+    for stop in (win.tap_test_btn.clicked, win._stop_mic_test):
+        win.tap_test_btn.clicked()
+        assert win.streams[-1].started
+        started = time.monotonic()
+        stop()
+        assert time.monotonic() - started < 0.5
+        assert win.tap_test_btn.get_label() == "Test"
+    release.set()
+    assert all(stopped(stream) for stream in win.streams)
 
 
 def test_the_window_focus_is_watched():
@@ -221,7 +259,7 @@ def test_a_stream_that_wont_start_is_closed(win):
     win._pause_stream_factory = factory
     win.tap_check.set_active(True)
     win.tap_test_btn.clicked()
-    assert opened[-1].closed
+    assert stopped(opened[-1])
     assert "Couldn't open the microphone" in win.tap_status.get_text()
 
 

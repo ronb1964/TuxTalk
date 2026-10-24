@@ -144,7 +144,7 @@ def service(monkeypatch):
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
     monkeypatch.setattr(app, "_notify", lambda *a, **k: None)
     monkeypatch.setattr(app, "_notify_tray_recording_state", lambda *a, **k: None)
-    monkeypatch.setattr(app, "_get_device_samplerate", lambda idx: 16000)
+    monkeypatch.setattr(app.mic_stream, "input_samplerate", lambda idx, rate: 16000)
     monkeypatch.setattr(app, "recording_indicator", None)
     monkeypatch.setattr(app.sd, "InputStream", lambda *a, **k: FakeStream())
     spy = SpyPauser()

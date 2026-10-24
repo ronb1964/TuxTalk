@@ -82,7 +82,7 @@ def quiet_recording(monkeypatch):
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
     monkeypatch.setattr(app, "_notify", lambda *a, **k: None)
     monkeypatch.setattr(app, "_notify_tray_recording_state", lambda *a, **k: None)
-    monkeypatch.setattr(app, "_get_device_samplerate", lambda idx: 16000)
+    monkeypatch.setattr(app.mic_stream, "input_samplerate", lambda idx, rate: 16000)
     monkeypatch.setattr(app, "recording_indicator", None)
     app.state.is_recording = False
     yield
@@ -769,15 +769,15 @@ def test_a_microphone_that_never_stops_cannot_freeze_the_service(monkeypatch):
         def close(self):
             pass
 
-    monkeypatch.setattr(app, "STREAM_STOP_TIMEOUT_S", 0.1)
-    monkeypatch.setattr(app, "_stuck_streams", [])
+    monkeypatch.setattr(app.mic_stream, "STOP_TIMEOUT_S", 0.1)
+    monkeypatch.setattr(app.mic_stream, "_stuck", [])
     stream = StuckStream()
     app.state.stream = stream
     started = app.time.monotonic()
     app._stop_stream_safely()
     assert app.time.monotonic() - started < 1.0
     assert app.state.stream is None
-    assert app._stuck_streams == [stream]
+    assert app.mic_stream._stuck == [stream]
     release.set()
 
 
@@ -791,10 +791,10 @@ def test_a_normal_stop_closes_the_stream(monkeypatch):
         def close(self):
             calls.append("close")
 
-    monkeypatch.setattr(app, "_stuck_streams", [])
+    monkeypatch.setattr(app.mic_stream, "_stuck", [])
     app.state.stream = Stream()
     app._stop_stream_safely()
-    assert calls == ["stop", "close"] and app._stuck_streams == []
+    assert calls == ["stop", "close"] and app.mic_stream._stuck == []
 
 
 def test_falling_back_to_another_mic_says_so(monkeypatch, quiet_recording):
