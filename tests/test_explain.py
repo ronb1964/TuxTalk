@@ -4,7 +4,7 @@ window explaining them, once per run; then the short label alone (Ron,
 before it could be read)."""
 import pytest
 
-from tuxtalk import app, explain
+from tuxtalk import app, edit_notices, explain
 
 # The real open_window, before the suite's stand-in replaces it (conftest).
 REAL_OPEN_WINDOW = explain.open_window
@@ -60,7 +60,7 @@ def test_if_the_window_cannot_open_the_notification_still_says_it(problems, monk
 
 def test_every_explanation_has_a_label_and_a_notice():
     for kind in explain.EXPLANATIONS:
-        assert kind in app._EDIT_NOTICES and kind in app._EDIT_LABELS
+        assert kind in edit_notices.NOTICES and kind in edit_notices.LABELS
 
 
 def test_the_window_has_the_title_text_tickbox_and_got_it():

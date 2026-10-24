@@ -210,16 +210,16 @@ def test_long_enough_to_read():
 
 
 def test_the_label_says_it_short_and_the_notification_in_full(monkeypatch):
-    from tuxtalk import app, screen_message
+    from tuxtalk import app, edit_notices, screen_message
     shown, notified = [], []
     monkeypatch.setattr(screen_message, "show_over_active_window", shown.append)
     monkeypatch.setattr(app, "_notify", lambda title, msg: notified.append(msg))
     monkeypatch.setattr(app, "_beep", lambda *a: None)
-    for kind in app._EDIT_NOTICES:
+    for kind in edit_notices.NOTICES:
         shown.clear(); notified.clear()
         app._edit_problem(kind, False)
         assert len(shown[0].split()) <= 7, (kind, shown[0])
-        assert notified[0] == app._EDIT_NOTICES[kind]
+        assert notified[0] == edit_notices.NOTICES[kind]
 
 
 # --- with no tray, the service answers itself --------------------------------------------------

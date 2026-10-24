@@ -27,7 +27,7 @@ from .logger import setup_logger
 
 logger = setup_logger(__name__)
 
-# kind -> (title, explanation). The kinds are app._EDIT_NOTICES'.
+# kind -> (title, explanation). The kinds are edit_notices.NOTICES'.
 EXPLANATIONS = {
     "nothing_said": (
         "Select works right after you dictate",

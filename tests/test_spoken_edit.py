@@ -4,7 +4,7 @@ voice_edit_rules.spoken_edit). Labs, with voice editing on."""
 import numpy as np
 import pytest
 
-from tuxtalk import app
+from tuxtalk import app, edit_notices
 from tuxtalk.voice_edit_rules import spoken_edit
 
 S = "SHIFT"
@@ -181,7 +181,7 @@ def test_long_after_a_send_edit_that_is_words_again(editing, monkeypatch):
 
 
 def test_every_notice_has_a_short_label():
-    assert set(app._EDIT_NOTICES) == set(app._EDIT_LABELS)
+    assert set(edit_notices.NOTICES) == set(edit_notices.LABELS)
 
 
 def test_pressing_enter_remembers_the_send(monkeypatch):
