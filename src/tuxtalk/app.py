@@ -1995,7 +1995,6 @@ def _type_text_raw(text: str) -> bool:
         try:
             import pyperclip
             pyperclip.copy(text)
-            print("Copied to clipboard. Ctrl+V to paste.")
             logger.info("Text copied to clipboard (fallback mode)")
             # Nothing was actually typed into the field — report failure so
             # the undo buffer doesn't track text the user must paste manually.
@@ -2510,7 +2509,6 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
             extra["limit_to"] = limit_to
         raw, _no_speech = engine.transcribe(audio_f32, language, **extra)
         logger.info(f"TIMING: Transcription completed in {time.time() - transcribe_start:.2f}s (Vulkan GPU)")
-        print(f"Raw (graphics): {_loggable(raw)}")
         logger.info(f"Raw transcription (Vulkan GPU): {_loggable(raw)}")
         # whisper.cpp's no-speech score isn't reliable (0.90 on clear speech,
         # 0.00 on silence, see whisper_vulkan.parse_result), so the recording's
@@ -2537,7 +2535,6 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
         raw = engine.recognize(audio_f32)
         where = " on GPU" if isinstance(engine, ParakeetGpuModel) else ""
         logger.info(f"TIMING: Transcription completed in {time.time() - transcribe_start:.2f}s (Parakeet{where})")
-        print(f"Raw (Parakeet): {_loggable(raw)}")
         logger.info(f"Raw transcription (Parakeet): {_loggable(raw)}")
         from .silence import has_no_speech
         no_speech = 1.0 if raw and has_no_speech(audio_f32, SAMPLE_RATE) else 0.0
@@ -2588,7 +2585,6 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
 
     raw = " ".join(seg.text for seg in seg_list).strip()
     max_no_speech_prob = max((seg.no_speech_prob for seg in seg_list), default=0.0)
-    print(f"Raw (before filter): {_loggable(raw)}  [no_speech_prob={max_no_speech_prob:.2f}]")
     logger.info(f"Raw transcription (before hallucination filter): {_loggable(raw)}  [no_speech_prob={max_no_speech_prob:.2f}]")
 
     if custom_words.is_echo(raw, _custom_words):
@@ -2598,7 +2594,6 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
     # Strip common Whisper hallucinations like "thank you" from the end
     raw = _strip_hallucinations(raw, no_speech_prob=max_no_speech_prob)
     if raw:
-        print(f"Raw (after filter): {_loggable(raw)}")
         logger.info(f"Raw transcription (after hallucination filter): {_loggable(raw)}")
     return raw or None
 
@@ -2617,7 +2612,6 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
     state.nav_context = None
     label = undo_type if count == 1 else f"{count} {undo_type}s"
     logger.info(f"Undo command detected: {label}")
-    print(f"Undo command: {label}")
 
     # 'everything' clears the entire input field via Ctrl+A + Backspace.
     # No tracked dictation required: it wipes whatever is in the textarea,
@@ -2644,7 +2638,6 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
         return True
 
     if not state.last_inserted_text:
-        print("Nothing to undo (no previous dictation)")
         logger.info("Undo requested but no previous text to undo")
         _beep(beeps_on, *CANCEL_BEEP)
         if notify_on: _notify("Nothing to undo", "")
@@ -2664,7 +2657,6 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
     # Calculate how many characters to delete (iterates `count` times)
     delete_count = calculate_undo_length(state.last_inserted_text, undo_type, count)
     logger.info(f"Undo: deleting {delete_count} characters (last text was {len(state.last_inserted_text)} chars, count={count})")
-    print(f"Undoing {delete_count} characters ({label})")
 
     if delete_count > 0:
         # Only shrink the buffer once the deletion is confirmed; otherwise it
@@ -2676,7 +2668,6 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
             # Some of the text is gone and some isn't, by an unknown amount,
             # so the buffer no longer matches the document. Forgetting it is
             # the only safe choice: a later undo then deletes nothing.
-            print("Undo stopped partway")
             logger.error("Undo stopped partway: an unknown number of backspaces landed; undo buffer cleared")
             state.last_inserted_text = ""
             _forget_shown()
@@ -2686,7 +2677,6 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
                 _notify("Undo stopped partway", "Some of the text may still be there.")
             return True
         if not deleted:
-            print("Undo failed — nothing was deleted")
             logger.error("Undo failed: backspaces were not delivered; buffer left unchanged")
             _beep(beeps_on, *CANCEL_BEEP)
             if notify_on:
@@ -2951,7 +2941,6 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
         logger.info(f"Electron-broken check: focused_class={focused_class!r}")
         if focused_class in _ELECTRON_PASTE_BROKEN_CLASSES and not os.environ.get("FLATPAK_ID"):
             logger.info(f"Electron-paste-broken override: class={focused_class!r}, typing")
-            print(f"Electron app ({focused_class}): typing instead of pasting")
 
             # Split on §SHIFT_ENTER§ (line-break voice command) and \n so
             # we send actual Shift+Enter keystrokes between text chunks
@@ -3022,8 +3011,6 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
 
     use_paste = (actual_mode == "paste")
     logger.info(f"Injection mode: configured={injection_mode!r}, actual={actual_mode!r}, reason={reason}")
-    if injection_mode == "auto":
-        print(f"Auto mode: {reason}")
 
     # Tracks whether text actually reached the focused app. Only a confirmed
     # injection updates the undo buffer; otherwise a later "undo last word"
@@ -3068,7 +3055,6 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
                 time.sleep(0.05)
 
         if resume_at is None:
-            print(f"Inject (smart paste) {len(parts)} chunks, {len(text)} total chars")
             logger.info(f"Smart hybrid paste completed: {len(parts)} chunks")
         elif password_field:
             # Not asked again: a second answer that comes back "no" (a slow
@@ -5008,7 +4994,6 @@ def _loop_evdev(cfg: Settings, input_device_idx, keyboards=None):
         print(diagnosis, file=sys.stderr)
 
     if voice_cmds_combo:
-        print(f"Voice Commands hotkey: {vc_hotkey_str}")
         logger.info(f"Voice Commands hotkey: {vc_hotkey_str}")
     _helper_watch(devices, hold_key, toggle_key, voice_cmds_combo, paste_last_combo)
     modifier_hotkeys.note(devices, hold_key, toggle_key)
