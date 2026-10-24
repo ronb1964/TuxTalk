@@ -292,16 +292,19 @@ class LibeiSession:
         ei.ei_device_keyboard_key(dev, modifier_kc, False)
         ei.ei_device_frame(dev, ei.ei_now(ctx))
 
-    def _run_emitting(self, emit) -> bool:
+    def _run_emitting(self, emit, ready=None) -> bool:
         """Shared wrapper for every emission: service the connection, ensure a
         device is ready, then run `emit()` inside one start/stop-emulating frame
         and flush the socket. Returns False if no device became ready (never
-        raises). type_string and the editing key-combos all go through here so
-        the device-readiness and flush handling live in exactly one place."""
+        raises), or if *ready*, asked once the device is, says no. type_string
+        and the editing key-combos all go through here so the device-readiness
+        and flush handling live in exactly one place."""
         # Service the connection and refresh device state right before emitting.
         self._drain()
         if self.device is None and not self.pump_until_ready(timeout=2.0):
             _log.warning("[libei] no device ready after drain")
+            return False
+        if ready is not None and not ready():
             return False
         ei, ctx, dev = self.ei, self.ctx, self.device
         self._seq += 1
@@ -341,10 +344,12 @@ class LibeiSession:
 
         return self._run_emitting(emit)
 
-    def press_chords(self, chords) -> bool:
+    def press_chords(self, chords, ready=None) -> bool:
         """Press [(modifiers, key)] by name, each modifier held around its key:
         select and move by voice inside the sandbox (voice_navigation.py).
-        Key codes are a US layout's, like the rest of this path."""
+        Key codes are a US layout's, like the rest of this path. *ready*, if
+        given, is asked right before the first key, once the device is ready,
+        and False presses nothing (an automatic send a tap held meanwhile)."""
         def emit():
             ei, ctx, dev = self.ei, self.ctx, self.device
 
@@ -361,7 +366,7 @@ class LibeiSession:
                 for c in reversed(mod_codes):
                     key(c, False)
 
-        return self._run_emitting(emit)
+        return self._run_emitting(emit, ready)
 
     def backspaces(self, count: int) -> bool:
         """Send `count` Backspace presses — character-level undo over libei."""

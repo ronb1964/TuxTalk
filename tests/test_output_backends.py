@@ -369,7 +369,9 @@ def _libei_with_fake_session(monkeypatch):
             done.append("ready")
             return True
 
-        def press_chords(self, chords):
+        def press_chords(self, chords, ready=None):
+            if ready is not None and not ready():
+                return False
             done.append(chords)
             return True
 
@@ -379,3 +381,71 @@ def _libei_with_fake_session(monkeypatch):
     monkeypatch.setattr(b, "_run_handshake", lambda: (r, None))
     monkeypatch.setattr(libei_ctypes, "LibeiSession", Session)
     return b, done
+
+
+class _FakeLibei:
+    """libei's calls, answering from a script of events: each ei_dispatch
+    brings the next batch, and a batch may first run something (a tap of
+    the hotkey arriving while the device wasn't ready)."""
+
+    def __init__(self, batches):
+        from tuxtalk import libei_ctypes as L
+        self.types = {1: L.EI_EVENT_SEAT_ADDED, 2: L.EI_EVENT_DEVICE_RESUMED,
+                      3: L.EI_EVENT_DEVICE_PAUSED}
+        self.batches, self.queued, self.keys = list(batches), [], []
+
+    def ei_dispatch(self, ctx):
+        if self.batches:
+            first, *events = self.batches.pop(0)
+            if first is not None:
+                first()
+            self.queued += events
+
+    def ei_get_event(self, ctx):
+        return self.queued.pop(0) if self.queued else 0
+
+    def ei_event_get_type(self, ev):
+        return self.types[ev]
+
+    def ei_setup_backend_fd(self, ctx, fd):
+        os.close(fd)
+        return 0
+
+    def ei_get_fd(self, ctx):
+        self.fd = _portal_fd()      # the session's socket, closed with it
+        return self.fd
+
+    def ei_unref(self, ctx):
+        os.close(self.fd)
+
+    def ei_device_keyboard_key(self, dev, code, down):
+        self.keys.append((code, down))
+
+    ei_new_sender = ei_now = ei_event_get_seat = ei_event_get_device = lambda self, *a: 7
+    ei_seat_bind_capabilities = ei_event_unref = ei_device_frame = lambda self, *a: None
+    ei_device_start_emulating = ei_device_stop_emulating = lambda self, *a: None
+
+
+def test_a_tap_while_the_libei_device_comes_back_holds_the_send(monkeypatch):
+    """The keyboard device went away (paused) as the Enter was about to go,
+    and a tap held the send while TuxTalk waited for it to come back. Claimed
+    before that wait, the Enter went out after the tap."""
+    from tuxtalk import libei_ctypes, virtual_keyboard
+    from tuxtalk.output_backends import LibeiOutputBackend
+    held = []
+    libei = _FakeLibei([(None, 1, 2),                       # ready for the session
+                        (None, 3),                          # paused before the Enter
+                        (lambda: held.append(True), 2),     # the tap, then back
+                        (None, 1, 2)])                      # the next session
+    monkeypatch.setattr(libei_ctypes, "load_libei", lambda: libei)
+    monkeypatch.setattr(libei_ctypes.time, "sleep", lambda s: None)
+    b = LibeiOutputBackend()
+    monkeypatch.setattr(b, "_run_handshake", lambda: (_portal_fd(), None))
+
+    def take():
+        if held:
+            raise virtual_keyboard.GaveUp("held")
+    assert b.press_keys([((), "ENTER")], claim=lambda: take) is False
+    assert held == [True] and libei.keys == []
+    assert b.press_keys([((), "ENTER")], claim=lambda: lambda: None) is True
+    assert libei.keys == [(libei_ctypes.KEY_ENTER, True), (libei_ctypes.KEY_ENTER, False)]
