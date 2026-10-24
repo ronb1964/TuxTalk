@@ -13,6 +13,7 @@ from types import SimpleNamespace
 
 from tuxtalk import prefs as P
 from tuxtalk.prefs import PreferencesWindow
+from tuxtalk.prefs_speech import SpeechSection
 
 
 class FakeCombo:
@@ -41,11 +42,12 @@ def test_an_unrelated_ok_keeps_the_saved_cuda_choice(tmp_path, monkeypatch):
 
     opened = {"device": "cuda", "beeps": True, "model": "small", "language_mode": "auto"}
     d = SimpleNamespace(config=dict(opened), _config_at_open=dict(opened),
-                        device_combo=FakeCombo(), _handle_autostart=lambda v: None,
+                        _handle_autostart=lambda v: None,
                         _check_cuda_availability=lambda: False, _has_nvidia=lambda: False)
+    speech = SimpleNamespace(win=d, config=d.config, device_combo=FakeCombo())
 
-    PreferencesWindow._refresh_device_options(d)
-    assert d.device_combo.active == "cpu"          # what the service really uses
+    SpeechSection.refresh_device_options(speech)
+    assert speech.device_combo.active == "cpu"     # what the service really uses
 
     d.config["beeps"] = False                       # the user's only change
     assert PreferencesWindow.save_config(d) is True

@@ -189,7 +189,7 @@ def test_first_run_and_preferences_recommend_parakeet(prefs_window):
     run recommends through recommend.py (the welcome card)."""
     from tuxtalk import recommend
     assert recommend.recommend("en", recommend.Hardware(None)).model == "parakeet-v3"
-    labels = {row[0]: row[1] for row in prefs_window().model_combo.get_model()}
+    labels = {row[0]: row[1] for row in prefs_window().general_tab.speech.model_combo.get_model()}
     assert "recommended" in labels["parakeet-v3"]
     assert not [model for model, label in labels.items()
                 if "recommended" in label and model != "parakeet-v3"]

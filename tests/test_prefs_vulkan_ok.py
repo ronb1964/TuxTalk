@@ -20,16 +20,15 @@ def prefs_cls():
     return PreferencesWindow
 
 
-def _vulkan_stub(model, downloads):
-    stub = SimpleNamespace(config={"model": model, "device": "vulkan"})
-    stub._download_vulkan_files = lambda m, confirm: downloads.append(m) or True
-    return stub
-
-
 def test_a_vulkan_model_download_reports_success(prefs_cls, monkeypatch):
+    from tuxtalk import vulkan_setup_dialogs
+    from tuxtalk.prefs_speech import SpeechSection
     downloads = []
     monkeypatch.setattr(wv, "is_installed", lambda m: bool(downloads))
-    assert prefs_cls._download_selected_model(_vulkan_stub("parakeet-v3", downloads)) is True
+    monkeypatch.setattr(vulkan_setup_dialogs, "ensure_files",
+                        lambda parent, m, confirm: downloads.append(m) or True)
+    stub = SimpleNamespace(config={"model": "parakeet-v3", "device": "vulkan"}, window=None)
+    assert SpeechSection.download_selected_model(stub) is True
     assert downloads == ["parakeet-v3"]
 
 
@@ -45,9 +44,10 @@ def test_ok_closes_after_a_model_download(prefs_cls, monkeypatch):
         config={"model": "small"},
         save_config=lambda: True,
         _changed_since_open=lambda: {"model"},
-        _download_selected_model=lambda: True,  # downloaded fine
         _apply_or_restart=lambda changed: True,
-        _after_hotkey_change=lambda changed, since: False,
+        general_tab=SimpleNamespace(
+            speech=SimpleNamespace(download_selected_model=lambda: True),  # downloaded fine
+            after_hotkey_change=lambda changed, since: False),
         _stop_mic_test=lambda: None,
         _release_pidfile=lambda: None,
         words_tab=SimpleNamespace(save=lambda: True),

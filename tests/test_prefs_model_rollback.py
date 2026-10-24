@@ -11,9 +11,9 @@ rollback a retry would see no change at all: Preferences would report "your
 changes are already in effect" and skip the restart, leaving the service on
 the old model indefinitely.
 
-These tests drive on_apply/on_ok with a stub `self`, which reaches the real
-ordering logic without constructing a GTK window. The failure path returns
-before any dialog is built, so no display is needed.
+These tests drive on_apply/on_ok with a stub `self`, and the real rollback of
+the speech settings, without constructing a GTK window. The failure path
+returns before any dialog is built, so no display is needed.
 """
 
 from types import SimpleNamespace
@@ -44,6 +44,9 @@ class StubPrefs:
         self.download_result = False  # did the download succeed
         self.restart_calls = 0
         self.words_tab = SimpleNamespace(save=lambda: True)     # snippets saved
+        self.speech = _speech(self, chosen_model, chosen_device)
+        self.general_tab = SimpleNamespace(speech=self.speech,
+                                           after_hotkey_change=lambda changed, since: False)
 
     # --- real collaborators, stubbed ---
 
@@ -59,23 +62,6 @@ class StubPrefs:
 
         return PreferencesWindow._changed_since_open(self)
 
-    def _rollback_download(self, previous):
-        # The code under test — delegate, never reimplement.
-        from tuxtalk.prefs import PreferencesWindow
-
-        return PreferencesWindow._rollback_download(self, previous)
-
-    def _set_choice(self, key, value):
-        from tuxtalk.prefs import PreferencesWindow
-
-        return PreferencesWindow._set_choice(self, key, value)
-
-    def _on_device_changed(self, combo):
-        raise AssertionError("the device dialogs ran during a rollback")
-
-    def _download_selected_model(self):
-        return self.download_result
-
     def _apply_or_restart(self, changed):
         self.restart_calls += 1
         return True
@@ -86,6 +72,24 @@ class StubPrefs:
     def model_on_disk(self):
         """The last model save_config() actually persisted."""
         return self.saved_models[-1] if self.saved_models else None
+
+
+def _speech(win, model, device):
+    """The real speech settings (rollback_download and set_choice are the
+    code under test), with stand-in dropdowns and no download."""
+    from tuxtalk.prefs_speech import SpeechSection
+
+    speech = SpeechSection.__new__(SpeechSection)
+    speech.win = win
+    speech._updating_model = False
+    speech.download_selected_model = lambda: win.download_result
+
+    def no_dialogs(combo):
+        raise AssertionError("the device dialogs ran during a rollback")
+    speech._on_device_changed = no_dialogs
+    speech.model_combo = FakeCombo(speech, model)
+    speech.device_combo = FakeDeviceCombo(speech, device)
+    return speech
 
 
 def _changed_since_open(stub):
@@ -173,15 +177,14 @@ class TestDropdownFollowsTheRollback:
         """After a cancelled Medium download the dropdown must not stay on
         Medium while the service keeps running the old model."""
         stub = StubPrefs(on_disk_model="parakeet-v3", chosen_model="medium")
-        stub.model_combo = FakeCombo(stub, "medium")
         stub.download_result = False
 
         prefs_cls.on_apply(stub, None)
 
-        assert stub.model_combo.active == "parakeet-v3"
-        assert stub.model_combo.muted is True  # no model-picked dialogs
-        assert stub._updating_model is False
-        assert stub._last_selected_model == "parakeet-v3"
+        assert stub.speech.model_combo.active == "parakeet-v3"
+        assert stub.speech.model_combo.muted is True  # no model-picked dialogs
+        assert stub.speech._updating_model is False
+        assert stub.speech._last_selected_model == "parakeet-v3"
 
 
 class FakeDeviceCombo:
@@ -211,7 +214,6 @@ class TestADeviceChangeIsRolledBackToo:
     def _stub(self):
         stub = StubPrefs(on_disk_model="parakeet-v3", chosen_model="parakeet-v3",
                          on_disk_device="vulkan", chosen_device="cpu")
-        stub.device_combo = FakeDeviceCombo(stub, "cpu")
         stub.download_result = False
         return stub
 
@@ -220,8 +222,8 @@ class TestADeviceChangeIsRolledBackToo:
         prefs_cls.on_ok(stub, None)
         assert stub.config["device"] == "vulkan"
         assert stub._config_at_open["device"] == "vulkan"   # what's on disk
-        assert stub.device_combo.active == "vulkan"
-        assert stub.device_combo.blocked is False
+        assert stub.speech.device_combo.active == "vulkan"
+        assert stub.speech.device_combo.blocked is False
 
     def test_the_retry_still_restarts_onto_the_new_device(self, prefs_cls):
         stub = self._stub()

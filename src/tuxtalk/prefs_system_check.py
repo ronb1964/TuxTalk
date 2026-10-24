@@ -311,10 +311,10 @@ class SystemCheck(Tab):
 
     def _initial_gpu_check(self):
         """Perform initial GPU check when preferences window opens."""
-        self._check_gpu_status()
+        self.check_gpu_status()
         return False  # Don't repeat
 
-    def _check_gpu_status(self):
+    def check_gpu_status(self):
         """Show the NVIDIA card and whether CUDA's files are installed."""
         try:
             from . import cuda_helper

@@ -33,7 +33,7 @@ def test_every_model_picker_builds_from_the_shared_list(prefs_window):
     that is how 'base' went missing from the first-run setup screen. (First
     run has no full picker: its card offers the models recommend.py picks.)"""
     from tuxtalk.model_helper import OFFERED_MODELS
-    offered = [row[0] for row in prefs_window().model_combo.get_model()]
+    offered = [row[0] for row in prefs_window().general_tab.speech.model_combo.get_model()]
     assert offered == list(OFFERED_MODELS)
 
 

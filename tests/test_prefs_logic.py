@@ -14,6 +14,7 @@ import pytest
 
 from tuxtalk import prefs as P
 from tuxtalk.prefs import PreferencesWindow, _coerce_config_types
+from tuxtalk.prefs_general import GeneralTab
 from tuxtalk.prefs_updates import UpdatesTab
 
 
@@ -298,7 +299,7 @@ def test_hotkey_fallback_is_written_into_the_config(monkeypatch):
                         hotkey_combo=FakeCombo(),
                         toggle_combo=FakeCombo())
 
-    PreferencesWindow._apply_hotkey_fallbacks(d, ["F8", "F9", "F10"])
+    GeneralTab._apply_hotkey_fallbacks(d, ["F8", "F9", "F10"])
 
     assert d.hotkey_combo.get_active_id() == "F8"
     assert d.config["hotkey"] == "F8", "screen shows F8 but a blank hotkey would be saved"
@@ -311,7 +312,7 @@ def test_a_configured_hotkey_is_left_alone(monkeypatch):
                         hotkey_combo=FakeCombo(),
                         toggle_combo=FakeCombo())
 
-    PreferencesWindow._apply_hotkey_fallbacks(d, ["F8", "F9", "F10"])
+    GeneralTab._apply_hotkey_fallbacks(d, ["F8", "F9", "F10"])
 
     assert d.hotkey_combo.get_active_id() == "F10"
     assert d.config["hotkey"] == "F10"

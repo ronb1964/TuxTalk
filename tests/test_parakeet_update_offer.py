@@ -146,9 +146,10 @@ def test_enter_on_the_offer_means_not_now(disk, monkeypatch):
 @pytest.fixture
 def prefs_row(monkeypatch):
     """Preferences' Update Parakeet row with only what it needs."""
-    from tuxtalk.prefs import PreferencesWindow
-    w = PreferencesWindow.__new__(PreferencesWindow)
-    w.window = None
+    from types import SimpleNamespace
+    from tuxtalk.prefs_speech import SpeechSection
+    w = SpeechSection.__new__(SpeechSection)
+    w.win = SimpleNamespace(window=None, restart_service=lambda: w.restarts.append(True))
     w.device_combo = tray.Gtk.ComboBoxText()
     w.device_combo.append("vulkan", "Vulkan")
     w.device_combo.set_active_id("vulkan")
@@ -161,8 +162,7 @@ def prefs_row(monkeypatch):
     monkeypatch.setattr("tuxtalk.model_helper.parakeet_update_needed", lambda cfg: need["device"])
     monkeypatch.setattr("tuxtalk.model_helper.parakeet_update_size", lambda device: "669 MB")
     w.restarts, w.messages = [], []
-    w.restart_service = lambda: w.restarts.append(True)
-    monkeypatch.setattr("tuxtalk.prefs.show_message",
+    monkeypatch.setattr("tuxtalk.prefs_speech.show_message",
                         lambda parent, kind, title, text: w.messages.append(title))
     return w, need
 

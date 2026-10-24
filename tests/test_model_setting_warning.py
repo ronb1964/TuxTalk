@@ -6,7 +6,7 @@ ignores a language it doesn't know. Both get a warning.
 import pytest
 
 from tuxtalk.parakeet_engine import PARAKEET_LANGUAGES
-from tuxtalk.prefs import model_setting_warning
+from tuxtalk.prefs_speech import model_setting_warning
 
 
 def test_parakeet_has_its_25_languages():

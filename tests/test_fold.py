@@ -9,7 +9,7 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
 
-from tuxtalk.prefs import PreferencesWindow  # noqa: E402
+from tuxtalk.prefs_general import GeneralTab  # noqa: E402
 from tuxtalk.prefs_indicator import IndicatorSettings  # noqa: E402
 from tuxtalk.ui_style import Fold  # noqa: E402
 
@@ -64,7 +64,7 @@ def test_more_shortcuts_shows_the_keys_beside_its_button():
         combo.append(key, key)
     w.vc_hotkey_combo.set_active_id("")
     w.pl_hotkey_combo.set_active_id("Ctrl+Alt+P")
-    PreferencesWindow._update_shortcuts_summary(w)
+    GeneralTab._update_shortcuts_summary(w)
     assert w.shortcuts_fold.summary.get_text() == "cheat sheet off · paste last Ctrl+Alt+P"
 
 

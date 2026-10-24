@@ -4,8 +4,8 @@ Language Mode, Language and Only these languages were three controls; the
 dropdown replaces them, but the settings keep their meaning so configs and
 backups from before read the same.
 """
-from tuxtalk.prefs import (SEVERAL_LANGUAGES, apply_language_choice, language_choice,
-                           language_summary, several_languages_label)
+from tuxtalk.prefs_language import (SEVERAL_LANGUAGES, apply_language_choice, language_choice,
+                                    language_summary, several_languages_label)
 
 
 def test_existing_settings_show_as_the_matching_entry():

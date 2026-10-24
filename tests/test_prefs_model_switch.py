@@ -13,7 +13,7 @@ gi = pytest.importorskip("gi")
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
 
-from tuxtalk import prefs, prefs_words  # noqa: E402
+from tuxtalk import prefs, prefs_speech, prefs_words  # noqa: E402
 from tuxtalk.config import Settings  # noqa: E402
 
 
@@ -30,10 +30,15 @@ def _build(monkeypatch, model, device):
     return prefs.PreferencesWindow()
 
 
+def _speech(w):
+    return w.general_tab.speech
+
+
 def _pick_model(w, model):
-    for i, row in enumerate(w.model_combo.get_model()):
+    combo = _speech(w).model_combo
+    for i, row in enumerate(combo.get_model()):
         if row[0] == model:
-            w.model_combo.set_active(i)
+            combo.set_active(i)
             return
     raise AssertionError(f"no {model} in the Model dropdown")
 
@@ -46,17 +51,17 @@ def _pick_model(w, model):
 def test_switching_between_parakeet_and_whisper_settles(monkeypatch, start, to, device):
     w = _build(monkeypatch, start, device)
     hints = []      # the calls that do the work, not the ones a refill turns away
-    original = prefs.PreferencesWindow._update_model_combo_hint
+    original = prefs_speech.SpeechSection.update_hint
 
     def counted(self):
-        if not self._filling_languages:
+        if not self.language.filling:
             hints.append(1)
         if len(hints) < 50:
             original(self)
-    monkeypatch.setattr(prefs.PreferencesWindow, "_update_model_combo_hint", counted)
+    monkeypatch.setattr(prefs_speech.SpeechSection, "update_hint", counted)
     _pick_model(w, to)
     assert len(hints) < 10
-    assert w._languages_for_model == to
+    assert _speech(w).language.filled_for == to
     w.window.destroy()
 
 
@@ -68,7 +73,8 @@ def test_a_new_several_languages_label_doesnt_reopen_the_picker(monkeypatch):
     monkeypatch.setitem(w.config, "auto_languages", "en,es")
     monkeypatch.setattr(Gtk.Dialog, "run", lambda self: Gtk.ResponseType.OK)
     seen = []
-    w.lang_combo.get_model().connect("row-changed", lambda *_: seen.append(w._filling_languages))
-    assert w._pick_several_languages() is True
+    language = _speech(w).language
+    language.combo.get_model().connect("row-changed", lambda *_: seen.append(language.filling))
+    assert language.pick_several() is True
     assert seen and all(seen)
     w.window.destroy()

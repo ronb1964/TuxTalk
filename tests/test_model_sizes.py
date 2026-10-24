@@ -56,7 +56,7 @@ def test_option_rows_follow_the_graphics_card_choice():
 def test_help_readme_and_preferences_show_the_real_sizes(help_pages, prefs_window):
     from gtk_text import tree_text
     window = prefs_window()
-    models = [row[1] for row in window.model_combo.get_model()]
+    models = [row[1] for row in window.general_tab.speech.model_combo.get_model()]
     texts = {"Help": "\n".join(help_pages.values()),
              "README": (ROOT / "README.md").read_text(),
              "Preferences": "\n".join(tree_text(window.window) + models)}

@@ -40,7 +40,7 @@ def test_no_flags():
 def test_preferences_and_first_run_list_the_same_languages(prefs_window, welcome_window):
     """Preferences had its own flagged list, which also lacked Maltese."""
     every = [rec.language_label(code) for code, _ in rec.LANGUAGES]
-    preferences = [row[0] for row in prefs_window(model="small").lang_combo.get_model()]
+    preferences = [row[0] for row in prefs_window(model="small").general_tab.speech.language.combo.get_model()]
     first_run = [row[0] for row in welcome_window.lang_combo.get_model()]
     assert preferences[1:1 + len(every)] == every       # after "Detect automatically"
     assert first_run == every

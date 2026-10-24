@@ -7,6 +7,12 @@ from types import SimpleNamespace
 from tuxtalk import kwin_hotkeys, service_launcher
 from tuxtalk import prefs as P
 from tuxtalk.prefs import PreferencesWindow
+from tuxtalk.prefs_general import GeneralTab
+
+
+def _tab(window):
+    """The General tab of the stand-in *window*."""
+    return SimpleNamespace(win=window, window=window.window)
 
 
 def test_the_window_is_locked_while_waiting_and_unlocked_after(monkeypatch):
@@ -18,7 +24,7 @@ def test_the_window_is_locked_while_waiting_and_unlocked_after(monkeypatch):
     monkeypatch.setattr(P.Gtk, "events_pending", lambda: False)
     d = SimpleNamespace(window=SimpleNamespace(set_sensitive=states.append))
 
-    assert PreferencesWindow._kde_refused(d, 0.0) == ["F8"]
+    assert GeneralTab._kde_refused(_tab(d), 0.0) == ["F8"]
     assert states == [False, True]
 
 
@@ -33,7 +39,7 @@ def test_an_error_while_waiting_still_unlocks_it(monkeypatch):
     d = SimpleNamespace(window=SimpleNamespace(set_sensitive=states.append))
 
     try:
-        PreferencesWindow._kde_refused(d, 0.0)
+        GeneralTab._kde_refused(_tab(d), 0.0)
     except RuntimeError:
         pass
     assert states == [False, True]
@@ -59,7 +65,7 @@ def test_the_title_bar_close_waits_too(monkeypatch):
         return False
     monkeypatch.setattr(P.Gtk, "events_pending", close_now)
 
-    assert PreferencesWindow._kde_refused(d, 0.0) == ["F8"]
+    assert GeneralTab._kde_refused(_tab(d), 0.0) == ["F8"]
     assert seen == [True], "the close went ahead during the wait"
     assert closed == []
 

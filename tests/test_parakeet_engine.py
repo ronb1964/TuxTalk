@@ -25,7 +25,7 @@ def test_every_offered_model_has_a_label_on_every_picker(prefs_window):
     """The picker indexes a label dict by model id; a missing key crashes the
     screen as it opens. (First run's card has no full picker.)"""
     from tuxtalk.model_helper import OFFERED_MODELS
-    rows = {row[0]: row[1] for row in prefs_window().model_combo.get_model()}
+    rows = {row[0]: row[1] for row in prefs_window().general_tab.speech.model_combo.get_model()}
     assert set(rows) == set(OFFERED_MODELS)
     assert all(label.strip() for label in rows.values()), rows
 

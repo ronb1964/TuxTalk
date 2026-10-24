@@ -5,7 +5,7 @@ import pytest
 
 pytest.importorskip("gi")
 from tuxtalk.hotkey_labels import hands_free_label, hotkey_label  # noqa: E402
-from tuxtalk.prefs import hotkey_change_message  # noqa: E402
+from tuxtalk.prefs_general import hotkey_change_message  # noqa: E402
 
 CFG = {"hotkey": "F7", "toggle_hotkey": "F9", "voice_commands_hotkey": "Ctrl+Alt+V"}
 

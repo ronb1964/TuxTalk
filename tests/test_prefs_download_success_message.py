@@ -4,71 +4,59 @@ The success message comes after the cache check, so a download that reports
 success but leaves files missing doesn't show "Model Downloaded Successfully!"
 and then "Model download failed!".
 """
-import threading
-from types import SimpleNamespace
-
 import pytest
 
 gi = pytest.importorskip("gi")
 gi.require_version("Gtk", "3.0")
 
-from tuxtalk import model_helper  # noqa: E402
-from tuxtalk import prefs as P  # noqa: E402
-from tuxtalk.prefs import PreferencesWindow  # noqa: E402
+from tuxtalk import download_progress_dialog, model_helper, prefs_speech  # noqa: E402
 
 
-class Anything:
-    """Stands in for every widget the progress dialog builds."""
+class FinishedDownloads:
+    """The download window, with each download run to its end at once."""
 
-    def __init__(self, *a, **k):
-        pass
+    def __init__(self, **_kwargs):
+        self.tasks = []
 
-    def __getattr__(self, name):
-        return lambda *a, **k: Anything()
+    def add_task(self, task):
+        self.tasks.append(task)
 
     def run(self):
-        return P.Gtk.ResponseType.OK
-
-
-class SyncThread:
-    def __init__(self, target=None, **k):
-        self.target = target
-
-    def start(self):
-        self.target()
+        for task in self.tasks:
+            task.success = task.download_func(lambda *a: None, task.cancel_event)
+            task.completed = True
 
 
 @pytest.fixture
-def fake_dialog(monkeypatch):
-    fake_gtk = SimpleNamespace(Dialog=Anything, Label=Anything, ProgressBar=Anything,
-                               Button=Anything, ResponseType=P.Gtk.ResponseType,
-                               MessageType=P.Gtk.MessageType)
-    monkeypatch.setattr(P, "Gtk", fake_gtk)
-    monkeypatch.setattr(P.GLib, "idle_add", lambda fn, *a: None)
-    monkeypatch.setattr(threading, "Thread", SyncThread)
+def shown(monkeypatch):
+    titles = []
+    monkeypatch.setattr(download_progress_dialog, "UnifiedDownloadDialog", FinishedDownloads)
     monkeypatch.setattr(model_helper, "make_model_download_func",
                         lambda name: lambda progress, cancel: True)
+    monkeypatch.setattr(prefs_speech, "show_message",
+                        lambda parent, kind, title, text="", buttons=None: titles.append(title))
+    return titles
 
 
-def _window(monkeypatch):
-    shown = []
-    monkeypatch.setattr(P, "show_message", lambda parent, kind, title, text="", buttons=None: shown.append(title))
-    d = SimpleNamespace(window=None)
-    return d, shown
-
-
-def test_an_incomplete_download_never_claims_success(fake_dialog, monkeypatch):
+def test_an_incomplete_download_never_claims_success(shown, monkeypatch):
     monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda name: False)
-    d, shown = _window(monkeypatch)
 
-    assert PreferencesWindow.check_and_download_model(d, "small") == (False, False, False)
+    assert prefs_speech.download_model(None, "small") == (False, False)
     assert "Model Downloaded Successfully!" not in shown
 
 
-def test_a_verified_download_says_so(fake_dialog, monkeypatch):
+def test_a_verified_download_says_so(shown, monkeypatch):
     checks = iter([False, True])            # not cached before, complete after
     monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda name: next(checks))
-    d, shown = _window(monkeypatch)
 
-    assert PreferencesWindow.check_and_download_model(d, "parakeet-v3") == (True, True, False)
+    assert prefs_speech.download_model(None, "parakeet-v3") == (True, False)
     assert shown == ["Model Downloaded Successfully!"]
+
+
+def test_a_model_already_here_downloads_nothing(shown, monkeypatch):
+    monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda name: True)
+    monkeypatch.setattr(download_progress_dialog, "UnifiedDownloadDialog",
+                        lambda **k: pytest.fail("opened the download window"))
+
+    assert prefs_speech.download_model(None, "small") == (True, False)
+    assert shown == []

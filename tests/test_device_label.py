@@ -6,7 +6,7 @@ Parakeet runs on the processor rather than "CUDA (GPU)".
 """
 import pytest
 
-from tuxtalk.prefs import device_label
+from tuxtalk.prefs_speech import SpeechSection, device_label
 
 
 def test_cuda_not_downloaded_names_the_download():
@@ -43,7 +43,6 @@ def test_relabelling_the_cuda_entry_again_changes_nothing():
     from gi.repository import Gtk
     if not Gtk.init_check()[0]:
         pytest.skip("no display")
-    from tuxtalk.prefs import PreferencesWindow
 
     picks = []
 
@@ -59,13 +58,13 @@ def test_relabelling_the_cuda_entry_again_changes_nothing():
     prefs.device_combo.connect("changed", prefs._on_device_changed)
     writes = []
     prefs.device_combo.get_model().connect("row-changed", lambda *_: writes.append(1))
-    PreferencesWindow._relabel_cuda_option(prefs, "small")
-    PreferencesWindow._relabel_cuda_option(prefs, "small")
+    SpeechSection._relabel_cuda_option(prefs, "small")
+    SpeechSection._relabel_cuda_option(prefs, "small")
     assert prefs.device_combo.get_active_text() == "CUDA (NVIDIA)"
     assert len(writes) == 1
     # Nor does a new label count as picking CUDA (review of 0.17): the Device
     # handler is held back while it's written, whatever GTK signals.
     prefs.device_combo.get_model().connect(
         "row-changed", lambda *_: prefs.device_combo.emit("changed"))
-    PreferencesWindow._relabel_cuda_option(prefs, "parakeet-v3")
+    SpeechSection._relabel_cuda_option(prefs, "parakeet-v3")
     assert picks == []
