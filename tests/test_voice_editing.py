@@ -469,10 +469,11 @@ def test_gnome_gets_them_as_accelerators():
 
 def _prefs_stub(saved):
     import types
-    from tuxtalk.prefs import PreferencesWindow
+    from tuxtalk.prefs_advanced import AdvancedTab
     stub = types.SimpleNamespace(update_config=lambda k, v: saved.append((k, v)), window=None)
-    stub._untick_ai_feature = lambda check, key, handler: PreferencesWindow._untick_ai_feature(stub, check, key, handler)
-    return stub, PreferencesWindow
+    stub._untick_ai_feature = lambda check, key, handler: AdvancedTab._untick_ai_feature(
+        stub, check, key, handler)
+    return stub, AdvancedTab
 
 
 class Box:
@@ -805,7 +806,7 @@ def test_the_flatpak_has_no_labs(prefs_window, monkeypatch):
 
 def test_voice_editing_is_in_labs_not_with_the_cleanup_options(prefs_window):
     window = prefs_window()
-    assert window.voice_editing_check in _labs(window)
+    assert window.advanced_tab.voice_editing_check in _labs(window)
 
 
 # --- lines the AI must not lose ------------------------------------------------------------

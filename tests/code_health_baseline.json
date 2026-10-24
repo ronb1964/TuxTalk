@@ -1,7 +1,7 @@
 {
  "files": {
   "app.py": 4860,
-  "prefs.py": 3361,
+  "prefs.py": 2758,
   "tray.py": 2477,
   "welcome_dialog.py": 3222
  },
@@ -195,7 +195,6 @@
   "prefs.py::PreferencesWindow._fit_to_screen::swallowed_error": 1,
   "prefs.py::PreferencesWindow._has_unapplied_changes::swallowed_error": 1,
   "prefs.py::PreferencesWindow._kde_refused::swallowed_error": 1,
-  "prefs.py::PreferencesWindow._numbers_option::long_line": 5,
   "prefs.py::PreferencesWindow._nvidia_gpu::swallowed_error": 1,
   "prefs.py::PreferencesWindow._on_model_changed::long_line": 2,
   "prefs.py::PreferencesWindow._on_model_changed::swallowed_error": 1,
@@ -206,13 +205,9 @@
   "prefs.py::PreferencesWindow._refresh_device_options::long_line": 1,
   "prefs.py::PreferencesWindow._release_pidfile::swallowed_error": 1,
   "prefs.py::PreferencesWindow._scroll_into_view.scroll::undocumented": 1,
-  "prefs.py::PreferencesWindow._send_automatically_option::long_line": 1,
-  "prefs.py::PreferencesWindow._swiss_spelling_check::long_line": 2,
   "prefs.py::PreferencesWindow._update_model_combo_hint::dated_comment": 1,
   "prefs.py::PreferencesWindow._vulkan_offered::swallowed_error": 1,
   "prefs.py::PreferencesWindow.check_and_download_model::long_line": 1,
-  "prefs.py::PreferencesWindow.create_advanced_tab::long_line": 20,
-  "prefs.py::PreferencesWindow.create_advanced_tab::undocumented": 1,
   "prefs.py::PreferencesWindow.create_general_tab::long_line": 12,
   "prefs.py::PreferencesWindow.create_general_tab::swallowed_error": 2,
   "prefs.py::PreferencesWindow.create_general_tab::undocumented": 1,
@@ -531,9 +526,6 @@
   },
   "prefs.py::PreferencesWindow.check_and_download_model": {
    "lines": 114
-  },
-  "prefs.py::PreferencesWindow.create_advanced_tab": {
-   "lines": 333
   },
   "prefs.py::PreferencesWindow.create_general_tab": {
    "decisions": 20,

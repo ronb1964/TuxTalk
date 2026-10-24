@@ -49,7 +49,8 @@ def win(monkeypatch):
     w.update_config = update_config
     w.get_selected_device_idx = lambda: 3
     w.audio_tab = SimpleNamespace(mic_test=MicTest(lambda: 3, lambda title, text: None))
-    tap = w.type_at_pause = TypeAtPause(w)
+    tap = TypeAtPause(w)
+    w.advanced_tab = SimpleNamespace(type_at_pause=tap)
     tap.streams = []
 
     def factory(**kwargs):

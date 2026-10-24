@@ -76,7 +76,6 @@ def test_the_setting_is_read_on_each_reload(monkeypatch):
 
 
 def test_preferences_has_the_checkbox_bound_to_the_setting():
-    from tuxtalk.prefs import PreferencesWindow
     changes = []
 
     class Stub:
@@ -85,7 +84,8 @@ def test_preferences_has_the_checkbox_bound_to_the_setting():
         def update_config(self, key, value):
             changes.append((key, value))
 
-    check = PreferencesWindow._swiss_spelling_check(Stub())
+    from tuxtalk.prefs_advanced import AdvancedTab
+    check = AdvancedTab._swiss_spelling_check(Stub())
     assert check.get_active() is True and "ß" in check.get_label()
     check.set_active(False)
     assert changes == [("swiss_spelling", False)]
@@ -94,7 +94,7 @@ def test_preferences_has_the_checkbox_bound_to_the_setting():
 def test_preferences_offers_it_only_when_german_is_in_play():
     """Swiss German spelling sat second in Text Formatting for everyone; now
     it shows only where it can matter (0.16 simplicity review)."""
-    from tuxtalk.prefs import swiss_spelling_offered
+    from tuxtalk.prefs_advanced import swiss_spelling_offered
     english = {"LANG": "en_US.UTF-8"}
     assert not swiss_spelling_offered({}, env=english)
     assert swiss_spelling_offered({}, env={"LANG": "de_DE.UTF-8"})

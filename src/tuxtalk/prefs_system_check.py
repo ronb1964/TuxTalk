@@ -8,7 +8,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk
 
 from .logger import setup_logger
-from .prefs_tab import WARNING_AMBER, Tab, _on_gnome, progress_window
+from .prefs_tab import WARNING_AMBER, Tab, _on_gnome, progress_window, subheading
 from .ui_style import message_dialog, show_message
 from .whisper_vulkan import ENGINE_SIZE_TEXT
 
@@ -143,7 +143,7 @@ class SystemCheck(Tab):
 
     def _build_gpu(self, check, crow):
         """The graphics card: what TuxTalk found, and CUDA's state; returns the next row."""
-        check.attach(self.win._subheading("Graphics card"), 0, crow, 2, 1)
+        check.attach(subheading("Graphics card"), 0, crow, 2, 1)
         crow += 1
         # GPU Status Label
         self.gpu_status_label = Gtk.Label(label="Checking...", xalign=0)
@@ -180,7 +180,7 @@ class SystemCheck(Tab):
 
     def _build_typing(self, check, crow):
         """Typing setup: its state and Fix Typing (on the Flatpak, a note); returns the next row."""
-        check.attach(self.win._subheading("Typing setup"), 0, crow, 2, 1)
+        check.attach(subheading("Typing setup"), 0, crow, 2, 1)
         crow += 1
         # The Typing Setup body is host-only — it configures the /dev/uinput
         # permission TuxTalk's virtual keyboard needs. The Flatpak types through the
@@ -239,7 +239,7 @@ class SystemCheck(Tab):
         # greyed-out buttons, so it is hidden there (see end of method).
         # Hidden rather than skipped: install/uninstall code still updates
         # these widgets, and must not trip over missing attributes.
-        extension_header = self.win._subheading("GNOME extension")
+        extension_header = subheading("GNOME extension")
         check.attach(extension_header, 0, crow, 2, 1)
         crow += 1
 

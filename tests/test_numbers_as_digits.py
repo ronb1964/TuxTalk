@@ -168,7 +168,7 @@ def test_settings_pick_the_mode_and_language(monkeypatch):
 def test_preferences_has_one_numbers_dropdown_over_both_settings():
     """The tickbox with two choices under it became one dropdown (0.16
     simplicity review); the two settings keep their meaning."""
-    from tuxtalk.prefs import NUMBER_CHOICES, PreferencesWindow, number_choice
+    from tuxtalk.prefs_advanced import NUMBER_CHOICES, AdvancedTab, number_choice
     assert number_choice({}) == "written"
     assert number_choice({"numbers_as_digits": True}) == "digits"
     assert number_choice({"numbers_as_digits": True, "numbers_small_as_words": True}) == "from-ten"
@@ -184,7 +184,7 @@ def test_preferences_has_one_numbers_dropdown_over_both_settings():
         def update_config(self, key, value):
             changes.append((key, value))
 
-    box = PreferencesWindow._numbers_option(Stub())
+    box = AdvancedTab._numbers_option(Stub())
     label, combo = box.get_children()
     assert combo.get_active_id() == "written"
     combo.set_active_id("digits")

@@ -146,7 +146,6 @@ def _fake_check(active):
 
 
 def _install_fake_dialog(monkeypatch, response):
-    from tuxtalk import prefs
     seen = {}
 
     class _FakeStyle:
@@ -178,7 +177,7 @@ def _install_fake_dialog(monkeypatch, response):
         def destroy(self):
             pass
 
-    monkeypatch.setattr(prefs, "message_dialog", _FakeDialog)
+    monkeypatch.setattr("tuxtalk.prefs_advanced.message_dialog", _FakeDialog)
     monkeypatch.setattr("tuxtalk.ui_style.message_dialog", _FakeDialog)
     return seen
 
@@ -186,6 +185,7 @@ def _install_fake_dialog(monkeypatch, response):
 def test_checking_the_box_without_confirming_does_not_enable_logging(monkeypatch):
     import types
     from tuxtalk import prefs
+    from tuxtalk.prefs_advanced import AdvancedTab
     seen = _install_fake_dialog(monkeypatch, prefs.Gtk.ResponseType.CANCEL)
     saved = []
     window = object()  # stands in for the real Gtk.Window at self.window
@@ -194,7 +194,7 @@ def test_checking_the_box_without_confirming_does_not_enable_logging(monkeypatch
                                  _on_log_transcripts_toggled=lambda *a: None)
     check, reverted = _fake_check(active=True)
 
-    prefs.PreferencesWindow._on_log_transcripts_toggled(self, check)
+    AdvancedTab._on_log_transcripts_toggled(self, check)
 
     assert seen["message_type"] == prefs.Gtk.MessageType.WARNING  # a warning was shown
     # The dialog must be parented to the real window, not the wrapper — passing
@@ -207,6 +207,7 @@ def test_checking_the_box_without_confirming_does_not_enable_logging(monkeypatch
 def test_confirming_the_warning_enables_logging(monkeypatch):
     import types
     from tuxtalk import prefs
+    from tuxtalk.prefs_advanced import AdvancedTab
     _install_fake_dialog(monkeypatch, prefs.Gtk.ResponseType.OK)
     saved = []
     self = types.SimpleNamespace(update_config=lambda k, v: saved.append((k, v)),
@@ -214,16 +215,16 @@ def test_confirming_the_warning_enables_logging(monkeypatch):
                                  _on_log_transcripts_toggled=lambda *a: None)
     check, _ = _fake_check(active=True)
 
-    prefs.PreferencesWindow._on_log_transcripts_toggled(self, check)
+    AdvancedTab._on_log_transcripts_toggled(self, check)
 
     assert ("log_transcripts", True) in saved                     # confirmed → enabled
 
 
 def test_unchecking_needs_no_dialog_and_disables(monkeypatch):
     import types
-    from tuxtalk import prefs
+    from tuxtalk.prefs_advanced import AdvancedTab
     # If a dialog were constructed while unchecking, this would blow up.
-    monkeypatch.setattr(prefs, "message_dialog",
+    monkeypatch.setattr("tuxtalk.prefs_advanced.message_dialog",
                         lambda **k: (_ for _ in ()).throw(AssertionError("no dialog on uncheck")))
     monkeypatch.setattr("tuxtalk.ui_style.message_dialog",
                         lambda **k: (_ for _ in ()).throw(AssertionError("no dialog on uncheck")))
@@ -232,7 +233,7 @@ def test_unchecking_needs_no_dialog_and_disables(monkeypatch):
                                  _on_log_transcripts_toggled=lambda *a: None)
     check, _ = _fake_check(active=False)
 
-    prefs.PreferencesWindow._on_log_transcripts_toggled(self, check)
+    AdvancedTab._on_log_transcripts_toggled(self, check)
 
     assert ("log_transcripts", False) in saved
 

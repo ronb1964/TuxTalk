@@ -3,7 +3,7 @@ of the warnings, whether the GNOME extension applies here, and the window a
 download or install shows its progress in."""
 import gi
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk
+from gi.repository import GLib, Gtk
 
 # The amber of TuxTalk's warnings (an unsafe setting, a backup never saved).
 WARNING_AMBER = "#e6aa3c"
@@ -16,6 +16,14 @@ def _on_gnome():
         return is_gnome()
     except Exception:
         return True   # unsure: show the GNOME options rather than hide them
+
+
+def subheading(text):
+    """A small heading inside a section or fold."""
+    label = Gtk.Label(xalign=0)
+    label.set_markup(f'<span weight="600">{GLib.markup_escape_text(text)}</span>')
+    label.set_margin_top(6)
+    return label
 
 
 def progress_window(parent, title, first_line):
