@@ -14,6 +14,7 @@ from .hotkey_labels import dropdown_entries, hands_free_label
 from .logger import setup_logger
 from .prefs_audio import AudioTab
 from .prefs_advanced import AdvancedTab
+from .prefs_hotkey_test import run_hotkey_test
 from .prefs_stats import StatsTab
 from .prefs_system_check import UPDATE_HELPER_LABEL
 from .prefs_tab import WARNING_AMBER
@@ -776,7 +777,7 @@ class PreferencesWindow:
 
         # Test Hotkeys button
         test_hotkeys_btn = Gtk.Button(label="Test Hotkeys")
-        test_hotkeys_btn.connect("clicked", self._on_test_hotkeys)
+        test_hotkeys_btn.connect("clicked", lambda _b: run_hotkey_test(self.window, self.config))
         test_hotkeys_btn.get_child().set_xalign(0.5)
         test_hotkeys_btn.set_tooltip_text("Test your configured hotkeys to make sure they work")
         test_hotkeys_btn.set_halign(Gtk.Align.START)
@@ -2513,7 +2514,7 @@ class PreferencesWindow:
         answer = dialog.run()
         dialog.destroy()
         if answer == Gtk.ResponseType.OK:
-            self._on_test_hotkeys(None)
+            run_hotkey_test(self.window, self.config)
         return True
 
     def on_cancel(self, button):
@@ -2565,147 +2566,6 @@ class PreferencesWindow:
         else:
             # Same failure dialog as Apply, so OK never looks dead on a save error.
             self._show_save_error()
-
-    def _on_test_hotkeys(self, button):
-        """Show hotkey test dialog.
-
-        Instead of stopping the dictation service (which releases the evdev grab and
-        causes XWayland phantom key-repeat floods), we put it into "hotkey test
-        mode" with a flag file that this dialog keeps fresh while it is open. In
-        this mode the evdev grab stays active (no phantom floods) and hotkey
-        presses are reported back via D-Bus HotkeyPressed signals instead of
-        starting/stopping recording. The flag goes stale by itself if this
-        process dies, so dictation can't be left switched off.
-        """
-        # The service tests against the SAVED hotkeys, but this dialog labels its
-        # rows from the pending dropdown selections. If the user changed a hotkey
-        # without applying, those disagree and the wrong row lights up. Make them
-        # apply first rather than testing against a config the service isn't using.
-        from .config import unapplied_hotkeys, load_config
-        pending = unapplied_hotkeys(self.config, load_config().__dict__)
-        if pending:
-            show_message(self.window,
-                         Gtk.MessageType.INFO,
-                         "Apply your hotkey change first",
-                         "You changed a hotkey but haven't applied it yet. Click Apply, "
-                         "then test — otherwise the test checks your previous hotkeys and "
-                         "the wrong row will light up.")
-            return
-
-        dialog = Gtk.Dialog(title="Test Hotkeys", transient_for=self.window)
-        dialog.set_default_size(450, 280)
-        dialog.set_modal(True)
-        dialog.set_position(Gtk.WindowPosition.CENTER)
-        dialog.set_keep_above(True)
-
-        content = dialog.get_content_area()
-        content.set_margin_top(20)
-        content.set_margin_bottom(20)
-        content.set_margin_start(25)
-        content.set_margin_end(25)
-        content.set_spacing(15)
-
-        # Instructions
-        instructions = Gtk.Label()
-        instructions.set_markup('<span size="large"><b>Test Your Hotkeys</b></span>\n\nPress each hotkey to verify it works:')
-        instructions.set_xalign(0)
-        content.pack_start(instructions, False, False, 0)
-
-        # Get current hotkeys
-        hold_key = self.config.get("hotkey", "F8")
-        toggle_key = self.config.get("toggle_hotkey", "F9")
-
-        # Test status labels
-        status_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        status_box.set_margin_top(10)
-
-        hold_label = Gtk.Label()
-        hold_label.set_markup(f'<b>{hold_key}</b> (Hold-to-talk): <span color="#999999">Not tested</span>')
-        hold_label.set_xalign(0)
-        status_box.pack_start(hold_label, False, False, 0)
-
-        toggle_label = Gtk.Label()
-        toggle_label.set_markup(f'<b>{toggle_key}</b> (Tap-to-toggle): <span color="#999999">Not tested</span>')
-        toggle_label.set_xalign(0)
-        status_box.pack_start(toggle_label, False, False, 0)
-
-        content.pack_start(status_box, False, False, 0)
-
-        # Track tested keys
-        tested_keys = {"hold": False, "toggle": False}
-
-        # Listen for HotkeyPressed D-Bus signals from app.py.
-        # The app's evdev loop detects hotkey presses and sends them to the
-        # tray's D-Bus service, which emits the HotkeyPressed signal.
-        from .dbus_service import DBUS_INTERFACE, DBUS_NAME, DBUS_PATH
-        bus = dbus.SessionBus()
-
-        def _on_hotkey_signal(key_name):
-            """Called when app.py reports a hotkey press via D-Bus signal."""
-            logger.debug(f"Hotkey test: TuxTalk heard {key_name}")
-            if key_name == "hold" and not tested_keys["hold"]:
-                tested_keys["hold"] = True
-                hold_label.set_markup(f'<b>{hold_key}</b> (Hold-to-talk): <span color="#4CAF50">✓ Working!</span>')
-            elif key_name == "toggle" and not tested_keys["toggle"]:
-                tested_keys["toggle"] = True
-                toggle_label.set_markup(f'<b>{toggle_key}</b> (Tap-to-toggle): <span color="#4CAF50">✓ Working!</span>')
-
-        # Connect to the HotkeyPressed signal on the D-Bus
-        signal_match = bus.add_signal_receiver(
-            _on_hotkey_signal,
-            signal_name="HotkeyPressed",
-            dbus_interface=DBUS_INTERFACE,
-            bus_name=DBUS_NAME,
-            path=DBUS_PATH
-        )
-
-        # Info label
-        info_label = Gtk.Label()
-        info_label.set_markup('<i>Dictation is paused while testing.\nClose this dialog to resume.</i>')
-        info_label.set_line_wrap(True)
-        info_label.set_xalign(0)
-        info_label.set_margin_top(10)
-        content.pack_start(info_label, False, False, 0)
-
-        # Close button
-        close_button = Gtk.Button(label="Close")
-        close_button.connect("clicked", lambda w: dialog.destroy())
-        dialog.add_action_widget(close_button, Gtk.ResponseType.CLOSE)
-
-        # Hotkey test mode lasts while the flag is fresh: start it now and keep
-        # it fresh while the dialog is open (see service_launcher).
-        from .service_launcher import (HOTKEY_TEST_REFRESH_S,
-                                       hotkey_test_flag_path)
-        flag = hotkey_test_flag_path()
-
-        def _refresh_test_flag():
-            try:
-                os.makedirs(os.path.dirname(flag), exist_ok=True)
-                with open(flag, "a"):
-                    pass
-                os.utime(flag)
-            except OSError as e:
-                logger.warning(f"Hotkey test: could not refresh the test flag: {e}")
-            return True  # keep the timer running
-
-        _refresh_test_flag()
-        refresh_timer = GLib.timeout_add_seconds(HOTKEY_TEST_REFRESH_S, _refresh_test_flag)
-        try:
-            dialog.show_all()
-            dialog.run()
-            dialog.destroy()
-        finally:
-            # Resume normal hotkey processing, whatever happened in the dialog.
-            GLib.source_remove(refresh_timer)
-            try:
-                os.remove(flag)
-            except OSError:
-                pass
-            # Disconnect D-Bus signal listener
-            try:
-                signal_match.remove()
-            except Exception:
-                pass
 
     def on_help(self, button):
         """Show help dialog with TuxTalk features and instructions."""

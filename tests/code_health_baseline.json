@@ -1,7 +1,7 @@
 {
  "files": {
   "app.py": 4860,
-  "prefs.py": 2758,
+  "prefs.py": 2618,
   "tray.py": 2477,
   "welcome_dialog.py": 3222
  },
@@ -198,9 +198,6 @@
   "prefs.py::PreferencesWindow._nvidia_gpu::swallowed_error": 1,
   "prefs.py::PreferencesWindow._on_model_changed::long_line": 2,
   "prefs.py::PreferencesWindow._on_model_changed::swallowed_error": 1,
-  "prefs.py::PreferencesWindow._on_test_hotkeys._on_hotkey_signal::long_line": 2,
-  "prefs.py::PreferencesWindow._on_test_hotkeys::long_line": 4,
-  "prefs.py::PreferencesWindow._on_test_hotkeys::swallowed_error": 1,
   "prefs.py::PreferencesWindow._pick_several_languages::long_line": 1,
   "prefs.py::PreferencesWindow._refresh_device_options::long_line": 1,
   "prefs.py::PreferencesWindow._release_pidfile::swallowed_error": 1,
@@ -519,9 +516,6 @@
   },
   "prefs.py::PreferencesWindow._on_model_changed": {
    "decisions": 26,
-   "lines": 140
-  },
-  "prefs.py::PreferencesWindow._on_test_hotkeys": {
    "lines": 140
   },
   "prefs.py::PreferencesWindow.check_and_download_model": {
