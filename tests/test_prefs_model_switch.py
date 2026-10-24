@@ -22,7 +22,7 @@ def _build(monkeypatch, model, device):
         pytest.skip("no display")
     monkeypatch.setattr(prefs.PreferencesWindow, "load_config",
                         lambda self: {**asdict(Settings()), "model": model, "device": device})
-    monkeypatch.setattr(prefs.PreferencesWindow, "_check_cuda_availability", lambda self: True)
+    monkeypatch.setattr(prefs.PreferencesWindow, "cuda_files_present", lambda self: True)
     monkeypatch.setattr(prefs_words, "load_custom_commands", lambda: {})
     monkeypatch.setattr(prefs_words.WordsTab, "_watch_custom_commands_file",
                         lambda self: None)

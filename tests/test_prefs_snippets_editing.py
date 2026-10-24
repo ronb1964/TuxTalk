@@ -1,6 +1,5 @@
 """Editing the Snippets list must not save rows the user never filled in,
 lose a row to a duplicate phrase, or let a write error escape OK/Apply."""
-import types
 from types import SimpleNamespace
 
 import pytest
@@ -32,13 +31,12 @@ def shown(monkeypatch):
 
 
 def _window(rows):
-    d = SimpleNamespace(commands_store=FakeStore([list(r) for r in rows]),
-                        _commands_loaded={}, window=None)
+    """A Words tab with stand-in lists instead of the built page."""
+    d = W.WordsTab(SimpleNamespace(window=None))
+    d.commands_store = FakeStore([list(r) for r in rows])
+    d.words_store = FakeStore()
+    d._commands_loaded = {}
     d.commands_tree = SimpleNamespace(set_cursor=lambda *a: None, get_column=lambda i: i)
-    for name in ("_commands_from_store", "_fill_commands_store", "save",
-                 "_on_add_command", "_on_phrase_edited", "_warn_duplicate_phrase",
-                 "_split_commands", "_fill_words_store", "_apply_snippet_edit"):
-        setattr(d, name, types.MethodType(getattr(W.WordsTab, name), d))
     return d
 
 

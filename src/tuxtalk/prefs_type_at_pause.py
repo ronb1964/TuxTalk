@@ -11,7 +11,7 @@ from . import mic_stream
 from .chunk_meter import PauseTest, level_to_fraction, threshold_fraction
 from .mic_test import MicReopen, SegmentedVUMeter
 from .logger import setup_logger
-from .prefs_tab import Tab, fold
+from .prefs_tab import LABS_INDENT, Tab, fold, subheading
 
 logger = setup_logger(__name__)
 
@@ -70,10 +70,10 @@ class TypeAtPause(Tab):
         self._tap_redraw_pending = False
         self._tap_last_room = None          # the room the last test measured
 
-    def build(self, grid, row, indent, heading):
+    def build(self, grid, row):
         """The Labs entry: the switch, and under it the fine-tuning with a live
         test of what the pause detector hears. Returns the next grid row."""
-        grid.attach(heading("Type at pause"), 0, row, 2, 1)
+        grid.attach(subheading("Type at pause"), 0, row, 2, 1)
         row += 1
 
         self.tap_check = Gtk.CheckButton(label="Type each phrase when you pause")
@@ -82,14 +82,14 @@ class TypeAtPause(Tab):
             "While you dictate, each phrase is typed as soon as you pause, instead of\n"
             "all of it when you stop. Nothing typed is changed afterwards. Whether a\n"
             "pause ends a sentence is decided once the next words are heard.")
-        self.tap_check.set_margin_start(indent)
+        self.tap_check.set_margin_start(LABS_INDENT)
         grid.attach(self.tap_check, 0, row, 2, 1)
         row += 1
 
         # Several settings, so a fold with their values beside its button (one
         # setting would sit by its tickbox, like Power Saving's minutes).
         self.tap_fold = fold(grid, row, "Adjust Settings", "Hide Settings")
-        self.tap_fold.set_margin_start(indent)
+        self.tap_fold.set_margin_start(LABS_INDENT)
         # Hiding the settings hides the test's meter, so the test stops.
         self.tap_fold.button.connect(
             "clicked", lambda _b: self.tap_fold.is_open() or self.stop_test())
@@ -127,13 +127,15 @@ class TypeAtPause(Tab):
         fine.attach(self.tap_context_check, 0, r, 2, 1)
         r += 1
 
-        fine.attach(Gtk.Label(label="Pause length:", xalign=0), 0, r, 1, 1)
+        pause_label = Gtk.Label(label="Pause length:", xalign=0)
+        fine.attach(pause_label, 0, r, 1, 1)
         self.tap_pause_spin = Gtk.SpinButton(
             adjustment=Gtk.Adjustment(value=float(self.config.get("chunk_pause_seconds", 0.8)),
                                       lower=0.3, upper=3.0, step_increment=0.1,
                                       page_increment=0.5),
             digits=1)
         self.tap_pause_spin.connect("scroll-event", lambda *a: True)
+        pause_label.set_mnemonic_widget(self.tap_pause_spin)
         self.tap_pause_spin.set_tooltip_text(
             "How long you stay quiet before the phrase so far is typed.\n"
             "It's always kept shorter than the hands-free stop.")
@@ -143,12 +145,14 @@ class TypeAtPause(Tab):
         fine.attach(pause_box, 1, r, 1, 1)
         r += 1
 
-        fine.attach(Gtk.Label(label="Noise filter:", xalign=0), 0, r, 1, 1)
+        noise_label = Gtk.Label(label="Noise filter:", xalign=0)
+        fine.attach(noise_label, 0, r, 1, 1)
         self.tap_db_spin = Gtk.SpinButton(
             adjustment=Gtk.Adjustment(value=float(self.config.get("chunk_speech_db", 6.0)),
                                       lower=3, upper=12, step_increment=1, page_increment=3),
             digits=0)
         self.tap_db_spin.connect("scroll-event", lambda *a: True)
+        noise_label.set_mnemonic_widget(self.tap_db_spin)
         # The value is how many dB louder than the room speech must be
         # (chunk_speech_db): higher ignores more room noise.
         self.tap_db_spin.set_tooltip_text(

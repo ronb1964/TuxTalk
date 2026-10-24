@@ -43,7 +43,8 @@ def test_an_unrelated_ok_keeps_the_saved_cuda_choice(tmp_path, monkeypatch):
     opened = {"device": "cuda", "beeps": True, "model": "small", "language_mode": "auto"}
     d = SimpleNamespace(config=dict(opened), _config_at_open=dict(opened),
                         _handle_autostart=lambda v: None,
-                        _check_cuda_availability=lambda: False, _has_nvidia=lambda: False)
+                        cuda_files_present=lambda: False, has_nvidia=lambda: False,
+                        vulkan_offered=lambda: False)
     d.show_without_saving = lambda key, value: PreferencesWindow.show_without_saving(d, key, value)
     speech = SimpleNamespace(win=d, config=d.config, device_combo=FakeCombo())
 

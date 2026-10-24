@@ -48,9 +48,11 @@ class FakeDialog:
 
 def test_pkexec_runs_off_the_gtk_thread_and_a_failure_resets_the_button(monkeypatch):
     threads, idle = [], []
-    monkeypatch.setattr(threading, "Thread",
-                        lambda target, daemon=None: threads.append(target) or
-                        SimpleNamespace(start=lambda: None))
+    # Only the System check's threads: the sound thread started at the
+    # test's end must stay a real one.
+    monkeypatch.setattr(P, "threading", SimpleNamespace(
+        Thread=lambda target, daemon=None: threads.append(target) or
+        SimpleNamespace(start=lambda: None)))
     monkeypatch.setattr(P.GLib, "idle_add", lambda fn, *a: idle.append((fn, a)))
     monkeypatch.setattr(P, "message_dialog", lambda **k: FakeDialog(P.Gtk.ResponseType.YES))
     monkeypatch.setattr("tuxtalk.ui_style.message_dialog",

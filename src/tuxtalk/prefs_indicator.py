@@ -43,11 +43,13 @@ def _desktop_accent():
     return rgba if found else _rgba("#4caf50")
 
 
-def _row_label(grid, row, text, tooltip=None):
-    """The name of a setting, in the left column of *row*."""
+def _row_label(grid, row, text, control, tooltip=None):
+    """The name of a setting, in the left column of *row*; a screen reader
+    names *control* by it."""
     label = Gtk.Label(label=text, xalign=0)
     if tooltip:
         label.set_tooltip_text(tooltip)
+    label.set_mnemonic_widget(control)
     grid.attach(label, 0, row, 1, 1)
     return label
 
@@ -95,8 +97,7 @@ class IndicatorSettings(Tab):
 
     def _dropdown(self, choices, active):
         """A dropdown of *choices* ((id, label) pairs) showing *active*."""
-        combo = Gtk.ComboBoxText()
-        dropdown(combo)
+        combo = dropdown(Gtk.ComboBoxText())
         for choice_id, label in choices:
             combo.append(choice_id, label)
         combo.set_active_id(active)
@@ -112,32 +113,34 @@ class IndicatorSettings(Tab):
         """Size and Style. Returns the next row."""
         # The tooltips are on the labels: on a dropdown they get in the way
         # of its popup.
-        _row_label(grid, row, "Size 💡:",
+        size = self._setting_dropdown("indicator_size", "medium", _SIZES)
+        _row_label(grid, row, "Size 💡:", size,
                    "Choose the size of the recording indicator.\nMedium is the default size.")
-        grid.attach(self._setting_dropdown("indicator_size", "medium", _SIZES), 1, row, 1, 1)
-        _row_label(grid, row + 1, "Style 💡:",
+        grid.attach(size, 1, row, 1, 1)
+        style = self._setting_dropdown("indicator_style", "orb", _STYLES)
+        _row_label(grid, row + 1, "Style 💡:", style,
                    "Choose how the recording indicator looks.\nOrb is the default.")
-        grid.attach(self._setting_dropdown("indicator_style", "orb", _STYLES), 1, row + 1, 1, 1)
+        grid.attach(style, 1, row + 1, 1, 1)
         return row + 2
 
     def _build_color(self, grid, row):
         """Color: the desktop's accent or a color picked, and the swatch that
         picks it. Returns the next row."""
-        _row_label(grid, row, "Color:")
         # An older config can still hold 'cyan'; it shows as Custom.
         mode = self.config.get("indicator_color_mode", "custom")
         self._color_mode_combo = self._dropdown(
             (("system", "Use system accent color"), ("custom", "Custom color")),
             mode if mode in ("system", "custom") else "custom")
+        _row_label(grid, row, "Color:", self._color_mode_combo)
         grid.attach(self._color_mode_combo, 1, row, 1, 1)
 
         # The swatch is always shown: in Custom mode the chosen color, in
         # System mode the live desktop accent (a continuity cue). Clicking it
         # always opens the picker and adopts the result as a custom color, so
         # changing color is one click without the dropdown.
-        _row_label(grid, row + 1, "Custom color:")
         color_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         self._color_btn = Gtk.ColorButton()
+        _row_label(grid, row + 1, "Custom color:", self._color_btn)
         self._color_btn.set_halign(Gtk.Align.START)
         self._color_btn.set_size_request(64, 30)
         self._color_btn.set_tooltip_text("Click to choose a custom color")
@@ -215,10 +218,10 @@ class IndicatorSettings(Tab):
 
     def _build_response(self, grid, row):
         """How strongly the animation follows the voice. Returns the next row."""
-        _row_label(grid, row, "Animation response:",
+        scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.5, 2.0, 0.1)
+        _row_label(grid, row, "Animation response:", scale,
                    "How strongly the indicator's animation moves with your voice.\n"
                    "It doesn't change what the microphone hears.")
-        scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.5, 2.0, 0.1)
         scale.set_value(self.config.get("indicator_sensitivity", 1.0))
         scale.set_hexpand(True)
         scale.connect("value-changed", lambda s: self.update_config(
@@ -229,8 +232,8 @@ class IndicatorSettings(Tab):
     def _build_position(self, grid, row, can_move):
         """Position, greyed with a warning where the indicator can't be moved.
         Returns the next row."""
-        _row_label(grid, row, "Position:")
         combo = self._setting_dropdown("indicator_position", "center", _POSITIONS)
+        _row_label(grid, row, "Position:", combo)
         # Moving the indicator needs XWayland, not a session type or the GNOME
         # extension: the tray starts the dictation service with
         # GDK_BACKEND=x11,wayland, so this works on a Wayland desktop with no

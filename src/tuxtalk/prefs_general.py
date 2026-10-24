@@ -337,8 +337,7 @@ class GeneralTab(Tab):
         """A key dropdown of *entries* [(key, its label)], which a screen
         reader names by *label*. The tooltip stays on the label: on the
         combo it gets in the way of the popup."""
-        combo = Gtk.ComboBoxText()
-        dropdown(combo)
+        combo = dropdown(Gtk.ComboBoxText())
         for key, text in entries:
             combo.append(key, text)
         label.set_mnemonic_widget(combo)

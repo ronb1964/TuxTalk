@@ -529,7 +529,6 @@ def message_dialog(closable=True, **kwargs):
     return dialog
 
 
-
 def show_message(parent, kind, title, text="", buttons=Gtk.ButtonsType.OK,
                  keep_above=False):
     """Show a message box over *parent* and wait for an answer: *title* in
@@ -547,6 +546,7 @@ def show_message(parent, kind, title, text="", buttons=Gtk.ButtonsType.OK,
     response = dialog.run()
     dialog.destroy()
     return response
+
 
 class Fold(Gtk.Box):
     """Settings most people never need, closed behind a button that names

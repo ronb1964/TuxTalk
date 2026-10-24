@@ -8,12 +8,9 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 
 from .prefs_system_check import SystemCheck
-from .prefs_tab import Tab, dropdown, fold, subheading
+from .prefs_tab import LABS_INDENT, Tab, dropdown, fold, subheading
 from .prefs_type_at_pause import TypeAtPause
 from .ui_style import message_dialog, show_message
-
-# How far a Labs feature's options sit in under its heading.
-LABS_INDENT = 20
 
 # The Numbers dropdown: (label, numbers_as_digits, numbers_small_as_words).
 # "As written" leaves the one-to-nine choice as it was (None), for next time.
@@ -49,8 +46,16 @@ class AdvancedTab(Tab):
     """The Advanced tab. The AI options download the AI the first time one is
     ticked (_toggle_ai_feature); unticked, nothing is downloaded."""
 
-    # Type at pause's Labs entry: built outside the Flatpak only.
-    type_at_pause = None
+    def __init__(self, win):
+        super().__init__(win)
+        # Type at pause's Labs entry: built outside the Flatpak only.
+        self.type_at_pause = None
+
+    def stop(self, closing=False):
+        """Stop Type at pause's live test, where its Labs entry is built;
+        closing, wait until the microphone is free."""
+        if self.type_at_pause is not None:
+            self.type_at_pause.stop_test(closing)
 
     def build(self):
         """The tab's page: Text, Fine-tuning, System check and TuxTalk Labs."""
@@ -71,7 +76,6 @@ class AdvancedTab(Tab):
 
     def _build_text(self, grid, row):
         """The Text section; returns the next row."""
-        # ===== TEXT SECTION =====
         # The text options people turn on. The ones that already do the right
         # thing by themselves are folded into Fine-tuning below.
         text_header = Gtk.Label()
@@ -132,7 +136,6 @@ class AdvancedTab(Tab):
 
     def _build_fine_tuning(self, grid, row):
         """Fine-tuning, closed: formatting, inserting text and privacy; returns the next row."""
-        # ===== FINE-TUNING =====
         # Each of these already does the sensible thing; they're here for the
         # day something looks off.
         fine_fold = fold(grid, row, "Show fine-tuning", "Hide fine-tuning")
@@ -148,7 +151,6 @@ class AdvancedTab(Tab):
         """Fine-tuning's Formatting rows; returns the next row."""
         fine.attach(subheading("Formatting"), 0, frow, 2, 1)
         frow += 1
-        # Smart quotes
         quotes_check = Gtk.CheckButton(label="Use smart quotes (\u201c \u201d)")
         quotes_check.set_active(self.config["smart_quotes"])
         quotes_check.connect("toggled", lambda x: self.update_config(
@@ -158,12 +160,11 @@ class AdvancedTab(Tab):
             "Say 'open quote' and 'close quote' when dictating.")
         fine.attach(quotes_check, 0, frow, 2, 1)
         frow += 1
-        
+
         if swiss_spelling_offered(self.config):
             fine.attach(self._swiss_spelling_check(), 0, frow, 2, 1)
             frow += 1
 
-        # Auto space
         space_check = Gtk.CheckButton(label="Auto-space between utterances")
         space_check.set_active(self.config["auto_space"])
         space_check.connect("toggled", lambda x: self.update_config("auto_space", x.get_active()))
@@ -172,8 +173,7 @@ class AdvancedTab(Tab):
             "Turn off if you want to control spacing manually.")
         fine.attach(space_check, 0, frow, 2, 1)
         frow += 1
-        
-        # Auto period
+
         period_check = Gtk.CheckButton(label="Ensure period at end of sentences")
         period_check.set_active(bool(self.config.get("auto_period", True)))
         period_check.connect("toggled", lambda x: self.update_config("auto_period", x.get_active()))
@@ -204,7 +204,6 @@ class AdvancedTab(Tab):
 
     def _fine_inserting(self, fine, frow):
         """How text is put in (not on the Flatpak, which always types); returns the next row."""
-        # Injection mode
         inject_label = Gtk.Label(label="Text Injection 💡:", xalign=0)
         inject_label.set_tooltip_text(
             "How to insert transcribed text:\n"
@@ -225,8 +224,8 @@ class AdvancedTab(Tab):
             "✓ Most standard text input fields\n"
             "\n"
             "Use Keystroke Typing if paste doesn't work in specialized applications.")
-        inject_combo = Gtk.ComboBoxText()
-        dropdown(inject_combo)
+        inject_combo = dropdown(Gtk.ComboBoxText())
+        inject_label.set_mnemonic_widget(inject_combo)
 
         inject_combo.append("auto", "Auto (Smart Detection)")
         inject_combo.append("type", "Keystroke Typing")
@@ -302,7 +301,6 @@ class AdvancedTab(Tab):
 
     def _build_labs(self, grid, row):
         """TuxTalk Labs, at *row* of *grid*."""
-        # ===== TUXTALK LABS =====
         # Experimental features: they work but are still being
         # refined, so they live here with a note saying so, the Help page about
         # them, and a feedback link. Hidden in the Flatpak: its portal input
@@ -335,7 +333,7 @@ class AdvancedTab(Tab):
 
         row = self._labs_editing(grid, row)
         self.type_at_pause = TypeAtPause(self.win)
-        row = self.type_at_pause.build(grid, row, LABS_INDENT, subheading)
+        row = self.type_at_pause.build(grid, row)
 
         self._labs_indicator_and_links(grid, row)
 
@@ -476,6 +474,7 @@ class AdvancedTab(Tab):
         combo.connect("changed", changed)
 
         label = Gtk.Label(label="Numbers 💡:", xalign=0)
+        label.set_mnemonic_widget(combo)
         label.set_tooltip_text(
             "Digits: \"twenty-five chickens\" becomes \"25 chickens\", \"october fifteenth\"\n"
             "becomes \"october 15th\" and \"seven thirty\" after at becomes \"7:30\".\n"

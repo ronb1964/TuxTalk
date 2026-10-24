@@ -9,10 +9,9 @@ from .config import (ConfigNotLoadedError, load_custom_commands, merge_custom_co
                      save_custom_commands)
 from .logger import setup_logger
 from .prefs_tab import Tab
-from .ui_style import message_dialog, show_message
+from .ui_style import show_message
 
 logger = setup_logger(__name__)
-
 
 
 def _section(vbox, title, text):
@@ -48,9 +47,15 @@ def _buttons(vbox, *specs):
         (box.pack_end if at_end else box.pack_start)(button, False, False, 0)
     vbox.pack_start(box, False, False, 0)
 
+
 class WordsTab(Tab):
     """The Words tab. Snippets are saved by Apply and OK through save(), apart
     from the settings; the window asks changed() before it closes."""
+
+    def __init__(self, win):
+        super().__init__(win)
+        self._word_rows = []        # (word, its mishearings), as on disk
+        self._duplicate_warning_pending = False
 
     def build(self):
         """The tab's page: Your Words, each with the mishearings fixed to it,
@@ -149,34 +154,31 @@ class WordsTab(Tab):
                  ("Remove", "Remove the selected snippet", self._on_remove_command, False))
 
     def _on_cell_editing_started(self, renderer, editable, path, column_idx):
-        """Handle when a cell starts being edited - setup focus-out commit and Tab navigation."""
-        # Connect to focus-out to commit the edit
+        """A snippet cell being edited: leaving it commits the text, and Tab
+        moves to the next cell."""
         def on_focus_out(widget, event):
-            # Commit the current text
             text = widget.get_text()
             if column_idx == 0:
                 self._on_phrase_edited(renderer, path, text)
             else:
                 self._on_replacement_edited(renderer, path, text)
             return False
-        
+
         editable.connect("focus-out-event", on_focus_out)
-        
+
         def on_key_press(widget, event):
             """Tab keeps the edit and moves on to the next cell."""
             from gi.repository import Gdk
             if event.keyval == Gdk.KEY_Tab:
-                # Commit current edit first
                 text = widget.get_text()
                 if column_idx == 0:
                     self._on_phrase_edited(renderer, path, text)
                 else:
                     self._on_replacement_edited(renderer, path, text)
-                
-                # Stop the current edit
+
                 widget.editing_done()
                 widget.remove_widget()
-                
+
                 # Move to next column or next row
                 if column_idx == 0:
                     # Move to replacement column (column 1)
@@ -197,7 +199,7 @@ class WordsTab(Tab):
                         ))
                 return True  # Consume the Tab event
             return False
-        
+
         editable.connect("key-press-event", on_key_press)
 
     def _on_phrase_edited(self, renderer, path, new_text):
@@ -209,7 +211,7 @@ class WordsTab(Tab):
         phrase = new_text.strip().lower()
         if not phrase:
             return
-        for word, phrases in getattr(self, "_word_rows", ()):
+        for word, phrases in self._word_rows:
             if phrase in phrases:
                 show_message(self.window, Gtk.MessageType.WARNING,
                              "That phrase already fixes a word",
@@ -230,7 +232,7 @@ class WordsTab(Tab):
         waits for the idle loop and a second call while it is pending adds
         nothing.
         """
-        if getattr(self, "_duplicate_warning_pending", False):
+        if self._duplicate_warning_pending:
             return
         self._duplicate_warning_pending = True
 
@@ -243,13 +245,12 @@ class WordsTab(Tab):
         GLib.idle_add(show)
 
     def _on_replacement_edited(self, renderer, path, new_text):
-        """Handle editing of the replacement column."""
+        """A replacement typed into a snippet row."""
         self.commands_store[path][1] = new_text
 
     def _on_add_command(self, button):
-        """Add a new empty command row."""
+        """Add an empty snippet row and start editing its phrase."""
         iter = self.commands_store.append(["", ""])
-        # Select the new row
         path = self.commands_store.get_path(iter)
         self.commands_tree.set_cursor(path, self.commands_tree.get_column(0), True)
 
@@ -313,7 +314,7 @@ class WordsTab(Tab):
             dialog.destroy()
 
     def _on_remove_command(self, button):
-        """Remove the selected command."""
+        """Remove the selected snippet."""
         selection = self.commands_tree.get_selection()
         model, iter = selection.get_selected()
         if iter:
@@ -356,7 +357,7 @@ class WordsTab(Tab):
         if it is None:
             return None
         index = model.get_path(it).get_indices()[0]
-        rows = getattr(self, "_word_rows", [])
+        rows = self._word_rows
         return rows[index] if index < len(rows) else None
 
     def _on_add_word(self, _button):
@@ -377,16 +378,12 @@ class WordsTab(Tab):
         if row is None:
             return
         word, phrases = row
-        ask = message_dialog(
-            transient_for=self.window, modal=True,
-            message_type=Gtk.MessageType.QUESTION, buttons=Gtk.ButtonsType.YES_NO,
-            text=f"Remove {word}?")
-        ask.format_secondary_text(
+        answer = show_message(
+            self.window, Gtk.MessageType.QUESTION, f"Remove {word}?",
             "TuxTalk stops spelling it your way"
             + (f", and stops fixing what it hears instead ({', '.join(phrases)})."
-               if phrases else "."))
-        answer = ask.run()
-        ask.destroy()
+               if phrases else "."),
+            buttons=Gtk.ButtonsType.YES_NO)
         if answer != Gtk.ResponseType.YES:
             return
         try:
@@ -481,9 +478,8 @@ class WordsTab(Tab):
         return vocabulary.split_commands(custom_words.load(), commands)
 
     def _fill_words_store(self, rows):
+        """Show Your Words, *rows* of (word, its mishearings)."""
         self._word_rows = rows
-        if getattr(self, "words_store", None) is None:
-            return
         self.words_store.clear()
         for word, phrases in rows:
             self.words_store.append([word, ", ".join(phrases)])

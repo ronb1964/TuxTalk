@@ -83,8 +83,7 @@ class LanguageRow(Tab):
             "makes it a little faster, and it never takes you for another one.\n"
             "Several languages: it picks only from the ones you tick (Whisper models).")
         grid.attach(label, 0, row, 1, 1)
-        self.combo = Gtk.ComboBoxText()
-        dropdown(self.combo)
+        self.combo = dropdown(Gtk.ComboBoxText())
         label.set_mnemonic_widget(self.combo)
         self.fill(model)
         self.combo.connect("changed", self._on_changed)

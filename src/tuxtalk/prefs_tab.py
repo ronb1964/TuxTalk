@@ -1,7 +1,9 @@
 """What the tabs of Preferences share: the window they belong to, the amber
-of the warnings, whether the GNOME extension applies here, the window a
-download or install shows its progress in, and the pieces every tab is built
+of the warnings, the window a
+download or install runs in (run_with_progress), and the pieces every tab is built
 from (section headings, folds, dropdowns)."""
+import threading
+
 import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk
@@ -14,26 +16,19 @@ logger = setup_logger(__name__)
 # The amber of TuxTalk's warnings (an unsafe setting, a backup never saved).
 WARNING_AMBER = "#e6aa3c"
 
-
-def on_gnome():
-    """Whether the GNOME Shell extension can apply on this desktop at all."""
-    try:
-        from .desktop_detect import is_gnome
-        return is_gnome()
-    except Exception as e:
-        logger.warning(f"Could not tell whether this is GNOME: {e}")
-        return True   # unsure: show the GNOME options rather than hide them
+# How far a Labs feature's options sit in under its heading.
+LABS_INDENT = 20
 
 
 def section_header(grid, row, title):
-    """A divider line and a bold section title across *grid* at *row*;
-    returns the next free row."""
+    """A divider line and a bold section title (plain text) across *grid*
+    at *row*; returns the next free row."""
     sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
     sep.set_margin_top(20)
     sep.set_margin_bottom(15)
     grid.attach(sep, 0, row, 2, 1)
     header = Gtk.Label()
-    header.set_markup(f"<b>{title}</b>")
+    header.set_markup(f"<b>{GLib.markup_escape_text(title)}</b>")
     header.set_xalign(0)
     header.set_margin_bottom(10)
     grid.attach(header, 0, row + 1, 2, 1)
@@ -108,7 +103,7 @@ def subheading(text):
     return label
 
 
-def progress_window(parent, title, first_line):
+def _progress_window(parent, title, first_line):
     """A window for a download or install, which can't be closed while it
     works: (window, status line, progress bar), shown."""
     dialog = Gtk.Dialog(title=title, transient_for=parent, flags=Gtk.DialogFlags.MODAL)
@@ -130,11 +125,42 @@ def progress_window(parent, title, first_line):
     return dialog, status_label, progress_bar
 
 
+def run_with_progress(parent, title, first_line, work, finish):
+    """Run *work(progress)* on its own thread with a progress window over
+    *parent*, then close the window and call *finish(what work returned)*
+    on the GTK thread (None if work raised). work may call
+    progress(message, percent) as often as it likes."""
+    dialog, status_label, progress_bar = _progress_window(parent, title, first_line)
+
+    def progress(message, percent):
+        def update_ui():
+            status_label.set_text(message)
+            progress_bar.set_fraction(percent / 100.0)
+            progress_bar.set_text(f"{percent}%")
+            return False
+        GLib.idle_add(update_ui)
+
+    def done(result):
+        dialog.destroy()
+        finish(result)
+        return False
+
+    def run():
+        try:
+            result = work(progress)
+        except Exception:
+            logger.exception(f"{title} failed")
+            result = None
+        GLib.idle_add(done, result)
+
+    threading.Thread(target=run, daemon=True).start()
+
+
 class Tab:
-    """One tab of Preferences, or a window of settings a tab opens. It builds
-    its page (build) and handles its own settings, reading and changing them
-    through the window (*win*, a prefs.PreferencesWindow), which saves and
-    applies them for every tab."""
+    """A tab of Preferences, a section of one, or a window of settings a tab
+    opens. It builds its part (build) and handles its own settings, reading
+    and changing them through the window (*win*, a prefs.PreferencesWindow),
+    which saves and applies them for every tab."""
 
     def __init__(self, win):
         self.win = win
@@ -152,3 +178,8 @@ class Tab:
     def update_config(self, key, value):
         """Change a setting; Apply or OK saves it."""
         self.win.update_config(key, value)
+
+    def stop(self, closing=False):
+        """Stop what this tab runs that holds the microphone (a test), as
+        another tab is shown, the focus goes to another window, or the window
+        closes (*closing*). Nothing, for most tabs."""

@@ -276,12 +276,12 @@ class SpeechSection(Tab):
 
     def _large_v3_text(self):
         """What the large-v3 entry says: what running it on this computer takes."""
-        if self.win._check_cuda_availability():
+        if self.win.cuda_files_present():
             return MODEL_TEXT["large-v3"]
-        if self.win._has_nvidia():
+        if self.win.has_nvidia():
             # Selectable: picking it offers CUDA's download.
             return "large-v3 — click to download required CUDA libraries"
-        if self.win._vulkan_offered():
+        if self.win.vulkan_offered():
             return "large-v3 — Whisper's best, on your graphics card (Vulkan)"
         return "large-v3 — needs a graphics card (none found)"
 
@@ -295,8 +295,7 @@ class SpeechSection(Tab):
         """The Device label and dropdown at *row* of the fold."""
         label = Gtk.Label(label="Device:", xalign=0)
         setup.attach(label, 0, row, 1, 1)
-        self.device_combo = Gtk.ComboBoxText()
-        dropdown(self.device_combo)
+        self.device_combo = dropdown(Gtk.ComboBoxText())
         label.set_mnemonic_widget(self.device_combo)
         self.refresh_device_options()
         # What _on_device_changed falls back to when a setup is refused.
@@ -497,7 +496,7 @@ class SpeechSection(Tab):
                 self._choose_model(model)
                 return
         if model == "large-v3":
-            if not self.win._check_cuda_availability():
+            if not self.win.cuda_files_present():
                 self.set_choice("model", self._last_selected_model)
                 self._set_up_large_v3()
                 return
@@ -528,16 +527,16 @@ class SpeechSection(Tab):
             "💡 Click OK here to confirm, then click Apply or OK in Preferences "
             "to start the download.\n\n"
             "Do you want to proceed with this model?",
-            buttons=Gtk.ButtonsType.OK_CANCEL) != Gtk.ResponseType.CANCEL
+            buttons=Gtk.ButtonsType.OK_CANCEL) == Gtk.ResponseType.OK
 
     def _set_up_large_v3(self):
         """large-v3 picked without CUDA's files: on NVIDIA, Vulkan or CUDA;
         on AMD or Intel graphics, Vulkan; with no graphics card, why not.
         The Model dropdown already shows the model before, and only a
         finished setup selects large-v3."""
-        if self.win._has_nvidia():
+        if self.win.has_nvidia():
             self._large_v3_on_nvidia()
-        elif self.win._vulkan_offered():
+        elif self.win.vulkan_offered():
             if show_message(
                     self.window, Gtk.MessageType.QUESTION,
                     "Large-v3 needs your graphics card",
@@ -560,7 +559,7 @@ class SpeechSection(Tab):
         long-standing NVIDIA setup). Without Vulkan, CUDA is asked about
         before its 4.4 GB download."""
         from .vulkan_setup_dialogs import FULL, LIGHT, choose_light_or_full
-        if self.win._vulkan_offered():
+        if self.win.vulkan_offered():
             choice = choose_light_or_full(self.window, "large-v3")
         else:
             choice = FULL if show_message(
@@ -604,8 +603,8 @@ class SpeechSection(Tab):
         combo.append("cpu", "CPU")
         tooltip = "Processing device for AI transcription:\n• CPU: works on all computers, slower"
 
-        self._cuda_ready = self.win._check_cuda_availability()
-        if self._cuda_ready or self.win._has_nvidia():
+        self._cuda_ready = self.win.cuda_files_present()
+        if self._cuda_ready or self.win.has_nvidia():
             combo.append("cuda", device_label("cuda", self.config.get("model"), self._cuda_ready))
             tooltip += ("\n• CUDA (NVIDIA): much faster for the Whisper models, a one-time "
                         "1.4 GB download. Parakeet can't use it")
@@ -620,15 +619,12 @@ class SpeechSection(Tab):
         # Any graphics card through Vulkan (whisper_vulkan.py): the only GPU
         # option on AMD / Intel, and the light one on NVIDIA. Offered when a
         # graphics chip is present, and kept if it is already the setting.
-        try:
-            from . import whisper_vulkan
-            if whisper_vulkan.is_offered() or self.config["device"] == "vulkan":
-                combo.append("vulkan", whisper_vulkan.DEVICE_LABEL)
-                tooltip += ("\n• Vulkan (any GPU): AMD, Intel or NVIDIA. On NVIDIA about "
-                            f"as fast as CUDA for a {ENGINE_SIZE_TEXT} download (one-time, "
-                            "with a speed check). Also runs Parakeet on the graphics chip")
-        except Exception as e:
-            logger.warning(f"Could not check for Vulkan graphics: {e}")
+        if self.win.vulkan_offered() or self.config["device"] == "vulkan":
+            from .whisper_vulkan import DEVICE_LABEL
+            combo.append("vulkan", DEVICE_LABEL)
+            tooltip += ("\n• Vulkan (any GPU): AMD, Intel or NVIDIA. On NVIDIA about "
+                        f"as fast as CUDA for a {ENGINE_SIZE_TEXT} download (one-time, "
+                        "with a speed check). Also runs Parakeet on the graphics chip")
 
         combo.set_active_id(self.config["device"])
         combo.set_tooltip_text(tooltip)
@@ -738,7 +734,7 @@ class SpeechSection(Tab):
             return
 
         def on_success():
-            self.win.advanced_tab.system_check.check_gpu_status()
+            self.win.refresh_gpu_status()
             self.refresh_device_options()
             self._relabel_large_v3()
             self._after_cuda_download()

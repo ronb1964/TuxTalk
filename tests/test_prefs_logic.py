@@ -167,7 +167,8 @@ def _commands_window(rows, loaded=None):
     """A stand-in Words tab with just the snippets list."""
     import types
     from tuxtalk.prefs_words import WordsTab
-    d = SimpleNamespace(commands_store=rows, _commands_loaded=loaded or {})
+    d = SimpleNamespace(commands_store=rows, _commands_loaded=loaded or {},
+                        words_store=P.Gtk.ListStore(str, str))
     for name in ("_commands_from_store", "_fill_commands_store", "save",
                  "_split_commands", "_fill_words_store"):
         setattr(d, name, types.MethodType(getattr(WordsTab, name), d))
@@ -418,7 +419,6 @@ def test_an_update_doesnt_start_when_the_changes_couldnt_be_saved(monkeypatch):
     shown = []
     answer = SimpleNamespace(run=lambda: P.Gtk.ResponseType.YES, destroy=lambda: None,
                              format_secondary_text=lambda text: None)
-    monkeypatch.setattr(P, "message_dialog", lambda **kw: answer)
     monkeypatch.setattr("tuxtalk.ui_style.message_dialog", lambda **kw: answer)
     monkeypatch.setattr(update_checker, "get_install_type", lambda: "appimage")
     monkeypatch.setattr(update_checker, "get_update_guidance",
@@ -441,7 +441,6 @@ def test_an_update_saves_the_snippets_first(monkeypatch):
     saved = []
     answer = SimpleNamespace(run=lambda: P.Gtk.ResponseType.YES, destroy=lambda: None,
                              format_secondary_text=lambda text: None)
-    monkeypatch.setattr(P, "message_dialog", lambda **kw: answer)
     monkeypatch.setattr("tuxtalk.ui_style.message_dialog", lambda **kw: answer)
     monkeypatch.setattr(update_checker, "get_install_type", lambda: "appimage")
     monkeypatch.setattr(update_checker, "get_update_guidance",

@@ -15,6 +15,8 @@ import gtk_text  # noqa: E402
 from tuxtalk import mic_stream  # noqa: E402
 from tuxtalk.mic_test import MicTest  # noqa: E402
 from tuxtalk.prefs import PreferencesWindow  # noqa: E402
+from tuxtalk.prefs_advanced import AdvancedTab  # noqa: E402
+from tuxtalk.prefs_audio import AudioTab  # noqa: E402
 from tuxtalk.prefs_type_at_pause import TypeAtPause  # noqa: E402
 
 
@@ -48,9 +50,12 @@ def win(monkeypatch):
 
     w.update_config = update_config
     w.get_selected_device_idx = lambda: 3
-    w.audio_tab = SimpleNamespace(mic_test=MicTest(lambda: 3, lambda title, text: None))
+    w.audio_tab = AudioTab(w)
+    w.audio_tab.mic_test = MicTest(lambda: 3, lambda title, text: None)
     tap = TypeAtPause(w)
-    w.advanced_tab = SimpleNamespace(type_at_pause=tap)
+    w.advanced_tab = AdvancedTab(w)
+    w.advanced_tab.type_at_pause = tap
+    w._tabs = [(w.audio_tab, Gtk.ScrolledWindow()), (w.advanced_tab, Gtk.ScrolledWindow())]
     tap.streams = []
 
     def factory(**kwargs):
@@ -60,7 +65,7 @@ def win(monkeypatch):
 
     tap._pause_stream_factory = factory
     tap.grid = Gtk.Grid()
-    tap.build(tap.grid, 0, 20, lambda text: Gtk.Label(label=text))
+    tap.build(tap.grid, 0)
     return tap
 
 
@@ -148,7 +153,7 @@ def test_the_test_opens_the_chosen_mic_and_shows_what_it_hears(win):
 def test_closing_preferences_stops_the_test(win):
     win.tap_check.set_active(True)
     win.tap_test_btn.clicked()
-    win.win._stop_mic_test()                 # what OK, Cancel and the X all call
+    win.win._stop_tests(closing=True)       # what OK, Cancel and the X all call
     assert win.streams[-1].stopped and win.streams[-1].closed
     assert win.tap_test_btn.get_label() == "Test"
 
@@ -247,7 +252,10 @@ def test_a_microphone_that_never_stops_doesnt_freeze_the_window(win, monkeypatch
     monkeypatch.setattr(mic_stream, "_closing", set())
     release = slow_to_stop(win)
     win.tap_check.set_active(True)
-    for count, stop in ((1, win.tap_test_btn.clicked), (2, win.win._stop_mic_test)):
+
+    def closing():
+        win.win._stop_tests(closing=True)
+    for count, stop in ((1, win.tap_test_btn.clicked), (2, closing)):
         win.tap_test_btn.clicked()
         assert opened(win, count)
         started = time.monotonic()
@@ -302,7 +310,7 @@ STOP_PATHS = {
         Gtk.ScrolledWindow(), 1),
     "hiding the settings": lambda win: win.tap_fold.button.clicked(),
     "turning it off": lambda win: win.tap_check.set_active(False),
-    "closing Preferences": lambda win: win.win._stop_mic_test(),
+    "closing Preferences": lambda win: win.win._stop_tests(closing=True),
 }
 
 

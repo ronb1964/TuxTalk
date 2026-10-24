@@ -7,8 +7,10 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk
 
+from .desktop_detect import is_gnome
 from .logger import setup_logger
-from .prefs_tab import WARNING_AMBER, Tab, fold, on_gnome, progress_window, subheading
+from .prefs_tab import (WARNING_AMBER, Tab, fold, run_with_progress,
+                        subheading)
 from .ui_style import message_dialog, show_message
 from .whisper_vulkan import ENGINE_SIZE_TEXT
 
@@ -46,6 +48,7 @@ def _hide_widgets(*widgets):
     for w in widgets:
         w.set_no_show_all(True)
         w.hide()
+
 
 _READY = "✓ Ready"
 
@@ -145,7 +148,6 @@ class SystemCheck(Tab):
         """The graphics card: what TuxTalk found, and CUDA's state; returns the next row."""
         check.attach(subheading("Graphics card"), 0, crow, 2, 1)
         crow += 1
-        # GPU Status Label
         self.gpu_status_label = Gtk.Label(label="Checking...", xalign=0)
         self.gpu_status_label.set_margin_start(10)
         check.attach(self.gpu_status_label, 0, crow, 2, 1)
@@ -161,7 +163,7 @@ class SystemCheck(Tab):
         crow += 1
 
         # The light alternative to CUDA (and the only GPU route on AMD / Intel).
-        if self.win._vulkan_offered():
+        if self.win.vulkan_offered():
             vulkan_hint = Gtk.Label(xalign=0)
             vulkan_hint.set_line_wrap(True)
             vulkan_hint.set_margin_start(10)
@@ -174,7 +176,6 @@ class SystemCheck(Tab):
             check.attach(vulkan_hint, 0, crow, 2, 1)
             crow += 1
 
-        # Initial GPU check
         GLib.timeout_add(500, self._initial_gpu_check)
         return crow
 
@@ -198,7 +199,6 @@ class SystemCheck(Tab):
             check.attach(typing_note, 0, crow, 2, 1)
             crow += 1
         else:
-            # Typing Status Label
             self.typing_status_label = Gtk.Label(label="Checking...", xalign=0)
             # Wrapped: "Working, through the 'input' group…" would widen the window.
             self.typing_status_label.set_line_wrap(True)
@@ -208,11 +208,9 @@ class SystemCheck(Tab):
             check.attach(self.typing_status_label, 0, crow, 2, 1)
             crow += 1
 
-            # Button box for Typing actions
             typing_button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
             typing_button_box.set_margin_start(10)
 
-            # Fix Typing button
             self.fix_typing_button = Gtk.Button(label=FIX_TYPING_LABEL)
             self.fix_typing_button.connect("clicked", self._on_fix_typing_clicked)
             self.fix_typing_button.get_child().set_xalign(0.5)
@@ -224,11 +222,9 @@ class SystemCheck(Tab):
             self.fix_typing_button.set_sensitive(False)
             typing_button_box.pack_start(self.fix_typing_button, False, False, 0)
 
-
             check.attach(typing_button_box, 0, crow, 2, 1)
             crow += 1
 
-            # Initial typing check
             GLib.timeout_add(600, self._initial_typing_check)
         return crow
 
@@ -243,18 +239,15 @@ class SystemCheck(Tab):
         check.attach(extension_header, 0, crow, 2, 1)
         crow += 1
 
-        # Extension Status Label
         self.extension_status_label = Gtk.Label(label="Checking...", xalign=0)
         self.extension_status_label.set_margin_start(10)
         self.extension_status_label.set_margin_bottom(10)
         check.attach(self.extension_status_label, 0, crow, 2, 1)
         crow += 1
 
-        # Button box for Extension actions
         ext_button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         ext_button_box.set_margin_start(10)
 
-        # Install Extension button
         self.install_extension_button = Gtk.Button(label="Install Extension")
         self.install_extension_button.connect("clicked", self._on_install_extension_clicked)
         self.install_extension_button.get_child().set_xalign(0.5)
@@ -265,7 +258,6 @@ class SystemCheck(Tab):
         self.install_extension_button.set_sensitive(False)
         ext_button_box.pack_start(self.install_extension_button, False, False, 0)
 
-        # Uninstall Extension button
         self.uninstall_extension_button = Gtk.Button(label="Uninstall Extension")
         self.uninstall_extension_button.connect("clicked", self._on_uninstall_extension_clicked)
         self.uninstall_extension_button.get_child().set_xalign(0.5)
@@ -273,7 +265,6 @@ class SystemCheck(Tab):
         self.uninstall_extension_button.set_sensitive(False)
         ext_button_box.pack_start(self.uninstall_extension_button, False, False, 0)
 
-        # Restart GNOME Shell info button
         self.restart_info_button = Gtk.Button(label="Restart Info")
         self.restart_info_button.connect("clicked", self._on_restart_info_clicked)
         self.restart_info_button.get_child().set_xalign(0.5)
@@ -284,8 +275,7 @@ class SystemCheck(Tab):
         check.attach(ext_button_box, 0, crow, 2, 1)
         crow += 1
 
-
-        if on_gnome():
+        if is_gnome():
             GLib.timeout_add(500, self._initial_extension_check)
         else:
             _hide_widgets(extension_header, self.extension_status_label, ext_button_box)
@@ -318,7 +308,7 @@ class SystemCheck(Tab):
         """Show the NVIDIA card and whether CUDA's files are installed."""
         try:
             from . import cuda_helper
-            gpu_name = self.win._nvidia_gpu()
+            gpu_name = self.win.nvidia_gpu()
             # TuxTalk's own download only, not a system-wide CUDA install
             has_cuda = cuda_helper.has_talktype_cuda_libraries()
 
@@ -372,7 +362,8 @@ class SystemCheck(Tab):
         return ok
 
     def _on_fix_typing_clicked(self, button):
-        """Handle Fix Typing button click."""
+        """Fix Typing (or Switch to / Update the hotkey helper): say what it
+        does, then run it with the admin password, off the GTK thread."""
         if button.get_label() == LEAVE_GROUP_LABEL:
             self._leave_input_group(button)
             return
@@ -383,15 +374,9 @@ class SystemCheck(Tab):
             note = secure_input.fallback_note()     # on the "input" group path
             switching = button.get_label() == SWITCH_TO_HELPER_LABEL
             updating = button.get_label() == UPDATE_HELPER_LABEL
-            dialog = message_dialog(
-                transient_for=self.window,
-                flags=0,
-                message_type=Gtk.MessageType.QUESTION,
-                buttons=Gtk.ButtonsType.YES_NO,
-                text=("Switch to the hotkey helper?" if switching
-                      else "Configure Typing Permissions?")
-            )
-            dialog.format_secondary_text(
+            response = show_message(
+                self.window, Gtk.MessageType.QUESTION,
+                "Switch to the hotkey helper?" if switching else "Configure Typing Permissions?",
                 ("This sets TuxTalk up so the hotkeys and typing work without the "
                  "'input' group, and takes you out of that group, so other programs "
                  "can't read your keyboard. (If another program you use needs the "
@@ -408,16 +393,11 @@ class SystemCheck(Tab):
                    "effect. Logging out and back in is often not enough — a "
                    "background session can keep the old permissions alive.\n\n"
                    if restarts else "No restart is needed.\n\n")
-                + "Continue?"
-            )
-            
-            response = dialog.run()
-            dialog.destroy()
-            
+                + "Continue?",
+                buttons=Gtk.ButtonsType.YES_NO)
             if response != Gtk.ResponseType.YES:
                 return
-            
-            # Disable button during fix
+
             button.set_sensitive(False)
             button.set_label("Setting up...")
         except Exception as e:
@@ -591,17 +571,9 @@ class SystemCheck(Tab):
             return False
 
     def _set_restart_info_sensitive(self, sensitive):
-        """Enable/disable the Restart Info button.
-
-        Separate helper because the button is created in a different tab from
-        the status check that governs it. It is off on desktops with no GNOME
-        Shell to restart.
-        """
-        button = getattr(self, "restart_info_button", None)
-        if button is None:
-            return
-        button.set_sensitive(sensitive)
-        button.set_tooltip_text(
+        """Restart Info works only where there's a GNOME Shell to restart."""
+        self.restart_info_button.set_sensitive(sensitive)
+        self.restart_info_button.set_tooltip_text(
             "How to restart GNOME Shell to activate extension"
             if sensitive
             else "Only applies to GNOME Shell, which this desktop is not running"
@@ -633,27 +605,10 @@ class SystemCheck(Tab):
         """Download and install the extension with a progress window, then
         say how to make GNOME load it."""
         from . import extension_helper
-        dialog, status_label, progress_bar = progress_window(
-            self.window, "Installing Extension", "Preparing installation...")
         button.set_sensitive(False)
 
-        def progress(message, percent):
-            """From the download thread: the window's line and bar."""
-            def update_ui():
-                status_label.set_text(message)
-                progress_bar.set_fraction(percent / 100.0)
-                progress_bar.set_text(f"{percent}%")
-                return False
-            GLib.idle_add(update_ui)
-
-        def work():
-            """On its own thread: the download and install."""
-            success = extension_helper.download_and_install_extension(progress)
-            GLib.idle_add(finish, success)
-
         def finish(success):
-            """Back on the GTK thread: what to do next, or why it failed."""
-            dialog.destroy()
+            """What to do next, or why it failed."""
             if success:
                 self._check_extension_status()
                 done = message_dialog(
@@ -673,46 +628,31 @@ class SystemCheck(Tab):
                 show_message(self.window, Gtk.MessageType.ERROR, "Installation Failed",
                              "Failed to install GNOME extension.\n\n"
                              "Please check your internet connection and try again.")
-            return False
 
-        threading.Thread(target=work, daemon=True).start()
+        run_with_progress(self.window, "Installing Extension", "Preparing installation...",
+                          extension_helper.download_and_install_extension, finish)
 
     def _on_uninstall_extension_clicked(self, button):
-        """Handle Uninstall Extension button click."""
+        """Remove the GNOME extension, once the user says yes."""
         from . import extension_helper
-
-        # Show confirmation dialog
-        dialog = message_dialog(
-            transient_for=self.window,
-            flags=0,
-            message_type=Gtk.MessageType.WARNING,
-            buttons=Gtk.ButtonsType.YES_NO,
-            text="Uninstall GNOME Extension?"
-        )
-        dialog.format_secondary_text(
+        response = show_message(
+            self.window, Gtk.MessageType.WARNING, "Uninstall GNOME Extension?",
             "This will remove the TuxTalk GNOME Shell extension.\n\n"
             "The main TuxTalk application will continue to work normally.\n\n"
-            "Uninstall?"
-        )
-
-        response = dialog.run()
-        dialog.destroy()
-
+            "Uninstall?",
+            buttons=Gtk.ButtonsType.YES_NO)
         if response == Gtk.ResponseType.YES:
             success = extension_helper.uninstall_extension()
 
             if success:
-                # Refresh extension status
                 self._check_extension_status()
 
-                # Show success message
                 show_message(self.window,
                              Gtk.MessageType.INFO,
                              "Extension Uninstalled",
                              "The GNOME extension has been removed.\n\n"
                              "To finish: " + extension_reload_steps())
             else:
-                # Show error
                 show_message(self.window,
                              Gtk.MessageType.ERROR,
                              "Uninstall Failed",

@@ -1,7 +1,7 @@
 """Type at pause: the live test in Preferences (TuxTalk Labs), minus GTK.
 
 Preferences streams the microphone into a PauseTest and draws what it reports
-on a PauseMeter (prefs.py). Kept apart from the window so it can be tested
+on a PauseMeter (prefs_type_at_pause.py). Kept apart from the window so it can be tested
 with synthetic audio, without a display or a microphone.
 """
 import math

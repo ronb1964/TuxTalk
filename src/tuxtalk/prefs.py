@@ -34,6 +34,7 @@ PREFS_STYLE_CLASS = "talktype-prefs"
 
 logger = setup_logger(__name__)
 
+
 def _coerce_config_types(config: dict) -> dict:
     """*config* read as the service reads it (config.apply_toml, then
     config.repaired): a hand-edited config can hold '5' for 5, and
@@ -113,7 +114,8 @@ class PreferencesWindow:
         self.window.present()
 
     def _load_css(self):
-        """Load custom CSS stylesheet for preferences window ONLY (not globally)."""
+        """Preferences' stylesheet (prefs_style.css): installed for the whole
+        screen, as GTK needs, and scoped to this window by its style class."""
         # Dropdown list mode must be installed screen-wide: a provider on this
         # window's context does not reach its child combos, so it cannot ride
         # along with prefs_style.css below.
@@ -159,7 +161,7 @@ class PreferencesWindow:
 
         return _coerce_config_types(defaults)
 
-    def _check_cuda_availability(self):
+    def cuda_files_present(self):
         """Whether CUDA libraries (downloaded or system-wide) are present."""
         try:
             from . import cuda_helper
@@ -168,7 +170,7 @@ class PreferencesWindow:
             logger.warning(f"Could not check for CUDA's files: {e}")
             return False
 
-    def _nvidia_gpu(self):
+    def nvidia_gpu(self):
         """The NVIDIA card's name (or True in a Flatpak), False if there is none.
 
         Asked once per window: nvidia-smi runs on the GTK thread and can take
@@ -183,11 +185,11 @@ class PreferencesWindow:
                 self._nvidia_found = False
         return self._nvidia_found
 
-    def _has_nvidia(self):
+    def has_nvidia(self):
         """Whether this computer has an NVIDIA card."""
-        return bool(self._nvidia_gpu())
+        return bool(self.nvidia_gpu())
 
-    def _vulkan_offered(self):
+    def vulkan_offered(self):
         """Whether Vulkan is offered on this computer (whisper_vulkan.is_offered)."""
         try:
             from . import whisper_vulkan
@@ -300,12 +302,18 @@ class PreferencesWindow:
     def _build_tabs(self):
         """The notebook with every tab, each in a scroll of its own."""
         notebook = self.notebook = Gtk.Notebook()
+        self._tabs = []     # (tab, its page)
+
+        def add(tab, label, page):
+            notebook.append_page(page, Gtk.Label(label=label))
+            self._tabs.append((tab, page))
+
         self.general_tab = GeneralTab(self)
         self.audio_tab = AudioTab(self)
         self.advanced_tab = AdvancedTab(self)
         for tab, label in ((self.general_tab, "General"), (self.audio_tab, "Audio"),
                            (self.advanced_tab, "Advanced")):
-            notebook.append_page(self._scrollable_tab(tab.build()), Gtk.Label(label=label))
+            add(tab, label, self._scrollable_tab(tab.build()))
 
         # Words tab (Your Words and the snippets). Its lists have scrolls of
         # their own, which the wheel must still reach, so the page scroll leaves
@@ -314,12 +322,12 @@ class PreferencesWindow:
         self.words_tab = WordsTab(self)
         words_page = self._scrollable_tab(self.words_tab.build(), capture_wheel=False)
         words_page.set_propagate_natural_height(True)
-        notebook.append_page(words_page, Gtk.Label(label="Words"))
+        add(self.words_tab, "Words", words_page)
 
         self.stats_tab = StatsTab(self)
         self.updates_tab = UpdatesTab(self)
         for tab, label in ((self.stats_tab, "Stats"), (self.updates_tab, "Updates & Backup")):
-            notebook.append_page(self._scrollable_tab(tab.build()), Gtk.Label(label=label))
+            add(tab, label, self._scrollable_tab(tab.build()))
         # Connected once every tab is built: appending the first page shows it.
         notebook.connect("switch-page", self.on_tab_switched)
         return notebook
@@ -490,24 +498,23 @@ class PreferencesWindow:
         from .config import find_input_device
         return find_input_device(self.config.get("mic", ""))
 
-    def _stop_mic_test(self):
-        """The window closes: stop the microphone tests and free the mic."""
-        self.audio_tab.mic_test.close()
-        self._stop_pause_test(wait=True)
+    def _stop_tests(self, closing=False, shown=None):
+        """Stop the microphone tests of every tab but the one on page
+        *shown* (Tab.stop); *closing*: the window closes, so free the mic."""
+        for tab, page in self._tabs:
+            if page is not shown:
+                tab.stop(closing)
+
+    def refresh_gpu_status(self):
+        """Something was installed for the graphics card: the System check says so."""
+        self.advanced_tab.system_check.check_gpu_status()
 
     def _on_window_active(self, window, _param):
         """Going off to another window is going off to dictate: a microphone
         test still holding a direct hw: mic, or about to open it, would make
-        that dictation fail with only a beep, so both tests stop."""
+        that dictation fail with only a beep, so the tests stop."""
         if not window.is_active():
-            self.audio_tab.mic_test.stop()
-            self._stop_pause_test()
-
-    def _stop_pause_test(self, wait=False):
-        """Stop Type at pause's live test, where its Labs entry is built (not
-        on the Flatpak). *wait*: TypeAtPause.stop_test's."""
-        if self.advanced_tab.type_at_pause is not None:
-            self.advanced_tab.type_at_pause.stop_test(wait)
+            self._stop_tests()
 
     def _show_save_error(self):
         """Say the settings weren't saved, and why (disk full, read-only
@@ -523,7 +530,7 @@ class PreferencesWindow:
 
     def _release(self):
         """The window closes: stop the microphone tests and let go of the pidfile."""
-        self._stop_mic_test()
+        self._stop_tests(closing=True)
         prefs_ipc.release_pidfile()
 
     def on_window_close(self, widget, event):
@@ -619,13 +626,9 @@ class PreferencesWindow:
         service updates while this window is open, and stop the microphone
         test of the tab left: it holds the mic."""
         page.get_vadjustment().set_value(0)     # each page is a _scrollable_tab
-        tab = notebook.get_tab_label_text(page)
-        if tab == "Stats":
+        if notebook.get_tab_label_text(page) == "Stats":
             self.stats_tab.refresh()
-        if tab != "Audio":
-            self.audio_tab.mic_test.stop()
-        if tab != "Advanced":
-            self._stop_pause_test()
+        self._stop_tests(shown=page)
 
     def _save_and_download(self):
         """Save the settings, then download what the chosen model needs:

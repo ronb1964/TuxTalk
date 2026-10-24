@@ -10,12 +10,12 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Pango", "1.0")
 from gi.repository import GLib, Gtk, Pango
 
+from .desktop_detect import is_gnome
 from .logger import setup_logger
-from .prefs_tab import WARNING_AMBER, Tab, dropdown, on_gnome, progress_window
+from .prefs_tab import WARNING_AMBER, Tab, dropdown, run_with_progress
 from .ui_style import show_message
 
 logger = setup_logger(__name__)
-
 
 
 def _header(markup):
@@ -117,8 +117,9 @@ class UpdatesTab(Tab):
                              f"{settings_backup.KEEP}). Go back to one if a change or an "
                              f"update went wrong."), False, False, 0)
         row = _indented(Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10))
-        self.earlier_combo = Gtk.ComboBoxText()
-        dropdown(self.earlier_combo)
+        self.earlier_combo = dropdown(Gtk.ComboBoxText())
+        # Named by the heading above it, for a screen reader.
+        self.earlier_combo.get_accessible().set_name("Earlier settings")
         row.pack_start(self.earlier_combo, False, False, 0)
         self.restore_btn = Gtk.Button(label="Restore")
         self.restore_btn.connect("clicked", self._on_restore_earlier_clicked)
@@ -357,7 +358,7 @@ class UpdatesTab(Tab):
         from . import update_checker
         row = _indented(Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10))
         versions = f"TuxTalk {update_checker.get_current_version()}"
-        if on_gnome():
+        if is_gnome():
             ext_version = update_checker.get_extension_version()
             versions += (f"  ·  GNOME extension {ext_version}" if ext_version
                          else "  ·  GNOME extension not installed")
@@ -418,7 +419,7 @@ class UpdatesTab(Tab):
             self.win.on_cancel(None)
 
     def _on_check_updates_clicked(self, button):
-        """Handle check for updates button click."""
+        """Check GitHub for a newer TuxTalk, off the GTK thread."""
         from . import update_checker
 
         # Update status and hide action buttons. The status box is hidden
@@ -440,7 +441,7 @@ class UpdatesTab(Tab):
         thread.start()
 
     def _handle_update_result(self, result, button):
-        """Handle update check result in main thread."""
+        """Show what the update check found (on the GTK thread)."""
         button.set_sensitive(True)
 
         if not result.get("success"):
@@ -462,7 +463,6 @@ class UpdatesTab(Tab):
 
         self._current_release = release
 
-        # Build status message
         if has_update:
             status_lines = [
                 "<span color='#4CAF50'><b>Update available!</b></span>",
@@ -474,7 +474,6 @@ class UpdatesTab(Tab):
                 f"TuxTalk {current} is the latest version."
             ]
 
-        # Add extension status
         if ext_current is not None:
             if has_ext_update:
                 status_lines.append(
@@ -519,7 +518,6 @@ class UpdatesTab(Tab):
             self.download_btn.hide()
             self.view_release_btn.hide()
 
-        # Show extension update button if extension update available
         if has_ext_update:
             self.update_extension_btn.show()
         else:
@@ -568,43 +566,26 @@ class UpdatesTab(Tab):
         window; on success the tray restarts TuxTalk, which closes this
         window too (update_ui.restart_via_tray)."""
         from . import update_checker
-        dialog, status_label, progress_bar = progress_window(
-            self.window, "Updating TuxTalk", "Starting download...")
-        failure = {"error": None}
 
-        def progress(message, percent):
-            GLib.idle_add(lambda: status_label.set_text(message))
-            GLib.idle_add(lambda: progress_bar.set_fraction(percent / 100.0))
-            GLib.idle_add(lambda: progress_bar.set_text(f"{percent}%"))
-
-        def work():
-            """On its own thread: the download, then the install."""
+        def work(progress):
+            """On its own thread: the download, then the install; (installed, why not)."""
             downloaded_path = update_checker.download_update(
                 url, filename, progress,
                 checksums_url=self._current_release.get("checksums_url"))
             if not downloaded_path:
-                failure["error"] = "Download failed"
-                GLib.idle_add(failed)
-                return
-            GLib.idle_add(lambda: status_label.set_text("Installing update..."))
-            GLib.idle_add(lambda: progress_bar.set_fraction(0.9))
-            success, message = update_checker.install_appimage_update(downloaded_path, progress)
+                return False, "Download failed"
+            progress("Installing update...", 90)
+            return update_checker.install_appimage_update(downloaded_path, progress)
+
+        def finish(result):
+            """Restart onto the update, or say in Update Status and in a
+            message that it didn't go in."""
+            success, error_msg = result or (False, None)
             if success:
-                GLib.idle_add(installed)
-            else:
-                failure["error"] = message
-                GLib.idle_add(failed)
-
-        def installed():
-            from . import update_ui
-            dialog.destroy()
-            update_ui.restart_via_tray()
-            return False
-
-        def failed():
-            """The update didn't go in: said in Update Status and in a message."""
-            dialog.destroy()
-            error_msg = failure.get("error") or "Unknown error"
+                from . import update_ui
+                update_ui.restart_via_tray()
+                return
+            error_msg = error_msg or "Unknown error"
             self.update_status_label.set_markup(
                 f"<span color='red'>Update failed: "
                 f"{GLib.markup_escape_text(str(error_msg))}</span>\n"
@@ -615,7 +596,7 @@ class UpdatesTab(Tab):
                          f"{error_msg}\n\n"
                          f"You can try again or download the update manually from GitHub.")
 
-        threading.Thread(target=work, daemon=True).start()
+        run_with_progress(self.window, "Updating TuxTalk", "Starting download...", work, finish)
 
     def _on_view_release_clicked(self, button):
         """Open the release page on GitHub."""
@@ -625,76 +606,22 @@ class UpdatesTab(Tab):
             update_checker.open_release_page(self._current_release["html_url"])
 
     def _on_update_extension_clicked(self, button):
-        """Handle Update Extension button click - downloads and installs latest extension."""
+        """Download and install the newest GNOME extension, with a progress window."""
         from . import extension_helper
 
-        # Create progress dialog
-        progress_dialog = Gtk.Dialog(
-            title="Updating Extension",
-            transient_for=self.window,
-            flags=Gtk.DialogFlags.MODAL
-        )
-        progress_dialog.set_default_size(350, 100)
-
-        content = progress_dialog.get_content_area()
-        content.set_spacing(10)
-        content.set_margin_start(20)
-        content.set_margin_end(20)
-        content.set_margin_top(20)
-        content.set_margin_bottom(10)
-
-        status_label = Gtk.Label(label="Downloading extension...")
-        status_label.set_halign(Gtk.Align.START)
-        content.pack_start(status_label, False, False, 0)
-
-        progress_bar = Gtk.ProgressBar()
-        progress_bar.set_show_text(True)
-        content.pack_start(progress_bar, False, False, 10)
-
-        progress_dialog.show_all()
-
-        success_holder = [False]
-
-        def progress_callback(message, percent):
-            """Update progress in main thread."""
-            def update_ui():
-                status_label.set_text(message)
-                progress_bar.set_fraction(percent / 100.0)
-                progress_bar.set_text(f"{percent}%")
-                return False
-            GLib.idle_add(update_ui)
-
-        def do_install():
-            """Background thread to install extension."""
-            success_holder[0] = extension_helper.download_and_install_extension(progress_callback)
-            GLib.idle_add(finish_install)
-
-        def finish_install():
-            """Finish up in main thread."""
-            progress_dialog.destroy()
-
-            if success_holder[0]:
-                # Success dialog
-                show_message(self.window,
-                             Gtk.MessageType.INFO,
-                             "Extension Updated!",
-                             "The GNOME extension has been updated.\n\n"
-                             "You need to log out and log back in for the changes to take effect.")
-
-                # Update UI to reflect new state
-                self.update_extension_btn.hide()
-                self.update_status_label.set_markup(
-                    "<span color='#4CAF50'>Extension updated!</span>\n"
-                    "Log out and log back in to activate the new version."
-                )
-            else:
-                # Error dialog
-                show_message(self.window,
-                             Gtk.MessageType.ERROR,
-                             "Update Failed",
+        def finish(success):
+            if not success:
+                show_message(self.window, Gtk.MessageType.ERROR, "Update Failed",
                              "Failed to update the GNOME extension.\n"
                              "Check the log file for details.")
+                return
+            show_message(self.window, Gtk.MessageType.INFO, "Extension Updated!",
+                         "The GNOME extension has been updated.\n\n"
+                         "You need to log out and log back in for the changes to take effect.")
+            self.update_extension_btn.hide()
+            self.update_status_label.set_markup(
+                "<span color='#4CAF50'>Extension updated!</span>\n"
+                "Log out and log back in to activate the new version.")
 
-        # Start installation in background
-        thread = threading.Thread(target=do_install, daemon=True)
-        thread.start()
+        run_with_progress(self.window, "Updating Extension", "Downloading extension...",
+                          extension_helper.download_and_install_extension, finish)

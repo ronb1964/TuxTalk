@@ -559,7 +559,7 @@ Preferences shows from 51 settings to about 26; keep it there:
   it opens ("Show more shortcuts", "Adjust Settings"), turning into "Hide …"
   when open, with a short dim summary beside it of what's inside or how it's
   set, and the settings sliding open right below. Build it with
-  `ui_style.Fold` (Preferences: `_fold`), never by hand; `tests/test_fold.py`
+  `ui_style.Fold` (Preferences: `prefs_tab.fold`), never by hand; `tests/test_fold.py`
   fails on any Gtk.Expander. This holds for every new fold, in Preferences and
   in any other window.
 - **An experiment goes in TuxTalk Labs**, off, until it's earned a place.

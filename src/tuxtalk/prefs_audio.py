@@ -73,8 +73,7 @@ class AudioTab(Tab):
     def _mic_dropdown(self):
         """System Default and each microphone plugged in now, showing the
         saved one."""
-        combo = Gtk.ComboBoxText()
-        dropdown(combo)
+        combo = dropdown(Gtk.ComboBoxText())
         combo.append("", "System Default")
         self._input_device_names = []
         try:
@@ -163,10 +162,17 @@ class AudioTab(Tab):
             logger.warning("Could not set the microphone's volume")
         return False
 
+    def stop(self, closing=False):
+        """Stop the microphone test; closing, free the microphone too."""
+        if closing:
+            self.mic_test.close()
+        else:
+            self.mic_test.stop()
+
     def _build_feedback(self, grid, row):
         """Audio & Visual Feedback: beeps, other sound, notifications and
         the recording indicator."""
-        row = section_header(grid, row, "Audio &amp; Visual Feedback")
+        row = section_header(grid, row, "Audio & Visual Feedback")
         grid.attach(self._setting_check(
             "beeps", "Play beeps for start/stop/ready",
             "Play audio beeps to confirm when recording starts, stops, and when "
@@ -199,12 +205,12 @@ class AudioTab(Tab):
             "its volume slider) and comes back after: Discord calls, games and anything\n"
             "pausing can't reach. A call still hears your microphone, so mute yourself there.\n"
             "A volume you change yourself in the meantime is left as you set it.")
-        combo = Gtk.ComboBoxText()
-        dropdown(combo)
+        combo = dropdown(Gtk.ComboBoxText())
         for sid, (label, _pause, _duck) in SOUND_CHOICES.items():
             combo.append(sid, label)
         combo.set_active_id(sound_choice(self.config))
         combo.connect("changed", self._on_sound_changed)
+        sound_label.set_mnemonic_widget(combo)
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         row.pack_start(sound_label, False, False, 0)
         row.pack_start(combo, False, False, 0)
