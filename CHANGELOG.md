@@ -31,6 +31,16 @@ before 0.15.0, so older entries use that name.
   all there, and a tab character pasted into a web form wouldn't have moved
   you anyway. "Send each dictation automatically" doesn't send a box you
   left with "press tab".
+- With "Send each dictation automatically" and Type at pause, a recording
+  that ended in a pause after you'd clicked into another window could press
+  Enter in that window. The Enter only goes where the text went now. On KDE
+  and GNOME that tells two windows of one app apart too, so two maximized
+  browser windows aren't mixed up, and moving a window while a send counts
+  down doesn't stop it any more. GNOME extension version 26.
+- In Claude Desktop a tab said in the middle of a dictation is four spaces
+  with Keystroke Typing too. It pressed the real Tab, which jumps to the Send
+  button. Saying only "press tab" in a password box there presses the real
+  Tab.
 
 ## [0.18.0] - 2026-10-23
 

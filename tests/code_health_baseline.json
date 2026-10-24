@@ -1,6 +1,6 @@
 {
  "files": {
-  "app.py": 5391,
+  "app.py": 5292,
   "prefs.py": 7120,
   "tray.py": 2548,
   "welcome_dialog.py": 3256
@@ -22,7 +22,6 @@
   "app.py::_build_vulkan_model::swallowed_error": 1,
   "app.py::_claim_desktop_hotkeys::swallowed_error": 1,
   "app.py::_deliver_text::long_line": 2,
-  "app.py::_deliver_text::swallowed_error": 1,
   "app.py::_device_name::swallowed_error": 1,
   "app.py::_edit_problem::swallowed_error": 1,
   "app.py::_edit_selection::long_line": 1,
@@ -35,7 +34,6 @@
   "app.py::_handle_spoken_edit::dated_comment": 1,
   "app.py::_handle_undo::long_line": 2,
   "app.py::_inject_key::long_line": 1,
-  "app.py::_inject_text::swallowed_error": 1,
   "app.py::_input_access_diagnosis::swallowed_error": 1,
   "app.py::_loop_evdev::swallowed_error": 1,
   "app.py::_mark_service_ready::swallowed_error": 1,
@@ -45,7 +43,6 @@
   "app.py::_paste_text::long_line": 1,
   "app.py::_paste_text::swallowed_error": 1,
   "app.py::_prepare_text::dated_comment": 1,
-  "app.py::_query_reported_window_class::swallowed_error": 1,
   "app.py::_rediscover_devices::swallowed_error": 1,
   "app.py::_report_undelivered::swallowed_error": 1,
   "app.py::_resample_audio::long_line": 1,
@@ -104,7 +101,6 @@
   "cuda_helper.py::show_cuda_download_dialog::long_line": 3,
   "custom_words.py::_joinable::long_line": 1,
   "custom_words.py::fix_spelling::long_line": 1,
-  "dbus_service.py::<module>::long_line": 1,
   "dbus_service.py::TuxTalkDBusService.CheckForUpdates.do_check::undocumented": 1,
   "dbus_service.py::TuxTalkDBusService.owns_name::swallowed_error": 1,
   "desktop_detect.py::_is_extension_enabled_via_dbus::swallowed_error": 1,
@@ -454,7 +450,6 @@
   "whisper_vulkan.py::VulkanWhisperModel.transcribe::long_line": 1,
   "whisper_vulkan.py::make_engine_download_func.download::undocumented": 1,
   "whisper_vulkan.py::model_path::swallowed_error": 1,
-  "window_geometry.py::_reported::swallowed_error": 1,
   "window_geometry.py::_x11_active_rect::swallowed_error": 1,
   "window_geometry.py::screen_monitors::swallowed_error": 1
  },
@@ -469,8 +464,8 @@
    "decisions": 24
   },
   "app.py::_deliver_text": {
-   "decisions": 48,
-   "lines": 237
+   "decisions": 47,
+   "lines": 229
   },
   "app.py::_edit_selection": {
    "decisions": 48,
@@ -508,7 +503,7 @@
   },
   "app.py::_transcribe_and_inject": {
    "decisions": 69,
-   "lines": 261
+   "lines": 259
   },
   "app.py::_transcribe_audio": {
    "decisions": 25,
