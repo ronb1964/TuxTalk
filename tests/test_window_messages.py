@@ -122,7 +122,7 @@ def test_the_tray_caches_the_geometry():
     from tuxtalk import dbus_service
     svc = object()
     dbus_service.TuxTalkDBusService.SetFocusedWindowGeometry(svc, "1,2,3,4|DP-6|0,0,10,10")
-    assert dbus_service.TuxTalkDBusService.GetFocusedWindowGeometry(svc) == "1,2,3,4|DP-6|0,0,10,10"
+    assert dbus_service.TuxTalkDBusService.GetFocusedWindow(svc)[-1] == "1,2,3,4|DP-6|0,0,10,10"
 
 
 # --- KDE and GNOME report it ------------------------------------------------------------------
@@ -235,28 +235,27 @@ class _FakeBus:
         return self.me
 
     def get_object(self, *a, **k):
+        import dbus
         self.asked.append(a)
-        raise AssertionError("should not call over D-Bus")
+        raise dbus.exceptions.DBusException("no tray in this test")
 
 
 def test_the_service_holding_the_name_reads_its_own_cache(monkeypatch):
     """Calling its own bus name from the GTK thread would wait out the timeout
     every time the indicator follows a window."""
-    import sys
-    import types
+    import dbus
     from tuxtalk import dbus_service
     bus = _FakeBus(":1.5", ":1.5")
-    monkeypatch.setitem(sys.modules, "dbus", types.SimpleNamespace(SessionBus=lambda: bus))
+    monkeypatch.setattr(dbus, "SessionBus", lambda: bus)
     monkeypatch.setattr(dbus_service, "_focused_window_geometry", "1,2,3,4|DP-6|0,0,10,10")
     assert wg._reported() == "1,2,3,4|DP-6|0,0,10,10"
     assert bus.asked == []
 
 
 def test_the_tray_is_asked_when_it_holds_the_name(monkeypatch):
-    import sys
-    import types
+    import dbus
     bus = _FakeBus(":1.2", ":1.5")
-    monkeypatch.setitem(sys.modules, "dbus", types.SimpleNamespace(SessionBus=lambda: bus))
+    monkeypatch.setattr(dbus, "SessionBus", lambda: bus)
     assert wg._reported() is None and len(bus.asked) == 1
 
 

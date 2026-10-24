@@ -6,7 +6,7 @@ A spoken "new line" stays Shift+Enter, which never sends a chat message.
 import numpy as np
 import pytest
 
-from tuxtalk import app, config, key_commands, send_countdown, window_classes
+from tuxtalk import app, config, focused_window, key_commands, send_countdown, window_classes
 from tuxtalk.key_commands import split_key_command
 
 
@@ -42,6 +42,7 @@ def _dictate(monkeypatch, raw, prepared=None, outcome="ok", window="brave-browse
     monkeypatch.setattr(app, "_handle_navigation", lambda *a, **k: False)
     monkeypatch.setattr(app, "_handle_fix_word", lambda *a, **k: False)
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: window)
+    monkeypatch.setattr(focused_window, "look", lambda: (window, None))
     monkeypatch.setattr(app, "_report_undelivered", lambda *a, **k: events.append("not delivered"))
 
     def inject(text, mode, t0):
@@ -233,6 +234,7 @@ def countdown(monkeypatch):
     monkeypatch.setattr(screen_message, "show_over_active_window",
                         lambda text, **kw: labels.append(text))
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "brave-browser")
+    monkeypatch.setattr(focused_window, "look", lambda: ("brave-browser", None))
     monkeypatch.setattr(app.state, "last_inserted_window", "brave-browser")
     TYPED.clear()
     monkeypatch.setattr(app, "_inject_text", lambda text, mode, t0: TYPED.append(text) or "ok")
@@ -276,6 +278,7 @@ def test_no_enter_into_another_window(countdown, monkeypatch):
     pressed, _ = countdown
     send_countdown.send_automatically("test")
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "konsole")
+    monkeypatch.setattr(focused_window, "look", lambda: ("konsole", None))
     sends()[0].fire()
     assert pressed == []
 
@@ -283,21 +286,19 @@ def test_no_enter_into_another_window(countdown, monkeypatch):
 def test_no_enter_into_another_window_of_the_same_app(countdown, monkeypatch):
     """Two Brave windows: the class is the same, the window isn't. The Enter
     would send whatever is in the other one's box."""
-    from tuxtalk import window_geometry
     pressed, labels = countdown
-    monkeypatch.setattr(window_geometry, "which_window", lambda: 0x3200007)
+    monkeypatch.setattr(focused_window, "look", lambda: ("brave-browser", 0x3200007))
     send_countdown.send_automatically("test")
-    monkeypatch.setattr(window_geometry, "which_window", lambda: 0x3400004)
+    monkeypatch.setattr(focused_window, "look", lambda: ("brave-browser", 0x3400004))
     sends()[0].fire()
     assert pressed == [] and labels[-1] == send_countdown.SWITCHED_WINDOW_NOTICE
 
 
 def test_a_window_not_known_at_the_send_still_sends(countdown, monkeypatch):
     """COSMIC, or a desktop that didn't answer: nothing says it's another window."""
-    from tuxtalk import window_geometry
     pressed, _ = countdown
     looks = iter([None, 0x3200007])
-    monkeypatch.setattr(window_geometry, "which_window", lambda: next(looks))
+    monkeypatch.setattr(focused_window, "look", lambda: ("brave-browser", next(looks)))
     send_countdown.send_automatically("test")
     sends()[0].fire()
     assert pressed == ["test"]
@@ -559,6 +560,7 @@ def test_no_space_into_another_window(countdown, monkeypatch):
     send_countdown.send_automatically("test", " ", "type")
     send_countdown.hold(announce=True)
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "konsole")
+    monkeypatch.setattr(focused_window, "look", lambda: ("konsole", None))
     send_countdown.type_owed_space()
     assert TYPED == []
 
@@ -588,6 +590,7 @@ def test_switching_windows_stops_the_countdown_at_once(countdown, monkeypatch):
     monkeypatch.setattr(send_countdown, "_delay", 4.0)
     send_countdown.send_automatically("test")
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "konsole")
+    monkeypatch.setattr(focused_window, "look", lambda: ("konsole", None))
     ticks = [t for t in FakeTimer.made if t.fn is send_countdown._count_down]
     ticks[0].fire()
     assert relabels == [send_countdown.SWITCHED_WINDOW_NOTICE]
@@ -601,6 +604,7 @@ def test_switching_in_the_last_second_says_not_sent(countdown, monkeypatch):
     pressed, labels = countdown
     send_countdown.send_automatically("test")
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "konsole")
+    monkeypatch.setattr(focused_window, "look", lambda: ("konsole", None))
     sends()[0].fire()
     assert pressed == [] and labels[-1] == send_countdown.SWITCHED_WINDOW_NOTICE
 

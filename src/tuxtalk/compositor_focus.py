@@ -4,12 +4,11 @@ and X11.
 Paste sends Ctrl+Shift+V to terminals (plain Ctrl+V is readline's
 quoted-insert there and shows nothing), and some Electron apps get typed
 instead of pasted. Both need the focused window's class; typing that waited,
-and an automatic send, need to know which window it is too (focused_window,
-window_geometry.which_window). GNOME's extension
-and KDE's KWin script push it to the tray; these compositors have nothing to
-push it, but each answers the question over a local socket. So the dictation
-service asks at paste time, when nobody has reported it (app.py,
-_query_focused_window_class).
+and an automatic send, need to know which window it is too. GNOME's
+extension and KDE's KWin script push both to the tray; these compositors
+have nothing to push them, but each answers the question over a local
+socket, so the dictation service asks them when nobody has reported it
+(focused_window.py).
 
   Sway / i3   i3 IPC on $SWAYSOCK or $I3SOCK: GET_TREE, then the focused node.
               A native Wayland window has an app_id; an XWayland one has the

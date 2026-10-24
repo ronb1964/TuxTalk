@@ -360,16 +360,16 @@ def fix_in_text(typed, fix, window):
     the replacement and steps forward again; nothing else is retyped. Not
     when another window than *window* has the focus (None: unknown, go
     ahead). True if done."""
-    from . import app
+    from . import app, focused_window
     start, end, replacement = fix
     time.sleep(_REFOCUS_S)
-    focused = app._query_focused_window_class()
+    focused = focused_window.window_class()
     if window and focused and focused != window:
         logger.info(f"Fix a Word: {focused!r} has the focus, not {window!r}; text left as it was")
         app._notify("Your text wasn't changed",
                     "The fix is saved, but another window had the focus.")
         return False
-    if app._focused_is_password():
+    if focused_window.is_password():
         logger.info("Fix a Word: a password field has the focus; text left as it was")
         app._notify("Your text wasn't changed",
                     "The fix is saved, but the cursor is in a password field.")

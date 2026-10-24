@@ -3,7 +3,7 @@
 see a word retyped by hand."""
 import pytest
 
-from tuxtalk import app, explain
+from tuxtalk import app, explain, focused_window
 
 
 @pytest.fixture
@@ -104,7 +104,7 @@ def test_fix_in_text_swaps_only_the_word(monkeypatch):
             return True
     monkeypatch.setattr(fw, "_REFOCUS_S", 0)
     monkeypatch.setattr(app, "_output_backend", lambda: Backend())
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.kwrite")
+    monkeypatch.setattr(focused_window, "window_class", lambda: "org.kde.kwrite")
     old = " Whose fleas was white. "                  # as typed, outer spaces and all
     core = old.strip()
     start = core.index("fleas")
@@ -127,7 +127,7 @@ def test_fix_in_text_leaves_another_window_alone(monkeypatch):
     from tuxtalk import fix_word_dialog as fw
     notices = []
     monkeypatch.setattr(fw, "_REFOCUS_S", 0)
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "firefox")
+    monkeypatch.setattr(focused_window, "window_class", lambda: "firefox")
     monkeypatch.setattr(app, "_notify", lambda t, m: notices.append(f"{t}\n{m}"))
     monkeypatch.setattr(app, "_output_backend", lambda: pytest.fail("typed into the wrong window"))
     assert fw.fix_in_text(" Hello. ", (0, 5, "Hi"), "org.kde.kwrite") is False
@@ -185,6 +185,6 @@ def test_a_fix_the_keyboard_dropped_partway_is_not_done(monkeypatch, keyboard):
     pytest.importorskip("gi")
     from tuxtalk import fix_word_dialog as fw
     monkeypatch.setattr(fw.time, "sleep", lambda s: None)
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.kwrite")
+    monkeypatch.setattr(focused_window, "window_class", lambda: "org.kde.kwrite")
     keyboard.fail_after = 3
     assert fw.fix_in_text(" Hello there. ", (0, 5, "Hi"), "org.kde.kwrite") is False

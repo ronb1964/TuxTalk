@@ -14,8 +14,9 @@ logger = setup_logger(__name__)
 
 
 # Cache of the currently focused window's wm_class, pushed by the GNOME
-# extension or the KWin focus script whenever focus changes. Read by app._paste_text to decide between
-# plain Ctrl+V (regular apps) and Ctrl+Shift+V (terminals).
+# extension or the KWin focus script whenever focus changes, for the
+# dictation service (focused_window.py): paste picks Ctrl+V or, in a
+# terminal, Ctrl+Shift+V by it.
 _focused_window_class: str | None = None
 # "x,y,w,h|output|ox,oy,ow,oh" from the same reporters (window_geometry.py).
 _focused_window_geometry: str = ""
@@ -24,6 +25,14 @@ _focused_window_geometry: str = ""
 # next window's. Its reports are left out, and so is the geometry sent after
 # each of them: the focus goes back to the window before it.
 _clipboard_tool_focused = False
+
+
+
+def focused_window():
+    """(class, frame) as GetFocusedWindow answers, for the dictation service
+    when it holds the bus name itself (no tray running)."""
+    return _focused_window_class or "", _focused_window_geometry
+
 
 # The bus identifiers, at module level so providers that fill the focused-window
 # cache (the GNOME extension's Python side, and kwin_focus on KDE) can name the
@@ -259,19 +268,12 @@ class TuxTalkDBusService(dbus.service.Object):
         if not _clipboard_tool_focused:
             _focused_window_geometry = str(geometry or "")
 
-    @dbus.service.method(DBUS_INTERFACE, out_signature='s')
-    def GetFocusedWindowGeometry(self):
-        """The cached geometry, for the dictation service's floating messages."""
-        return _focused_window_geometry
-
-    @dbus.service.method(DBUS_INTERFACE, out_signature='s')
-    def GetFocusedWindowClass(self):
-        """Return the currently focused window's wm_class (empty string if unknown).
-
-        Used by the dictation engine subprocess (tuxtalk.app) to read the cache
-        that the focus reporters push into this tray-side service.
-        """
-        return _focused_window_class or ''
+    @dbus.service.method(DBUS_INTERFACE, out_signature='ss')
+    def GetFocusedWindow(self):
+        """The focused window's class and frame, "" for what isn't known: the
+        cache the focus reporters push into, for the dictation service, which
+        runs in a process of its own (focused_window.py)."""
+        return focused_window()
 
     @dbus.service.method(DBUS_INTERFACE, out_signature='a(sss)')
     def GetPresets(self):

@@ -31,8 +31,9 @@ from . import config as config_module
 from .logger import setup_logger, redact_text
 from .recording_indicator import RecordingIndicator
 from .undo import detect_undo_command, calculate_undo_length
-from . import (delivery_notices, edit_notices, hallucinations, modifier_hotkeys,
-               send_countdown, virtual_keyboard)
+from . import (delivery_notices, edit_notices, focused_window, hallucinations,
+               modifier_hotkeys, send_countdown, virtual_keyboard)
+from .focused_window import window_class as _query_focused_window_class
 from .window_classes import (ELECTRON_PASTE_BROKEN_CLASSES, SMART_NEWLINE_CLASSES_LOWER,
                              app_kind, is_document_window, is_terminal_class)
 from .hotkey_keys import (MODIFIER_CODES, check_modifiers_held, keycode_from_name, keys_down,
@@ -1653,7 +1654,7 @@ def _send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY
     not go out another way (wtype, the clipboard) either. *claim* is
     virtual_keyboard.send's.
     """
-    before_press = modifier_hotkeys.wait_while_held(_destination)
+    before_press = modifier_hotkeys.wait_while_held(focused_window.destination)
     try:
         sent = virtual_keyboard.send(events, delay_ms, before_press, claim)
     except virtual_keyboard.StoppedPartway as stop:
@@ -1681,14 +1682,6 @@ class _KeysSent(threading.local):
 
 
 _keys_sent = _KeysSent()
-
-
-def _destination():
-    """Where keys go now: (the focused window's class and which window it
-    is (window_geometry.which_window), each None when not known, and whether
-    the cursor is in a password field)."""
-    from .window_geometry import which_window
-    return _query_focused_window_class(), which_window(), _focused_is_password()
 
 
 def _not_where_typed(focused) -> bool:
@@ -1785,7 +1778,7 @@ def _type_text(text: str) -> bool:
     field there raises PasswordFieldNow."""
     parts = text.split("\xa7SHIFT_ENTER\xa7")
     for i, part in enumerate(parts):
-        if i and _focused_is_password():
+        if i and focused_window.is_password():
             raise PasswordFieldNow()
         if part and not _type_text_raw(part):
             return False
@@ -1857,102 +1850,6 @@ def _type_text_raw(text: str) -> bool:
             logger.warning(f"Couldn't copy the text to the clipboard either: {e}")
     logger.error("Could not type text: no virtual keyboard, wtype or wl-copy")
     return False
-
-def _focused_is_password() -> bool:
-    """Whether the cursor is in a password field: one the accessibility bus
-    knows (atspi_helper), or the desktop's own password prompt."""
-    from . import atspi_helper
-    return atspi_helper.focused_is_password() or _password_prompt_has_focus()
-
-
-def _password_prompt_has_focus() -> bool:
-    """The desktop's own password prompt has the focus. KDE's and LXQt's are
-    polkit apps of their own, which only tell the accessibility bus with
-    accessibility switched on; their window says what they are. Cinnamon
-    and COSMIC draw theirs in the shell, over the app, which still counts as
-    focused while the prompt takes every key: there a waiting prompt is
-    enough (VMs, 2026-10-22). With no prompt waiting nothing is asked: this
-    runs before every typed line."""
-    waiting = _polkit_prompt_waiting()
-    if waiting is False:
-        return False
-    from .desktop_detect import get_desktop_environment
-    if waiting and get_desktop_environment() in ("cinnamon", "cosmic"):
-        return True
-    focused = _query_focused_window_class()
-    return focused is not None and any(word in focused.lower() for word in ("polkit", "policykit"))
-
-
-def _polkit_prompt_waiting() -> bool | None:
-    """Whether a polkit prompt waits for this user's password: while one
-    does, polkit-agent-helper-1 runs, on every desktop. Another user's,
-    logged in at the same time, doesn't count. None when /proc hides other
-    users' processes (hidepid), so it can't be told."""
-    if not os.path.exists("/proc/1"):
-        return None
-    with os.scandir("/proc") as entries:
-        for entry in entries:
-            if not entry.name.isdigit():
-                continue
-            try:
-                with open(f"/proc/{entry.name}/comm") as f:
-                    if f.read().strip() != "polkit-agent-he":   # comm keeps 15 characters
-                        continue
-                with open(f"/proc/{entry.name}/status") as f:
-                    uid = next(int(line.split()[1]) for line in f if line.startswith("Uid:"))
-            except (OSError, StopIteration, ValueError):
-                continue    # a process that ended meanwhile
-            # Set-user-ID root, so the real user is whoever it asks for; a
-            # socket-activated one (polkit 124 and later) runs as root itself.
-            if uid in (os.getuid(), 0):
-                return True
-    return False
-
-
-def _query_focused_window_class() -> str | None:
-    """The focused window's wm_class (or Wayland app_id), or None if unknown.
-
-    The GNOME extension and the KWin script (kwin_focus.py) push it to the
-    tray, which we ask over D-Bus. Sway, i3, Hyprland and niri have nothing
-    to push it, so when the tray doesn't know, the compositor is asked
-    directly (compositor_focus.py).
-
-    TuxTalk's own windows count as unknown: a stale report of Preferences
-    must not pick the paste shortcut for the app the user is really in. So
-    does wl-copy's brief window, which the tray already leaves out of its
-    reports.
-    """
-    from .desktop_identity import is_clipboard_tool_class, is_own_window_class
-    reported = _query_reported_window_class()
-    if reported and not is_own_window_class(reported):
-        return reported
-    from .compositor_focus import focused_class
-    asked = focused_class()
-    return None if is_own_window_class(asked) or is_clipboard_tool_class(asked) else asked
-
-
-def _query_reported_window_class() -> str | None:
-    """Query the tray's D-Bus service for the currently focused window's wm_class.
-
-    This process is a subprocess of the tray, which owns the D-Bus service and
-    receives the focus updates, so it is asked across processes. Returns None
-    if the class is unknown or D-Bus is unavailable.
-    """
-    try:
-        # The shared, introspect-free proxy with a short timeout: this runs
-        # between the hotkey release and the text appearing, and it is only a
-        # hint for choosing the paste shortcut, so a fast "don't know" beats a
-        # slow answer.
-        proxy = _get_tray_dbus_proxy()
-        result = proxy.GetFocusedWindowClass(
-            dbus_interface="io.github.ronb1964.TalkType",
-            timeout=_TRAY_DBUS_TIMEOUT,
-        )
-        s = str(result) if result else ""
-        return s if s else None
-    except Exception as e:
-        logger.debug(f"Focused window class query failed: {e}")
-        return None
 
 
 def _send_paste_keystroke(focused_class: str | None, primary_holds_text: bool = False) -> bool:
@@ -2656,7 +2553,7 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
     as Shift+Enter, since a plain Enter would send a chat message; that holds
     for every typed line break, not only voice editing's.
     """
-    if _focused_is_password():
+    if focused_window.is_password():
         return "password_field"
     # Which window this text goes into, so select and move by voice only
     # trusts "what I just said" in that same window.
@@ -2697,7 +2594,7 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
             if marker in unified:
                 parts = unified.split(marker)
                 for i, part in enumerate(parts):
-                    if i and _focused_is_password():
+                    if i and focused_window.is_password():
                         success, password_field = False, True
                         break
                     if part and not _type_text_raw(part):
@@ -2772,7 +2669,7 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
         resume_at = None
         needs_break = password_field = False
         for i, part in enumerate(parts):
-            if i and _focused_is_password():
+            if i and focused_window.is_password():
                 resume_at, password_field = i, True
                 break
             if part:
@@ -3057,9 +2954,9 @@ def _report_undelivered(outcome: str, beeps_on: bool):
 
 
 def _refuse_password_field(beeps_on: bool) -> bool:
-    """True when the cursor is in a password field (_focused_is_password), after
+    """True when the cursor is in a password field (focused_window.is_password), after
     saying so (_password_field_refused)."""
-    if not _focused_is_password():
+    if not focused_window.is_password():
         return False
     _password_field_refused(beeps_on)
     return True
@@ -3173,7 +3070,7 @@ def _erase_typed(text: str) -> bool:
         return False
     # The AI that found the correction can take seconds, time enough to
     # click into a password field of the same window.
-    if _focused_is_password():
+    if focused_window.is_password():
         logger.info("Correction across a pause skipped: a password field has the focus")
         return False
     try:
@@ -3483,7 +3380,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # never sees them. Only "press enter" or "press tab" on its own still
         # presses the key: people type the password by hand, then say it to
         # log in, or move between the boxes.
-        if _focused_is_password():
+        if focused_window.is_password():
             state.pending_boundary, state.held_cue = None, ""
             if not key_only:
                 _password_field_refused(beeps_on)

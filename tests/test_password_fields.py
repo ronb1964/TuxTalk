@@ -14,7 +14,8 @@ import numpy as np
 import pytest
 from gi.repository import Gio, GLib
 
-from tuxtalk import app, atspi_helper, delivery_notices, history, screen_message, send_countdown
+from tuxtalk import (app, atspi_helper, delivery_notices, focused_window, history,
+                     screen_message, send_countdown)
 
 ACTIVE = 1 << atspi_helper._STATE_ACTIVE
 FOCUSED = 1 << atspi_helper._STATE_FOCUSED
@@ -22,7 +23,7 @@ SHOWING = 1 << atspi_helper._STATE_SHOWING
 PASSWORD = atspi_helper._ROLE_PASSWORD_TEXT
 TEXT = 61      # ATSPI_ROLE_TEXT
 # Taken before conftest swaps in a stand-in, which every test gets.
-REAL_PROMPT_WAITING = app._polkit_prompt_waiting
+REAL_PROMPT_WAITING = focused_window._polkit_prompt_waiting
 
 
 # --- the app: nothing typed, nothing kept ------------------------------------------
@@ -263,8 +264,8 @@ def test_the_desktops_own_password_prompt_gets_nothing(desktop, monkeypatch, des
                                                        focused, waiting, refused):
     from tuxtalk import desktop_detect
     monkeypatch.setattr(desktop_detect, "get_desktop_environment", lambda: desktop_name)
-    monkeypatch.setattr(app, "_polkit_prompt_waiting", lambda: waiting)
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: focused)
+    monkeypatch.setattr(focused_window, "_polkit_prompt_waiting", lambda: waiting)
+    monkeypatch.setattr(focused_window, "window_class", lambda: focused)
     dictate(monkeypatch)
     assert (desktop["typed"] == []) is refused
 
@@ -273,9 +274,9 @@ def test_with_no_prompt_waiting_the_focused_window_isnt_asked(desktop, monkeypat
     """The check runs before every typed line; asking the tray which window
     has the focus each time would slow typing down for nothing."""
     asked = []
-    monkeypatch.setattr(app, "_polkit_prompt_waiting", lambda: False)
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: asked.append(1))
-    assert app._password_prompt_has_focus() is False
+    monkeypatch.setattr(focused_window, "_polkit_prompt_waiting", lambda: False)
+    monkeypatch.setattr(focused_window, "window_class", lambda: asked.append(1))
+    assert focused_window._password_prompt_has_focus() is False
     assert asked == []
 
 

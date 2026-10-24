@@ -9,7 +9,7 @@ import socket
 
 import pytest
 
-from tuxtalk import app, hotkey_helper as hh
+from tuxtalk import app, focused_window, hotkey_helper as hh
 from tuxtalk.hotkey_helper_client import HelperKeyboard, connect_helper, watch_specs
 from tuxtalk.hotkey_keys import track_modifier
 from test_hotkey_helper import FakeKeyboard
@@ -198,7 +198,7 @@ def right_ctrl(rig, keyboard, monkeypatch):
     for name, value in (("_noted", ([], frozenset())), ("_hidden", (frozenset(), ())),
                         ("_stuck", set()), ("time", keyboard.clock)):
         monkeypatch.setattr(modifier_hotkeys, name, value)
-    monkeypatch.setattr(app, "_destination", lambda: ("kwrite", False))
+    monkeypatch.setattr(focused_window, "destination", lambda: ("kwrite", False))
     modifier_hotkeys.note([client], RCTRL, F9)
     return lambda: app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
 

@@ -19,7 +19,8 @@ import subprocess
 
 import pytest
 
-from tuxtalk import app, clipboard, compositor_focus, dbus_service, desktop_identity
+from tuxtalk import (app, clipboard, compositor_focus, dbus_service, desktop_identity,
+                     focused_window)
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 EXT = ROOT / "gnome-extension" / "talktype@ronb1964.github.io"
@@ -50,33 +51,33 @@ def test_the_tray_does_not_keep_tuxtalks_own_window_as_the_focus(monkeypatch):
     monkeypatch.setattr(dbus_service, "_focused_window_class", "org.gnome.Ptyxis")
     service = object.__new__(dbus_service.TuxTalkDBusService)
     dbus_service.TuxTalkDBusService.SetFocusedWindowClass(service, "tuxtalk")
-    assert dbus_service.TuxTalkDBusService.GetFocusedWindowClass(service) == ""
+    assert dbus_service.TuxTalkDBusService.GetFocusedWindow(service)[0] == ""
 
 
-class _Tray:
-    def __init__(self, reported):
-        self.reported = reported
-
-    def GetFocusedWindowClass(self, **kw):
-        return self.reported
+def _reported(monkeypatch, wm_class, asked):
+    """The tray says *wm_class*; the compositor, asked, says *asked*."""
+    monkeypatch.setattr(focused_window, "reported", lambda timeout=None: (wm_class, ""))
+    monkeypatch.setattr(compositor_focus, "focused_window", lambda: (asked, None))
 
 
 def test_a_reported_tuxtalk_window_counts_as_unknown(monkeypatch):
     """An older extension still reports TuxTalk's windows."""
-    monkeypatch.setattr(app, "_get_tray_dbus_proxy", lambda: _Tray("tuxtalk"))
-    monkeypatch.setattr(compositor_focus, "focused_class", lambda: None)
+    _reported(monkeypatch, "tuxtalk", None)
     assert app._query_focused_window_class() is None
 
 
 def test_a_tuxtalk_window_from_the_compositor_counts_as_unknown(monkeypatch):
-    monkeypatch.setattr(app, "_get_tray_dbus_proxy", lambda: _Tray(""))
-    monkeypatch.setattr(compositor_focus, "focused_class", lambda: "Tuxtalk")
+    _reported(monkeypatch, "", "Tuxtalk")
     assert app._query_focused_window_class() is None
 
 
-def test_a_reported_tuxtalk_window_still_asks_the_compositor(monkeypatch):
-    monkeypatch.setattr(app, "_get_tray_dbus_proxy", lambda: _Tray("tuxtalk"))
-    monkeypatch.setattr(compositor_focus, "focused_class", lambda: "foot")
+def test_a_tuxtalk_window_the_tray_had_still_asks_the_compositor(monkeypatch):
+    """The tray keeps no class for TuxTalk's own window, so the compositor is asked."""
+    service = object.__new__(dbus_service.TuxTalkDBusService)
+    dbus_service.TuxTalkDBusService.SetFocusedWindowClass(service, "tuxtalk")
+    monkeypatch.setattr(focused_window, "reported",
+                        lambda timeout=None: dbus_service.focused_window())
+    monkeypatch.setattr(compositor_focus, "focused_window", lambda: ("foot", None))
     assert app._query_focused_window_class() == "foot"
 
 
@@ -184,10 +185,7 @@ class _TrayCache:
         dbus_service.TuxTalkDBusService.SetFocusedWindowGeometry(self.service, geometry)
 
     def geometry(self):
-        return dbus_service.TuxTalkDBusService.GetFocusedWindowGeometry(self.service)
-
-    def GetFocusedWindowClass(self, **kw):
-        return dbus_service.TuxTalkDBusService.GetFocusedWindowClass(self.service)
+        return dbus_service.TuxTalkDBusService.GetFocusedWindow(self.service)[-1]
 
 
 class _CopyReportingItsWindow(_Copy):
@@ -206,8 +204,9 @@ def tray(monkeypatch):
     monkeypatch.setattr(dbus_service, "_focused_window_geometry", "")
     monkeypatch.setattr(dbus_service, "_clipboard_tool_focused", False)
     tray = _TrayCache()
-    monkeypatch.setattr(app, "_get_tray_dbus_proxy", lambda: tray)
-    monkeypatch.setattr(compositor_focus, "focused_class", lambda: None)
+    monkeypatch.setattr(focused_window, "reported", lambda timeout=None: (
+        dbus_service.TuxTalkDBusService.GetFocusedWindow(tray.service)))
+    monkeypatch.setattr(compositor_focus, "focused_window", lambda: (None, None))
     return tray
 
 
@@ -236,8 +235,7 @@ def test_the_next_window_after_wl_copy_is_followed_again(tray):
 
 def test_wl_copys_window_from_the_compositor_counts_as_unknown(monkeypatch):
     """Sway, Hyprland and niri are asked directly, without the tray."""
-    monkeypatch.setattr(app, "_get_tray_dbus_proxy", lambda: _Tray(""))
-    monkeypatch.setattr(compositor_focus, "focused_class", lambda: WL_COPY)
+    _reported(monkeypatch, "", WL_COPY)
     assert app._query_focused_window_class() is None
 
 

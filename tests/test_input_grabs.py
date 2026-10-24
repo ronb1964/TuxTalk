@@ -658,19 +658,6 @@ def test_a_toggle_recording_survives_an_unrelated_keyboard_dropping_out(key_env)
     assert devices == [kb2]
 
 
-def test_focused_window_query_is_time_bounded(tray_proxy):
-    """Runs on the input thread during paste injection, between the user
-    releasing the hotkey and their text appearing, so neither building the
-    proxy nor the call may wait unbounded."""
-    app._query_focused_window_class()
-
-    assert tray_proxy.calls, "no D-Bus call was made"
-    name, kwargs = tray_proxy.calls[0]
-    assert name == "GetFocusedWindowClass"
-    assert "timeout" in kwargs, "unbounded call on the injection path"
-    assert kwargs["timeout"] <= 5
-
-
 # --- devices that come back must be picked up again -------------------------
 
 def test_a_device_that_returns_is_monitored_again(monkeypatch):

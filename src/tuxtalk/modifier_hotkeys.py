@@ -9,7 +9,7 @@ import time
 
 from evdev import ecodes
 
-from . import virtual_keyboard, window_geometry
+from . import focused_window, virtual_keyboard
 from .config import HOTKEY_CHOICES
 from .hotkey_keys import MODIFIER_CODES, keys_down
 from .logger import setup_logger
@@ -88,11 +88,11 @@ def wait_while_held(destination=None):
     raises virtual_keyboard.GaveUp("key_held"). wait_while_held itself
     returns None when neither is a dictation key.
 
-    *destination*, if given, says where the keys go (app._destination: the
+    *destination*, if given, says where the keys go (focused_window.destination: the
     focused window's class, which window it is, and whether the cursor is in
     a password field). It's asked when a wait starts and when it ends, and
     GaveUp("moved") stops the typing if the answers differ in a part both
-    know (window_geometry.changed): the checks made before typing began are
+    know (focused_window.changed): the checks made before typing began are
     out of date by then, and the user may have clicked into a password
     field meanwhile."""
     devices, modifiers = _noted
@@ -118,7 +118,7 @@ def wait_while_held(destination=None):
                 _give_up(still)
             time.sleep(0.02)
         _stuck.clear()
-        if destination and window_geometry.changed(where, destination()):
+        if destination and focused_window.changed(where, destination()):
             logger.info("Typing stopped: the window changed while it waited for the key")
             raise virtual_keyboard.GaveUp("moved")
 

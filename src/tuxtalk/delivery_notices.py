@@ -31,7 +31,7 @@ NOTICES = {
                 "in as shortcuts. It's saved in Recent Dictations in the TuxTalk menu: "
                 "click it to copy, then paste with Ctrl+V.",
     # On KDE and GNOME a window that moved or changed size counts too: there
-    # nothing else tells two windows of one app apart (window_geometry.which_window).
+    # nothing else tells two windows of one app apart (focused_window.py).
     "moved": "Another window or a password field took the focus, or the window moved or "
              "changed size, while TuxTalk waited for Right Ctrl or Right Alt to come up. "
              "The text is saved in Recent Dictations in the TuxTalk menu: click it to "

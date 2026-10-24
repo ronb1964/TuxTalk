@@ -146,15 +146,3 @@ def test_the_indicator_uses_its_configured_position_when_following(monkeypatch):
     ind = _Ind()
     ind.position = "top-right"
     assert ind._follow_target(200, 80) == ri.follow_position(WIN, 200, 80, MON, "top-right")
-
-
-def test_the_compositors_window_id_says_which_window_it_is(monkeypatch):
-    """On X11, Sway or Hyprland the id stays the same when the window moves or
-    is re-tiled; only KDE and GNOME fall back to where it is."""
-    from tuxtalk import compositor_focus
-    where = (Rect(0, 0, 800, 600), "DP-1", None)
-    monkeypatch.setattr(wg, "active_window_report", lambda: where)
-    monkeypatch.setattr(compositor_focus, "focused_window", lambda: ("XTerm", 0x2a00003))
-    assert wg.which_window() == 0x2a00003
-    monkeypatch.setattr(compositor_focus, "focused_window", lambda: (None, None))
-    assert wg.which_window() == where

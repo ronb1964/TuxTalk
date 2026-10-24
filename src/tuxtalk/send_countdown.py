@@ -13,7 +13,7 @@ typing and the questions about the focus are app.py's.
 import threading
 import time
 
-from . import virtual_keyboard, window_geometry
+from . import focused_window, virtual_keyboard
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -45,7 +45,7 @@ def send_automatically(why: str, space: str = "", injection_mode: str = "type") 
     if delay <= 0:
         app._press_key("ENTER", why)
         return
-    pending = {"window": _window(), "why": why,
+    pending = {"window": focused_window.look(), "why": why,
                "space": space, "mode": injection_mode}
     pending["timer"] = threading.Timer(delay, _send_when_due, args=(pending,))
     # The label counts down once a second: "Sending in 4 s", 3, 2, 1.
@@ -89,17 +89,11 @@ def _count_down(pending: dict, seconds_left: int) -> None:
     screen_message.relabel(LABEL_TAG, _label(seconds_left))
 
 
-def _window():
-    """The focused window: its class, and which window it is."""
-    from . import app
-    return app._query_focused_window_class(), window_geometry.which_window()
-
-
 def _focus_left(pending: dict) -> bool:
     """Whether another window than the one the text went to has the focus:
     another app, or another window of the same app where the desktop tells
-    them apart (window_geometry.which_window)."""
-    return window_geometry.changed(pending["window"], _window())
+    them apart (focused_window.py)."""
+    return focused_window.changed(pending["window"], focused_window.look())
 
 
 def _cancel_timers(pending: dict) -> None:
@@ -135,13 +129,12 @@ def _claim_send(pending: dict):
     to could send something else entirely. Returns what takes the send,
     right before the Enter goes down (virtual_keyboard.send's *claim*).
     Raises virtual_keyboard.GaveUp when it mustn't go."""
-    from . import app
     if _focus_left(pending):
         _refuse_send(pending, "another window has the focus now", SWITCHED_WINDOW_NOTICE)
     # Tabbing from a username into the password box during the wait must
     # not submit the form: "press enter" said on its own is the only Enter a
     # password field gets.
-    if app._focused_is_password():
+    if focused_window.is_password():
         _refuse_send(pending, "a password field has the focus now", PASSWORD_FIELD_NOT_SENT)
     return lambda: _take_send(pending)
 

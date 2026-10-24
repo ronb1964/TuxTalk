@@ -197,22 +197,17 @@ def test_a_compositor_that_never_answers_is_given_up_on_quickly(tmp_path, monkey
 # --- where the dictation service uses it ---------------------------------------------
 
 def test_the_service_asks_the_compositor_when_nobody_reported_focus(monkeypatch):
-    from tuxtalk import app
-    monkeypatch.setattr(app, "_get_tray_dbus_proxy", lambda: (_ for _ in ()).throw(RuntimeError()))
-    monkeypatch.setattr(cf, "focused_class", lambda: "foot")
-    assert app._query_focused_window_class() == "foot"
+    from tuxtalk import focused_window
+    monkeypatch.setattr(focused_window, "reported", lambda: None)
+    monkeypatch.setattr(cf, "focused_window", lambda: ("foot", None))
+    assert focused_window.window_class() == "foot"
 
 
 def test_a_reported_window_wins_over_asking_the_compositor(monkeypatch):
-    from tuxtalk import app
-
-    class Tray:
-        def GetFocusedWindowClass(self, **kw):
-            return "org.kde.konsole"
-
-    monkeypatch.setattr(app, "_get_tray_dbus_proxy", lambda: Tray())
-    monkeypatch.setattr(cf, "focused_class", lambda: pytest.fail("asked the compositor"))
-    assert app._query_focused_window_class() == "org.kde.konsole"
+    from tuxtalk import focused_window
+    monkeypatch.setattr(focused_window, "reported", lambda: ("org.kde.konsole", ""))
+    monkeypatch.setattr(cf, "focused_window", lambda: ("Xwayland", 0x400001))
+    assert focused_window.window_class() == "org.kde.konsole"
 
 
 @pytest.mark.parametrize("app_id", [
