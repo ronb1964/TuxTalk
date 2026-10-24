@@ -50,7 +50,8 @@ before 0.15.0, so older entries use that name.
   on their own, so a sound system that stops answering can't hold up the
   typing, or your hotkeys for more than a second. The double-tap is timed
   from when you hear the end of the start beep, and that beep is never
-  mistaken for a word, however late it plays. The microphone test in
+  mistaken for a word, however late it plays, while a word you say before
+  it still counts. The microphone test in
   Preferences, Audio, plays your recording back to the end too, and Replay
   waits until it's done.
 - On a desktop where TuxTalk can't make its own keyboard and types with

@@ -26,7 +26,6 @@ that stops answering holds up only that thread; whoever waits for a sound
 """
 import atexit
 import collections
-import sys
 import threading
 import time
 
@@ -151,24 +150,25 @@ def output_latency():
     return _latency
 
 
-def heard_in_recording(sound, recorded, rate):
-    """How many samples at the start of a recording a microphone near the
-    speakers may have heard *sound* in, when *recorded* samples at *rate*
-    have come in so far and the last of them just now.
+def heard_in_recording(sound, recorded, rate, captured_until):
+    """The samples of a recording a microphone near the speakers may have
+    heard *sound* in, as a slice, when *recorded* samples at *rate* have come
+    in so far and the last of them was captured at *captured_until*
+    (time.monotonic()).
 
-    That is up to the sound's last sample heard, and its length again for the
-    microphone's own delay. A sound that was never played (None: beeps off)
-    is in none of it. One that isn't over may be playing right now, so it
-    may be in all of it."""
-    if sound is None:
-        return 0
-    over, _heard_from, heard_until = sound.heard()
-    if over and heard_until is None:
-        return 0
-    if not over:
-        return sys.maxsize
-    recorded_from = time.monotonic() - recorded / rate
-    return max(0, int((heard_until + sound.length - recorded_from) * rate))
+    That is from the sound's first sample heard to its last; for one still
+    playing, to the end of the recording. A sound with none of it handed
+    over yet (None: beeps off; or held up, failed or dropped) is in none of
+    it. What is said before or after the sound is outside the slice. A
+    sliver of the sound the slice misses, by the timing of a block or a
+    buffer, is far shorter than silence.has_a_word's word."""
+    over, heard_from, heard_until = sound.heard() if sound is not None else (True, None, None)
+    if heard_from is None:
+        return slice(0, 0)
+    first = captured_until - recorded / rate        # when the first sample was captured
+    start = min(recorded, max(0, int((heard_from - first) * rate)))
+    end = min(recorded, int(np.ceil((heard_until - first) * rate))) if over else recorded
+    return slice(start, max(start, end))
 
 
 def tone(freq, duration, rate=SAMPLE_RATE):
@@ -318,14 +318,14 @@ class _Playback:
             self.out_of_buffer.set()
 
     def _note_heard(self, now, time_info, count):
-        """When the *count* samples just handed over are heard: when
-        PortAudio says this buffer starts playing, where it says, else one
-        latency from now, about what the stream holds ahead of it."""
+        """When the *count* samples just handed over are heard: from when
+        PortAudio says this buffer starts playing, where it says. Else any
+        time from now, if the stream's buffer was empty, to one latency from
+        now, if it was full."""
         ahead = time_info.outputBufferDacTime - time_info.currentTime
         self.reported = 0 < ahead < MAX_AHEAD_S
-        if not self.reported:
-            ahead = self.latency
-        self.sound.note_heard(now + ahead, now + ahead + count / self.rate)
+        start, latest = (now + ahead, now + ahead) if self.reported else (now, now + self.latency)
+        self.sound.note_heard(start, latest + count / self.rate)
 
 
 def _play(samples, rate, device, sound):

@@ -478,7 +478,7 @@
   },
   "app.py::_handle_undo": {
    "decisions": 20,
-   "lines": 103
+   "lines": 102
   },
   "app.py::_loop_evdev": {
    "decisions": 27,
@@ -509,7 +509,7 @@
    "lines": 104
   },
   "app.py::main": {
-   "lines": 265
+   "lines": 261
   },
   "audio_duck.py::AudioDucker._restore_now": {
    "decisions": 16

@@ -328,6 +328,24 @@ def test_a_beep_held_up_behind_another_sound_knows_when_it_was_heard(sound, down
         assert heard_until - 0.03 <= noted <= heard_until + 0.174 + 0.03
 
 
+@pytest.mark.parametrize("downstream", [0, 0.1])
+def test_a_beep_is_never_reckoned_heard_later_than_it_starts(sound, downstream):
+    """A beep handed to an empty buffer is heard at once. Where PortAudio
+    says no time, it may be, so the part of a recording the start beep may
+    be in starts as it is handed over, not one latency later: a microphone
+    that heard it then would count it as a word."""
+    system = sound(0.174, 512, downstream)
+    start = beeps.beep(True, *beeps.START_BEEP)
+    assert beeps.wait_until_played(5)
+    first = min(i for i, period in enumerate(system.heard) if period.any())
+    heard_from = system.heard_at[first] + np.flatnonzero(system.heard[first])[0] / RATE
+    noted = start.heard()[1]
+    if system.reports_time:
+        assert noted == pytest.approx(heard_from, abs=0.03)
+    else:
+        assert noted <= heard_from + 0.03
+
+
 def test_sounds_behind_a_stuck_output_never_pile_up(sound, monkeypatch):
     """Beeps and replays asked for while the output hangs wait for it, but
     only the newest few; asking never blocks, and a replay that is dropped

@@ -297,10 +297,12 @@ class RecordingState:
     # None unless a double-tap of the toggle key armed it.
     silence: object = None
     # When the toggle key started this recording (None for any other start),
-    # so a quick second tap can be told apart from a stop; and its start beep
-    # (a beeps.Sound, None with beeps off), which the mic may have picked up.
+    # so a quick second tap can be told apart from a stop; its start beep (a
+    # beeps.Sound, None with beeps off), which the mic may have picked up; and
+    # when the mic's last block came in (time.monotonic()), to find it there.
     toggle_started_at: float = None
     start_beep: object = None
+    last_block_at: float = 0.0
     # Paste Last Dictation: {"key", "key_up", "at"} from the combo press until
     # every key of it is let go, else None (see _handle_key_event).
     paste_last: object = None
@@ -753,6 +755,7 @@ def _sd_callback(indata, frames_count, time_info, status):
     """sounddevice's audio callback: collect frames while recording."""
     if state.is_recording:
         state.frames.append(indata.tobytes())
+        state.last_block_at = time.monotonic()
 
         # Chunked dictation: at a pause, the phrase so far goes off to be typed.
         chunker = state.chunker
@@ -2278,7 +2281,6 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
                 _notify("Undo failed", "The text couldn't be deleted.")
             return True
 
-        # Update last_inserted_text to reflect what remains
         _trim_shown(state.last_inserted_text, delete_count)
         if delete_count >= len(state.last_inserted_text):
             state.last_inserted_text = ""
@@ -2735,7 +2737,9 @@ def _toggle_pressed_while_recording(beeps_on: bool) -> bool:
     rate = getattr(state, "recording_samplerate", SAMPLE_RATE)
     detector = SilenceDetector(_auto_stop_seconds, rate)
     heard = _frames_f32(list(state.frames))
-    if has_a_word(heard[beeps.heard_in_recording(state.start_beep, len(heard), rate):], rate):
+    captured_until = state.last_block_at - getattr(state.stream, "latency", 0.0)
+    beep = beeps.heard_in_recording(state.start_beep, len(heard), rate, captured_until)
+    if has_a_word(np.delete(heard, beep), rate):
         detector.heard_speech()
     state.silence = detector
     logger.info("Double-tap: this recording will stop by itself when you go quiet")
@@ -5020,7 +5024,6 @@ def main():
     if _custom_words:
         logger.info(f"Loaded your words ({len(_custom_words)})")
 
-    # Input device selection
     input_device_idx = _pick_input_device(cfg.mic)
 
     # The D-Bus service and the recording indicator both need GTK's main loop.
@@ -5029,7 +5032,6 @@ def main():
     recording_indicator = None
     gtk_ok = False
     try:
-        # Import GTK in the main thread
         import gi
         gi.require_version('Gtk', '3.0')
         from gi.repository import Gtk
@@ -5038,7 +5040,6 @@ def main():
         try:
             from .dbus_service import TuxTalkDBusService
 
-            # Create a simple app instance with necessary attributes for D-Bus
             class AppInstance:
                 def __init__(self, cfg):
                     self.config = cfg
@@ -5080,7 +5081,6 @@ def main():
                     """Start the dictation service"""
                     import subprocess
                     try:
-                        # Find the dictate script
                         src_dir = os.path.dirname(__file__)  # usr/src/tuxtalk
                         usr_dir = os.path.dirname(os.path.dirname(src_dir))  # usr
                         dictate_script = os.path.join(usr_dir, "bin", "dictate")
