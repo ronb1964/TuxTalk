@@ -273,12 +273,10 @@ def test_the_hold_key_holds_the_send_before_it_hides_itself(chat, keyboard, monk
     the send. With F8 the grab can take as long as the countdown's last
     moment."""
     focus, heard, typed, notices = chat
-    monkeypatch.setattr(send_countdown, "_delay", 2.0)
-    monkeypatch.setattr(send_countdown.threading, "Timer", Countdown)
     monkeypatch.setattr(modifier_hotkeys, "_noted", ([], frozenset()))
     devices = [Keyboard(lambda look: True)]           # the hold key is down
     modifier_hotkeys.note(devices, hold_key, F9)
-    send_automatically(focused_window.destination())
+    counting_down(monkeypatch)
     waiting = send_countdown._pending
 
     def grab_then_the_send_runs(devices, codes):
@@ -298,6 +296,62 @@ def test_the_hold_key_holds_the_send_before_it_hides_itself(chat, keyboard, monk
     finally:
         app.state.is_recording = False
         app.state.stream = None
+
+
+@pytest.fixture
+def notifications(monkeypatch):
+    """Desktop notifications' titles, once the threads sending them are done."""
+    from tuxtalk import notify
+    sent = []
+    monkeypatch.setattr(notify, "_send", lambda title, body: sent.append(title))
+
+    def titles():
+        for thread in threading.enumerate():
+            if thread.name == "send-held-notice":
+                thread.join(5)
+        return sent
+    return titles
+
+
+HELD_TITLE = "Not sent: you held it"
+
+
+def counting_down(monkeypatch):
+    monkeypatch.setattr(send_countdown, "_delay", 2.0)
+    monkeypatch.setattr(send_countdown.threading, "Timer", Countdown)
+    send_automatically(focused_window.destination())
+
+
+def test_a_tap_of_the_toggle_key_that_holds_the_send_says_so_aloud(chat, keyboard, monkeypatch,
+                                                                    notifications):
+    """Notifications off, or no XWayland for the label: the send was held
+    and nothing a screen reader reads said so."""
+    focus, heard, typed, notices = chat
+    counting_down(monkeypatch)
+    tap = types.SimpleNamespace(type=ecodes.EV_KEY, code=F9, value=1)
+    app._handle_key_event(tap, F8, F9, None, set(), [], None, None)
+    assert notices == [send_countdown.HELD_NOTICE] and notifications() == [HELD_TITLE]
+
+
+@pytest.mark.parametrize("notify_on", [False, True])
+def test_a_short_tap_of_the_hold_key_that_holds_the_send_says_so_aloud_once(
+        chat, keyboard, monkeypatch, notifications, notify_on):
+    focus, heard, typed, notices = chat
+    for name in ("_stop_stream_safely", "_resume_media_players", "_notify_tray_recording_state"):
+        monkeypatch.setattr(app, name, lambda *a, **k: None)
+    monkeypatch.setattr(app, "recording_indicator", None)
+    monkeypatch.setattr(app.state, "held_send", True)
+    monkeypatch.setattr(app.state, "silence", None)
+    monkeypatch.setattr(app.state, "press_t0", app.time.time())
+    assert app._finish_capture(False, notify_on) is None
+    assert notices == [send_countdown.HELD_NOTICE] and notifications() == [HELD_TITLE]
+
+
+def test_holding_the_send_to_dictate_more_onto_it_says_nothing(chat, monkeypatch, notifications):
+    focus, heard, typed, notices = chat
+    counting_down(monkeypatch)
+    assert send_countdown.hold(announce=False)
+    assert notices == [] and notifications() == []
 
 
 def test_a_click_during_the_password_check_sends_nothing(chat, keyboard, monkeypatch):

@@ -361,6 +361,19 @@ def _send(pending: dict) -> None:
     _say_not_sent(why or "not_pressed")
 
 
+def say_held() -> None:
+    """A tap held the send: said over the window and as a desktop
+    notification whatever the notifications setting, as every other end
+    of a send without its Enter is (_say_not_sent). The notification goes
+    from a thread of its own: the tap is read on the hotkey loop, and a
+    slow notification service would hold up the keys after it."""
+    from .notify import notify
+    show_notice(HELD_NOTICE)
+    threading.Thread(target=notify, name="send-held-notice", daemon=True, args=(
+        "Not sent: you held it",
+        "The text is still in the box. Press Enter when you're ready.")).start()
+
+
 def show_notice(text: str) -> None:
     """Say over the window, where the countdown was, what became of the send."""
     from . import screen_message
@@ -369,7 +382,7 @@ def show_notice(text: str) -> None:
 
 def hold(announce: bool) -> bool:
     """Stop a counting-down send; True when there was one. *announce* says
-    "Not sent" on screen at once (a tap of the toggle key); a press of the
+    "Not sent" at once (a tap of the toggle key, say_held); a press of the
     hold key waits to see whether it's a tap or more dictation."""
     global _pending, _owed
     with _send_lock:
@@ -382,7 +395,7 @@ def hold(announce: bool) -> bool:
     _cancel_timers(pending)
     logger.info("Held the send: the dictation stays unsent")
     if announce:
-        show_notice(HELD_NOTICE)
+        say_held()
     else:
         from . import screen_message
         screen_message.hide(LABEL_TAG)

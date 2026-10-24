@@ -2562,8 +2562,8 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
         send_countdown.type_owed_space()
     if held_ms < MIN_HOLD_MS or (state.held_send and state.released_while_starting):
         if state.held_send:
-            cancel_recording(beeps_on, notify_on, send_countdown.HELD_NOTICE)
-            send_countdown.show_notice(send_countdown.HELD_NOTICE)
+            cancel_recording(beeps_on, False, send_countdown.HELD_NOTICE)
+            send_countdown.say_held()
         else:
             cancel_recording(beeps_on, notify_on, f"Cancelled (held {held_ms} ms)")
         return None
