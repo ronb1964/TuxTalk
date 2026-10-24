@@ -721,10 +721,11 @@ class Helper:
         for keyboard in list(self.keyboards.values()):
             if keyboard.path not in origins and keyboard.group not in group:
                 continue
-            really_down = keyboard.kernel_down()
             mine = [c for path, c in presses if path == keyboard.path]
-            released = [c for c in mine + mods
-                        if c in really_down and self.inject(keyboard, c, 0)]
+            released = self.let_up(keyboard, mine + mods)
+            if released is None:
+                self.let_go(held_on)
+                return "ERR couldn't hide the keys"
             if (keyboard.path in origins or released) and keyboard.grab(True):
                 held_on.append(keyboard)
             elif keyboard.path in origins or released:
@@ -746,14 +747,34 @@ class Helper:
                      "keyboards": held_on, "since": time.monotonic()}
         return "OK HIDE"
 
+    def let_up(self, keyboard, codes):
+        """Tell the desktop that those of *codes* down on *keyboard* went up;
+        the ones that were, or None when one couldn't be. The desktop then
+        still sees it down: a Right Ctrl it holds would turn TuxTalk's typing
+        into shortcuts, so nothing may be called hidden. What did go up is
+        left up for it."""
+        really_down = keyboard.kernel_down()
+        wanted = [c for c in codes if c in really_down]
+        released = [c for c in wanted if self.inject(keyboard, c, 0)]
+        if len(released) == len(wanted):
+            return released
+        log(f"couldn't let the keys go up on {keyboard.name!r}")
+        keyboard.trusted.difference_update(released)
+        self.settle(keyboard, ())
+        return None
+
     def end_hide(self, why=None):
         if self.hide is None:
             return
         keyboards, self.hide = self.hide["keyboards"], None
-        stuck = [k for k in keyboards
-                 if k.path in self.keyboards and k.grabbed and not k.grab(False)]
         if why:
             log(f"gave the keyboard back: {why}")
+        self.let_go(keyboards)
+
+    def let_go(self, keyboards):
+        """Give *keyboards* back to the desktop, closing one that won't let go."""
+        stuck = [k for k in keyboards
+                 if k.path in self.keyboards and k.grabbed and not k.grab(False)]
         for keyboard in stuck:
             # Closing the device always ends the kernel's grab; the keyboard
             # is opened afresh on the next scan.

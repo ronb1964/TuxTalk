@@ -930,3 +930,50 @@ def test_a_right_ctrl_held_with_another_hotkey_comes_up_once(setup):
     kb.press(RCTRL)
     kb.press(RCTRL, 0)
     assert heard(sock) == ["DOWN 97 -", "DOWN 67 97", "UP 67", "UP 97", "OK WATCH"]
+
+
+def _release_fails(monkeypatch, keyboard, code):
+    """Injecting *code*'s release into *keyboard* fails, as a write to a
+    device on its way out does."""
+    inject = keyboard.inject
+
+    def failing(c, value):
+        if (c, value) == (code, 0):
+            keyboard.calls.append(("inject failed", c, value))
+            return False
+        return inject(c, value)
+
+    monkeypatch.setattr(keyboard, "inject", failing)
+
+
+def test_a_right_ctrl_the_desktop_still_sees_down_isnt_called_hidden(setup, monkeypatch):
+    """Its release couldn't be injected: answering OK would let TuxTalk type
+    while the desktop holds Ctrl (a dictated "w" closing the tab)."""
+    helper, kb, connect, say, heard, _seat = setup
+    sock = _ready(connect, say, heard, "97")
+    kb.press(RCTRL)
+    heard(sock)
+    _release_fails(monkeypatch, kb, RCTRL)
+    say(sock, "HIDE 97")
+    assert heard(sock) == ["ERR couldn't hide the keys"]
+    assert helper.hide is None and not kb.grabbed
+    assert ("grab", True) not in kb.calls
+
+
+def test_a_failed_release_on_a_second_keyboard_gives_the_first_back(setup, monkeypatch):
+    """F8 was hidden and held on one keyboard, then the Right Ctrl held with it
+    on another couldn't be let go: the first keyboard isn't kept."""
+    helper, kb, connect, say, heard, _seat = setup
+    second = FakeKeyboard("/dev/input/event-second")
+    kb.group = second.group = "real"
+    helper.keyboards[second.path] = second
+    sock = _ready(connect, say, heard, "C:66")
+    second.press(RCTRL)
+    assert heard(sock) == []
+    kb.press(F8)
+    assert heard(sock) == ["DOWN 66 97"]
+    _release_fails(monkeypatch, second, RCTRL)
+    say(sock, "HIDE 66 97")
+    assert heard(sock) == ["ERR couldn't hide the keys"]
+    assert ("grab", True) in kb.calls and not kb.grabbed
+    assert helper.hide is None
