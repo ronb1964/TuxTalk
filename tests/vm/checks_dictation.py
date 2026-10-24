@@ -79,31 +79,35 @@ def beep_bursts(samples, rate):
     return bursts
 
 
-TONE_STEP_S = 0.005
-TONE_WINDOW_S = 0.02
+# Only this close to a beep's frequency is listened to: the two beeps are
+# 400 Hz apart, and a narrower band blurs a beep's edges more.
+TONE_BAND_HZ = 100
 # A tone at -50 dBFS: far under a beep (-14 dBFS at full volume), over hiss.
 TONE_QUIETEST = 32768 * 10 ** (-50 / 20)
+# A whole beep reads within about 2 ms of its length, even over hiss at
+# -21 dBFS; one cut short by 10 ms reads at least 9 ms short
+# (tests/test_vm_beep_detector.py). Halfway between.
+TONE_SLACK_S = 0.005
 
 
 def tone_heard(samples, rate, freq):
     """The longest stretch of a recording in which a tone of *freq* Hz is
-    the loudest sound: (where it starts, how long it is), in seconds, in
-    steps of TONE_STEP_S. A whole tone reads as its length and about half a
-    window more, as the windows over each of its edges still hold mostly
-    the tone (tests/test_vm_beep_detector.py)."""
-    hop, size = int(rate * TONE_STEP_S), int(rate * TONE_WINDOW_S)
-    window = np.hanning(size)
-    bins = np.fft.rfftfreq(size, 1 / rate)
-    longest, start, current = 0, None, 0
-    for step, i in enumerate(range(0, len(samples) - size, hop)):
-        spectrum = np.abs(np.fft.rfft(samples[i:i + size] * window))
-        # Through a Hann window a tone's peak is its amplitude times size / 4.
-        heard = (spectrum.max() > TONE_QUIETEST * size / 4
-                 and abs(bins[spectrum.argmax()] - freq) < 30)
-        current = current + 1 if heard else 0
-        if current > longest:
-            longest, start = current, (step - current + 1) * TONE_STEP_S
-    return start, longest * TONE_STEP_S
+    at least half as loud as at its loudest: (where it starts, how long it
+    is), in seconds.
+
+    The recording is filtered to the tone's band, and the stretch measured
+    on its envelope sample by sample. The band's filter rounds a tone's
+    edges evenly, so at half its height a tone measures its own length."""
+    spectrum = np.fft.fft(samples)
+    spectrum[np.abs(np.fft.fftfreq(len(samples), 1 / rate) - freq) > TONE_BAND_HZ] = 0
+    envelope = 2 * np.abs(np.fft.ifft(spectrum))        # only the positive band is left
+    loud = envelope > max(TONE_QUIETEST, envelope.max() / 2)
+    edges = np.flatnonzero(np.diff(np.concatenate([[0], loud.astype(np.int8), [0]])))
+    if not len(edges):
+        return None, 0.0
+    starts, ends = edges[::2], edges[1::2]
+    longest = np.argmax(ends - starts)
+    return starts[longest] / rate, (ends[longest] - starts[longest]) / rate
 
 
 @check("Dictation", "basic", "Dictation works (processor)")
@@ -259,9 +263,7 @@ def beeps_outcome(log, samples, rate):
     heard = {name: tone_heard(samples, rate, freq) for name, (freq, _length) in beeps.items()}
     detail = ", ".join(f"{name} beep {seconds * 1000:.0f} of {beeps[name][1] * 1000:.0f} ms"
                        for name, (_start, seconds) in heard.items())
-    # A whole beep reads as its length plus half a window or more; one cut
-    # short by 10 ms reads 5 ms over its length at most.
-    full = all(seconds >= beeps[name][1] + TONE_WINDOW_S / 2 - 1e-9
+    full = all(seconds >= beeps[name][1] - TONE_SLACK_S
                for name, (_start, seconds) in heard.items())
     in_order = full and heard["start"][0] < heard["hands-free"][0]
     if full and not in_order:
