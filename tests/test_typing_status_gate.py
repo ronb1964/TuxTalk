@@ -37,7 +37,8 @@ class _FakeButton:
 
 
 def _prefs_with_perms(monkeypatch, *, all_ok, udev, in_group, hotkey_ok=False):
-    from tuxtalk import prefs as prefs_mod
+    from types import SimpleNamespace
+    from tuxtalk import prefs_system_check as prefs_mod
     from tuxtalk import uinput_helper as uh
 
     monkeypatch.setattr(uh, "check_all_device_permissions",
@@ -47,7 +48,7 @@ def _prefs_with_perms(monkeypatch, *, all_ok, udev, in_group, hotkey_ok=False):
     monkeypatch.setattr(uh, "check_input_read_permission",
                         lambda: (hotkey_ok, "reason"))
 
-    prefs = prefs_mod.PreferencesWindow.__new__(prefs_mod.PreferencesWindow)
+    prefs = prefs_mod.SystemCheck(SimpleNamespace(config={}))
     prefs.typing_status_label = _FakeLabel()
     prefs.fix_typing_button = _FakeButton()
     return prefs

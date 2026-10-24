@@ -13,9 +13,9 @@ import pytest
 gi = pytest.importorskip("gi")
 gi.require_version("Gtk", "3.0")
 
-from tuxtalk import prefs as P  # noqa: E402
+from tuxtalk import prefs_system_check as P  # noqa: E402
 from tuxtalk import uinput_helper  # noqa: E402
-from tuxtalk.prefs import PreferencesWindow  # noqa: E402
+from tuxtalk.prefs_system_check import SystemCheck  # noqa: E402
 
 
 class FakeButton:
@@ -64,10 +64,10 @@ def test_pkexec_runs_off_the_gtk_thread_and_a_failure_resets_the_button(monkeypa
                         (False, "Authentication was cancelled"))
 
     d = SimpleNamespace(window=None, typing_status_label=SimpleNamespace(set_markup=lambda m: None))
-    d._finish_fix_typing = lambda *a: PreferencesWindow._finish_fix_typing(d, *a)
+    d._finish_fix_typing = lambda *a: SystemCheck._finish_fix_typing(d, *a)
     button = FakeButton()
 
-    PreferencesWindow._on_fix_typing_clicked(d, button)
+    SystemCheck._on_fix_typing_clicked(d, button)
     assert ran_in == [], "pkexec ran inside the click handler"
     assert button.label == "Setting up..." and not button.sensitive
 

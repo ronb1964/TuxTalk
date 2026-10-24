@@ -22,7 +22,7 @@ def test_uninstall_removes_the_files_and_both_list_entries(monkeypatch, tmp_path
 
 def test_the_install_button_says_install_again_after_an_uninstall(monkeypatch):
     pytest.importorskip("gi")
-    from tuxtalk.prefs import PreferencesWindow   # first: it picks GTK 3
+    from tuxtalk.prefs_system_check import SystemCheck   # first: it picks GTK 3
     from gi.repository import Gtk
 
     win = types.SimpleNamespace(
@@ -32,6 +32,6 @@ def test_the_install_button_says_install_again_after_an_uninstall(monkeypatch):
         _set_restart_info_sensitive=lambda s: None)
     monkeypatch.setattr(eh, "get_extension_status",
                         lambda: {"available": True, "installed": False, "enabled": False})
-    PreferencesWindow._show_extension_status(win)
+    SystemCheck._show_extension_status(win)
     assert win.install_extension_button.get_label() == "Install Extension"
     assert win.install_extension_button.get_sensitive()

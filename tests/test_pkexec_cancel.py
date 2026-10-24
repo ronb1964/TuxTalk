@@ -57,7 +57,7 @@ class _Recorder:
 
 def test_prefs_says_cancelled_instead_of_setup_failed(monkeypatch):
     pytest.importorskip("gi")
-    from tuxtalk import prefs as P
+    from tuxtalk import prefs_system_check as P
 
     dialogs = []
     monkeypatch.setattr(P, "message_dialog", lambda **k: dialogs.append(k))
@@ -67,7 +67,7 @@ def test_prefs_says_cancelled_instead_of_setup_failed(monkeypatch):
 
     d = SimpleNamespace(window=None, typing_status_label=_Recorder())
     button = _Recorder()
-    P.PreferencesWindow._finish_fix_typing(d, button, False, message)
+    P.SystemCheck._finish_fix_typing(d, button, False, message)
 
     assert dialogs == [], "a cancel must not open the Setup Failed dialog"
     assert "cancelled" in d.typing_status_label.markup.lower()

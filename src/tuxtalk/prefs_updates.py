@@ -10,7 +10,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk, Pango
 
 from .logger import setup_logger
-from .prefs_tab import WARNING_AMBER, Tab, _on_gnome
+from .prefs_tab import WARNING_AMBER, Tab, _on_gnome, progress_window
 from .ui_style import show_message
 
 logger = setup_logger(__name__)
@@ -70,28 +70,6 @@ def _how_it_updates(install_type):
     row.pack_start(changelog_link, False, False, 0)
     return row
 
-
-def _progress_window(parent):
-    """The "Updating TuxTalk" window, which can't be closed while it works:
-    (window, status line, progress bar)."""
-    dialog = Gtk.Dialog(title="Updating TuxTalk", transient_for=parent,
-                        flags=Gtk.DialogFlags.MODAL)
-    dialog.set_default_size(400, 120)
-    dialog.set_deletable(False)
-    content = dialog.get_content_area()
-    content.set_spacing(10)
-    content.set_margin_start(20)
-    content.set_margin_end(20)
-    content.set_margin_top(20)
-    content.set_margin_bottom(10)
-    status_label = Gtk.Label(label="Starting download...")
-    status_label.set_halign(Gtk.Align.START)
-    content.pack_start(status_label, False, False, 0)
-    progress_bar = Gtk.ProgressBar()
-    progress_bar.set_show_text(True)
-    content.pack_start(progress_bar, False, False, 10)
-    dialog.show_all()
-    return dialog, status_label, progress_bar
 
 class UpdatesTab(Tab):
     """The Updates & Backup tab. Loading a backup or an earlier copy closes
@@ -593,7 +571,8 @@ class UpdatesTab(Tab):
         window; on success the tray restarts TuxTalk, which closes this
         window too (update_ui.restart_via_tray)."""
         from . import update_checker
-        dialog, status_label, progress_bar = _progress_window(self.window)
+        dialog, status_label, progress_bar = progress_window(
+            self.window, "Updating TuxTalk", "Starting download...")
         failure = {"error": None}
 
         def progress(message, percent):

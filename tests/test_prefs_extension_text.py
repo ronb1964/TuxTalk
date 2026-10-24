@@ -5,7 +5,7 @@ only in an X11 session; GNOME 49 turned that session off by default and
 GNOME 50 removed it. The success dialog must not promise a model switcher the
 extension's menu does not have.
 """
-from tuxtalk import prefs as P
+from tuxtalk import prefs_system_check as P
 
 
 def test_wayland_is_told_to_log_out_only(monkeypatch):
