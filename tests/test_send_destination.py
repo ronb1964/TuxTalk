@@ -7,6 +7,9 @@ line, and two windows of one app (two Brave windows) look the same by
 their class. These pin what someone would see: where the words were typed,
 and whether an Enter followed them there or anywhere else.
 """
+import threading
+import types
+
 import numpy as np
 import pytest
 from evdev import ecodes
@@ -14,7 +17,9 @@ from evdev import ecodes
 from tuxtalk import (app, atspi_helper, compositor_focus, dbus_service, focused_window, history,
                      modifier_hotkeys, send_countdown)
 
-ENTER, RCTRL, F8 = ecodes.KEY_ENTER, ecodes.KEY_RIGHTCTRL, ecodes.KEY_F8
+ENTER, RCTRL, F8, F9 = ecodes.KEY_ENTER, ecodes.KEY_RIGHTCTRL, ecodes.KEY_F8, ecodes.KEY_F9
+# Taken before conftest runs "Right away" on the test's own thread.
+SEND_RIGHT_AWAY = send_countdown._send_right_away
 FIRST = ("brave-browser", ("tray", "{5c1d0e2a}"))
 SECOND = ("brave-browser", ("tray", "{9f04b7c3}"))      # another window, same app
 
@@ -188,7 +193,8 @@ def test_right_away_checks_the_window_once_the_key_is_up(chat, keyboard, right_c
 
 def test_right_away_a_tap_while_the_enter_waits_holds_it(chat, keyboard, right_ctrl_toggle):
     """The hotkey loop reads a tap of the Right Ctrl toggle while the Enter
-    waits for the key: with nothing pending, the tap held nothing."""
+    waits for the key. Before, the send wasn't pending any more by then,
+    and the tap held nothing."""
     held = []
 
     def pressed(look):
@@ -199,6 +205,33 @@ def test_right_away_a_tap_while_the_enter_waits_holds_it(chat, keyboard, right_c
     send_countdown.send_automatically("test", focused_window.Destination(*FIRST),
                                       app._press_key, app._type_onto_dictation)
     assert held == [True] and keyboard.events == []
+
+
+def test_right_away_a_tap_the_hotkey_loop_reads_holds_the_enter(chat, keyboard, monkeypatch):
+    """The words are typed on the hotkey loop's thread, then the Enter's
+    checks run. Run there too, the loop read the tap of F9 only once the
+    Enter had gone out."""
+    focus, heard, typed, notices = chat
+    monkeypatch.setattr(send_countdown, "_send_right_away", SEND_RIGHT_AWAY)
+    words_in, tap_read = threading.Event(), threading.Event()
+    deliver = app._deliver_text
+
+    def deliver_then_note(*a, **k):
+        outcome = deliver(*a, **k)
+        words_in.set()
+        return outcome
+    monkeypatch.setattr(app, "_deliver_text", deliver_then_note)
+    monkeypatch.setattr(atspi_helper, "focused_is_password",
+                        lambda: words_in.is_set() and tap_read.wait(2) and False)
+    heard.append("see you at noon")
+    dictate()
+    tap = types.SimpleNamespace(type=ecodes.EV_KEY, code=F9, value=1)
+    app._handle_key_event(tap, F8, F9, None, set(), [], None, None)
+    tap_read.set()
+    for thread in threading.enumerate():
+        if thread.name == "send-right-away":
+            thread.join(5)
+    assert keyboard.events == [] and notices == [send_countdown.HELD_NOTICE]
 
 
 def test_a_click_during_the_password_check_sends_nothing(chat, keyboard, monkeypatch):

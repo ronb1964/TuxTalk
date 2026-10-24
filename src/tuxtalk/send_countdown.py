@@ -215,7 +215,7 @@ def send_automatically(why: str, sent_to, press, type_more, space: str = "",
             _cancel_timers(_pending)
         _pending = pending
     if delay <= 0:
-        _send(pending)
+        _send_right_away(pending)
         return
     for timer in [pending["timer"], *pending["ticks"]]:
         timer.daemon = True
@@ -224,6 +224,14 @@ def send_automatically(why: str, sent_to, press, type_more, space: str = "",
     from . import screen_message
     screen_message.show_over_active_window(
         _label(delay), seconds=delay, warning=False, tag=LABEL_TAG, low=True)
+
+
+def _send_right_away(pending: dict) -> None:
+    """"Right away": the Enter on a thread of its own, as after a countdown.
+    A dictation is typed on the hotkey loop's own thread (stop_recording),
+    and run there the Enter's checks and its wait for a Right Ctrl or Right
+    Alt dictation key kept the loop from reading the tap that holds it."""
+    threading.Thread(target=_send, args=(pending,), name="send-right-away", daemon=True).start()
 
 
 def _label(seconds_left: float) -> str:

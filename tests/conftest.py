@@ -191,7 +191,8 @@ def _no_followed_default_mic(monkeypatch):
 @pytest.fixture(autouse=True)
 def _no_real_send_countdown(monkeypatch, request):
     """No floating label on the user's screen and no Enter left counting down
-    between tests. Sends happen at once unless a test sets a wait itself.
+    between tests. Sends happen at once, on the test's thread, unless a test
+    sets a wait itself.
     test_window_messages tests the label itself, with its own fakes."""
     from tuxtalk import app, screen_message, send_countdown
     if request.module.__name__.rpartition(".")[2] != "test_window_messages":
@@ -199,6 +200,8 @@ def _no_real_send_countdown(monkeypatch, request):
         monkeypatch.setattr(screen_message, "hide", lambda *a, **k: None)
         monkeypatch.setattr(screen_message, "relabel", lambda *a, **k: None)
     monkeypatch.setattr(send_countdown, "_delay", 0.0)
+    # "Right away" on the test's own thread, so a test sees the Enter at once.
+    monkeypatch.setattr(send_countdown, "_send_right_away", send_countdown._send)
     monkeypatch.setattr(send_countdown, "_pending", None)
     monkeypatch.setattr(app.state, "held_send", False)
     monkeypatch.setattr(send_countdown, "_owed", None)
