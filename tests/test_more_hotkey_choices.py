@@ -66,7 +66,7 @@ def service(monkeypatch):
 def key(code, value, held, hold=F8, toggle=None):
     """One key event as the main loop delivers it: modifier state first."""
     track_modifier(held, Event(code, value))
-    app._handle_key_event(Event(code, value), "hold", hold, toggle,
+    app._handle_key_event(Event(code, value), hold, toggle,
                           None, held, [], Cfg(), 0)
 
 
@@ -440,7 +440,7 @@ def holding(real_grabs, monkeypatch):
     def hold(code, grabs=True):
         board = Grabbable(lambda look: True, code, grabs)
         modifier_hotkeys.note([board], code, ecodes.KEY_F9)
-        app._handle_key_event(Event(code, 1), "hold", code, ecodes.KEY_F9, None, {code},
+        app._handle_key_event(Event(code, 1), code, ecodes.KEY_F9, None, {code},
                               [board], Cfg(), 0)
         assert app.state.is_recording
     return hold
@@ -488,7 +488,7 @@ def test_a_double_tap_of_a_right_ctrl_or_alt_toggle_goes_hands_free(keyboard, re
     held = set()
     for value in (1, 0, 1, 0):
         track_modifier(held, Event(code, value))
-        app._handle_key_event(Event(code, value), "hold", F8, code, None, held, [board],
+        app._handle_key_event(Event(code, value), F8, code, None, held, [board],
                               Cfg(), 0)
         assert app.state.is_recording
     assert app.state.silence is not None and stopped == []

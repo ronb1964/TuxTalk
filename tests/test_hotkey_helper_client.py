@@ -101,7 +101,7 @@ def rig(tmp_path, monkeypatch):
                     if app._is_own_injected_event(dev, event):
                         continue
                     track_modifier(held, event)
-                    app._handle_key_event(event, "hold", F8, F9, None, held,
+                    app._handle_key_event(event, F8, F9, None, held,
                                           [client], Cfg, None)
 
     yield helper, kb, client, loop, calls
@@ -174,7 +174,7 @@ def test_if_the_helper_goes_away_a_held_key_is_let_go(rig):
                 continue
             for event in events:
                 if not app._is_own_injected_event(dev, event):
-                    app._handle_key_event(event, "hold", F8, F9, None, set(),
+                    app._handle_key_event(event, F8, F9, None, set(),
                                           [client], type("C", (), {"beeps": True, "notify": True,
                                                                     "smart_quotes": True, "language": "",
                                                                     "auto_space": True, "auto_period": True,

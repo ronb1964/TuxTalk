@@ -1045,7 +1045,6 @@ class LiveSettings(NamedTuple):
     vc_hotkey_str: str
     voice_cmds_combo: tuple | None
     voice_cmds_main_key: int | None
-    mode: str
     paste_last_combo: tuple | None = None
 
 
@@ -1211,7 +1210,6 @@ def _reload_live_settings(cfg, indicator):
             vc_hotkey_str=vc_hotkey_str,
             voice_cmds_combo=voice_cmds_combo,
             voice_cmds_main_key=voice_cmds_combo[1] if voice_cmds_combo else None,
-            mode=cfg.mode.lower().strip(),
             paste_last_combo=parse_hotkey_combo(getattr(cfg, "paste_last_hotkey", "")),
         )
     except Exception as e:
@@ -4600,7 +4598,7 @@ def _hide_modifier_hotkey(event, toggle_key, devices) -> None:
         _release_all_grabs()
 
 
-def _handle_key_event(event, mode, hold_key, toggle_key,
+def _handle_key_event(event, hold_key, toggle_key,
                       voice_cmds_combo, held_modifiers,
                       devices, cfg, input_device_idx, paste_last_combo=None):
     """Handle a single keyboard event. Both hold (F8) and toggle (F9) are always active.
@@ -4958,7 +4956,6 @@ def _loop_evdev(cfg: Settings, input_device_idx, keyboards=None):
     it is installed: then no keyboard is opened here at all."""
     session = os.environ.get("XDG_SESSION_TYPE", "").lower()
     logger.info(f"Session type: {session}, Wayland: {session=='wayland'}")
-    mode = cfg.mode.lower().strip()
     # Both hotkeys work whatever the mode setting says.
     logger.info(f"Hold key: {cfg.hotkey}, Toggle key: {cfg.toggle_hotkey or 'none'}")
 
@@ -5042,7 +5039,7 @@ def _loop_evdev(cfg: Settings, input_device_idx, keyboards=None):
         # enforce the auto-timeout, and pick up Preferences changes (all shared
         # with the portal loop).
         #
-        # This loop keeps the hotkeys and mode in locals, so it rebinds them
+        # This loop keeps the hotkeys in locals, so it rebinds them
         # from what the tick reloaded. It must not check _config_file_changed()
         # itself: that check is edge-triggered, and the tick has already
         # consumed the change.
@@ -5054,7 +5051,6 @@ def _loop_evdev(cfg: Settings, input_device_idx, keyboards=None):
             voice_cmds_combo = live.voice_cmds_combo
             voice_cmds_main_key = live.voice_cmds_main_key
             paste_last_combo = live.paste_last_combo
-            mode = live.mode
             # Re-claim even if the hotkeys look unchanged: claim() is cheap,
             # and comparing would mean a second copy of the hotkey fields.
             _claim_desktop_hotkeys(cfg)
@@ -5080,7 +5076,7 @@ def _loop_evdev(cfg: Settings, input_device_idx, keyboards=None):
                                           paste_last_combo[1] if paste_last_combo else None):
                             svc.last_activity = current_time
                         _handle_key_event(
-                            event, mode, hold_key, toggle_key,
+                            event, hold_key, toggle_key,
                             voice_cmds_combo, held_modifiers,
                             devices, cfg, svc.input_device_idx,
                             paste_last_combo=paste_last_combo)

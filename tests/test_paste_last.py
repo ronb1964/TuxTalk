@@ -45,7 +45,7 @@ def send(code, value, held, combo=COMBO):
     """Deliver one key event the way the main loop does: modifier state first."""
     if code in (CTRL, ALT):
         (held.add if value else held.discard)(code)
-    app._handle_key_event(Event(code, value), "hold", ecodes.KEY_F8, None,
+    app._handle_key_event(Event(code, value), ecodes.KEY_F8, None,
                           None, held, [], Cfg(), 0, paste_last_combo=combo)
 
 

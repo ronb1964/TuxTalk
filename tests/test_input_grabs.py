@@ -267,7 +267,7 @@ def key_env(monkeypatch):
 
 
 def press_hold(devices):
-    app._handle_key_event(FakeEvent(HOLD, 1), "hold", HOLD, TOGGLE,
+    app._handle_key_event(FakeEvent(HOLD, 1), HOLD, TOGGLE,
                           None, set(), devices, FakeConfig(), 0)
 
 
@@ -284,7 +284,7 @@ def test_releasing_the_hotkey_releases_the_keyboard(key_env):
     press_hold([kb])
     assert kb.is_grabbed
 
-    app._handle_key_event(FakeEvent(HOLD, 0), "hold", HOLD, TOGGLE,
+    app._handle_key_event(FakeEvent(HOLD, 0), HOLD, TOGGLE,
                           None, set(), [kb], FakeConfig(), 0)
 
     assert not kb.is_grabbed
@@ -296,7 +296,7 @@ def test_toggle_key_pressed_while_holding_releases_the_keyboard(key_env):
     press_hold([kb])
     assert kb.is_grabbed
 
-    app._handle_key_event(FakeEvent(TOGGLE, 1), "hold", HOLD, TOGGLE,
+    app._handle_key_event(FakeEvent(TOGGLE, 1), HOLD, TOGGLE,
                           None, set(), [kb], FakeConfig(), 0)
 
     assert not app.state.is_recording
@@ -307,7 +307,7 @@ def test_escape_releases_the_keyboard(key_env):
     kb = keyboard()
     press_hold([kb])
 
-    app._handle_key_event(FakeEvent(ecodes.KEY_ESC, 1), "hold", HOLD, TOGGLE,
+    app._handle_key_event(FakeEvent(ecodes.KEY_ESC, 1), HOLD, TOGGLE,
                           None, set(), [kb], FakeConfig(), 0)
 
     assert not kb.is_grabbed
@@ -452,7 +452,7 @@ def test_the_apps_own_virtual_keyboard_is_not_grabbed():
 def _press_voice_combo(devices, monkeypatch, dbus=None):
     """Press the Ctrl+Alt+V style combo (no modifiers required, for brevity)."""
     monkeypatch.setattr(app, "_show_voice_commands_via_dbus", dbus or (lambda: None))
-    app._handle_key_event(FakeEvent(ecodes.KEY_V, 1), "hold", HOLD, TOGGLE,
+    app._handle_key_event(FakeEvent(ecodes.KEY_V, 1), HOLD, TOGGLE,
                           (set(), ecodes.KEY_V), set(), devices, FakeConfig(), 0)
 
 
@@ -630,7 +630,7 @@ def test_dropping_a_device_mid_hold_ends_the_recording_in_toggle_mode(key_env):
     started, stopped = key_env
     kb1, kb2 = keyboard("dies"), keyboard("survives")
     devices = [kb1, kb2]
-    app._handle_key_event(FakeEvent(HOLD, 1), "toggle", HOLD, TOGGLE,
+    app._handle_key_event(FakeEvent(HOLD, 1), HOLD, TOGGLE,
                           None, set(), devices, ToggleModeConfig(), 0)
     assert app.state.is_recording and kb2.is_grabbed
 
@@ -647,7 +647,7 @@ def test_a_toggle_recording_survives_an_unrelated_keyboard_dropping_out(key_env)
     started, stopped = key_env
     kb1, kb2 = keyboard("dies"), keyboard("survives")
     devices = [kb1, kb2]
-    app._handle_key_event(FakeEvent(TOGGLE, 1), "hold", HOLD, TOGGLE,
+    app._handle_key_event(FakeEvent(TOGGLE, 1), HOLD, TOGGLE,
                           None, set(), devices, FakeConfig(), 0)
     assert app.state.is_recording
 
@@ -742,7 +742,7 @@ def test_the_voice_commands_combo_mid_hold_keeps_the_recordings_grab(key_env, mo
     assert kb.is_grabbed
 
     combo = (set(), ecodes.KEY_H)
-    app._handle_key_event(FakeEvent(ecodes.KEY_H, 1), "hold", HOLD, TOGGLE,
+    app._handle_key_event(FakeEvent(ecodes.KEY_H, 1), HOLD, TOGGLE,
                           combo, set(), [kb], FakeConfig(), 0)
 
     assert app.state.is_recording
@@ -755,7 +755,7 @@ def test_a_toggle_tap_during_a_send_countdown_only_holds_it(key_env, monkeypatch
     started, _ = key_env
     held = []
     monkeypatch.setattr(app, "_hold_pending_send", lambda announce: held.append(announce) or True)
-    app._handle_key_event(FakeEvent(TOGGLE, 1), "hold", HOLD, TOGGLE,
+    app._handle_key_event(FakeEvent(TOGGLE, 1), HOLD, TOGGLE,
                           None, set(), [keyboard()], FakeConfig(), 0)
     assert held == [True]
     assert started == []
@@ -764,7 +764,7 @@ def test_a_toggle_tap_during_a_send_countdown_only_holds_it(key_env, monkeypatch
 def test_a_toggle_tap_with_nothing_counting_down_starts_recording(key_env, monkeypatch):
     started, _ = key_env
     monkeypatch.setattr(app, "_hold_pending_send", lambda announce: False)
-    app._handle_key_event(FakeEvent(TOGGLE, 1), "hold", HOLD, TOGGLE,
+    app._handle_key_event(FakeEvent(TOGGLE, 1), HOLD, TOGGLE,
                           None, set(), [keyboard()], FakeConfig(), 0)
     assert len(started) == 1
 
@@ -866,6 +866,6 @@ def test_letting_go_of_the_toggle_key_types_a_held_sends_space(key_env, monkeypa
     typed = []
     monkeypatch.setattr(app, "_type_owed_space", lambda: typed.append(" "))
     monkeypatch.setattr(app.state, "owed_space", {"space": " "})
-    app._handle_key_event(FakeEvent(TOGGLE, 0), "hold", HOLD, TOGGLE,
+    app._handle_key_event(FakeEvent(TOGGLE, 0), HOLD, TOGGLE,
                           None, set(), [keyboard()], FakeConfig(), 0)
     assert typed == [" "]

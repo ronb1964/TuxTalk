@@ -285,7 +285,7 @@ def keyloop(monkeypatch):
 
 
 def key(code, value, held):
-    app._handle_key_event(Ev(code, value), "hold", F8, F9, None, held, [], Cfg(), 0)
+    app._handle_key_event(Ev(code, value), F8, F9, None, held, [], Cfg(), 0)
 
 
 def test_shift_f8_starts_an_edit_and_hides_shift_from_the_desktop(keyloop):
@@ -555,7 +555,7 @@ def test_stopping_with_shift_waits_for_it_without_injecting_keys(keyloop, monkey
     kb = FakeKeyboard([[SHIFT], [SHIFT], []])
     key(F9, 1, {SHIFT})
     keyloop["grab_codes"].clear()
-    app._handle_key_event(Ev(F9, 1), "hold", F8, F9, None, {SHIFT}, [kb], Cfg(), 0)
+    app._handle_key_event(Ev(F9, 1), F8, F9, None, {SHIFT}, [kb], Cfg(), 0)
     assert keyloop["stops"] == 1 and keyloop["grab_codes"] == []
 
 
@@ -565,7 +565,7 @@ def test_shift_held_too_long_cancels_the_edit(keyloop, monkeypatch):
     cancelled = []
     monkeypatch.setattr(app, "cancel_recording", lambda b, n, reason="": cancelled.append(reason))
     key(F9, 1, {SHIFT})
-    app._handle_key_event(Ev(F9, 1), "hold", F8, F9, None, {SHIFT}, [FakeKeyboard([[SHIFT]])], Cfg(), 0)
+    app._handle_key_event(Ev(F9, 1), F8, F9, None, {SHIFT}, [FakeKeyboard([[SHIFT]])], Cfg(), 0)
     assert keyloop["stops"] == 0 and cancelled and "Shift" in cancelled[0]
 
 

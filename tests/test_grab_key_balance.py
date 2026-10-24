@@ -97,7 +97,7 @@ def pump(kb):
     for event in kb.read():
         if app._is_own_injected_event(kb, event):
             continue
-        app._handle_key_event(event, "hold", F8, None, None, set(), [kb], Cfg(), 0)
+        app._handle_key_event(event, F8, None, None, set(), [kb], Cfg(), 0)
 
 
 def test_hold_to_talk_leaves_the_desktop_balanced(kb):

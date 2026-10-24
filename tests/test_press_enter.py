@@ -504,7 +504,7 @@ def test_a_quick_tap_holds_the_send_even_when_recording_starts_slowly(
     try:
         for value in (1, 0):        # the release was waiting while recording started
             app._handle_key_event(SimpleNamespace(type=ecodes.EV_KEY, code=F8, value=value),
-                                  "hold", F8, F9, None, set(), [keyboard], cfg, 0)
+                                  F8, F9, None, set(), [keyboard], cfg, 0)
     finally:
         app._release_all_grabs()
         app.state.is_recording = False

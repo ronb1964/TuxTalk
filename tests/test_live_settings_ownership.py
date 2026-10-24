@@ -45,7 +45,7 @@ class TestChangeSignalHasOneOwner:
         _idle(monkeypatch)
         live = app.LiveSettings(
             hold_key=60, toggle_key=None, vc_hotkey_str="",
-            voice_cmds_combo=None, voice_cmds_main_key=None, mode="hold",
+            voice_cmds_combo=None, voice_cmds_main_key=None,
         )
         monkeypatch.setattr(app, "_config_file_changed", lambda: True)
         monkeypatch.setattr(app, "_reload_live_settings", lambda cfg, ind: live)

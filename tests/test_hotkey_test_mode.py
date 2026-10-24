@@ -51,7 +51,7 @@ def keys(monkeypatch):
 
 
 def press(code):
-    app._handle_key_event(FakeEvent(code, 1), "hold", HOLD, TOGGLE,
+    app._handle_key_event(FakeEvent(code, 1), HOLD, TOGGLE,
                           None, set(), [], FakeConfig(), 0)
 
 
