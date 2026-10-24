@@ -331,15 +331,51 @@ def test_flatpak_typing_records_what_libei_types_for_undo(monkeypatch):
 
 
 def test_libei_backend_presses_nothing_when_the_claim_says_no(monkeypatch):
-    """A send held by a tap during its wait: no portal session is opened, so
-    no Enter goes out (send_countdown._claim_send)."""
+    """A send held by a tap during its wait: no Enter goes out (send_countdown._claim_send)."""
     from tuxtalk import virtual_keyboard
-    from tuxtalk.output_backends import LibeiOutputBackend
-    b = LibeiOutputBackend()
-    opened = []
-    monkeypatch.setattr(b, "_run_handshake", lambda: opened.append(True) or (None, None))
+    b, done = _libei_with_fake_session(monkeypatch)
 
     def claim():
         raise virtual_keyboard.GaveUp("held")
     assert b.press_keys([((), "ENTER")], claim=claim) is False
-    assert opened == []
+    assert done == ["ready"]
+
+
+def test_libei_backend_claims_the_send_once_the_portal_is_ready(monkeypatch):
+    """The handshake can wait minutes for the approval dialog; a tap during
+    it must still hold the send, so the claim comes right before the Enter."""
+    b, done = _libei_with_fake_session(monkeypatch)
+    assert b.press_keys([((), "ENTER")], claim=lambda: lambda: done.append("taken")) is True
+    assert done == ["ready", "taken", [((), "ENTER")]]
+
+
+def _libei_with_fake_session(monkeypatch):
+    """A Libei backend whose portal handshake and libei session are recorded."""
+    from tuxtalk import libei_ctypes
+    from tuxtalk.output_backends import LibeiOutputBackend
+    done = []
+
+    class Session:
+        def __init__(self, fd):
+            os.close(fd)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def pump_until_ready(self):
+            done.append("ready")
+            return True
+
+        def press_chords(self, chords):
+            done.append(chords)
+            return True
+
+    b = LibeiOutputBackend()
+    r, w = os.pipe()
+    os.close(w)
+    monkeypatch.setattr(b, "_run_handshake", lambda: (r, None))
+    monkeypatch.setattr(libei_ctypes, "LibeiSession", Session)
+    return b, done

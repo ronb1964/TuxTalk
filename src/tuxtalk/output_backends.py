@@ -281,12 +281,17 @@ class LibeiOutputBackend(OutputBackend):
 
     def press_keys(self, chords, claim=None) -> bool:
         from .virtual_keyboard import GaveUp
-        try:
-            if claim is not None:
-                claim()()
-        except GaveUp:
-            return False
-        return self._with_session(lambda s: s.press_chords(chords))
+
+        def press(session):
+            # The handshake can wait minutes for the approval dialog: a tap
+            # meanwhile must still hold the send, so the claim comes last.
+            try:
+                if claim is not None:
+                    claim()()
+            except GaveUp:
+                return False
+            return session.press_chords(chords)
+        return self._with_session(press)
 
 
 def get_output_backend(flatpak_id=None) -> OutputBackend:
