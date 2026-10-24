@@ -42,6 +42,9 @@ _send_lock = threading.Lock()
 LABEL_TAG = "send-countdown"
 HELD_NOTICE = "Not sent. Press Enter when you're ready."
 SWITCHED_WINDOW_NOTICE = "Not sent: you switched windows."
+# Not "you switched": on KDE, a click on the desktop before dictating moves
+# the focus back to the last window by itself while a paste goes in.
+MOVED_NOTICE = "Not sent: the focus moved while the words went in."
 PASSWORD_FIELD_NOT_SENT = "Not sent: the cursor is in a password field."
 UNKNOWN_WINDOW_NOTICE = "Not sent: this desktop doesn't say which window has the focus."
 OWN_WINDOW_NOTICE = "Not sent: a TuxTalk window has the focus."
@@ -49,7 +52,7 @@ OWN_WINDOW_NOTICE = "Not sent: a TuxTalk window has the focus."
 # Why an Enter wasn't sent: (what the log says after "Not sent: ", the notice).
 _NOT_SENT = {
     "switched": ("another window has the focus now", SWITCHED_WINDOW_NOTICE),
-    "moved": ("the focus moved while the words were delivered", SWITCHED_WINDOW_NOTICE),
+    "moved": ("the focus moved while the words were delivered", MOVED_NOTICE),
     "password": ("a password field has the focus now", PASSWORD_FIELD_NOT_SENT),
     "own_window": ("a TuxTalk window has the focus", OWN_WINDOW_NOTICE),
     "typed_meanwhile": ("other keys went out while it was checked", HELD_NOTICE),

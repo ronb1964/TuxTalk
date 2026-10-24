@@ -2397,7 +2397,8 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
     before can be out of date. On KDE, clicking the desktop reports
     plasmashell; wl-copy's clipboard window then hands the focus back to the
     last real window, and the text lands there, where "delete last
-    sentence" must work.
+    sentence" must work. No automatic Enter follows it there: a focus that
+    moved while the words went in can't be told from the user switching.
     """
     before = focused_window.destination()
     if into is not None and focused_window.changed(into, before):

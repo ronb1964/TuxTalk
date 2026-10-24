@@ -80,7 +80,7 @@ def test_a_window_switch_while_the_words_go_in_sends_nothing(chat, keyboard, mon
     heard.append("see you at noon")
     dictate()
     assert typed == [("See you at noon.", FIRST[1])]                 # the words stay
-    assert keyboard.events == [] and notices == [send_countdown.SWITCHED_WINDOW_NOTICE]
+    assert keyboard.events == [] and notices == [send_countdown.MOVED_NOTICE]
 
 
 def test_no_countdown_after_a_switch_while_the_words_went_in(chat, keyboard, monkeypatch):
@@ -98,7 +98,20 @@ def test_no_countdown_after_a_switch_while_the_words_went_in(chat, keyboard, mon
     monkeypatch.setattr(app, "_deliver_text", clicked_away_meanwhile)
     heard.append("see you at noon")
     dictate()
-    assert started == [] and notices == [send_countdown.SWITCHED_WINDOW_NOTICE]
+    assert started == [] and notices == [send_countdown.MOVED_NOTICE]
+
+
+def test_after_a_click_on_the_kde_desktop_it_doesnt_say_you_switched(chat, keyboard,
+                                                                      monkeypatch):
+    """KDE: the desktop was clicked before dictating, and the paste's
+    clipboard window handed the focus back to KWrite as the words went in.
+    The user switched nothing; the Enter still can't follow."""
+    focus, heard, typed, notices = chat
+    focus[:] = ("plasmashell", ("tray", "{0d35}"))
+    clicked_away_while_the_words_went_in(monkeypatch, focus, ("org.kde.kwrite", ("tray", "{a}")))
+    heard.append("see you at noon")
+    dictate()
+    assert keyboard.events == [] and notices == [send_countdown.MOVED_NOTICE]
 
 
 def test_a_pause_then_another_window_of_the_app_gets_neither_mark_nor_enter(chat, keyboard,
