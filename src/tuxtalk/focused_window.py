@@ -17,10 +17,11 @@ Hyprland's address, niri's id. It stays the same when the window moves, and
 tells two windows of one app apart. Each id is tagged with where it came
 from, the tray or the compositor: on an X11 session of KDE or GNOME, a tray
 that didn't answer in time leaves the look to X11, whose number for the same
-window is another one. Without an id (an extension from before it sent one)
-it's the window's frame, so there a window moved or resized counts as
-another, and two maximized windows of one app on one screen can't be told
-apart. COSMIC tells only the class.
+window is another one. Without an id only the app is known, as on COSMIC,
+which tells only the class: the GNOME extension from before it sent one
+(still loaded until the user logs out and in after an update) tells the
+window's frame too, but that changes when the window moves or is resized,
+and two maximized windows of one app share it.
 
 TuxTalk's own windows have no class here: a stale report of Preferences
 must not pick the paste shortcut for the app the user is really in. Which
@@ -87,11 +88,9 @@ def _not_a_target(wm_class) -> bool:
 def look():
     """(class, which window) of the focused window, each None when not
     known. Which window is ("tray", id), ("own", id) for one of TuxTalk's
-    own windows, ("compositor", id) or ("frame",
-    window_geometry.parse_reported's answer). Safe from any thread."""
+    own windows, or ("compositor", id). Safe from any thread."""
     from . import compositor_focus
-    from .window_geometry import parse_reported
-    wm_class, tray_id, frame = reported() or ("", "", "")
+    wm_class, tray_id, _frame = reported() or ("", "", "")
     if wm_class and tray_id and not _not_a_target(wm_class):
         return wm_class, ("tray", tray_id)
     asked_class, asked_id = compositor_focus.focused_window()
@@ -99,12 +98,7 @@ def look():
     if tray_id:
         # An id with no class: the tray keeps only the id of TuxTalk's own.
         return wm_class, ("own", tray_id)
-    if asked_id is not None:
-        return wm_class, ("compositor", asked_id)
-    where = parse_reported(frame)
-    if where is None and (rect := compositor_focus.focused_rect()):
-        where = (rect, "", None)
-    return wm_class, ("frame", where) if where else None
+    return wm_class, None if asked_id is None else ("compositor", asked_id)
 
 
 def window_class():
@@ -115,17 +109,14 @@ def window_class():
 def same_window(before, after) -> bool | None:
     """Whether two looks at the focused window (look() or destination())
     are of one window: True when the desktop's id says so, False when they
-    are known to differ (another app, another id, another frame), None when
-    it can't be told: a part one look didn't get, ids from two sources, or
-    only the frame, which two maximized windows of one app share."""
+    are known to differ (another app, another id), None when it can't be
+    told: a part one look didn't get, or ids from two sources."""
     (class_a, window_a), (class_b, window_b) = before[:2], after[:2]
     if class_a is not None and class_b is not None and class_a != class_b:
         return False
     if window_a is None or window_b is None or _source(window_a) != _source(window_b):
         return None
-    if window_a != window_b:
-        return False
-    return None if window_a[0] == "frame" else True
+    return window_a == window_b
 
 
 def _source(window) -> str:

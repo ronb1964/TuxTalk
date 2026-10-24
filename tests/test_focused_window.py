@@ -4,20 +4,19 @@ tell the window the text went to from any other."""
 import pytest
 
 from tuxtalk import compositor_focus, focused_window
-from tuxtalk.window_geometry import Rect
 
 FRAME = "0,0,800,600|DP-1|0,0,1920,1080"
 
 
 def test_the_compositors_window_id_says_which_window_it_is(monkeypatch):
     """On X11, Sway or Hyprland the id stays the same when the window moves or
-    is re-tiled; without one, where it is stands in."""
+    is re-tiled. Where it is doesn't stand in for one: that changes as it
+    moves, and two maximized windows share it."""
     monkeypatch.setattr(focused_window, "reported", lambda: ("", "", FRAME))
     monkeypatch.setattr(compositor_focus, "focused_window", lambda: ("XTerm", 0x2a00003))
     assert focused_window.look() == ("XTerm", ("compositor", 0x2a00003))
     monkeypatch.setattr(compositor_focus, "focused_window", lambda: (None, None))
-    assert focused_window.look() == (None, ("frame", (Rect(0, 0, 800, 600), "DP-1",
-                                                      Rect(0, 0, 1920, 1080))))
+    assert focused_window.look() == (None, None)
 
 
 def test_the_tray_is_asked_with_a_time_limit(monkeypatch):
@@ -90,14 +89,13 @@ def test_a_window_moved_or_resized_is_still_the_same_window(monkeypatch):
     assert not focused_window.changed(first, focused_window.look())
 
 
-def test_an_extension_that_sends_no_id_falls_back_to_the_frame(monkeypatch):
-    """The extension still loaded from before an update sends only the class:
-    the id the last window had mustn't stick to the next one."""
+def test_an_extension_that_sends_no_id_tells_only_the_app(monkeypatch):
+    """The extension still loaded from before an update sends only the class
+    and the frame: the id the last window had mustn't stick to the next one."""
     report = _tray_reports(monkeypatch)
     report("4183", "kwrite", KWRITE_MAXIMIZED)
     report(None, "firefox", "0,0,800,600|DP-1|0,0,1920,1080")
-    assert focused_window.look() == ("firefox", ("frame", (Rect(0, 0, 800, 600), "DP-1",
-                                                           Rect(0, 0, 1920, 1080))))
+    assert focused_window.look() == ("firefox", None)
 
 
 def test_wl_copys_brief_window_takes_no_id(monkeypatch):
@@ -178,8 +176,6 @@ def test_a_tray_id_is_never_compared_with_an_x11_id(monkeypatch):
     (("kwrite", ("tray", "{a}")), ("kwrite", ("tray", "{b}")), False),
     (("kwrite", ("tray", "{a}")), ("konsole", ("tray", "{a}")), False),
     (("kwrite", None), ("kwrite", None), None),                       # COSMIC: only the app
-    (("kwrite", ("frame", 1)), ("kwrite", ("frame", 1)), None),       # one frame, two windows?
-    (("kwrite", ("frame", 1)), ("kwrite", ("frame", 2)), False),
     ((None, None), ("kwrite", ("tray", "{a}")), None),                # a look that timed out
     (("kwrite", ("tray", "{a}")), (None, ("own", "{t}")), False),     # Preferences opened
 ])

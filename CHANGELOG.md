@@ -36,7 +36,9 @@ before 0.15.0, so older entries use that name.
   Enter in that window. The Enter only goes where the text went now. On KDE
   and GNOME that tells two windows of one app apart too, so two maximized
   browser windows aren't mixed up, and moving a window while a send counts
-  down doesn't stop it any more. GNOME extension version 27.
+  down doesn't stop it any more. On GNOME that needs extension version 28,
+  which is loaded once you log out and back in after the update; until then
+  TuxTalk knows only which app has the focus there, as on COSMIC.
 - Sending automatically now checks where the Enter would go one last time,
   right before it goes, whatever it waited for first. Click into another
   window while a long dictation is still going in and the text stays where it

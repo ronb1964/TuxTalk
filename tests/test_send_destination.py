@@ -306,23 +306,20 @@ def test_no_enter_goes_into_a_tuxtalk_window(tray, keyboard, monkeypatch, dictat
 
 # --- Where the desktop can't say which window: the open decision -------------------------
 
-@pytest.mark.parametrize("window", [None, ("frame", "0,0,1920,1050|DP-1|0,0,1920,1080")])
-def test_where_only_the_app_is_known_it_sends_as_before(chat, keyboard, window):
-    """COSMIC (only the app), or GNOME with 0.18's extension still loaded
-    (the app and its frame): until it's decided otherwise, it sends."""
+def test_where_only_the_app_is_known_it_sends_as_before(chat, keyboard):
+    """COSMIC, or GNOME with 0.18's extension still loaded: until it's
+    decided otherwise, it sends."""
     focus, _, _, notices = chat
-    focus[1] = window
+    focus[1] = None
     assert send_countdown.SEND_WHEN_ONLY_THE_APP_IS_KNOWN is True
     send_countdown.send_automatically("test", focused_window.destination(),
                                       app._press_key, app._type_onto_dictation)
     assert keyboard.typed_keys() == [ENTER] and notices == []
 
 
-@pytest.mark.parametrize("window", [None, ("frame", "0,0,1920,1050|DP-1|0,0,1920,1080")])
-def test_set_not_to_send_there_nothing_is_sent_and_it_says_why(chat, keyboard, monkeypatch,
-                                                               window):
+def test_set_not_to_send_there_nothing_is_sent_and_it_says_why(chat, keyboard, monkeypatch):
     focus, _, _, notices = chat
-    focus[1] = window
+    focus[1] = None
     monkeypatch.setattr(send_countdown, "SEND_WHEN_ONLY_THE_APP_IS_KNOWN", False)
     monkeypatch.setattr(send_countdown, "_delay", 2.0)
     monkeypatch.setattr(send_countdown.threading, "Timer",
@@ -461,3 +458,24 @@ def test_a_click_while_the_pause_is_heard_again_keeps_its_mark_out_of_the_other_
     assert typed[0] == ("See you at noon", FIRST[1])
     assert all(window == FIRST[1] for text, window in typed if text.strip() in ".?!")
     assert typed[-1][1] == SECOND[1]
+
+
+@pytest.mark.parametrize("send_there", [True, False])
+def test_with_0_18s_extension_a_resized_window_is_left_to_the_open_decision(
+        tray, keyboard, monkeypatch, send_there):
+    """GNOME with the extension from 0.18 still loaded until the next login
+    tells the app and the window's frame. Maximizing the browser during the
+    countdown said "you switched windows", whichever way it's decided."""
+    notices, frames = [], ["0,0,800,600||0,0,1920,1080", "0,0,1920,1050||0,0,1920,1080"]
+    monkeypatch.setattr(send_countdown, "show_notice", notices.append)
+    monkeypatch.setattr(send_countdown, "SEND_WHEN_ONLY_THE_APP_IS_KNOWN", send_there)
+    service = object.__new__(dbus_service.TuxTalkDBusService)
+    dbus_service.TuxTalkDBusService.SetFocusedWindowClass(service, "brave-browser")
+    dbus_service.TuxTalkDBusService.SetFocusedWindowGeometry(service, frames[0])
+    sent_to = focused_window.destination()
+    dbus_service.TuxTalkDBusService.SetFocusedWindowGeometry(service, frames[1])
+    send_countdown.send_automatically("test", sent_to, app._press_key, app._type_onto_dictation)
+    if send_there:
+        assert keyboard.typed_keys() == [ENTER] and notices == []
+    else:
+        assert keyboard.events == [] and notices == [send_countdown.UNKNOWN_WINDOW_NOTICE]

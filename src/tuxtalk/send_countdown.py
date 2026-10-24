@@ -55,9 +55,10 @@ _NOT_SENT = {
     "not_pressed": ("a dictation key stayed down, or the key couldn't be pressed", HELD_NOTICE),
 }
 
-# The open decision: where the desktop says which app has the focus but not
-# which of its windows, whether an automatic Enter goes when the app is the
-# same (see _when_the_window_is_unknown).
+# The open decision: where the desktop doesn't say which window has the
+# focus, whether an automatic Enter goes when nothing says it's another app.
+# The name says the common case; True also sends where not even the app is
+# known (see _when_the_window_is_unknown).
 SEND_WHEN_ONLY_THE_APP_IS_KNOWN = True
 
 _delay = 2.0                # seconds before the Enter (Preferences)
@@ -90,17 +91,19 @@ def landed(before, after):
 
 
 def _when_the_window_is_unknown() -> str | None:
-    """None to send, or why not, where the desktop says which app has the
-    focus but can't say which of its windows: COSMIC tells only the app;
-    GNOME with the extension from 0.18 or earlier, still loaded until the
-    user logs out and in after an update, tells the app and where its window
-    is, which two maximized windows of one app share; a desktop that says
-    nothing about the focus (GNOME without the extension), or a tray too
-    busy to answer, leaves even the app unknown.
+    """None to send, or why not, where the desktop can't say which window
+    has the focus: COSMIC tells only the app, and so does GNOME with the
+    extension from 0.18 or earlier, still loaded until the user logs out and
+    in after an update; a desktop that says nothing about the focus (GNOME
+    without the extension), or a tray too busy to answer, leaves even the
+    app unknown. A key said after the words ("... press enter") follows the
+    same choice (press_where_sent).
 
     Two choices, not made yet; until they are, it sends as it always has:
       SEND_WHEN_ONLY_THE_APP_IS_KNOWN True: send when nothing says it's
-        another app. Another window of the same app can get the Enter.
+        another app, also where not even the app is known. Another window
+        of the same app can get the Enter, and where nothing is known, any
+        window.
       False: never send there; the words stay, and the notice says to press
         Enter. On COSMIC, and where the desktop says nothing about the
         focus, nothing is ever sent automatically."""
