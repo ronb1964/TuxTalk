@@ -4664,7 +4664,6 @@ class PreferencesWindow:
             def audio_callback(indata, frames, time, status):
                 if self.recording:
                     self.recorded_frames.append(indata.copy())
-                    # Update level bar
                     rms = np.sqrt(np.mean(indata**2))
                     GLib.idle_add(self.update_level_bar, min(rms * 10, 1.0))
 
@@ -4688,25 +4687,17 @@ class PreferencesWindow:
         """Stop recording microphone input."""
         try:
             self.recording = False
-            
             if hasattr(self, 'record_stream'):
                 self.record_stream.stop()
                 self.record_stream.close()
-            
-            # Combine recorded frames
             if self.recorded_frames:
                 import numpy as np
                 self.recorded_audio = np.concatenate(self.recorded_frames, axis=0)
-            
             self.start_record_btn.set_sensitive(True)
             self.stop_record_btn.set_sensitive(False)
             self.replay_btn.set_sensitive(len(self.recorded_frames) > 0)
-            
             self.level_bar.set_value(0.0)
-
-            # Evaluate recording quality and show grade
             self._show_recording_grade()
-
         except Exception as e:
             self.show_error_dialog("Stop recording failed!", str(e))
 
@@ -4717,7 +4708,6 @@ class PreferencesWindow:
         style_context.remove_class("level-good")
         style_context.remove_class("level-too-loud")
 
-        # Check if we have level data
         if not hasattr(self, '_level_samples') or not self._level_samples:
             self.level_status.set_text("No audio detected")
             style_context.add_class("level-too-quiet")
@@ -4753,18 +4743,28 @@ class PreferencesWindow:
         thread (beeps.play), so it is heard to the end and the window stays
         free while it plays. Replay and Start Recording are greyed out until
         it is over: a second click would queue the recording again behind
-        it, and a new recording would record the replay."""
+        it, and a new recording would record the replay. A sound server that
+        hangs as the stream opens never says it is over, so they come back
+        by themselves once it would long have played."""
         if self.recorded_audio is None:
             return
         import numpy as np
         from . import beeps
         louder = np.clip(self.recorded_audio[:, 0] * 3.0, -1.0, 1.0).astype(np.float32)
+        rate = getattr(self, '_recording_sr', 48000)
         self.replay_btn.set_sensitive(False)
         self.start_record_btn.set_sensitive(False)
-        beeps.play(louder, getattr(self, '_recording_sr', 48000),
-                   finished=lambda error: GLib.idle_add(self._replay_over, error))
+        self._replaying = replay = object()
+        beeps.play(louder, rate, finished=lambda error: GLib.idle_add(
+            self._replay_over, replay, error))
+        GLib.timeout_add(int((len(louder) / rate + beeps.WAIT_LIMIT_S + beeps.STUCK_S) * 1000),
+                         self._replay_over, replay, "the sound output isn't answering")
 
-    def _replay_over(self, error):
+    def _replay_over(self, replay, error):
+        """Once for each *replay*: played, failed or given up on, whichever is first."""
+        if replay is not self._replaying:
+            return False
+        self._replaying = None
         self.replay_btn.set_sensitive(True)
         self.start_record_btn.set_sensitive(True)
         if error:
