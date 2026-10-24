@@ -189,6 +189,26 @@ def test_the_start_beep_picked_up_by_the_mic_is_not_a_word(monkeypatch):
     app.state.is_recording = False
 
 
+def test_on_a_slow_output_the_start_beep_picked_up_late_is_not_a_word(monkeypatch):
+    """The beep reaches the speakers, and so the mic, one output latency
+    after it is played: 0.3 s here, past two beep lengths."""
+    app = _start(monkeypatch)
+    from tuxtalk import beeps
+    monkeypatch.setattr(beeps, "output_latency", lambda: 0.3)
+    t = np.arange(int(app.START_BEEP[1] * SR)) / SR
+    beep = (np.sin(2 * np.pi * app.START_BEEP[0] * t) * 8000).astype(np.int16)
+    heard = np.concatenate([noise(0.3 + 0.02), beep, noise(0.2)])
+    for i in range(0, len(heard), BLOCK):
+        app._sd_callback(heard[i:i + BLOCK].reshape(-1, 1), BLOCK, None, None)
+    assert app._toggle_pressed_while_recording(beeps_on=False) is True
+    quiet = noise(12.0)
+    for i in range(0, len(quiet), BLOCK):
+        app._sd_callback(quiet[i:i + BLOCK].reshape(-1, 1), BLOCK, None, None)
+    assert app.state.silence.nothing_said
+    app._cmd_stop_recording.clear()
+    app.state.is_recording = False
+
+
 def test_a_quick_second_tap_counts_when_the_recording_was_slow_to_start(monkeypatch):
     """Issue #21: the keys are read on the thread that starts the recording,
     so a second tap made while the microphone and the start beep took most

@@ -97,6 +97,14 @@ def output_latency():
     return _latency
 
 
+def start_beep_heard(rate):
+    """How far into a recording, in samples at *rate*, a microphone near the
+    speakers may still hear the start beep. It is played just after the
+    microphone opens and reaches the speakers one output latency later; twice
+    its length leaves room for the microphone's own delay."""
+    return int((2 * START_BEEP[1] + output_latency()) * rate)
+
+
 def tone(freq, duration, rate=SAMPLE_RATE):
     """A sine tone of *duration* seconds at *rate* samples a second."""
     t = np.arange(int(rate * duration)) / rate
