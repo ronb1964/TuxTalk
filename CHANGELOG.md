@@ -121,6 +121,8 @@ before 0.15.0, so older entries use that name.
   noisy for your voice, under the level grade: a headset, or the mic closer
   to your mouth, will help. It measures how far your voice stands above the
   room in the recording you just made.
+- Preferences opens again when a number in the settings file was edited by
+  hand into something that isn't one. It shows that setting's default.
 - Help lists its sections down the left side now, with the one you pick
   beside it, instead of a row of tabs along the top. The tabs made the
   window wider with every one added, and on Mint it already had to grow

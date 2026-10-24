@@ -273,7 +273,6 @@
   "prefs.py::_acquire_prefs_singleton._cleanup::swallowed_error": 1,
   "prefs.py::_acquire_prefs_singleton::swallowed_error": 2,
   "prefs.py::_acquire_prefs_singleton::undocumented": 1,
-  "prefs.py::_coerce_config_types::swallowed_error": 1,
   "prefs.py::_list_pulse_sources::swallowed_error": 1,
   "prefs.py::_on_gnome::swallowed_error": 1,
   "prefs.py::_pulse_source_for_mic::long_line": 1,

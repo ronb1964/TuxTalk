@@ -17,7 +17,7 @@ import sys
 import time
 import atexit
 import dbus.mainloop.glib
-from dataclasses import asdict
+from dataclasses import asdict, fields
 from .config import (CONFIG_PATH, ConfigNotLoadedError, Settings, changed_keys, merge_changed_keys,
                      load_custom_commands, save_custom_commands, write_text_atomic,
                      merge_custom_command_edits,
@@ -42,14 +42,15 @@ except ImportError:
         with open(path, "r") as f:
             return toml.load(f)
 
-# Type coercion for on-disk config values. A hand-edited config can hold '5'
-# where an int is expected, and Gtk.Adjustment(value='5') crashes the window.
 _COERCE_BOOL_TRUE = ("true", "1", "yes", "on")
 
 def _coerce_config_types(config: dict) -> dict:
-    """Coerce known Settings keys to their declared field types in place."""
-    from dataclasses import fields as _dc_fields
-    for fld in _dc_fields(Settings):
+    """Coerce known Settings keys to their declared field types in place: a
+    hand-edited config can hold '5' for 5, and Gtk.Adjustment(value='5')
+    crashes the window. A value that can't be ("oops" for a number) becomes
+    the setting's default; left as it was, Preferences didn't open."""
+    defaults = asdict(Settings())
+    for fld in fields(Settings):
         if fld.name not in config:
             continue
         value = config[fld.name]
@@ -62,8 +63,9 @@ def _coerce_config_types(config: dict) -> dict:
                 config[fld.name] = float(value)
             elif fld.type == "str" and not isinstance(value, str):
                 config[fld.name] = str(value)
-        except Exception:
-            pass  # leave the bad value; Settings defaults cover it elsewhere
+        except (TypeError, ValueError, OverflowError):
+            print(f"Setting {fld.name} = {value!r} isn't a {fld.type}: showing its default")
+            config[fld.name] = defaults[fld.name]
     return config
 
 
@@ -606,8 +608,6 @@ class PreferencesWindow:
             except Exception as e:
                 print(f"Error loading config: {e}")
 
-        # Fix wrongly-typed on-disk values ('5' instead of 5) that would
-        # otherwise crash spinbox construction in create_ui()
         return _coerce_config_types(defaults)
 
     def _check_cuda_availability(self):

@@ -76,6 +76,19 @@ def test_coerce_config_types_leaves_correct_types_alone():
     assert out["custom_key"] == [1]  # unknown keys untouched
 
 
+def test_a_setting_that_isnt_a_number_gets_its_default_so_preferences_opens():
+    """auto_stop_seconds = "oops" in a hand-edited config stayed a string,
+    and building the spin button for it raised: Preferences didn't open."""
+    from gi.repository import Gtk
+    from tuxtalk.config import Settings
+    out = _coerce_config_types({"auto_stop_seconds": "oops", "auto_timeout_minutes": "five",
+                                "beeps": True})
+    assert out["auto_stop_seconds"] == Settings().auto_stop_seconds
+    assert out["auto_timeout_minutes"] == Settings().auto_timeout_minutes
+    assert out["beeps"] is True
+    Gtk.Adjustment(value=float(out["auto_stop_seconds"]), lower=0.5, upper=10.0)
+
+
 # --- save_config must emit TOML that can be read back ---
 
 def _saveable(tmp_path, monkeypatch, config, at_open=None):
