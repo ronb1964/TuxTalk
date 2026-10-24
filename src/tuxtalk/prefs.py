@@ -8,7 +8,7 @@ import gi
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gtk, Gdk, GLib
-from .ui_style import Fold, message_dialog, show_message
+from .ui_style import message_dialog, show_message
 from .logger import setup_logger
 from .prefs_audio import AudioTab
 from .prefs_advanced import AdvancedTab
@@ -22,8 +22,9 @@ import time
 import atexit
 import dbus.mainloop.glib
 from dataclasses import asdict
+from . import prefs_ipc
 from .config import (CONFIG_PATH, Settings, apply_toml, changed_keys, merge_changed_keys,
-                     repaired, write_text_atomic, _toml_value)
+                     repaired, write_text_atomic, _load_toml_file, _toml_value)
 
 # Set on the Preferences window so prefs_style.css — which must be installed
 # screen-wide to reach child widgets — matches only this window's widgets.
@@ -31,21 +32,6 @@ from .config import (CONFIG_PATH, Settings, apply_toml, changed_keys, merge_chan
 PREFS_STYLE_CLASS = "talktype-prefs"
 
 logger = setup_logger(__name__)
-
-# Use tomllib (Python 3.11+) or fallback to toml
-try:
-    import tomllib
-    def load_toml(path):
-        with open(path, "rb") as f:
-            return tomllib.load(f)
-except ImportError:
-    # Python < 3.11. No hand-rolled parser beyond this: a string-only one
-    # returns '5' instead of 5, and the spinboxes crash on it.
-    import toml
-    def load_toml(path):
-        with open(path, "r") as f:
-            return toml.load(f)
-
 
 def _coerce_config_types(config: dict) -> dict:
     """*config* read as the service reads it (config.apply_toml, then
@@ -58,37 +44,21 @@ def _coerce_config_types(config: dict) -> dict:
     return {**config, **asdict(repaired(settings))}
 
 
-# Single instance management (see prefs_ipc.py)
-from . import prefs_ipc
-_PREFS_PIDFILE = prefs_ipc.pidfile_path()
-
 def _acquire_prefs_singleton(tab=None):
+    """Give way to a Preferences window already open, bringing it to the
+    front (on *tab*) and exiting, or claim the pidfile for this one."""
+    old = prefs_ipc.running_pid()
+    if old and old != os.getpid():
+        # Bring the open one forward rather than silently doing nothing,
+        # which looked like Preferences failed to open.
+        prefs_ipc.bring_to_front(old, tab)
+        logger.info("Preferences is already open; brought it to the front")
+        sys.exit(0)
     try:
-        if os.path.exists(_PREFS_PIDFILE):
-            try:
-                with open(_PREFS_PIDFILE, "r") as f:
-                    old = int(f.read().strip() or "0")
-            except Exception:
-                old = 0
-            if old != os.getpid() and prefs_ipc.is_prefs_pid(old):
-                # Bring the open one forward rather than silently doing
-                # nothing, which looked like Preferences failed to open.
-                prefs_ipc.bring_to_front(old, tab)
-                logger.info("Preferences is already open; brought it to the front")
-                sys.exit(0)
-        with open(_PREFS_PIDFILE, "w") as f:
-            f.write(str(os.getpid()))
-    except Exception as e:
+        prefs_ipc.claim_pidfile()
+    except OSError as e:
         logger.warning(f"Could not write prefs pidfile: {e}")
-    def _cleanup():
-        try:
-            with open(_PREFS_PIDFILE, "r") as f:
-                cur = int(f.read().strip() or "0")
-            if cur == os.getpid():
-                os.remove(_PREFS_PIDFILE)
-        except Exception:
-            pass
-    atexit.register(_cleanup)
+    atexit.register(prefs_ipc.release_pidfile)
 
 
 # What can need a download, and so is rolled back when it never finishes:
@@ -101,39 +71,34 @@ class PreferencesWindow:
     applying and closing for all of them."""
 
     def __init__(self):
-        # Set GTK theme to prefer dark mode
+        """Read the settings, build the window and show it."""
         settings = Gtk.Settings.get_default()
         if settings:
             settings.set_property("gtk-application-prefer-dark-theme", True)
 
-        # Create window FIRST
         self.window = Gtk.Window(title="TuxTalk Preferences")
-        self.window.set_name("preferences_window")  # Give window a name for CSS targeting
+        self.window.set_name("preferences_window")
         # Size is set in create_ui (_fit_to_screen), once the content can be measured.
         self.window.set_position(Gtk.WindowPosition.CENTER)
-
-        # Load custom CSS styling (after window is created)
         self._load_css()
-
-        # Set window type hint to NORMAL to ensure proper window stacking
-        # This prevents the "Tried to map a popup with a non-top most parent" error
+        # A normal window, so dropdown popups have a top-level parent ("Tried
+        # to map a popup with a non-top most parent" otherwise).
         self.window.set_type_hint(Gdk.WindowTypeHint.NORMAL)
 
-        # Load current config. Keep a snapshot of the window-open state so
-        # save_config() can write only the keys the user actually changed
-        # (see merge_changed_keys — protects tray changes made meanwhile).
+        # The settings as they were at open: save_config() writes only the
+        # keys changed in this window (merge_changed_keys), so a change the
+        # tray made meanwhile survives.
         self.config = self.load_config()
         self._config_at_open = dict(self.config)
+        # Set while Apply waits for KDE's verdict on a new hotkey.
+        self._waiting_for_kde = False
+        self._save_error = ""
+        self._scroll_controllers = []
 
-        # Create UI
         self.create_ui()
-        
-        # Connect window close event to cleanup
         self.window.connect("delete-event", self.on_window_close)
         self.window.connect("notify::is-active", self._on_window_active)
-        
         self._show_window()
-        # Don't auto-start level monitoring - only when user clicks record button
 
     def _show_window(self):
         """Show the window with the rows that depend on a setting already hidden."""
@@ -142,9 +107,9 @@ class PreferencesWindow:
         # were built come back. Hide them again here, before the main loop
         # draws anything, so they never flash on screen.
         self.general_tab.update_timeout_ui_state()
-        self.ok_btn.grab_default()  # Now safe to grab default after window is shown
-        self.window.present()  # Bring window to front
-        # Note: Don't use set_keep_above - it interferes with combo box popups
+        self.ok_btn.grab_default()      # only once the window is shown
+        # Not set_keep_above: it gets in the way of the dropdowns' popups.
+        self.window.present()
 
     def _load_css(self):
         """Load custom CSS stylesheet for preferences window ONLY (not globally)."""
@@ -176,16 +141,6 @@ class PreferencesWindow:
         except Exception as e:
             logger.warning(f"Failed to load CSS: {e}")
 
-    def _block_combo_scroll(self, combo):
-        """
-        Stop the scroll wheel from changing a ComboBox value, while still letting
-        the page scroll when the pointer is over the dropdown (see
-        ui_style.forward_combo_scroll for why swallowing the event stalled the
-        window).
-        """
-        from .ui_style import forward_combo_scroll
-        forward_combo_scroll(combo)
-
     def load_config(self):
         """Load config from TOML file.
 
@@ -196,7 +151,7 @@ class PreferencesWindow:
 
         if os.path.exists(CONFIG_PATH):
             try:
-                config = load_toml(CONFIG_PATH)
+                config = _load_toml_file(CONFIG_PATH)
                 defaults.update(config)
             except Exception as e:
                 logger.warning(f"Could not read the config: {e}")
@@ -258,7 +213,7 @@ class PreferencesWindow:
             on_disk = {}
             if os.path.exists(CONFIG_PATH):
                 try:
-                    on_disk = load_toml(CONFIG_PATH)
+                    on_disk = _load_toml_file(CONFIG_PATH)
                 except Exception as e:
                     # The file exists but cannot be read. Everything this
                     # window is showing is therefore defaults, not the user's
@@ -305,8 +260,9 @@ class PreferencesWindow:
             logger.error(f"Could not save the config: {e}")
             self._save_error = str(e)
             return False
-    
+
     def create_ui(self):
+        """The title, the tabs, the version and the button row."""
         main_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
 
         # Main content column. Each notebook tab is individually wrapped in a
@@ -324,53 +280,51 @@ class PreferencesWindow:
         title.set_markup("<big><b>TuxTalk Preferences</b></big>")
         vbox.pack_start(title, False, False, 0)
 
-        notebook = self.notebook = Gtk.Notebook()
-
-        self.general_tab = GeneralTab(self)
-        notebook.append_page(self._scrollable_tab(self.general_tab.build()),
-                             Gtk.Label(label="General"))
-
-        self.audio_tab = AudioTab(self)
-        notebook.append_page(self._scrollable_tab(self.audio_tab.build()),
-                             Gtk.Label(label="Audio"))
-
-        self.advanced_tab = AdvancedTab(self)
-        advanced_tab = self.advanced_tab.build()
-        notebook.append_page(self._scrollable_tab(advanced_tab), Gtk.Label(label="Advanced"))
-
-        # Words tab (Your Words and the snippets). Its lists have scrolls of
-        # their own, which the wheel must still reach, so the page scroll leaves
-        # the wheel alone; the tab has no dropdowns or sliders to protect.
-        # Its whole content sets the window's opening height (see below).
-        self.words_tab = WordsTab(self)
-        commands_tab = self.words_tab.build()
-        commands_page = self._scrollable_tab(commands_tab, capture_wheel=False)
-        commands_page.set_propagate_natural_height(True)
-        notebook.append_page(commands_page, Gtk.Label(label="Words"))
-
-        self.stats_tab = StatsTab(self)
-        notebook.append_page(self._scrollable_tab(self.stats_tab.build()),
-                             Gtk.Label(label="Stats"))
-
-        self.updates_tab = UpdatesTab(self)
-        updates_tab = self.updates_tab.build()
-        notebook.append_page(self._scrollable_tab(updates_tab), Gtk.Label(label="Updates & Backup"))
-        # Connected once every tab is built: appending the first page shows it.
-        notebook.connect("switch-page", self.on_tab_switched)
-
-        vbox.pack_start(notebook, True, True, 0)
+        vbox.pack_start(self._build_tabs(), True, True, 0)
 
         from . import __version__
         version_label = Gtk.Label()
-        version_label.set_markup(f'<span size="small" color="#888888">TuxTalk v{__version__}</span>')
+        version_label.set_markup(
+            f'<span size="small" color="#888888">TuxTalk v{__version__}</span>')
         version_label.set_halign(Gtk.Align.END)
         version_label.set_margin_top(5)
         version_label.set_margin_end(5)
         vbox.pack_start(version_label, False, False, 0)
 
         main_vbox.pack_start(vbox, True, True, 0)
+        main_vbox.pack_start(self._button_row(), False, False, 0)
+        self.window.add(main_vbox)
+        self._fit_to_screen(main_vbox)
 
-        # Buttons (outside scrolled area so always visible)
+    def _build_tabs(self):
+        """The notebook with every tab, each in a scroll of its own."""
+        notebook = self.notebook = Gtk.Notebook()
+        self.general_tab = GeneralTab(self)
+        self.audio_tab = AudioTab(self)
+        self.advanced_tab = AdvancedTab(self)
+        for tab, label in ((self.general_tab, "General"), (self.audio_tab, "Audio"),
+                           (self.advanced_tab, "Advanced")):
+            notebook.append_page(self._scrollable_tab(tab.build()), Gtk.Label(label=label))
+
+        # Words tab (Your Words and the snippets). Its lists have scrolls of
+        # their own, which the wheel must still reach, so the page scroll leaves
+        # the wheel alone; the tab has no dropdowns or sliders to protect.
+        # Its whole content sets the window's opening height (_fit_to_screen).
+        self.words_tab = WordsTab(self)
+        words_page = self._scrollable_tab(self.words_tab.build(), capture_wheel=False)
+        words_page.set_propagate_natural_height(True)
+        notebook.append_page(words_page, Gtk.Label(label="Words"))
+
+        self.stats_tab = StatsTab(self)
+        self.updates_tab = UpdatesTab(self)
+        for tab, label in ((self.stats_tab, "Stats"), (self.updates_tab, "Updates & Backup")):
+            notebook.append_page(self._scrollable_tab(tab.build()), Gtk.Label(label=label))
+        # Connected once every tab is built: appending the first page shows it.
+        notebook.connect("switch-page", self.on_tab_switched)
+        return notebook
+
+    def _button_row(self):
+        """Help, Cancel, Apply and OK, below the tabs so they always show."""
         button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         button_box.set_margin_start(20)
         button_box.set_margin_end(20)
@@ -383,8 +337,7 @@ class PreferencesWindow:
         help_btn.set_tooltip_text("Open TuxTalk help documentation")
         button_box.pack_start(help_btn, False, False, 0)
 
-        # Add spacing to push other buttons to the right
-        button_box.pack_start(Gtk.Label(), True, True, 0)
+        button_box.pack_start(Gtk.Label(), True, True, 0)     # the rest to the right
 
         cancel_btn = Gtk.Button(label="Cancel")
         cancel_btn.connect("clicked", self.on_cancel)
@@ -399,12 +352,7 @@ class PreferencesWindow:
         button_box.pack_start(cancel_btn, False, False, 0)
         button_box.pack_start(apply_btn, False, False, 0)
         button_box.pack_start(self.ok_btn, False, False, 0)
-
-        main_vbox.pack_start(button_box, False, False, 0)
-        self.window.add(main_vbox)
-        self._fit_to_screen(main_vbox)
-        # Wheel scrolling over combos/sliders is handled by the per-tab capture-phase
-        # scroll controller installed in _scrollable_tab (compositor-independent).
+        return button_box
 
     def _fit_to_screen(self, content):
         """Open at the height the content asks for, capped to the monitor.
@@ -415,12 +363,9 @@ class PreferencesWindow:
         page that is not expected to scroll.
         """
         from .ui_style import fit_dialog_to_screen
-        try:
-            # Hidden widgets measure as zero; window.show_all() follows anyway.
-            content.show_all()
-            desired = content.get_preferred_height()[1]
-        except Exception:
-            desired = 0
+        # Hidden widgets measure as zero; window.show_all() follows anyway.
+        content.show_all()
+        desired = content.get_preferred_height()[1]
         fit_dialog_to_screen(self.window, 500, desired if desired > 0 else 600)
 
     def _scrollable_tab(self, widget, capture_wheel=True):
@@ -455,45 +400,18 @@ class PreferencesWindow:
             scrolled, Gtk.EventControllerScrollFlags.VERTICAL)
         ctrl.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
         ctrl.connect("scroll", self._on_capture_scroll, scrolled)
-        # Keep a reference so the controller is not garbage-collected.
-        if not hasattr(self, "_scroll_controllers"):
-            self._scroll_controllers = []
+        # Kept, or the controller is garbage-collected and stops working.
         self._scroll_controllers.append(ctrl)
 
     def _on_capture_scroll(self, controller, dx, dy, scrolled):
+        """Scroll the page by the wheel's movement, and keep it from the
+        widget under the pointer."""
         vadj = scrolled.get_vadjustment()
         if vadj is not None:
             step = vadj.get_step_increment() or 40
             hi = vadj.get_upper() - vadj.get_page_size()
             vadj.set_value(max(vadj.get_lower(), min(vadj.get_value() + dy * step, hi)))
         return True  # consume so child widgets never act on the scroll
-
-    def _fold(self, grid, row, show_label, hide_label):
-        """A closed Fold across *grid* at *row*, for settings most people
-        never need; fill its .content."""
-        def toggled(opening):
-            if opening:
-                # After the slide-down, so its full height is known.
-                self._scroll_into_view(
-                    fold.revealer, fold.revealer.get_transition_duration() + 60)
-        fold = Fold(show_label, hide_label, on_toggle=toggled)
-        fold.set_margin_top(6)
-        grid.attach(fold, 0, row, 2, 1)
-        return fold
-
-    def _section_header(self, grid, row, title):
-        """A divider line and a bold section title across the grid; returns the
-        next free row."""
-        sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-        sep.set_margin_top(20)
-        sep.set_margin_bottom(15)
-        grid.attach(sep, 0, row, 2, 1)
-        header = Gtk.Label()
-        header.set_markup(f"<b>{title}</b>")
-        header.set_xalign(0)
-        header.set_margin_bottom(10)
-        grid.attach(header, 0, row + 1, 2, 1)
-        return row + 2
 
     def select_tab(self, name):
         """Show the tab whose label is *name* (case-insensitive). Looked up by
@@ -516,28 +434,16 @@ class PreferencesWindow:
         from .raise_window import raise_window
         raise_window(self.window)
 
-    def _on_combo_button_press(self, widget, event):
-        """Handle button press events on combo boxes to ensure they open reliably."""
-        # Ensure the widget has focus before processing the click
-        if not widget.has_focus():
-            widget.grab_focus()
-        # Let GTK handle the normal click event
-        return False
-
     def update_config(self, key, value):
-        """Update config value."""
+        """Change a setting in the window; Apply or OK saves it (and only
+        then writes launch_at_login's autostart file, so Cancel has nothing
+        to undo)."""
         # GTK combos emit 'changed' with get_active_id()=None while being
-        # rebuilt (remove_all in SpeechSection.refresh_device_options). Writing that None
-        # would produce 'device = None' in the TOML file — invalid TOML that
-        # wipes ALL settings on the next load. Never a real user action.
-        if value is None:
-            return
-
-        # (CUDA picked before its files are downloaded never gets here: the
-        # Device dropdown offers the download instead.)
-        self.config[key] = value
-        # launch_at_login's autostart file is written by save_config(), not
-        # here, so it changes only when the user saves and never on Cancel.
+        # rebuilt (SpeechSection.refresh_device_options). Writing that None
+        # would produce 'device = None' in the TOML file, invalid TOML that
+        # wipes all settings on the next load. Never a real user action.
+        if value is not None:
+            self.config[key] = value
 
     def _handle_autostart(self, enable):
         """Create or remove the autostart desktop file. Delegates to
@@ -546,43 +452,11 @@ class PreferencesWindow:
         autostart.set_autostart(enable)
 
     def get_selected_device_idx(self):
-        """Get the device index for the currently selected microphone.
-
-        Uses config.find_input_device() for smart PipeWire-aware detection
-        when no mic name is configured, avoiding the broken ALSA default
-        virtual device that returns garbage audio.
-        """
+        """The sound device of the microphone picked in the Audio tab
+        (config.find_input_device: with none picked, the PipeWire default
+        rather than ALSA's "default", which records noise)."""
         from .config import find_input_device
-        current_mic = self.config.get("mic", "")
-        return find_input_device(current_mic)
-    
-    def _scroll_into_view(self, widget, delay_ms=60):
-        """Scroll the tab so *widget*, just shown, is in view, once GTK has
-        laid it out (after *delay_ms*, longer for a sliding reveal). Ticking
-        a box whose settings appear below the window's edge looked like
-        nothing had happened."""
-        def scroll():
-            sw = widget.get_parent()
-            while sw is not None and not isinstance(sw, Gtk.ScrolledWindow):
-                sw = sw.get_parent()
-            if sw is None or not widget.get_mapped():
-                return False
-            coords = widget.translate_coordinates(sw, 0, 0)
-            if coords is None:
-                return False
-            top = coords[1]
-            bottom = top + widget.get_allocated_height()
-            adj = sw.get_vadjustment()
-            page = adj.get_page_size()
-            if bottom > page:
-                # Down until its bottom clears the "more below" fade (70 px,
-                # prefs_style.css), but never past its top. At a page's end
-                # there's no fade: the page just scrolls to the bottom.
-                adj.set_value(adj.get_value() + min(bottom - page + 76, max(0, top - 12)))
-            elif top < 0:
-                adj.set_value(adj.get_value() + top - 12)
-            return False
-        GLib.timeout_add(delay_ms, scroll)
+        return find_input_device(self.config.get("mic", ""))
 
     def _stop_mic_test(self):
         """The window closes: stop the microphone tests and free the mic."""
@@ -603,36 +477,26 @@ class PreferencesWindow:
         if self.advanced_tab.type_at_pause is not None:
             self.advanced_tab.type_at_pause.stop_test(wait)
 
-    def _release_pidfile(self):
-        """Remove the prefs singleton pidfile if it belongs to this process."""
-        try:
-            with open(_PREFS_PIDFILE, "r") as f:
-                cur = int(f.read().strip() or "0")
-            if cur == os.getpid():
-                os.remove(_PREFS_PIDFILE)
-        except Exception:
-            pass
-
     def _show_save_error(self):
-        """Error dialog for a failed config save (disk full, permissions…)."""
-        dialog = message_dialog(
-            transient_for=self.window,
-            flags=0,
-            message_type=Gtk.MessageType.ERROR,
-            buttons=Gtk.ButtonsType.OK,
-            text="Failed to save settings!"
-        )
-        # Why it failed (disk full, read-only folder…) is what the user needs
-        # to fix it.
-        reason = getattr(self, "_save_error", "")
-        if reason:
-            dialog.format_secondary_text(reason)
-        dialog.run()
-        dialog.destroy()
+        """Say the settings weren't saved, and why (disk full, read-only
+        folder…): that's what the user needs to fix it."""
+        show_message(self.window, Gtk.MessageType.ERROR, "Failed to save settings!",
+                     self._save_error)
+
+    def _say_restart_failed(self):
+        """The settings are saved, but the dictation service didn't restart."""
+        show_message(self.window, Gtk.MessageType.WARNING,
+                     "Settings saved, but service restart failed!",
+                     "You may need to manually restart the service.")
+
+    def _release(self):
+        """The window closes: stop the microphone tests and let go of the pidfile."""
+        self._stop_mic_test()
+        prefs_ipc.release_pidfile()
 
     def on_window_close(self, widget, event):
-        """Handle window close event: stop the mic test, clean up PID file."""
-        if getattr(self, "_waiting_for_kde", False):
+        """The title bar's close: asks first about changes not applied."""
+        if self._waiting_for_kde:
             return True     # Apply/OK is still using the window
         # Closing with the X used to drop unapplied changes without a word.
         # Ask first, the way KDE's System Settings does. (Cancel still closes
@@ -644,22 +508,14 @@ class PreferencesWindow:
                 return True
             if answer != "discard":
                 return True         # Keep Editing, or the question was closed
-        self._stop_mic_test()
-        self._release_pidfile()
+        self._release()
         Gtk.main_quit()
         return False
-    
+
     def _has_unapplied_changes(self):
         """True when closing now would lose something: a setting changed since
-        the last Apply, or an edited Voice Commands list."""
-        if self._changed_since_open():
-            return True
-        try:
-            if self.words_tab.changed():
-                return True
-        except Exception:
-            pass
-        return False
+        the last Apply, or an edited snippet."""
+        return bool(self._changed_since_open()) or self.words_tab.changed()
 
     def _ask_apply_before_closing(self):
         """"apply", "discard", or "keep" (also when the question is closed)."""
@@ -711,27 +567,21 @@ class PreferencesWindow:
         return self.restart_service()
 
     def restart_service(self):
-        """Restart the dictation service."""
+        """Restart the dictation service; True if it started again."""
+        from .service_launcher import launch_dictation_service, stop_dictation_service
         try:
-
-            # Kill existing dictation-service processes
-            from .service_launcher import stop_dictation_service
             stop_dictation_service()
-            # Wait a moment for processes to terminate
-            time.sleep(1)
-
-            # Start it the same way the tray does. Preferences runs on native
+            time.sleep(1)       # for the old processes to end
+            # Started the same way the tray does. Preferences runs on native
             # Wayland, and a service spawned with this process's environment
             # would inherit it: gtk_window_move() would be ignored and the
             # recording indicator always centred.
-            from .service_launcher import launch_dictation_service
-
             launch_dictation_service()
             return True
         except Exception as e:
             logger.warning(f"Failed to restart service: {e}")
             return False
-    
+
     def on_tab_switched(self, notebook, page, page_num):
         """Scroll the newly shown tab to the top, refresh Stats, which the
         service updates while this window is open, and stop the microphone
@@ -745,119 +595,84 @@ class PreferencesWindow:
         if tab != "Advanced":
             self._stop_pause_test()
 
+    def _save_and_download(self):
+        """Save the settings, then download what the chosen model needs:
+        (the keys changed, when they were saved), or None when the save
+        failed (it says why) or the download didn't finish (its model and
+        device are rolled back)."""
+        # Both before save_config(), which resets _config_at_open to what it
+        # wrote: after that there is nothing left to diff, and it no longer
+        # names the setup the service runs.
+        changed = self._changed_since_open()
+        previous = {k: self._config_at_open.get(k) for k in _DOWNLOAD_KEYS}
+        saved_at = time.time()      # for KDE's verdict on a changed hotkey
+        if not self.save_config():
+            self._show_save_error()
+            return None
+        speech = self.general_tab.speech
+        if not speech.download_selected_model():
+            speech.rollback_download(previous)
+            return None
+        return changed, saved_at
+
     def on_apply(self, button):
         """Apply changes, restarting the service only if something needs it."""
-        # Save custom commands first
         self.words_tab.save()
+        saved = self._save_and_download()
+        if saved is None:
+            return
+        changed, saved_at = saved
+        # Restart only when the change requires it. The service picks up
+        # everything else from the config file within a second, which avoids
+        # a ~10 s rebuild of the speech model during which the hotkey does
+        # nothing at all.
+        if not self._apply_or_restart(changed):
+            self._say_restart_failed()
+        elif not self.general_tab.after_hotkey_change(changed, saved_at):
+            # (A hotkey question stands in for this.) Whether the service
+            # really restarted, not just that the change applied.
+            from .config import needs_service_restart
+            show_message(self.window, Gtk.MessageType.INFO, "Settings applied successfully!",
+                         "Dictation service has been restarted with new settings."
+                         if needs_service_restart(changed)
+                         else "Your changes are already in effect.")
 
-        # MUST be computed before save_config(), which resets _config_at_open
-        # to the merged result — after that there is nothing left to diff.
-        changed = self._changed_since_open()
-        # Same reason: after the save this no longer names the live setup.
-        previous = {k: self._config_at_open.get(k) for k in _DOWNLOAD_KEYS}
-
-        saved_at = time.time()      # for KDE's verdict on a changed hotkey
-        if self.save_config():
-            # Check if model needs downloading
-            speech = self.general_tab.speech
-            if not speech.download_selected_model():
-                speech.rollback_download(previous)
-                return
-
-            # Restart only when the change actually requires it. The service
-            # picks up everything else from the config file within a second,
-            # which avoids a ~10s rebuild of the Whisper model during which
-            # the hotkey does nothing at all.
-            applied = self._apply_or_restart(changed)
-            if applied and self.general_tab.after_hotkey_change(changed, saved_at):
-                pass    # its question stands in for "Settings applied"
-            elif applied:
-                # Show confirmation
-                dialog = message_dialog(
-                    transient_for=self.window,
-                    flags=0,
-                    message_type=Gtk.MessageType.INFO,
-                    buttons=Gtk.ButtonsType.OK,
-                    text="Settings applied successfully!"
-                )
-
-                # Say whether the service really restarted, not just that it applied.
-                from .config import needs_service_restart
-                dialog.format_secondary_text(
-                    "Dictation service has been restarted with new settings."
-                    if needs_service_restart(changed)
-                    else "Your changes are already in effect."
-                )
-                dialog.run()
-                dialog.destroy()
-            else:
-                # Show service restart error
-                show_message(self.window,
-                             Gtk.MessageType.WARNING,
-                             "Settings saved, but service restart failed!",
-                             "You may need to manually restart the service.")
-        else:
-            self._show_save_error()
-    
     def on_cancel(self, button):
-        """Cancel and close without saving."""
-        # Cancel/OK close via destroy(), which does NOT emit delete-event,
-        # so the on_window_close cleanup must be invoked explicitly here.
-        self._stop_mic_test()
-        self._release_pidfile()
+        """Close without saving."""
+        # destroy() emits no delete-event, so on_window_close doesn't run.
+        self._release()
         self.window.destroy()
         Gtk.main_quit()
-    
+
     def on_ok(self, button):
-        """Save, apply (restarting only if needed), and close."""
-        # Save custom commands first. If writing them failed, closing would
-        # throw away the edits the user was just told weren't saved.
+        """Save, apply (restarting only if needed), and close; Apply is the
+        one that stays open, so OK closes after a download too."""
+        # If writing the snippets failed, closing would throw away the edits
+        # the user was just told weren't saved.
         if self.words_tab.save() is None:
             return
-
-        # MUST be computed before save_config(), which resets _config_at_open.
-        changed = self._changed_since_open()
-        # Same reason: after the save this no longer names the live setup.
-        previous = {k: self._config_at_open.get(k) for k in _DOWNLOAD_KEYS}
-
-        saved_at = time.time()      # for KDE's verdict on a changed hotkey
-        if self.save_config():
-            # Check if model needs downloading
-            speech = self.general_tab.speech
-            if not speech.download_selected_model():
-                speech.rollback_download(previous)
-                return
-
-            # OK closes even after a download; Apply is the one that stays open.
-            service_restarted = self._apply_or_restart(changed)
-            if service_restarted:
-                self.general_tab.after_hotkey_change(changed, saved_at)
-
-            # Stop the mic test (if running) and clean up PID file before closing
-            self._stop_mic_test()
-            self._release_pidfile()
-
-            # Show final status if service restart failed
-            if not service_restarted:
-                show_message(self.window,
-                             Gtk.MessageType.WARNING,
-                             "Settings saved, but service restart failed!",
-                             "You may need to manually restart the service.")
-
-            self.window.destroy()
-            Gtk.main_quit()
-        else:
-            # Same failure dialog as Apply, so OK never looks dead on a save error.
-            self._show_save_error()
+        saved = self._save_and_download()
+        if saved is None:
+            return
+        changed, saved_at = saved
+        restarted = self._apply_or_restart(changed)
+        if restarted:
+            self.general_tab.after_hotkey_change(changed, saved_at)
+        self._release()
+        if not restarted:
+            self._say_restart_failed()
+        self.window.destroy()
+        Gtk.main_quit()
 
     def on_help(self, button):
-        """Show help dialog with TuxTalk features and instructions."""
+        """Open TuxTalk's Help window."""
         from .help_dialog import show_help_dialog
         show_help_dialog()
 
 
-
 def main():
+    """Open Preferences (python -m tuxtalk.prefs [--tab TAB]), or bring the
+    one already open to the front."""
     from . import desktop_identity, ui_style
     desktop_identity.apply()        # TuxTalk's icon on its windows, not KDE's generic one
     ui_style.prepare_windows()   # emoji that show, buttons clear of panels and docks
@@ -869,9 +684,9 @@ def main():
     dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
     import argparse
     parser = argparse.ArgumentParser(description="TuxTalk Preferences")
-    parser.add_argument("--tab", choices=["general", "audio", "advanced", "words", "snippets", "commands",
-                                          "stats", "updates", "backup"],
-                        help="Tab to open initially")
+    parser.add_argument("--tab", help="Tab to open initially",
+                        choices=["general", "audio", "advanced", "words", "snippets",
+                                 "commands", "stats", "updates", "backup"])
     args = parser.parse_args()
 
     # Handlers go in BEFORE the pidfile is written (_acquire_prefs_singleton):
@@ -891,11 +706,10 @@ def main():
     app = PreferencesWindow()
     window_holder.append(app)
 
-    # Switch to specified tab if requested
     if args.tab:
         app.select_tab(args.tab)
-
     Gtk.main()
+
 
 if __name__ == "__main__":
     main()

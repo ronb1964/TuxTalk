@@ -17,8 +17,7 @@ def _window(unapplied, answer):
         _has_unapplied_changes=lambda: unapplied,
         _ask_apply_before_closing=lambda: calls.append("asked") or answer,
         on_ok=lambda button: calls.append("ok"),
-        _stop_mic_test=lambda: calls.append("stop"),
-        _release_pidfile=lambda: calls.append("release"),
+        _release=lambda: calls.extend(["stop", "release"]),
     )
     return w, calls
 

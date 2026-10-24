@@ -86,7 +86,7 @@ def test_a_second_launch_forwards_and_exits(tmp_path, monkeypatch):
     from tuxtalk import prefs
     pidfile = tmp_path / "talktype-prefs.pid"
     pidfile.write_text("4242")
-    monkeypatch.setattr(prefs, "_PREFS_PIDFILE", str(pidfile))
+    monkeypatch.setattr(prefs.prefs_ipc, "pidfile_path", lambda: str(pidfile))
     monkeypatch.setattr(prefs.prefs_ipc, "is_prefs_pid", lambda pid: True)
     sent = []
     monkeypatch.setattr(prefs.prefs_ipc, "bring_to_front", lambda pid, tab: sent.append((pid, tab)))

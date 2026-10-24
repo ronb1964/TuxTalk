@@ -61,13 +61,13 @@ def test_rows_for_settings_that_are_on_are_shown():
     assert stub.general_tab.timeout_label.visible and stub.general_tab.timeout_spin.visible
 
 
-def test_turning_power_saving_on_scrolls_its_settings_into_view():
+def test_turning_power_saving_on_scrolls_its_settings_into_view(monkeypatch):
     """It's the last thing on the General tab: the minutes and the note it
     shows were below the window's edge (Ron, 2026-10-17)."""
     shown = []
     tab = _stub({"auto_timeout_enabled": True}).general_tab
-    tab.win = SimpleNamespace(
-        _scroll_into_view=lambda widget, delay_ms=60: shown.append(widget))
+    monkeypatch.setattr("tuxtalk.prefs_general.scroll_into_view",
+                        lambda widget, delay_ms=60: shown.append(widget))
     on = SimpleNamespace(get_active=lambda: True)
     off = SimpleNamespace(get_active=lambda: False)
     GeneralTab._on_auto_timeout_toggled(tab, off)

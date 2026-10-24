@@ -14,7 +14,7 @@ from .logger import setup_logger
 from .prefs_hotkey_test import run_hotkey_test
 from .prefs_speech import SpeechSection
 from .prefs_system_check import UPDATE_HELPER_LABEL
-from .prefs_tab import WARNING_AMBER, Tab
+from .prefs_tab import WARNING_AMBER, Tab, dropdown, fold, scroll_into_view, section_header
 from .ui_style import message_dialog
 
 logger = setup_logger(__name__)
@@ -251,7 +251,7 @@ class GeneralTab(Tab):
         Dictation. Both work out of the box, so they stay folded and the
         section shows only the keys people dictate with. Returns the next
         free row."""
-        self.shortcuts_fold = self.win._fold(grid, row, "Show more shortcuts",
+        self.shortcuts_fold = fold(grid, row, "Show more shortcuts",
                                              "Hide more shortcuts")
         shortcuts = self.shortcuts_fold.content
 
@@ -280,7 +280,7 @@ class GeneralTab(Tab):
 
     def _build_startup(self, grid, row):
         """Start at login; returns the next free row."""
-        row = self.win._section_header(grid, row, "Startup Options")
+        row = section_header(grid, row, "Startup Options")
         check = Gtk.CheckButton(label="Launch TuxTalk at login")
         check.set_active(self.config.get("launch_at_login", False))
         check.connect("toggled", lambda x: self.update_config("launch_at_login", x.get_active()))
@@ -292,7 +292,7 @@ class GeneralTab(Tab):
     def _build_power_saving(self, grid, row):
         """Power Saving: the tickbox, and under it the minutes and what
         happens then, hidden with it off (update_timeout_ui_state)."""
-        row = self.win._section_header(grid, row, "Power Saving")
+        row = section_header(grid, row, "Power Saving")
         check = Gtk.CheckButton(label="Save power when dictation isn't used for a while")
         check.set_active(self.config.get("auto_timeout_enabled", False))
         check.connect("toggled",
@@ -338,9 +338,7 @@ class GeneralTab(Tab):
         reader names by *label*. The tooltip stays on the label: on the
         combo it gets in the way of the popup."""
         combo = Gtk.ComboBoxText()
-        combo.set_can_focus(True)
-        combo.connect("button-press-event", self.win._on_combo_button_press)
-        self.win._block_combo_scroll(combo)
+        dropdown(combo)
         for key, text in entries:
             combo.append(key, text)
         label.set_mnemonic_widget(combo)
@@ -388,7 +386,7 @@ class GeneralTab(Tab):
         if checkbox.get_active():
             # The last thing on the General tab: what it just showed (the
             # minutes and what happens then) would sit below the window's edge.
-            self.win._scroll_into_view(self.timeout_note)
+            scroll_into_view(self.timeout_note)
 
     def update_timeout_ui_state(self):
         """The Power Saving minutes show only with its tickbox ticked."""

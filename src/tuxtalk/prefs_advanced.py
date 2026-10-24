@@ -8,7 +8,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 
 from .prefs_system_check import SystemCheck
-from .prefs_tab import Tab, subheading
+from .prefs_tab import Tab, dropdown, fold, subheading
 from .prefs_type_at_pause import TypeAtPause
 from .ui_style import message_dialog, show_message
 
@@ -135,7 +135,7 @@ class AdvancedTab(Tab):
         # ===== FINE-TUNING =====
         # Each of these already does the sensible thing; they're here for the
         # day something looks off.
-        fine_fold = self.win._fold(grid, row, "Show fine-tuning", "Hide fine-tuning")
+        fine_fold = fold(grid, row, "Show fine-tuning", "Hide fine-tuning")
         fine_fold.set_summary("formatting, inserting text, privacy")
         fine = fine_fold.content
         row += 1
@@ -226,9 +226,7 @@ class AdvancedTab(Tab):
             "\n"
             "Use Keystroke Typing if paste doesn't work in specialized applications.")
         inject_combo = Gtk.ComboBoxText()
-        inject_combo.set_can_focus(True)
-        inject_combo.connect("button-press-event", self.win._on_combo_button_press)
-        self.win._block_combo_scroll(inject_combo)
+        dropdown(inject_combo)
 
         inject_combo.append("auto", "Auto (Smart Detection)")
         inject_combo.append("type", "Keystroke Typing")

@@ -11,7 +11,7 @@ gi.require_version("Pango", "1.0")
 from gi.repository import GLib, Gtk, Pango
 
 from .logger import setup_logger
-from .prefs_tab import WARNING_AMBER, Tab, _on_gnome, progress_window
+from .prefs_tab import WARNING_AMBER, Tab, dropdown, on_gnome, progress_window
 from .ui_style import show_message
 
 logger = setup_logger(__name__)
@@ -118,8 +118,7 @@ class UpdatesTab(Tab):
                              f"update went wrong."), False, False, 0)
         row = _indented(Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10))
         self.earlier_combo = Gtk.ComboBoxText()
-        self.earlier_combo.connect("button-press-event", self.win._on_combo_button_press)
-        self.win._block_combo_scroll(self.earlier_combo)
+        dropdown(self.earlier_combo)
         row.pack_start(self.earlier_combo, False, False, 0)
         self.restore_btn = Gtk.Button(label="Restore")
         self.restore_btn.connect("clicked", self._on_restore_earlier_clicked)
@@ -358,7 +357,7 @@ class UpdatesTab(Tab):
         from . import update_checker
         row = _indented(Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10))
         versions = f"TuxTalk {update_checker.get_current_version()}"
-        if _on_gnome():
+        if on_gnome():
             ext_version = update_checker.get_extension_version()
             versions += (f"  ·  GNOME extension {ext_version}" if ext_version
                          else "  ·  GNOME extension not installed")

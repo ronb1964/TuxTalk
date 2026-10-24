@@ -1,5 +1,6 @@
 """
-Asking an already-open Preferences window to come to the front.
+The open Preferences window's pidfile, and asking that window to come to the
+front.
 
 Preferences runs as its own process and allows one instance (pidfile). A
 second "open" (tray menu, GNOME extension via the tray, or a second launch)
@@ -90,6 +91,24 @@ def running_pid():
     except (OSError, ValueError):
         return None
     return pid if is_prefs_pid(pid) else None
+
+
+def claim_pidfile():
+    """Write this process's pid as the open Preferences window's. Raises
+    OSError when it can't be written."""
+    with open(pidfile_path(), "w") as f:
+        f.write(str(os.getpid()))
+
+
+def release_pidfile():
+    """Remove the pidfile if it names this process."""
+    try:
+        with open(pidfile_path()) as f:
+            pid = int(f.read().strip() or "0")
+        if pid == os.getpid():
+            os.remove(pidfile_path())
+    except (OSError, ValueError):
+        pass        # gone already, never written, or not ours to remove
 
 
 def bring_to_front(pid, tab=None):

@@ -10,7 +10,7 @@ from . import mic_volume
 from .logger import setup_logger
 from .mic_test import MicTest
 from .prefs_indicator import IndicatorSettings
-from .prefs_tab import Tab
+from .prefs_tab import Tab, dropdown, section_header
 from .ui_style import show_message
 
 logger = setup_logger(__name__)
@@ -74,9 +74,7 @@ class AudioTab(Tab):
         """System Default and each microphone plugged in now, showing the
         saved one."""
         combo = Gtk.ComboBoxText()
-        combo.set_can_focus(True)
-        combo.connect("button-press-event", self.win._on_combo_button_press)
-        self.win._block_combo_scroll(combo)
+        dropdown(combo)
         combo.append("", "System Default")
         self._input_device_names = []
         try:
@@ -167,7 +165,7 @@ class AudioTab(Tab):
     def _build_feedback(self, grid, row):
         """Audio & Visual Feedback: beeps, other sound, notifications and
         the recording indicator."""
-        row = self.win._section_header(grid, row, "Audio &amp; Visual Feedback")
+        row = section_header(grid, row, "Audio &amp; Visual Feedback")
         grid.attach(self._setting_check(
             "beeps", "Play beeps for start/stop/ready",
             "Play audio beeps to confirm when recording starts, stops, and when "
@@ -201,8 +199,7 @@ class AudioTab(Tab):
             "pausing can't reach. A call still hears your microphone, so mute yourself there.\n"
             "A volume you change yourself in the meantime is left as you set it.")
         combo = Gtk.ComboBoxText()
-        combo.connect("button-press-event", self.win._on_combo_button_press)
-        self.win._block_combo_scroll(combo)
+        dropdown(combo)
         for sid, (label, _pause, _duck) in SOUND_CHOICES.items():
             combo.append(sid, label)
         combo.set_active_id(sound_choice(self.config))

@@ -7,7 +7,7 @@ gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, Gtk
 
 from .config import CLASSIC_CYAN_HEX
-from .prefs_tab import Tab
+from .prefs_tab import Tab, dropdown, fold
 
 _SIZES = (("small", "Small (60%)"), ("medium", "Medium (100%)"), ("large", "Large (140%)"))
 _STYLES = (("orb", "Orb"), ("waveform", "Waveform"), ("bars", "Frequency bars"),
@@ -96,8 +96,7 @@ class IndicatorSettings(Tab):
     def _dropdown(self, choices, active):
         """A dropdown of *choices* ((id, label) pairs) showing *active*."""
         combo = Gtk.ComboBoxText()
-        combo.connect("button-press-event", self.win._on_combo_button_press)
-        self.win._block_combo_scroll(combo)
+        dropdown(combo)
         for choice_id, label in choices:
             combo.append(choice_id, label)
         combo.set_active_id(active)
@@ -258,7 +257,7 @@ class IndicatorSettings(Tab):
     def _build_fine_position(self, grid, row, can_move):
         """The offsets from the chosen position and Reset to 0. So rarely
         wanted that they're in a closed fold."""
-        self.position_fold = self.win._fold(grid, row, "Show fine position",
+        self.position_fold = fold(grid, row, "Show fine position",
                                             "Hide fine position")
         fine = self.position_fold.content
         across = self._offset_row(fine, 0, "Horizontal offset (pixels):",

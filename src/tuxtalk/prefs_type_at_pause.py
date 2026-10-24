@@ -11,7 +11,7 @@ from . import mic_stream
 from .chunk_meter import PauseTest, level_to_fraction, threshold_fraction
 from .mic_test import MicReopen, SegmentedVUMeter
 from .logger import setup_logger
-from .prefs_tab import Tab
+from .prefs_tab import Tab, fold
 
 logger = setup_logger(__name__)
 
@@ -88,7 +88,7 @@ class TypeAtPause(Tab):
 
         # Several settings, so a fold with their values beside its button (one
         # setting would sit by its tickbox, like Power Saving's minutes).
-        self.tap_fold = self.win._fold(grid, row, "Adjust Settings", "Hide Settings")
+        self.tap_fold = fold(grid, row, "Adjust Settings", "Hide Settings")
         self.tap_fold.set_margin_start(indent)
         # Hiding the settings hides the test's meter, so the test stops.
         self.tap_fold.button.connect(

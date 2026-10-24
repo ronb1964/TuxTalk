@@ -8,7 +8,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk
 
 from .logger import setup_logger
-from .prefs_tab import WARNING_AMBER, Tab, _on_gnome, progress_window, subheading
+from .prefs_tab import WARNING_AMBER, Tab, fold, on_gnome, progress_window, subheading
 from .ui_style import message_dialog, show_message
 from .whisper_vulkan import ENGINE_SIZE_TEXT
 
@@ -131,7 +131,7 @@ class SystemCheck(Tab):
         # The graphics card, typing and GNOME extension status. Closed while
         # all is well; it opens and says so when something needs fixing
         # (report).
-        self.fold = self.win._fold(grid, row, "Show system check", "Hide system check")
+        self.fold = fold(grid, row, "Show system check", "Hide system check")
         check = self.fold.content
         self._system_problems = set()
         self.report(None, True)
@@ -285,7 +285,7 @@ class SystemCheck(Tab):
         crow += 1
 
 
-        if _on_gnome():
+        if on_gnome():
             GLib.timeout_add(500, self._initial_extension_check)
         else:
             _hide_widgets(extension_header, self.extension_status_label, ext_button_box)

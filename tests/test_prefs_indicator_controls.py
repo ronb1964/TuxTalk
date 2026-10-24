@@ -131,18 +131,6 @@ def test_style_options_present(window):
     assert combo_ids(_combo(window, "orb")) == ["orb", "waveform", "bars", "radial"]
 
 
-def test_offset_boxes_show_up_and_right_as_positive():
-    """Typing a negative number to move the indicator UP feels backwards, so
-    the vertical box flips the sign it shows; the saved value keeps screen
-    coordinates (positive = down) so old settings and backups still mean the
-    same place."""
-    from tuxtalk.prefs_indicator import OFFSET_DISPLAY_SIGN
-    assert OFFSET_DISPLAY_SIGN == {"indicator_offset_x": 1, "indicator_offset_y": -1}
-    # Showing +30 ("up 30") saves -30, which the indicator reads as 30 px up.
-    shown_up = 30
-    assert OFFSET_DISPLAY_SIGN["indicator_offset_y"] * shown_up == -30
-
-
 def _offset_box(window, hint):
     """The number box written *hint* sits under."""
     label = find(window.audio_tab.indicator.grid, Gtk.Label, hint)

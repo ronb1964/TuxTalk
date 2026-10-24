@@ -48,12 +48,12 @@ def test_ok_closes_after_a_model_download(prefs_cls, monkeypatch):
         general_tab=SimpleNamespace(
             speech=SimpleNamespace(download_selected_model=lambda: True),  # downloaded fine
             after_hotkey_change=lambda changed, since: False),
-        _stop_mic_test=lambda: None,
-        _release_pidfile=lambda: None,
+        _release=lambda: None,
         words_tab=SimpleNamespace(save=lambda: True),
         window=SimpleNamespace(destroy=lambda: closed.append(True)),
     )
 
+    stub._save_and_download = lambda: prefs_cls._save_and_download(stub)
     prefs_cls.on_ok(stub, None)
 
     assert closed == [True]

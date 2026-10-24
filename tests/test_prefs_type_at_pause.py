@@ -399,8 +399,8 @@ def test_the_title_follows_the_settings(win):
 
 def test_opening_the_settings_scrolls_them_into_view(win, monkeypatch):
     shown = []
-    monkeypatch.setattr(type(win.win), "_scroll_into_view",
-                        lambda self, widget, delay_ms=60: shown.append(widget), raising=False)
+    monkeypatch.setattr("tuxtalk.prefs_tab.scroll_into_view",
+                        lambda widget, delay_ms=60: shown.append(widget))
     win.tap_check.set_active(True)
     win.tap_fold.button.clicked()
     assert shown == [win.tap_fold.revealer]

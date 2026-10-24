@@ -14,7 +14,7 @@ from gi.repository import GLib, Gtk
 from .config import Settings
 from .logger import setup_logger
 from .prefs_language import LanguageRow, language_summary
-from .prefs_tab import WARNING_AMBER, Tab
+from .prefs_tab import WARNING_AMBER, Tab, dropdown, fold, section_header
 from .ui_style import message_dialog, show_message
 from .whisper_vulkan import ENGINE_SIZE_TEXT
 
@@ -164,10 +164,10 @@ class SpeechSection(Tab):
 
     def build(self, grid, row):
         """The section at *row* of *grid*; returns the next free row."""
-        row = self.win._section_header(grid, row, "Speech Recognition")
+        row = section_header(grid, row, "Speech Recognition")
         row = self._build_status(grid, row)
         # No summary: the bold line above already says how it's set.
-        setup = self.win._fold(grid, row, "Change model, device or language",
+        setup = fold(grid, row, "Change model, device or language",
                                "Hide model, device and language").content
         # Which models run on which device: too many combinations to remember.
         compat_btn = Gtk.Button(label="What works with what?")
@@ -264,8 +264,7 @@ class SpeechSection(Tab):
         # Column 0 holds the model id: without this, set_active_id() is a
         # silent no-op (plain ComboBox has no id column by default).
         combo.set_id_column(0)
-        combo.set_can_focus(True)
-        self.win._block_combo_scroll(combo)
+        dropdown(combo)
         renderer = Gtk.CellRendererText()
         combo.pack_start(renderer, True)
         combo.add_attribute(renderer, "text", 1)
@@ -297,9 +296,7 @@ class SpeechSection(Tab):
         label = Gtk.Label(label="Device:", xalign=0)
         setup.attach(label, 0, row, 1, 1)
         self.device_combo = Gtk.ComboBoxText()
-        self.device_combo.set_can_focus(True)
-        self.device_combo.connect("button-press-event", self.win._on_combo_button_press)
-        self.win._block_combo_scroll(self.device_combo)
+        dropdown(self.device_combo)
         label.set_mnemonic_widget(self.device_combo)
         self.refresh_device_options()
         # What _on_device_changed falls back to when a setup is refused.

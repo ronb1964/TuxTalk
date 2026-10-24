@@ -9,7 +9,7 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 
-from .prefs_tab import WARNING_AMBER, Tab
+from .prefs_tab import WARNING_AMBER, Tab, dropdown
 
 # The Language dropdown's entry for auto-detect held to a list of languages.
 SEVERAL_LANGUAGES = "several"
@@ -84,9 +84,7 @@ class LanguageRow(Tab):
             "Several languages: it picks only from the ones you tick (Whisper models).")
         grid.attach(label, 0, row, 1, 1)
         self.combo = Gtk.ComboBoxText()
-        self.combo.set_can_focus(True)
-        self.combo.connect("button-press-event", self.win._on_combo_button_press)
-        self.win._block_combo_scroll(self.combo)
+        dropdown(self.combo)
         label.set_mnemonic_widget(self.combo)
         self.fill(model)
         self.combo.connect("changed", self._on_changed)

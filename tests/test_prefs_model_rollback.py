@@ -62,6 +62,11 @@ class StubPrefs:
 
         return PreferencesWindow._changed_since_open(self)
 
+    def _save_and_download(self):
+        from tuxtalk.prefs import PreferencesWindow
+
+        return PreferencesWindow._save_and_download(self)
+
     def _apply_or_restart(self, changed):
         self.restart_calls += 1
         return True
