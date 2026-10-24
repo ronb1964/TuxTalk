@@ -371,6 +371,24 @@ def test_a_callback_that_fails_leaves_the_sound_over_and_the_sounds_playing(soun
     assert any(r.exc_info and "the window is gone" in str(r.exc_info[1]) for r in caplog.records)
 
 
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
+def test_a_sound_that_ends_the_sound_thread_still_counts_as_over(sound, monkeypatch):
+    """Nobody waits in vain for a sound whose job ended the thread itself,
+    and the next sound gets a thread of its own."""
+    system = sound()
+    real_play = beeps._play
+
+    def ends_the_thread(*args):
+        raise SystemExit
+    monkeypatch.setattr(beeps, "_play", ends_the_thread)
+    assert beeps.beep(True, *beeps.CANCEL_BEEP).wait(1)
+    beeps._worker.join(1)
+    monkeypatch.setattr(beeps, "_play", real_play)
+    beeps.beep(True, *beeps.START_BEEP)
+    assert beeps.wait_until_played(5)
+    assert heard_in_full(tones(system.speakers())[0], *beeps.START_BEEP)
+
+
 def test_each_kind_of_sound_failure_is_logged_once(sound, caplog):
     """A sound output that is missing fails every beep and says so once; a
     different failure later still shows in the log."""

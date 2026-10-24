@@ -255,7 +255,8 @@ def _work():
             if (type(e), error) not in _failures_logged:
                 _failures_logged.add((type(e), error))
                 logger.warning(f"Could not play {what}: {e} (not logged again)")
-        _end(over, what, finished, error)
+        finally:
+            _end(over, what, finished, error)
 
 
 class _Playback:
