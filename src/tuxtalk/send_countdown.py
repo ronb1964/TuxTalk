@@ -28,8 +28,11 @@ Anything else, nothing is sent and the notice says why (_why_not). What
 happens where the desktop can't say which window of an app has the focus is
 a decision of its own: SEND_WHEN_ONLY_THE_APP_IS_KNOWN.
 
-The send waiting is _pending, guarded by _send_lock. The typing is app.py's:
-the dictation hands over what presses a key and what types more onto it.
+The send waiting is _pending, and a held one's owed space _owed, both
+guarded by _send_lock. The owed space follows a gentler rule than the
+Enter: it goes in unless another window is known to have the focus, since
+typing still refuses a password field. The typing is app.py's: the
+dictation hands over what presses a key and what types more onto it.
 """
 import threading
 
@@ -319,13 +322,13 @@ def hold(announce: bool) -> bool:
     global _pending, _owed
     with _send_lock:
         pending, _pending = _pending, None
+        if pending is not None and pending.get("space"):
+            _owed = pending
     if pending is None:
         return False
     pending["stopped"] = True       # its press, if under way, says nothing more
     _cancel_timers(pending)
     logger.info("Held the send: the dictation stays unsent")
-    if pending.get("space"):
-        _owed = pending
     if announce:
         show_notice(HELD_NOTICE)
     else:
@@ -345,11 +348,18 @@ def _focus_left(pending: dict) -> bool:
     return focused_window.changed(pending["to"], focused_window.look())
 
 
+def _take_owed():
+    """The held send whose space is owed, now no longer owed, or None."""
+    global _owed
+    with _send_lock:
+        pending, _owed = _owed, None
+    return pending
+
+
 def type_owed_space() -> None:
     """The hotkey that held a send is up: type the space it left off, in the
     window its text went to."""
-    global _owed
-    pending, _owed = _owed, None
+    pending = _take_owed()
     if pending is not None and not _focus_left(pending):
         pending["type"](pending["space"], pending["mode"])
 
@@ -357,8 +367,7 @@ def type_owed_space() -> None:
 def with_owed_space(text: str) -> str:
     """Put a held send's space in front of *text*, the dictation added onto
     it, when it goes to the same window."""
-    global _owed
-    pending, _owed = _owed, None
+    pending = _take_owed()
     if pending is None or not text or text[0].isspace() or _focus_left(pending):
         return text
     return pending["space"] + text
