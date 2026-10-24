@@ -31,12 +31,14 @@ from .config import load_config, Settings, load_custom_commands
 from . import config as config_module
 from . import beeps, mic_stream
 from .beeps import START_BEEP, HANDS_FREE_BEEP, CANCEL_BEEP, READY_BEEP, beep as _beep
-from .chunking import carry_question, hold_back_boundary, word_count
+from .chunking import (boundary_mark, carry_question, hold_back_boundary, word_count,
+                       words_in_context)
+from .key_commands import KEY_CODES, auto_send, split_key_command
 from .logger import setup_logger, redact_text
 from .recording_indicator import RecordingIndicator
 from .undo import detect_undo_command, calculate_undo_length
 from . import (delivery_notices, edit_notices, focused_window, hallucinations,
-               modifier_hotkeys, send_countdown, virtual_keyboard)
+               modifier_hotkeys, send_countdown, silence, virtual_keyboard)
 from .focused_window import window_class as _query_focused_window_class
 from .window_classes import (ELECTRON_PASTE_BROKEN_CLASSES, SMART_NEWLINE_CLASSES_LOWER,
                              app_kind, is_document_window, is_terminal_class)
@@ -1416,11 +1418,13 @@ def _open_input_stream(device_idx) -> None:
 
 
 def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
-                    from_toggle: bool = False, edit_mode: bool = False) -> bool:
+                    from_toggle: bool = False, edit_mode: bool = False,
+                    held_send: bool = False) -> bool:
     """Begin capturing audio. Returns True only if recording actually started.
 
     *from_toggle* marks a start by the toggle key, so a quick second tap can
     switch it to hands-free (see _toggle_pressed_while_recording).
+    *held_send*: the press that starts it already held a pending send.
 
     On failure this releases any input-device grabs before returning. The
     keyboard is grabbed just before this is called, so without that release a
@@ -1428,7 +1432,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     """
     # Pressing a hotkey while a send counts down holds it: a tap leaves the
     # text unsent, a hold dictates more onto it.
-    state.held_send = send_countdown.hold(announce=False)
+    state.held_send = send_countdown.hold(announce=False) or held_send
     state.frames = []
     state.was_cancelled = False
     state.silence = None
@@ -1995,7 +1999,6 @@ def _send_backspaces(count: int) -> bool:
 def _nav_keycode(name: str) -> int:
     """The key code for a key name of _send_chords: a letter (Ctrl+A) is
     looked up on the active layout, as Ctrl shortcuts are matched by letter."""
-    from .key_commands import KEY_CODES
     if name in KEY_CODES:
         return KEY_CODES[name]
     from .keyboard_layout import shortcut_keycode
@@ -2059,8 +2062,7 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
         if custom_words.is_echo(raw, _custom_words):
             logger.info("Whisper read your words back with nothing said; dropped")
             return None
-        from .silence import has_no_speech
-        no_speech = 1.0 if has_no_speech(audio_f32, SAMPLE_RATE) else 0.0
+        no_speech = 1.0 if silence.has_no_speech(audio_f32, SAMPLE_RATE) else 0.0
         return _strip_hallucinations(raw, no_speech_prob=no_speech) or None
 
     from .parakeet_engine import ParakeetModel
@@ -2078,8 +2080,7 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
         where = " on GPU" if isinstance(engine, ParakeetGpuModel) else ""
         logger.info(f"TIMING: Transcription completed in {time.time() - transcribe_start:.2f}s (Parakeet{where})")
         logger.info(f"Raw transcription (Parakeet): {_loggable(raw)}")
-        from .silence import has_no_speech
-        no_speech = 1.0 if raw and has_no_speech(audio_f32, SAMPLE_RATE) else 0.0
+        no_speech = 1.0 if raw and silence.has_no_speech(audio_f32, SAMPLE_RATE) else 0.0
         return _strip_hallucinations(raw, no_speech_prob=no_speech) or None
 
     whisper_options = dict(
@@ -2644,11 +2645,10 @@ def _toggle_pressed_while_recording(beeps_on: bool) -> bool:
     if (_auto_stop_seconds <= 0 or started is None or state.silence is not None
             or time.time() - started > DOUBLE_TAP_S):
         return False
-    from .silence import SilenceDetector, has_a_word
     rate = getattr(state, "recording_samplerate", SAMPLE_RATE)
-    detector = SilenceDetector(_auto_stop_seconds, rate)
+    detector = silence.SilenceDetector(_auto_stop_seconds, rate)
     beep_hz = START_BEEP[0] if state.start_beep is not None else None
-    if has_a_word(_frames_f32(list(state.frames)), rate, ignoring_hz=beep_hz):
+    if silence.has_a_word(_frames_f32(list(state.frames)), rate, ignoring_hz=beep_hz):
         detector.heard_speech()
     state.silence = detector
     logger.info("Double-tap: this recording will stop by itself when you go quiet")
@@ -2785,8 +2785,7 @@ def _frames_f32(frames):
 
 def _frames_are_dead_mic(frames, rec_sr) -> bool:
     """silence.is_dead_mic for raw int16 recording frames."""
-    from .silence import is_dead_mic
-    return is_dead_mic(_frames_f32(frames), rec_sr)
+    return silence.is_dead_mic(_frames_f32(frames), rec_sr)
 
 
 def _report_undelivered(outcome: str, beeps_on: bool):
@@ -3022,7 +3021,6 @@ def _resolve_boundary(audio_f32, language, injection_mode, raw="", auto_period=T
     mark = pending["mark"]
     joint = ""
     try:
-        from .chunking import boundary_mark
         gap = np.zeros(int(JOINT_GAP_S * SAMPLE_RATE), dtype=np.float32)
         joint = _transcribe_audio(np.concatenate(
             [pending["audio"], gap, audio_f32[:_context_samples()]]), language) or ""
@@ -3032,7 +3030,6 @@ def _resolve_boundary(audio_f32, language, injection_mode, raw="", auto_period=T
             mark = found
     except Exception as e:
         logger.warning(f"Couldn't hear the chunk boundary in context: {e}")
-    from .key_commands import split_key_command
     if (raw and len(raw.split()) <= ENTER_IN_CONTEXT_MAX_WORDS
             and not split_key_command(raw)[1] and split_key_command(joint)[1] == "ENTER"):
         logger.info(f"Heard \"press enter\" in context ({_loggable(raw)} alone)")
@@ -3044,7 +3041,6 @@ def _resolve_boundary(audio_f32, language, injection_mode, raw="", auto_period=T
         state.continue_mid_sentence = False
         return raw
     if joint and len(audio_f32) <= SHORT_CHUNK_S * SAMPLE_RATE:
-        from .chunking import words_in_context
         heard = words_in_context(pending["raw"], joint) or ""
         # Whether to press a key stays the rule above's call.
         if (0 < word_count(heard) < word_count(raw)
@@ -3208,18 +3204,16 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
 
         # A second or more of pure digital silence: the microphone is muted,
         # unplugged or dead, not a quiet room. Say so instead of typing nothing.
-        from .silence import is_dead_mic
-        if is_dead_mic(audio_f32, SAMPLE_RATE):
+        if silence.is_dead_mic(audio_f32, SAMPLE_RATE):
             _beep(beeps_on, *CANCEL_BEEP)
             _warn_silent_mic()
             return
 
         # A quick tap of the key with nothing said: speech engines can invent
         # a word ("Thank you.") in a fraction of a second of room noise.
-        from .silence import is_speechless_tap
         # Both stop with the cancel beep, as a too-short F8 tap and the
         # hands-free "nothing said" stop do: silence there read as broken.
-        if is_speechless_tap(audio_f32, SAMPLE_RATE):
+        if silence.is_speechless_tap(audio_f32, SAMPLE_RATE):
             if _nothing_in_chunk("had no speech"):
                 return
             print("(Short tap with no speech; nothing typed)")
@@ -3241,7 +3235,6 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             _beep(beeps_on, *CANCEL_BEEP)
             return
 
-        from .key_commands import split_key_command, auto_send
         rest, said = split_key_command(raw)
         key_only = not rest.strip() and said
         # A password field gets nothing: not the words, nor what Type at
@@ -3702,14 +3695,13 @@ def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
     """Voice editing: the recording is an instruction ("make this more formal")
     for the text selected in the focused app, which the AI rewrites and the
     rewrite replaces. Ctrl+Z in the app undoes it."""
-    from .silence import is_speechless_tap
     t0 = time.time()
     audio_f32 = _frames_f32(frames)
     if audio_f32.size == 0:
         return
     if rec_sr != SAMPLE_RATE:
         audio_f32 = _resample_audio(audio_f32, rec_sr, SAMPLE_RATE)
-    if is_speechless_tap(audio_f32, SAMPLE_RATE):
+    if silence.is_speechless_tap(audio_f32, SAMPLE_RATE):
         return
 
     if not _is_wayland_session():
@@ -3987,6 +3979,32 @@ def _toggle_tap_holds_send(event, toggle_key, held_modifiers) -> bool:
             and send_countdown.hold(announce=True))
 
 
+def _start_hold_recording(hold_key, held_modifiers, devices, cfg, input_device_idx) -> None:
+    """The hold key went down: hold a send counting down, then hide the key
+    (and Shift, for voice editing) from the desktop, and record.
+
+    The send goes first: once the key is hidden, an Enter that waits for it
+    to come up goes out. The grab keeps the hotkey from the focused app,
+    without leaving the desktop thinking it's still held (see
+    _grab_keyboards_hiding); start_recording lets go of it if the mic fails
+    to open. Shift unhidden, the Ctrl+C that copies the selection would
+    arrive as Ctrl+Shift+C."""
+    held = send_countdown.hold(announce=False)
+    shift = _held_shift(held_modifiers) if _voice_editing else set()
+    _grab_keyboards_hiding(devices, {hold_key, *shift})
+    if (start_recording(cfg.beeps, cfg.notify, input_device_idx, edit_mode=bool(shift),
+                        held_send=held) and state.held_send):
+        # The hold time counts from the press to when its release is read,
+        # which waits for the start: 0.15 to 0.2 s in the test VMs, so a
+        # quick tap to hold the send came to over MIN_HOLD_MS on Pop!_OS and
+        # recorded instead. A key already up after a start that quick was a
+        # tap; after a slower one it could have been a short word, so the
+        # hold time decides.
+        state.released_while_starting = (
+            time.time() - state.press_t0 < 2 * MIN_HOLD_MS / 1000
+            and _wait_for_keys_up(devices, {hold_key}, 0))
+
+
 def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifiers,
                       devices, cfg, input_device_idx, paste_last_combo=None):
     """Handle a single keyboard event. Both hold (F8) and toggle (F9) are always active.
@@ -4058,25 +4076,7 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
     if event.code == hold_key:
         if (event.value == 1 and not state.is_recording
                 and not _someone_elses_shortcut(held_modifiers - {hold_key})):
-            # Grab the keyboards so the hotkey doesn't reach the focused app,
-            # without leaving the desktop thinking the key is still held (see
-            # _grab_keyboards_hiding). start_recording releases the grabs itself
-            # if the mic fails to open. With Shift (voice editing) Shift is
-            # hidden too, or the Ctrl+C that copies the selection would arrive
-            # as Ctrl+Shift+C.
-            shift = _held_shift(held_modifiers) if _voice_editing else set()
-            _grab_keyboards_hiding(devices, {hold_key, *shift})
-            if (start_recording(cfg.beeps, cfg.notify, input_device_idx, edit_mode=bool(shift))
-                    and state.held_send):
-                # The hold time counts from the press to when its release is
-                # read, which waits for the start: 0.15 to 0.2 s in the test
-                # VMs, so a quick tap to hold the send came to over
-                # MIN_HOLD_MS on Pop!_OS and recorded instead. A key already
-                # up after a start that quick was a tap; after a slower one
-                # it could have been a short word, so the hold time decides.
-                state.released_while_starting = (
-                    time.time() - state.press_t0 < 2 * MIN_HOLD_MS / 1000
-                    and _wait_for_keys_up(devices, {hold_key}, 0))
+            _start_hold_recording(hold_key, held_modifiers, devices, cfg, input_device_idx)
         elif event.value == 0 and state.is_recording:
             # Let go of the keyboards before typing, so the user's own keys
             # reach the app again

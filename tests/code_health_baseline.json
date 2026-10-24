@@ -456,8 +456,8 @@
    "decisions": 18
   },
   "app.py::_handle_key_event": {
-   "decisions": 56,
-   "lines": 139
+   "decisions": 52,
+   "lines": 121
   },
   "app.py::_handle_spoken_edit": {
    "decisions": 16
@@ -484,11 +484,11 @@
   },
   "app.py::_transcribe_and_inject": {
    "decisions": 63,
-   "lines": 252
+   "lines": 249
   },
   "app.py::_transcribe_audio": {
    "decisions": 25,
-   "lines": 116
+   "lines": 114
   },
   "app.py::build_model": {
    "decisions": 20,

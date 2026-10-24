@@ -250,6 +250,54 @@ def test_right_away_a_tap_the_hotkey_loop_reads_holds_the_enter(chat, keyboard, 
     assert keyboard.events == [] and notices == [send_countdown.HELD_NOTICE]
 
 
+class Countdown:
+    """threading.Timer for a send counting down: it never fires by itself."""
+
+    def __init__(self, delay, run, args):
+        self.daemon = False
+
+    def start(self):
+        pass
+
+    def cancel(self):
+        pass
+
+
+@pytest.mark.parametrize("hold_key", [RCTRL, F8])
+def test_the_hold_key_holds_the_send_before_it_hides_itself(chat, keyboard, monkeypatch,
+                                                            hold_key):
+    """Right Ctrl as the hold key, pressed as the countdown ran out: hiding
+    the key let the Enter that waited for it go out before the press held
+    the send. With F8 the grab can take as long as the countdown's last
+    moment."""
+    focus, heard, typed, notices = chat
+    monkeypatch.setattr(send_countdown, "_delay", 2.0)
+    monkeypatch.setattr(send_countdown.threading, "Timer", Countdown)
+    monkeypatch.setattr(modifier_hotkeys, "_noted", ([], frozenset()))
+    devices = [Keyboard(lambda look: True)]           # the hold key is down
+    modifier_hotkeys.note(devices, hold_key, F9)
+    send_automatically(focused_window.destination())
+    waiting = send_countdown._pending
+
+    def grab_then_the_send_runs(devices, codes):
+        modifier_hotkeys.note_hidden(set(codes), devices)
+        send_countdown._send(waiting)                 # its thread got there first
+    monkeypatch.setattr(app, "_grab_keyboards_hiding", grab_then_the_send_runs)
+    monkeypatch.setattr(app, "_open_input_stream", lambda idx: None)
+    for name in ("_notify", "_notify_tray_recording_state", "_arm_chunker",
+                 "_pause_media_players", "_release_all_grabs"):
+        monkeypatch.setattr(app, name, lambda *a, **k: None)
+    monkeypatch.setattr(app, "recording_indicator", None)
+    cfg = types.SimpleNamespace(beeps=False, notify=False)
+    press = types.SimpleNamespace(type=ecodes.EV_KEY, code=hold_key, value=1)
+    try:
+        app._handle_key_event(press, hold_key, F9, None, set(), devices, cfg, 0)
+        assert keyboard.events == [] and app.state.held_send is True
+    finally:
+        app.state.is_recording = False
+        app.state.stream = None
+
+
 def test_a_click_during_the_password_check_sends_nothing(chat, keyboard, monkeypatch):
     """The accessibility bus can take a quarter of a second to say whether
     the cursor is in a password field. Clicked into the other Brave window

@@ -269,7 +269,7 @@ def keyloop(monkeypatch):
     monkeypatch.setattr(app, "_grab_keyboards_hiding", lambda devs, codes: seen["grab_codes"].append(set(codes)))
     monkeypatch.setattr(app, "_release_all_grabs", lambda: None)
 
-    def start(beeps, notify, idx, from_toggle=False, edit_mode=False):
+    def start(beeps, notify, idx, from_toggle=False, edit_mode=False, held_send=False):
         seen["starts"].append({"from_toggle": from_toggle, "edit_mode": edit_mode})
         app.state.is_recording = True
         app.state.edit_mode = edit_mode
