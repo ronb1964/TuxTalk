@@ -108,19 +108,15 @@ before 0.15.0, so older entries use that name.
   C locale too. The key that keeps other people's programs off the AI
   self-corrections engine was on its command line too, and is now hidden
   the same way.
-- Hands-free stops on time in a noisy room now. With a clothes dryer running
-  nearby it never stopped by itself: the dryer was louder than what TuxTalk
-  counted as talking, so it never learned that was just the room. Steady
-  noise like a dryer, a fan or an air vent is learned as the room within two
-  seconds now, however loud it is. Talking never is, because a voice goes up
-  and down with every word. A note you hold for two seconds, or a long
-  "mmm", is the one thing as steady as that, and counts as a pause.
-- A fan's gusts and a dryer's thumps don't start the hands-free wait over
-  any more. With a fan running, a 2 second wait took 4 or 5. A word still
-  starts it over.
-- In a really loud room, with the noise nearly as loud as your voice, quiet
-  words get lost in it and hands-free can stop while you're still talking.
-  It did before too, when it had learned the room.
+- Hands-free stops by itself with a clothes dryer or a gusty fan running.
+  Before, each thump or gust counted as you talking and started the wait
+  over, so it never stopped. Steady noise is learned as the room once it
+  has gone on for three seconds without you talking, and its thumps and
+  gusts then just pause the wait. So it stops, a second or two later than
+  your setting. In a quiet room nothing changes.
+- Noise that's nearly as loud as your voice is left alone on purpose:
+  learning it made hands-free stop during your quiet words. There it still
+  doesn't stop by itself, so tap the key when you're done.
 - Type at pause doesn't miss your pauses with a dryer running. Its thumps
   started every pause over, so nothing was typed until you stopped.
 - The microphone test in Preferences, Audio, tells you when your room is

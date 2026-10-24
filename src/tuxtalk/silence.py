@@ -16,11 +16,11 @@ measured (see tail_to_trim), which is safe and also keeps Whisper from
 inventing words like "thank you" in trailing silence.
 
 How it listens: each audio block's loudness (RMS) is compared with the room's
-background noise, which it learns as it goes (the quietest level heard, or
-noise that has stayed steady for two seconds, a fan or a dryer). Nothing
-counts until the speaker has actually talked for a moment, so a slow start
-is never mistaken for being done, and a click or a bump of the room does
-not count as talking.
+background noise, which it learns as it goes (the quietest level heard,
+rising slowly if the room gets noisier, or noise that has stayed steady for
+three seconds, a fan or a dryer). Nothing counts until the speaker has
+actually talked for a moment, so a slow start is never mistaken for being
+done, and a single click or bump does not count as talking.
 """
 import collections
 
@@ -36,22 +36,35 @@ _SPEECH_TO_ARM_S = 0.3
 # Keep this much of the silent tail when trimming, so the last word's natural
 # decay is never cut.
 _TAIL_KEEP_S = 0.3
-# Steady noise: the room is learned from frames of this long...
+# How fast the learned noise floor may rise per second (x1.5/s), so it follows
+# a room that gets noisier without ever chasing the speaker's own voice up.
+_NOISE_RISE_PER_S = 1.5
+# Steady noise is judged from frames this long...
 _FRAME_S = 0.05
 # ...over the last _STEADY_S: when the 10th and 75th percentile of their
-# levels lie within _STEADY_DB of each other, what is heard is steady noise,
-# and the floor becomes its median, louder than speech's threshold or not.
-_STEADY_S = 2.0
-_STEADY_DB = 5.0
+# levels lie within _STEADY_DB of each other, what is heard is noise.
+_STEADY_S = 3.0
+_STEADY_DB = 3.0
 _STEADY_LOW, _STEADY_HIGH = 10, 75
+# Speech then has to be this much louder (+3 dB) than the noise's loud end,
+# the 98th percentile of its blocks in frames no louder than the 75th.
+_NOISE_TOP = 98
+_OVER_NOISE_TOP = 1.4
+# Steady noise is learned only once something this much louder than it (22
+# dB, the loudest 50 ms heard) shows the voice is well clear of it. Closer to
+# the voice, its quiet words drown in the noise, and learning it ended the
+# recording during them.
+_CLEAR_OF_NOISE_DB = 22.0
+# A block this much quieter than the steady noise (6 dB) means it stopped.
+_NOISE_GONE = 0.5
 # Steady noise that raises speech's threshold this many times over (6 dB)
 # was misjudged until then, and the last _STEADY_S is judged again.
 _MISJUDGED = 2.0
-# Loud for less than this, with gaps under _BLIP_GAP_S, is a bump of the
-# room, not speech: it pauses the quiet count rather than starting it over.
-# Never more than a tenth of the wait: with a 0.5 s wait, 0.15 s took the
-# start of a quiet word for a bump and stopped mid-sentence three times as
-# often as before, in a quiet room too.
+# In steady noise louder than _MIN_SPEECH_RMS, loud for less than this, with
+# gaps under _BLIP_GAP_S, is a bump (a dryer's thump, a fan's gust): it
+# pauses the quiet count rather than starting it over. Never more than a
+# tenth of the wait: with a 0.5 s wait, 0.15 s took the start of a quiet word
+# for a bump.
 _BLIP_S = 0.15
 _BLIP_SHARE = 0.1
 _BLIP_GAP_S = 0.1
@@ -69,50 +82,55 @@ class NoiseFloor:
     """The room's background noise, learned as blocks arrive, and the loudness
     that counts as speech over it.
 
-    Two rules learn it. The floor drops to the quietest 50 ms heard: that
-    settles on a quiet room within a word or two, since speech has gaps
-    between syllables where only the room is heard. And noise that is steady
-    (the 10th and 75th percentile of its 50 ms levels over the last
-    _STEADY_S within _STEADY_DB) sets the floor to its median, even noise
-    louder than speech's threshold: a clothes dryer switched on, or one
-    running from the start, which the first rule can never learn as none of
-    it is quieter. Nothing else raises the floor, so it never chases a voice:
-    speech is never that steady, its syllables and the gaps between them
-    swinging by 10 dB or more. Measured on 26 recorded sentences and an 11 s
-    speech, alone and in pink, fan, vent and rumble noise: no 2 s of speech
-    came within 7.7 dB in a quiet room or with the noise 10 dB under the
-    voice, and 4.8 dB with it 5 dB under, where the median taken was the
-    noise's own level. Fan, vent, rumble, white and pink noise stayed within
-    4.2 dB, a dryer's thumps included. One sound is as steady as noise: a
-    note held for two seconds, sung, hummed or a long "mmm", is taken for
-    the room, and so counts as a pause that long.
+    The floor is the quietest level heard so far, allowed to rise slowly
+    while it is quiet. Speech has short gaps between syllables where only the
+    room is heard, so even when someone starts talking the instant recording
+    begins, the floor settles on the room within a word or two.
+
+    That rule can't learn noise louder than speech's threshold (a clothes
+    dryer, a loud hiss): none of it is quiet enough to rise through. So noise
+    that stays steady for _STEADY_S is learned whatever its level, and speech
+    must then be louder than its loud end. Speech is never that steady: on
+    125 recorded readers (Ron's sentences, LibriSpeech, FLEURS), alone and
+    with pink noise 10 and 5 dB under the voice, no 3 s of speech came within
+    3.3 dB; white noise, a fan, a dryer and a gusty fan did in 85 to 100% of
+    windows. A note held for three seconds (sung, hummed, a long "mmm") is
+    taken for the room, and counts as a pause that long.
     """
 
     def __init__(self):
+        """A floor for one recording, with nothing heard yet."""
         self.level = None
-        # Whether the latest update() found steady noise that raised the
-        # threshold by _MISJUDGED or more: until now the room was misjudged,
-        # and some of it counted as speech.
-        self.raised = False
-        self._frames = collections.deque()      # (level, seconds) over _STEADY_S
+        # The loud end of the steady noise learned, while it lasts (None in a
+        # room learned by the quietest level), and that noise's median.
+        self.top = None
+        self.steady = None
+        self._bumps = False
+        # Whether the latest update() learned steady noise that changes what
+        # counted as speech until now: it raised the threshold by _MISJUDGED
+        # or more, or its bumps are to be taken for bumps from now on.
+        self.changed = False
+        self._frames = collections.deque()      # (level, seconds, its blocks)
         self._span = 0.0                        # seconds in _frames
-        self._energy = 0.0                      # the frame being gathered
+        self._blocks = []                       # the frame being gathered
+        self._energy = 0.0
         self._gathered = 0.0
+        self._loudest = 0.0                     # the loudest frame heard
 
-    def threshold(self, level=None) -> float:
-        """The loudness (int16 RMS) that counts as speech in this room, or
-        in a room of *level*."""
-        level = self.level if level is None else level
-        return max(_MIN_SPEECH_RMS, (level or 0.0) * _SPEECH_OVER_NOISE)
+    def threshold(self) -> float:
+        """The loudness (int16 RMS) that counts as speech in this room."""
+        if self.top is not None:
+            return max(_MIN_SPEECH_RMS, self.top * _OVER_NOISE_TOP)
+        return max(_MIN_SPEECH_RMS, (self.level or 0.0) * _SPEECH_OVER_NOISE)
 
-    def quietest(self) -> float:
-        """The quietest 50 ms of the last _STEADY_S: where the floor would
-        have been, had it been learned when they were heard."""
-        return min(level for level, _ in self._frames)
+    def bumpy(self) -> bool:
+        """Whether the steady noise learned has bumps loud enough to count as
+        speech (a dryer's thumps, a fan's gusts). A quiet room's are not."""
+        return self.top is not None and self._bumps
 
     def update(self, rms: float, duration: float) -> bool:
         """Learn from one block; True if the block is speech."""
-        self.raised = False
+        self.changed = False
         if rms < 1.0:
             # Digital silence (many streams open with a block of zeros) says
             # nothing about the room. Learned, it held the floor at 0, which
@@ -121,49 +139,70 @@ class NoiseFloor:
             return False
         if self.level is None:
             # The first block may already be speech (talking the instant the
-            # key goes down), so the first guess is capped at a quiet level.
+            # key goes down), so the first guess is capped at a quiet level;
+            # in a noisier room it rises to the real noise within a second.
             self.level = min(rms, _MIN_SPEECH_RMS)
+        elif rms < self.level:
+            self.level = rms
+        elif rms < self.threshold():
+            self.level = min(rms, self.level * (_NOISE_RISE_PER_S ** duration))
+        if self.top is not None and rms < self.steady * _NOISE_GONE:
+            self.top = self.steady = None
         self._gather(rms, duration)
         return rms >= self.threshold()
 
     def _gather(self, rms: float, duration: float) -> None:
         """Add a block to the frame being gathered; a whole frame joins the
-        last _STEADY_S of them, and if those are steady, sets the floor."""
+        last _STEADY_S of them, which may show steady noise to learn."""
+        self._blocks.append(rms)
         self._energy += rms * rms * duration
         self._gathered += duration
         if self._gathered < _FRAME_S:
             return
         frame = float(np.sqrt(self._energy / self._gathered))
-        self._frames.append((frame, self._gathered))
+        self._frames.append((frame, self._gathered, self._blocks))
         self._span += self._gathered
-        self._energy = self._gathered = 0.0
-        before = self.threshold()
-        self.level = min(self.level, frame)
+        self._loudest = max(self._loudest, frame)
+        self._blocks, self._energy, self._gathered = [], 0.0, 0.0
         while self._span - self._frames[0][1] >= _STEADY_S:
             self._span -= self._frames.popleft()[1]
-        if self._span < _STEADY_S:
-            return
-        levels = [level for level, _ in self._frames]
+        if self._span >= _STEADY_S:
+            self._learn_steady()
+
+    def _learn_steady(self) -> None:
+        """If the last _STEADY_S is steady noise well under the voice, it is
+        the room: the floor becomes its median, and speech must be louder
+        than its loud end. Only frames no louder than its 75th percentile
+        give that end, so a word or a thump among them doesn't."""
+        levels = [level for level, _, _ in self._frames]
         low, high = np.percentile(levels, (_STEADY_LOW, _STEADY_HIGH))
-        if high <= low * 10 ** (_STEADY_DB / 20):
-            self.level = float(np.median(levels))
-            self.raised = self.threshold() >= before * _MISJUDGED
+        median = float(np.median(levels))
+        if (high > low * 10 ** (_STEADY_DB / 20)
+                or self._loudest < median * 10 ** (_CLEAR_OF_NOISE_DB / 20)):
+            return
+        before, was_bumpy = self.threshold(), self.bumpy()
+        noise = [rms for level, _, blocks in self._frames if level <= high for rms in blocks]
+        self.level = self.steady = median
+        self.top = float(np.percentile(noise, _NOISE_TOP))
+        loudest = max(rms for _, _, blocks in self._frames for rms in blocks)
+        self._bumps = loudest >= self.threshold()
+        self.changed = self.threshold() >= before * _MISJUDGED or self.bumpy() > was_bumpy
 
 
 class _Runs:
     """Each block judged as speech, a bump of the room, or quiet. Loud
     blocks make a run, which a quiet gap of _BLIP_GAP_S ends; a run is
-    speech once it has been loud for *blip_s*, all of it, so a short word
-    still counts in full. Shorter runs are bumps."""
+    speech once it has been loud for the bump length asked, all of it, so a
+    short word still counts in full. Shorter runs are bumps."""
 
-    def __init__(self, blip_s: float):
-        self.blip_s = blip_s
+    def __init__(self):
         self.run = 0.0          # loud seconds in the latest run
         self.gap = 0.0          # quiet seconds since its last loud block
         self.counted = 0.0      # of run, seconds already counted as speech
 
-    def judge(self, loud: bool, duration: float):
-        """("speech", seconds of it it adds), ("bump", 0.0) or ("quiet", 0.0)."""
+    def judge(self, loud: bool, duration: float, bump_s: float):
+        """("speech", seconds of it it adds), ("bump", 0.0) or ("quiet", 0.0),
+        with runs shorter than *bump_s* taken for bumps."""
         if not loud:
             self.gap += duration
             if self.gap >= _BLIP_GAP_S:
@@ -171,7 +210,7 @@ class _Runs:
             return "quiet", 0.0
         self.run += duration
         self.gap = 0.0
-        if self.run < self.blip_s:
+        if self.run < bump_s:
             return "bump", 0.0
         added, self.counted = self.run - self.counted, self.run
         return "speech", added
@@ -180,28 +219,20 @@ class _Runs:
 class SilenceDetector:
     """Feed it audio blocks as they arrive; it says when the speaker is done.
 
-    The quiet that counts towards silence_seconds may have bumps of the room
-    in it: loud for under _BLIP_S, or a tenth of silence_seconds if that is
-    shorter (a fan's gust, a dryer's thump, a click), pauses the count
-    instead of starting it over. Words are loud for longer and start it
-    over. A quick word said just before the wait runs out can therefore end
-    the recording right after it; the word itself is kept, as only the
-    quiet since the last loud block is trimmed (tail_to_trim).
+    In steady noise louder than speech's minimum, the quiet that counts
+    towards silence_seconds may have bumps in it: loud for under _BLIP_S, or
+    a tenth of silence_seconds if that is shorter, pauses the count instead
+    of starting it over. In a quieter room every loud block starts it over,
+    as the start of a quiet word after a pause can be that short.
 
-    Measured with three of 26 recorded sentences joined by pauses of 0.6 of
-    the setting, at three voice levels, in white, pink, rumble, fan, dryer
-    and vent noise, 6 trials each. With a 2 s setting and the noise 10 dB
-    or more under the voice, it stopped at most 0.1 s after the setting
-    (1 s for a quiet voice in fan or dryer noise), and never while words
-    were still coming; before, a dryer meant it never stopped from 20 dB,
-    and a fan or a vent at 10 dB stopped it 1.5 to 3 s late. With a 1 s
-    setting and the noise 10 dB under the voice, the voice's own soft
-    stretches end it mid-sentence in 1 or 2 trials of 6, where it used to
-    never stop in 2. With the noise 5 dB under the voice, quiet words drown
-    in it, and it can stop while you talk, as it did before whenever it had
-    learned the room (the microphone test warns before that). Steady noise
-    louder than speech's threshold that starts while you talk is learned
-    some 1.5 s after the last word, which a shorter setting then waits.
+    Measured with three of 125 recorded readers' clips joined by pauses of
+    0.6 of the setting, at three voice levels, in white, pink, fan, gusty
+    fan, dryer and babble noise from 40 to 10 dB under the voice, with waits
+    of 0.5, 1 and 2 s: it stopped mid-sentence no more often than before
+    (within 1 in 400), and where it used to never stop by itself (a dryer, a
+    gusty fan, a loud voice over steady noise) it now mostly stops, 1 to 3 s
+    late. Noise 10 dB or less under the voice is left unlearned, so there it
+    still doesn't stop by itself.
     """
 
     # With nothing said at all for this long, stop anyway (nothing_said is
@@ -223,8 +254,8 @@ class SilenceDetector:
         self.fired = False
         self.nothing_said = False
         self._busy = 0           # hold() calls not yet released
-        self._blip_s = min(_BLIP_S, self.silence_seconds * _BLIP_SHARE)
-        self._runs = _Runs(self._blip_s)
+        self._bump_s = min(_BLIP_S, self.silence_seconds * _BLIP_SHARE)
+        self._runs = _Runs()
         self._tail = 0.0         # quiet seconds since the last loud block
         self._heard = collections.deque()   # (rms, seconds, speech added), last _STEADY_S
         self._heard_s = 0.0
@@ -244,17 +275,12 @@ class SilenceDetector:
 
     def release(self) -> None:
         """The phrase is done and on screen: the quiet counts from now, so
-        there's the full silence_seconds to read it (and say "press enter")."""
+        there's the full silence_seconds to read it (and say "press enter").
+        Noise learned later doesn't count the time before it, either."""
         self._busy = max(0, self._busy - 1)
         self.silence_time = 0.0
-
-    @property
-    def noise_floor(self):
-        return self._floor.level
-
-    @noise_floor.setter
-    def noise_floor(self, value):
-        self._floor.level = value
+        self._heard.clear()
+        self._heard_s = 0.0
 
     @property
     def armed(self) -> bool:
@@ -265,6 +291,12 @@ class SilenceDetector:
         """The loudness (int16 RMS) that counts as speech in this room."""
         return self._floor.threshold()
 
+    def _bump_length(self) -> float:
+        """Loud for less than this is a bump of the room, not speech: only
+        in noise that has bumps, as in a quiet room the start of a quiet word
+        after a pause can be as short."""
+        return self._bump_s if self._floor.bumpy() else 0.0
+
     def _remember(self, rms: float, duration: float, added: float) -> None:
         """Keep the last _STEADY_S of blocks, for _judge_again."""
         self._heard.append((rms, duration, added))
@@ -273,24 +305,24 @@ class SilenceDetector:
             self._heard_s -= self._heard.popleft()[1]
 
     def _judge_again(self) -> None:
-        """Steady noise raised the floor a long way: the room was misjudged,
-        and the noise counted as speech. The last _STEADY_S is judged again
-        by the new threshold, so the quiet in it counts after all, and steady
-        noise with nothing said still ends as nothing said."""
-        runs, threshold = _Runs(self._blip_s), self._floor.threshold(self._floor.quietest())
-        quiet = tail = spoken = said = 0.0
+        """Steady noise was learned that counted as speech until now (all of
+        it, or its bumps). The last _STEADY_S is judged again as it would be
+        now, so its quiet counts after all, and steady noise with nothing
+        said still ends as nothing said. What it trims is left alone: audio
+        taken back as noise might be words after all."""
+        threshold, bump_s = self._floor.threshold(), self._bump_length()
+        runs, said, spoken, quiet = _Runs(), 0.0, 0.0, 0.0
         for rms, seconds, added in self._heard:
-            kind, now = runs.judge(rms >= threshold, seconds)
+            kind, now = runs.judge(rms >= threshold, seconds, bump_s)
             said, spoken = said + added, spoken + now
             if kind == "speech":
                 quiet = 0.0
             elif kind == "quiet":
                 quiet += seconds
-            tail = tail + seconds if kind == "quiet" else 0.0
         self._runs = runs
         self.speech_time = max(0.0, self.speech_time - said + spoken)
-        self.silence_time = max(self.silence_time, quiet)
-        self._tail = max(self._tail, tail)
+        if not self._busy:
+            self.silence_time = max(self.silence_time, quiet)
 
     def feed(self, block) -> bool:
         """Add one block of int16 samples. True exactly once: when the speaker
@@ -307,15 +339,12 @@ class SilenceDetector:
             return False
 
         loud = self._floor.update(rms, duration)
-        if self._floor.raised:
+        if self._floor.changed:
             self._judge_again()
-        kind, added = self._runs.judge(loud, duration)
+        kind, added = self._runs.judge(loud, duration, self._bump_length())
         self.speech_time += added
         self._remember(rms, duration, added)
-        if kind == "quiet":
-            self._tail += duration
-        else:
-            self._tail = 0.0
+        self._tail = 0.0 if loud else self._tail + duration
         if kind == "speech" or self._busy:
             self.silence_time = 0.0
             return False
