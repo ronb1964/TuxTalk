@@ -181,6 +181,7 @@ def test_a_tray_id_is_never_compared_with_an_x11_id(monkeypatch):
     (("kwrite", ("frame", 1)), ("kwrite", ("frame", 1)), None),       # one frame, two windows?
     (("kwrite", ("frame", 1)), ("kwrite", ("frame", 2)), False),
     ((None, None), ("kwrite", ("tray", "{a}")), None),                # a look that timed out
+    (("kwrite", ("tray", "{a}")), (None, ("own", "{t}")), False),     # Preferences opened
 ])
 def test_which_looks_are_one_window(before, after, same):
     assert focused_window.same_window(before, after) is same

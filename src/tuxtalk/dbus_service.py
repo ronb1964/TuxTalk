@@ -259,11 +259,15 @@ class TuxTalkDBusService(dbus.service.Object):
         _clipboard_tool_focused = is_clipboard_tool_class(wm_class)
         if _clipboard_tool_focused:
             return
-        # TuxTalk's own window (Preferences) is never a paste target, and kept
-        # here it would outlive a reporter that stops, such as an extension
-        # uninstalled from Preferences.
-        if not wm_class or is_own_window_class(wm_class):
-            wm_class = window_id = ""
+        # TuxTalk's own window (Preferences) is never a paste target, and its
+        # class kept here would outlive a reporter that stops, such as an
+        # extension uninstalled from Preferences. Its id stays: an id with no
+        # class is how a look knows it's TuxTalk's own window, which an
+        # automatic Enter never goes into (focused_window.look).
+        if not wm_class:
+            window_id = ""
+        elif is_own_window_class(wm_class):
+            wm_class = ""
         if wm_class != _focus.wm_class:
             logger.info(f"Focused window class: {wm_class or None!r}")
         _focus = FocusReport(str(wm_class), str(window_id or ""), str(geometry or ""))

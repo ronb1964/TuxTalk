@@ -22,9 +22,11 @@ it's the window's frame, so there a window moved or resized counts as
 another, and two maximized windows of one app on one screen can't be told
 apart. COSMIC tells only the class.
 
-TuxTalk's own windows count as unknown: a stale report of Preferences must
-not pick the paste shortcut for the app the user is really in. So does
-wl-copy's brief window, which the tray already leaves out of its reports.
+TuxTalk's own windows have no class here: a stale report of Preferences
+must not pick the paste shortcut for the app the user is really in. Which
+window it is still counts (tagged "own"), so an automatic Enter never goes
+into one. wl-copy's brief window, which the tray leaves out of its reports,
+counts as unknown.
 """
 import os
 from typing import NamedTuple
@@ -84,7 +86,8 @@ def _not_a_target(wm_class) -> bool:
 
 def look():
     """(class, which window) of the focused window, each None when not
-    known. Which window is ("tray", id), ("compositor", id) or ("frame",
+    known. Which window is ("tray", id), ("own", id) for one of TuxTalk's
+    own windows, ("compositor", id) or ("frame",
     window_geometry.parse_reported's answer). Safe from any thread."""
     from . import compositor_focus
     from .window_geometry import parse_reported
@@ -94,7 +97,8 @@ def look():
     asked_class, asked_id = compositor_focus.focused_window()
     wm_class = next((c for c in (wm_class, asked_class) if c and not _not_a_target(c)), None)
     if tray_id:
-        return wm_class, ("tray", tray_id)
+        # An id with no class: the tray keeps only the id of TuxTalk's own.
+        return wm_class, ("own", tray_id)
     if asked_id is not None:
         return wm_class, ("compositor", asked_id)
     where = parse_reported(frame)
@@ -117,11 +121,22 @@ def same_window(before, after) -> bool | None:
     (class_a, window_a), (class_b, window_b) = before[:2], after[:2]
     if class_a is not None and class_b is not None and class_a != class_b:
         return False
-    if window_a is None or window_b is None or window_a[0] != window_b[0]:
+    if window_a is None or window_b is None or _source(window_a) != _source(window_b):
         return None
     if window_a != window_b:
         return False
     return None if window_a[0] == "frame" else True
+
+
+def _source(window) -> str:
+    """Where a look's id came from; TuxTalk's own windows are the tray's
+    too, with the same ids as every other window there."""
+    return "tray" if window[0] == "own" else window[0]
+
+
+def is_own(where) -> bool:
+    """Whether *where* (a look or a destination) is one of TuxTalk's own windows."""
+    return where[1] is not None and where[1][0] == "own"
 
 
 def changed(before, after) -> bool:

@@ -11,7 +11,8 @@ import numpy as np
 import pytest
 from evdev import ecodes
 
-from tuxtalk import app, atspi_helper, focused_window, history, modifier_hotkeys, send_countdown
+from tuxtalk import (app, atspi_helper, compositor_focus, dbus_service, focused_window, history,
+                     modifier_hotkeys, send_countdown)
 
 ENTER, RCTRL, F8 = ecodes.KEY_ENTER, ecodes.KEY_RIGHTCTRL, ecodes.KEY_F8
 FIRST = ("brave-browser", ("tray", "{5c1d0e2a}"))
@@ -237,6 +238,37 @@ def test_right_away_into_the_other_window_of_the_app_sends_nothing(chat, keyboar
     send_countdown.send_automatically("test", focused_window.Destination(*FIRST),
                                       app._press_key, app._type_onto_dictation)
     assert keyboard.events == [] and notices == [send_countdown.SWITCHED_WINDOW_NOTICE]
+
+
+# --- TuxTalk's own windows ------------------------------------------------------------------
+
+@pytest.fixture
+def tray(monkeypatch):
+    """The tray's real focus cache, told the focused window as the KWin
+    script and the GNOME extension tell it, and asked as the service asks."""
+    monkeypatch.setattr(dbus_service, "_focus", dbus_service.FocusReport())
+    monkeypatch.setattr(dbus_service, "_clipboard_tool_focused", False)
+    monkeypatch.setattr(focused_window, "reported", lambda: tuple(dbus_service.cached_focus()))
+    monkeypatch.setattr(compositor_focus, "focused_window", lambda: (None, None))
+    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    service = object.__new__(dbus_service.TuxTalkDBusService)
+    return lambda wm_class, window_id: dbus_service.TuxTalkDBusService.SetFocusedWindow(
+        service, wm_class, window_id, "")
+
+
+@pytest.mark.parametrize("dictated_into", ["org.kde.kwrite", "tuxtalk"])
+def test_no_enter_goes_into_a_tuxtalk_window(tray, keyboard, monkeypatch, dictated_into):
+    """On KDE or GNOME: Preferences opened during the countdown, or the
+    Parakeet offer came up by itself, and the Enter pressed its default
+    button (OK applied the settings). Or the words went into one of
+    TuxTalk's own boxes."""
+    notices = []
+    monkeypatch.setattr(send_countdown, "show_notice", notices.append)
+    tray(dictated_into, "{5c1d0e2a}")
+    sent_to = focused_window.destination()
+    tray("tuxtalk", "{77a0c4e1}")
+    send_countdown.send_automatically("test", sent_to, app._press_key, app._type_onto_dictation)
+    assert keyboard.events == [] and notices == [send_countdown.OWN_WINDOW_NOTICE]
 
 
 # --- Where the desktop can't say which window: the open decision -------------------------

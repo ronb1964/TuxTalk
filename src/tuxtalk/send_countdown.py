@@ -8,7 +8,8 @@ first; holding the key dictates more onto it.
 
 Where the Enter may go is one rule, kept here: only where the words went.
 In another window it would send whatever is in that box, or run the command
-on a terminal's line; in a password field it submits the form.
+on a terminal's line; in a password field it submits the form, and in one
+of TuxTalk's own windows it presses the default button.
 
   1. Where the words go is noted before they're delivered and looked at
      again once they're in (landed). A window that changed meanwhile means
@@ -41,12 +42,14 @@ HELD_NOTICE = "Not sent. Press Enter when you're ready."
 SWITCHED_WINDOW_NOTICE = "Not sent: you switched windows."
 PASSWORD_FIELD_NOT_SENT = "Not sent: the cursor is in a password field."
 UNKNOWN_WINDOW_NOTICE = "Not sent: this desktop doesn't say which window has the focus."
+OWN_WINDOW_NOTICE = "Not sent: a TuxTalk window has the focus."
 
 # Why an Enter wasn't sent: (what the log says after "Not sent: ", the notice).
 _NOT_SENT = {
     "switched": ("another window has the focus now", SWITCHED_WINDOW_NOTICE),
     "moved": ("the focus moved while the words were delivered", SWITCHED_WINDOW_NOTICE),
     "password": ("a password field has the focus now", PASSWORD_FIELD_NOT_SENT),
+    "own_window": ("a TuxTalk window has the focus", OWN_WINDOW_NOTICE),
     "typed_meanwhile": ("other keys went out while it was checked", HELD_NOTICE),
     "unknown_window": ("which window has the focus isn't known", UNKNOWN_WINDOW_NOTICE),
     "not_pressed": ("a dictation key stayed down, or the key couldn't be pressed", HELD_NOTICE),
@@ -112,6 +115,10 @@ def _why_not(sent_to, now) -> str | None:
         return "moved"
     if now.password:
         return "password"
+    # Preferences, or an offer that opened by itself: Enter would press its
+    # default button.
+    if focused_window.is_own(now):
+        return "own_window"
     same = focused_window.same_window(sent_to, now)
     if same is False:
         return "switched"

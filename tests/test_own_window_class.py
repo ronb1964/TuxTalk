@@ -46,12 +46,13 @@ def test_other_windows_are_not_tuxtalks(wm_class):
 
 
 def test_the_tray_does_not_keep_tuxtalks_own_window_as_the_focus(monkeypatch):
-    """A report of TuxTalk's own window clears the cache, so it can't stay
-    behind when the reporter goes away."""
+    """A report of TuxTalk's own window clears the class, so it can't stay
+    behind as the paste target when the reporter goes away. Its id stays,
+    which says it's TuxTalk's own (focused_window.look)."""
     monkeypatch.setattr(dbus_service, "_focus", dbus_service.FocusReport("org.gnome.Ptyxis", "4"))
     service = object.__new__(dbus_service.TuxTalkDBusService)
     dbus_service.TuxTalkDBusService.SetFocusedWindow(service, "tuxtalk", "9", "")
-    assert dbus_service.TuxTalkDBusService.GetFocusedWindow(service)[:2] == ("", "")
+    assert dbus_service.TuxTalkDBusService.GetFocusedWindow(service)[:2] == ("", "9")
     dbus_service.TuxTalkDBusService.SetFocusedWindow(service, "org.gnome.Ptyxis", "4", "")
     dbus_service.TuxTalkDBusService.SetFocusedWindowClass(service, "tuxtalk")   # 0.18's extension
     assert dbus_service.TuxTalkDBusService.GetFocusedWindow(service)[:2] == ("", "")
