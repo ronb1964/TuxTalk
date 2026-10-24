@@ -403,14 +403,11 @@ print("quitting", flush=True)
 def test_quitting_during_a_sound(play, ends_portaudio):
     """The real exit order: TuxTalk's wait runs before sounddevice ends
     PortAudio, and a sound that never ends doesn't hold up quitting."""
-    import os
     import subprocess
     import sys
-    # Nothing here opens a stream; the sound servers are out of reach all the same.
-    env = dict(os.environ, PIPEWIRE_REMOTE="/nonexistent", PULSE_SERVER="unix:/nonexistent")
     started = time.monotonic()
     ran = subprocess.run([sys.executable, "-c", _QUIT_DURING_A_SOUND.format(play=play)],
-                         capture_output=True, text=True, timeout=20, env=env)
+                         capture_output=True, text=True, timeout=20)
     assert ran.returncode == 0, ran.stderr
     assert ran.stdout.splitlines()[0] == "quitting"
     assert ("PortAudio ended" in ran.stdout) is ends_portaudio

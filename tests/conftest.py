@@ -14,6 +14,22 @@ import tempfile
 import gi
 import pytest
 
+# No program a test starts can reach the speakers, nor this one. Every
+# program inherits this, so a child Python's sounddevice, a player started
+# by a shell, GTK's event sounds and GStreamer find no sound server: the
+# PulseAudio and PipeWire sockets named here can't exist (a path under a
+# file), and ALSA's configuration defines no device at all, the sound cards
+# included. Set before Gtk opens and before PortAudio first reads ALSA's
+# configuration. A test that gives a child an environment of its own drops
+# this, but only shell scripts are run that way.
+os.environ.update({
+    "PULSE_SERVER": f"unix:{os.devnull}/no-sound-server",
+    "PIPEWIRE_REMOTE": f"{os.devnull}/no-sound-server",
+    "ALSA_CONFIG_PATH": os.devnull,
+    "JACK_NO_START_SERVER": "1",
+    "JACK_DEFAULT_SERVER": "no-sound-server",
+})
+
 # Every window a test builds must open on xvfb-run's hidden display, never on
 # the user's desktop, where it would take the focus from what they're typing
 # in. GTK prefers Wayland, and libwayland connects to wayland-0 in the runtime
