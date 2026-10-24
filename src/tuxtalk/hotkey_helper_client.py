@@ -213,13 +213,18 @@ class HelperKeyboard:
             logger.warning(f"Hotkey helper said something odd: {' '.join(words)!r}")
 
     def _answered(self, ok, args):
-        """An OK or ERR, the answer to the oldest command not answered yet."""
+        """An OK or ERR, the answer to the oldest command not answered yet.
+        An OK names its command: one that doesn't means the answers are out
+        of step, and isn't taken as a hide."""
         asked = self.asked.popleft() if self.asked else None
+        named = args[:1] == [asked]
+        if ok and not named:
+            logger.warning(f"Hotkey helper answered OK {' '.join(args)} to {asked}")
         if asked == "HIDE":
             # An UNHIDE sent since has undone it already.
-            self.hidden = ok and "UNHIDE" not in self.asked
+            self.hidden = ok and named and "UNHIDE" not in self.asked
         if not ok:
-            logger.warning(f"Hotkey helper: {' '.join(args)}")
+            logger.warning(f"Hotkey helper refused {asked}: {' '.join(args)}")
 
     # -- what app._loop_evdev calls -------------------------------------------------
 

@@ -282,3 +282,19 @@ def test_the_service_uses_the_helper_when_it_is_there(monkeypatch):
     assert isinstance(backend, input_backends.EvdevInputBackend) and backend.helper is sentinel
     monkeypatch.setattr(hotkey_helper_client, "connect_helper", lambda: None)
     assert input_backends.get_input_backend(flatpak_id="").helper is None
+
+
+def test_an_answer_out_of_step_isnt_taken_as_a_hide(tmp_path, caplog):
+    """Each OK names its command; an OK WATCH where HIDE's answer was due
+    must not let typing go on under a key the helper never hid."""
+    from collections import deque
+    client = HelperKeyboard(str(tmp_path / "helper.sock"))
+    client.asked = deque(["HIDE"])
+    with caplog.at_level("WARNING", logger="tuxtalk.hotkey_helper_client"):
+        client._handle(["OK", "WATCH"])
+    assert client.hidden is False
+    assert "answered OK WATCH to HIDE" in caplog.text
+    client.asked = deque(["HIDE"])
+    client._handle(["OK", "HIDE"])
+    assert client.hidden is True
+
