@@ -224,12 +224,16 @@ def test_typing_that_waits_for_right_alt_doesnt_hold_up_the_menu_guard(keyboard,
     bar went out only after the wait, too late: Firefox's menu bar took the
     rest of the phrase as menu letters."""
     import threading
-    up = threading.Event()
-    modifier_hotkeys.note([Keyboard(lambda look: not up.wait(0.002), code=RALT)],
-                          RALT, None)
+    looked, up = threading.Event(), threading.Event()
+
+    def pressed(look):
+        looked.set()        # the first look is made with the keyboard taken
+        return not up.wait(0.002)
+    modifier_hotkeys.note([Keyboard(pressed, code=RALT)], RALT, None)
     typer = threading.Thread(target=app._send_keys, args=([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)],))
     typer.start()
     try:
+        assert looked.wait(2)
         guard = threading.Thread(target=app._guard_alt_tap)
         guard.start()
         guard.join(timeout=2)
