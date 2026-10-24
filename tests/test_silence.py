@@ -370,7 +370,9 @@ def test_a_word_only_just_loud_enough_still_counts_with_the_filter(word, room, r
     filtered out down to within FILTER_COST_DB of where it stops counting
     without the filter, picked up with the beep or not. Measured against the
     room as recorded, the part of the room's noise the filter takes looked
-    like lost speech: in a room of 450 a word had to be 4 dB louder."""
+    like lost speech: in a room of 450 these two words had to be 4 dB
+    louder (up to 16 dB over all the recordings tests/data/README.md
+    describes)."""
     def heard(db, beep):
         sounds = [(_real_word(word, 10 ** (db / 20), rate), 0.3)]
         if beep:

@@ -64,7 +64,7 @@ What was found, in rooms up to int16 RMS 450 at all three rates:
   loud as what it adds. 0.54 cost a soft word more. Measured against the
   room as recorded instead, the filter's share of the room's noise looked
   like lost speech, and a word in a room of 450 had to be up to 16 dB
-  louder.
+  louder over all the recordings, and 4 dB for the two JFK words alone.
 - From a room of about 480 up the room counts as a word by itself, beep or
   not, as it does with the beeps off: it is as loud as speaking. Asking each
   block to stand a quarter above the room as well made steady noise no word,
