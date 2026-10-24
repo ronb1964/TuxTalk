@@ -171,6 +171,18 @@ def test_a_tray_id_is_never_compared_with_an_x11_id(monkeypatch):
     assert focused_window.same_window(first, now) is None
 
 
+def test_one_window_named_by_kwin_and_by_x11_is_still_one_app(monkeypatch):
+    """Plasma X11 with the tray busy: KWin's class is lowercased, X11's is as
+    Chrome set it. Taken for another app, a send said "you switched
+    windows" in the window the user never left."""
+    report = _tray_reports(monkeypatch)
+    report("{5c1d0e2a}", "google-chrome", KWRITE_MAXIMIZED)
+    first = focused_window.look()
+    monkeypatch.setattr(focused_window, "reported", lambda: None)
+    monkeypatch.setattr(compositor_focus, "focused_window", lambda: ("Google-chrome", 0x3200007))
+    assert not focused_window.changed(first, focused_window.look())
+
+
 @pytest.mark.parametrize("before, after, same", [
     (("kwrite", ("tray", "{a}")), ("kwrite", ("tray", "{a}")), True),
     (("kwrite", ("tray", "{a}")), ("kwrite", ("tray", "{b}")), False),

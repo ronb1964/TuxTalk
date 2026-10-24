@@ -112,7 +112,10 @@ def same_window(before, after) -> bool | None:
     are known to differ (another app, another id), None when it can't be
     told: a part one look didn't get, or ids from two sources."""
     (class_a, window_a), (class_b, window_b) = before[:2], after[:2]
-    if class_a is not None and class_b is not None and class_a != class_b:
+    # KWin lowercases the class ("google-chrome"); X11 has it as the app
+    # set it ("Google-chrome"), and on Plasma's X11 session a look can come
+    # from either.
+    if class_a is not None and class_b is not None and class_a.casefold() != class_b.casefold():
         return False
     if window_a is None or window_b is None or _source(window_a) != _source(window_b):
         return None
