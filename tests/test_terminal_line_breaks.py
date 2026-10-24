@@ -21,7 +21,7 @@ without that a terminal is indistinguishable from anything else.
 
 import pytest
 
-from tuxtalk import app
+from tuxtalk import app, focused_window
 
 
 @pytest.fixture
@@ -90,7 +90,7 @@ def test_new_line_in_kwrite_is_pasted_not_a_shift_enter(window, monkeypatch):
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: window)
+    monkeypatch.setattr(focused_window, "look", lambda: (window, None))
     pasted, keys = [], []
     monkeypatch.setattr(app, "_paste_text", lambda t: pasted.append(t) or True)
     monkeypatch.setattr(app, "_send_shift_enter", lambda: keys.append("shift+enter") or True)
@@ -105,7 +105,7 @@ def test_new_line_in_a_chat_app_is_still_shift_enter(monkeypatch):
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "discord")
+    monkeypatch.setattr(focused_window, "look", lambda: ("discord", None))
     pasted, keys = [], []
     monkeypatch.setattr(app, "_paste_text", lambda t: pasted.append(t) or True)
     monkeypatch.setattr(app, "_send_shift_enter", lambda: keys.append("shift+enter") or True)
@@ -113,3 +113,17 @@ def test_new_line_in_a_chat_app_is_still_shift_enter(monkeypatch):
     assert app._inject_text("one\xa7SHIFT_ENTER\xa7two", "auto") == "ok"
     assert pasted == ["one", "two"]
     assert keys == ["shift+enter"]
+
+
+def test_a_paste_with_line_breaks_asks_which_window_only_before_and_after(monkeypatch):
+    """Each question is a D-Bus call to the tray from the thread that types;
+    the one made right before the paste already said it's KWrite."""
+    looks = []
+    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
+    monkeypatch.setattr(focused_window, "look",
+                        lambda: looks.append(1) or ("org.kde.kwrite", None))
+    monkeypatch.setattr(app, "_paste_text", lambda t: True)
+    assert app._inject_text("$45.\xa7SHIFT_ENTER\xa7$25. ", "auto") == "ok"
+    assert len(looks) == 2

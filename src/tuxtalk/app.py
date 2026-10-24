@@ -379,13 +379,6 @@ dbus_service = None
 # The tray owns the D-Bus name and relays signals to the GNOME extension.
 _tray_dbus_proxy = None
 
-# Calls to the tray come from the input thread, which holds an exclusive grab
-# on every keyboard while recording. dbus-python's default reply timeout is 25
-# seconds, so a busy tray (loading a Whisper model on its main loop, say) would
-# freeze the keyboard system-wide for that long. These are fire-and-forget
-# notifications, and a late one is worthless anyway.
-_TRAY_DBUS_TIMEOUT = 1.5
-
 # Thread-safe recording command flags — set by signal handler or D-Bus thread, consumed by evdev loop.
 # Using two separate Events (rather than one flag) so start and stop can't overwrite each other.
 _cmd_start_recording = threading.Event()
@@ -457,7 +450,7 @@ def _notify_tray_recording_state(is_recording: bool):
     the tray's NotifyRecordingState method which then emits the signal.
 
     Called from start_recording/stop_recording — that is, with every keyboard
-    exclusively grabbed. It must never block for long: see _TRAY_DBUS_TIMEOUT.
+    exclusively grabbed. It must never block for long: see focused_window.TRAY_TIMEOUT_S.
     """
     try:
         import dbus
@@ -465,7 +458,7 @@ def _notify_tray_recording_state(is_recording: bool):
         proxy.NotifyRecordingState(
             dbus.Boolean(is_recording),
             dbus_interface='io.github.ronb1964.TalkType',
-            timeout=_TRAY_DBUS_TIMEOUT,
+            timeout=focused_window.TRAY_TIMEOUT_S,
         )
     except Exception as e:
         logger.debug(f"Could not notify tray of recording state: {e}")
@@ -525,7 +518,7 @@ def _claim_desktop_hotkeys(cfg):
         _get_tray_dbus_proxy().NotifyClaimedHotkeys(
             dbus.Array(gnome_hotkeys.accelerators(cfg), signature='s'),
             dbus_interface='io.github.ronb1964.TalkType',
-            timeout=_TRAY_DBUS_TIMEOUT,
+            timeout=focused_window.TRAY_TIMEOUT_S,
         )
     except Exception as e:
         logger.debug(f"Could not send the hotkeys to the tray: {e}")
@@ -542,7 +535,7 @@ def _notify_tray_hotkey_pressed(key_name: str):
         proxy.NotifyHotkeyPressed(
             key_name,
             dbus_interface='io.github.ronb1964.TalkType',
-            timeout=_TRAY_DBUS_TIMEOUT,
+            timeout=focused_window.TRAY_TIMEOUT_S,
         )
     except Exception as e:
         logger.debug(f"Could not notify tray of hotkey press: {e}")
@@ -554,7 +547,7 @@ def _show_voice_commands_via_dbus():
         proxy = _get_tray_dbus_proxy()
         proxy.ShowVoiceCommands(
             dbus_interface='io.github.ronb1964.TalkType',
-            timeout=_TRAY_DBUS_TIMEOUT,
+            timeout=focused_window.TRAY_TIMEOUT_S,
         )
     except Exception as e:
         logger.debug(f"Could not show voice commands via D-Bus: {e}")
@@ -2366,8 +2359,8 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
     # Handle mid-sentence continuation after undo:
     # lowercase the first letter if we're continuing a sentence
     if state.continue_mid_sentence and text:
-        # In another window it's a new sentence (Ron, 2026-10-20: a message
-        # after "meet me at noon and" in KWrite began with a small letter).
+        # In another window it's a new sentence: a message after "meet me at
+        # noon and" in KWrite mustn't begin with a small letter.
         focused = _query_focused_window_class()
         if (not _not_where_typed(focused) and text[0].isupper()
                 and _safe_to_lowercase_first_word(text)):
@@ -2566,9 +2559,8 @@ def _deliver_text(text: str, injection_mode: str, one_block: bool = False, *, wh
         # A terminal honours a newline inside a paste, but treats Shift+Enter
         # like Enter, so it gets one chunk carrying real newlines and no
         # keystrokes at all; so do KDE's editors (plan_line_breaks).
-        focused = _query_focused_window_class()
-        parts = plan_line_breaks(text, is_terminal_class(focused)
-                                 or (focused or "").lower() in SMART_NEWLINE_CLASSES_LOWER)
+        parts = plan_line_breaks(text, is_terminal_class(focused_class)
+                                 or (focused_class or "").lower() in SMART_NEWLINE_CLASSES_LOWER)
         logger.info(f"Smart hybrid mode: {len(parts)} part(s)")
 
         # Track where delivery stopped, so the fallback types only the rest:
@@ -4747,7 +4739,7 @@ def _notify_tray_running_engine():
         _get_tray_dbus_proxy().NotifyRunningEngine(
             *_running_engine,
             dbus_interface='io.github.ronb1964.TalkType',
-            timeout=_TRAY_DBUS_TIMEOUT,
+            timeout=focused_window.TRAY_TIMEOUT_S,
         )
     except Exception as e:
         logger.debug(f"Could not tell the tray which engine is running: {e}")
@@ -4793,7 +4785,7 @@ def _mark_service_ready():
         _get_tray_dbus_proxy().NotifyServiceReady(
             dbus.UInt32(os.getpid()),
             dbus_interface='io.github.ronb1964.TalkType',
-            timeout=_TRAY_DBUS_TIMEOUT,
+            timeout=focused_window.TRAY_TIMEOUT_S,
         )
     except Exception as e:
         logger.debug(f"Could not tell the tray the service is ready: {e}")

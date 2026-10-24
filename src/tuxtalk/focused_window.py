@@ -36,11 +36,14 @@ from .logger import setup_logger
 
 logger = setup_logger(__name__)
 
-# The tray answers from a cache in a millisecond; this is for one whose loop
-# is busy (Preferences opening), which would otherwise leave the class
-# unknown and pick the wrong paste shortcut. The bus daemon gets the same
-# limit: these questions come from the typing thread, which a wedged session
-# bus would otherwise hold for dbus-python's 25 seconds.
+# How long any call to the tray may take: these questions, and the
+# dictation service's notices to it (app.py). The tray answers from a cache
+# in a millisecond; this is for one whose loop is busy (Preferences opening,
+# a Whisper model loading), which would otherwise leave the class unknown
+# and pick the wrong paste shortcut. dbus-python's default is 25 seconds, and
+# the calls come from the typing thread and the hotkey loop, which holds
+# every keyboard grabbed while recording: a wedged tray or session bus would
+# freeze the keyboard that long. The bus daemon gets the same limit.
 TRAY_TIMEOUT_S = 1.5
 
 
