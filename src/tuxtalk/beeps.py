@@ -173,19 +173,24 @@ def wait_until_played(limit=WAIT_LIMIT_S, *, sound=None):
 
 
 def _submit(job, what, over, finished=None):
-    global _worker
     with _queue:
         _unfinished.add(over)
         dropped = _waiting.popleft() if len(_waiting) >= MAX_WAITING else None
         _waiting.append((job, what, over, finished))
         _queue.notify_all()
-        if _worker is None or not _worker.is_alive():
-            _worker = threading.Thread(target=_work, name="tt-sounds", daemon=True)
-            _worker.start()
+        if _worker is None:
+            _start_worker()
     if dropped:
         _job, what_dropped, over_dropped, told = dropped
         logger.info(f"Skipped {what_dropped}: the sound output is held up")
         _end(over_dropped, what_dropped, told, "the sound output is held up")
+
+
+def _start_worker():
+    """Start the sound thread; called with _queue held."""
+    global _worker
+    _worker = threading.Thread(target=_work, name="tt-sounds", daemon=True)
+    _worker.start()
 
 
 def _end(over, what, finished, error):
@@ -204,23 +209,40 @@ def _end(over, what, finished, error):
 
 def _work():
     """The sound thread: plays each sound asked for, in turn. A sound is
-    never worth a recording, so any audio error is logged and dropped."""
-    while True:
+    never worth a recording, so any audio error is logged and dropped.
+
+    A job that ends the thread itself (SystemExit) leaves the queue to a
+    new thread. It is handed over under _queue, so a sound asked for as the
+    thread ends is never left waiting for one that has gone."""
+    global _worker
+    try:
+        while True:
+            with _queue:
+                _queue.wait_for(lambda: _waiting)
+                job, what, over, finished = _waiting.popleft()
+            _run(job, what, over, finished)
+    finally:
         with _queue:
-            _queue.wait_for(lambda: _waiting)
-            job, what, over, finished = _waiting.popleft()
+            _worker = None
+            if _waiting:
+                _start_worker()
+
+
+def _run(job, what, over, finished):
+    """Play one sound and say how it went: None, or what stopped it."""
+    error = "the sound thread stopped"      # unless the job returns or raises an Exception
+    try:
+        job()
         error = None
-        try:
-            job()
-        except Exception as e:
-            error = str(e)
-            # A missing output fails every sound: each kind of failure is
-            # logged the first time, so a new one still shows in the log.
-            if (type(e), error) not in _failures_logged:
-                _failures_logged.add((type(e), error))
-                logger.warning(f"Could not play {what}: {e} (not logged again)")
-        finally:
-            _end(over, what, finished, error)
+    except Exception as e:
+        error = str(e)
+        # A missing output fails every sound: each kind of failure is
+        # logged the first time, so a new one still shows in the log.
+        if (type(e), error) not in _failures_logged:
+            _failures_logged.add((type(e), error))
+            logger.warning(f"Could not play {what}: {e} (not logged again)")
+    finally:
+        _end(over, what, finished, error)
 
 
 class _Playback:

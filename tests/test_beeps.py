@@ -372,20 +372,31 @@ def test_a_callback_that_fails_leaves_the_sound_over_and_the_sounds_playing(soun
 
 
 @pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
-def test_a_sound_that_ends_the_sound_thread_still_counts_as_over(sound, monkeypatch):
-    """Nobody waits in vain for a sound whose job ended the thread itself,
-    and the next sound gets a thread of its own."""
+def test_a_sound_asked_for_as_the_sound_thread_ends_still_plays(sound, monkeypatch):
+    """A job that ends the sound thread itself (SystemExit) counts as failed,
+    not played, and a sound asked for while that thread is on its way out
+    gets a thread of its own. It waited, unplayed, until some later sound
+    was asked for."""
     system = sound()
     real_play = beeps._play
+    in_callback, go_on = threading.Event(), threading.Event()
+    told = []
 
     def ends_the_thread(*args):
         raise SystemExit
+
+    def told_then_held_up(error):
+        told.append(error)
+        in_callback.set()
+        go_on.wait(5)
     monkeypatch.setattr(beeps, "_play", ends_the_thread)
-    assert beeps.beep(True, *beeps.CANCEL_BEEP).wait(1)
-    beeps._worker.join(1)
+    beeps.play(np.zeros(100, np.float32), RATE, finished=told_then_held_up)
+    assert in_callback.wait(5)
     monkeypatch.setattr(beeps, "_play", real_play)
-    beeps.beep(True, *beeps.START_BEEP)
-    assert beeps.wait_until_played(5)
+    start = beeps.beep(True, *beeps.START_BEEP)
+    go_on.set()
+    assert start.wait(5), "the beep asked for as the thread ended never played"
+    assert told == ["the sound thread stopped"]
     assert heard_in_full(tones(system.speakers())[0], *beeps.START_BEEP)
 
 
