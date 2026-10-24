@@ -1,7 +1,7 @@
 {
  "files": {
   "app.py": 4860,
-  "prefs.py": 5115,
+  "prefs.py": 4924,
   "tray.py": 2477,
   "welcome_dialog.py": 3222
  },
@@ -234,7 +234,6 @@
   "prefs.py::_acquire_prefs_singleton._cleanup::swallowed_error": 1,
   "prefs.py::_acquire_prefs_singleton::swallowed_error": 1,
   "prefs.py::_acquire_prefs_singleton::undocumented": 1,
-  "prefs.py::_pulse_source_for_mic::long_line": 1,
   "prefs.py::main::long_line": 1,
   "prefs.py::main::undocumented": 1,
   "prefs.py::several_languages_label::long_line": 1,
@@ -565,9 +564,6 @@
   "prefs.py::PreferencesWindow.create_general_tab": {
    "decisions": 20,
    "lines": 489
-  },
-  "prefs.py::PreferencesWindow.get_system_mic_volume": {
-   "decisions": 19
   },
   "prefs.py::hotkey_change_message": {
    "decisions": 19

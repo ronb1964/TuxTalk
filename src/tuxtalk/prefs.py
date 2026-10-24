@@ -10,7 +10,7 @@ gi.require_version("Gdk", "3.0")
 gi.require_version("Pango", "1.0")
 from gi.repository import Gtk, Gdk, GLib
 import sounddevice as sd
-from . import mic_stream
+from . import mic_stream, mic_volume
 from .chunk_meter import PauseTest, level_to_fraction, threshold_fraction
 from .mic_test import MicReopen, MicTest, SegmentedVUMeter
 from .ui_style import Fold, message_dialog, show_message
@@ -22,7 +22,6 @@ from .prefs_tab import WARNING_AMBER, _on_gnome
 from .prefs_updates import UpdatesTab
 from .prefs_words import WordsTab
 import os
-import subprocess
 import sys
 import threading
 import time
@@ -64,102 +63,6 @@ def _coerce_config_types(config: dict) -> dict:
     settings = Settings()
     apply_toml(settings, config)
     return {**config, **asdict(repaired(settings))}
-
-
-# The Input Volume slider's target when TuxTalk uses the system default mic.
-DEFAULT_SOURCE = "@DEFAULT_SOURCE@"
-# Mic settings that record from the system default: "" (System Default) and
-# the sound server's own catch-all devices.
-_DEFAULT_MIC_NAMES = ("", "default", "pipewire", "pulse")
-
-
-def _recorded_mic(mic, device_names):
-    """The input device the service records from for the mic setting *mic*,
-    or "" for the system default. Same rule as config.find_input_device: the
-    first name containing *mic*, and the default when none does (a mic that
-    was unplugged, say)."""
-    if mic:
-        for name in device_names:
-            if mic.lower() in name.lower():
-                return name
-    return ""
-
-
-def _list_pulse_sources():
-    """The PipeWire/PulseAudio sources as pactl reports them, or [] if it can't."""
-    try:
-        result = subprocess.run(["pactl", "-f", "json", "list", "sources"],
-                                capture_output=True, text=True, timeout=2)
-        if result.returncode == 0:
-            import json
-            return json.loads(result.stdout)
-        # pactl before 16 (Ubuntu 22.04, Mint 21) has no JSON output.
-        result = subprocess.run(["pactl", "list", "sources"],
-                                capture_output=True, text=True, timeout=2,
-                                env={**os.environ, "LC_ALL": "C"})
-        if result.returncode == 0:
-            return _parse_pactl_sources(result.stdout)
-    except Exception as e:
-        logger.warning(f"Could not list audio sources: {e}")
-    return []
-
-
-def _parse_pactl_sources(text):
-    """`pactl list sources` text (C locale) as the dicts `pactl -f json` gives:
-    name, description and properties, which is all the slider needs."""
-    sources = []
-    current = None
-    in_properties = False
-    for line in text.splitlines():
-        if line.startswith("Source #"):
-            current = {"name": "", "description": "", "properties": {}}
-            sources.append(current)
-            in_properties = False
-        elif current is None:
-            continue
-        elif line.startswith("\t\t"):
-            if in_properties and " = " in line:
-                key, _, value = line.strip().partition(" = ")
-                current["properties"][key] = value.strip('"')
-        elif line.startswith("\t"):
-            field, _, value = line.strip().partition(": ")
-            in_properties = field.rstrip(":") == "Properties"
-            if field == "Name":
-                current["name"] = value
-            elif field == "Description":
-                current["description"] = value
-    return sources
-
-
-def _pulse_source_for_mic(mic, sources):
-    """The PipeWire/PulseAudio source behind the sounddevice input named *mic*.
-
-    ALSA devices carry their card and device numbers ("USB Audio (hw:3,0)"),
-    which the source's alsa.card and alsa.device properties also hold; PipeWire's own devices are named
-    after the source's description. None when neither matches, so the slider
-    never quietly changes some other mic.
-    """
-    import re
-    inputs = [src for src in sources
-              if src.get("properties", {}).get("device.class") != "monitor"
-              and not str(src.get("name", "")).endswith(".monitor")]
-    hw = re.search(r"\(hw:(\d+),(\d+)\)", mic)
-    if not hw:
-        for src in inputs:
-            if src.get("description") == mic:
-                return src.get("name")
-        return None
-    on_card = [src for src in inputs
-               if str(src.get("properties", {}).get("alsa.card")) == hw.group(1)]
-    # A card can have several inputs (hw:2,0 and hw:2,2); only a source that
-    # names no PCM device of its own may stand in for one it doesn't name.
-    for src in on_card:
-        if str(src.get("properties", {}).get("alsa.device")) == hw.group(2):
-            return src.get("name")
-    for src in on_card:
-        if "alsa.device" not in src.get("properties", {}):
-            return src.get("name")
-    return None
 
 
 FIX_TYPING_LABEL = "Fix Typing Permissions"
@@ -2960,103 +2863,6 @@ class PreferencesWindow:
         current_mic = self.config.get("mic", "")
         return find_input_device(current_mic)
     
-    def get_system_mic_volume(self, source=DEFAULT_SOURCE):
-        """
-        Get the input volume of *source* (default: the system default mic).
-        Supports both PipeWire (wpctl) and PulseAudio (pactl).
-        """
-
-        # Try PipeWire first (modern systems like Fedora, Nobara, newer Ubuntu).
-        # wpctl only knows the default by name; a named source goes to pactl.
-        if source == DEFAULT_SOURCE:
-            try:
-                result = subprocess.run(
-                    ["wpctl", "get-volume", "@DEFAULT_AUDIO_SOURCE@"],
-                    capture_output=True, text=True, timeout=2
-                )
-                if result.returncode == 0:
-                    # Parse volume from output like "Volume: 0.90" or "Volume: 0.90 [MUTED]"
-                    output = result.stdout.strip()
-                    if 'Volume:' in output:
-                        # Extract the decimal value (0.0 to 1.0)
-                        parts = output.split()
-                        if len(parts) >= 2:
-                            try:
-                                volume_decimal = float(parts[1])
-                                return int(volume_decimal * 100)  # Convert to percentage
-                            except ValueError:
-                                pass
-            except FileNotFoundError:
-                # wpctl not installed - try PulseAudio
-                pass
-            except Exception as e:
-                logger.warning(f"wpctl failed: {e}")
-
-        # Try PulseAudio (older/traditional systems)
-        try:
-            result = subprocess.run(
-                ["pactl", "get-source-volume", source],
-                capture_output=True, text=True, timeout=2
-            )
-            if result.returncode == 0:
-                # Parse volume from output like "Volume: mono: 43423 /  66% / -10.73 dB"
-                for line in result.stdout.split('\n'):
-                    if 'Volume:' in line and '%' in line:
-                        # Extract percentage - look for pattern "/ XX% /"
-                        if '/' in line and '%' in line:
-                            parts = line.split('/')
-                            for part in parts:
-                                part = part.strip()
-                                if part.endswith('%'):
-                                    try:
-                                        return int(part[:-1])
-                                    except ValueError:
-                                        continue
-        except FileNotFoundError:
-            # pactl not installed either
-            pass
-        except Exception as e:
-            logger.warning(f"pactl failed: {e}")
-
-        # Fallback to 50% if neither wpctl nor pactl work
-        return 50
-    
-    def set_system_mic_volume(self, volume_percent, source=DEFAULT_SOURCE):
-        """
-        Set the input volume of *source* (default: the system default mic).
-        Supports both PipeWire (wpctl) and PulseAudio (pactl).
-        """
-
-        # Try PipeWire first (modern systems)
-        if source == DEFAULT_SOURCE:
-            try:
-                # wpctl expects decimal format (0.0 to 1.0)
-                volume_decimal = volume_percent / 100.0
-                result = subprocess.run(
-                    ["wpctl", "set-volume", "@DEFAULT_AUDIO_SOURCE@", f"{volume_decimal}"],
-                    capture_output=True, timeout=2
-                )
-                if result.returncode == 0:
-                    return  # Success!
-            except FileNotFoundError:
-                # wpctl not installed - try PulseAudio
-                pass
-            except Exception as e:
-                logger.warning(f"wpctl failed: {e}")
-
-        # Try PulseAudio (older systems)
-        try:
-            subprocess.run(
-                ["pactl", "set-source-volume", source, f"{volume_percent}%"],
-                capture_output=True, timeout=2
-            )
-            return  # Success!
-        except FileNotFoundError:
-            # Neither wpctl nor pactl available
-            logger.info("Volume control not available (neither wpctl nor pactl found)")
-        except Exception as e:
-            logger.warning(f"pactl failed: {e}")
-    
     def on_volume_changed(self, scale):
         """Handle volume slider changes.
 
@@ -3070,8 +2876,9 @@ class PreferencesWindow:
     def _apply_pending_volume(self):
         """Apply the slider's latest value once the drag has paused."""
         self._volume_timer = None
-        if getattr(self, "_volume_source", None) is not None:
-            self.set_system_mic_volume(self._pending_volume, self._volume_source)
+        if (getattr(self, "_volume_source", None) is not None
+                and not mic_volume.set_volume(self._pending_volume, self._volume_source)):
+            logger.warning("Could not set the microphone's volume")
         return False
 
     def _on_mic_changed(self, combo):
@@ -3081,25 +2888,27 @@ class PreferencesWindow:
     def _refresh_volume_slider(self):
         """Point the Input Volume slider at the mic TuxTalk records from.
 
-        A mic whose source can't be found disables the slider with a note,
-        rather than letting it change the system default mic instead.
+        A mic whose source can't be found, or whose volume can't be read,
+        disables the slider with a note, rather than letting it change the
+        system default mic instead or show a volume that isn't the mic's.
         """
         if not hasattr(self, "volume_scale"):
             return
-        mic = _recorded_mic(self.config.get("mic") or "",
-                            getattr(self, "_input_device_names", []))
-        if mic.lower() in _DEFAULT_MIC_NAMES:
-            source = DEFAULT_SOURCE
+        mic = mic_volume.recorded_mic(self.config.get("mic") or "",
+                                      getattr(self, "_input_device_names", []))
+        if mic.lower() in mic_volume.DEFAULT_MIC_NAMES:
+            source = mic_volume.DEFAULT_SOURCE
         else:
-            source = _pulse_source_for_mic(mic, _list_pulse_sources())
-        self._volume_source = source
-        self.volume_scale.set_sensitive(source is not None)
-        self.volume_note.set_visible(source is None)
-        if source is not None:
+            source = mic_volume.source_for_mic(mic, mic_volume.list_sources())
+        volume = None if source is None else mic_volume.get_volume(source)
+        self._volume_source = source if volume is not None else None
+        self.volume_scale.set_sensitive(volume is not None)
+        self.volume_note.set_visible(volume is None)
+        if volume is not None:
             # Showing the mic's current volume must not write it back.
             self.volume_scale.handler_block_by_func(self.on_volume_changed)
             try:
-                self.volume_scale.set_value(self.get_system_mic_volume(source))
+                self.volume_scale.set_value(volume)
             finally:
                 self.volume_scale.handler_unblock_by_func(self.on_volume_changed)
     
