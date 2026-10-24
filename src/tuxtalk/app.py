@@ -3702,6 +3702,15 @@ def _chunk_message_sent() -> None:
         state.shown_text = ""
 
 
+def _press_said(key: str, chunk_role) -> None:
+    """Press the key said at the end of a dictation ("press enter"). In Type
+    at pause that ends the message, and what's said next starts afresh; not
+    pressed (a key stuck down), the message is still in the box, to carry
+    on in and for "edit that" to reach whole."""
+    if _press_key(key, f'said "press {key.lower()}"') and chunk_role is not None:
+        _chunk_message_sent()
+
+
 def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                            language=None, auto_space=True, auto_period=True,
                            injection_mode="type", chunk_role=None):
@@ -3851,9 +3860,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             # Only "press enter" or "press tab" was said.
             if chunk_role != "middle":
                 _beep(beeps_on, *READY_BEEP)
-            _press_key(said, f'said "press {said.lower()}"')
-            if chunk_role is not None:
-                _chunk_message_sent()
+            _press_said(said, chunk_role)
             return
 
         # Stage 3: Normalize text (voice commands, punctuation, spacing),
@@ -3931,12 +3938,11 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             _remember_shown(state.last_inserted_text, chunked, outcome == "ok")
             if outcome in _UNDELIVERED_NOTICES:
                 _report_undelivered(outcome, beeps_on)
+            elif said:
+                _press_said(said, chunk_role)
             elif press:
-                if said:
-                    _press_key(said, f'said "press {said.lower()}"')
-                else:
-                    _send_automatically("Send each dictation automatically is on",
-                                        space_left_off, injection_mode)
+                _send_automatically("Send each dictation automatically is on",
+                                    space_left_off, injection_mode)
                 if chunk_role is not None:
                     _chunk_message_sent()
             if chunk_role == "middle" and not _chunk_context_marks and outcome == "ok" \

@@ -1115,6 +1115,21 @@ def test_press_enter_at_the_end_of_a_phrase_sends_it(enter):
     assert typed[2:] == ["How are you"]
 
 
+def test_an_enter_that_couldnt_be_pressed_leaves_the_message_open(enter, monkeypatch):
+    """A Right Ctrl stuck down stopped the Enter: the phrase is still in the
+    box, so "edit that" must still reach all of it, not start afresh."""
+    from tuxtalk import app
+    texts, typed, _ = enter
+    monkeypatch.setattr(app, "_press_key", lambda key, why: False)
+    monkeypatch.setattr(app.state, "recording_serial", 7)
+    texts.extend(["see you at noon, press enter", "press enter"])
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    assert typed == ["See you at noon."]
+    assert app.state.shown_text == "See you at noon."
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    assert app.state.shown_text == "See you at noon."
+
+
 def test_press_enter_after_a_pause_ends_the_phrase_before_it(enter):
     """ "we meet at three" ... pause ... "press enter": the held-back end of
     the phrase is typed (the auto-period, no space) before Enter, with no
