@@ -1,9 +1,9 @@
 {
  "files": {
-  "app.py": 5875,
-  "prefs.py": 7127,
+  "app.py": 5781,
+  "prefs.py": 7120,
   "tray.py": 2548,
-  "welcome_dialog.py": 3275
+  "welcome_dialog.py": 3256
  },
  "findings": {
   "ai_cleanup.py::<module>::long_line": 4,
@@ -52,10 +52,8 @@
   "app.py::_resample_audio::long_line": 1,
   "app.py::_resolve_boundary::dated_comment": 1,
   "app.py::_show_voice_commands_via_dbus::swallowed_error": 1,
-  "app.py::_strip_hallucinations::long_line": 1,
   "app.py::_transcribe_and_inject::long_line": 1,
   "app.py::_transcribe_audio::long_line": 5,
-  "app.py::_type_text_raw::swallowed_error": 1,
   "app.py::build_model::long_line": 3,
   "app.py::main.AppInstance.quit::swallowed_error": 1,
   "app.py::main.AppInstance::undocumented": 1,
@@ -444,12 +442,10 @@
   "welcome_dialog.py::_extension_already_active::swallowed_error": 1,
   "welcome_dialog.py::_flush_pending_events::swallowed_error": 1,
   "welcome_dialog.py::_menu_location::swallowed_error": 1,
-  "welcome_dialog.py::_open_key_devices::swallowed_error": 2,
+  "welcome_dialog.py::_open_key_devices::swallowed_error": 1,
   "welcome_dialog.py::_saved_hold_key::swallowed_error": 1,
-  "welcome_dialog.py::show_hotkey_test_dialog.evdev_key_reader::swallowed_error": 3,
-  "welcome_dialog.py::show_hotkey_test_dialog.on_key_press::undocumented": 1,
+  "welcome_dialog.py::show_hotkey_test_dialog.evdev_key_reader::swallowed_error": 2,
   "welcome_dialog.py::show_hotkey_test_dialog::long_line": 1,
-  "welcome_dialog.py::show_hotkey_test_dialog::swallowed_error": 1,
   "welcome_dialog.py::show_setup_complete_dialog.on_restart_now::undocumented": 1,
   "welcome_dialog.py::show_setup_complete_dialog::dated_comment": 1,
   "welcome_dialog.py::show_setup_complete_dialog::long_line": 1,
@@ -499,7 +495,7 @@
   },
   "app.py::_loop_evdev": {
    "decisions": 27,
-   "lines": 166
+   "lines": 164
   },
   "app.py::_paste_text": {
    "decisions": 18
@@ -650,8 +646,8 @@
    "lines": 129
   },
   "prefs.py::PreferencesWindow.create_general_tab": {
-   "decisions": 22,
-   "lines": 509
+   "decisions": 20,
+   "lines": 489
   },
   "prefs.py::PreferencesWindow.create_stats_tab": {
    "lines": 107
@@ -746,10 +742,7 @@
    "lines": 191
   },
   "welcome_dialog.py::show_hotkey_test_dialog": {
-   "lines": 443
-  },
-  "welcome_dialog.py::show_hotkey_test_dialog.evdev_key_reader": {
-   "decisions": 16
+   "lines": 396
   },
   "welcome_dialog.py::show_setup_complete_dialog": {
    "decisions": 19,
