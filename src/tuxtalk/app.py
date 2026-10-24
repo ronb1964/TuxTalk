@@ -747,7 +747,7 @@ def _restore_protected(text: str, protected: dict[str, str]) -> str:
 def _strip_hallucinations(text: str, no_speech_prob: float = 0.0) -> str:
     """hallucinations.strip, logged the way transcripts are (_loggable)."""
     stripped = hallucinations.strip(text, no_speech_prob)
-    if stripped != text:
+    if stripped != text.strip():
         logger.info(f"Stripped a hallucination (no_speech_prob={no_speech_prob:.2f}): "
                     f"{_loggable(text)} -> {_loggable(stripped)}")
     return stripped
