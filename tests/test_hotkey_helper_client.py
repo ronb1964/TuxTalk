@@ -15,6 +15,7 @@ from tuxtalk.hotkey_keys import track_modifier
 from test_hotkey_helper import FakeKeyboard
 
 F8, F9, ESC = 66, 67, 1
+RCTRL = 97
 LSHIFT = 42
 
 
@@ -88,7 +89,7 @@ def rig(tmp_path, monkeypatch):
         language = ""
         injection_mode = "type"
 
-    def loop(times=3):
+    def loop(times=3, hold=F8):
         """What _loop_evdev does each pass, for the helper's one 'keyboard'."""
         for _ in range(times):
             helper.run_once(timeout=0.01)
@@ -101,7 +102,7 @@ def rig(tmp_path, monkeypatch):
                     if app._is_own_injected_event(dev, event):
                         continue
                     track_modifier(held, event)
-                    app._handle_key_event(event, F8, F9, None, held,
+                    app._handle_key_event(event, hold, F9, None, held,
                                           [client], Cfg, None)
 
     yield helper, kb, client, loop, calls
@@ -181,6 +182,71 @@ def test_if_the_helper_goes_away_a_held_key_is_let_go(rig):
                                                                     "injection_mode": "type"}), None)
     assert calls == [("start", False), ("stop",)]
     assert helper.hide is None           # and the keyboards were given back
+
+
+@pytest.fixture
+def right_ctrl(rig, keyboard, monkeypatch):
+    """The rig with Right Ctrl as the hold key, and typing's waits on the
+    test keyboard's fake clock. Returns how to type a letter."""
+    from evdev import ecodes
+    from tuxtalk import modifier_hotkeys
+    helper, kb, client, loop, calls = rig
+    client.watch([str(RCTRL), "67", "1"])
+    for _ in range(3):
+        helper.run_once(timeout=0.01)
+    client.active_keys()
+    for name, value in (("_noted", ([], frozenset())), ("_hidden", (frozenset(), ())),
+                        ("_stuck", set()), ("time", keyboard.clock)):
+        monkeypatch.setattr(modifier_hotkeys, name, value)
+    monkeypatch.setattr(app, "_destination", lambda: ("kwrite", False))
+    modifier_hotkeys.note([client], RCTRL, F9)
+    return lambda: app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
+
+
+def test_a_hold_key_the_helper_couldnt_hide_still_holds_typing_up(rig, right_ctrl, keyboard):
+    """The helper said no (a remapper or a VM viewer holds the keyboard), so
+    the desktop still sees Right Ctrl down. Counted as hidden once HIDE was
+    sent, a phrase of Type at pause went in as Ctrl shortcuts (Ctrl+W)."""
+    helper, kb, client, loop, calls = rig
+
+    def grab_refused(on):
+        kb.calls.append(("grab", on))
+        return False
+    kb.grab = grab_refused
+    kb.press(RCTRL)
+    loop(hold=RCTRL)
+    assert calls == [("start", False)] and helper.hide is None
+    assert right_ctrl() is False
+    assert keyboard.events == []
+
+
+def test_typing_waits_for_the_helper_to_say_the_hold_key_is_hidden(rig, right_ctrl, keyboard,
+                                                                   monkeypatch):
+    """HIDE is answered after a round trip through the helper: until then
+    the desktop may still see the key down."""
+    helper, kb, client, loop, calls = rig
+    kb.press(RCTRL)
+    loop(1, hold=RCTRL)                  # HIDE sent, not yet taken in by the helper
+    assert calls == [("start", False)] and helper.hide is None
+    from tuxtalk import modifier_hotkeys
+    typed_while_waiting = []
+
+    class HelperAnswersMeanwhile:
+        """Typing's waits for the key, during which the helper runs."""
+        now = 0.0
+
+        def monotonic(self):
+            return self.now
+
+        def sleep(self, seconds):
+            typed_while_waiting.append(list(keyboard.events))
+            helper.run_once(timeout=0.01)
+            self.now += seconds
+    monkeypatch.setattr(modifier_hotkeys, "time", HelperAnswersMeanwhile())
+    assert right_ctrl()
+    assert typed_while_waiting and typed_while_waiting[0] == []
+    assert keyboard.typed_keys() == [30]            # KEY_A, once the helper had hidden it
+    assert helper.hide is not None and ("inject", RCTRL, 0) in kb.calls
 
 
 def test_events_taken_in_early_are_read_without_waiting(rig):

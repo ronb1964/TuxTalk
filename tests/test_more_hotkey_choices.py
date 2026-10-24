@@ -459,7 +459,7 @@ def real_grabs(keyboard, stuck_right_ctrl, monkeypatch):
     on the keyboard's fake clock."""
     monkeypatch.setattr(app, "_hotkey_test_active", lambda: False)
     monkeypatch.setattr(app, "_grabbed_devices", [])
-    monkeypatch.setattr(modifier_hotkeys, "_hidden", frozenset())
+    monkeypatch.setattr(modifier_hotkeys, "_hidden", (frozenset(), ()))
     app.state.is_recording = False
     yield
     app._release_all_grabs()

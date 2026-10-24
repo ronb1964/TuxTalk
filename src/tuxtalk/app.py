@@ -1293,7 +1293,7 @@ def _grab_keyboards_hiding(devices, codes) -> None:
         _inject_key(dev, code, 1)
         if dev not in _grabbed_devices:
             shown.add(code)
-    modifier_hotkeys.note_hidden(set(codes) - shown)
+    modifier_hotkeys.note_hidden(set(codes) - shown, [d for d in devices if d in _grabbed_devices])
 
 
 def _grab_all_devices(devices) -> None:

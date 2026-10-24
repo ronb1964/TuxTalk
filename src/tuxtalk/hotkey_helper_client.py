@@ -15,7 +15,9 @@ that loop makes:
                 back, the way the kernel echoes a real injected event, so the
                 loop's _is_own_injected_event skips them as before;
 * grab() / ungrab()  HIDE / UNHIDE: the helper hides the held hotkey from
-                the desktop and keeps the keyboards while it's held.
+                the desktop and keeps the keyboards while it's held. Its
+                answer comes later, and may be no (another program holds
+                the keyboard): *hidden* says whether it did.
 
 If the helper goes away (restarted, updated), every key it said was down is
 released here, so a recording can't hang on a key-up that will never come,
@@ -73,6 +75,8 @@ class HelperKeyboard:
     name = "TuxTalk hotkey helper"
 
     def __init__(self, path=None, connect_timeout=1.0):
+        """Not connected yet: connect() says hello to the helper at *path*
+        (socket_path() when None), waiting up to *connect_timeout* s."""
         self.socket_path = path or socket_path()
         self.connect_timeout = connect_timeout
         self.sock = None
@@ -83,6 +87,11 @@ class HelperKeyboard:
         self.to_hide = []
         self.reconnect_at = 0.0
         self.helper_version = None
+        # Commands the helper hasn't answered yet, oldest first: an OK or
+        # ERR doesn't say which one it answers.
+        self.asked = deque()
+        # The helper said OK to the last HIDE, and no UNHIDE went since.
+        self.hidden = False
         self._lock = threading.RLock()
         # Stands in for the socket in select() while disconnected: never readable.
         self._idle_r, self._idle_w = os.pipe()
@@ -113,6 +122,8 @@ class HelperKeyboard:
         self.helper_version = words[2] if len(words) > 2 else None
         sock.setblocking(False)
         self.sock, self.inbuf = sock, rest
+        self.asked.clear()
+        self.hidden = False
         if self.specs:
             self._send("WATCH " + " ".join(self.specs))
         return True
@@ -125,17 +136,21 @@ class HelperKeyboard:
             pass
         self.sock = None
         self.reconnect_at = time.monotonic() + RECONNECT_S
+        self.asked.clear()
+        self.hidden = False
         # A key it said was down can't come up now: let it go here.
         for code in sorted(self.held):
             self.queue.append(KeyEvent(EV_KEY, code, 0))
         self.held.clear()
 
     def _send(self, line):
+        """Send one command line; False when the helper is gone."""
         with self._lock:
             if self.sock is None:
                 return False
             try:
                 self.sock.sendall(line.encode() + b"\n")
+                self.asked.append(line.split(" ", 1)[0])
                 return True
             except BlockingIOError:
                 # A handful of bytes to a local socket: only a stuck helper
@@ -192,10 +207,19 @@ class HelperKeyboard:
                 if code in self.held:
                     self.held.discard(code)
                     self.queue.append(KeyEvent(EV_KEY, code, 0))
-            elif kind == "ERR":
-                logger.warning(f"Hotkey helper: {' '.join(args)}")
+            elif kind in ("OK", "ERR"):
+                self._answered(kind == "OK", args)
         except ValueError:
             logger.warning(f"Hotkey helper said something odd: {' '.join(words)!r}")
+
+    def _answered(self, ok, args):
+        """An OK or ERR, the answer to the oldest command not answered yet."""
+        asked = self.asked.popleft() if self.asked else None
+        if asked == "HIDE":
+            # An UNHIDE sent since has undone it already.
+            self.hidden = ok and "UNHIDE" not in self.asked
+        if not ok:
+            logger.warning(f"Hotkey helper: {' '.join(args)}")
 
     # -- what app._loop_evdev calls -------------------------------------------------
 
@@ -241,14 +265,19 @@ class HelperKeyboard:
                 self.to_hide.append(code)
 
     def grab(self):
-        codes, self.to_hide = self.to_hide or sorted(self.held), []
-        if self.sock is None:
-            raise OSError("the hotkey helper isn't connected")
-        if not self._send("HIDE " + " ".join(map(str, codes))):
-            raise OSError("the hotkey helper went away")
+        """Ask the helper to hide the keys; *hidden* turns True once it has."""
+        with self._lock:
+            codes, self.to_hide = self.to_hide or sorted(self.held), []
+            self.hidden = False
+            if self.sock is None:
+                raise OSError("the hotkey helper isn't connected")
+            if not self._send("HIDE " + " ".join(map(str, codes))):
+                raise OSError("the hotkey helper went away")
 
     def ungrab(self):
-        self._send("UNHIDE")
+        with self._lock:
+            self.hidden = False
+            self._send("UNHIDE")
 
     def watch(self, specs):
         """Tell the helper which keys to report (again after a settings change)."""

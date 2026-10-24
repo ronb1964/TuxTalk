@@ -20,8 +20,9 @@ logger = setup_logger(__name__)
 # The keyboards the hotkey loop reads and its dictation keys that are
 # modifiers; set by note().
 _noted = ([], frozenset())
-# The keys a grab hides from the desktop now; set by note_hidden().
-_hidden = frozenset()
+# The keys a grab hides from the desktop now, and the keyboards it grabbed
+# for that; set by note_hidden().
+_hidden = (frozenset(), ())
 
 # How long typing waits for the key to come up. Pressed again while the last
 # dictation is still being typed, it holds the rest up for as long as it's
@@ -47,13 +48,24 @@ def note(devices, *keys) -> None:
     _noted = (devices, frozenset(k for k in keys if k in MODIFIER_CODES))
 
 
-def note_hidden(codes) -> None:
-    """Remember the keys a grab has just hidden from the desktop
-    (app._grab_keyboards_hiding), or none once it lets go. The desktop has
-    been told they're up, so typing under them is safe: Type at pause types
-    each phrase while the hold key is still held."""
+def note_hidden(codes, keyboards=()) -> None:
+    """Remember the keys a grab of *keyboards* has just hidden from the
+    desktop (app._grab_keyboards_hiding), or none once it lets go. The
+    desktop has been told they're up, so typing under them is safe: Type at
+    pause types each phrase while the hold key is still held.
+
+    The hotkey helper hides them in its own process and answers later, or
+    refuses (another program holds the keyboard): until its keyboard says
+    the helper did (hotkey_helper_client.HelperKeyboard.hidden), typing
+    still waits. A keyboard TuxTalk grabs itself has hidden them once
+    grab() returns."""
     global _hidden
-    _hidden = frozenset(codes)
+    _hidden = (frozenset(codes), tuple(keyboards))
+
+
+def _hidden_now():
+    codes, keyboards = _hidden
+    return codes if all(getattr(k, "hidden", True) for k in keyboards) else frozenset()
 
 
 def note_released(code) -> None:
@@ -82,7 +94,7 @@ def wait_while_held(destination=None):
     keyboards = [d for d in list(devices) if is_keyboard_device(d)]
 
     def held():
-        return keys_down(keyboards) & (modifiers - _hidden)
+        return keys_down(keyboards) & (modifiers - _hidden_now())
 
     def wait():
         where = destination() if destination else None
