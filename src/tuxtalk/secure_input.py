@@ -414,3 +414,56 @@ def install_with_pkexec(leave_group=False):
     """Install (or update) the helper and the typing rule, and with
     *leave_group* leave the input group too. (ok, message)."""
     return _run_as_root(install_script(leave_group), "installed")
+
+
+def input_access_diagnosis() -> str:
+    """Explain, in terms the user can act on, why no keyboards are readable.
+
+    evdev's list_devices() filters nodes with os.access(R_OK | W_OK) and returns
+    an empty list, never an exception, when the user can open none of them.
+    Without this message the service looks healthy while ignoring every
+    keypress.
+
+    The two cases need opposite advice, so they are reported separately:
+    not in the 'input' group (fixable with usermod + a re-login) versus in the
+    group already (so the device node permissions are what is wrong).
+    """
+    import grp
+    import pwd
+
+    head = ("No readable keyboard devices found - hotkeys cannot work. "
+            "TuxTalk reads keys from /dev/input, which needs the 'input' group. ")
+    try:
+        group = grp.getgrnam("input")
+    except KeyError:
+        return head + "This system has no 'input' group at all."
+
+    # os.getgroups() is this SESSION's group list, fixed at login; the group's
+    # member list is the SYSTEM's, updated the moment usermod runs. They
+    # disagree only when setup granted the group after this session started,
+    # which needs a restart rather than another usermod.
+    in_session = group.gr_gid in os.getgroups()
+    try:
+        username = pwd.getpwuid(os.getuid()).pw_name
+    except Exception:
+        username = os.environ.get("USER", "")
+    in_system = username in group.gr_mem
+
+    if in_session:
+        return head + (
+            "This user IS in the 'input' group, so the device nodes themselves "
+            "are wrong: /dev/input/event* should be 'crw-rw---- root input'."
+        )
+    if in_system:
+        return head + (
+            f"Setup already added '{username}' to the 'input' group, but this "
+            "session started before that and is still using the old "
+            "permissions. RESTART the computer - logging out is often not "
+            "enough, because a lingering user session keeps the old group list."
+        )
+    return head + (
+        "This user is NOT in the 'input' group. Fix it with:\n"
+        "    sudo usermod -a -G input $USER\n"
+        "then RESTART the computer. Logging out and back in is often not "
+        "enough - a lingering user session keeps the old group list alive."
+    )

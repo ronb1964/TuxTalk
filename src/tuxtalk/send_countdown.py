@@ -29,8 +29,8 @@ Anything else, nothing is sent and the notice says why (_why_not). Where
 the desktop can't say which window has the focus, the two kinds of key part
 ways (_why_not's *spoken*).
 
-The send waiting is _pending, and a held one's owed space _owed, both
-guarded by _send_lock. The owed space follows a gentler rule than the
+The send waiting is _pending, and the space a held or refused one owes,
+_owed, both guarded by _send_lock. The owed space follows a gentler rule than the
 Enter: it goes in unless another window is known to have the focus, since
 typing still refuses a password field. The typing is app.py's: the
 dictation hands over what presses a key and what types more onto it.
@@ -77,9 +77,11 @@ _hold_key_name = "F8"       # named in the "Sending in 2 s" label
 # hotkey holds it, else None: {"to", "why", "press", "type", "space",
 # "mode", "timer", "ticks", "refused", "stopped"}.
 _pending = None
-# The send a tap held, while the space it left off waits for the hotkey that
-# held it to come up (type_owed_space), else None. Typed while the key is
-# down, GNOME without the extension sees the key too and the space is lost.
+# The send a tap held, or one refused once its countdown began, while the
+# space it left off waits for the hotkey that held it to come up
+# (type_owed_space) or the next dictation (with_owed_space), else None.
+# Typed while the key is down, GNOME without the extension sees the key
+# too and the space is lost.
 _owed = None
 # Whether this session's notifications have said why an automatic send
 # can't go where the focus can't be told: on such a desktop it's every
@@ -99,11 +101,12 @@ def configure(cfg) -> None:
 @dataclass
 class Message:
     """What a recording has typed since it began, or since Enter or Tab
-    ended the message before it (app._start_afresh): one dictation, or
-    Type at pause's phrases, rewritten by "edit that" or not. An automatic Enter and a key said
-    after its words go only where they went, and only while all of them
-    went in: a phrase that stopped partway leaves a hole a send would let
-    out, and the phrases after it don't fill it."""
+    ended the message before it (app._start_afresh): one dictation, or Type
+    at pause's phrases, rewritten by "edit that" or not; each recording has
+    its own. An automatic Enter and a key said after its words go only where
+    they went, and only while all of them went in: a phrase that stopped
+    partway leaves a hole a send would let out, and the phrases after it
+    don't fill it."""
     # Where its words went (landed()), None once the focus moved while any
     # of them went in: they may be in two places.
     to: focused_window.Destination | None = None
@@ -123,6 +126,10 @@ class Message:
             self.to = landed
         self.has_words = True
         self.complete = self.complete and outcome == "ok"
+
+    def start_over(self) -> None:
+        """Enter or Tab ended it: what's typed next is a new message."""
+        self.to, self.has_words, self.complete = None, False, True
 
 
 def _incomplete(message: Message) -> str | None:
@@ -150,7 +157,8 @@ def _why_not(sent_to, now, spoken: bool = False) -> str | None:
     the words stay for the user to send. A key *spoken* after the words
     ("... press enter") still goes: the user asked for it, looking at the
     window. Either is stopped where another window, a password field or
-    TuxTalk's own window is known to have the focus."""
+    TuxTalk's own window is known to have the focus; a spoken key goes into
+    TuxTalk's own window only when its words were dictated there too."""
     if sent_to is None:
         return "moved"
     if now.password:
@@ -166,30 +174,31 @@ def _why_not(sent_to, now, spoken: bool = False) -> str | None:
     return "unknown_window" if same is None and not spoken else None
 
 
-def _claim(pending, counting_down: bool = True):
+def _claim(pending, spoken: bool = False):
     """virtual_keyboard.send's *claim* for the Enter of *pending*: the
     checks that take a while, made with the keyboard free and the send still
     pending, so a tap meanwhile still holds it. Returns *take*, which runs
     with the keyboard held, right before the Enter goes down. Either raises
-    virtual_keyboard.GaveUp when the Enter mustn't go. A key said after the
-    words (press_where_sent) isn't *counting_down*: no tap holds it."""
+    virtual_keyboard.GaveUp when the Enter mustn't go. A key *spoken* after
+    the words (press_where_sent) is no automatic send: no tap holds it, and
+    it goes where only the app is known (_why_not)."""
     start = virtual_keyboard.emitted()
     first = focused_window.look()
     now = focused_window.destination()
     # A click during the password check: its answer may be the other window's.
     why = ("switched" if focused_window.changed(first, now)
-           else _why_not(pending["to"], now, spoken=not counting_down))
+           else _why_not(pending["to"], now, spoken=spoken))
     if why:
         _refuse(pending, why)
 
     def take():
         global _pending
         with _send_lock:
-            if counting_down and _pending is not pending:
+            if not spoken and _pending is not pending:
                 raise virtual_keyboard.GaveUp("held")
             if virtual_keyboard.emitted() != start:
                 _refuse(pending, "typed_meanwhile")
-            if counting_down:
+            if not spoken:
                 _pending = None
     return take
 
@@ -239,7 +248,7 @@ def press_where_sent(key: str, why: str, message: Message, press) -> bool:
     why."""
     pending = {"to": message.to}
     if not (refused := _incomplete(message)) and press(
-            key, why, claim=lambda: _claim(pending, counting_down=False)):
+            key, why, claim=lambda: _claim(pending, spoken=True)):
         return True
     _say_not_sent(refused or pending.get("refused") or "not_pressed", key=key)
     return False
@@ -277,7 +286,13 @@ def send_automatically(why: str, message: Message, press, type_more, space: str 
     # told.
     if reason := _incomplete(message) or _why_not(message.to, message.to):
         _say_not_sent(reason)
-        _owe_space(pending)
+        if reason == "unknown_window" and space:
+            # No Enter could ever follow, and the focus is where the words
+            # just went: the space goes in now, as with sending off. Owed,
+            # it would start the next message after the user's own Enter.
+            type_more(space, injection_mode)
+        else:
+            _owe_space(pending)
         return
     delay = _delay
     if delay > 0:
@@ -417,24 +432,26 @@ def _owe_space(pending: dict) -> None:
     what's said next into its window starts after it, and doesn't stick to
     the last word ("noon.How")."""
     global _owed
-    if pending.get("space"):
+    # Without the window its words went to (the focus moved while they went
+    # in), there is nowhere it could go.
+    if pending.get("space") and pending["to"] is not None:
         with _send_lock:
             _owed = pending
 
 
 def owes_space() -> bool:
-    """Whether a held send's space waits for its hotkey to come up."""
+    """Whether a held or refused send's space is still owed."""
     return _owed is not None
 
 
 def _focus_left(pending: dict) -> bool:
     """Whether another window than the one the text went to is known to
-    have the focus, for the space a held send owes."""
+    have the focus, for the space a held or refused send owes."""
     return focused_window.changed(pending["to"], focused_window.look())
 
 
 def _take_owed():
-    """The held send whose space is owed, now no longer owed, or None."""
+    """The send whose space is owed, now no longer owed, or None."""
     global _owed
     with _send_lock:
         pending, _owed = _owed, None
@@ -450,8 +467,8 @@ def type_owed_space() -> None:
 
 
 def with_owed_space(text: str) -> str:
-    """Put a held send's space in front of *text*, the dictation added onto
-    it, when it goes to the same window."""
+    """Put an owed space in front of *text*, the next dictation, when it
+    goes to the same window."""
     pending = _take_owed()
     if pending is None or not text or text[0].isspace() or _focus_left(pending):
         return text

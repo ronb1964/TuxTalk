@@ -608,14 +608,16 @@ def test_where_the_window_isnt_known_nothing_is_sent_automatically(unknown_windo
     focus, heard, typed, notices = unknown_window
     heard.append("see you at noon")
     dictate()
-    assert len(typed) == 1 and keyboard.events == []
+    assert typed[0][0] == "See you at noon." and keyboard.events == []
     assert notices == [send_countdown.UNKNOWN_WINDOW_NOTICE]
 
 
 def test_where_the_window_isnt_known_the_next_dictation_keeps_its_space(unknown_window,
                                                                          keyboard):
     """The auto-space is left off before an Enter; refused, the Enter took
-    the space with it, and the next dictation stuck to the last word."""
+    the space with it, and the next dictation stuck to the last word. The
+    space goes right after the words, not in front of the next message,
+    which the user may send first."""
     focus, heard, typed, notices = unknown_window
     heard.append("see you at noon")
     dictate()
@@ -623,6 +625,19 @@ def test_where_the_window_isnt_known_the_next_dictation_keeps_its_space(unknown_
     heard.append("how are you")
     dictate()
     assert "".join(text for text, _ in typed).startswith("See you at noon. How are you")
+
+
+def test_where_the_window_is_never_known_the_space_goes_after_the_words(chat, keyboard):
+    """On COSMIC no Enter can follow: the space goes in at once, as with
+    sending off. Owed, it went in front of the next message, after the user
+    had pressed Enter on this one: " How are you." """
+    focus, heard, typed, notices = chat
+    focus[1] = None                                 # COSMIC: only the app
+    for words in ("see you at noon", "how are you"):
+        app._arm_chunker(app.SAMPLE_RATE)
+        heard.append(words)
+        dictate()
+    assert [text for text, _ in typed] == ["See you at noon.", " ", "How are you.", " "]
 
 
 def test_where_the_window_is_never_known_no_countdown_runs(chat, keyboard, monkeypatch):
@@ -828,7 +843,6 @@ def test_where_the_window_is_never_known_the_notification_comes_once(chat, keybo
     forever, is a nag. The floating notice still says so each time."""
     focus, heard, typed, notices = chat
     focus[1] = None                                 # COSMIC: only the app
-    monkeypatch.setattr(send_countdown, "_told_unknown_window", False, raising=False)
     for words in ("see you at noon", "how are you"):
         app._arm_chunker(app.SAMPLE_RATE)
         heard.append(words)
@@ -1039,3 +1053,125 @@ def test_after_edit_that_press_enter_sends_the_rewrite_where_it_is(edit_that, ke
     heard.append("press enter")
     dictate("last")
     assert keyboard.typed_keys() == [ENTER] and notices == []
+
+
+def test_after_a_send_refused_for_a_click_away_the_next_dictation_still_goes_in(
+        chat, keyboard, monkeypatch):
+    """The focus moved while the words went in, so the send had no window
+    to go to. The space it left off was kept for "the window it went to",
+    which there wasn't, and the next dictation raised before it was typed
+    or saved to Recent Dictations."""
+    focus, heard, typed, notices = chat
+    saved = []
+    monkeypatch.setattr(history, "add_entry", lambda text, replaces=None: saved.append(text))
+    into_the_chat = app._deliver_text
+    clicked_away_while_the_words_went_in(monkeypatch, focus)
+    heard.append("see you at noon")
+    dictate()
+    assert keyboard.events == []                    # the send had nowhere to go
+    monkeypatch.setattr(app, "_deliver_text", into_the_chat)
+    app._arm_chunker(app.SAMPLE_RATE)
+    heard.append("how are you")
+    dictate()
+    assert saved[-1].startswith("How are you") and typed[-1][0].startswith("How are you")
+    assert keyboard.typed_keys() == [ENTER]         # sent where it went
+
+
+def test_a_phrase_queued_before_the_next_recording_keeps_its_own_message(chat, keyboard,
+                                                                        monkeypatch):
+    """On the Flatpak the next recording can start while the last one's
+    phrases still wait to be typed. Its fresh message replaced theirs, so
+    the old recording's lone "press enter" was pressed unguarded in the
+    window the user had switched to."""
+    focus, heard, typed, notices = chat
+    monkeypatch.setattr(app, "_press_enter_after", False)
+    app._arm_chunker(app.SAMPLE_RATE)               # recording A
+    first = app.state.message
+    frames = [(np.ones(app.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
+    heard.append("See you at noon.")
+    app._transcribe_and_inject(frames, app.SAMPLE_RATE, False, False, False,
+                               chunk_role="middle", message=first)
+    app._arm_chunker(app.SAMPLE_RATE)               # recording B starts meanwhile
+    focus[:] = SECOND
+    heard.append("press enter")
+    app._transcribe_and_inject(frames, app.SAMPLE_RATE, False, False, False,
+                               chunk_role="last", message=first)
+    assert keyboard.events == [] and notices == [send_countdown.SWITCHED_WINDOW_NOTICE]
+    assert not app.state.message.has_words          # B's own message untouched
+
+
+def _rewrite_goes_in(monkeypatch, outcome):
+    """The chat's delivery, with the voice edit's rewrite going in as
+    *outcome* ("raise": typing it raised)."""
+    deliver = app._deliver_text
+
+    def rewrite(text, *a, **k):
+        if text.startswith("Hope"):
+            if outcome == "raise":
+                raise OSError("the virtual keyboard went away")
+            deliver(text, *a, **k)
+            return outcome
+        return deliver(text, *a, **k)
+    monkeypatch.setattr(app, "_deliver_text", rewrite)
+
+
+@pytest.mark.parametrize("outcome", ["raise", "partial"])
+def test_a_rewrite_that_didnt_all_go_in_leaves_the_message_unsent(edit_that, keyboard,
+                                                                  monkeypatch, outcome):
+    """Type at pause with "Send each dictation automatically": "edit that"
+    rewrote the phrase, but typing the rewrite failed or stopped partway,
+    and the recording's stop sent whatever was in the box."""
+    focus, heard, typed, notices = edit_that
+    _rewrite_goes_in(monkeypatch, outcome)
+    monkeypatch.setattr(app, "_report_undelivered", lambda outcome, beeps_on: None)
+    heard.append("See you at noon.")
+    dictate("middle")
+    heard.append("edit that, make it friendlier")
+    dictate("middle")
+    dictate("last", audio=False)
+    assert keyboard.events == []
+
+
+def test_a_send_that_doesnt_go_notifies_from_a_thread_of_its_own(chat, keyboard, monkeypatch):
+    """The typing runs on the hotkey loop: a slow notification service
+    there held up reading the next key, so a press and its release read
+    together counted as a tap."""
+    from tuxtalk import notify
+    threads = []
+    monkeypatch.setattr(notify, "_send", lambda title, body: threads.append(
+        threading.current_thread().name))
+    clicked_away_while_the_words_went_in(monkeypatch, chat[0])
+    chat[1].append("see you at noon")
+    dictate()
+    for thread in threading.enumerate():
+        if thread.name == "send-not-sent-notice":
+            thread.join(5)
+    assert threads == ["send-not-sent-notice"]
+
+
+def test_a_countdown_called_off_partway_still_gives_back_its_space(chat, keyboard,
+                                                                   monkeypatch):
+    """A click into the other window during the countdown calls the send
+    off; the space left off for the Enter goes in front of the next
+    dictation into the first window, not lost ("noon.How")."""
+    focus, heard, typed, notices = chat
+    timers = []
+    monkeypatch.setattr(send_countdown, "_delay", 3.0)
+
+    class Timer:
+        def __init__(self, delay, run, args):
+            self.run, self.args, self.daemon = run, args, False
+            timers.append(self)
+
+        def start(self):
+            pass
+
+        def cancel(self):
+            pass
+    monkeypatch.setattr(send_countdown.threading, "Timer", Timer)
+    send_countdown.send_automatically("test", send_countdown.Message(focused_window.destination()),
+                                      app._press_key, app._type_onto_dictation, " ")
+    focus[:] = SECOND
+    timers[1].run(*timers[1].args)                  # "Sending in 2 s": another window
+    focus[:] = FIRST
+    assert send_countdown.with_owed_space("How are you.") == " How are you."

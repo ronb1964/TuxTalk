@@ -203,6 +203,7 @@ def _no_real_send_countdown(monkeypatch, request):
     # "Right away" on the test's own thread, so a test sees the Enter at once.
     monkeypatch.setattr(send_countdown, "_send_right_away", send_countdown._send)
     monkeypatch.setattr(send_countdown, "_pending", None)
+    monkeypatch.setattr(send_countdown, "_told_unknown_window", False)
     monkeypatch.setattr(app.state, "held_send", False)
     monkeypatch.setattr(send_countdown, "_owed", None)
     monkeypatch.setattr(app.state, "sent", None)

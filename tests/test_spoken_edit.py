@@ -51,7 +51,7 @@ def editing(monkeypatch):
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.kwrite")
     monkeypatch.setattr(app, "_output_backend", lambda: Backend())
     monkeypatch.setattr(app, "_edit_selection",
-                        lambda get, beeps, mode, focused, t0, spoken=False:
+                        lambda get, beeps, mode, focused, t0, message, spoken=False:
                         edits.append((get(), focused, spoken)))
     monkeypatch.setattr(app, "_edit_problem", lambda kind, beeps: problems.append(kind))
     monkeypatch.setattr(app.state, "last_inserted_text", "We meet at three. ")
@@ -66,7 +66,7 @@ def editing(monkeypatch):
 
 def test_edit_that_selects_the_dictation_and_edits_it(editing):
     pressed, edits, problems = editing
-    assert app._handle_spoken_edit("Edit that, make it shorter.", None, True, "type")
+    assert app._handle_spoken_edit("Edit that, make it shorter.", None, True, "type", app.state.message)
     # Over the trailing space, then select the sentence, exactly.
     assert pressed == [((), "LEFT")] + [((S,), "LEFT")] * len("We meet at three.")
     assert edits == [("make it shorter.", "org.kde.kwrite", True)]
@@ -80,28 +80,28 @@ def test_with_type_at_pause_it_edits_every_phrase_on_screen(editing):
     pressed, edits, _ = editing
     app.state.shown_serial = app.state.recording_serial
     app.state.shown_text = "Hi Sam. We meet at three. "
-    assert app._handle_spoken_edit("edit that make it friendlier", "middle", True, "type")
+    assert app._handle_spoken_edit("edit that make it friendlier", "middle", True, "type", app.state.message)
     assert pressed.count(((S,), "LEFT")) == len("Hi Sam. We meet at three.")
 
 
 def test_nothing_just_typed_means_the_words_are_typed(editing):
     _pressed, edits, _ = editing
     app.state.last_inserted_text = ""
-    assert not app._handle_spoken_edit("Edit that, make it shorter.", None, True, "type")
+    assert not app._handle_spoken_edit("Edit that, make it shorter.", None, True, "type", app.state.message)
     assert edits == []
 
 
 def test_a_dictation_in_another_window_isnt_edited(editing, monkeypatch):
     _pressed, edits, _ = editing
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "google-chrome")
-    assert not app._handle_spoken_edit("Edit that, make it shorter.", None, True, "type")
+    assert not app._handle_spoken_edit("Edit that, make it shorter.", None, True, "type", app.state.message)
     assert edits == []
 
 
 def test_off_unless_voice_editing_is_on(editing, monkeypatch):
     _pressed, edits, _ = editing
     monkeypatch.setattr(app, "_voice_editing", False)
-    assert not app._handle_spoken_edit("Edit that, make it shorter.", None, True, "type")
+    assert not app._handle_spoken_edit("Edit that, make it shorter.", None, True, "type", app.state.message)
     assert edits == []
 
 
@@ -109,30 +109,30 @@ def test_not_in_a_terminal(editing, monkeypatch):
     pressed, edits, problems = editing
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.konsole")
     monkeypatch.setattr(app.state, "last_inserted_window", "org.kde.konsole")
-    assert app._handle_spoken_edit("Edit that, make it shorter.", None, True, "type")
+    assert app._handle_spoken_edit("Edit that, make it shorter.", None, True, "type", app.state.message)
     assert problems == ["terminal"] and pressed == [] and edits == []
 
 
 def test_edit_that_then_a_pause_waits_for_the_next_phrase(editing):
     pressed, edits, _ = editing
-    assert app._handle_spoken_edit("Edit that.", "middle", True, "type")
+    assert app._handle_spoken_edit("Edit that.", "middle", True, "type", app.state.message)
     assert pressed == [] and edits == []
-    assert app._handle_spoken_edit("Make it more formal.", "middle", True, "type")
+    assert app._handle_spoken_edit("Make it more formal.", "middle", True, "type", app.state.message)
     assert edits == [("Make it more formal.", "org.kde.kwrite", True)]
     assert pressed.count(((S,), "LEFT")) == len("We meet at three.")
 
 
 def test_the_wait_ends_with_the_recording(editing):
     _pressed, edits, _ = editing
-    assert app._handle_spoken_edit("Edit that.", "middle", True, "type")
+    assert app._handle_spoken_edit("Edit that.", "middle", True, "type", app.state.message)
     app.state.recording_serial += 1                  # a new recording
-    assert not app._handle_spoken_edit("Make it more formal.", "middle", True, "type")
+    assert not app._handle_spoken_edit("Make it more formal.", "middle", True, "type", app.state.message)
     assert edits == []
 
 
 def test_edit_that_alone_at_the_end_asks_what_to_change(editing):
     _pressed, edits, problems = editing
-    assert app._handle_spoken_edit("Edit that.", None, True, "type")
+    assert app._handle_spoken_edit("Edit that.", None, True, "type", app.state.message)
     assert problems == ["edit_that_what"] and edits == []
 
 
@@ -159,7 +159,7 @@ def test_edit_that_right_after_an_automatic_send_says_why(editing, monkeypatch):
     _pressed, edits, problems = editing
     monkeypatch.setattr(app.state, "last_inserted_text", "")
     monkeypatch.setattr(app.state, "sent", {"at": app.time.time(), "automatic": True})
-    assert app._handle_spoken_edit("Edit that, make it more formal.", None, True, "type")
+    assert app._handle_spoken_edit("Edit that, make it more formal.", None, True, "type", app.state.message)
     assert problems == ["already_sent_auto"] and edits == []
 
 
@@ -167,7 +167,7 @@ def test_edit_that_after_saying_press_enter_says_it_was_sent(editing, monkeypatc
     _pressed, _edits, problems = editing
     monkeypatch.setattr(app.state, "last_inserted_text", "")
     monkeypatch.setattr(app.state, "sent", {"at": app.time.time(), "automatic": False})
-    assert app._handle_spoken_edit("Edit that, make it shorter.", None, True, "type")
+    assert app._handle_spoken_edit("Edit that, make it shorter.", None, True, "type", app.state.message)
     assert problems == ["already_sent"]
 
 
@@ -175,7 +175,7 @@ def test_long_after_a_send_edit_that_is_words_again(editing, monkeypatch):
     _pressed, _edits, problems = editing
     monkeypatch.setattr(app.state, "last_inserted_text", "")
     monkeypatch.setattr(app.state, "sent", {"at": app.time.time() - 3600, "automatic": True})
-    assert not app._handle_spoken_edit("Edit that, make it shorter.", None, True, "type")
+    assert not app._handle_spoken_edit("Edit that, make it shorter.", None, True, "type", app.state.message)
     assert problems == []
 
 

@@ -18,7 +18,7 @@ import grp
 import os
 import pytest
 
-from tuxtalk.app import _input_access_diagnosis
+from tuxtalk.secure_input import input_access_diagnosis
 
 
 def _input_gid():
@@ -42,7 +42,7 @@ def test_says_restart_when_setup_ran_but_session_is_stale(monkeypatch):
     monkeypatch.setattr(grp, "getgrnam", lambda name: fake)
     monkeypatch.setattr("os.getgroups", lambda: [1000])  # session lacks it
 
-    msg = _input_access_diagnosis()
+    msg = input_access_diagnosis()
 
     assert "restart" in msg.lower()
     assert "usermod" not in msg, "already in the group — do not re-run setup"
@@ -54,7 +54,7 @@ def test_names_the_group_when_user_is_not_a_member(monkeypatch):
     fake = type("G", (), {"gr_gid": 999, "gr_mem": []})()
     monkeypatch.setattr(grp, "getgrnam", lambda name: fake)
     monkeypatch.setattr("os.getgroups", lambda: [1000])
-    msg = _input_access_diagnosis()
+    msg = input_access_diagnosis()
 
     assert "input" in msg
     assert "usermod" in msg, "must give the user a command they can actually run"
@@ -68,7 +68,7 @@ def test_points_at_permissions_when_user_is_already_a_member(monkeypatch):
     """Being in the group but seeing no devices is a different problem entirely."""
     gid = _input_gid()
     monkeypatch.setattr("os.getgroups", lambda: [1000, gid])
-    msg = _input_access_diagnosis()
+    msg = input_access_diagnosis()
 
     assert "/dev/input" in msg
     # Must NOT tell someone already in the group to add themselves again.
@@ -81,5 +81,5 @@ def test_survives_systems_with_no_input_group(monkeypatch):
         raise KeyError(name)
 
     monkeypatch.setattr("grp.getgrnam", _boom)
-    msg = _input_access_diagnosis()
+    msg = input_access_diagnosis()
     assert msg, "must still return something explanatory"

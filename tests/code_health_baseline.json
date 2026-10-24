@@ -1,6 +1,6 @@
 {
  "files": {
-  "app.py": 4990,
+  "app.py": 4951,
   "prefs.py": 6738,
   "tray.py": 2548,
   "welcome_dialog.py": 3256
@@ -29,7 +29,6 @@
   "app.py::_handle_spoken_edit::dated_comment": 1,
   "app.py::_handle_undo::long_line": 2,
   "app.py::_inject_key::long_line": 1,
-  "app.py::_input_access_diagnosis::swallowed_error": 1,
   "app.py::_loop_evdev::swallowed_error": 1,
   "app.py::_mark_service_ready::swallowed_error": 1,
   "app.py::_notify_tray_hotkey_pressed::swallowed_error": 1,
@@ -303,6 +302,7 @@
   "screen_message.py::show::swallowed_error": 1,
   "screen_message.py::show_over_active_window::swallowed_error": 1,
   "secure_input.py::_heredoc::long_line": 1,
+  "secure_input.py::input_access_diagnosis::swallowed_error": 1,
   "secure_input.py::install_script::long_line": 1,
   "service_launcher.py::release_desktop_hotkeys::swallowed_error": 1,
   "spoken_numbers.py::_small_digits_as_words.word::undocumented": 1,
@@ -480,8 +480,8 @@
    "decisions": 20
   },
   "app.py::_transcribe_and_inject": {
-   "decisions": 63,
-   "lines": 249
+   "decisions": 62,
+   "lines": 237
   },
   "app.py::_transcribe_audio": {
    "decisions": 25,
@@ -583,7 +583,7 @@
    "lines": 107
   },
   "prefs.py::PreferencesWindow._on_download_update_clicked": {
-   "lines": 142
+   "lines": 139
   },
   "prefs.py::PreferencesWindow._on_install_extension_clicked": {
    "lines": 120
