@@ -110,8 +110,8 @@ class Message:
         """Words of it were delivered: app._inject_text's *outcome*, and
         where they went (*landed*, None when not all of them did). Words
         known to be in another window move it there (the user switched
-        windows between two phrases); a look that only can't tell, as a
-        held-back mark's where only the app is known, keeps where it was."""
+        windows between two phrases); a look that can't tell (a held-back
+        mark typed where only the app is known) keeps where it was."""
         if not self.has_words or (self.to is not None and (
                 landed is None or focused_window.changed(self.to, landed))):
             self.to = landed
