@@ -531,3 +531,21 @@ def test_a_countdown_says_nothing_aloud_until_it_ends(chat, keyboard, monkeypatc
         timer.run(*timer.args)
     timers[0].run(*timers[0].args)              # the Enter
     assert keyboard.typed_keys() == [ENTER] and sent == []
+
+
+def test_a_phrase_that_stopped_partway_leaves_the_message_unsent(chat, keyboard, monkeypatch):
+    """Type at pause: the second phrase's typing stopped partway (a key
+    stuck down) and the notice said the whole text is in Recent
+    Dictations. The recording then ended in a pause, and the half message
+    was sent."""
+    focus, heard, typed, notices = chat
+    deliver = app._deliver_text
+    outcomes = iter(["ok", "partial"])
+    monkeypatch.setattr(app, "_deliver_text",
+                        lambda *a, **k: deliver(*a, **k) and next(outcomes))
+    monkeypatch.setattr(app, "_report_undelivered", lambda outcome, beeps_on: None)
+    heard.extend(["See you at noon,", "and bring the cake"])
+    dictate("middle")
+    dictate("middle")
+    dictate("last", audio=False)
+    assert len(typed) == 2 and keyboard.events == [] and notices == []

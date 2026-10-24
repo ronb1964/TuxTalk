@@ -2416,7 +2416,8 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
                 logger.info(f"The text landed in {after[0]!r}, not {state.last_inserted_window!r}")
             state.last_inserted_window = after[0]
         state.last_inserted_where = (state.last_inserted_window, after[1])
-        state.send_to = send_countdown.landed(before, after)
+        # Only after all of it: a message missing a part mustn't be sent.
+        state.send_to = send_countdown.landed(before, after) if outcome == "ok" else None
     return outcome
 
 
@@ -3428,8 +3429,9 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                 # Without the context pass the engine's own mark decides: after
                 # a comma or none, the next chunk carries on lowercase.
                 state.continue_mid_sentence = not text.rstrip().endswith(_SENTENCE_ENDS)
-            if chunk_role is not None and outcome == "ok" and not press:
-                state.chunk_typed = True
+            if chunk_role is not None and not press:
+                # A phrase that didn't all go in leaves the message unsent at the stop.
+                state.chunk_typed = outcome == "ok"
             if held_mark is not None and outcome == "ok":
                 # Only the end of the phrase is kept: the engine hears it with
                 # the start of the next one to decide the mark between them.
