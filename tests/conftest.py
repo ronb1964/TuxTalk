@@ -594,7 +594,7 @@ def prefs_window(monkeypatch):
     removed, so a later test that runs the loop never runs them."""
     from dataclasses import asdict
     from gi.repository import GLib
-    from tuxtalk import config, prefs
+    from tuxtalk import config, prefs, prefs_words
     built, timers = [], []
 
     def scheduled(add):
@@ -604,8 +604,8 @@ def prefs_window(monkeypatch):
         values = asdict(config.Settings())
         values.update(settings)
         monkeypatch.setattr(prefs.PreferencesWindow, "load_config", lambda self: dict(values))
-        monkeypatch.setattr(prefs, "load_custom_commands", lambda: {})
-        monkeypatch.setattr(prefs.PreferencesWindow, "_watch_custom_commands_file",
+        monkeypatch.setattr(prefs_words, "load_custom_commands", lambda: {})
+        monkeypatch.setattr(prefs_words.WordsTab, "_watch_custom_commands_file",
                             lambda self: None)
         with monkeypatch.context() as m:
             for name in ("timeout_add", "timeout_add_seconds", "idle_add"):

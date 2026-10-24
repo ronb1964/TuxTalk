@@ -1,7 +1,7 @@
 {
  "files": {
   "app.py": 4860,
-  "prefs.py": 6343,
+  "prefs.py": 5822,
   "tray.py": 2477,
   "welcome_dialog.py": 3222
  },
@@ -195,14 +195,12 @@
   "prefs.py::PreferencesWindow._check_gpu_status::long_line": 4,
   "prefs.py::PreferencesWindow._desktop_accent_rgba::swallowed_error": 1,
   "prefs.py::PreferencesWindow._download_selected_model::long_line": 1,
-  "prefs.py::PreferencesWindow._edit_word_dialog::swallowed_error": 1,
   "prefs.py::PreferencesWindow._fit_to_screen::swallowed_error": 1,
   "prefs.py::PreferencesWindow._handle_update_result::long_line": 2,
   "prefs.py::PreferencesWindow._has_unapplied_changes::swallowed_error": 1,
   "prefs.py::PreferencesWindow._kde_refused::swallowed_error": 1,
   "prefs.py::PreferencesWindow._numbers_option::long_line": 5,
   "prefs.py::PreferencesWindow._nvidia_gpu::swallowed_error": 1,
-  "prefs.py::PreferencesWindow._on_cell_editing_started.on_key_press::undocumented": 1,
   "prefs.py::PreferencesWindow._on_download_update_clicked.do_download_and_install::undocumented": 1,
   "prefs.py::PreferencesWindow._on_download_update_clicked.download_failed::long_line": 1,
   "prefs.py::PreferencesWindow._on_fix_typing_clicked.work::long_line": 1,
@@ -212,8 +210,6 @@
   "prefs.py::PreferencesWindow._on_load_backup_clicked::undocumented": 1,
   "prefs.py::PreferencesWindow._on_model_changed::long_line": 2,
   "prefs.py::PreferencesWindow._on_model_changed::swallowed_error": 1,
-  "prefs.py::PreferencesWindow._on_remove_word::swallowed_error": 1,
-  "prefs.py::PreferencesWindow._on_remove_word::undocumented": 1,
   "prefs.py::PreferencesWindow._on_restore_earlier_clicked::undocumented": 1,
   "prefs.py::PreferencesWindow._on_save_backup_clicked::undocumented": 1,
   "prefs.py::PreferencesWindow._on_test_hotkeys._on_hotkey_signal::long_line": 2,
@@ -580,15 +576,9 @@
   "prefs.py::PreferencesWindow.create_audio_tab": {
    "lines": 405
   },
-  "prefs.py::PreferencesWindow.create_commands_tab": {
-   "lines": 129
-  },
   "prefs.py::PreferencesWindow.create_general_tab": {
    "decisions": 20,
    "lines": 489
-  },
-  "prefs.py::PreferencesWindow.create_ui": {
-   "lines": 104
   },
   "prefs.py::PreferencesWindow.create_updates_tab": {
    "lines": 138

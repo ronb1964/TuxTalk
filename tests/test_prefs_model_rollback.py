@@ -16,6 +16,7 @@ ordering logic without constructing a GTK window. The failure path returns
 before any dialog is built, so no display is needed.
 """
 
+from types import SimpleNamespace
 import pytest
 
 
@@ -42,6 +43,7 @@ class StubPrefs:
         self.saved_models = []
         self.download_result = False  # did the download succeed
         self.restart_calls = 0
+        self.words_tab = SimpleNamespace(save=lambda: True)     # snippets saved
 
     # --- real collaborators, stubbed ---
 

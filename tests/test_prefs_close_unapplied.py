@@ -55,9 +55,7 @@ def test_keep_editing_leaves_the_window_open():
 def _changes(config_at_open, config, commands_same=True):
     w = SimpleNamespace(
         _config_at_open=config_at_open, config=config,
-        commands_store=object(),
-        _commands_from_store=lambda: "same" if commands_same else "edited",
-        _commands_loaded="same",
+        words_tab=SimpleNamespace(changed=lambda: not commands_same),
     )
     w._changed_since_open = lambda: prefs.PreferencesWindow._changed_since_open(w)
     return prefs.PreferencesWindow._has_unapplied_changes(w)

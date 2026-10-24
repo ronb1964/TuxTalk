@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from tuxtalk import prefs as P
+from tuxtalk import prefs_words as W
 from tuxtalk.prefs import PreferencesWindow
 
 
@@ -27,7 +27,7 @@ class FakeStore(list):
 def shown(monkeypatch):
     """The titles of the message boxes Preferences showed."""
     titles = []
-    monkeypatch.setattr(P, "show_message", lambda parent, kind, title, text="", buttons=None: titles.append(title))
+    monkeypatch.setattr(W, "show_message", lambda parent, kind, title, text="", buttons=None: titles.append(title))
     return titles
 
 
@@ -35,10 +35,10 @@ def _window(rows):
     d = SimpleNamespace(commands_store=FakeStore([list(r) for r in rows]),
                         _commands_loaded={}, window=None)
     d.commands_tree = SimpleNamespace(set_cursor=lambda *a: None, get_column=lambda i: i)
-    for name in ("_commands_from_store", "_fill_commands_store", "_save_custom_commands",
+    for name in ("_commands_from_store", "_fill_commands_store", "save",
                  "_on_add_command", "_on_phrase_edited", "_warn_duplicate_phrase",
                  "_split_commands", "_fill_words_store", "_apply_snippet_edit"):
-        setattr(d, name, types.MethodType(getattr(PreferencesWindow, name), d))
+        setattr(d, name, types.MethodType(getattr(W.WordsTab, name), d))
     return d
 
 
@@ -54,7 +54,7 @@ def test_an_untouched_new_row_is_not_saved():
 
 def test_a_duplicate_phrase_is_refused_and_explained(monkeypatch, shown):
     """Two rows with one phrase would save as one, silently dropping a row."""
-    monkeypatch.setattr(P.GLib, "idle_add", lambda fn, *a: fn(*a))
+    monkeypatch.setattr(W.GLib, "idle_add", lambda fn, *a: fn(*a))
     d = _window([["talk type", "TalkType"], ["", ""]])
 
     d._on_phrase_edited(None, "1", "  Talk Type ")
@@ -66,7 +66,7 @@ def test_a_duplicate_phrase_is_refused_and_explained(monkeypatch, shown):
 
 def test_the_duplicate_warning_shows_once_per_commit(monkeypatch, shown):
     pending = []
-    monkeypatch.setattr(P.GLib, "idle_add", lambda fn, *a: pending.append(fn))
+    monkeypatch.setattr(W.GLib, "idle_add", lambda fn, *a: pending.append(fn))
     d = _window([["talk type", "TalkType"], ["", ""]])
 
     d._on_phrase_edited(None, "1", "talk type")   # "edited"
@@ -97,10 +97,10 @@ def test_a_write_error_is_reported_not_raised(tmp_path, monkeypatch, shown):
 
     def full_disk(commands):
         raise OSError(28, "No space left on device")
-    monkeypatch.setattr(P, "save_custom_commands", full_disk)
+    monkeypatch.setattr(W, "save_custom_commands", full_disk)
 
     d = _window([["talk type", "TalkType"]])
-    assert d._save_custom_commands() is None
+    assert d.save() is None
     assert shown == ["Your snippets weren't saved"]
 
 
@@ -108,8 +108,7 @@ def test_ok_stays_open_when_the_snippets_could_not_be_written():
     """Closing right after saying the snippets weren't saved would throw the
     unsaved edits away."""
     steps = []
-    d = SimpleNamespace(commands_store=FakeStore([]),
-                        _save_custom_commands=lambda: None,
+    d = SimpleNamespace(words_tab=SimpleNamespace(save=lambda: None),
                         _changed_since_open=lambda: steps.append("settings") or {},
                         save_config=lambda: steps.append("save") or True,
                         window=SimpleNamespace(destroy=lambda: steps.append("destroy")))
@@ -129,7 +128,7 @@ def test_editing_a_snippet_changes_its_row():
 
 
 def test_editing_a_snippet_onto_another_phrase_is_refused(monkeypatch, shown):
-    monkeypatch.setattr(P.GLib, "idle_add", lambda fn, *a: fn(*a))
+    monkeypatch.setattr(W.GLib, "idle_add", lambda fn, *a: fn(*a))
     d = _window([["my email", "me@example.com"], ["sig", "Ron"]])
     assert d._apply_snippet_edit("1", "my email", "Ron Brand") is False
     assert d.commands_store[1] == ["sig", "Ron"], "nothing changes when it's refused"

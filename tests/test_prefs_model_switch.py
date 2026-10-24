@@ -13,7 +13,7 @@ gi = pytest.importorskip("gi")
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
 
-from tuxtalk import prefs  # noqa: E402
+from tuxtalk import prefs, prefs_words  # noqa: E402
 from tuxtalk.config import Settings  # noqa: E402
 
 
@@ -23,8 +23,8 @@ def _build(monkeypatch, model, device):
     monkeypatch.setattr(prefs.PreferencesWindow, "load_config",
                         lambda self: {**asdict(Settings()), "model": model, "device": device})
     monkeypatch.setattr(prefs.PreferencesWindow, "_check_cuda_availability", lambda self: True)
-    monkeypatch.setattr(prefs, "load_custom_commands", lambda: {})
-    monkeypatch.setattr(prefs.PreferencesWindow, "_watch_custom_commands_file",
+    monkeypatch.setattr(prefs_words, "load_custom_commands", lambda: {})
+    monkeypatch.setattr(prefs_words.WordsTab, "_watch_custom_commands_file",
                         lambda self: None)
     monkeypatch.setattr(prefs.PreferencesWindow, "_show_window", lambda self: None)
     return prefs.PreferencesWindow()

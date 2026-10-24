@@ -9,6 +9,7 @@ exercise the real logic without constructing a GTK window.
 """
 
 
+from types import SimpleNamespace
 import pytest
 
 
@@ -29,6 +30,7 @@ class StubPrefs:
         self.config = dict(current)
         self.restart_calls = 0
         self.restart_result = True
+        self.words_tab = SimpleNamespace(save=lambda: True)     # snippets saved
 
     def restart_service(self):
         self.restart_calls += 1

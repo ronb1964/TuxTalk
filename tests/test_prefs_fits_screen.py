@@ -14,7 +14,7 @@ gi = pytest.importorskip("gi")
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
 
-from tuxtalk import prefs  # noqa: E402
+from tuxtalk import prefs, prefs_words  # noqa: E402
 from tuxtalk import ui_style  # noqa: E402
 from tuxtalk.config import Settings  # noqa: E402
 from dataclasses import asdict  # noqa: E402
@@ -38,8 +38,8 @@ def _build(monkeypatch, screen_height):
     monkeypatch.setattr(ui_style.Gdk.Display, "get_default", lambda: display)
     monkeypatch.setattr(prefs.PreferencesWindow, "load_config",
                         lambda self: asdict(Settings()))
-    monkeypatch.setattr(prefs, "load_custom_commands", lambda: {})
-    monkeypatch.setattr(prefs.PreferencesWindow, "_watch_custom_commands_file",
+    monkeypatch.setattr(prefs_words, "load_custom_commands", lambda: {})
+    monkeypatch.setattr(prefs_words.WordsTab, "_watch_custom_commands_file",
                         lambda self: None)
     monkeypatch.setattr(prefs.PreferencesWindow, "_show_window", lambda self: None)
     w = prefs.PreferencesWindow()

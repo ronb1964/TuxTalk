@@ -50,6 +50,7 @@ def test_ok_closes_after_a_model_download(prefs_cls, monkeypatch):
         _after_hotkey_change=lambda changed, since: False,
         _stop_mic_test=lambda: None,
         _release_pidfile=lambda: None,
+        words_tab=SimpleNamespace(save=lambda: True),
         window=SimpleNamespace(destroy=lambda: closed.append(True)),
     )
 

@@ -94,18 +94,18 @@ def test_a_word_added_on_the_words_tab_is_saved_and_listed(prefs_window, monkeyp
     _answer_dialogs(monkeypatch, Gtk.ResponseType.OK, word="TuxTalk")
     find(_words_tab(window), Gtk.Button, "Add Word").clicked()
     assert "TuxTalk" in custom_words.load()
-    assert [row[0] for row in window.words_store] == ["TuxTalk"]
+    assert [row[0] for row in window.words_tab.words_store] == ["TuxTalk"]
 
 
 def test_a_word_removed_on_the_words_tab_is_gone(prefs_window, monkeypatch):
     custom_words.save(["TuxTalk"])
     window = prefs_window()
-    window.words_tree.get_selection().select_path(0)
+    window.words_tab.words_tree.get_selection().select_path(0)
     _answer_dialogs(monkeypatch, Gtk.ResponseType.YES)
     remove = [b for b in shown_buttons(_words_tab(window)) if b.get_label() == "Remove"][0]
     remove.clicked()
     assert custom_words.load() == []
-    assert len(window.words_store) == 0
+    assert len(window.words_tab.words_store) == 0
 
 
 def test_the_command_line_opens_the_words_tab(prefs_main):

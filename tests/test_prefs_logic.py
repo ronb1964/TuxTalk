@@ -162,18 +162,19 @@ def test_save_config_roundtrips_through_config_loader(tmp_path, monkeypatch):
 # --- a damaged commands file must not wedge Apply/OK -----------------------
 
 def _commands_window(rows, loaded=None):
-    """A stand-in PreferencesWindow with just the Voice Commands list."""
+    """A stand-in Words tab with just the snippets list."""
     import types
+    from tuxtalk.prefs_words import WordsTab
     d = SimpleNamespace(commands_store=rows, _commands_loaded=loaded or {})
-    for name in ("_commands_from_store", "_fill_commands_store", "_save_custom_commands",
+    for name in ("_commands_from_store", "_fill_commands_store", "save",
                  "_split_commands", "_fill_words_store"):
-        setattr(d, name, types.MethodType(getattr(PreferencesWindow, name), d))
+        setattr(d, name, types.MethodType(getattr(WordsTab, name), d))
     return d
 
 
 def test_saving_commands_over_a_damaged_file_does_not_raise(tmp_path, monkeypatch):
     """save_custom_commands refuses to overwrite a file it could not
-    read. _save_custom_commands runs FIRST in both on_apply and on_ok, so
+    read. The Words tab's save runs FIRST in both on_apply and on_ok, so
     letting that propagate would make clicking OK do nothing at all — the
     window would not even close. It must degrade, not wedge.
     """
@@ -188,7 +189,7 @@ def test_saving_commands_over_a_damaged_file_does_not_raise(tmp_path, monkeypatc
     damaged = path.read_text()
 
     d = _commands_window([["talk type", "TalkType"]])
-    assert d._save_custom_commands() is False
+    assert d.save() is False
 
     assert path.read_text() == damaged, "damaged commands file was overwritten"
 
@@ -201,7 +202,7 @@ def test_saving_commands_normally_reports_success(tmp_path, monkeypatch):
     monkeypatch.setattr(C, "_commands_read_failed", False, raising=False)
 
     d = _commands_window([["talk type", "TalkType"]])
-    assert d._save_custom_commands() is True
+    assert d.save() is True
     assert C.load_custom_commands() == {"talk type": "TalkType"}
 
 
@@ -220,7 +221,7 @@ def test_apply_keeps_a_word_fixed_from_the_tray_while_prefs_was_open(tmp_path, m
     # ...then Fix a Word saves a new one from the tray...
     C.save_custom_commands({"talk type": "TalkType", "bamboo studio": "BambuStudio"})
     # ...and the user clicks Apply without touching the list.
-    assert d._save_custom_commands() is True
+    assert d.save() is True
 
     assert C.load_custom_commands() == {"talk type": "TalkType", "bamboo studio": "BambuStudio"}
     assert ["bamboo studio", "BambuStudio"] in d.commands_store   # and it now shows
@@ -417,6 +418,7 @@ def test_an_update_doesnt_start_when_the_changes_couldnt_be_saved(monkeypatch):
     window = SimpleNamespace(
         _current_release={"appimage_url": "https://example.invalid/TuxTalk.AppImage"},
         window=None, save_config=lambda: False,
+        words_tab=SimpleNamespace(save=lambda: True),
         _show_save_error=lambda: shown.append("save error"))
     PreferencesWindow._on_download_update_clicked(window, None)
     assert shown == ["save error"]
@@ -438,8 +440,8 @@ def test_an_update_saves_the_snippets_first(monkeypatch):
     monkeypatch.setattr(P.Gtk, "Dialog", lambda **kw: pytest.fail("the update started"))
     window = SimpleNamespace(
         _current_release={"appimage_url": "https://example.invalid/TuxTalk.AppImage"},
-        window=None, commands_store=object(),
-        _save_custom_commands=lambda: saved.append("snippets") and None,
+        window=None,
+        words_tab=SimpleNamespace(save=lambda: saved.append("snippets") and None),
         save_config=lambda: saved.append("settings") or True,
         _show_save_error=lambda: saved.append("save error"))
     PreferencesWindow._on_download_update_clicked(window, None)
