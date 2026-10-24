@@ -13,7 +13,6 @@ import re
 import shutil
 import subprocess
 import atexit
-import fcntl
 import select
 import signal
 import functools
@@ -39,7 +38,8 @@ from .recording_indicator import RecordingIndicator
 from .recording_state import RecordingState
 from .undo import detect_undo_command, calculate_undo_length
 from . import (custom_commands, delivery_notices, edit_notices, focused_window, hallucinations,
-               modifier_hotkeys, secure_input, send_countdown, silence, virtual_keyboard)
+               modifier_hotkeys, secure_input, send_countdown, silence, single_instance,
+               virtual_keyboard)
 from .focused_window import window_class as _query_focused_window_class
 from .window_classes import (ELECTRON_PASTE_BROKEN_CLASSES, SMART_NEWLINE_CLASSES_LOWER,
                              app_kind, is_document_window, is_terminal_class)
@@ -211,62 +211,22 @@ def _which(name):
 # Optional desktop notifications via libnotify
 from .notify import notify as _notify
 
-# --- Single instance lock (user runtime dir) ---
-def _runtime_dir():
-    base = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
-    # Inside a Flatpak, XDG_RUNTIME_DIR is shared with the host, so a host
-    # service's lock would make the Flatpak service exit as "already running".
-    # The per-app $XDG_RUNTIME_DIR/app/$FLATPAK_ID is private to the sandbox, so
-    # the lock goes there. Mirrors tray._runtime_dir.
-    fid = os.environ.get("FLATPAK_ID")
-    if fid:
-        app_dir = os.path.join(base, "app", fid)
-        if os.path.isdir(app_dir):
-            return app_dir
-    return base
-
 def _acquire_single_instance():
-    """Take the single-instance lock, or exit if another service holds it.
-
-    flock is atomic, and the kernel releases the lock when the process exits.
-    """
+    """Take the service's single-instance lock (single_instance.py), or exit
+    if another service holds it."""
     global _lockfile_handle
-    lockfile_path = os.path.join(_runtime_dir(), "talktype.lock")
     try:
-        # Opened without truncating: the running instance's PID stays in the
-        # file until this process actually holds the lock.
-        fd = os.open(lockfile_path, os.O_RDWR | os.O_CREAT, 0o600)
-        lockfile = os.fdopen(fd, "r+")
-
-        # Close-on-exec so an in-place restart (os.execv) releases the lock
-        # instead of inheriting the still-locked FD and exiting as "already
-        # running". The tray's singleton lock does the same.
-        _flags = fcntl.fcntl(lockfile.fileno(), fcntl.F_GETFD)
-        fcntl.fcntl(lockfile.fileno(), fcntl.F_SETFD, _flags | fcntl.FD_CLOEXEC)
-
-        try:
-            fcntl.flock(lockfile.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            # Only this error means another process holds the lock. Anything
-            # else (an unwritable runtime folder) is not "already running".
-            print("Another TuxTalk instance is already running. Exiting.", file=sys.stderr)
-            sys.exit(0)
-
-        # The PID is for people inspecting the file; the lock itself is the flock.
-        lockfile.truncate(0)
-        lockfile.write(str(os.getpid()))
-        lockfile.flush()
-
-        # Held in a global so garbage collection never closes it (and drops the lock).
-        _lockfile_handle = lockfile
-
-        logger.debug(f"Acquired singleton lock: {lockfile_path}")
-
+        lockfile = single_instance.open_lock("talktype.lock")
     except OSError as e:
-        logger.warning(f"Could not acquire singleton lock at {lockfile_path}: {e}")
-        print(f"Warning: could not acquire singleton lock: {e}", file=sys.stderr)
+        logger.warning(f"Could not open the single-instance lock: {e}")
+        return
+    if not single_instance.claim(lockfile):
+        print("Another TuxTalk instance is already running. Exiting.", file=sys.stderr)
+        sys.exit(0)
+    _lockfile_handle = lockfile     # closing it, even by garbage collection, lets go
 
-# Global to keep lock file open
+
+# The single-instance lock's file, open while the service runs.
 _lockfile_handle = None
 
 # --- Runtime state ---
@@ -2846,6 +2806,12 @@ def _send_automatically(space: str, injection_mode: str, message) -> None:
                                       _press_key, _type_onto_dictation, space, injection_mode)
 
 
+# _inject_text's outcomes that are sure nothing was typed: it gave up before
+# the first key (_delivery_stopped). "failed" may follow some of it (wtype
+# timing out), and "password_field" earlier lines.
+_GAVE_UP_UNTYPED = frozenset({"moved", "key_held"})
+
+
 def _type_onto_dictation(text: str, injection_mode: str, into=None) -> str:
     """Type *text* right after the dictation, keeping undo's record of it
     whole; _inject_text's outcome. *into* is _inject_text's. When none of
@@ -2856,7 +2822,7 @@ def _type_onto_dictation(text: str, injection_mode: str, into=None) -> str:
     outcome = _inject_text(text, injection_mode, into=into)
     if outcome == "ok":
         state.last_inserted_text = kept[0] + text
-    elif outcome != "partial":
+    elif outcome in _GAVE_UP_UNTYPED:
         (state.last_inserted_text, state.continue_mid_sentence, state.nav_context,
          state.shown_text) = kept
     return outcome
@@ -2867,6 +2833,14 @@ def _end_in_a_pause(message, beeps_on, auto_space, auto_period, injection_mode) 
     it: a held "no wait" is typed as said, the last phrase gets its mark,
     and "Send each dictation automatically" sends *message* if all of it
     went in."""
+    waiting = state.edit_waiting
+    # "edit that", a pause, and nothing more: what to change never came, and
+    # the message isn't sent as it was.
+    unfinished_edit = waiting is not None and waiting["serial"] == state.recording_serial
+    if unfinished_edit:
+        state.edit_waiting = None
+        _edit_problem("edit_that_what", beeps_on)
+        message.add("failed", None)
     if state.held_cue:
         cue, state.held_cue = state.held_cue, ""
         if auto_period and cue[-1] not in ".?!":
@@ -2881,7 +2855,8 @@ def _end_in_a_pause(message, beeps_on, auto_space, auto_period, injection_mode) 
         _flush_boundary(auto_period, auto_space, injection_mode)
     if not _chunk_context_marks:
         state.continue_mid_sentence = False   # it belongs to this recording
-    _beep(beeps_on, *READY_BEEP)
+    if not unfinished_edit:                   # that one beeped its cancel
+        _beep(beeps_on, *READY_BEEP)
 
 
 def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,

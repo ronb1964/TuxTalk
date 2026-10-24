@@ -1198,6 +1198,20 @@ def test_where_the_window_is_never_known_the_space_goes_only_where_the_words_did
     assert app.state.last_inserted_text == "See you at noon."
 
 
+
+def test_a_failed_space_may_have_gone_in_so_the_record_isnt_brought_back(monkeypatch):
+    """"failed" can follow some of the text (wtype timing out): the old
+    record of the dictation would then count the wrong characters."""
+    monkeypatch.setattr(app.state, "last_inserted_text", "See you at noon.")
+
+    def inject(text, mode, into=None, **kw):
+        """Forgets the dictation, as a delivery that stopped does."""
+        app.state.last_inserted_text = ""
+        return "failed"
+    monkeypatch.setattr(app, "_inject_text", inject)
+    app._type_onto_dictation(" ", "type")
+    assert app.state.last_inserted_text == ""
+
 def test_a_phrase_cut_at_a_pause_takes_its_recordings_message_to_the_queue(chat, monkeypatch):
     """The phrase is queued when the pause is heard and typed later; the
     next recording may start in between. Taken when it's typed, the message

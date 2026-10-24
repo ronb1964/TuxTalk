@@ -10,12 +10,12 @@ import os
 
 import pytest
 
-from tuxtalk import app
+from tuxtalk import app, single_instance
 
 
 @pytest.fixture
 def lock_dir(tmp_path, monkeypatch):
-    monkeypatch.setattr(app, "_runtime_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(single_instance, "runtime_dir", lambda: str(tmp_path))
     saved = app._lockfile_handle
     yield tmp_path
     if app._lockfile_handle is not None and app._lockfile_handle is not saved:
@@ -41,6 +41,6 @@ def test_a_second_instance_exits_and_leaves_the_pid_alone(lock_dir):
 
 
 def test_an_unusable_runtime_folder_is_not_reported_as_already_running(monkeypatch, tmp_path):
-    monkeypatch.setattr(app, "_runtime_dir", lambda: str(tmp_path / "missing"))
+    monkeypatch.setattr(single_instance, "runtime_dir", lambda: str(tmp_path / "missing"))
     app._acquire_single_instance()   # must not raise SystemExit
 

@@ -224,3 +224,18 @@ def test_an_edit_that_didnt_change_the_text_isnt_sent_as_it_was(editing, monkeyp
         raw = "Edit that."
     assert _said(raw)
     assert not app.state.message.complete
+
+
+def test_edit_that_then_only_a_pause_isnt_sent_as_it_was(editing, monkeypatch):
+    """Type at pause and "Send each dictation automatically": "edit that",
+    a pause, then the recording ended with nothing said. The message went
+    out unchanged."""
+    pressed, edits, problems = editing
+    sent = []
+    monkeypatch.setattr(app, "_press_enter_after", True)
+    monkeypatch.setattr(app, "_send_automatically", lambda *a: sent.append(a))
+    app.state.message.add("ok", app.state.message.to)       # the message's words
+    assert _said("Edit that.", "middle")                    # waits for what to change
+    app._end_in_a_pause(app.state.message, False, True, True, "type")
+    assert sent == [] and problems == ["edit_that_what"]
+    assert app.state.edit_waiting is None

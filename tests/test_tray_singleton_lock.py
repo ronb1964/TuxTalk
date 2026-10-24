@@ -15,12 +15,12 @@ import textwrap
 
 import pytest
 
-from tuxtalk import service_launcher, tray
+from tuxtalk import service_launcher, single_instance, tray
 
 
 @pytest.fixture
 def lock_dir(tmp_path, monkeypatch):
-    monkeypatch.setattr(tray, "_runtime_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(single_instance, "runtime_dir", lambda: str(tmp_path))
     saved = tray._tray_lockfile_handle
     yield tmp_path
     if tray._tray_lockfile_handle is not None and tray._tray_lockfile_handle is not saved:
@@ -52,7 +52,7 @@ def test_a_second_tray_exits_and_leaves_the_pid_alone(lock_dir, monkeypatch):
 
 
 def test_an_unusable_runtime_folder_is_not_reported_as_already_running(monkeypatch, tmp_path):
-    monkeypatch.setattr(tray, "_runtime_dir", lambda: str(tmp_path / "missing"))
+    monkeypatch.setattr(single_instance, "runtime_dir", lambda: str(tmp_path / "missing"))
     tray._acquire_tray_singleton()   # must not raise SystemExit
 
 

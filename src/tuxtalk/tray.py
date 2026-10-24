@@ -21,6 +21,7 @@ import sys
 import fcntl
 import warnings
 from .logger import setup_logger
+from . import single_instance
 
 # The tray menu's icons need Gtk.ImageMenuItem: AppIndicator sends only its
 # image to the desktop. It is deprecated but stays in GTK3, so its warnings
@@ -63,95 +64,44 @@ except ImportError:
     DBUS_AVAILABLE = False
     logger.warning("D-Bus service not available - GNOME extension integration disabled")
 
-def _runtime_dir():
-    base = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
-    # Inside a Flatpak, XDG_RUNTIME_DIR (/run/user/N) is shared with the host, so
-    # a host/AppImage tray's singleton lock is visible in the sandbox and the
-    # Flatpak instance exits as "already running" — it never starts. Flatpak
-    # provides a private, per-app tmpfs dir at $XDG_RUNTIME_DIR/app/$FLATPAK_ID;
-    # use it there so the Flatpak's lock never collides with a host instance. On
-    # the host (no FLATPAK_ID) the location is unchanged.
-    fid = os.environ.get("FLATPAK_ID")
-    if fid:
-        app_dir = os.path.join(base, "app", fid)
-        if os.path.isdir(app_dir):
-            return app_dir
-    return base
-
-
 def _acquire_tray_singleton():
-    """
-    Acquire singleton lock using fcntl to prevent race conditions.
-    Uses file locking which is atomic and prevents multiple instances.
-    The lock is held for the lifetime of the process and auto-released on exit.
-    """
-    lockfile_path = os.path.join(_runtime_dir(), "talktype-tray.lock")
+    """Take the tray's single-instance lock (single_instance.py). Another
+    TuxTalk tray holding it: show the running one's menu, or say it's
+    running, and exit. A TalkType tray from before the rename is old code:
+    stop it and take its place."""
+    global _tray_lockfile_handle
     try:
-        # Opened without truncating: the running instance's PID stays in the
-        # file until this process actually holds the lock.
-        fd = os.open(lockfile_path, os.O_RDWR | os.O_CREAT, 0o600)
-        lockfile = os.fdopen(fd, "r+")
-
-        # Mark the lock FD close-on-exec. The updater's "Restart Now" restarts
-        # in place with os.execv, which keeps FDs open by default — so without
-        # this the restarted tray would inherit THIS still-locked FD, fail to
-        # re-acquire the lock, and exit as "already running" (the app silently
-        # not coming back after an update). CLOEXEC releases the lock on exec.
-        _flags = fcntl.fcntl(lockfile.fileno(), fcntl.F_GETFD)
-        fcntl.fcntl(lockfile.fileno(), fcntl.F_SETFD, _flags | fcntl.FD_CLOEXEC)
-
-        # Try to acquire exclusive lock (non-blocking)
-        # LOCK_EX = exclusive lock, LOCK_NB = non-blocking
-        try:
-            fcntl.flock(lockfile.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            # Only this error means another tray holds the lock. Anything else
-            # (an unwritable runtime folder) is not "already running".
-            # A TalkType tray from before the rename is old code: stop it and
-            # take its place. Another TuxTalk stays, and this one says so.
-            from .service_launcher import pre_rename_tray_pids
-            old_trays = pre_rename_tray_pids()
-            if old_trays:
-                logger.info(f"Stopping the pre-0.15.0 tray (PID {old_trays}) so TuxTalk can start")
-                for pid in old_trays:
-                    try:
-                        os.kill(pid, signal.SIGTERM)
-                    except OSError:
-                        pass  # exited between the scan and the kill
-            if not (old_trays and _wait_for_lock(lockfile, _OLD_TRAY_EXIT_WAIT_S)):
-                print("Another tray instance is already running. Exiting.", file=sys.stderr)
-                # Opened again from the app list: show the running TuxTalk's
-                # menu as a window. Plain GNOME has no tray to point people
-                # at, so "look for the tray icon" was a dead end there.
-                if not old_trays:
-                    from . import control
-                    try:
-                        if control.open_in_running("menu", tray_starting=lambda: True):
-                            sys.exit(0)
-                    except Exception as e:
-                        logger.debug(f"Could not ask the running TuxTalk for its menu: {e}")
-                _show_already_running(older_talktype=bool(pre_rename_tray_pids()))
-                sys.exit(0)
-
-        # If we got here, we acquired the lock successfully
-        # Write our PID for informational purposes
-        lockfile.truncate(0)
-        lockfile.write(str(os.getpid()))
-        lockfile.flush()
-
-        # Keep the file open for the process lifetime
-        # The lock will automatically be released when the process exits
-        # Store in global to prevent garbage collection
-        global _tray_lockfile_handle
-        _tray_lockfile_handle = lockfile
-
-        logger.debug(f"Acquired tray singleton lock: {lockfile_path}")
-
+        lockfile = single_instance.open_lock("talktype-tray.lock")
     except OSError as e:
-        logger.warning(f"Could not acquire tray singleton lock at {lockfile_path}: {e}")
-        print(f"Warning: could not acquire tray singleton lock: {e}", file=sys.stderr)
+        logger.warning(f"Could not open the tray's single-instance lock: {e}")
+        return
+    if not single_instance.claim(lockfile):
+        from .service_launcher import pre_rename_tray_pids
+        old_trays = pre_rename_tray_pids()
+        if old_trays:
+            logger.info(f"Stopping the pre-0.15.0 tray (PID {old_trays}) so TuxTalk can start")
+            for pid in old_trays:
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                except OSError:
+                    pass  # exited between the scan and the kill
+        if not (old_trays and single_instance.claim(lockfile, _OLD_TRAY_EXIT_WAIT_S)):
+            print("Another tray instance is already running. Exiting.", file=sys.stderr)
+            # Opened again from the app list: show the running TuxTalk's
+            # menu as a window. Plain GNOME has no tray to point people
+            # at, so "look for the tray icon" was a dead end there.
+            if not old_trays:
+                from . import control
+                try:
+                    if control.open_in_running("menu", tray_starting=lambda: True):
+                        sys.exit(0)
+                except Exception as e:
+                    logger.debug(f"Could not ask the running TuxTalk for its menu: {e}")
+            _show_already_running(older_talktype=bool(pre_rename_tray_pids()))
+            sys.exit(0)
+    _tray_lockfile_handle = lockfile    # closing it, even by garbage collection, lets go
 
-# Global to keep lock file open
+# The single-instance lock's file, open while the tray runs.
 _tray_lockfile_handle = None
 
 # How long an older TalkType tray gets to exit after SIGTERM. It has no handler
@@ -162,7 +112,7 @@ _OLD_TRAY_EXIT_WAIT_S = 3.0
 def _tray_lock_held():
     """Whether another tray holds the single-instance lock, e.g. one still
     starting up that hasn't taken its D-Bus name yet."""
-    path = os.path.join(_runtime_dir(), "talktype-tray.lock")
+    path = os.path.join(single_instance.runtime_dir(), "talktype-tray.lock")
     try:
         fd = os.open(path, os.O_RDONLY)
     except OSError:
@@ -218,19 +168,6 @@ def _open_from_command_line(name):
         from . import uninstall
         sys.exit(0 if uninstall.run() else 1)
     print("Starting TuxTalk.")
-
-
-def _wait_for_lock(lockfile, timeout_s):
-    """Take the lock on *lockfile* once its holder lets go; False after *timeout_s*."""
-    deadline = time.monotonic() + timeout_s
-    while True:
-        try:
-            fcntl.flock(lockfile.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-            return True
-        except BlockingIOError:
-            if time.monotonic() >= deadline:
-                return False
-            time.sleep(0.1)
 
 
 def already_running_message(older_talktype):

@@ -335,8 +335,8 @@ def test_run_command_line_returns_to_start_tuxtalk(monkeypatch):
 
 
 def test_tray_lock_held(monkeypatch, tmp_path):
-    from tuxtalk import tray
-    monkeypatch.setattr(tray, "_runtime_dir", lambda: str(tmp_path))
+    from tuxtalk import single_instance, tray
+    monkeypatch.setattr(single_instance, "runtime_dir", lambda: str(tmp_path))
     assert tray._tray_lock_held() is False          # no tray ever started here
     path = tmp_path / "talktype-tray.lock"
     path.write_text("123")

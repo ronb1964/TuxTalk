@@ -1,8 +1,8 @@
 {
  "files": {
-  "app.py": 4885,
+  "app.py": 4860,
   "prefs.py": 6738,
-  "tray.py": 2548,
+  "tray.py": 2485,
   "welcome_dialog.py": 3256
  },
  "findings": {
