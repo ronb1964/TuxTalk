@@ -150,6 +150,18 @@ def test_a_mic_that_wont_open_says_so(win):
     assert win.tap_test_btn.get_label() == "Test"
 
 
+def test_a_mic_that_cant_be_found_says_so(win):
+    """The microphone's device is looked up before any stream exists; a
+    lookup that failed left the test button doing nothing at all."""
+    def no_devices():
+        raise OSError("no audio devices")
+    win.get_selected_device_idx = no_devices
+    win.tap_check.set_active(True)
+    win.tap_test_btn.clicked()
+    assert win.tap_status.get_text() == "Couldn't open the microphone: no audio devices"
+    assert win.tap_test_btn.get_label() == "Test"
+
+
 def test_a_slider_change_applies_to_a_running_test(win):
     win.tap_check.set_active(True)
     win.tap_test_btn.clicked()

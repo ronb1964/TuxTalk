@@ -6197,6 +6197,7 @@ class PreferencesWindow:
         """Stream the chosen mic into a PauseTest; the callback only feeds it
         and asks for one redraw at a time."""
         from .chunk_meter import PauseTest
+        stream = None
         try:
             device_idx = self.get_selected_device_idx()
             sample_rate = self._get_device_samplerate(device_idx)
@@ -6213,7 +6214,6 @@ class PreferencesWindow:
                     self._tap_redraw_pending = True
                     GLib.idle_add(self._tap_show)
 
-            stream = None
             stream = self._pause_stream_factory(device=device_idx, channels=1,
                                                 samplerate=sample_rate, dtype="int16",
                                                 callback=callback)
