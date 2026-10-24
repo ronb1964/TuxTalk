@@ -32,9 +32,9 @@ Merge the more-hotkey-choices branch first: it changes the same files.
 | 1 | Tests that read source text become behaviour tests (about 60); shared test helpers in conftest; the check and ruff cover tests/ too | M | open |
 | 2 | The remaining medium user-facing bugs (about 40), each with a failing test first: Preferences update and settings loader, Transcribe a File frames and Your Words, download retry and re-fetch, send and undo timing, password-field timeouts, Budgie/Flashback detection, tray update freeze, soft break, KDE editors when typing (not pasting) | L | open |
 | 3 | app.py into about 21 modules with one Recording object per dictation; the three typing loops become one | L | open (hallucinations.py split off, d8f9c45) |
-| 4 | prefs.py into a shell and about 15 modules, one per tab | L | open |
+| 4 | prefs.py into a shell and about 15 modules, one per tab | L | open (the microphone test in mic_test.py, c983fe6) |
 | 5 | welcome_dialog.py into 5 modules; Help's text into its own module with one command table shared with Voice Commands; tray.py into 6 | L | open (Help's text in help_text.py, 8c936ad; the shared command table still to do) |
-| 6 | One helper per job: message dialog (64 copies), download window (5), model downloader (2), runtime folder (13), the pkexec runner and engine launcher thread (3 each), .deb/.rpm staging | M | open |
+| 6 | One helper per job: message dialog (64 copies), download window (5), model downloader (2), runtime folder (13), the pkexec runner and engine launcher thread (3 each), .deb/.rpm staging | M | open (the microphone's rate probe and bounded stop in mic_stream.py, f01c4ee) |
 | 7 | Error handling and logging: the 235 swallowed errors, 187 print() calls, Preferences writing to the log | M | open |
 | 8 | 100 missing docstrings, 27 dated comments, 332 long lines, about 60 dead-code items | M | open |
 | 9 | CI installs from poetry.lock; appimagetool, its runtime and the Vulkan SDK pinned with checksums; more ruff families under the same ratchet | S | open |
