@@ -284,3 +284,90 @@ def test_set_not_to_send_there_a_tray_too_busy_to_answer_stops_the_enter(chat, k
     focus[:] = [None, None]
     send_countdown.send_automatically("test", sent_to, app._press_key, app._type_onto_dictation)
     assert keyboard.events == [] and notices == [send_countdown.UNKNOWN_WINDOW_NOTICE]
+
+
+# --- "... press enter" said after the words: the same rule ---------------------------------
+
+def clicked_away_while_the_words_went_in(monkeypatch, focus, to=SECOND):
+    deliver = app._deliver_text
+
+    def deliver_then_switch(*a, **k):
+        outcome = deliver(*a, **k)
+        focus[:] = to
+        return outcome
+    monkeypatch.setattr(app, "_deliver_text", deliver_then_switch)
+
+
+@pytest.mark.parametrize("key", ["enter", "tab"])
+def test_a_key_said_after_the_words_goes_where_they_went(chat, keyboard, key):
+    focus, heard, typed, notices = chat
+    heard.append(f"see you at noon, press {key}")
+    dictate()
+    assert typed[0][1] == FIRST[1]
+    assert keyboard.typed_keys() == [getattr(ecodes, f"KEY_{key.upper()}")] and notices == []
+
+
+@pytest.mark.parametrize("key", ["enter", "tab"])
+def test_a_switch_while_the_words_go_in_keeps_back_the_key_said_after_them(chat, keyboard,
+                                                                           monkeypatch, key):
+    """"See you at noon, press enter", and a click into the other Brave
+    window as the words went in: the Enter sent what was in that window's box."""
+    focus, heard, typed, notices = chat
+    clicked_away_while_the_words_went_in(monkeypatch, focus)
+    heard.append(f"see you at noon, press {key}")
+    dictate()
+    assert typed[0][1] == FIRST[1] and keyboard.events == []
+    assert len(notices) == 1
+
+
+def test_a_switch_after_the_words_keeps_back_the_enter_said_after_them(chat, keyboard,
+                                                                       monkeypatch):
+    """The click comes after the words are in, in the moment the app is
+    given to take them in before the Enter."""
+    focus, heard, typed, notices = chat
+    monkeypatch.setattr(app.time, "sleep", lambda s: focus.__setitem__(slice(None), SECOND))
+    heard.append("see you at noon, press enter")
+    dictate()
+    assert keyboard.events == [] and notices == [send_countdown.SWITCHED_WINDOW_NOTICE]
+
+
+def test_press_enter_said_alone_goes_wherever_the_focus_is(chat, keyboard):
+    """A password typed by hand, then "press enter" to log in: nothing was
+    dictated there, so there's no window it must match."""
+    focus, heard, typed, notices = chat
+    heard.append("see you at noon")
+    dictate()
+    focus[:] = SECOND
+    heard.append("press enter")
+    dictate()
+    assert keyboard.typed_keys() == [ENTER, ENTER] and notices == []
+
+
+def test_a_pause_then_another_window_keeps_back_press_enter_said_alone(chat, keyboard,
+                                                                       monkeypatch):
+    """Type at pause: "see you at noon" typed into one Brave window, a click
+    into the other during the pause, then only "press enter": it sent the
+    other window's box."""
+    focus, heard, typed, notices = chat
+    monkeypatch.setattr(app, "_press_enter_after", False)
+    heard.append("See you at noon.")
+    dictate("middle")
+    focus[:] = SECOND
+    heard.append("press enter")
+    dictate("last")
+    assert keyboard.events == [] and notices == [send_countdown.SWITCHED_WINDOW_NOTICE]
+
+
+def test_a_pause_then_press_enter_alone_in_a_password_field_logs_in(chat, keyboard,
+                                                                    monkeypatch):
+    """Hands-free: a phrase dictated, then a password typed by hand in a
+    login box, then "press enter"."""
+    focus, heard, typed, notices = chat
+    monkeypatch.setattr(app, "_press_enter_after", False)
+    heard.append("See you at noon.")
+    dictate("middle")
+    focus[:] = SECOND
+    monkeypatch.setattr(focused_window, "is_password", lambda: True)
+    heard.append("press enter")
+    dictate("last")
+    assert keyboard.typed_keys() == [ENTER] and notices == []

@@ -42,7 +42,8 @@ def _dictate(monkeypatch, raw, window="brave-browser"):
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: window)
     monkeypatch.setattr(app, "_inject_text",
                         lambda text, mode, t0: events.append(("typed", text)) or "ok")
-    monkeypatch.setattr(app, "_press_key", lambda key, why: events.append((key, why)))
+    monkeypatch.setattr(app, "_press_key",
+                        lambda key, why, claim=None: events.append((key, why)) or True)
     frames = [(np.ones(app.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
     app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=False,
                                smart_quotes=False, notify_on=False)

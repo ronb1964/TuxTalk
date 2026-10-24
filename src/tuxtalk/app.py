@@ -3128,14 +3128,21 @@ def _chunk_message_sent() -> None:
         state.shown_text = ""
 
 
-def _press_said(key: str, chunk_role) -> None:
+def _press_said(key: str, chunk_role, after_words: bool = False) -> None:
     """Press the key said at the end of a dictation ("press enter"). In Type
     at pause that ends the message, and what's said next starts afresh; not
     pressed (a key stuck down), the message is still in the box, to carry
     on in and for "edit that" to reach whole. In Claude Desktop "press tab"
     types four spaces, as a tab said mid-sentence does there: its Tab key
     jumps to the Send button, and the next space typed would press it. A
-    password field there gets the real Tab: spaces would be refused."""
+    password field there gets the real Tab: spaces would be refused.
+
+    *after_words*: words of this dictation, or a phrase of this recording
+    before a pause, went in first, and the key goes only where they went
+    (send_countdown.press_where_sent), as an automatic Enter does. Said
+    alone it goes wherever the focus is: people type a password by hand,
+    then say "press enter" to log in."""
+    why = f'said "press {key.lower()}"'
     if (key == "TAB" and _query_focused_window_class() in ELECTRON_PASTE_BROKEN_CLASSES
             and not focused_window.is_password()):
         outcome = _type_onto_dictation("    ", "type")
@@ -3143,8 +3150,29 @@ def _press_said(key: str, chunk_role) -> None:
             logger.warning(f"Tab not typed as four spaces ({outcome})")
             if outcome == "key_held":
                 _notify(*delivery_notices.key_not_pressed(key))
-    elif _press_key(key, f'said "press {key.lower()}"') and chunk_role is not None:
+        return
+    if after_words:
+        pressed = send_countdown.press_where_sent(key, why, state.send_to, _press_key)
+    else:
+        pressed = _press_key(key, why)
+    if pressed and chunk_role is not None:
         _chunk_message_sent()
+
+
+def _after_the_words(outcome: str, said: str, press: str, space: str, chunk_role,
+                     beeps_on: bool, injection_mode: str) -> None:
+    """What follows a dictation's words, by _inject_text's *outcome*: a
+    notice when they didn't all go in; else the key *said* after them, or
+    the automatic send's Enter when *press*. *space* is the auto-space left
+    off before the key."""
+    if outcome in delivery_notices.NOTICES:
+        _report_undelivered(outcome, beeps_on)
+    elif said:
+        _press_said(said, chunk_role, after_words=True)
+    elif press:
+        _send_automatically(space, injection_mode)
+        if chunk_role is not None:
+            _chunk_message_sent()
 
 
 def _send_automatically(space: str, injection_mode: str) -> None:
@@ -3257,10 +3285,11 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # pause would type first (the mark held back from the last phrase, a
         # held "No wait.", backspaces for a correction), and the local AI
         # never sees them. Only "press enter" or "press tab" on its own still
-        # presses the key: people type the password by hand, then say it to
-        # log in, or move between the boxes.
+        # presses the key, there and not where the phrases before went:
+        # people type the password by hand, then say it to log in, or move
+        # between the boxes.
         if focused_window.is_password():
-            state.pending_boundary, state.held_cue = None, ""
+            state.pending_boundary, state.held_cue, state.chunk_typed = None, "", False
             if not key_only:
                 _password_field_refused(beeps_on)
                 return
@@ -3309,7 +3338,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             # Only "press enter" or "press tab" was said.
             if chunk_role != "middle":
                 _beep(beeps_on, *READY_BEEP)
-            _press_said(said, chunk_role)
+            _press_said(said, chunk_role, after_words=state.chunk_typed)
             return
 
         # Stage 3: Normalize text (voice commands, punctuation, spacing),
@@ -3384,14 +3413,8 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             if outcome == "password_field":
                 _unsay(said_before)
             _remember_shown(state.last_inserted_text, chunked, outcome == "ok")
-            if outcome in delivery_notices.NOTICES:
-                _report_undelivered(outcome, beeps_on)
-            elif said:
-                _press_said(said, chunk_role)
-            elif press:
-                _send_automatically(space_left_off, injection_mode)
-                if chunk_role is not None:
-                    _chunk_message_sent()
+            _after_the_words(outcome, said, press, space_left_off, chunk_role, beeps_on,
+                             injection_mode)
             if chunk_role == "middle" and not _chunk_context_marks and outcome == "ok" \
                     and not press:
                 # Without the context pass the engine's own mark decides: after

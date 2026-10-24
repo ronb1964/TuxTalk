@@ -49,7 +49,7 @@ _NOT_SENT = {
     "password": ("a password field has the focus now", PASSWORD_FIELD_NOT_SENT),
     "typed_meanwhile": ("other keys went out while it was checked", HELD_NOTICE),
     "unknown_window": ("which window has the focus isn't known", UNKNOWN_WINDOW_NOTICE),
-    "not_pressed": ("a dictation key stayed down, or Enter couldn't be pressed", HELD_NOTICE),
+    "not_pressed": ("a dictation key stayed down, or the key couldn't be pressed", HELD_NOTICE),
 }
 
 # The open decision: where the desktop says which app has the focus but not
@@ -118,12 +118,13 @@ def _why_not(sent_to, now) -> str | None:
     return _when_the_window_is_unknown() if same is None else None
 
 
-def _claim(pending):
+def _claim(pending, counting_down: bool = True):
     """virtual_keyboard.send's *claim* for the Enter of *pending*: the
     checks that take a while, made with the keyboard free and the send still
     pending, so a tap meanwhile still holds it. Returns *take*, which runs
     with the keyboard held, right before the Enter goes down. Either raises
-    virtual_keyboard.GaveUp when the Enter mustn't go."""
+    virtual_keyboard.GaveUp when the Enter mustn't go. A key said after the
+    words (press_where_sent) isn't *counting_down*: no tap holds it."""
     start = virtual_keyboard.emitted()
     first = focused_window.look()
     now = focused_window.destination()
@@ -135,11 +136,12 @@ def _claim(pending):
     def take():
         global _pending
         with _send_lock:
-            if _pending is not pending:
+            if counting_down and _pending is not pending:
                 raise virtual_keyboard.GaveUp("held")
             if virtual_keyboard.emitted() != start:
                 _refuse(pending, "typed_meanwhile")
-            _pending = None
+            if counting_down:
+                _pending = None
     return take
 
 
@@ -150,14 +152,30 @@ def _refuse(pending, why: str) -> None:
     raise virtual_keyboard.GaveUp("moved")
 
 
-def _say_not_sent(why: str, relabel: bool = False) -> None:
+def _say_not_sent(why: str, relabel: bool = False, key: str = "ENTER") -> None:
     text, notice = _NOT_SENT[why]
-    logger.info(f"Not sent: {text}")
+    what = "Not sent" if key == "ENTER" else f"{key.title()} not pressed"
+    if key != "ENTER":
+        notice = f"{what}: {text}."
+    logger.info(f"{what}: {text}")
     if relabel:
         from . import screen_message
         screen_message.relabel(LABEL_TAG, notice)
     else:
         show_notice(notice)
+
+
+def press_where_sent(key: str, why: str, sent_to, press) -> bool:
+    """Press *key*, said after words delivered to *sent_to* (landed()'s
+    answer): "... press enter" sends as an automatic Enter does, and "...
+    press tab" leaves the box, so either goes only where the words went, by
+    the same claim, with no wait to hold it. *press* is as for
+    send_automatically. Not pressed, the notice says why."""
+    pending = {"to": sent_to}
+    if press(key, why, claim=lambda: _claim(pending, counting_down=False)):
+        return True
+    _say_not_sent(pending.get("refused") or "not_pressed", key=key)
+    return False
 
 
 # --- The countdown ------------------------------------------------------------
