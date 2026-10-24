@@ -297,8 +297,10 @@ class RecordingState:
     # None unless a double-tap of the toggle key armed it.
     silence: object = None
     # When the toggle key started this recording (None for any other start),
-    # so a quick second tap can be told apart from a stop.
+    # so a quick second tap can be told apart from a stop; and its start beep
+    # (a beeps.Sound, None with beeps off), which the mic may have picked up.
     toggle_started_at: float = None
+    start_beep: object = None
     # Paste Last Dictation: {"key", "key_up", "at"} from the combo press until
     # every key of it is let go, else None (see _handle_key_event).
     paste_last: object = None
@@ -1495,7 +1497,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
 
     _arm_chunker(getattr(state, "recording_samplerate", SAMPLE_RATE), edit_mode)
     _pause_media_players()
-    _beep(beeps_on, *START_BEEP)
+    state.start_beep = _beep(beeps_on, *START_BEEP)
     if notify_on: _notify("Recording… speak now", "")
     _notify_tray_recording_state(True)
     if recording_indicator:
@@ -2732,7 +2734,8 @@ def _toggle_pressed_while_recording(beeps_on: bool) -> bool:
     from .silence import SilenceDetector, has_a_word
     rate = getattr(state, "recording_samplerate", SAMPLE_RATE)
     detector = SilenceDetector(_auto_stop_seconds, rate)
-    if has_a_word(_frames_f32(list(state.frames))[beeps.start_beep_heard(rate):], rate):
+    heard = _frames_f32(list(state.frames))
+    if has_a_word(heard[beeps.heard_in_recording(state.start_beep, len(heard), rate):], rate):
         detector.heard_speech()
     state.silence = detector
     logger.info("Double-tap: this recording will stop by itself when you go quiet")
@@ -5007,8 +5010,6 @@ def main():
     # Dictation cleanup; the AI engine (if on) loads in the background.
     _apply_cleanup_settings(cfg)
 
-
-    # Load custom voice commands
     global _custom_commands
     _custom_commands = load_custom_commands()
     if _custom_commands:
@@ -5168,7 +5169,6 @@ def main():
             else:
                 logger.error(f"D-Bus service initialization failed: {e}", exc_info=True)
 
-        # Initialize recording indicator if enabled
         if cfg.recording_indicator:
             try:
                 recording_indicator = RecordingIndicator(

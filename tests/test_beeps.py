@@ -3,10 +3,15 @@ sound output that fails or hangs never holds up a recording.
 
 The fake sound system below works like PortAudio's ALSA output: a stream has
 a buffer of its latency plus one period, the callback is asked for a period
-whenever there is room, and the speakers take one period at a time from a
-buffer kept full. Closing the stream throws away whatever is still in the
-buffer, which is how sounddevice.play() lost the hands-free beep on a desktop
-with 0.17 s or more of output latency.
+whenever there is room, and the speakers take one period at a time, in real
+time, from a buffer kept full. Closing the stream throws away whatever is
+still in the buffer, which is how sounddevice.play() lost the hands-free beep
+on a desktop with 0.17 s or more of output latency.
+
+A sound server can hold more than the stream's buffer (*downstream*): it
+takes what it has room for at once, says so in the time the callback is
+told the samples will be heard, and a close throws that away too, as
+PulseAudio's flush does.
 """
 import logging
 import threading
@@ -27,26 +32,34 @@ class FakeStream:
         self.callback = callback
         self.latency = system.latency
         self.period = system.period
+        self.holds = round(system.latency * RATE) + system.period + round(system.downstream * RATE)
         self.buffer = []                  # what the speakers haven't taken yet
         self.closed = threading.Event()
         self.feeder = threading.Thread(target=self._run, daemon=True)
 
-    def _free(self):
-        return round(self.latency * RATE) + self.period - sum(len(b) for b in self.buffer)
-
     def _run(self):
-        first = True
+        started, written, taken = time.monotonic(), 0, 0
         while not self.closed.is_set():
-            while self._free() >= self.period and not self.closed.is_set():
+            while written - taken + self.period <= self.holds and not self.closed.is_set():
                 out = np.full((self.period, 1), np.nan, np.float32)
-                status = types.SimpleNamespace(output_underflow=first and self.system.underflow)
-                self.callback(out, self.period, None, status)
-                first = False
+                underflow = written == 0 and self.system.underflow
+                status = types.SimpleNamespace(output_underflow=underflow)
+                now = time.monotonic()
+                # The buffer's first frame is heard once the speakers have
+                # taken every frame written before it. A backend that knows
+                # no time reports 0 for both.
+                heard = started + written / RATE if self.system.reports_time else 0.0
+                info = types.SimpleNamespace(currentTime=now if self.system.reports_time else 0.0,
+                                             outputBufferDacTime=heard)
+                self.callback(out, self.period, info, status)
                 self.buffer.append(out[:, 0].copy())
-            # The speakers take a period every 10 ms, time enough for a close
-            # to come first, as it does from a real, much slower, sound card.
-            if self.buffer and not self.closed.wait(0.01):
-                self.system.heard.append(self.buffer.pop(0))
+                written += self.period
+            take_at = started + taken / RATE
+            if self.closed.wait(max(0.0, take_at - time.monotonic())):
+                break
+            self.system.heard.append(self.buffer.pop(0))
+            self.system.heard_at.append(time.monotonic())
+            taken += self.period
 
     def start(self):
         if self.system.broken == "start":
@@ -65,13 +78,15 @@ class FakeStream:
 
 class FakeSoundSystem:
     """Stands in for the sounddevice module: one output device, and what
-    reached its speakers."""
+    reached its speakers, a period at a time, and when."""
 
     PortAudioError = OSError
 
-    def __init__(self, latency, period):
-        self.latency, self.period = latency, period
+    def __init__(self, latency, period, downstream=0.0):
+        self.latency, self.period, self.downstream = latency, period, downstream
+        self.reports_time = downstream > 0
         self.heard = []
+        self.heard_at = []
         self.underflow = False
         self.broken = None
         self.closes = 0
@@ -93,10 +108,10 @@ class FakeSoundSystem:
 
 @pytest.fixture
 def sound(monkeypatch):
-    def make(latency=0.035, period=383):
-        system = FakeSoundSystem(latency, period)
+    def make(latency=0.035, period=383, downstream=0.0):
+        system = FakeSoundSystem(latency, period, downstream)
         monkeypatch.setattr(beeps, "sd", system)
-        monkeypatch.setattr(beeps, "STUCK_S", 0.2)
+        monkeypatch.setattr(beeps, "STUCK_S", 0.5)
         for name, value in (("_devices", {}), ("_latency", 0.0), ("_latency_logged", False),
                             ("_underflow_logged", False), ("_failure_logged", False)):
             monkeypatch.setattr(beeps, name, value)
@@ -127,12 +142,16 @@ def heard_in_full(found, freq, duration):
 
 # Latency and period of real outputs: PipeWire's usual one, the slow one in
 # #21, and periods of 4096 and 8192 frames, longer than any fixed margin.
-OUTPUTS = [(0.035, 383), (0.174, 512), (0.279, 4096), (0.557, 8192)]
+# Then a sound server holding 0.1 s more than the stream, which it throws
+# away on a close, and says it holds.
+OUTPUTS = [(0.035, 383, 0), (0.174, 512, 0), (0.279, 4096, 0), (0.557, 8192, 0),
+           (0.035, 383, 0.1), (0.174, 512, 0.1)]
 
 
-@pytest.mark.parametrize("latency,period", OUTPUTS)
-def test_a_double_tap_plays_both_beeps_in_full_however_slow_the_output(sound, latency, period):
-    system = sound(latency, period)
+@pytest.mark.parametrize("latency,period,downstream", OUTPUTS)
+def test_a_double_tap_plays_both_beeps_in_full_however_slow_the_output(
+        sound, latency, period, downstream):
+    system = sound(latency, period, downstream)
     beeps.beep(True, *beeps.START_BEEP)
     beeps.beep(True, *beeps.HANDS_FREE_BEEP)
     assert beeps.wait_until_played(5)
@@ -286,3 +305,22 @@ def test_a_recording_is_played_back_to_the_end_at_the_output_rate(sound, monkeyp
     heard = system.speakers()
     assert failures == []
     assert np.count_nonzero(heard) == pytest.approx(48000, abs=48)
+
+
+@pytest.mark.parametrize("downstream", [0, 0.1])
+def test_a_beep_held_up_behind_another_sound_knows_when_it_was_heard(sound, downstream):
+    """The start beep can wait behind a sound still playing (issue #21), and
+    is then heard later than one latency after it was asked for. How much
+    of a recording it may be in is reckoned from when it really was."""
+    system = sound(0.174, 512, downstream)
+    beeps.play(np.full(int(0.4 * RATE), 0.1, np.float32), RATE)
+    start = beeps.beep(True, *beeps.START_BEEP)
+    assert beeps.wait_until_played(5)
+    last = max(i for i, period in enumerate(system.heard) if period.any())
+    heard_until = system.heard_at[last] + np.flatnonzero(system.heard[last])[-1] / RATE
+    if system.reports_time:
+        assert start.heard_until == pytest.approx(heard_until, abs=0.03)
+    else:
+        # One latency from when it was handed over: never early, and late
+        # by at most the latency when it all went into an empty buffer.
+        assert heard_until - 0.03 <= start.heard_until <= heard_until + 0.174 + 0.03
