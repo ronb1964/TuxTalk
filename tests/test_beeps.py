@@ -400,6 +400,45 @@ def test_a_sound_asked_for_as_the_sound_thread_ends_still_plays(sound, monkeypat
     assert heard_in_full(tones(system.speakers())[0], *beeps.START_BEEP)
 
 
+def test_a_sound_called_off_before_it_starts_never_opens_a_stream(sound):
+    system = sound()
+    called_off, told = threading.Event(), []
+    called_off.set()
+    beeps.play(np.full(RATE, 0.1, np.float32), RATE, finished=told.append, called_off=called_off)
+    assert beeps.wait_until_played(5)
+    assert told == [None] and system.closes == 0 and system.speakers().size == 0
+
+
+def test_a_sound_called_off_while_its_stream_opens_never_starts(sound, monkeypatch):
+    """A sound server can take seconds to open a stream; the replay may be
+    given up on meanwhile."""
+    system = sound()
+    called_off = threading.Event()
+    open_stream = system.OutputStream
+
+    def slow_open(callback, **settings):
+        called_off.set()
+        return open_stream(callback, **settings)
+    monkeypatch.setattr(system, "OutputStream", slow_open)
+    beeps.play(np.full(RATE, 0.1, np.float32), RATE, called_off=called_off)
+    assert beeps.wait_until_played(5)
+    assert system.closes == 1 and system.speakers().size == 0
+
+
+def test_a_sound_called_off_as_it_plays_stops_at_once(sound):
+    system = sound()
+    called_off = threading.Event()
+    beeps.play(np.full(2 * RATE, 0.1, np.float32), RATE, called_off=called_off)
+    deadline = time.monotonic() + 5
+    while not system.heard and time.monotonic() < deadline:
+        time.sleep(0.01)
+    called_off.set()
+    asked = time.monotonic()
+    assert beeps.wait_until_played(5)
+    assert time.monotonic() - asked < 0.5
+    assert 0 < np.count_nonzero(system.speakers()) < RATE
+
+
 def test_each_kind_of_sound_failure_is_logged_once(sound, caplog):
     """A sound output that is missing fails every beep and says so once; a
     different failure later still shows in the log."""

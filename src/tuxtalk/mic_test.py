@@ -6,6 +6,8 @@ sound thread, so it is heard to the end (sounddevice.play() lost about one
 output latency at the end of what it played, issue #21) and the window
 stays free while it plays.
 """
+import threading
+
 import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk  # noqa: E402
@@ -172,6 +174,7 @@ class MicTest:
 
     def start(self, _button=None):
         """Start recording the chosen microphone."""
+        self._call_off_replay()
         try:
             import sounddevice as sd
             device_idx = self._device()
@@ -218,7 +221,9 @@ class MicTest:
             self._show_error("Stop recording failed!", str(e))
 
     def close(self):
-        """The window closes: stop a recording and free the microphone."""
+        """The window closes: stop a recording or a replay, and free the
+        microphone."""
+        self._call_off_replay()
         if self.recording:
             self.recording = False
             if self._stream is not None:
@@ -263,26 +268,41 @@ class MicTest:
         a second click would queue the recording again behind it, and a new
         recording would record the replay. A sound server that hangs as the
         stream opens never says it is over, so they come back by themselves
-        once it would long have played."""
+        once the player itself would have given up on it."""
         if self.recorded_audio is None:
             return
         louder = np.clip(self.recorded_audio[:, 0] * 3.0, -1.0, 1.0).astype(np.float32)
         self.replay_btn.set_sensitive(False)
         self.start_btn.set_sensitive(False)
-        self._replaying = replay = object()
-        beeps.play(louder, self._rate, finished=lambda error: GLib.idle_add(
+        self._replaying = replay = threading.Event()
+        beeps.play(louder, self._rate, called_off=replay, finished=lambda error: GLib.idle_add(
             self._replay_over, replay, error))
-        limit = len(louder) / self._rate + beeps.WAIT_LIMIT_S + beeps.STUCK_S
-        GLib.timeout_add(int(limit * 1000), self._replay_over, replay,
+        GLib.timeout_add(int(self.replay_limit(len(louder)) * 1000), self._replay_over, replay,
                          "the sound output isn't answering")
+
+    def replay_limit(self, samples):
+        """Seconds a replay of *samples* may take: its length, the longest a
+        beep is waited for standing in for the output's latency, the time
+        the player lets a stuck output have, and the most it then waits for
+        the sound to be heard."""
+        return samples / self._rate + beeps.WAIT_LIMIT_S + beeps.STUCK_S + beeps.MAX_AHEAD_S
 
     def _replay_over(self, replay, error):
         """Once for each *replay*: played, failed or given up on, whichever is first."""
         if replay is not self._replaying:
             return False
-        self._replaying = None
+        self._call_off_replay()
         self.replay_btn.set_sensitive(True)
         self.start_btn.set_sensitive(True)
         if error:
             self._show_error("Playback failed!", error)
         return False
+
+    def _call_off_replay(self):
+        """A replay that hasn't started never plays, and one playing stops:
+        it was given up on, a new recording starts, or the window closes.
+        Given up on, it would otherwise play the user's voice later, maybe
+        into the next recording."""
+        if self._replaying is not None:
+            self._replaying.set()
+            self._replaying = None

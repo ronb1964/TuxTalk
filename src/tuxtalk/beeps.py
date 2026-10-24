@@ -75,6 +75,7 @@ _latency_logged = False
 _underflow_logged = False
 _failures_logged = set()  # each kind of audio failure is logged once
 
+_NEVER = threading.Event()          # what a sound nobody can call off waits on
 _queue = threading.Condition()      # guards everything below
 _waiting = collections.deque()      # (job, what, over, finished callback), oldest first
 _unfinished = set()      # the Event of each sound asked for, set once it is over
@@ -139,12 +140,14 @@ def beep(enabled: bool, freq, duration):
     return over
 
 
-def play(samples, rate, finished=None):
+def play(samples, rate, finished=None, called_off=None):
     """Play mono float32 *samples* recorded at *rate*, after any sound
     before it. Returns at once. *finished* is called once the sound is over,
     with None, or the text of what stopped it: on the sound thread, or, when
     a later sound pushes it out of the queue, on the thread asking for that
-    one."""
+    one. Setting *called_off*, an Event, calls the sound off: one that
+    hasn't started never plays, and one playing stops at once."""
+    called_off = _NEVER if called_off is None else called_off
 
     def job():
         device, device_rate = output_device(rate)
@@ -152,7 +155,7 @@ def play(samples, rate, finished=None):
         if device_rate != rate:
             positions = np.linspace(0, len(samples) - 1, int(len(samples) * device_rate / rate))
             resampled = np.interp(positions, np.arange(len(samples)), samples).astype(np.float32)
-        _play(resampled, device_rate, device)
+        _play(resampled, device_rate, device, called_off)
     _submit(job, "a sound", threading.Event(), finished)
 
 
@@ -249,8 +252,9 @@ class _Playback:
     """One sound fed to a stream's callback, then silence until the stream's
     buffer can no longer hold any of the sound."""
 
-    def __init__(self, samples, rate):
+    def __init__(self, samples, rate, called_off):
         self.samples, self.rate = samples, rate
+        self.called_off = called_off
         self.fed = 0
         self.silence = 0            # frames of silence fed after the sound
         self.period = 0             # the most frames one callback asked for
@@ -267,6 +271,10 @@ class _Playback:
         if status.output_underflow:
             self.underflows += 1
         self.period = max(self.period, frames)
+        if self.called_off.is_set():
+            outdata[:] = 0
+            self.out_of_buffer.set()        # closing the stream now throws the rest away
+            return
         chunk = self.samples[self.fed:self.fed + frames]
         outdata[:len(chunk), 0] = chunk
         outdata[len(chunk):] = 0
@@ -292,14 +300,19 @@ class _Playback:
             self.heard_until = now + ahead + count / self.rate
 
 
-def _play(samples, rate, device):
-    """Play *samples* to the end on a stream of their own, then close it.
-    Raises on an audio error, or when the output stops taking samples."""
+def _play(samples, rate, device, called_off=_NEVER):
+    """Play *samples* to the end on a stream of their own, then close it,
+    unless *called_off* is set first. Raises on an audio error, or when the
+    output stops taking samples."""
     global _latency_logged, _underflow_logged
-    playback = _Playback(samples, rate)
+    if called_off.is_set():
+        return
+    playback = _Playback(samples, rate, called_off)
     stream = sd.OutputStream(samplerate=rate, channels=1, dtype="float32", device=device,
                              callback=playback.callback)
     try:
+        if called_off.is_set():             # while the stream opened, which can take long
+            return
         playback.latency = stream.latency
         if not _latency_logged:
             _latency_logged = True
@@ -308,7 +321,7 @@ def _play(samples, rate, device):
         if not playback.out_of_buffer.wait(len(samples) / rate + stream.latency + STUCK_S):
             raise TimeoutError("the sound output stopped taking samples")
         if playback.reported:
-            time.sleep(min(max(0.0, playback.heard_until - time.monotonic()), MAX_AHEAD_S))
+            called_off.wait(min(max(0.0, playback.heard_until - time.monotonic()), MAX_AHEAD_S))
         if playback.underflows and not _underflow_logged:
             _underflow_logged = True    # a gap in a sound, logged once a session
             logger.info(f"The sound output ran dry {playback.underflows} time(s) during a sound")

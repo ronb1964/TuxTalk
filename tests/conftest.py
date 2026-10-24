@@ -311,7 +311,7 @@ def _no_sound_on_the_speakers():
 _no_sound_on_the_speakers()
 
 
-def _play_to_nobody(samples, rate, device):
+def _play_to_nobody(samples, rate, device, called_off=None):
     """Stands in for beeps._play: the sound plays at once, and silently."""
 
 
