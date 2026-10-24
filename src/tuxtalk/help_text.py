@@ -1,10 +1,11 @@
-"""What Help says, tab by tab; help_dialog.py shows it.
+"""What Help says, section by section; help_dialog.py shows it.
 
 Help is sorted by what you're doing (chatting, writing, in a terminal,
 hands-free, fixing mistakes, something wrong), not by feature, so it can be
-opened with a situation in mind. Labs features are explained where they're
-used, marked as Labs. Each tab starts with what to do, then what's
-optional, then what to try if it doesn't work. Keys are named as the
+opened with a situation in mind; Tips gathers the practical advice. Labs
+features are explained where they're used, marked as Labs. Each section
+starts with what to do, then what's optional, then what to try if it
+doesn't work. Keys are named as the
 settings have them ({hold}, {toggle}), never a fixed F8.
 
 The text is format-aware: TuxTalk ships as a Flatpak, an AppImage, and
@@ -84,14 +85,14 @@ def _no_hotkey_tips(is_flatpak, keys_where):
 
 
 def tabs():
-    """[(title, Pango markup)] for each of Help's tabs, in order."""
+    """[(title, Pango markup)] for each of Help's sections, in order."""
     values = _values()
     return [(title, text.format(**values) if formatted else text)
             for title, text, formatted in _TABS]
 
 
 def _values():
-    """What the tabs' {placeholders} say on this computer."""
+    """What the sections' {placeholders} say on this computer."""
     f = install_facts()
     is_flatpak = f["is_flatpak"]
     hold, toggle, paste_key = (GLib.markup_escape_text(k) for k in _keys(is_flatpak))
@@ -152,8 +153,18 @@ def _values():
 
     paste_tip = (f"Press <b>{paste_key}</b> in the right window and your last dictation is "
                  "typed again. " if paste_key else "")
+    paste_line = (f"<b>{paste_key}</b> types your last dictation again, and\n    "
+                  if paste_key else "")
+    if is_flatpak:
+        key_choice_tip = f"Pick a dictation key that's easy to reach in {keys_where}."
+    else:
+        key_choice_tip = (
+            "Pick <b>Right Alt</b>, <b>Right Ctrl</b> or <b>Scroll Lock</b> as your key in "
+            "<b>Preferences →\n    General</b>: they never need Fn on a laptop. Where Right Alt "
+            "is AltGr, the list\n    says which characters you'd lose, like @ or €.")
 
     return {"hold": hold, "toggle": toggle, "paste_tip": paste_tip,
+            "paste_line": paste_line, "key_choice_tip": key_choice_tip,
             "shortcut_line": shortcut_line, "typing_para": typing_para,
             "no_hotkey_block": no_hotkey_block, "kde_notice": kde_notice,
             "update_block": update_block, "log_path": f["log_path"],
@@ -173,7 +184,7 @@ Say punctuation as you go: <b>period</b>, <b>comma</b>, <b>question mark</b>,
 
 <b>Without holding a key</b>
 Tap <b>{toggle}</b> to start, talk as long as you like, and tap it again to stop.
-The Hands-free tab has a way to make it stop by itself when you stop talking.
+The Hands-free section has a way to make it stop by itself when you stop talking.
 
 <b>How you know it's listening</b>
 • A beep when it starts and when it stops.
@@ -206,8 +217,9 @@ that window is on the screen, instead of always in the same spot.
     so it's skipped.
   • When TuxTalk can't tell where the window is, the indicator uses its usual
     position from <b>Preferences → Audio → Customize…</b>.
-  • Works on KDE, on GNOME with the TuxTalk extension, on Sway and Hyprland, and on
-    X11 desktops like Cinnamon and XFCE. On a scaled screen it may sit a little off.'''
+  • Works on KDE, on GNOME with the TuxTalk extension, on Sway and Hyprland,
+    and on X11 desktops like Cinnamon and XFCE. On a scaled screen it may sit
+    a little off.'''
 
 CHATTING = '''<span size="large"><b>Chats and Messages</b></span>
 
@@ -238,7 +250,7 @@ A message that was already sent can't be changed, so with the automatic send:
   1. Tap <b>{hold}</b> during the countdown, so it isn't sent.
   2. Hold <b>{hold}</b>, say <b>edit that, make it friendlier</b>, let go.
   3. Press Enter when it reads right.
-The Writing tab has more.
+The Writing section has more.
 
 <b>On a call</b>
 <b>Preferences → Audio → Other sound while you dictate → Turn everything down</b>
@@ -292,7 +304,8 @@ One box at a time, each box a dictation of its own:
     <b>{hold}</b>, say only "press tab", let go: the cursor moves to the next box.
 
 <b>Optional: cleaner text</b> (Preferences → Advanced)
-  • <b>Remove "um", "uh" and accidentally repeated words.</b> Instant, nothing to download.
+  • <b>Remove "um", "uh" and accidentally repeated words.</b> Instant, nothing
+    to download.
   • <b>Fix self-corrections with AI.</b> "meet at 3, no wait, 4" types "meet at 4".
     The AI runs on your computer (a one-time 1.1 GB download) and only sees
     sentences with a correction phrase. If its answer changes anything besides the
@@ -303,7 +316,7 @@ One box at a time, each box a dictation of its own:
 Labs features are experimental: they work, but they're still being refined, may
 change, and won't always get it right. Turn them on in <b>Preferences → Advanced →
 TuxTalk Labs</b>. Voice editing and select and move are below; Type at pause is on
-the Hands-free tab, and the indicator that follows your window on Start Here. Your
+in the Hands-free section, and the indicator that follows your window in Start Here. Your
 feedback decides what gets finished: <a href="{FEEDBACK_URL}">TuxTalk Discussions</a>.
 
 <span size="large">🧪 <b>Voice Editing</b></span>
@@ -352,7 +365,8 @@ other changes: do those as an edit of their own.
 
 <b>Bold, italics and underline</b>
 Say <b>make this bold</b>, <b>italicize this</b> or <b>underline this</b> in LibreOffice and
-other word processors, and TuxTalk presses the app's own Ctrl+B, Ctrl+I or Ctrl+U for you.
+other word processors, and TuxTalk presses the app's own Ctrl+B, Ctrl+I or
+Ctrl+U for you.
 Plain-text apps like KWrite and Kate have no formatting to apply. Font, size and color
 can't be changed by voice.
 
@@ -369,7 +383,8 @@ can't be changed by voice.
 
 <b>Good to know</b>
   • Your clipboard is put back afterwards, the way you left it.
-  • The rewrite is also saved in <b>Recent Dictations</b>, and Paste Last Dictation types it again.
+  • The rewrite is also saved in <b>Recent Dictations</b>, and Paste Last
+    Dictation types it again.
   • It doesn't work in a terminal: there's no selection there to replace.
   • It uses the same small AI as <b>Fix self-corrections with AI</b>: one download of
     about 1.1 GB, shared. Everything runs on this computer; nothing is sent online.
@@ -398,7 +413,8 @@ Counts go up to 10 ("three" or "3").
   • <b>select to the end of the line</b>  •  <b>select to the start of the line</b>
   • <b>select to the end</b>  •  <b>select to the top</b>
 <b>Moving</b>
-  • <b>go to the end</b>  •  <b>go to the top</b>  •  <b>go to the end of the line</b>  •  <b>go to the start of the line</b>
+  • <b>go to the end</b>  •  <b>go to the top</b>  •  <b>go to the end of the line</b>
+  • <b>go to the start of the line</b>
   • <b>go back 3 words</b>  •  <b>go forward a word</b>  •  <b>next word</b>  •  <b>previous word</b>
   • <b>go back 5 letters</b>  •  <b>go up 2 lines</b>  •  <b>go down a line</b>
   • <b>unselect</b>
@@ -516,8 +532,8 @@ user@example.com. Add your own in <b>Preferences → Words → Add Snippet</b>, 
   • Check the microphone: <b>Preferences → Audio</b>, Start Recording, and talk. The
     level should move well past the middle. Input Volume there is the same as your
     desktop's microphone volume.
-  • The test also says when the room is noisy for your voice (a fan, a dryer). A
-    headset, or the microphone closer to your mouth, helps more than anything.
+  • The test also says when the room is noisy for your voice. The Tips section says
+    what helps.
   • Use the setup TuxTalk recommends: <b>Use Recommended</b> in Preferences → General,
     or TuxTalk menu → Performance → Recommended for this computer.
   • Speak more than one language and it picks the wrong one? Preferences → General
@@ -595,15 +611,17 @@ Your Words and stats in one file, to keep or to load on another computer with
 Everything runs on your computer; nothing you say is sent anywhere. Your Stats keeps
 only numbers (words, dictations, time), never the text. Recent Dictations keeps
 your last 20 in memory, gone when you log out. The log has your words only if you
-turn on "Log transcribed text" (Preferences → Advanced → Fine-tuning), for a bug report;
-then it has what you said in a password box too, though nothing was typed there.
+turn on "Log transcribed text" (Preferences → Advanced → Fine-tuning), for a bug
+report; then it has what you said in a password box too, though nothing was
+typed there.
 
 <b>Password fields</b>
 TuxTalk doesn't type into a password box. Hold <b>{hold}</b> and talk there, let go: you
 hear the low beep, "TuxTalk doesn't type into password fields" shows over the window,
 and nothing is typed or kept in Recent Dictations. Type passwords on the keyboard.
 Saying only <b>press enter</b> or <b>press tab</b> there still works, to log in or move on.
-  • It usually knows a password box in GTK apps (most GNOME, Cinnamon and Xfce apps).
+  • It usually knows a password box in GTK apps (most GNOME, Cinnamon and
+    Xfce apps).
   • In KDE apps and Firefox only while accessibility is on (a screen reader turns it on).
   • In Chrome, Brave and apps built on them (Discord, Slack, VS Code) only if
     accessibility was already on when they started.
@@ -656,13 +674,15 @@ is in the TuxTalk menu → Voice Commands....
 • Say <b>new paragraph</b> or <b>paragraph break</b> for a double line break
 • Say <b>press tab</b> for a tab; <b>tab</b> alone is the word. At the end of a dictation it
   presses the Tab key (so does <b>press the tab key</b>): in a form you go to the next box.
-  In Claude Desktop it types four spaces. Filling in a form, on the Writing tab, has the steps
+  In Claude Desktop it types four spaces. Filling in a form, in the Writing section,
+  has the steps
 • Say <b>soft break</b> or <b>soft line</b> for three spaces
 • End with <b>press enter</b> or <b>hit enter</b> to type the dictation and press Enter: it
   sends a chat message or runs a command. <b>literal press enter</b> types the words.
 
 <b>Literal Words:</b>
-To output the word instead of executing the command, say <b>literal</b> or <b>the word</b> before it:
+To output the word instead of executing the command, say <b>literal</b> or
+<b>the word</b> before it:
 
 • <b>literal period</b> or <b>the word period</b> → "period" (not .)
 • <b>literal comma</b> or <b>the word comma</b> → "comma" (not ,)
@@ -696,7 +716,7 @@ Second sentence!
 <b>Fixing a Word:</b>
 • Say <b>fix that word</b> right after a dictation to open Fix a Word on it
 
-<b>Editing by Voice</b> (🧪 Labs, see the Writing tab):
+<b>Editing by Voice</b> (🧪 Labs, see the Writing section):
 • Select text, hold Shift with your dictation key, and say the change:
   <b>make this more formal</b>, <b>fix the grammar</b>, <b>make this all caps</b>
 • Right after dictating: <b>edit that, make it shorter</b>
@@ -707,6 +727,32 @@ Second sentence!
   to correct yourself: "meet at 3, no wait, 4" → "meet at 4"
 • Needs <b>Fix self-corrections with AI</b> in Preferences → Advanced'''
 
+TIPS = '''<span size="large"><b>Tips</b></span>
+
+<b>Getting good results</b>
+  • Have the microphone close to your mouth, or use a headset. Nothing helps more:
+    going from a noisy spot to a moderate one about halves the mistakes.
+  • In a noisy room (a fan, a dryer, a busy street), move closer to the microphone.
+  • Turn off noise filters on the microphone for dictation (EasyEffects, NoiseTorch,
+    RNNoise plugins). They make dictation worse, not better.
+  • Speak at a normal pace, the way you'd talk to someone. No need to slow down.
+  • To check your room: <b>Preferences → Audio</b>, Start Recording, talk, Stop. The
+    test says when the room is noisy for your voice.
+
+<b>Names and unusual words</b>
+  • Add them in <b>Preferences → Words → Add Word</b>, and they're spelled your way.
+  • One came out wrong? Right after, hold <b>{hold}</b>, say only <b>fix that word</b>, let go.
+
+<b>Easier on the hands</b>
+  • {key_choice_tip}
+  • Double-tap <b>{toggle}</b> for hands-free: talk without holding a key, and it stops
+    when you do. Turn it on in <b>Preferences → General</b>.
+
+<b>Everyday shortcuts</b>
+  • End with <b>press enter</b> to send: "see you at noon, press enter".
+  • End with <b>press tab</b> to fill in a form box by box (Writing → Filling in a form).
+  • {paste_line}<b>Recent Dictations</b> in the TuxTalk menu keeps your last 20.'''
+
 _TABS = [
     ("🚀 Start Here", START_HERE, True),
     ("💬 Chatting", CHATTING, True),
@@ -714,6 +760,7 @@ _TABS = [
     ("💻 Terminals", TERMINALS, True),
     ("🙌 Hands-free", HANDS_FREE, True),
     ("🩹 Mistakes", MISTAKES, True),
+    ("💡 Tips", TIPS, True),
     ("🛠️ Problems", PROBLEMS, True),
     ("🗣️ Commands", COMMANDS, False),
 ]

@@ -70,3 +70,38 @@ def test_readme_config_example_uses_real_setting_names():
         if key and not key.startswith("#"):
             assert hasattr(Settings, key), key
     assert 'model = "parakeet-v3"' in block
+
+
+def _tips(monkeypatch, flatpak=False, **settings):
+    """The Tips section's text, as Help shows it with *settings*."""
+    from tuxtalk import config, help_text
+    monkeypatch.setattr(config, "load_config", lambda: config.Settings(**settings))
+    if flatpak:
+        monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TuxTalk")
+    else:
+        monkeypatch.delenv("FLATPAK_ID", raising=False)
+    return next(text for title, text in help_text.tabs() if "Tips" in title)
+
+
+def test_tips_name_your_own_keys(monkeypatch):
+    """Help names keys from the settings: someone on F6 is never told F8."""
+    tips = _tips(monkeypatch, hotkey="F6", toggle_hotkey="F7", paste_last_hotkey="Ctrl+Alt+V")
+    assert "fix that word" in tips and "<b>F6</b>" in tips
+    assert "Double-tap <b>F7</b>" in tips and "<b>Ctrl+Alt+V</b> types your last" in tips
+    assert "F8" not in tips and "F9" not in tips and "Ctrl+Alt+P" not in tips
+
+
+def test_tips_say_what_helps_in_a_noisy_room(monkeypatch):
+    tips = _tips(monkeypatch)
+    for advice in ("headset", "noise filters", "EasyEffects", "Preferences → Audio",
+                   "Preferences → Words", "Right Alt", "AltGr", "press enter", "press tab",
+                   "Filling in a form", "Recent Dictations"):
+        assert advice in tips, advice
+
+
+def test_tips_leave_out_what_a_setting_turned_off_or_the_flatpak_lacks(monkeypatch):
+    """No Paste Last Dictation key: no line for it. On the Flatpak the
+    desktop assigns the keys, so Preferences → General doesn't pick them."""
+    assert "types your last" not in _tips(monkeypatch, paste_last_hotkey="")
+    tips = _tips(monkeypatch, flatpak=True)
+    assert "Right Alt" not in tips and "System Settings → Keyboard → Shortcuts" in tips

@@ -634,11 +634,11 @@ def help_pages(monkeypatch):
     monkeypatch.setattr(config, "load_config", config.Settings)
     dialog = help_dialog.show_help_dialog()
     try:
-        notebook = find(dialog, Gtk.Notebook)
+        stack = find(dialog, Gtk.Stack)
         pages = {}
-        for number, page in enumerate(notebook.get_children()):
-            notebook.set_current_page(number)
-            pages[notebook.get_tab_label_text(page)] = "\n".join(shown_text(page))
+        for page in stack.get_children():
+            stack.set_visible_child(page)
+            pages[stack.child_get_property(page, "title")] = "\n".join(shown_text(page))
         return pages
     finally:
         dialog.destroy()

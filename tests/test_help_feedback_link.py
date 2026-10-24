@@ -33,10 +33,10 @@ def test_help_has_a_feedback_link_to_discussions(dialog):
     assert help_dialog.FEEDBACK_URL == "https://github.com/ronb1964/TuxTalk/discussions"
 
 
-def test_the_link_is_outside_the_tabs_so_every_tab_shows_it(dialog):
+def test_the_link_is_outside_the_sections_so_every_section_shows_it(dialog):
     link = next(w for w in widgets(dialog) if isinstance(w, Gtk.LinkButton))
-    notebook = next(w for w in widgets(dialog) if isinstance(w, Gtk.Notebook))
-    assert link not in list(widgets(notebook))
+    stack = next(w for w in widgets(dialog) if isinstance(w, Gtk.Stack))
+    assert link not in list(widgets(stack))
 
 
 def test_clicking_the_link_does_not_close_help(dialog):
@@ -77,25 +77,67 @@ def test_help_lists_every_tray_preset(dialog):
         assert f"{preset.label}:" in text, f"Help doesn't mention the {preset.label} preset"
 
 
-@pytest.mark.parametrize("screen, arrows", [(4000, False), (300, True)])
-def test_every_tab_shows_without_scroll_arrows_when_the_screen_allows(monkeypatch, screen,
-                                                                     arrows):
-    """On Mint's wider font the eight tabs needed more than 760 px and GTK
-    hid some behind scroll arrows (VM, 2026-10-22). Help is as wide as its
-    tabs need; only a screen too narrow for that keeps the arrows."""
+def _sections(dialog):
+    """(the section list's rows, the stack of pages)."""
+    stack = next(w for w in widgets(dialog) if isinstance(w, Gtk.Stack))
+    rows = [w for w in widgets(dialog) if isinstance(w, Gtk.ListBoxRow)]
+    return rows, stack
+
+
+def test_every_section_is_listed_in_order_and_opens_from_the_list(dialog):
+    """Sections are a list down the left, not tabs: each one is in it, in
+    Help's order with Start Here first and open, and choosing it (with the
+    mouse or up and down) shows its page."""
+    from tuxtalk import help_text
+    rows, stack = _sections(dialog)
+    titles = [title for title, _ in help_text.tabs()]
+    assert [next(w.get_text() for w in widgets(row) if isinstance(w, Gtk.Label))
+            for row in rows] == titles
+    assert titles[0] == "🚀 Start Here"
+    assert stack.child_get_property(stack.get_visible_child(), "title") == titles[0]
+    for row, title in zip(rows, titles):
+        row.get_parent().select_row(row)
+        assert stack.child_get_property(stack.get_visible_child(), "title") == title
+
+
+def test_a_page_takes_the_focus_for_the_keyboard_and_a_screen_reader(dialog):
+    """Tab from the list goes into the page, so Page Up and Down scroll it;
+    focusing it doesn't leave the whole text selected."""
+    rows, stack = _sections(dialog)
+    assert all(row.get_can_focus() for row in rows)
+    label = next(w for w in widgets(stack.get_visible_child()) if isinstance(w, Gtk.Label))
+    assert label.get_can_focus() and label.get_selectable()
+    label.grab_focus()
+    assert not label.get_selection_bounds()[0]
+    sidebar = next(w for w in widgets(dialog) if isinstance(w, Gtk.StackSidebar))
+    assert sidebar.get_accessible().get_name() == "Help sections"
+
+
+def test_help_opens_on_the_section_asked_for():
     if not Gtk.init_check()[0]:
         pytest.skip("no display")
-    from tuxtalk import ui_style
-    monkeypatch.setattr(ui_style, "workarea_width", lambda: screen)
-    shown = []
-    monkeypatch.setattr(Gtk.Dialog, "show_all", lambda self: shown.append(self))
-    monkeypatch.setattr(Gtk.Dialog, "present", lambda self: None)
-    help_dialog.show_help_dialog()
-    dialog = shown[0]
+    opened = help_dialog.show_help_dialog(tab="tips")
     try:
-        notebook = next(w for w in widgets(dialog) if isinstance(w, Gtk.Notebook))
-        assert notebook.get_scrollable() is arrows
-        if not arrows:
-            assert dialog.get_default_size()[0] >= dialog.get_preferred_width()[0]
+        stack = next(w for w in widgets(opened) if isinstance(w, Gtk.Stack))
+        assert stack.child_get_property(stack.get_visible_child(), "title") == "💡 Tips"
     finally:
-        dialog.destroy()
+        opened.destroy()
+
+
+def test_help_is_no_wider_with_another_section(monkeypatch):
+    """A row of tabs made Help wider with every one added (Mint's font
+    needed more than 760 px for eight). The list down the side doesn't."""
+    if not Gtk.init_check()[0]:
+        pytest.skip("no display")
+    from tuxtalk import help_text, ui_style
+    monkeypatch.setattr(Gtk.Dialog, "present", lambda self: None)
+    # A screen wide enough for any row of tabs, which only a tab row reads.
+    monkeypatch.setattr(ui_style, "workarea_width", lambda: 4000, raising=False)
+    widths = []
+    for extra in (0, 4):
+        sections = help_text.tabs() + [(f"Section {n}", "More.") for n in range(extra)]
+        monkeypatch.setattr(help_text, "tabs", lambda sections=sections: sections)
+        opened = help_dialog.show_help_dialog()
+        widths.append(opened.get_default_size()[0])
+        opened.destroy()
+    assert widths[0] == widths[1] and widths[0] <= 900

@@ -126,7 +126,7 @@
   "gnome_keybindings.py::_set::swallowed_error": 1,
   "gnome_keybindings.py::disable_for_hotkey_test::swallowed_error": 1,
   "gnome_keybindings.py::restore::swallowed_error": 1,
-  "help_text.py::<module>::long_line": 10,
+  "help_text.py::<module>::long_line": 8,
   "hotkey_helper.py::Helper.__init__::long_line": 1,
   "hotkey_helper.py::Helper.__init__::undocumented": 1,
   "hotkey_helper.py::Helper.admit::undocumented": 1,

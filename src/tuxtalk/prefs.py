@@ -2477,7 +2477,7 @@ class PreferencesWindow:
             labs_links = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
             labs_links.set_margin_top(12)
             labs_help = Gtk.Button(label="How these work")
-            labs_help.set_tooltip_text("Open Help on the Writing tab, where Labs starts")
+            labs_help.set_tooltip_text("Open Help at Writing, where Labs starts")
             labs_help.connect("clicked", lambda _b: show_help_dialog(tab="writing"))
             labs_links.pack_start(labs_help, False, False, 0)
             labs_feedback = Gtk.LinkButton.new_with_label(FEEDBACK_URL, "Send feedback")

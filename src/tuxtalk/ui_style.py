@@ -231,21 +231,6 @@ def workarea_height(near=None):
         return None
 
 
-def workarea_width():
-    """The usable width, in logical pixels, of the narrowest monitor (a
-    portrait screen beside a landscape one isn't the shortest); None when
-    unknown."""
-    try:
-        display = Gdk.Display.get_default()
-        if display is None:
-            return None
-        monitors = [display.get_monitor(i) for i in range(display.get_n_monitors())]
-        return min((m.get_workarea().width for m in monitors if m is not None), default=None)
-    except Exception as e:
-        logger.warning(f"Couldn't read the screen's usable width: {e}")
-        return None
-
-
 def fit_dialog_to_screen(dialog, width, desired_height):
     """Open a dialog *width* wide and *desired_height* tall (below 0: as tall
     as its content), resizable. Onboarding dialogs are tall; on a short

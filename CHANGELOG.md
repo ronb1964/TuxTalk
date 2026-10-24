@@ -127,6 +127,17 @@ before 0.15.0, so older entries use that name.
   noisy for your voice, under the level grade: a headset, or the mic closer
   to your mouth, will help. It measures how far your voice stands above the
   room in the recording you just made.
+- Help lists its sections down the left side now, with the one you pick
+  beside it, instead of a row of tabs along the top. The tabs made the
+  window wider with every one added, and on Mint it already had to grow
+  past its usual size to fit them. Up and down arrows move through
+  the list, and Tab takes you into the text, where Page Up and Page Down
+  scroll it.
+- Help has a new Tips section with the practical stuff in one place:
+  getting good results (the mic close or a headset matters most, and noise
+  filters on the microphone make dictation worse), names and unusual words,
+  keys that are easier on the hands, and everyday shortcuts like "press
+  enter" and typing your last dictation again. It names your own keys.
 
 ## [0.18.2] - 2026-10-23
 
