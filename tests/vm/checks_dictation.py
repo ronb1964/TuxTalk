@@ -56,10 +56,12 @@ def speakers_recording(run):
         raise RuntimeError(f"pw-record made no recording ({errors or e})") from e
     finally:
         run.vm.ssh(f"rm -f ~/{SPEAKERS_WAV} ~/{SPEAKERS_ERR}", check=False)
-    with wave.open(str(local)) as w:
-        rate, channels = w.getframerate(), w.getnchannels()
-        samples = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16)
-    local.unlink()
+    try:
+        with wave.open(str(local)) as w:
+            rate, channels = w.getframerate(), w.getnchannels()
+            samples = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16)
+    finally:
+        local.unlink()
     return samples.reshape(-1, channels).mean(axis=1), rate
 
 
@@ -200,12 +202,17 @@ SLOW_ENOUGH_S = 0.15
 @check("Dictation", "handsfree_beeps",
        "Hands-free double-tap: both beeps are heard, on a slow sound output too")
 def handsfree_beeps(run):
-    moved = []
+    # A file of that name the VM already had is put aside under a name of
+    # this run's own, and back afterwards; only files this check wrote are
+    # removed.
+    aside = f".before-test-{int(time.time())}"
+    moved, written = [], []
     try:
         for path in SLOW_OUTPUT:
             if run.vm.ssh(f"test -e {path}", check=False).returncode == 0:
-                run.vm.ssh(f"mv {path} {path}.before-test")
+                run.vm.ssh(f"mv {path} {path}{aside}")
                 moved.append(path)
+            written.append(path)
             run.vm.ssh(f"mkdir -p $(dirname {path}) && cat > {path}", input=SLOW_OUTPUT_CONF)
         # set_config restarts the service, which then plays through the slow
         # output; the first beep logs its latency.
@@ -223,9 +230,10 @@ def handsfree_beeps(run):
         if run.wait_log(mark, "Auto-stop", timeout=25) is None:
             run.vm.tap("f9")           # stop it, so the next check starts clean
     finally:
-        run.vm.ssh("rm -f " + " ".join(SLOW_OUTPUT))
+        if written:
+            run.vm.ssh("rm -f " + " ".join(written), check=False)
         for path in moved:
-            run.vm.ssh(f"mv {path}.before-test {path}")
+            run.vm.ssh(f"mv {path}{aside} {path}", check=False)
         run.restart_service()
     return beeps_outcome(log, samples, rate)
 
