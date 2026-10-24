@@ -200,6 +200,42 @@ def test_lone_noise_spikes_do_not_hide_a_pause():
     assert len(fired) == 2
 
 
+def _thumps(seconds, level=300.0, thump=1500.0, every=0.45, long=0.045):
+    """A dryer's drum: steady noise with a *long*-second thump every *every* s."""
+    audio = rng.normal(0, level, int(seconds * SR))
+    for start in np.arange(0.2, seconds - long, every):
+        i = int(start * SR)
+        audio[i:i + int(long * SR)] = rng.normal(0, thump, int(long * SR))
+    return np.clip(audio, -32768, 32767).astype(np.int16)
+
+
+def test_a_dryers_thumps_do_not_hide_a_pause():
+    """Thumps of 45 ms every 0.45 s started every pause over: with a dryer
+    running, Type at pause typed nothing until the recording ended."""
+    talk = speech(2.0, level=4000.0, noise_level=300.0)
+    fired, _ = run_pauses(np.concatenate([_thumps(1.0), talk, _thumps(2.0), talk,
+                                          _thumps(2.0)]))
+    assert len(fired) == 2
+
+
+def test_a_syllable_in_a_pause_still_starts_it_over():
+    """A word as short as one syllable, 100 ms, said in a pause is speech."""
+    talk = speech(1.0, level=4000.0, noise_level=300.0)
+    syllable = speech(0.1, level=4000.0, noise_level=300.0)
+    fired, _ = run_pauses(np.concatenate([_thumps(1.0), talk, _thumps(0.6), syllable,
+                                          _thumps(0.6), talk, _thumps(0.3)]))
+    assert fired == []
+
+
+def test_bumps_in_a_pause_are_no_part_of_it():
+    """The count of a pause waits through a bump, so 0.74 s of quiet with
+    three thumps in it is still shorter than a 0.8 s pause."""
+    talk = speech(1.0, level=4000.0, noise_level=300.0)
+    gap = np.concatenate([noise(0.15, 300), _thumps(0.55, every=0.12), noise(0.1, 300)])
+    fired, _ = run_pauses(np.concatenate([noise(1.0, 300), talk, gap, talk, noise(0.3, 300)]))
+    assert fired == []
+
+
 def test_higher_sensitivity_db_hears_less_as_speech():
     """Quiet speech over cbox's hiss: +3 dB hears it, +12 dB takes it for room."""
     from tuxtalk.chunking import PauseDetector

@@ -48,9 +48,15 @@ ROOM_START_S = 1.0
 # Levels are measured over windows this long, whatever size of block the audio
 # callback delivers: on cbox it delivered ~6 ms blocks, too short to measure.
 WINDOW_S = 0.02
-# Loud for less than this is a click or a burst of hiss, not speech; it does not
-# start a pause over. A consonant lasts longer.
-MIN_BURST_S = 0.04
+# Loud for less than this is a click, a burst of hiss or a dryer's thump, not
+# speech: the pause counting waits through it instead of starting over. A
+# syllable lasts longer. Measured with recorded sentences in generated noise
+# (silence.SilenceDetector says how): at 0.04 s a dryer's thumps started every
+# pause over, so Type at pause typed nothing until the end; at 0.1 s phrases
+# were cut mid-sentence with the noise 10 dB under the voice, and at 0.07 s
+# no more often than at 0.04. With the noise 5 dB under the voice, quiet
+# words drown in it and phrases are cut mid-sentence either way.
+MIN_BURST_S = 0.07
 
 
 class PauseSnapshot(NamedTuple):
@@ -78,6 +84,8 @@ class PauseDetector:
 
     def __init__(self, pause_seconds: float, sample_rate: int,
                  speech_db: float = DEFAULT_SPEECH_DB):
+        """A detector for one recording at *sample_rate*: a pause of
+        *pause_seconds* ends a chunk, and speech is *speech_db* over the room."""
         self.pause_seconds = float(pause_seconds)
         self.sample_rate = int(sample_rate)
         self.speech_over_room = 10 ** (float(speech_db) / 20)
@@ -156,6 +164,8 @@ class PauseDetector:
         return fired
 
     def _window(self, level: float, duration: float) -> bool:
+        """Count one WINDOW_S window of *level*: True when it ends a pause
+        long enough to cut a chunk."""
         self.level = level
         self._learn_room(level, duration)
         self.loudest = max(self.loudest, level)
@@ -164,9 +174,8 @@ class PauseDetector:
             if self._burst >= MIN_BURST_S:
                 self.speech_time += duration
                 self.silence_time = 0.0
-                return False
-        else:
-            self._burst = 0.0
+            return False
+        self._burst = 0.0
         self.silence_time += duration
         if self.speech_time >= MIN_SPEECH_S:
             self.longest_quiet = max(self.longest_quiet, self.silence_time)

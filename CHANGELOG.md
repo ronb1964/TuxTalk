@@ -121,6 +121,8 @@ before 0.15.0, so older entries use that name.
 - In a really loud room, with the noise nearly as loud as your voice, quiet
   words get lost in it and hands-free can stop while you're still talking.
   It did before too, when it had learned the room.
+- Type at pause doesn't miss your pauses with a dryer running. Its thumps
+  started every pause over, so nothing was typed until you stopped.
 
 ## [0.18.2] - 2026-10-23
 

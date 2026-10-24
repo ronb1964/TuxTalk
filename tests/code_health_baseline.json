@@ -58,8 +58,6 @@
   "audio_duck.py::AudioDucker._settle_owed::long_line": 1,
   "audio_duck.py::_set_volume::long_line": 1,
   "audio_duck.py::reset_remembered::long_line": 1,
-  "chunking.py::PauseDetector.__init__::undocumented": 1,
-  "chunking.py::PauseDetector._window::undocumented": 1,
   "cleanup.py::<module>::long_line": 1,
   "cleanup.py::_remove_fillers.repl::undocumented": 1,
   "clipboard.py::ClipboardKeeper._restore::swallowed_error": 1,
