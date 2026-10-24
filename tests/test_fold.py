@@ -10,6 +10,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
 
 from tuxtalk.prefs import PreferencesWindow  # noqa: E402
+from tuxtalk.prefs_indicator import IndicatorSettings  # noqa: E402
 from tuxtalk.ui_style import Fold  # noqa: E402
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tuxtalk"
@@ -69,9 +70,9 @@ def test_more_shortcuts_shows_the_keys_beside_its_button():
 
 def test_fine_position_says_how_far_the_indicator_moved():
     w = _prefs({"indicator_offset_x": 0, "indicator_offset_y": 0})
-    PreferencesWindow._update_position_summary(w)
+    IndicatorSettings._update_position_summary(w)
     assert w.position_fold.summary.get_text() == "not moved"
     # Saved in screen pixels: a negative y is up.
     w.config.update(indicator_offset_x=20, indicator_offset_y=-10)
-    PreferencesWindow._update_position_summary(w)
+    IndicatorSettings._update_position_summary(w)
     assert w.position_fold.summary.get_text() == "20 px right, 10 px up"

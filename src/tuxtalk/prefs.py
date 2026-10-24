@@ -17,6 +17,7 @@ from .ui_style import Fold, message_dialog, show_message
 from .whisper_vulkan import ENGINE_SIZE_TEXT
 from .hotkey_labels import dropdown_entries, hands_free_label
 from .logger import setup_logger
+from .prefs_indicator import IndicatorSettings
 from .prefs_stats import StatsTab
 from .prefs_tab import WARNING_AMBER, _on_gnome
 from .prefs_updates import UpdatesTab
@@ -30,7 +31,7 @@ import dbus.mainloop.glib
 from dataclasses import asdict
 from .config import (CONFIG_PATH, Settings, apply_toml, changed_keys, merge_changed_keys,
                      repaired, write_text_atomic,
-                     _toml_value, CLASSIC_CYAN_HEX, HOTKEY_CHOICES)
+                     _toml_value, HOTKEY_CHOICES)
 
 # Set on the Preferences window so prefs_style.css — which must be installed
 # screen-wide to reach child widgets — matches only this window's widgets.
@@ -383,12 +384,6 @@ def device_label(device, model, cuda_ready):
 # What can need a download, and so is rolled back when it never finishes:
 # the model, and the device (the processor or Vulkan copy of a model).
 _DOWNLOAD_KEYS = ("model", "device")
-
-
-# How each indicator offset box shows its saved value. The vertical box shows
-# UP as positive, the way people expect, while indicator_offset_y keeps screen
-# coordinates (positive = down) so no saved setting or backup changes meaning.
-OFFSET_DISPLAY_SIGN = {"indicator_offset_x": 1, "indicator_offset_y": -1}
 
 
 class PreferencesWindow:
@@ -1454,276 +1449,17 @@ class PreferencesWindow:
         customize_btn = Gtk.Button(label="Customize\u2026")
         customize_btn.set_tooltip_text("Its style, size, color and where it appears")
         customize_btn.set_sensitive(indicator_check.get_active())
-        customize_btn.connect("clicked", lambda _b: self._show_indicator_window())
+        customize_btn.connect("clicked", lambda _b: self.indicator_settings.show())
         indicator_check.connect("toggled", lambda x: (
             self.update_config("recording_indicator", x.get_active()),
             customize_btn.set_sensitive(x.get_active())))
         indicator_row.pack_start(indicator_check, False, False, 0)
         indicator_row.pack_start(customize_btn, False, False, 0)
         grid.attach(indicator_row, 0, row, 2, 1)
-        row += 1
-
-        # Built now, shown by Customize…: its controls write self.config like
-        # every other, so Apply, OK and Cancel treat them the same.
-        ind = self.indicator_grid = Gtk.Grid()
-        ind.set_column_spacing(10)
-        ind.set_row_spacing(10)
-        for side in ("start", "end", "top", "bottom"):
-            getattr(ind, f"set_margin_{side}")(20)
-        row = 0
-
-        # Indicator size
-        size_label = Gtk.Label(label="Size 💡:", xalign=0)
-        size_label.set_tooltip_text("Choose the size of the recording indicator.\nMedium is the default size.")
-        ind.attach(size_label, 0, row, 1, 1)
-
-        size_combo = Gtk.ComboBoxText()
-        size_combo.connect("button-press-event", self._on_combo_button_press)
-        self._block_combo_scroll(size_combo)
-        size_combo.append("small", "Small (60%)")
-        size_combo.append("medium", "Medium (100%)")
-        size_combo.append("large", "Large (140%)")
-
-        current_size = self.config.get("indicator_size", "medium")
-        size_combo.set_active_id(current_size)
-        size_combo.connect("changed", lambda x: self.update_config("indicator_size", x.get_active_id()))
-        # The tooltip is on the label: on the combo it gets in the way of the popup
-        ind.attach(size_combo, 1, row, 1, 1)
-        row += 1
-
-        # Indicator style
-        style_label = Gtk.Label(label="Style 💡:", xalign=0)
-        style_label.set_tooltip_text("Choose how the recording indicator looks.\nOrb is the default.")
-        ind.attach(style_label, 0, row, 1, 1)
-        style_combo = Gtk.ComboBoxText()
-        style_combo.connect("button-press-event", self._on_combo_button_press)
-        self._block_combo_scroll(style_combo)
-        for sid, slabel in (("orb", "Orb"), ("waveform", "Waveform"),
-                            ("bars", "Frequency bars"), ("radial", "Radial")):
-            style_combo.append(sid, slabel)
-        style_combo.set_active_id(self.config.get("indicator_style", "orb"))
-
-        def _on_style_changed(combo):
-            self.update_config("indicator_style", combo.get_active_id())
-        style_combo.connect("changed", _on_style_changed)
-        ind.attach(style_combo, 1, row, 1, 1)
-        row += 1
-
-        # Color mode — two choices: match the desktop accent, or pick a color.
-        # The classic cyan is the first preset swatch in the picker below.
-        color_mode_label = Gtk.Label(label="Color:", xalign=0)
-        ind.attach(color_mode_label, 0, row, 1, 1)
-        color_mode_combo = Gtk.ComboBoxText()
-        color_mode_combo.connect("button-press-event", self._on_combo_button_press)
-        self._block_combo_scroll(color_mode_combo)
-        color_mode_combo.append("system", "Use system accent color")
-        color_mode_combo.append("custom", "Custom color")
-        # An older config can still hold 'cyan'; show it as Custom.
-        _mode = self.config.get("indicator_color_mode", "custom")
-        color_mode_combo.set_active_id(_mode if _mode in ("system", "custom") else "custom")
-        self._color_mode_combo = color_mode_combo
-        ind.attach(color_mode_combo, 1, row, 1, 1)
-        row += 1
-
-        # Color swatch — always visible. In Custom mode it shows your chosen
-        # color; in System mode it mirrors the live desktop accent (a continuity
-        # cue). Clicking it always opens the picker and adopts the result as a
-        # custom color, so changing color is one click without the dropdown.
-        color_pick_label = Gtk.Label(label="Custom color:", xalign=0)
-        ind.attach(color_pick_label, 0, row, 1, 1)
-        color_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        color_btn = Gtk.ColorButton()
-        color_btn.set_halign(Gtk.Align.START)
-        color_btn.set_size_request(64, 30)
-        color_btn.set_tooltip_text("Click to choose a custom color")
-        # Seed the picker with preset swatches so the classic cyan is one click
-        # away without knowing a hex code — it is deliberately the first preset.
-        _presets = [CLASSIC_CYAN_HEX, "#ffffff", "#ff5252", "#ffb300",
-                    "#4caf50", "#7c4dff", "#ff4081", "#00bcd4"]
-        _palette = []
-        for _hex in _presets:
-            _c = Gdk.RGBA()
-            _c.parse(_hex)
-            _palette.append(_c)
-        color_btn.add_palette(Gtk.Orientation.HORIZONTAL, len(_palette), _palette)
-        self._color_btn = color_btn
-
-        def _on_color_set(btn):
-            c = btn.get_rgba()
-            hexval = "#%02x%02x%02x" % (int(c.red * 255), int(c.green * 255), int(c.blue * 255))
-            self.update_config("indicator_color", hexval)
-            # Picking a color implies you want to use it. Flip to Custom without
-            # re-triggering the auto-open picker (guarded below).
-            self._set_color_mode_silently("custom")
-            self.update_config("indicator_color_mode", "custom")
-        color_btn.connect("color-set", _on_color_set)
-        color_box.pack_start(color_btn, False, False, 0)
-
-        color_hint = Gtk.Label(label="← click to choose", xalign=0)
-        color_hint.get_style_context().add_class("dim-label")
-        color_box.pack_start(color_hint, False, False, 0)
-
-        # The classic cyan is the one color whose identity matters, and a grid of
-        # unlabeled swatches can't announce it. A plainly-worded link returns to
-        # it in one click, no hex knowledge needed.
-        reset_btn = Gtk.Button(label="Reset to classic cyan")
-        reset_btn.set_relief(Gtk.ReliefStyle.NONE)
-        reset_btn.get_style_context().add_class("dim-label")
-        reset_btn.set_tooltip_text("Set the color back to TuxTalk's original cyan")
-        reset_btn.connect("clicked", self._reset_color_to_classic)
-        color_box.pack_start(reset_btn, False, False, 0)
-
-        ind.attach(color_box, 1, row, 1, 1)
-        row += 1
-
-        # Wire the dropdown now that the swatch exists. Choosing "Custom color"
-        # opens the picker immediately (no hunting for the swatch); either mode
-        # keeps the swatch in sync. The guard flag stops the programmatic
-        # system→custom flip in _on_color_set from re-opening the picker.
-        self._suppress_color_popup = False
-
-        def _on_color_mode_changed(combo):
-            mode = combo.get_active_id()
-            self.update_config("indicator_color_mode", mode)
-            self._sync_color_swatch()
-            if mode == "custom" and not self._suppress_color_popup:
-                self._open_color_picker()
-        color_mode_combo.connect("changed", _on_color_mode_changed)
-        self._sync_color_swatch()
-
-        # Sensitivity slider
-        sens_label = Gtk.Label(label="Animation response:", xalign=0)
-        sens_label.set_tooltip_text("How strongly the indicator's animation moves with your voice.\n"
-                                    "It doesn't change what the microphone hears.")
-        ind.attach(sens_label, 0, row, 1, 1)
-        sens_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.5, 2.0, 0.1)
-        sens_scale.set_value(self.config.get("indicator_sensitivity", 1.0))
-        sens_scale.set_hexpand(True)
-        sens_scale.connect("value-changed", lambda x: self.update_config("indicator_sensitivity", round(x.get_value(), 2)))
-        ind.attach(sens_scale, 1, row, 1, 1)
-        row += 1
-
-        # Indicator position
-        pos_label = Gtk.Label(label="Position:", xalign=0)
-        ind.attach(pos_label, 0, row, 1, 1)
-
-
-        positions = [
-            ("center", "Center"),
-            ("top-left", "Top Left"),
-            ("top-center", "Top Center"),
-            ("top-right", "Top Right"),
-            ("bottom-left", "Bottom Left"),
-            ("bottom-center", "Bottom Center"),
-            ("bottom-right", "Bottom Right"),
-            ("left-center", "Left Center"),
-            ("right-center", "Right Center")
-        ]
-
-        position_combo = Gtk.ComboBoxText()
-        position_combo.connect("button-press-event", self._on_combo_button_press)
-        self._block_combo_scroll(position_combo)
-        for pos_id, pos_label_text in positions:
-            position_combo.append(pos_id, pos_label_text)
-
-        current_position = self.config.get("indicator_position", "center")
-        position_combo.set_active_id(current_position)
-        position_combo.connect("changed", lambda x: self.update_config("indicator_position", x.get_active_id()))
-
-        # Positioning depends on the indicator getting XWayland, not on the
-        # session type or the GNOME extension. The tray launches the
-        # dictation service with GDK_BACKEND=x11,wayland, so this works on a
-        # Wayland desktop with no extension installed.
-        from .recording_indicator import positioning_available
-
-        if positioning_available():
-            position_combo.set_tooltip_text("Choose where the recording indicator appears on screen.")
-        else:
-            position_combo.set_tooltip_text(
-                "Position cannot be set on this system: it needs XWayland, which\n"
-                "is not available here. The indicator appears centred instead."
-            )
-            position_combo.set_sensitive(False)
-
-        ind.attach(position_combo, 1, row, 1, 1)
-        row += 1
-
-        # Warn only when positioning genuinely cannot work.
-        if not positioning_available():
-            warning_label = Gtk.Label(label="⚠️ XWayland is not available, so the indicator always appears centred", xalign=0)
-            warning_label.set_line_wrap(True)
-            warning_label.set_max_width_chars(60)
-            warning_style = warning_label.get_style_context()
-            warning_style.add_class("dim-label")
-            ind.attach(warning_label, 0, row, 2, 1)
-            row += 1
-
-        # The offsets nudge the indicator from its position, so rarely wanted
-        # that they're folded away.
-        self.position_fold = self._fold(ind, row, "Show fine position",
-                                        "Hide fine position")
-        fine = self.position_fold.content
-        row += 1
-
-        # Offsets. Which way each box moves the indicator is written right
-        # under it, where people look, rather than in a tooltip. Up shows as
-        # positive; see OFFSET_DISPLAY_SIGN.
-        can_move = positioning_available()
-
-        def _offset_row(row, label, key, hint):
-            # Line the label up with the box, not with the box-plus-hint.
-            name = Gtk.Label(label=label, xalign=0, valign=Gtk.Align.START)
-            name.set_margin_top(6)
-            fine.attach(name, 0, row, 1, 1)
-            sign = OFFSET_DISPLAY_SIGN[key]
-            value = sign * int(self.config.get(key, 0))
-            spin = Gtk.SpinButton(adjustment=Gtk.Adjustment(
-                value=value, lower=-1000, upper=1000, step_increment=10))
-            spin.set_value(value)
-            spin.connect("value-changed", lambda w: (
-                self.update_config(key, sign * int(w.get_value())),
-                self._update_position_summary()))
-            spin.connect("scroll-event", lambda *a: True)  # no accidental scroll-wheel changes
-            spin.set_sensitive(can_move)
-            hint_label = Gtk.Label(label=hint, xalign=0)
-            hint_label.get_style_context().add_class("dim-label")
-            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-            box.pack_start(spin, False, False, 0)
-            box.pack_start(hint_label, False, False, 0)
-            box.set_halign(Gtk.Align.START)
-            fine.attach(box, 1, row, 1, 1)
-            return spin
-
-        offset_x_spin = _offset_row(0, "Horizontal offset (pixels):",
-                                    "indicator_offset_x", "+ moves it right, − moves it left")
-        offset_y_spin = _offset_row(1, "Vertical offset (pixels):",
-                                    "indicator_offset_y", "+ moves it up, − moves it down")
-
-        # Setting both spins fires their value-changed handlers, which save.
-        reset_button = Gtk.Button(label="Reset to 0")
-        reset_button.set_tooltip_text("Put the indicator back exactly at the chosen position.")
-        reset_button.set_halign(Gtk.Align.START)
-        reset_button.set_sensitive(can_move)
-        reset_button.connect("clicked", lambda _b: (offset_x_spin.set_value(0),
-                                                    offset_y_spin.set_value(0)))
-        fine.attach(reset_button, 1, 2, 1, 1)
-        self._update_position_summary()
-
+        # Built now and shown by Customize…, see IndicatorSettings.
+        self.indicator_settings = IndicatorSettings(self)
+        self.indicator_settings.build()
         return grid
-
-    def _show_indicator_window(self):
-        """The recording indicator's look and place, in a window of its own."""
-        win = getattr(self, "_indicator_window", None)
-        if win is None:
-            win = self._indicator_window = Gtk.Dialog(
-                title="Recording Indicator", transient_for=self.window, modal=True)
-            win.add_button("Done", Gtk.ResponseType.CLOSE)
-            win.get_content_area().pack_start(self.indicator_grid, True, True, 0)
-            # Closing only hides it: its controls stay part of this window.
-            win.connect("response", lambda w, _r: w.hide())
-            win.connect("delete-event", lambda w, _e: w.hide_on_delete())
-        win.show_all()
-        win.present()
 
     def _swiss_spelling_check(self):
         """The "Swiss German spelling" checkbox, bound to swiss_spelling."""
@@ -1834,14 +1570,6 @@ class PreferencesWindow:
         self.shortcuts_fold.set_summary(GLib.markup_escape_text(
             f"cheat sheet {key(self.vc_hotkey_combo)}"
             f" \u00b7 paste last {key(self.pl_hotkey_combo)}"))
-
-    def _update_position_summary(self):
-        """How far the offsets move the indicator, beside Fine position."""
-        x = int(self.config.get("indicator_offset_x", 0))
-        y = int(self.config.get("indicator_offset_y", 0))   # screen pixels: + is down
-        moves = [f"{abs(x)} px {'right' if x > 0 else 'left'}"] if x else []
-        moves += [f"{abs(y)} px {'down' if y > 0 else 'up'}"] if y else []
-        self.position_fold.set_summary(", ".join(moves) or "not moved")
 
     def _subheading(self, text):
         """A small heading inside a section or fold."""
@@ -2426,73 +2154,6 @@ class PreferencesWindow:
             widget.grab_focus()
         # Let GTK handle the normal click event
         return False
-
-    def _desktop_accent_rgba(self):
-        """The desktop theme's accent color as a Gdk.RGBA (fallback: green).
-
-        Mirrors recording_indicator._accent_rgb so the swatch preview matches
-        what the indicator actually paints in system-accent mode.
-        """
-        try:
-            ok, rgba = Gtk.Label().get_style_context().lookup_color("theme_selected_bg_color")
-            if ok:
-                return rgba
-        except Exception:
-            pass
-        fallback = Gdk.RGBA()
-        fallback.parse("#4caf50")
-        return fallback
-
-    def _open_color_picker(self):
-        """Open the swatch's color chooser dialog immediately.
-
-        A Gtk.ColorButton is a Gtk.Button whose click opens its chooser, so
-        emitting clicked() is the same as the user pressing the swatch.
-        """
-        btn = getattr(self, "_color_btn", None)
-        if btn is not None:
-            btn.clicked()
-
-    def _set_color_mode_silently(self, mode):
-        """Set the color-mode dropdown without auto-opening the picker.
-
-        Used when a color pick implies Custom mode — flipping the dropdown must
-        not re-fire the 'selected Custom → open picker' behavior into a loop.
-        """
-        self._suppress_color_popup = True
-        try:
-            self._color_mode_combo.set_active_id(mode)
-        finally:
-            self._suppress_color_popup = False
-
-    def _reset_color_to_classic(self, _button=None):
-        """Return the indicator color to TuxTalk's classic cyan.
-
-        Because the resolved color is then the classic cyan, the orb falls back
-        to its original hand-tuned gradient — the out-of-box look — with no need
-        to hunt a hex code out of a grid of swatches.
-        """
-        self.update_config("indicator_color", CLASSIC_CYAN_HEX)
-        self._set_color_mode_silently("custom")
-        self.update_config("indicator_color_mode", "custom")
-        self._sync_color_swatch()
-
-    def _sync_color_swatch(self):
-        """Keep the swatch showing the right color for the current mode.
-
-        Custom mode → the chosen color; System mode → the live desktop accent,
-        a small continuity cue so the swatch reflects what the indicator paints.
-        """
-        btn = getattr(self, "_color_btn", None)
-        if btn is None:
-            return
-        mode = self._color_mode_combo.get_active_id()
-        if mode == "system":
-            btn.set_rgba(self._desktop_accent_rgba())
-        else:
-            rgba = Gdk.RGBA()
-            rgba.parse(self.config.get("indicator_color", CLASSIC_CYAN_HEX))
-            btn.set_rgba(rgba)
 
     def update_config(self, key, value):
         """Update config value."""

@@ -15,9 +15,10 @@ def _on_gnome():
 
 
 class Tab:
-    """One tab of Preferences. It builds its page (build) and handles its own
-    settings, reading and changing them through the window (*win*, a
-    prefs.PreferencesWindow), which saves and applies them for every tab."""
+    """One tab of Preferences, or a window of settings a tab opens. It builds
+    its page (build) and handles its own settings, reading and changing them
+    through the window (*win*, a prefs.PreferencesWindow), which saves and
+    applies them for every tab."""
 
     def __init__(self, win):
         self.win = win

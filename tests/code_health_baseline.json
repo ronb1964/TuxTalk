@@ -1,7 +1,7 @@
 {
  "files": {
   "app.py": 4860,
-  "prefs.py": 4924,
+  "prefs.py": 4585,
   "tray.py": 2477,
   "welcome_dialog.py": 3222
  },
@@ -192,7 +192,6 @@
   "prefs.py::PreferencesWindow.__init__::undocumented": 1,
   "prefs.py::PreferencesWindow._check_cuda_availability::swallowed_error": 1,
   "prefs.py::PreferencesWindow._check_gpu_status::long_line": 4,
-  "prefs.py::PreferencesWindow._desktop_accent_rgba::swallowed_error": 1,
   "prefs.py::PreferencesWindow._download_selected_model::long_line": 1,
   "prefs.py::PreferencesWindow._fit_to_screen::swallowed_error": 1,
   "prefs.py::PreferencesWindow._has_unapplied_changes::swallowed_error": 1,
@@ -222,8 +221,7 @@
   "prefs.py::PreferencesWindow.check_and_download_model::long_line": 1,
   "prefs.py::PreferencesWindow.create_advanced_tab::long_line": 22,
   "prefs.py::PreferencesWindow.create_advanced_tab::undocumented": 1,
-  "prefs.py::PreferencesWindow.create_audio_tab._offset_row::undocumented": 1,
-  "prefs.py::PreferencesWindow.create_audio_tab::long_line": 12,
+  "prefs.py::PreferencesWindow.create_audio_tab::long_line": 4,
   "prefs.py::PreferencesWindow.create_audio_tab::undocumented": 1,
   "prefs.py::PreferencesWindow.create_general_tab::long_line": 12,
   "prefs.py::PreferencesWindow.create_general_tab::swallowed_error": 2,
@@ -559,7 +557,7 @@
    "lines": 484
   },
   "prefs.py::PreferencesWindow.create_audio_tab": {
-   "lines": 405
+   "lines": 160
   },
   "prefs.py::PreferencesWindow.create_general_tab": {
    "decisions": 20,

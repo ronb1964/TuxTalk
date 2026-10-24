@@ -619,10 +619,10 @@ def prefs_window(monkeypatch):
         if GLib.MainContext.default().find_source_by_id(timer):
             GLib.source_remove(timer)
     for window in built:
-        indicator = getattr(window, "_indicator_window", None)    # Customize…
-        if indicator is not None:
-            indicator.destroy()
-        window.indicator_grid.destroy()     # not in the window until Customize… opens it
+        indicator = window.indicator_settings
+        if indicator.dialog is not None:                # Customize… opened it
+            indicator.dialog.destroy()
+        indicator.grid.destroy()        # not in the window until Customize… opens it
         window.window.destroy()
 
 
