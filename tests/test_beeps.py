@@ -114,7 +114,7 @@ def sound(monkeypatch):
         monkeypatch.setattr(beeps, "sd", system)
         monkeypatch.setattr(beeps, "STUCK_S", 0.5)
         for name, value in (("_devices", {}), ("_latency", 0.0), ("_latency_logged", False),
-                            ("_underflow_logged", False), ("_failure_logged", False)):
+                            ("_underflow_logged", False), ("_failures_logged", set())):
             monkeypatch.setattr(beeps, name, value)
         return system
     return make
@@ -348,6 +348,20 @@ def test_sounds_behind_a_stuck_output_never_pile_up(sound, monkeypatch):
     release.set()
     assert beeps.wait_until_played(5)
     assert len(played) == 1 + beeps.MAX_WAITING
+
+
+def test_each_kind_of_sound_failure_is_logged_once(sound, caplog):
+    """A sound output that is missing fails every beep and says so once; a
+    different failure later still shows in the log."""
+    caplog.set_level(logging.INFO)
+    system = sound()
+    for broken in ("open", "open", "start", "start"):
+        system.broken = broken
+        beeps.beep(True, *beeps.START_BEEP)
+        assert beeps.wait_until_played(5)
+    warned = [r.getMessage() for r in caplog.records if r.getMessage().startswith("Could not")]
+    assert len(warned) == 2
+    assert "Device unavailable" in warned[0] and "start failed" in warned[1]
 
 
 def test_quitting_waits_for_a_sound_and_leaves_a_stuck_one_to_the_system(sound, monkeypatch):

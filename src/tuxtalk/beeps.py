@@ -71,7 +71,7 @@ _devices = {}            # the rate asked for: (device index or None, rate it pl
 _latency = 0.0
 _latency_logged = False
 _underflow_logged = False
-_failure_logged = False
+_failures_logged = set()  # each kind of audio failure is logged once
 
 _finished = threading.Condition()   # guards everything below
 _waiting = collections.deque()      # (job, what, Sound, finished callback), oldest first
@@ -222,7 +222,6 @@ def _end(sound, finished, error):
 def _work():
     """The sound thread: plays each sound asked for, in turn. A sound is
     never worth a recording, so any audio error is logged and dropped."""
-    global _failure_logged
     while True:
         with _finished:
             _finished.wait_for(lambda: _waiting)
@@ -232,10 +231,11 @@ def _work():
             job()
         except Exception as e:
             error = str(e)
-            # A missing output fails every sound: one warning says so.
-            if not _failure_logged:
-                _failure_logged = True
-                logger.warning(f"Could not play {what}: {e} (later failures are not logged)")
+            # A missing output fails every sound: each kind of failure is
+            # logged the first time, so a new one still shows in the log.
+            if (type(e), error) not in _failures_logged:
+                _failures_logged.add((type(e), error))
+                logger.warning(f"Could not play {what}: {e} (not logged again)")
         finally:
             _end(sound, finished, error)
 
