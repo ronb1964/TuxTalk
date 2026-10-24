@@ -701,9 +701,35 @@ def test_right_alt_warns_where_the_layout_makes_it_altgr(monkeypatch, layout, lo
 
 
 def test_the_first_run_hotkey_test_says_what_right_alt_gives_up(monkeypatch):
-    """Picked there, Right Alt took a German keyboard's @ and € away unsaid."""
+    """Picked there, or set already, Right Alt took a German keyboard's @
+    and € away unsaid."""
+    pytest.importorskip("gi")
+    from gi.repository import Gdk, Gtk
+    from gtk_text import widgets
+    from test_hotkey_test_unreadable_keyboard import _key, _run_dialog
     monkeypatch.setattr(keyboard_layout, "active_layout", lambda: ("de", ""))
-    assert layout_label("Right Alt") == "Right Alt (your AltGr key: stops typing @ and €)"
-    assert layout_label("F8") == "F8"
+    seen = {}
+
+    def labels(dialog):
+        return [w.get_text() for w in widgets(dialog) if isinstance(w, Gtk.Label)]
+
+    def pick_right_alt(dialog):
+        seen["before"] = labels(dialog)
+        [w for w in widgets(dialog) if isinstance(w, Gtk.Button)
+         and w.get_label() == "Change Key"][0].clicked()
+        _key(dialog, Gdk.KEY_Alt_R)
+        seen["picked"] = labels(dialog)
+    _run_dialog(monkeypatch, ["/dev/input/event3"], pick_right_alt)
+    lost = "Right Alt (your AltGr key: stops typing @ and €)"
+    assert "Push-to-talk: F8" in seen["before"]
+    assert f"Push-to-talk: {lost}" in seen["picked"]
+
+    _run_dialog(monkeypatch, ["/dev/input/event3"],
+                lambda dialog: seen.update(set=labels(dialog)), hotkeys=("F8", "Right Alt"))
+    assert f"Toggle mode: {lost}" in seen["set"]
+
+
+def test_right_alt_on_a_us_keyboard_only_stops_being_alt(monkeypatch):
     monkeypatch.setattr(keyboard_layout, "active_layout", lambda: ("us", ""))
     assert layout_label("Right Alt") == "Right Alt (stops working as Alt)"
+    assert layout_label("F8") == "F8"

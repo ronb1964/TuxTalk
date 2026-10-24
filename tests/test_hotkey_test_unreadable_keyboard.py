@@ -105,9 +105,10 @@ def test_the_notice_points_to_fix_typing_when_setup_is_not_done(monkeypatch):
     assert "restart" in notice
 
 
-def _run_dialog(monkeypatch, evdev_paths, during, denied=()):
+def _run_dialog(monkeypatch, evdev_paths, during, denied=(), hotkeys=("F8", "F9")):
     """Run the real dialog, with the dictation service and the settings left
-    alone, and call *during(dialog)* while it is up."""
+    alone, and call *during(dialog)* while it is up. *hotkeys* are the
+    (hold, toggle) keys it starts with."""
     from gi.repository import Gtk
     if not Gtk.init_check()[0]:
         pytest.skip("no display")
@@ -115,7 +116,7 @@ def _run_dialog(monkeypatch, evdev_paths, during, denied=()):
     from tuxtalk import config, gnome_keybindings, service_launcher
 
     monkeypatch.setattr(config, "load_config",
-                        lambda: SimpleNamespace(hotkey="F8", toggle_hotkey="F9"))
+                        lambda: SimpleNamespace(hotkey=hotkeys[0], toggle_hotkey=hotkeys[1]))
     monkeypatch.setattr(config, "save_config", lambda c: None)
     monkeypatch.setattr(gnome_keybindings, "disable_for_hotkey_test", lambda: None)
     monkeypatch.setattr(gnome_keybindings, "restore", lambda saved: None)
