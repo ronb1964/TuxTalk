@@ -115,21 +115,48 @@ class _Take:
         self.stream = None
 
 
-def after_close(closing, then):
-    """Call *then* once the microphone's last stream is closed: *closing* is
-    the Event mic_stream.close(wait=False) returned for it, or None. At once
-    if it is closed, else on the GTK thread, with the wait on a thread of its
-    own: until a stream is closed it holds an ALSA hw: device, and opening
-    that again fails as busy. A close that never ends is given up on after
-    STOP_TIMEOUT_S, so this waits no longer."""
-    if closing is None or closing.is_set():
-        then()
-        return
+class MicReopen:
+    """A microphone test's next stream, opened only once its last one is
+    closed: until then that one holds an ALSA hw: device, and opening it
+    again fails as busy. *closing* is the Event mic_stream.close(wait=False)
+    returned for the last stream, or None. Stopping the test calls off a
+    start still waiting, so the microphone isn't opened behind the user's
+    back after they went off to dictate."""
 
-    def wait():
-        closing.wait(mic_stream.STOP_TIMEOUT_S + 1)
-        GLib.idle_add(lambda: then() and False)
-    threading.Thread(target=wait, daemon=True, name="tt-mic-wait").start()
+    def __init__(self):
+        self.closing = None
+        self._waiting = None        # the start waiting for the close, if any
+
+    def when_closed(self, then):
+        """Call *then* once the last stream is closed, unless called off
+        first: at once if it is closed, else on the GTK thread, with the
+        wait on a thread of its own. A close that never ends is given up on
+        after STOP_TIMEOUT_S, so this waits no longer."""
+        self._waiting = token = object()
+
+        def go():
+            if token is self._waiting:
+                self._waiting = None
+                then()
+        closing = self.closing
+        if closing is None or closing.is_set():
+            go()
+            return
+
+        def wait():
+            closing.wait(mic_stream.STOP_TIMEOUT_S + 1)
+            GLib.idle_add(go)
+        threading.Thread(target=wait, daemon=True, name="tt-mic-wait").start()
+
+    def call_off(self):
+        """A start still waiting never happens. Whether there was one."""
+        waiting, self._waiting = self._waiting is not None, None
+        return waiting
+
+    @property
+    def waiting(self):
+        """Whether a start is waiting for the last stream to close."""
+        return self._waiting is not None
 
 
 class MicTest:
@@ -145,8 +172,7 @@ class MicTest:
         self._take = None           # the recording under way
         self.recorded_audio = None
         self._rate = 16000          # of recorded_audio
-        self._closing = None        # the last stream's close, from Stop
-        self._closed = False
+        self._reopen = MicReopen()
         self._replaying = None
         self.meter = SegmentedVUMeter(num_segments=20)
         self.status = Gtk.Label(label="Click 'Start Recording' and speak to test your mic levels")
@@ -206,13 +232,11 @@ class MicTest:
         stream is closed."""
         self._call_off_replay()
         self.start_btn.set_sensitive(False)
-        after_close(self._closing, self._open)
+        self._reopen.when_closed(self._open)
 
     def _open(self):
         """Open the chosen microphone and record from it. On a stream that
         won't open or start, the test is as it was, and says why."""
-        if self._closed:
-            return
         stream = None
         try:
             device_idx = self._device()
@@ -231,8 +255,8 @@ class MicTest:
         except Exception as e:
             self._take = None
             if stream is not None:
-                self._closing = mic_stream.close(stream, wait=False)  # opened, not started
-            self.start_btn.set_sensitive(True)
+                self._reopen.closing = mic_stream.close(stream, wait=False)  # not started
+            self._ready()
             logger.warning(f"The microphone test couldn't record: {e}")
             self._show_error("Recording failed!", str(e))
             return
@@ -243,11 +267,14 @@ class MicTest:
         self.replay_btn.set_sensitive(False)
 
     def stop(self, _button=None):
-        """Stop recording, and grade it."""
+        """Stop recording, and grade it; or call off a recording still
+        waiting for the last one's stream to close."""
         take, self._take = self._take, None
         if take is None:
+            if self._reopen.call_off():
+                self._ready()
             return
-        self._closing = mic_stream.close(take.stream, wait=False)
+        self._reopen.closing = mic_stream.close(take.stream, wait=False)
         if take.frames:
             self.recorded_audio = np.concatenate(take.frames, axis=0)
             self._rate = take.rate
@@ -258,9 +285,9 @@ class MicTest:
         self._show_grade(take)
 
     def close(self):
-        """The window closes: stop a recording or a replay, and free the
-        microphone."""
-        self._closed = True
+        """The window closes: stop a recording or a replay, call off a
+        recording still waiting to start, and free the microphone."""
+        self._reopen.call_off()
         self._call_off_replay()
         take, self._take = self._take, None
         if take is not None:
@@ -329,11 +356,16 @@ class MicTest:
         if replay is not self._replaying:
             return False
         self._call_off_replay()
-        self.replay_btn.set_sensitive(True)
-        self.start_btn.set_sensitive(True)
+        self._ready()
         if error:
             self._show_error("Playback failed!", error)
         return False
+
+    def _ready(self):
+        """Nothing is recording: Start Recording, and Replay if there is a
+        recording to play."""
+        self.start_btn.set_sensitive(True)
+        self.replay_btn.set_sensitive(self.recorded_audio is not None)
 
     def _call_off_replay(self):
         """A replay that hasn't started never plays, and one playing stops:

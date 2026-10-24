@@ -80,6 +80,19 @@ def opened(win, count):
     return len(win.streams) == count and win.streams[-1].started
 
 
+def slow_to_stop(win):
+    """Make each new stream's stop() wait until the returned Event is set."""
+    release = threading.Event()
+
+    class SlowToStop(FakeStream):
+        def stop(self, ignore_errors=True):
+            release.wait(5)
+            super().stop()
+    win._pause_stream_factory = lambda **kwargs: win.streams.append(SlowToStop(**kwargs)) or \
+        win.streams[-1]
+    return release
+
+
 def labels(widget):
     return [w.get_text() for w in gtk_text.widgets(widget) if isinstance(w, Gtk.Label)]
 
@@ -227,14 +240,7 @@ def test_a_microphone_that_never_stops_doesnt_freeze_the_window(win, monkeypatch
     it only a moment."""
     monkeypatch.setattr(prefs.mic_stream, "STOP_TIMEOUT_S", 0.1)
     monkeypatch.setattr(prefs.mic_stream, "_closing", set())
-    release = threading.Event()
-
-    class Hangs(FakeStream):
-        def stop(self, ignore_errors=True):
-            release.wait(5)
-            super().stop()
-    win._pause_stream_factory = lambda **kwargs: win.streams.append(Hangs(**kwargs)) or \
-        win.streams[-1]
+    release = slow_to_stop(win)
     win.tap_check.set_active(True)
     for count, stop in ((1, win.tap_test_btn.clicked), (2, win._stop_mic_test)):
         win.tap_test_btn.clicked()
@@ -272,14 +278,7 @@ def test_a_stream_still_stopping_feeds_nothing_to_the_next_test(win):
 def test_the_next_test_waits_until_the_last_stream_is_closed(win):
     """An ALSA hw: device is held until its stream is closed, so opening it
     again at once failed as busy ("Device unavailable")."""
-    release = threading.Event()
-
-    class SlowToStop(FakeStream):
-        def stop(self, ignore_errors=True):
-            release.wait(5)
-            super().stop()
-    win._pause_stream_factory = lambda **kwargs: win.streams.append(SlowToStop(**kwargs)) or \
-        win.streams[-1]
+    release = slow_to_stop(win)
     win.tap_check.set_active(True)
     win.tap_test_btn.clicked()
     win.tap_test_btn.clicked()                   # Stop
@@ -288,6 +287,41 @@ def test_the_next_test_waits_until_the_last_stream_is_closed(win):
     release.set()
     assert opened(win, 2) and win.streams[0].closed
     assert win.tap_test_btn.get_sensitive() and win.tap_test_btn.get_label() == "Stop"
+
+
+STOP_PATHS = {
+    "leaving the window": lambda win: win._tap_on_window_active(
+        SimpleNamespace(is_active=lambda: False), None),
+    "another tab": lambda win: win.on_tab_switched(
+        SimpleNamespace(get_tab_label_text=lambda page: "Audio"),
+        SimpleNamespace(get_vadjustment=lambda: None), 1),
+    "hiding the settings": lambda win: win.tap_fold.button.clicked(),
+    "turning it off": lambda win: win.tap_check.set_active(False),
+    "closing Preferences": lambda win: win._stop_mic_test(),
+}
+
+
+@pytest.mark.parametrize("stop", STOP_PATHS.values(), ids=STOP_PATHS.keys())
+def test_a_test_called_off_while_it_waits_never_opens_the_mic(win, stop):
+    """Test again while the last stream is still stopping waits to open the
+    mic. Going off to dictate (or any other way the test stops) meanwhile
+    left it waiting all the same: it then opened the mic with Preferences in
+    the background, and a hw: mic was busy for the dictation."""
+    release = slow_to_stop(win)
+    win.tap_check.set_active(True)
+    win.tap_fold.button.clicked()                # open, so hiding them is a way to stop
+    win.tap_test_btn.clicked()
+    win.tap_test_btn.clicked()                   # Stop
+    win.tap_test_btn.clicked()                   # Test again: waits
+    stop(win)
+    release.set()
+    assert stopped(win.streams[0]) and win._pause_reopen.closing.wait(2)
+    deadline = time.monotonic() + 0.3            # what the wait hands to the main loop
+    while time.monotonic() < deadline:
+        GLib.MainContext.default().iteration(False)
+        time.sleep(0.005)
+    assert len(win.streams) == 1 and win._pause_test is None
+    assert win.tap_test_btn.get_sensitive() and win.tap_test_btn.get_label() == "Test"
 
 
 def test_the_window_focus_is_watched():

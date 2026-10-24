@@ -1,6 +1,7 @@
 """Preferences' microphone test, recording: each recording gets only its own
-stream's sound, and a new one opens the microphone only once the last one's
-stream is closed. The streams are fakes; nothing is recorded."""
+stream's sound, a new one opens the microphone only once the last one's
+stream is closed, and one called off while it waits never opens it. The
+streams are fakes; nothing is recorded."""
 import threading
 
 import numpy as np
@@ -54,6 +55,18 @@ def run_main_loop(mic):
         fn(*args)
 
 
+def after_the_close(mic):
+    """Let the held stop end, then run what the wait for it handed to the
+    main loop."""
+    mic.release.set()
+    assert mic.opened[0].closed.wait(2)
+    for _ in range(200):
+        if mic.scheduled:
+            break
+        threading.Event().wait(0.01)
+    run_main_loop(mic)
+
+
 def block(level):
     return np.full((160, 1), level, np.float32)
 
@@ -67,7 +80,7 @@ def test_a_stream_still_stopping_adds_nothing_to_the_next_recording(mic):
     old = mic.opened[0]
     old.callback(block(0.05), 160, None, None)
     mic.stop()
-    assert mic._closing.wait(2)
+    assert mic._reopen.closing.wait(2)
     mic.start()
     new = mic.opened[1]
     old.callback(block(0.09), 160, None, None)     # late, from the old stream's thread
@@ -86,27 +99,22 @@ def test_the_next_recording_waits_until_the_last_stream_is_closed(mic):
     mic.stop()
     mic.start()
     assert len(mic.opened) == 1 and not mic.start_btn.get_sensitive()
-    mic.release.set()
-    assert mic.opened[0].closed.wait(2)
-    for _ in range(200):
-        if mic.scheduled:
-            break
-        threading.Event().wait(0.01)
-    run_main_loop(mic)
+    after_the_close(mic)
     assert len(mic.opened) == 2 and mic.recording
 
 
-def test_a_recording_started_as_the_window_closes_never_opens_the_microphone(mic):
+@pytest.mark.parametrize("stop", ["stop", "close"])
+def test_a_recording_called_off_while_it_waits_never_opens_the_microphone(mic, stop):
+    """Start again while the last stream is still stopping, then Stop, or
+    close the window: the start that was waiting still opened the mic
+    afterwards, and held it from dictation."""
     mic.release.clear()
     mic.start()
     mic.stop()
     mic.start()
-    mic.close()
-    mic.release.set()
-    assert mic.opened[0].closed.wait(2)
-    for _ in range(200):
-        if mic.scheduled:
-            break
-        threading.Event().wait(0.01)
-    run_main_loop(mic)
+    getattr(mic, stop)()
+    after_the_close(mic)
     assert len(mic.opened) == 1 and not mic.recording
+    if stop == "stop":
+        assert mic.start_btn.get_sensitive()
+

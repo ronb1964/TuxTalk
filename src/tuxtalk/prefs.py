@@ -6,7 +6,7 @@ from gi.repository import Gtk, Gdk, GLib, Pango
 import sounddevice as sd
 from . import mic_stream
 from .chunk_meter import PauseTest, level_to_fraction, threshold_fraction
-from .mic_test import MicTest, SegmentedVUMeter, after_close
+from .mic_test import MicReopen, MicTest, SegmentedVUMeter
 from .ui_style import Fold, message_dialog
 from .whisper_vulkan import ENGINE_SIZE_TEXT
 from .hotkey_labels import dropdown_entries, hands_free_label
@@ -5751,9 +5751,8 @@ class PreferencesWindow:
         grid.attach(self.tap_check, 0, row, 2, 1)
         row += 1
 
-        # Several settings, so they sit in a fold with their values beside its
-        # button (one setting would sit by its tickbox, like Power Saving's
-        # minutes).
+        # Several settings, so a fold with their values beside its button (one
+        # setting would sit by its tickbox, like Power Saving's minutes).
         self.tap_fold = self._fold(grid, row, "Adjust Settings", "Hide Settings")
         self.tap_fold.set_margin_start(indent)
         # Hiding the settings hides the test's meter, so the test stops.
@@ -5812,6 +5811,7 @@ class PreferencesWindow:
             "the bar moves with your voice and flashes green wherever a phrase\n"
             "would be typed. It uses the microphone from the Audio tab.")
         self.tap_meter = PauseMeter(num_segments=20)
+        self._pause_reopen = MicReopen()
         test_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         test_box.pack_start(self.tap_test_btn, False, False, 0)
         test_box.pack_start(self.tap_meter, True, True, 0)
@@ -5877,7 +5877,7 @@ class PreferencesWindow:
             self._stop_pause_test()
         else:
             self.tap_test_btn.set_sensitive(False)
-            after_close(getattr(self, "_pause_closing", None), self._start_pause_test)
+            self._pause_reopen.when_closed(self._start_pause_test)
 
     def _start_pause_test(self):
         """Stream the chosen mic into a PauseTest of its own, so a stream of
@@ -5907,7 +5907,7 @@ class PreferencesWindow:
         except Exception as e:
             self._pause_test = None
             if stream is not None:      # opened but not started: free the mic
-                self._pause_closing = mic_stream.close(stream, wait=False)
+                self._pause_reopen.closing = mic_stream.close(stream, wait=False)
             self.tap_status.set_text(f"Couldn't open the microphone: {e}")
             return
         self._pause_test_stream = stream
@@ -5938,23 +5938,22 @@ class PreferencesWindow:
             self.tap_meter.show_snapshot(0.0, threshold_fraction(room, self.tap_db_spin.get_value()))
 
     def _stop_pause_test(self, wait=False):
-        """Stop Type at pause's live test, if it is running, and free the mic:
-        off the window's thread, or with *wait* (the window closing) for a
-        moment at most."""
-        stream = getattr(self, "_pause_test_stream", None)
-        test = getattr(self, "_pause_test", None)
-        self._pause_test_stream = None
-        self._pause_test = None
-        if test is not None and hasattr(self, "tap_status"):
+        """Stop Type at pause's live test, or call off one still waiting to
+        open the mic, and free the mic: off the window's thread, or with
+        *wait* (the window closing) for a moment at most."""
+        stream, self._pause_test_stream = getattr(self, "_pause_test_stream", None), None
+        test, self._pause_test = getattr(self, "_pause_test", None), None
+        if test is not None:
             # Not the live line frozen at its last words: what it found.
             self.tap_status.set_text(test.result_text())
         if stream is not None and wait:
             mic_stream.close(stream)
         elif stream is not None:
-            self._pause_closing = mic_stream.close(stream, wait=False)
-        if hasattr(self, "tap_test_btn"):
+            self._pause_reopen.closing = mic_stream.close(stream, wait=False)
+        if hasattr(self, "tap_meter"):      # the Labs entry is built
+            self._pause_reopen.call_off()
             self.tap_test_btn.set_label("Test")
-        if hasattr(self, "tap_meter"):
+            self.tap_test_btn.set_sensitive(True)
             self.tap_meter.show_snapshot(0.0, self.tap_meter.threshold)
 
     def _release_pidfile(self):
