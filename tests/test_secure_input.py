@@ -214,8 +214,11 @@ def test_the_service_cant_take_the_machine():
     assert {"CPUQuota=25%", "MemoryMax=64M", "TasksMax=4"} <= set(lines)
 
 
-def test_an_older_helper_is_offered_an_update(monkeypatch):
-    P, prefs = _typing_prefs(monkeypatch, running="1.0")
+@pytest.mark.parametrize("running", ["1.0", "1.5"])
+def test_an_older_helper_is_offered_an_update(monkeypatch, running):
+    """1.5 too: test builds installed a 1.5 whose hide could leave Right Ctrl
+    held for the desktop, and only a newer number gets it replaced."""
+    P, prefs = _typing_prefs(monkeypatch, running=running)
     assert prefs.fix_typing_button.label == P.UPDATE_HELPER_LABEL and prefs.fix_typing_button.sensitive
     assert "newer hotkey helper" in prefs.typing_status_label.markup
 

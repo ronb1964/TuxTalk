@@ -16,7 +16,7 @@ before 0.15.0, so older entries use that name.
   down, so nothing it types while you hold it turns into a Ctrl shortcut.
 - Pause isn't on the list. Most keyboards send it as let go the moment it's
   pressed, so you can't hold it.
-- The hotkey helper is version 1.5, because it has to report Right Ctrl and
+- The hotkey helper is version 1.6, because it has to report Right Ctrl and
   Right Alt on their own now. Preferences offers the update, and you're asked
   for your password once. Until then Right Ctrl and Right Alt do nothing, and
   Preferences says so when you pick one.
