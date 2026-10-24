@@ -1689,6 +1689,13 @@ def _destination():
     return _query_focused_window_class(), which_window(), _focused_is_password()
 
 
+def _not_where_typed(focused) -> bool:
+    """Whether the window class *focused* is known to be another app than
+    the one the last dictation went to."""
+    return (focused is not None and state.last_inserted_window is not None
+            and focused != state.last_inserted_window)
+
+
 def _typed_breaks_for(text: str, window_class) -> str:
     """*text* ready to type into *window_class*. Typed line breaks go in as
     Shift+Enter, but terminals such as gnome-terminal treat Shift+Enter as
@@ -1741,12 +1748,8 @@ def _ctrl_keys(letter: str, shift: bool = False) -> list:
 
 
 def _send_select_all_delete():
-    """Send Ctrl+A then Backspace to clear the entire input field.
-
-    Used by the 'delete everything' voice command — wipes the whole textarea
-    regardless of whether the contents came from TuxTalk, manual typing, or
-    pasting from elsewhere.
-    """
+    """Ctrl+A, then Backspace: "delete everything" clears the whole box,
+    whatever put the text there."""
     if not _send_keys(_ctrl_keys("a"), what="select-all"):
         return False
     time.sleep(0.05)
@@ -2498,8 +2501,7 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
     # delete text there that TuxTalk never typed. Unknown windows go ahead,
     # as before.
     focused = _query_focused_window_class()
-    if (focused is not None and state.last_inserted_window is not None
-            and focused != state.last_inserted_window):
+    if _not_where_typed(focused):
         logger.info(f"Undo refused: the last dictation went to {state.last_inserted_window!r}, "
                     f"not {focused!r}")
         _edit_problem("undo_other_window", beeps_on)
@@ -2673,9 +2675,8 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
         # In another window it's a new sentence (Ron, 2026-10-20: a message
         # after "meet me at noon and" in KWrite began with a small letter).
         focused = _query_focused_window_class()
-        elsewhere = (focused is not None and state.last_inserted_window is not None
-                     and focused != state.last_inserted_window)
-        if not elsewhere and text[0].isupper() and _safe_to_lowercase_first_word(text):
+        if (not _not_where_typed(focused) and text[0].isupper()
+                and _safe_to_lowercase_first_word(text)):
             text = text[0].lower() + text[1:]
             logger.info("Lowercased first letter for mid-sentence continuation")
         state.continue_mid_sentence = False
@@ -3286,8 +3287,7 @@ def _erase_typed(text: str) -> bool:
     """Backspace over *text*, just typed by the phrase before the pause. False
     when it can't be done safely; then nothing more is erased."""
     focused = _query_focused_window_class()
-    if (focused is not None and state.last_inserted_window is not None
-            and focused != state.last_inserted_window):
+    if _not_where_typed(focused):
         logger.info("Correction across a pause skipped: the phrase is in another window")
         return False
     # The AI that found the correction can take seconds, time enough to
@@ -3467,8 +3467,7 @@ def _flush_boundary(auto_period: bool, auto_space: bool, injection_mode: str) ->
     if pending is None:
         return
     focused = _query_focused_window_class()
-    if (focused is not None and state.last_inserted_window is not None
-            and focused != state.last_inserted_window):
+    if _not_where_typed(focused):
         return  # the end of this sentence isn't in the window that has focus
     kind = app_kind(focused) if _adapt_to_app else ""
     mark = pending["mark"] or ("." if auto_period and not kind else "")
@@ -3892,9 +3891,7 @@ def _handle_fix_word(raw: str, beeps_on: bool) -> bool:
     typed = state.last_inserted_text
     if typed and state.shown_text and state.shown_text.endswith(typed):
         typed = state.shown_text        # the whole recording, phrases and all
-    if typed.strip() and not (
-            focused is not None and state.last_inserted_window is not None
-            and focused != state.last_inserted_window):
+    if typed.strip() and not _not_where_typed(focused):
         try:
             import json
             path = os.path.join(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"),
@@ -3944,9 +3941,7 @@ def _handle_navigation(raw: str, beeps_on: bool, focused_class=_UNKNOWN_WINDOW) 
     # nav_context says where in it. Only in the window it was typed into:
     # dictating into a chat, then saying "select the last sentence" in Writer
     # would otherwise select the chat message's length of Writer's text.
-    elsewhere = (focused_class is not None and state.last_inserted_window is not None
-                 and focused_class != state.last_inserted_window)
-    if elsewhere:
+    if _not_where_typed(focused_class):
         left, right = None, ""
     elif state.last_inserted_text:
         left, right = state.last_inserted_text, ""
@@ -3983,8 +3978,7 @@ def _spoken_edit_target():
     if not typed or not typed.strip():
         return ""
     focused = _query_focused_window_class()
-    if (focused is not None and state.last_inserted_window is not None
-            and focused != state.last_inserted_window):
+    if _not_where_typed(focused):
         return ""
     shown = state.shown_text
     if shown and state.shown_serial == state.recording_serial and shown.endswith(typed):

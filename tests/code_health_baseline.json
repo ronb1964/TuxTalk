@@ -1,6 +1,6 @@
 {
  "files": {
-  "app.py": 5511,
+  "app.py": 5505,
   "prefs.py": 7120,
   "tray.py": 2548,
   "welcome_dialog.py": 3256
@@ -489,8 +489,8 @@
    "decisions": 16
   },
   "app.py::_handle_undo": {
-   "decisions": 22,
-   "lines": 104
+   "decisions": 20,
+   "lines": 103
   },
   "app.py::_loop_evdev": {
    "decisions": 27,
@@ -500,7 +500,7 @@
    "decisions": 18
   },
   "app.py::_prepare_text": {
-   "decisions": 19
+   "decisions": 17
   },
   "app.py::_resolve_boundary": {
    "decisions": 20
