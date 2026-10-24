@@ -112,15 +112,19 @@ class LibeiOutputBackend(OutputBackend):
     def _close_session(self, session_path):
         """Close a RemoteDesktop portal session (one is created per dictation)."""
         import gi
+        import logging
         gi.require_version("Gio", "2.0")
-        from gi.repository import Gio
+        from gi.repository import Gio, GLib
         from . import portal_common as pc
         try:
             pc.session_bus().call_sync(
                 pc.BUS_NAME, session_path, "org.freedesktop.portal.Session",
                 "Close", None, None, Gio.DBusCallFlags.NONE, 2000, None)
-        except Exception:
-            pass
+        except GLib.Error as e:
+            # The portal ends a session on its own when its client goes away,
+            # so one left open is gone at the latest when TuxTalk quits.
+            logging.getLogger(__name__).warning(
+                "Couldn't close the remote-control session %s: %s", session_path, e.message)
 
     def _run_handshake(self):
         """Drive CreateSession -> SelectDevices -> Start -> ConnectToEIS on a

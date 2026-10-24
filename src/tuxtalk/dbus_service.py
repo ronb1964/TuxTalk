@@ -108,7 +108,8 @@ class TuxTalkDBusService(dbus.service.Object):
         """Whether this process currently owns the TuxTalk bus name."""
         try:
             return self.bus.get_name_owner(DBUS_NAME) == self.bus.get_unique_name()
-        except Exception:
+        except dbus.exceptions.DBusException as e:     # no owner, or the bus went away
+            logger.info(f"Couldn't ask the bus who holds {DBUS_NAME}: {e}")
             return False
 
     # ==================== Internal Helpers ====================

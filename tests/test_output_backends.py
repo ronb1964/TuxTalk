@@ -471,3 +471,17 @@ def test_a_tap_while_the_libei_device_comes_back_holds_the_send(monkeypatch):
     assert held == [True] and libei.keys == []
     assert b.press_keys([((), "ENTER")], claim=lambda: lambda: None) is True
     assert libei.keys == [(libei_ctypes.KEY_ENTER, True), (libei_ctypes.KEY_ENTER, False)]
+
+
+def test_a_portal_session_that_wont_close_is_logged(monkeypatch, caplog):
+    from gi.repository import GLib
+    from tuxtalk import portal_common
+    from tuxtalk.output_backends import LibeiOutputBackend
+
+    class Bus:
+        def call_sync(self, *args):
+            raise GLib.Error("the portal went away")
+    monkeypatch.setattr(portal_common, "session_bus", lambda: Bus())
+    with caplog.at_level("WARNING"):
+        LibeiOutputBackend()._close_session("/org/freedesktop/portal/desktop/session/1_9/t")
+    assert "Couldn't close the remote-control session" in caplog.text

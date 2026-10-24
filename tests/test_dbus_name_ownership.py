@@ -89,3 +89,23 @@ def test_tray_owns_the_name_and_the_service_never_inherits_it(tmp_path):
     assert lines.get("tray_back") == "tray"
     assert lines.get("standalone") == "service registered"
     assert lines.get("tray_takes_over") == "tray"
+
+
+def test_a_bus_that_cant_say_who_holds_the_name_is_logged(caplog):
+    """Waiting in line behind another TuxTalk, the bus answers that the name
+    has no owner yet; the log says so instead of nothing."""
+    import dbus
+    from tuxtalk.dbus_service import TuxTalkDBusService
+
+    class Bus:
+        def get_name_owner(self, name):
+            raise dbus.exceptions.DBusException("no owner",
+                                                name="org.freedesktop.DBus.Error.NameHasNoOwner")
+
+        def get_unique_name(self):
+            return ":1.4"
+    service = object.__new__(TuxTalkDBusService)
+    service.bus = Bus()
+    with caplog.at_level("INFO"):
+        assert service.owns_name() is False
+    assert "Couldn't ask the bus who holds" in caplog.text
