@@ -436,3 +436,28 @@ def test_a_pause_then_press_enter_alone_in_a_password_field_logs_in(chat, keyboa
     heard.append("press enter")
     dictate("last")
     assert keyboard.typed_keys() == [ENTER] and notices == []
+
+
+def test_a_click_while_the_pause_is_heard_again_keeps_its_mark_out_of_the_other_window(
+        chat, keyboard, monkeypatch):
+    """Type at pause hears the end of a phrase again with the start of the
+    next to choose its mark, which can take a moment. Clicked into the other
+    Brave window meanwhile, the first window's period went there."""
+    focus, heard, typed, notices = chat
+    monkeypatch.setattr(app, "_chunk_context_marks", True)
+    monkeypatch.setattr(app, "_press_enter_after", False)
+    heard.append("See you at noon.")
+    dictate("middle")
+    heard.extend(["how are you", "See you at noon. How are you"])
+    transcribe = app._transcribe_audio
+
+    def context_pass_then_click(audio, language):
+        words = transcribe(audio, language)
+        if not heard:                       # the pass that heard both
+            focus[:] = SECOND
+        return words
+    monkeypatch.setattr(app, "_transcribe_audio", context_pass_then_click)
+    dictate("middle")
+    assert typed[0] == ("See you at noon", FIRST[1])
+    assert all(window == FIRST[1] for text, window in typed if text.strip() in ".?!")
+    assert typed[-1][1] == SECOND[1]

@@ -2385,10 +2385,13 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
     return text
 
 
-def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = False) -> str:
+def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = False,
+                 into=None) -> str:
     """Insert *text* into the active app (_deliver_text), then remember the
     window it landed in, for undo, "fix that word", select and move, and an
-    automatic Enter after it (send_countdown.landed).
+    automatic Enter after it (send_countdown.landed). *into*, a look taken
+    earlier, is the only window it may go into: "moved" when another has
+    the focus by the time it would.
 
     The focus is checked once more after typing because the report from
     before can be out of date. On KDE, clicking the desktop reports
@@ -2397,6 +2400,9 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
     sentence" must work.
     """
     before = focused_window.destination()
+    if into is not None and focused_window.changed(into, before):
+        logger.info("Not typed: another window has the focus now")
+        return "moved"
     sends_before = _keys_sent.count
     try:
         outcome = _deliver_text(text, injection_mode, t0, one_block, where=before)
@@ -3024,7 +3030,8 @@ def _type_boundary(pending: dict, tail: str, injection_mode: str) -> None:
         return
     send_to = state.send_to
     _remember_said(tail, chunked=True)
-    ok = _inject_text(tail, injection_mode, time.time()) == "ok"
+    # Only into the phrase's window: the context pass before this can take a while.
+    ok = _inject_text(tail, injection_mode, time.time(), into=pending["where"]) == "ok"
     _remember_shown(tail, chunked=True, ok=ok)
     if ok:
         # Undo and "delete last sentence" then see the whole chunk.
