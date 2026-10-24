@@ -349,6 +349,18 @@ def test_a_stuck_key_types_nothing_another_way(keyboard, stuck_right_ctrl, monke
     assert "Right Ctrl" in app._UNDELIVERED_NOTICES["key_held"]
 
 
+def test_a_clipboard_fallback_that_fails_says_why_in_the_log(monkeypatch, caplog):
+    """With no virtual keyboard and no wtype, the last way out is the
+    clipboard; when that failed too, the log said only that nothing worked."""
+    import pyperclip
+    monkeypatch.setattr(app, "_send_keys", lambda *a, **k: False)
+    monkeypatch.setattr(app, "_which", lambda name: name == "wl-copy" and "/usr/bin/wl-copy")
+    monkeypatch.setattr(pyperclip, "copy", lambda text: 1 / 0)
+    with caplog.at_level("WARNING", logger="tuxtalk.app"):
+        assert app._type_text_raw("hello") is False
+    assert "clipboard" in caplog.text and "division by zero" in caplog.text
+
+
 def test_undo_under_a_stuck_key_deletes_nothing_and_says_so(keyboard, stuck_right_ctrl):
     stuck_right_ctrl()
     assert app._send_backspaces(3) is False

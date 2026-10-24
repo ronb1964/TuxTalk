@@ -2001,8 +2001,8 @@ def _type_text_raw(text: str) -> bool:
             # Nothing was actually typed into the field — report failure so
             # the undo buffer doesn't track text the user must paste manually.
             return False
-        except Exception:
-            pass
+        except Exception as e:      # pyperclip missing, or no clipboard it can use
+            logger.warning(f"Couldn't copy the text to the clipboard either: {e}")
     logger.error("Could not type text: no virtual keyboard, wtype or wl-copy")
     print("Could not type text.")
     return False
