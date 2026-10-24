@@ -5548,8 +5548,8 @@ class PreferencesWindow:
             elif running is not None:
                 self.typing_status_label.set_markup(
                     '<span color="#4CAF50">✓ Ready. Only TuxTalk\'s hotkey helper reads the '
-                    'keyboard, and it tells TuxTalk about its hotkeys and nothing else</span>'
-                )
+                    'keyboard, and it tells TuxTalk about its hotkeys and Right Ctrl or '
+                    'Right Alt going down, never what you type</span>')
                 self.fix_typing_button.set_label("✓ Ready")
                 self.fix_typing_button.set_sensitive(False)
                 return True

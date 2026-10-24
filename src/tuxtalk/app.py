@@ -4847,7 +4847,7 @@ def _service_tick(cfg, svc: "_ServiceState") -> "LiveSettings | None":
     grabbed (the portal case).
 
     Returns the reloaded LiveSettings when the config changed, so a caller that
-    keeps loop locals (the evdev loop's hold_key/mode) can rebind them; None
+    keeps loop locals (the evdev loop's hold_key and toggle_key) can rebind them; None
     otherwise. The return value matters because _config_file_changed() is
     edge-triggered: it reports a given change exactly once, so the caller cannot
     simply ask again.

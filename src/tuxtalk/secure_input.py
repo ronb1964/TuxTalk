@@ -382,7 +382,8 @@ def fix_description():
     if can_install()[0]:
         return ([
             "Installs TuxTalk's hotkey helper, the only program that reads the keyboard. "
-            "It tells TuxTalk about its hotkeys and nothing else",
+            "It tells TuxTalk about its hotkeys and Right Ctrl or Right Alt going down, "
+            "never what you type",
             "Lets TuxTalk type with a virtual keyboard, as Steam does for game controllers",
         ], False)
     return ([

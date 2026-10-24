@@ -510,8 +510,9 @@ windows, so TuxTalk needs a little help to notice F8.
 - Preferences → Advanced → Typing Setup → **Fix Typing Permissions**
 - On most systems that installs TuxTalk's hotkey helper. It's a small
   background service, and it's the only thing that reads the keyboard. It
-  tells TuxTalk about its hotkeys and nothing else, so no other program you
-  run gets to read what you type. No restart needed. Check it with
+  tells TuxTalk about its hotkeys and Right Ctrl or Right Alt going down,
+  never what you type, and no other program you run gets to read your keys.
+  No restart needed. Check it with
   `systemctl status tuxtalk-hotkeys`
 - On a system without systemd it puts you in the `input` group instead. Then
   restart the computer (logging out often isn't enough) and check with
