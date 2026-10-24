@@ -4,6 +4,7 @@ gi.require_version("Gdk", "3.0")
 gi.require_version("Pango", "1.0")
 from gi.repository import Gtk, Gdk, GLib, Pango
 from . import mic_stream
+from .mic_test import MicTest, SegmentedVUMeter
 from .ui_style import Fold, message_dialog
 from .whisper_vulkan import ENGINE_SIZE_TEXT
 from .hotkey_labels import dropdown_entries, hands_free_label
@@ -218,97 +219,6 @@ def _acquire_prefs_singleton(tab=None):
         except Exception:
             pass
     atexit.register(_cleanup)
-
-
-class SegmentedVUMeter(Gtk.DrawingArea):
-    """
-    Custom segmented VU meter widget that looks like a classic LED audio meter.
-
-    Segments are colored based on their position:
-    - Green: Safe/normal levels (0-60%)
-    - Yellow: Getting loud (60-80%)
-    - Red: Danger/clipping zone (80-100%)
-
-    Unlit segments are shown in dark gray.
-    """
-
-    def __init__(self, num_segments=20):
-        super().__init__()
-        self.num_segments = num_segments
-        self.level = 0.0  # 0.0 to 1.0
-
-        # Set minimum size
-        self.set_size_request(200, 20)
-
-        # Connect draw signal
-        self.connect("draw", self._on_draw)
-
-        # Colors for segments based on position (as RGB tuples, 0-1 range)
-        # Bright, vivid colors like a real VU meter / LED display
-        # Green zone: 0-60% of segments
-        # Yellow zone: 60-80% of segments
-        # Red zone: 80-100% of segments
-        self.color_green = (0.0, 0.90, 0.46)     # #00E676 - bright lime green
-        self.color_yellow = (1.0, 0.84, 0.0)     # #FFD600 - bright yellow
-        self.color_red = (1.0, 0.09, 0.27)       # #FF1744 - bright red
-        self.color_off = (0.18, 0.18, 0.18)      # #2E2E2E - dark gray for unlit
-        self.color_border = (0.12, 0.12, 0.12)   # #1F1F1F - darker border
-
-    def set_value(self, level):
-        """Set the meter level (0.0 to 1.0)."""
-        self.level = max(0.0, min(1.0, level))
-        self.queue_draw()  # Trigger redraw
-
-    def _get_segment_color(self, segment_index, is_lit):
-        """Get the color for a segment based on its position and lit state."""
-        if not is_lit:
-            return self.color_off
-
-        # Calculate position as percentage (0.0 to 1.0)
-        position = segment_index / self.num_segments
-
-        if position < 0.60:
-            return self.color_green   # Green zone (0-60%)
-        elif position < 0.80:
-            return self.color_yellow  # Yellow zone (60-80%)
-        else:
-            return self.color_red     # Red zone (80-100%)
-
-    def _on_draw(self, widget, cr):
-        """Draw the segmented meter."""
-        # Get widget dimensions
-        width = widget.get_allocated_width()
-        height = widget.get_allocated_height()
-
-        # Calculate segment dimensions
-        segment_gap = 2  # Gap between segments
-        total_gaps = (self.num_segments - 1) * segment_gap
-        segment_width = (width - total_gaps) / self.num_segments
-        segment_height = height - 4  # Leave some margin
-
-        # Calculate how many segments should be lit
-        lit_segments = int(self.level * self.num_segments)
-
-        # Draw each segment
-        for i in range(self.num_segments):
-            x = i * (segment_width + segment_gap)
-            y = 2  # Top margin
-
-            is_lit = i < lit_segments
-            color = self._get_segment_color(i, is_lit)
-
-            # Draw segment background
-            cr.set_source_rgb(*color)
-            cr.rectangle(x, y, segment_width, segment_height)
-            cr.fill()
-
-            # Draw subtle border around each segment
-            cr.set_source_rgb(*self.color_border)
-            cr.rectangle(x, y, segment_width, segment_height)
-            cr.set_line_width(1)
-            cr.stroke()
-
-        return False
 
 
 class PauseMeter(SegmentedVUMeter):
@@ -1606,58 +1516,10 @@ class PreferencesWindow:
         mic_test_box.pack_start(self.volume_note, False, False, 0)
         self._refresh_volume_slider()
         
-        # Level meter - shows real-time audio level with segmented VU meter
-        level_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
-        level_label = Gtk.Label(label="Input Level:")
-
-        # Custom segmented VU meter (classic LED meter look)
-        # Green segments (0-60%), Yellow (60-80%), Red (80-100%)
-        self.level_bar = SegmentedVUMeter(num_segments=20)
-        self.level_bar.set_hexpand(True)
-        self.level_bar.set_tooltip_text(
-            "Green = safe levels, Yellow = getting loud, Red = too loud!\n"
-            "Aim to stay mostly in the green with occasional yellow peaks."
-        )
-
-        level_box.pack_start(level_label, False, False, 0)
-        level_box.pack_start(self.level_bar, True, True, 0)
-        mic_test_box.pack_start(level_box, False, False, 0)
-
-        # Status/grade label - shows recording quality after you stop
-        self.level_status = Gtk.Label(label="Click 'Start Recording' and speak to test your mic levels")
-        self.level_status.set_xalign(0)
-        self.level_status.set_margin_start(75)  # Align with level bar
-        self.level_status.set_line_wrap(True)
-        mic_test_box.pack_start(self.level_status, False, False, 0)
-        
-        # Control buttons
-        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
-        self.start_record_btn = Gtk.Button(label="● Start Recording")
-        self.stop_record_btn = Gtk.Button(label="■ Stop Recording")
-        self.replay_btn = Gtk.Button(label="▶ Replay")
-        self.start_record_btn.get_child().set_xalign(0.5)
-        self.stop_record_btn.get_child().set_xalign(0.5)
-        self.replay_btn.get_child().set_xalign(0.5)
-        
-        self.start_record_btn.connect("clicked", self.on_start_recording)
-        self.stop_record_btn.connect("clicked", self.on_stop_recording)
-        self.replay_btn.connect("clicked", self.on_replay_recording)
-        
-        # Initial button states
-        self.stop_record_btn.set_sensitive(False)
-        self.replay_btn.set_sensitive(False)
-        
-        button_box.pack_start(self.start_record_btn, False, False, 0)
-        button_box.pack_start(self.stop_record_btn, False, False, 0)
-        button_box.pack_start(self.replay_btn, False, False, 0)
-        mic_test_box.pack_start(button_box, False, False, 0)
-        
+        self.mic_test = MicTest(self.get_selected_device_idx, self.show_error_dialog)
+        self.mic_test.build(mic_test_box)
         grid.attach(mic_test_box, 1, row, 1, 1)
         row += 1
-        
-        # Initialize microphone test state
-        self.recording = False
-        self.recorded_audio = None
 
         # ===== AUDIO FEEDBACK SECTION =====
         separator1 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
@@ -4604,151 +4466,6 @@ class PreferencesWindow:
         current_mic = self.config.get("mic", "")
         return find_input_device(current_mic)
     
-    def update_level_bar(self, level):
-        """Update the VU meter with current audio level."""
-        # The SegmentedVUMeter handles colors automatically based on level
-        self.level_bar.set_value(level)
-
-        # Track statistics for post-recording evaluation
-        if hasattr(self, '_level_samples'):
-            self._level_samples.append(level)
-            if level > self._peak_level:
-                self._peak_level = level
-
-        return False  # Don't repeat
-    
-    def on_start_recording(self, button):
-        """Start recording microphone input."""
-        try:
-            import sounddevice as sd
-            import numpy as np
-
-            device_idx = self.get_selected_device_idx()
-            self._recording_sr = mic_stream.input_samplerate(device_idx, 16000)
-
-            self.recording = True
-            self.recorded_frames = []
-
-            # Initialize level tracking for post-recording evaluation
-            self._level_samples = []
-            self._peak_level = 0.0
-
-            # Clear any previous status message
-            self.level_status.set_text("🎤 Recording... speak normally")
-            style_context = self.level_status.get_style_context()
-            style_context.remove_class("level-too-quiet")
-            style_context.remove_class("level-good")
-            style_context.remove_class("level-too-loud")
-
-            def audio_callback(indata, frames, time, status):
-                if self.recording:
-                    self.recorded_frames.append(indata.copy())
-                    rms = np.sqrt(np.mean(indata**2))
-                    GLib.idle_add(self.update_level_bar, min(rms * 10, 1.0))
-
-            self.record_stream = sd.InputStream(
-                callback=audio_callback,
-                channels=1,
-                samplerate=self._recording_sr,
-                device=device_idx,
-                dtype='float32'
-            )
-            self.record_stream.start()
-
-            self.start_record_btn.set_sensitive(False)
-            self.stop_record_btn.set_sensitive(True)
-            self.replay_btn.set_sensitive(False)
-
-        except Exception as e:
-            self.show_error_dialog("Recording failed!", str(e))
-    
-    def on_stop_recording(self, button):
-        """Stop recording microphone input."""
-        try:
-            self.recording = False
-            if hasattr(self, 'record_stream'):
-                mic_stream.close(self.record_stream, wait=False)
-            if self.recorded_frames:
-                import numpy as np
-                self.recorded_audio = np.concatenate(self.recorded_frames, axis=0)
-            self.start_record_btn.set_sensitive(True)
-            self.stop_record_btn.set_sensitive(False)
-            self.replay_btn.set_sensitive(len(self.recorded_frames) > 0)
-            self.level_bar.set_value(0.0)
-            self._show_recording_grade()
-        except Exception as e:
-            self.show_error_dialog("Stop recording failed!", str(e))
-
-    def _show_recording_grade(self):
-        """Evaluate the recording and show a quality grade."""
-        style_context = self.level_status.get_style_context()
-        style_context.remove_class("level-too-quiet")
-        style_context.remove_class("level-good")
-        style_context.remove_class("level-too-loud")
-
-        if not hasattr(self, '_level_samples') or not self._level_samples:
-            self.level_status.set_text("No audio detected")
-            style_context.add_class("level-too-quiet")
-            return
-
-        # Calculate statistics (convert to Python floats to avoid numpy type issues)
-        samples = [float(s) for s in self._level_samples]
-        peak_level = float(self._peak_level)
-
-        # Filter out silence to get "speaking" samples (above 0.08)
-        speaking_samples = [s for s in samples if s > 0.08]
-        speaking_avg = sum(speaking_samples) / len(speaking_samples) if speaking_samples else 0
-
-        # Graded on the peak and the average level while speaking, with
-        # thresholds tuned for typical speech: under 5 speaking samples
-        # is too quiet, a peak over 0.95 clips, and an average under 0.20 is quiet.
-
-        if len(speaking_samples) < 5:
-            self.level_status.set_text("⚠️ Too quiet - speak louder or move closer to the mic")
-            style_context.add_class("level-too-quiet")
-        elif peak_level > 0.95:
-            self.level_status.set_text("⚠️ Too loud - reduce volume to avoid distortion")
-            style_context.add_class("level-too-loud")
-        elif speaking_avg < 0.20:
-            self.level_status.set_text("⚠️ A bit quiet - try speaking louder for best results")
-            style_context.add_class("level-too-quiet")
-        else:
-            self.level_status.set_text("✓ Good levels - should transcribe well!")
-            style_context.add_class("level-good")
-    
-    def on_replay_recording(self, button):
-        """Play the test recording back, three times louder, on the sound
-        thread (beeps.play), so it is heard to the end and the window stays
-        free while it plays. Replay and Start Recording are greyed out until
-        it is over: a second click would queue the recording again behind
-        it, and a new recording would record the replay. A sound server that
-        hangs as the stream opens never says it is over, so they come back
-        by themselves once it would long have played."""
-        if self.recorded_audio is None:
-            return
-        import numpy as np
-        from . import beeps
-        louder = np.clip(self.recorded_audio[:, 0] * 3.0, -1.0, 1.0).astype(np.float32)
-        rate = getattr(self, '_recording_sr', 48000)
-        self.replay_btn.set_sensitive(False)
-        self.start_record_btn.set_sensitive(False)
-        self._replaying = replay = object()
-        beeps.play(louder, rate, finished=lambda error: GLib.idle_add(
-            self._replay_over, replay, error))
-        GLib.timeout_add(int((len(louder) / rate + beeps.WAIT_LIMIT_S + beeps.STUCK_S) * 1000),
-                         self._replay_over, replay, "the sound output isn't answering")
-
-    def _replay_over(self, replay, error):
-        """Once for each *replay*: played, failed or given up on, whichever is first."""
-        if replay is not self._replaying:
-            return False
-        self._replaying = None
-        self.replay_btn.set_sensitive(True)
-        self.start_record_btn.set_sensitive(True)
-        if error:
-            self.show_error_dialog("Playback failed!", error)
-        return False
-
     def show_error_dialog(self, title, message):
         """Show an error dialog."""
         dialog = message_dialog(
@@ -6014,11 +5731,10 @@ class PreferencesWindow:
         dialog.destroy()
 
     def _stop_mic_test(self):
-        """Stop an in-progress mic-test recording and release the stream."""
-        if hasattr(self, 'recording') and self.recording:
-            self.recording = False
-            if hasattr(self, 'record_stream'):
-                mic_stream.close(self.record_stream)
+        """The window closes: stop the microphone tests and free the mic."""
+        mic_test = getattr(self, "mic_test", None)
+        if mic_test is not None:
+            mic_test.close()
         self._stop_pause_test(wait=True)
 
     # --- TuxTalk Labs: Type at pause (chunking.py) -----------------------------

@@ -1,7 +1,7 @@
 {
  "files": {
   "app.py": 5196,
-  "prefs.py": 7047,
+  "prefs.py": 6763,
   "tray.py": 2548,
   "welcome_dialog.py": 3256
  },
@@ -259,7 +259,7 @@
   "prefs.py::PreferencesWindow.create_advanced_tab::long_line": 22,
   "prefs.py::PreferencesWindow.create_advanced_tab::undocumented": 1,
   "prefs.py::PreferencesWindow.create_audio_tab._offset_row::undocumented": 1,
-  "prefs.py::PreferencesWindow.create_audio_tab::long_line": 13,
+  "prefs.py::PreferencesWindow.create_audio_tab::long_line": 12,
   "prefs.py::PreferencesWindow.create_audio_tab::swallowed_error": 1,
   "prefs.py::PreferencesWindow.create_audio_tab::undocumented": 1,
   "prefs.py::PreferencesWindow.create_commands_tab::swallowed_error": 1,
@@ -272,14 +272,11 @@
   "prefs.py::PreferencesWindow.create_updates_tab::long_line": 3,
   "prefs.py::PreferencesWindow.get_system_mic_volume::swallowed_error": 2,
   "prefs.py::PreferencesWindow.load_config::swallowed_error": 1,
-  "prefs.py::PreferencesWindow.on_start_recording::swallowed_error": 1,
-  "prefs.py::PreferencesWindow.on_stop_recording::swallowed_error": 1,
   "prefs.py::PreferencesWindow.on_tab_switched::swallowed_error": 1,
   "prefs.py::PreferencesWindow.restart_service::swallowed_error": 1,
   "prefs.py::PreferencesWindow.save_config::swallowed_error": 3,
   "prefs.py::PreferencesWindow.set_system_mic_volume::swallowed_error": 2,
   "prefs.py::PreferencesWindow::undocumented": 1,
-  "prefs.py::SegmentedVUMeter.__init__::undocumented": 1,
   "prefs.py::_acquire_prefs_singleton._cleanup::swallowed_error": 1,
   "prefs.py::_acquire_prefs_singleton::swallowed_error": 2,
   "prefs.py::_acquire_prefs_singleton::undocumented": 1,
@@ -619,7 +616,7 @@
   },
   "prefs.py::PreferencesWindow.create_audio_tab": {
    "decisions": 16,
-   "lines": 464
+   "lines": 416
   },
   "prefs.py::PreferencesWindow.create_commands_tab": {
    "lines": 129
