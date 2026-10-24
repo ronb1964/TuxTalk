@@ -9,7 +9,7 @@ TuxTalk reports success.
 
 The provider is a KWin script loaded over D-Bus. It connects to
 workspace.windowActivated and pushes window.resourceClass into the same
-SetFocusedWindowClass method the GNOME extension calls, so everything downstream
+SetFocusedWindow method the GNOME extension calls, so everything downstream
 is unchanged. Checked by hand on a live Plasma 6.7.4 Wayland session, where the
 cache follows focus from window to window.
 
@@ -17,9 +17,14 @@ Nothing here may be fatal. A missing KWin, a refused D-Bus call or a read-only
 data directory must cost the paste hint, never the tray.
 """
 
+import pathlib
+
 import pytest
 
 from tuxtalk import kwin_focus as K
+
+EXTENSION_JS = (pathlib.Path(__file__).resolve().parent.parent / "gnome-extension"
+                / "talktype@ronb1964.github.io" / "extension.js").read_text()
 
 
 class FakeBus:
@@ -73,7 +78,8 @@ class TestTheScript:
         script = K.build_script()
 
         assert dbus_service.DBUS_INTERFACE in script
-        assert "SetFocusedWindowClass" in script
+        assert '"SetFocusedWindow"' in script
+        assert "SetFocusedWindowRemote" in EXTENSION_JS
 
     def test_it_reports_the_window_class(self):
         script = K.build_script()

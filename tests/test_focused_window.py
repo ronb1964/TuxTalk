@@ -19,27 +19,28 @@ def test_the_compositors_window_id_says_which_window_it_is(monkeypatch):
 
 
 def test_the_tray_is_asked_with_a_time_limit(monkeypatch):
-    """Paste asks between the hotkey's release and the text appearing: a
-    busy tray must not hold the text up for D-Bus's 25 seconds."""
+    """Paste asks between the hotkey's release and the text appearing, from
+    the thread that types: neither the bus daemon nor a busy tray may hold
+    the text up for dbus-python's 25 seconds. A proxy for the tray's name
+    would look its owner up again without one."""
     import dbus
     calls = []
 
     class Bus:
-        def get_name_owner(self, name):
-            return ":1.7"
-
         def get_unique_name(self):
             return ":1.9"
 
-        def get_object(self, *a, **kw):
-            return self
+        def call_blocking(self, bus_name, path, interface, method, signature, args, timeout=-1):
+            calls.append((bus_name, method, timeout))
+            return ":1.7" if method == "GetNameOwner" else ("org.kde.konsole", "", "")
 
-        def GetFocusedWindow(self, **kw):
-            calls.append(kw)
-            return ("org.kde.konsole", "", "")
+        def get_object(self, *a, **kw):
+            raise AssertionError("a proxy asks the bus for the owner with no time limit")
     monkeypatch.setattr(dbus, "SessionBus", Bus)
     assert focused_window.reported() == ("org.kde.konsole", "", "")
-    assert calls and 0 < calls[0]["timeout"] <= 5
+    assert [(name, method) for name, method, _ in calls] == [
+        ("org.freedesktop.DBus", "GetNameOwner"), (":1.7", "GetFocusedWindow")]
+    assert all(0 < timeout <= 5 for _, _, timeout in calls)
 
 
 # --- KDE and GNOME: the window's own id, through the tray -----------------------------
@@ -49,23 +50,23 @@ KWRITE_MAXIMIZED = "0,0,1920,1050|DP-1|0,0,1920,1080"
 
 def _tray_reports(monkeypatch):
     """The tray's real focus cache, reported to the way the KWin script and
-    the GNOME extension do (the id, then the class, then the frame), and
+    the GNOME extension do (the class, the id and the frame in one call; with
+    no id, as the extension of 0.18 did: the class, then the frame), and
     asked the way the dictation service asks it."""
     from tuxtalk import dbus_service
-    for name, value in (("_focused_window_class", None), ("_focused_window_id", ""),
-                        ("_next_window_id", ""), ("_focused_window_geometry", ""),
-                        ("_clipboard_tool_focused", False)):
-        monkeypatch.setattr(dbus_service, name, value)
+    monkeypatch.setattr(dbus_service, "_focus", dbus_service.FocusReport())
+    monkeypatch.setattr(dbus_service, "_clipboard_tool_focused", False)
     service = object.__new__(dbus_service.TuxTalkDBusService)
     monkeypatch.setattr(focused_window, "reported",
                         lambda: dbus_service.TuxTalkDBusService.GetFocusedWindow(service))
     monkeypatch.setattr(compositor_focus, "focused_window", lambda: (None, None))
 
     def report(window_id, wm_class, frame):
-        if window_id is not None:
-            dbus_service.TuxTalkDBusService.SetFocusedWindowId(service, window_id)
-        dbus_service.TuxTalkDBusService.SetFocusedWindowClass(service, wm_class)
-        dbus_service.TuxTalkDBusService.SetFocusedWindowGeometry(service, frame)
+        if window_id is None:
+            dbus_service.TuxTalkDBusService.SetFocusedWindowClass(service, wm_class)
+            dbus_service.TuxTalkDBusService.SetFocusedWindowGeometry(service, frame)
+        else:
+            dbus_service.TuxTalkDBusService.SetFocusedWindow(service, wm_class, window_id, frame)
     return report
 
 
@@ -113,15 +114,43 @@ def test_with_the_id_known_the_compositor_isnt_asked(monkeypatch):
     assert focused_window.look() == ("kwrite", "4183")
 
 
-def test_the_kwin_script_and_the_extension_send_the_id_before_the_class():
+def test_the_kwin_script_and_the_extension_send_the_window_in_one_call():
+    """Sent apart, a look between the calls paired one window's class with
+    the next one's id."""
     import pathlib
+    import re
     from tuxtalk import kwin_focus
     script = kwin_focus.build_script()
-    assert script.index('"SetFocusedWindowId"') < script.index('"SetFocusedWindowClass"')
-    assert "w.internalId" in script
+    report = script[script.index("function tuxtalkReport(w)"):]
+    call = report[report.index("callDBus("):report.index(");") + 2]
+    assert '"SetFocusedWindow"' in call and "w.internalId" in call and "tuxtalkFrame(w)" in call
+    assert "SetFocusedWindowClass" not in script
     ext = (pathlib.Path(__file__).resolve().parent.parent / "gnome-extension"
            / "talktype@ronb1964.github.io" / "extension.js").read_text()
-    assert '<method name="SetFocusedWindowId">' in ext
-    push = ext[ext.index("_pushFocusedWindowClass() {"):]
-    assert push.index("SetFocusedWindowIdRemote") < push.index("SetFocusedWindowClassRemote")
-    assert "win.get_id()" in push
+    assert re.search(r'<method name="SetFocusedWindow">(\s*<arg type="s" direction="in" '
+                     r'name="\w+"/>){3}', ext)
+    push = ext[ext.index("_pushFocusedWindow() {"):ext.index("_watchFocusedWindow(win) {")]
+    assert re.search(r"SetFocusedWindowRemote\(wmClass, win \? String\(win\.get_id\(\)\)", push)
+
+
+def test_a_tuxtalk_from_before_the_one_call_still_gets_the_class_from_the_extension():
+    """The extension downloaded from the latest release can meet an older
+    TuxTalk, which answers the new call with an error."""
+    import pathlib
+    ext = (pathlib.Path(__file__).resolve().parent.parent / "gnome-extension"
+           / "talktype@ronb1964.github.io" / "extension.js").read_text()
+    push = ext[ext.index("_pushFocusedWindow() {"):ext.index("_watchFocusedWindow(win) {")]
+    fallback = push[push.index("(result, error) =>"):]
+    assert "if (error" in fallback and "SetFocusedWindowClassRemote(wmClass" in fallback
+
+
+def test_the_extension_of_0_18_never_pairs_a_class_with_the_last_windows_frame(monkeypatch):
+    """Still loaded until the user logs out, it sends the class, then the
+    frame. A look in between got the new class with the old window's frame."""
+    report = _tray_reports(monkeypatch)
+    report("4183", "kwrite", KWRITE_MAXIMIZED)
+    from tuxtalk import dbus_service
+    service = object.__new__(dbus_service.TuxTalkDBusService)
+    dbus_service.TuxTalkDBusService.SetFocusedWindowClass(service, "firefox")
+    monkeypatch.setattr(compositor_focus, "focused_rect", lambda: None)
+    assert focused_window.look() == ("firefox", None)

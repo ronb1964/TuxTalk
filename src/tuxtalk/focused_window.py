@@ -32,7 +32,9 @@ logger = setup_logger(__name__)
 
 # The tray answers from a cache in a millisecond; this is for one whose loop
 # is busy (Preferences opening), which would otherwise leave the class
-# unknown and pick the wrong paste shortcut.
+# unknown and pick the wrong paste shortcut. The bus daemon gets the same
+# limit: these questions come from the typing thread, which a wedged session
+# bus would otherwise hold for dbus-python's 25 seconds.
 TRAY_TIMEOUT_S = 1.5
 
 
@@ -45,13 +47,18 @@ def reported(timeout: float = TRAY_TIMEOUT_S):
     from .dbus_service import DBUS_INTERFACE, DBUS_NAME, DBUS_PATH
     try:
         bus = dbus.SessionBus()
-        if bus.get_name_owner(DBUS_NAME) == bus.get_unique_name():
+        owner = bus.call_blocking("org.freedesktop.DBus", "/org/freedesktop/DBus",
+                                  "org.freedesktop.DBus", "GetNameOwner", "s", (DBUS_NAME,),
+                                  timeout=timeout)
+        if owner == bus.get_unique_name():
             # With no tray running, the dictation service holds the name
             # itself; a call to its own name would wait on the GTK loop that
             # is making it, and time out.
-            return dbus_service.focused_window()
-        proxy = bus.get_object(DBUS_NAME, DBUS_PATH, introspect=False)
-        answer = proxy.GetFocusedWindow(dbus_interface=DBUS_INTERFACE, timeout=timeout)
+            return tuple(dbus_service.cached_focus())
+        # To the owner's unique name: dbus-python looks a well-known name up
+        # again for each proxy, with no time limit.
+        answer = bus.call_blocking(owner, DBUS_PATH, DBUS_INTERFACE, "GetFocusedWindow", "", (),
+                                   timeout=timeout)
     except dbus.exceptions.DBusException as e:   # no tray, or a busy one
         logger.debug(f"Could not ask the tray which window has the focus: {e}")
         return None

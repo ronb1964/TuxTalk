@@ -4,7 +4,7 @@ Paste keys off which window has focus: it sends Ctrl+Shift+V to terminals (they
 treat plain Ctrl+V as readline's quoted-insert and show nothing), and routes
 Electron apps that swallow synthetic paste to a typing fallback. Floating
 messages and the follow-window indicator need where that window is. Both are
-cached by the D-Bus service (SetFocusedWindowClass, SetFocusedWindowGeometry),
+cached by the D-Bus service (SetFocusedWindow, SetFocusedWindowGeometry),
 and on KDE nothing else fills that cache.
 
 KWin has no D-Bus property for the active window — queryWindowInfo() asks the
@@ -66,19 +66,21 @@ function tuxtalkNumbers(g) {{
 }}
 
 // "x,y,w,h|output|ox,oy,ow,oh": the window's frame and its screen (window_geometry.py).
-function tuxtalkGeometry() {{
-    var w = workspace.activeWindow;
-    var s = "";
-    if (w && w.frameGeometry) {{
-        var o = w.output;
-        s = tuxtalkNumbers(w.frameGeometry) + "|" + ((o && o.name) ? String(o.name) : "") +
-            "|" + ((o && o.geometry) ? tuxtalkNumbers(o.geometry) : "0,0,0,0");
+function tuxtalkFrame(w) {{
+    if (!w || !w.frameGeometry) {{
+        return "";
     }}
+    var o = w.output;
+    return tuxtalkNumbers(w.frameGeometry) + "|" + ((o && o.name) ? String(o.name) : "") +
+        "|" + ((o && o.geometry) ? tuxtalkNumbers(o.geometry) : "0,0,0,0");
+}}
+
+function tuxtalkGeometry() {{
     callDBus("{DBUS_NAME}",
              "{DBUS_PATH}",
              "{DBUS_INTERFACE}",
              "SetFocusedWindowGeometry",
-             s);
+             tuxtalkFrame(workspace.activeWindow));
 }}
 
 // A drag or resize changes the frame on every frame: report once it ends.
@@ -92,18 +94,16 @@ function tuxtalkGeometryChanged() {{
 
 function tuxtalkReport(w) {{
     var cls = (w && w.resourceClass) ? String(w.resourceClass) : "";
-    // Which window it is, right before its class: two windows of one app
-    // look the same otherwise (focused_window.py).
+    // Its class, which window it is and where, in one call: two windows of
+    // one app look the same by their class (focused_window.py), and a look
+    // between separate calls would pair one window's class with another's id.
     callDBus("{DBUS_NAME}",
              "{DBUS_PATH}",
              "{DBUS_INTERFACE}",
-             "SetFocusedWindowId",
-             (w && w.internalId) ? String(w.internalId) : "");
-    callDBus("{DBUS_NAME}",
-             "{DBUS_PATH}",
-             "{DBUS_INTERFACE}",
-             "SetFocusedWindowClass",
-             cls);
+             "SetFocusedWindow",
+             cls,
+             (w && w.internalId) ? String(w.internalId) : "",
+             tuxtalkFrame(w));
     // Follow this window's moves and resizes until another one is active.
     if (tuxtalkWatched && tuxtalkWatched.frameGeometryChanged) {{
         try {{ tuxtalkWatched.frameGeometryChanged.disconnect(tuxtalkGeometryChanged); }} catch (e) {{}}
@@ -118,7 +118,6 @@ function tuxtalkReport(w) {{
     if (w && w.interactiveMoveResizeFinished) {{
         w.interactiveMoveResizeFinished.connect(tuxtalkGeometry);
     }}
-    tuxtalkGeometry();
 }}
 
 if (workspace.windowActivated) {{

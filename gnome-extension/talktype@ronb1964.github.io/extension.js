@@ -51,8 +51,10 @@ const TuxTalkIface = `
     <method name="SetModel">
       <arg type="s" direction="in" name="model"/>
     </method>
-    <method name="SetFocusedWindowId">
+    <method name="SetFocusedWindow">
+      <arg type="s" direction="in" name="wm_class"/>
       <arg type="s" direction="in" name="window_id"/>
+      <arg type="s" direction="in" name="geometry"/>
     </method>
     <method name="SetFocusedWindowClass">
       <arg type="s" direction="in" name="wm_class"/>
@@ -246,25 +248,32 @@ class TuxTalkIndicator extends PanelMenu.Button {
         if (!global.display) return;
         this._focusSignalId = global.display.connect(
             'notify::focus-window',
-            () => this._pushFocusedWindowClass()
+            () => this._pushFocusedWindow()
         );
-        this._pushFocusedWindowClass();
+        this._pushFocusedWindow();
     }
 
-    _pushFocusedWindowClass() {
+    _pushFocusedWindow() {
         if (!this._proxy || !this._dbusAvailable) {
             return;
         }
         try {
             const win = global.display && global.display.focus_window;
             const wmClass = (win && win.get_wm_class()) || '';
-            // Which window it is, right before its class: two windows of one
-            // app look the same otherwise. An older TuxTalk without the
-            // method answers with an error, which is left unread.
-            this._proxy.SetFocusedWindowIdRemote(win ? String(win.get_id()) : '', () => {});
-            this._proxy.SetFocusedWindowClassRemote(wmClass, () => {});
+            const geometry = this._frameOf(win);
+            // Its class, which window it is and where, in one call: two
+            // windows of one app look the same by their class, and a look
+            // between separate calls would pair one window's class with
+            // another's id. A TuxTalk from before the call existed answers
+            // with an error, and gets the class and frame the old way.
+            this._proxy.SetFocusedWindowRemote(wmClass, win ? String(win.get_id()) : '', geometry,
+                (result, error) => {
+                    if (error && this._proxy && this._dbusAvailable) {
+                        this._proxy.SetFocusedWindowClassRemote(wmClass, () => {});
+                        this._proxy.SetFocusedWindowGeometryRemote(geometry, () => {});
+                    }
+                });
             this._watchFocusedWindow(win);
-            this._pushFocusedWindowGeometry();
         } catch (e) {
             console.error('TuxTalk: focus push failed:', e);
         }
@@ -298,18 +307,20 @@ class TuxTalkIndicator extends PanelMenu.Button {
 
     // "x,y,w,h|output|ox,oy,ow,oh": the frame and its monitor. GNOME has no
     // connector name at hand, so the output is left empty.
+    _frameOf(win) {
+        if (!win)
+            return '';
+        const r = win.get_frame_rect();
+        const m = global.display.get_monitor_geometry(win.get_monitor());
+        return `${r.x},${r.y},${r.width},${r.height}||${m.x},${m.y},${m.width},${m.height}`;
+    }
+
     _pushFocusedWindowGeometry() {
         if (!this._proxy || !this._dbusAvailable)
             return;
         try {
             const win = global.display && global.display.focus_window;
-            let geometry = '';
-            if (win) {
-                const r = win.get_frame_rect();
-                const m = global.display.get_monitor_geometry(win.get_monitor());
-                geometry = `${r.x},${r.y},${r.width},${r.height}||${m.x},${m.y},${m.width},${m.height}`;
-            }
-            this._proxy.SetFocusedWindowGeometryRemote(geometry, () => {});
+            this._proxy.SetFocusedWindowGeometryRemote(this._frameOf(win), () => {});
         } catch (e) {
             console.error('TuxTalk: geometry push failed:', e);
         }
@@ -330,7 +341,7 @@ class TuxTalkIndicator extends PanelMenu.Button {
                 this._updateStatus();
                 // Re-push current focus so a freshly restarted Python service
                 // doesn't sit at class=None until the user changes windows.
-                this._pushFocusedWindowClass();
+                this._pushFocusedWindow();
                 console.log('TuxTalk: D-Bus service appeared - showing indicator');
             },
             () => {

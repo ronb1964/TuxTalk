@@ -3,6 +3,8 @@
 D-Bus service for TuxTalk - enables GNOME extension integration
 """
 
+from typing import NamedTuple
+
 from gi.repository import GLib
 import dbus
 import dbus.service
@@ -13,20 +15,22 @@ from .logger import setup_logger
 logger = setup_logger(__name__)
 
 
-# Cache of the currently focused window's wm_class, pushed by the GNOME
-# extension or the KWin focus script whenever focus changes, for the
-# dictation service (focused_window.py): paste picks Ctrl+V or, in a
-# terminal, Ctrl+Shift+V by it.
-_focused_window_class: str | None = None
-# "x,y,w,h|output|ox,oy,ow,oh" from the same reporters (window_geometry.py).
-_focused_window_geometry: str = ""
-# The compositor's own id for that window (KWin's internalId, Mutter's window
-# id), "" when not known: it tells two windows of one app apart. A reporter
-# sends it (SetFocusedWindowId) right before the class it belongs to, and the
-# class takes it; a reporter that never sends one (an extension from before
-# it did) leaves it "".
-_focused_window_id: str = ""
-_next_window_id: str = ""
+class FocusReport(NamedTuple):
+    """What the GNOME extension or the KWin focus script last said about the
+    focused window, "" for what it didn't: its class, the compositor's own id
+    for it (KWin's internalId, Mutter's window id), which tells two windows
+    of one app apart, and its frame, "x,y,w,h|output|ox,oy,ow,oh"
+    (window_geometry.py). Paste picks Ctrl+V or, in a terminal,
+    Ctrl+Shift+V by the class (focused_window.py)."""
+    wm_class: str = ""
+    window_id: str = ""
+    geometry: str = ""
+
+
+# Replaced whole by each report, never changed in place: the dictation
+# service reads it from other threads when it holds the bus name itself, and
+# must get one window's class, id and frame together.
+_focus = FocusReport()
 
 # True from a report of wl-copy's brief window (desktop_identity) until the
 # next window's. Its reports are left out, and so is the geometry sent after
@@ -34,11 +38,10 @@ _next_window_id: str = ""
 _clipboard_tool_focused = False
 
 
-
-def focused_window():
-    """(class, id, frame) as GetFocusedWindow answers, for the dictation
+def cached_focus() -> FocusReport:
+    """The focused window as GetFocusedWindow answers, for the dictation
     service when it holds the bus name itself (no tray running)."""
-    return _focused_window_class or "", _focused_window_id, _focused_window_geometry
+    return _focus
 
 
 # The bus identifiers, at module level so providers that fill the focused-window
@@ -245,52 +248,49 @@ class TuxTalkDBusService(dbus.service.Object):
         """Change the speech model"""
         self._dispatch('set_model', model_name)
 
-    @dbus.service.method(DBUS_INTERFACE, in_signature='s')
-    def SetFocusedWindowClass(self, wm_class: str):
-        """Receive the focused window's wm_class from the GNOME extension or KWin script.
-
-        Called on every focus change. Cached for cross-process query via
-        GetFocusedWindowClass — the dictation engine runs in a separate
-        subprocess from this service.
-        """
-        global _focused_window_class, _focused_window_id, _next_window_id
-        global _clipboard_tool_focused
+    @dbus.service.method(DBUS_INTERFACE, in_signature='sss')
+    def SetFocusedWindow(self, wm_class: str, window_id: str, geometry: str):
+        """The focused window, from the KWin script or the GNOME extension on
+        every focus change: its class, the compositor's id for it and its
+        frame (FocusReport), in one call, so a look can't pair one window's
+        class with the next one's id."""
+        global _focus, _clipboard_tool_focused
         from .desktop_identity import is_clipboard_tool_class, is_own_window_class
-        window_id, _next_window_id = _next_window_id, ""
         _clipboard_tool_focused = is_clipboard_tool_class(wm_class)
         if _clipboard_tool_focused:
             return
         # TuxTalk's own window (Preferences) is never a paste target, and kept
         # here it would outlive a reporter that stops, such as an extension
         # uninstalled from Preferences.
-        new_class = wm_class if wm_class and not is_own_window_class(wm_class) else None
-        if new_class != _focused_window_class:
-            logger.info(f"Focused window class: {new_class!r}")
-        _focused_window_class = new_class
-        _focused_window_id = str(window_id) if new_class else ""
+        if not wm_class or is_own_window_class(wm_class):
+            wm_class = window_id = ""
+        if wm_class != _focus.wm_class:
+            logger.info(f"Focused window class: {wm_class or None!r}")
+        _focus = FocusReport(str(wm_class), str(window_id or ""), str(geometry or ""))
 
     @dbus.service.method(DBUS_INTERFACE, in_signature='s')
-    def SetFocusedWindowId(self, window_id: str):
-        """The compositor's own id for the window whose class comes next
-        (SetFocusedWindowClass), from the KWin script or GNOME extension."""
-        global _next_window_id
-        _next_window_id = str(window_id or "")
+    def SetFocusedWindowClass(self, wm_class: str):
+        """The focused window's class alone, from a GNOME extension of 0.18
+        or earlier, still loaded until the user logs out after an update. Its
+        frame follows in SetFocusedWindowGeometry; until then it isn't known."""
+        self.SetFocusedWindow(wm_class, "", "")
 
     @dbus.service.method(DBUS_INTERFACE, in_signature='s')
     def SetFocusedWindowGeometry(self, geometry: str):
-        """Where the focused window is, from the KWin script or GNOME
-        extension: "x,y,w,h|output|ox,oy,ow,oh" (window_geometry.py). Sent on
-        every move, so it is cached without logging."""
-        global _focused_window_geometry
+        """Where the focused window is now, from the KWin script or GNOME
+        extension, sent as it moves or is resized: "x,y,w,h|output|ox,oy,ow,oh"
+        (window_geometry.py). Sent on every move, so it is cached without
+        logging."""
+        global _focus
         if not _clipboard_tool_focused:
-            _focused_window_geometry = str(geometry or "")
+            _focus = _focus._replace(geometry=str(geometry or ""))
 
     @dbus.service.method(DBUS_INTERFACE, out_signature='sss')
     def GetFocusedWindow(self):
         """The focused window's class, id and frame, "" for what isn't known:
         the cache the focus reporters push into, for the dictation service,
         which runs in a process of its own (focused_window.py)."""
-        return focused_window()
+        return tuple(_focus)
 
     @dbus.service.method(DBUS_INTERFACE, out_signature='a(sss)')
     def GetPresets(self):

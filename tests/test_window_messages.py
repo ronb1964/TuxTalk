@@ -118,8 +118,9 @@ def test_hyprland_focused_rect(monkeypatch):
 
 # --- the tray keeps the latest report ------------------------------------------------------
 
-def test_the_tray_caches_the_geometry():
+def test_the_tray_caches_the_geometry(monkeypatch):
     from tuxtalk import dbus_service
+    monkeypatch.setattr(dbus_service, "_focus", dbus_service.FocusReport("kwrite", "4", ""))
     svc = object()
     dbus_service.TuxTalkDBusService.SetFocusedWindowGeometry(svc, "1,2,3,4|DP-6|0,0,10,10")
     assert dbus_service.TuxTalkDBusService.GetFocusedWindow(svc)[-1] == "1,2,3,4|DP-6|0,0,10,10"
@@ -132,7 +133,7 @@ def test_the_kwin_script_reports_geometry_and_follows_moves():
     js = kwin_focus.build_script()
     assert "SetFocusedWindowGeometry" in js
     assert "frameGeometryChanged" in js and "output" in js
-    assert "SetFocusedWindowClass" in js           # still reports the class
+    assert '"SetFocusedWindow"' in js              # still reports the class
 
 
 def test_the_gnome_extension_reports_geometry():
@@ -228,15 +229,14 @@ class _FakeBus:
     def __init__(self, owner, me):
         self.owner, self.me, self.asked = owner, me, []
 
-    def get_name_owner(self, name):
-        return self.owner
-
     def get_unique_name(self):
         return self.me
 
-    def get_object(self, *a, **k):
+    def call_blocking(self, bus_name, path, interface, method, signature, args, timeout=-1):
         import dbus
-        self.asked.append(a)
+        if method == "GetNameOwner":
+            return self.owner
+        self.asked.append((bus_name, method))
         raise dbus.exceptions.DBusException("no tray in this test")
 
 
@@ -247,7 +247,8 @@ def test_the_service_holding_the_name_reads_its_own_cache(monkeypatch):
     from tuxtalk import dbus_service
     bus = _FakeBus(":1.5", ":1.5")
     monkeypatch.setattr(dbus, "SessionBus", lambda: bus)
-    monkeypatch.setattr(dbus_service, "_focused_window_geometry", "1,2,3,4|DP-6|0,0,10,10")
+    monkeypatch.setattr(dbus_service, "_focus",
+                        dbus_service.FocusReport(geometry="1,2,3,4|DP-6|0,0,10,10"))
     assert wg._reported() == "1,2,3,4|DP-6|0,0,10,10"
     assert bus.asked == []
 

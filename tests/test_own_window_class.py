@@ -48,10 +48,13 @@ def test_other_windows_are_not_tuxtalks(wm_class):
 def test_the_tray_does_not_keep_tuxtalks_own_window_as_the_focus(monkeypatch):
     """A report of TuxTalk's own window clears the cache, so it can't stay
     behind when the reporter goes away."""
-    monkeypatch.setattr(dbus_service, "_focused_window_class", "org.gnome.Ptyxis")
+    monkeypatch.setattr(dbus_service, "_focus", dbus_service.FocusReport("org.gnome.Ptyxis", "4"))
     service = object.__new__(dbus_service.TuxTalkDBusService)
-    dbus_service.TuxTalkDBusService.SetFocusedWindowClass(service, "tuxtalk")
-    assert dbus_service.TuxTalkDBusService.GetFocusedWindow(service)[0] == ""
+    dbus_service.TuxTalkDBusService.SetFocusedWindow(service, "tuxtalk", "9", "")
+    assert dbus_service.TuxTalkDBusService.GetFocusedWindow(service)[:2] == ("", "")
+    dbus_service.TuxTalkDBusService.SetFocusedWindow(service, "org.gnome.Ptyxis", "4", "")
+    dbus_service.TuxTalkDBusService.SetFocusedWindowClass(service, "tuxtalk")   # 0.18's extension
+    assert dbus_service.TuxTalkDBusService.GetFocusedWindow(service)[:2] == ("", "")
 
 
 def _reported(monkeypatch, wm_class, asked):
@@ -73,10 +76,11 @@ def test_a_tuxtalk_window_from_the_compositor_counts_as_unknown(monkeypatch):
 
 def test_a_tuxtalk_window_the_tray_had_still_asks_the_compositor(monkeypatch):
     """The tray keeps no class for TuxTalk's own window, so the compositor is asked."""
+    monkeypatch.setattr(dbus_service, "_focus", dbus_service.FocusReport())
     service = object.__new__(dbus_service.TuxTalkDBusService)
-    dbus_service.TuxTalkDBusService.SetFocusedWindowClass(service, "tuxtalk")
+    dbus_service.TuxTalkDBusService.SetFocusedWindow(service, "tuxtalk", "9", "")
     monkeypatch.setattr(focused_window, "reported",
-                        lambda timeout=None: dbus_service.focused_window())
+                        lambda timeout=None: tuple(dbus_service.cached_focus()))
     monkeypatch.setattr(compositor_focus, "focused_window", lambda: ("foot", None))
     assert app._query_focused_window_class() == "foot"
 
@@ -175,13 +179,13 @@ KWRITE_AT = "900,100,800,600|DP-1|0,0,1920,1080"
 
 class _TrayCache:
     """The tray's real focus cache, filled the way the KWin script and the GNOME
-    extension fill it (the class, then the geometry) and asked like the service asks."""
+    extension fill it (the window, then its moves) and asked like the service asks."""
 
     def __init__(self):
         self.service = object.__new__(dbus_service.TuxTalkDBusService)
 
     def report(self, wm_class, geometry):
-        dbus_service.TuxTalkDBusService.SetFocusedWindowClass(self.service, wm_class)
+        dbus_service.TuxTalkDBusService.SetFocusedWindow(self.service, wm_class, "", geometry)
         dbus_service.TuxTalkDBusService.SetFocusedWindowGeometry(self.service, geometry)
 
     def geometry(self):
@@ -200,8 +204,7 @@ class _CopyReportingItsWindow(_Copy):
 
 @pytest.fixture
 def tray(monkeypatch):
-    monkeypatch.setattr(dbus_service, "_focused_window_class", None)
-    monkeypatch.setattr(dbus_service, "_focused_window_geometry", "")
+    monkeypatch.setattr(dbus_service, "_focus", dbus_service.FocusReport())
     monkeypatch.setattr(dbus_service, "_clipboard_tool_focused", False)
     tray = _TrayCache()
     monkeypatch.setattr(focused_window, "reported", lambda timeout=None: (
