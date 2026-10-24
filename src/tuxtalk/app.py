@@ -1781,8 +1781,11 @@ def _type_text_raw(text: str) -> bool:
     if _which("wtype"):
         # The real exit code, so the undo buffer tracks only typed text; a
         # bounded wait, so a stalled compositor can't freeze dictation; the
-        # text on stdin ("-"), as every user can read a command line.
-        proc = subprocess.Popen(["wtype", "-"], stdin=subprocess.PIPE)
+        # text on stdin ("-"), as every user can read a command line. wtype
+        # reads stdin in its locale's encoding, and under a C locale stops at
+        # the first letter outside ASCII, dropping the rest without an error.
+        proc = subprocess.Popen(["wtype", "-"], stdin=subprocess.PIPE,
+                                env=dict(os.environ, LC_ALL="C.UTF-8"))
         try:
             proc.communicate(text.encode("utf-8"), timeout=WTYPE_TIMEOUT_S)
         except subprocess.TimeoutExpired:
@@ -2816,7 +2819,6 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
     _trim_auto_stop_tail(frames)
     if state.was_cancelled:
         return None
-    # Hide recording indicator before text injection
     if recording_indicator:
         recording_indicator.hide_indicator()
     return frames, rec_sr
@@ -4547,7 +4549,6 @@ def _loop_evdev(cfg: Settings, input_device_idx, keyboards=None):
             modifier_hotkeys.note(devices, hold_key, toggle_key)
             logger.info("Applied settings change without restarting")
 
-        # Read the devices that have key events waiting.
         for dev in _devices_with_input(devices, INPUT_WAIT_S):
             try:
                 for event in dev.read():
@@ -5021,8 +5022,7 @@ def main():
     # Input device selection
     input_device_idx = _pick_input_device(cfg.mic)
 
-    # Initialize GTK components (D-Bus service and recording indicator)
-    # Both need the GTK main loop, so we initialize them together
+    # The D-Bus service and the recording indicator both need GTK's main loop.
     global dbus_service, recording_indicator
     dbus_service = None
     recording_indicator = None

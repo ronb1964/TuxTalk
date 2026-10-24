@@ -53,7 +53,8 @@ before 0.15.0, so older entries use that name.
 - On a desktop where TuxTalk can't make its own keyboard and types with
   wtype instead, your dictation was on wtype's command line for a moment,
   where anyone else logged in to the computer could read it. It goes to
-  wtype privately now. The key that keeps other programs off the AI
+  wtype privately now, and every letter arrives on a system set to a plain
+  C locale too. The key that keeps other programs off the AI
   self-corrections engine was on its command line too, and is now hidden
   the same way.
 

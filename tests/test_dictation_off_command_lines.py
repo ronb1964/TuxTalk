@@ -22,9 +22,11 @@ class Recorder:
     def __init__(self):
         self.argvs = []
         self.stdin = []
+        self.env = None
 
     def popen(self, argv, **options):
         self.argvs.append(list(argv))
+        self.env = options.get("env")
         recorder = self
 
         class Proc:
@@ -61,6 +63,19 @@ def test_wtype_gets_the_dictation_on_stdin(recorder, monkeypatch):
     assert app._type_text_raw(SECRET) is True
     assert recorder.argvs == [["wtype", "-"]]
     assert recorder.stdin == [SECRET.encode("utf-8")]
+
+
+def test_wtype_reads_the_dictation_as_utf8_under_any_locale(recorder, monkeypatch):
+    """Under a C locale wtype stopped at "é" and dropped the rest unseen."""
+    from tuxtalk import keyboard_layout
+    monkeypatch.setenv("LC_ALL", "C")
+    monkeypatch.setattr(app, "_which", lambda name: name == "wtype")
+    monkeypatch.setattr(virtual_keyboard, "_open", lambda: None)
+    # A layout with é on it (French, say), so it isn't pasted instead.
+    monkeypatch.setattr(keyboard_layout, "layout_key_events", lambda text: [(30, 1), (30, 0)])
+    assert app._type_text_raw("café au lait") is True
+    assert recorder.stdin == ["café au lait".encode("utf-8")]
+    assert recorder.env["LC_ALL"] == "C.UTF-8"
 
 
 @pytest.mark.parametrize("copy", [

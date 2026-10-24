@@ -482,7 +482,7 @@
   },
   "app.py::_loop_evdev": {
    "decisions": 27,
-   "lines": 163
+   "lines": 162
   },
   "app.py::_paste_text": {
    "decisions": 18
@@ -509,7 +509,7 @@
    "lines": 104
   },
   "app.py::main": {
-   "lines": 269
+   "lines": 268
   },
   "audio_duck.py::AudioDucker._restore_now": {
    "decisions": 16
