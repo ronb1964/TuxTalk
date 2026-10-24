@@ -288,8 +288,8 @@ One box at a time, each box a dictation of its own:
     types the words "press tab".
   • In Claude Desktop <b>press tab</b> types four spaces: there the Tab key would
     jump to the Send button.
-  • In a password box TuxTalk types nothing, but saying only <b>press tab</b> still
-    moves on, once you've typed the password yourself.
+  • In a password box TuxTalk types nothing. Type the password yourself, then hold
+    <b>{hold}</b>, say only "press tab", let go: the cursor moves to the next box.
 
 <b>Optional: cleaner text</b> (Preferences → Advanced)
   • <b>Remove "um", "uh" and accidentally repeated words.</b> Instant, nothing to download.

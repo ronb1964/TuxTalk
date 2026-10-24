@@ -171,3 +171,26 @@ def test_help_explains_forms_with_your_own_key(monkeypatch):
     assert 'Hold <b>F6</b>, say "John Smith, press tab", let go' in form
     assert "F8" not in form
     assert "Claude Desktop" in form and "password box" in form
+    assert 'hold\n    <b>F6</b>, say only "press tab", let go' in form
+
+
+def test_press_tab_alone_in_a_claude_desktop_password_box_presses_the_key(monkeypatch,
+                                                                          no_auto_send):
+    """Spaces would be refused there, so the Tab is the real key, as in any
+    password field."""
+    from tuxtalk import focused_window
+    monkeypatch.setattr(focused_window, "is_password", lambda: True)
+    assert _dictate(monkeypatch, "Press tab.", window="com.anthropic.Claude") == [
+        ("TAB", 'said "press tab"')]
+
+
+def test_four_spaces_kept_back_by_a_stuck_key_say_so(monkeypatch):
+    """A real Tab kept back says so; the four spaces Claude Desktop gets
+    instead must too, or the box looks as if nothing was heard."""
+    from tuxtalk import delivery_notices
+    notes = []
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "com.anthropic.Claude")
+    monkeypatch.setattr(app, "_inject_text", lambda text, mode, t0: "key_held")
+    monkeypatch.setattr(app, "_notify", lambda title, body: notes.append((title, body)))
+    app._press_said("TAB", None)
+    assert notes == [delivery_notices.key_not_pressed("TAB")]

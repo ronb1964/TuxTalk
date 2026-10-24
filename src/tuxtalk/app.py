@@ -2549,10 +2549,12 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
         return "password_field"
     # Which window this text goes into, so select and move by voice only
     # trusts "what I just said" in that same window.
-    try:
-        state.last_inserted_window = _query_focused_window_class()
-    except Exception:
-        state.last_inserted_window = None
+    state.last_inserted_window = focused_class = _query_focused_window_class()
+    if focused_class in ELECTRON_PASTE_BROKEN_CLASSES:
+        # A tab as four spaces, however it's typed: a real Tab moves the
+        # focus from Claude Desktop's box to the Send button, and the next
+        # space typed sends the message.
+        text = text.replace("\t", "    ")
     # Determine injection method (auto mode does smart detection)
     detection_start = time.time()
     actual_mode, reason = _determine_injection_method(injection_mode)
@@ -2568,17 +2570,13 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
     # type instead. Only kicks in for auto/paste — if the user explicitly chose
     # "type", we already use Type mode.
     if injection_mode != "type":
-        focused_class = _query_focused_window_class()
         logger.info(f"Electron-broken check: focused_class={focused_class!r}")
         if focused_class in ELECTRON_PASTE_BROKEN_CLASSES and not os.environ.get("FLATPAK_ID"):
             logger.info(f"Electron-paste-broken override: class={focused_class!r}, typing")
 
-            # Line breaks go in as Shift+Enter between the parts, and a tab as
-            # four spaces: a real Tab moves the focus from Claude Desktop's box
-            # to the Send button, and the next space typed sends the message.
+            # Line breaks go in as Shift+Enter between the parts.
             marker = "\xa7SHIFT_ENTER\xa7"
             unified = text.replace("\n", marker) if "\n" in text else text
-            unified = unified.replace("\t", "    ")
             success = True
             delivered_parts = 0  # chunks confirmed in the document
             breaks_sent = 0      # line breaks confirmed after those chunks
@@ -2629,12 +2627,6 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
                 return "password_field" if password_field else "partial"
             # Nothing landed, so the normal injection path can safely try again.
             logger.warning("Typing failed, falling through to normal injection")
-        elif focused_class in ELECTRON_PASTE_BROKEN_CLASSES:
-            # Flatpak: libei always types, so there's no paste to avoid; keep
-            # only the Claude-Desktop tab safety (a real Tab jumps focus to the
-            # Send button) and fall through to libei typing.
-            logger.info(f"Flatpak + Electron app ({focused_class!r}): libei typing, tab→spaces")
-            text = text.replace("\t", "    ")
 
     use_paste = (actual_mode == "paste")
     logger.info(f"Injection mode: configured={injection_mode!r}, actual={actual_mode!r}, reason={reason}")
@@ -3264,11 +3256,15 @@ def _press_said(key: str, chunk_role) -> None:
     pressed (a key stuck down), the message is still in the box, to carry
     on in and for "edit that" to reach whole. In Claude Desktop "press tab"
     types four spaces, as a tab said mid-sentence does there: its Tab key
-    jumps to the Send button, and the next space typed would press it."""
-    if key == "TAB" and _query_focused_window_class() in ELECTRON_PASTE_BROKEN_CLASSES:
-        typed = state.last_inserted_text
-        if _inject_text("    ", "type", time.time()) == "ok":
-            state.last_inserted_text = typed + "    "
+    jumps to the Send button, and the next space typed would press it. A
+    password field there gets the real Tab: spaces would be refused."""
+    if (key == "TAB" and _query_focused_window_class() in ELECTRON_PASTE_BROKEN_CLASSES
+            and not focused_window.is_password()):
+        outcome = _type_onto_dictation("    ", "type")
+        if outcome != "ok":
+            logger.warning(f"Tab not typed as four spaces ({outcome})")
+            if outcome == "key_held":
+                _notify(*delivery_notices.key_not_pressed(key))
     elif _press_key(key, f'said "press {key.lower()}"') and chunk_role is not None:
         _chunk_message_sent()
 

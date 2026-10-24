@@ -381,3 +381,15 @@ def test_an_unknown_window_after_typing_keeps_the_one_before(monkeypatch, waylan
     _focus_moves_on_paste(monkeypatch, "org.kde.kwrite", None)
     app._inject_text("Hello. ", "paste", 0.0)
     assert app.state.last_inserted_window == "org.kde.kwrite"
+
+
+@pytest.mark.parametrize("mode", ["type", "auto"])
+def test_a_tab_said_mid_sentence_is_four_spaces_in_claude_desktop_however_it_types(
+        monkeypatch, mode):
+    """With Keystroke Typing too: a real Tab there jumps to the Send button,
+    and the next space typed sends the message halfway through."""
+    typed = _typing_into(monkeypatch, "com.anthropic.Claude", mode="type")
+    monkeypatch.setattr(app, "_type_text_raw", lambda t: typed.append(t) or True)
+    assert app._inject_text("Name\taddress. ", mode, 0.0) == "ok"
+    assert typed == ["Name    address. "]
+    assert app.state.last_inserted_text == "Name    address. "
