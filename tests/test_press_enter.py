@@ -244,7 +244,7 @@ def countdown(monkeypatch):
     monkeypatch.setattr(focused_window, "look", lambda: ("brave-browser", None))
     monkeypatch.setattr(app.state, "last_inserted_window", "brave-browser")
     TYPED.clear()
-    monkeypatch.setattr(app, "_inject_text", lambda text, mode: TYPED.append(text) or "ok")
+    monkeypatch.setattr(app, "_inject_text", lambda text, mode, **kw: TYPED.append(text) or "ok")
     return pressed, labels
 
 
@@ -454,7 +454,7 @@ def test_typing_the_space_doesnt_turn_a_tap_into_a_dictation(countdown, monkeypa
     monkeypatch.setattr(app, "cancel_recording",
                         lambda beeps, notify, reason="": reasons.append(reason))
     monkeypatch.setattr(app, "_inject_text",
-                        lambda text, mode: app.time.sleep(0.1) or TYPED.append(text) or "ok")
+                        lambda text, mode, **kw: app.time.sleep(0.1) or TYPED.append(text) or "ok")
     monkeypatch.setattr(send_countdown, "_owed", None)
     start_send("test", " ", "type")
     monkeypatch.setattr(app.state, "held_send", send_countdown.hold(announce=False))

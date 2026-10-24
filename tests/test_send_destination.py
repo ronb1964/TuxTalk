@@ -535,6 +535,35 @@ def test_a_switch_while_the_words_go_in_keeps_back_the_key_said_after_them(chat,
     assert len(notices) == 1
 
 
+CLAUDE = ("com.anthropic.Claude", ("tray", "{c1a0}"))
+
+
+@pytest.mark.parametrize("when", ["while", "after"])
+def test_a_tab_said_after_the_words_types_no_spaces_into_claude_if_they_went_elsewhere(
+        chat, keyboard, monkeypatch, when):
+    """"John, press tab" into Brave, and a click into Claude Desktop while
+    the words went in or right after: there "press tab" is four spaces,
+    and they went into Claude's box, whose Send button a space can press."""
+    focus, heard, typed, notices = chat
+    if when == "while":
+        clicked_away_while_the_words_went_in(monkeypatch, focus, CLAUDE)
+    else:                                   # once the words are in
+        monkeypatch.setattr(app, "_remember_shown",
+                            lambda *a, **k: focus.__setitem__(slice(None), CLAUDE))
+    heard.append("john, press tab")
+    dictate()
+    assert typed == [("John", FIRST[1])] and keyboard.events == []
+    assert len(notices) == 1
+
+
+def test_a_tab_said_after_the_words_in_claude_is_four_spaces_there(chat, keyboard):
+    focus, heard, typed, notices = chat
+    focus[:] = CLAUDE
+    heard.append("john, press tab")
+    dictate()
+    assert typed == [("John", CLAUDE[1]), ("    ", CLAUDE[1])] and notices == []
+
+
 def test_a_switch_after_the_words_keeps_back_the_enter_said_after_them(chat, keyboard,
                                                                        monkeypatch):
     """The click comes after the words are in, in the moment the app is

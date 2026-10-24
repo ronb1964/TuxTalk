@@ -242,6 +242,19 @@ def press_where_sent(key: str, why: str, message: Message, press) -> bool:
     return False
 
 
+def type_where_sent(text: str, key: str, message: Message, type_more) -> str | None:
+    """Type *text* in place of *key* said after *message*'s words (Claude
+    Desktop's four spaces for Tab: its Tab key jumps to the Send button), by
+    the key's rule: only where the words went. *type_more*(text, mode,
+    into=None) is as for send_automatically. The typing's outcome, or None
+    when it wasn't tried; either way not typed, the notice says why."""
+    why = _incomplete(message) or _why_not(message.to, focused_window.destination())
+    outcome = None if why else type_more(text, "type", into=message.to)
+    if why or outcome == "moved":
+        _say_not_sent(why or "switched", key=key)
+    return outcome
+
+
 # --- The countdown ------------------------------------------------------------
 
 def send_automatically(why: str, message: Message, press, type_more, space: str = "",

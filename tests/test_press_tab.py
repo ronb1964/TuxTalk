@@ -191,7 +191,7 @@ def test_four_spaces_kept_back_by_a_stuck_key_say_so(monkeypatch):
     from tuxtalk import delivery_notices
     notes = []
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "com.anthropic.Claude")
-    monkeypatch.setattr(app, "_inject_text", lambda text, mode: "key_held")
+    monkeypatch.setattr(app, "_inject_text", lambda text, mode, **kw: "key_held")
     monkeypatch.setattr(app, "_notify", lambda title, body: notes.append((title, body)))
     app._press_said("TAB", None)
     assert notes == [delivery_notices.key_not_pressed("TAB")]

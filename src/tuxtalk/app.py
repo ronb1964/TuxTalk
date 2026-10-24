@@ -2939,8 +2939,9 @@ def _press_said(key: str, chunk_role, after_words: bool = False) -> None:
     pressed (a key stuck down), the message is still in the box, to carry
     on in and for "edit that" to reach whole. In Claude Desktop "press tab"
     types four spaces, as a tab said mid-sentence does there: its Tab key
-    jumps to the Send button, and the next space typed would press it. A
-    password field there gets the real Tab: spaces would be refused.
+    jumps to the Send button, and the next space typed would press it; after
+    words, they go where the Tab would. A password field there gets the
+    real Tab: spaces would be refused.
 
     *after_words*: words of this message (state.message) were delivered
     first, or tried, and the key goes only where they went, and only if all
@@ -2950,8 +2951,9 @@ def _press_said(key: str, chunk_role, after_words: bool = False) -> None:
     why = f'said "press {key.lower()}"'
     if (key == "TAB" and _query_focused_window_class() in ELECTRON_PASTE_BROKEN_CLASSES
             and not focused_window.is_password()):
-        outcome = _type_onto_dictation("    ", "type")
-        if outcome != "ok":
+        outcome = (send_countdown.type_where_sent("    ", key, state.message, _type_onto_dictation)
+                   if after_words else _type_onto_dictation("    ", "type"))
+        if outcome not in (None, "ok"):
             logger.warning(f"Tab not typed as four spaces ({outcome})")
             if outcome == "key_held":
                 _notify(*delivery_notices.key_not_pressed(key))
@@ -2986,11 +2988,11 @@ def _send_automatically(space: str, injection_mode: str) -> None:
                                       _press_key, _type_onto_dictation, space, injection_mode)
 
 
-def _type_onto_dictation(text: str, injection_mode: str) -> str:
+def _type_onto_dictation(text: str, injection_mode: str, into=None) -> str:
     """Type *text* right after the dictation, keeping undo's record of it
-    whole; _inject_text's outcome."""
+    whole; _inject_text's outcome. *into* is _inject_text's."""
     typed = state.last_inserted_text
-    outcome = _inject_text(text, injection_mode)
+    outcome = _inject_text(text, injection_mode, into=into)
     if outcome == "ok":
         state.last_inserted_text = typed + text
     return outcome
