@@ -1,8 +1,8 @@
 """The Help window offers a feedback link, and never asks for feedback itself.
 
 Nothing in TuxTalk pops up asking for feedback, but a link people can go
-looking for in Help is welcome. The link sits under the tabs so it's there
-whichever tab is open.
+looking for in Help is welcome. The link sits under the sections so it's there
+whichever section is open.
 """
 import pytest
 
@@ -100,28 +100,109 @@ def test_every_section_is_listed_in_order_and_opens_from_the_list(dialog):
         assert stack.child_get_property(stack.get_visible_child(), "title") == title
 
 
-def test_a_page_takes_the_focus_for_the_keyboard_and_a_screen_reader(dialog):
-    """Tab from the list goes into the page, so Page Up and Down scroll it;
-    focusing it doesn't leave the whole text selected."""
-    rows, stack = _sections(dialog)
-    assert all(row.get_can_focus() for row in rows)
-    label = next(w for w in widgets(stack.get_visible_child()) if isinstance(w, Gtk.Label))
-    assert label.get_can_focus() and label.get_selectable()
-    label.grab_focus()
-    assert not label.get_selection_bounds()[0]
-    sidebar = next(w for w in widgets(dialog) if isinstance(w, Gtk.StackSidebar))
-    assert sidebar.get_accessible().get_name() == "Help sections"
-
-
-def test_help_opens_on_the_section_asked_for():
+@pytest.fixture
+def shown_help(monkeypatch):
+    """Help as it opens on the (hidden) test display, on the section asked
+    for, ready for key presses."""
     if not Gtk.init_check()[0]:
         pytest.skip("no display")
-    opened = help_dialog.show_help_dialog(tab="tips")
-    try:
-        stack = next(w for w in widgets(opened) if isinstance(w, Gtk.Stack))
-        assert stack.child_get_property(stack.get_visible_child(), "title") == "💡 Tips"
-    finally:
-        opened.destroy()
+    opened = []
+
+    def show(tab=None):
+        opened.append(help_dialog.show_help_dialog(tab=tab))
+        _settle()
+        return opened[-1]
+    yield show
+    for dialog in opened:
+        dialog.destroy()
+
+
+def _settle():
+    while Gtk.events_pending():
+        Gtk.main_iteration_do(False)
+
+
+def _press(dialog, keyval, state=0):
+    """Press and release *keyval* in *dialog*, as the keyboard would: GTK
+    hands it to the widget with the focus."""
+    from gi.repository import Gdk
+    seat = Gdk.Display.get_default().get_default_seat()
+    keymap = Gdk.Keymap.get_for_display(Gdk.Display.get_default())
+    code = keymap.get_entries_for_keyval(keyval)[1][0].keycode
+    for kind in (Gdk.EventType.KEY_PRESS, Gdk.EventType.KEY_RELEASE):
+        event = Gdk.Event.new(kind)
+        event.window, event.send_event = dialog.get_window(), True
+        event.keyval, event.state, event.hardware_keycode = keyval, state, code
+        event.set_device(seat.get_keyboard())
+        Gtk.main_do_event(event)
+        _settle()
+
+
+def _title(stack):
+    return stack.child_get_property(stack.get_visible_child(), "title")
+
+
+def _page_text(stack):
+    label = next(w for w in widgets(stack.get_visible_child()) if isinstance(w, Gtk.Label))
+    scrolled = stack.get_visible_child()
+    return label, scrolled.get_vadjustment()
+
+
+def test_tab_from_the_list_goes_into_the_open_sections_text(shown_help):
+    """Picked with the arrows, then Tab: the keyboard is in that section's
+    text, and the section is still the one picked (GTK's list alone took Tab
+    for the next row and switched sections). Shift+Tab goes back to the list."""
+    from gi.repository import Gdk
+    dialog = shown_help()
+    _, stack = _sections(dialog)
+    _press(dialog, Gdk.KEY_Down)
+    _press(dialog, Gdk.KEY_Down)
+    assert "Writing" in _title(stack)
+    _press(dialog, Gdk.KEY_Tab)
+    label, _ = _page_text(stack)
+    assert "Writing" in _title(stack)
+    assert dialog.get_focus() is label
+    assert not label.get_selection_bounds()[0], "focusing it selected the whole text"
+    _press(dialog, Gdk.KEY_ISO_Left_Tab, Gdk.ModifierType.SHIFT_MASK)
+    assert isinstance(dialog.get_focus(), Gtk.ListBoxRow) and "Writing" in _title(stack)
+
+
+def test_the_keys_scroll_the_text(shown_help):
+    """In the text, Page Down and Down scroll it, End and Home go to either
+    end, and the keyboard stays in the text."""
+    from gi.repository import Gdk
+    dialog = shown_help("writing")
+    _, stack = _sections(dialog)
+    _press(dialog, Gdk.KEY_Tab)
+    label, scroll = _page_text(stack)
+    start = scroll.get_value()
+    _press(dialog, Gdk.KEY_Page_Down)
+    paged = scroll.get_value()
+    assert paged > start
+    _press(dialog, Gdk.KEY_Down)
+    assert scroll.get_value() > paged
+    _press(dialog, Gdk.KEY_End)
+    assert scroll.get_value() == pytest.approx(scroll.get_upper() - scroll.get_page_size())
+    _press(dialog, Gdk.KEY_Home)
+    assert scroll.get_value() == scroll.get_lower()
+    assert dialog.get_focus() is label
+
+
+def test_help_opens_on_the_section_asked_for_with_the_keyboard_there(shown_help):
+    """From Preferences' Labs link: Tips shows, and the keyboard (and a
+    screen reader) is on the Tips row, not on Start Here."""
+    dialog = shown_help("tips")
+    _, stack = _sections(dialog)
+    assert _title(stack) == "💡 Tips"
+    focus = dialog.get_focus()
+    assert isinstance(focus, Gtk.ListBoxRow)
+    assert next(w.get_text() for w in widgets(focus) if isinstance(w, Gtk.Label)) == "💡 Tips"
+
+
+def test_a_screen_reader_hears_the_list_named(dialog):
+    """The name goes on the list box, the widget that takes the focus."""
+    listbox = next(w for w in widgets(dialog) if isinstance(w, Gtk.ListBox))
+    assert listbox.get_accessible().get_name() == "Help sections"
 
 
 def test_help_is_no_wider_with_another_section(monkeypatch):
@@ -131,8 +212,7 @@ def test_help_is_no_wider_with_another_section(monkeypatch):
         pytest.skip("no display")
     from tuxtalk import help_text, ui_style
     monkeypatch.setattr(Gtk.Dialog, "present", lambda self: None)
-    # A screen wide enough for any row of tabs, which only a tab row reads.
-    monkeypatch.setattr(ui_style, "workarea_width", lambda: 4000, raising=False)
+    monkeypatch.setattr(ui_style, "workarea_width", lambda near=None: 4000)
     widths = []
     for extra in (0, 4):
         sections = help_text.tabs() + [(f"Section {n}", "More.") for n in range(extra)]
@@ -141,3 +221,18 @@ def test_help_is_no_wider_with_another_section(monkeypatch):
         widths.append(opened.get_default_size()[0])
         opened.destroy()
     assert widths[0] == widths[1] and widths[0] <= 900
+
+
+def test_help_fits_a_narrow_screen(monkeypatch):
+    """With large text or a small screen, Help opens no wider than the
+    screen, its lines wrapping, instead of running off its edge."""
+    if not Gtk.init_check()[0]:
+        pytest.skip("no display")
+    from tuxtalk import ui_style
+    monkeypatch.setattr(Gtk.Dialog, "present", lambda self: None)
+    monkeypatch.setattr(ui_style, "workarea_width", lambda near=None: 640)
+    opened = help_dialog.show_help_dialog()
+    try:
+        assert opened.get_default_size()[0] <= 640 - 40
+    finally:
+        opened.destroy()

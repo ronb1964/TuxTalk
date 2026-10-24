@@ -231,6 +231,17 @@ def workarea_height(near=None):
         return None
 
 
+def workarea_width(near=None):
+    """The usable width, in logical pixels, of the monitor for window *near*
+    (_monitor_for); None when unknown."""
+    try:
+        monitor = _monitor_for(near)
+        return monitor.get_workarea().width if monitor is not None else None
+    except Exception as e:
+        logger.warning(f"Couldn't read the screen's usable width: {e}")
+        return None
+
+
 def fit_dialog_to_screen(dialog, width, desired_height):
     """Open a dialog *width* wide and *desired_height* tall (below 0: as tall
     as its content), resizable. Onboarding dialogs are tall; on a short

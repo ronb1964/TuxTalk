@@ -87,7 +87,7 @@ def test_tips_name_your_own_keys(monkeypatch):
     """Help names keys from the settings: someone on F6 is never told F8."""
     tips = _tips(monkeypatch, hotkey="F6", toggle_hotkey="F7", paste_last_hotkey="Ctrl+Alt+V")
     assert "fix that word" in tips and "<b>F6</b>" in tips
-    assert "Double-tap <b>F7</b>" in tips and "<b>Ctrl+Alt+V</b> types your last" in tips
+    assert "double-tap <b>F7</b>" in tips and "<b>Ctrl+Alt+V</b> types your last" in tips
     assert "F8" not in tips and "F9" not in tips and "Ctrl+Alt+P" not in tips
 
 

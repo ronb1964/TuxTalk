@@ -7,9 +7,9 @@ with every section added, and GTK 3's tabs can't wrap to a second row.
 """
 import gi
 gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk, Pango
+from gi.repository import Gdk, Gtk, Pango
 
-from . import help_text
+from . import help_text, ui_style
 from .help_text import FEEDBACK_URL
 
 # Help's text is broken by hand at about 85 characters, so the page is this
@@ -20,12 +20,34 @@ from .help_text import FEEDBACK_URL
 _LINE_CHARS = 87
 _FRAME_PX = 60
 HEIGHT = 600
+# Room left beside Help on a screen too narrow for it.
+_SCREEN_MARGIN_PX = 40
+
+# The keys that scroll a page while its text has the focus. A selectable
+# label would move its cursor on most of them, or move the focus away.
+_SCROLL_KEYS = {
+    Gdk.KEY_Page_Down: Gtk.ScrollType.PAGE_FORWARD,
+    Gdk.KEY_Page_Up: Gtk.ScrollType.PAGE_BACKWARD,
+    Gdk.KEY_Down: Gtk.ScrollType.STEP_FORWARD,
+    Gdk.KEY_Up: Gtk.ScrollType.STEP_BACKWARD,
+    Gdk.KEY_End: Gtk.ScrollType.END,
+    Gdk.KEY_Home: Gtk.ScrollType.START,
+}
+
+
+def _scroll(label, event, scrolled):
+    """A scrolling key pressed in a page's text: scroll the page."""
+    scroll = _SCROLL_KEYS.get(event.keyval)
+    if scroll is None or event.state & Gdk.ModifierType.CONTROL_MASK:
+        return False
+    scrolled.emit("scroll-child", scroll, False)
+    return True
 
 
 def _page(markup_text):
     """A section's text: *markup_text* in a wrapping label that scrolls. The
-    label takes the keyboard focus (Tab from the list), so Page Up and Page
-    Down scroll it and a screen reader reads it."""
+    label takes the keyboard focus (Tab from the list), so the arrow keys,
+    Page Up and Down, Home and End scroll it, and a screen reader reads it."""
     scrolled = Gtk.ScrolledWindow()
     scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
     label = Gtk.Label()
@@ -39,8 +61,35 @@ def _page(markup_text):
     label.connect_after("grab-focus", lambda lbl: lbl.select_region(0, 0))
     for side in ("top", "bottom", "start", "end"):
         getattr(label, f"set_margin_{side}")(15 if side in ("top", "bottom") else 8)
+    label.connect("key-press-event", _scroll, scrolled)
     scrolled.add(label)
     return scrolled
+
+
+def _text_of(page):
+    """The label holding *page*'s text (inside the viewport its scrolled
+    window wraps it in)."""
+    return page.get_child().get_child()
+
+
+def _list_of(sidebar):
+    """The list box inside *sidebar*: the widget that takes the focus."""
+    child = sidebar
+    while not isinstance(child, Gtk.ListBox):
+        child = child.get_child()
+    return child
+
+
+def _into_page(listbox, event, stack):
+    """Tab in the section list goes into the open page's text. GTK 3's list
+    takes Tab for the next row, and its selection follows the focus, so Tab
+    alone would switch sections and never reach the text."""
+    tab = event.keyval in (Gdk.KEY_Tab, Gdk.KEY_KP_Tab)
+    modified = event.state & (Gdk.ModifierType.SHIFT_MASK | Gdk.ModifierType.CONTROL_MASK)
+    if not tab or modified:
+        return False
+    _text_of(stack.get_visible_child()).grab_focus()
+    return True
 
 
 def _sections():
@@ -51,15 +100,21 @@ def _sections():
         stack.add_titled(_page(markup), f"section-{number}", title)
     sidebar = Gtk.StackSidebar()
     sidebar.set_stack(stack)
-    sidebar.get_accessible().set_name("Help sections")
+    listbox = _list_of(sidebar)
+    listbox.get_accessible().set_name("Help sections")
+    listbox.connect("key-press-event", _into_page, stack)
     return sidebar, stack
 
 
 def _width(dialog, sidebar):
-    """How wide Help opens: the section list beside a page _LINE_CHARS wide."""
+    """How wide Help opens: the section list beside a page _LINE_CHARS wide,
+    or the screen's width less a margin if that is narrower (large text, a
+    small or portrait screen), where the page's lines wrap."""
     context = dialog.get_pango_context()
     char = context.get_metrics(context.get_font_description(), None).get_approximate_char_width()
-    return int(sidebar.get_preferred_width()[1] + _LINE_CHARS * char / Pango.SCALE + _FRAME_PX)
+    wanted = int(sidebar.get_preferred_width()[1] + _LINE_CHARS * char / Pango.SCALE + _FRAME_PX)
+    screen = ui_style.workarea_width()
+    return min(wanted, screen - _SCREEN_MARGIN_PX) if screen else wanted
 
 
 def open_section(stack, word):
@@ -108,8 +163,11 @@ def show_help_dialog(tab=None):
 
     content.show_all()      # a hidden widget asks for no width
     dialog.set_default_size(_width(dialog, sidebar), HEIGHT)
-    dialog.show_all()
+    # Before the window shows: it puts the focus on the list's chosen row
+    # then, so the keyboard and a screen reader start on the section shown,
+    # not on Start Here.
     if tab:
         open_section(stack, tab)
+    dialog.show_all()
     dialog.present()  # Bring to front and focus
     return dialog

@@ -730,11 +730,11 @@ Second sentence!
 TIPS = '''<span size="large"><b>Tips</b></span>
 
 <b>Getting good results</b>
-  • Have the microphone close to your mouth, or use a headset. Nothing helps more:
-    going from a noisy spot to a moderate one about halves the mistakes.
-  • In a noisy room (a fan, a dryer, a busy street), move closer to the microphone.
-  • Turn off noise filters on the microphone for dictation (EasyEffects, NoiseTorch,
-    RNNoise plugins). They make dictation worse, not better.
+  • Have the microphone close to your mouth, or use a headset, above all in a noisy
+    room (a fan, a dryer, a busy street). Nothing helps more.
+  • Turn off noise filters on the microphone for dictation (noise suppression in
+    EasyEffects, NoiseTorch or an RNNoise plugin). In TuxTalk's tests every one of
+    them made dictation worse, not better.
   • Speak at a normal pace, the way you'd talk to someone. No need to slow down.
   • To check your room: <b>Preferences → Audio</b>, Start Recording, talk, Stop. The
     test says when the room is noisy for your voice.
@@ -745,12 +745,15 @@ TIPS = '''<span size="large"><b>Tips</b></span>
 
 <b>Easier on the hands</b>
   • {key_choice_tip}
-  • Double-tap <b>{toggle}</b> for hands-free: talk without holding a key, and it stops
-    when you do. Turn it on in <b>Preferences → General</b>.
+  • Hands-free: turn on "Double-tap {toggle} for hands-free" in <b>Preferences →
+    General</b>. Then double-tap <b>{toggle}</b> and talk without holding a key, and it
+    stops when you do.
 
 <b>Everyday shortcuts</b>
-  • End with <b>press enter</b> to send: "see you at noon, press enter".
-  • End with <b>press tab</b> to fill in a form box by box (Writing → Filling in a form).
+  • To send a message: hold <b>{hold}</b>, say it and end with <b>press enter</b>, let go.
+    "see you at noon, press enter" is typed and sent.
+  • To fill in a form box by box: hold <b>{hold}</b>, say what goes in the box and end
+    with <b>press tab</b>, let go (Writing → Filling in a form).
   • {paste_line}<b>Recent Dictations</b> in the TuxTalk menu keeps your last 20.'''
 
 _TABS = [
