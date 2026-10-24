@@ -10,7 +10,6 @@ import atexit
 import os
 import shutil
 import tempfile
-import time
 
 import gi
 import pytest
@@ -311,10 +310,8 @@ def _no_sound_on_the_speakers():
 _no_sound_on_the_speakers()
 
 
-def _play_to_nobody(samples, rate, device, sound):
+def _play_to_nobody(samples, rate, device):
     """Stands in for beeps._play: the sound plays at once, and silently."""
-    now = time.monotonic()
-    sound.note_heard(now, now)
 
 
 @pytest.fixture(autouse=True)

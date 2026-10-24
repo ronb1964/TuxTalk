@@ -3,6 +3,7 @@
 The user is often at the computer while the suite runs. A beep from a test
 is confusing at best, and a replayed recording plays their own voice back.
 """
+import logging
 import shutil
 import subprocess
 import sys
@@ -106,13 +107,14 @@ def test_a_beep_left_playing_as_a_test_ends_is_played_by_that_tests_fakes(
     after_the_test(played_by_the_tests_fake)
 
 
-def test_the_stand_in_player_plays_each_sound_silently_and_says_it_played():
+def test_the_stand_in_player_plays_each_sound_silently_and_says_it_played(caplog):
     """Outside test_beeps every sound goes to conftest's player; a sound
     played through it is played, not failed."""
+    caplog.set_level(logging.INFO)
     told = []
     beeps.play(np.zeros(100, np.float32), 44100, finished=told.append)
-    start = beeps.beep(True, *beeps.START_BEEP)
+    beeps.beep(True, *beeps.START_BEEP)
     assert beeps.wait_until_played(limit=5)
-    over, heard_from, _heard_until = start.heard()
     assert told == [None]
-    assert over and heard_from is not None
+    assert not [r for r in caplog.records if r.getMessage().startswith("Could not play")]
+

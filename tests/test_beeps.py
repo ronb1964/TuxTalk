@@ -130,15 +130,16 @@ def tones(heard):
     for run in runs:
         part = heard[run[0]:run[-1] + 1]
         rising = np.flatnonzero((part[:-1] < 0) & (part[1:] >= 0))
-        cycles = len(rising) + 1          # a tone starts at zero, going up
-        found.append((len(part), float(np.abs(part).max()), cycles * RATE / len(part)))
+        hz = (len(rising) - 1) * RATE / (rising[-1] - rising[0])   # whole cycles between them
+        found.append((len(part), float(np.abs(part).max()), hz))
     return found
 
 
 def heard_in_full(found, freq, duration):
     samples, peak, hz = found
-    return (abs(samples - duration * RATE) <= 2 and peak == pytest.approx(beeps.VOLUME, rel=0.01)
-            and hz == pytest.approx(freq, rel=0.02))
+    # Every sample of the tone, but its first and last, which are 0.
+    return (abs(samples - len(beeps.tone(freq, duration))) <= 2
+            and peak == pytest.approx(beeps.VOLUME, rel=0.01) and hz == pytest.approx(freq, rel=0.02))
 
 
 # Latency and period of real outputs: PipeWire's usual one, the slow one in
@@ -307,44 +308,6 @@ def test_a_recording_is_played_back_to_the_end_at_the_output_rate(sound, monkeyp
     assert np.count_nonzero(heard) == pytest.approx(48000, abs=48)
 
 
-@pytest.mark.parametrize("downstream", [0, 0.1])
-def test_a_beep_held_up_behind_another_sound_knows_when_it_was_heard(sound, downstream):
-    """The start beep can wait behind a sound still playing (issue #21), and
-    is then heard later than one latency after it was asked for. How much
-    of a recording it may be in is reckoned from when it really was."""
-    system = sound(0.174, 512, downstream)
-    beeps.play(np.full(int(0.4 * RATE), 0.1, np.float32), RATE)
-    start = beeps.beep(True, *beeps.START_BEEP)
-    assert beeps.wait_until_played(5)
-    last = max(i for i, period in enumerate(system.heard) if period.any())
-    heard_until = system.heard_at[last] + np.flatnonzero(system.heard[last])[-1] / RATE
-    noted = start.heard()[2]
-    if system.reports_time:
-        assert noted == pytest.approx(heard_until, abs=0.03)
-    else:
-        # One latency from when it was handed over: never early, and late
-        # by at most the latency when it all went into an empty buffer.
-        assert heard_until - 0.03 <= noted <= heard_until + 0.174 + 0.03
-
-
-@pytest.mark.parametrize("downstream", [0, 0.1])
-def test_a_beep_is_never_reckoned_heard_later_than_it_starts(sound, downstream):
-    """A beep handed to an empty buffer is heard at once. Where PortAudio
-    says no time, it may be, so the part of a recording the start beep may
-    be in starts as it is handed over, not one latency later: a microphone
-    that heard it then would count it as a word."""
-    system = sound(0.174, 512, downstream)
-    start = beeps.beep(True, *beeps.START_BEEP)
-    assert beeps.wait_until_played(5)
-    first = min(i for i, period in enumerate(system.heard) if period.any())
-    heard_from = system.heard_at[first] + np.flatnonzero(system.heard[first])[0] / RATE
-    noted = start.heard()[1]
-    if system.reports_time:
-        assert noted == pytest.approx(heard_from, abs=0.03)
-    else:
-        assert noted <= heard_from + 0.03
-
-
 def test_sounds_behind_a_stuck_output_never_pile_up(sound, monkeypatch):
     """Beeps and replays asked for while the output hangs wait for it, but
     only the newest few; asking never blocks, and a replay that is dropped
@@ -396,15 +359,15 @@ def test_a_wait_lasts_while_the_sound_before_it_plays_whatever_is_dropped_after(
 def test_a_callback_that_fails_leaves_the_sound_over_and_the_sounds_playing(sound, caplog):
     """Whoever asked for a sound is told after it counts as over, so their
     callback failing can't hold up a wait, nor stop the sounds after it."""
-    sound()
+    system = sound()
     caplog.set_level(logging.INFO)
 
     def fails(error):
         raise ValueError("the window is gone")
     beeps.play(np.zeros(100, np.float32), RATE, finished=fails)
-    after = beeps.beep(True, *beeps.START_BEEP)
+    beeps.beep(True, *beeps.START_BEEP)
     assert beeps.wait_until_played(limit=5)
-    assert after.heard()[2] is not None, "the beep after it played"
+    assert heard_in_full(tones(system.speakers())[0], *beeps.START_BEEP), "the beep after it played"
     assert any(r.exc_info and "the window is gone" in str(r.exc_info[1]) for r in caplog.records)
 
 

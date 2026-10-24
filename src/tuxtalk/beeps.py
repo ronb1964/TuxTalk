@@ -1,5 +1,6 @@
 """The short tones that say a recording started, went hands-free, finished
-or failed, and the player every TuxTalk sound goes through.
+or failed, the player every TuxTalk sound goes through, and the filter that
+takes the start beep back out of a recording.
 
 A sound has to be heard to the end. sounddevice.play() ended its stream once
 the last samples were handed over, and on PortAudio's ALSA path that threw
@@ -23,6 +24,13 @@ apart. Real PulseAudio reported no time, so only the first applies there.
 Sounds play one after another on one thread of their own. A sound server
 that stops answering holds up only that thread; whoever waits for a sound
 (wait_until_played) waits a bounded time.
+
+A microphone near the speakers records the start beep, and before the
+second tap of a double-tap TuxTalk asks whether a word was said. When the
+beep reached the recording can't be known for sure (an output or a
+microphone can be slower than it reports), so without_beep tells the beep
+apart by its pitch. Each tone fades in and out, so its sound stays at its
+pitch.
 """
 import atexit
 import collections
@@ -44,6 +52,18 @@ READY_BEEP = (1000, 0.09)
 
 SAMPLE_RATE = 44100
 VOLUME = 0.2
+# A tone that starts or stops at once clicks, and a click is sound at every
+# pitch: picked up by a microphone near the speakers, no filter at the
+# beep's pitch takes it out, and it counts as a word (without_beep).
+FADE_S = 0.005
+# without_beep's filter. Of a beep picked up anywhere from faint to near
+# full scale, distorted or not, in a silent or a noisy room, at most 20 ms
+# is left (tests/test_silence.py): a quarter of the shortest word
+# silence.has_a_word counts. Of 86 recordings of quick words ("yes", "no",
+# "hi", "it"), by people and computer voices, each lost at most 1.6 dB of
+# its loudness, and all still count as words.
+NOTCH_STOP_HZ = 200
+NOTCH_EASE_HZ = 200
 # The longest wait_until_played waits. Measured in a VM on PipeWire, the
 # start beep took 0.39 s at its usual 0.035 s of latency and 0.53 s at 0.17 s.
 WAIT_LIMIT_S = 1.0
@@ -72,47 +92,9 @@ _underflow_logged = False
 _failures_logged = set()  # each kind of audio failure is logged once
 
 _queue = threading.Condition()      # guards everything below
-_waiting = collections.deque()      # (job, what, Sound, finished callback), oldest first
-_unfinished = set()      # the Sounds asked for that aren't over
+_waiting = collections.deque()      # (job, what, over, finished callback), oldest first
+_unfinished = set()      # the Event of each sound asked for, set once it is over
 _worker = None
-
-
-class Sound:
-    """One sound asked for: when the speakers play it, and whether it is over.
-
-    The sound's times are written on PortAudio's thread as its samples are
-    handed over, and read on others while it plays: heard() gives them and
-    whether it is over as one snapshot."""
-
-    def __init__(self):
-        self._lock = threading.Lock()
-        self._heard_from = None         # time.monotonic() its first sample is heard
-        self._heard_until = None        # and the last one handed over so far
-        self._over = threading.Event()  # played, failed or dropped
-
-    def note_heard(self, start, end):
-        """The samples just handed over are heard from *start* to *end*; the
-        first of them all was heard at the first *start* noted."""
-        with self._lock:
-            if self._heard_from is None:
-                self._heard_from = start
-            self._heard_until = end
-
-    def end(self):
-        """It is over: played, failed or dropped."""
-        with self._lock:
-            self._over.set()
-
-    def heard(self):
-        """(over, heard from, heard until), at one moment. A time is None
-        while none of the sound has been handed over, and stays None for one
-        that failed or was dropped before it played."""
-        with self._lock:
-            return self._over.is_set(), self._heard_from, self._heard_until
-
-    def wait(self, limit):
-        """Wait at most *limit* seconds for it to be over; whether it is."""
-        return self._over.wait(limit)
 
 
 def output_device(samplerate):
@@ -142,50 +124,55 @@ def _search(samplerate):
     return None, samplerate
 
 
-def heard_in_recording(sound, recorded, rate, captured_until):
-    """The samples of a recording a microphone near the speakers may have
-    heard *sound* in, as a slice, when *recorded* samples at *rate* have come
-    in so far and the last of them was captured at *captured_until*
-    (time.monotonic()).
-
-    That is from the sound's first sample heard to its last; for one still
-    playing, to the end of the recording. A sound with none of it handed
-    over yet (None: beeps off; or held up, failed or dropped) is in none of
-    it. What is said before or after the sound is outside the slice. A
-    sliver of the sound the slice misses, by the timing of a block or a
-    buffer, is far shorter than silence.has_a_word's word."""
-    over, heard_from, heard_until = sound.heard() if sound is not None else (True, None, None)
-    if heard_from is None:
-        return slice(0, 0)
-    first = captured_until - recorded / rate        # when the first sample was captured
-    start = min(recorded, max(0, int((heard_from - first) * rate)))
-    end = min(recorded, int(np.ceil((heard_until - first) * rate))) if over else recorded
-    return slice(start, max(start, end))
-
-
 def tone(freq, duration, rate=SAMPLE_RATE):
-    """A sine tone of *duration* seconds at *rate* samples a second."""
-    t = np.arange(int(rate * duration)) / rate
-    return (np.sin(2 * np.pi * freq * t) * VOLUME).astype(np.float32)
+    """A sine tone at *rate* samples a second that sounds *duration* seconds
+    long: it fades in and out over FADE_S, and is *duration* long at half
+    its loudness."""
+    fade = int(rate * FADE_S)
+    envelope = np.ones(int(rate * (duration + FADE_S)))
+    envelope[:fade] = 0.5 - 0.5 * np.cos(np.pi * np.arange(fade) / fade)
+    envelope[-fade:] = envelope[fade - 1::-1]
+    t = np.arange(len(envelope)) / rate
+    return (np.sin(2 * np.pi * freq * t) * envelope * VOLUME).astype(np.float32)
+
+
+def without_beep(audio, rate, freq):
+    """*audio*, recorded at *rate*, with a beep of *freq* Hz filtered out:
+    what a microphone near the speakers picked up of it, wherever it falls.
+
+    Around the beep's pitch and each of its harmonics, which a speaker's
+    distortion or a microphone overloaded by the beep adds, NOTCH_STOP_HZ
+    either side is taken out and the next NOTCH_EASE_HZ fades back in. A
+    voice spreads over every pitch, so it keeps nearly all its loudness. The
+    recording is padded with silence, so what the filter smears past its end
+    doesn't wrap round to its start."""
+    size = len(audio) + rate // 20
+    spectrum = np.fft.rfft(audio, size)
+    pitches = np.fft.rfftfreq(size, 1 / rate)
+    gain = np.ones(len(pitches))
+    for harmonic in range(1, int(rate / 2 // freq) + 1):
+        away = np.clip((np.abs(pitches - harmonic * freq) - NOTCH_STOP_HZ) / NOTCH_EASE_HZ, 0, 1)
+        gain = np.minimum(gain, 0.5 - 0.5 * np.cos(np.pi * away))
+    return np.fft.irfft(spectrum * gain, size)[:len(audio)].astype(np.float32)
 
 
 def beep(enabled: bool, freq, duration):
-    """Play a tone, if beeps are on. Returns at once, with its Sound (None
-    with beeps off); the tone plays on the sound thread after any sound
-    before it."""
+    """Play a tone, if beeps are on. Returns at once, with an Event set once
+    it is over (None with beeps off); the tone plays on the sound thread
+    after any sound before it."""
     if not enabled:
         return None
     asked_at = time.monotonic()
-    sound = Sound()
+    over = threading.Event()
 
     def job():
         if time.monotonic() - asked_at > STALE_S:
             logger.info("Skipped a beep the sound output held up")
             return
         device, rate = output_device(SAMPLE_RATE)
-        _play(tone(freq, duration, rate), rate, device, sound)
-    _submit(job, "a beep", sound)
-    return sound
+        _play(tone(freq, duration, rate), rate, device)
+    _submit(job, "a beep", over)
+    return over
 
 
 def play(samples, rate, finished=None):
@@ -194,7 +181,6 @@ def play(samples, rate, finished=None):
     with None, or the text of what stopped it: on the sound thread, or, when
     a later sound pushes it out of the queue, on the thread asking for that
     one."""
-    sound = Sound()
 
     def job():
         device, device_rate = output_device(rate)
@@ -202,13 +188,13 @@ def play(samples, rate, finished=None):
         if device_rate != rate:
             positions = np.linspace(0, len(samples) - 1, int(len(samples) * device_rate / rate))
             resampled = np.interp(positions, np.arange(len(samples)), samples).astype(np.float32)
-        _play(resampled, device_rate, device, sound)
-    _submit(job, "a sound", sound, finished)
+        _play(resampled, device_rate, device)
+    _submit(job, "a sound", threading.Event(), finished)
 
 
 def wait_until_played(limit=WAIT_LIMIT_S, *, sound=None):
-    """Wait until *sound* is over, or without one every sound asked for so
-    far: played out to the speakers, as far as the stream can tell, or
+    """Wait until *sound* (what beep() returned) is over, or without one
+    every sound asked for so far: played out to the speakers, as far as the stream can tell, or
     failed or dropped. At most *limit* seconds; False if it took longer.
 
     Each sound is waited for itself: a later one dropped from the queue, and
@@ -216,35 +202,35 @@ def wait_until_played(limit=WAIT_LIMIT_S, *, sound=None):
     with _queue:
         sounds = [sound] if sound is not None else list(_unfinished)
     deadline = time.monotonic() + limit
-    if all(s.wait(max(0.0, deadline - time.monotonic())) for s in sounds):
+    if all(over.wait(max(0.0, deadline - time.monotonic())) for over in sounds):
         return True
     logger.warning(f"A sound took over {limit}s to play; carrying on without it")
     return False
 
 
-def _submit(job, what, sound, finished=None):
+def _submit(job, what, over, finished=None):
     global _worker
     with _queue:
-        _unfinished.add(sound)
+        _unfinished.add(over)
         dropped = _waiting.popleft() if len(_waiting) >= MAX_WAITING else None
-        _waiting.append((job, what, sound, finished))
+        _waiting.append((job, what, over, finished))
         _queue.notify_all()
         if _worker is None or not _worker.is_alive():
             _worker = threading.Thread(target=_work, name="tt-sounds", daemon=True)
             _worker.start()
     if dropped:
-        _job, what_dropped, sound_dropped, told = dropped
+        _job, what_dropped, over_dropped, told = dropped
         logger.info(f"Skipped {what_dropped}: the sound output is held up")
-        _end(sound_dropped, what_dropped, told, "the sound output is held up")
+        _end(over_dropped, what_dropped, told, "the sound output is held up")
 
 
-def _end(sound, what, finished, error):
+def _end(over, what, finished, error):
     """One sound is over: it counts as over for the waiters first, then
     whoever asked for it is told. Their callback failing is logged, so it
     can neither leave the sound unfinished nor stop the sound thread."""
     with _queue:
-        _unfinished.discard(sound)
-    sound.end()
+        _unfinished.discard(over)
+    over.set()
     if finished:
         try:
             finished(error)
@@ -258,7 +244,7 @@ def _work():
     while True:
         with _queue:
             _queue.wait_for(lambda: _waiting)
-            job, what, sound, finished = _waiting.popleft()
+            job, what, over, finished = _waiting.popleft()
         error = None
         try:
             job()
@@ -269,20 +255,21 @@ def _work():
             if (type(e), error) not in _failures_logged:
                 _failures_logged.add((type(e), error))
                 logger.warning(f"Could not play {what}: {e} (not logged again)")
-        _end(sound, what, finished, error)
+        _end(over, what, finished, error)
 
 
 class _Playback:
     """One sound fed to a stream's callback, then silence until the stream's
     buffer can no longer hold any of the sound."""
 
-    def __init__(self, samples, rate, sound):
-        self.samples, self.rate, self.sound = samples, rate, sound
+    def __init__(self, samples, rate):
+        self.samples, self.rate = samples, rate
         self.fed = 0
         self.silence = 0            # frames of silence fed after the sound
         self.period = 0             # the most frames one callback asked for
         self.latency = 0.0          # the stream's, set before it starts
-        self.reported = False       # PortAudio said when the last of it is heard
+        self.reported = False       # PortAudio said when the last of it is heard:
+        self.heard_until = 0.0      # then (time.monotonic())
         self.underflows = 0
         self.out_of_buffer = threading.Event()
 
@@ -310,21 +297,19 @@ class _Playback:
             self.out_of_buffer.set()
 
     def _note_heard(self, now, time_info, count):
-        """When the *count* samples just handed over are heard: from when
-        PortAudio says this buffer starts playing, where it says. Else any
-        time from now, if the stream's buffer was empty, to one latency from
-        now, if it was full."""
+        """When the *count* samples just handed over have all been heard,
+        where PortAudio says when this buffer starts playing."""
         ahead = time_info.outputBufferDacTime - time_info.currentTime
         self.reported = 0 < ahead < MAX_AHEAD_S
-        start, latest = (now + ahead, now + ahead) if self.reported else (now, now + self.latency)
-        self.sound.note_heard(start, latest + count / self.rate)
+        if self.reported:
+            self.heard_until = now + ahead + count / self.rate
 
 
-def _play(samples, rate, device, sound):
+def _play(samples, rate, device):
     """Play *samples* to the end on a stream of their own, then close it.
     Raises on an audio error, or when the output stops taking samples."""
     global _latency_logged, _underflow_logged
-    playback = _Playback(samples, rate, sound)
+    playback = _Playback(samples, rate)
     stream = sd.OutputStream(samplerate=rate, channels=1, dtype="float32", device=device,
                              callback=playback.callback)
     try:
@@ -336,8 +321,7 @@ def _play(samples, rate, device, sound):
         if not playback.out_of_buffer.wait(len(samples) / rate + stream.latency + STUCK_S):
             raise TimeoutError("the sound output stopped taking samples")
         if playback.reported:
-            heard_until = sound.heard()[2]
-            time.sleep(min(max(0.0, heard_until - time.monotonic()), MAX_AHEAD_S))
+            time.sleep(min(max(0.0, playback.heard_until - time.monotonic()), MAX_AHEAD_S))
         if playback.underflows and not _underflow_logged:
             _underflow_logged = True    # a gap in a sound, logged once a session
             logger.info(f"The sound output ran dry {playback.underflows} time(s) during a sound")

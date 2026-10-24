@@ -297,12 +297,11 @@ class RecordingState:
     # None unless a double-tap of the toggle key armed it.
     silence: object = None
     # When the toggle key started this recording (None for any other start),
-    # so a quick second tap can be told apart from a stop; its start beep (a
-    # beeps.Sound, None with beeps off), which the mic may have picked up; and
-    # when the mic's last block came in (time.monotonic()), to find it there.
+    # so a quick second tap can be told apart from a stop, and its start beep
+    # (what beeps.beep returned, None with beeps off), which the second tap's
+    # clock waits for.
     toggle_started_at: float = None
     start_beep: object = None
-    last_block_at: float = 0.0
     # Paste Last Dictation: {"key", "key_up", "at"} from the combo press until
     # every key of it is let go, else None (see _handle_key_event).
     paste_last: object = None
@@ -755,7 +754,6 @@ def _sd_callback(indata, frames_count, time_info, status):
     """sounddevice's audio callback: collect frames while recording."""
     if state.is_recording:
         state.frames.append(indata.tobytes())
-        state.last_block_at = time.monotonic()
 
         # Chunked dictation: at a pause, the phrase so far goes off to be typed.
         chunker = state.chunker
@@ -2737,9 +2735,7 @@ def _toggle_pressed_while_recording(beeps_on: bool) -> bool:
     rate = getattr(state, "recording_samplerate", SAMPLE_RATE)
     detector = SilenceDetector(_auto_stop_seconds, rate)
     heard = _frames_f32(list(state.frames))
-    captured_until = state.last_block_at - getattr(state.stream, "latency", 0.0)
-    beep = beeps.heard_in_recording(state.start_beep, len(heard), rate, captured_until)
-    if has_a_word(np.delete(heard, beep), rate):
+    if has_a_word(beeps.without_beep(heard, rate, START_BEEP[0]), rate):
         detector.heard_speech()
     state.silence = detector
     logger.info("Double-tap: this recording will stop by itself when you go quiet")

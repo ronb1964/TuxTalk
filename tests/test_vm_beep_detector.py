@@ -15,19 +15,23 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent / "vm"))
 import checks_dictation as check  # noqa: E402  (the VM checks' own folder, added above)
 
+from tuxtalk import beeps  # noqa: E402
+
 RATE = 16000      # the VM's recording of its speakers is 48 kHz; the detector works at either
 SLOW_LOG = "Double-tap: this recording will stop by itself\nBeeps: the output's latency is 0.174s\n"
-rng = np.random.default_rng(3)
 
 
 def speakers(*tones, hiss=30.0, seconds=1.5, rate=RATE):
     """A recording of the speakers at *rate*: hiss, and each (Hz, length,
-    where) tone at a beep's loudness."""
-    recording = rng.normal(0, hiss, int(rate * seconds))
-    for freq, length, at in tones:
-        t = np.arange(int(rate * length)) / rate
+    where, cut) beep as TuxTalk plays it, its last *cut* seconds lost. The
+    hiss is the same for the same recording, whichever tests ran before."""
+    seed = [rate, int(hiss)] + [int(at * 4000) for _freq, _length, at, _cut in tones]
+    recording = np.random.default_rng(seed).normal(0, hiss, int(rate * seconds))
+    for freq, length, at, cut in tones:
+        beep = beeps.tone(freq, length, rate)
+        beep = beep[:len(beep) - int(rate * cut)] * 32767
         start = int(rate * at)
-        recording[start:start + len(t)] += np.sin(2 * np.pi * freq * t) * 32767 * 0.2
+        recording[start:start + len(beep)] += beep
     return recording
 
 
@@ -37,8 +41,8 @@ def double_tap(start_cut=0.0, hands_free_cut=0.0, offset=0.0, swapped=False, his
     way round), each cut short by as much as asked."""
     first, second = (0.6, 0.3) if swapped else (0.3, 0.6)
     (start_hz, start_s), (hands_free_hz, hands_free_s) = check.START_BEEP, check.HANDS_FREE_BEEP
-    return speakers((start_hz, start_s - start_cut, first + offset),
-                    (hands_free_hz, hands_free_s - hands_free_cut, second + offset),
+    return speakers((start_hz, start_s, first + offset, start_cut),
+                    (hands_free_hz, hands_free_s, second + offset, hands_free_cut),
                     hiss=hiss, rate=rate)
 
 
@@ -73,9 +77,9 @@ def test_beeps_in_the_wrong_order_fail():
 
 
 def test_a_missing_beep_fails():
-    start = (check.START_BEEP[0], check.START_BEEP[1], 0.3)
+    start = (check.START_BEEP[0], check.START_BEEP[1], 0.3, 0.0)
     outcome = check.beeps_outcome(SLOW_LOG, speakers(start), RATE)
-    # All the hands-free beep's band holds is the click of the start beep's edges.
+    # All the hands-free beep's band holds is hiss and the start beep's edges.
     heard = re.search(r"hands-free beep (\d+) of 70 ms", outcome.detail)
     assert outcome.status == "fail" and heard and int(heard.group(1)) < 10, outcome.detail
 

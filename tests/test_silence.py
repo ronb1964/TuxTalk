@@ -3,13 +3,14 @@
 Audio is built from quiet room noise and louder "speech" (noise plus a tone),
 fed in 20 ms blocks the way the microphone callback delivers it.
 """
-import threading
 import time
-import types
+import wave
+from pathlib import Path
 
 import numpy as np
 import pytest
 
+from tuxtalk import beeps
 from tuxtalk.silence import SilenceDetector
 
 SR = 16000
@@ -105,14 +106,11 @@ def test_talking_the_instant_recording_starts_still_counts_as_speech():
 
 # --- Wiring into the service -------------------------------------------------
 
-def _start(monkeypatch, from_toggle=True, seconds=1.0, mic_delay=0.0, beeps_on=False,
-           mic_latency=0.0):
+def _start(monkeypatch, from_toggle=True, seconds=1.0, mic_delay=0.0, beeps_on=False):
     """A recording started as the service starts one, on a microphone that
-    takes *mic_delay* to open and reports *mic_latency* (what it hears
-    reaches TuxTalk that much later)."""
+    takes *mic_delay* to open."""
     from tuxtalk import app
     monkeypatch.setattr(app, "_auto_stop_seconds", seconds)
-    monkeypatch.setattr(app.state, "stream", types.SimpleNamespace(latency=mic_latency))
 
     def open_microphone(idx):
         time.sleep(mic_delay)
@@ -179,52 +177,43 @@ def test_a_word_said_before_the_second_tap_is_kept(monkeypatch):
     app.state.is_recording = False
 
 
-def _start_with_its_start_beep(monkeypatch, held_up, latency, mic_latency=0.0, stuck=None,
-                               output_answers=None):
-    """A toggle start whose start beep the sound thread plays *held_up*
-    seconds late, behind another sound, on an output of *latency*; or, with
-    *stuck*, whose output stops answering before any of the beep is handed
-    over ("before") or after the first of it ("during"), until
-    *output_answers* is set. Returns the service and when its microphone
-    opened."""
-    from tuxtalk import beeps
+# --- The start beep, picked up by the microphone -------------------------------
+# With speakers near the microphone, what it records before the second tap
+# holds the start beep. Where in the recording is never known for sure: an
+# output or microphone can be slower than it reports (a Bluetooth speaker,
+# the sound server's own buffers), so the beep is told apart by its pitch.
 
-    def play(samples, rate, device, sound):
-        time.sleep(held_up)
-        if stuck == "before":
-            output_answers.wait(10)
-            return
-        heard_from = time.monotonic() + latency
-        sound.note_heard(heard_from, heard_from + len(samples) / rate)
-        if stuck == "during":
-            output_answers.wait(10)
-        time.sleep(latency + len(samples) / rate)          # played out
-    monkeypatch.setattr(beeps, "_play", play)
-    opened = time.monotonic()
-    return _start(monkeypatch, beeps_on=True, mic_latency=mic_latency), opened
+def _real_word(name, gain=1.0):
+    """A quick word said by a person, at *gain*: "ask" or "not", cut from
+    whisper.cpp's sample of John F. Kennedy's inaugural address (1961,
+    public domain)."""
+    with wave.open(str(Path(__file__).with_name("data") / f"jfk-{name}.wav")) as w:
+        assert w.getframerate() == SR
+        return np.frombuffer(w.readframes(w.getnframes()), np.int16) * gain
 
 
-def _second_tap(app, opened, words=(), mic_latency=0.0):
-    """Speakers next to the mic: it records the room; the start beep where
-    the sound thread says it was heard, as far as it was; and a word
-    starting at each of *words* (time.monotonic()), all reaching TuxTalk
-    *mic_latency* late. Then the second tap."""
-    _over, heard_from, heard_until = app.state.start_beep.heard()
-    time.sleep(max(0.0, (heard_until or 0.0) + 0.4 + mic_latency - time.monotonic()))
-    heard = noise(time.monotonic() - opened)
+def _picked_up_beep(level, distorted):
+    """The start beep as the microphone records it: the tone TuxTalk plays,
+    *level* times as loud; *distorted* by a small speaker, with 2nd and 3rd
+    harmonics 20 dB down, and squashed as it nears full scale."""
+    freq, length = beeps.START_BEEP
+    heard = beeps.tone(freq, length, SR).astype(np.float64)
+    if distorted:
+        heard += 0.1 * (beeps.tone(2 * freq, length, SR) + beeps.tone(3 * freq, length, SR))
+    heard *= level
+    return (np.tanh(heard) if distorted else heard) * 32767
 
-    def at(when):
-        return int((when - opened + mic_latency) * SR)
-    if heard_from is not None:
-        t = np.arange(at(heard_until) - at(heard_from)) / SR
-        heard[at(heard_from):at(heard_until)] += (
-            np.sin(2 * np.pi * app.START_BEEP[0] * t) * 8000).astype(np.int16)
-    for when in words:
-        word = speech(0.2)
-        heard[at(when):][:len(word)] += word
-    for i in range(0, len(heard), BLOCK):
-        app._sd_callback(heard[i:i + BLOCK].reshape(-1, 1), BLOCK, None, None)
-    return app._toggle_pressed_while_recording(beeps_on=False)
+
+def _recording(sounds, room, seconds=1.2):
+    """What the microphone recorded before the second tap: the room (int16
+    RMS *room*) and each (sound, where it starts in seconds) of *sounds*,
+    cut off where the recording starts and ends."""
+    heard = np.random.default_rng(1).normal(0, room, int(seconds * SR))
+    for sound, at in sounds:
+        start = int(at * SR)
+        first, last = max(0, start), min(len(heard), start + len(sound))
+        heard[first:last] += sound[first - start:last - start]
+    return np.clip(heard, -32768, 32767).astype(np.int16)
 
 
 def _nothing_said_after(app):
@@ -238,50 +227,59 @@ def _nothing_said_after(app):
     return app.state.silence.nothing_said
 
 
-@pytest.mark.parametrize("held_up,latency,mic_latency",
-                         [(0.0, 0.0, 0.0), (0.0, 0.3, 0.0), (0.4, 0.17, 0.0), (0.0, 0.17, 0.25)],
-                         ids=["at once", "slow output", "behind another sound", "slow microphone"])
+def _nothing_said(monkeypatch, heard):
+    """The microphone records *heard*, the second tap of a double-tap comes,
+    and then the room goes quiet: whether the recording stops as one with
+    nothing said (dropped, rather than typed)."""
+    app = _start(monkeypatch)
+    for i in range(0, len(heard), BLOCK):
+        app._sd_callback(heard[i:i + BLOCK].reshape(-1, 1), BLOCK, None, None)
+    assert app._toggle_pressed_while_recording(beeps_on=False) is True
+    return _nothing_said_after(app)
+
+
+# Where the beep reaches the recording: at once; 0.4 and 0.6 s late; already
+# playing as the microphone opened; still playing at the second tap.
+BEEP_AT = {"at once": 0.0, "0.4 s late": 0.4, "0.6 s late": 0.6,
+           "before the mic opened": -0.06, "still playing at the tap": 1.12}
+
+
+@pytest.mark.parametrize("room", [6.0, 300.0], ids=["silent room", "noisy room"])
+@pytest.mark.parametrize("distorted", [False, True], ids=["clean", "distorted"])
+@pytest.mark.parametrize("level", [4.0, 1.0, 0.1], ids=["near full scale", "as played", "faint"])
+@pytest.mark.parametrize("beep_at", BEEP_AT.values(), ids=BEEP_AT.keys())
 def test_the_start_beep_picked_up_by_the_mic_is_not_a_word(
-        monkeypatch, held_up, latency, mic_latency):
-    """A double-tap with nothing said but the start beep is nothing said,
-    however late the beep was heard: on a 0.3 s output, past two beep
-    lengths; 0.4 s late behind another sound, past any fixed guess; or on
-    a microphone whose sound reaches TuxTalk 0.25 s late, two beeps' length."""
-    app, opened = _start_with_its_start_beep(monkeypatch, held_up, latency, mic_latency)
-    assert _second_tap(app, opened, mic_latency=mic_latency) is True
-    assert _nothing_said_after(app)
+        monkeypatch, beep_at, level, distorted, room):
+    """A double-tap with nothing said but the start beep is nothing said."""
+    heard = _recording([(_picked_up_beep(level, distorted), beep_at)], room)
+    assert _nothing_said(monkeypatch, heard)
 
 
-def test_a_word_said_right_after_a_late_start_beep_is_kept(monkeypatch):
-    app, opened = _start_with_its_start_beep(monkeypatch, 0.4, 0.17)
-    _over, _heard_from, heard_until = app.state.start_beep.heard()
-    assert _second_tap(app, opened, words=[heard_until + 0.15]) is True
-    assert not _nothing_said_after(app), "the word counts: going quiet after it types it"
+@pytest.mark.parametrize("level", [4.0, 1.0], ids=["near full scale", "as played"])
+def test_the_start_beep_is_not_a_word_wherever_it_falls_in_a_block(monkeypatch, level):
+    """The microphone's sound comes in 20 ms blocks, and the beep starts and
+    ends anywhere in one. A beep that clicked as it started and stopped
+    counted as a word at some of them."""
+    for ms in range(20):
+        heard = _recording([(_picked_up_beep(level, distorted=False), 0.4 + ms / 1000)], 6.0)
+        assert _nothing_said(monkeypatch, heard), f"the beep {ms} ms into a block"
 
 
-def test_a_word_said_before_a_late_start_beep_is_kept(monkeypatch):
-    """The user can start talking before a beep held up behind another
-    sound is heard; only the beep itself is left out."""
-    app, opened = _start_with_its_start_beep(monkeypatch, 0.4, 0.17)
-    _over, heard_from, _heard_until = app.state.start_beep.heard()
-    assert _second_tap(app, opened, words=[heard_from - 0.3]) is True
-    assert not _nothing_said_after(app)
+# (where the word starts, where the beep starts), in seconds
+WORD_AND_BEEP = {"word before the beep": (0.02, 0.6), "word after the beep": (0.3, 0.0),
+                 "word over the beep": (0.25, 0.3)}
 
 
-@pytest.mark.parametrize("stuck", ["before", "during"])
-def test_a_start_beep_the_output_never_finished_drops_no_word_said_before_it(
-        monkeypatch, stuck):
-    """Behind an output that stopped answering, the start waits its second
-    for the beep and carries on. A word said before what was heard of the
-    beep, or with none of it heard, still counts."""
-    output_answers = threading.Event()
-    app, opened = _start_with_its_start_beep(monkeypatch, 0.4, 0.0, stuck=stuck,
-                                             output_answers=output_answers)
-    assert app.state.start_beep.heard()[0] is False, "the beep is still not over"
-    tapped = _second_tap(app, opened, words=[opened + 0.1])
-    output_answers.set()
-    assert tapped is True
-    assert not _nothing_said_after(app)
+@pytest.mark.parametrize("gain", [1.0, 0.1], ids=["spoken", "spoken softly"])
+@pytest.mark.parametrize("word", ["ask", "not"])
+@pytest.mark.parametrize("word_at,beep_at", WORD_AND_BEEP.values(), ids=WORD_AND_BEEP.keys())
+def test_a_quick_word_said_with_the_start_beep_is_kept(monkeypatch, word_at, beep_at, word,
+                                                       gain):
+    """A real word said before the second tap counts, wherever the beep the
+    mic picked up falls: going quiet after it types it."""
+    heard = _recording([(_picked_up_beep(1.0, distorted=True), beep_at),
+                        (_real_word(word, gain), word_at)], room=60.0)
+    assert not _nothing_said(monkeypatch, heard)
 
 
 def test_a_quick_second_tap_counts_when_the_recording_was_slow_to_start(monkeypatch):

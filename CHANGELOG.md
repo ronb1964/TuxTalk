@@ -49,11 +49,17 @@ before 0.15.0, so older entries use that name.
   PipeWire, and through PulseAudio's plugin to PipeWire), and the beeps play
   on their own, so a sound system that stops answering can't hold up the
   typing, or your hotkeys for more than a second. The double-tap is timed
-  from when you hear the end of the start beep, and that beep is never
-  mistaken for a word, however late it plays, while a word you say before
-  it still counts. The microphone test in
+  from when you hear the end of the start beep. The microphone test in
   Preferences, Audio, plays your recording back to the end too, and Replay
   waits until it's done.
+- If your microphone picks up the start beep and it got there late, on a
+  slow sound output or behind another sound, a double-tap with nothing said
+  could take the beep for a word, and hands-free transcribed it instead of
+  dropping the recording. TuxTalk now filters the beep's pitch out before it
+  listens for a word, so it doesn't matter when the beep reaches the
+  microphone, and a word you say before the second tap still counts. The
+  beeps fade in and out over a few thousandths of a second now, so they
+  don't click.
 - On a desktop where TuxTalk can't make its own keyboard and types with
   wtype instead, your dictation was on wtype's command line for a moment,
   where anyone else logged in to the computer could read it. It goes to

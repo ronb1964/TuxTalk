@@ -84,10 +84,11 @@ def beep_bursts(samples, rate):
 TONE_BAND_HZ = 100
 # A tone at -50 dBFS: far under a beep (-14 dBFS at full volume), over hiss.
 TONE_QUIETEST = 32768 * 10 ** (-50 / 20)
-# A whole beep reads within about 2 ms of its length, even over hiss at
-# -21 dBFS; one cut short by 10 ms reads at least 9 ms short
-# (tests/test_vm_beep_detector.py). Halfway between.
-TONE_SLACK_S = 0.005
+# A whole beep, which fades in and out (beeps.FADE_S), reads within 2.3 ms
+# of its length, even over hiss at -21 dBFS; one with its last 10 ms cut
+# off, which then ends at once, at least 7 ms short
+# (tests/test_vm_beep_detector.py). About halfway between.
+TONE_SLACK_S = 0.0045
 
 
 def tone_heard(samples, rate, freq):
