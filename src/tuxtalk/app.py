@@ -4581,16 +4581,19 @@ def _report_test_press(code, hold_key, toggle_key) -> None:
         _notify_tray_hotkey_pressed("toggle")
 
 
-def _hide_modifier_hotkey(event, toggle_key, devices) -> None:
+def _hide_modifier_hotkey(event, toggle_key, devices, held_modifiers) -> None:
     """Hide a Right Ctrl or Right Alt dictation key from the desktop as soon
     as it's down: what TuxTalk types meanwhile (the dictation a tap stops, a
     phrase of hands-free, a send counting down) would otherwise arrive as
     Ctrl or Alt shortcuts (Ctrl+W closes the tab). The hold key hides itself
     when it starts a dictation (_handle_key_event). Kept until it's let go,
     or until something lets go of every grab sooner; the desktop has been
-    told it's up either way."""
+    told it's up either way. Not with another modifier held: that press is
+    the user's own shortcut (Ctrl+Alt+T with Right Ctrl), which hiding the
+    key would break."""
     if (event.value == 1 and not _grabbed_devices
-            and (event.code == toggle_key or state.is_recording)):
+            and (event.code == toggle_key or state.is_recording)
+            and not _someone_elses_shortcut(held_modifiers - {event.code})):
         _grab_keyboards_hiding(devices, {event.code})
         state.hidden_key = event.code
     elif event.value == 0 and event.code == state.hidden_key:
@@ -4662,7 +4665,7 @@ def _handle_key_event(event, hold_key, toggle_key,
             return
 
     if event.code in MODIFIER_CODES and event.code in (hold_key, toggle_key):
-        _hide_modifier_hotkey(event, toggle_key, devices)
+        _hide_modifier_hotkey(event, toggle_key, devices, held_modifiers)
 
     # --- Hold-to-talk: hold key down to record, release to stop ---
     if event.code == hold_key:
@@ -4703,6 +4706,7 @@ def _handle_key_event(event, hold_key, toggle_key,
             and not _someone_elses_shortcut(held_modifiers - {toggle_key})):
         shift = _held_shift(held_modifiers) if _voice_editing else set()
         if not state.is_recording and not shift and _hold_pending_send(announce=True):
+            _release_all_grabs()    # a Right Ctrl toggle's: nothing will be typed
             return   # the tap only held the send: no recording
         if not state.is_recording:
             if shift:

@@ -151,9 +151,18 @@ def test_a_right_ctrl_toggle_holds_a_send_counting_down_when_pressed(service, mo
     monkeypatch.setattr(app, "_hold_pending_send", lambda announce: service.append("held") or True)
     held = set()
     key(RCTRL, 1, held, toggle=RCTRL)
-    assert service == ["grab", "held"]
+    assert service == ["grab", "held", "let go"]     # not left for the backstop to find
     key(RCTRL, 0, held, toggle=RCTRL)
     assert "start" not in service
+
+
+def test_a_right_ctrl_toggle_in_the_users_own_shortcut_stays_shown(service):
+    """Left Alt+Right Ctrl+T is Ctrl+Alt+T (a terminal): hidden, the desktop
+    saw Alt+T."""
+    held = set()
+    key(ecodes.KEY_LEFTALT, 1, held, toggle=RCTRL)
+    key(RCTRL, 1, held, toggle=RCTRL)
+    assert service == []
 
 
 def test_a_right_alt_toggle_presses_ctrl_then_hides(service):

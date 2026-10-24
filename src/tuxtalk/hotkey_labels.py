@@ -6,8 +6,8 @@ from .config import HOTKEY_CHOICES
 
 # What else a key does, named in the hotkey dropdowns so nobody picks one
 # blind: dictating with F5 also reloads the page in a browser. Right Ctrl or
-# Right Alt pressed with another key still starts or stops a dictation, so it
-# can't be both.
+# Right Alt held down for a shortcut (Right Ctrl+C) starts or stops a
+# dictation instead, so it can't be both.
 HOTKEY_CLASHES = {
     "F1": "opens Help in many apps",
     "F5": "reloads the page in browsers",
