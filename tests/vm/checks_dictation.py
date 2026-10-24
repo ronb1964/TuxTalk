@@ -79,22 +79,27 @@ def beep_bursts(samples, rate):
     return bursts
 
 
-TONE_STEP_S = 0.01
+TONE_STEP_S = 0.005
+TONE_WINDOW_S = 0.02
+# A tone at -50 dBFS: far under a beep (-14 dBFS at full volume), over hiss.
+TONE_QUIETEST = 32768 * 10 ** (-50 / 20)
 
 
 def tone_heard(samples, rate, freq):
     """The longest stretch of a recording in which a tone of *freq* Hz is
-    the loudest sound: (where it starts, how long it is), in seconds; how
-    much of a beep was heard, in steps of TONE_STEP_S."""
-    hop = int(rate * TONE_STEP_S)                          # 20 ms windows, a step apart
-    window = np.hanning(2 * hop)
-    bins = np.fft.rfftfreq(2 * hop, 1 / rate)
+    the loudest sound: (where it starts, how long it is), in seconds, in
+    steps of TONE_STEP_S. A whole tone reads as its length and about half a
+    window more, as the windows over each of its edges still hold mostly
+    the tone (tests/test_vm_beep_detector.py)."""
+    hop, size = int(rate * TONE_STEP_S), int(rate * TONE_WINDOW_S)
+    window = np.hanning(size)
+    bins = np.fft.rfftfreq(size, 1 / rate)
     longest, start, current = 0, None, 0
-    for step, i in enumerate(range(0, len(samples) - 2 * hop, hop)):
-        spectrum = np.abs(np.fft.rfft(samples[i:i + 2 * hop] * window))
-        # A tone's peak here is about its amplitude times hop / 2: 50 * hop
-        # is a tone at -50 dBFS: far under a beep (-14 dBFS at full volume), over hiss.
-        heard = spectrum.max() > 50 * hop and abs(bins[spectrum.argmax()] - freq) < 30
+    for step, i in enumerate(range(0, len(samples) - size, hop)):
+        spectrum = np.abs(np.fft.rfft(samples[i:i + size] * window))
+        # Through a Hann window a tone's peak is its amplitude times size / 4.
+        heard = (spectrum.max() > TONE_QUIETEST * size / 4
+                 and abs(bins[spectrum.argmax()] - freq) < 30)
         current = current + 1 if heard else 0
         if current > longest:
             longest, start = current, (step - current + 1) * TONE_STEP_S
@@ -254,9 +259,10 @@ def beeps_outcome(log, samples, rate):
     heard = {name: tone_heard(samples, rate, freq) for name, (freq, _length) in beeps.items()}
     detail = ", ".join(f"{name} beep {seconds * 1000:.0f} of {beeps[name][1] * 1000:.0f} ms"
                        for name, (_start, seconds) in heard.items())
-    # A whole beep reads as its length plus a step or two (130 to 140 and 80
-    # to 90 ms in the VMs): under its length, part of it was lost.
-    full = all(seconds >= beeps[name][1] - 1e-9 for name, (_start, seconds) in heard.items())
+    # A whole beep reads as its length plus half a window or more; one cut
+    # short by 10 ms reads 5 ms over its length at most.
+    full = all(seconds >= beeps[name][1] + TONE_WINDOW_S / 2 - 1e-9
+               for name, (_start, seconds) in heard.items())
     in_order = full and heard["start"][0] < heard["hands-free"][0]
     if full and not in_order:
         detail += "; the hands-free beep came first"
