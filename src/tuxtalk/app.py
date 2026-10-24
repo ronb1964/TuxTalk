@@ -1549,7 +1549,6 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
             recording_indicator.show_at_position()
             recording_indicator.start_recording()
         except Exception as e:
-            print(f"Failed to show recording indicator: {e}")
             logger.error(f"Failed to show recording indicator: {e}", exc_info=True)
 
     return True
@@ -5247,7 +5246,6 @@ def _build_vulkan_model(settings: Settings):
                 reason = "no graphics chip was found"
             else:
                 model = whisper_vulkan.VulkanWhisperModel(settings.model, device_index)
-                print(f"Model loaded successfully on the GPU through Vulkan (device {device_index})")
                 logger.info(f"Model loaded: {settings.model} on vulkan device {device_index}")
                 _record_engine(settings.model, "vulkan")
                 return model
@@ -5280,7 +5278,6 @@ def _build_parakeet_gpu_model(settings: Settings):
             reason = "no graphics chip was found"
         else:
             model = parakeet_gpu.ParakeetGpuModel(device_index)
-            print(f"Parakeet loaded on the GPU through Vulkan (device {device_index})")
             logger.info(f"Model loaded: {PARAKEET_MODEL} on vulkan device {device_index}")
             _record_engine(PARAKEET_MODEL, "vulkan")
             return model
@@ -5416,7 +5413,6 @@ def build_model(settings: Settings):
 
         # Parakeet gets here only on the processor (the graphics route returned above).
         where = "cpu" if is_parakeet(settings.model) else settings.device
-        print(f"Model loaded successfully on {where.upper()}")
         logger.info(f"Model loaded: {settings.model} on {where}")
         _record_engine(settings.model, where)
         return model
@@ -5429,7 +5425,6 @@ def build_model(settings: Settings):
         raise
     except Exception as e:
         if settings.device.lower() == "cuda" and not is_parakeet(settings.model):
-            print(f"CUDA failed: {e}")
             logger.error(f"CUDA error: {type(e).__name__}: {str(e)}")
             logger.debug("CUDA traceback:", exc_info=True)
             print("Falling back to CPU...")
@@ -5449,7 +5444,6 @@ def build_model(settings: Settings):
                     raise ModelUnavailable(
                         f"The {settings.model} model was not downloaded (cancelled or failed)")
 
-                print("Model loaded successfully on CPU (fallback)")
                 logger.info("Model loaded on CPU (fallback from CUDA)")
                 _record_engine(settings.model, "cpu")
                 # This switches the saved device to the processor (below), so
@@ -5474,11 +5468,9 @@ def build_model(settings: Settings):
             except BrokenModelFiles as cpu_e:
                 raise ModelWontLoad(str(cpu_e)) from cpu_e
             except Exception as cpu_e:
-                print(f"CPU fallback also failed: {cpu_e}")
                 logger.error(f"CPU fallback failed: {cpu_e}")
                 raise
         else:
-            print(f"Model loading failed: {e}")
             logger.error(f"Model loading failed: {e}")
             raise
 
@@ -5679,7 +5671,6 @@ def main():
             dbus_service.emit_service_state(True)
             dbus_service.emit_model_changed(cfg.model)
 
-            print("D-Bus service initialized for GNOME extension")
             logger.info("D-Bus service started successfully (no tray running)")
         except Exception as e:
             dbus_service = None
@@ -5687,7 +5678,6 @@ def main():
                 # The normal case: the tray already owns the name.
                 logger.info("The tray owns the D-Bus name; the service doesn't register its own")
             else:
-                print(f"Failed to initialize D-Bus service: {e}")
                 logger.error(f"D-Bus service initialization failed: {e}", exc_info=True)
 
         # Initialize recording indicator if enabled
@@ -5708,14 +5698,11 @@ def main():
                 global _spectrum_processor
                 from .indicator_dsp import SpectrumProcessor
                 _spectrum_processor = SpectrumProcessor(bins=20)
-                print(f"Recording indicator initialized (position: {cfg.indicator_position}, size: {cfg.indicator_size})")
                 logger.info(f"Recording indicator initialized at position: {cfg.indicator_position}, size: {cfg.indicator_size}")
             except Exception as e:
-                print(f"Failed to initialize recording indicator: {e}")
                 logger.error(f"Recording indicator initialization failed: {e}", exc_info=True)
         gtk_ok = True
     except Exception as e:
-        print(f"Failed to initialize GTK components: {e}")
         logger.error(f"GTK initialization failed: {e}", exc_info=True)
 
     # Outside the try above: a model that fails to load is not a GTK
@@ -5743,7 +5730,6 @@ def main():
 
     if model is None:
         model = _build_model_or_exit(cfg)
-    print(f"Config: model={cfg.model} device={cfg.device} lang={cfg.language or 'auto'} auto_space={cfg.auto_space} auto_period={cfg.auto_period}")
     logger.info(f"Configuration: model={cfg.model}, device={cfg.device}, language={cfg.language or 'auto'}, auto_space={cfg.auto_space}, auto_period={cfg.auto_period}")
     _notify_tray_running_engine()
     # A toggle sent while the model was loading would otherwise start a
