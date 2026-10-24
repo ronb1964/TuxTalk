@@ -130,6 +130,7 @@ def tones(heard):
     for run in runs:
         part = heard[run[0]:run[-1] + 1]
         rising = np.flatnonzero((part[:-1] < 0) & (part[1:] >= 0))
+        assert len(rising) >= 2, f"a sound of {len(part)} samples, under one whole cycle"
         hz = (len(rising) - 1) * RATE / (rising[-1] - rising[0])   # whole cycles between them
         found.append((len(part), float(np.abs(part).max()), hz))
     return found
@@ -139,7 +140,8 @@ def heard_in_full(found, freq, duration):
     samples, peak, hz = found
     # Every sample of the tone, but its first and last, which are 0.
     return (abs(samples - len(beeps.tone(freq, duration))) <= 2
-            and peak == pytest.approx(beeps.VOLUME, rel=0.01) and hz == pytest.approx(freq, rel=0.02))
+            and peak == pytest.approx(beeps.VOLUME, rel=0.01)
+            and hz == pytest.approx(freq, rel=0.02))
 
 
 # Latency and period of real outputs: PipeWire's usual one, the slow one in
@@ -343,7 +345,7 @@ def test_a_wait_lasts_while_the_sound_before_it_plays_whatever_is_dropped_after(
     assert playing.wait(5)
     waits = {}
     waiters = [threading.Thread(target=lambda key=key: waits.update({key: beeps.wait_until_played(
-        5, sound=start if key == "start beep" else None)})) for key in ("start beep", "all")]
+        5, over=start if key == "start beep" else None)})) for key in ("start beep", "all")]
     for waiter in waiters:
         waiter.start()
     for _ in range(beeps.MAX_WAITING + 2):            # two of them pushed out of the queue

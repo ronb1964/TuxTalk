@@ -386,9 +386,9 @@ def _slow_start_beep(monkeypatch):
     from tuxtalk import beeps
     waits = []
 
-    def wait_until_played(limit=beeps.WAIT_LIMIT_S, sound=None):
+    def wait_until_played(limit=beeps.WAIT_LIMIT_S, *, over=None):
         time.sleep(0.5)
-        waits.append((sound, time.time()))
+        waits.append((over, time.time()))
         return True
     monkeypatch.setattr(beeps, "wait_until_played", wait_until_played)
     return waits

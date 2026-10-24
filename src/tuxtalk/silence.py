@@ -179,9 +179,9 @@ class SilenceDetector:
 # --- An accidental tap of the hold key ---------------------------------------------
 # A tap just over MIN_HOLD_MS records a fraction of a second of room noise and
 # the key's click, and Parakeet can "hear" a word in it ("Thank you.", or
-# "Yeah." from the processor engine for 0.4 s of loud hiss). Whisper has a no-speech score to catch this; Parakeet
-# has none. So a recording this short is only transcribed if some of it is
-# clearly louder than its own background.
+# "Yeah." from the processor engine for 0.4 s of loud hiss). Whisper has a
+# no-speech score to catch this; Parakeet has none. So a recording this short
+# is only transcribed if some of it is clearly louder than its own background.
 
 TAP_MAX_S = 0.6             # longer recordings are always transcribed, silent or not
 _TAP_BLOCK_S = 0.02

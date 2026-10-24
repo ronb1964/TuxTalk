@@ -159,17 +159,18 @@ def play(samples, rate, finished=None, called_off=None):
     _submit(job, "a sound", threading.Event(), finished)
 
 
-def wait_until_played(limit=WAIT_LIMIT_S, *, sound=None):
-    """Wait until *sound* (what beep() returned) is over, or without one
-    every sound asked for so far: played out to the speakers, as far as the stream can tell, or
-    failed or dropped. At most *limit* seconds; False if it took longer.
+def wait_until_played(limit=WAIT_LIMIT_S, *, over=None):
+    """Wait until the sound *over* stands for (the Event beep() returned) is
+    over, or without one every sound asked for so far: played out to the
+    speakers, as far as the stream can tell, or failed or dropped. At most
+    *limit* seconds; False if it took longer.
 
     Each sound is waited for itself: a later one dropped from the queue, and
     so over first, never ends the wait for one still playing."""
     with _queue:
-        sounds = [sound] if sound is not None else list(_unfinished)
+        sounds = [over] if over is not None else list(_unfinished)
     deadline = time.monotonic() + limit
-    if all(over.wait(max(0.0, deadline - time.monotonic())) for over in sounds):
+    if all(sound.wait(max(0.0, deadline - time.monotonic())) for sound in sounds):
         return True
     logger.warning(f"A sound took over {limit}s to play; carrying on without it")
     return False

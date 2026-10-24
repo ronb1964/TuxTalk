@@ -1489,7 +1489,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     # The double-tap is timed from here, the start beep heard: keys wait on
     # this thread, so a tap made during a slow start still counts (#21).
     if from_toggle and state.start_beep is not None:
-        beeps.wait_until_played(sound=state.start_beep)
+        beeps.wait_until_played(over=state.start_beep)
     state.toggle_started_at = time.time() if from_toggle else None
     logger.info(f"Recording started in {time.time() - state.press_t0:.2f}s")
     return True
