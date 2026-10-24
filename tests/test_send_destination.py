@@ -1175,3 +1175,45 @@ def test_a_countdown_called_off_partway_still_gives_back_its_space(chat, keyboar
     timers[1].run(*timers[1].args)                  # "Sending in 2 s": another window
     focus[:] = FIRST
     assert send_countdown.with_owed_space("How are you.") == " How are you."
+
+
+def test_where_the_window_is_never_known_the_space_goes_only_where_the_words_did(
+        chat, keyboard, monkeypatch):
+    """COSMIC: a click into a terminal as the "Not sent" notice came up.
+    The space went into the terminal, and undo, which follows where the
+    last text went, then took the terminal for the dictation's window:
+    "delete last sentence" there backspaced the chat message's length."""
+    focus, heard, typed, notices = chat
+    focus[1] = None                                 # COSMIC: only the app
+
+    def notice_then_click(text):
+        notices.append(text)
+        focus[:] = ["konsole", None]
+    monkeypatch.setattr(send_countdown, "show_notice", notice_then_click)
+    heard.append("see you at noon")
+    dictate()
+    assert [text for text, _ in typed] == ["See you at noon."]
+    assert app.state.last_inserted_window == "brave-browser"
+
+
+def test_a_phrase_cut_at_a_pause_takes_its_recordings_message_to_the_queue(chat, monkeypatch):
+    """The phrase is queued when the pause is heard and typed later; the
+    next recording may start in between. Taken when it's typed, the message
+    was the new recording's."""
+    focus, heard, typed, notices = chat
+    jobs = []
+    monkeypatch.setattr(app, "_chunk_worker", lambda: types.SimpleNamespace(submit=jobs.append))
+    monkeypatch.setattr(app, "_chunk_cfg", types.SimpleNamespace(
+        beeps=False, smart_quotes=False, notify=False, language=None, auto_space=True,
+        auto_period=True, injection_mode="type"))
+    app._arm_chunker(app.SAMPLE_RATE)               # recording A
+    first = app.state.message
+    pause = types.SimpleNamespace(tail_samples=lambda: 0, last_pause=1.0)
+    monkeypatch.setattr(app.state, "chunker", pause)
+    monkeypatch.setattr(app.state, "frames",
+                        [(np.ones(app.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()])
+    app._cut_chunk(pause)                           # "see you at noon", then a pause
+    app._arm_chunker(app.SAMPLE_RATE)               # recording B starts
+    heard.append("See you at noon.")
+    jobs[0]()
+    assert first.has_words and not app.state.message.has_words

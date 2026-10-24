@@ -287,10 +287,10 @@ def send_automatically(why: str, message: Message, press, type_more, space: str 
     if reason := _incomplete(message) or _why_not(message.to, message.to):
         _say_not_sent(reason)
         if reason == "unknown_window" and space:
-            # No Enter could ever follow, and the focus is where the words
-            # just went: the space goes in now, as with sending off. Owed,
-            # it would start the next message after the user's own Enter.
-            type_more(space, injection_mode)
+            # No Enter could ever follow: the space goes in now, as with
+            # sending off, and only where the words went. Owed, it would
+            # start the next message after the user's own Enter.
+            type_more(space, injection_mode, into=message.to)
         else:
             _owe_space(pending)
         return

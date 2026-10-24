@@ -284,7 +284,8 @@ class SilenceDetector:
     steady fan 20 dB under the voice with a 4 s wait: learned as the room,
     its wobble starts the wait over. A quiet room behaves as before, and so
     do six recorded real rooms (DEMAND: kitchen, living room, laundry,
-    office, cafeteria, traffic), which are never steady enough to learn.
+    office, cafeteria, traffic) in all but a few of 2,800 recordings: they
+    are almost never steady enough to learn.
     """
 
     # With nothing said at all for this long, stop anyway (nothing_said is
