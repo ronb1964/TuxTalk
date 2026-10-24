@@ -1,6 +1,6 @@
 {
  "files": {
-  "app.py": 5505,
+  "app.py": 5391,
   "prefs.py": 7120,
   "tray.py": 2548,
   "welcome_dialog.py": 3256
@@ -12,7 +12,7 @@
   "ai_cleanup.py::_model_path::swallowed_error": 1,
   "ai_cleanup.py::fix_self_corrections::long_line": 1,
   "ai_cleanup.py::make_engine_download_func.download::undocumented": 1,
-  "app.py::<module>::dated_comment": 2,
+  "app.py::<module>::dated_comment": 1,
   "app.py::<module>::long_line": 2,
   "app.py::<module>::undocumented": 1,
   "app.py::_apply_cleanup_settings::long_line": 2,

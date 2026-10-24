@@ -33,6 +33,8 @@ from .recording_indicator import RecordingIndicator
 from .undo import detect_undo_command, calculate_undo_length
 from . import (delivery_notices, edit_notices, hallucinations, modifier_hotkeys,
                send_countdown, virtual_keyboard)
+from .window_classes import (ELECTRON_PASTE_BROKEN_CLASSES, SMART_NEWLINE_CLASSES_LOWER,
+                             app_kind, is_document_window, is_terminal_class)
 from .hotkey_keys import (MODIFIER_CODES, check_modifiers_held, keycode_from_name, keys_down,
                           parse_hotkey_combo, track_modifier)
 import threading
@@ -1857,114 +1859,6 @@ def _type_text_raw(text: str) -> bool:
     print("Could not type text.")
     return False
 
-# Window classes that need Ctrl+Shift+V for paste (terminals).
-# All other apps get plain Ctrl+V — works in chat/editor/browser inputs and
-# avoids a Chromium/Electron regression that mishandles synthetic Ctrl+Shift+V.
-_TERMINAL_WM_CLASSES = frozenset({
-    "org.gnome.Ptyxis", "Ptyxis",
-    # GNOME Shell reports GNOME Terminal (Ubuntu 24.04, Zorin 18, Debian) by
-    # its server process: without this one, Ctrl+V typed a raw ^V there.
-    "org.gnome.Terminal", "Gnome-terminal", "gnome-terminal-server",
-    "konsole", "org.kde.konsole",
-    "yakuake", "org.kde.yakuake",
-    "kitty",
-    "Alacritty",
-    "WezTerm", "org.wezfurlong.wezterm",
-    "foot", "footclient",
-    "Tilix", "com.gexperts.Tilix",
-    "Terminator",
-    "xterm", "XTerm", "UXTerm",
-    "rxvt", "URxvt",
-    # Common on Sway / Hyprland setups.
-    "com.mitchellh.ghostty", "ghostty",
-    "org.gnome.Console", "kgx",
-    "xfce4-terminal", "Xfce4-terminal",
-    "com.system76.CosmicTerm",
-    "mate-terminal", "lxterminal", "qterminal", "terminology",
-    "st", "st-256color", "sakura", "Termite", "contour",
-    # X11 desktops (XFCE, MATE, Cinnamon...) report these WM_CLASS names.
-    "Guake", "Tilda", "Roxterm", "cool-retro-term", "Eterm",
-})
-
-# Lower-cased once, because the class arrives from several independent sources
-# (the GNOME Shell extension, the KWin script, the compositors) that don't
-# agree on capitalisation.
-_TERMINAL_WM_CLASSES_LOWER = frozenset(c.lower() for c in _TERMINAL_WM_CLASSES)
-
-
-# Code editors, for "Plain text in terminals and code editors": no period
-# typed at the end. Matched case-insensitively, plus any JetBrains IDE
-# (jetbrains-idea, jetbrains-pycharm...). Kate is left out: it's used for
-# prose as much as code.
-_CODE_EDITOR_CLASSES_LOWER = frozenset({
-    "code", "code-oss", "code-url-handler", "codium", "vscodium",
-    "dev.zed.zed", "zed", "sublime_text", "geany", "org.gnome.builder",
-    "org.kde.kdevelop", "neovide",
-})
-
-
-# Text editors, word processors and note apps, where Enter only starts a new
-# line: "Send each dictation automatically" leaves them alone, as it does code
-# editors (Ron, 2026-10-18: KWrite got a new line after every dictation).
-# Saying "press enter" still presses it.
-_DOCUMENT_CLASSES_LOWER = frozenset({
-    "org.kde.kwrite", "kwrite", "org.kde.kate", "kate",
-    "org.gnome.texteditor", "gnome-text-editor", "org.gnome.gedit", "gedit",
-    "org.xfce.mousepad", "mousepad", "xed", "pluma", "featherpad", "notepadqq",
-    "libreoffice-writer", "libreoffice-calc", "libreoffice-impress", "soffice",
-    "abiword", "org.kde.calligrawords", "calligrawords", "org.kde.ghostwriter",
-    "ghostwriter", "org.gnome.gitlab.somas.apostrophe", "obsidian", "joplin",
-    "typora", "marktext", "desktopeditors", "wps", "wpp", "et",
-})
-
-
-def is_document_window(wm_class: str | None) -> bool:
-    """Whether Enter in the focused window only starts a new line."""
-    if not wm_class:
-        return False
-    return wm_class.lower() in _DOCUMENT_CLASSES_LOWER or app_kind(wm_class) == "code"
-
-
-def app_kind(wm_class: str | None) -> str:
-    """"terminal", "code" or "" for the focused window, for plain_for_app."""
-    if not wm_class:
-        return ""
-    if is_terminal_class(wm_class):
-        return "terminal"
-    lower = wm_class.lower()
-    if lower in _CODE_EDITOR_CLASSES_LOWER or lower.startswith("jetbrains-"):
-        return "code"
-    return ""
-
-
-def is_terminal_class(wm_class: str | None) -> bool:
-    """Whether the focused window is a terminal, so paste uses Ctrl+Shift+V.
-
-    A terminal treats plain Ctrl+V as readline's quoted-insert and shows
-    nothing, so getting this wrong is silent. None means nobody reported focus
-    (no provider on this desktop) and must not be read as a terminal.
-
-    Matching is exact-but-case-insensitive: substring matching would make
-    "kitty-photo-viewer" a terminal.
-    """
-    if not wm_class:
-        return False
-    return wm_class.lower() in _TERMINAL_WM_CLASSES_LOWER
-
-
-# Electron/Chromium apps where synthetic paste (Ctrl+V from /dev/uinput) is
-# broken on Wayland — modifier-key chords are silently dropped and the focused
-# input blurs. These apps are typed into instead (plain character keystrokes
-# still work, per OpenWhispr #240 and others).
-_ELECTRON_PASTE_BROKEN_CLASSES = frozenset({
-    "Claude", "claude", "claude-desktop", "Claude Desktop", "anthropic-claude",
-    # Claude Desktop reports this reverse-DNS id or one of the names above,
-    # depending on how it was packaged; a missing one means a paste that
-    # silently does nothing.
-    "com.anthropic.Claude",
-})
-
-
 def _focused_is_password() -> bool:
     """Whether the cursor is in a password field: one the accessibility bus
     knows (atspi_helper), or the desktop's own password prompt."""
@@ -2254,14 +2148,6 @@ def _determine_injection_method(injection_mode: str) -> tuple[str, str]:
         return ("type", "Auto: not a Wayland session, typing")
     return ("paste", "Auto: paste")
 
-# KDE's text editor component takes Shift+Enter as Insert Smart Newline,
-# which starts the new line with the symbols the line above starts with: "$45",
-# new line, "$25" came out as "$$25", and one more "$" each line after.
-_SMART_NEWLINE_CLASSES_LOWER = frozenset({
-    "org.kde.kwrite", "kwrite", "org.kde.kate", "kate", "org.kde.kdevelop",
-})
-
-
 def plan_line_breaks(text: str, one_paste: bool) -> list[str]:
     """How to deliver *text*'s line breaks: the chunks to paste, in order.
 
@@ -2273,7 +2159,7 @@ def plan_line_breaks(text: str, one_paste: bool) -> list[str]:
     terminal does accept is a newline inside pasted text: bracketed paste (on by
     default in modern bash and zsh) inserts it literally instead of executing at
     it. So a terminal gets one paste carrying real newlines, and so do KDE's
-    editors (_SMART_NEWLINE_CLASSES_LOWER), where a pasted newline copies
+    editors (SMART_NEWLINE_CLASSES_LOWER), where a pasted newline copies
     nothing from the line above (in a code mode Kate still indents it, as
     any paste). Not a plain Enter there: Kate's terminal panel would run it.
 
@@ -2796,7 +2682,7 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
     if injection_mode != "type":
         focused_class = _query_focused_window_class()
         logger.info(f"Electron-broken check: focused_class={focused_class!r}")
-        if focused_class in _ELECTRON_PASTE_BROKEN_CLASSES and not os.environ.get("FLATPAK_ID"):
+        if focused_class in ELECTRON_PASTE_BROKEN_CLASSES and not os.environ.get("FLATPAK_ID"):
             logger.info(f"Electron-paste-broken override: class={focused_class!r}, typing")
 
             # Split on §SHIFT_ENTER§ (line-break voice command) and \n so
@@ -2859,7 +2745,7 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
                 return "password_field" if password_field else "partial"
             # Nothing landed, so the normal injection path can safely try again.
             logger.warning("Typing failed, falling through to normal injection")
-        elif focused_class in _ELECTRON_PASTE_BROKEN_CLASSES:
+        elif focused_class in ELECTRON_PASTE_BROKEN_CLASSES:
             # Flatpak: libei always types, so there's no paste to avoid; keep
             # only the Claude-Desktop tab safety (a real Tab jumps focus to the
             # Send button) and fall through to libei typing.
@@ -2882,7 +2768,7 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
         # keystrokes at all; so do KDE's editors (plan_line_breaks).
         focused = _query_focused_window_class()
         parts = plan_line_breaks(text, is_terminal_class(focused)
-                                 or (focused or "").lower() in _SMART_NEWLINE_CLASSES_LOWER)
+                                 or (focused or "").lower() in SMART_NEWLINE_CLASSES_LOWER)
         logger.info(f"Smart hybrid mode: {len(parts)} part(s)")
 
         # Track where delivery stopped, so the fallback types only the rest:

@@ -6,7 +6,7 @@ A spoken "new line" stays Shift+Enter, which never sends a chat message.
 import numpy as np
 import pytest
 
-from tuxtalk import app, config, key_commands, send_countdown
+from tuxtalk import app, config, key_commands, send_countdown, window_classes
 from tuxtalk.key_commands import split_key_command
 
 
@@ -627,4 +627,4 @@ def test_saying_press_enter_still_works_in_a_text_editor(monkeypatch):
     ("org.kde.konsole", False), (None, False),
 ])
 def test_which_windows_are_documents(window, document):
-    assert app.is_document_window(window) is document
+    assert window_classes.is_document_window(window) is document

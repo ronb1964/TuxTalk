@@ -12,7 +12,7 @@ Real values captured from a live Plasma 6.7.4 Wayland session: Konsole reports
 
 import pytest
 
-from tuxtalk import app
+from tuxtalk import window_classes
 
 
 class TestKnownTerminalsAreRecognized:
@@ -25,7 +25,7 @@ class TestKnownTerminalsAreRecognized:
         "foot",
     ])
     def test_it_is_a_terminal(self, wm_class):
-        assert app.is_terminal_class(wm_class) is True
+        assert window_classes.is_terminal_class(wm_class) is True
 
 
 class TestCaseDoesNotMatter:
@@ -34,7 +34,7 @@ class TestCaseDoesNotMatter:
         "Kitty", "ALACRITTY", "Foot",
     ])
     def test_a_differently_cased_terminal_is_still_a_terminal(self, wm_class):
-        assert app.is_terminal_class(wm_class) is True
+        assert window_classes.is_terminal_class(wm_class) is True
 
 
 class TestItStaysNarrow:
@@ -46,12 +46,12 @@ class TestItStaysNarrow:
         "",
     ])
     def test_a_non_terminal_is_not_a_terminal(self, wm_class):
-        assert app.is_terminal_class(wm_class) is False
+        assert window_classes.is_terminal_class(wm_class) is False
 
     def test_unknown_focus_is_not_a_terminal(self):
         """None means 'nobody told us' — it must not be read as a terminal."""
-        assert app.is_terminal_class(None) is False
+        assert window_classes.is_terminal_class(None) is False
 
     def test_a_terminal_name_inside_another_app_does_not_match(self):
         """Substring matching would make 'kitty-photo-viewer' a terminal."""
-        assert app.is_terminal_class("kitty-photo-viewer") is False
+        assert window_classes.is_terminal_class("kitty-photo-viewer") is False

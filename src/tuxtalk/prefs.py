@@ -2256,7 +2256,7 @@ class PreferencesWindow:
         frow += 1
 
         # No closing period in terminals and code editors, no starting capital
-        # in terminals (app.app_kind, normalize.plain_for_app).
+        # in terminals (window_classes.app_kind, normalize.plain_for_app).
         plain_check = Gtk.CheckButton(label="Plain text in terminals and code editors")
         plain_check.set_active(bool(self.config.get("adapt_to_app", True)))
         plain_check.connect("toggled", lambda x: self.update_config("adapt_to_app", x.get_active()))

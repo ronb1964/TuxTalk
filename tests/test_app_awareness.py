@@ -3,7 +3,7 @@ the start in a terminal, and no period at the end in either, so "ls dash la"
 types `ls -la`, not `Ls -la.`. Chat apps keep full punctuation."""
 import pytest
 
-from tuxtalk import app, config
+from tuxtalk import app, config, window_classes
 from tuxtalk.normalize import plain_for_app
 
 
@@ -31,7 +31,7 @@ def test_plain_for_app(text, kind, expected):
     (None, ""),
 ])
 def test_app_kind(window_class, kind):
-    assert app.app_kind(window_class) == kind
+    assert window_classes.app_kind(window_class) == kind
 
 
 def _prepare(monkeypatch, raw, kind):

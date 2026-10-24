@@ -651,7 +651,8 @@ def test_no_edit_in_a_terminal(edit_env, monkeypatch):
 
 
 def test_yakuake_counts_as_a_terminal():
-    assert app.is_terminal_class("org.kde.yakuake") and app.is_terminal_class("yakuake")
+    from tuxtalk.window_classes import is_terminal_class
+    assert is_terminal_class("org.kde.yakuake") and is_terminal_class("yakuake")
 
 
 def test_a_window_change_while_the_ai_works_keeps_the_rewrite_safe(edit_env, monkeypatch):
