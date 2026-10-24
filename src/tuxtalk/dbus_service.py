@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-D-Bus service for TuxTalk - enables GNOME extension integration
+TuxTalk's D-Bus service, held by the tray: the GNOME extension's menu and
+signals, the focus reports from the KWin script and the extension, and the
+dictation service's calls and questions to the tray.
 """
 
 from typing import NamedTuple

@@ -139,11 +139,12 @@ def is_own(where) -> bool:
 def changed(before, after) -> bool:
     """Whether two looks are known to be of different windows, or two
     destinations differ in whether the cursor is in a password field. A
-    D-Bus question that timed out isn't another window, and where only the
-    class is known, nor is TuxTalk's own window: stopping typing for those
-    would stop a dictation for nothing."""
+    D-Bus question that timed out isn't another window, nor is one where
+    only the class is known: stopping typing for those would stop a
+    dictation for nothing."""
     return same_window(before, after) is False or any(
-        a != b for a, b in zip(before[2:], after[2:]))
+        # A look has no password part; a destination does.
+        a != b for a, b in zip(before[2:], after[2:], strict=False))
 
 
 def destination() -> Destination:

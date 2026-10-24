@@ -166,8 +166,8 @@ def _claim(pending, counting_down: bool = True):
 def _refuse(pending, why: str) -> None:
     """Stop the Enter of *pending*; it's said why once the press is over
     (_send), unless a tap held it first."""
-    pending["refused"] = why
-    raise virtual_keyboard.GaveUp("moved")
+    pending["refused"] = why        # the keyboard's callers drop GaveUp's reason
+    raise virtual_keyboard.GaveUp(why)
 
 
 def _say_not_sent(why: str, relabel: bool = False, key: str = "ENTER") -> None:
