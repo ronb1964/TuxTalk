@@ -48,7 +48,10 @@ _NOISE_RISE_PER_S = 1.5
 # noise and a gusty fan stayed within 3.3 dB either way, pink noise mostly
 # not. Frames smooth out a voice that swings every few blocks (a held note
 # with a tremolo); blocks alone let a gusty fan be learned so often that
-# the next sentence's soft start was cut off twice as often.
+# the next sentence's soft start was cut off twice as often. The margins
+# are thin, set by one reader (0.3 dB by frames, 1 dB by blocks; the next
+# closest came within 6.4 and 8.9 dB), so a voice held steadier than that,
+# a sung note, is taken for the room.
 _STEADY_S = 3.0
 _FRAME_S = 0.05
 _STEADY_DB = 3.0
@@ -214,16 +217,19 @@ class NoiseFloor:
 def _bumps_throughout(levels, threshold: float, seconds_each: float) -> bool:
     """Whether *levels* (blocks *seconds_each* long) have runs at or over
     *threshold* starting in each of their _BUMP_THIRDS parts, all shorter
-    than _BUMP_S."""
-    starts, run = set(), 0
+    than _BUMP_S. A run cut off by either end of *levels* may be part of a
+    word (the last sentence's final syllable), so it shows nothing."""
+    starts, run, start = set(), 0, 0
     for i, level in enumerate([*levels, 0.0]):
         if level >= threshold:
             if not run:
-                starts.add(i * _BUMP_THIRDS // len(levels))
+                start = i
             run += 1
         elif run:
             if run * seconds_each >= _BUMP_S:
                 return False
+            if start > 0 and i < len(levels):
+                starts.add(start * _BUMP_THIRDS // len(levels))
             run = 0
     return len(starts) == _BUMP_THIRDS
 
@@ -267,13 +273,18 @@ class SilenceDetector:
     Measured with three of 125 recorded readers' clips joined by pauses of
     0.6 and of 0.92 of the setting, in white, pink, fan, gusty fan, dryer
     and babble noise from 40 to 10 dB under the voice, with waits of 1 to
-    4 s (7,584 recordings): it stopped mid-sentence where it used to stop
-    after the last word in 2, and the other way round in 57. Of the 2,452
-    that never stopped by themselves before (a dryer, a gusty fan, a loud
-    voice over steady noise), 911 now stop, mostly 1 to 3 s late, and 67
-    cut off the next sentence's soft start: a dryer or a gusty fan 20 dB or
-    less under the voice with pauses close to the wait, as a steady fan
-    already did. A quiet room behaves as before.
+    4 s (7,584 recordings; rv2/sim2.py with PYTHONHASHSEED=2, and another
+    seed moves each count by a few): it stopped mid-sentence where it used
+    to stop after the last word in 1, and the other way round in 57. Of
+    the 2,452 that never stopped by themselves before (a dryer, a gusty
+    fan, a loud voice over steady noise), 910 now stop, mostly 1 to 3 s
+    late, and 66 cut off the next sentence's soft start: a dryer or a gusty
+    fan 20 dB or less under the voice with pauses close to the wait, as a
+    steady fan already did. 13 that stopped before now don't, most in a
+    steady fan 20 dB under the voice with a 4 s wait: learned as the room,
+    its wobble starts the wait over. A quiet room behaves as before, and so
+    do six recorded real rooms (DEMAND: kitchen, living room, laundry,
+    office, cafeteria, traffic), which are never steady enough to learn.
     """
 
     # With nothing said at all for this long, stop anyway (nothing_said is

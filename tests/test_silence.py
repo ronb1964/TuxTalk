@@ -971,3 +971,29 @@ def test_a_voice_swinging_every_50_ms_isnt_learned_as_the_room():
                            + [frame(1000 if i % 2 else 1500) for i in range(120)])
     at, _ = run(audio.astype(np.int16), 1.0)
     assert at is None or at >= 7.5
+
+
+def test_a_word_in_the_window_keeps_a_quiet_room_from_turning_bumpy():
+    """A pause nearly the wait long, with a click in the middle of it: the
+    last sentence's tail, the click and the next sentence's first short
+    syllable put short sounds in every third of the window, and without
+    the word-length check the room was taken for bumpy. The next soft
+    words then ended the recording."""
+    said = np.concatenate([speech(1.0), noise(1.3), speech(0.06), noise(1.3), speech(0.04),
+                           speech(0.5, level=250), speech(2.0)])
+    at, _ = run(np.concatenate([said, noise(4.0)]), 3.0)
+    assert at is not None and at >= len(said) / SR
+
+
+def test_judging_the_same_seconds_again_takes_nothing_back_twice():
+    """Two learnings close together (the threshold jumps, then the bumps
+    show a frame later) judge the same history twice: taking its speech
+    back twice can leave too little to count as talking, and a real
+    dictation ends as "Nothing heard"."""
+    det = SilenceDetector(1.5, SR)
+    _feed(det, np.concatenate([speech(0.6), hum(1.0, 400)]).astype(np.int16))
+    det._floor.top, det._floor.steady_level = 600.0, 450.0    # a loud room learned
+    det._judge_again()
+    once = det.speech_time
+    det._judge_again()
+    assert det.speech_time == pytest.approx(once)
