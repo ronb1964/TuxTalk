@@ -181,6 +181,7 @@ class MicTest:
     def start(self, _button=None):
         """Start recording the chosen microphone."""
         self._call_off_replay()
+        stream = None
         try:
             import sounddevice as sd
             device_idx = self._device()
@@ -198,14 +199,17 @@ class MicTest:
                     rms = np.sqrt(np.mean(indata**2))
                     GLib.idle_add(self._show_level, min(rms * 10, 1.0))
 
-            self._stream = sd.InputStream(callback=audio_callback, channels=1,
-                                          samplerate=self._rate, device=device_idx,
-                                          dtype='float32')
-            self._stream.start()
+            stream = sd.InputStream(callback=audio_callback, channels=1, samplerate=self._rate,
+                                    device=device_idx, dtype='float32')
+            stream.start()
+            self._stream = stream
             self.start_btn.set_sensitive(False)
             self.stop_btn.set_sensitive(True)
             self.replay_btn.set_sensitive(False)
         except Exception as e:
+            self.recording = False
+            if stream is not None:
+                mic_stream.close(stream, wait=False)    # opened but not started: free the mic
             logger.warning(f"The microphone test couldn't record: {e}")
             self._show_error("Recording failed!", str(e))
 

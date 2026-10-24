@@ -9,6 +9,8 @@ dialog if it failed, from GTK's own thread; or, behind a sound server that
 never answers, once the player itself would have given up, and the replay
 is then called off.
 """
+import time
+
 import numpy as np
 import pytest
 
@@ -161,6 +163,37 @@ def test_the_limit_on_a_replay_that_played_changes_nothing_later(monkeypatch):
     call(*args)
     assert mic.start_btn.get_sensitive() is False
     assert shown == []
+
+
+def test_a_microphone_that_wont_start_is_freed_and_says_so(monkeypatch):
+    """A stream that opened but wouldn't start kept the microphone, and the
+    test went on as though it recorded."""
+    import sounddevice
+    opened = []
+
+    class WontStart:
+        def __init__(self, **settings):
+            self.closed = False
+            opened.append(self)
+
+        def start(self):
+            raise OSError("Device unavailable")
+
+        def stop(self):
+            pass
+
+        def close(self):
+            self.closed = True
+    mic, _asked, _scheduled, shown = _window(monkeypatch, None)
+    monkeypatch.setattr(mic_test.mic_stream, "input_samplerate", lambda device, rate: rate)
+    monkeypatch.setattr(sounddevice, "InputStream", WontStart)
+    mic.start()
+    assert shown == [("Recording failed!", "Device unavailable")]
+    assert not mic.recording and mic.start_btn.get_sensitive()
+    deadline = time.monotonic() + 2
+    while not opened[0].closed and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert opened[0].closed
 
 
 def test_a_screen_reader_names_the_microphone_controls_by_their_labels(prefs_window):
