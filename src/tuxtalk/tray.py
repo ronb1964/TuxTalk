@@ -18,7 +18,6 @@ from gi.repository import AyatanaAppIndicator3 as AppIndicator3
 import subprocess
 import time
 import sys
-import fcntl
 import warnings
 from .logger import setup_logger
 from . import single_instance
@@ -65,67 +64,60 @@ except ImportError:
     logger.warning("D-Bus service not available - GNOME extension integration disabled")
 
 def _acquire_tray_singleton():
-    """Take the tray's single-instance lock (single_instance.py). Another
-    TuxTalk tray holding it: show the running one's menu, or say it's
-    running, and exit. A TalkType tray from before the rename is old code:
-    stop it and take its place."""
+    """Take the tray's single-instance lock (single_instance.py), or give way
+    to the tray that holds it (_give_way_or_exit)."""
     global _tray_lockfile_handle
     try:
-        lockfile = single_instance.open_lock("talktype-tray.lock")
-    except OSError as e:
-        logger.warning(f"Could not open the tray's single-instance lock: {e}")
+        lockfile = single_instance.open_lock(TRAY_LOCK)
+        if not single_instance.claim(lockfile):
+            _give_way_or_exit(lockfile)
+    except OSError as e:        # no runtime folder, or it's full: not "already running"
+        logger.warning(f"Could not take the tray's single-instance lock: {e}")
         return
-    if not single_instance.claim(lockfile):
-        from .service_launcher import pre_rename_tray_pids
-        old_trays = pre_rename_tray_pids()
-        if old_trays:
-            logger.info(f"Stopping the pre-0.15.0 tray (PID {old_trays}) so TuxTalk can start")
-            for pid in old_trays:
-                try:
-                    os.kill(pid, signal.SIGTERM)
-                except OSError:
-                    pass  # exited between the scan and the kill
-        if not (old_trays and single_instance.claim(lockfile, _OLD_TRAY_EXIT_WAIT_S)):
-            print("Another tray instance is already running. Exiting.", file=sys.stderr)
-            # Opened again from the app list: show the running TuxTalk's
-            # menu as a window. Plain GNOME has no tray to point people
-            # at, so "look for the tray icon" was a dead end there.
-            if not old_trays:
-                from . import control
-                try:
-                    if control.open_in_running("menu", tray_starting=lambda: True):
-                        sys.exit(0)
-                except Exception as e:
-                    logger.debug(f"Could not ask the running TuxTalk for its menu: {e}")
-            _show_already_running(older_talktype=bool(pre_rename_tray_pids()))
-            sys.exit(0)
     _tray_lockfile_handle = lockfile    # closing it, even by garbage collection, lets go
+
+
+def _give_way_or_exit(lockfile):
+    """Another tray holds *lockfile*. A TalkType tray from before the rename
+    is stopped, and this returns once its lock is taken; another TuxTalk
+    shows its menu, or says it's running, and this one exits."""
+    from .service_launcher import pre_rename_tray_pids
+    old_trays = pre_rename_tray_pids()
+    if old_trays:
+        logger.info(f"Stopping the pre-0.15.0 tray (PID {old_trays}) so TuxTalk can start")
+        for pid in old_trays:
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except OSError:
+                pass  # exited between the scan and the kill
+    if not (old_trays and single_instance.claim(lockfile, _OLD_TRAY_EXIT_WAIT_S)):
+        print("Another tray instance is already running. Exiting.", file=sys.stderr)
+        # Opened again from the app list: the running TuxTalk's menu as a window.
+        # Plain GNOME has no tray, so "look for the tray icon" was a dead end.
+        if not old_trays:
+            from . import control
+            try:
+                if control.open_in_running("menu", tray_starting=lambda: True):
+                    sys.exit(0)
+            except Exception as e:
+                logger.info(f"Could not ask the running TuxTalk for its menu: {e}")
+        _show_already_running(older_talktype=bool(pre_rename_tray_pids()))
+        sys.exit(0)
+
 
 # The single-instance lock's file, open while the tray runs.
 _tray_lockfile_handle = None
+TRAY_LOCK = "talktype-tray.lock"
+
+
+def _tray_starting():
+    """Whether another tray holds the lock: one still starting up that
+    hasn't taken its D-Bus name yet, for control's wait."""
+    return single_instance.held_elsewhere(TRAY_LOCK)
 
 # How long an older TalkType tray gets to exit after SIGTERM. It has no handler
 # for it, so it is normally gone at once.
 _OLD_TRAY_EXIT_WAIT_S = 3.0
-
-
-def _tray_lock_held():
-    """Whether another tray holds the single-instance lock, e.g. one still
-    starting up that hasn't taken its D-Bus name yet."""
-    path = os.path.join(single_instance.runtime_dir(), "talktype-tray.lock")
-    try:
-        fd = os.open(path, os.O_RDONLY)
-    except OSError:
-        return False        # no lock file: no tray has ever started here
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        return False        # closing the file below lets go of it again
-    except BlockingIOError:
-        return True
-    except OSError:
-        return False
-    finally:
-        os.close(fd)
 
 
 def _run_command_line(action):
@@ -133,7 +125,7 @@ def _run_command_line(action):
     only when nothing runs and this process should start TuxTalk itself."""
     from . import control
     try:
-        status = control.ask_running(action, tray_starting=_tray_lock_held)
+        status = control.ask_running(action, tray_starting=_tray_starting)
     except Exception as e:
         print(f"Couldn't reach TuxTalk: {e}", file=sys.stderr)
         sys.exit(1)
@@ -150,7 +142,7 @@ def _open_from_command_line(name):
     (main() opens the window once it's up)."""
     from . import control
     try:
-        status = control.open_in_running(name, tray_starting=_tray_lock_held)
+        status = control.open_in_running(name, tray_starting=_tray_starting)
     except Exception as e:
         print(f"Couldn't reach TuxTalk: {e}", file=sys.stderr)
         sys.exit(1)

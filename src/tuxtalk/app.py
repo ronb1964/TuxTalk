@@ -217,10 +217,11 @@ def _acquire_single_instance():
     global _lockfile_handle
     try:
         lockfile = single_instance.open_lock("talktype.lock")
-    except OSError as e:
-        logger.warning(f"Could not open the single-instance lock: {e}")
+        claimed = single_instance.claim(lockfile)
+    except OSError as e:        # no runtime folder, or it's full: not "already running"
+        logger.warning(f"Could not take the single-instance lock: {e}")
         return
-    if not single_instance.claim(lockfile):
+    if not claimed:
         print("Another TuxTalk instance is already running. Exiting.", file=sys.stderr)
         sys.exit(0)
     _lockfile_handle = lockfile     # closing it, even by garbage collection, lets go
@@ -2475,7 +2476,6 @@ def _report_undelivered(outcome: str, beeps_on: bool):
             logger.debug(f"Couldn't work out why typing failed: {e}")
     if _paste_last_hotkey:
         message += f" Or press {_paste_last_hotkey} to type it again where your cursor is."
-    print(message)
     logger.warning(f"Dictation not delivered ({outcome}); told the user")
     _beep(beeps_on, *CANCEL_BEEP)
     _notify(delivery_notices.TITLES[outcome], message)
@@ -2818,13 +2818,14 @@ def _type_onto_dictation(text: str, injection_mode: str, into=None) -> str:
     it went in (a space refused because the focus moved), the dictation is
     in the app as it was, and so is everything that remembers it."""
     kept = (state.last_inserted_text, state.continue_mid_sentence, state.nav_context,
-            state.shown_text)
+            state.shown_text, state.last_inserted_window, state.last_inserted_where)
     outcome = _inject_text(text, injection_mode, into=into)
     if outcome == "ok":
         state.last_inserted_text = kept[0] + text
     elif outcome in _GAVE_UP_UNTYPED:
+        # The window too: typing takes it for the dictation's before the first key.
         (state.last_inserted_text, state.continue_mid_sentence, state.nav_context,
-         state.shown_text) = kept
+         state.shown_text, state.last_inserted_window, state.last_inserted_where) = kept
     return outcome
 
 
@@ -3157,7 +3158,6 @@ def _edit_problem(kind: str, beeps_on: bool) -> None:
     explanation in it is gone before it can be read."""
     message = edit_notices.NOTICES[kind]
     logger.info(f"Voice edit not done: {kind}")
-    print(message)
     _beep(beeps_on, *CANCEL_BEEP)
     from . import explain
     # "Don't explain this again" ticked, or a window already open: the

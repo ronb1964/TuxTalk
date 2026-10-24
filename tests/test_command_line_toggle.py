@@ -335,16 +335,18 @@ def test_run_command_line_returns_to_start_tuxtalk(monkeypatch):
 
 
 def test_tray_lock_held(monkeypatch, tmp_path):
+    """Only a lock someone holds now counts: not a file left by a tray that
+    has exited."""
     from tuxtalk import single_instance, tray
     monkeypatch.setattr(single_instance, "runtime_dir", lambda: str(tmp_path))
-    assert tray._tray_lock_held() is False          # no tray ever started here
+    assert tray._tray_starting() is False          # no tray ever started here
     path = tmp_path / "talktype-tray.lock"
     path.write_text("123")
-    assert tray._tray_lock_held() is False
+    assert tray._tray_starting() is False
     with open(path) as holder:
         fcntl.flock(holder.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        assert tray._tray_lock_held() is True
-    assert tray._tray_lock_held() is False
+        assert tray._tray_starting() is True
+    assert tray._tray_starting() is False
     assert path.read_text() == "123", "the running tray's PID stays in the file"
 
 

@@ -1212,6 +1212,23 @@ def test_a_failed_space_may_have_gone_in_so_the_record_isnt_brought_back(monkeyp
     app._type_onto_dictation(" ", "type")
     assert app.state.last_inserted_text == ""
 
+
+def test_a_space_that_went_nowhere_leaves_undo_on_the_dictations_window(monkeypatch):
+    """Typing takes the focused window for the dictation's before the first
+    key. Given up before it (Claude Desktop's four spaces for "press tab",
+    the key still held), "undo that" there would delete the other app's text."""
+    monkeypatch.setattr(app.state, "last_inserted_text", "See you at noon.")
+    monkeypatch.setattr(app.state, "last_inserted_window", "brave-browser")
+
+    def inject(text, mode, into=None, **kw):
+        """Takes the window, then gives up before typing."""
+        app.state.last_inserted_window = "claude"
+        return "key_held"
+    monkeypatch.setattr(app, "_inject_text", inject)
+    app._type_onto_dictation("    ", "type")
+    assert app.state.last_inserted_text == "See you at noon."
+    assert app.state.last_inserted_window == "brave-browser"
+
 def test_a_phrase_cut_at_a_pause_takes_its_recordings_message_to_the_queue(chat, monkeypatch):
     """The phrase is queued when the pause is heard and typed later; the
     next recording may start in between. Taken when it's typed, the message

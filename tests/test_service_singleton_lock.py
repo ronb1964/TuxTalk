@@ -44,3 +44,11 @@ def test_an_unusable_runtime_folder_is_not_reported_as_already_running(monkeypat
     monkeypatch.setattr(single_instance, "runtime_dir", lambda: str(tmp_path / "missing"))
     app._acquire_single_instance()   # must not raise SystemExit
 
+
+
+def test_a_full_runtime_folder_is_not_reported_as_already_running(lock_dir, monkeypatch):
+    """Writing the PID can fail (the runtime folder is a small tmpfs)."""
+    def full(lockfile, wait_s=0.0):
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr(single_instance, "claim", full)
+    app._acquire_single_instance()   # must not raise

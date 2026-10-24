@@ -2,7 +2,7 @@
  "files": {
   "app.py": 4860,
   "prefs.py": 6738,
-  "tray.py": 2485,
+  "tray.py": 2477,
   "welcome_dialog.py": 3256
  },
  "findings": {
@@ -338,7 +338,6 @@
   "tray.py::DictationTray.show_about_dialog::swallowed_error": 1,
   "tray.py::DictationTray.show_menu_window_if_no_tray::swallowed_error": 1,
   "tray.py::DictationTray::undocumented": 1,
-  "tray.py::_acquire_tray_singleton::swallowed_error": 1,
   "tray.py::_open_from_command_line::swallowed_error": 1,
   "tray.py::_refresh_kde_menu_cache::swallowed_error": 1,
   "tray.py::_run_command_line::swallowed_error": 1,

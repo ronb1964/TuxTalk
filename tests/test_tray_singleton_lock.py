@@ -56,6 +56,14 @@ def test_an_unusable_runtime_folder_is_not_reported_as_already_running(monkeypat
     tray._acquire_tray_singleton()   # must not raise SystemExit
 
 
+
+def test_a_full_runtime_folder_is_not_reported_as_already_running(lock_dir, monkeypatch):
+    """Writing the PID can fail (the runtime folder is a small tmpfs)."""
+    def full(lockfile, wait_s=0.0):
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr(single_instance, "claim", full)
+    tray._acquire_tray_singleton()   # must not raise
+
 # A stand-in for a TalkType 0.7.0 tray: run as `python -m talktype.tray`, it
 # opens the shared lock file the way 0.7.0 did and holds it.
 _FAKE_OLD_TRAY = textwrap.dedent("""

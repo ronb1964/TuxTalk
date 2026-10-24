@@ -61,3 +61,20 @@ def claim(lockfile, wait_s: float = 0.0) -> bool:
     lockfile.write(str(os.getpid()))
     lockfile.flush()
     return True
+
+
+def held_elsewhere(name: str) -> bool:
+    """Whether another process holds the lock file *name* now."""
+    try:
+        fd = os.open(os.path.join(runtime_dir(), name), os.O_RDONLY)
+    except OSError:
+        return False        # no lock file: nothing has ever started here
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return False        # closing the file below lets go of it again
+    except BlockingIOError:
+        return True
+    except OSError:
+        return False
+    finally:
+        os.close(fd)
