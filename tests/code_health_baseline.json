@@ -140,9 +140,7 @@
   "gnome_keybindings.py::_set::swallowed_error": 1,
   "gnome_keybindings.py::disable_for_hotkey_test::swallowed_error": 1,
   "gnome_keybindings.py::restore::swallowed_error": 1,
-  "help_dialog.py::show_help_dialog.create_tab::undocumented": 1,
-  "help_dialog.py::show_help_dialog::dated_comment": 1,
-  "help_dialog.py::show_help_dialog::long_line": 10,
+  "help_text.py::<module>::long_line": 10,
   "hotkey_helper.py::Helper.__init__::long_line": 1,
   "hotkey_helper.py::Helper.__init__::undocumented": 1,
   "hotkey_helper.py::Helper.admit::undocumented": 1,
@@ -561,9 +559,6 @@
   },
   "fix_word_dialog.py::_FixWordDialog.__init__": {
    "lines": 115
-  },
-  "help_dialog.py::show_help_dialog": {
-   "lines": 674
   },
   "hotkey_helper.py::Helper.deliver_down": {
    "decisions": 23

@@ -30,9 +30,9 @@ def test_clearing_the_log_empties_it_and_drops_the_backup(tmp_path):
 
 
 def test_help_points_at_the_new_log_and_settings_folder(monkeypatch):
-    from tuxtalk import help_dialog
+    from tuxtalk import help_text
     monkeypatch.delenv("FLATPAK_ID", raising=False)
-    facts = help_dialog._install_facts()
+    facts = help_text.install_facts()
     assert facts["cfg_dir"] == "~/.config/tuxtalk/"
     assert facts["log_path"] == "~/.config/tuxtalk/tuxtalk.log"
 
