@@ -213,7 +213,7 @@ def test_sending_automatically_doesnt_press_enter_in_a_password_field(desktop, m
     from tuxtalk.output_backends import VirtualKeyboardOutputBackend
     monkeypatch.setattr(app, "_output_backend", VirtualKeyboardOutputBackend)
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
-    pending = {"window": None, "why": "sending automatically", "timer": None}
+    pending = {"window": (None, None), "why": "sending automatically", "timer": None}
     monkeypatch.setattr(app.state, "pending_send", pending)
     desktop["password"] = True
     send_countdown._send_when_due(pending)

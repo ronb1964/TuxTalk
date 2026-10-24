@@ -9,7 +9,7 @@ import time
 
 from evdev import ecodes
 
-from . import virtual_keyboard
+from . import virtual_keyboard, window_geometry
 from .config import HOTKEY_CHOICES
 from .hotkey_keys import MODIFIER_CODES, keys_down
 from .logger import setup_logger
@@ -84,11 +84,13 @@ def wait_while_held(destination=None):
     raises virtual_keyboard.GaveUp("key_held"). wait_while_held itself
     returns None when neither is a dictation key.
 
-    *destination*, if given, says where the keys go (a tuple: the focused
-    window, a password field or not). It's asked when a wait starts and when
-    it ends, and GaveUp("moved") stops the typing if the answers differ
-    (_moved): the checks made before typing began are out of date by then,
-    and the user may have clicked into a password field meanwhile."""
+    *destination*, if given, says where the keys go (app._destination: the
+    focused window's class, which window it is, and whether the cursor is in
+    a password field). It's asked when a wait starts and when it ends, and
+    GaveUp("moved") stops the typing if the answers differ in a part both
+    know (window_geometry.changed): the checks made before typing began are
+    out of date by then, and the user may have clicked into a password
+    field meanwhile."""
     devices, modifiers = _noted
     if not modifiers:
         return None
@@ -111,7 +113,7 @@ def wait_while_held(destination=None):
             first = False
             time.sleep(0.02)
         _stuck.clear()
-        if destination and _moved(where, destination()):
+        if destination and window_geometry.changed(where, destination()):
             logger.info("Typing stopped: the focus moved while it waited for the key")
             raise GaveUp("moved")
 
@@ -121,14 +123,6 @@ def wait_while_held(destination=None):
         _stuck.clear()
         return None
     return before_press
-
-
-def _moved(before, after) -> bool:
-    """Whether two answers of a destination differ in a part both know. A
-    part is None when it isn't known: a D-Bus question that timed out, or
-    TuxTalk's own window. That isn't a move, and stopping for it would stop
-    the dictation for nothing."""
-    return any(a is not None and b is not None and a != b for a, b in zip(before, after))
 
 
 def guard_alt_tap() -> None:

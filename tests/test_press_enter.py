@@ -280,6 +280,29 @@ def test_no_enter_into_another_window(countdown, monkeypatch):
     assert pressed == []
 
 
+def test_no_enter_into_another_window_of_the_same_app(countdown, monkeypatch):
+    """Two Brave windows: the class is the same, the window isn't. The Enter
+    would send whatever is in the other one's box."""
+    from tuxtalk import window_geometry
+    pressed, labels = countdown
+    monkeypatch.setattr(window_geometry, "which_window", lambda: 0x3200007)
+    send_countdown.send_automatically("test")
+    monkeypatch.setattr(window_geometry, "which_window", lambda: 0x3400004)
+    sends()[0].fire()
+    assert pressed == [] and labels[-1] == send_countdown.SWITCHED_WINDOW_NOTICE
+
+
+def test_a_window_not_known_at_the_send_still_sends(countdown, monkeypatch):
+    """COSMIC, or a desktop that didn't answer: nothing says it's another window."""
+    from tuxtalk import window_geometry
+    pressed, _ = countdown
+    looks = iter([None, 0x3200007])
+    monkeypatch.setattr(window_geometry, "which_window", lambda: next(looks))
+    send_countdown.send_automatically("test")
+    sends()[0].fire()
+    assert pressed == ["test"]
+
+
 def test_pressing_the_hold_key_holds_the_send_and_records(countdown, monkeypatch):
     """Holding the key dictates more onto the unsent message."""
     pressed, _ = countdown

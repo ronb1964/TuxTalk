@@ -13,7 +13,7 @@ typing and the questions about the focus are app.py's.
 import threading
 import time
 
-from . import virtual_keyboard
+from . import virtual_keyboard, window_geometry
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -45,7 +45,7 @@ def send_automatically(why: str, space: str = "", injection_mode: str = "type") 
     if delay <= 0:
         app._press_key("ENTER", why)
         return
-    pending = {"window": app.state.last_inserted_window, "why": why,
+    pending = {"window": _window(), "why": why,
                "space": space, "mode": injection_mode}
     pending["timer"] = threading.Timer(delay, _send_when_due, args=(pending,))
     # The label counts down once a second: "Sending in 4 s", 3, 2, 1.
@@ -89,12 +89,17 @@ def _count_down(pending: dict, seconds_left: int) -> None:
     screen_message.relabel(LABEL_TAG, _label(seconds_left))
 
 
-def _focus_left(pending: dict) -> bool:
-    """Whether another window than the one the text went to has the focus."""
+def _window():
+    """The focused window: its class, and which window it is."""
     from . import app
-    focused = app._query_focused_window_class()
-    return (focused is not None and pending["window"] is not None
-            and focused != pending["window"])
+    return app._query_focused_window_class(), window_geometry.which_window()
+
+
+def _focus_left(pending: dict) -> bool:
+    """Whether another window than the one the text went to has the focus:
+    another app, or another window of the same app where the desktop tells
+    them apart (window_geometry.which_window)."""
+    return window_geometry.changed(pending["window"], _window())
 
 
 def _cancel_timers(pending: dict) -> None:

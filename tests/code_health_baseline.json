@@ -1,6 +1,6 @@
 {
  "files": {
-  "app.py": 5514,
+  "app.py": 5511,
   "prefs.py": 7120,
   "tray.py": 2548,
   "welcome_dialog.py": 3256
@@ -82,8 +82,8 @@
   "compositor_focus.py::_CosmicWindows._follow::undocumented": 1,
   "compositor_focus.py::_CosmicWindows._on_event::undocumented": 1,
   "compositor_focus.py::_CosmicWindows.run::swallowed_error": 1,
-  "compositor_focus.py::focused_class::swallowed_error": 1,
   "compositor_focus.py::focused_rect::swallowed_error": 1,
+  "compositor_focus.py::focused_window::swallowed_error": 1,
   "config.py::<module>::long_line": 1,
   "config.py::<module>::undocumented": 1,
   "config.py::Settings::long_line": 30,

@@ -44,8 +44,8 @@ def _clear_env(monkeypatch):
 # Trimmed from a real `swaymsg -t get_tree`: the focused window can sit deep in
 # the tree, in floating_nodes, and an XWayland window has no app_id.
 def _tree(focused):
-    foot = {"type": "con", "app_id": "foot", "focused": focused == "foot", "nodes": [],
-            "floating_nodes": []}
+    foot = {"type": "con", "id": 7, "app_id": "foot", "focused": focused == "foot",
+            "nodes": [], "floating_nodes": []}
     xterm = {"type": "con", "app_id": None, "focused": focused == "xterm",
              "window_properties": {"class": "XTerm", "instance": "xterm"},
              "nodes": [], "floating_nodes": []}
@@ -82,6 +82,16 @@ def test_sway_reports_the_focused_window(tmp_path, monkeypatch, focused, expecte
     done.join(1)
 
 
+def test_sway_names_which_window_has_focus(tmp_path, monkeypatch):
+    """Its con id tells two windows of one app apart, and a re-tile keeps it."""
+    _clear_env(monkeypatch)
+    path = tmp_path / "sway.sock"
+    done = _serve(path, _i3_server(_tree("foot")))
+    monkeypatch.setenv("SWAYSOCK", str(path))
+    assert cf.focused_window() == ("foot", 7)
+    done.join(1)
+
+
 def test_i3_uses_the_same_protocol(tmp_path, monkeypatch):
     _clear_env(monkeypatch)
     path = tmp_path / "i3.sock"
@@ -106,12 +116,13 @@ def test_hyprland_reports_the_focused_window_and_hangs_up(tmp_path, monkeypatch)
     def handler(conn):
         got.append(conn.recv(100))
         conn.sendall(json.dumps({"class": "com.mitchellh.ghostty",
-                                 "initialClass": "com.mitchellh.ghostty"}).encode())
+                                 "initialClass": "com.mitchellh.ghostty",
+                                 "address": "0x5f1e2a40"}).encode())
 
     done = _serve(folder / ".socket.sock", handler)
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
     monkeypatch.setenv("HYPRLAND_INSTANCE_SIGNATURE", signature)
-    assert cf.focused_class() == "com.mitchellh.ghostty"
+    assert cf.focused_window() == ("com.mitchellh.ghostty", "0x5f1e2a40")
     assert got == [b"j/activewindow"]
     done.join(1)
 
@@ -141,7 +152,7 @@ def test_niri_reports_the_focused_window(tmp_path, monkeypatch):
     path = tmp_path / "niri.sock"
     done = _serve(path, handler)
     monkeypatch.setenv("NIRI_SOCKET", str(path))
-    assert cf.focused_class() == "Alacritty"
+    assert cf.focused_window() == ("Alacritty", 12)
     assert got == [b'"FocusedWindow"\n']
     done.join(1)
 
@@ -229,8 +240,9 @@ def test_an_x11_session_asks_the_x_server(monkeypatch):
     _clear_env(monkeypatch)
     monkeypatch.setenv("XDG_SESSION_TYPE", "x11")
     monkeypatch.setenv("DISPLAY", ":0")
-    monkeypatch.setattr(cf, "_from_x11", lambda: "Xfce4-terminal")
+    monkeypatch.setattr(cf, "_from_x11", lambda: ("Xfce4-terminal", 0x1e00007))
     assert cf.focused_class() == "Xfce4-terminal"
+    assert cf.focused_window() == ("Xfce4-terminal", 0x1e00007)
 
 
 def test_a_wayland_session_never_asks_xwayland(monkeypatch):
@@ -253,7 +265,7 @@ def test_without_a_session_type_x11_is_used_only_with_no_wayland(monkeypatch):
     monkeypatch.setattr(cf, "_from_x11", lambda: pytest.fail("asked XWayland"))
     assert cf.focused_class() is None
     monkeypatch.delenv("WAYLAND_DISPLAY")
-    monkeypatch.setattr(cf, "_from_x11", lambda: "XTerm")
+    monkeypatch.setattr(cf, "_from_x11", lambda: ("XTerm", 0x2a00003))
     assert cf.focused_class() == "XTerm"
 
 

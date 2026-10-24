@@ -130,6 +130,27 @@ def _x11_active_rect():
         return None
 
 
+def which_window():
+    """Something that tells the focused window from others, None when nothing
+    says: the compositor's own id on X11, Sway, i3, Hyprland and niri;
+    on KDE and GNOME, where it is (active_window_report), so there a window
+    moved or resized counts as another and two of one app maximized on one
+    screen as the same (KWin and Mutter have ids, but the KWin script and
+    the GNOME extension push only the class and the frame). COSMIC says
+    nothing more than the class. Safe from any thread."""
+    from . import compositor_focus
+    window_id = compositor_focus.focused_window()[1]
+    return window_id if window_id is not None else active_window_report()
+
+
+def changed(before, after) -> bool:
+    """Whether two looks at the focused window (tuples, a part None when it
+    wasn't known) differ in a part both know. A D-Bus question that timed
+    out, or TuxTalk's own window, isn't another window: stopping for it
+    would stop a dictation for nothing."""
+    return any(a is not None and b is not None and a != b for a, b in zip(before, after))
+
+
 _ASK = object()          # active_window_rect(): look the window up now
 
 

@@ -484,7 +484,7 @@ def test_a_tap_while_a_due_send_waits_for_right_ctrl_still_holds_it(keyboard, no
             held.append(send_countdown.hold(announce=True))
         return look <= 3
     modifier_hotkeys.note([Keyboard(pressed)], ecodes.KEY_F8, RCTRL)
-    pending = {"window": "kwrite", "why": "test", "space": "", "mode": "type",
+    pending = {"window": ("kwrite", None), "why": "test", "space": "", "mode": "type",
                "timer": None, "ticks": []}
     monkeypatch.setattr(send_countdown, "_cancel_timers", lambda pending: None)
     app.state.pending_send = pending
@@ -499,7 +499,7 @@ def due_send(keyboard, no_hotkeys_noted, monkeypatch):
     monkeypatch.setattr(app, "_destination", lambda: ("kwrite", False))
     monkeypatch.setattr(send_countdown, "_cancel_timers", lambda pending: None)
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
-    pending = {"window": "kwrite", "why": "test", "space": "", "mode": "type",
+    pending = {"window": ("kwrite", None), "why": "test", "space": "", "mode": "type",
                "timer": None, "ticks": []}
     app.state.pending_send = pending
 
