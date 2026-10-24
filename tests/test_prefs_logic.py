@@ -14,6 +14,7 @@ import pytest
 
 from tuxtalk import prefs as P
 from tuxtalk.prefs import PreferencesWindow, _coerce_config_types
+from tuxtalk.prefs_updates import UpdatesTab
 
 
 def _dummy(config=None):
@@ -415,12 +416,12 @@ def test_an_update_doesnt_start_when_the_changes_couldnt_be_saved(monkeypatch):
     monkeypatch.setattr(update_checker, "get_update_guidance",
                         lambda kind, version: {"update_method": "appimage"})
     monkeypatch.setattr(P.Gtk, "Dialog", lambda **kw: pytest.fail("the update started"))
-    window = SimpleNamespace(
+    tab = SimpleNamespace(
         _current_release={"appimage_url": "https://example.invalid/TuxTalk.AppImage"},
-        window=None, save_config=lambda: False,
-        words_tab=SimpleNamespace(save=lambda: True),
-        _show_save_error=lambda: shown.append("save error"))
-    PreferencesWindow._on_download_update_clicked(window, None)
+        window=None, win=SimpleNamespace(
+            save_config=lambda: False, words_tab=SimpleNamespace(save=lambda: True),
+            _show_save_error=lambda: shown.append("save error")))
+    UpdatesTab._on_download_update_clicked(tab, None)
     assert shown == ["save error"]
 
 
@@ -438,11 +439,11 @@ def test_an_update_saves_the_snippets_first(monkeypatch):
     monkeypatch.setattr(update_checker, "get_update_guidance",
                         lambda kind, version: {"update_method": "appimage"})
     monkeypatch.setattr(P.Gtk, "Dialog", lambda **kw: pytest.fail("the update started"))
-    window = SimpleNamespace(
+    tab = SimpleNamespace(
         _current_release={"appimage_url": "https://example.invalid/TuxTalk.AppImage"},
-        window=None,
-        words_tab=SimpleNamespace(save=lambda: saved.append("snippets") and None),
-        save_config=lambda: saved.append("settings") or True,
-        _show_save_error=lambda: saved.append("save error"))
-    PreferencesWindow._on_download_update_clicked(window, None)
+        window=None, win=SimpleNamespace(
+            words_tab=SimpleNamespace(save=lambda: saved.append("snippets") and None),
+            save_config=lambda: saved.append("settings") or True,
+            _show_save_error=lambda: saved.append("save error")))
+    UpdatesTab._on_download_update_clicked(tab, None)
     assert saved == ["snippets"]

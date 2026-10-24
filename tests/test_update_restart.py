@@ -385,11 +385,11 @@ def prefs_update(prefs_window, monkeypatch):
     asked = []
     monkeypatch.setattr(Gtk.Dialog, "run", lambda d: Gtk.ResponseType.YES)
     monkeypatch.setattr(update_ui, "restart_via_tray", lambda: asked.append("restart"))
-    window = prefs_window()
-    window._current_release = {"appimage_url": "https://x/TuxTalk.AppImage",
-                               "html_url": "https://x/release"}
-    window.asked = asked
-    return window
+    tab = prefs_window().updates_tab
+    tab._current_release = {"appimage_url": "https://x/TuxTalk.AppImage",
+                            "html_url": "https://x/release"}
+    tab.asked = asked
+    return tab
 
 
 def test_preferences_restarts_an_installed_appimage_through_the_tray(

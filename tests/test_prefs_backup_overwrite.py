@@ -13,12 +13,12 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
 
 from tuxtalk import settings_backup  # noqa: E402
-from tuxtalk.prefs import PreferencesWindow  # noqa: E402
+from tuxtalk.prefs_updates import UpdatesTab  # noqa: E402
 
 
 def _window(monkeypatch, typed, answer):
     asked = []
-    monkeypatch.setattr("tuxtalk.prefs.show_message",
+    monkeypatch.setattr("tuxtalk.prefs_updates.show_message",
                         lambda parent, kind, title, text="", buttons=None: asked.append(title) or answer)
     d = SimpleNamespace(
         window=None, _pick_file=lambda title, save_name=None: typed,
@@ -33,7 +33,7 @@ def test_cancel_keeps_the_existing_backup(tmp_path, monkeypatch):
     monkeypatch.setattr(settings_backup, "write_backup", written.append)
     d, asked = _window(monkeypatch, str(tmp_path / "mybackup"), Gtk.ResponseType.CANCEL)
 
-    PreferencesWindow._on_save_backup_clicked(d, None)
+    UpdatesTab._on_save_backup_clicked(d, None)
 
     assert asked == ["Replace the existing backup?"]
     assert written == []
@@ -45,7 +45,7 @@ def test_ok_replaces_it(tmp_path, monkeypatch):
     monkeypatch.setattr(settings_backup, "write_backup", written.append)
     d, asked = _window(monkeypatch, str(tmp_path / "mybackup"), Gtk.ResponseType.OK)
 
-    PreferencesWindow._on_save_backup_clicked(d, None)
+    UpdatesTab._on_save_backup_clicked(d, None)
 
     assert written == [str(tmp_path / "mybackup.zip")]
 
@@ -55,7 +55,7 @@ def test_a_new_name_is_not_questioned(tmp_path, monkeypatch):
     monkeypatch.setattr(settings_backup, "write_backup", written.append)
     d, asked = _window(monkeypatch, str(tmp_path / "fresh"), Gtk.ResponseType.OK)
 
-    PreferencesWindow._on_save_backup_clicked(d, None)
+    UpdatesTab._on_save_backup_clicked(d, None)
 
     assert asked == ["Backup saved"]
     assert written == [str(tmp_path / "fresh.zip")]

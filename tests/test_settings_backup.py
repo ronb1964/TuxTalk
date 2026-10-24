@@ -457,7 +457,7 @@ def test_preferences_shows_a_refused_restore_as_a_message(prefs_window, monkeypa
     monkeypatch.setattr(Gtk.Dialog, "run", lambda d: shown.append(tree_text(d)))
     window = prefs_window()
     monkeypatch.setattr(window, "restart_service", lambda: pytest.fail("restarted"))
-    window._restore_backup("/backups/tuxtalk-settings.zip")
+    window.updates_tab._restore_backup("/backups/tuxtalk-settings.zip")
     assert len(shown) == 1
     assert "The settings weren't restored" in shown[0] and str(problem) in shown[0]
     assert window.window.get_visible()
@@ -468,16 +468,16 @@ def test_saving_a_backup_makes_its_folder_the_backup_folder(home, monkeypatch):
     next one goes and where Earlier settings looks; the Backup folder row can
     still set it outright."""
     from types import SimpleNamespace
-    from tuxtalk.prefs import PreferencesWindow
+    from tuxtalk.prefs_updates import UpdatesTab
     folder = home / "USB stick"
     folder.mkdir()
     shown = []
-    monkeypatch.setattr("tuxtalk.prefs.show_message", lambda *a, **k: shown.append(a[2]))
+    monkeypatch.setattr("tuxtalk.prefs_updates.show_message", lambda *a, **k: shown.append(a[2]))
     window = SimpleNamespace(
         window=None, _pick_file=lambda title, save_name=None: str(folder / "tuxtalk-backup"),
         _show_last_backup=lambda: None, _fill_restore_list=lambda: None,
         _show_backup_folder=lambda: None)
-    PreferencesWindow._on_save_backup_clicked(window, None)
+    UpdatesTab._on_save_backup_clicked(window, None)
     assert shown == ["Backup saved"]
     assert sb.backup_folder() == str(folder)
     assert [p.kind for p in sb.restore_points()] == ["file"]
@@ -487,16 +487,16 @@ def test_the_backup_folder_can_be_chosen_outright(home, monkeypatch):
     """Ron, 2026-10-18: removing the Backup folder row left no way to pick
     the location except by saving a backup there."""
     from types import SimpleNamespace
-    from tuxtalk.prefs import PreferencesWindow
+    from tuxtalk.prefs_updates import UpdatesTab
     folder = home / "Backups"
     folder.mkdir()
     refreshed = []
-    monkeypatch.setattr("tuxtalk.prefs.show_message", lambda *a, **k: pytest.fail("a message"))
+    monkeypatch.setattr("tuxtalk.prefs_updates.show_message", lambda *a, **k: pytest.fail("a message"))
     window = SimpleNamespace(
         _pick_file=lambda title, save_name=None, folder_only=False: str(folder) if folder_only else None,
         window=None,
         _show_backup_folder=lambda: refreshed.append("folder"),
         _fill_restore_list=lambda: refreshed.append("list"))
-    PreferencesWindow._on_change_backup_folder_clicked(window, None)
+    UpdatesTab._on_change_backup_folder_clicked(window, None)
     assert sb.backup_folder() == str(folder)
     assert refreshed == ["folder", "list"]
