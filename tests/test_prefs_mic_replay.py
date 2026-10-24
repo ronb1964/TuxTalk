@@ -3,9 +3,9 @@
 sounddevice.play() lost about one output latency at the end of what it
 played (issue #21), so a slow desktop cut off the end of the test
 recording, and the user would blame their microphone. The replay goes
-through the same player as the beeps, on the sound thread; Replay is
-greyed out while it plays, and comes back, with a dialog if it failed,
-from GTK's own thread.
+through the same player as the beeps, on the sound thread; Replay and
+Start Recording are greyed out while it plays, and come back, with a
+dialog if it failed, from GTK's own thread.
 """
 from types import SimpleNamespace
 
@@ -31,7 +31,7 @@ def _window(monkeypatch, recording):
         (samples, rate, finished)))
     monkeypatch.setattr(prefs.GLib, "idle_add", lambda fn, *args: scheduled.append((fn, args)))
     window = SimpleNamespace(recorded_audio=recording, _recording_sr=16000, recording=False,
-                             replay_btn=Button(),
+                             replay_btn=Button(), start_record_btn=Button(),
                              show_error_dialog=lambda title, text: shown.append((title, text)))
     window._replay_over = lambda error: PreferencesWindow._replay_over(window, error)
     return window, asked, scheduled, shown
@@ -65,13 +65,15 @@ def test_replay_is_greyed_out_until_the_recording_has_played(monkeypatch):
     assert shown == []
 
 
-def test_replay_stays_greyed_out_when_a_new_recording_started_meanwhile(monkeypatch):
+def test_no_new_recording_starts_while_a_replay_plays(monkeypatch):
+    """Start Recording, then Stop, would bring Replay back while the replay
+    still played, and the new recording would record it."""
     window, asked, scheduled, _shown = _window(monkeypatch, np.zeros((100, 1), np.float32))
     PreferencesWindow.on_replay_recording(window, None)
-    window.recording = True
+    assert window.start_record_btn.sensitive is False
     asked[0][2](None)
     _run_main_loop(scheduled)
-    assert window.replay_btn.sensitive is False
+    assert window.start_record_btn.sensitive is True
 
 
 def test_a_replay_that_fails_says_so_in_a_dialog_on_the_gtk_thread(monkeypatch):

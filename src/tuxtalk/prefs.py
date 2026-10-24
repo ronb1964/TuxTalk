@@ -4647,7 +4647,6 @@ class PreferencesWindow:
             # Use device's native sample rate (some ALSA devices reject 16kHz)
             self._recording_sr = self._get_device_samplerate(device_idx)
 
-            # Start recording
             self.recording = True
             self.recorded_frames = []
 
@@ -4678,7 +4677,6 @@ class PreferencesWindow:
             )
             self.record_stream.start()
 
-            # Update button states
             self.start_record_btn.set_sensitive(False)
             self.stop_record_btn.set_sensitive(True)
             self.replay_btn.set_sensitive(False)
@@ -4700,12 +4698,10 @@ class PreferencesWindow:
                 import numpy as np
                 self.recorded_audio = np.concatenate(self.recorded_frames, axis=0)
             
-            # Update button states
             self.start_record_btn.set_sensitive(True)
             self.stop_record_btn.set_sensitive(False)
             self.replay_btn.set_sensitive(len(self.recorded_frames) > 0)
             
-            # Reset level bar
             self.level_bar.set_value(0.0)
 
             # Evaluate recording quality and show grade
@@ -4755,19 +4751,22 @@ class PreferencesWindow:
     def on_replay_recording(self, button):
         """Play the test recording back, three times louder, on the sound
         thread (beeps.play), so it is heard to the end and the window stays
-        free while it plays. Replay is greyed out until it is over, so a
-        second click can't queue the recording again behind it."""
+        free while it plays. Replay and Start Recording are greyed out until
+        it is over: a second click would queue the recording again behind
+        it, and a new recording would record the replay."""
         if self.recorded_audio is None:
             return
         import numpy as np
         from . import beeps
         louder = np.clip(self.recorded_audio[:, 0] * 3.0, -1.0, 1.0).astype(np.float32)
         self.replay_btn.set_sensitive(False)
+        self.start_record_btn.set_sensitive(False)
         beeps.play(louder, getattr(self, '_recording_sr', 48000),
                    finished=lambda error: GLib.idle_add(self._replay_over, error))
 
     def _replay_over(self, error):
-        self.replay_btn.set_sensitive(not self.recording)
+        self.replay_btn.set_sensitive(True)
+        self.start_record_btn.set_sensitive(True)
         if error:
             self.show_error_dialog("Playback failed!", error)
         return False
