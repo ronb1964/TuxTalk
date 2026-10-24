@@ -147,7 +147,8 @@ def play(samples, rate, finished=None, called_off=None):
     with None, or the text of what stopped it: on the sound thread, or, when
     a later sound pushes it out of the queue, on the thread asking for that
     one. Setting *called_off*, an Event, calls the sound off: one that
-    hasn't started never plays, and one playing stops at once."""
+    hasn't started never plays, and one playing stops at once. Either way it
+    is over with None, so *finished* can't tell it from one played out."""
     called_off = _NEVER if called_off is None else called_off
 
     def job():
