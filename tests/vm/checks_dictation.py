@@ -30,12 +30,32 @@ def pieces_outcome(run, phrase_id, wanted, absent=()):
                    expected=" … ".join(wanted), typed=typed, heard=heard)
 
 
-def beep_bursts(path):
-    """How many separate beeps a recording of the speakers holds."""
-    with wave.open(str(path)) as w:
+SPEAKERS_WAV = f"{REMOTE}/speakers.wav"
+
+
+def record_speakers(run, seconds):
+    """Record what the speakers play (the default output's monitor) for the
+    next *seconds*, in the background."""
+    sink = run.vm.ssh("pactl get-default-sink").stdout.strip()
+    run.vm.ssh(f"rm -f ~/{SPEAKERS_WAV}; setsid -f timeout {seconds} pw-record -P "
+               f"'{{ stream.capture.sink=true }}' --target {sink} --rate 16000 --channels 1 "
+               f"~/{SPEAKERS_WAV} > /dev/null 2>&1 < /dev/null")
+    time.sleep(1)
+
+
+def speakers_recording(run):
+    """What record_speakers recorded, once it has finished: (mono samples, rate)."""
+    local = run.out_dir / f"{run.vm.spec.key}-speakers.wav"
+    run.vm.get(SPEAKERS_WAV, local)
+    with wave.open(str(local)) as w:
         rate, channels = w.getframerate(), w.getnchannels()
         samples = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16)
-    samples = samples.reshape(-1, channels).mean(axis=1)
+    local.unlink()
+    return samples.reshape(-1, channels).mean(axis=1), rate
+
+
+def beep_bursts(samples, rate):
+    """How many separate beeps a recording of the speakers holds."""
     window = rate // 50                                    # 20 ms
     usable = len(samples) // window * window
     rms = np.sqrt((samples[:usable].reshape(-1, window) ** 2).mean(axis=1))
@@ -46,6 +66,21 @@ def beep_bursts(path):
             bursts += 1
         quiet_run = 0 if is_loud else quiet_run + 1
     return bursts
+
+
+def tone_seconds(samples, rate, freq):
+    """The longest stretch of a recording, in seconds, in which a tone of
+    *freq* Hz is the loudest sound: how much of a beep was heard."""
+    hop = rate // 100                                      # 10 ms steps, 20 ms windows
+    window = np.hanning(2 * hop)
+    bins = np.fft.rfftfreq(2 * hop, 1 / rate)
+    longest = current = 0
+    for i in range(0, len(samples) - 2 * hop, hop):
+        spectrum = np.abs(np.fft.rfft(samples[i:i + 2 * hop] * window))
+        heard = spectrum.max() > 50 * hop and abs(bins[spectrum.argmax()] - freq) < 30
+        current = current + 1 if heard else 0
+        longest = max(longest, current)
+    return longest * hop / rate
 
 
 @check("Dictation", "basic", "Dictation works (processor)")
@@ -62,17 +97,10 @@ def basic(run):
 @check("Dictation", "beeps", "Start and stop beeps play")
 def beeps(run):
     run.sink_ready()
-    sink = run.vm.ssh("pactl get-default-sink").stdout.strip()
-    run.vm.ssh(f"rm -f ~/{REMOTE}/beeps.wav; setsid -f timeout 9 pw-record -P "
-               f"'{{ stream.capture.sink=true }}' --target {sink} --rate 16000 --channels 1 "
-               f"~/{REMOTE}/beeps.wav > /dev/null 2>&1 < /dev/null")
-    time.sleep(1)
+    record_speakers(run, 9)
     run.say("basic")
     time.sleep(9)
-    local = run.out_dir / f"{run.vm.spec.key}-beeps.wav"
-    run.vm.get(f"{REMOTE}/beeps.wav", local)
-    bursts = beep_bursts(local)
-    local.unlink()
+    bursts = beep_bursts(*speakers_recording(run))
     if bursts >= 2:
         return Outcome("pass", f"{bursts} beeps heard on the speakers during one dictation")
     return Outcome("fail", f"{bursts} beeps heard on the speakers (expected a start and a stop "
@@ -134,6 +162,50 @@ def handsfree_silence(run):
     if log is None:
         run.vm.tap("f9")           # stop it, so the next check starts clean
     return Outcome("fail", f"auto-stop logged: {log is not None}; typed {typed!r}")
+
+
+# The start and hands-free beeps (tuxtalk/beeps.py): Hz, and seconds long.
+START_BEEP = (1200, 0.12)
+HANDS_FREE_BEEP = (1600, 0.07)
+# A sound output as slow as the one in issue #21: every program that plays
+# through PipeWire's ALSA plugin, as TuxTalk does, gets a 0.17 s buffer.
+# PipeWire before 1.2 reads client-rt.conf.d for it, later ones client.conf.d.
+SLOW_OUTPUT = [f"~/.config/pipewire/{folder}/tuxtalk-test-slow-output.conf"
+               for folder in ("client-rt.conf.d", "client.conf.d")]
+SLOW_OUTPUT_CONF = "alsa.properties = {\n  alsa.buffer-bytes = 32768\n  alsa.period-bytes = 2048\n}\n"
+
+
+@check("Dictation", "handsfree_beeps",
+       "Hands-free double-tap: both beeps are heard, on a slow sound output too")
+def handsfree_beeps(run):
+    for path in SLOW_OUTPUT:
+        run.vm.ssh(f"mkdir -p $(dirname {path}) && cat > {path}", input=SLOW_OUTPUT_CONF)
+    try:
+        run.set_config(auto_stop_silence=True)   # the restarted service opens its output anew
+        run.sink_ready()
+        # Long enough for both beeps, and over before the auto-stop, whose
+        # silent-microphone notice has a sound of its own.
+        record_speakers(run, 3)
+        mark = run.log_mark()
+        run.vm.tap("f9", hold=0.05)
+        run.vm.tap("f9", hold=0.05)
+        time.sleep(2.5)
+        samples, rate = speakers_recording(run)
+        armed = "Double-tap" in run.log_since(mark)
+        if run.wait_log(mark, "Auto-stop", timeout=25) is None:
+            run.vm.tap("f9")           # stop it, so the next check starts clean
+    finally:
+        run.vm.ssh("rm -f " + " ".join(SLOW_OUTPUT))
+        run.restart_service()
+    if not armed:
+        return Outcome("fail", "The double-tap didn't switch the recording to hands-free")
+    heard = {name: tone_seconds(samples, rate, freq)
+             for name, (freq, _length) in (("start", START_BEEP), ("hands-free", HANDS_FREE_BEEP))}
+    detail = ", ".join(f"{name} beep {seconds * 1000:.0f} ms" for name, seconds in heard.items())
+    full = (heard["start"] >= 0.8 * START_BEEP[1]
+            and heard["hands-free"] >= 0.8 * HANDS_FREE_BEEP[1])
+    return Outcome("pass" if full else "fail",
+                   f"Heard on a 0.17 s output: {detail} (beeps are 120 and 70 ms)")
 
 
 @check("Dictation", "silent_mic", "Silent microphone warning (and the switch to it is followed)")
