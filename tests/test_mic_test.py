@@ -176,13 +176,14 @@ def test_stop_calls_off_a_recording_waiting_to_start(mic):
 
 # --- The grade, and a noisy room ------------------------------------------------
 
-def _record(mic, room, talk=True, seconds=4.0, rate=16000):
+def _record(mic, room, talk=True, seconds=4.0, rate=16000, talk_s=None):
     """Record room noise of RMS *room* (full scale 1) for *seconds*, with a
-    voice talking for the middle half of it if *talk*, in 0.1 s blocks, and
-    stop."""
+    voice talking if *talk*, for *talk_s* from the first second or else the
+    middle half, in 0.1 s blocks, and stop."""
     rng = np.random.default_rng(1)
     t = np.arange(int(seconds * rate)) / rate
-    talking = (t > seconds / 4) & (t < seconds * 3 / 4) & ((t % 0.25) < 0.18)
+    start, end = (1.0, 1.0 + talk_s) if talk_s else (seconds / 4, seconds * 3 / 4)
+    talking = (t > start) & (t < end) & ((t % 0.25) < 0.18)
     voice = 0.08 * np.sin(2 * np.pi * 180 * t) * talking * talk
     audio = (voice + rng.normal(0, room, t.size)).astype(np.float32).reshape(-1, 1)
     mic.start()
@@ -196,6 +197,15 @@ def _record(mic, room, talk=True, seconds=4.0, rate=16000):
 def test_a_quiet_room_gets_the_grade_alone(mic):
     text, style = _record(mic, room=0.001)
     assert text == "✓ Good levels - should transcribe well!"
+    assert style.has_class("level-good")
+
+
+def test_a_quick_word_and_a_long_wait_is_still_a_quiet_room(mic):
+    """Saying "testing" and waiting before Stop: most of the take is the
+    room, but only the talking is measured against it, so a quiet room isn't
+    called noisy (the whole take's loudest tenth was the room itself)."""
+    text, style = _record(mic, room=0.001, seconds=8.0, talk_s=0.6)
+    assert mic_test.NOISY_ROOM_TIP not in text
     assert style.has_class("level-good")
 
 

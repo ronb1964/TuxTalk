@@ -332,18 +332,17 @@ class MicTest:
                            "level-too-quiet")
         else:
             text, grade = "✓ Good levels - should transcribe well!", "level-good"
-        if len(speaking) >= 5 and self._noisy(take):
+        if len(speaking) >= 5 and self._noisy():
             if grade == "level-good":
                 text, grade = "✓ Good levels", "level-noisy"
             text += "\n" + NOISY_ROOM_TIP
         self.status.set_text(text)
         self._set_grade_style(grade)
 
-    @staticmethod
-    def _noisy(take):
-        """Whether *take*'s room is noisy for the voice in it, as logged."""
-        audio = np.concatenate(take.frames, axis=0)[:, 0]
-        over_room = silence.speech_over_room_db(audio, take.rate)
+    def _noisy(self):
+        """Whether the test recording's room is noisy for the voice in it, as
+        logged."""
+        over_room = silence.speech_over_room_db(self.recorded_audio[:, 0], self._rate)
         if over_room is None:
             return False
         logger.info(f"Microphone test: speech {over_room:.0f} dB over the room")

@@ -523,22 +523,42 @@ def has_no_speech(audio_f32, sample_rate) -> bool:
 
 
 # --- A noisy room, for the microphone test ------------------------------------
-# How far a test recording's loud blocks (its 90th percentile) stand over its
-# quiet ones (its 10th), in dB. Measured on 26 recorded sentences with and
-# without pauses around them, in white, pink, rumble, fan, dryer and vent
-# noise: 22 dB and up in a quiet room, at least 17 dB with the noise 15 dB
-# under the voice, 13 to 16 dB at 10 dB under it and 11 to 14 dB at 8 dB.
-# Under 10 dB, quiet words start to be taken for pauses (hands-free stops
-# during them at 5 dB), so the test warns from there, with a little margin.
+# How far a test recording's speech stands over its room, in dB: the 90th
+# percentile of its blocks while talking (from the first to the last 0.1 s
+# clearly louder than the room) over the 10th of the whole recording. Only
+# that stretch is speech: a quick "testing" in an eight-second take left the
+# whole take's 90th percentile in the room, and the test called a quiet room
+# noisy. Measured on 125 recorded readers' clips of 0.3 to 4 s with silence
+# around them, three voice levels, in pink, white, fan, dryer and babble
+# noise (2,400 takes at each level): with the noise 40 dB under the voice it
+# never warned; at 30 dB under it, in 159, all a second or less of talking
+# with a dryer or a TV, whose thumps and voices stand out in so short a
+# take; with 2.5 s or more of talking it never warned there or at 20 dB. At
+# 10 dB under the voice it warned in two of five, at 5 dB in most.
 NOISY_ROOM_DB = 16.0
+# Blocks this much louder than the room (+8 dB), and never quieter than
+# speech's minimum, are clearly talking when they last _TALKING_RUN_S...
+_TALKING_OVER_ROOM = 2.5
+_TALKING_RUN_S = 0.1
+# ...and talking for less than this, from the first to the last, is too
+# little to tell how far over the room it stands.
+_TALKING_TO_JUDGE_S = 0.3
 
 
 def speech_over_room_db(audio_f32, sample_rate):
     """How much louder a recording's speech is than its room, in dB, or None
-    for a recording under a second, too short to tell. Under NOISY_ROOM_DB
-    the room is noisy for that voice."""
+    for a recording under a second or with too little clear talking to
+    tell. Under NOISY_ROOM_DB the room is noisy for that voice."""
     rms = _blocks_rms(audio_f32, sample_rate)
     if len(rms) * _TAP_BLOCK_S < 1.0:
         return None
-    room, speech = np.percentile(rms, (10, 90))
-    return float(20 * np.log10(max(speech, 1.0) / max(room, 1.0)))
+    room = np.percentile(rms, 10)
+    loud = rms >= max(_MIN_SPEECH_RMS, room * _TALKING_OVER_ROOM)
+    run = max(1, round(_TALKING_RUN_S / _TAP_BLOCK_S))
+    starts = np.flatnonzero(np.convolve(loud, np.ones(run, dtype=int), "valid") == run)
+    if starts.size == 0:
+        return None
+    talking = rms[starts[0]:starts[-1] + run]
+    if len(talking) * _TAP_BLOCK_S < _TALKING_TO_JUDGE_S:
+        return None
+    return float(20 * np.log10(max(np.percentile(talking, 90), 1.0) / max(room, 1.0)))
