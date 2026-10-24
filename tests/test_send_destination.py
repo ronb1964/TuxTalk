@@ -44,11 +44,16 @@ def chat(monkeypatch, keyboard):
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
     monkeypatch.setattr(app, "_press_enter_after", True)
     monkeypatch.setattr(app, "_usage_stats", False)
-    monkeypatch.setattr(app.state, "chunk_typed", False)
     monkeypatch.setattr(app.state, "pending_boundary", None)
     monkeypatch.setattr(history, "add_entry", lambda text, replaces=None: None)
     monkeypatch.setattr(send_countdown, "show_notice", notices.append)
     return focus, heard, typed, notices
+
+
+def send_automatically(sent_to):
+    """An automatic send of words delivered to *sent_to* (a destination)."""
+    send_countdown.send_automatically("test", send_countdown.Message(sent_to), app._press_key,
+                                      app._type_onto_dictation)
 
 
 def dictate(chunk_role=None, audio=True):
@@ -199,8 +204,7 @@ def test_right_away_checks_the_window_once_the_key_is_up(chat, keyboard, right_c
         focus[:] = SECOND
         return look <= 3
     right_ctrl_toggle(pressed)
-    send_countdown.send_automatically("test", focused_window.Destination(*FIRST),
-                                      app._press_key, app._type_onto_dictation)
+    send_automatically(focused_window.Destination(*FIRST))
     assert keyboard.events == [] and notices == [send_countdown.SWITCHED_WINDOW_NOTICE]
 
 
@@ -215,8 +219,7 @@ def test_right_away_a_tap_while_the_enter_waits_holds_it(chat, keyboard, right_c
             held.append(send_countdown.hold(announce=True))
         return look <= 3
     right_ctrl_toggle(pressed)
-    send_countdown.send_automatically("test", focused_window.Destination(*FIRST),
-                                      app._press_key, app._type_onto_dictation)
+    send_automatically(focused_window.Destination(*FIRST))
     assert held == [True] and keyboard.events == []
 
 
@@ -257,8 +260,7 @@ def test_a_click_during_the_password_check_sends_nothing(chat, keyboard, monkeyp
         focus[:] = SECOND
         return False
     monkeypatch.setattr(atspi_helper, "focused_is_password", slow_check)
-    send_countdown.send_automatically("test", focused_window.Destination(*FIRST),
-                                      app._press_key, app._type_onto_dictation)
+    send_automatically(focused_window.Destination(*FIRST))
     assert keyboard.events == [] and notices == [send_countdown.SWITCHED_WINDOW_NOTICE]
 
 
@@ -273,16 +275,14 @@ def test_a_click_back_during_the_password_check_sends_nothing(chat, keyboard, mo
         focus[:] = FIRST
         return False
     monkeypatch.setattr(atspi_helper, "focused_is_password", slow_check)
-    send_countdown.send_automatically("test", focused_window.Destination(*FIRST),
-                                      app._press_key, app._type_onto_dictation)
+    send_automatically(focused_window.Destination(*FIRST))
     assert keyboard.events == [] and notices == [send_countdown.SWITCHED_WINDOW_NOTICE]
 
 
 def test_right_away_into_the_other_window_of_the_app_sends_nothing(chat, keyboard):
     focus, _, _, notices = chat
     focus[:] = SECOND
-    send_countdown.send_automatically("test", focused_window.Destination(*FIRST),
-                                      app._press_key, app._type_onto_dictation)
+    send_automatically(focused_window.Destination(*FIRST))
     assert keyboard.events == [] and notices == [send_countdown.SWITCHED_WINDOW_NOTICE]
 
 
@@ -313,7 +313,7 @@ def test_no_enter_goes_into_a_tuxtalk_window(tray, keyboard, monkeypatch, dictat
     tray(dictated_into, "{5c1d0e2a}")
     sent_to = focused_window.destination()
     tray("tuxtalk", "{77a0c4e1}")
-    send_countdown.send_automatically("test", sent_to, app._press_key, app._type_onto_dictation)
+    send_automatically(sent_to)
     assert keyboard.events == [] and notices == [send_countdown.OWN_WINDOW_NOTICE]
 
 
@@ -325,8 +325,7 @@ def test_where_only_the_app_is_known_it_sends_as_before(chat, keyboard):
     focus, _, _, notices = chat
     focus[1] = None
     assert send_countdown.SEND_WHEN_ONLY_THE_APP_IS_KNOWN is True
-    send_countdown.send_automatically("test", focused_window.destination(),
-                                      app._press_key, app._type_onto_dictation)
+    send_automatically(focused_window.destination())
     assert keyboard.typed_keys() == [ENTER] and notices == []
 
 
@@ -337,15 +336,13 @@ def test_set_not_to_send_there_nothing_is_sent_and_it_says_why(chat, keyboard, m
     monkeypatch.setattr(send_countdown, "_delay", 2.0)
     monkeypatch.setattr(send_countdown.threading, "Timer",
                         lambda *a, **k: pytest.fail("counted down to a send that can't go"))
-    send_countdown.send_automatically("test", focused_window.destination(),
-                                      app._press_key, app._type_onto_dictation)
+    send_automatically(focused_window.destination())
     assert keyboard.events == [] and notices == [send_countdown.UNKNOWN_WINDOW_NOTICE]
 
 
 def test_set_not_to_send_there_a_known_window_still_sends(chat, keyboard, monkeypatch):
     monkeypatch.setattr(send_countdown, "SEND_WHEN_ONLY_THE_APP_IS_KNOWN", False)
-    send_countdown.send_automatically("test", focused_window.destination(),
-                                      app._press_key, app._type_onto_dictation)
+    send_automatically(focused_window.destination())
     assert keyboard.typed_keys() == [ENTER]
 
 
@@ -357,7 +354,7 @@ def test_set_not_to_send_there_a_tray_too_busy_to_answer_stops_the_enter(chat, k
     monkeypatch.setattr(send_countdown, "SEND_WHEN_ONLY_THE_APP_IS_KNOWN", False)
     sent_to = focused_window.destination()
     focus[:] = [None, None]
-    send_countdown.send_automatically("test", sent_to, app._press_key, app._type_onto_dictation)
+    send_automatically(sent_to)
     assert keyboard.events == [] and notices == [send_countdown.UNKNOWN_WINDOW_NOTICE]
 
 
@@ -413,6 +410,7 @@ def test_press_enter_said_alone_goes_wherever_the_focus_is(chat, keyboard):
     heard.append("see you at noon")
     dictate()
     focus[:] = SECOND
+    app._arm_chunker(app.SAMPLE_RATE)               # the next recording starts
     heard.append("press enter")
     dictate()
     assert keyboard.typed_keys() == [ENTER, ENTER] and notices == []
@@ -487,7 +485,7 @@ def test_with_0_18s_extension_a_resized_window_is_left_to_the_open_decision(
     dbus_service.TuxTalkDBusService.SetFocusedWindowGeometry(service, frames[0])
     sent_to = focused_window.destination()
     dbus_service.TuxTalkDBusService.SetFocusedWindowGeometry(service, frames[1])
-    send_countdown.send_automatically("test", sent_to, app._press_key, app._type_onto_dictation)
+    send_automatically(sent_to)
     if send_there:
         assert keyboard.typed_keys() == [ENTER] and notices == []
     else:
@@ -525,30 +523,94 @@ def test_a_countdown_says_nothing_aloud_until_it_ends(chat, keyboard, monkeypatc
         def cancel(self):
             pass
     monkeypatch.setattr(send_countdown.threading, "Timer", Timer)
-    send_countdown.send_automatically("test", focused_window.destination(),
-                                      app._press_key, app._type_onto_dictation)
+    send_automatically(focused_window.destination())
     for timer in timers[1:]:                    # "Sending in 2 s", then 1
         timer.run(*timer.args)
     timers[0].run(*timers[0].args)              # the Enter
     assert keyboard.typed_keys() == [ENTER] and sent == []
 
 
-def test_a_phrase_that_stopped_partway_leaves_the_message_unsent(chat, keyboard, monkeypatch):
-    """Type at pause: the second phrase's typing stopped partway (a key
-    stuck down) and the notice said the whole text is in Recent
-    Dictations. The recording then ended in a pause, and the half message
-    was sent."""
-    focus, heard, typed, notices = chat
-    deliver = app._deliver_text
-    outcomes = iter(["ok", "partial"])
-    monkeypatch.setattr(app, "_deliver_text",
-                        lambda *a, **k: deliver(*a, **k) and next(outcomes))
+def phrases_that_go_in(monkeypatch, *outcomes):
+    """Type at pause's phrases, the next one going in as *outcomes* says
+    ("partial": its typing stopped partway, a key stuck down)."""
+    deliver, left = app._deliver_text, iter(outcomes)
+    monkeypatch.setattr(app, "_deliver_text", lambda *a, **k: deliver(*a, **k) and next(left))
     monkeypatch.setattr(app, "_report_undelivered", lambda outcome, beeps_on: None)
+    monkeypatch.setattr(app, "_chunk_context_marks", False)
+
+
+def test_a_phrase_that_stopped_partway_leaves_the_message_unsent(chat, keyboard, monkeypatch):
+    """The second phrase stopped partway, and the notice said the whole
+    text is in Recent Dictations. The recording then ended in a pause, and
+    the half message was sent."""
+    focus, heard, typed, notices = chat
+    phrases_that_go_in(monkeypatch, "ok", "partial")
     heard.extend(["See you at noon,", "and bring the cake"])
     dictate("middle")
     dictate("middle")
     dictate("last", audio=False)
-    assert len(typed) == 2 and keyboard.events == [] and notices == []
+    assert len(typed) == 2 and keyboard.events == []
+    assert notices == [send_countdown.INCOMPLETE_NOTICE]
+
+
+def test_a_phrase_that_went_in_whole_after_one_that_didnt_still_sends_nothing(
+        chat, keyboard, monkeypatch):
+    """The third phrase went in whole and made the message look complete
+    again: the stop sent it with the hole the second one left."""
+    focus, heard, typed, notices = chat
+    phrases_that_go_in(monkeypatch, "ok", "partial", "ok")
+    heard.extend(["See you at noon,", "and bring the cake", "for Anna"])
+    for _ in range(3):
+        dictate("middle")
+    dictate("last", audio=False)
+    assert len(typed) == 3 and keyboard.events == []
+    assert notices == [send_countdown.INCOMPLETE_NOTICE]
+
+
+def test_a_phrase_that_failed_then_a_last_one_that_went_in_sends_nothing(
+        chat, keyboard, monkeypatch):
+    focus, heard, typed, notices = chat
+    phrases_that_go_in(monkeypatch, "failed", "ok")
+    heard.extend(["See you at noon,", "and bring the cake"])
+    dictate("middle")
+    dictate("last")
+    assert keyboard.events == [] and notices == [send_countdown.INCOMPLETE_NOTICE]
+
+
+def test_a_click_away_while_a_phrase_went_in_keeps_the_message_unsent(chat, keyboard,
+                                                                     monkeypatch):
+    """The first phrase may be in either Brave window: the next one, typed
+    whole into the second, doesn't say where the first went."""
+    focus, heard, typed, notices = chat
+    deliver = app._deliver_text
+
+    def first_one_then_switch(*a, **k):
+        outcome = deliver(*a, **k)
+        focus[:] = SECOND
+        monkeypatch.setattr(app, "_deliver_text", deliver)
+        return outcome
+    monkeypatch.setattr(app, "_deliver_text", first_one_then_switch)
+    monkeypatch.setattr(app, "_chunk_context_marks", False)
+    heard.extend(["See you at noon,", "and bring the cake"])
+    dictate("middle")
+    dictate("last")
+    assert keyboard.events == [] and notices == [send_countdown.MOVED_NOTICE]
+
+
+def test_press_enter_alone_after_a_phrase_that_stopped_partway_isnt_pressed_anywhere(
+        chat, keyboard, monkeypatch):
+    """A phrase in one Brave window, the next one stopped partway, a click
+    into the other window, then only "press enter": nothing said it came
+    after words, and it sent the other window's box."""
+    focus, heard, typed, notices = chat
+    monkeypatch.setattr(app, "_press_enter_after", False)
+    phrases_that_go_in(monkeypatch, "ok", "partial")
+    heard.extend(["See you at noon,", "and bring the cake", "press enter"])
+    dictate("middle")
+    dictate("middle")
+    focus[:] = SECOND
+    dictate("middle")
+    assert keyboard.events == [] and notices == [send_countdown.INCOMPLETE_NOTICE]
 
 
 def test_an_enter_the_keyboard_failed_to_press_says_so(chat, keyboard):
@@ -556,6 +618,5 @@ def test_an_enter_the_keyboard_failed_to_press_says_so(chat, keyboard):
     countdown label just ran out, and the message sat unsent."""
     focus, _, _, notices = chat
     keyboard.fail_after = 0
-    send_countdown.send_automatically("test", focused_window.destination(),
-                                      app._press_key, app._type_onto_dictation)
+    send_automatically(focused_window.destination())
     assert keyboard.events == [] and notices == [send_countdown.HELD_NOTICE]

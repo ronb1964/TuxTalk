@@ -210,7 +210,8 @@ def _no_real_send_countdown(monkeypatch, request):
     # nor its held-back mark.
     from tuxtalk import focused_window
     monkeypatch.setattr(app.state, "last_inserted_where", (None, None))
-    monkeypatch.setattr(app.state, "send_to", focused_window.Destination(None, None))
+    monkeypatch.setattr(app.state, "message",
+                        send_countdown.Message(focused_window.Destination(None, None)))
 
 
 @pytest.fixture(autouse=True)

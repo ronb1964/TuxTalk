@@ -98,7 +98,7 @@ def test_dictation_is_recorded_before_it_is_typed(monkeypatch):
     monkeypatch.setattr(app, "_prepare_text", lambda raw, *a, **k: "Hello there. ")
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
     monkeypatch.setattr(app, "_inject_text",
-                        lambda text, mode: order.append(("typed", history.get_entries())))
+                        lambda text, mode, **kw: order.append(("typed", history.get_entries())))
 
     # A full second: a near-silent 0.1 s would be dropped as an accidental tap
     # (silence.is_speechless_tap) before reaching the engine.

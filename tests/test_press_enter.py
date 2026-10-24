@@ -45,7 +45,7 @@ def _dictate(monkeypatch, raw, prepared=None, outcome="ok", window="brave-browse
     monkeypatch.setattr(focused_window, "look", lambda: (window, None))
     monkeypatch.setattr(app, "_report_undelivered", lambda *a, **k: events.append("not delivered"))
 
-    def inject(text, mode):
+    def inject(text, mode, message=None):
         events.append(("typed", text))
         return outcome
     monkeypatch.setattr(app, "_inject_text", inject)
@@ -217,8 +217,8 @@ TYPED = []   # what the countdown fixture's _inject_text was given
 
 def start_send(why="test", space="", mode="type"):
     """An automatic send for a dictation typed into the window focused now."""
-    send_countdown.send_automatically(why, focused_window.destination(), app._press_key,
-                                      app._type_onto_dictation, space, mode)
+    send_countdown.send_automatically(why, send_countdown.Message(focused_window.destination()),
+                                      app._press_key, app._type_onto_dictation, space, mode)
 
 
 @pytest.fixture
@@ -661,7 +661,6 @@ def test_a_pause_at_the_end_after_switching_windows_sends_nothing(monkeypatch, k
     monkeypatch.setattr(app, "_press_enter_after", True)
     monkeypatch.setattr(app, "_usage_stats", False)
     monkeypatch.setattr(history, "add_entry", lambda text, replaces=None: None)
-    monkeypatch.setattr(app.state, "chunk_typed", False)
     monkeypatch.setattr(send_countdown, "_delay", wait)
     FakeTimer.made = []
     monkeypatch.setattr(send_countdown.threading, "Timer", FakeTimer)

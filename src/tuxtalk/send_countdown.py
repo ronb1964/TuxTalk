@@ -13,7 +13,8 @@ of TuxTalk's own windows it presses the default button.
 
   1. Where the words go is noted before they're delivered and looked at
      again once they're in (landed). A window that changed meanwhile means
-     they may be in two places, and no send is set up.
+     they may be in two places, and no send is set up. The recording's
+     Message keeps where its words went, and whether all of them did.
   2. Right before the Enter goes down, after every wait (the countdown, a
      Right Ctrl or Right Alt dictation key held, the keyboard taken back
      from other typing, the Flatpak's portal getting ready), one claim
@@ -35,6 +36,7 @@ typing still refuses a password field. The typing is app.py's: the
 dictation hands over what presses a key and what types more onto it.
 """
 import threading
+from dataclasses import dataclass
 
 from . import focused_window, virtual_keyboard
 from .logger import setup_logger
@@ -51,6 +53,7 @@ MOVED_NOTICE = "Not sent: the focus moved while the words went in."
 PASSWORD_FIELD_NOT_SENT = "Not sent: the cursor is in a password field."
 UNKNOWN_WINDOW_NOTICE = "Not sent: this desktop doesn't say which window has the focus."
 OWN_WINDOW_NOTICE = "Not sent: a TuxTalk window has the focus."
+INCOMPLETE_NOTICE = "Not sent: part of the message didn't go in."
 
 # Why an Enter wasn't sent: (what the log says after "Not sent: ", the notice).
 _NOT_SENT = {
@@ -58,6 +61,7 @@ _NOT_SENT = {
     "moved": ("the focus moved while the words were delivered", MOVED_NOTICE),
     "password": ("a password field has the focus now", PASSWORD_FIELD_NOT_SENT),
     "own_window": ("a TuxTalk window has the focus", OWN_WINDOW_NOTICE),
+    "incomplete": ("part of the message didn't go in", INCOMPLETE_NOTICE),
     "typed_meanwhile": ("other keys went out while it was checked", HELD_NOTICE),
     "unknown_window": ("which window has the focus isn't known", UNKNOWN_WINDOW_NOTICE),
     "not_pressed": ("a dictation key stayed down, or the key couldn't be pressed", HELD_NOTICE),
@@ -90,6 +94,40 @@ def configure(cfg) -> None:
 
 
 # --- Where the Enter may go ---------------------------------------------------
+
+@dataclass
+class Message:
+    """What a recording has typed since it began, or since Enter, Tab or
+    "edit that" ended the message before it (app._chunk_message_sent): one
+    dictation, or Type at pause's phrases. An automatic Enter and a key said
+    after its words go only where they went, and only while all of them
+    went in: a phrase that stopped partway leaves a hole a send would let
+    out, and the phrases after it don't fill it."""
+    # Where its words went (landed()), None once the focus moved while any
+    # of them went in: they may be in two places.
+    to: focused_window.Destination | None = None
+    # Words of it were delivered, or tried: a key said now isn't said alone.
+    has_words: bool = False
+    # Every delivery of it went in whole.
+    complete: bool = True
+
+    def add(self, outcome: str, landed) -> None:
+        """Words of it were delivered: app._inject_text's *outcome*, and
+        where they went (*landed*, None when not all of them did). Words
+        known to be in another window move it there (the user switched
+        windows between two phrases); a look that only can't tell, as a
+        held-back mark's where only the app is known, keeps where it was."""
+        if not self.has_words or (self.to is not None and (
+                landed is None or focused_window.changed(self.to, landed))):
+            self.to = landed
+        self.has_words = True
+        self.complete = self.complete and outcome == "ok"
+
+
+def _incomplete(message: Message) -> str | None:
+    """"incomplete" when part of *message* didn't go in, else None."""
+    return None if message.complete else "incomplete"
+
 
 def landed(before, after):
     """Where an automatic Enter may go after words were delivered: *before*
@@ -190,36 +228,37 @@ def _say_not_sent(why: str, relabel: bool = False, key: str = "ENTER") -> None:
         show_notice(notice)
 
 
-def press_where_sent(key: str, why: str, sent_to, press) -> bool:
-    """Press *key*, said after words delivered to *sent_to* (landed()'s
-    answer): "... press enter" sends as an automatic Enter does, and "...
-    press tab" leaves the box, so either goes only where the words went, by
-    the same claim, with no wait to hold it. *press* is as for
-    send_automatically. Not pressed, the notice says why."""
-    pending = {"to": sent_to}
-    if press(key, why, claim=lambda: _claim(pending, counting_down=False)):
+def press_where_sent(key: str, why: str, message: Message, press) -> bool:
+    """Press *key*, said after *message*'s words: "... press enter" sends as
+    an automatic Enter does, and "... press tab" leaves the box, so either
+    goes only where the words went, by the same claim, with no wait to hold
+    it. *press* is as for send_automatically. Not pressed, the notice says
+    why."""
+    pending = {"to": message.to}
+    if not (refused := _incomplete(message)) and press(
+            key, why, claim=lambda: _claim(pending, counting_down=False)):
         return True
-    _say_not_sent(pending.get("refused") or "not_pressed", key=key)
+    _say_not_sent(refused or pending.get("refused") or "not_pressed", key=key)
     return False
 
 
 # --- The countdown ------------------------------------------------------------
 
-def send_automatically(why: str, sent_to, press, type_more, space: str = "",
+def send_automatically(why: str, message: Message, press, type_more, space: str = "",
                        injection_mode: str = "type") -> None:
-    """Press Enter for the dictation just delivered to *sent_to* (landed()'s
-    answer), after the wait (hold), through the one claim. *press*(key,
-    why, claim=None) presses it, as app._press_key; *type_more*(text, mode)
-    types onto the dictation.
+    """Press Enter for *message*, just delivered, after the wait (hold),
+    through the one claim. *press*(key, why, claim=None) presses it, as
+    app._press_key; *type_more*(text, mode) types onto the dictation.
 
     *space* is the auto-space left off so it wouldn't be sent; a held send
     types it, or what's said next sticks to the last word ("delay.All")."""
     global _pending
-    pending = {"to": sent_to, "why": why, "press": press, "type": type_more,
+    pending = {"to": message.to, "why": why, "press": press, "type": type_more,
                "space": space, "mode": injection_mode, "timer": None, "ticks": []}
-    # Nothing to count down to when no Enter could go: the delivery saw the
-    # focus move, or the window can't be told and the policy says no.
-    if reason := _why_not(sent_to, sent_to):
+    # Nothing to count down to when no Enter could go: part of the message
+    # is missing, the delivery saw the focus move, or the window can't be
+    # told and the policy says no.
+    if reason := _incomplete(message) or _why_not(message.to, message.to):
         _say_not_sent(reason)
         return
     delay = _delay

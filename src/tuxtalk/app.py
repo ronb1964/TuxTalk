@@ -16,7 +16,7 @@ import atexit
 import fcntl
 import select
 import signal
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import numpy as np
 import sounddevice as sd
 from evdev import InputDevice, ecodes, list_devices
@@ -292,8 +292,10 @@ class RecordingState:
     # And which window has it: a focused_window.look() right after it
     # landed, for Type at pause's mark held back after it.
     last_inserted_where: tuple = (None, None)
-    # Where an automatic Enter may follow it (send_countdown.landed).
-    send_to: tuple = None
+    # What this recording has typed since it began or since its last
+    # message ended, and where: where an automatic Enter or a key said after
+    # it may go (send_countdown.Message).
+    message: send_countdown.Message = field(default_factory=send_countdown.Message)
     # Mid-sentence continuation - if True, lowercase the first letter of next dictation
     continue_mid_sentence: bool = False
     # Hands-free auto-stop for this recording (a silence.SilenceDetector), or
@@ -336,9 +338,6 @@ class RecordingState:
     # The last Enter TuxTalk pressed: {"at", "automatic"}, or None
     # (_press_key). "edit that" just after it explains itself.
     sent: object = None
-    # A phrase of this recording has been typed, so a correction said after the
-    # next pause ("no wait, four") may change it (app._correct_across_pause).
-    chunk_typed: bool = False
     # A phrase that was only a correction cue ("No wait."), not typed yet: the
     # corrected value comes in the next phrase.
     held_cue: str = ""
@@ -829,7 +828,7 @@ def _arm_chunker(rec_sr, edit_mode=False):
         state.chunks_submitted = 0
         state.pending_boundary = None
         state.question_open = False
-        state.chunk_typed = False
+        state.message = send_countdown.Message()
         state.held_cue = ""
         state.edit_waiting = None
         state.chunker = chunker
@@ -2378,12 +2377,14 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
     return text
 
 
-def _inject_text(text: str, injection_mode: str, one_block: bool = False, into=None) -> str:
+def _inject_text(text: str, injection_mode: str, one_block: bool = False, into=None,
+                 message=None) -> str:
     """Insert *text* into the active app (_deliver_text), then remember the
-    window it landed in, for undo, "fix that word", select and move, and an
-    automatic Enter after it (send_countdown.landed). *into*, a look taken
-    earlier, is the only window it may go into: "moved" when another has
-    the focus by the time it would.
+    window it landed in, for undo, "fix that word" and select and move.
+    *into*, a look taken earlier, is the only window it may go into: "moved"
+    when another has the focus by the time it would. Words of *message*
+    (send_countdown.Message) are added to it, with where they went, for an
+    automatic Enter or a key said after them.
 
     The focus is checked once more after typing because the report from
     before can be out of date. On KDE, clicking the desktop reports
@@ -2396,7 +2397,7 @@ def _inject_text(text: str, injection_mode: str, one_block: bool = False, into=N
     if into is not None and focused_window.changed(into, before):
         logger.info("Not typed: another window has the focus now")
         return "moved"
-    sends_before = _keys_sent.count
+    sends_before, landed = _keys_sent.count, None
     try:
         outcome = _deliver_text(text, injection_mode, one_block, where=before)
     except (virtual_keyboard.StoppedPartway, virtual_keyboard.GaveUp, PasswordFieldNow) as stop:
@@ -2408,8 +2409,10 @@ def _inject_text(text: str, injection_mode: str, one_block: bool = False, into=N
                 logger.info(f"The text landed in {after[0]!r}, not {state.last_inserted_window!r}")
             state.last_inserted_window = after[0]
         state.last_inserted_where = (state.last_inserted_window, after[1])
-        # Only after all of it: a message missing a part mustn't be sent.
-        state.send_to = send_countdown.landed(before, after) if outcome == "ok" else None
+        if outcome == "ok":
+            landed = send_countdown.landed(before, after)
+    if message is not None:
+        message.add(outcome, landed)
     return outcome
 
 
@@ -2951,7 +2954,7 @@ def _corrects_across_pause(raw: str, chunk_role) -> bool:
     """True when this phrase corrects the one typed before the pause ("no
     wait, four" after "meet at three"), so the AI should hear both together.
     Needs AI self-corrections on and a phrase of this recording typed."""
-    if chunk_role is None or not state.chunk_typed:
+    if chunk_role is None or not (state.message.has_words and state.message.complete):
         return False
     if not (_ai_corrections and _ai_engine is not None and state.last_inserted_text.strip()):
         return False
@@ -3015,20 +3018,17 @@ def _correct_across_pause(text: str):
 
 
 def _type_boundary(pending: dict, tail: str, injection_mode: str) -> None:
-    """Type what goes between a held-back chunk and what follows it, keeping
-    an automatic send aimed where the chunk went (unless this saw a move)."""
+    """Type what goes between a held-back chunk and what follows it, as part
+    of the message the chunk is in."""
     if not tail:
         return
-    send_to = state.send_to
     _remember_said(tail, chunked=True)
     # Only into the phrase's window: the context pass before this can take a while.
-    ok = _inject_text(tail, injection_mode, into=pending["where"]) == "ok"
+    ok = _inject_text(tail, injection_mode, into=pending["where"], message=state.message) == "ok"
     _remember_shown(tail, chunked=True, ok=ok)
     if ok:
         # Undo and "delete last sentence" then see the whole chunk.
         state.last_inserted_text = pending["typed"] + tail
-    if state.send_to is not None:
-        state.send_to = send_to
 
 
 # A phrase this short that the context pass hears as "press enter" is taken
@@ -3119,7 +3119,7 @@ def _chunk_message_sent() -> None:
     correction, no lowercase start, and the screen copy starts again."""
     state.pending_boundary = None
     state.question_open = False
-    state.chunk_typed = False
+    state.message = send_countdown.Message()
     state.held_cue = ""
     state.continue_mid_sentence = False
     if state.shown_text is not None and state.shown_serial == state.recording_serial:
@@ -3135,11 +3135,11 @@ def _press_said(key: str, chunk_role, after_words: bool = False) -> None:
     jumps to the Send button, and the next space typed would press it. A
     password field there gets the real Tab: spaces would be refused.
 
-    *after_words*: words of this dictation, or a phrase of this recording
-    before a pause, went in first, and the key goes only where they went
-    (send_countdown.press_where_sent), as an automatic Enter does. Said
-    alone it goes wherever the focus is: people type a password by hand,
-    then say "press enter" to log in."""
+    *after_words*: words of this message (state.message) were delivered
+    first, or tried, and the key goes only where they went, and only if all
+    of them did (send_countdown.press_where_sent), as an automatic Enter
+    does. Said alone it goes wherever the focus is: people type a password
+    by hand, then say "press enter" to log in."""
     why = f'said "press {key.lower()}"'
     if (key == "TAB" and _query_focused_window_class() in ELECTRON_PASTE_BROKEN_CLASSES
             and not focused_window.is_password()):
@@ -3150,7 +3150,7 @@ def _press_said(key: str, chunk_role, after_words: bool = False) -> None:
                 _notify(*delivery_notices.key_not_pressed(key))
         return
     if after_words:
-        pressed = send_countdown.press_where_sent(key, why, state.send_to, _press_key)
+        pressed = send_countdown.press_where_sent(key, why, state.message, _press_key)
     else:
         pressed = _press_key(key, why)
     if pressed and chunk_role is not None:
@@ -3175,7 +3175,7 @@ def _after_the_words(outcome: str, said: str, press: str, space: str, chunk_role
 
 def _send_automatically(space: str, injection_mode: str) -> None:
     """"Send each dictation automatically": Enter where the dictation went (send_countdown)."""
-    send_countdown.send_automatically("Send each dictation automatically is on", state.send_to,
+    send_countdown.send_automatically("Send each dictation automatically is on", state.message,
                                       _press_key, _type_onto_dictation, space, injection_mode)
 
 
@@ -3216,8 +3216,9 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                 cue, state.held_cue = state.held_cue, ""
                 if auto_period and cue[-1] not in ".?!":
                     cue += "."
-                _inject_text(cue + (" " if auto_space else ""), injection_mode)
-            if (_press_enter_after and state.chunk_typed
+                _inject_text(cue + (" " if auto_space else ""), injection_mode,
+                             message=state.message)
+            if (_press_enter_after and state.message.has_words
                     and not is_document_window(_query_focused_window_class())):
                 # The recording ended in a pause; its phrases are typed, so
                 # "Send each dictation automatically" sends them now.
@@ -3286,8 +3287,9 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # presses the key, there and not where the phrases before went:
         # people type the password by hand, then say it to log in, or move
         # between the boxes.
-        if focused_window.is_password():
-            state.pending_boundary, state.held_cue, state.chunk_typed = None, "", False
+        in_password = focused_window.is_password()
+        if in_password:
+            state.pending_boundary, state.held_cue = None, ""
             if not key_only:
                 _password_field_refused(beeps_on)
                 return
@@ -3336,7 +3338,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             # Only "press enter" or "press tab" was said.
             if chunk_role != "middle":
                 _beep(beeps_on, *READY_BEEP)
-            _press_said(said, chunk_role, after_words=state.chunk_typed)
+            _press_said(said, chunk_role, after_words=state.message.has_words and not in_password)
             return
 
         # Stage 3: Normalize text (voice commands, punctuation, spacing),
@@ -3401,13 +3403,14 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             chunked = chunk_role is not None
             said_before = _remember_said(text, chunked, taken_back)
             try:
-                outcome = _inject_text(text, injection_mode)
+                outcome = _inject_text(text, injection_mode, message=state.message)
             except Exception as e:
                 # The transcription worked; only getting it into the window
                 # didn't, so this is reported as undelivered, not as the
                 # "Transcription error" below.
                 logger.error(f"Injection error: {e}", exc_info=True)
                 outcome = "failed"
+                state.message.add(outcome, None)
             if outcome == "password_field":
                 _unsay(said_before)
             _remember_shown(state.last_inserted_text, chunked, outcome == "ok")
@@ -3418,9 +3421,6 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                 # Without the context pass the engine's own mark decides: after
                 # a comma or none, the next chunk carries on lowercase.
                 state.continue_mid_sentence = not text.rstrip().endswith(_SENTENCE_ENDS)
-            if chunk_role is not None and not press:
-                # A phrase that didn't all go in leaves the message unsent at the stop.
-                state.chunk_typed = outcome == "ok"
             if held_mark is not None and outcome == "ok":
                 # Only the end of the phrase is kept: the engine hears it with
                 # the start of the next one to decide the mark between them.

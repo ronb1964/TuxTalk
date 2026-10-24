@@ -59,7 +59,6 @@ def editing(monkeypatch):
     monkeypatch.setattr(app.state, "shown_text", None)
     monkeypatch.setattr(app.state, "edit_waiting", None)
     monkeypatch.setattr(app.state, "pending_boundary", None)
-    monkeypatch.setattr(app.state, "chunk_typed", False)
     monkeypatch.setattr(app.state, "held_cue", "")
     monkeypatch.setattr(app.state, "sent", None)
     return pressed, edits, problems

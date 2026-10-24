@@ -104,11 +104,11 @@ def dictation(monkeypatch):
 
     def run(outcome, beeps_on=True, notify_on=False):
         if isinstance(outcome, Exception):
-            def boom(*a):
+            def boom(*a, **k):
                 raise outcome
             monkeypatch.setattr(app, "_inject_text", boom)
         else:
-            monkeypatch.setattr(app, "_inject_text", lambda text, mode: outcome)
+            monkeypatch.setattr(app, "_inject_text", lambda text, mode, **kw: outcome)
         frames = [(np.ones(app.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
         app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=beeps_on,
                                    smart_quotes=False, notify_on=notify_on)

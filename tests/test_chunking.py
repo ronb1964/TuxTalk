@@ -366,9 +366,11 @@ def pipeline(monkeypatch):
     texts, typed, beeps = [], [], []
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: texts.pop(0))
 
-    def fake_inject(text, mode, one_block=False, into=None):
+    def fake_inject(text, mode, one_block=False, into=None, message=None):
         typed.append(text)
         app.state.last_inserted_text = text
+        if message is not None:
+            message.add("ok", message.to)       # into the window its words went to
         return "ok"
 
     monkeypatch.setattr(app, "_inject_text", fake_inject)
@@ -822,7 +824,6 @@ def ai_on(pipeline, monkeypatch):
     monkeypatch.setattr(app, "_ai_engine", ai)
     monkeypatch.setattr(app, "_output_backend",
                         lambda: SimpleNamespace(backspaces=lambda n: (erased.append(n), True)[1]))
-    monkeypatch.setattr(app.state, "chunk_typed", False)
     monkeypatch.setattr(app.state, "held_cue", "")
     monkeypatch.setattr(app.state, "last_inserted_window", None)
     texts, typed, beeps = pipeline
@@ -1053,7 +1054,7 @@ def test_fix_that_word_after_a_window_change_gets_the_last_phrase(fix_word, monk
     texts, typed, opened = fix_word
     windows = iter(["kwrite", "kwrite", "konsole"])
 
-    def fake_inject(text, mode, one_block=False, into=None):
+    def fake_inject(text, mode, one_block=False, into=None, message=None):
         typed.append(text)
         app.state.last_inserted_text = text
         app.state.last_inserted_window = next(windows)
@@ -1097,7 +1098,6 @@ def enter(pipeline, monkeypatch):
         return True
     monkeypatch.setattr(app, "_press_key", fake_enter)
     monkeypatch.setattr(app, "_press_enter_after", False)
-    monkeypatch.setattr(app.state, "chunk_typed", False)
     monkeypatch.setattr(app.state, "held_cue", "")
     return texts, typed, beeps
 
@@ -1111,7 +1111,7 @@ def test_press_enter_at_the_end_of_a_phrase_sends_it(enter):
     texts.extend(["see you at noon, press enter", "how are you"])
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     assert typed == ["See you at noon.", "<ENTER>"]
-    assert app.state.pending_boundary is None and not app.state.chunk_typed
+    assert app.state.pending_boundary is None and not app.state.message.has_words
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     assert typed[2:] == ["How are you"]
 
@@ -1121,7 +1121,7 @@ def test_an_enter_that_couldnt_be_pressed_leaves_the_message_open(enter, monkeyp
     box, so "edit that" must still reach all of it, not start afresh."""
     from tuxtalk import app
     texts, typed, _ = enter
-    monkeypatch.setattr(app, "_press_key", lambda key, why: False)
+    monkeypatch.setattr(app, "_press_key", lambda key, why, claim=None: False)
     monkeypatch.setattr(app.state, "recording_serial", 7)
     texts.extend(["see you at noon, press enter", "press enter"])
     call(frames_of(speech(1.0)), "middle", auto_period=True)
@@ -1154,7 +1154,7 @@ def test_press_tab_at_the_end_of_a_phrase_leaves_the_box_without_a_mark(enter):
     texts.extend(["john, press tab", "smith"])
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     assert typed == ["John", "<TAB>"]
-    assert app.state.pending_boundary is None and not app.state.chunk_typed
+    assert app.state.pending_boundary is None and not app.state.message.has_words
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     assert typed[2:] == ["Smith"]
 
@@ -1187,7 +1187,6 @@ def test_press_enter_after_each_dictation_when_it_ends_in_a_pause(enter, monkeyp
     monkeypatch.setattr(app, "_press_enter_after", True)
     texts.append("we meet")
     call(frames_of(speech(1.0)), "middle", auto_period=True)
-    app.state.chunk_typed = True
     call([], "last", auto_period=True)
     assert typed == ["We meet", ".", "<ENTER>"]
 
