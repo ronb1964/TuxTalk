@@ -507,7 +507,7 @@ def test_the_right_alt_guard_goes_while_right_alt_is_held(keyboard, no_hotkeys_n
 def test_scroll_lock_is_claimed_on_every_desktop():
     assert kh.qt_key_sequence("Scroll Lock") == "ScrollLock"
     assert kh.qt_key_sequence("Shift+Scroll Lock") == "Shift+ScrollLock"
-    assert kh.qt_key_code("Scroll Lock") == 0x01000026        # Qt::Key_ScrollLock
+    assert kh.qt_key_code("ScrollLock") == 0x01000026         # Qt::Key_ScrollLock
     assert gnome_hotkeys.accelerator("Shift+ScrollLock") == "<Shift>Scroll_Lock"
     assert cosmic_hotkeys.binding("ScrollLock") == ((), "Scroll_Lock")
     assert x11_hotkeys.x_grab("ScrollLock") == (ecodes.KEY_SCROLLLOCK + 8, 0)

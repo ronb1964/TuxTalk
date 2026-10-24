@@ -104,16 +104,19 @@ _QT_F1 = 0x01000030
 
 
 def qt_key_code(sequence):
-    """A Qt key sequence from qt_key_sequence ("Shift+F8") as the number
-    kglobalaccel reports it in, or None."""
-    sequence = qt_key_sequence(sequence)
-    if sequence is None:
+    """A Qt key sequence from qt_key_sequence ("Shift+F8", "ScrollLock",
+    "Meta+F9") as the number kglobalaccel reports it in, or None. Read as
+    Qt writes it: run through qt_key_sequence again, Qt's "ScrollLock" and
+    "Meta" weren't TuxTalk names and came out as None."""
+    if not sequence:
         return None
     *mods, key = sequence.split("+")
     if key in _FKEYS:
         code = _QT_F1 + int(key[1:]) - 1
-    else:
+    elif key in _QT_KEY_CODES or len(key) == 1:
         code = _QT_KEY_CODES.get(key) or ord(key)
+    else:
+        return None
     for mod in mods:
         code |= _QT_MODIFIER_CODES[mod]
     return code

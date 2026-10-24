@@ -297,7 +297,19 @@ class TestAppLaunchShortcuts:
         ("Super+F9", 0x10000000 | 0x01000038), ("", None), ("Space", None),
     ])
     def test_qt_key_codes(self, name, code):
-        assert kh.qt_key_code(name) == code
+        assert kh.qt_key_code(kh.qt_key_sequence(name)) == code
+
+    @pytest.mark.parametrize("hold,vc,qt_code", [
+        ("Scroll Lock", "", 0x01000026), ("F8", "Super+F9", 0x10000000 | 0x01000038)])
+    def test_an_app_on_scroll_lock_or_a_super_shortcut_is_reported(self, apps, hold, vc,
+                                                                    qt_code):
+        """Qt names them ScrollLock and Meta, which the check used to read
+        as TuxTalk names: it never matched either."""
+        before = kh.time.time() - 1
+        comps = {"/component/kmix": ("kmix", "Audio Volume", [qt_code], True)}
+        kh.claim(_cfg(hold, "F10", vc), apps(comps))
+        assert kh.app_shortcuts_since(before) == {kh.qt_key_sequence(hold if not vc else vc):
+                                                  "Audio Volume"}
 
     def test_an_app_launched_by_our_key_is_reported(self, apps, caplog):
         before = kh.time.time() - 1
