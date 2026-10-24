@@ -9,6 +9,7 @@ import time
 import types
 
 import pytest
+import sounddevice as sd
 
 from tuxtalk import mic_stream
 
@@ -16,11 +17,12 @@ from tuxtalk import mic_stream
 class Stream:
     """Stops and closes as asked; *stop* can hang until released, and *fails*
     ("stop" or "close") with a PortAudio error, which sounddevice raises only
-    when asked not to ignore it."""
+    when asked not to ignore it. *never_started*: PortAudio says so when
+    stopping it, as it does for a stream whose start failed."""
 
-    def __init__(self, stop=None, fails=None):
+    def __init__(self, stop=None, fails=None, never_started=False):
         self.calls = []
-        self._stop, self._fails = stop, fails
+        self._stop, self._fails, self._never_started = stop, fails, never_started
         self.release = threading.Event()
         self.closed = threading.Event()
 
@@ -30,6 +32,9 @@ class Stream:
             self.release.wait(5)
         if self._fails == "stop" and not ignore_errors:
             raise OSError("device unplugged")
+        if self._never_started and not ignore_errors:
+            raise sd.PortAudioError("Error stopping stream: Stream is stopped",
+                                    sd._lib.paStreamIsStopped)
 
     def close(self, ignore_errors=True):
         self.calls.append("close")
@@ -64,6 +69,18 @@ def test_a_stream_that_fails_to_stop_or_close_is_still_closed_and_it_is_logged(
     assert mic_stream.close(stream) is True
     assert stream.calls == ["stop", "close"]
     assert any(said in r.getMessage() for r in caplog.records)
+
+
+def test_a_stream_whose_start_failed_is_closed_with_no_warning(caplog):
+    """A microphone that won't start is closed again, and PortAudio says
+    there was nothing to stop. That was logged as a second warning, "Could
+    not stop the microphone stream: ... Stream is stopped", beside the real
+    failure."""
+    caplog.set_level(logging.INFO)
+    stream = Stream(never_started=True)
+    assert mic_stream.close(stream) is True
+    assert stream.calls == ["stop", "close"]
+    assert not [r for r in caplog.records if r.name == mic_stream.logger.name]
 
 
 def test_a_stream_that_never_stops_is_given_up_on_and_kept(caplog):

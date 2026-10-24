@@ -24,6 +24,9 @@ EXIT_WAIT_S = 0.5
 # each). _closed is notified as each one is closed.
 _closing = set()
 _closed = threading.Condition()
+# PortAudio's error for stopping a stream that was opened and never started
+# (its start failed): there was nothing to stop.
+_NEVER_STARTED = sd._lib.paStreamIsStopped
 
 
 def input_samplerate(device, preferred):
@@ -79,11 +82,13 @@ def close(stream, wait=True):
 
 
 def _stop_and_close(stream):
-    # sounddevice ignores PortAudio's errors on these unless told not to.
+    """Stop and close *stream*, logging what fails: sounddevice ignores
+    PortAudio's errors on these unless told not to."""
     try:
         stream.stop(ignore_errors=False)
     except Exception as e:
-        logger.warning(f"Could not stop the microphone stream: {e}")
+        if e.args[1:2] != (_NEVER_STARTED,):
+            logger.warning(f"Could not stop the microphone stream: {e}")
     finally:
         try:
             stream.close(ignore_errors=False)
