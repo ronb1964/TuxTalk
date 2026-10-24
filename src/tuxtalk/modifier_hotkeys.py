@@ -14,7 +14,6 @@ from .config import HOTKEY_CHOICES
 from .hotkey_keys import MODIFIER_CODES, keys_down
 from .logger import setup_logger
 from .uinput_helper import is_keyboard_device
-from .virtual_keyboard import GaveUp
 
 logger = setup_logger(__name__)
 
@@ -101,21 +100,22 @@ def wait_while_held(destination=None):
 
     def wait():
         """Until no such key is down, guarding a Right Alt first; GaveUp
-        when it stays down or the destination changed meanwhile."""
+        when it stays down or the destination changed meanwhile. The guard
+        goes before the destination is asked: that can take a moment, and
+        a quick tap let go before the guard opens the menu bar."""
+        still = held()
+        if ecodes.KEY_RIGHTALT in still and not still & _stuck:
+            _guard_if_alone(keyboards)
         where = destination() if destination else None
         give_up_at = time.monotonic() + HELD_LIMIT_S
-        first = True
         while still := held():
             if still & _stuck or time.monotonic() >= give_up_at:
                 _give_up(still)
-            if first and ecodes.KEY_RIGHTALT in still:
-                _guard_if_alone(keyboards)
-            first = False
             time.sleep(0.02)
         _stuck.clear()
         if destination and window_geometry.changed(where, destination()):
             logger.info("Typing stopped: the window changed while it waited for the key")
-            raise GaveUp("moved")
+            raise virtual_keyboard.GaveUp("moved")
 
     def before_press():
         if held():
@@ -155,7 +155,7 @@ def _give_up(held) -> None:
         logger.warning(f"{names} has been down for {HELD_LIMIT_S:g} s, so typing stopped; "
                        "the dictation is in Recent Dictations")
         _stuck.update(held)
-    raise GaveUp("key_held")
+    raise virtual_keyboard.GaveUp("key_held")
 
 
 def right_alt_alone(event, dictation_keys, held_modifiers) -> bool:

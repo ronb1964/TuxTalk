@@ -747,6 +747,22 @@ def test_typing_that_waits_for_right_alt_presses_the_guard_itself(keyboard, no_h
     assert any(down and (LCTRL, 0) in events for down, events in seen)
 
 
+def test_the_guard_goes_before_the_slow_questions_about_the_window(keyboard, no_hotkeys_noted,
+                                                                     monkeypatch):
+    """Asking which window has the focus, and whether it's a password field,
+    can take a moment in LibreOffice or Firefox: a quick tap of Right Alt
+    let go meanwhile reached the menu bar before the guard's Ctrl."""
+    guarded_when_asked = []
+
+    def destination():
+        guarded_when_asked.append((LCTRL, 0) in keyboard.events)
+        return ("soffice", None, False)
+    monkeypatch.setattr(app, "_destination", destination)
+    modifier_hotkeys.note([Keyboard(lambda look: look <= 4, code=RALT)], RALT, None)
+    assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
+    assert guarded_when_asked and guarded_when_asked[0] is True
+
+
 def test_typing_waits_for_right_alt_without_a_guard_when_ctrl_is_held_too(keyboard,
                                                                           no_hotkeys_noted):
     """Letting go of the guard's Ctrl could let go of the user's Ctrl too."""
