@@ -118,7 +118,6 @@ class TuxTalkIndicator extends PanelMenu.Button {
     _init() {
         super._init(0.0, 'TuxTalk');
 
-        // Create icon
         this._icon = new St.Icon({
             icon_name: 'audio-input-microphone-symbolic',
             style_class: 'system-status-icon',
@@ -150,7 +149,6 @@ class TuxTalkIndicator extends PanelMenu.Button {
         this._hotkeys = [];
         this._grabs = new Map();
 
-        // Build menu
         this._buildMenu();
 
         // Hidden until watch_name sees TuxTalk on the bus.
@@ -265,10 +263,14 @@ class TuxTalkIndicator extends PanelMenu.Button {
             // windows of one app look the same by their class, and a look
             // between separate calls would pair one window's class with
             // another's id. A TuxTalk from before the call existed answers
-            // with an error, and gets the class and frame the old way.
+            // that there's no such method, and gets the class and frame the
+            // old way. Not on any other error (a busy or restarting TuxTalk):
+            // sent late, the old calls would undo a newer report.
             this._proxy.SetFocusedWindowRemote(wmClass, win ? String(win.get_id()) : '', geometry,
                 (result, error) => {
-                    if (error && this._proxy && this._dbusAvailable) {
+                    if (error && error.matches(Gio.DBusError, Gio.DBusError.UNKNOWN_METHOD)
+                            && this._proxy && this._dbusAvailable
+                            && global.display.focus_window === win) {
                         this._proxy.SetFocusedWindowClassRemote(wmClass, () => {});
                         this._proxy.SetFocusedWindowGeometryRemote(geometry, () => {});
                     }
@@ -307,12 +309,20 @@ class TuxTalkIndicator extends PanelMenu.Button {
 
     // "x,y,w,h|output|ox,oy,ow,oh": the frame and its monitor. GNOME has no
     // connector name at hand, so the output is left empty.
+    // Where *win* is, '' when that can't be told: a monitor being plugged
+    // in or out has no geometry for a moment, and the class and id must
+    // still go out with the frame.
     _frameOf(win) {
         if (!win)
             return '';
-        const r = win.get_frame_rect();
-        const m = global.display.get_monitor_geometry(win.get_monitor());
-        return `${r.x},${r.y},${r.width},${r.height}||${m.x},${m.y},${m.width},${m.height}`;
+        try {
+            const r = win.get_frame_rect();
+            const m = global.display.get_monitor_geometry(win.get_monitor());
+            return `${r.x},${r.y},${r.width},${r.height}||${m.x},${m.y},${m.width},${m.height}`;
+        } catch (e) {
+            console.error('TuxTalk: no frame for the focused window:', e);
+            return '';
+        }
     }
 
     _pushFocusedWindowGeometry() {
@@ -685,7 +695,6 @@ class TuxTalkIndicator extends PanelMenu.Button {
     }
 
     _updateIcon() {
-        // Update icon based on state
         if (!this._dbusAvailable) {
             // TuxTalk not running: very dimmed with slash
             this._icon.icon_name = 'microphone-sensitivity-muted-symbolic';
@@ -760,7 +769,8 @@ class TuxTalkIndicator extends PanelMenu.Button {
 
         if (this._proxy) {
             // Nothing reports focus once this is gone, so the last window
-            // reported must not stay behind as the paste target.
+            // reported must not stay behind as the paste target. The two old
+            // calls on purpose: every TuxTalk version has them.
             if (this._dbusAvailable) {
                 try {
                     this._proxy.SetFocusedWindowClassRemote('', () => {});

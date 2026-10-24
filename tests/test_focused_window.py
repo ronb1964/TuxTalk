@@ -144,6 +144,30 @@ def test_a_tuxtalk_from_before_the_one_call_still_gets_the_class_from_the_extens
     assert "if (error" in fallback and "SetFocusedWindowClassRemote(wmClass" in fallback
 
 
+def test_the_extension_falls_back_only_for_a_tuxtalk_without_the_call():
+    """Any error sent the old calls too, late: after a busy TuxTalk's
+    timeout they undid a newer window's report, and the next look said the
+    old window's class, or no id at all."""
+    import pathlib
+    import re
+    ext = (pathlib.Path(__file__).resolve().parent.parent / "gnome-extension"
+           / "talktype@ronb1964.github.io" / "extension.js").read_text()
+    push = ext[ext.index("_pushFocusedWindow() {"):ext.index("_watchFocusedWindow(win) {")]
+    condition = push[push.index("(result, error) =>"):push.index("SetFocusedWindowClassRemote")]
+    assert "error.matches(Gio.DBusError, Gio.DBusError.UNKNOWN_METHOD)" in condition
+    assert re.search(r"global\.display\.focus_window === win", condition)
+
+
+def test_a_frame_the_extension_cant_get_doesnt_keep_the_window_from_being_reported():
+    """A monitor being plugged in or out: the frame threw, and neither the
+    class nor the id went out, so paste kept the last window's class."""
+    import pathlib
+    ext = (pathlib.Path(__file__).resolve().parent.parent / "gnome-extension"
+           / "talktype@ronb1964.github.io" / "extension.js").read_text()
+    frame = ext[ext.index("    _frameOf(win) {"):ext.index("_pushFocusedWindowGeometry() {")]
+    assert "try {" in frame and "catch (e)" in frame and "return '';" in frame.split("catch")[1]
+
+
 def test_the_extension_of_0_18_never_pairs_a_class_with_the_last_windows_frame(monkeypatch):
     """Still loaded until the user logs out, it sends the class, then the
     frame. A look in between got the new class with the old window's frame."""

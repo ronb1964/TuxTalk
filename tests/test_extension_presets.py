@@ -25,10 +25,10 @@ def test_menu_is_built_from_the_tray():
     assert "status.preset" in JS
 
 
-def test_version_is_27():
+def test_version_is_28():
     """The version is bumped with every extension.js change so the in-app
     updater offers the new extension."""
-    assert json.loads((EXT / "metadata.json").read_text())["version"] == 27
+    assert json.loads((EXT / "metadata.json").read_text())["version"] == 28
 
 
 CUSTOM_LABEL = "Custom (opens Preferences)"
