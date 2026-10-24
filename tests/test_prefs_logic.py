@@ -10,6 +10,8 @@ except ImportError:     # Python 3.10, the AppImage's (the CI runs it)
     import toml as tomllib
 from types import SimpleNamespace
 
+import pytest
+
 from tuxtalk import prefs as P
 from tuxtalk.prefs import PreferencesWindow, _coerce_config_types
 
@@ -87,6 +89,17 @@ def test_a_setting_that_isnt_a_number_gets_its_default_so_preferences_opens():
     assert out["auto_timeout_minutes"] == Settings().auto_timeout_minutes
     assert out["beeps"] is True
     Gtk.Adjustment(value=float(out["auto_stop_seconds"]), lower=0.5, upper=10.0)
+
+
+def test_a_number_that_isnt_finite_gets_its_default_so_preferences_opens():
+    """press_enter_delay = nan is valid TOML and a float, and building the
+    wait's dropdown raised on round(nan): Preferences didn't open."""
+    from tuxtalk.config import Settings
+    for value in (float("nan"), float("inf")):
+        out = _coerce_config_types({"press_enter_delay": value, "auto_stop_seconds": value})
+        assert out["press_enter_delay"] == Settings().press_enter_delay
+        assert out["auto_stop_seconds"] == Settings().auto_stop_seconds
+        int(round(float(out["press_enter_delay"])))
 
 
 # --- save_config must emit TOML that can be read back ---
@@ -385,3 +398,24 @@ def test_a_failed_save_says_why(tmp_path, monkeypatch):
 
     assert PreferencesWindow.save_config(d) is False
     assert "No space left on device" in d._save_error
+
+
+def test_an_update_doesnt_start_when_the_changes_couldnt_be_saved(monkeypatch):
+    """"Any unsaved preferences changes will be saved first": with the disk
+    full or the file unreadable the save failed, the update went ahead, and
+    its restart lost the changes."""
+    from tuxtalk import update_checker
+    shown = []
+    answer = SimpleNamespace(run=lambda: P.Gtk.ResponseType.YES, destroy=lambda: None,
+                             format_secondary_text=lambda text: None)
+    monkeypatch.setattr(P, "message_dialog", lambda **kw: answer)
+    monkeypatch.setattr(update_checker, "get_install_type", lambda: "appimage")
+    monkeypatch.setattr(update_checker, "get_update_guidance",
+                        lambda kind, version: {"update_method": "appimage"})
+    monkeypatch.setattr(P.Gtk, "Dialog", lambda **kw: pytest.fail("the update started"))
+    window = SimpleNamespace(
+        _current_release={"appimage_url": "https://example.invalid/TuxTalk.AppImage"},
+        window=None, save_config=lambda: False,
+        _show_save_error=lambda: shown.append("save error"))
+    PreferencesWindow._on_download_update_clicked(window, None)
+    assert shown == ["save error"]

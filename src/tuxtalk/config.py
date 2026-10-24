@@ -337,6 +337,23 @@ def _migrate_settings(s: Settings) -> Settings:
     return s
 
 
+def repaired(s: Settings) -> Settings:
+    """*s* as the service uses it: brought forward to the current schema,
+    and each unusable value back at its default. Preferences reads the file
+    this way too, so it shows what the service uses (nan for a number was a
+    float to the caster, and stopped Preferences opening)."""
+    # Before validating, so retired values (the old 'cyan' color mode) become
+    # their modern equivalents instead of tripping validation and being reset.
+    _migrate_settings(s)
+    try:
+        validate_config(s)
+    except ConfigError as e:
+        # Keep the process alive. The tray polls this once a second, so a single
+        # bad value must cost the user that setting, not their tray icon.
+        s = _repair_invalid_fields(s, e)
+    return s
+
+
 def _repair_invalid_fields(s: Settings, error: ConfigError) -> Settings:
     """Reset only the settings that are unusable, keeping everything else.
 
@@ -561,18 +578,7 @@ def load_config() -> Settings:
             # overwrite the user's real settings for good.
             s = _recover_damaged_config(e)
 
-    # Bring older schemas forward before validating, so retired values (e.g. the
-    # old 'cyan' color mode) become their modern equivalents instead of tripping
-    # validation and being reset.
-    _migrate_settings(s)
-
-    try:
-        validate_config(s)
-    except ConfigError as e:
-        # Keep the process alive. The tray polls this once a second, so a single
-        # bad value must cost the user that setting, not their tray icon.
-        s = _repair_invalid_fields(s, e)
-
+    s = repaired(s)
     _config_cache = s
     # Only now is the cache known to reflect the file. On a failed read
     # current_mtime is None, so the next call re-reads instead of serving

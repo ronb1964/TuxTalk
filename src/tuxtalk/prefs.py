@@ -19,7 +19,7 @@ import atexit
 import dbus.mainloop.glib
 from dataclasses import asdict
 from .config import (CONFIG_PATH, ConfigNotLoadedError, Settings, apply_toml, changed_keys,
-                     merge_changed_keys, load_custom_commands, save_custom_commands,
+                     merge_changed_keys, load_custom_commands, repaired, save_custom_commands,
                      write_text_atomic,
                      merge_custom_command_edits,
                      _toml_value, CLASSIC_CYAN_HEX, HOTKEY_CHOICES)
@@ -45,14 +45,14 @@ except ImportError:
 
 
 def _coerce_config_types(config: dict) -> dict:
-    """*config* with each setting cast to its type as the service reads it
-    (config.apply_toml): a hand-edited config can hold '5' for 5, and
-    Gtk.Adjustment(value='5') crashes the window. A value that won't cast
-    ("oops" for a number) shows its default, which is what the service uses;
+    """*config* read as the service reads it (config.apply_toml, then
+    config.repaired): a hand-edited config can hold '5' for 5, and
+    Gtk.Adjustment(value='5') crashes the window. An unusable value ("oops"
+    or nan for a number) shows its default, which is what the service uses;
     left as it was, Preferences didn't open. Unknown keys are kept."""
     settings = Settings()
     apply_toml(settings, config)
-    return {**config, **asdict(settings)}
+    return {**config, **asdict(repaired(settings))}
 
 
 # The Input Volume slider's target when TuxTalk uses the system default mic.
@@ -1899,14 +1899,14 @@ class PreferencesWindow:
             "to keep talking; that message is sent when you're done. A sent dictation\n"
             f"can't be changed with \u201cedit that\u201d, so tap {key} first if you want to.\n\n"
             "If what you said ends on a word like \u201cand\u201d or \u201cthe\u201d, it was probably\n"
-            "cut off, so it isn't sent.\n\n"
+            "cut off, so it isn't sent. Where TuxTalk can't tell which window has the focus\n"
+            "(COSMIC, GNOME without TuxTalk's extension), nothing is sent by itself.\n\n"
             "With this off, end any dictation with \u201cpress enter\u201d to send just that one.")
 
         waits = Gtk.ComboBoxText()
-        for seconds, label in (("0", "Right away"), ("1", "After 1 second"),
-                               ("2", "After 2 seconds"), ("3", "After 3 seconds"),
-                               ("4", "After 4 seconds")):
-            waits.append(seconds, label)
+        for seconds in range(5):
+            waits.append(str(seconds), f"After {seconds} second{'s' * (seconds > 1)}"
+                         if seconds else "Right away")
         current = int(round(float(self.config.get("press_enter_delay", 2.0))))
         waits.set_active_id(str(min(4, max(0, current))))
         waits.connect("changed", lambda c: self.update_config(
@@ -3396,15 +3396,14 @@ class PreferencesWindow:
         if response != Gtk.ResponseType.YES:
             return
 
-        # Save any pending config changes first
-        self.save_config()
+        # As the question promised: an update that restarts TuxTalk would
+        # lose changes it couldn't save.
+        if not self.save_config():
+            self._show_save_error()
+            return
 
-        # Create progress dialog
-        progress_dialog = Gtk.Dialog(
-            title="Updating TuxTalk",
-            transient_for=self.window,
-            flags=Gtk.DialogFlags.MODAL
-        )
+        progress_dialog = Gtk.Dialog(title="Updating TuxTalk", transient_for=self.window,
+                                     flags=Gtk.DialogFlags.MODAL)
         progress_dialog.set_default_size(400, 120)
         progress_dialog.set_deletable(False)  # Prevent closing during update
 
