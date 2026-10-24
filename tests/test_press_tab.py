@@ -1,4 +1,5 @@
-"""Ending a dictation with "press tab" presses the real Tab key (key_commands.py).
+"""Ending a dictation with "press tab" presses the real Tab key (key_commands.py),
+except in Claude Desktop, where it types four spaces.
 
 Forms are filled one box at a time ("John, press tab"). A tab character at
 the end of the text would be stripped with the trailing space, and pasted
@@ -76,10 +77,19 @@ def test_literal_press_tab_at_the_end_types_the_words(monkeypatch, no_auto_send)
     assert _dictate(monkeypatch, "Type literal press tab") == [("typed", "Type press tab. ")]
 
 
-def test_press_tab_presses_the_key_in_claude_desktop_too(monkeypatch, no_auto_send):
-    """Typed tabs become spaces there (a Tab would jump to the Send button),
-    but saying it at the end asks for the key itself."""
-    assert _dictate(monkeypatch, "John press tab", window="com.anthropic.Claude") == [
+@pytest.mark.parametrize("raw, typed", [
+    ("John press tab", [("typed", "John"), ("typed", "    ")]),
+    ("Press tab.", [("typed", "    ")]),
+])
+def test_press_tab_types_four_spaces_in_claude_desktop(monkeypatch, no_auto_send, raw, typed):
+    """Its Tab key jumps from the message box to the Send button, and the next
+    space typed would send the message: four spaces, as a tab said
+    mid-sentence there gets."""
+    assert _dictate(monkeypatch, raw, window="com.anthropic.Claude") == typed
+
+
+def test_press_tab_still_presses_the_key_elsewhere(monkeypatch, no_auto_send):
+    assert _dictate(monkeypatch, "John press tab", window="org.kde.kwrite") == [
         ("typed", "John"), ("TAB", 'said "press tab"')]
 
 

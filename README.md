@@ -402,7 +402,7 @@ Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--st
 |----------|--------|
 | "new line" | Line break |
 | "new paragraph" | Double line break |
-| "press tab" | Tab character ("tab" on its own is just the word). At the end of a dictation it presses the Tab key, so in a form you go to the next box |
+| "press tab" | Tab character ("tab" on its own is just the word). At the end of a dictation it presses the Tab key, so in a form you go to the next box. In Claude Desktop it types four spaces instead, because there the Tab key jumps to the Send button |
 
 ### Editing
 | Say This | Result |

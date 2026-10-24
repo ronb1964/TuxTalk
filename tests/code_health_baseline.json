@@ -472,7 +472,7 @@
   },
   "app.py::_deliver_text": {
    "decisions": 48,
-   "lines": 241
+   "lines": 237
   },
   "app.py::_edit_selection": {
    "decisions": 48,
@@ -510,7 +510,7 @@
   },
   "app.py::_transcribe_and_inject": {
    "decisions": 69,
-   "lines": 262
+   "lines": 261
   },
   "app.py::_transcribe_audio": {
    "decisions": 25,

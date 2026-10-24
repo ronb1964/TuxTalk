@@ -1856,7 +1856,6 @@ def _type_text_raw(text: str) -> bool:
         except Exception as e:      # pyperclip missing, or no clipboard it can use
             logger.warning(f"Couldn't copy the text to the clipboard either: {e}")
     logger.error("Could not type text: no virtual keyboard, wtype or wl-copy")
-    print("Could not type text.")
     return False
 
 def _focused_is_password() -> bool:
@@ -2685,13 +2684,9 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
         if focused_class in ELECTRON_PASTE_BROKEN_CLASSES and not os.environ.get("FLATPAK_ID"):
             logger.info(f"Electron-paste-broken override: class={focused_class!r}, typing")
 
-            # Split on §SHIFT_ENTER§ (line-break voice command) and \n so
-            # we send actual Shift+Enter keystrokes between text chunks
-            # instead of typing the marker literally.
-            # Tab characters (from the "press tab" command) are converted to
-            # 4 spaces here: a real Tab keypress moves focus from Claude Desktop's
-            # chat textarea to the Send button, and the next typed space then
-            # activates it — submitting the message mid-dictation.
+            # Line breaks go in as Shift+Enter between the parts, and a tab as
+            # four spaces: a real Tab moves the focus from Claude Desktop's box
+            # to the Send button, and the next space typed sends the message.
             marker = "\xa7SHIFT_ENTER\xa7"
             unified = text.replace("\n", marker) if "\n" in text else text
             unified = unified.replace("\t", "    ")
@@ -3378,8 +3373,14 @@ def _press_said(key: str, chunk_role) -> None:
     """Press the key said at the end of a dictation ("press enter"). In Type
     at pause that ends the message, and what's said next starts afresh; not
     pressed (a key stuck down), the message is still in the box, to carry
-    on in and for "edit that" to reach whole."""
-    if _press_key(key, f'said "press {key.lower()}"') and chunk_role is not None:
+    on in and for "edit that" to reach whole. In Claude Desktop "press tab"
+    types four spaces, as a tab said mid-sentence does there: its Tab key
+    jumps to the Send button, and the next space typed would press it."""
+    if key == "TAB" and _query_focused_window_class() in ELECTRON_PASTE_BROKEN_CLASSES:
+        typed = state.last_inserted_text
+        if _inject_text("    ", "type", time.time()) == "ok":
+            state.last_inserted_text = typed + "    "
+    elif _press_key(key, f'said "press {key.lower()}"') and chunk_role is not None:
         _chunk_message_sent()
 
 
@@ -3639,7 +3640,6 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
 
     except Exception as e:
         logger.error(f"Transcription error: {e}", exc_info=True)
-        print(f"Transcription error: {e}")
         # The cancel beep and a notice whatever the notifications setting,
         # like _report_undelivered: nothing was typed, and the "done" beep
         # would sound like it worked.
