@@ -1696,18 +1696,18 @@ def _press_key(key: str, why: str) -> bool:
     sends a chat message, runs a terminal command or submits a form, which is
     the point; Tab moves on to a form's next box, even in Claude Desktop,
     whose typed tabs become spaces. Undo can't reach what's behind either, so
-    it forgets the dictation."""
+    once the key is pressed it forgets the dictation; one that couldn't be
+    pressed leaves the text where undo still reaches it."""
     time.sleep(0.05)   # let the app take in the typed text first
-    ok = _output_backend().press_keys([((), key)])
+    if not _output_backend().press_keys([((), key)]):
+        logger.warning(f"Couldn't press {key.title()} ({why})")
+        return False
     state.last_inserted_text = ""
     if key == "ENTER":
         # "edit that" right after this says why there's nothing to edit.
         state.sent = {"at": time.time(), "automatic": why.startswith("Send each")}
-    if ok:
-        logger.info(f"Pressed {key.title()} ({why})")
-    else:
-        logger.warning(f"Couldn't press {key.title()} ({why})")
-    return ok
+    logger.info(f"Pressed {key.title()} ({why})")
+    return True
 
 
 _send_lock = threading.Lock()

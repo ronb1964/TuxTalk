@@ -118,6 +118,21 @@ def test_pressing_tab_goes_through_the_output_backend_and_forgets_undo(monkeypat
     assert app.state.last_inserted_text == "" and app.state.sent is None
 
 
+@pytest.mark.parametrize("key", ["TAB", "ENTER"])
+def test_a_key_that_couldnt_be_pressed_leaves_undo_and_no_send(monkeypatch, key):
+    """The focus never moved and nothing was sent: undo still reaches the
+    text, and "edit that" mustn't say it's already sent."""
+    class Backend:
+        def press_keys(self, chords):
+            return False
+    monkeypatch.setattr(app, "_output_backend", lambda: Backend())
+    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    monkeypatch.setattr(app.state, "last_inserted_text", "John")
+    monkeypatch.setattr(app.state, "sent", None)
+    assert app._press_key(key, "test") is False
+    assert app.state.last_inserted_text == "John" and app.state.sent is None
+
+
 def test_both_typing_paths_know_the_tab_key():
     assert app._nav_keycode("TAB") == 15
     assert libei_ctypes._CHORD_KEYS["TAB"] == 15
