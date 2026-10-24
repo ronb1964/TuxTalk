@@ -28,6 +28,8 @@ from .config import load_config, Settings, load_custom_commands
 # Imported as a module too, so the live-settings reload can read CONFIG_PATH and
 # LIVE_APPLIED_KEYS without pulling each name in separately.
 from . import config as config_module
+from .beeps import START_BEEP, HANDS_FREE_BEEP, CANCEL_BEEP, READY_BEEP
+from .beeps import beep as _beep
 from .logger import setup_logger, redact_text
 from .recording_indicator import RecordingIndicator
 from .undo import detect_undo_command, calculate_undo_length
@@ -266,13 +268,9 @@ _lockfile_handle = None
 SAMPLE_RATE = 16000
 CHANNELS = 1
 MIN_HOLD_MS = 200
-START_BEEP = (1200, 0.12)
-HANDS_FREE_BEEP = (1600, 0.07)  # confirms a double-tap switched the recording to hands-free
 # Two taps of the toggle key closer together than this switch the recording
 # that the first tap started to hands-free, instead of stopping it.
 DOUBLE_TAP_S = 0.4
-CANCEL_BEEP = (500, 0.12)
-READY_BEEP  = (1000, 0.09)
 
 @dataclass
 class RecordingState:
@@ -748,39 +746,6 @@ def _strip_hallucinations(text: str, no_speech_prob: float = 0.0) -> str:
                     f"{_loggable(text)} -> {_loggable(stripped)}")
     return stripped
 
-
-_cached_output_device = None
-_output_device_cached = False
-
-def _find_output_device():
-    """Find a working output device. Cached — device doesn't change during a session."""
-    global _cached_output_device, _output_device_cached
-    if _output_device_cached:
-        return _cached_output_device
-    for name_hint in ['pipewire', 'pulse', 'sysdefault', 'default']:
-        for i, d in enumerate(sd.query_devices()):
-            if d['max_output_channels'] > 0 and name_hint in d.get('name', '').lower():
-                try:
-                    sd.check_output_settings(device=i, samplerate=44100, channels=1)
-                    _cached_output_device = i
-                    _output_device_cached = True
-                    return i
-                except Exception:
-                    continue
-    _output_device_cached = True  # Cache the "not found" result too
-    return None  # Fall back to sounddevice default
-
-def _beep(enabled: bool, freq=1000, duration=0.15):
-    """Play a short sine tone, if beeps are on. Audio errors are ignored."""
-    if not enabled:
-        return
-    samplerate = 44100
-    t = np.linspace(0, duration, int(samplerate * duration), False)
-    tone = (np.sin(freq * t * 2 * np.pi) * 0.2).astype(np.float32)
-    try:
-        sd.play(tone, samplerate, device=_find_output_device()); sd.wait()
-    except Exception:
-        pass
 
 def _sd_callback(indata, frames_count, time_info, status):
     """sounddevice's audio callback: collect frames while recording."""

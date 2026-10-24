@@ -41,6 +41,12 @@ before 0.15.0, so older entries use that name.
   with Keystroke Typing too. It pressed the real Tab, which jumps to the Send
   button. Saying only "press tab" in a password box there presses the real
   Tab.
+- On some computers the beeps got cut short, and when you double-tap F9 for
+  hands-free you often heard neither the start beep nor the short one after
+  it (#21). TuxTalk closed each beep while the end of it was still waiting in
+  the sound system, so the slower the sound output, the more of the beep was
+  lost. Now every beep plays to the end. It takes about 20 ms longer than
+  before, however slow the output is.
 
 ## [0.18.0] - 2026-10-23
 

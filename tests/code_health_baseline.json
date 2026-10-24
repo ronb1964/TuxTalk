@@ -1,6 +1,6 @@
 {
  "files": {
-  "app.py": 5292,
+  "app.py": 5257,
   "prefs.py": 7120,
   "tray.py": 2548,
   "welcome_dialog.py": 3256
@@ -16,7 +16,6 @@
   "app.py::<module>::long_line": 2,
   "app.py::<module>::undocumented": 1,
   "app.py::_apply_cleanup_settings::long_line": 2,
-  "app.py::_beep::swallowed_error": 1,
   "app.py::_build_model_or_exit::swallowed_error": 1,
   "app.py::_build_parakeet_gpu_model::swallowed_error": 1,
   "app.py::_build_vulkan_model::swallowed_error": 1,
@@ -25,7 +24,6 @@
   "app.py::_device_name::swallowed_error": 1,
   "app.py::_edit_problem::swallowed_error": 1,
   "app.py::_edit_selection::long_line": 1,
-  "app.py::_find_output_device::swallowed_error": 1,
   "app.py::_finish_capture::long_line": 1,
   "app.py::_frames_are_dead_mic::swallowed_error": 1,
   "app.py::_get_device_samplerate::swallowed_error": 1,
