@@ -534,6 +534,7 @@ class PreferencesWindow:
         
         # Connect window close event to cleanup
         self.window.connect("delete-event", self.on_window_close)
+        self.window.connect("notify::is-active", self._on_window_active)
         
         self._show_window()
         # Don't auto-start level monitoring - only when user clicks record button
@@ -5733,6 +5734,14 @@ class PreferencesWindow:
             mic_test.close()
         self._stop_pause_test(wait=True)
 
+    def _on_window_active(self, window, _param):
+        """Going off to another window is going off to dictate: a microphone
+        test still holding a direct hw: mic, or about to open it, would make
+        that dictation fail with only a beep, so both tests stop."""
+        if not window.is_active():
+            self.mic_test.stop()
+            self._stop_pause_test()
+
     # --- TuxTalk Labs: Type at pause (chunking.py) -----------------------------
 
     def _build_type_at_pause(self, grid, row, indent, heading):
@@ -5840,19 +5849,8 @@ class PreferencesWindow:
             self.update_config("chunk_context_marks", c.get_active()),
             self._tap_update_title()))
         self.tap_test_btn.connect("clicked", self._tap_toggle_test)
-
-        window = getattr(self, "window", None)
-        if window is not None:
-            window.connect("notify::is-active", self._tap_on_window_active)
         self._tap_sync_sensitivity()
         return row
-
-    def _tap_on_window_active(self, window, _param):
-        """Going off to another window is going off to dictate: a test still
-        holding a direct hw: mic would make that dictation fail with only a
-        beep, so the test stops."""
-        if not window.is_active():
-            self._stop_pause_test()
 
     def _tap_update_title(self):
         """The values beside the Adjust Settings button, as they are now."""
@@ -6204,20 +6202,18 @@ class PreferencesWindow:
             return False
     
     def on_tab_switched(self, notebook, page, page_num):
-        """Scroll the newly shown tab to the top, and refresh Stats, which the
-        service updates while this window is open."""
-        # Each tab page is a ScrolledWindow (see _scrollable_tab).
-        try:
-            vadj = page.get_vadjustment()
-            if vadj:
-                vadj.set_value(0)
-        except Exception:
-            pass
-        # The dictation service adds to the stats while this window is open.
-        if notebook.get_tab_label_text(page) == "Stats":
+        """Scroll the newly shown tab to the top, refresh Stats, which the
+        service updates while this window is open, and stop the microphone
+        test of the tab left: it holds the mic."""
+        page.get_vadjustment().set_value(0)     # each page is a _scrollable_tab
+        tab = notebook.get_tab_label_text(page)
+        if tab == "Stats":
             self._refresh_stats()
-        if notebook.get_tab_label_text(page) != "Advanced":
-            self._stop_pause_test()   # Type at pause's live test holds the mic
+        # The first tab is shown before the Audio tab and its test are built.
+        if tab != "Audio" and hasattr(self, "mic_test"):
+            self.mic_test.stop()
+        if tab != "Advanced":
+            self._stop_pause_test()
 
     def _download_selected_model(self):
         """Download the model selected in the dropdown, if it needs it.

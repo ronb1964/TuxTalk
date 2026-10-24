@@ -13,6 +13,7 @@ from gi.repository import GLib, Gtk  # noqa: E402
 
 import gtk_text  # noqa: E402
 from tuxtalk import prefs  # noqa: E402
+from tuxtalk.mic_test import MicTest  # noqa: E402
 from tuxtalk.prefs import PreferencesWindow  # noqa: E402
 
 
@@ -54,6 +55,7 @@ def win(monkeypatch):
         return s
 
     w._pause_stream_factory = factory
+    w.mic_test = MicTest(lambda: 3, lambda title, text: None)
     w.grid = Gtk.Grid()
     w._build_type_at_pause(w.grid, 0, 20, lambda text: Gtk.Label(label=text))
     return w
@@ -172,7 +174,7 @@ def test_leaving_the_advanced_tab_stops_the_test(win):
     win.tap_check.set_active(True)
     win.tap_test_btn.clicked()
     notebook = SimpleNamespace(get_tab_label_text=lambda page: "Audio")
-    win.on_tab_switched(notebook, SimpleNamespace(get_vadjustment=lambda: None), 1)
+    win.on_tab_switched(notebook, Gtk.ScrolledWindow(), 1)
     assert stopped(win.streams[-1])
 
 
@@ -230,7 +232,7 @@ def test_leaving_the_window_stops_the_test(win):
     beep, so the test stops then."""
     win.tap_check.set_active(True)
     win.tap_test_btn.clicked()
-    win._tap_on_window_active(SimpleNamespace(is_active=lambda: False), None)
+    win._on_window_active(SimpleNamespace(is_active=lambda: False), None)
     assert stopped(win.streams[-1])
 
 
@@ -290,11 +292,11 @@ def test_the_next_test_waits_until_the_last_stream_is_closed(win):
 
 
 STOP_PATHS = {
-    "leaving the window": lambda win: win._tap_on_window_active(
+    "leaving the window": lambda win: win._on_window_active(
         SimpleNamespace(is_active=lambda: False), None),
     "another tab": lambda win: win.on_tab_switched(
         SimpleNamespace(get_tab_label_text=lambda page: "Audio"),
-        SimpleNamespace(get_vadjustment=lambda: None), 1),
+        Gtk.ScrolledWindow(), 1),
     "hiding the settings": lambda win: win.tap_fold.button.clicked(),
     "turning it off": lambda win: win.tap_check.set_active(False),
     "closing Preferences": lambda win: win._stop_mic_test(),
@@ -324,14 +326,13 @@ def test_a_test_called_off_while_it_waits_never_opens_the_mic(win, stop):
     assert win.tap_test_btn.get_sensitive() and win.tap_test_btn.get_label() == "Test"
 
 
-def test_the_window_focus_is_watched():
-    connected = []
-    w = PreferencesWindow.__new__(PreferencesWindow)
-    w.config = {}
-    w.update_config = lambda k, v: None
-    w.window = SimpleNamespace(connect=lambda sig, cb: connected.append(sig))
-    w._build_type_at_pause(Gtk.Grid(), 0, 20, lambda text: Gtk.Label(label=text))
-    assert "notify::is-active" in connected
+def test_the_window_focus_is_watched(prefs_window, monkeypatch):
+    seen = []
+    monkeypatch.setattr(PreferencesWindow, "_on_window_active",
+                        lambda self, window, _param: seen.append(window))
+    window = prefs_window()
+    window.window.notify("is-active")
+    assert window.window in seen
 
 
 def test_a_stream_that_wont_start_is_closed(win):
