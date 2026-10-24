@@ -52,13 +52,21 @@ def close(stream, wait=True):
     be opened again.
 
     With *wait*, for at most STOP_TIMEOUT_S: False if it hadn't stopped by
-    then. Without, it returns at once (a window's thread), and a stream
-    that never stops is logged all the same."""
+    then. Without, it returns at once (a window's thread) with an Event set
+    once the stream is closed or given up on, and a stream that never stops
+    is logged all the same."""
     with _closed:
         _closing.add(stream)
     if not wait:
-        threading.Thread(target=close, args=(stream,), daemon=True, name="tt-mic-close").start()
-        return None
+        over = threading.Event()
+
+        def close_then_say_so():
+            try:
+                close(stream)
+            finally:
+                over.set()
+        threading.Thread(target=close_then_say_so, daemon=True, name="tt-mic-close").start()
+        return over
     closer = threading.Thread(target=_stop_and_close, args=(stream,), daemon=True,
                               name="tt-mic-stop")
     closer.start()

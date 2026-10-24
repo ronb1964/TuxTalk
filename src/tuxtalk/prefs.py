@@ -3,8 +3,10 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 gi.require_version("Pango", "1.0")
 from gi.repository import Gtk, Gdk, GLib, Pango
+import sounddevice as sd
 from . import mic_stream
-from .mic_test import MicTest, SegmentedVUMeter
+from .chunk_meter import PauseTest, level_to_fraction, threshold_fraction
+from .mic_test import MicTest, SegmentedVUMeter, after_close
 from .ui_style import Fold, message_dialog
 from .whisper_vulkan import ENGINE_SIZE_TEXT
 from .hotkey_labels import dropdown_entries, hands_free_label
@@ -1457,7 +1459,6 @@ class PreferencesWindow:
         self._block_combo_scroll(mic_combo)
 
         try:
-            import sounddevice as sd
             devices = sd.query_devices()
             input_devices = [(i, d) for i, d in enumerate(devices) if d.get("max_input_channels", 0) > 0]
             self._input_device_names = [d.get("name", f"Device {i}") for i, d in input_devices]
@@ -5869,35 +5870,35 @@ class PreferencesWindow:
             self._stop_pause_test()
 
     def _pause_stream_factory(self, **kwargs):
-        import sounddevice as sd
         return sd.InputStream(**kwargs)
 
     def _tap_toggle_test(self, _button):
         if getattr(self, "_pause_test_stream", None) is not None:
             self._stop_pause_test()
         else:
-            self._start_pause_test()
+            self.tap_test_btn.set_sensitive(False)
+            after_close(getattr(self, "_pause_closing", None), self._start_pause_test)
 
     def _start_pause_test(self):
-        """Stream the chosen mic into a PauseTest; the callback only feeds it
-        and asks for one redraw at a time."""
-        from .chunk_meter import PauseTest
+        """Stream the chosen mic into a PauseTest of its own, so a stream of
+        an earlier test still being closed feeds nothing to it; the callback
+        only feeds it and asks for one redraw at a time."""
+        self.tap_test_btn.set_sensitive(True)
         stream = None
         try:
             device_idx = self.get_selected_device_idx()
             sample_rate = mic_stream.input_samplerate(device_idx, 16000)
-            self._pause_test = PauseTest(sample_rate, self.tap_pause_spin.get_value(),
-                                         self.tap_db_spin.get_value())
+            self._pause_test = test = PauseTest(sample_rate, self.tap_pause_spin.get_value(),
+                                                self.tap_db_spin.get_value())
             self._tap_redraw_pending = False
 
             def callback(indata, frames, time_info, status):
-                test = getattr(self, "_pause_test", None)
-                if test is None:
+                if test is not self._pause_test:
                     return
                 test.feed(indata)
                 if not self._tap_redraw_pending:
                     self._tap_redraw_pending = True
-                    GLib.idle_add(self._tap_show)
+                    GLib.idle_add(self._tap_show, test)
 
             stream = self._pause_stream_factory(device=device_idx, channels=1,
                                                 samplerate=sample_rate, dtype="int16",
@@ -5905,21 +5906,19 @@ class PreferencesWindow:
             stream.start()
         except Exception as e:
             self._pause_test = None
-            if stream is not None:
-                mic_stream.close(stream, wait=False)    # opened but not started: free the mic
+            if stream is not None:      # opened but not started: free the mic
+                self._pause_closing = mic_stream.close(stream, wait=False)
             self.tap_status.set_text(f"Couldn't open the microphone: {e}")
             return
         self._pause_test_stream = stream
         self.tap_test_btn.set_label("Stop")
         self.tap_status.set_text("Listening\u2026 talk, then pause.")
 
-    def _tap_show(self):
-        """Draw the latest snapshot (GTK thread, via GLib.idle_add)."""
+    def _tap_show(self, test):
+        """Draw *test*'s latest snapshot, unless it was stopped since (GTK thread)."""
         self._tap_redraw_pending = False
-        test = getattr(self, "_pause_test", None)
-        if test is None:
+        if test is not self._pause_test:
             return False
-        from .chunk_meter import level_to_fraction
         snap = test.snapshot()
         self._tap_last_room = snap.room   # the mark keeps following the noise filter after Stop
         self.tap_meter.show_snapshot(level_to_fraction(snap.level),
@@ -5936,7 +5935,6 @@ class PreferencesWindow:
         room = getattr(self, "_tap_last_room", None)
         if room is not None:
             # Not testing: place the mark from the room the last test measured.
-            from .chunk_meter import threshold_fraction
             self.tap_meter.show_snapshot(0.0, threshold_fraction(room, self.tap_db_spin.get_value()))
 
     def _stop_pause_test(self, wait=False):
@@ -5950,8 +5948,10 @@ class PreferencesWindow:
         if test is not None and hasattr(self, "tap_status"):
             # Not the live line frozen at its last words: what it found.
             self.tap_status.set_text(test.result_text())
-        if stream is not None:
-            mic_stream.close(stream, wait=wait)
+        if stream is not None and wait:
+            mic_stream.close(stream)
+        elif stream is not None:
+            self._pause_closing = mic_stream.close(stream, wait=False)
         if hasattr(self, "tap_test_btn"):
             self.tap_test_btn.set_label("Test")
         if hasattr(self, "tap_meter"):

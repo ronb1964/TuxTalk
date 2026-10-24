@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk  # noqa: E402
+from gi.repository import GLib, Gtk  # noqa: E402
 
 import gtk_text  # noqa: E402
 from tuxtalk import prefs  # noqa: E402
@@ -68,6 +68,18 @@ def stopped(stream):
     return stream.stopped and stream.closed
 
 
+def opened(win, count):
+    """Whether *count* streams have been opened, the last one started. A test
+    started right after another opens its stream on the GTK thread once the
+    last one is closed, so the main loop is run meanwhile."""
+    deadline = time.monotonic() + 2
+    while not (len(win.streams) == count and win.streams[-1].started) \
+            and time.monotonic() < deadline:
+        GLib.MainContext.default().iteration(False)
+        time.sleep(0.005)
+    return len(win.streams) == count and win.streams[-1].started
+
+
 def labels(widget):
     return [w.get_text() for w in gtk_text.widgets(widget) if isinstance(w, Gtk.Label)]
 
@@ -109,7 +121,7 @@ def test_the_test_opens_the_chosen_mic_and_shows_what_it_hears(win):
     assert win.tap_test_btn.get_label() == "Stop"
     block = (np.random.default_rng(3).normal(0, 380, 320)).astype(np.int16).reshape(-1, 1)
     stream.kwargs["callback"](block, 320, None, None)
-    win._tap_show()
+    win._tap_show(win._pause_test)
     assert win.tap_status.get_text().startswith(("Waiting", "Quiet", "Hearing you talk"))
     win.tap_test_btn.clicked()                  # Stop: the result, not the frozen live line
     assert win.tap_status.get_text().startswith(("Test done", "Test stopped"))
@@ -224,15 +236,58 @@ def test_a_microphone_that_never_stops_doesnt_freeze_the_window(win, monkeypatch
     win._pause_stream_factory = lambda **kwargs: win.streams.append(Hangs(**kwargs)) or \
         win.streams[-1]
     win.tap_check.set_active(True)
-    for stop in (win.tap_test_btn.clicked, win._stop_mic_test):
+    for count, stop in ((1, win.tap_test_btn.clicked), (2, win._stop_mic_test)):
         win.tap_test_btn.clicked()
-        assert win.streams[-1].started
+        assert opened(win, count)
         started = time.monotonic()
         stop()
         assert time.monotonic() - started < 0.5
         assert win.tap_test_btn.get_label() == "Test"
     release.set()
     assert all(stopped(stream) for stream in win.streams)
+
+
+def test_a_stream_still_stopping_feeds_nothing_to_the_next_test(win):
+    """Stop hands the stream to another thread to close, and Test comes back
+    at once: the old stream's callback still fed the new test's detector,
+    and its redraw drew the new test."""
+    win.tap_check.set_active(True)
+    win.tap_test_btn.clicked()
+    old = win.streams[0].kwargs["callback"]
+    speech = (np.random.default_rng(5).normal(0, 6000, 320)).astype(np.int16).reshape(-1, 1)
+    old(speech, 320, None, None)                 # its redraw is queued
+    win.tap_test_btn.clicked()
+    assert stopped(win.streams[0])
+    win.tap_test_btn.clicked()
+    assert opened(win, 2)
+    test = win._pause_test
+    for _ in range(50):
+        old(speech, 320, None, None)            # late, from the old stream's thread
+    while GLib.MainContext.default().iteration(False):
+        pass
+    assert test.snapshot().level == 0.0 and test._detector.speech_time == 0.0
+    assert win.tap_status.get_text() == "Listening\u2026 talk, then pause."
+
+
+def test_the_next_test_waits_until_the_last_stream_is_closed(win):
+    """An ALSA hw: device is held until its stream is closed, so opening it
+    again at once failed as busy ("Device unavailable")."""
+    release = threading.Event()
+
+    class SlowToStop(FakeStream):
+        def stop(self, ignore_errors=True):
+            release.wait(5)
+            super().stop()
+    win._pause_stream_factory = lambda **kwargs: win.streams.append(SlowToStop(**kwargs)) or \
+        win.streams[-1]
+    win.tap_check.set_active(True)
+    win.tap_test_btn.clicked()
+    win.tap_test_btn.clicked()                   # Stop
+    win.tap_test_btn.clicked()                   # Test again
+    assert len(win.streams) == 1 and not win.tap_test_btn.get_sensitive()
+    release.set()
+    assert opened(win, 2) and win.streams[0].closed
+    assert win.tap_test_btn.get_sensitive() and win.tap_test_btn.get_label() == "Stop"
 
 
 def test_the_window_focus_is_watched():
@@ -273,7 +328,7 @@ def _listen(win, seconds=1.5):
     noise = np.random.default_rng(4).normal(0, 380, int(seconds * 16000)).astype(np.int16)
     for i in range(0, len(noise), 320):
         callback(noise[i:i + 320].reshape(-1, 1), 320, None, None)
-    win._tap_show()
+    win._tap_show(win._pause_test)
 
 
 def test_the_mark_follows_the_sensitivity_after_the_test(win):

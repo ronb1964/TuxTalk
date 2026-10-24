@@ -102,6 +102,36 @@ class SegmentedVUMeter(Gtk.DrawingArea):
         return False
 
 
+class _Take:
+    """One recording of the test, from Start Recording to Stop: its rate and
+    what came in. Its stream's callback adds to this take only, so a stream
+    from an earlier one, still being closed, adds nothing to a newer one."""
+
+    def __init__(self, rate):
+        self.rate = rate
+        self.frames = []
+        self.levels = []
+        self.peak = 0.0
+        self.stream = None
+
+
+def after_close(closing, then):
+    """Call *then* once the microphone's last stream is closed: *closing* is
+    the Event mic_stream.close(wait=False) returned for it, or None. At once
+    if it is closed, else on the GTK thread, with the wait on a thread of its
+    own: until a stream is closed it holds an ALSA hw: device, and opening
+    that again fails as busy. A close that never ends is given up on after
+    STOP_TIMEOUT_S, so this waits no longer."""
+    if closing is None or closing.is_set():
+        then()
+        return
+
+    def wait():
+        closing.wait(mic_stream.STOP_TIMEOUT_S + 1)
+        GLib.idle_add(lambda: then() and False)
+    threading.Thread(target=wait, daemon=True, name="tt-mic-wait").start()
+
+
 class MicTest:
     """The level meter, the grade under it and the Start, Stop and Replay
     buttons, and the recording they share. *device* gives the chosen
@@ -112,14 +142,12 @@ class MicTest:
         """Nothing recorded yet, and the widgets made for build() to place."""
         self._device = device
         self._show_error = show_error
-        self.recording = False
+        self._take = None           # the recording under way
         self.recorded_audio = None
-        self._frames = []
-        self._rate = 16000
-        self._stream = None
+        self._rate = 16000          # of recorded_audio
+        self._closing = None        # the last stream's close, from Stop
+        self._closed = False
         self._replaying = None
-        self._levels = []
-        self._peak = 0.0
         self.meter = SegmentedVUMeter(num_segments=20)
         self.status = Gtk.Label(label="Click 'Start Recording' and speak to test your mic levels")
         self.start_btn = Gtk.Button(label="● Start Recording")
@@ -129,6 +157,11 @@ class MicTest:
         for button, name in ((self.start_btn, "Start Recording"),
                              (self.stop_btn, "Stop Recording"), (self.replay_btn, "Replay")):
             button.get_accessible().set_name(name)
+
+    @property
+    def recording(self):
+        """Whether a recording is under way."""
+        return self._take is not None
 
     def build(self, box):
         """Add the meter, the grade and the buttons to *box*, a vertical Gtk.Box."""
@@ -159,72 +192,79 @@ class MicTest:
         self.replay_btn.set_sensitive(False)
         box.pack_start(button_box, False, False, 0)
 
-    def _show_level(self, level):
-        """Show one block's level on the meter (GTK thread, via GLib.idle_add)."""
-        self.meter.set_value(level)
-        self._levels.append(level)
-        self._peak = max(self._peak, level)
+    def _show_level(self, take, level):
+        """Show one block's level on the meter (GTK thread, via GLib.idle_add),
+        unless *take* has been stopped since."""
+        if take is self._take:
+            self.meter.set_value(level)
+            take.levels.append(level)
+            take.peak = max(take.peak, level)
         return False
 
     def start(self, _button=None):
-        """Start recording the chosen microphone."""
+        """Start recording the chosen microphone, once the last recording's
+        stream is closed."""
         self._call_off_replay()
+        self.start_btn.set_sensitive(False)
+        after_close(self._closing, self._open)
+
+    def _open(self):
+        """Open the chosen microphone and record from it. On a stream that
+        won't open or start, the test is as it was, and says why."""
+        if self._closed:
+            return
         stream = None
         try:
             device_idx = self._device()
-            self._rate = mic_stream.input_samplerate(device_idx, 16000)
-            self.recording = True
-            self._frames = []
-            self._levels = []
-            self._peak = 0.0
-            self.status.set_text("🎤 Recording... speak normally")
-            self._set_grade_style(None)
+            take = _Take(mic_stream.input_samplerate(device_idx, 16000))
 
             def audio_callback(indata, frames, time, status):
-                if self.recording:
-                    self._frames.append(indata.copy())
+                if take is self._take:
+                    take.frames.append(indata.copy())
                     rms = np.sqrt(np.mean(indata**2))
-                    GLib.idle_add(self._show_level, min(rms * 10, 1.0))
+                    GLib.idle_add(self._show_level, take, min(rms * 10, 1.0))
 
-            stream = sd.InputStream(callback=audio_callback, channels=1, samplerate=self._rate,
+            stream = sd.InputStream(callback=audio_callback, channels=1, samplerate=take.rate,
                                     device=device_idx, dtype='float32')
+            self._take = take
             stream.start()
-            self._stream = stream
-            self.start_btn.set_sensitive(False)
-            self.stop_btn.set_sensitive(True)
-            self.replay_btn.set_sensitive(False)
         except Exception as e:
-            self.recording = False
+            self._take = None
             if stream is not None:
-                mic_stream.close(stream, wait=False)    # opened but not started: free the mic
+                self._closing = mic_stream.close(stream, wait=False)  # opened, not started
+            self.start_btn.set_sensitive(True)
             logger.warning(f"The microphone test couldn't record: {e}")
             self._show_error("Recording failed!", str(e))
+            return
+        take.stream = stream
+        self.status.set_text("🎤 Recording... speak normally")
+        self._set_grade_style(None)
+        self.stop_btn.set_sensitive(True)
+        self.replay_btn.set_sensitive(False)
 
     def stop(self, _button=None):
         """Stop recording, and grade it."""
-        try:
-            self.recording = False
-            if self._stream is not None:
-                mic_stream.close(self._stream, wait=False)
-            if self._frames:
-                self.recorded_audio = np.concatenate(self._frames, axis=0)
-            self.start_btn.set_sensitive(True)
-            self.stop_btn.set_sensitive(False)
-            self.replay_btn.set_sensitive(len(self._frames) > 0)
-            self.meter.set_value(0.0)
-            self._show_grade()
-        except Exception as e:
-            logger.warning(f"The microphone test couldn't stop: {e}")
-            self._show_error("Stop recording failed!", str(e))
+        take, self._take = self._take, None
+        if take is None:
+            return
+        self._closing = mic_stream.close(take.stream, wait=False)
+        if take.frames:
+            self.recorded_audio = np.concatenate(take.frames, axis=0)
+            self._rate = take.rate
+        self.start_btn.set_sensitive(True)
+        self.stop_btn.set_sensitive(False)
+        self.replay_btn.set_sensitive(bool(take.frames))
+        self.meter.set_value(0.0)
+        self._show_grade(take)
 
     def close(self):
         """The window closes: stop a recording or a replay, and free the
         microphone."""
+        self._closed = True
         self._call_off_replay()
-        if self.recording:
-            self.recording = False
-            if self._stream is not None:
-                mic_stream.close(self._stream)
+        take, self._take = self._take, None
+        if take is not None:
+            mic_stream.close(take.stream)
 
     def _set_grade_style(self, grade):
         """Colour the grade line: "level-too-quiet", "level-good",
@@ -235,21 +275,21 @@ class MicTest:
         if grade:
             style.add_class(grade)
 
-    def _show_grade(self):
-        """Grade the recording on the peak and the average level while
-        speaking, with thresholds tuned for typical speech: under 5 speaking
-        samples is too quiet, a peak over 0.95 clips, and an average under
-        0.20 is quiet."""
-        if not self._levels:
+    def _show_grade(self, take):
+        """Grade *take* on the peak and the average level while speaking,
+        with thresholds tuned for typical speech: under 5 speaking samples
+        is too quiet, a peak over 0.95 clips, and an average under 0.20 is
+        quiet."""
+        if not take.levels:
             self.status.set_text("No audio detected")
             self._set_grade_style("level-too-quiet")
             return
-        speaking = [level for level in self._levels if level > 0.08]
+        speaking = [level for level in take.levels if level > 0.08]
         speaking_avg = sum(speaking) / len(speaking) if speaking else 0
         if len(speaking) < 5:
             text, grade = ("⚠️ Too quiet - speak louder or move closer to the mic",
                            "level-too-quiet")
-        elif self._peak > 0.95:
+        elif take.peak > 0.95:
             text, grade = "⚠️ Too loud - reduce volume to avoid distortion", "level-too-loud"
         elif speaking_avg < 0.20:
             text, grade = ("⚠️ A bit quiet - try speaking louder for best results",

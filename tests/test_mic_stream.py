@@ -92,6 +92,18 @@ def test_without_waiting_it_returns_at_once_and_still_says_when_a_stream_hangs(c
     assert stream.closed.wait(5)
 
 
+@pytest.mark.parametrize("stop", [None, "hangs"], ids=["stops", "never stops"])
+def test_without_waiting_it_says_once_the_stream_is_closed_or_given_up_on(stop):
+    """So the next recording opens the device only once it is free (an ALSA
+    hw: device stays busy until then), and never waits longer than a stream
+    may take to stop."""
+    stream = Stream(stop=stop)
+    over = mic_stream.close(stream, wait=False)
+    assert over.wait(1)
+    assert stream.closed.is_set() is (stop is None)
+    stream.release.set()
+
+
 @pytest.mark.parametrize("stop,ended", [("slow", True), ("hangs", False)],
                          ids=["closing", "stuck"])
 def test_quitting_waits_for_a_stream_closing_and_leaves_a_stuck_one(monkeypatch, stop, ended):

@@ -615,7 +615,7 @@
   },
   "prefs.py::PreferencesWindow.create_audio_tab": {
    "decisions": 16,
-   "lines": 411
+   "lines": 410
   },
   "prefs.py::PreferencesWindow.create_commands_tab": {
    "lines": 129

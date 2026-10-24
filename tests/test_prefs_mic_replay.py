@@ -167,7 +167,8 @@ def test_the_limit_on_a_replay_that_played_changes_nothing_later(monkeypatch):
 
 def test_a_microphone_that_wont_start_is_freed_and_says_so(monkeypatch):
     """A stream that opened but wouldn't start kept the microphone, and the
-    test went on as though it recorded."""
+    test went on as though it recorded. The test is as it was: the status
+    line, and the last recording at its own rate for Replay."""
     import sounddevice
     opened = []
 
@@ -184,12 +185,15 @@ def test_a_microphone_that_wont_start_is_freed_and_says_so(monkeypatch):
 
         def close(self, ignore_errors=True):
             self.closed = True
-    mic, _asked, _scheduled, shown = _window(monkeypatch, None)
-    monkeypatch.setattr(mic_test.mic_stream, "input_samplerate", lambda device, rate: rate)
+    mic, _asked, _scheduled, shown = _window(monkeypatch, np.zeros((100, 1), np.float32))
+    before = mic.status.get_text()
+    monkeypatch.setattr(mic_test.mic_stream, "input_samplerate", lambda device, rate: 48000)
     monkeypatch.setattr(sounddevice, "InputStream", WontStart)
     mic.start()
     assert shown == [("Recording failed!", "Device unavailable")]
     assert not mic.recording and mic.start_btn.get_sensitive()
+    assert mic.status.get_text() == before, "it still said it was recording"
+    assert mic._rate == 16000, "Replay would play the last recording at the new mic's rate"
     deadline = time.monotonic() + 2
     while not opened[0].closed and time.monotonic() < deadline:
         time.sleep(0.01)
