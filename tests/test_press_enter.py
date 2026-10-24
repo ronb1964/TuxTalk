@@ -42,7 +42,7 @@ def _dictate(monkeypatch, raw, prepared=None, outcome="ok", window="brave-browse
     monkeypatch.setattr(app, "_handle_navigation", lambda *a, **k: False)
     monkeypatch.setattr(app, "_handle_fix_word", lambda *a, **k: False)
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: window)
-    monkeypatch.setattr(focused_window, "look", lambda: (window, None))
+    monkeypatch.setattr(focused_window, "look", lambda: (window, ("tray", "{window}")))
     monkeypatch.setattr(app, "_report_undelivered", lambda *a, **k: events.append("not delivered"))
 
     def inject(text, mode, message=None):
@@ -217,6 +217,7 @@ class FakeTimer:
 
 
 TYPED = []   # what the countdown fixture's _inject_text was given
+BRAVE = ("brave-browser", ("tray", "{b4a7}"))   # the countdown fixture's window
 
 
 def start_send(why="test", space="", mode="type"):
@@ -245,7 +246,7 @@ def countdown(monkeypatch):
     monkeypatch.setattr(screen_message, "show_over_active_window",
                         lambda text, **kw: labels.append(text))
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "brave-browser")
-    monkeypatch.setattr(focused_window, "look", lambda: ("brave-browser", None))
+    monkeypatch.setattr(focused_window, "look", lambda: BRAVE)
     monkeypatch.setattr(app.state, "last_inserted_window", "brave-browser")
     TYPED.clear()
     monkeypatch.setattr(app, "_inject_text", lambda text, mode, **kw: TYPED.append(text) or "ok")
@@ -305,14 +306,14 @@ def test_no_enter_into_another_window_of_the_same_app(countdown, monkeypatch):
     assert pressed == [] and labels[-1] == send_countdown.SWITCHED_WINDOW_NOTICE
 
 
-def test_a_window_not_known_at_the_send_still_sends(countdown, monkeypatch):
-    """COSMIC, or a desktop that didn't answer: nothing says it's another window."""
-    pressed, _ = countdown
-    looks = iter([None, ("compositor", 0x3200007), ("compositor", 0x3200007)])
-    monkeypatch.setattr(focused_window, "look", lambda: ("brave-browser", next(looks)))
+def test_a_window_not_known_at_the_send_isnt_sent_into(countdown, monkeypatch):
+    """The tray too busy to answer as the Enter is due: nothing says it's
+    still the window the words went to."""
+    pressed, labels = countdown
     start_send("test")
+    monkeypatch.setattr(focused_window, "look", lambda: ("brave-browser", None))
     sends()[0].fire()
-    assert pressed == ["test"]
+    assert pressed == [] and labels[-1] == send_countdown.UNKNOWN_WINDOW_NOTICE
 
 
 def test_pressing_the_hold_key_holds_the_send_and_records(countdown, monkeypatch):

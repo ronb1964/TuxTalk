@@ -207,11 +207,12 @@ def _no_real_send_countdown(monkeypatch, request):
     monkeypatch.setattr(send_countdown, "_owed", None)
     monkeypatch.setattr(app.state, "sent", None)
     # Where an earlier test's text "landed" must not stop this test's send,
-    # nor its held-back mark.
+    # nor its held-back mark. A test that fakes the typing has its words
+    # in a window the desktop named, where an automatic Enter may go.
     from tuxtalk import focused_window
     monkeypatch.setattr(app.state, "last_inserted_where", (None, None))
-    monkeypatch.setattr(app.state, "message",
-                        send_countdown.Message(focused_window.Destination(None, None)))
+    monkeypatch.setattr(app.state, "message", send_countdown.Message(
+        focused_window.Destination(None, ("tray", "{test window}"))))
 
 
 @pytest.fixture(autouse=True)

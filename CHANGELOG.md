@@ -38,7 +38,8 @@ before 0.15.0, so older entries use that name.
   browser windows aren't mixed up, and moving a window while a send counts
   down doesn't stop it any more. On GNOME that needs extension version 28,
   which is loaded once you log out and back in after the update; until then
-  TuxTalk knows only which app has the focus there, as on COSMIC.
+  TuxTalk knows only which app has the focus there, as on COSMIC, and
+  doesn't send automatically.
 - Sending automatically now checks where the Enter would go one last time,
   right before it goes, whatever it waited for first. Click into another
   window while a long dictation is still going in and the text stays where it
@@ -52,12 +53,20 @@ before 0.15.0, so older entries use that name.
   pressed and you're told why. "Press tab" too. Saying only "press enter"
   still presses it wherever you are, so you can still log in after typing a
   password yourself.
-- An automatic Enter, or "press enter" said after your words, doesn't go
-  into a TuxTalk window now. If Preferences or the Parakeet offer came up
-  during the countdown, the Enter could press its OK button while your
-  message sat there unsent. That works wherever the desktop says which
-  window has the focus, which is everywhere but GNOME without TuxTalk's
-  extension and Plasma 5.27 on Wayland.
+- An automatic Enter never goes into a TuxTalk window now, and neither does
+  "press enter" said after your words wherever the desktop says which window
+  has the focus. If Preferences or the Parakeet offer came up during the
+  countdown, the Enter could press its OK button while your message sat
+  there unsent.
+- Where the desktop doesn't say which window has the focus, "Send each
+  dictation automatically" types your words and doesn't send them. You get
+  "Not sent: this desktop doesn't say which window has the focus. Press
+  Enter when you're ready." That's COSMIC, GNOME without TuxTalk's extension
+  or with the old one until you log out and back in after the update, Plasma
+  5.27 on Wayland, and any moment the tray is too busy to answer. A message
+  sent into the wrong chat can't be taken back. Saying "..., press enter"
+  still presses it there, because you asked for it and you're looking at the
+  window.
 - When a send doesn't go, you get a notification as well as the note over
   the window, so a screen reader tells you. And if a phrase in Type at pause
   only got partly typed, the message isn't sent at the end.

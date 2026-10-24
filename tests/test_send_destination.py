@@ -510,49 +510,84 @@ def test_a_tuxtalk_window_however_the_desktop_names_it_gets_no_key(
     else:
         send_countdown.press_where_sent(key.upper(), "test", message, app._press_key)
     assert keyboard.events == []
-    assert notices == [send_countdown.OWN_WINDOW_NOTICE if key != "tab"
-                       else "Tab not pressed: a TuxTalk window has the focus."]
+    if key == "auto" and before[1] is None:     # COSMIC: no automatic Enter at all
+        assert notices == [send_countdown.UNKNOWN_WINDOW_NOTICE]
+    else:
+        assert notices == [send_countdown.OWN_WINDOW_NOTICE if key != "tab"
+                           else "Tab not pressed: a TuxTalk window has the focus."]
 
 
-# --- Where the desktop can't say which window: the open decision -------------------------
+# --- Where the desktop can't say which window: no automatic Enter, a spoken one goes ----
 
-def test_where_only_the_app_is_known_it_sends_as_before(chat, keyboard):
-    """COSMIC, or GNOME with 0.18's extension still loaded: until it's
-    decided otherwise, it sends."""
-    focus, _, _, notices = chat
-    focus[1] = None
-    assert send_countdown.SEND_WHEN_ONLY_THE_APP_IS_KNOWN is True
-    send_automatically(focused_window.destination())
-    assert keyboard.typed_keys() == [ENTER] and notices == []
+# What the tray was told and what the compositor says, (reported, compositor),
+# when the words go in and then after: reported is None when the tray
+# didn't answer.
+UNKNOWN_SOURCES = {
+    "COSMIC": [(None, ("cosmic-term", None))] * 2,
+    "GNOME with 0.18's extension": [(("brave-browser", "", "0,0,800,600||"), (None, None))] * 2,
+    "nothing reported": [(("", "", ""), (None, None))] * 2,       # GNOME, no extension
+    "a tray too busy to answer": [(("brave-browser", "{5c1d}", ""), (None, None)),
+                                  (None, (None, None))],
+    "a busy tray on X11": [(("brave-browser", "{5c1d}", ""), (None, None)),
+                           (None, ("Brave-browser", 0x3200007))],
+}
+REAL_LOOK = focused_window.look
 
 
-def test_set_not_to_send_there_nothing_is_sent_and_it_says_why(chat, keyboard, monkeypatch):
-    focus, _, _, notices = chat
-    focus[1] = None
-    monkeypatch.setattr(send_countdown, "SEND_WHEN_ONLY_THE_APP_IS_KNOWN", False)
+@pytest.fixture(params=list(UNKNOWN_SOURCES))
+def unknown_window(request, chat, monkeypatch):
+    """The chat fixture on a desktop that doesn't say which window has the
+    focus, or stops saying it once the words are in."""
+    said = list(UNKNOWN_SOURCES[request.param])
+    monkeypatch.setattr(focused_window, "look", REAL_LOOK)
+    monkeypatch.setattr(focused_window, "reported", lambda: said[0][0])
+    monkeypatch.setattr(compositor_focus, "focused_window", lambda: said[0][1])
+    deliver = app._deliver_text
+
+    def words_in_then_after(*a, **k):
+        outcome = deliver(*a, **k)
+        said.pop(0) if len(said) > 1 else None
+        return outcome
+    monkeypatch.setattr(app, "_deliver_text", words_in_then_after)
+    return chat
+
+
+def test_where_the_window_isnt_known_nothing_is_sent_automatically(unknown_window, keyboard,
+                                                                   monkeypatch):
+    """A message sent into the wrong chat can't be taken back: the words
+    stay, and the notice says to press Enter."""
+    focus, heard, typed, notices = unknown_window
+    heard.append("see you at noon")
+    dictate()
+    assert len(typed) == 1 and keyboard.events == []
+    assert notices == [send_countdown.UNKNOWN_WINDOW_NOTICE]
+
+
+def test_where_the_window_is_never_known_no_countdown_runs(chat, keyboard, monkeypatch):
+    focus, heard, typed, notices = chat
+    focus[1] = None                                 # COSMIC: only the app
     monkeypatch.setattr(send_countdown, "_delay", 2.0)
     monkeypatch.setattr(send_countdown.threading, "Timer",
                         lambda *a, **k: pytest.fail("counted down to a send that can't go"))
-    send_automatically(focused_window.destination())
+    heard.append("see you at noon")
+    dictate()
     assert keyboard.events == [] and notices == [send_countdown.UNKNOWN_WINDOW_NOTICE]
 
 
-def test_set_not_to_send_there_a_known_window_still_sends(chat, keyboard, monkeypatch):
-    monkeypatch.setattr(send_countdown, "SEND_WHEN_ONLY_THE_APP_IS_KNOWN", False)
+@pytest.mark.parametrize("key", ["enter", "tab"])
+def test_where_the_window_isnt_known_a_key_said_after_the_words_still_goes(
+        unknown_window, keyboard, monkeypatch, key):
+    """The user asked for the key, looking at the window."""
+    focus, heard, typed, notices = unknown_window
+    monkeypatch.setattr(app, "_press_enter_after", False)
+    heard.append(f"see you at noon, press {key}")
+    dictate()
+    assert keyboard.typed_keys() == [getattr(ecodes, f"KEY_{key.upper()}")] and notices == []
+
+
+def test_a_known_window_still_gets_its_automatic_enter(chat, keyboard):
     send_automatically(focused_window.destination())
     assert keyboard.typed_keys() == [ENTER]
-
-
-def test_set_not_to_send_there_a_tray_too_busy_to_answer_stops_the_enter(chat, keyboard,
-                                                                         monkeypatch):
-    """The window was known when the words went in; at the Enter, nothing
-    can say it's still that one."""
-    focus, _, _, notices = chat
-    monkeypatch.setattr(send_countdown, "SEND_WHEN_ONLY_THE_APP_IS_KNOWN", False)
-    sent_to = focused_window.destination()
-    focus[:] = [None, None]
-    send_automatically(sent_to)
-    assert keyboard.events == [] and notices == [send_countdown.UNKNOWN_WINDOW_NOTICE]
 
 
 # --- "... press enter" said after the words: the same rule ---------------------------------
@@ -697,25 +732,20 @@ def test_a_click_while_the_pause_is_heard_again_keeps_its_mark_out_of_the_other_
     assert typed[-1][1] == SECOND[1]
 
 
-@pytest.mark.parametrize("send_there", [True, False])
-def test_with_0_18s_extension_a_resized_window_is_left_to_the_open_decision(
-        tray, keyboard, monkeypatch, send_there):
+def test_with_0_18s_extension_a_resized_window_isnt_taken_for_a_switch(
+        tray, keyboard, monkeypatch):
     """GNOME with the extension from 0.18 still loaded until the next login
     tells the app and the window's frame. Maximizing the browser during the
-    countdown said "you switched windows", whichever way it's decided."""
+    countdown said "you switched windows"."""
     notices, frames = [], ["0,0,800,600||0,0,1920,1080", "0,0,1920,1050||0,0,1920,1080"]
     monkeypatch.setattr(send_countdown, "show_notice", notices.append)
-    monkeypatch.setattr(send_countdown, "SEND_WHEN_ONLY_THE_APP_IS_KNOWN", send_there)
     service = object.__new__(dbus_service.TuxTalkDBusService)
     dbus_service.TuxTalkDBusService.SetFocusedWindowClass(service, "brave-browser")
     dbus_service.TuxTalkDBusService.SetFocusedWindowGeometry(service, frames[0])
     sent_to = focused_window.destination()
     dbus_service.TuxTalkDBusService.SetFocusedWindowGeometry(service, frames[1])
     send_automatically(sent_to)
-    if send_there:
-        assert keyboard.typed_keys() == [ENTER] and notices == []
-    else:
-        assert keyboard.events == [] and notices == [send_countdown.UNKNOWN_WINDOW_NOTICE]
+    assert keyboard.events == [] and notices == [send_countdown.UNKNOWN_WINDOW_NOTICE]
 
 
 def test_a_send_that_doesnt_go_says_so_in_a_notification_too(chat, keyboard, monkeypatch):

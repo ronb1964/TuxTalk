@@ -25,9 +25,9 @@ of TuxTalk's own windows it presses the default button.
      through the desktop's portal (output_backends.LibeiOutputBackend),
      which this last check can't count.
 
-Anything else, nothing is sent and the notice says why (_why_not). What
-happens where the desktop can't say which window of an app has the focus is
-a decision of its own: SEND_WHEN_ONLY_THE_APP_IS_KNOWN.
+Anything else, nothing is sent and the notice says why (_why_not). Where
+the desktop can't say which window has the focus, the two kinds of key part
+ways (_why_not's *spoken*).
 
 The send waiting is _pending, and a held one's owed space _owed, both
 guarded by _send_lock. The owed space follows a gentler rule than the
@@ -51,7 +51,8 @@ SWITCHED_WINDOW_NOTICE = "Not sent: you switched windows."
 # the focus back to the last window by itself while a paste goes in.
 MOVED_NOTICE = "Not sent: the focus moved while the words went in."
 PASSWORD_FIELD_NOT_SENT = "Not sent: the cursor is in a password field."
-UNKNOWN_WINDOW_NOTICE = "Not sent: this desktop doesn't say which window has the focus."
+UNKNOWN_WINDOW_NOTICE = ("Not sent: this desktop doesn't say which window has the focus. "
+                         "Press Enter when you're ready.")
 OWN_WINDOW_NOTICE = "Not sent: a TuxTalk window has the focus."
 INCOMPLETE_NOTICE = "Not sent: part of the message didn't go in."
 
@@ -66,12 +67,6 @@ _NOT_SENT = {
     "unknown_window": ("which window has the focus isn't known", UNKNOWN_WINDOW_NOTICE),
     "not_pressed": ("a dictation key stayed down, or the key couldn't be pressed", HELD_NOTICE),
 }
-
-# The open decision: where the desktop doesn't say which window has the
-# focus, whether an automatic Enter goes when nothing says it's another app.
-# The name says the common case; True also sends where not even the app is
-# known (see _when_the_window_is_unknown).
-SEND_WHEN_ONLY_THE_APP_IS_KNOWN = True
 
 _delay = 2.0                # seconds before the Enter (Preferences)
 _hold_key_name = "F8"       # named in the "Sending in 2 s" label
@@ -136,30 +131,20 @@ def landed(before, after):
     return None if focused_window.changed(before, after) else before
 
 
-def _when_the_window_is_unknown() -> str | None:
-    """None to send, or why not, where the desktop can't say which window
-    has the focus: COSMIC tells only the app, and so does GNOME with the
-    extension from 0.18 or earlier, still loaded until the user logs out and
-    in after an update; a desktop that says nothing about the focus (GNOME
-    without the extension), or a tray too busy to answer, leaves even the
-    app unknown. A key said after the words ("... press enter") follows the
-    same choice (press_where_sent).
-
-    Two choices, not made yet; until they are, it sends as it always has:
-      SEND_WHEN_ONLY_THE_APP_IS_KNOWN True: send when nothing says it's
-        another app, also where not even the app is known. Another window
-        of the same app can get the Enter, and where nothing is known, any
-        window.
-      False: never send there; the words stay, and the notice says to press
-        Enter. On COSMIC, and where the desktop says nothing about the
-        focus, nothing is ever sent automatically."""
-    return None if SEND_WHEN_ONLY_THE_APP_IS_KNOWN else "unknown_window"
-
-
-def _why_not(sent_to, now) -> str | None:
+def _why_not(sent_to, now, spoken: bool = False) -> str | None:
     """Why an automatic Enter mustn't go into *now* (a destination) for
     words delivered to *sent_to* (landed()'s answer), or None when it may.
-    A key of _NOT_SENT."""
+    A key of _NOT_SENT.
+
+    Where the desktop can't say which window has the focus (COSMIC tells
+    only the app, and so does GNOME's extension from 0.18 until the user
+    logs out and in; GNOME without the extension and Plasma 5.27 on Wayland
+    tell nothing, nor does a tray too busy to answer), an automatic Enter
+    doesn't go: a message sent into the wrong chat can't be taken back, and
+    the words stay for the user to send. A key *spoken* after the words
+    ("... press enter") still goes: the user asked for it, looking at the
+    window. Either is stopped where another window, a password field or
+    TuxTalk's own window is known to have the focus."""
     if sent_to is None:
         return "moved"
     if now.password:
@@ -171,7 +156,7 @@ def _why_not(sent_to, now) -> str | None:
     same = focused_window.same_window(sent_to, now)
     if same is False:
         return "switched"
-    return _when_the_window_is_unknown() if same is None else None
+    return "unknown_window" if same is None and not spoken else None
 
 
 def _claim(pending, counting_down: bool = True):
@@ -185,7 +170,8 @@ def _claim(pending, counting_down: bool = True):
     first = focused_window.look()
     now = focused_window.destination()
     # A click during the password check: its answer may be the other window's.
-    why = "switched" if focused_window.changed(first, now) else _why_not(pending["to"], now)
+    why = ("switched" if focused_window.changed(first, now)
+           else _why_not(pending["to"], now, spoken=not counting_down))
     if why:
         _refuse(pending, why)
 
@@ -248,7 +234,7 @@ def type_where_sent(text: str, key: str, message: Message, type_more) -> str | N
     the key's rule: only where the words went. *type_more*(text, mode,
     into=None) is as for send_automatically. The typing's outcome, or None
     when it wasn't tried; either way not typed, the notice says why."""
-    why = _incomplete(message) or _why_not(message.to, focused_window.destination())
+    why = _incomplete(message) or _why_not(message.to, focused_window.destination(), spoken=True)
     outcome = None if why else type_more(text, "type", into=message.to)
     if why or outcome == "moved":
         _say_not_sent(why or "switched", key=key)
@@ -270,7 +256,7 @@ def send_automatically(why: str, message: Message, press, type_more, space: str 
                "space": space, "mode": injection_mode, "timer": None, "ticks": []}
     # Nothing to count down to when no Enter could go: part of the message
     # is missing, the delivery saw the focus move, or the window can't be
-    # told and the policy says no.
+    # told.
     if reason := _incomplete(message) or _why_not(message.to, message.to):
         _say_not_sent(reason)
         return
