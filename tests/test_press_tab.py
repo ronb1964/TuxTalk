@@ -146,3 +146,28 @@ def test_a_key_that_couldnt_be_pressed_leaves_undo_and_no_send(monkeypatch, key)
 def test_both_typing_paths_know_the_tab_key():
     assert app._nav_keycode("TAB") == 15
     assert libei_ctypes._CHORD_KEYS["TAB"] == 15
+
+
+# --- what Help's "Filling in a form" says, held to what TuxTalk does -------------
+
+@pytest.mark.parametrize("raw, done", [
+    # One box: the words with no period, then Tab to the next box.
+    ("John Smith, press tab", [("typed", "John Smith"), ("TAB", 'said "press tab"')]),
+    # "press enter" ends it like a sentence: a period, then Enter.
+    ("Smith press enter", [("typed", "Smith."), ("ENTER", 'said "press enter"')]),
+    # "tab" on its own is the word.
+    ("open a new tab", [("typed", "Open a new tab. ")]),
+])
+def test_help_on_forms_says_what_happens(monkeypatch, no_auto_send, raw, done):
+    assert _dictate(monkeypatch, raw) == done
+
+
+def test_help_explains_forms_with_your_own_key(monkeypatch):
+    from tuxtalk import config, help_text
+    monkeypatch.setattr(config, "load_config", lambda: config.Settings(hotkey="F6"))
+    writing = next(text for title, text in help_text.tabs() if "Writing" in title)
+    form = writing[writing.index("<b>Filling in a form</b>"):]
+    form = form[:form.index("<b>Optional: cleaner text</b>")]
+    assert 'Hold <b>F6</b>, say "John Smith, press tab", let go' in form
+    assert "F8" not in form
+    assert "Claude Desktop" in form and "password box" in form

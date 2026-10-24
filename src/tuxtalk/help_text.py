@@ -271,6 +271,26 @@ Hold <b>{hold}</b> again, say <b>delete last sentence</b>, let go: it's gone.
   • Ctrl+Z in the app works too.
   • <b>delete everything</b> clears the whole box, text you typed yourself included.
 
+<b>Filling in a form</b>
+One box at a time, each box a dictation of its own:
+  1. Click into the first box.
+  2. Hold <b>{hold}</b>, say "John Smith, press tab", let go: John Smith is typed,
+     with no period, and the cursor moves to the next box.
+  3. The next box the same way: hold <b>{hold}</b>, say "Hamilton, press tab", let go.
+  4. When every box is filled, send the form as you would by hand: click its
+     button, or press Enter. Ending a box with <b>press enter</b> types it with a
+     period, as at the end of a sentence, then presses Enter: right for a search
+     box or a message, not for a name or an email address.
+  • Said in the middle of a dictation, <b>press tab</b> types a tab character
+    instead, for lining things up in a document. A form box isn't the place for
+    one, so in a form keep <b>press tab</b> for the end, one box per dictation.
+  • <b>tab</b> on its own is just the word: "open a new tab". <b>literal press tab</b>
+    types the words "press tab".
+  • In Claude Desktop <b>press tab</b> types four spaces: there the Tab key would
+    jump to the Send button.
+  • In a password box TuxTalk types nothing, but saying only <b>press tab</b> still
+    moves on, once you've typed the password yourself.
+
 <b>Optional: cleaner text</b> (Preferences → Advanced)
   • <b>Remove "um", "uh" and accidentally repeated words.</b> Instant, nothing to download.
   • <b>Fix self-corrections with AI.</b> "meet at 3, no wait, 4" types "meet at 4".
@@ -633,7 +653,8 @@ is in the TuxTalk menu → Voice Commands....
 • Say <b>new line</b>, <b>newline</b>, <b>return</b>, or <b>line break</b> for a line break
 • Say <b>new paragraph</b> or <b>paragraph break</b> for a double line break
 • Say <b>press tab</b> for a tab; <b>tab</b> alone is the word. At the end of a dictation it
-  presses the Tab key (so does <b>press the tab key</b>): in a form you go to the next box
+  presses the Tab key (so does <b>press the tab key</b>): in a form you go to the next box.
+  In Claude Desktop it types four spaces. Filling in a form, on the Writing tab, has the steps
 • Say <b>soft break</b> or <b>soft line</b> for three spaces
 • End with <b>press enter</b> or <b>hit enter</b> to type the dictation and press Enter: it
   sends a chat message or runs a command. <b>literal press enter</b> types the words.

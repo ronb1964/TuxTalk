@@ -131,7 +131,8 @@ The commands are English words, whatever language you dictate in.
   <b>new line</b> / <b>newline</b> / <b>return</b> / <b>line break</b> → line break
   <b>new paragraph</b> / <b>paragraph break</b> → double line break
   <b>press tab</b> → tab character (just <b>tab</b> is the word)
-  <b>press tab</b> at the end → presses Tab (the next box in a form)
+  <b>press tab</b> at the end → presses Tab (the next box in a form; Help → Writing has the steps).
+    In Claude Desktop, four spaces
   <b>soft break</b> → three spaces
   <b>press enter</b> / <b>hit enter</b> at the end → types it, then presses Enter (sends a message, runs a command)
 
