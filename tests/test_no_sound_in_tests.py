@@ -118,3 +118,17 @@ def test_the_stand_in_player_plays_each_sound_silently_and_says_it_played(caplog
     assert told == [None]
     assert not [r for r in caplog.records if r.getMessage().startswith("Could not play")]
 
+
+def test_the_end_of_a_test_waits_until_whoever_asked_for_a_sound_was_told():
+    """A sound counts as over before whoever asked for it is told, so a
+    wait for the sound alone can end while their call still runs, into the
+    next test."""
+    import conftest
+    told = []
+
+    def slow_call(error):
+        threading.Event().wait(0.3)
+        told.append(error)
+    beeps.play(np.zeros(100, np.float32), 44100, finished=slow_call)
+    assert conftest.drain_sounds(beeps._submit)
+    assert told == [None]
