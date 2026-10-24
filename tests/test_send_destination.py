@@ -479,3 +479,42 @@ def test_with_0_18s_extension_a_resized_window_is_left_to_the_open_decision(
         assert keyboard.typed_keys() == [ENTER] and notices == []
     else:
         assert keyboard.events == [] and notices == [send_countdown.UNKNOWN_WINDOW_NOTICE]
+
+
+def test_a_send_that_doesnt_go_says_so_in_a_notification_too(chat, keyboard, monkeypatch):
+    """A screen reader reads notifications, not the label over the window,
+    and without XWayland the label can't be shown at all."""
+    from tuxtalk import notify
+    focus, heard, typed, notices = chat
+    sent = []
+    monkeypatch.setattr(notify, "_send", lambda title, body: sent.append(title))
+    clicked_away_while_the_words_went_in(monkeypatch, focus)
+    heard.append("see you at noon")
+    dictate()
+    assert keyboard.events == [] and len(notices) == 1
+    assert sent == ["Not sent: the focus moved while the words were delivered"]
+
+
+def test_a_countdown_says_nothing_aloud_until_it_ends(chat, keyboard, monkeypatch):
+    from tuxtalk import notify
+    sent, timers = [], []
+    monkeypatch.setattr(notify, "_send", lambda title, body: sent.append(title))
+    monkeypatch.setattr(send_countdown, "_delay", 3.0)
+
+    class Timer:
+        def __init__(self, delay, run, args):
+            self.run, self.args, self.daemon = run, args, False
+            timers.append(self)
+
+        def start(self):
+            pass
+
+        def cancel(self):
+            pass
+    monkeypatch.setattr(send_countdown.threading, "Timer", Timer)
+    send_countdown.send_automatically("test", focused_window.destination(),
+                                      app._press_key, app._type_onto_dictation)
+    for timer in timers[1:]:                    # "Sending in 2 s", then 1
+        timer.run(*timer.args)
+    timers[0].run(*timers[0].args)              # the Enter
+    assert keyboard.typed_keys() == [ENTER] and sent == []

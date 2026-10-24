@@ -165,11 +165,18 @@ def _refuse(pending, why: str) -> None:
 
 
 def _say_not_sent(why: str, relabel: bool = False, key: str = "ENTER") -> None:
+    """Say why the Enter (or *key*) of a send didn't go: in the log, over
+    the window, and as a desktop notification whatever the notifications
+    setting. A screen reader reads the notification, not the label, and
+    without XWayland the label can't be shown at all."""
+    from .notify import notify
     text, notice = _NOT_SENT[why]
     what = "Not sent" if key == "ENTER" else f"{key.title()} not pressed"
     if key != "ENTER":
         notice = f"{what}: {text}."
     logger.info(f"{what}: {text}")
+    notify(f"{what}: {text}",
+           f"The text is still in the box. Press {key.title()} yourself when you're ready.")
     if relabel:
         from . import screen_message
         screen_message.relabel(LABEL_TAG, notice)
