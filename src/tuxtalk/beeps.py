@@ -84,8 +84,7 @@ class Sound:
     handed over, and read on others while it plays: heard() gives them and
     whether it is over as one snapshot."""
 
-    def __init__(self, length):
-        self.length = length            # seconds
+    def __init__(self):
         self._lock = threading.Lock()
         self._heard_from = None         # time.monotonic() its first sample is heard
         self._heard_until = None        # and the last one handed over so far
@@ -177,7 +176,7 @@ def beep(enabled: bool, freq, duration):
     if not enabled:
         return None
     asked_at = time.monotonic()
-    sound = Sound(duration)
+    sound = Sound()
 
     def job():
         if time.monotonic() - asked_at > STALE_S:
@@ -195,7 +194,7 @@ def play(samples, rate, finished=None):
     with None, or the text of what stopped it: on the sound thread, or, when
     a later sound pushes it out of the queue, on the thread asking for that
     one."""
-    sound = Sound(len(samples) / rate)
+    sound = Sound()
 
     def job():
         device, device_rate = output_device(rate)

@@ -285,7 +285,9 @@ def _no_sound_on_the_speakers():
     sounddevice stream that plays (OutputStream, Stream, the Raw ones, and
     play(), which opens an OutputStream) is refused where they all start, in
     _StreamBase; recording streams still open. Starting a sound player is
-    refused too."""
+    refused too, by the program's name where it comes first; one started
+    through a shell or env still finds no sound server (the environment set
+    at the top of this file)."""
     import subprocess
     import sounddevice
     open_stream = sounddevice._StreamBase.__init__
