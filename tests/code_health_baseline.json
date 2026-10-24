@@ -1,6 +1,6 @@
 {
  "files": {
-  "app.py": 5256,
+  "app.py": 5251,
   "prefs.py": 7120,
   "tray.py": 2548,
   "welcome_dialog.py": 3256
@@ -500,7 +500,7 @@
   },
   "app.py::_transcribe_and_inject": {
    "decisions": 69,
-   "lines": 257
+   "lines": 256
   },
   "app.py::_transcribe_audio": {
    "decisions": 25,

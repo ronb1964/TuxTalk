@@ -45,8 +45,11 @@ before 0.15.0, so older entries use that name.
   hands-free you often heard neither the start beep nor the short one after
   it (#21). TuxTalk closed each beep while the end of it was still waiting in
   the sound system, so the slower the sound output, the more of the beep was
-  lost. Now every beep plays to the end. It takes about 20 ms longer than
-  before, however slow the output is.
+  lost. Now every beep plays to the end, however slow the output, and the
+  beeps play on their own, so a sound system that stops answering can't
+  hold up your hotkeys or the typing any more. The double-tap is timed from
+  the end of the start beep. The microphone test in Preferences, Audio,
+  plays your recording back to the end too.
 - On a desktop where TuxTalk can't make its own keyboard and types with
   wtype instead, your dictation was on wtype's command line for a moment,
   where anyone else logged in to the computer could read it. It goes to

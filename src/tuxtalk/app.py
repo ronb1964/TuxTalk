@@ -28,8 +28,8 @@ from .config import load_config, Settings, load_custom_commands
 # Imported as a module too, so the live-settings reload can read CONFIG_PATH and
 # LIVE_APPLIED_KEYS without pulling each name in separately.
 from . import config as config_module
-from .beeps import START_BEEP, HANDS_FREE_BEEP, CANCEL_BEEP, READY_BEEP
-from .beeps import beep as _beep
+from . import beeps
+from .beeps import START_BEEP, HANDS_FREE_BEEP, CANCEL_BEEP, READY_BEEP, beep as _beep
 from .logger import setup_logger, redact_text
 from .recording_indicator import RecordingIndicator
 from .undo import detect_undo_command, calculate_undo_length
@@ -1497,11 +1497,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     _pause_media_players()
     _beep(beeps_on, *START_BEEP)
     if notify_on: _notify("Recording… speak now", "")
-
-    # Notify GNOME extension that recording started (turns icon red)
     _notify_tray_recording_state(True)
-
-    # Show recording indicator
     if recording_indicator:
         try:
             recording_indicator.show_at_position()
@@ -1509,7 +1505,10 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
         except Exception as e:
             logger.error(f"Failed to show recording indicator: {e}", exc_info=True)
 
-    # From here: keys wait on this thread, so a tap made during a slow start counts (#21).
+    # The double-tap is timed from here, the start beep heard: keys wait on
+    # this thread, so a tap made during a slow start still counts (#21).
+    if from_toggle:
+        beeps.wait_until_played()
     state.toggle_started_at = time.time() if from_toggle else None
     logger.info(f"Recording started in {time.time() - state.press_t0:.2f}s")
     return True
@@ -1564,11 +1563,8 @@ def cancel_recording(beeps_on: bool, notify_on: bool, reason="Cancelled"):
     logger.debug(f"Recording cancelled: {reason}")
     if notify_on: _notify(reason, "")
 
-    # Hide recording indicator
     if recording_indicator:
         recording_indicator.hide_indicator()
-
-    # Notify GNOME extension that recording stopped (icon returns to normal)
     _notify_tray_recording_state(False)
 
 def _is_wayland_session() -> bool:
@@ -3453,7 +3449,6 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         if text and _refuse_password_field(beeps_on):
             return
 
-        # Beep to confirm transcription is done
         if chunk_role != "middle":
             _beep(beeps_on, *READY_BEEP)
             if notify_on: _notify("Transcribed", f"{text[:80]}{'…' if len(text) > 80 else ''}")
