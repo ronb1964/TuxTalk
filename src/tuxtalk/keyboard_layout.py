@@ -516,7 +516,10 @@ def layout_key_events(text):
 def altgr_characters():
     """When the active layout's Right Alt is AltGr, up to two common
     characters it types only with AltGr ("@", "€"), which picking Right Alt
-    as a dictation key takes away; None when it isn't AltGr (US)."""
+    as a dictation key takes away; None when it isn't AltGr (US). From the
+    layout and variant alone: XKB options that move AltGr (lv3:ralt_switch
+    gives US one, lv3:ralt_alt takes Germany's away) aren't read, here or
+    when typing (CODE_HEALTH.md)."""
     try:
         planner = planner_for(active_layout() or US)
     except (OSError, ValueError) as e:

@@ -46,6 +46,7 @@ Merge the more-hotkey-choices branch first: it changes the same files.
 | 15 | Flatpak only: Setup Complete says the TuxTalk menu changes the keys, but there the desktop's settings do. Goes with the decision to keep or drop the Flatpak code | S | open |
 | 16 | Typing off the hotkey loop: outside the Flatpak, stop_recording transcribes and types on the hotkey loop's thread, so a dictation key pressed while text is still typing is read only once typing is done. With Right Ctrl or Right Alt the rest of the text waits while it's held and what's said meanwhile isn't recorded (a start and a cancel beep after); with F8 the start of it is lost. Transcribe and type on a worker, as the Flatpak path already does (_service_tick), and record the press while typing waits. Goes with task 3 | M | open |
 | 17 | GTK set up on one thread and run on another: main() builds the RecordingIndicator before Gtk.main() moves to a thread of its own; keep construction and the loop on one thread and move the evdev loop to a worker. Goes with task 3 | S | open |
+| 18 | Keyboard options: keyboard_layout reads the layout and variant, never the XKB options, so the Right Alt dropdown's AltGr warning (and typing a layout's AltGr characters) assume the layout's own Right Alt. lv3:ralt_switch on US, compose:ralt or lv3:ralt_alt are misjudged. Read the options where each desktop keeps them, as the layout is read | S | open |
 
 Full findings, with each one's user effect, fix, risk and effort, are in the
 audit's verified tables (kept outside the repository; they name Ron's machine).
