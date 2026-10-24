@@ -201,9 +201,10 @@ def test_lone_noise_spikes_do_not_hide_a_pause():
 
 
 def test_a_syllable_in_a_pause_still_starts_it_over():
-    """A word as short as one syllable, 100 ms, said in a pause is speech."""
+    """A word as short as one syllable, 60 ms, said in a pause is speech
+    (a 70 ms burst rule took it for a thump and cut the phrase)."""
     talk = speech(1.0, level=4000.0, noise_level=300.0)
-    syllable = speech(0.1, level=4000.0, noise_level=300.0)
+    syllable = speech(0.06, level=4000.0, noise_level=300.0)
     fired, _ = run_pauses(np.concatenate([noise(1.0, 300), talk, noise(0.6, 300), syllable,
                                           noise(0.6, 300), talk, noise(0.3, 300)]))
     assert fired == []
@@ -1340,3 +1341,21 @@ def test_a_recording_that_opens_with_digital_silence_still_learns_the_room():
     floor.update(0.0, 0.03)
     heard = [floor.update(400.0, 0.03) for _ in range(100)]
     assert not heard[-1], "steady room noise still counts as speech"
+
+
+def test_the_screen_copy_survives_the_two_spellings_of_one_app(monkeypatch):
+    """Plasma's X11 session: KWin says "google-chrome", X11 "Google-chrome",
+    and a busy tray leaves a phrase's look to X11. The copy "edit that" and
+    "fix that word" work on was dropped as if the phrase went elsewhere."""
+    from tuxtalk import app
+    for name, value in (("recording_serial", 3), ("shown_serial", 2), ("shown_text", ""),
+                        ("shown_window", None)):
+        monkeypatch.setattr(app.state, name, value)
+    monkeypatch.setattr(app.state, "last_inserted_window", "google-chrome")
+    app._remember_shown("See you at noon.", chunked=True, ok=True)
+    monkeypatch.setattr(app.state, "last_inserted_window", "Google-chrome")
+    app._remember_shown(" How are you?", chunked=True, ok=True)
+    assert app.state.shown_text == "See you at noon. How are you?"
+    monkeypatch.setattr(app.state, "last_inserted_window", "org.kde.kwrite")
+    app._remember_shown(" Bye.", chunked=True, ok=True)
+    assert app.state.shown_text is None                 # another app: not trusted

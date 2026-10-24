@@ -92,7 +92,7 @@ def test_nothing_is_trimmed_unless_it_fired():
 
 def test_talking_instantly_with_no_quiet_gaps_still_counts_as_speech():
     """Even speech whose gaps never get quiet is recognised when it starts at
-    once, and two seconds of it held perfectly steady is still speech."""
+    once."""
     t = np.arange(int(2.0 * SR)) / SR
     gapless = (np.sin(2 * np.pi * 220 * t) * 3000).astype(np.int16)
     at, _ = run(np.concatenate([gapless, noise(3.0)]), 1.5)
@@ -798,7 +798,7 @@ def test_steady_noise_louder_than_speech_s_threshold_becomes_the_room(when):
         :len(audio) - int(0.5 * SR)]
     at, det = run(np.clip(audio, -32768, 32767).astype(np.int16), 1.5)
     assert at is not None, "it never stopped"
-    assert 3.5 + 1.5 - 0.1 <= at <= 3.5 + 3.0 + 0.5
+    assert 3.5 + 1.5 - 0.1 <= at <= 3.5 + 3.0 + 1.0     # learned 3 s after the last word
     assert det.tail_to_trim() <= int(1.5 * SR), "it trimmed what it took back as noise"
 
 
@@ -876,3 +876,98 @@ def test_noise_learned_right_after_a_phrase_is_typed_still_gives_the_full_wait()
     det.release()
     at = _feed(det, hum(4.0, 1000).astype(np.int16))
     assert at is not None and at >= 1.5
+
+
+def test_a_phrase_finished_while_the_audio_thread_judges_again_stops_nothing():
+    """Type at pause's worker calls release() while the audio thread is
+    judging the last seconds again: the history was cleared under it, the
+    audio callback raised, and sounddevice calls a callback that raised
+    never again, so the recording went on hearing nothing."""
+    import threading
+    det = SilenceDetector(1.5, SR)
+    assert _feed(det, speech(0.5)) is None
+    inside, released, errors = threading.Event(), threading.Event(), []
+
+    def judge_again_slowly():
+        heard = iter(det._heard)
+        next(heard)
+        inside.set()
+        released.wait(0.5)              # the worker's release() comes now
+        list(heard)
+    det._judge_again = judge_again_slowly
+    det._floor.update = lambda rms, duration: setattr(det._floor, "changed", True) or False
+
+    def audio_thread():
+        try:
+            det.feed(noise(0.02).tobytes())
+        except RuntimeError as e:
+            errors.append(e)
+    feeding = threading.Thread(target=audio_thread)
+    feeding.start()
+    inside.wait(5)
+    worker = threading.Thread(target=lambda: (det.release(), released.set()))
+    worker.start()
+    feeding.join(5)
+    worker.join(5)
+    assert errors == [] and released.is_set()
+
+
+def test_a_pause_nearly_the_wait_then_a_short_first_syllable_in_a_quiet_room():
+    """A 3 s wait, a 2.7 s pause, then a sentence starting with one short
+    syllable and soft words. The learned room took the end of the last
+    sentence for a bump of the room, then that syllable too, and the
+    recording ended 0.3 s into the sentence."""
+    said = np.concatenate([speech(1.0), noise(2.7), speech(0.04), speech(0.5, level=250),
+                           speech(2.0)])
+    at, _ = run(np.concatenate([said, noise(4.0)]), 3.0)
+    assert at is not None and at >= len(said) / SR
+
+
+def _stepping_hum(seconds, low=500.0, high=725.0):
+    """A hum whose level steps between *low* and *high* (3.2 dB) every half second."""
+    t = np.arange(int(0.5 * SR)) / SR
+    return np.concatenate([np.sin(2 * np.pi * 120 * t) * np.sqrt(2) * (high if i % 2 else low)
+                           for i in range(int(seconds * 2))])
+
+
+def test_a_sound_that_steps_up_and_down_by_3_db_isnt_learned_as_the_room():
+    """Measured by blocks alone, 3 s of it is as steady as a fan; by 50 ms
+    frames it isn't, and frames are what keep a gusty fan from being
+    learned so often that the next sentence's soft start is cut off."""
+    audio = np.concatenate([speech(0.5, level=20000.0), _stepping_hum(8.0)])
+    at, _ = run(np.clip(audio, -32768, 32767).astype(np.int16), 1.5)
+    assert at is None
+
+
+def test_when_the_dryer_stops_a_soft_voice_counts_again():
+    """A dryer learned as the room, then switched off: a voice softer than
+    the dryer was is still talking, not the quiet after it."""
+    det = SilenceDetector(5.0, SR)
+    dryer = np.clip(np.concatenate([speech(0.5, level=20000.0), hum(3.5, 1000)]),
+                    -32768, 32767).astype(np.int16)
+    assert _feed(det, dryer) is None
+    soft = speech(1.5, level=900.0)
+    at = _feed(det, np.concatenate([noise(0.5), soft, noise(6.0)]))
+    assert at is not None and at >= 0.5 + 1.5 + 5.0 - 0.1
+
+
+def test_a_click_in_a_quiet_mic_test_gives_no_verdict_on_the_room():
+    """A tenth of a second is too little talking to say how far a voice
+    stands over the room."""
+    take = np.concatenate([noise(3.0), speech(0.1), noise(3.0)]).astype(np.float32) / 32768
+    assert silence.speech_over_room_db(take, SR) is None
+
+
+def test_a_voice_swinging_every_50_ms_isnt_learned_as_the_room():
+    """Codex's case: a loud opening, then a voice alternating between two
+    levels 3.5 dB apart every 50 ms. Its 50 ms frames smooth that out and
+    look as steady as a fan; its blocks don't. Learned, it ended the
+    recording at 3.8 s while the voice went on to 7.5 s."""
+    t = np.arange(800) / SR
+
+    def frame(level):
+        return np.sin(2 * np.pi * 440 * t) * level * np.sqrt(2)
+    audio = np.concatenate([frame(100)] * 10 + [frame(1000 if i % 2 else 20000) for i in range(20)]
+                           + [frame(1000 if i % 2 else 1500) for i in range(120)])
+    at, _ = run(audio.astype(np.int16), 1.0)
+    assert at is None or at >= 7.5
