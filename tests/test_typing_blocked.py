@@ -79,7 +79,7 @@ def test_failed_notice_names_the_cause(monkeypatch):
 
 
 def test_failed_notice_without_a_known_cause_is_unchanged(monkeypatch):
-    from tuxtalk import app
+    from tuxtalk import app, delivery_notices
     monkeypatch.setattr(app, "_paste_last_hotkey", "")   # its hint is tested in test_paste_last
     shown = []
     monkeypatch.setattr(app, "_notify", lambda title, body: shown.append(body))
@@ -87,7 +87,7 @@ def test_failed_notice_without_a_known_cause_is_unchanged(monkeypatch):
     monkeypatch.setattr(U, "typing_blocked_reason", lambda: None)
 
     app._report_undelivered("failed", beeps_on=False)
-    assert shown == [app._UNDELIVERED_NOTICES["failed"]]
+    assert shown == [delivery_notices.NOTICES["failed"]]
 
 
 def test_the_fix_script_touches_only_uinput_and_matches_the_group_exactly():

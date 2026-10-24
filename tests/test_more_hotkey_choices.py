@@ -10,8 +10,8 @@ and Preferences says what each key gives up.
 import pytest
 from evdev import ecodes
 
-from tuxtalk import (app, cosmic_hotkeys, gnome_hotkeys, keyboard_layout, modifier_hotkeys,
-                     send_countdown, virtual_keyboard, x11_hotkeys)
+from tuxtalk import (app, cosmic_hotkeys, delivery_notices, gnome_hotkeys, keyboard_layout,
+                     modifier_hotkeys, send_countdown, virtual_keyboard, x11_hotkeys)
 from tuxtalk import kwin_hotkeys as kh
 from tuxtalk.config import HOTKEY_CHOICES
 from tuxtalk.hotkey_keys import keycode_from_name, track_modifier
@@ -376,7 +376,7 @@ def test_a_stuck_key_types_nothing_another_way(keyboard, stuck_right_ctrl, monke
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "kwrite")
     assert app._inject_text("hello there", "type", 0.0) == "key_held"
     assert ran == [] and keyboard.events == []
-    assert "Right Ctrl" in app._UNDELIVERED_NOTICES["key_held"]
+    assert "Right Ctrl" in delivery_notices.NOTICES["key_held"]
 
 
 @pytest.fixture
@@ -435,7 +435,7 @@ def test_typing_that_waited_stops_if_the_focus_moved_meanwhile(keyboard, no_hotk
     with pytest.raises(virtual_keyboard.GaveUp) as stop:
         app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a", raise_if_partial=True)
     assert stop.value.reason == "moved" and keyboard.events == []
-    assert "Recent Dictations" in app._UNDELIVERED_NOTICES["moved"]
+    assert "Recent Dictations" in delivery_notices.NOTICES["moved"]
 
 
 def test_typing_that_waited_stops_if_another_window_of_the_app_has_the_focus(

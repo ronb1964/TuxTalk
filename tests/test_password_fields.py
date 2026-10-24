@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 from gi.repository import Gio, GLib
 
-from tuxtalk import app, atspi_helper, history, screen_message, send_countdown
+from tuxtalk import app, atspi_helper, delivery_notices, history, screen_message, send_countdown
 
 ACTIVE = 1 << atspi_helper._STATE_ACTIVE
 FOCUSED = 1 << atspi_helper._STATE_FOCUSED
@@ -75,7 +75,7 @@ def test_a_dictation_in_a_password_field_is_not_typed_or_kept(desktop, monkeypat
     # Not even in the "Transcribed: …" notification.
     assert not any("swordfish" in n for n in desktop["notes"])
     assert desktop["beeps"] == [app.CANCEL_BEEP]
-    assert desktop["labels"] == [app.PASSWORD_FIELD_LABEL]
+    assert desktop["labels"] == [delivery_notices.PASSWORD_FIELD_LABEL]
     assert "password field" in caplog.text and "swordfish" not in caplog.text
 
 
@@ -101,7 +101,7 @@ def test_a_notification_says_it_when_beep_or_label_cant(desktop, monkeypatch, be
     monkeypatch.setenv("DISPLAY", ":0")
     desktop["password"] = True
     dictate(monkeypatch, beeps_on=beeps_on)
-    assert desktop["notes"] == [app.PASSWORD_FIELD_NOTICE]
+    assert desktop["notes"] == [delivery_notices.PASSWORD_FIELD_NOTICE]
 
 
 def test_type_at_pause_types_nothing_of_its_own_into_a_password_field(desktop, monkeypatch):
@@ -117,7 +117,7 @@ def test_type_at_pause_types_nothing_of_its_own_into_a_password_field(desktop, m
     dictate(monkeypatch, chunk_role="middle")
     assert desktop["typed"] == [] and ran == []
     assert app.state.pending_boundary is None and app.state.held_cue == ""
-    assert desktop["labels"] == [app.PASSWORD_FIELD_LABEL]
+    assert desktop["labels"] == [delivery_notices.PASSWORD_FIELD_LABEL]
 
 
 def test_saying_only_press_enter_still_presses_enter_there(desktop, monkeypatch):
@@ -144,7 +144,7 @@ def test_words_before_press_tab_are_not_typed_there(desktop, monkeypatch):
     desktop["password"] = True
     dictate(monkeypatch, said="swordfish press tab")
     assert pressed == [] and desktop["typed"] == [] and desktop["history"] == []
-    assert desktop["labels"] == [app.PASSWORD_FIELD_LABEL]
+    assert desktop["labels"] == [delivery_notices.PASSWORD_FIELD_LABEL]
 
 
 def test_paste_last_dictation_types_nothing_in_a_password_field(desktop, monkeypatch):
@@ -153,7 +153,7 @@ def test_paste_last_dictation_types_nothing_in_a_password_field(desktop, monkeyp
     desktop["password"] = True
     app._paste_last_dictation(cfg)
     assert desktop["typed"] == []
-    assert desktop["labels"] == [app.PASSWORD_FIELD_LABEL]
+    assert desktop["labels"] == [delivery_notices.PASSWORD_FIELD_LABEL]
     desktop["password"] = False
     app._paste_last_dictation(cfg)
     assert desktop["typed"] == ["my secret is swordfish "]

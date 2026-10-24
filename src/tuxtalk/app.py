@@ -31,8 +31,8 @@ from . import config as config_module
 from .logger import setup_logger, redact_text
 from .recording_indicator import RecordingIndicator
 from .undo import detect_undo_command, calculate_undo_length
-from . import (edit_notices, hallucinations, modifier_hotkeys, send_countdown,
-               virtual_keyboard)
+from . import (delivery_notices, edit_notices, hallucinations, modifier_hotkeys,
+               send_countdown, virtual_keyboard)
 from .hotkey_keys import (MODIFIER_CODES, check_modifiers_held, keycode_from_name, keys_down,
                           parse_hotkey_combo, track_modifier)
 import threading
@@ -3099,38 +3099,6 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
     return frames, rec_sr
 
 
-PASSWORD_FIELD_LABEL = "TuxTalk doesn't type into password fields"
-PASSWORD_FIELD_TITLE = "Not typed into a password field"
-PASSWORD_FIELD_NOTICE = ("TuxTalk doesn't type into password fields, so it stopped there. "
-                         "Type the password on the keyboard.")
-
-# What to tell the user when a dictation didn't reach the window. The text is
-# in Recent Dictations by then (it's saved before injection starts), unless a
-# password field refused it (_unsay).
-_UNDELIVERED_TITLES = {
-    "failed": "Couldn't type the dictation",
-    "partial": "Only part of the dictation was typed",
-    "password_field": PASSWORD_FIELD_TITLE,
-    "key_held": "Typing stopped: a dictation key stayed down",
-    "moved": "Not typed: the focus moved",
-}
-_UNDELIVERED_NOTICES = {
-    "failed": "It's saved in Recent Dictations in the TuxTalk menu: click it to copy, "
-              "then paste with Ctrl+V.",
-    "partial": "The whole text is saved in Recent Dictations in the TuxTalk menu: click "
-               "it to copy, then paste with Ctrl+V.",
-    # Said its own way, with a label over the window (_password_field_refused).
-    "password_field": PASSWORD_FIELD_NOTICE,
-    "key_held": f"Right Ctrl or Right Alt read as held down for "
-                f"{modifier_hotkeys.HELD_LIMIT_S:g} seconds, and the text would have gone "
-                "in as shortcuts. It's saved in Recent Dictations in the TuxTalk menu: "
-                "click it to copy, then paste with Ctrl+V.",
-    "moved": "The focus moved to another window or a password field while TuxTalk waited "
-             "for Right Ctrl or Right Alt to come up. The text is saved in Recent Dictations "
-             "in the TuxTalk menu: click it to copy, then paste with Ctrl+V.",
-}
-
-
 SILENT_MIC_TITLE = "No sound from the microphone"
 SILENT_MIC_NOTICE = ("TuxTalk heard only silence. If you spoke, check that the microphone "
                      "isn't muted or unplugged, and that the right one is picked in "
@@ -3190,7 +3158,7 @@ def _report_undelivered(outcome: str, beeps_on: bool):
     if outcome == "password_field":
         _password_field_refused(beeps_on)
         return
-    message = _UNDELIVERED_NOTICES[outcome]
+    message = delivery_notices.NOTICES[outcome]
     if outcome == "failed":
         # When the typing setup is the reason, say what fixes it.
         try:
@@ -3206,7 +3174,7 @@ def _report_undelivered(outcome: str, beeps_on: bool):
     print(message)
     logger.warning(f"Dictation not delivered ({outcome}); told the user")
     _beep(beeps_on, *CANCEL_BEEP)
-    _notify(_UNDELIVERED_TITLES[outcome], message)
+    _notify(delivery_notices.TITLES[outcome], message)
 
 
 def _refuse_password_field(beeps_on: bool) -> bool:
@@ -3228,9 +3196,9 @@ def _password_field_refused(beeps_on: bool) -> None:
     logger.info("Not typed: the cursor is in a password field")
     _beep(beeps_on, *CANCEL_BEEP)
     from . import screen_message
-    screen_message.show_over_active_window(PASSWORD_FIELD_LABEL)
+    screen_message.show_over_active_window(delivery_notices.PASSWORD_FIELD_LABEL)
     if not (beeps_on and _gtk_loop_running and os.environ.get("DISPLAY")):
-        _notify(PASSWORD_FIELD_TITLE, PASSWORD_FIELD_NOTICE)
+        _notify(delivery_notices.PASSWORD_FIELD_TITLE, delivery_notices.PASSWORD_FIELD_NOTICE)
 
 
 # Silence put between two chunks when the engine hears them together, so the
@@ -3758,7 +3726,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             if outcome == "password_field":
                 _unsay(said_before)
             _remember_shown(state.last_inserted_text, chunked, outcome == "ok")
-            if outcome in _UNDELIVERED_NOTICES:
+            if outcome in delivery_notices.NOTICES:
                 _report_undelivered(outcome, beeps_on)
             elif said:
                 _press_said(said, chunk_role)
@@ -4271,7 +4239,7 @@ def _edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0
             outcome = "failed"
         if outcome == "password_field":
             history.forget(result)
-        if outcome in _UNDELIVERED_NOTICES:
+        if outcome in delivery_notices.NOTICES:
             _report_undelivered(outcome, beeps_on)
         else:
             _beep(beeps_on, *READY_BEEP)
@@ -4338,7 +4306,7 @@ def _paste_last_dictation(cfg) -> None:
         text += " "
     logger.info("Paste last dictation")
     outcome = _inject_text(text, cfg.injection_mode, time.time())
-    if outcome in _UNDELIVERED_NOTICES:
+    if outcome in delivery_notices.NOTICES:
         _report_undelivered(outcome, cfg.beeps)
 
 
