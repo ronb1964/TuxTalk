@@ -115,7 +115,6 @@ ELECTRON_PASTE_BROKEN_CLASSES = frozenset({
 })
 
 
-
 # KDE's text editor component takes Shift+Enter as Insert Smart Newline,
 # which starts the new line with the symbols the line above starts with: "$45",
 # new line, "$25" came out as "$$25", and one more "$" each line after.

@@ -1,10 +1,10 @@
 """Claude Desktop must be recognised by the app id it actually reports.
 
 Synthetic Ctrl+V is silently dropped by Electron/Chromium apps on Wayland, so
-_inject_text types into those apps instead. The routing is a
-single membership test against _ELECTRON_PASTE_BROKEN_CLASSES, which makes that
-set the whole feature: an app id missing from it means the override never fires
-and the user gets a paste that quietly does nothing.
+_inject_text types into those apps instead. The routing is a single membership
+test against window_classes.ELECTRON_PASTE_BROKEN_CLASSES, which makes that set
+the whole feature: an app id missing from it means the override never fires and
+the user gets a paste that quietly does nothing.
 
 Claude Desktop reports itself as 'claude-desktop' or as 'com.anthropic.Claude'
 depending on how it was packaged, so the set must list both.

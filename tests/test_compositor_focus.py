@@ -215,7 +215,7 @@ def test_a_reported_window_wins_over_asking_the_compositor(monkeypatch):
     "com.system76.CosmicTerm", "Kitty", "foot",
 ])
 def test_terminals_common_on_tiling_desktops_get_terminal_paste(app_id):
-    from tuxtalk.app import is_terminal_class
+    from tuxtalk.window_classes import is_terminal_class
     assert is_terminal_class(app_id)
 
 
@@ -298,7 +298,7 @@ def test_no_x_server_at_all_is_unknown_not_an_error(monkeypatch):
 
 @pytest.mark.parametrize("wm_class", ["Guake", "Tilda", "Roxterm", "cool-retro-term", "Mate-terminal"])
 def test_x11_terminals_get_terminal_paste(wm_class):
-    from tuxtalk.app import is_terminal_class
+    from tuxtalk.window_classes import is_terminal_class
     assert is_terminal_class(wm_class)
 
 
@@ -526,5 +526,5 @@ def test_a_malformed_message_ends_the_connection_instead_of_spinning():
 
 def test_gnome_terminal_on_cosmic_gets_terminal_paste():
     """COSMIC names GNOME Terminal's windows after its server process."""
-    from tuxtalk.app import is_terminal_class
+    from tuxtalk.window_classes import is_terminal_class
     assert is_terminal_class("gnome-terminal-server")

@@ -426,7 +426,8 @@ def test_a_dictation_added_to_a_held_send_starts_with_its_space(countdown, monke
     monkeypatch.setattr(send_countdown, "_owed", None)
     start_send("test", " ", "type")
     send_countdown.hold(announce=False)
-    assert send_countdown.with_owed_space("And this part was added. ") == " And this part was added. "
+    added = "And this part was added. "
+    assert send_countdown.with_owed_space(added) == " " + added
     assert send_countdown.with_owed_space("Next one. ") == "Next one. "    # only once
 
 

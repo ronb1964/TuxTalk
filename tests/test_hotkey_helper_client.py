@@ -297,4 +297,3 @@ def test_an_answer_out_of_step_isnt_taken_as_a_hide(tmp_path, caplog):
     client.asked = deque(["HIDE"])
     client._handle(["OK", "HIDE"])
     assert client.hidden is True
-
