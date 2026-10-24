@@ -151,6 +151,18 @@ def changed(before, after) -> bool:
         a != b for a, b in zip(before[2:], after[2:], strict=False))
 
 
+def claim_into(window, now=None):
+    """virtual_keyboard.send's claim for keys that may only go into
+    *window*, a look taken earlier: GaveUp("moved") when another window is
+    known to have the focus *now* (a look, else one taken here), right
+    before they go out."""
+    from . import virtual_keyboard
+    if changed(window, look() if now is None else now):
+        logger.info("Not typed: another window has the focus now")
+        raise virtual_keyboard.GaveUp("moved")
+    return lambda: None
+
+
 def destination() -> Destination:
     """Where keys go now. The password check goes first: it can take a
     while (the accessibility bus has a quarter of a second to answer), and

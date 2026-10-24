@@ -16,6 +16,7 @@ import atexit
 import fcntl
 import select
 import signal
+import functools
 from dataclasses import dataclass, field
 import numpy as np
 import sounddevice as sd
@@ -1395,8 +1396,11 @@ def _send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY
     that must tell "none of the keys were sent" from "some of them were";
     and a wait that gave up raises virtual_keyboard.GaveUp: the text must
     not go out another way (wtype, the clipboard) either. *claim* is
-    virtual_keyboard.send's.
+    virtual_keyboard.send's; in a delivery that may only go into one window
+    (_inject_text's *into*), the claim checks it's still that one.
     """
+    if claim is None and _this_thread.into is not None:
+        claim = functools.partial(focused_window.claim_into, _this_thread.into)
     before_press = modifier_hotkeys.wait_while_held(focused_window.destination)
     try:
         sent = virtual_keyboard.send(events, delay_ms, before_press, claim)
@@ -1413,18 +1417,20 @@ def _send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY
     if not sent:
         logger.error(f"Couldn't send {what}: TuxTalk's virtual keyboard isn't working")
     else:
-        _keys_sent.count += 1
+        _this_thread.sends += 1
     return sent
 
 
-class _KeysSent(threading.local):
-    """How many sends went out whole on this thread (_send_keys): a wait
-    that gives up after earlier lines of a dictation were typed stopped it
-    partway, not before it began (_inject_text)."""
-    count = 0
+class _ThisThread(threading.local):
+    """What _send_keys knows of the delivery on this thread (_inject_text):
+    how many sends went out whole, so a wait that gives up after earlier
+    lines were typed stopped it partway, not before it began; and the only
+    window it may go into, else None."""
+    sends = 0
+    into = None
 
 
-_keys_sent = _KeysSent()
+_this_thread = _ThisThread()
 
 
 def _not_where_typed(focused) -> bool:
@@ -2194,14 +2200,18 @@ def _inject_text(text: str, injection_mode: str, one_block: bool = False, into=N
     moved while the words went in can't be told from the user switching.
     """
     before = focused_window.destination()
-    if into is not None and focused_window.changed(into, before):
-        logger.info("Not typed: another window has the focus now")
-        return "moved"
-    sends_before, landed = _keys_sent.count, None
+    sends_before, landed = _this_thread.sends, None
+    _this_thread.into = into
     try:
+        # Checked again right before each key, after the waits for the paste
+        # (wl-copy) or a dictation key held (_send_keys).
+        if into is not None:
+            focused_window.claim_into(into, before)
         outcome = _deliver_text(text, injection_mode, one_block, where=before)
     except (virtual_keyboard.StoppedPartway, virtual_keyboard.GaveUp, PasswordFieldNow) as stop:
-        outcome = _delivery_stopped(stop, typed_some=_keys_sent.count != sends_before)
+        outcome = _delivery_stopped(stop, typed_some=_this_thread.sends != sends_before)
+    finally:
+        _this_thread.into = None
     if outcome in ("ok", "partial"):
         after = focused_window.look()
         if after[0]:
@@ -2224,8 +2234,9 @@ def _delivery_stopped(stop, typed_some: bool) -> str:
     pasting it again would double that part. PasswordFieldNow: the lines
     before it are in the app, but in which form (pasted, typed after a
     failed paste) isn't tracked. GaveUp: a Right Ctrl or Right Alt dictation
-    key stayed down, or the window changed while typing waited for it
-    (modifier_hotkeys); typing on any other way (wtype, the clipboard) would
+    key stayed down, the window changed while typing waited for it
+    (modifier_hotkeys), or it isn't the one the text had to go into
+    (focused_window.claim_into); typing on any other way (wtype, the clipboard) would
     do what the wait was there to prevent. *typed_some*: earlier lines were
     typed before it gave up."""
     state.last_inserted_text = ""

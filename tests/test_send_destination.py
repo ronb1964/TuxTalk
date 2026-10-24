@@ -18,8 +18,10 @@ from tuxtalk import (app, atspi_helper, compositor_focus, dbus_service, focused_
                      modifier_hotkeys, send_countdown)
 
 ENTER, RCTRL, F8, F9 = ecodes.KEY_ENTER, ecodes.KEY_RIGHTCTRL, ecodes.KEY_F8, ecodes.KEY_F9
-# Taken before conftest runs "Right away" on the test's own thread.
+# Taken before conftest runs "Right away" on the test's own thread, and
+# before the chat fixture fakes the delivery.
 SEND_RIGHT_AWAY = send_countdown._send_right_away
+DELIVER_TEXT = app._deliver_text
 FIRST = ("brave-browser", ("tray", "{5c1d0e2a}"))
 SECOND = ("brave-browser", ("tray", "{9f04b7c3}"))      # another window, same app
 
@@ -332,6 +334,62 @@ def test_right_away_into_the_other_window_of_the_app_sends_nothing(chat, keyboar
     focus[:] = SECOND
     send_automatically(focused_window.Destination(*FIRST))
     assert keyboard.events == [] and notices == [send_countdown.SWITCHED_WINDOW_NOTICE]
+
+
+# --- Type at pause's held mark: only into its phrase's window, up to the key ---------
+
+class WlCopy:
+    """wl-copy setting the clipboard, during which the user clicks."""
+
+    def __init__(self, clicked):
+        self.stdin, self.stderr, self.clicked = self, None, clicked
+
+    def write(self, data):
+        pass
+
+    def close(self):
+        pass
+
+    def poll(self):
+        return 0
+
+    def wait(self, timeout=None):
+        self.clicked()
+        return 0
+
+
+def test_a_click_while_the_mark_is_put_on_the_clipboard_keeps_it_out_of_the_other_window(
+        chat, keyboard, monkeypatch):
+    """The held period for the first Brave window is pasted. The window was
+    checked before wl-copy set the clipboard, the user clicked into the
+    other one meanwhile, and Ctrl+V put the period there."""
+    from tuxtalk import clipboard
+    focus, _, _, _ = chat
+    monkeypatch.setattr(app, "_deliver_text", DELIVER_TEXT)
+    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
+    monkeypatch.setattr(app, "_which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(app, "_restore_clipboard", False)
+    monkeypatch.setattr(clipboard, "wl_copy_command", lambda: ["wl-copy"])
+    monkeypatch.setattr(app.subprocess, "Popen",
+                        lambda cmd, **kw: WlCopy(lambda: focus.__setitem__(slice(None), SECOND)))
+    assert app._inject_text(".", "paste", into=focused_window.Destination(*FIRST)) == "moved"
+    assert keyboard.events == []
+
+
+def test_a_click_while_typing_waits_for_the_dictation_key_keeps_the_mark_out(
+        chat, keyboard, monkeypatch, right_ctrl_toggle):
+    """Right Ctrl down as the mark is typed: the click came as the wait
+    began, so it compared the other window with itself."""
+    focus, _, _, _ = chat
+    monkeypatch.setattr(app, "_deliver_text", DELIVER_TEXT)
+
+    def pressed(look):
+        if look == 1:
+            focus[:] = SECOND
+        return look <= 3
+    right_ctrl_toggle(pressed)
+    assert app._inject_text(".", "type", into=focused_window.Destination(*FIRST)) == "moved"
+    assert keyboard.events == []
 
 
 # --- TuxTalk's own windows ------------------------------------------------------------------
