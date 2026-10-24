@@ -140,9 +140,14 @@ def send(events, delay_ms: float = KEY_DELAY_MS, before_press=None, claim=None) 
     *before_press*, if given, is called before each key goes down, and
     returns None or a function that waits (app._send_keys: until a Right
     Ctrl dictation key is let go) and may raise GaveUp; that runs with the
-    keyboard free for others (_wait_unlocked). *claim*, if given, runs the
-    same way once, right before the first key goes down, after any wait,
-    and may raise GaveUp too (send_countdown._claim_send: a send a tap held meanwhile).
+    keyboard free for others (_wait_unlocked), and the keys are looked at
+    again once it has the keyboard back: one pressed meanwhile is waited for
+    too. *claim*, if given, is for a key that must still be stoppable right
+    up to its press (send_countdown._claim_send: a send a tap can hold): it
+    runs the same way before the first key, after any wait, for checks that
+    take a while, and returns *take*, which runs with the keyboard held,
+    once nothing is down, right before that key goes down. Either may raise
+    GaveUp.
 
     Waits *delay_ms* after each event, on a schedule kept from the start, so
     sleeping a little long doesn't add up over a long text. When this process
@@ -173,8 +178,7 @@ def send(events, delay_ms: float = KEY_DELAY_MS, before_press=None, claim=None) 
         sent = 0
         try:
             for code, value in events:
-                wait = before_press() if value and before_press is not None else None
-                if wait is not None:
+                while value and before_press is not None and (wait := before_press()):
                     _wait_unlocked(device, down, wait)
                 device.write(ecodes.EV_KEY, code, value)
                 # Counted before the SYN: the event may reach the app even
@@ -228,22 +232,30 @@ def _wait_unlocked(device, down, wait) -> None:
 
 
 def _claiming(before_press, claim):
-    """*before_press*, whose answer for the first key is a wait that ends
-    with *claim*."""
-    claimed = False
+    """*before_press*, for a send with a *claim* (see send). Before the first
+    key it answers with a wait that ends with claim's checks, again after
+    each wait for a key pressed meanwhile, and takes the claim once nothing
+    is down: a tap read during the checks, or while the keyboard was busy,
+    can still stop the key."""
+    take, taken = None, False
 
     def check():
-        nonlocal claimed
+        """The answer for the next key: claim's checks, after any wait,
+        until they were made with nothing down since; then take."""
+        nonlocal take, taken
         wait = before_press() if before_press is not None else None
-        if claimed:
+        if taken:
             return wait
-        claimed = True
-
-        def then_claim():
-            if wait is not None:
-                wait()
-            claim()
-        return then_claim
+        if take is None or wait is not None:
+            def then_check():
+                nonlocal take
+                if wait is not None:
+                    wait()
+                take = claim()
+            return then_check
+        taken = True
+        take()
+        return None
     return check
 
 

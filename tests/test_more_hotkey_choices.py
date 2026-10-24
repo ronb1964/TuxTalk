@@ -540,6 +540,86 @@ def test_where_the_enter_goes_is_asked_once_it_has_waited(keyboard, due_send, mo
     assert keyboard.events == [] and app.state.pending_send is None
 
 
+def test_a_tap_during_the_focus_questions_holds_the_send(keyboard, due_send, monkeypatch):
+    """The questions before the Enter (which window, a password field) can
+    take a moment; the send stays pending through them, so a tap read
+    meanwhile holds it. Taken before them, the Enter went out after the tap."""
+    held = []
+
+    def focused():
+        held.append(send_countdown.hold(announce=True))
+        return "kwrite"
+    monkeypatch.setattr(app, "_query_focused_window_class", focused)
+    monkeypatch.setattr(app, "_focused_is_password", lambda: False)
+    due_send(lambda look: False)
+    assert held == [True] and keyboard.events == []
+
+
+def test_a_tap_while_the_enter_waits_for_the_keyboard_holds_the_send(keyboard, due_send,
+                                                                       monkeypatch):
+    """Another dictation's typing has the keyboard as the questions end: the
+    send is taken only once the Enter has the keyboard, so a tap read while
+    it waited still holds it."""
+    import threading
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "kwrite")
+    monkeypatch.setattr(app, "_focused_is_password", lambda: False)
+    held, typing, checked = [], threading.Event(), threading.Event()
+
+    def other_typing():
+        with virtual_keyboard._lock:
+            typing.set()
+            assert checked.wait(2)
+            held.append(send_countdown.hold(announce=True))
+
+    claim_send = send_countdown._claim_send
+
+    def claim(pending):
+        threading.Thread(target=other_typing).start()
+        assert typing.wait(2)
+        take = claim_send(pending)
+        checked.set()
+        return take
+    monkeypatch.setattr(send_countdown, "_claim_send", claim)
+    due_send(lambda look: False)
+    assert held == [True] and keyboard.events == []
+
+
+def test_a_right_ctrl_pressed_during_the_focus_questions_makes_the_enter_wait(
+        keyboard, due_send, monkeypatch):
+    """Pressed while the questions were asked, it was down as the Enter went:
+    the desktop got Ctrl+Enter, another command in a browser form or
+    LibreOffice."""
+    down_from, written_while_down = [], []
+
+    def focused():
+        down_from.append(board_looks[0] + 1)
+        return "kwrite"
+
+    def pressed(look):
+        board_looks[0] = look
+        down = bool(down_from) and look < down_from[0] + 3
+        if down:
+            written_while_down.append(len(keyboard.events))
+        return down
+    board_looks = [0]
+    monkeypatch.setattr(app, "_query_focused_window_class", focused)
+    monkeypatch.setattr(app, "_focused_is_password", lambda: False)
+    due_send(pressed)
+    assert written_while_down and set(written_while_down) == {0}
+    assert keyboard.typed_keys() == [ecodes.KEY_ENTER]
+
+
+def test_a_key_stuck_through_a_due_send_holds_it_and_says_so(keyboard, due_send, monkeypatch):
+    monkeypatch.setattr(modifier_hotkeys, "time", keyboard.clock)
+    monkeypatch.setattr(modifier_hotkeys, "_stuck", set())
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "kwrite")
+    notices = []
+    monkeypatch.setattr(send_countdown, "show_notice", notices.append)
+    due_send(lambda look: look < 10_000)
+    assert keyboard.events == [] and notices == [send_countdown.HELD_NOTICE]
+    assert app.state.pending_send is None
+
+
 def test_a_due_send_with_nothing_held_presses_enter(keyboard, due_send, monkeypatch):
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "kwrite")
     due_send(lambda look: False)

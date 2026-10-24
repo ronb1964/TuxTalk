@@ -13,7 +13,7 @@ typing and the questions about the focus are app.py's.
 import threading
 import time
 
-from . import modifier_hotkeys, virtual_keyboard
+from . import virtual_keyboard
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -106,16 +106,15 @@ def _send_when_due(pending: dict) -> None:
     """The wait is over and nothing held it: press Enter, but only in the
     window the text went to (_claim_send).
 
-    A Right Ctrl or Right Alt dictation key down now is waited for first
-    (modifier_hotkeys), and again if one goes down before the Enter does,
-    with the send pending until the Enter goes down: the hotkey loop reads a
-    tap of it meanwhile, and the tap holds the send as it would have."""
+    A Right Ctrl or Right Alt dictation key down now, or going down before
+    the Enter does, is waited for first (modifier_hotkeys), with the send
+    pending until the Enter goes down: the hotkey loop reads a tap of it
+    meanwhile, and the tap holds the send as it would have."""
     from . import app
     with _send_lock:
         if app.state.pending_send is not pending:
             return
-    sent = modifier_hotkeys.wait_until_up() and app._press_key(
-        "ENTER", pending["why"], claim=lambda: _claim_send(pending))
+    sent = app._press_key("ENTER", pending["why"], claim=lambda: _claim_send(pending))
     with _send_lock:
         unclaimed = app.state.pending_send is pending
         if unclaimed:
@@ -125,27 +124,43 @@ def _send_when_due(pending: dict) -> None:
         show_notice(HELD_NOTICE)
 
 
-def _claim_send(pending: dict) -> None:
-    """Take the send for its Enter, which goes down right after, unless a
-    tap held it meanwhile or the focus moved. Enter in whatever the user
-    switched to could send something else entirely. Raises
-    virtual_keyboard.GaveUp when it mustn't go."""
+def _claim_send(pending: dict):
+    """The checks before a send's Enter, made with the send still pending,
+    so a tap meanwhile still holds it: Enter in whatever the user switched
+    to could send something else entirely. Returns what takes the send,
+    right before the Enter goes down (virtual_keyboard.send's *claim*).
+    Raises virtual_keyboard.GaveUp when it mustn't go."""
+    from . import app
+    if _focus_left(pending):
+        _refuse_send(pending, "another window has the focus now", SWITCHED_WINDOW_NOTICE)
+    # Tabbing from a username into the password box during the wait must
+    # not submit the form: "press enter" said on its own is the only Enter a
+    # password field gets.
+    if app._focused_is_password():
+        _refuse_send(pending, "a password field has the focus now", PASSWORD_FIELD_NOT_SENT)
+    return lambda: _take_send(pending)
+
+
+def _take_send(pending: dict) -> None:
+    """Take *pending* for its Enter; GaveUp when a tap held it."""
     from . import app
     with _send_lock:
         if app.state.pending_send is not pending:
             raise virtual_keyboard.GaveUp("held")
         app.state.pending_send = None
-    if _focus_left(pending):
-        logger.info("Not sent: another window has the focus now")
-        show_notice(SWITCHED_WINDOW_NOTICE)
-        raise virtual_keyboard.GaveUp("moved")
-    # Tabbing from a username into the password box during the wait must
-    # not submit the form: "press enter" said on its own is the only Enter a
-    # password field gets.
-    if app._focused_is_password():
-        logger.info("Not sent: a password field has the focus now")
-        show_notice(PASSWORD_FIELD_NOT_SENT)
-        raise virtual_keyboard.GaveUp("moved")
+
+
+def _refuse_send(pending: dict, why: str, notice: str) -> None:
+    """End *pending* unsent and say why, unless a tap held it first."""
+    from . import app
+    with _send_lock:
+        ours = app.state.pending_send is pending
+        if ours:
+            app.state.pending_send = None
+    if ours:
+        logger.info(f"Not sent: {why}")
+        show_notice(notice)
+    raise virtual_keyboard.GaveUp("moved")
 
 
 def show_notice(text: str) -> None:

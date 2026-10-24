@@ -131,19 +131,6 @@ def _moved(before, after) -> bool:
     return any(a is not None and b is not None and a != b for a, b in zip(before, after))
 
 
-def wait_until_up() -> bool:
-    """Wait as typing would before its next key (wait_while_held); False when
-    it gave up."""
-    before_press = wait_while_held()
-    wait = before_press() if before_press else None
-    try:
-        if wait:
-            wait()
-    except GaveUp:
-        return False
-    return True
-
-
 def guard_alt_tap() -> None:
     """Press Ctrl while a Right Alt dictation key is down. To the desktop and
     apps a lone tap of Alt opens the menu bar (Firefox, LibreOffice), and what
