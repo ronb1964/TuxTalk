@@ -33,7 +33,7 @@ def keys(monkeypatch):
     seen = {"grabbed": 0, "released": 0, "typed": [], "beeps": []}
     monkeypatch.setattr(app, "_grab_keyboards_hiding", lambda devs, codes: seen.__setitem__("grabbed", seen["grabbed"] + 1))
     monkeypatch.setattr(app, "_release_all_grabs", lambda: seen.__setitem__("released", seen["released"] + 1))
-    monkeypatch.setattr(app, "_inject_text", lambda text, mode, t0: seen["typed"].append((text, mode)) or "ok")
+    monkeypatch.setattr(app, "_inject_text", lambda text, mode: seen["typed"].append((text, mode)) or "ok")
     monkeypatch.setattr(app, "_beep", lambda on, *a: seen["beeps"].append(a))
     monkeypatch.setattr(history, "get_entries", lambda: ["Hello there.\nSecond line.", "older"])
     monkeypatch.setattr(app.state, "is_recording", False)

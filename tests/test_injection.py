@@ -182,7 +182,7 @@ def test_failed_chunk_only_retypes_the_remainder(monkeypatch, wayland):
 
     marker = "\xa7SHIFT_ENTER\xa7"
     text = marker.join(["first", "second", "third", "fourth"])
-    app._inject_text(text, "paste", 0.0)
+    app._inject_text(text, "paste")
 
     assert typed, "nothing was retyped after the failure"
     retyped = "".join(typed)
@@ -203,7 +203,7 @@ def test_undo_buffer_records_only_what_actually_landed(monkeypatch, wayland):
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
     app.state.last_inserted_text = "previous dictation"
 
-    app._inject_text("brand new text", "paste", 0.0)
+    app._inject_text("brand new text", "paste")
 
     assert app.state.last_inserted_text == "", \
         "undo buffer kept a length that no longer matches the document"
@@ -215,7 +215,7 @@ def test_undo_buffer_updates_on_a_successful_injection(monkeypatch, wayland):
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
     app.state.last_inserted_text = "previous"
 
-    app._inject_text("brand new text", "paste", 0.0)
+    app._inject_text("brand new text", "paste")
 
     assert app.state.last_inserted_text == "brand new text"
 
@@ -327,27 +327,27 @@ def _typing_into(monkeypatch, window_class, mode="type"):
 @pytest.mark.parametrize("window", ["Gnome-terminal", "org.kde.konsole", "xfce4-terminal"])
 def test_typed_line_breaks_become_spaces_in_a_terminal(monkeypatch, window):
     typed = _typing_into(monkeypatch, window)
-    assert app._inject_text(f"First line.{MARK}Second line.", "type", 0.0) == "ok"
+    assert app._inject_text(f"First line.{MARK}Second line.", "type") == "ok"
     assert typed == ["First line. Second line."]
     assert app.state.last_inserted_text == "First line. Second line."
 
 
 def test_a_snippet_newline_becomes_a_space_in_a_terminal(monkeypatch):
     typed = _typing_into(monkeypatch, "Gnome-terminal")
-    app._inject_text("Best,\nRon", "type", 0.0)
+    app._inject_text("Best,\nRon", "type")
     assert typed == ["Best, Ron"]
 
 
 def test_typed_line_breaks_stay_line_breaks_in_other_apps(monkeypatch):
     typed = _typing_into(monkeypatch, "xed")
-    app._inject_text(f"First line.{MARK}Second line.", "type", 0.0)
+    app._inject_text(f"First line.{MARK}Second line.", "type")
     assert typed == [f"First line.{MARK}Second line."]
 
 
 def test_the_typed_remainder_after_a_failed_paste_has_no_breaks_in_a_terminal(monkeypatch, wayland):
     typed = _typing_into(monkeypatch, "org.kde.konsole", mode="paste")
     monkeypatch.setattr(app, "_paste_text", lambda *a, **k: False)
-    app._inject_text(f"First line.{MARK}Second line.", "paste", 0.0)
+    app._inject_text(f"First line.{MARK}Second line.", "paste")
     assert typed and all(MARK not in t and "\n" not in t for t in typed)
 
 
@@ -374,13 +374,13 @@ def test_the_window_the_text_landed_in_is_remembered(monkeypatch, wayland):
     """Ron clicked the desktop, dictated, and the text landed in Claude. Undo
     then refused to delete it there, saying it went to plasmashell."""
     _focus_moves_on_paste(monkeypatch, "plasmashell", "com.anthropic.Claude")
-    assert app._inject_text("Testing 1, 2, 3. ", "paste", 0.0) == "ok"
+    assert app._inject_text("Testing 1, 2, 3. ", "paste") == "ok"
     assert app.state.last_inserted_window == "com.anthropic.Claude"
 
 
 def test_an_unknown_window_after_typing_keeps_the_one_before(monkeypatch, wayland):
     _focus_moves_on_paste(monkeypatch, "org.kde.kwrite", None)
-    app._inject_text("Hello. ", "paste", 0.0)
+    app._inject_text("Hello. ", "paste")
     assert app.state.last_inserted_window == "org.kde.kwrite"
 
 
@@ -391,6 +391,6 @@ def test_a_tab_said_mid_sentence_is_four_spaces_in_claude_desktop_however_it_typ
     and the next space typed sends the message halfway through."""
     typed = _typing_into(monkeypatch, "com.anthropic.Claude", mode="type")
     monkeypatch.setattr(app, "_type_text_raw", lambda t: typed.append(t) or True)
-    assert app._inject_text("Name\taddress. ", mode, 0.0) == "ok"
+    assert app._inject_text("Name\taddress. ", mode) == "ok"
     assert typed == ["Name    address. "]
     assert app.state.last_inserted_text == "Name    address. "

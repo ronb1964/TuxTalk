@@ -34,7 +34,7 @@ def chat(monkeypatch, keyboard):
     monkeypatch.setattr(focused_window, "look", lambda: tuple(focus))
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: focus[0])
 
-    def deliver(text, mode, t0, one_block=False, *, where):
+    def deliver(text, mode, one_block=False, *, where):
         typed.append((text, focus[1]))
         app.state.last_inserted_text = text
         return "ok"

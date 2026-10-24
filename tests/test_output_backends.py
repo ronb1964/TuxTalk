@@ -252,7 +252,7 @@ def test_flatpak_electron_app_types_via_libei_not_the_virtual_keyboard(monkeypat
             return True
 
     monkeypatch.setattr(app, "_output_backend", lambda: FakeBackend())
-    app._inject_text("line1\tindented", "auto", 0.0)
+    app._inject_text("line1\tindented", "auto")
 
     assert keyboard.events == [], "the virtual keyboard must not be used on the Flatpak"
     assert typed == ["line1    indented"], "tab→4 spaces, delivered via libei"
@@ -347,7 +347,7 @@ def test_flatpak_typing_records_what_libei_types_for_undo(monkeypatch):
             return True
 
     monkeypatch.setattr(app, "_output_backend", lambda: FakeLibei())
-    assert app._inject_text("Wait… café", "auto", 0.0) == "ok"
+    assert app._inject_text("Wait… café", "auto") == "ok"
     assert typed == ["Wait... cafe"]
     assert app.state.last_inserted_text == "Wait... cafe"
 

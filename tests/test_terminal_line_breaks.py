@@ -95,7 +95,7 @@ def test_new_line_in_kwrite_is_pasted_not_a_shift_enter(window, monkeypatch):
     monkeypatch.setattr(app, "_paste_text", lambda t: pasted.append(t) or True)
     monkeypatch.setattr(app, "_send_shift_enter", lambda: keys.append("shift+enter") or True)
 
-    assert app._inject_text("$45.\xa7SHIFT_ENTER\xa7$25. ", "auto", 0.0) == "ok"
+    assert app._inject_text("$45.\xa7SHIFT_ENTER\xa7$25. ", "auto") == "ok"
     assert pasted == ["$45.\n$25. "]
     assert keys == []
 
@@ -110,6 +110,6 @@ def test_new_line_in_a_chat_app_is_still_shift_enter(monkeypatch):
     monkeypatch.setattr(app, "_paste_text", lambda t: pasted.append(t) or True)
     monkeypatch.setattr(app, "_send_shift_enter", lambda: keys.append("shift+enter") or True)
 
-    assert app._inject_text("one\xa7SHIFT_ENTER\xa7two", "auto", 0.0) == "ok"
+    assert app._inject_text("one\xa7SHIFT_ENTER\xa7two", "auto") == "ok"
     assert pasted == ["one", "two"]
     assert keys == ["shift+enter"]

@@ -2385,8 +2385,7 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
     return text
 
 
-def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = False,
-                 into=None) -> str:
+def _inject_text(text: str, injection_mode: str, one_block: bool = False, into=None) -> str:
     """Insert *text* into the active app (_deliver_text), then remember the
     window it landed in, for undo, "fix that word", select and move, and an
     automatic Enter after it (send_countdown.landed). *into*, a look taken
@@ -2406,7 +2405,7 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
         return "moved"
     sends_before = _keys_sent.count
     try:
-        outcome = _deliver_text(text, injection_mode, t0, one_block, where=before)
+        outcome = _deliver_text(text, injection_mode, one_block, where=before)
     except (virtual_keyboard.StoppedPartway, virtual_keyboard.GaveUp, PasswordFieldNow) as stop:
         outcome = _delivery_stopped(stop, typed_some=_keys_sent.count != sends_before)
     if outcome in ("ok", "partial"):
@@ -2449,13 +2448,11 @@ def _delivery_stopped(stop, typed_some: bool) -> str:
     return "partial"
 
 
-def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = False,
-                  *, where) -> str:
+def _deliver_text(text: str, injection_mode: str, one_block: bool = False, *, where) -> str:
     """Determine the best injection method and insert text into the active app.
 
     Pastes or types as _determine_injection_method decides, typing whatever a
     failed paste could not deliver.
-    t0 is the timestamp when stop_recording began (for timing logs).
 
     Returns how it went: "ok" (all of it arrived), "partial" (some chunks of a
     multi-part dictation arrived, then it stopped), "failed" (none did) or
@@ -3033,7 +3030,7 @@ def _type_boundary(pending: dict, tail: str, injection_mode: str) -> None:
     send_to = state.send_to
     _remember_said(tail, chunked=True)
     # Only into the phrase's window: the context pass before this can take a while.
-    ok = _inject_text(tail, injection_mode, time.time(), into=pending["where"]) == "ok"
+    ok = _inject_text(tail, injection_mode, into=pending["where"]) == "ok"
     _remember_shown(tail, chunked=True, ok=ok)
     if ok:
         # Undo and "delete last sentence" then see the whole chunk.
@@ -3194,7 +3191,7 @@ def _type_onto_dictation(text: str, injection_mode: str) -> str:
     """Type *text* right after the dictation, keeping undo's record of it
     whole; _inject_text's outcome."""
     typed = state.last_inserted_text
-    outcome = _inject_text(text, injection_mode, time.time())
+    outcome = _inject_text(text, injection_mode)
     if outcome == "ok":
         state.last_inserted_text = typed + text
     return outcome
@@ -3227,7 +3224,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                 cue, state.held_cue = state.held_cue, ""
                 if auto_period and cue[-1] not in ".?!":
                     cue += "."
-                _inject_text(cue + (" " if auto_space else ""), injection_mode, time.time())
+                _inject_text(cue + (" " if auto_space else ""), injection_mode)
             if (_press_enter_after and state.chunk_typed
                     and not is_document_window(_query_focused_window_class())):
                 # The recording ended in a pause; its phrases are typed, so
@@ -3412,7 +3409,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             chunked = chunk_role is not None
             said_before = _remember_said(text, chunked, taken_back)
             try:
-                outcome = _inject_text(text, injection_mode, t0)
+                outcome = _inject_text(text, injection_mode)
             except Exception as e:
                 # The transcription worked; only getting it into the window
                 # didn't, so this is reported as undelivered, not as the
@@ -3916,7 +3913,7 @@ def _edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0
         # The selection is still active, so typing or pasting replaces it, in
         # one block (see _inject_text).
         try:
-            outcome = _inject_text(result, injection_mode, t0, one_block=True)
+            outcome = _inject_text(result, injection_mode, one_block=True)
         except Exception as e:
             logger.error(f"Voice edit: typing the rewrite failed: {e}", exc_info=True)
             outcome = "failed"
@@ -3988,7 +3985,7 @@ def _paste_last_dictation(cfg) -> None:
     if getattr(cfg, "auto_space", True):
         text += " "
     logger.info("Paste last dictation")
-    outcome = _inject_text(text, cfg.injection_mode, time.time())
+    outcome = _inject_text(text, cfg.injection_mode)
     if outcome in delivery_notices.NOTICES:
         _report_undelivered(outcome, cfg.beeps)
 

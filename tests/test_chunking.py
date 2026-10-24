@@ -366,7 +366,7 @@ def pipeline(monkeypatch):
     texts, typed, beeps = [], [], []
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: texts.pop(0))
 
-    def fake_inject(text, mode, t0, one_block=False, into=None):
+    def fake_inject(text, mode, one_block=False, into=None):
         typed.append(text)
         app.state.last_inserted_text = text
         return "ok"
@@ -1053,7 +1053,7 @@ def test_fix_that_word_after_a_window_change_gets_the_last_phrase(fix_word, monk
     texts, typed, opened = fix_word
     windows = iter(["kwrite", "kwrite", "konsole"])
 
-    def fake_inject(text, mode, t0, one_block=False, into=None):
+    def fake_inject(text, mode, one_block=False, into=None):
         typed.append(text)
         app.state.last_inserted_text = text
         app.state.last_inserted_window = next(windows)

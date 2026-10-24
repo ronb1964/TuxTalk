@@ -166,7 +166,7 @@ def test_delivery_stops_when_the_focus_moves_into_a_password_field(desktop, monk
     monkeypatch.setattr(app, "_send_shift_enter", lambda: True)
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     desktop["answers"], desktop["password"] = [False], True   # a text box, then a password field
-    assert app._inject_text("first line\nsecond line", "auto", 0.0) == "password_field"
+    assert app._inject_text("first line\nsecond line", "auto") == "password_field"
     assert desktop["pasted"] == ["first line"] and desktop["typed"] == []
 
 
@@ -177,7 +177,7 @@ def test_a_paste_stopped_there_isnt_finished_by_typing(desktop, monkeypatch):
     monkeypatch.setattr(app, "_send_shift_enter", lambda: True)
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     desktop["answers"] = [False, True]          # then "no" to any further question
-    assert app._inject_text("first line\nsecond line", "auto", 0.0) == "password_field"
+    assert app._inject_text("first line\nsecond line", "auto") == "password_field"
     assert desktop["pasted"] == ["first line"] and desktop["typed"] == []
 
 
@@ -191,7 +191,7 @@ def test_typed_line_by_line_it_stops_there_too(desktop, monkeypatch):
     monkeypatch.setattr(app, "_send_shift_enter", lambda: keys.append("SHIFT+ENTER") or True)
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     desktop["answers"], desktop["password"] = [False], True
-    assert app._inject_text("first line\nsecond line", "auto", 0.0) == "password_field"
+    assert app._inject_text("first line\nsecond line", "auto") == "password_field"
     assert keys == ["first line", "SHIFT+ENTER"]
     assert app.state.last_inserted_text == ""      # undo deletes nothing it can't count
 

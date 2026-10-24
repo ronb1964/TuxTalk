@@ -377,7 +377,7 @@ def test_a_stuck_key_types_nothing_another_way(keyboard, stuck_right_ctrl, monke
     monkeypatch.setattr(app, "_determine_injection_method", lambda mode: ("type", "test"))
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "kwrite")
     monkeypatch.setattr(focused_window, "look", lambda: ("kwrite", None))
-    assert app._inject_text("hello there", "type", 0.0) == "key_held"
+    assert app._inject_text("hello there", "type") == "key_held"
     assert ran == [] and keyboard.events == []
     assert "Right Ctrl" in delivery_notices.NOTICES["key_held"]
 
@@ -423,7 +423,7 @@ def test_a_key_stuck_after_the_first_line_says_only_part_was_typed(keyboard, stu
     all again over it."""
     board = stuck_right_ctrl()
     board.pressed = lambda look: len(keyboard.events) >= 2      # once "a" is typed
-    assert app._inject_text("a\xa7SHIFT_ENTER\xa7b", "type", 0.0) == "partial"
+    assert app._inject_text("a\xa7SHIFT_ENTER\xa7b", "type") == "partial"
     assert keyboard.typed_keys() == [ecodes.KEY_A]
 
 
@@ -431,7 +431,7 @@ def test_a_key_stuck_partway_isnt_blamed_on_the_keyboard(keyboard, stuck_right_c
                                                           typing_into_kwrite, caplog):
     stuck_right_ctrl(start=2)
     with caplog.at_level("INFO", logger="tuxtalk.app"):
-        assert app._inject_text("ab", "type", 0.0) == "partial"
+        assert app._inject_text("ab", "type") == "partial"
     assert keyboard.typed_keys() == [ecodes.KEY_A]
     assert "virtual keyboard stopped" not in caplog.text
     assert "Typing stopped partway through the dictation (key_held)" in caplog.text

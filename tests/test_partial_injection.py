@@ -56,7 +56,7 @@ def test_terminal_remainder_never_presses_a_plain_enter(monkeypatch, quiet):
     monkeypatch.setattr(app, "_type_text_raw", lambda t: typed.append(t) or True)
     monkeypatch.setattr(app, "_send_shift_enter", lambda: shift_enters.append(1) or True)
 
-    outcome = app._inject_text(f"ls{MARKER}foo", "auto", 0.0)
+    outcome = app._inject_text(f"ls{MARKER}foo", "auto")
 
     assert outcome == "ok"
     assert not any("\n" in t for t in typed), "a plain Enter was typed in a terminal"
@@ -78,7 +78,7 @@ def test_typed_snippet_newline_is_shift_enter_on_x11(monkeypatch, quiet):
     monkeypatch.setattr(app, "_type_text_raw", lambda t: keys.append(t) or True)
     monkeypatch.setattr(app, "_send_shift_enter", lambda: keys.append("SHIFT+ENTER") or True)
 
-    outcome = app._inject_text("Best regards,\nRon ", "auto", 0.0)
+    outcome = app._inject_text("Best regards,\nRon ", "auto")
 
     assert outcome == "ok"
     assert keys == ["Best regards,", "SHIFT+ENTER", "Ron "]
@@ -93,7 +93,7 @@ def test_failed_typing_empties_the_undo_buffer(monkeypatch, quiet):
     monkeypatch.setattr(app, "_type_text", lambda t: False)
     app.state.last_inserted_text = "the previous dictation"
 
-    assert app._inject_text("a dictation that stopped partway", "type", 0.0) == "failed"
+    assert app._inject_text("a dictation that stopped partway", "type") == "failed"
     assert app.state.last_inserted_text == ""
 
 
@@ -106,7 +106,7 @@ def test_smart_paste_records_the_line_break_that_landed(monkeypatch, quiet):
     monkeypatch.setattr(app, "_send_shift_enter", lambda: True)
     monkeypatch.setattr(app, "_type_text", lambda t: False)
 
-    outcome = app._inject_text(f"first{MARKER}second", "paste", 0.0)
+    outcome = app._inject_text(f"first{MARKER}second", "paste")
 
     assert outcome == "partial"
     assert app.state.last_inserted_text == "first\n"
@@ -119,7 +119,7 @@ def test_smart_paste_leaves_out_a_line_break_that_failed(monkeypatch, quiet):
     monkeypatch.setattr(app, "_send_shift_enter", lambda: False)
     monkeypatch.setattr(app, "_type_text", lambda t: False)
 
-    app._inject_text(f"first{MARKER}second", "paste", 0.0)
+    app._inject_text(f"first{MARKER}second", "paste")
 
     assert app.state.last_inserted_text == "first"
 
@@ -131,7 +131,7 @@ def test_typing_into_electron_records_the_line_break_that_landed(monkeypatch, qu
     monkeypatch.setattr(app, "_type_text_raw", lambda t: t == "first")
     monkeypatch.setattr(app, "_send_shift_enter", lambda: True)
 
-    outcome = app._inject_text(f"first{MARKER}second", "paste", 0.0)
+    outcome = app._inject_text(f"first{MARKER}second", "paste")
 
     assert outcome == "partial"
     assert app.state.last_inserted_text == "first\n"

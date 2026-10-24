@@ -202,7 +202,7 @@ def test_a_dictation_typed_partway_is_partial_and_not_typed_again(breaks_once, m
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "Claude")
     monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
     monkeypatch.setattr(app.state, "last_inserted_text", "earlier dictation")
-    assert app._inject_text("hello world", "auto", 0.0) == "partial"
+    assert app._inject_text("hello world", "auto") == "partial"
     assert len(breaks_once.events) == 6
     assert app.state.last_inserted_text == "", "undo would count on text that may not be there"
 
@@ -225,7 +225,7 @@ def test_a_paste_shortcut_cut_off_is_partial_and_not_typed_after(breaks_once, mo
         def poll(self):
             return 0
     monkeypatch.setattr(app.subprocess, "Popen", lambda *a, **k: Copied())
-    assert app._inject_text("hello world", "paste", 0.0) == "partial"
+    assert app._inject_text("hello world", "paste") == "partial"
     keys = {code for code, _value in breaks_once.events[4:]}
     assert keys == {29, 47}, "typed the text after a paste that may have landed"
     assert breaks_once.events[-2:] == [(47, 0), (29, 0)], "Ctrl and V left down"

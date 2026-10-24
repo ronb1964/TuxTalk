@@ -254,5 +254,5 @@ def test_undo_remembers_the_window_the_text_went_to_not_wl_copys(monkeypatch, tr
     monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
     monkeypatch.setattr(app, "_paste_text", paste)
     monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
-    app._inject_text("Hello. ", "paste", 0.0)
+    app._inject_text("Hello. ", "paste")
     assert app.state.last_inserted_window == "org.kde.kwrite"

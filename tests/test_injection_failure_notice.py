@@ -37,7 +37,7 @@ def _paste_mode(monkeypatch):
 def test_a_paste_that_lands_is_ok(monkeypatch, quiet):
     _paste_mode(monkeypatch)
     monkeypatch.setattr(app, "_paste_text", lambda *a, **k: True)
-    assert app._inject_text("hello", "auto", 0.0) == "ok"
+    assert app._inject_text("hello", "auto") == "ok"
 
 
 def test_nothing_landing_is_failed(monkeypatch, quiet):
@@ -45,14 +45,14 @@ def test_nothing_landing_is_failed(monkeypatch, quiet):
     _paste_mode(monkeypatch)
     monkeypatch.setattr(app, "_paste_text", lambda *a, **k: False)
     monkeypatch.setattr(app, "_type_text", lambda t: False)
-    assert app._inject_text("Привіт", "auto", 0.0) == "failed"
+    assert app._inject_text("Привіт", "auto") == "failed"
 
 
 def test_typing_that_lands_after_a_refused_paste_is_ok(monkeypatch, quiet):
     _paste_mode(monkeypatch)
     monkeypatch.setattr(app, "_paste_text", lambda *a, **k: False)
     monkeypatch.setattr(app, "_type_text", lambda t: True)
-    assert app._inject_text("hello", "auto", 0.0) == "ok"
+    assert app._inject_text("hello", "auto") == "ok"
 
 
 def test_some_chunks_landing_is_partial(monkeypatch, quiet):
@@ -60,13 +60,13 @@ def test_some_chunks_landing_is_partial(monkeypatch, quiet):
     monkeypatch.setattr(app, "_paste_text", lambda part, *a, **k: part != "third")
     monkeypatch.setattr(app, "_type_text", lambda t: False)
     text = MARKER.join(["first", "second", "third"])
-    assert app._inject_text(text, "auto", 0.0) == "partial"
+    assert app._inject_text(text, "auto") == "partial"
 
 
 def test_type_mode_failure_is_failed(monkeypatch, quiet):
     monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("type", "test"))
     monkeypatch.setattr(app, "_type_text", lambda t: False)
-    assert app._inject_text("hello", "type", 0.0) == "failed"
+    assert app._inject_text("hello", "type") == "failed"
 
 
 @pytest.fixture
@@ -80,13 +80,13 @@ def electron(monkeypatch, quiet):
 
 def test_typing_into_electron_that_lands_is_ok(monkeypatch, electron):
     monkeypatch.setattr(app, "_type_text_raw", lambda t: True)
-    assert app._inject_text("hello", "auto", 0.0) == "ok"
+    assert app._inject_text("hello", "auto") == "ok"
 
 
 def test_typing_into_electron_stopping_partway_is_partial(monkeypatch, electron):
     calls = []
     monkeypatch.setattr(app, "_type_text_raw", lambda t: calls.append(t) or len(calls) == 1)
-    assert app._inject_text(MARKER.join(["first", "second"]), "auto", 0.0) == "partial"
+    assert app._inject_text(MARKER.join(["first", "second"]), "auto") == "partial"
 
 
 # --- _transcribe_and_inject tells the user --------------------------------------
@@ -108,7 +108,7 @@ def dictation(monkeypatch):
                 raise outcome
             monkeypatch.setattr(app, "_inject_text", boom)
         else:
-            monkeypatch.setattr(app, "_inject_text", lambda text, mode, t0: outcome)
+            monkeypatch.setattr(app, "_inject_text", lambda text, mode: outcome)
         frames = [(np.ones(app.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
         app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=beeps_on,
                                    smart_quotes=False, notify_on=notify_on)
