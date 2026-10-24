@@ -113,7 +113,7 @@ def service_hears(keyboards, keyname):
     older install still in the "input" group, say."""
     if not keyboards:
         return False
-    if keyname not in secure_input.RIGHT_MODIFIER_KEYS:
+    if keyname not in secure_input.KEYS_SINCE:
         return True
     version = next((k.helper_version for k in keyboards if hasattr(k, "helper_version")), None)
     if version is None:

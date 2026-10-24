@@ -299,20 +299,23 @@ def is_older(running):
     return running is not None and _version(running) < _version(VERSION)
 
 
-# The dictation keys helpers before 1.5 don't report.
-RIGHT_MODIFIER_KEYS = ("Right Ctrl", "Right Alt")
+# The dictation keys the first helpers didn't report, and the version that
+# does. Here, not in hotkey_helper.py: the helper speaks key codes, and
+# nothing in it would use this.
+KEYS_SINCE = {"Right Ctrl": "1.5", "Right Alt": "1.5"}
 
 
 def hears_key(running, key):
     """Whether the running helper (version *running*, None when there is
     none) reports dictation key *key* ("F8", "Right Ctrl")."""
-    return running is None or key not in RIGHT_MODIFIER_KEYS or _version(running) >= (1, 5)
+    return (running is None or key not in KEYS_SINCE
+            or _version(running) >= _version(KEYS_SINCE[key]))
 
 
 def unheard_keys(keys):
     """Those of dictation *keys* the running hotkey helper is too old to
     report; the helper is asked its version only when one could be."""
-    if not set(keys) & set(RIGHT_MODIFIER_KEYS):
+    if not set(keys) & set(KEYS_SINCE):
         return []
     running = running_version()
     return [k for k in keys if not hears_key(running, k)]
