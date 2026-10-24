@@ -1485,7 +1485,6 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
             # app. Undo everything and tell the user; failing silently would
             # leave the keyboard grabbed and the machine unusable.
             logger.error(f"Could not start recording: {e}", exc_info=True)
-            print(f"Could not start recording: {e}")
             state.is_recording = False
             _stop_stream_safely()
             _release_all_grabs()
@@ -5018,7 +5017,6 @@ def main():
     _custom_commands = load_custom_commands()
     if _custom_commands:
         logger.info(f"Loaded {len(_custom_commands)} custom voice command(s)")
-        print(f"Loaded {len(_custom_commands)} custom voice command(s)")
     global _custom_words
     from . import custom_words
     _custom_words = custom_words.load()

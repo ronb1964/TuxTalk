@@ -1,6 +1,6 @@
 {
  "files": {
-  "app.py": 5257,
+  "app.py": 5256,
   "prefs.py": 7120,
   "tray.py": 2548,
   "welcome_dialog.py": 3256
@@ -500,7 +500,7 @@
   },
   "app.py::_transcribe_and_inject": {
    "decisions": 69,
-   "lines": 259
+   "lines": 257
   },
   "app.py::_transcribe_audio": {
    "decisions": 25,
@@ -511,7 +511,7 @@
    "lines": 104
   },
   "app.py::main": {
-   "lines": 270
+   "lines": 269
   },
   "audio_duck.py::AudioDucker._restore_now": {
    "decisions": 16
