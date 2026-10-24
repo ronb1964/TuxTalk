@@ -113,7 +113,7 @@ def sound(monkeypatch):
         system = FakeSoundSystem(latency, period, downstream)
         monkeypatch.setattr(beeps, "sd", system)
         monkeypatch.setattr(beeps, "STUCK_S", 0.5)
-        for name, value in (("_devices", {}), ("_latency", 0.0), ("_latency_logged", False),
+        for name, value in (("_devices", {}), ("_latency_logged", False),
                             ("_underflow_logged", False), ("_failures_logged", set())):
             monkeypatch.setattr(beeps, name, value)
         return system
@@ -201,7 +201,6 @@ def test_the_output_latency_is_logged_once(sound, caplog):
     beeps.wait_until_played(5)
     said = [r.getMessage() for r in caplog.records if "latency" in r.getMessage()]
     assert said == ["Beeps: the output's latency is 0.174s"]
-    assert beeps.output_latency() == 0.174
 
 
 @pytest.mark.parametrize("broken", ["open", "start", "stuck"])

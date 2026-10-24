@@ -67,7 +67,6 @@ OUTPUT_HINTS = ("pipewire", "pulse", "sysdefault", "default", "analog")
 
 _lock = threading.Lock()
 _devices = {}            # the rate asked for: (device index or None, rate it plays)
-_latency = 0.0
 _latency_logged = False
 _underflow_logged = False
 _failures_logged = set()  # each kind of audio failure is logged once
@@ -142,12 +141,6 @@ def _search(samplerate):
                     continue
                 return i, rate
     return None, samplerate
-
-
-def output_latency():
-    """The latency the last sound's stream reported, in seconds; 0.0 before
-    the first one."""
-    return _latency
 
 
 def heard_in_recording(sound, recorded, rate, captured_until):
@@ -331,12 +324,12 @@ class _Playback:
 def _play(samples, rate, device, sound):
     """Play *samples* to the end on a stream of their own, then close it.
     Raises on an audio error, or when the output stops taking samples."""
-    global _latency, _latency_logged, _underflow_logged
+    global _latency_logged, _underflow_logged
     playback = _Playback(samples, rate, sound)
     stream = sd.OutputStream(samplerate=rate, channels=1, dtype="float32", device=device,
                              callback=playback.callback)
     try:
-        playback.latency = _latency = stream.latency
+        playback.latency = stream.latency
         if not _latency_logged:
             _latency_logged = True
             logger.info(f"Beeps: the output's latency is {stream.latency:.3f}s")
