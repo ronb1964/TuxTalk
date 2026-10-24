@@ -2456,15 +2456,12 @@ def _send_backspaces(count: int) -> bool:
     except virtual_keyboard.GaveUp:
         return False        # none sent, and there's no other way to send them
 
-# Key names voice_navigation uses -> Linux key codes (the letter A is looked up
-# on the active layout, as Ctrl shortcuts are matched by letter).
-_NAV_KEYCODES = {"CTRL": 29, "SHIFT": 42, "LEFT": 105, "RIGHT": 106, "UP": 103,
-                 "DOWN": 108, "HOME": 102, "END": 107, "ENTER": 28, "TAB": 15}
-
-
 def _nav_keycode(name: str) -> int:
-    if name in _NAV_KEYCODES:
-        return _NAV_KEYCODES[name]
+    """The key code for a key name of _send_chords: a letter (Ctrl+A) is
+    looked up on the active layout, as Ctrl shortcuts are matched by letter."""
+    from .key_commands import KEY_CODES
+    if name in KEY_CODES:
+        return KEY_CODES[name]
     from .keyboard_layout import shortcut_keycode
     return shortcut_keycode(name.lower())
 
