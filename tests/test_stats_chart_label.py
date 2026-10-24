@@ -24,16 +24,16 @@ class _RecordingCairo:
 def _draw(words_per_day):
     gi = pytest.importorskip("gi")
     gi.require_version("Gtk", "3.0")
-    from tuxtalk.prefs import PreferencesWindow
+    from tuxtalk.prefs_stats import StatsTab
     start = datetime.date(2026, 10, 1)
-    owner = SimpleNamespace(_stats_daily=[(start + datetime.timedelta(days=i), w)
-                                          for i, w in enumerate(words_per_day)])
+    owner = SimpleNamespace(_daily=[(start + datetime.timedelta(days=i), w)
+                                    for i, w in enumerate(words_per_day)])
     color = SimpleNamespace(red=1, green=1, blue=1)
     widget = SimpleNamespace(
         get_allocated_width=lambda: 560, get_allocated_height=lambda: 120,
         get_style_context=lambda: SimpleNamespace(get_color=lambda _f: color))
     cr = _RecordingCairo()
-    PreferencesWindow._draw_stats_chart(owner, widget, cr)
+    StatsTab._draw_chart(owner, widget, cr)
     return [t for t in cr.texts if t.startswith("most:")]
 
 

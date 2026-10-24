@@ -1,7 +1,7 @@
 {
  "files": {
   "app.py": 4860,
-  "prefs.py": 6572,
+  "prefs.py": 6343,
   "tray.py": 2477,
   "welcome_dialog.py": 3222
  },
@@ -214,7 +214,6 @@
   "prefs.py::PreferencesWindow._on_model_changed::swallowed_error": 1,
   "prefs.py::PreferencesWindow._on_remove_word::swallowed_error": 1,
   "prefs.py::PreferencesWindow._on_remove_word::undocumented": 1,
-  "prefs.py::PreferencesWindow._on_reset_stats::undocumented": 1,
   "prefs.py::PreferencesWindow._on_restore_earlier_clicked::undocumented": 1,
   "prefs.py::PreferencesWindow._on_save_backup_clicked::undocumented": 1,
   "prefs.py::PreferencesWindow._on_test_hotkeys._on_hotkey_signal::long_line": 2,
@@ -587,9 +586,6 @@
   "prefs.py::PreferencesWindow.create_general_tab": {
    "decisions": 20,
    "lines": 489
-  },
-  "prefs.py::PreferencesWindow.create_stats_tab": {
-   "lines": 107
   },
   "prefs.py::PreferencesWindow.create_ui": {
    "lines": 104
