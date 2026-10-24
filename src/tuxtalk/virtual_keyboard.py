@@ -202,7 +202,7 @@ def send(events, delay_ms: float = KEY_DELAY_MS, before_press=None) -> bool:
 def _wait_unlocked(device, down, wait) -> None:
     """Run *wait* with the lock let go. Taking it meanwhile, the hotkey
     loop's own keys go out at once: its Ctrl that keeps a Right Alt tap from
-    opening the menu bar (app._guard_alt_tap) came after the tap otherwise.
+    opening the menu bar (modifier_hotkeys.guard_alt_tap) came after the tap otherwise.
     The keys this send holds (Shift for a capital) are let go first and
     pressed again after, so nothing sent meanwhile gets them."""
     from evdev import ecodes

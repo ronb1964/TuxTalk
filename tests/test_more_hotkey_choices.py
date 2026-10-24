@@ -43,6 +43,7 @@ def service(monkeypatch):
     monkeypatch.setattr(app, "_grab_keyboards_hiding", lambda devices, codes: done.append("grab"))
     monkeypatch.setattr(app, "_release_all_grabs", lambda: done.append("let go"))
     monkeypatch.setattr(app, "_send_keys", lambda events, **k: done.append(("keys", events)) or True)
+    monkeypatch.setattr(modifier_hotkeys, "guard_alt_tap", lambda: done.append("Ctrl guard"))
 
     def start(*a, **k):
         done.append("start")
@@ -103,7 +104,7 @@ def test_right_alt_presses_ctrl_before_hiding_so_no_menu_bar_opens(service):
     """A lone Alt tap puts Firefox's menu bar in focus, and the dictation
     would be typed into it."""
     key(RALT, 1, set(), hold=RALT)
-    assert service[:3] == [("keys", [(LCTRL, 1), (LCTRL, 0)]), "grab", "start"]
+    assert service[:3] == ["Ctrl guard", "grab", "start"]
 
 
 def test_right_alt_with_another_modifier_held_presses_no_ctrl(service):
@@ -112,12 +113,12 @@ def test_right_alt_with_another_modifier_held_presses_no_ctrl(service):
     held = set()
     key(LCTRL, 1, held, hold=RALT)
     key(RALT, 1, held, hold=RALT)
-    assert not [d for d in service if d[0] == "keys"]
+    assert "Ctrl guard" not in service
 
 
 def test_right_ctrl_needs_no_ctrl_press(service):
     key(RCTRL, 1, set(), hold=RCTRL)
-    assert not [d for d in service if d[0] == "keys"]
+    assert "Ctrl guard" not in service
 
 
 def test_a_right_ctrl_toggle_is_hidden_before_anything_is_typed(service):
@@ -167,7 +168,7 @@ def test_a_right_ctrl_toggle_in_the_users_own_shortcut_stays_shown(service):
 
 def test_a_right_alt_toggle_presses_ctrl_then_hides(service):
     key(RALT, 1, set(), toggle=RALT)
-    assert service[:3] == [("keys", [(LCTRL, 1), (LCTRL, 0)]), "grab", "start"]
+    assert service[:3] == ["Ctrl guard", "grab", "start"]
 
 
 def test_the_hotkey_test_sees_a_right_ctrl_toggle_and_nothing_else_happens(service, monkeypatch):
@@ -234,11 +235,11 @@ def test_typing_that_waits_for_right_alt_doesnt_hold_up_the_menu_guard(keyboard,
     typer.start()
     try:
         assert looked.wait(2)
-        guard = threading.Thread(target=app._guard_alt_tap)
+        guard = threading.Thread(target=modifier_hotkeys.guard_alt_tap)
         guard.start()
         guard.join(timeout=2)
         assert not guard.is_alive(), "the Ctrl waited for the typing"
-        assert keyboard.events == [(LCTRL, 1), (LCTRL, 0)]
+        assert (LCTRL, 0) in keyboard.events and (ecodes.KEY_A, 1) not in keyboard.events
     finally:
         up.set()
         typer.join(timeout=2)
@@ -538,8 +539,36 @@ def test_a_double_tap_of_a_right_ctrl_or_alt_toggle_goes_hands_free(keyboard, re
 
 def test_the_right_alt_guard_goes_while_right_alt_is_held(keyboard, no_hotkeys_noted):
     modifier_hotkeys.note([Keyboard(lambda look: True, code=RALT)], RALT, None)
-    app._guard_alt_tap()
+    modifier_hotkeys.guard_alt_tap()
     assert keyboard.events == [(LCTRL, 1), (LCTRL, 0)]
+
+
+def test_typing_that_waits_for_right_alt_presses_the_guard_itself(keyboard, no_hotkeys_noted):
+    """Typing a paragraph on the hotkey loop's thread, a Right Alt pressed
+    for the next dictation is read only once typing is done, after it's let
+    go: the desktop saw a lone Alt tap, and the rest of the paragraph went
+    into Firefox's menu bar as menu letters."""
+    seen = []
+
+    def pressed(look):
+        seen.append((look <= 4, list(keyboard.events)))
+        return look <= 4
+    modifier_hotkeys.note([Keyboard(pressed, code=RALT)], RALT, None)
+    assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
+    assert keyboard.events == [(LCTRL, 1), (LCTRL, 0), (ecodes.KEY_A, 1), (ecodes.KEY_A, 0)]
+    assert any(down and (LCTRL, 0) in events for down, events in seen)
+
+
+def test_typing_waits_for_right_alt_without_a_guard_when_ctrl_is_held_too(keyboard,
+                                                                          no_hotkeys_noted):
+    """Letting go of the guard's Ctrl could let go of the user's Ctrl too."""
+    class BothDown(Keyboard):
+        def active_keys(self):
+            self.looks += 1
+            return [RALT, LCTRL] if self.looks <= 4 else []
+    modifier_hotkeys.note([BothDown(None, code=RALT)], RALT, None)
+    assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
+    assert keyboard.events == [(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)]
 
 
 # --- the desktops hold Scroll Lock back from the focused app ------------------------

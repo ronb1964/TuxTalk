@@ -1636,7 +1636,7 @@ def _key_delay() -> int:
 
 
 def _send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY_MS,
-               raise_if_partial: bool = False, under_hotkey: bool = False) -> bool:
+               raise_if_partial: bool = False) -> bool:
     """Press keys [(evdev code, 1 down / 0 up)] on TuxTalk's virtual keyboard.
     True only if all of them were sent: keystrokes that never happened must
     not reach the undo buffer.
@@ -1645,7 +1645,6 @@ def _send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY
     not yet hidden from the desktop (modifier_hotkeys): pressed under it,
     letters are shortcuts (Ctrl+W closes the tab). Typing on the hotkey
     loop's own thread, TuxTalk hasn't read the press yet to hide it.
-    *under_hotkey* is for the keys meant to go with it.
 
     With *raise_if_partial*, a keyboard that failed partway raises
     virtual_keyboard.StoppedPartway instead of returning False, for a caller
@@ -1653,7 +1652,7 @@ def _send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY
     and a wait that gave up raises virtual_keyboard.GaveUp: the text must
     not go out another way (wtype, the clipboard) either.
     """
-    before_press = None if under_hotkey else modifier_hotkeys.wait_while_held(_destination)
+    before_press = modifier_hotkeys.wait_while_held(_destination)
     try:
         sent = virtual_keyboard.send(events, delay_ms, before_press)
     except virtual_keyboard.StoppedPartway:
@@ -4530,16 +4529,6 @@ def _wait_for_keys_up(devices, codes, timeout) -> bool:
         time.sleep(0.02)
 
 
-def _guard_alt_tap() -> None:
-    """Press Ctrl while a Right Alt dictation key is down. To the desktop and
-    apps a lone tap of Alt opens the menu bar (Firefox, LibreOffice), and what
-    TuxTalk types next would go into the menu. Any key between Alt's press and
-    release makes it a shortcut instead; Ctrl+Alt alone does nothing. keyd
-    does the same for the same reason."""
-    _send_keys([(ecodes.KEY_LEFTCTRL, 1), (ecodes.KEY_LEFTCTRL, 0)],
-               what="Ctrl to keep Right Alt from opening a menu", under_hotkey=True)
-
-
 def _held_shift(held_modifiers) -> set:
     """The Shift keys among *held_modifiers*: Shift + the dictation key starts
     a voice edit instead of a dictation."""
@@ -4612,7 +4601,7 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
     exception inside start_recording — releases the keyboard.
     """
     if modifier_hotkeys.right_alt_alone(event, (hold_key, toggle_key), held_modifiers):
-        _guard_alt_tap()
+        modifier_hotkeys.guard_alt_tap()
 
     # --- Hotkey test mode: report presses via D-Bus instead of recording ---
     if event.value == 1 and _hotkey_test_active():

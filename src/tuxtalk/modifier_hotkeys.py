@@ -9,6 +9,7 @@ import time
 
 from evdev import ecodes
 
+from . import virtual_keyboard
 from .config import HOTKEY_CHOICES
 from .hotkey_keys import MODIFIER_CODES, keys_down
 from .logger import setup_logger
@@ -97,11 +98,17 @@ def wait_while_held(destination=None):
         return keys_down(keyboards) & (modifiers - _hidden_now())
 
     def wait():
+        """Until no such key is down, guarding a Right Alt first; GaveUp
+        when it stays down or the destination changed meanwhile."""
         where = destination() if destination else None
         give_up_at = time.monotonic() + HELD_LIMIT_S
+        first = True
         while still := held():
             if still & _stuck or time.monotonic() >= give_up_at:
                 _give_up(still)
+            if first and ecodes.KEY_RIGHTALT in still:
+                _guard_if_alone(keyboards)
+            first = False
             time.sleep(0.02)
         _stuck.clear()
         if destination and destination() != where:
@@ -129,6 +136,30 @@ def wait_until_up() -> bool:
     return True
 
 
+def guard_alt_tap() -> None:
+    """Press Ctrl while a Right Alt dictation key is down. To the desktop and
+    apps a lone tap of Alt opens the menu bar (Firefox, LibreOffice), and what
+    TuxTalk types next would go into the menu. Any key between Alt's press and
+    release makes it a shortcut instead; Ctrl+Alt alone does nothing. keyd
+    does the same for the same reason. Pressed at once: it goes with the key
+    that typing waits for."""
+    try:
+        if not virtual_keyboard.send([(ecodes.KEY_LEFTCTRL, 1), (ecodes.KEY_LEFTCTRL, 0)]):
+            logger.error("Couldn't press Ctrl to keep Right Alt from opening a menu")
+    except virtual_keyboard.StoppedPartway:
+        pass            # logged by send, which let go of the Ctrl
+
+
+def _guard_if_alone(keyboards) -> None:
+    """Typing that waits for a Right Alt dictation key presses the guard
+    itself: on the hotkey loop's own thread (stop_recording types there), the
+    loop reads the press only once typing is done, after the user has let
+    go, and the desktop has seen a lone Alt tap. Not with another modifier
+    down, for right_alt_alone's reason."""
+    if not keys_down(keyboards) & (MODIFIER_CODES - {ecodes.KEY_RIGHTALT}):
+        guard_alt_tap()
+
+
 def _give_up(held) -> None:
     if not held & _stuck:
         names = " and ".join(sorted(_NAMES.get(code, str(code)) for code in held))
@@ -140,7 +171,7 @@ def _give_up(held) -> None:
 
 def right_alt_alone(event, dictation_keys, held_modifiers) -> bool:
     """Whether *event* is a Right Alt dictation key going down with no other
-    modifier held, which app._guard_alt_tap keeps from opening a menu. Not
+    modifier held, which guard_alt_tap keeps from opening a menu. Not
     with another modifier: the key isn't dictating then, and if Left Ctrl is
     down, the guard letting go of it could let it go there too."""
     return (event.value == 1 and event.code == ecodes.KEY_RIGHTALT
