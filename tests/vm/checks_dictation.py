@@ -2,6 +2,7 @@
 F8 and F9 pressed on the VM's own keyboard, and what TuxTalk typed read back
 from the test window. CLAUDE.md Step 8, the dictation lines.
 """
+import re
 import time
 import wave
 
@@ -31,6 +32,7 @@ def pieces_outcome(run, phrase_id, wanted, absent=()):
 
 
 SPEAKERS_WAV = f"{REMOTE}/speakers.wav"
+SPEAKERS_ERR = f"{REMOTE}/speakers.err"
 
 
 def record_speakers(run, seconds):
@@ -39,14 +41,21 @@ def record_speakers(run, seconds):
     sink = run.vm.ssh("pactl get-default-sink").stdout.strip()
     run.vm.ssh(f"rm -f ~/{SPEAKERS_WAV}; setsid -f timeout {seconds} pw-record -P "
                f"'{{ stream.capture.sink=true }}' --target {sink} --rate 16000 --channels 1 "
-               f"~/{SPEAKERS_WAV} > /dev/null 2>&1 < /dev/null")
-    time.sleep(1)
+               f"~/{SPEAKERS_WAV} > ~/{SPEAKERS_ERR} 2>&1 < /dev/null")
+    time.sleep(1)       # pw-record takes a moment to connect; a sound before that is missed
 
 
 def speakers_recording(run):
-    """What record_speakers recorded, once it has finished: (mono samples, rate)."""
+    """What record_speakers recorded, once it has finished: (mono samples,
+    rate). The recording is deleted from the VM."""
     local = run.out_dir / f"{run.vm.spec.key}-speakers.wav"
-    run.vm.get(SPEAKERS_WAV, local)
+    try:
+        run.vm.get(SPEAKERS_WAV, local)
+    except Exception as e:
+        errors = run.vm.ssh(f"cat ~/{SPEAKERS_ERR}", check=False).stdout.strip()
+        raise RuntimeError(f"pw-record made no recording ({errors or e})") from e
+    finally:
+        run.vm.ssh(f"rm -f ~/{SPEAKERS_WAV} ~/{SPEAKERS_ERR}", check=False)
     with wave.open(str(local)) as w:
         rate, channels = w.getframerate(), w.getnchannels()
         samples = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16)
@@ -68,19 +77,26 @@ def beep_bursts(samples, rate):
     return bursts
 
 
-def tone_seconds(samples, rate, freq):
-    """The longest stretch of a recording, in seconds, in which a tone of
-    *freq* Hz is the loudest sound: how much of a beep was heard."""
-    hop = rate // 100                                      # 10 ms steps, 20 ms windows
+TONE_STEP_S = 0.01
+
+
+def tone_heard(samples, rate, freq):
+    """The longest stretch of a recording in which a tone of *freq* Hz is
+    the loudest sound: (where it starts, how long it is), in seconds; how
+    much of a beep was heard, in steps of TONE_STEP_S."""
+    hop = int(rate * TONE_STEP_S)                          # 20 ms windows, a step apart
     window = np.hanning(2 * hop)
     bins = np.fft.rfftfreq(2 * hop, 1 / rate)
-    longest = current = 0
-    for i in range(0, len(samples) - 2 * hop, hop):
+    longest, start, current = 0, None, 0
+    for step, i in enumerate(range(0, len(samples) - 2 * hop, hop)):
         spectrum = np.abs(np.fft.rfft(samples[i:i + 2 * hop] * window))
+        # A tone's peak here is about its amplitude times hop / 2: 50 * hop
+        # is a tone at -50 dBFS: far under a beep (-14 dBFS at full volume), over hiss.
         heard = spectrum.max() > 50 * hop and abs(bins[spectrum.argmax()] - freq) < 30
         current = current + 1 if heard else 0
-        longest = max(longest, current)
-    return longest * hop / rate
+        if current > longest:
+            longest, start = current, (step - current + 1) * TONE_STEP_S
+    return start, longest * TONE_STEP_S
 
 
 @check("Dictation", "basic", "Dictation works (processor)")
@@ -175,16 +191,25 @@ HANDS_FREE_BEEP = (1600, 0.07)
 # PipeWire before 1.2 reads client-rt.conf.d for it, later ones client.conf.d.
 SLOW_OUTPUT = [f"~/.config/pipewire/{folder}/tuxtalk-test-slow-output.conf"
                for folder in ("client-rt.conf.d", "client.conf.d")]
-SLOW_OUTPUT_CONF = "alsa.properties = {\n  alsa.buffer-bytes = 32768\n  alsa.period-bytes = 2048\n}\n"
+SLOW_OUTPUT_CONF = ("alsa.properties = {\n  alsa.buffer-bytes = 32768\n"
+                    "  alsa.period-bytes = 2048\n}\n")
+# Under this, TuxTalk's output wasn't slowed (no PipeWire ALSA plugin, say).
+SLOW_ENOUGH_S = 0.15
 
 
 @check("Dictation", "handsfree_beeps",
        "Hands-free double-tap: both beeps are heard, on a slow sound output too")
 def handsfree_beeps(run):
-    for path in SLOW_OUTPUT:
-        run.vm.ssh(f"mkdir -p $(dirname {path}) && cat > {path}", input=SLOW_OUTPUT_CONF)
+    moved = []
     try:
-        run.set_config(auto_stop_silence=True)   # the restarted service opens its output anew
+        for path in SLOW_OUTPUT:
+            if run.vm.ssh(f"test -e {path}", check=False).returncode == 0:
+                run.vm.ssh(f"mv {path} {path}.before-test")
+                moved.append(path)
+            run.vm.ssh(f"mkdir -p $(dirname {path}) && cat > {path}", input=SLOW_OUTPUT_CONF)
+        # set_config restarts the service, which then plays through the slow
+        # output; the first beep logs its latency.
+        run.set_config(auto_stop_silence=True)
         run.sink_ready()
         # Long enough for both beeps, and over before the auto-stop, whose
         # silent-microphone notice has a sound of its own.
@@ -194,21 +219,41 @@ def handsfree_beeps(run):
         run.vm.tap("f9", hold=0.05)
         time.sleep(2.5)
         samples, rate = speakers_recording(run)
-        armed = "Double-tap" in run.log_since(mark)
+        log = run.log_since(mark)
         if run.wait_log(mark, "Auto-stop", timeout=25) is None:
             run.vm.tap("f9")           # stop it, so the next check starts clean
     finally:
         run.vm.ssh("rm -f " + " ".join(SLOW_OUTPUT))
+        for path in moved:
+            run.vm.ssh(f"mv {path}.before-test {path}")
         run.restart_service()
-    if not armed:
+    return beeps_outcome(log, samples, rate)
+
+
+def beeps_outcome(log, samples, rate):
+    """Whether the double-tap's two beeps were heard in full, in order, on an
+    output the log shows was really slow."""
+    if "Double-tap" not in log:
         return Outcome("fail", "The double-tap didn't switch the recording to hands-free")
-    heard = {name: tone_seconds(samples, rate, freq)
-             for name, (freq, _length) in (("start", START_BEEP), ("hands-free", HANDS_FREE_BEEP))}
-    detail = ", ".join(f"{name} beep {seconds * 1000:.0f} ms" for name, seconds in heard.items())
-    full = (heard["start"] >= 0.8 * START_BEEP[1]
-            and heard["hands-free"] >= 0.8 * HANDS_FREE_BEEP[1])
-    return Outcome("pass" if full else "fail",
-                   f"Heard on a 0.17 s output: {detail} (beeps are 120 and 70 ms)")
+    measured = re.search(r"Beeps: the output's latency is ([\d.]+)s", log)
+    if not measured:
+        return Outcome("fail", "The log never said the output's latency (no beep played?)")
+    latency = float(measured.group(1))
+    if latency < SLOW_ENOUGH_S:
+        return Outcome("skip", f"The slow-output setting didn't reach TuxTalk's output: "
+                       f"latency {latency:.3f}s")
+    beeps = {"start": START_BEEP, "hands-free": HANDS_FREE_BEEP}
+    heard = {name: tone_heard(samples, rate, freq) for name, (freq, _length) in beeps.items()}
+    detail = ", ".join(f"{name} beep {seconds * 1000:.0f} of {beeps[name][1] * 1000:.0f} ms"
+                       for name, (_start, seconds) in heard.items())
+    # A whole beep reads as its length plus a step or two (130 to 140 and 80
+    # to 90 ms in the VMs): under its length, part of it was lost.
+    full = all(seconds >= beeps[name][1] - 1e-9 for name, (_start, seconds) in heard.items())
+    in_order = full and heard["start"][0] < heard["hands-free"][0]
+    if full and not in_order:
+        detail += "; the hands-free beep came first"
+    return Outcome("pass" if in_order else "fail",
+                   f"Heard on a {latency:.3f} s output: {detail}")
 
 
 @check("Dictation", "silent_mic", "Silent microphone warning (and the switch to it is followed)")
