@@ -58,7 +58,9 @@ before 0.15.0, so older entries use that name.
   dropping the recording. TuxTalk now tells the beep from a word by its
   pitch, wherever in the recording it lands, even when it's loud enough to
   distort the microphone. A word you say before the second tap still counts,
-  said softly too. With the beeps turned off nothing is filtered. The beeps
+  said softly too. With the beeps turned off nothing is filtered. In a room
+  as loud as talking, say a fan right next to the microphone, the room
+  itself still counts as a word, beeps on or off. The beeps
   fade in and out over a few thousandths of a second now, so they don't
   click.
 - On a desktop where TuxTalk can't make its own keyboard and types with
