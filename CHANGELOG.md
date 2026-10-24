@@ -70,8 +70,8 @@ before 0.15.0, so older entries use that name.
   log out and back in after the update, and Plasma 5.27 on Wayland. A
   message sent into the wrong chat can't be taken back. Saying "..., press
   enter" still presses it there, because you asked for it and you're
-  looking at the window. Your next dictation still starts after a space;
-  before, it stuck to the last word ("noon.How"). A tray too busy to answer
+  looking at the window. The space after your words still goes in; before,
+  the next dictation stuck to the last word ("noon.How"). A tray too busy to answer
   for a moment no longer calls off a countdown; the last check before the
   Enter decides.
 - When a send doesn't go, you get a notification as well as the note over
@@ -113,12 +113,14 @@ before 0.15.0, so older entries use that name.
   C locale too. The key that keeps other people's programs off the AI
   self-corrections engine was on its command line too, and is now hidden
   the same way.
-- Hands-free stops by itself with a clothes dryer or a gusty fan running.
-  Before, each thump or gust counted as you talking and started the wait
-  over, so it never stopped. Steady noise is learned as the room once it
+- Hands-free often stops by itself now with a very steady machine running,
+  like a clothes dryer or a gusty fan. Before, each thump or gust counted as
+  you talking and started the wait over, so it never stopped. Steady noise is learned as the room once it
   has gone on for about three seconds after you stop talking, and its
   thumps and gusts then just pause the wait. So it stops, a second or two
-  later than your setting. In a quiet room nothing changes.
+  later than your setting. In a quiet room nothing changes, and neither does
+  it in a real kitchen, café or street, which aren't that steady: there,
+  with the noise close to your voice, tap the key when you're done.
 - With a loud dryer and pauses almost as long as your setting, it can stop
   at the soft start of your next sentence, the way a loud fan already
   could. A longer setting, or the mic closer, helps.
@@ -129,8 +131,9 @@ before 0.15.0, so older entries use that name.
 - Preferences opens again when a number in the settings file was edited by
   hand into something that isn't one, or into nan or inf. It shows that
   setting's default, which is what TuxTalk uses for it.
-- Updating from Preferences doesn't start if your unsaved changes couldn't
-  be saved first (a full disk, say). Before, the update's restart lost them.
+- Updating from Preferences saves your snippets first too, and doesn't start
+  if your unsaved changes couldn't be saved (a full disk, say). Before, the
+  update's restart lost them.
 - Help lists its sections down the left side now, with the one you pick
   beside it, instead of a row of tabs along the top. The tabs made the
   window wider with every one added, and on Mint it already had to grow
