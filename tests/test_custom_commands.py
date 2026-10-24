@@ -12,7 +12,7 @@ can happen:
 
 import pytest
 
-from tuxtalk import app
+from tuxtalk import app, custom_commands
 
 
 @pytest.fixture
@@ -34,7 +34,7 @@ def pipeline(monkeypatch):
 
         def run(text):
             processed, protected = app._apply_custom_commands(text)
-            return app._restore_protected(normalize_text(processed), protected)
+            return custom_commands.restore_protected(normalize_text(processed), protected)
 
         return run
     return install
