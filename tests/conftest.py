@@ -10,6 +10,7 @@ import atexit
 import os
 import shutil
 import tempfile
+import time
 
 import gi
 import pytest
@@ -308,18 +309,25 @@ def _no_sound_on_the_speakers():
 _no_sound_on_the_speakers()
 
 
+def _play_to_nobody(samples, rate, device, sound):
+    """Stands in for beeps._play: the sound plays at once, and silently."""
+    sound.heard_until = time.monotonic()
+
+
 @pytest.fixture(autouse=True)
 def _no_real_sound(request, monkeypatch):
     """Sounds go to a player that plays nothing (test_beeps brings a fake
     sound system of its own), and every sound a test asked for is over
     before the test's fakes are put back: a beep left on the sound thread
-    would otherwise run against whatever the next test has."""
+    would otherwise run against whatever the next test has. The wait is the
+    real one, even where the test put a fake of its own in its place."""
     from tuxtalk import beeps
+    drain = beeps.wait_until_played
     if request.module.__name__.rpartition(".")[2] != "test_beeps":
         monkeypatch.setattr(beeps, "output_device", lambda samplerate: (None, samplerate))
-        monkeypatch.setattr(beeps, "_play", lambda samples, rate, device: None)
+        monkeypatch.setattr(beeps, "_play", _play_to_nobody)
     yield
-    if not beeps.wait_until_played(5):
+    if not drain(limit=5):
         pytest.fail("a sound the test asked for was still playing after it")
 
 

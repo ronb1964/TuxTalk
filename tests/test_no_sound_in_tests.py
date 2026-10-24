@@ -72,25 +72,46 @@ def test_a_player_a_shell_starts_reaches_no_sound_server(player, tmp_path):
     assert ran.returncode != 0, f"{player} played: {ran.stderr}"
 
 
-# The next two tests go together: the first leaves a beep on the sound
-# thread as it ends, and the second checks where that beep went.
-_late_beep = []
+@pytest.fixture(scope="module")
+def after_the_test():
+    """Checks to make once the test asking for this is over and its fakes
+    are put back: this fixture's own end comes after that test's."""
+    checks = []
+    yield checks.append
+    for check in checks:
+        check()
 
 
-def test_a_beep_left_playing_at_the_end_of_a_test(monkeypatch):
-    """Ends while its beep is still being looked up on the sound thread."""
+def test_a_beep_left_playing_as_a_test_ends_is_played_by_that_tests_fakes(
+        monkeypatch, after_the_test):
+    """The test ends while its beep is still being looked up on the sound
+    thread; the beep is over before the test's fakes are put back, a fake
+    wait among them."""
     looking_up = threading.Event()
+    late_beep = []
 
     def slow_lookup(samplerate):
         looking_up.set()
         threading.Event().wait(0.3)
         return None, samplerate
     monkeypatch.setattr(beeps, "output_device", slow_lookup)
-    monkeypatch.setattr(beeps, "_play", lambda *a: _late_beep.append("played by the test's fake"))
+    monkeypatch.setattr(beeps, "_play", lambda *a: late_beep.append("played by the test's fake"))
+    monkeypatch.setattr(beeps, "wait_until_played", lambda *a, **k: True)
     beeps.beep(True, *beeps.START_BEEP)
     assert looking_up.wait(5)
 
+    def played_by_the_tests_fake():
+        beeps.wait_until_played(limit=5)
+        assert late_beep == ["played by the test's fake"]
+    after_the_test(played_by_the_tests_fake)
 
-def test_is_played_by_that_tests_fakes_before_they_are_put_back():
-    beeps.wait_until_played(5)
-    assert _late_beep == ["played by the test's fake"]
+
+def test_the_stand_in_player_plays_each_sound_silently_and_says_it_played():
+    """Outside test_beeps every sound goes to conftest's player; a sound
+    played through it is played, not failed."""
+    told = []
+    beeps.play(np.zeros(100, np.float32), 44100, finished=told.append)
+    start = beeps.beep(True, *beeps.START_BEEP)
+    assert beeps.wait_until_played(limit=5)
+    assert told == [None]
+    assert start.heard_until is not None
