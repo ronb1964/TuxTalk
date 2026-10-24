@@ -116,13 +116,20 @@ def test_right_ctrl_alone_tests_as_a_key_but_not_as_part_of_a_shortcut():
     assert htk.evdev_key_action(_event(66, 1), held, mods, names.get) is None
 
 
-@pytest.mark.parametrize("gtk_name,key", [("Control_R", "Right Ctrl"), ("Alt_R", "Right Alt"),
-                                          ("ISO_Level3_Shift", "Right Alt"),
-                                          ("Scroll_Lock", "Scroll Lock"), ("F8", "F8")])
-def test_gtk_names_the_keys_as_the_settings_do(gtk_name, key):
+@pytest.mark.parametrize("gtk_name,keycode,key", [
+    ("Control_R", 105, "Right Ctrl"), ("Alt_R", 108, "Right Alt"),
+    ("ISO_Level3_Shift", 108, "Right Alt"), ("Scroll_Lock", 78, "Scroll Lock"), ("F8", 74, "F8")])
+def test_gtk_names_the_keys_as_the_settings_do(gtk_name, keycode, key):
     """On a German layout GTK calls Right Alt ISO_Level3_Shift (AltGr): it
     must still test as Right Alt, or the test never says it works."""
-    assert htk.gtk_key_name(gtk_name) == key
+    assert htk.gtk_key_name(gtk_name, keycode) == key
+
+
+@pytest.mark.parametrize("keycode", [66, 135])        # Caps Lock, Menu
+def test_altgr_moved_to_another_key_isnt_right_alt(keycode):
+    """lv3:caps_switch or lv3:menu_switch: saved as Right Alt, the key
+    pressed in the test wasn't the one that would dictate."""
+    assert htk.gtk_key_name("ISO_Level3_Shift", keycode) != "Right Alt"
 
 
 def test_evdev_names_the_keys_as_the_settings_do():

@@ -2242,7 +2242,7 @@ def show_hotkey_test_dialog():
         mouse: Tab moves the focus, Space and Enter press the button."""
         if not dialog_ready[0] or event.type != Gdk.EventType.KEY_PRESS:
             return True
-        keyname = gtk_key_name(Gtk.accelerator_name(event.keyval, 0))
+        keyname = gtk_key_name(Gtk.accelerator_name(event.keyval, 0), event.hardware_keycode)
         is_capture = capturing_key[0] is not None
         if not is_capture and keyname not in HOTKEY_CHOICES:
             return False
@@ -2262,7 +2262,7 @@ def show_hotkey_test_dialog():
         if not dialog_ready[0]:
             return False
         # Release = physical action confirmed — mark the key as working
-        keyname = gtk_key_name(Gtk.accelerator_name(event.keyval, 0))
+        keyname = gtk_key_name(Gtk.accelerator_name(event.keyval, 0), event.hardware_keycode)
         if event.state & _NO_MODIFIER_MASK & ~_OWN_MODIFIER.get(keyname, 0):
             return False
         is_capture = capturing_key[0] is not None

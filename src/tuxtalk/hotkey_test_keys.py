@@ -13,9 +13,10 @@ from .config import HOTKEY_CHOICES
 # Scroll Lock is among HOTKEY_CHOICES, the name both readers give it.
 _TEST_KEYS = {f"F{n}" for n in range(1, 25)} | {"Escape", "Pause"} | set(HOTKEY_CHOICES)
 
-# GTK's names for the dictation keys that aren't F-keys.
-_GTK_KEY_NAMES = {"Control_R": "Right Ctrl", "Alt_R": "Right Alt",
-                  "ISO_Level3_Shift": "Right Alt", "Scroll_Lock": "Scroll Lock"}
+# GTK's names for the dictation keys that aren't F-keys. ISO_Level3_Shift
+# (AltGr) is Right Alt only from that key (gtk_key_name).
+_GTK_KEY_NAMES = {"Control_R": "Right Ctrl", "Alt_R": "Right Alt", "Scroll_Lock": "Scroll Lock"}
+_RIGHT_ALT_KEYCODE = 100 + 8        # evdev's KEY_RIGHTALT, as X11 and GDK count it
 
 
 def loggable_key(keyname):
@@ -72,9 +73,14 @@ def evdev_key_name(code):
     return special.get(code)
 
 
-def gtk_key_name(accelerator_name):
+def gtk_key_name(accelerator_name, hardware_keycode=None):
     """The test's name for a key GTK names *accelerator_name*
-    (Gtk.accelerator_name): "Control_R" is "Right Ctrl"."""
+    (Gtk.accelerator_name): "Control_R" is "Right Ctrl". A layout that makes
+    Right Alt its AltGr calls it ISO_Level3_Shift, but so do the options
+    that put AltGr on Caps Lock or the Menu key: those aren't Right Alt, so
+    the key's *hardware_keycode* decides."""
+    if accelerator_name == "ISO_Level3_Shift" and hardware_keycode == _RIGHT_ALT_KEYCODE:
+        return "Right Alt"
     return _GTK_KEY_NAMES.get(accelerator_name, accelerator_name)
 
 
