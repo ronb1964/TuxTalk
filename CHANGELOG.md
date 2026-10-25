@@ -157,6 +157,9 @@ before 0.15.0, so older entries use that name.
   with your username taken out and no dictated words. You see all of it
   first, then copy it, save it to a file, or open a GitHub issue with it
   filled in. Nothing is sent anywhere unless you do that yourself.
+- Preferences' tabs each have a faint outline now. On Breeze dark the tabs
+  you weren't on were just words in a row, and it was hard to see they were
+  tabs at all.
 
 ## [0.18.2] - 2026-10-23
 

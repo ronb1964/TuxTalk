@@ -77,3 +77,20 @@ def test_stylesheet_parses():
         provider.load_from_path(str(CSS))
     except Exception as exc:  # GLib.Error
         pytest.fail(f"prefs_style.css does not parse: {exc}")
+
+
+def test_every_tab_has_an_outline_not_only_the_open_one(prefs_window):
+    """Unselected tabs drew no edge at all, so on Breeze dark the row read
+    as words run together, not tabs. GTK 3's tabs are CSS nodes, not
+    widgets, so the style is read for the node path notebook > header >
+    tabs > tab."""
+    from gi.repository import Gtk
+    notebook = prefs_window().notebook
+    path = notebook.get_path().copy()
+    for node in ("header", "tabs", "tab"):
+        path.iter_set_object_name(path.append_type(Gtk.Widget), node)
+    tab = Gtk.StyleContext()
+    tab.set_screen(notebook.get_screen())
+    tab.set_path(path)
+    edge = tab.get_border(Gtk.StateFlags.NORMAL)
+    assert edge.left >= 1 and edge.right >= 1 and edge.top >= 1

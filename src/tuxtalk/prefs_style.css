@@ -28,7 +28,11 @@ window.talktype-prefs {
 .talktype-prefs notebook > header > tabs > tab {
     background: transparent;
     color: #ababab;
-    border: none;
+    /* A faint outline, so the tabs read as tabs, not a row of words run
+       together (on Breeze dark especially). The header's own grey; no bottom
+       edge, the header's line is there. */
+    border: 1px solid #3a3a3a;
+    border-bottom-width: 0;
     /* 18px, not 24: room for "Updates & Backup" at the same window width */
     padding: 12px 18px;
     margin: 0 4px;
