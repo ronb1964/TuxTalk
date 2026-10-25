@@ -15,6 +15,7 @@ from tuxtalk import recording_state as rs
 from tuxtalk.key_commands import split_key_command
 from tuxtalk import notices
 from tuxtalk import dictation_text
+from tuxtalk import voice_commands
 
 
 @pytest.mark.parametrize("raw, expected", [
@@ -45,9 +46,9 @@ def _dictate(monkeypatch, raw, prepared=None, outcome="ok", window="brave-browse
     if prepared is not None:
         monkeypatch.setattr(dictation_text, "prepare_text", lambda r, *a, **k: prepared(r))
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
-    monkeypatch.setattr(app, "_handle_undo", lambda *a, **k: False)
-    monkeypatch.setattr(app, "_handle_navigation", lambda *a, **k: False)
-    monkeypatch.setattr(app, "_handle_fix_word", lambda *a, **k: False)
+    monkeypatch.setattr(voice_commands, "handle_undo", lambda *a, **k: False)
+    monkeypatch.setattr(voice_commands, "handle_navigation", lambda *a, **k: False)
+    monkeypatch.setattr(voice_commands, "handle_fix_word", lambda *a, **k: False)
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: window)
     monkeypatch.setattr(focused_window, "look", lambda: (window, ("tray", "{window}")))
     monkeypatch.setattr(notices, "report_undelivered", lambda *a, **k: events.append("not delivered"))

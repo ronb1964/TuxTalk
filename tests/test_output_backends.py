@@ -3,6 +3,7 @@ typing path is behaviorally unchanged."""
 import os
 from tuxtalk import recording_state as rs
 from tuxtalk import keyboard_output
+from tuxtalk import voice_commands
 
 
 def _portal_fd():
@@ -196,8 +197,7 @@ def test_libei_backend_backspaces_via_fresh_session(monkeypatch):
 def test_handle_undo_everything_routes_through_backend(monkeypatch):
     # 'delete everything' must call the backend's select_all_delete, so it works
     # on the Flatpak (libei) exactly like on the host (the virtual keyboard).
-    from tuxtalk import app
-    monkeypatch.setattr(app, "detect_undo_command", lambda raw: ("everything", 1))
+    monkeypatch.setattr(voice_commands, "detect_undo_command", lambda raw: ("everything", 1))
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
     calls = []
@@ -208,14 +208,13 @@ def test_handle_undo_everything_routes_through_backend(monkeypatch):
             return True
 
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: FakeBackend())
-    assert app._handle_undo("delete everything", False, False) is True
+    assert voice_commands.handle_undo("delete everything", False, False) is True
     assert calls == ["clear"]
 
 
 def test_handle_undo_char_undo_routes_backspaces_through_backend(monkeypatch):
     # Character-level undo must send its backspaces through the backend too.
-    from tuxtalk import app
-    monkeypatch.setattr(app, "detect_undo_command", lambda raw: ("word", 1))
+    monkeypatch.setattr(voice_commands, "detect_undo_command", lambda raw: ("word", 1))
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
     rs.state.last_inserted_text = "hello world"
@@ -227,7 +226,7 @@ def test_handle_undo_char_undo_routes_backspaces_through_backend(monkeypatch):
             return True
 
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: FakeBackend())
-    assert app._handle_undo("undo that", False, False) is True
+    assert voice_commands.handle_undo("undo that", False, False) is True
     assert got and got[0] > 0  # deleted a positive number of characters
 
 

@@ -15,6 +15,7 @@ import subprocess
 import pytest
 
 from tuxtalk import app, focused_window
+from tuxtalk import voice_commands
 from tuxtalk import keyboard_output
 from tuxtalk import recording_state as rs
 
@@ -239,7 +240,7 @@ def test_undo_leaves_its_buffer_alone_when_the_backspaces_fail(monkeypatch, undo
     next undo deletes that many characters of the user's own writing."""
     monkeypatch.setattr(keyboard_output, "send_backspaces", lambda count: False)
 
-    app._handle_undo("undo last word", beeps_on=False, notify_on=False)
+    voice_commands.handle_undo("undo last word", beeps_on=False, notify_on=False)
 
     assert rs.state.last_inserted_text == "hello world"
 
@@ -247,7 +248,7 @@ def test_undo_leaves_its_buffer_alone_when_the_backspaces_fail(monkeypatch, undo
 def test_undo_shrinks_its_buffer_when_the_backspaces_land(monkeypatch, undo_env):
     monkeypatch.setattr(keyboard_output, "send_backspaces", lambda count: True)
 
-    app._handle_undo("undo last word", beeps_on=False, notify_on=False)
+    voice_commands.handle_undo("undo last word", beeps_on=False, notify_on=False)
 
     assert rs.state.last_inserted_text == "hello "
 

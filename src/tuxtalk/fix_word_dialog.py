@@ -6,7 +6,7 @@ D-Bus). The user clicks the misheard word(s), types the right spelling, and
 the fix is saved as a custom voice command (see vocabulary.py), so every
 later dictation gets it right.
 
-Saying "fix that word" opens it too (app._handle_fix_word), as its own
+Saying "fix that word" opens it too (voice_commands.handle_fix_word), as its own
 process (main() below) placed over the app being dictated into, on the
 newest dictation only: no dropdown, which XWayland would break.
 """
@@ -101,7 +101,7 @@ class _FixWordDialog:
                       "more than one word.")
         box.pack_start(hint, False, False, 0)
 
-        # Opened from the tray: point to the quicker way (app._handle_fix_word).
+        # Opened from the tray: point to the quicker way (voice_commands.handle_fix_word).
         if not in_place:
             tip = Gtk.Label(xalign=0)
             tip.set_line_wrap(True)

@@ -6,6 +6,7 @@ would type into whatever window has the focus on the computer running them.
 import pytest
 
 from tuxtalk import app, virtual_keyboard
+from tuxtalk import voice_commands
 from tuxtalk import keyboard_output
 from tuxtalk import recording_state as rs
 
@@ -96,7 +97,7 @@ def test_an_undo_stopped_partway_forgets_the_buffer(monkeypatch):
     monkeypatch.setattr(keyboard_output, "send_backspaces", partway)
     rs.state.last_inserted_text = "a long dictation that was being undone"
     try:
-        assert app._handle_undo("undo last sentence", beeps_on=False, notify_on=False) is True
+        assert voice_commands.handle_undo("undo last sentence", beeps_on=False, notify_on=False) is True
         assert rs.state.last_inserted_text == ""
     finally:
         rs.state.last_inserted_text = ""

@@ -3,7 +3,8 @@
 see a word retyped by hand."""
 import pytest
 
-from tuxtalk import app, explain, focused_window
+from tuxtalk import explain, focused_window
+from tuxtalk import voice_commands
 from tuxtalk import keyboard_output
 from tuxtalk import recording_state as rs
 
@@ -19,14 +20,14 @@ def opened(monkeypatch):
 @pytest.mark.parametrize("said", ["Fix that word.", "fix that", "Fix a word!", "fix the last word",
                                   "fix this word", "Fix that, please."])
 def test_the_phrases_open_fix_a_word(opened, said):
-    assert app._handle_fix_word(said, False) is True
+    assert voice_commands.handle_fix_word(said, False) is True
     assert opened == ["tuxtalk.fix_word_dialog"]
 
 
 @pytest.mark.parametrize("said", ["we need to fix that word in the report", "fix the sink",
                                   "fix", "that word"])
 def test_inside_a_sentence_it_is_typed(opened, said):
-    assert app._handle_fix_word(said, False) is False
+    assert voice_commands.handle_fix_word(said, False) is False
     assert opened == []
 
 
@@ -36,7 +37,7 @@ def test_a_window_that_cannot_start_says_so(monkeypatch):
                         lambda *a: (_ for _ in ()).throw(OSError("no python")))
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, msg: notices.append(msg))
-    assert app._handle_fix_word("fix that word", False) is True
+    assert voice_commands.handle_fix_word("fix that word", False) is True
     assert notices and "TuxTalk menu" in notices[0]
 
 
@@ -73,7 +74,7 @@ def test_right_after_a_dictation_it_can_fix_the_text(opened, typed, monkeypatch)
     calls = []
     monkeypatch.setattr(explain, "start_helper_window", lambda module, *a: calls.append(a))
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
-    app._handle_fix_word("fix that word", False)
+    voice_commands.handle_fix_word("fix that word", False)
     flag, path = calls[0]
     import json, os, stat
     assert flag == "--in-place"
@@ -87,7 +88,7 @@ def test_in_another_window_it_only_saves_the_fix(opened, typed, monkeypatch):
     calls = []
     monkeypatch.setattr(explain, "start_helper_window", lambda module, *a: calls.append(a))
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "libreoffice-writer")
-    app._handle_fix_word("fix that word", False)
+    voice_commands.handle_fix_word("fix that word", False)
     assert calls == [()]
 
 

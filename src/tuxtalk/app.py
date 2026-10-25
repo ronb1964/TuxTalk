@@ -32,7 +32,6 @@ from .chunking import (boundary_mark, carry_question, hold_back_boundary, word_c
 from .key_commands import auto_send, split_key_command
 from .logger import setup_logger
 from .recording_indicator import RecordingIndicator
-from .undo import detect_undo_command, calculate_undo_length
 from . import (delivery_notices, focused_window, modifier_hotkeys, secure_input, send_countdown,
                silence, single_instance, uinput_helper, virtual_keyboard)
 from .window_classes import (ELECTRON_PASTE_BROKEN_CLASSES, SMART_NEWLINE_CLASSES_LOWER,
@@ -49,6 +48,7 @@ from . import recording
 from . import last_dictation
 from . import notices
 from . import dictation_text
+from . import voice_commands
 import threading
 
 logger = setup_logger(__name__)
@@ -647,110 +647,6 @@ def plan_line_breaks(text: str, one_paste: bool) -> list[str]:
     return normalised.split(marker)
 
 
-
-
-def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
-    """Check if raw text is an undo command and execute it.
-
-    Returns True if an undo was handled (caller should return early).
-    """
-    detected = detect_undo_command(raw)
-    if not detected:
-        return False
-
-    undo_type, count = detected
-    # Deleting changes the text a voice move remembered (nav_context).
-    rs.state.nav_context = None
-    label = undo_type if count == 1 else f"{count} {undo_type}s"
-    logger.info(f"Undo command detected: {label}")
-
-    # 'everything' clears the entire input field via Ctrl+A + Backspace.
-    # No tracked dictation required: it wipes whatever is in the textarea,
-    # including text that wasn't typed by TuxTalk.
-    if undo_type == 'everything':
-        # In a terminal Ctrl+A jumps to the start of the line and Backspace there
-        # deletes nothing, so the line is cleared the shell's way: Ctrl+E to its end,
-        # Ctrl+U to delete back to the prompt (bash, zsh, fish; Ctrl+A is screen's).
-        backend = keyboard_output.output_backend()
-        if is_terminal_class(focused_window.window_class()):
-            cleared = backend.press_keys([(("CTRL",), "E"), (("CTRL",), "U")])
-        else:
-            cleared = backend.select_all_delete()
-        if cleared:
-            rs.state.last_inserted_text = ""
-            last_dictation.forget_shown()
-            rs.state.continue_mid_sentence = False
-            beeps.beep(beeps_on, *READY_BEEP)
-            if notify_on: notify_module.notify("Cleared the text box", "")
-        else:
-            print("Could not clear input field (text injection unavailable)")
-            beeps.beep(beeps_on, *CANCEL_BEEP)
-            if notify_on: notify_module.notify("Couldn't clear the text box", "")
-        return True
-
-    if not rs.state.last_inserted_text:
-        logger.info("Undo requested but no previous text to undo")
-        beeps.beep(beeps_on, *CANCEL_BEEP)
-        if notify_on: notify_module.notify("Nothing to undo", "")
-        return True
-
-    # Backspacing the last dictation's length in a different window would
-    # delete text there that TuxTalk never typed. Unknown windows go ahead,
-    # as before.
-    focused = focused_window.window_class()
-    if keyboard_output.not_where_typed(focused):
-        logger.info(f"Undo refused: the last dictation went to {rs.state.last_inserted_window!r}, "
-                    f"not {focused!r}")
-        notices.edit_problem("undo_other_window", beeps_on)
-        return True
-
-    # Calculate how many characters to delete (iterates `count` times)
-    delete_count = calculate_undo_length(rs.state.last_inserted_text, undo_type, count)
-    logger.info(f"Undo: deleting {delete_count} characters (last text was {len(rs.state.last_inserted_text)} chars, count={count})")
-
-    if delete_count > 0:
-        # Only shrink the buffer once the deletion is confirmed; otherwise it
-        # falls out of step with the document and the next undo backspaces
-        # over the user's own text.
-        try:
-            deleted = keyboard_output.output_backend().backspaces(delete_count)
-        except virtual_keyboard.StoppedPartway:
-            # Some of the text is gone and some isn't, by an unknown amount,
-            # so the buffer no longer matches the document. Forgetting it is
-            # the only safe choice: a later undo then deletes nothing.
-            logger.error("Undo stopped partway: an unknown number of backspaces landed; undo buffer cleared")
-            rs.state.last_inserted_text = ""
-            last_dictation.forget_shown()
-            rs.state.continue_mid_sentence = False
-            beeps.beep(beeps_on, *CANCEL_BEEP)
-            if notify_on:
-                notify_module.notify("Undo stopped partway", "Some of the text may still be there.")
-            return True
-        if not deleted:
-            logger.error("Undo failed: backspaces were not delivered; buffer left unchanged")
-            beeps.beep(beeps_on, *CANCEL_BEEP)
-            if notify_on:
-                notify_module.notify("Undo failed", "The text couldn't be deleted.")
-            return True
-
-        last_dictation.trim_shown(rs.state.last_inserted_text, delete_count)
-        if delete_count >= len(rs.state.last_inserted_text):
-            rs.state.last_inserted_text = ""
-            rs.state.continue_mid_sentence = False
-        else:
-            rs.state.last_inserted_text = rs.state.last_inserted_text[:-delete_count]
-            remaining = rs.state.last_inserted_text.rstrip()
-            if remaining and not remaining.endswith(('.', '?', '!', '\u2026')):
-                rs.state.continue_mid_sentence = True
-                logger.info("Mid-sentence continuation enabled for next dictation")
-            else:
-                rs.state.continue_mid_sentence = False
-        beeps.beep(beeps_on, *READY_BEEP)
-        if notify_on: notify_module.notify(f"Undid the last {label}", "")
-    else:
-        print("Nothing to undo for this scope")
-        beeps.beep(beeps_on, *CANCEL_BEEP)
-    return True
 
 
 
@@ -1512,16 +1408,16 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                 raw = _resolve_boundary(audio_f32, language, injection_mode, raw, auto_period)
 
         # Stage 2: Check for undo commands ("undo that", "undo word", etc.)
-        if _handle_undo(raw, beeps_on, notify_on):
+        if voice_commands.handle_undo(raw, beeps_on, notify_on):
             return
 
         # Select and move by voice ("select the last sentence"), when the
         # whole dictation is one of its commands (TuxTalk Labs).
-        if _handle_navigation(raw, beeps_on):
+        if voice_commands.handle_navigation(raw, beeps_on):
             return
 
         # "fix that word": Fix a Word on the dictation before this one.
-        if _handle_fix_word(raw, beeps_on):
+        if voice_commands.handle_fix_word(raw, beeps_on):
             return
 
         # "edit that, make it shorter": voice editing without its key, on
@@ -1708,138 +1604,6 @@ def _focus_moved(focused_class) -> bool:
     return now != focused_class
 
 
-# "fix that word": the whole dictation is one of these (normalized: lower case,
-# no punctuation). Fix a Word opens on the dictation before it.
-_FIX_WORD_PHRASES = frozenset({
-    "fix that", "fix that word", "fix a word", "fix the word", "fix this word",
-    "fix the last word", "fix that please", "fix that word please",
-})
-
-
-def _handle_fix_word(raw: str, beeps_on: bool) -> bool:
-    """"fix that word": open Fix a Word over the app, on the newest dictation.
-    True when the dictation was that command."""
-    said = " ".join(re.sub(r"[^\w\s]", " ", raw.lower()).split())
-    if said not in _FIX_WORD_PHRASES:
-        return False
-    logger.info("Voice command: fix that word")
-    # Right after a dictation, in its window, Fix a Word can also fix it in
-    # the text: it gets exactly what was typed, through a file only this
-    # user can read (the runtime folder), which it deletes once read.
-    args = []
-    focused = focused_window.window_class()
-    typed = rs.state.last_inserted_text
-    if typed and rs.state.shown_text and rs.state.shown_text.endswith(typed):
-        typed = rs.state.shown_text        # the whole recording, phrases and all
-    if typed.strip() and not keyboard_output.not_where_typed(focused):
-        try:
-            import json
-            path = os.path.join(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"),
-                                "tuxtalk-fix-word.json")
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-            with os.fdopen(fd, "w") as f:
-                json.dump({"text": typed, "window": focused}, f)
-            args = ["--in-place", path]
-            # The text is about to change: undo and voice moves can't trust
-            # their counts any more.
-            rs.state.last_inserted_text = ""
-            last_dictation.forget_shown()
-            rs.state.nav_context = None
-        except OSError as e:
-            logger.debug(f"Fix a Word can't fix it in the text: {e}")
-    try:
-        from .explain import start_helper_window
-        start_helper_window("tuxtalk.fix_word_dialog", *args)
-        beeps.beep(beeps_on, *READY_BEEP)
-    except Exception as e:
-        logger.warning(f"Could not open Fix a Word: {e}")
-        beeps.beep(beeps_on, *CANCEL_BEEP)
-        notify_module.notify("Fix a Word didn't open", "Choose it in the TuxTalk menu instead.")
-    return True
-
-
-_UNKNOWN_WINDOW = object()
-
-
-def _handle_navigation(raw: str, beeps_on: bool, focused_class=_UNKNOWN_WINDOW) -> bool:
-    """Select and move by voice (TuxTalk Labs). True when the whole dictation
-    was one of voice_navigation's commands, done or refused with a notice;
-    False to type it as text."""
-    if not live.voice_navigation:
-        return False
-    from . import voice_navigation as nav
-    command = nav.parse(raw)
-    if command is None:
-        return False
-    logger.info(f"Voice command: {command.name}")
-    if focused_class is _UNKNOWN_WINDOW:
-        focused_class = focused_window.window_class()
-    if is_terminal_class(focused_class):
-        notices.edit_problem("nav_terminal", beeps_on)
-        return True
-    # Right after a dictation the cursor is at its end; after an exact move,
-    # nav_context says where in it. Only in the window it was typed into:
-    # dictating into a chat, then saying "select the last sentence" in Writer
-    # would otherwise select the chat message's length of Writer's text.
-    if keyboard_output.not_where_typed(focused_class):
-        left, right = None, ""
-    elif rs.state.last_inserted_text:
-        left, right = rs.state.last_inserted_text, ""
-    else:
-        left, right = rs.state.nav_context or (None, "")
-    plan = nav.plan(command, left, right)
-    if plan is None:
-        # One message for "just restarted" and "dictated somewhere else since":
-        # both come down to the one rule (it teaches the rule, too).
-        notices.edit_problem("nothing_said", beeps_on)
-        return True
-    try:
-        pressed = keyboard_output.output_backend().press_keys(plan.chords)
-    except Exception as e:
-        logger.error(f"Voice command: pressing the keys failed: {e}")
-        pressed = False
-    # The cursor has moved (or may have): undo's character count no longer
-    # matches the document, and "delete last word" would eat the wrong text.
-    rs.state.last_inserted_text = ""
-    last_dictation.forget_shown()
-    rs.state.nav_context = (plan.left, plan.right) if pressed and plan.left is not None else None
-    if pressed:
-        beeps.beep(beeps_on, *READY_BEEP)
-    else:
-        notices.edit_problem("shortcut_failed", beeps_on)
-    return True
-
-
-def _spoken_edit_target():
-    """What "edit that" changes: this recording's text on screen (every
-    phrase since the last Enter, with Type at pause), else the last
-    dictation; "" when there's nothing fresh in the focused window."""
-    typed = rs.state.last_inserted_text
-    if not typed or not typed.strip():
-        return ""
-    focused = focused_window.window_class()
-    if keyboard_output.not_where_typed(focused):
-        return ""
-    shown = rs.state.shown_text
-    if shown and rs.state.shown_serial == rs.state.recording_serial and shown.endswith(typed):
-        return shown
-    return typed
-
-
-# "edit that" this soon after TuxTalk pressed Enter meant the sent dictation.
-EDIT_AFTER_SEND_S = 60
-
-
-def _refused_as_sent(beeps_on: bool) -> bool:
-    """"edit that" with nothing just typed: True when TuxTalk pressed Enter a
-    moment ago, said with a notice (typing "Edit that, make it formal" into
-    the box would only add to the confusion); False to type the words."""
-    sent = rs.state.sent
-    if sent is None or time.time() - sent["at"] >= EDIT_AFTER_SEND_S:
-        return False
-    notices.edit_problem("already_sent_auto" if sent["automatic"] else "already_sent", beeps_on)
-    return True
-
 
 def _handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: str,
                         message) -> bool:
@@ -1859,9 +1623,9 @@ def _handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: st
         instruction = voice_edit_rules.spoken_edit(raw)
         if instruction is None:
             return False
-        target = _spoken_edit_target()
+        target = voice_commands.spoken_edit_target()
         if not target:
-            return _refused_as_sent(beeps_on)
+            return voice_commands.refused_as_sent(beeps_on)
     logger.info(f"Voice command: edit that ({len(target)} characters)")
     if not keyboard_output.is_wayland_session():
         notices.edit_problem("needs_wayland", beeps_on)
@@ -1999,7 +1763,7 @@ def _edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0
         # next edit works on. The clipboard is already back (copy_selection does that).
         if live.voice_navigation and not spoken:
             said = get_instruction()
-            if said and _handle_navigation(said, beeps_on, focused_class):
+            if said and voice_commands.handle_navigation(said, beeps_on, focused_class):
                 return
         notices.edit_problem("no_selection", beeps_on)
         return
@@ -2009,7 +1773,7 @@ def _edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0
         if not instruction:
             notices.edit_problem("no_instruction", beeps_on)
             return
-        if _handle_navigation(instruction, beeps_on, focused_class):
+        if voice_commands.handle_navigation(instruction, beeps_on, focused_class):
             return
         logger.info(f"Voice edit: {live.loggable(instruction)} ({len(selected)} characters)")
         # Deleting, formatting and exact jobs need no AI (voice_edit_rules.py).
