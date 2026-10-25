@@ -17,6 +17,7 @@ from tuxtalk import live_settings as live
 from tuxtalk import tray_link
 from tuxtalk import engine
 from tuxtalk import notices
+from tuxtalk import recording
 
 SR = 16000
 BLOCK = 320   # 20 ms
@@ -410,7 +411,7 @@ def test_a_word_kept_with_the_start_beep_is_transcribed(monkeypatch):
     assert app._toggle_pressed_while_recording(beeps_on=False) is True
     stopped_after, nothing_said = _goes_quiet(app)
     assert stopped_after is not None and not nothing_said
-    monkeypatch.setattr(app, "_stop_stream_safely", lambda: None)
+    monkeypatch.setattr(recording, "stop_stream_safely", lambda: None)
     rs.state.press_t0 = time.time() - 5
     frames, rate = app._finish_capture(False, False)
     assert rate == SR
@@ -492,7 +493,7 @@ def test_a_hold_recording_cannot_become_hands_free(monkeypatch):
 
 def test_the_silent_tail_is_trimmed_and_speech_is_kept(monkeypatch):
     from tuxtalk import app
-    monkeypatch.setattr(app, "_stop_stream_safely", lambda: None)
+    monkeypatch.setattr(recording, "stop_stream_safely", lambda: None)
     monkeypatch.setattr(tray_link, "notify_recording_state", lambda *a: None)
     monkeypatch.setattr(app, "recording_indicator", None, raising=False)
     det = SilenceDetector(2.0, SR)
@@ -630,7 +631,7 @@ def test_a_hands_free_recording_with_nothing_said_is_dropped(monkeypatch):
     for i in range(0, len(audio), BLOCK):
         app._sd_callback(audio[i:i + BLOCK].reshape(-1, 1), BLOCK, None, None)
     assert app._cmd_stop_recording.is_set()
-    monkeypatch.setattr(app, "_stop_stream_safely", lambda: None)
+    monkeypatch.setattr(recording, "stop_stream_safely", lambda: None)
     assert app._finish_capture(False, False) is None      # nothing is transcribed
     assert rs.state.was_cancelled
     app._cmd_stop_recording.clear()

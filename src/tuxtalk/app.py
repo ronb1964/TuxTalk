@@ -45,47 +45,13 @@ from . import keyboard_grab
 from . import keyboard_output
 from . import tray_link
 from . import engine
+from . import recording
 from . import last_dictation
 from . import notices
 from . import dictation_text
 import threading
 
 logger = setup_logger(__name__)
-
-_media_pauser = None            # media_pause.MediaPauser, created on the first pause
-_audio_ducker = None            # audio_duck.AudioDucker, created on the first duck
-
-
-def _pause_media_players():
-    """Pause playing music and videos and turn other sounds down, as the
-    options say, in the background (the keyboard is grabbed)."""
-    global _media_pauser, _audio_ducker
-    if live.duck_audio:
-        if _audio_ducker is None:
-            from .audio_duck import AudioDucker
-            _audio_ducker = AudioDucker()
-            # Quitting mid-dictation would otherwise leave everything quiet.
-            atexit.register(_audio_ducker.restore_now)
-        _audio_ducker.duck()
-    if not live.pause_media:
-        return
-    if _media_pauser is None:
-        from .media_pause import MediaPauser
-        _media_pauser = MediaPauser()
-        # Quitting mid-dictation would otherwise leave the music paused.
-        atexit.register(_media_pauser.resume_now)
-    _media_pauser.pause()
-
-
-def _resume_media_players():
-    """Resume what _pause_media_players paused and put back what it turned
-    down. Runs even if an option was switched off mid-recording, so nothing
-    is left paused or quiet."""
-    if _media_pauser is not None:
-        _media_pauser.resume()
-    if _audio_ducker is not None:
-        _audio_ducker.restore()
-
 
 
 # Optional desktop notifications via libnotify
@@ -109,7 +75,6 @@ def _acquire_single_instance():
 # The single-instance lock's file, open while the service runs.
 _lockfile_handle = None
 
-CHANNELS = 1
 MIN_HOLD_MS = 200
 # Two toggle taps closer than this make the first tap's recording hands-free.
 # Generous: 0.4 s missed slower hands (#21); a quick word still comes, at auto-stop.
@@ -248,7 +213,7 @@ def _sd_callback(indata, frames_count, time_info, status):
 
         # Feed the recording indicator whatever its active style needs.
         if recording_indicator:
-            _feed_indicator(recording_indicator, indata, _spectrum_processor)
+            recording.feed_indicator(recording_indicator, indata, _spectrum_processor)
 
 
 def _cut_chunk(chunker):
@@ -260,7 +225,7 @@ def _cut_chunk(chunker):
         if rs.state.chunker is not chunker:
             return  # the recording ended while this block was arriving
         frames, rs.state.frames = rs.state.frames, []
-        _drop_tail_samples(frames, chunker.tail_samples())
+        recording.drop_tail_samples(frames, chunker.tail_samples())
         rs.state.chunks_submitted += 1
         number = rs.state.chunks_submitted
         rec_sr = getattr(rs.state, "recording_samplerate", engine.SAMPLE_RATE)
@@ -314,88 +279,11 @@ def _arm_chunker(rec_sr, edit_mode=False):
         rs.state.chunker = chunker
 
 
-def _feed_indicator(indicator, indata, spectrum_processor):
-    """Feed the recording indicator the data its active style needs.
-
-    The RMS level is always cheap and drives the orb and the color brightness.
-    Raw samples (waveform, radial) and the FFT spectrum (bars) are computed
-    ONLY for the style that consumes them, so an orb user pays for no FFT.
-    """
-    audio = np.frombuffer(indata, dtype=np.int16).astype(np.float64)
-    rms = float(np.sqrt(np.mean(audio ** 2))) if len(audio) else 0.0
-    indicator.set_audio_level(min(1.0, rms / 3000.0))
-
-    style = getattr(indicator, "style", "orb")
-    if style in ("waveform", "radial"):
-        indicator.set_waveform(audio.astype(np.float32) / 32768.0)
-    elif style == "bars" and spectrum_processor is not None:
-        indicator.set_spectrum(spectrum_processor.process(audio.astype(np.float32) / 32768.0))
-
 
 # Built once when the recording indicator is created; used by _feed_indicator
 # to compute the bars spectrum. None until then (and for non-bars styles).
 _spectrum_processor = None
 
-
-def _pick_input_device(mic_substring: str | None):
-    """Return device index for the best matching input device.
-
-    Delegates to config.find_input_device() which handles PipeWire
-    auto-detection when no mic name is configured. This avoids the
-    broken ALSA "default" virtual device that returns garbage audio
-    on PipeWire systems.
-    """
-    global _system_default_mic
-    from .config import find_input_device
-    if mic_substring:
-        _system_default_mic = None      # a mic chosen by name stays put
-        return find_input_device(mic_substring)
-    source = config_module.default_source_name()
-    idx = find_input_device(mic_substring)
-    _system_default_mic = (source, idx)
-    return idx
-
-
-# (PipeWire default source name, device index) while the mic is on System
-# Default; None when a mic was chosen by name. See _follow_system_default.
-_system_default_mic = None
-
-
-def _follow_system_default(input_device_idx):
-    """The device to record from, following a switched desktop default.
-
-    The default mic is turned into a device number when it's resolved, so
-    switching inputs in GNOME's Quick Settings or KDE's applet used to need a
-    restart (issue #14). Asking PipeWire costs about a millisecond, so it's
-    done on every recording, and devices are re-resolved only on a change.
-    Anything that goes wrong keeps the device already in use.
-    """
-    tracked = _system_default_mic
-    if tracked is None:
-        return input_device_idx
-    source = config_module.default_source_name()
-    if source is None or source == tracked[0]:
-        return tracked[1]
-    try:
-        idx = _pick_input_device("")
-    except Exception as e:
-        logger.warning(f"Could not follow the new default microphone {source!r}: {e}")
-        return tracked[1]
-    logger.info(f"The system's default microphone changed to {source!r} (device {idx})")
-    return idx
-
-def _resample_audio(audio, orig_sr, target_sr):
-    """Resample audio from orig_sr to target_sr using linear interpolation.
-
-    Good enough for speech audio going to Whisper. No extra dependencies needed.
-    """
-    if orig_sr == target_sr:
-        return audio
-    # Calculate new length and interpolate
-    duration = len(audio) / orig_sr
-    target_len = int(duration * target_sr)
-    orig_indices = np.linspace(0, len(audio) - 1, target_len)
-    return np.interp(orig_indices, np.arange(len(audio)), audio.astype(np.float64)).astype(audio.dtype)
 
 
 # How often to look for input devices that have appeared or come back.
@@ -582,7 +470,7 @@ def _open_input_stream(device_idx) -> None:
     """Open and start the microphone stream. Raises if the device is unusable."""
     # Use the device's native sample rate (may differ from 16kHz on ALSA hw: devices)
     rs.state.recording_samplerate = mic_stream.input_samplerate(device_idx, engine.SAMPLE_RATE)
-    sd.default.channels = CHANNELS
+    sd.default.channels = recording.CHANNELS
     sd.default.samplerate = rs.state.recording_samplerate
     rs.state.stream = sd.InputStream(callback=_sd_callback, dtype='int16', device=device_idx)
     rs.state.stream.start()
@@ -617,7 +505,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     if engine.model is None:
         # Power Saving let the model go: load it while the user talks.
         threading.Thread(target=engine.wake, daemon=True, name="tt-wake-model").start()
-    input_device_idx = _follow_system_default(input_device_idx)
+    input_device_idx = recording.follow_system_default(input_device_idx)
     try:
         _open_input_stream(input_device_idx)
     except Exception as first_error:
@@ -625,9 +513,9 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
         # a USB device and the numbering shifts, leaving that number pointing at
         # nothing. Re-resolve by name and try once more before giving up.
         logger.warning(f"Microphone {input_device_idx} failed ({first_error}); re-resolving")
-        _stop_stream_safely()
+        recording.stop_stream_safely()
         try:
-            fresh_idx = _pick_input_device(load_config().mic)
+            fresh_idx = recording.pick_input_device(load_config().mic)
             _open_input_stream(fresh_idx)
             logger.info(f"Microphone re-resolved to device {fresh_idx}")
             if fresh_idx != input_device_idx:
@@ -638,7 +526,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
             # leave the keyboard grabbed and the machine unusable.
             logger.error(f"Could not start recording: {e}", exc_info=True)
             rs.state.is_recording = False
-            _stop_stream_safely()
+            recording.stop_stream_safely()
             keyboard_grab.release_all()
             beeps.beep(beeps_on, *CANCEL_BEEP)
             if notify_on:
@@ -649,7 +537,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
             return False
 
     _arm_chunker(getattr(rs.state, "recording_samplerate", engine.SAMPLE_RATE), edit_mode)
-    _pause_media_players()
+    recording.pause_media_players()
     rs.state.start_beep = beeps.beep(beeps_on, *START_BEEP)
     if notify_on: notify_module.notify("Recording… speak now", "")
     tray_link.notify_recording_state(True)
@@ -669,21 +557,14 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     return True
 
 
-def _stop_stream_safely():
-    """Stop and close the microphone stream. An audio system that stops
-    answering costs mic_stream.STOP_TIMEOUT_S, not the whole service."""
-    stream, rs.state.stream = rs.state.stream, None
-    if stream is not None:
-        mic_stream.close(stream)
-
 
 def cancel_recording(beeps_on: bool, notify_on: bool, reason="Cancelled"):
     """End a recording without transcribing it, telling the user *reason*."""
     rs.state.is_recording = False
     rs.state.was_cancelled = True
     rs.state.edit_mode = False
-    _stop_stream_safely()
-    _resume_media_players()
+    recording.stop_stream_safely()
+    recording.resume_media_players()
     beeps.beep(beeps_on, *CANCEL_BEEP)
     print(reason)
     logger.debug(f"Recording cancelled: {reason}")
@@ -1159,44 +1040,13 @@ def _toggle_pressed_while_recording(beeps_on: bool) -> bool:
     rate = getattr(rs.state, "recording_samplerate", engine.SAMPLE_RATE)
     detector = silence.SilenceDetector(live.auto_stop_seconds, rate)
     beep_hz = START_BEEP[0] if rs.state.start_beep is not None else None
-    if silence.has_a_word(_frames_f32(list(rs.state.frames)), rate, ignoring_hz=beep_hz):
+    if silence.has_a_word(recording.frames_f32(list(rs.state.frames)), rate, ignoring_hz=beep_hz):
         detector.heard_speech()
     rs.state.silence = detector
     logger.info("Double-tap: this recording will stop by itself when you go quiet")
     beeps.beep(beeps_on, *HANDS_FREE_BEEP)
     return True
 
-
-def _trim_auto_stop_tail(frames):
-    """After an auto-stop, drop the silence the detector measured at the end.
-
-    Only whole trailing blocks are removed, and only up to what was measured
-    as silent (less a small margin kept for the last word), so speech is never
-    touched. Runs after the stream stops, so no block is still being added.
-    """
-    detector, rs.state.silence = rs.state.silence, None
-    _drop_tail_samples(frames, detector.tail_to_trim() if detector is not None else 0)
-
-
-def _drop_speechless_rest(frames):
-    """The audio after the last cut, or none when the pause detector heard no
-    speech in it: room noise longer than the tap check would otherwise reach
-    the engine, which invents a word for it ("Yeah.")."""
-    if rs.state.last_chunk_speech == 0.0:
-        logger.info("No speech after the last chunk; the rest isn't transcribed")
-        return []
-    return frames
-
-
-def _drop_tail_samples(frames, to_trim):
-    """Remove whole trailing blocks (int16 mono) holding at most *to_trim*
-    samples. A block is never split, so speech is never touched."""
-    while frames and to_trim > 0:
-        block_samples = len(frames[-1]) // 2          # int16 mono
-        if block_samples > to_trim:
-            break
-        frames.pop()
-        to_trim -= block_samples
 
 
 def _finish_capture(beeps_on: bool, notify_on: bool):
@@ -1213,7 +1063,7 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
         # type a stray "Thank you." (see silence.is_speechless_tap).
         rs.state.silence = None
         rate = getattr(rs.state, "recording_samplerate", engine.SAMPLE_RATE)
-        dead_mic = _frames_are_dead_mic(rs.state.frames, rate)
+        dead_mic = recording.frames_are_dead_mic(rs.state.frames, rate)
         cancel_recording(beeps_on, notify_on and not dead_mic, "Nothing heard, so nothing was typed")
         if dead_mic:
             notices.warn_silent_mic()
@@ -1240,10 +1090,10 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
         logger.info(f"Chunked dictation: no pause found ({chunker.describe()})")
     rec_sr = getattr(rs.state, 'recording_samplerate', engine.SAMPLE_RATE)
     rs.state.is_recording = False
-    _stop_stream_safely()
-    _resume_media_players()
+    recording.stop_stream_safely()
+    recording.resume_media_players()
     tray_link.notify_recording_state(False)  # the tray icon shows recording stopped
-    _trim_auto_stop_tail(frames)
+    recording.trim_auto_stop_tail(frames)
     if rs.state.was_cancelled:
         return None
     if recording_indicator:
@@ -1255,16 +1105,6 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
 def _shortened(text, limit):
     """*text* cut to *limit* characters for a notification, with … if cut."""
     return f"{text[:limit]}{'…' if len(text) > limit else ''}"
-
-
-def _frames_f32(frames):
-    """Raw int16 recording frames as float samples in -1..1."""
-    return np.frombuffer(b"".join(frames), dtype=np.int16).astype(np.float32) / 32768.0
-
-
-def _frames_are_dead_mic(frames, rec_sr) -> bool:
-    """silence.is_dead_mic for raw int16 recording frames."""
-    return silence.is_dead_mic(_frames_f32(frames), rec_sr)
 
 
 
@@ -1601,14 +1441,14 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         return True
 
     try:
-        audio_f32 = _frames_f32(frames)
+        audio_f32 = recording.frames_f32(frames)
         if audio_f32.size == 0:
             if _nothing_in_chunk("had no audio"):
                 return
             print("(No audio captured)")
             return
         if rec_sr != engine.SAMPLE_RATE:
-            audio_f32 = _resample_audio(audio_f32, rec_sr, engine.SAMPLE_RATE)
+            audio_f32 = recording.resample(audio_f32, rec_sr, engine.SAMPLE_RATE)
 
         # A second or more of pure digital silence: the microphone is muted,
         # unplugged or dead, not a quiet room. Say so instead of typing nothing.
@@ -1837,7 +1677,7 @@ def stop_recording(
         # transcription when nothing was chunked.
         params = (beeps_on, smart_quotes, notify_on, language, auto_space,
                   auto_period, injection_mode)
-        frames = _drop_speechless_rest(frames)
+        frames = recording.drop_speechless_rest(frames)
         worker = _chunk_worker()
         worker.submit(lambda message=rs.state.message: _transcribe_and_inject(
             frames, rec_sr, *params, chunk_role="last", message=message))
@@ -2065,11 +1905,11 @@ def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
     for the text selected in the focused app, which the AI rewrites and the
     rewrite replaces. Ctrl+Z in the app undoes it."""
     t0 = time.time()
-    audio_f32 = _frames_f32(frames)
+    audio_f32 = recording.frames_f32(frames)
     if audio_f32.size == 0:
         return
     if rec_sr != engine.SAMPLE_RATE:
-        audio_f32 = _resample_audio(audio_f32, rec_sr, engine.SAMPLE_RATE)
+        audio_f32 = recording.resample(audio_f32, rec_sr, engine.SAMPLE_RATE)
     if silence.is_speechless_tap(audio_f32, engine.SAMPLE_RATE):
         return
 
@@ -2528,7 +2368,7 @@ class _ServiceState:
         if mic == self._resolved_mic:
             return
         try:
-            self.input_device_idx = _pick_input_device(mic)
+            self.input_device_idx = recording.pick_input_device(mic)
             logger.info(f"Microphone changed to {mic!r} (device {self.input_device_idx})")
         except Exception as e:
             logger.warning(f"Could not resolve microphone {mic!r}, keeping current: {e}")
@@ -2593,7 +2433,7 @@ def _service_tick(cfg, svc: "_ServiceState") -> "LiveSettings | None":
                         # before the next recording's. No wait, as below.
                         role = "last" if rs.state.chunks_submitted else None
                         if role:
-                            frames = _drop_speechless_rest(frames)
+                            frames = recording.drop_speechless_rest(frames)
                         _chunk_worker().submit(
                             lambda frames=frames, rec_sr=rec_sr, cfg=cfg, role=role,
                             message=rs.state.message: _transcribe_and_inject(
@@ -2912,7 +2752,7 @@ def main():
     if live.words:
         logger.info(f"Loaded your words ({len(live.words)})")
 
-    input_device_idx = _pick_input_device(cfg.mic)
+    input_device_idx = recording.pick_input_device(cfg.mic)
 
     # The D-Bus service and the recording indicator both need GTK's main loop.
     global dbus_service, recording_indicator

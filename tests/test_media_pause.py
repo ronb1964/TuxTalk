@@ -16,6 +16,7 @@ from tuxtalk import config as C
 from tuxtalk.media_pause import MediaPauser
 from tuxtalk import keyboard_grab
 from tuxtalk import tray_link
+from tuxtalk import recording
 
 
 class FakeBus:
@@ -152,7 +153,7 @@ def service(monkeypatch):
     monkeypatch.setattr(app, "recording_indicator", None)
     monkeypatch.setattr(app.sd, "InputStream", lambda *a, **k: FakeStream())
     spy = SpyPauser()
-    monkeypatch.setattr(app, "_media_pauser", spy)
+    monkeypatch.setattr(recording, "_media_pauser", spy)
     monkeypatch.setattr(live, "pause_media", True)
     rs.state.is_recording = False
     yield spy
@@ -164,7 +165,8 @@ def test_the_service_never_pauses_real_players_until_config_says_so():
     """The service turns this on from config at startup, not at import."""
     import subprocess, sys
     out = subprocess.run(
-        [sys.executable, "-c", "from tuxtalk import app, live_settings; print(live_settings.pause_media, app._media_pauser)"],
+        [sys.executable, "-c", "from tuxtalk import app, live_settings, recording; "
+         "print(live_settings.pause_media, recording._media_pauser)"],
         capture_output=True, text=True, check=True)
     assert out.stdout.split()[-2:] == ["False", "None"]
 
@@ -204,7 +206,7 @@ def test_switched_off_pauses_nothing(service, monkeypatch):
 def test_a_microphone_failure_pauses_nothing(service, monkeypatch):
     monkeypatch.setattr(app.sd, "InputStream",
                         lambda *a, **k: (_ for _ in ()).throw(Exception("no mic")))
-    monkeypatch.setattr(app, "_pick_input_device", lambda mic: 0)
+    monkeypatch.setattr(recording, "pick_input_device", lambda mic: 0)
     monkeypatch.setattr(keyboard_grab, "release_all", lambda: None)
     assert app.start_recording(False, False, 0) is False
     assert service.calls == []

@@ -328,8 +328,9 @@ def test_pressing_the_hold_key_holds_the_send_and_records(countdown, monkeypatch
     pressed, _ = countdown
     start_send("test")
     monkeypatch.setattr(app, "_open_input_stream", lambda idx: None)
-    for name in ("_arm_chunker", "_pause_media_players"):
+    for name in ("_arm_chunker",):
         monkeypatch.setattr(app, name, lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.recording.pause_media_players", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.tray_link.notify_recording_state", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
@@ -544,8 +545,11 @@ def test_a_quick_tap_holds_the_send_even_when_recording_starts_slowly(
                         lambda beeps, notify, reason="": reasons.append(reason))
     monkeypatch.setattr(app, "_transcribe_and_inject", lambda *a, **k: dictated.append(1))
     monkeypatch.setattr(app, "_open_input_stream", lambda idx: clock.sleep(start_s))
-    for name in ("_arm_chunker", "_pause_media_players", "_resume_media_players", "_stop_stream_safely"):
+    for name in ("_arm_chunker",):
         monkeypatch.setattr(app, name, lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.recording.pause_media_players", lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.recording.resume_media_players", lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.recording.stop_stream_safely", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.tray_link.notify_recording_state", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)

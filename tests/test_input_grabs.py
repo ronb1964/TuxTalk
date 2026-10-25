@@ -17,6 +17,7 @@ from tuxtalk import tray_link
 from tuxtalk import keyboard_grab
 from tuxtalk import recording_state as rs
 from tuxtalk import uinput_helper
+from tuxtalk import recording
 
 
 class FakeDevice:
@@ -351,7 +352,7 @@ def test_stale_microphone_index_is_re_resolved_and_retried(monkeypatch, quiet_re
         return FakeStream()
 
     monkeypatch.setattr(app.sd, "InputStream", fake_input_stream)
-    monkeypatch.setattr(app, "_pick_input_device", lambda mic: 3)
+    monkeypatch.setattr(recording, "pick_input_device", lambda mic: 3)
     monkeypatch.setattr(app, "load_config", lambda: FakeConfig())
 
     kb = keyboard()
@@ -367,7 +368,7 @@ def test_stale_microphone_index_is_re_resolved_and_retried(monkeypatch, quiet_re
 def test_keyboard_is_released_when_even_the_re_resolved_mic_fails(monkeypatch, quiet_recording):
     monkeypatch.setattr(app.sd, "InputStream",
                         lambda *a, **k: (_ for _ in ()).throw(Exception("no mic anywhere")))
-    monkeypatch.setattr(app, "_pick_input_device", lambda mic: 3)
+    monkeypatch.setattr(recording, "pick_input_device", lambda mic: 3)
     monkeypatch.setattr(app, "load_config", lambda: FakeConfig())
 
     kb = keyboard()
@@ -779,7 +780,7 @@ def test_a_microphone_that_never_stops_cannot_freeze_the_service(monkeypatch):
     stream = StuckStream()
     rs.state.stream = stream
     started = app.time.monotonic()
-    app._stop_stream_safely()
+    recording.stop_stream_safely()
     assert app.time.monotonic() - started < 1.0
     assert rs.state.stream is None
     assert app.mic_stream._closing == {stream}
@@ -798,7 +799,7 @@ def test_a_normal_stop_closes_the_stream(monkeypatch):
 
     monkeypatch.setattr(app.mic_stream, "_closing", set())
     rs.state.stream = Stream()
-    app._stop_stream_safely()
+    recording.stop_stream_safely()
     assert calls == ["stop", "close"] and app.mic_stream._closing == set()
 
 
@@ -818,7 +819,7 @@ def test_falling_back_to_another_mic_says_so(monkeypatch, quiet_recording):
     notices = []
     monkeypatch.setattr(app.sd, "InputStream", fake_input_stream)
     monkeypatch.setattr(app.sd, "query_devices", lambda idx: {"name": names[idx]})
-    monkeypatch.setattr(app, "_pick_input_device", lambda mic: 8)
+    monkeypatch.setattr(recording, "pick_input_device", lambda mic: 8)
     monkeypatch.setattr(app, "load_config", lambda: FakeConfig())
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, text: notices.append(text))
 
@@ -844,7 +845,7 @@ def test_reopening_the_same_mic_says_nothing(monkeypatch, quiet_recording):
 
     notices = []
     monkeypatch.setattr(app.sd, "InputStream", fake_input_stream)
-    monkeypatch.setattr(app, "_pick_input_device", lambda mic: 14)
+    monkeypatch.setattr(recording, "pick_input_device", lambda mic: 14)
     monkeypatch.setattr(app, "load_config", lambda: FakeConfig())
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, text: notices.append(text))
 

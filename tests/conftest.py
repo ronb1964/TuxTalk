@@ -18,6 +18,7 @@ from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
 from tuxtalk import keyboard_output
 from tuxtalk import engine
+from tuxtalk import recording
 
 # No program a test starts can reach the speakers, nor this one. Every
 # program inherits this, so a child Python's sounddevice, a player started
@@ -185,8 +186,7 @@ def _no_followed_default_mic(monkeypatch):
     the real _pick_input_device("") records the user's PipeWire default, and
     start_recording would then record from that instead of the device the
     next test passes in."""
-    from tuxtalk import app
-    monkeypatch.setattr(app, "_system_default_mic", None)
+    monkeypatch.setattr(recording, "_system_default_mic", None)
 
 
 @pytest.fixture(autouse=True)
@@ -838,7 +838,7 @@ def service_main(monkeypatch):
     monkeypatch.setattr(app, "_install_signal_handlers", lambda: None)
     monkeypatch.setattr(engine, "guard_large_v3_without_cuda", lambda cfg: None)
     monkeypatch.setattr(live, "apply", lambda cfg: None)
-    monkeypatch.setattr(app, "_pick_input_device", lambda mic: None)
+    monkeypatch.setattr(recording, "pick_input_device", lambda mic: None)
     monkeypatch.setattr(app, "load_custom_commands", lambda: {})
     monkeypatch.setattr(custom_words, "load", lambda: [])
     monkeypatch.setattr(virtual_keyboard, "start", lambda: None)

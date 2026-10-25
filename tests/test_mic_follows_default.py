@@ -15,6 +15,7 @@ import pytest
 
 from tuxtalk import app, config
 from tuxtalk import recording_state as rs
+from tuxtalk import recording
 
 
 @pytest.fixture
@@ -30,73 +31,74 @@ def desktop(monkeypatch):
         state.resolves.append(mic)
         return 9 if mic else state.idx_for.get(state.source, 2)
     monkeypatch.setattr(config, "find_input_device", find)
-    monkeypatch.setattr(app, "_system_default_mic", None)
+    monkeypatch.setattr(recording, "_system_default_mic", None)
     return state
 
 
 def test_a_switched_default_is_used_by_the_next_recording(desktop):
-    assert app._pick_input_device("") == 4
+    assert recording.pick_input_device("") == 4
 
     desktop.source = "alsa_input.usb-TONOR_TD520S"   # Quick Settings → TONOR
 
-    assert app._follow_system_default(4) == 6
+    assert recording.follow_system_default(4) == 6
 
 
 def test_an_unchanged_default_is_not_re_resolved(desktop):
-    app._pick_input_device("")
+    recording.pick_input_device("")
     desktop.resolves.clear()
 
-    assert app._follow_system_default(4) == 4
+    assert recording.follow_system_default(4) == 4
     assert desktop.resolves == []
 
 
 def test_a_mic_chosen_by_name_is_kept(desktop):
-    assert app._pick_input_device("Fast Track") == 9
+    assert recording.pick_input_device("Fast Track") == 9
 
     desktop.source = "alsa_input.usb-TONOR_TD520S"
 
-    assert app._follow_system_default(9) == 9
+    assert recording.follow_system_default(9) == 9
 
 
 def test_back_on_system_default_follows_again(desktop):
-    app._pick_input_device("Fast Track")
-    app._pick_input_device("")
+    recording.pick_input_device("Fast Track")
+    recording.pick_input_device("")
     desktop.source = "alsa_input.usb-TONOR_TD520S"
 
-    assert app._follow_system_default(4) == 6
+    assert recording.follow_system_default(4) == 6
 
 
 def test_without_wpctl_the_device_in_use_is_kept(desktop):
-    app._pick_input_device("")
+    recording.pick_input_device("")
     desktop.source = None                              # wpctl missing or failed
     desktop.resolves.clear()
 
-    assert app._follow_system_default(4) == 4
+    assert recording.follow_system_default(4) == 4
     assert desktop.resolves == []
 
 
 def test_a_failed_re_resolve_keeps_the_device_in_use(desktop, monkeypatch):
-    app._pick_input_device("")
+    recording.pick_input_device("")
     desktop.source = "alsa_input.usb-TONOR_TD520S"
 
     def boom(mic):
         raise RuntimeError("PortAudio went away")
     monkeypatch.setattr(config, "find_input_device", boom)
 
-    assert app._follow_system_default(4) == 4
+    assert recording.follow_system_default(4) == 4
 
 
 def test_start_recording_opens_the_new_default(desktop, monkeypatch):
     opened = []
     monkeypatch.setattr(app, "_open_input_stream", lambda idx: opened.append(idx))
-    for name in ("_arm_chunker", "_pause_media_players"):
+    for name in ("_arm_chunker",):
         monkeypatch.setattr(app, name, lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.recording.pause_media_players", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.tray_link.notify_recording_state", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
     monkeypatch.setattr(app, "recording_indicator", None)
 
-    app._pick_input_device("")
+    recording.pick_input_device("")
     desktop.source = "alsa_input.usb-TONOR_TD520S"
     try:
         assert app.start_recording(False, False, 4) is True

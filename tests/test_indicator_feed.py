@@ -1,6 +1,7 @@
 """The audio callback feeds only the data the active style needs."""
 import numpy as np
 import pytest
+from tuxtalk import recording
 
 
 @pytest.fixture
@@ -31,32 +32,32 @@ def _samples():
 
 def test_orb_gets_level_only(app):
     ind = StubInd("orb")
-    app._feed_indicator(ind, _samples(), None)
+    recording.feed_indicator(ind, _samples(), None)
     assert ind.level is not None
     assert ind.waveform is None and ind.spectrum is None
 
 
 def test_waveform_style_gets_samples(app):
     ind = StubInd("waveform")
-    app._feed_indicator(ind, _samples(), None)
+    recording.feed_indicator(ind, _samples(), None)
     assert ind.waveform is not None
     assert ind.level is not None       # level still drives brightness
 
 
 def test_radial_style_gets_samples(app):
     ind = StubInd("radial")
-    app._feed_indicator(ind, _samples(), None)
+    recording.feed_indicator(ind, _samples(), None)
     assert ind.waveform is not None
 
 
 def test_bars_style_gets_spectrum(app):
     from tuxtalk.indicator_dsp import SpectrumProcessor
     ind = StubInd("bars")
-    app._feed_indicator(ind, _samples(), SpectrumProcessor(bins=20))
+    recording.feed_indicator(ind, _samples(), SpectrumProcessor(bins=20))
     assert ind.spectrum is not None and len(ind.spectrum) == 20
 
 
 def test_bars_without_a_processor_does_not_crash(app):
     ind = StubInd("bars")
-    app._feed_indicator(ind, _samples(), None)   # no processor available
+    recording.feed_indicator(ind, _samples(), None)   # no processor available
     assert ind.level is not None                  # still fed the level

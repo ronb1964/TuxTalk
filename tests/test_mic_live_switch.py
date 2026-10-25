@@ -19,6 +19,7 @@ import types
 from tuxtalk import app
 from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
+from tuxtalk import recording
 
 
 def _idle(monkeypatch):
@@ -38,7 +39,7 @@ class TestResolvingTheMic:
     def test_a_changed_mic_is_re_resolved(self, monkeypatch):
         cfg = _cfg(mic="Built-in")
         svc = app._ServiceState(cfg, input_device_idx=3)
-        monkeypatch.setattr(app, "_pick_input_device", lambda name: 7)
+        monkeypatch.setattr(recording, "pick_input_device", lambda name: 7)
 
         cfg.mic = "Sennheiser"  # what _reload_live_settings does
         svc.refresh_input_device()
@@ -50,7 +51,7 @@ class TestResolvingTheMic:
         cfg = _cfg(mic="Built-in")
         svc = app._ServiceState(cfg, input_device_idx=3)
         calls = []
-        monkeypatch.setattr(app, "_pick_input_device",
+        monkeypatch.setattr(recording, "pick_input_device",
                             lambda name: calls.append(name) or 7)
 
         svc.refresh_input_device()
@@ -66,7 +67,7 @@ class TestResolvingTheMic:
         def boom(name):
             raise RuntimeError("no such device")
 
-        monkeypatch.setattr(app, "_pick_input_device", boom)
+        monkeypatch.setattr(recording, "pick_input_device", boom)
 
         cfg.mic = "Unplugged USB"
         svc.refresh_input_device()
@@ -80,7 +81,7 @@ class TestTheNextDictationUsesIt:
         _idle(monkeypatch)
         monkeypatch.setattr(live, "config_file_changed", lambda: False)
         monkeypatch.setattr(live, "commands_file_changed", lambda: False)
-        monkeypatch.setattr(app, "_pick_input_device", lambda name: 7)
+        monkeypatch.setattr(recording, "pick_input_device", lambda name: 7)
 
         cfg = _cfg(mic="Built-in")
         svc = app._ServiceState(cfg, input_device_idx=3)

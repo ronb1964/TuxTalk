@@ -19,6 +19,7 @@ from tuxtalk import keyboard_output
 from tuxtalk import tray_link
 from tuxtalk import engine
 from tuxtalk import last_dictation
+from tuxtalk import recording as capture
 
 SR = 16000
 BLOCK = 320   # 20 ms at 16 kHz
@@ -577,8 +578,8 @@ def recording(monkeypatch, pipeline):
         beeps=True, smart_quotes=True, notify=False, language=None,
         auto_space=True, auto_period=False, injection_mode="type"))
     monkeypatch.setattr(app, "recording_indicator", None)
-    monkeypatch.setattr(app, "_stop_stream_safely", lambda: None)
-    monkeypatch.setattr(app, "_resume_media_players", lambda: None)
+    monkeypatch.setattr(capture, "stop_stream_safely", lambda: None)
+    monkeypatch.setattr(capture, "resume_media_players", lambda: None)
     monkeypatch.setattr(tray_link, "notify_recording_state", lambda *a: None)
     monkeypatch.setattr(rs.state, "silence", None)
     monkeypatch.setattr(rs.state, "recording_samplerate", SR, raising=False)
@@ -676,9 +677,8 @@ def test_cut_after_stop_snapshot_hands_nothing_on(recording):
 
 
 def test_drop_tail_samples_keeps_partial_blocks():
-    from tuxtalk import app
     frames = [b"\0\0" * 320, b"\0\0" * 320, b"\0\0" * 320]
-    app._drop_tail_samples(frames, 700)   # two whole blocks fit, the third doesn't
+    capture.drop_tail_samples(frames, 700)   # two whole blocks fit, the third doesn't
     assert len(frames) == 1
 
 

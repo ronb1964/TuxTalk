@@ -9,6 +9,7 @@ import subprocess
 
 from tuxtalk import audio_duck
 from tuxtalk import live_settings as live
+from tuxtalk import recording
 
 OWN_PID = 4242
 
@@ -127,7 +128,6 @@ def test_setting_is_off_by_default_and_live():
 
 
 def test_recording_hooks_duck_and_restore(monkeypatch):
-    from tuxtalk import app
     calls = []
 
     class Ducker:
@@ -138,13 +138,13 @@ def test_recording_hooks_duck_and_restore(monkeypatch):
             calls.append("restore")
     monkeypatch.setattr(live, "duck_audio", True)
     monkeypatch.setattr(live, "pause_media", False)
-    monkeypatch.setattr(app, "_audio_ducker", Ducker())
-    app._pause_media_players()
-    app._resume_media_players()
+    monkeypatch.setattr(recording, "_audio_ducker", Ducker())
+    recording.pause_media_players()
+    recording.resume_media_players()
     assert calls == ["duck", "restore"]
     # Switched off mid-recording: still restored.
     monkeypatch.setattr(live, "duck_audio", False)
-    app._resume_media_players()
+    recording.resume_media_players()
     assert calls[-1] == "restore"
 
 

@@ -7,6 +7,7 @@ from tuxtalk import app
 from tuxtalk import engine
 from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
+from tuxtalk import recording
 
 
 def test_turning_the_ai_off_does_not_block_the_caller(monkeypatch):
@@ -67,7 +68,7 @@ def test_the_mic_stream_is_closed_even_when_stopping_it_fails(monkeypatch):
 
     monkeypatch.setattr(rs.state, "stream", Stream())
 
-    app._stop_stream_safely()
+    recording.stop_stream_safely()
 
     assert Stream.closed
     assert rs.state.stream is None
