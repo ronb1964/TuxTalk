@@ -394,8 +394,8 @@ def service(monkeypatch):
     told = []
 
     class Tray:
-        def NotifyServiceReady(self, pid, dbus_interface, timeout):
-            told.append(int(pid))
+        def NotifyServiceReady(self, pid, dbus_interface, timeout, signature=None):
+            told.append((int(pid), signature))
 
     monkeypatch.setattr(tray_link, "get_proxy", lambda: Tray())
     recording.start_requested.clear()
@@ -407,8 +407,18 @@ def service(monkeypatch):
 
 def test_the_service_says_when_it_is_ready(service):
     service.app._mark_service_ready()
-    assert service.told == [os.getpid()] and service.written == [os.getpid()]
+    assert service.told == [(os.getpid(), "u")] and service.written == [os.getpid()]
     assert not recording.start_requested.is_set()
+
+
+def test_the_service_starts_even_when_it_cannot_reach_the_tray(service, monkeypatch):
+    """A tray link that can't even load (dbus-python missing) is logged and
+    passed over: the input loop still starts."""
+    def no_dbus():
+        raise ImportError("No module named 'dbus'")
+    monkeypatch.setattr(tray_link, "get_proxy", no_dbus)
+    service.app._mark_service_ready()
+    assert service.written == [os.getpid()] and service.app._service_ready
 
 
 def test_with_no_tray_the_service_keeps_a_request_until_it_is_ready(service):

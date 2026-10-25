@@ -1,9 +1,9 @@
-"""Backend B (the portal/Flatpak path) runs ONLY _service_tick — never the evdev
+"""Backend B (the portal/Flatpak path) runs ONLY service_tick.tick — never the evdev
 main loop. The evdev loop is where settings changed in Preferences get picked up
-without a restart (_config_file_changed -> _reload_live_settings). If _service_tick
+without a restart (live.config_file_changed -> _reload_live_settings). If service_tick.tick
 doesn't do the same, the recording indicator's style/position and every other live
 setting never update in the Flatpak, even though Preferences reports "Applied
-without restart". This test pins the reload into _service_tick.
+without restart". This test pins the reload into service_tick.tick.
 """
 
 import types
@@ -29,7 +29,7 @@ def test_service_tick_reloads_live_settings_when_config_changed(monkeypatch):
 
     service_tick.tick(cfg, svc)
 
-    assert calls, "a config change must trigger a live-settings reload in _service_tick"
+    assert calls, "a config change must trigger a live-settings reload in service_tick.tick"
     assert calls[0][0] is cfg
 
 

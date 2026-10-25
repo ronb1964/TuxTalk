@@ -16,14 +16,15 @@ _tray_dbus_proxy = None
 _INTERFACE = "io.github.ronb1964.TalkType"
 
 
-def call(method: str, *args, what: str) -> None:
-    """Call the tray's D-Bus *method* with *args*. A failure is logged as
-    "Could not {what}". Every call has the short time limit
-    focused_window.TRAY_TIMEOUT_S: some are made with every keyboard
-    exclusively grabbed. Without introspection (get_proxy), anything that
-    isn't a plain str or bool needs its dbus type (dbus.UInt32, dbus.Array)."""
+def call(method: str, *args, what: str, signature: str | None = None) -> None:
+    """Call the tray's D-Bus *method* with *args*. A failure, dbus itself
+    missing included, is logged as "Could not {what}" and never raised.
+    Every call has the short time limit focused_window.TRAY_TIMEOUT_S: some
+    are made with every keyboard exclusively grabbed. Without introspection
+    (get_proxy), arguments that aren't plain strings or booleans need their
+    D-Bus *signature* ("u" for a process id, "as" for a list of strings)."""
     try:
-        getattr(get_proxy(), method)(*args, dbus_interface=_INTERFACE,
+        getattr(get_proxy(), method)(*args, dbus_interface=_INTERFACE, signature=signature,
                                      timeout=focused_window.TRAY_TIMEOUT_S)
     except Exception as e:
         logger.info(f"Could not {what}: {e}")
@@ -32,9 +33,7 @@ def call(method: str, *args, what: str) -> None:
 def notify_recording_state(is_recording: bool):
     """Tell the tray recording started or stopped. The tray owns the D-Bus
     name the GNOME extension listens to, and emits the signal for us."""
-    import dbus
-    call("NotifyRecordingState", dbus.Boolean(is_recording),
-         what="notify tray of recording state")
+    call("NotifyRecordingState", is_recording, what="notify tray of recording state")
 
 
 def get_proxy():

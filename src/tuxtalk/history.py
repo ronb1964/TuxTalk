@@ -25,7 +25,6 @@ MAX_ENTRIES = 20
 PREVIEW_CHARS = 50
 
 
-
 def _history_path():
     """The history file, in the user's (or the Flatpak's) runtime directory."""
     base = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")

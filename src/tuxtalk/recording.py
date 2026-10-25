@@ -242,7 +242,6 @@ def _sd_callback(indata, frames_count, time_info, status):
             feed_indicator(indicator, indata, spectrum_processor)
 
 
-
 def open_input_stream(device_idx) -> None:
     """Open and start the microphone stream. Raises if the device is unusable."""
     # Use the device's native sample rate (may differ from 16kHz on ALSA hw: devices)

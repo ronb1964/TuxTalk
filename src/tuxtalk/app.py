@@ -109,8 +109,7 @@ def _mark_service_ready():
         recording.start_requested.set()
     from .service_launcher import write_ready_pid
     write_ready_pid(os.getpid())
-    import dbus
-    tray_link.call("NotifyServiceReady", dbus.UInt32(os.getpid()),
+    tray_link.call("NotifyServiceReady", os.getpid(), signature="u",
                    what="tell the tray the service is ready")
 
 
@@ -284,11 +283,10 @@ def _start_gtk_loop() -> None:
 def _run_service_entry():
     """Entry for `python -m tuxtalk.app` (the dictation service).
 
-    `-m` runs this file as the module "__main__", but the input backends import
-    it as "tuxtalk.app", a DIFFERENT module object with its own globals. Running
-    the package module's main() keeps the whole service in ONE namespace, so the
-    globals main() sets (the ready flag, the lock, the stand-in D-Bus service)
-    are the ones the input loop's tick reads.
+    `-m` runs this file as the module "__main__", and anything importing
+    "tuxtalk.app" (the tests do) gets a DIFFERENT module object with its own
+    globals. Running the package module's main() keeps one copy of what
+    main() sets: the ready flag, the lock and the stand-in D-Bus service.
     """
     from tuxtalk.app import main
     main()

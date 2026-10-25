@@ -3,14 +3,14 @@
 Both rules prevent the same failure: a setting Preferences reports as "applied
 without restart" that the running service never actually picks up.
 
-1. _config_file_changed() is edge-triggered — it compares mtime against a
-   module global and returns True once per change. _service_tick() is the
+1. live.config_file_changed() is edge-triggered — it compares mtime against a
+   module global and returns True once per change. service_tick.tick() is the
    single detector (Backend B runs no evdev loop, so the tick must check) and
    hands the reloaded settings back to the evdev loop, which rebinds
    hold_key and toggle_key from them. A second check in the loop would always
    see False, and a changed hotkey would do nothing until a restart.
 
-2. _reload_live_settings refreshes cfg in place, so _ServiceState must read the
+2. _reload_live_settings refreshes cfg in place, so ServiceState must read the
    auto-timeout from cfg rather than a snapshot taken at construction, or
    switching the timeout off leaves the service still exiting on it.
 """

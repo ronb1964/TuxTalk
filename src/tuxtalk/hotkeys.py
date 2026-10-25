@@ -79,9 +79,7 @@ def _claim_desktop_hotkeys(cfg):
     kwin_hotkeys.claim(cfg)
     cosmic_hotkeys.claim(cfg)
     x11_hotkeys.claim(cfg)
-    import dbus
-    tray_link.call("NotifyClaimedHotkeys",
-                   dbus.Array(gnome_hotkeys.accelerators(cfg), signature='s'),
+    tray_link.call("NotifyClaimedHotkeys", gnome_hotkeys.accelerators(cfg), signature="as",
                    what="send the hotkeys to the tray")
 
 

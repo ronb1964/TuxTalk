@@ -205,7 +205,6 @@ def deliver_text(text: str, injection_mode: str, one_block: bool = False, *, whe
     return _remember_delivered(text, inject_ok)
 
 
-
 def _delivery_stopped(stop, typed_some: bool) -> str:
     """The outcome of a delivery that *stop* ended early, after forgetting
     what undo, "select that" and the next dictation's capital count on.

@@ -9,7 +9,7 @@ The failure path in start_recording re-resolves only when opening the old
 device *raises*, so on its own it does nothing when switching between two
 microphones that both work.
 
-The resolved number lives on _ServiceState next to the cfg it came from, so
+The resolved number lives on ServiceState next to the cfg it came from, so
 there is one owner rather than a snapshot and a parameter that disagree.
 """
 
