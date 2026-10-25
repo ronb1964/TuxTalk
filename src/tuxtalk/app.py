@@ -353,11 +353,34 @@ def _mark_service_ready():
 
 
 def main():
-    from . import desktop_identity, ui_style
+    """The dictation service: load the settings, start GTK (the stand-in
+    D-Bus service and the recording indicator) and the speech model, then
+    run the input loop for the life of the process."""
+    cfg = _load_settings()
+    input_device_idx = recording.pick_input_device(cfg.mic)
+    gtk_ok = _start_gtk(cfg)
+    _load_model(cfg, gtk_ok)
+    # A toggle sent while the model was loading would otherwise start a
+    # recording seconds later, out of the blue, when the input loop starts.
+    # One asked for on the command line waits in the tray instead (control.py).
+    recording.start_requested.clear()
+    recording.stop_requested.clear()
+    recording.started_from_toggle_key.clear()
+    _mark_service_ready()
+
+    # Run the input backend chosen by FLATPAK_ID: evdev everywhere
+    # (EvdevInputBackend -> hotkeys.run), portals inside a Flatpak.
+    from .input_backends import get_input_backend
+    get_input_backend(cfg=cfg, input_device_idx=input_device_idx).start()
+
+
+def _load_settings():
+    """Take the single-instance lock and the signals, then load the settings
+    and everything they switch on: the virtual keyboard, the live options,
+    custom commands and Your Words. Returns the settings."""
+    from . import custom_words, desktop_identity, ui_style
     desktop_identity.apply()        # TuxTalk's icon on its windows, not KDE's generic one
     ui_style.prepare_windows()   # emoji that show, buttons clear of panels and docks
-    # The loaded speech model. Usually built after the GTK loop starts; built
-    # earlier when it must first be downloaded (see the GTK section below).
     _acquire_single_instance()
     _install_signal_handlers()
 
@@ -375,80 +398,93 @@ def main():
         from .audio_duck import restore_left_over
         restore_left_over()
     except Exception as e:
-        logger.debug(f"Could not check for sounds left turned down: {e}")
+        logger.info(f"Could not check for sounds left turned down: {e}")
     # The live options; the AI engine (if on) loads in the background.
     live.apply(cfg)
 
     live.commands = load_custom_commands()
     if live.commands:
         logger.info(f"Loaded {len(live.commands)} custom voice command(s)")
-    from . import custom_words
     live.words = custom_words.load()
     if live.words:
         logger.info(f"Loaded your words ({len(live.words)})")
+    return cfg
 
-    input_device_idx = recording.pick_input_device(cfg.mic)
 
-    # The D-Bus service and the recording indicator both need GTK's main loop.
+def _start_gtk(cfg) -> bool:
+    """Make what needs GTK's main loop (the stand-in D-Bus service and the
+    recording indicator); whether GTK could be set up at all."""
     global dbus_service
     dbus_service = None
     recording.indicator = None
-    gtk_ok = False
     try:
         import gi
         gi.require_version('Gtk', '3.0')
-        from gi.repository import Gtk
-
-        # Initialize D-Bus service for GNOME extension integration
-        try:
-            from .dbus_service import TuxTalkDBusService
-
-            from .service_dbus import AppInstance
-
-            app_instance = AppInstance(cfg, recording.start_requested, recording.stop_requested,
-                                       _control_in_service)
-            # A stand-in only: the tray owns the bus name (see
-            # TuxTalkDBusService). This succeeds only with no tray running.
-            dbus_service = TuxTalkDBusService(app_instance, primary=False)
-            app_instance.dbus_service = dbus_service
-
-            # Emit initial state so extension syncs properly
-            dbus_service.emit_service_state(True)
-            dbus_service.emit_model_changed(cfg.model)
-
-            logger.info("D-Bus service started successfully (no tray running)")
-        except Exception as e:
-            dbus_service = None
-            if type(e).__name__ == "NameExistsException":
-                # The normal case: the tray already owns the name.
-                logger.info("The tray owns the D-Bus name; the service doesn't register its own")
-            else:
-                logger.error(f"D-Bus service initialization failed: {e}", exc_info=True)
-
+        from gi.repository import Gtk  # noqa: F401  (fails here when GTK can't load)
+        dbus_service = _start_dbus_stand_in(cfg)
         if cfg.recording_indicator:
-            try:
-                recording.indicator = RecordingIndicator(
-                    position=cfg.indicator_position,
-                    offset_x=cfg.indicator_offset_x,
-                    offset_y=cfg.indicator_offset_y,
-                    size=cfg.indicator_size,
-                    style=cfg.indicator_style,
-                    color_mode=cfg.indicator_color_mode,
-                    custom_color=cfg.indicator_color,
-                    sensitivity=cfg.indicator_sensitivity,
-                    follow_window=getattr(cfg, "indicator_follow_window", False),
-                )
-                # Spectrum processor for the bars style; recording.feed_indicator uses it.
-                from .indicator_dsp import SpectrumProcessor
-                recording.spectrum_processor = SpectrumProcessor(bins=20)
-                logger.info(f"Recording indicator initialized at position: {cfg.indicator_position}, size: {cfg.indicator_size}")
-            except Exception as e:
-                logger.error(f"Recording indicator initialization failed: {e}", exc_info=True)
-        gtk_ok = True
+            _make_indicator(cfg)
+        return True
     except Exception as e:
         logger.error(f"GTK initialization failed: {e}", exc_info=True)
+        return False
 
-    # Outside the try above: a model that fails to load is not a GTK
+
+def _start_dbus_stand_in(cfg):
+    """The service's own D-Bus service, for the GNOME extension when no tray
+    runs; None in the normal case, where the tray owns the name."""
+    try:
+        from .dbus_service import TuxTalkDBusService
+        from .service_dbus import AppInstance
+
+        app_instance = AppInstance(cfg, recording.start_requested, recording.stop_requested,
+                                   _control_in_service)
+        # A stand-in only: the tray owns the bus name (see
+        # TuxTalkDBusService). This succeeds only with no tray running.
+        service = TuxTalkDBusService(app_instance, primary=False)
+        app_instance.dbus_service = service
+
+        # Emit initial state so extension syncs properly
+        service.emit_service_state(True)
+        service.emit_model_changed(cfg.model)
+
+        logger.info("D-Bus service started successfully (no tray running)")
+        return service
+    except Exception as e:
+        if type(e).__name__ == "NameExistsException":
+            # The normal case: the tray already owns the name.
+            logger.info("The tray owns the D-Bus name; the service doesn't register its own")
+        else:
+            logger.error(f"D-Bus service initialization failed: {e}", exc_info=True)
+        return None
+
+
+def _make_indicator(cfg) -> None:
+    """The recording indicator, with its spectrum for the bars style."""
+    try:
+        recording.indicator = RecordingIndicator(
+            position=cfg.indicator_position,
+            offset_x=cfg.indicator_offset_x,
+            offset_y=cfg.indicator_offset_y,
+            size=cfg.indicator_size,
+            style=cfg.indicator_style,
+            color_mode=cfg.indicator_color_mode,
+            custom_color=cfg.indicator_color,
+            sensitivity=cfg.indicator_sensitivity,
+            follow_window=getattr(cfg, "indicator_follow_window", False),
+        )
+        # Spectrum processor for the bars style; recording.feed_indicator uses it.
+        from .indicator_dsp import SpectrumProcessor
+        recording.spectrum_processor = SpectrumProcessor(bins=20)
+        logger.info(f"Recording indicator initialized at position: {cfg.indicator_position}, "
+                    f"size: {cfg.indicator_size}")
+    except Exception as e:
+        logger.error(f"Recording indicator initialization failed: {e}", exc_info=True)
+
+
+def _load_model(cfg, gtk_ok: bool) -> None:
+    """Load the speech model, and start GTK's main loop when GTK is there."""
+    # Outside _start_gtk's try: a model that fails to load is not a GTK
     # failure, and must not be loaded a second time below.
     if gtk_ok:
         # If the model still has to be downloaded, do it NOW, before the GTK
@@ -460,33 +496,28 @@ def main():
         from .model_helper import is_model_cached_fast
         if not is_model_cached_fast(cfg.model):
             engine.model = engine.build_or_exit(cfg)
-
-        # Start single GTK main loop in a background thread for both D-Bus and recording indicator
-        def run_gtk_loop():
-            print("Starting GTK main loop...")
-            Gtk.main()
-
-        gtk_thread = threading.Thread(target=run_gtk_loop, daemon=True)
-        gtk_thread.start()
-        engine.gtk_loop_running = True
-        print("GTK main loop started in background thread")
+        _start_gtk_loop()
 
     if engine.model is None:
         engine.model = engine.build_or_exit(cfg)
-    logger.info(f"Configuration: model={cfg.model}, device={cfg.device}, language={cfg.language or 'auto'}, auto_space={cfg.auto_space}, auto_period={cfg.auto_period}")
+    logger.info(f"Configuration: model={cfg.model}, device={cfg.device}, "
+                f"language={cfg.language or 'auto'}, auto_space={cfg.auto_space}, "
+                f"auto_period={cfg.auto_period}")
     engine.notify_tray()
-    # A toggle sent while the model was loading would otherwise start a
-    # recording seconds later, out of the blue, when the input loop starts.
-    # One asked for on the command line waits in the tray instead (control.py).
-    recording.start_requested.clear()
-    recording.stop_requested.clear()
-    recording.started_from_toggle_key.clear()
-    _mark_service_ready()
 
-    # Run the input backend chosen by FLATPAK_ID: evdev everywhere
-    # (EvdevInputBackend -> hotkeys.run), portals inside a Flatpak.
-    from .input_backends import get_input_backend
-    get_input_backend(cfg=cfg, input_device_idx=input_device_idx).start()
+
+def _start_gtk_loop() -> None:
+    """One GTK main loop, on its own thread, for D-Bus and the indicator."""
+    from gi.repository import Gtk
+
+    def run_gtk_loop():
+        print("Starting GTK main loop...")
+        Gtk.main()
+
+    threading.Thread(target=run_gtk_loop, daemon=True).start()
+    engine.gtk_loop_running = True
+    print("GTK main loop started in background thread")
+
 
 def _run_service_entry():
     """Entry for `python -m tuxtalk.app` (the dictation service).
