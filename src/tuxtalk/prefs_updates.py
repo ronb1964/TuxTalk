@@ -12,7 +12,7 @@ from gi.repository import GLib, Gtk, Pango
 
 from .desktop_detect import is_gnome
 from .logger import setup_logger
-from .prefs_tab import Tab, dropdown, run_with_progress
+from .prefs_tab import Tab, dropdown, run_with_progress, subheading
 from .ui_style import WARNING_AMBER, show_message
 
 logger = setup_logger(__name__)
@@ -107,11 +107,13 @@ class UpdatesTab(Tab):
         vbox.pack_start(row, False, False, 0)
 
     def _build_earlier(self, vbox):
-        """Earlier settings: the backups in the backup folder and the copies
-        the tray takes when it starts (settings_backup.py), to go back to."""
+        """Earlier settings, part of Backup (no line between them): the
+        backups in the backup folder and the copies the tray takes when it
+        starts (settings_backup.py), to go back to."""
         from . import settings_backup
-        vbox.pack_start(_separator(), False, False, 0)
-        vbox.pack_start(_header("🕘 Earlier settings"), False, False, 0)
+        heading = _indented(subheading("Earlier settings"))
+        heading.set_margin_top(10)
+        vbox.pack_start(heading, False, False, 0)
         vbox.pack_start(_dim(f"Your backups in the backup folder, and the copies TuxTalk "
                              f"saves by itself when it starts (the last "
                              f"{settings_backup.KEEP}). Go back to one if a change or an "
