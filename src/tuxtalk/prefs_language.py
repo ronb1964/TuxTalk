@@ -9,7 +9,8 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 
-from .prefs_tab import WARNING_AMBER, Tab, dropdown
+from .prefs_tab import Tab, dropdown
+from .ui_style import WARNING_AMBER
 
 # The Language dropdown's entry for auto-detect held to a list of languages.
 SEVERAL_LANGUAGES = "several"

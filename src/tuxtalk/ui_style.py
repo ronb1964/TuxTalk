@@ -190,6 +190,11 @@ def forward_combo_scroll(combo):
     combo.connect("scroll-event", _on_scroll)
 
 
+# The amber of TuxTalk's warnings (an unsafe setting, a backup never saved,
+# dictations in a report's log).
+WARNING_AMBER = "#e6aa3c"
+
+
 # The share of the screen's height a window may count on, whatever the work
 # area says. Under Wayland GTK 3 isn't told about panels and docks, so the work
 # area is the whole screen: on Pop!_OS at 1280x800, Setup Complete filled it

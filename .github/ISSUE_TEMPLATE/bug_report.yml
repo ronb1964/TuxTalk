@@ -80,7 +80,8 @@ body:
     attributes:
       label: Log Output (if applicable)
       description: |
-        Paste the lines from around the time it happened. The log is at `~/.config/tuxtalk/tuxtalk.log`,
+        TuxTalk's Help → Problems → Report a problem gathers your system, settings and log in one go:
+        paste that here. Or paste the lines from around the time it happened. The log is at `~/.config/tuxtalk/tuxtalk.log`,
         and `tail -50 ~/.config/tuxtalk/tuxtalk.log` shows the last 50 lines.
         On 0.14.x and earlier it's `~/.config/talktype/talktype.log`.
         For the Flatpak it's `~/.var/app/io.github.ronb1964.TuxTalk/config/tuxtalk/tuxtalk.log`.

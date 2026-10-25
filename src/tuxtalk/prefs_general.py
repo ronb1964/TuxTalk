@@ -14,8 +14,8 @@ from .logger import setup_logger
 from .prefs_hotkey_test import run_hotkey_test
 from .prefs_speech import SpeechSection
 from .prefs_system_check import UPDATE_HELPER_LABEL
-from .prefs_tab import WARNING_AMBER, Tab, dropdown, fold, scroll_into_view, section_header
-from .ui_style import message_dialog
+from .prefs_tab import Tab, dropdown, fold, scroll_into_view, section_header
+from .ui_style import WARNING_AMBER, message_dialog
 
 logger = setup_logger(__name__)
 

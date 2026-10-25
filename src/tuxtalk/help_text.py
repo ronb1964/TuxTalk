@@ -25,6 +25,8 @@ from .whisper_vulkan import ENGINE_SIZE_TEXT
 # points to the same page.
 FEEDBACK_URL = "https://github.com/ronb1964/TuxTalk/discussions"
 ISSUES_URL = "https://github.com/ronb1964/TuxTalk/issues"
+# A link in Help that opens Report a Problem instead of a web page.
+REPORT_LINK = "tuxtalk:report"
 
 
 def install_facts():
@@ -170,7 +172,7 @@ def _values():
             "no_hotkey_block": no_hotkey_block, "kde_notice": kde_notice,
             "update_block": update_block, "log_path": f["log_path"],
             "cfg_dir": f["cfg_dir"], "cache_dir": f["cache_dir"],
-            "FEEDBACK_URL": FEEDBACK_URL, "ISSUES_URL": ISSUES_URL,
+            "FEEDBACK_URL": FEEDBACK_URL, "ISSUES_URL": ISSUES_URL, "REPORT_LINK": REPORT_LINK,
             "ENGINE_SIZE_TEXT": ENGINE_SIZE_TEXT}
 
 
@@ -630,9 +632,11 @@ Saying only <b>press enter</b> or <b>press tab</b> there still works, to log in 
     A terminal asking for one (sudo) doesn't tell it: there, don't dictate.
 
 <b>Bug reports and feedback</b>
+  • <b>Something not working?</b> <a href="{REPORT_LINK}">Report a problem</a> gathers
+    what helps find it: your system, your settings and the end of TuxTalk's log.
+    You see all of it first, then copy it, save it, or open a GitHub issue with it.
   • <b>Report bugs:</b> <a href="{ISSUES_URL}">TuxTalk issues on GitHub</a>
   • <b>Questions, ideas, or just how it's working for you:</b> <a href="{FEEDBACK_URL}">TuxTalk Discussions</a>
-  • <b>Include:</b> your Linux distro, desktop environment, and TuxTalk version
   • <b>Log file:</b> {log_path}'''
 
 # Plain text, never formatted: the brace commands below contain { and }.

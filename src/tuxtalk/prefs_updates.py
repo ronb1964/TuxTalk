@@ -12,8 +12,8 @@ from gi.repository import GLib, Gtk, Pango
 
 from .desktop_detect import is_gnome
 from .logger import setup_logger
-from .prefs_tab import WARNING_AMBER, Tab, dropdown, run_with_progress
-from .ui_style import show_message
+from .prefs_tab import Tab, dropdown, run_with_progress
+from .ui_style import WARNING_AMBER, show_message
 
 logger = setup_logger(__name__)
 

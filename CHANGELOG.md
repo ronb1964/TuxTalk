@@ -151,6 +151,12 @@ before 0.15.0, so older entries use that name.
   filters on the microphone make dictation worse), names and unusual words,
   keys that are easier on the hands, and everyday shortcuts like "press
   enter" and typing your last dictation again. It names your own keys.
+- Help has a "Report a problem" link now, under Problems. It puts together
+  what I'd ask for anyway: your TuxTalk version, distro, desktop, keyboard
+  layout, graphics card, the settings that matter and the end of the log,
+  with your username taken out and no dictated words. You see all of it
+  first, then copy it, save it to a file, or open a GitHub issue with it
+  filled in. Nothing is sent anywhere unless you do that yourself.
 
 ## [0.18.2] - 2026-10-23
 

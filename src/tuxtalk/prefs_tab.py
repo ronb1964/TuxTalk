@@ -13,9 +13,6 @@ from .ui_style import Fold, forward_combo_scroll
 
 logger = setup_logger(__name__)
 
-# The amber of TuxTalk's warnings (an unsafe setting, a backup never saved).
-WARNING_AMBER = "#e6aa3c"
-
 # How far a Labs feature's options sit in under its heading.
 LABS_INDENT = 20
 

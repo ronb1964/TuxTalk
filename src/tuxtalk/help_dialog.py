@@ -10,7 +10,7 @@ gi.require_version('Gtk', '3.0')
 from gi.repository import Gdk, Gtk, Pango
 
 from . import help_text, ui_style
-from .help_text import FEEDBACK_URL
+from .help_text import FEEDBACK_URL, REPORT_LINK
 
 # Help's text is broken by hand at about 85 characters, so the page is this
 # many of the font's characters wide, and the window that plus the section
@@ -44,6 +44,16 @@ def _scroll(label, event, scrolled):
     return True
 
 
+def _on_link(label, uri):
+    """Help's Report a problem link opens its window; any other link is a
+    web page, which GTK opens."""
+    if uri != REPORT_LINK:
+        return False
+    from .problem_report_window import ReportWindow
+    ReportWindow(label.get_toplevel())
+    return True
+
+
 def _page(markup_text):
     """A section's text: *markup_text* in a wrapping label that scrolls. The
     label takes the keyboard focus (Tab from the list), so the arrow keys,
@@ -52,6 +62,7 @@ def _page(markup_text):
     scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
     label = Gtk.Label()
     label.set_markup(markup_text)
+    label.connect("activate-link", _on_link)
     label.set_line_wrap(True)
     label.set_xalign(0)
     label.set_valign(Gtk.Align.START)

@@ -9,9 +9,9 @@ from gi.repository import GLib, Gtk
 
 from .desktop_detect import is_gnome
 from .logger import setup_logger
-from .prefs_tab import (WARNING_AMBER, Tab, fold, run_with_progress,
+from .prefs_tab import (Tab, fold, run_with_progress,
                         subheading)
-from .ui_style import message_dialog, show_message
+from .ui_style import WARNING_AMBER, message_dialog, show_message
 from .whisper_vulkan import ENGINE_SIZE_TEXT
 
 logger = setup_logger(__name__)

@@ -14,8 +14,8 @@ from gi.repository import GLib, Gtk
 from .config import Settings
 from .logger import setup_logger
 from .prefs_language import LanguageRow, language_summary
-from .prefs_tab import WARNING_AMBER, Tab, dropdown, fold, section_header
-from .ui_style import message_dialog, show_message
+from .prefs_tab import Tab, dropdown, fold, section_header
+from .ui_style import WARNING_AMBER, message_dialog, show_message
 from .whisper_vulkan import ENGINE_SIZE_TEXT
 
 logger = setup_logger(__name__)
