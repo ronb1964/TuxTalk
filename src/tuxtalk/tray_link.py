@@ -42,7 +42,7 @@ def get_proxy():
     introspect=False: Introspect() is itself a blocking call with the 25-second
     reply timeout, so it would double the worst-case stall on a busy tray.
     Without it dbus-python guesses argument types from the Python values, so
-    wrap anything that isn't a plain str or bool (dbus.Array(..., signature=...)).
+    call() is given the signature for anything that isn't a plain str or bool.
     """
     global _tray_dbus_proxy
     import dbus

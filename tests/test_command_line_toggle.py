@@ -411,15 +411,20 @@ def test_the_service_says_when_it_is_ready(service):
     assert not recording.start_requested.is_set()
 
 
-def test_the_service_starts_even_when_it_cannot_reach_the_tray(service, monkeypatch):
-    """A tray link that can't even load (dbus-python missing) is logged and
-    passed over: the input loop still starts."""
-    def no_dbus():
-        raise ImportError("No module named 'dbus'")
-    monkeypatch.setattr(tray_link, "get_proxy", no_dbus)
-    service.app._mark_service_ready()
-    assert service.written == [os.getpid()] and service.app._service_ready
-
+def test_the_service_gets_ready_even_without_dbus(monkeypatch):
+    """With dbus-python missing, telling the tray fails, is logged and is
+    passed over: the service still marks itself ready, and main() goes on
+    to start the input loop. Real tray_link, with "import dbus" failing."""
+    import sys
+    from tuxtalk import app, service_launcher
+    monkeypatch.setitem(sys.modules, "dbus", None)    # "import dbus" raises
+    monkeypatch.setattr(tray_link, "_tray_dbus_proxy", None)
+    monkeypatch.setattr(app, "_service_ready", False)
+    monkeypatch.setattr(app, "_waiting_start", None)
+    written = []
+    monkeypatch.setattr(service_launcher, "write_ready_pid", written.append)
+    app._mark_service_ready()
+    assert written == [os.getpid()] and app._service_ready
 
 def test_with_no_tray_the_service_keeps_a_request_until_it_is_ready(service):
     """The service owns the D-Bus name itself when no tray runs."""
