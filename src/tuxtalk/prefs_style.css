@@ -14,7 +14,8 @@
  */
 
 /* Window background - clean dark */
-window.talktype-prefs {
+window.talktype-prefs,
+dialog.talktype-prefs {   /* Help is a dialog, its own node name */
     background: #1e1e1e;
 }
 
@@ -153,6 +154,14 @@ window.talktype-prefs {
 .talktype-prefs button.flat:hover {
     background: rgba(90, 143, 184, 0.15);
     border-color: @theme_selected_bg_color;
+}
+
+/* Links, in Help's text and as buttons: the theme's link blue was nearly
+   invisible on these dark backgrounds (Help's feedback link, 0.19). */
+.talktype-prefs *:link,
+.talktype-prefs *:visited,
+.talktype-prefs button.link > label {
+    color: shade(@theme_selected_bg_color, 1.5);
 }
 
 /* Links (GtkLinkButton) are text, not boxes. The button rule above drew

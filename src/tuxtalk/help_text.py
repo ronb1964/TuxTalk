@@ -762,13 +762,13 @@ TIPS = '''<span size="large"><b>Tips</b></span>
   • {paste_line}<b>Recent Dictations</b> in the TuxTalk menu keeps your last 20.'''
 
 _TABS = [
-    ("🚀 Start Here", START_HERE, True),
-    ("💬 Chatting", CHATTING, True),
-    ("📝 Writing", WRITING, True),
-    ("💻 Terminals", TERMINALS, True),
-    ("🙌 Hands-free", HANDS_FREE, True),
-    ("🩹 Mistakes", MISTAKES, True),
-    ("💡 Tips", TIPS, True),
-    ("🛠️ Problems", PROBLEMS, True),
-    ("🗣️ Commands", COMMANDS, False),
+    ("Start Here", START_HERE, True),
+    ("Chatting", CHATTING, True),
+    ("Writing", WRITING, True),
+    ("Terminals", TERMINALS, True),
+    ("Hands-free", HANDS_FREE, True),
+    ("Mistakes", MISTAKES, True),
+    ("Tips", TIPS, True),
+    ("Problems", PROBLEMS, True),
+    ("Commands", COMMANDS, False),
 ]

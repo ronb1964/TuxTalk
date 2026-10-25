@@ -35,8 +35,8 @@ def test_help_has_a_feedback_link_to_discussions(dialog):
 
 def test_the_link_is_outside_the_sections_so_every_section_shows_it(dialog):
     link = next(w for w in widgets(dialog) if isinstance(w, Gtk.LinkButton))
-    stack = next(w for w in widgets(dialog) if isinstance(w, Gtk.Stack))
-    assert link not in list(widgets(stack))
+    notebook = next(w for w in widgets(dialog) if isinstance(w, Gtk.Notebook))
+    assert link not in list(widgets(notebook))
 
 
 def test_clicking_the_link_does_not_close_help(dialog):
@@ -77,27 +77,40 @@ def test_help_lists_every_tray_preset(dialog):
         assert f"{preset.label}:" in text, f"Help doesn't mention the {preset.label} preset"
 
 
-def _sections(dialog):
-    """(the section list's rows, the stack of pages)."""
-    stack = next(w for w in widgets(dialog) if isinstance(w, Gtk.Stack))
-    rows = [w for w in widgets(dialog) if isinstance(w, Gtk.ListBoxRow)]
-    return rows, stack
+def _notebook(dialog):
+    return next(w for w in widgets(dialog) if isinstance(w, Gtk.Notebook))
 
 
-def test_every_section_is_listed_in_order_and_opens_from_the_list(dialog):
-    """Sections are a list down the left, not tabs: each one is in it, in
-    Help's order with Start Here first and open, and choosing it (with the
-    mouse or up and down) shows its page."""
+def _titles(notebook):
+    return [notebook.get_tab_label_text(notebook.get_nth_page(n))
+            for n in range(notebook.get_n_pages())]
+
+
+def _title(notebook):
+    return notebook.get_tab_label_text(notebook.get_nth_page(notebook.get_current_page()))
+
+
+def test_every_section_is_a_tab_in_order_and_opens(dialog):
+    """Sections are tabs along the top, as in Preferences: each one, in
+    Help's order with Start Here first and open, and choosing it shows its
+    page."""
     from tuxtalk import help_text
-    rows, stack = _sections(dialog)
+    notebook = _notebook(dialog)
     titles = [title for title, _ in help_text.tabs()]
-    assert [next(w.get_text() for w in widgets(row) if isinstance(w, Gtk.Label))
-            for row in rows] == titles
-    assert titles[0] == "🚀 Start Here"
-    assert stack.child_get_property(stack.get_visible_child(), "title") == titles[0]
-    for row, title in zip(rows, titles):
-        row.get_parent().select_row(row)
-        assert stack.child_get_property(stack.get_visible_child(), "title") == title
+    assert _titles(notebook) == titles and titles[0] == "Start Here"
+    assert _title(notebook) == "Start Here"
+    for number, title in enumerate(titles):
+        notebook.set_current_page(number)
+        assert _title(notebook) == title
+
+
+def test_help_has_the_look_of_preferences(dialog):
+    """The two windows match: Help carries the class Preferences' stylesheet
+    is scoped to, and has its title above the tabs."""
+    from tuxtalk import ui_style
+    assert dialog.get_style_context().has_class(ui_style.STYLE_CLASS)
+    assert any(isinstance(w, Gtk.Label) and w.get_text() == "TuxTalk Help"
+               for w in widgets(dialog))
 
 
 @pytest.fixture
@@ -138,33 +151,29 @@ def _press(dialog, keyval, state=0):
         _settle()
 
 
-def _title(stack):
-    return stack.child_get_property(stack.get_visible_child(), "title")
+def _page_text(notebook):
+    page = notebook.get_nth_page(notebook.get_current_page())
+    label = next(w for w in widgets(page) if isinstance(w, Gtk.Label))
+    return label, page.get_vadjustment()
 
 
-def _page_text(stack):
-    label = next(w for w in widgets(stack.get_visible_child()) if isinstance(w, Gtk.Label))
-    scrolled = stack.get_visible_child()
-    return label, scrolled.get_vadjustment()
-
-
-def test_tab_from_the_list_goes_into_the_open_sections_text(shown_help):
-    """Picked with the arrows, then Tab: the keyboard is in that section's
-    text, and the section is still the one picked (GTK's list alone took Tab
-    for the next row and switched sections). Shift+Tab goes back to the list."""
+def test_tab_from_the_tabs_goes_into_the_open_sections_text(shown_help):
+    """On the tabs the arrows change section; Tab then goes into that
+    section's text, and Shift+Tab back to the tabs, on the same section."""
     from gi.repository import Gdk
     dialog = shown_help()
-    _, stack = _sections(dialog)
-    _press(dialog, Gdk.KEY_Down)
-    _press(dialog, Gdk.KEY_Down)
-    assert "Writing" in _title(stack)
+    notebook = _notebook(dialog)
+    assert dialog.get_focus() is notebook
+    _press(dialog, Gdk.KEY_Right)
+    _press(dialog, Gdk.KEY_Right)
+    assert _title(notebook) == "Writing"
     _press(dialog, Gdk.KEY_Tab)
-    label, _ = _page_text(stack)
-    assert "Writing" in _title(stack)
+    label, _ = _page_text(notebook)
+    assert _title(notebook) == "Writing"
     assert dialog.get_focus() is label
     assert not label.get_selection_bounds()[0], "focusing it selected the whole text"
     _press(dialog, Gdk.KEY_ISO_Left_Tab, Gdk.ModifierType.SHIFT_MASK)
-    assert isinstance(dialog.get_focus(), Gtk.ListBoxRow) and "Writing" in _title(stack)
+    assert dialog.get_focus() is notebook and _title(notebook) == "Writing"
 
 
 def test_the_keys_scroll_the_text(shown_help):
@@ -172,9 +181,9 @@ def test_the_keys_scroll_the_text(shown_help):
     end, and the keyboard stays in the text."""
     from gi.repository import Gdk
     dialog = shown_help("writing")
-    _, stack = _sections(dialog)
+    notebook = _notebook(dialog)
     _press(dialog, Gdk.KEY_Tab)
-    label, scroll = _page_text(stack)
+    label, scroll = _page_text(notebook)
     start = scroll.get_value()
     _press(dialog, Gdk.KEY_Page_Down)
     paged = scroll.get_value()
@@ -189,45 +198,37 @@ def test_the_keys_scroll_the_text(shown_help):
 
 
 def test_help_opens_on_the_section_asked_for_with_the_keyboard_there(shown_help):
-    """Opened on a section (Preferences' Labs link opens Writing): it
-    shows, and the keyboard (and a screen reader) is on its row, not on
-    Start Here."""
+    """Opened on a section (Preferences' Labs link opens Writing): it shows,
+    and the keyboard (and a screen reader) is on the tabs, not on a link."""
     dialog = shown_help("tips")
-    _, stack = _sections(dialog)
-    assert _title(stack) == "💡 Tips"
-    focus = dialog.get_focus()
-    assert isinstance(focus, Gtk.ListBoxRow)
-    assert next(w.get_text() for w in widgets(focus) if isinstance(w, Gtk.Label)) == "💡 Tips"
+    notebook = _notebook(dialog)
+    assert _title(notebook) == "Tips"
+    assert dialog.get_focus() is notebook
 
 
-def test_a_screen_reader_hears_the_list_named(dialog):
-    """The name goes on the list box, the widget that takes the focus."""
-    listbox = next(w for w in widgets(dialog) if isinstance(w, Gtk.ListBox))
-    assert listbox.get_accessible().get_name() == "Help sections"
+def test_a_screen_reader_hears_the_tabs_named(dialog):
+    assert _notebook(dialog).get_accessible().get_name() == "Help sections"
 
 
-def test_help_is_no_wider_with_another_section(monkeypatch, shown_help):
-    """A row of tabs made Help wider with every one added (Mint's font
-    needed more than 760 px for eight). The list down the side doesn't, as
-    shown, not only in the size asked for."""
-    from tuxtalk import help_text, ui_style
-    monkeypatch.setattr(ui_style, "workarea_width", lambda: 4000)
-    widths = []
-    for extra in (0, 4):
-        sections = help_text.tabs() + [(f"Section {n}", "More.") for n in range(extra)]
-        monkeypatch.setattr(help_text, "tabs", lambda sections=sections: sections)
-        widths.append(shown_help().get_allocated_width())
-    assert widths[0] == widths[1] and widths[0] <= 900
+def test_every_tab_shows_on_a_normal_screen(monkeypatch, shown_help):
+    """On a screen with room, all the tabs are in view at once: no arrows."""
+    from tuxtalk import ui_style
+    monkeypatch.setattr(ui_style, "workarea_width", lambda: 1920)
+    dialog = shown_help()
+    notebook = _notebook(dialog)
+    assert not notebook.get_scrollable()
+    assert dialog.get_allocated_width() >= notebook.get_preferred_width()[0]
 
 
 def test_help_fits_a_narrow_screen(monkeypatch, shown_help):
     """With large text or a small screen, Help opens no wider than the
-    screen, its lines wrapping, instead of running off its edge: the window
-    as shown, not only the size it asked for."""
+    screen, its lines wrapping and its tabs scrolling, instead of running
+    off its edge: the window as shown, not only the size it asked for."""
     from tuxtalk import ui_style
     monkeypatch.setattr(ui_style, "workarea_width", lambda: 640)
     dialog = shown_help()
     assert dialog.get_allocated_width() <= 640 - 40
+    assert _notebook(dialog).get_scrollable()
 
 
 def test_the_screen_width_is_the_narrowest_monitors(monkeypatch):

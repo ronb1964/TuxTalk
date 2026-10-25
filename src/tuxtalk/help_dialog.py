@@ -1,9 +1,9 @@
-"""The Help window, shared by the tray and Preferences: a list of sections
-down the left, one for each situation, and the chosen one's text on the
-right, as help_text.py writes it for this computer.
+"""The Help window, shared by the tray and Preferences: one tab along the
+top for each situation, as help_text.py writes it for this computer, in
+Preferences' look (ui_style.use_tuxtalk_style), so the two windows match.
 
-A list rather than tabs along the top: a row of tabs makes the window wider
-with every section added, and GTK 3's tabs can't wrap to a second row.
+Tabs can't wrap to a second row in GTK 3, so each section added makes the
+row wider; on a screen too narrow for it the row scrolls with arrows.
 """
 import gi
 gi.require_version('Gtk', '3.0')
@@ -13,10 +13,8 @@ from . import help_text, ui_style
 from .help_text import FEEDBACK_URL, REPORT_LINK
 
 # Help's text is broken by hand at about 85 characters, so the page is this
-# many of the font's characters wide, and the window that plus the section
-# list and _FRAME_PX of margins and scroll bar: 730 to 850 px in the fonts
-# measured (KDE's, GNOME's, Mint's, DejaVu), each narrower than the row of
-# tabs made it before.
+# many of the font's characters wide, and the window that plus _FRAME_PX of
+# margins and scroll bar, or the row of tabs if that is wider.
 _LINE_CHARS = 87
 _FRAME_PX = 60
 HEIGHT = 600
@@ -83,56 +81,35 @@ def _text_of(page):
     return page.get_child().get_child()
 
 
-def _list_of(sidebar):
-    """The list box inside *sidebar*: the widget that takes the focus."""
-    child = sidebar
-    while not isinstance(child, Gtk.ListBox):
-        child = child.get_child()
-    return child
-
-
-def _into_page(listbox, event, stack):
-    """Tab in the section list goes into the open page's text. GTK 3's list
-    takes Tab for the next row, and its selection follows the focus, so Tab
-    alone would switch sections and never reach the text."""
-    tab = event.keyval in (Gdk.KEY_Tab, Gdk.KEY_KP_Tab)
-    modified = event.state & (Gdk.ModifierType.SHIFT_MASK | Gdk.ModifierType.CONTROL_MASK)
-    if not tab or modified:
-        return False
-    _text_of(stack.get_visible_child()).grab_focus()
-    return True
-
-
 def _sections():
-    """The section list and the stack of pages it switches between."""
-    stack = Gtk.Stack()
-    stack.set_transition_type(Gtk.StackTransitionType.NONE)
-    for number, (title, markup) in enumerate(help_text.tabs()):
-        stack.add_titled(_page(markup), f"section-{number}", title)
-    sidebar = Gtk.StackSidebar()
-    sidebar.set_stack(stack)
-    listbox = _list_of(sidebar)
-    listbox.get_accessible().set_name("Help sections")
-    listbox.connect("key-press-event", _into_page, stack)
-    return sidebar, stack
+    """The notebook of sections, one tab each, in Help's order."""
+    notebook = Gtk.Notebook()
+    for title, markup in help_text.tabs():
+        notebook.append_page(_page(markup), Gtk.Label(label=title))
+    notebook.get_accessible().set_name("Help sections")
+    return notebook
 
 
-def _width(dialog, sidebar):
-    """How wide Help opens: the section list beside a page _LINE_CHARS wide,
-    or the screen's width less a margin if that is narrower (large text, a
-    small or portrait screen), where the page's lines wrap."""
+def _fit(dialog, notebook):
+    """Size Help: a page _LINE_CHARS wide, or the row of tabs if wider. On a
+    screen narrower than that (large text, a small or portrait screen) Help
+    takes the screen less a margin, its lines wrap and the tabs scroll."""
     context = dialog.get_pango_context()
     char = context.get_metrics(context.get_font_description(), None).get_approximate_char_width()
-    wanted = int(sidebar.get_preferred_width()[1] + _LINE_CHARS * char / Pango.SCALE + _FRAME_PX)
+    tabs = notebook.get_preferred_width()[0] + _FRAME_PX
+    wanted = max(int(_LINE_CHARS * char / Pango.SCALE + _FRAME_PX), tabs)
     screen = ui_style.workarea_width()
-    return min(wanted, screen - _SCREEN_MARGIN_PX) if screen else wanted
+    if screen and wanted > screen - _SCREEN_MARGIN_PX:
+        notebook.set_scrollable(True)
+        wanted = screen - _SCREEN_MARGIN_PX
+    dialog.set_default_size(wanted, HEIGHT)
 
 
-def open_section(stack, word):
+def open_section(notebook, word):
     """Show the section whose title contains *word* ("writing"), if any."""
-    for page in stack.get_children():
-        if word.lower() in stack.child_get_property(page, "title").lower():
-            stack.set_visible_child(page)
+    for number in range(notebook.get_n_pages()):
+        if word.lower() in notebook.get_tab_label_text(notebook.get_nth_page(number)).lower():
+            notebook.set_current_page(number)
             return
 
 
@@ -150,12 +127,12 @@ def show_help_dialog(tab=None):
     for side in ("top", "bottom", "start", "end"):
         getattr(content, f"set_margin_{side}")(10)
 
-    sidebar, stack = _sections()
-    body = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-    body.pack_start(sidebar, False, False, 0)
-    body.pack_start(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL), False, False, 0)
-    body.pack_start(stack, True, True, 0)
-    content.pack_start(body, True, True, 0)
+    ui_style.use_tuxtalk_style(dialog)
+    title = Gtk.Label()
+    title.set_markup("<big><b>TuxTalk Help</b></big>")
+    content.pack_start(title, False, False, 6)
+    notebook = _sections()
+    content.pack_start(notebook, True, True, 0)
 
     # A passive feedback link under the sections, so it's there whichever
     # one is open. Help never asks for feedback on its own; this is only for
@@ -173,12 +150,12 @@ def show_help_dialog(tab=None):
     dialog.connect("response", lambda d, r: d.destroy())
 
     content.show_all()      # a hidden widget asks for no width
-    dialog.set_default_size(_width(dialog, sidebar), HEIGHT)
-    # Before the window shows: it puts the focus on the list's chosen row
-    # then, so the keyboard and a screen reader start on the section shown,
-    # not on Start Here.
+    _fit(dialog, notebook)
     if tab:
-        open_section(stack, tab)
+        open_section(notebook, tab)
+    # The keyboard and a screen reader start on the tabs, at the section
+    # shown: the arrows change section and Tab goes into its text.
+    notebook.grab_focus()
     dialog.show_all()
     dialog.present()  # Bring to front and focus
     return dialog

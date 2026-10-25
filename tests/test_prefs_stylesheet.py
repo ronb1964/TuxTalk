@@ -9,8 +9,9 @@ except `window` silently does nothing.
 So two things are required, and BOTH matter:
 
   1. install the provider screen-wide, so it reaches child widgets at all
-  2. scope every selector to .talktype-prefs, so it does not restyle the help
-     dialog and every other GTK window in the process
+  2. scope every selector to .talktype-prefs, so it styles only the windows
+     that carry the class (Preferences and Help, ui_style.use_tuxtalk_style)
+     and no other GTK window in the process
 
 Half of this is worse than none: screen-wide with unscoped selectors would
 repaint unrelated windows.

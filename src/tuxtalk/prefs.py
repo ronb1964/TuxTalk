@@ -27,11 +27,6 @@ from . import prefs_ipc
 from .config import (CONFIG_PATH, Settings, apply_toml, changed_keys, merge_changed_keys,
                      repaired, write_text_atomic, _load_toml_file, _toml_value)
 
-# Set on the Preferences window so prefs_style.css — which must be installed
-# screen-wide to reach child widgets — matches only this window's widgets.
-# Every selector in that file is prefixed with it; keep the two in step.
-PREFS_STYLE_CLASS = "talktype-prefs"
-
 logger = setup_logger(__name__)
 
 
@@ -114,35 +109,12 @@ class PreferencesWindow:
         self.window.present()
 
     def _load_css(self):
-        """Preferences' stylesheet (prefs_style.css): installed for the whole
-        screen, as GTK needs, and scoped to this window by its style class."""
-        # Dropdown list mode must be installed screen-wide: a provider on this
-        # window's context does not reach its child combos, so it cannot ride
-        # along with prefs_style.css below.
-        from .ui_style import apply_dropdown_list_style
+        """TuxTalk's own look (ui_style.use_tuxtalk_style), and dropdowns that
+        open below their button. List mode must be installed screen-wide: a
+        provider on this window's context does not reach its child combos."""
+        from .ui_style import apply_dropdown_list_style, use_tuxtalk_style
         apply_dropdown_list_style()
-
-        try:
-            css_provider = Gtk.CssProvider()
-            css_file = os.path.join(os.path.dirname(__file__), 'prefs_style.css')
-
-            if os.path.exists(css_file):
-                css_provider.load_from_path(css_file)
-
-                # This provider must go on the screen: one on the window's own
-                # style context does not reach the window's children. Each
-                # selector in prefs_style.css is scoped to the class set below,
-                # so the stylesheet styles Preferences and no other window.
-                self.window.get_style_context().add_class(PREFS_STYLE_CLASS)
-                Gtk.StyleContext.add_provider_for_screen(
-                    Gdk.Screen.get_default(),
-                    css_provider,
-                    Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
-                )
-            else:
-                logger.warning(f"CSS file not found: {css_file}")
-        except Exception as e:
-            logger.warning(f"Failed to load CSS: {e}")
+        use_tuxtalk_style(self.window)
 
     def load_config(self):
         """Load config from TOML file.

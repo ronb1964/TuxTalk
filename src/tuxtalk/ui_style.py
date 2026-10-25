@@ -14,7 +14,7 @@ import gi
 
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
-from gi.repository import Gtk, Gdk, GObject
+from gi.repository import GLib, Gtk, Gdk, GObject
 
 from . import desktop_detect
 
@@ -119,6 +119,33 @@ def _on_widget_realize(widget, *_args):
     if isinstance(widget, Gtk.ComboBox):
         _drop_down_below(widget)
     return True
+
+
+# The style class of the windows drawn in TuxTalk's own look (Preferences and
+# Help). prefs_style.css must be installed for the whole screen to reach a
+# window's children at all, so every selector in it is scoped to this class:
+# it styles these windows and no other. Keep the two in step.
+STYLE_CLASS = "talktype-prefs"
+_tuxtalk_style_installed = False
+
+
+def use_tuxtalk_style(window):
+    """Give *window* TuxTalk's own look (prefs_style.css), as Preferences and
+    Help have: the stylesheet goes on the screen once per process, and
+    *window* carries the class its selectors match. A sheet that can't be
+    read leaves the theme's look, logged."""
+    global _tuxtalk_style_installed
+    if not _tuxtalk_style_installed:
+        provider = Gtk.CssProvider()
+        try:
+            provider.load_from_path(os.path.join(os.path.dirname(__file__), "prefs_style.css"))
+        except GLib.Error as e:
+            logger.warning(f"Couldn't load TuxTalk's stylesheet: {e}")
+            return
+        Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), provider,
+                                                 Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        _tuxtalk_style_installed = True
+    window.get_style_context().add_class(STYLE_CLASS)
 
 
 def apply_dropdown_list_style():

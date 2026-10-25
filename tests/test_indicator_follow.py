@@ -113,7 +113,8 @@ def test_the_labs_help_page_explains_it():
     from tuxtalk import help_dialog
     dialog = help_dialog.show_help_dialog(tab="start")
     try:
-        page = find(dialog, Gtk.Stack).get_visible_child()
+        notebook = find(dialog, Gtk.Notebook)
+        page = notebook.get_nth_page(notebook.get_current_page())
         text = " ".join(shown_text(page))
         assert "Indicator Follows Your Window" in text
     finally:

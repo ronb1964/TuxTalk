@@ -140,12 +140,13 @@ before 0.15.0, so older entries use that name.
 - Updating from Preferences saves your snippets first too, and doesn't start
   if your unsaved changes couldn't be saved (a full disk, say). Before, the
   update's restart lost them.
-- Help lists its sections down the left side now, with the one you pick
-  beside it, instead of a row of tabs along the top. The tabs made the
-  window wider with every one added, and on Mint it already had to grow
-  past its usual size to fit them. Up and down arrows move through
-  the list, and Tab takes you into the text, where Page Up and Page Down
-  scroll it.
+- Help looks like Preferences now: the same dark window, the same title,
+  and its sections as the same outlined tabs along the top. Before, the two
+  windows looked like they came from different apps. Left and Right move
+  between the tabs, and Tab takes you into the text, where Page Up and Page
+  Down scroll it. On a small screen the tabs scroll instead of running off
+  the edge, and the feedback link at the bottom is readable now (it was dark
+  blue on dark grey).
 - Help has a new Tips section with the practical stuff in one place:
   getting good results (the mic close or a headset matters most, and noise
   filters on the microphone make dictation worse), names and unusual words,

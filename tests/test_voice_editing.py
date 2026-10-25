@@ -780,9 +780,9 @@ def test_help_explains_labs_and_voice_editing_on_the_writing_tab():
     from tuxtalk import help_dialog
     dialog = help_dialog.show_help_dialog(tab="writing")
     try:
-        stack = find(dialog, Gtk.Stack)
-        page = stack.get_visible_child()
-        assert "Writing" in stack.child_get_property(page, "title")
+        notebook = find(dialog, Gtk.Notebook)
+        page = notebook.get_nth_page(notebook.get_current_page())
+        assert notebook.get_tab_label_text(page) == "Writing"
         text = " ".join(shown_text(page))
         for must in ("experimental", "Shift", "Ctrl+Z", "make this more formal", "terminal"):
             assert must in text, must
