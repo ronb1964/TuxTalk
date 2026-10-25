@@ -425,6 +425,16 @@ def test_a_hung_app_is_skipped_in_time(bus):
     assert time.monotonic() - started < atspi_helper.BUDGET_S
 
 
+def test_hung_apps_after_the_password_field_dont_hide_it(bus):
+    """Every app was listed before any focus was looked at, so three apps
+    that never answer used up the time, and the dictation was typed into
+    the password field found first."""
+    bus.app("seahorse", PASSWORD)
+    for n in range(3):
+        bus.app(f"frozen{n}", TEXT, hang=True)
+    assert atspi_helper.focused_is_password() is True
+
+
 def test_a_bus_where_everything_hangs_gives_up_within_the_budget(bus, monkeypatch):
     for n in range(5):
         bus.app(f"frozen{n}", PASSWORD, hang=True)

@@ -73,19 +73,20 @@ def focused_is_password() -> bool:
         if bus is None:
             return False
         # Every active window is asked, not the first: a desktop shell other
-        # than GNOME's may call its own window active too.
-        # The shell's tree is the biggest: its turn comes after the apps'.
-        windows = sorted(_active_windows(bus, deadline), key=lambda found: found[0] in _SHELLS)
-        _log_several_active(windows)
-        for _app, window in windows:
-            try:
-                focused = _focused_in(bus, window, deadline)
-                if focused is not None and _call(bus, focused, _ACCESSIBLE, "GetRole",
-                                                 None, deadline)[0] == _ROLE_PASSWORD_TEXT:
-                    return True
-            except GLib.Error as e:
-                logger.debug(f"Password field check: a window didn't answer: {e.message}")
-        return False
+        # than GNOME's may call its own window active too. Each as soon as
+        # it's found, so apps that hang further down the list can't use up
+        # the time before a password field already found is seen. The
+        # shell's tree is the biggest: its turn comes after the apps'.
+        apps, shells = [], []
+        for app, window in _active_windows(bus, deadline):
+            apps.append(app)
+            if app in _SHELLS:
+                shells.append(window)
+            elif _has_password_focus(bus, window, deadline):
+                _log_several_active(apps)
+                return True
+        _log_several_active(apps)
+        return any(_has_password_focus(bus, window, deadline) for window in shells)
     except _OutOfTime:
         logger.info(f"Password field check: no answer in {BUDGET_S}s, typing as usual")
         return False
@@ -185,11 +186,23 @@ def _active_windows(bus, deadline):
                 continue
 
 
-def _log_several_active(windows):
+def _has_password_focus(bus, window, deadline) -> bool:
+    """Whether the focused widget in *window* is a password field; False
+    when the window doesn't answer."""
+    try:
+        focused = _focused_in(bus, window, deadline)
+        return focused is not None and _call(bus, focused, _ACCESSIBLE, "GetRole",
+                                             None, deadline)[0] == _ROLE_PASSWORD_TEXT
+    except GLib.Error as e:
+        logger.debug(f"Password field check: a window didn't answer: {e.message}")
+        return False
+
+
+def _log_several_active(apps):
     """Say so when more than one app calls a window active, once per change:
     then the focus may be in either, and both are asked."""
     global _last_active
-    names = tuple(sorted(name for name, _window in windows if name not in _SHELLS))
+    names = tuple(sorted(name for name in apps if name not in _SHELLS))
     if len(names) > 1 and names != _last_active:
         logger.info(f"Password field check: several apps say a window is active: {names}")
     _last_active = names

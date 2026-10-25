@@ -170,6 +170,11 @@ before 0.15.0, so older entries use that name.
   space after your words could end up in front of the next dictation in
   that other window. That space only goes back into the window it belongs
   to now.
+- TuxTalk won't type into a password field, but it asks the accessibility
+  bus to find one and only waits a quarter of a second. If a few apps on
+  that bus had stopped answering, the time ran out and the dictation was
+  typed anyway, even when the password field was in the first app it
+  asked. Now it checks each app the moment it finds it.
 
 ## [0.18.2] - 2026-10-23
 
