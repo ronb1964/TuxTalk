@@ -12,7 +12,7 @@ as sentence starts and as names — so those are left as-is by design.
 
 import pytest
 
-from tuxtalk import app
+from tuxtalk import dictation_text
 from tuxtalk import recording_state as rs
 
 
@@ -24,7 +24,7 @@ def continuing():
 
 
 def _prep(text):
-    return app._prepare_text(text, False, True, False)
+    return dictation_text.prepare_text(text, False, True, False)
 
 
 def test_the_pronoun_i_is_not_lowercased(continuing):

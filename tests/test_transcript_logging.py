@@ -17,6 +17,7 @@ from tuxtalk import logger as tlog  # noqa: E402
 from tuxtalk import live_settings as live  # noqa: E402
 from tuxtalk import keyboard_output  # noqa: E402
 from tuxtalk import engine as speech_engine  # noqa: E402
+from tuxtalk import dictation_text  # noqa: E402
 
 
 # --- config flag -----------------------------------------------------------
@@ -67,12 +68,11 @@ def test_custom_command_log_line_redacts_the_text(monkeypatch, caplog):
     must not contain the dictated words, only the redacted breadcrumb. Guards
     against a future edit reverting `{_loggable(x)}` back to `{x!r}`."""
     import logging
-    from tuxtalk import app
     monkeypatch.setattr(live, "log_transcripts", False)
     monkeypatch.setattr(live, "commands", {"banana": "apple"})
     secret = "my banana passphrase"
     with caplog.at_level(logging.INFO, logger="tuxtalk.app"):
-        app._apply_custom_commands(secret)
+        dictation_text.apply_custom_commands(secret)
     logged = "\n".join(r.getMessage() for r in caplog.records)
     assert "Custom commands applied" in logged   # the line did fire
     assert "banana" not in logged                 # ...but the words are gone

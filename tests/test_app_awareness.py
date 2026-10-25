@@ -3,7 +3,8 @@ the start in a terminal, and no period at the end in either, so "ls dash la"
 types `ls -la`, not `Ls -la.`. Chat apps keep full punctuation."""
 import pytest
 
-from tuxtalk import app, config, window_classes
+from tuxtalk import config, window_classes
+from tuxtalk import dictation_text
 from tuxtalk import live_settings as live
 from tuxtalk.normalize import plain_for_app
 
@@ -41,7 +42,7 @@ def _prepare(monkeypatch, raw, kind):
     monkeypatch.setattr(live, "ai_corrections", False)
     monkeypatch.setattr(live, "swiss_spelling", False)
     monkeypatch.setattr(live, "numbers_mode", None)
-    return app._prepare_text(raw, smart_quotes=True, auto_period=True, auto_space=True,
+    return dictation_text.prepare_text(raw, smart_quotes=True, auto_period=True, auto_space=True,
                              app_kind=kind)
 
 

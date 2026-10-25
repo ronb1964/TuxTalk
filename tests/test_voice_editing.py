@@ -177,6 +177,7 @@ def test_the_engine_has_room_for_a_selection(monkeypatch):
 # --- 3. the setting and the engine --------------------------------------------------
 
 from tuxtalk import app, config
+from tuxtalk import dictation_text
 from tuxtalk import engine as speech_engine
 from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
@@ -221,7 +222,7 @@ def test_self_corrections_are_skipped_while_only_voice_editing_is_on(no_engine, 
     called = []
     monkeypatch.setattr(ai_cleanup, "fix_self_corrections", lambda t, e: called.append(t) or t)
     monkeypatch.setattr(live, "commands", {})
-    app._prepare_text("order two boxes, no wait, three boxes", True, True, False)
+    dictation_text.prepare_text("order two boxes, no wait, three boxes", True, True, False)
     assert called == []
 
 

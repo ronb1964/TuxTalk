@@ -9,6 +9,7 @@ import pytest
 
 from tuxtalk import config, vocabulary
 from tuxtalk import live_settings as live
+from tuxtalk import dictation_text
 
 
 # --- which words were picked -------------------------------------------------
@@ -107,12 +108,11 @@ def test_save_refuses_when_the_commands_file_is_unreadable(commands_file):
 
 def test_saved_fix_is_applied_to_the_next_dictation(commands_file, monkeypatch):
     """End to end with the dictation service's own matcher."""
-    from tuxtalk import app
 
     vocabulary.save_fix("bamboo studio", "BambuStudio")
     monkeypatch.setattr(live, "commands", config.load_custom_commands())
 
-    text, _protected = app._apply_custom_commands("i opened Bamboo Studio today")
+    text, _protected = dictation_text.apply_custom_commands("i opened Bamboo Studio today")
     assert text == "i opened BambuStudio today"
 
 

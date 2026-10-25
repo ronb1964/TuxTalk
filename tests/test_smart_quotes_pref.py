@@ -5,12 +5,12 @@ normalize_text, after the preference is applied to the raw text, so the
 preference must cover those too or curly quotes reach the document with it
 off.
 """
-from tuxtalk import app
+from tuxtalk import dictation_text
 from tuxtalk import live_settings as live
 
 
 def _prep(text, smart_quotes):
-    return app._prepare_text(text, smart_quotes, True, False)
+    return dictation_text.prepare_text(text, smart_quotes, True, False)
 
 
 def test_lone_open_quote_is_straight_with_smart_quotes_off(monkeypatch):

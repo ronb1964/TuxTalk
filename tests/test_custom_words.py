@@ -129,7 +129,7 @@ def test_real_speech_is_not_an_echo():
 
 import numpy as np
 
-from tuxtalk import app
+from tuxtalk import dictation_text
 from tuxtalk import engine
 from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
@@ -201,19 +201,19 @@ def test_whisper_reading_the_list_back_counts_as_nothing_said(with_words, monkey
 
 
 def test_parakeet_output_gets_the_spelling_pass(with_words):
-    assert "TuxTalk" in app._prepare_text("i use tux talk daily", True, True, False)
+    assert "TuxTalk" in dictation_text.prepare_text("i use tux talk daily", True, True, False)
 
 
 def test_a_snippet_still_beats_a_word(with_words, monkeypatch):
     """Snippets run first, so 'tux talk link' still finds its snippet."""
     monkeypatch.setattr(live, "commands", {"tux talk link": "https://example.com"})
-    out = app._prepare_text("open tux talk link", True, False, False)
+    out = dictation_text.prepare_text("open tux talk link", True, False, False)
     assert "https://example.com" in out
 
 
 def test_continuing_mid_sentence_keeps_a_words_capitals(with_words, monkeypatch):
     monkeypatch.setattr(rs.state, "continue_mid_sentence", True)
-    out = app._prepare_text("tux talk is running", True, False, False)
+    out = dictation_text.prepare_text("tux talk is running", True, False, False)
     assert out.startswith("TuxTalk")
 
 
@@ -269,7 +269,7 @@ def test_an_unreadable_file_can_be_reported_instead_of_emptied(words_file):
 def test_a_lowercase_first_word_keeps_its_case_at_a_sentence_start(monkeypatch):
     monkeypatch.setattr(live, "words", ["iPhone", "eBay"])
     monkeypatch.setattr(live, "commands", {})
-    out = app._prepare_text("iphone is great. ebay too", True, True, False)
+    out = dictation_text.prepare_text("iphone is great. ebay too", True, True, False)
     assert out.startswith("iPhone is great. eBay too")
 
 
@@ -277,7 +277,7 @@ def test_a_snippet_spoken_as_the_joined_word_still_fires(with_words, monkeypatch
     """Whisper, told about TuxTalk, hears 'TuxTalk website' while the snippet
     is saved as 'tux talk website'."""
     monkeypatch.setattr(live, "commands", {"tux talk website": '"https://tuxtalk.example"'})
-    assert "https://tuxtalk.example" in app._prepare_text("open TuxTalk website", True, False, False)
+    assert "https://tuxtalk.example" in dictation_text.prepare_text("open TuxTalk website", True, False, False)
 
 
 @pytest.mark.parametrize("raw, first", [
@@ -289,7 +289,7 @@ def test_continuing_mid_sentence_keeps_multi_word_and_possessive_names(raw, firs
     monkeypatch.setattr(live, "words", ["New York", "TuxTalk"])
     monkeypatch.setattr(live, "commands", {})
     monkeypatch.setattr(rs.state, "continue_mid_sentence", True)
-    assert app._prepare_text(raw, True, False, False).startswith(first)
+    assert dictation_text.prepare_text(raw, True, False, False).startswith(first)
 
 
 # --- whitespace, hyphens and short entries ----------------------------------------
@@ -308,13 +308,13 @@ def test_after_tidying_a_hyphen_is_the_users_own():
 def test_a_spoken_tab_or_dash_survives(spoken, monkeypatch):
     monkeypatch.setattr(live, "words", ["TuxTalk"])
     monkeypatch.setattr(live, "commands", {})
-    assert "TuxTalk" not in app._prepare_text(spoken, True, True, False)
+    assert "TuxTalk" not in dictation_text.prepare_text(spoken, True, True, False)
 
 
 def test_an_engine_hyphen_still_joins(monkeypatch):
     monkeypatch.setattr(live, "words", ["TuxTalk"])
     monkeypatch.setattr(live, "commands", {})
-    assert app._prepare_text("open Tux-Talk now", True, True, False).startswith("Open TuxTalk now")
+    assert dictation_text.prepare_text("open Tux-Talk now", True, True, False).startswith("Open TuxTalk now")
 
 
 def test_short_entries_do_not_hide_an_echo():

@@ -20,6 +20,7 @@ from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
 from tuxtalk import keyboard_output
 from tuxtalk import engine
+from tuxtalk import dictation_text
 
 ACTIVE = 1 << atspi_helper._STATE_ACTIVE
 FOCUSED = 1 << atspi_helper._STATE_FOCUSED
@@ -115,7 +116,7 @@ def test_type_at_pause_types_nothing_of_its_own_into_a_password_field(desktop, m
     ran = []
     monkeypatch.setattr(app, "_resolve_boundary", lambda *a, **k: ran.append("mark"))
     monkeypatch.setattr(app, "_flush_boundary", lambda *a, **k: ran.append("mark"))
-    monkeypatch.setattr(app, "_prepare_text", lambda *a, **k: ran.append("cleanup") or "x")
+    monkeypatch.setattr(dictation_text, "prepare_text", lambda *a, **k: ran.append("cleanup") or "x")
     monkeypatch.setattr(rs.state, "pending_boundary", {"mark": "."})
     monkeypatch.setattr(rs.state, "held_cue", "No wait.")
     desktop["password"] = True

@@ -14,6 +14,7 @@ from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
 from tuxtalk.key_commands import split_key_command
 from tuxtalk import notices
+from tuxtalk import dictation_text
 
 
 @pytest.mark.parametrize("raw, expected", [
@@ -42,7 +43,7 @@ def _dictate(monkeypatch, raw, prepared=None, outcome="ok", window="brave-browse
     events = []
     monkeypatch.setattr(engine, "transcribe", lambda audio, language: raw)
     if prepared is not None:
-        monkeypatch.setattr(app, "_prepare_text", lambda r, *a, **k: prepared(r))
+        monkeypatch.setattr(dictation_text, "prepare_text", lambda r, *a, **k: prepared(r))
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr(app, "_handle_undo", lambda *a, **k: False)
     monkeypatch.setattr(app, "_handle_navigation", lambda *a, **k: False)

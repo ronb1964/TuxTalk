@@ -18,6 +18,7 @@ from tuxtalk import app, focused_window, window_classes
 from tuxtalk import engine
 from tuxtalk import live_settings as live
 from tuxtalk import keyboard_output
+from tuxtalk import dictation_text
 
 MARKER = "\xa7SHIFT_ENTER\xa7"
 
@@ -99,7 +100,7 @@ def dictation(monkeypatch):
     """A dictation that transcribes to "Hello there." with everything recorded."""
     notes, beeps = [], []
     monkeypatch.setattr(engine, "transcribe", lambda audio, language: "hello there")
-    monkeypatch.setattr(app, "_prepare_text", lambda raw, *a, **k: "Hello there. ")
+    monkeypatch.setattr(dictation_text, "prepare_text", lambda raw, *a, **k: "Hello there. ")
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: notes.append(f"{title}\n{body}"))
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda enabled, *tone, **k: enabled and beeps.append(tone))
     monkeypatch.setattr("tuxtalk.history.add_entry", lambda text: None)

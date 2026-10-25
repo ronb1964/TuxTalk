@@ -8,6 +8,7 @@ import pytest
 
 from tuxtalk.cleanup import clean_fillers_and_repeats as clean
 from tuxtalk import live_settings as live
+from tuxtalk import dictation_text
 
 CLEANED = [
     ("Um, so I think we should, uh, go with the blue one. ", "So I think we should go with the blue one. "),
@@ -76,12 +77,11 @@ def test_literal_command_placeholders_are_never_collapsed():
 
 
 def test_cleanup_runs_in_prepare_text_only_when_enabled(monkeypatch):
-    from tuxtalk import app
     monkeypatch.setattr(live, "ai_engine", None)
     monkeypatch.setattr(live, "remove_fillers", False)
-    assert "um" in app._prepare_text("um so the the van is ready", False, True, False).lower()
+    assert "um" in dictation_text.prepare_text("um so the the van is ready", False, True, False).lower()
     monkeypatch.setattr(live, "remove_fillers", True)
-    assert app._prepare_text("um so the the van is ready", False, True, False) == "So the van is ready."
+    assert dictation_text.prepare_text("um so the the van is ready", False, True, False) == "So the van is ready."
 
 
 # A spoken "press tab" is a real tab character by the time cleanup runs, and

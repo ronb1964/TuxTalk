@@ -14,6 +14,7 @@ import pytest
 
 from tuxtalk import history
 from tuxtalk import engine
+from tuxtalk import dictation_text
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -96,7 +97,7 @@ def test_dictation_is_recorded_before_it_is_typed(monkeypatch):
 
     order = []
     monkeypatch.setattr(engine, "transcribe", lambda audio, language: "hello there")
-    monkeypatch.setattr(app, "_prepare_text", lambda raw, *a, **k: "Hello there. ")
+    monkeypatch.setattr(dictation_text, "prepare_text", lambda raw, *a, **k: "Hello there. ")
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr(app, "_inject_text",
                         lambda text, mode, **kw: order.append(("typed", history.get_entries())))

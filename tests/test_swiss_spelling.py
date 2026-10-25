@@ -5,7 +5,8 @@ swaps it in the finished text, so it works the same with every engine.
 """
 import pytest
 
-from tuxtalk import app, config
+from tuxtalk import config
+from tuxtalk import dictation_text
 from tuxtalk import live_settings as live
 from tuxtalk.normalize import swiss_spelling
 
@@ -56,7 +57,7 @@ def _prepare(monkeypatch, on):
     monkeypatch.setattr(live, "words", [])
     monkeypatch.setattr(live, "remove_fillers", False)
     monkeypatch.setattr(live, "ai_corrections", False)
-    return app._prepare_text("die straße ist groß", smart_quotes=True,
+    return dictation_text.prepare_text("die straße ist groß", smart_quotes=True,
                              auto_period=True, auto_space=False)
 
 

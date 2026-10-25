@@ -19,8 +19,7 @@ from evdev import InputDevice, ecodes, list_devices
 
 from typing import NamedTuple
 
-from .normalize import (normalize_text, append_auto_punct, plain_for_app,
-                        safe_to_lowercase_first_word, swiss_spelling)
+from .normalize import safe_to_lowercase_first_word, swiss_spelling
 from .config import load_config, Settings, load_custom_commands
 # Imported as a module too, so the live-settings reload can read CONFIG_PATH and
 # LIVE_APPLIED_KEYS without pulling each name in separately.
@@ -34,9 +33,8 @@ from .key_commands import auto_send, split_key_command
 from .logger import setup_logger
 from .recording_indicator import RecordingIndicator
 from .undo import detect_undo_command, calculate_undo_length
-from . import (custom_commands, delivery_notices, focused_window, modifier_hotkeys,
-               secure_input, send_countdown, silence, single_instance, uinput_helper,
-               virtual_keyboard)
+from . import (delivery_notices, focused_window, modifier_hotkeys, secure_input, send_countdown,
+               silence, single_instance, uinput_helper, virtual_keyboard)
 from .window_classes import (ELECTRON_PASTE_BROKEN_CLASSES, SMART_NEWLINE_CLASSES_LOWER,
                              app_kind, is_document_window, is_terminal_class)
 from .hotkey_keys import (MODIFIER_CODES, check_modifiers_held, keycode_from_name,
@@ -49,6 +47,7 @@ from . import tray_link
 from . import engine
 from . import last_dictation
 from . import notices
+from . import dictation_text
 import threading
 
 logger = setup_logger(__name__)
@@ -224,15 +223,6 @@ def _claim_desktop_hotkeys(cfg):
     except Exception as e:
         logger.debug(f"Could not send the hotkeys to the tray: {e}")
 
-
-
-def _apply_custom_commands(text: str) -> tuple[str, dict[str, str]]:
-    """The user's custom voice commands applied to the transcribed *text*
-    (custom_commands.apply), with Your Words."""
-    result, protected = custom_commands.apply(text, live.commands, live.words)
-    if result != text:
-        logger.info(f"Custom commands applied: {live.loggable(text)} -> {live.loggable(result)}")
-    return result, protected
 
 
 
@@ -881,102 +871,6 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
         beeps.beep(beeps_on, *CANCEL_BEEP)
     return True
 
-
-def _numbers_to_digits(text: str) -> str:
-    """*text* with spoken numbers as digits, when that option is on."""
-    if not live.numbers_mode:
-        return text
-    from .spoken_numbers import to_digits
-    return to_digits(text, live.numbers_language,
-                     small_as_words=live.numbers_mode == "small_as_words")
-
-
-def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bool,
-                  app_kind: str = "", ai: bool = True) -> str:
-    """Apply voice commands, normalize, handle mid-sentence, add auto-period/space.
-
-    *app_kind* ("terminal", "code" or ""): the focused app wants plain text
-    (no closing period; in a terminal, no starting capital either).
-    *ai* False skips the AI self-corrections: Type at pause asks the AI about
-    a phrase together with the one before it instead (_correct_across_pause).
-
-    Returns the final text string ready for injection.
-    """
-    if app_kind:
-        auto_period = False
-    # Apply custom voice commands (phrase → replacement)
-    # Quoted replacements come back as placeholder tokens in `protected`
-    processed, protected = _apply_custom_commands(raw)
-    # Your Words, first pass: before tidying, a hyphen inside a word can only
-    # have come from the engine ("Tux-Talk"), so it may join here.
-    if live.words:
-        from .custom_words import fix_spelling
-        processed = fix_spelling(processed, live.words)
-
-    # Normalize text (capitalization, punctuation, etc.). auto_period is passed
-    # through because this pass otherwise ends every line with a full stop of
-    # its own, and append_auto_punct below would never get to decide.
-    text = normalize_text(
-        processed if smart_quotes else processed.replace("\u201c","\"").replace("\u201d","\""),
-        auto_period=auto_period,
-    )
-    # A lone "open quote" or "close quote" becomes a curly quote inside
-    # normalize_text, so the preference is applied to its output as well.
-    if not smart_quotes:
-        text = text.replace("\u201c", "\"").replace("\u201d", "\"")
-
-    # Optional cleanup, while quoted custom-command replacements are still
-    # placeholders, so a literal replacement is never "cleaned". Rules first
-    # ("um", "the the"), then the AI for sentences with a self-correction.
-    if live.remove_fillers:
-        from .cleanup import clean_fillers_and_repeats
-        text = clean_fillers_and_repeats(text)
-    if ai and live.ai_corrections and live.ai_engine is not None:
-        from . import ai_cleanup
-        text = ai_cleanup.fix_self_corrections(text, live.ai_engine)
-
-    # Your Words, second pass: "tux talk" -> "TuxTalk" and iPhone's capitals
-    # back after a sentence start made it IPhone. After snippets, so a snippet
-    # whose phrase contains the split-up word still matches; while quoted
-    # snippets are still placeholders, so a literal one is never touched; and
-    # with no hyphen joins, since by now a hyphen means the user said "dash".
-    if live.words:
-        from .custom_words import fix_spelling
-        text = fix_spelling(text, live.words, hyphens=False)
-
-    # Spoken numbers as digits. Before the quoted snippets come back, so a
-    # literal snippet is typed exactly as written.
-    text = _numbers_to_digits(text)
-
-    # Restore quoted (literal) custom command replacements before any further
-    # processing so that auto-period/space checks see the real final text.
-    text = custom_commands.restore_protected(text, protected)
-
-    # Swiss Standard German writes ss where the engines write ß. Last, so it
-    # also covers snippets, Your Words and the AI's corrections.
-    if live.swiss_spelling:
-        text = swiss_spelling(text)
-
-    # Handle mid-sentence continuation after undo:
-    # lowercase the first letter if we're continuing a sentence
-    if rs.state.continue_mid_sentence and text:
-        # In another window it's a new sentence: a message after "meet me at
-        # noon and" in KWrite mustn't begin with a small letter.
-        focused = focused_window.window_class()
-        if (not keyboard_output.not_where_typed(focused) and text[0].isupper()
-                and safe_to_lowercase_first_word(text, live.words)):
-            text = text[0].lower() + text[1:]
-            logger.info("Lowercased first letter for mid-sentence continuation")
-        rs.state.continue_mid_sentence = False
-
-    # Auto-period and auto-space. When the utterance ends with a line-break
-    # command, the period lands BEFORE the break and no trailing space is
-    # added, so "hello new line" leaves no orphan ". " on the next line.
-    text = append_auto_punct(text, auto_period, auto_space)
-    if app_kind:
-        text = plain_for_app(text, app_kind)
-    logger.info(f"Normalized text: {live.loggable(text)}")
-    return text
 
 
 def _inject_text(text: str, injection_mode: str, one_block: bool = False, into=None,
@@ -1828,8 +1722,8 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # A correction said after a pause ("meet at three" ... "no wait,
         # four") goes to the AI together with the phrase it corrects.
         across = _corrects_across_pause(raw, chunk_role, message)
-        text = _prepare_text(raw, smart_quotes, chunk_period, auto_space, app_kind=kind,
-                             ai=not across)
+        text = dictation_text.prepare_text(raw, smart_quotes, chunk_period, auto_space,
+                                           app_kind=kind, ai=not across)
         if cut_off:
             # The engine may have put its own period after the "and".
             text = re.sub(r"\.(\s*)$", r"\1", text)
@@ -2325,7 +2219,7 @@ def _edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0
         if result and live.swiss_spelling:
             result = swiss_spelling(result)
         if result:
-            result = _numbers_to_digits(result)
+            result = dictation_text.numbers_to_digits(result)
         # Exact: for an edit done in code, spacing may be the whole change
         # (indenting one line); the AI's spacing-only answers are dropped above.
         if not result or result == selected:
