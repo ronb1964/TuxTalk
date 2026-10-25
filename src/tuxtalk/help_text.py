@@ -27,6 +27,8 @@ FEEDBACK_URL = "https://github.com/ronb1964/TuxTalk/discussions"
 ISSUES_URL = "https://github.com/ronb1964/TuxTalk/issues"
 # A link in Help that opens Report a Problem instead of a web page.
 REPORT_LINK = "tuxtalk:report"
+# The section that opens with a Report a Problem button (help_dialog).
+PROBLEMS_TITLE = "Problems"
 
 
 def install_facts():
@@ -769,6 +771,6 @@ _TABS = [
     ("Hands-free", HANDS_FREE, True),
     ("Mistakes", MISTAKES, True),
     ("Tips", TIPS, True),
-    ("Problems", PROBLEMS, True),
+    (PROBLEMS_TITLE, PROBLEMS, True),
     ("Commands", COMMANDS, False),
 ]

@@ -186,3 +186,26 @@ def test_help_problems_opens_it(monkeypatch):
         assert opened == [dialog]
     finally:
         dialog.destroy()
+
+
+def test_the_problems_tab_opens_with_a_report_button(monkeypatch):
+    """Report a Problem is a button at the top of Problems, not only a link
+    near the bottom of its text, and it opens the report over Help."""
+    if not Gtk.init_check()[0]:
+        pytest.skip("no display")
+    from gtk_text import widgets
+    shown, opened = [], []
+    monkeypatch.setattr(Gtk.Dialog, "show_all", lambda self: shown.append(self))
+    monkeypatch.setattr(Gtk.Dialog, "present", lambda self: None)
+    monkeypatch.setattr(problem_report_window, "ReportWindow", lambda parent: opened.append(parent))
+    help_dialog.show_help_dialog(tab="problems")
+    dialog = shown[0]
+    try:
+        notebook = next(w for w in widgets(dialog) if isinstance(w, Gtk.Notebook))
+        page = notebook.get_nth_page(notebook.get_current_page())
+        first = next(w for w in widgets(page) if isinstance(w, Gtk.Button))
+        assert first.get_label() == "Report a Problem…"
+        first.clicked()
+        assert opened == [dialog]
+    finally:
+        dialog.destroy()

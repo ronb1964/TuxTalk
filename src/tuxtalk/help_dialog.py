@@ -10,7 +10,7 @@ gi.require_version('Gtk', '3.0')
 from gi.repository import Gdk, Gtk, Pango
 
 from . import help_text, ui_style
-from .help_text import FEEDBACK_URL, REPORT_LINK
+from .help_text import FEEDBACK_URL, PROBLEMS_TITLE, REPORT_LINK
 
 # Help's text is broken by hand at about 85 characters, so the page is this
 # many of the font's characters wide, and the window that plus _FRAME_PX of
@@ -42,13 +42,18 @@ def _scroll(label, event, scrolled):
     return True
 
 
+def _open_report(widget):
+    """Open Report a Problem over the Help window *widget* is in."""
+    from .problem_report_window import ReportWindow
+    ReportWindow(widget.get_toplevel())
+
+
 def _on_link(label, uri):
     """Help's Report a problem link opens its window; any other link is a
     web page, which GTK opens."""
     if uri != REPORT_LINK:
         return False
-    from .problem_report_window import ReportWindow
-    ReportWindow(label.get_toplevel())
+    _open_report(label)
     return True
 
 
@@ -75,17 +80,34 @@ def _page(markup_text):
     return scrolled
 
 
-def _text_of(page):
-    """The label holding *page*'s text (inside the viewport its scrolled
-    window wraps it in)."""
-    return page.get_child().get_child()
+def _problems_page(markup):
+    """The Problems section, with a Report a Problem button above its text:
+    the first thing seen there, not a link near the bottom of the page."""
+    report = Gtk.Button(label="Report a Problem\u2026")
+    report.get_style_context().add_class("suggested-action")
+    report.connect("clicked", _open_report)
+    note = Gtk.Label(label="Gathers what helps find a problem: your system, your settings and "
+                           "the end of TuxTalk's log. You see all of it first, then copy it, "
+                           "save it, or open a GitHub issue with it.", xalign=0)
+    note.set_line_wrap(True)
+    note.get_style_context().add_class("dim-label")
+    row = Gtk.Box(spacing=14)
+    for side in ("top", "start", "end"):
+        getattr(row, f"set_margin_{side}")(15 if side == "top" else 8)
+    row.pack_start(report, False, False, 0)
+    row.pack_start(note, True, True, 0)
+    page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+    page.pack_start(row, False, False, 0)
+    page.pack_start(_page(markup), True, True, 0)
+    return page
 
 
 def _sections():
     """The notebook of sections, one tab each, in Help's order."""
     notebook = Gtk.Notebook()
     for title, markup in help_text.tabs():
-        notebook.append_page(_page(markup), Gtk.Label(label=title))
+        page = _problems_page(markup) if title == PROBLEMS_TITLE else _page(markup)
+        notebook.append_page(page, Gtk.Label(label=title))
     notebook.get_accessible().set_name("Help sections")
     return notebook
 
