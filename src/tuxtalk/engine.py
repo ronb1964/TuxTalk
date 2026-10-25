@@ -483,6 +483,7 @@ def _cpu_fallback_after_cuda(settings, error):
     *error*; the saved device becomes the processor, and the user is told."""
     from .model_helper import BrokenModelFiles, download_model_with_progress
     logger.error(f"CUDA error: {type(error).__name__}: {error}; falling back to the processor")
+    logger.debug("CUDA traceback:", exc_info=error)
     try:
         # No confirmation: the user already chose this model, and a surprise
         # dialog in a background process would block silently and hang the
@@ -500,6 +501,7 @@ def _cpu_fallback_after_cuda(settings, error):
         logger.error(f"CPU fallback failed: {cpu_e}")
         raise
     if model is None:
+        logger.error("CPU fallback failed: the model was not downloaded")
         raise ModelUnavailable(
             f"The {settings.model} model was not downloaded (cancelled or failed)")
     logger.info("Model loaded on CPU (fallback from CUDA)")
