@@ -3,6 +3,7 @@ the keys each one presses. See docs/superpowers/specs/2026-10-14-select-and-move
 import pytest
 
 from tuxtalk import voice_navigation as nav
+from tuxtalk import recording_state as rs
 
 C, S = "CTRL", "SHIFT"
 
@@ -159,7 +160,7 @@ def dictation(monkeypatch):
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.kwrite")
     monkeypatch.setattr(app, "_edit_problem", lambda kind, beeps: seen["problems"].append(kind))
     monkeypatch.setattr(app, "_beep", lambda on, *a: seen.__setitem__("beeps", seen["beeps"] + 1))
-    monkeypatch.setattr(app.state, "last_inserted_text", " We finished early.")
+    monkeypatch.setattr(rs.state, "last_inserted_text", " We finished early.")
     seen["app"], seen["backend"] = app, backend
     return seen
 
@@ -168,7 +169,7 @@ def test_a_command_presses_its_keys_and_clears_undo(dictation):
     app = dictation["app"]
     assert app._handle_navigation("select the last word", False) is True
     assert dictation["pressed"] == [[((), "LEFT")] + [((S,), "LEFT")] * 5]
-    assert app.state.last_inserted_text == ""      # undo can't trust its count now
+    assert rs.state.last_inserted_text == ""      # undo can't trust its count now
     assert dictation["beeps"] == 1 and dictation["problems"] == []
 
 
@@ -191,7 +192,7 @@ def test_a_terminal_is_refused(dictation, monkeypatch):
 
 def test_select_that_with_nothing_dictated_says_so(dictation, monkeypatch):
     app = dictation["app"]
-    monkeypatch.setattr(app.state, "last_inserted_text", "")
+    monkeypatch.setattr(rs.state, "last_inserted_text", "")
     assert app._handle_navigation("select that", False) is True
     assert dictation["pressed"] == [] and dictation["problems"] == ["nothing_said"]
 
@@ -222,7 +223,7 @@ def test_what_i_said_is_only_trusted_in_the_window_it_went_to(dictation, monkeyp
     """Ron dictated a chat message, then said "select the last sentence" in
     Writer: it selected the chat sentence's length of Writer's text."""
     app = dictation["app"]
-    monkeypatch.setattr(app.state, "last_inserted_window", "claude")
+    monkeypatch.setattr(rs.state, "last_inserted_window", "claude")
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "libreoffice-writer")
     assert app._handle_navigation("select the last sentence", False) is True
     assert dictation["pressed"] == [] and dictation["problems"] == ["nothing_said"]
@@ -233,7 +234,7 @@ def test_what_i_said_is_only_trusted_in_the_window_it_went_to(dictation, monkeyp
 
 def test_the_same_window_is_trusted(dictation, monkeypatch):
     app = dictation["app"]
-    monkeypatch.setattr(app.state, "last_inserted_window", "org.kde.kwrite")
+    monkeypatch.setattr(rs.state, "last_inserted_window", "org.kde.kwrite")
     app._handle_navigation("select the last word", False)
     assert dictation["pressed"] == [[((), "LEFT")] + [((S,), "LEFT")] * 5]
 
@@ -295,7 +296,7 @@ def test_dictation_remembers_the_place_between_moves(dictation):
     app._handle_navigation("go back two words", False)       # " We finished early."
     app._handle_navigation("go back one word", False)
     assert dictation["pressed"][1] == [((), "LEFT")] * len("We ")
-    assert app.state.nav_context == (" ", "We finished early.")
+    assert rs.state.nav_context == (" ", "We finished early.")
 
 
 # --- the same check for "delete last word" ------------------------------------------------
@@ -304,18 +305,18 @@ def test_delete_last_word_in_another_window_deletes_nothing(dictation, monkeypat
     app = dictation["app"]
     deleted = []
     dictation["backend"].backspaces = lambda n: deleted.append(n) or True
-    monkeypatch.setattr(app.state, "last_inserted_window", "claude")
+    monkeypatch.setattr(rs.state, "last_inserted_window", "claude")
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "libreoffice-writer")
     assert app._handle_undo("delete last word", False, False) is True
     assert deleted == [] and dictation["problems"] == ["undo_other_window"]
-    assert app.state.last_inserted_text == " We finished early."   # still there for its window
+    assert rs.state.last_inserted_text == " We finished early."   # still there for its window
 
 
 def test_delete_last_word_in_its_own_window_still_works(dictation, monkeypatch):
     app = dictation["app"]
     deleted = []
     dictation["backend"].backspaces = lambda n: deleted.append(n) or True
-    monkeypatch.setattr(app.state, "last_inserted_window", "org.kde.kwrite")
+    monkeypatch.setattr(rs.state, "last_inserted_window", "org.kde.kwrite")
     assert app._handle_undo("delete last word", False, False) is True
     assert deleted == [6] and dictation["problems"] == []
 

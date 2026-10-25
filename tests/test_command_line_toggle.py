@@ -17,6 +17,7 @@ import pytest
 
 from tuxtalk import control
 from tuxtalk.control import WaitingStart, act_now, parse_action
+from tuxtalk import recording_state as rs
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -385,7 +386,7 @@ def service(monkeypatch):
     from tuxtalk import app, service_launcher
     monkeypatch.setattr(app, "_service_ready", False)
     monkeypatch.setattr(app, "_waiting_start", None)
-    monkeypatch.setattr(app.state, "is_recording", False)
+    monkeypatch.setattr(rs.state, "is_recording", False)
     written = []
     monkeypatch.setattr(service_launcher, "write_ready_pid", written.append)
     told = []

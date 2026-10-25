@@ -10,6 +10,7 @@ import time
 import pytest
 
 from tuxtalk import app
+from tuxtalk import recording_state as rs
 from tuxtalk import config as C
 from tuxtalk.media_pause import MediaPauser
 
@@ -150,10 +151,10 @@ def service(monkeypatch):
     spy = SpyPauser()
     monkeypatch.setattr(app, "_media_pauser", spy)
     monkeypatch.setattr(app, "_pause_media", True)
-    app.state.is_recording = False
+    rs.state.is_recording = False
     yield spy
-    app.state.is_recording = False
-    app.state.stream = None
+    rs.state.is_recording = False
+    rs.state.stream = None
 
 
 def test_the_service_never_pauses_real_players_until_config_says_so():
@@ -179,7 +180,7 @@ def test_recording_start_pauses_and_cancel_resumes(service):
 
 def test_a_finished_recording_resumes(service):
     app.start_recording(False, False, 0)
-    app.state.press_t0 -= 5           # held long enough to count
+    rs.state.press_t0 -= 5           # held long enough to count
     assert app._finish_capture(False, False) is not None
     assert service.calls == ["pause", "resume"]
 

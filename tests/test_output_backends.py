@@ -1,6 +1,7 @@
 """The virtual-keyboard backend must keep delegating to app._type_text so the non-Flatpak
 typing path is behaviorally unchanged."""
 import os
+from tuxtalk import recording_state as rs
 
 
 def _portal_fd():
@@ -220,7 +221,7 @@ def test_handle_undo_char_undo_routes_backspaces_through_backend(monkeypatch):
     monkeypatch.setattr(app, "detect_undo_command", lambda raw: ("word", 1))
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
     monkeypatch.setattr(app, "_notify", lambda *a, **k: None)
-    app.state.last_inserted_text = "hello world"
+    rs.state.last_inserted_text = "hello world"
     got = []
 
     class FakeBackend:
@@ -349,7 +350,7 @@ def test_flatpak_typing_records_what_libei_types_for_undo(monkeypatch):
     monkeypatch.setattr(app, "_output_backend", lambda: FakeLibei())
     assert app._inject_text("Wait… café", "auto") == "ok"
     assert typed == ["Wait... cafe"]
-    assert app.state.last_inserted_text == "Wait... cafe"
+    assert rs.state.last_inserted_text == "Wait... cafe"
 
 
 def test_libei_backend_presses_nothing_when_the_claim_says_no(monkeypatch):

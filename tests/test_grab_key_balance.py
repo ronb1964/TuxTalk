@@ -18,6 +18,7 @@ import pytest
 from evdev import ecodes
 
 from tuxtalk import app
+from tuxtalk import recording_state as rs
 
 F8 = ecodes.KEY_F8
 
@@ -75,14 +76,14 @@ def kb(monkeypatch):
     app._grabbed_devices.clear()
     monkeypatch.setattr(app, "_is_keyboard_device", lambda d: True)
     monkeypatch.setattr(app, "start_recording",
-                        lambda *a, **k: setattr(app.state, "is_recording", True) or True)
+                        lambda *a, **k: setattr(rs.state, "is_recording", True) or True)
     stops = []
     monkeypatch.setattr(app, "stop_recording",
-                        lambda *a, **k: (stops.append(1), setattr(app.state, "is_recording", False)))
+                        lambda *a, **k: (stops.append(1), setattr(rs.state, "is_recording", False)))
     dev.stops = stops
-    app.state.is_recording = False
+    rs.state.is_recording = False
     yield dev
-    app.state.is_recording = False
+    rs.state.is_recording = False
     app._grabbed_devices.clear()
     app._injected_pending.clear()
 
@@ -103,13 +104,13 @@ def pump(kb):
 def test_hold_to_talk_leaves_the_desktop_balanced(kb):
     kb.physical(F8, 1)
     pump(kb)
-    assert app.state.is_recording and kb.grabbed
+    assert rs.state.is_recording and kb.grabbed
     assert kb.desktop_count.get(F8, 0) == 0          # desktop saw press + release
 
     kb.physical(F8, 0)                                # user lets go (grabbed)
     pump(kb)
     assert kb.stops == [1]                            # TuxTalk still hears the release
-    assert not app.state.is_recording and not kb.grabbed
+    assert not rs.state.is_recording and not kb.grabbed
     assert kb.desktop_count.get(F8, 0) == 0
 
 
@@ -125,7 +126,7 @@ def test_the_injected_release_does_not_stop_the_recording(kb):
     kb.physical(F8, 1)
     pump(kb)
     pump(kb)                                          # any leftover self-injected events
-    assert app.state.is_recording and kb.stops == []
+    assert rs.state.is_recording and kb.stops == []
 
 
 def test_a_tap_released_before_the_grab_needs_no_balancing(kb):
@@ -155,6 +156,6 @@ def test_a_failed_write_falls_back_to_the_old_behaviour(kb, monkeypatch):
         raise PermissionError("no write access")
     monkeypatch.setattr(kb, "write", refuse)
     kb.physical(F8, 1); pump(kb)
-    assert app.state.is_recording
+    assert rs.state.is_recording
     kb.physical(F8, 0); pump(kb)
     assert kb.stops == [1]

@@ -13,6 +13,7 @@ import pytest
 from evdev import ecodes
 
 from tuxtalk import app, send_countdown
+from tuxtalk import recording_state as rs
 
 
 class FakeDevice:
@@ -84,10 +85,10 @@ def quiet_recording(monkeypatch):
     monkeypatch.setattr(app, "_notify_tray_recording_state", lambda *a, **k: None)
     monkeypatch.setattr(app.mic_stream, "input_samplerate", lambda idx, rate: 16000)
     monkeypatch.setattr(app, "recording_indicator", None)
-    app.state.is_recording = False
+    rs.state.is_recording = False
     yield
-    app.state.is_recording = False
-    app.state.stream = None
+    rs.state.is_recording = False
+    rs.state.stream = None
 
 
 # --- releasing grabs -------------------------------------------------------
@@ -164,7 +165,7 @@ def test_failed_recording_start_clears_the_recording_flag(monkeypatch, quiet_rec
 
     app.start_recording(beeps_on=False, notify_on=False, input_device_idx=0)
 
-    assert app.state.is_recording is False
+    assert rs.state.is_recording is False
 
 
 def test_failed_recording_start_tells_the_user(monkeypatch, quiet_recording):
@@ -189,7 +190,7 @@ def test_successful_recording_start_reports_success(monkeypatch, quiet_recording
     started = app.start_recording(beeps_on=False, notify_on=False, input_device_idx=0)
 
     assert started is True
-    assert app.state.is_recording is True
+    assert rs.state.is_recording is True
 
 
 # --- device filtering ------------------------------------------------------
@@ -251,20 +252,20 @@ def key_env(monkeypatch):
 
     def fake_start(beeps_on, notify_on, input_device_idx, from_toggle=False, edit_mode=False,
                    held_send=False):
-        app.state.is_recording = True
+        rs.state.is_recording = True
         started.append(True)
         return True
 
     def fake_stop(*args, **kwargs):
-        app.state.is_recording = False
+        rs.state.is_recording = False
         stopped.append(True)
 
     monkeypatch.setattr(app, "start_recording", fake_start)
     monkeypatch.setattr(app, "stop_recording", fake_stop)
-    monkeypatch.setattr(app, "cancel_recording", lambda *a, **k: setattr(app.state, "is_recording", False))
-    app.state.is_recording = False
+    monkeypatch.setattr(app, "cancel_recording", lambda *a, **k: setattr(rs.state, "is_recording", False))
+    rs.state.is_recording = False
     yield started, stopped
-    app.state.is_recording = False
+    rs.state.is_recording = False
 
 
 def press_hold(devices):
@@ -300,7 +301,7 @@ def test_toggle_key_pressed_while_holding_releases_the_keyboard(key_env):
     app._handle_key_event(FakeEvent(TOGGLE, 1), HOLD, TOGGLE,
                           None, set(), [kb], FakeConfig(), 0)
 
-    assert not app.state.is_recording
+    assert not rs.state.is_recording
     assert not kb.is_grabbed, "keyboard left grabbed after toggle stopped recording"
 
 
@@ -323,7 +324,7 @@ def test_microphone_failure_during_hold_leaves_nothing_grabbed(monkeypatch, quie
     press_hold([kb])
 
     assert not kb.is_grabbed, "SYSTEM-WIDE KEYBOARD LOCKUP"
-    assert app.state.is_recording is False
+    assert rs.state.is_recording is False
 
 
 # --- stale microphone index -------------------------------------------------
@@ -357,7 +358,7 @@ def test_stale_microphone_index_is_re_resolved_and_retried(monkeypatch, quiet_re
 
     assert started is True
     assert tried == [99, 3], "stale index was not re-resolved"
-    assert app.state.is_recording is True
+    assert rs.state.is_recording is True
 
 
 def test_keyboard_is_released_when_even_the_re_resolved_mic_fails(monkeypatch, quiet_recording):
@@ -386,7 +387,7 @@ def test_grabs_held_while_not_recording_are_released():
     """
     kb = keyboard()
     app._grab_all_devices([kb])
-    app.state.is_recording = False
+    rs.state.is_recording = False
 
     recovered = app._release_grabs_if_not_recording()
 
@@ -397,11 +398,11 @@ def test_grabs_held_while_not_recording_are_released():
 def test_grabs_held_while_recording_are_left_alone():
     kb = keyboard()
     app._grab_all_devices([kb])
-    app.state.is_recording = True
+    rs.state.is_recording = True
     try:
         recovered = app._release_grabs_if_not_recording()
     finally:
-        app.state.is_recording = False
+        rs.state.is_recording = False
 
     assert recovered is False
     assert kb.is_grabbed, "released the keyboard mid-recording"
@@ -586,11 +587,11 @@ def test_dropping_a_device_mid_hold_ends_the_recording(key_env):
     kb1, kb2 = keyboard("dies"), keyboard("survives")
     devices = [kb1, kb2]
     press_hold(devices)
-    assert app.state.is_recording
+    assert rs.state.is_recording
 
     app._drop_dead_devices([kb1], devices, FakeConfig())
 
-    assert app.state.is_recording is False, "recording could never be ended"
+    assert rs.state.is_recording is False, "recording could never be ended"
     assert stopped, "stop_recording was not called"
     assert kb1 not in devices
     assert kb2 in devices
@@ -633,11 +634,11 @@ def test_dropping_a_device_mid_hold_ends_the_recording_in_toggle_mode(key_env):
     devices = [kb1, kb2]
     app._handle_key_event(FakeEvent(HOLD, 1), HOLD, TOGGLE,
                           None, set(), devices, ToggleModeConfig(), 0)
-    assert app.state.is_recording and kb2.is_grabbed
+    assert rs.state.is_recording and kb2.is_grabbed
 
     app._drop_dead_devices([kb1], devices, ToggleModeConfig())
 
-    assert app.state.is_recording is False
+    assert rs.state.is_recording is False
     assert stopped
     assert not kb2.is_grabbed, "other keyboards left grabbed — user cannot type"
 
@@ -650,11 +651,11 @@ def test_a_toggle_recording_survives_an_unrelated_keyboard_dropping_out(key_env)
     devices = [kb1, kb2]
     app._handle_key_event(FakeEvent(TOGGLE, 1), HOLD, TOGGLE,
                           None, set(), devices, FakeConfig(), 0)
-    assert app.state.is_recording
+    assert rs.state.is_recording
 
     app._drop_dead_devices([kb1], devices, FakeConfig())
 
-    assert app.state.is_recording is True
+    assert rs.state.is_recording is True
     assert not stopped
     assert devices == [kb2]
 
@@ -733,7 +734,7 @@ def test_the_voice_commands_combo_mid_hold_keeps_the_recordings_grab(key_env, mo
     app._handle_key_event(FakeEvent(ecodes.KEY_H, 1), HOLD, TOGGLE,
                           combo, set(), [kb], FakeConfig(), 0)
 
-    assert app.state.is_recording
+    assert rs.state.is_recording
     assert kb.is_grabbed, "the hold recording lost its keyboard grab"
 
 
@@ -773,11 +774,11 @@ def test_a_microphone_that_never_stops_cannot_freeze_the_service(monkeypatch):
     monkeypatch.setattr(app.mic_stream, "STOP_TIMEOUT_S", 0.1)
     monkeypatch.setattr(app.mic_stream, "_closing", set())
     stream = StuckStream()
-    app.state.stream = stream
+    rs.state.stream = stream
     started = app.time.monotonic()
     app._stop_stream_safely()
     assert app.time.monotonic() - started < 1.0
-    assert app.state.stream is None
+    assert rs.state.stream is None
     assert app.mic_stream._closing == {stream}
     release.set()
 
@@ -793,7 +794,7 @@ def test_a_normal_stop_closes_the_stream(monkeypatch):
             calls.append("close")
 
     monkeypatch.setattr(app.mic_stream, "_closing", set())
-    app.state.stream = Stream()
+    rs.state.stream = Stream()
     app._stop_stream_safely()
     assert calls == ["stop", "close"] and app.mic_stream._closing == set()
 

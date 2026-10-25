@@ -9,6 +9,7 @@ can't clobber the audio being transcribed.
 import time
 
 from tuxtalk import app
+from tuxtalk import recording_state as rs
 
 
 def test_finish_capture_snapshots_frames_surviving_next_recording(monkeypatch):
@@ -16,27 +17,27 @@ def test_finish_capture_snapshots_frames_surviving_next_recording(monkeypatch):
     monkeypatch.setattr(app, "_notify_tray_recording_state", lambda *_a: None)
     monkeypatch.setattr(app, "recording_indicator", None)
 
-    app.state.frames = [b"hello-audio"]
-    app.state.press_t0 = time.time() - 1.0  # held well past MIN_HOLD_MS
-    app.state.is_recording = True
-    app.state.was_cancelled = False
+    rs.state.frames = [b"hello-audio"]
+    rs.state.press_t0 = time.time() - 1.0  # held well past MIN_HOLD_MS
+    rs.state.is_recording = True
+    rs.state.was_cancelled = False
 
     cap = app._finish_capture(beeps_on=False, notify_on=False)
     assert cap is not None
     frames, _rec_sr = cap
     assert frames == [b"hello-audio"]
-    assert app.state.is_recording is False
+    assert rs.state.is_recording is False
 
     # A new recording reassigns state.frames to a fresh list — the snapshot the
     # worker will transcribe must NOT be affected.
-    app.state.frames = []
+    rs.state.frames = []
     assert frames == [b"hello-audio"], "snapshot must survive a new recording"
 
 
 def test_finish_capture_returns_none_when_too_short(monkeypatch):
     monkeypatch.setattr(app, "cancel_recording", lambda *a, **k: None)
-    app.state.press_t0 = time.time()  # ~0 ms held -> below MIN_HOLD_MS
-    app.state.is_recording = True
+    rs.state.press_t0 = time.time()  # ~0 ms held -> below MIN_HOLD_MS
+    rs.state.is_recording = True
     assert app._finish_capture(beeps_on=False, notify_on=False) is None
 
 

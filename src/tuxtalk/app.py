@@ -35,7 +35,6 @@ from .chunking import (boundary_mark, carry_question, hold_back_boundary, word_c
 from .key_commands import KEY_CODES, auto_send, split_key_command
 from .logger import setup_logger, redact_text
 from .recording_indicator import RecordingIndicator
-from .recording_state import RecordingState
 from .undo import detect_undo_command, calculate_undo_length
 from . import (custom_commands, delivery_notices, edit_notices, focused_window, hallucinations,
                modifier_hotkeys, secure_input, send_countdown, silence, single_instance,
@@ -45,6 +44,7 @@ from .window_classes import (ELECTRON_PASTE_BROKEN_CLASSES, SMART_NEWLINE_CLASSE
                              app_kind, is_document_window, is_terminal_class)
 from .hotkey_keys import (MODIFIER_CODES, check_modifiers_held, keycode_from_name, keys_down,
                           parse_hotkey_combo, track_modifier)
+from . import recording_state as rs
 import threading
 
 logger = setup_logger(__name__)
@@ -238,8 +238,6 @@ MIN_HOLD_MS = 200
 # Generous: 0.4 s missed slower hands (#21); a quick word still comes, at auto-stop.
 DOUBLE_TAP_S = 0.7
 
-# Global recording state
-state = RecordingState()
 
 # Global recording indicator and D-Bus service (initialized in main)
 recording_indicator = None
@@ -310,7 +308,7 @@ def _handle_sigusr1(signum, frame):
     """SIGUSR1 = toggle recording. Sent by the tray process via os.kill().
     Sets the appropriate Event; the evdev loop consumes it from the main thread.
     """
-    if state.is_recording:
+    if rs.state.is_recording:
         _cmd_stop_recording.set()
     else:
         _cmd_start_recording.set()
@@ -457,17 +455,17 @@ def _strip_hallucinations(text: str, no_speech_prob: float = 0.0) -> str:
 
 def _sd_callback(indata, frames_count, time_info, status):
     """sounddevice's audio callback: collect frames while recording."""
-    if state.is_recording:
-        state.frames.append(indata.tobytes())
+    if rs.state.is_recording:
+        rs.state.frames.append(indata.tobytes())
 
         # Chunked dictation: at a pause, the phrase so far goes off to be typed.
-        chunker = state.chunker
+        chunker = rs.state.chunker
         if chunker is not None and chunker.feed(indata):
             _cut_chunk(chunker)
 
         # Hands-free auto-stop: when the speaker has finished, ask the service
         # loop to stop, exactly as a second press of the toggle key would.
-        detector = state.silence
+        detector = rs.state.silence
         if detector is not None and detector.feed(indata):
             if detector.nothing_said:
                 logger.info("Auto-stop: nothing said, stopping without typing anything")
@@ -486,18 +484,18 @@ def _cut_chunk(chunker):
     Runs on the audio thread, so it only swaps a list and queues a job; the
     transcription happens on the worker."""
     with _chunk_lock:
-        if state.chunker is not chunker:
+        if rs.state.chunker is not chunker:
             return  # the recording ended while this block was arriving
-        frames, state.frames = state.frames, []
+        frames, rs.state.frames = rs.state.frames, []
         _drop_tail_samples(frames, chunker.tail_samples())
-        state.chunks_submitted += 1
-        number = state.chunks_submitted
-        rec_sr = getattr(state, "recording_samplerate", SAMPLE_RATE)
+        rs.state.chunks_submitted += 1
+        number = rs.state.chunks_submitted
+        rec_sr = getattr(rs.state, "recording_samplerate", SAMPLE_RATE)
         pause = chunker.last_pause
         # Queued before the lock is let go: otherwise the stop could slip in
         # between counting this chunk and queuing it, and queue the last chunk
         # ahead of it. put() on the unbounded queue never blocks.
-        _chunk_worker().submit(lambda message=state.message: _transcribe_chunk(
+        _chunk_worker().submit(lambda message=rs.state.message: _transcribe_chunk(
             frames, rec_sr, "middle", number, pause, message))
 
 
@@ -511,7 +509,7 @@ def _transcribe_chunk(frames, rec_sr, role, number, pause, message):
     cfg = _chunk_cfg
     # Hands-free's "stop when quiet" waits while this phrase is worked on: an
     # AI rewrite can take seconds, and the user is reading, not finished.
-    detector = state.silence
+    detector = rs.state.silence
     if detector is not None:
         detector.hold()
     try:
@@ -533,14 +531,14 @@ def _arm_chunker(rec_sr, edit_mode=False):
         # Started here, so the audio callback never has to build it.
         _chunk_worker()
     with _chunk_lock:
-        state.recording_serial += 1
-        state.chunks_submitted = 0
-        state.pending_boundary = None
-        state.question_open = False
-        state.message = send_countdown.Message()
-        state.held_cue = ""
-        state.edit_waiting = None
-        state.chunker = chunker
+        rs.state.recording_serial += 1
+        rs.state.chunks_submitted = 0
+        rs.state.pending_boundary = None
+        rs.state.question_open = False
+        rs.state.message = send_countdown.Message()
+        rs.state.held_cue = ""
+        rs.state.edit_waiting = None
+        rs.state.chunker = chunker
 
 
 def _feed_indicator(indicator, indata, spectrum_processor):
@@ -1034,7 +1032,7 @@ def _drop_dead_devices(dead_devices, devices, cfg) -> None:
     # The hold key works whatever the configured mode, so the grabs, not the
     # mode, tell a hold recording apart. A toggle or hands-free recording
     # holds no grab and carries on: any keyboard can still stop it.
-    if state.is_recording and _grabbed_devices:
+    if rs.state.is_recording and _grabbed_devices:
         logger.warning(
             "Input device died while the hold hotkey was down — ending the "
             "recording, since its key-up can no longer arrive"
@@ -1053,7 +1051,7 @@ def _release_grabs_if_not_recording() -> bool:
     including one added later — self-heals within milliseconds instead of
     leaving the user with a dead keyboard. Returns True if it had to recover.
     """
-    if _grabbed_devices and not state.is_recording:
+    if _grabbed_devices and not rs.state.is_recording:
         logger.warning(f"Releasing {len(_grabbed_devices)} stranded input grab(s)")
         _release_all_grabs()
         return True
@@ -1063,11 +1061,11 @@ def _release_grabs_if_not_recording() -> bool:
 def _open_input_stream(device_idx) -> None:
     """Open and start the microphone stream. Raises if the device is unusable."""
     # Use the device's native sample rate (may differ from 16kHz on ALSA hw: devices)
-    state.recording_samplerate = mic_stream.input_samplerate(device_idx, SAMPLE_RATE)
+    rs.state.recording_samplerate = mic_stream.input_samplerate(device_idx, SAMPLE_RATE)
     sd.default.channels = CHANNELS
-    sd.default.samplerate = state.recording_samplerate
-    state.stream = sd.InputStream(callback=_sd_callback, dtype='int16', device=device_idx)
-    state.stream.start()
+    sd.default.samplerate = rs.state.recording_samplerate
+    rs.state.stream = sd.InputStream(callback=_sd_callback, dtype='int16', device=device_idx)
+    rs.state.stream.start()
 
 
 def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
@@ -1085,17 +1083,17 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     """
     # Pressing a hotkey while a send counts down holds it: a tap leaves the
     # text unsent, a hold dictates more onto it.
-    state.held_send = send_countdown.hold(announce=False) or held_send
-    state.frames = []
-    state.was_cancelled = False
-    state.silence = None
-    state.chunker = None
-    state.press_t0 = time.time()
-    state.released_while_starting = False
-    state.toggle_started_at = None
-    state.edit_mode = edit_mode
+    rs.state.held_send = send_countdown.hold(announce=False) or held_send
+    rs.state.frames = []
+    rs.state.was_cancelled = False
+    rs.state.silence = None
+    rs.state.chunker = None
+    rs.state.press_t0 = time.time()
+    rs.state.released_while_starting = False
+    rs.state.toggle_started_at = None
+    rs.state.edit_mode = edit_mode
     # Set before the stream starts — _sd_callback drops frames unless it's set.
-    state.is_recording = True
+    rs.state.is_recording = True
     if model is None:
         # Power Saving let the model go: load it while the user talks.
         threading.Thread(target=_wake_model, daemon=True, name="tt-wake-model").start()
@@ -1119,19 +1117,19 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
             # app. Undo everything and tell the user; failing silently would
             # leave the keyboard grabbed and the machine unusable.
             logger.error(f"Could not start recording: {e}", exc_info=True)
-            state.is_recording = False
+            rs.state.is_recording = False
             _stop_stream_safely()
             _release_all_grabs()
             _beep(beeps_on, *CANCEL_BEEP)
             if notify_on:
                 _notify("Microphone unavailable", "Check that no other app is using it.")
-            if state.held_send:
+            if rs.state.held_send:
                 send_countdown.say_held()   # nothing to dictate onto it: it stays unsent
             return False
 
-    _arm_chunker(getattr(state, "recording_samplerate", SAMPLE_RATE), edit_mode)
+    _arm_chunker(getattr(rs.state, "recording_samplerate", SAMPLE_RATE), edit_mode)
     _pause_media_players()
-    state.start_beep = _beep(beeps_on, *START_BEEP)
+    rs.state.start_beep = _beep(beeps_on, *START_BEEP)
     if notify_on: _notify("Recording… speak now", "")
     _notify_tray_recording_state(True)
     if recording_indicator:
@@ -1143,26 +1141,26 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
 
     # The double-tap is timed from here, the start beep heard: keys wait on
     # this thread, so a tap made during a slow start still counts (#21).
-    if from_toggle and state.start_beep is not None:
-        beeps.wait_until_played(over=state.start_beep)
-    state.toggle_started_at = time.time() if from_toggle else None
-    logger.info(f"Recording started in {time.time() - state.press_t0:.2f}s")
+    if from_toggle and rs.state.start_beep is not None:
+        beeps.wait_until_played(over=rs.state.start_beep)
+    rs.state.toggle_started_at = time.time() if from_toggle else None
+    logger.info(f"Recording started in {time.time() - rs.state.press_t0:.2f}s")
     return True
 
 
 def _stop_stream_safely():
     """Stop and close the microphone stream. An audio system that stops
     answering costs mic_stream.STOP_TIMEOUT_S, not the whole service."""
-    stream, state.stream = state.stream, None
+    stream, rs.state.stream = rs.state.stream, None
     if stream is not None:
         mic_stream.close(stream)
 
 
 def cancel_recording(beeps_on: bool, notify_on: bool, reason="Cancelled"):
     """End a recording without transcribing it, telling the user *reason*."""
-    state.is_recording = False
-    state.was_cancelled = True
-    state.edit_mode = False
+    rs.state.is_recording = False
+    rs.state.was_cancelled = True
+    rs.state.edit_mode = False
     _stop_stream_safely()
     _resume_media_players()
     _beep(beeps_on, *CANCEL_BEEP)
@@ -1256,7 +1254,7 @@ def _not_where_typed(focused) -> bool:
     last dictation or phrase went to: focused_window's rule, by the class alone,
     which is all undo, select, the lowercase carry-on and the screen copy keep."""
     return focused_window.same_window((focused, None),
-                                      (state.last_inserted_window, None)) is False
+                                      (rs.state.last_inserted_window, None)) is False
 
 
 def _typed_breaks_for(text: str, window_class) -> str:
@@ -1286,10 +1284,10 @@ def _press_key(key: str, why: str, claim=None) -> bool:
         if claim is None and modifier_hotkeys.stuck():
             _notify(*delivery_notices.key_not_pressed(key))
         return False
-    state.last_inserted_text = ""
+    rs.state.last_inserted_text = ""
     if key == "ENTER":
         # "edit that" right after this says why there's nothing to edit.
-        state.sent = {"at": time.time(), "automatic": why.startswith("Send each")}
+        rs.state.sent = {"at": time.time(), "automatic": why.startswith("Send each")}
     logger.info(f"Pressed {key.title()} ({why})")
     return True
 
@@ -1811,7 +1809,7 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
 
     undo_type, count = detected
     # Deleting changes the text a voice move remembered (nav_context).
-    state.nav_context = None
+    rs.state.nav_context = None
     label = undo_type if count == 1 else f"{count} {undo_type}s"
     logger.info(f"Undo command detected: {label}")
 
@@ -1828,9 +1826,9 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
         else:
             cleared = _output_backend().select_all_delete()
         if cleared:
-            state.last_inserted_text = ""
+            rs.state.last_inserted_text = ""
             _forget_shown()
-            state.continue_mid_sentence = False
+            rs.state.continue_mid_sentence = False
             _beep(beeps_on, *READY_BEEP)
             if notify_on: _notify("Cleared the text box", "")
         else:
@@ -1839,7 +1837,7 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
             if notify_on: _notify("Couldn't clear the text box", "")
         return True
 
-    if not state.last_inserted_text:
+    if not rs.state.last_inserted_text:
         logger.info("Undo requested but no previous text to undo")
         _beep(beeps_on, *CANCEL_BEEP)
         if notify_on: _notify("Nothing to undo", "")
@@ -1850,14 +1848,14 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
     # as before.
     focused = _query_focused_window_class()
     if _not_where_typed(focused):
-        logger.info(f"Undo refused: the last dictation went to {state.last_inserted_window!r}, "
+        logger.info(f"Undo refused: the last dictation went to {rs.state.last_inserted_window!r}, "
                     f"not {focused!r}")
         _edit_problem("undo_other_window", beeps_on)
         return True
 
     # Calculate how many characters to delete (iterates `count` times)
-    delete_count = calculate_undo_length(state.last_inserted_text, undo_type, count)
-    logger.info(f"Undo: deleting {delete_count} characters (last text was {len(state.last_inserted_text)} chars, count={count})")
+    delete_count = calculate_undo_length(rs.state.last_inserted_text, undo_type, count)
+    logger.info(f"Undo: deleting {delete_count} characters (last text was {len(rs.state.last_inserted_text)} chars, count={count})")
 
     if delete_count > 0:
         # Only shrink the buffer once the deletion is confirmed; otherwise it
@@ -1870,9 +1868,9 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
             # so the buffer no longer matches the document. Forgetting it is
             # the only safe choice: a later undo then deletes nothing.
             logger.error("Undo stopped partway: an unknown number of backspaces landed; undo buffer cleared")
-            state.last_inserted_text = ""
+            rs.state.last_inserted_text = ""
             _forget_shown()
-            state.continue_mid_sentence = False
+            rs.state.continue_mid_sentence = False
             _beep(beeps_on, *CANCEL_BEEP)
             if notify_on:
                 _notify("Undo stopped partway", "Some of the text may still be there.")
@@ -1884,18 +1882,18 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
                 _notify("Undo failed", "The text couldn't be deleted.")
             return True
 
-        _trim_shown(state.last_inserted_text, delete_count)
-        if delete_count >= len(state.last_inserted_text):
-            state.last_inserted_text = ""
-            state.continue_mid_sentence = False
+        _trim_shown(rs.state.last_inserted_text, delete_count)
+        if delete_count >= len(rs.state.last_inserted_text):
+            rs.state.last_inserted_text = ""
+            rs.state.continue_mid_sentence = False
         else:
-            state.last_inserted_text = state.last_inserted_text[:-delete_count]
-            remaining = state.last_inserted_text.rstrip()
+            rs.state.last_inserted_text = rs.state.last_inserted_text[:-delete_count]
+            remaining = rs.state.last_inserted_text.rstrip()
             if remaining and not remaining.endswith(('.', '?', '!', '\u2026')):
-                state.continue_mid_sentence = True
+                rs.state.continue_mid_sentence = True
                 logger.info("Mid-sentence continuation enabled for next dictation")
             else:
-                state.continue_mid_sentence = False
+                rs.state.continue_mid_sentence = False
         _beep(beeps_on, *READY_BEEP)
         if notify_on: _notify(f"Undid the last {label}", "")
     else:
@@ -1980,7 +1978,7 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
 
     # Handle mid-sentence continuation after undo:
     # lowercase the first letter if we're continuing a sentence
-    if state.continue_mid_sentence and text:
+    if rs.state.continue_mid_sentence and text:
         # In another window it's a new sentence: a message after "meet me at
         # noon and" in KWrite mustn't begin with a small letter.
         focused = _query_focused_window_class()
@@ -1988,7 +1986,7 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
                 and safe_to_lowercase_first_word(text, _custom_words)):
             text = text[0].lower() + text[1:]
             logger.info("Lowercased first letter for mid-sentence continuation")
-        state.continue_mid_sentence = False
+        rs.state.continue_mid_sentence = False
 
     # Auto-period and auto-space. When the utterance ends with a line-break
     # command, the period lands BEFORE the break and no trailing space is
@@ -2032,10 +2030,10 @@ def _inject_text(text: str, injection_mode: str, one_block: bool = False, into=N
     if outcome in ("ok", "partial"):
         after = focused_window.look()
         if after[0]:
-            if after[0].casefold() != (state.last_inserted_window or "").casefold():
-                logger.info(f"The text landed in {after[0]!r}, not {state.last_inserted_window!r}")
-            state.last_inserted_window = after[0]
-        state.last_inserted_where = (state.last_inserted_window, after[1])
+            if after[0].casefold() != (rs.state.last_inserted_window or "").casefold():
+                logger.info(f"The text went to {after[0]!r}, not {rs.state.last_inserted_window!r}")
+            rs.state.last_inserted_window = after[0]
+        rs.state.last_inserted_where = (rs.state.last_inserted_window, after[1])
         if outcome == "ok":
             landed = send_countdown.landed(before, after)
     if message is not None:
@@ -2056,9 +2054,9 @@ def _delivery_stopped(stop, typed_some: bool) -> str:
     (focused_window.claim_into); typing on any other way (wtype, the clipboard) would
     do what the wait was there to prevent. *typed_some*: earlier lines were
     typed before it gave up."""
-    state.last_inserted_text = ""
-    state.continue_mid_sentence = False
-    state.nav_context = None
+    rs.state.last_inserted_text = ""
+    rs.state.continue_mid_sentence = False
+    rs.state.nav_context = None
     _forget_shown()
     if isinstance(stop, PasswordFieldNow):
         logger.warning("Stopped typing: a password field has the focus now")
@@ -2099,7 +2097,7 @@ def _deliver_text(text: str, injection_mode: str, one_block: bool = False, *, wh
         return "password_field"
     # Which window this text goes into, so select and move by voice only
     # trusts "what I just said" in that same window.
-    state.last_inserted_window = focused_class = where.wm_class
+    rs.state.last_inserted_window = focused_class = where.wm_class
     if focused_class in ELECTRON_PASTE_BROKEN_CLASSES:
         # A tab as four spaces, however it's typed: a real Tab moves the
         # focus from Claude Desktop's box to the Send button, and the next
@@ -2157,8 +2155,8 @@ def _deliver_text(text: str, injection_mode: str, one_block: bool = False, *, wh
                 # already replaced with 4 spaces, and each line-break marker
                 # as one '\n' (one Shift+Enter keystroke = one backspace),
                 # so backspace counts match what was actually sent.
-                state.last_inserted_text = unified.replace(marker, "\n")
-                logger.debug(f"Stored last inserted text for undo: {len(state.last_inserted_text)} chars (typed)")
+                rs.state.last_inserted_text = unified.replace(marker, "\n")
+                logger.debug(f"Kept {len(rs.state.last_inserted_text)} chars for undo (typed)")
                 return "ok"
 
             # Partial delivery: chunks already in the document must not be sent
@@ -2167,7 +2165,7 @@ def _deliver_text(text: str, injection_mode: str, one_block: bool = False, *, wh
                 landed = marker.join(unified.split(marker)[:delivered_parts])
                 if breaks_sent == delivered_parts:
                     landed += marker   # the break after the last chunk landed too
-                state.last_inserted_text = landed.replace(marker, "\n")
+                rs.state.last_inserted_text = landed.replace(marker, "\n")
                 logger.warning(
                     f"Typing stopped after {delivered_parts} chunk(s) — "
                     f"not re-injecting, undo buffer holds only what landed"
@@ -2228,7 +2226,7 @@ def _deliver_text(text: str, injection_mode: str, one_block: bool = False, *, wh
             # The chunks before reached the document, and so did the line
             # break after the last of them: the check comes after it.
             delivered = marker.join(parts[:resume_at]) + marker
-            state.last_inserted_text = delivered.replace(marker, "\n")
+            rs.state.last_inserted_text = delivered.replace(marker, "\n")
             logger.warning(f"Stopped after {resume_at}/{len(parts)} chunks: a password field "
                            "has the focus now")
             return "password_field"
@@ -2250,7 +2248,7 @@ def _deliver_text(text: str, injection_mode: str, one_block: bool = False, *, wh
                 delivered = marker.join(parts[:resume_at])
                 if resume_at and not needs_break:
                     delivered += marker
-                state.last_inserted_text = delivered.replace(marker, "\n")
+                rs.state.last_inserted_text = delivered.replace(marker, "\n")
                 logger.warning(
                     f"Injection stopped after {resume_at}/{len(parts)} chunks \u2014 "
                     f"undo buffer holds only what landed"
@@ -2288,10 +2286,10 @@ def _deliver_text(text: str, injection_mode: str, one_block: bool = False, *, wh
     # the text before it stopped, so the buffer matches neither this
     # dictation nor the last one: empty it, and undo then deletes nothing.
     if inject_ok:
-        state.last_inserted_text = text.replace("\xa7SHIFT_ENTER\xa7", "\n")
-        logger.debug(f"Stored last inserted text for undo: {len(state.last_inserted_text)} chars")
+        rs.state.last_inserted_text = text.replace("\xa7SHIFT_ENTER\xa7", "\n")
+        logger.debug(f"Kept {len(rs.state.last_inserted_text)} chars for undo")
     else:
-        state.last_inserted_text = ""
+        rs.state.last_inserted_text = ""
         logger.warning("Injection failed — undo buffer cleared")
     return "ok" if inject_ok else "failed"
 
@@ -2305,16 +2303,16 @@ def _toggle_pressed_while_recording(beeps_on: bool) -> bool:
     with the option on, arms auto-stop. A word said before the second tap
     counts as speech; the start beep the mic may pick up first does not.
     """
-    started = state.toggle_started_at
-    if (_auto_stop_seconds <= 0 or started is None or state.silence is not None
+    started = rs.state.toggle_started_at
+    if (_auto_stop_seconds <= 0 or started is None or rs.state.silence is not None
             or time.time() - started > DOUBLE_TAP_S):
         return False
-    rate = getattr(state, "recording_samplerate", SAMPLE_RATE)
+    rate = getattr(rs.state, "recording_samplerate", SAMPLE_RATE)
     detector = silence.SilenceDetector(_auto_stop_seconds, rate)
-    beep_hz = START_BEEP[0] if state.start_beep is not None else None
-    if silence.has_a_word(_frames_f32(list(state.frames)), rate, ignoring_hz=beep_hz):
+    beep_hz = START_BEEP[0] if rs.state.start_beep is not None else None
+    if silence.has_a_word(_frames_f32(list(rs.state.frames)), rate, ignoring_hz=beep_hz):
         detector.heard_speech()
-    state.silence = detector
+    rs.state.silence = detector
     logger.info("Double-tap: this recording will stop by itself when you go quiet")
     _beep(beeps_on, *HANDS_FREE_BEEP)
     return True
@@ -2327,7 +2325,7 @@ def _trim_auto_stop_tail(frames):
     as silent (less a small margin kept for the last word), so speech is never
     touched. Runs after the stream stops, so no block is still being added.
     """
-    detector, state.silence = state.silence, None
+    detector, rs.state.silence = rs.state.silence, None
     _drop_tail_samples(frames, detector.tail_to_trim() if detector is not None else 0)
 
 
@@ -2335,7 +2333,7 @@ def _drop_speechless_rest(frames):
     """The audio after the last cut, or none when the pause detector heard no
     speech in it: room noise longer than the tap check would otherwise reach
     the engine, which invents a word for it ("Yeah.")."""
-    if state.last_chunk_speech == 0.0:
+    if rs.state.last_chunk_speech == 0.0:
         logger.info("No speech after the last chunk; the rest isn't transcribed")
         return []
     return frames
@@ -2361,24 +2359,24 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
     list, so the returned reference stays valid even if a new recording begins
     immediately, which is what lets Backend B run the slow transcription/typing
     on a worker thread without dropping or mixing audio."""
-    if state.silence is not None and state.silence.nothing_said:
+    if rs.state.silence is not None and rs.state.silence.nothing_said:
         # Hands-free with nothing said: drop it. Transcribing room noise can
         # type a stray "Thank you." (see silence.is_speechless_tap).
-        state.silence = None
-        dead_mic = _frames_are_dead_mic(state.frames,
-                                        getattr(state, "recording_samplerate", SAMPLE_RATE))
+        rs.state.silence = None
+        dead_mic = _frames_are_dead_mic(rs.state.frames,
+                                        getattr(rs.state, "recording_samplerate", SAMPLE_RATE))
         cancel_recording(beeps_on, notify_on and not dead_mic, "Nothing heard, so nothing was typed")
         if dead_mic:
             _warn_silent_mic()
         return None
     # Before the space below: the time typing it takes isn't part of the press.
-    held_ms = int((time.time() - (state.press_t0 or time.time())) * 1000)
-    if state.held_send and send_countdown.owes_space() and not state.chunks_submitted:
+    held_ms = int((time.time() - (rs.state.press_t0 or time.time())) * 1000)
+    if rs.state.held_send and send_countdown.owes_space() and not rs.state.chunks_submitted:
         # The hotkey that held the send is up now; a tap leaves the text as
         # it is, a dictation goes after this space.
         send_countdown.type_owed_space()
-    if held_ms < MIN_HOLD_MS or (state.held_send and state.released_while_starting):
-        if state.held_send:
+    if held_ms < MIN_HOLD_MS or (rs.state.held_send and rs.state.released_while_starting):
+        if rs.state.held_send:
             cancel_recording(beeps_on, False, send_countdown.HELD_NOTICE)
             send_countdown.say_held()
         else:
@@ -2386,18 +2384,18 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
         return None
     with _chunk_lock:
         # No more cuts: from here on the audio is the last chunk.
-        chunker, state.chunker = state.chunker, None
-        state.last_chunk_speech = chunker.speech_time if chunker is not None else None
-        frames = state.frames  # snapshot the reference before it can be reassigned
-    if chunker is not None and not state.chunks_submitted:
+        chunker, rs.state.chunker = rs.state.chunker, None
+        rs.state.last_chunk_speech = chunker.speech_time if chunker is not None else None
+        frames = rs.state.frames  # snapshot the reference before it can be reassigned
+    if chunker is not None and not rs.state.chunks_submitted:
         logger.info(f"Chunked dictation: no pause found ({chunker.describe()})")
-    rec_sr = getattr(state, 'recording_samplerate', SAMPLE_RATE)
-    state.is_recording = False
+    rec_sr = getattr(rs.state, 'recording_samplerate', SAMPLE_RATE)
+    rs.state.is_recording = False
     _stop_stream_safely()
     _resume_media_players()
     _notify_tray_recording_state(False)  # the tray icon shows recording stopped
     _trim_auto_stop_tail(frames)
-    if state.was_cancelled:
+    if rs.state.was_cancelled:
         return None
     if recording_indicator:
         recording_indicator.hide_indicator()
@@ -2527,13 +2525,14 @@ def _remember_said(text: str, chunked: bool, takes_back: str = "") -> str:
     was before, for _unsay."""
     from . import history
     text = text.replace(history._LINE_BREAK_MARKER, "\n")
-    old = state.said_text if chunked and state.said_serial == state.recording_serial else ""
+    same_recording = rs.state.said_serial == rs.state.recording_serial
+    old = rs.state.said_text if chunked and same_recording else ""
     base = old[:len(old) - len(takes_back)] if takes_back and old.endswith(takes_back) else old
-    state.said_serial, state.said_text = state.recording_serial, base + text
+    rs.state.said_serial, rs.state.said_text = rs.state.recording_serial, base + text
     if old:
-        history.add_entry(state.said_text, replaces=old)
+        history.add_entry(rs.state.said_text, replaces=old)
     else:
-        history.add_entry(state.said_text)
+        history.add_entry(rs.state.said_text)
     return old
 
 
@@ -2541,7 +2540,7 @@ def _unsay(before: str) -> None:
     """Undo the last _remember_said, which returned *before*: the text went
     into Recent Dictations first and was then refused for a password field."""
     from . import history
-    said, state.said_text = state.said_text, before
+    said, rs.state.said_text = rs.state.said_text, before
     if before:
         history.add_entry(before, replaces=said)
     else:
@@ -2552,27 +2551,27 @@ def _remember_shown(piece: str, chunked: bool, ok: bool) -> None:
     """*piece* was just typed (*ok*) or tried: add it to this recording's
     screen copy. The copy is only trusted while every piece landed, in one
     window, one after the other."""
-    if not (chunked and state.shown_serial == state.recording_serial):
-        state.shown_serial, state.shown_text = state.recording_serial, ""
-        state.shown_window = state.last_inserted_window
-    if state.shown_text is None:
+    if not (chunked and rs.state.shown_serial == rs.state.recording_serial):
+        rs.state.shown_serial, rs.state.shown_text = rs.state.recording_serial, ""
+        rs.state.shown_window = rs.state.last_inserted_window
+    if rs.state.shown_text is None:
         return
-    if ok and not _not_where_typed(state.shown_window):
-        state.shown_text += piece
+    if ok and not _not_where_typed(rs.state.shown_window):
+        rs.state.shown_text += piece
     else:
-        state.shown_text = None
+        rs.state.shown_text = None
 
 
 def _trim_shown(tail: str, count: int) -> None:
     """*count* characters were backspaced off *tail*, the newest typing."""
-    shown = state.shown_text
+    shown = rs.state.shown_text
     if shown is not None:
-        state.shown_text = shown[:len(shown) - count] if tail and shown.endswith(tail) else None
+        rs.state.shown_text = shown[:len(shown) - count] if tail and shown.endswith(tail) else None
 
 
 def _forget_shown() -> None:
     """The cursor moved or the text changed: the screen copy can't be trusted."""
-    state.shown_text = None
+    rs.state.shown_text = None
 
 
 def _corrects_across_pause(raw: str, chunk_role, message) -> bool:
@@ -2581,12 +2580,12 @@ def _corrects_across_pause(raw: str, chunk_role, message) -> bool:
     Needs AI self-corrections on and a phrase of this recording typed."""
     if chunk_role is None or not (message.has_words and message.complete):
         return False
-    if not (_ai_corrections and _ai_engine is not None and state.last_inserted_text.strip()):
+    if not (_ai_corrections and _ai_engine is not None and rs.state.last_inserted_text.strip()):
         return False
-    if state.held_cue:
+    if rs.state.held_cue:
         return True
     from . import ai_cleanup
-    return ai_cleanup.opens_with_correction(state.last_inserted_text, raw)
+    return ai_cleanup.opens_with_correction(rs.state.last_inserted_text, raw)
 
 
 def _erase_typed(text: str) -> bool:
@@ -2605,13 +2604,13 @@ def _erase_typed(text: str) -> bool:
         deleted = _output_backend().backspaces(len(text))
     except virtual_keyboard.StoppedPartway:
         logger.error("Correction across a pause stopped partway; typing the phrase as said")
-        state.last_inserted_text = ""
+        rs.state.last_inserted_text = ""
         _forget_shown()
         _notify("A correction stopped partway", "Check the text before it.")
         return False
     if deleted:
         _trim_shown(text, len(text))
-        state.last_inserted_text = ""
+        rs.state.last_inserted_text = ""
     return bool(deleted)
 
 
@@ -2625,8 +2624,8 @@ def _correct_across_pause(text: str):
     typed as said, a cue held back from the phrase before included, and
     nothing is taken back."""
     from . import ai_cleanup
-    prev = state.last_inserted_text
-    cue, state.held_cue = state.held_cue, ""
+    prev = rs.state.last_inserted_text
+    cue, rs.state.held_cue = rs.state.held_cue, ""
     if cue and cue[-1] not in ".?!,;:":
         cue += ","
     if (cue.endswith(",") and text[:1].isupper()
@@ -2655,7 +2654,7 @@ def _type_boundary(pending: dict, tail: str, injection_mode: str) -> None:
     _remember_shown(tail, chunked=True, ok=ok)
     if ok:
         # Undo and "delete last sentence" then see the whole chunk.
-        state.last_inserted_text = pending["typed"] + tail
+        rs.state.last_inserted_text = pending["typed"] + tail
 
 
 # A phrase this short that the context pass hears as "press enter" is taken
@@ -2673,14 +2672,14 @@ def _resolve_boundary(audio_f32, language, injection_mode, raw="", auto_period=T
     one, from the engine hearing both chunks together, and type it. Returns
     the chunk's text: "press enter" when only the context pass heard that,
     and for a very short chunk the words the context pass heard."""
-    pending, state.pending_boundary = state.pending_boundary, None
+    pending, rs.state.pending_boundary = rs.state.pending_boundary, None
     if focused_window.changed(pending["where"], focused_window.look()):
         # The user switched windows during the pause: that phrase's mark
         # belongs at its end, in the other window, not at the start of this
         # one ("? What's next?"). This window starts afresh.
         logger.info("Chunk boundary: another window has the focus now; "
                     "its mark stays with its phrase")
-        state.continue_mid_sentence = False
+        rs.state.continue_mid_sentence = False
         return raw
     mark = pending["mark"]
     joint = ""
@@ -2702,7 +2701,7 @@ def _resolve_boundary(audio_f32, language, injection_mode, raw="", auto_period=T
         # clearly (_flush_boundary): its mark, and no space to send.
         mark = mark or ("." if auto_period else "")
         _type_boundary(pending, mark, injection_mode)
-        state.continue_mid_sentence = False
+        rs.state.continue_mid_sentence = False
         return raw
     if joint and len(audio_f32) <= SHORT_CHUNK_S * SAMPLE_RATE:
         heard = words_in_context(pending["raw"], joint) or ""
@@ -2714,18 +2713,18 @@ def _resolve_boundary(audio_f32, language, injection_mode, raw="", auto_period=T
             raw = heard
     _type_boundary(pending, (mark + " ") if mark else " ", injection_mode)
     # Lowercase on after a comma or no mark; a sentence end starts afresh.
-    state.continue_mid_sentence = mark not in _SENTENCE_ENDS
+    rs.state.continue_mid_sentence = mark not in _SENTENCE_ENDS
     # "do you think ... feature" (pause) "to make it work better": the engine
     # heard a question before the pause and a sentence going on across it,
     # so the question ends where this phrase does.
-    state.question_open = pending["mark"] == "?" and mark not in _SENTENCE_ENDS
+    rs.state.question_open = pending["mark"] == "?" and mark not in _SENTENCE_ENDS
     return raw
 
 
 def _flush_boundary(auto_period: bool, auto_space: bool, injection_mode: str) -> None:
     """The dictation ended in a pause: type the mark held back after its last
     chunk, or the auto-period when the engine wrote none, in its window only."""
-    pending, state.pending_boundary = state.pending_boundary, None
+    pending, rs.state.pending_boundary = rs.state.pending_boundary, None
     if pending is None:
         return
     now = focused_window.look()
@@ -2743,12 +2742,12 @@ def _start_afresh(ended=None) -> None:
     or Tab the message *ended* starts over; a rewrite stays in the unsent one."""
     if ended is not None:
         ended.start_over()
-    state.pending_boundary = None
-    state.question_open = False
-    state.held_cue = ""
-    state.continue_mid_sentence = False
-    if state.shown_text is not None and state.shown_serial == state.recording_serial:
-        state.shown_text = ""
+    rs.state.pending_boundary = None
+    rs.state.question_open = False
+    rs.state.held_cue = ""
+    rs.state.continue_mid_sentence = False
+    if rs.state.shown_text is not None and rs.state.shown_serial == rs.state.recording_serial:
+        rs.state.shown_text = ""
 
 
 def _press_said(key: str, chunk_role, after_words: bool = False, message=None) -> None:
@@ -2817,15 +2816,15 @@ def _type_onto_dictation(text: str, injection_mode: str, into=None) -> str:
     whole; _inject_text's outcome. *into* is _inject_text's. When none of
     it went in (a space refused because the focus moved), the dictation is
     in the app as it was, and so is everything that remembers it."""
-    kept = (state.last_inserted_text, state.continue_mid_sentence, state.nav_context,
-            state.shown_text, state.last_inserted_window, state.last_inserted_where)
+    kept = (rs.state.last_inserted_text, rs.state.continue_mid_sentence, rs.state.nav_context,
+            rs.state.shown_text, rs.state.last_inserted_window, rs.state.last_inserted_where)
     outcome = _inject_text(text, injection_mode, into=into)
     if outcome == "ok":
-        state.last_inserted_text = kept[0] + text
+        rs.state.last_inserted_text = kept[0] + text
     elif outcome in _GAVE_UP_UNTYPED:
         # The window too: typing takes it for the dictation's before the first key.
-        (state.last_inserted_text, state.continue_mid_sentence, state.nav_context,
-         state.shown_text, state.last_inserted_window, state.last_inserted_where) = kept
+        (rs.state.last_inserted_text, rs.state.continue_mid_sentence, rs.state.nav_context,
+         rs.state.shown_text, rs.state.last_inserted_window, rs.state.last_inserted_where) = kept
     return outcome
 
 
@@ -2834,16 +2833,16 @@ def _end_in_a_pause(message, beeps_on, auto_space, auto_period, injection_mode) 
     it: a held "no wait" is typed as said, the last phrase gets its mark,
     and "Send each dictation automatically" sends *message* if all of it
     went in."""
-    waiting = state.edit_waiting
+    waiting = rs.state.edit_waiting
     # "edit that", a pause, and nothing more: what to change never came, and
     # the message isn't sent as it was.
-    unfinished_edit = waiting is not None and waiting["serial"] == state.recording_serial
+    unfinished_edit = waiting is not None and waiting["serial"] == rs.state.recording_serial
     if unfinished_edit:
-        state.edit_waiting = None
+        rs.state.edit_waiting = None
         _edit_problem("edit_that_what", beeps_on)
         message.add("failed", None)
-    if state.held_cue:
-        cue, state.held_cue = state.held_cue, ""
+    if rs.state.held_cue:
+        cue, rs.state.held_cue = rs.state.held_cue, ""
         if auto_period and cue[-1] not in ".?!":
             cue += "."
         _inject_text(cue + (" " if auto_space else ""), injection_mode, message=message)
@@ -2855,7 +2854,7 @@ def _end_in_a_pause(message, beeps_on, auto_space, auto_period, injection_mode) 
     else:
         _flush_boundary(auto_period, auto_space, injection_mode)
     if not _chunk_context_marks:
-        state.continue_mid_sentence = False   # it belongs to this recording
+        rs.state.continue_mid_sentence = False   # it belongs to this recording
     if not unfinished_edit:                   # that one beeped its cancel
         _beep(beeps_on, *READY_BEEP)
 
@@ -2876,7 +2875,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
     *message* is the recording's (send_countdown.Message), taken when its
     work was queued, so a recording started meanwhile can't change where
     this one's Enter may go. By default this recording's."""
-    message = state.message if message is None else message
+    message = rs.state.message if message is None else message
     print("Recording stopped. Transcribing…")
     t0 = time.time()
     logger.info("Recording stopped, starting transcription")
@@ -2944,7 +2943,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # between the boxes.
         in_password = focused_window.is_password()
         if in_password:
-            state.pending_boundary, state.held_cue = None, ""
+            rs.state.pending_boundary, rs.state.held_cue = None, ""
             if not key_only:
                 _password_field_refused(beeps_on)
                 return
@@ -2952,7 +2951,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # Chunked dictation: the chunk before this one held back its final
         # mark; decide it now, before a command acts on what was typed.
         # Only "press tab" after the pause leaves the box without one.
-        if chunk_role is not None and state.pending_boundary is not None:
+        if chunk_role is not None and rs.state.pending_boundary is not None:
             if key_only == "ENTER":
                 # Only "press enter" after the pause: the sentence before it
                 # ends here (its held-back mark, or the auto-period), with no
@@ -3017,18 +3016,18 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         if cut_off:
             # The engine may have put its own period after the "and".
             text = re.sub(r"\.(\s*)$", r"\1", text)
-            state.continue_mid_sentence = True
+            rs.state.continue_mid_sentence = True
         taken_back = ""
         if across:
             from . import ai_cleanup
             if chunk_role == "middle" and ai_cleanup.is_bare_cue(text):
                 # Only "No wait.": the corrected value is in the next phrase.
-                state.held_cue = text.strip()
+                rs.state.held_cue = text.strip()
                 logger.info("Chunk is only a correction cue; waiting for the next phrase")
                 return
             text, taken_back = _correct_across_pause(text)
-        if state.question_open and chunk_role is not None:
-            state.question_open = False
+        if rs.state.question_open and chunk_role is not None:
+            rs.state.question_open = False
             text = carry_question(text)
         held_mark = None
         if chunk_role == "middle" and _chunk_context_marks and not said:
@@ -3068,21 +3067,21 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                 message.add(outcome, None)
             if outcome == "password_field":
                 _unsay(said_before)
-            _remember_shown(state.last_inserted_text, chunked, outcome == "ok")
+            _remember_shown(rs.state.last_inserted_text, chunked, outcome == "ok")
             _after_the_words(outcome, said, press, space_left_off, chunk_role, beeps_on,
                              injection_mode, message)
             if chunk_role == "middle" and not _chunk_context_marks and outcome == "ok" \
                     and not press:
                 # Without the context pass the engine's own mark decides: after
                 # a comma or none, the next chunk carries on lowercase.
-                state.continue_mid_sentence = not text.rstrip().endswith(_SENTENCE_ENDS)
+                rs.state.continue_mid_sentence = not text.rstrip().endswith(_SENTENCE_ENDS)
             if held_mark is not None and outcome == "ok":
                 # Only the end of the phrase is kept: the engine hears it with
                 # the start of the next one to decide the mark between them.
-                state.pending_boundary = {"mark": held_mark,
+                rs.state.pending_boundary = {"mark": held_mark,
                                           "audio": audio_f32[-_context_samples():],
-                                          "raw": raw, "typed": state.last_inserted_text,
-                                          "where": state.last_inserted_where,
+                                          "raw": raw, "typed": rs.state.last_inserted_text,
+                                          "where": rs.state.last_inserted_where,
                                           "message": message}
             if _usage_stats:
                 # After typing, so saving the counts never delays the text.
@@ -3113,7 +3112,7 @@ def stop_recording(
     Backend A (evdev): the whole pipeline runs on the caller's thread. Backend B splits the two halves (see _service_tick) so the
     slow transcription/typing runs off the hotkey loop.
     """
-    edit_mode, state.edit_mode = state.edit_mode, False
+    edit_mode, rs.state.edit_mode = rs.state.edit_mode, False
     cap = _finish_capture(beeps_on, notify_on)
     if cap is None:
         return
@@ -3121,7 +3120,7 @@ def stop_recording(
     if edit_mode:
         _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode)
         return
-    if state.chunks_submitted:
+    if rs.state.chunks_submitted:
         # Chunked dictation: the rest goes in after the chunks already queued,
         # and stopping waits for all of them, as it waits for one
         # transcription when nothing was chunked.
@@ -3129,7 +3128,7 @@ def stop_recording(
                   auto_period, injection_mode)
         frames = _drop_speechless_rest(frames)
         worker = _chunk_worker()
-        worker.submit(lambda message=state.message: _transcribe_and_inject(
+        worker.submit(lambda message=rs.state.message: _transcribe_and_inject(
             frames, rec_sr, *params, chunk_role="last", message=message))
         if not worker.drain(CHUNK_DRAIN_TIMEOUT_S):
             logger.warning("Chunked dictation: chunks still typing after "
@@ -3225,9 +3224,9 @@ def _handle_fix_word(raw: str, beeps_on: bool) -> bool:
     # user can read (the runtime folder), which it deletes once read.
     args = []
     focused = _query_focused_window_class()
-    typed = state.last_inserted_text
-    if typed and state.shown_text and state.shown_text.endswith(typed):
-        typed = state.shown_text        # the whole recording, phrases and all
+    typed = rs.state.last_inserted_text
+    if typed and rs.state.shown_text and rs.state.shown_text.endswith(typed):
+        typed = rs.state.shown_text        # the whole recording, phrases and all
     if typed.strip() and not _not_where_typed(focused):
         try:
             import json
@@ -3239,9 +3238,9 @@ def _handle_fix_word(raw: str, beeps_on: bool) -> bool:
             args = ["--in-place", path]
             # The text is about to change: undo and voice moves can't trust
             # their counts any more.
-            state.last_inserted_text = ""
+            rs.state.last_inserted_text = ""
             _forget_shown()
-            state.nav_context = None
+            rs.state.nav_context = None
         except OSError as e:
             logger.debug(f"Fix a Word can't fix it in the text: {e}")
     try:
@@ -3280,10 +3279,10 @@ def _handle_navigation(raw: str, beeps_on: bool, focused_class=_UNKNOWN_WINDOW) 
     # would otherwise select the chat message's length of Writer's text.
     if _not_where_typed(focused_class):
         left, right = None, ""
-    elif state.last_inserted_text:
-        left, right = state.last_inserted_text, ""
+    elif rs.state.last_inserted_text:
+        left, right = rs.state.last_inserted_text, ""
     else:
-        left, right = state.nav_context or (None, "")
+        left, right = rs.state.nav_context or (None, "")
     plan = nav.plan(command, left, right)
     if plan is None:
         # One message for "just restarted" and "dictated somewhere else since":
@@ -3297,9 +3296,9 @@ def _handle_navigation(raw: str, beeps_on: bool, focused_class=_UNKNOWN_WINDOW) 
         pressed = False
     # The cursor has moved (or may have): undo's character count no longer
     # matches the document, and "delete last word" would eat the wrong text.
-    state.last_inserted_text = ""
+    rs.state.last_inserted_text = ""
     _forget_shown()
-    state.nav_context = (plan.left, plan.right) if pressed and plan.left is not None else None
+    rs.state.nav_context = (plan.left, plan.right) if pressed and plan.left is not None else None
     if pressed:
         _beep(beeps_on, *READY_BEEP)
     else:
@@ -3311,14 +3310,14 @@ def _spoken_edit_target():
     """What "edit that" changes: this recording's text on screen (every
     phrase since the last Enter, with Type at pause), else the last
     dictation; "" when there's nothing fresh in the focused window."""
-    typed = state.last_inserted_text
+    typed = rs.state.last_inserted_text
     if not typed or not typed.strip():
         return ""
     focused = _query_focused_window_class()
     if _not_where_typed(focused):
         return ""
-    shown = state.shown_text
-    if shown and state.shown_serial == state.recording_serial and shown.endswith(typed):
+    shown = rs.state.shown_text
+    if shown and rs.state.shown_serial == rs.state.recording_serial and shown.endswith(typed):
         return shown
     return typed
 
@@ -3331,7 +3330,7 @@ def _refused_as_sent(beeps_on: bool) -> bool:
     """"edit that" with nothing just typed: True when TuxTalk pressed Enter a
     moment ago, said with a notice (typing "Edit that, make it formal" into
     the box would only add to the confusion); False to type the words."""
-    sent = state.sent
+    sent = rs.state.sent
     if sent is None or time.time() - sent["at"] >= EDIT_AFTER_SEND_S:
         return False
     _edit_problem("already_sent_auto" if sent["automatic"] else "already_sent", beeps_on)
@@ -3349,8 +3348,8 @@ def _handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: st
         return False
     from . import voice_edit_rules
     from . import voice_navigation as nav
-    waiting, state.edit_waiting = state.edit_waiting, None
-    if waiting is not None and waiting["serial"] == state.recording_serial:
+    waiting, rs.state.edit_waiting = rs.state.edit_waiting, None
+    if waiting is not None and waiting["serial"] == rs.state.recording_serial:
         instruction, target = raw, waiting["target"]
     else:
         instruction = voice_edit_rules.spoken_edit(raw)
@@ -3370,7 +3369,7 @@ def _handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: st
     if not instruction.strip():
         if chunk_role == "middle":
             # "edit that", then a pause: the next phrase says what to change.
-            state.edit_waiting = {"serial": state.recording_serial, "target": target}
+            rs.state.edit_waiting = {"serial": rs.state.recording_serial, "target": target}
             logger.info("Voice edit: waiting for the next phrase to say what to change")
         else:
             _edit_problem("edit_that_what", beeps_on)
@@ -3384,7 +3383,7 @@ def _handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: st
         selected = False
     # The text is selected now (and then replaced): undo's count and the
     # screen copy no longer match it, and nothing in it reaches the next phrase.
-    state.last_inserted_text = ""
+    rs.state.last_inserted_text = ""
     _start_afresh()
     _forget_shown()
     if not selected:
@@ -3425,7 +3424,7 @@ def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
         if not heard:
             heard.append(_transcribe_audio(audio_f32, language))
         return heard[0]
-    _edit_selection(instruction, beeps_on, injection_mode, focused_class, t0, state.message)
+    _edit_selection(instruction, beeps_on, injection_mode, focused_class, t0, rs.state.message)
 
 
 def _delete_selection(focused_class, beeps_on) -> bool:
@@ -3676,14 +3675,14 @@ def _hide_modifier_hotkey(event, toggle_key, devices, held_modifiers) -> None:
     the user's own shortcut (Ctrl+Alt+T with Right Ctrl), which hiding the
     key would break."""
     if (event.value == 1 and not _grabbed_devices
-            and (event.code == toggle_key or state.is_recording)
+            and (event.code == toggle_key or rs.state.is_recording)
             and not _someone_elses_shortcut(held_modifiers - {event.code})):
         _grab_keyboards_hiding(devices, {event.code})
-        state.hidden_key = event.code
+        rs.state.hidden_key = event.code
     elif event.value == 0:
         modifier_hotkeys.note_released(event.code)
-        if event.code == state.hidden_key:
-            state.hidden_key = None
+        if event.code == rs.state.hidden_key:
+            rs.state.hidden_key = None
             _release_all_grabs()
 
 
@@ -3692,7 +3691,7 @@ def _toggle_tap_holds_send(event, toggle_key, held_modifiers) -> bool:
     nothing else. Asked before a Right Ctrl or Right Alt toggle is hidden
     (_hide_modifier_hotkey): once hidden, the send's Enter, which waits for
     the key, could go out before the hold."""
-    return (event.code == toggle_key and event.value == 1 and not state.is_recording
+    return (event.code == toggle_key and event.value == 1 and not rs.state.is_recording
             and not _someone_elses_shortcut(held_modifiers - {toggle_key})
             and not (_voice_editing and _held_shift(held_modifiers))
             and send_countdown.hold(announce=True))
@@ -3712,15 +3711,15 @@ def _start_hold_recording(hold_key, held_modifiers, devices, cfg, input_device_i
     shift = _held_shift(held_modifiers) if _voice_editing else set()
     _grab_keyboards_hiding(devices, {hold_key, *shift})
     if (start_recording(cfg.beeps, cfg.notify, input_device_idx, edit_mode=bool(shift),
-                        held_send=held) and state.held_send):
+                        held_send=held) and rs.state.held_send):
         # The hold time counts from the press to when its release is read,
         # which waits for the start: 0.15 to 0.2 s in the test VMs, so a
         # quick tap to hold the send came to over MIN_HOLD_MS on Pop!_OS and
         # recorded instead. A key already up after a start that quick was a
         # tap; after a slower one it could have been a short word, so the
         # hold time decides.
-        state.released_while_starting = (
-            time.time() - state.press_t0 < 2 * MIN_HOLD_MS / 1000
+        rs.state.released_while_starting = (
+            time.time() - rs.state.press_t0 < 2 * MIN_HOLD_MS / 1000
             and _wait_for_keys_up(devices, {hold_key}, 0))
 
 
@@ -3743,10 +3742,10 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
     # --- Paste Last Dictation combo (e.g. Ctrl+Alt+P) ---
     # Typed only once every key of the combo is let go: typing while Ctrl and
     # Alt are still down would turn each letter into a Ctrl+Alt shortcut.
-    pending = state.paste_last
+    pending = rs.state.paste_last
     if pending is not None:
         if time.time() - pending["at"] > PASTE_LAST_EXPIRY_S:
-            state.paste_last = pending = None
+            rs.state.paste_last = pending = None
         elif event.value == 0 and (event.code == pending["key"] or event.code in MODIFIER_CODES):
             # Only the combo's own keys are waited for. Any other release
             # goes on to the handlers below: swallowing it would lose a hold
@@ -3754,24 +3753,24 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
             if event.code == pending["key"]:
                 pending["key_up"] = True
             if pending["key_up"] and not held_modifiers:
-                state.paste_last = None
-                if not state.is_recording:
+                rs.state.paste_last = None
+                if not rs.state.is_recording:
                     _paste_last_dictation(cfg)
             return
-    if paste_last_combo and event.value == 1 and not state.is_recording:
+    if paste_last_combo and event.value == 1 and not rs.state.is_recording:
         required_mods, main_key = paste_last_combo
         if event.code == main_key and check_modifiers_held(required_mods, held_modifiers):
             # Same brief grab as the Voice Commands combo below, so the key
             # press doesn't reach the focused app.
             _grab_keyboards_hiding(devices, {main_key, *held_modifiers})
             _release_all_grabs()
-            state.paste_last = {"key": main_key, "key_up": False, "at": time.time()}
+            rs.state.paste_last = {"key": main_key, "key_up": False, "at": time.time()}
             return
 
     # --- Voice Commands combo hotkey (e.g. Ctrl+Shift+H) ---
     # Not while recording: its brief grab ends by releasing every grab, which
     # would also drop the ones a hold recording depends on.
-    if voice_cmds_combo and event.value == 1 and not state.is_recording:
+    if voice_cmds_combo and event.value == 1 and not rs.state.is_recording:
         required_mods, main_key = voice_cmds_combo
         if event.code == main_key and check_modifiers_held(required_mods, held_modifiers):
             # Briefly grab the keyboards (not the pointer) to stop the keypress
@@ -3793,10 +3792,10 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
 
     # --- Hold-to-talk: hold key down to record, release to stop ---
     if event.code == hold_key:
-        if (event.value == 1 and not state.is_recording
+        if (event.value == 1 and not rs.state.is_recording
                 and not _someone_elses_shortcut(held_modifiers - {hold_key})):
             _start_hold_recording(hold_key, held_modifiers, devices, cfg, input_device_idx)
-        elif event.value == 0 and state.is_recording:
+        elif event.value == 0 and rs.state.is_recording:
             # Let go of the keyboards before typing, so the user's own keys
             # reach the app again
             _release_all_grabs()
@@ -3805,19 +3804,19 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
 
     # --- Tap-to-toggle: press once to start, press again to stop ---
     if (toggle_key and event.code == toggle_key and event.value == 0
-            and send_countdown.owes_space() and not state.is_recording):
+            and send_countdown.owes_space() and not rs.state.is_recording):
         send_countdown.type_owed_space()   # the tap that held the send is over
 
     if (toggle_key and event.code == toggle_key and event.value == 1
             and not _someone_elses_shortcut(held_modifiers - {toggle_key})):
         shift = _held_shift(held_modifiers) if _voice_editing else set()
-        if not state.is_recording:
+        if not rs.state.is_recording:
             if shift:
                 # An edit: no double-tap hands-free, so not "from_toggle".
                 start_recording(cfg.beeps, cfg.notify, input_device_idx, edit_mode=True)
             else:
                 start_recording(cfg.beeps, cfg.notify, input_device_idx, from_toggle=True)
-        elif state.edit_mode:
+        elif rs.state.edit_mode:
             # A hold edit holds the keyboards (brushing the toggle key mid-hold
             # lands here): let go first, or they stay grabbed for the whole edit.
             _release_all_grabs()
@@ -3842,7 +3841,7 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
                            cfg.auto_space, cfg.auto_period, cfg.injection_mode)
 
     # --- ESC cancels in any mode ---
-    if event.code == ecodes.KEY_ESC and state.is_recording and event.value == 1:
+    if event.code == ecodes.KEY_ESC and rs.state.is_recording and event.value == 1:
         cancel_recording(cfg.beeps, cfg.notify, "Cancelled by ESC")
         _release_all_grabs()
 
@@ -3961,12 +3960,12 @@ def _service_tick(cfg, svc: "_ServiceState") -> "LiveSettings | None":
         # tray and GNOME menu toggles and the hold shortcut are plain starts.
         from_toggle = _cmd_start_from_toggle_key.is_set()
         _cmd_start_from_toggle_key.clear()
-        if not state.is_recording:
+        if not rs.state.is_recording:
             start_recording(cfg.beeps, cfg.notify, svc.input_device_idx, from_toggle=from_toggle)
             svc.last_activity = now
     if _cmd_stop_recording.is_set():
         _cmd_stop_recording.clear()
-        if state.is_recording:
+        if rs.state.is_recording:
             _release_all_grabs()
             if os.environ.get("FLATPAK_ID"):
                 # Backend B (Flatpak): transcription + portal typing are slow
@@ -3982,19 +3981,19 @@ def _service_tick(cfg, svc: "_ServiceState") -> "LiveSettings | None":
                         # Chunked dictation: through the chunk worker, so the
                         # rest is typed after this recording's chunks and
                         # before the next recording's. No wait, as below.
-                        role = "last" if state.chunks_submitted else None
+                        role = "last" if rs.state.chunks_submitted else None
                         if role:
                             frames = _drop_speechless_rest(frames)
                         _chunk_worker().submit(
                             lambda frames=frames, rec_sr=rec_sr, cfg=cfg, role=role,
-                            message=state.message: _transcribe_and_inject(
+                            message=rs.state.message: _transcribe_and_inject(
                                 frames, rec_sr, cfg.beeps, cfg.smart_quotes,
                                 cfg.notify, cfg.language, cfg.auto_space,
                                 cfg.auto_period, cfg.injection_mode, chunk_role=role,
                                 message=message))
                     else:
                         def _worker(frames=frames, rec_sr=rec_sr, cfg=cfg,
-                                    message=state.message):
+                                    message=rs.state.message):
                             with _inject_lock:
                                 _transcribe_and_inject(
                                     frames, rec_sr, cfg.beeps, cfg.smart_quotes,
@@ -4008,7 +4007,7 @@ def _service_tick(cfg, svc: "_ServiceState") -> "LiveSettings | None":
             svc.last_activity = now
     # Not while a dictation is still being transcribed or typed: every worker
     # holds _inject_lock, and the idle clock starts when the key comes up.
-    if (svc.timeout_enabled and not state.is_recording and model is not None
+    if (svc.timeout_enabled and not rs.state.is_recording and model is not None
             and not _inject_lock.locked() and now - svc.last_activity > svc.timeout_seconds):
         _rest_model(svc.timeout_minutes)
 
@@ -4019,7 +4018,7 @@ def _service_tick(cfg, svc: "_ServiceState") -> "LiveSettings | None":
     # stays on whatever it was built with. Idle-only and throttled, mirroring the
     # evdev path. _reload_live_settings updates cfg in place and pushes the new
     # values into the running recording indicator.
-    if not state.is_recording and now - svc.last_config_check >= CONFIG_RECHECK_SECONDS:
+    if not rs.state.is_recording and now - svc.last_config_check >= CONFIG_RECHECK_SECONDS:
         svc.last_config_check = now
         # Custom commands live in their own file and are checked on the same
         # tick. Unconditionally, and before the early return below: an edit to
@@ -4208,7 +4207,7 @@ def _loop_evdev(cfg: Settings, input_device_idx, keyboards=None):
         # mid-recording would add an ungrabbed device to a grabbed set, letting
         # the hotkey leak into the focused app. Throttled because it opens
         # every node under /dev/input.
-        if (not use_helper and not state.is_recording
+        if (not use_helper and not rs.state.is_recording
                 and current_time - last_device_scan >= DEVICE_RESCAN_SECONDS):
             last_device_scan = current_time
             _rediscover_devices(devices)
@@ -4446,7 +4445,7 @@ def _control_in_service(action):
             if _waiting_start is None:
                 _waiting_start = control.WaitingStart()
             return _waiting_start.apply(action)
-    send, status = control.act_now(action, state.is_recording)
+    send, status = control.act_now(action, rs.state.is_recording)
     if send:
         _handle_sigusr1(None, None)
     return status
@@ -4658,7 +4657,7 @@ def main():
                 @property
                 def is_recording(self):
                     """Live recording state from the dictation engine."""
-                    return state.is_recording
+                    return rs.state.is_recording
 
                 def show_preferences(self):
                     """Open preferences window"""
@@ -4667,17 +4666,17 @@ def main():
 
                 def start_recording(self):
                     """Signal the evdev loop to start recording (thread-safe)."""
-                    if not state.is_recording:
+                    if not rs.state.is_recording:
                         _cmd_start_recording.set()
 
                 def stop_recording(self):
                     """Signal the evdev loop to stop recording (thread-safe)."""
-                    if state.is_recording:
+                    if rs.state.is_recording:
                         _cmd_stop_recording.set()
 
                 def toggle_recording(self):
                     """Toggle recording state (thread-safe)."""
-                    if state.is_recording:
+                    if rs.state.is_recording:
                         _cmd_stop_recording.set()
                     else:
                         _cmd_start_recording.set()

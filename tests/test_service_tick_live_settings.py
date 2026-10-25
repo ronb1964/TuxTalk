@@ -9,12 +9,13 @@ without restart". This test pins the reload into _service_tick.
 import types
 
 from tuxtalk import app
+from tuxtalk import recording_state as rs
 
 
 def test_service_tick_reloads_live_settings_when_config_changed(monkeypatch):
     app._cmd_start_recording.clear()
     app._cmd_stop_recording.clear()
-    monkeypatch.setattr(app.state, "is_recording", False, raising=False)
+    monkeypatch.setattr(rs.state, "is_recording", False, raising=False)
 
     calls = []
     monkeypatch.setattr(app, "_config_file_changed", lambda: True)
@@ -33,7 +34,7 @@ def test_service_tick_reloads_live_settings_when_config_changed(monkeypatch):
 def test_service_tick_skips_reload_when_config_unchanged(monkeypatch):
     app._cmd_start_recording.clear()
     app._cmd_stop_recording.clear()
-    monkeypatch.setattr(app.state, "is_recording", False, raising=False)
+    monkeypatch.setattr(rs.state, "is_recording", False, raising=False)
 
     calls = []
     monkeypatch.setattr(app, "_config_file_changed", lambda: False)

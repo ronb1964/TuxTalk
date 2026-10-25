@@ -6,6 +6,7 @@ would type into whatever window has the focus on the computer running them.
 import pytest
 
 from tuxtalk import app, virtual_keyboard
+from tuxtalk import recording_state as rs
 
 
 @pytest.fixture
@@ -92,12 +93,12 @@ def test_an_undo_stopped_partway_forgets_the_buffer(monkeypatch):
         raise virtual_keyboard.StoppedPartway("backspaces")
 
     monkeypatch.setattr(app, "_send_backspaces", partway)
-    app.state.last_inserted_text = "a long dictation that was being undone"
+    rs.state.last_inserted_text = "a long dictation that was being undone"
     try:
         assert app._handle_undo("undo last sentence", beeps_on=False, notify_on=False) is True
-        assert app.state.last_inserted_text == ""
+        assert rs.state.last_inserted_text == ""
     finally:
-        app.state.last_inserted_text = ""
+        rs.state.last_inserted_text = ""
 
 
 # --- its shape ---------------------------------------------------------------
@@ -201,10 +202,10 @@ def test_a_dictation_typed_partway_is_partial_and_not_typed_again(breaks_once, m
     first words came out twice."""
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "Claude")
     monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
-    monkeypatch.setattr(app.state, "last_inserted_text", "earlier dictation")
+    monkeypatch.setattr(rs.state, "last_inserted_text", "earlier dictation")
     assert app._inject_text("hello world", "auto") == "partial"
     assert len(breaks_once.events) == 6
-    assert app.state.last_inserted_text == "", "undo would count on text that may not be there"
+    assert rs.state.last_inserted_text == "", "undo would count on text that may not be there"
 
 
 def test_a_paste_shortcut_cut_off_is_partial_and_not_typed_after(breaks_once, monkeypatch):

@@ -14,6 +14,7 @@ import threading
 
 import gi
 import pytest
+from tuxtalk import recording_state as rs
 
 # No program a test starts can reach the speakers, nor this one. Every
 # program inherits this, so a child Python's sounddevice, a player started
@@ -141,28 +142,27 @@ def _no_remembered_dictation_window(monkeypatch):
     refuse when another window has the focus. A window left by an earlier test
     compared against the user's real desktop, so tests passed or failed with
     whatever the user was doing."""
-    from tuxtalk import app
-    monkeypatch.setattr(app.state, "last_inserted_window", None)
-    monkeypatch.setattr(app.state, "nav_context", None)
+    monkeypatch.setattr(rs.state, "last_inserted_window", None)
+    monkeypatch.setattr(rs.state, "nav_context", None)
 
 
 @pytest.fixture(autouse=True)
 def _dictation_state_put_back():
     """Each test starts from the dictation state and cleanup settings the
-    last one started from. Tests set app.state.is_recording and the like
+    last one started from. Tests set rs.state.is_recording and the like
     directly, and run the settings reload (_apply_cleanup_settings), and put
     them back after their asserts: one failing assert left is_recording on
     for every later test, so one failure showed as many, depending on order."""
     import dis
     from tuxtalk import app
     fields = {name: list(value) if isinstance(value, list) else value
-              for name, value in vars(app.state).items()}
+              for name, value in vars(rs.state).items()}
     names = {i.argval for i in dis.get_instructions(app._apply_cleanup_settings)
              if i.opname == "STORE_GLOBAL"}
     settings = {name: getattr(app, name) for name in names}
     yield
-    vars(app.state).clear()
-    vars(app.state).update(fields)
+    vars(rs.state).clear()
+    vars(rs.state).update(fields)
     for name, value in settings.items():
         setattr(app, name, value)
 
@@ -194,7 +194,7 @@ def _no_real_send_countdown(monkeypatch, request):
     between tests. Sends happen at once, on the test's thread, unless a test
     sets a wait itself.
     test_window_messages tests the label itself, with its own fakes."""
-    from tuxtalk import app, screen_message, send_countdown
+    from tuxtalk import screen_message, send_countdown
     if request.module.__name__.rpartition(".")[2] != "test_window_messages":
         monkeypatch.setattr(screen_message, "show_over_active_window", lambda *a, **k: None)
         monkeypatch.setattr(screen_message, "hide", lambda *a, **k: None)
@@ -204,15 +204,15 @@ def _no_real_send_countdown(monkeypatch, request):
     monkeypatch.setattr(send_countdown, "_send_right_away", send_countdown._send)
     monkeypatch.setattr(send_countdown, "_pending", None)
     monkeypatch.setattr(send_countdown, "_told_unknown_window", False)
-    monkeypatch.setattr(app.state, "held_send", False)
+    monkeypatch.setattr(rs.state, "held_send", False)
     monkeypatch.setattr(send_countdown, "_owed", None)
-    monkeypatch.setattr(app.state, "sent", None)
+    monkeypatch.setattr(rs.state, "sent", None)
     # Where an earlier test's text "landed" must not stop this test's send,
     # nor its held-back mark. A test that fakes the typing has its words
     # in a window the desktop named, where an automatic Enter may go.
     from tuxtalk import focused_window
-    monkeypatch.setattr(app.state, "last_inserted_where", (None, None))
-    monkeypatch.setattr(app.state, "message", send_countdown.Message(
+    monkeypatch.setattr(rs.state, "last_inserted_where", (None, None))
+    monkeypatch.setattr(rs.state, "message", send_countdown.Message(
         focused_window.Destination(None, ("tray", "{test window}"))))
 
 

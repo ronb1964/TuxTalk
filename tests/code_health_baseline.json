@@ -1,6 +1,6 @@
 {
  "files": {
-  "app.py": 4860,
+  "app.py": 4859,
   "tray.py": 2477,
   "welcome_dialog.py": 3222
  },
@@ -18,7 +18,7 @@
   "app.py::_build_parakeet_gpu_model::swallowed_error": 1,
   "app.py::_build_vulkan_model::swallowed_error": 1,
   "app.py::_claim_desktop_hotkeys::swallowed_error": 1,
-  "app.py::_deliver_text::long_line": 2,
+  "app.py::_deliver_text::long_line": 1,
   "app.py::_device_name::swallowed_error": 1,
   "app.py::_edit_problem::swallowed_error": 1,
   "app.py::_finish_capture::long_line": 1,

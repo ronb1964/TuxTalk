@@ -1,4 +1,5 @@
-"""What the dictation service remembers between key presses (app.state)."""
+"""What the dictation service remembers between key presses: RecordingState,
+and state, the one the service uses."""
 from dataclasses import dataclass, field
 
 from . import send_countdown
@@ -96,3 +97,7 @@ class RecordingState:
     def __post_init__(self):
         if self.frames is None:
             self.frames = []
+
+
+# The one the dictation service keeps, read as recording_state.state.
+state = RecordingState()

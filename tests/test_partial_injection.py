@@ -9,6 +9,7 @@ is really in the document, or "undo that" deletes the user's own writing.
 import pytest
 
 from tuxtalk import app, focused_window
+from tuxtalk import recording_state as rs
 
 MARKER = "\xa7SHIFT_ENTER\xa7"
 
@@ -17,9 +18,9 @@ MARKER = "\xa7SHIFT_ENTER\xa7"
 def quiet(monkeypatch):
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     monkeypatch.delenv("FLATPAK_ID", raising=False)
-    app.state.last_inserted_text = ""
+    rs.state.last_inserted_text = ""
     yield
-    app.state.last_inserted_text = ""
+    rs.state.last_inserted_text = ""
 
 
 # --- typing stops at the first failure ---------------------------------------
@@ -82,7 +83,7 @@ def test_typed_snippet_newline_is_shift_enter_on_x11(monkeypatch, quiet):
 
     assert outcome == "ok"
     assert keys == ["Best regards,", "SHIFT+ENTER", "Ron "]
-    assert app.state.last_inserted_text == "Best regards,\nRon "
+    assert rs.state.last_inserted_text == "Best regards,\nRon "
 
 
 # --- the undo buffer after a partial failure ----------------------------------
@@ -91,10 +92,10 @@ def test_failed_typing_empties_the_undo_buffer(monkeypatch, quiet):
     monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("type", "test"))
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
     monkeypatch.setattr(app, "_type_text", lambda t: False)
-    app.state.last_inserted_text = "the previous dictation"
+    rs.state.last_inserted_text = "the previous dictation"
 
     assert app._inject_text("a dictation that stopped partway", "type") == "failed"
-    assert app.state.last_inserted_text == ""
+    assert rs.state.last_inserted_text == ""
 
 
 def test_smart_paste_records_the_line_break_that_landed(monkeypatch, quiet):
@@ -109,7 +110,7 @@ def test_smart_paste_records_the_line_break_that_landed(monkeypatch, quiet):
     outcome = app._inject_text(f"first{MARKER}second", "paste")
 
     assert outcome == "partial"
-    assert app.state.last_inserted_text == "first\n"
+    assert rs.state.last_inserted_text == "first\n"
 
 
 def test_smart_paste_leaves_out_a_line_break_that_failed(monkeypatch, quiet):
@@ -121,7 +122,7 @@ def test_smart_paste_leaves_out_a_line_break_that_failed(monkeypatch, quiet):
 
     app._inject_text(f"first{MARKER}second", "paste")
 
-    assert app.state.last_inserted_text == "first"
+    assert rs.state.last_inserted_text == "first"
 
 
 def test_typing_into_electron_records_the_line_break_that_landed(monkeypatch, quiet):
@@ -134,4 +135,4 @@ def test_typing_into_electron_records_the_line_break_that_landed(monkeypatch, qu
     outcome = app._inject_text(f"first{MARKER}second", "paste")
 
     assert outcome == "partial"
-    assert app.state.last_inserted_text == "first\n"
+    assert rs.state.last_inserted_text == "first\n"

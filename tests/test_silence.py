@@ -12,6 +12,7 @@ import pytest
 
 from tuxtalk import beeps, silence
 from tuxtalk.silence import SilenceDetector
+from tuxtalk import recording_state as rs
 
 SR = 16000
 BLOCK = 320   # 20 ms
@@ -115,7 +116,7 @@ def _start(monkeypatch, from_toggle=True, seconds=1.0, mic_delay=0.0, beeps_on=F
 
     def open_microphone(idx):
         time.sleep(mic_delay)
-        app.state.recording_samplerate = SR
+        rs.state.recording_samplerate = SR
     monkeypatch.setattr(app, "_open_input_stream", open_microphone)
     if not beeps_on:
         monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
@@ -134,30 +135,30 @@ def _speak_then_go_quiet(app, quiet_seconds=3.0):
 
 def test_a_single_tap_is_a_plain_toggle_however_long_the_pause(monkeypatch):
     app = _start(monkeypatch)
-    assert app.state.silence is None
+    assert rs.state.silence is None
     _speak_then_go_quiet(app, quiet_seconds=8.0)
     assert not app._cmd_stop_recording.is_set()
-    app.state.is_recording = False
+    rs.state.is_recording = False
 
 
 def test_a_double_tap_switches_to_hands_free_and_it_stops_itself(monkeypatch):
     app = _start(monkeypatch)
     assert app._toggle_pressed_while_recording(beeps_on=False) is True   # 2nd tap: keep going
-    assert app.state.silence is not None
+    assert rs.state.silence is not None
     _speak_then_go_quiet(app)
     assert app._cmd_stop_recording.is_set()
     app._cmd_stop_recording.clear()
-    app.state.is_recording = False
+    rs.state.is_recording = False
 
 
 def test_a_double_tap_at_a_relaxed_pace_still_switches_to_hands_free(monkeypatch):
     """Issue #21: taps about half a second apart, a normal pace for someone
     whose hands are slow, stopped the recording instead."""
     app = _start(monkeypatch)
-    app.state.toggle_started_at -= 0.55
+    rs.state.toggle_started_at -= 0.55
     assert app._toggle_pressed_while_recording(beeps_on=False) is True
-    assert app.state.silence is not None
-    app.state.is_recording = False
+    assert rs.state.silence is not None
+    rs.state.is_recording = False
 
 
 def _goes_quiet(app):
@@ -168,7 +169,7 @@ def _goes_quiet(app):
     for i in range(0, len(quiet), BLOCK):
         app._sd_callback(quiet[i:i + BLOCK].reshape(-1, 1), BLOCK, None, None)
         if app._cmd_stop_recording.is_set():
-            return (i + BLOCK) / SR, app.state.silence.nothing_said
+            return (i + BLOCK) / SR, rs.state.silence.nothing_said
     return None, False
 
 
@@ -177,7 +178,7 @@ def _stopped_to_type_it(app):
     setting's second of quiet, to type what was said."""
     stopped_after, nothing_said = _goes_quiet(app)
     app._cmd_stop_recording.clear()
-    app.state.is_recording = False
+    rs.state.is_recording = False
     return stopped_after == pytest.approx(1.0, abs=0.05) and not nothing_said
 
 
@@ -262,7 +263,7 @@ def _nothing_said(monkeypatch, heard, beeps_on=True):
     assert app._toggle_pressed_while_recording(beeps_on=False) is True
     stopped_after, nothing_said = _goes_quiet(app)
     app._cmd_stop_recording.clear()
-    app.state.is_recording = False
+    rs.state.is_recording = False
     assert stopped_after is not None, "the recording never stopped by itself"
     return nothing_said
 
@@ -406,7 +407,7 @@ def test_a_word_kept_with_the_start_beep_is_transcribed(monkeypatch):
     stopped_after, nothing_said = _goes_quiet(app)
     assert stopped_after is not None and not nothing_said
     monkeypatch.setattr(app, "_stop_stream_safely", lambda: None)
-    app.state.press_t0 = time.time() - 5
+    rs.state.press_t0 = time.time() - 5
     frames, rate = app._finish_capture(False, False)
     assert rate == SR
     assert b"".join(frames).startswith(word.tobytes())
@@ -419,7 +420,7 @@ def test_a_quick_second_tap_counts_when_the_recording_was_slow_to_start(monkeypa
     of a second is only read afterwards. It is still a double-tap."""
     app = _start(monkeypatch, mic_delay=0.9)
     assert app._toggle_pressed_while_recording(beeps_on=False) is True
-    app.state.is_recording = False
+    rs.state.is_recording = False
 
 
 def _slow_start_beep(monkeypatch):
@@ -440,41 +441,41 @@ def test_the_double_tap_is_timed_from_the_start_beep_heard(monkeypatch):
     """Issue #21: the user waits for the start beep before the second tap,
     and on a slow output it comes most of a second after the first."""
     waits = _slow_start_beep(monkeypatch)
-    app = _start(monkeypatch, beeps_on=True)
+    _start(monkeypatch, beeps_on=True)
     (waited_for, ended), = waits
-    assert waited_for is app.state.start_beep is not None
-    assert app.state.toggle_started_at >= ended
-    app.state.is_recording = False
+    assert waited_for is rs.state.start_beep is not None
+    assert rs.state.toggle_started_at >= ended
+    rs.state.is_recording = False
 
 
 @pytest.mark.parametrize("from_toggle,beeps_on", [(False, True), (True, False)],
                          ids=["hold start", "beeps off"])
 def test_no_start_waits_for_a_start_beep_it_doesnt_have_to(monkeypatch, from_toggle, beeps_on):
     waits = _slow_start_beep(monkeypatch)
-    app = _start(monkeypatch, from_toggle=from_toggle, beeps_on=beeps_on)
+    _start(monkeypatch, from_toggle=from_toggle, beeps_on=beeps_on)
     assert waits == []
-    app.state.is_recording = False
+    rs.state.is_recording = False
 
 
 def test_a_slow_second_tap_is_a_normal_stop(monkeypatch):
     app = _start(monkeypatch)
-    app.state.toggle_started_at -= app.DOUBLE_TAP_S + 0.1
+    rs.state.toggle_started_at -= app.DOUBLE_TAP_S + 0.1
     assert app._toggle_pressed_while_recording(beeps_on=False) is False
-    assert app.state.silence is None
-    app.state.is_recording = False
+    assert rs.state.silence is None
+    rs.state.is_recording = False
 
 
 def test_a_third_tap_after_a_double_tap_stops(monkeypatch):
     app = _start(monkeypatch)
     assert app._toggle_pressed_while_recording(beeps_on=False) is True
     assert app._toggle_pressed_while_recording(beeps_on=False) is False
-    app.state.is_recording = False
+    rs.state.is_recording = False
 
 
 def test_double_tap_does_nothing_special_with_the_option_off(monkeypatch):
     app = _start(monkeypatch, seconds=0.0)
     assert app._toggle_pressed_while_recording(beeps_on=False) is False
-    app.state.is_recording = False
+    rs.state.is_recording = False
 
 
 def test_a_hold_recording_cannot_become_hands_free(monkeypatch):
@@ -482,7 +483,7 @@ def test_a_hold_recording_cannot_become_hands_free(monkeypatch):
     assert app._toggle_pressed_while_recording(beeps_on=False) is False
     _speak_then_go_quiet(app)
     assert not app._cmd_stop_recording.is_set()
-    app.state.is_recording = False
+    rs.state.is_recording = False
 
 
 def test_the_silent_tail_is_trimmed_and_speech_is_kept(monkeypatch):
@@ -497,17 +498,17 @@ def test_the_silent_tail_is_trimmed_and_speech_is_kept(monkeypatch):
     for blk in speech_blocks + silent_blocks:
         det.feed(blk)
     assert det.fired
-    app.state.silence = det
-    app.state.frames = speech_blocks + silent_blocks
-    app.state.is_recording = True
-    app.state.was_cancelled = False
-    app.state.press_t0 = time.time() - 5   # held well past MIN_HOLD_MS
+    rs.state.silence = det
+    rs.state.frames = speech_blocks + silent_blocks
+    rs.state.is_recording = True
+    rs.state.was_cancelled = False
+    rs.state.press_t0 = time.time() - 5   # held well past MIN_HOLD_MS
     frames, _ = app._finish_capture(False, False)
     kept_s = sum(len(f) // 2 for f in frames) / SR
     # 1 s of speech (its last syllable gap counts as silence) + 0.3 s kept.
     assert 1.1 <= kept_s <= 1.4
     assert frames[:50] == speech_blocks  # every speech block untouched
-    assert app.state.silence is None
+    assert rs.state.silence is None
 
 
 def test_auto_stop_settings_apply_without_a_restart():
@@ -628,9 +629,9 @@ def test_a_hands_free_recording_with_nothing_said_is_dropped(monkeypatch):
     assert app._cmd_stop_recording.is_set()
     monkeypatch.setattr(app, "_stop_stream_safely", lambda: None)
     assert app._finish_capture(False, False) is None      # nothing is transcribed
-    assert app.state.was_cancelled
+    assert rs.state.was_cancelled
     app._cmd_stop_recording.clear()
-    app.state.was_cancelled = False
+    rs.state.was_cancelled = False
 
 
 # --- A recording with nobody talking -------------------------------------------

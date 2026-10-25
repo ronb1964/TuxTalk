@@ -16,6 +16,7 @@ from gi.repository import Gio, GLib
 
 from tuxtalk import (app, atspi_helper, delivery_notices, focused_window, history,
                      screen_message, send_countdown)
+from tuxtalk import recording_state as rs
 
 ACTIVE = 1 << atspi_helper._STATE_ACTIVE
 FOCUSED = 1 << atspi_helper._STATE_FOCUSED
@@ -112,12 +113,12 @@ def test_type_at_pause_types_nothing_of_its_own_into_a_password_field(desktop, m
     monkeypatch.setattr(app, "_resolve_boundary", lambda *a, **k: ran.append("mark"))
     monkeypatch.setattr(app, "_flush_boundary", lambda *a, **k: ran.append("mark"))
     monkeypatch.setattr(app, "_prepare_text", lambda *a, **k: ran.append("cleanup") or "x")
-    monkeypatch.setattr(app.state, "pending_boundary", {"mark": "."})
-    monkeypatch.setattr(app.state, "held_cue", "No wait.")
+    monkeypatch.setattr(rs.state, "pending_boundary", {"mark": "."})
+    monkeypatch.setattr(rs.state, "held_cue", "No wait.")
     desktop["password"] = True
     dictate(monkeypatch, chunk_role="middle")
     assert desktop["typed"] == [] and ran == []
-    assert app.state.pending_boundary is None and app.state.held_cue == ""
+    assert rs.state.pending_boundary is None and rs.state.held_cue == ""
     assert desktop["labels"] == [delivery_notices.PASSWORD_FIELD_LABEL]
 
 
@@ -193,14 +194,14 @@ def test_typed_line_by_line_it_stops_there_too(desktop, monkeypatch):
     desktop["answers"], desktop["password"] = [False], True
     assert app._inject_text("first line\nsecond line", "auto") == "password_field"
     assert keys == ["first line", "SHIFT+ENTER"]
-    assert app.state.last_inserted_text == ""      # undo deletes nothing it can't count
+    assert rs.state.last_inserted_text == ""      # undo deletes nothing it can't count
 
 
 def test_a_dictation_refused_at_the_last_moment_leaves_recent_dictations(desktop, monkeypatch):
     """It goes into Recent Dictations before it's typed; refused then, it comes back out."""
     forgotten = []
     monkeypatch.setattr(history, "forget", lambda text: forgotten.append(text))
-    monkeypatch.setattr(app.state, "said_text", "")
+    monkeypatch.setattr(rs.state, "said_text", "")
     desktop["answers"] = [False, False, True]    # before the AI, before the beep, at delivery
     dictate(monkeypatch)
     assert desktop["typed"] == []
@@ -233,7 +234,7 @@ def test_no_wait_doesnt_backspace_in_a_password_field(desktop, monkeypatch):
     erased = []
     monkeypatch.setattr(app, "_output_backend",
                         lambda: types.SimpleNamespace(backspaces=lambda n: erased.append(n)))
-    monkeypatch.setattr(app.state, "last_inserted_window", None)
+    monkeypatch.setattr(rs.state, "last_inserted_window", None)
     desktop["password"] = True
     assert app._erase_typed("Meet at three. ") is False
     assert erased == []

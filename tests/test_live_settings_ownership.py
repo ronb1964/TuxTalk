@@ -20,13 +20,14 @@ import types
 import pytest
 
 from tuxtalk import app, hotkey_keys
+from tuxtalk import recording_state as rs
 
 
 def _idle(monkeypatch):
     """A service that is running but not recording."""
     app._cmd_start_recording.clear()
     app._cmd_stop_recording.clear()
-    monkeypatch.setattr(app.state, "is_recording", False, raising=False)
+    monkeypatch.setattr(rs.state, "is_recording", False, raising=False)
 
 
 def _cfg(**overrides):

@@ -18,6 +18,7 @@ import pytest
 from evdev import ecodes
 
 from tuxtalk import app, service_launcher
+from tuxtalk import recording_state as rs
 
 
 class FakeEvent:
@@ -45,9 +46,9 @@ def keys(monkeypatch):
     monkeypatch.setattr(app, "_notify_tray_hotkey_pressed", reported.append)
     monkeypatch.setattr(app, "_grab_keyboards_hiding", lambda *a, **k: None)
     monkeypatch.setattr(app, "start_recording", lambda *a, **k: started.append(True) or True)
-    app.state.is_recording = False
+    rs.state.is_recording = False
     yield reported, started
-    app.state.is_recording = False
+    rs.state.is_recording = False
 
 
 def press(code):

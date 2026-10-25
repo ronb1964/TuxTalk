@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 from tuxtalk import app, config, focused_window, key_commands, send_countdown, window_classes
+from tuxtalk import recording_state as rs
 from tuxtalk.key_commands import split_key_command
 
 
@@ -93,8 +94,8 @@ def test_a_cut_off_dictation_is_typed_but_not_sent(monkeypatch):
     # No period after "And" either: the sentence isn't over, and what's said
     # next carries it on in lowercase.
     assert events == [("typed", "You can go ahead and add that. And ")]
-    assert app.state.continue_mid_sentence is True
-    app.state.continue_mid_sentence = False
+    assert rs.state.continue_mid_sentence is True
+    rs.state.continue_mid_sentence = False
 
 
 def test_a_cut_off_dictation_gets_no_period_in_a_text_editor_either(monkeypatch):
@@ -104,8 +105,8 @@ def test_a_cut_off_dictation_gets_no_period_in_a_text_editor_either(monkeypatch)
     events = _dictate(monkeypatch, "Meet me at noon and", prepared=lambda r: r + ". ",
                       window="org.kde.kwrite")
     assert events == [("typed", "Meet me at noon and ")]
-    assert app.state.continue_mid_sentence is True
-    app.state.continue_mid_sentence = False
+    assert rs.state.continue_mid_sentence is True
+    rs.state.continue_mid_sentence = False
 
 
 @pytest.mark.parametrize("window, typed", [
@@ -121,8 +122,8 @@ def test_a_cut_off_sentence_goes_on_in_lowercase_only_in_its_own_window(monkeypa
     """Ron, 2026-10-20: "meet me at noon and" in KWrite, then a message in
     another window began with a small letter."""
     monkeypatch.setattr(app, "_press_enter_after", False)
-    monkeypatch.setattr(app.state, "continue_mid_sentence", True)
-    monkeypatch.setattr(app.state, "last_inserted_window", "org.kde.kwrite")
+    monkeypatch.setattr(rs.state, "continue_mid_sentence", True)
+    monkeypatch.setattr(rs.state, "last_inserted_window", "org.kde.kwrite")
     events = _dictate(monkeypatch, "This is where it goes on", window=window)
     assert events[0][1].strip() == typed
 
@@ -170,11 +171,11 @@ def test_press_enter_key_uses_the_output_backend_and_forgets_undo(monkeypatch):
             return True
     monkeypatch.setattr(app, "_output_backend", lambda: Backend())
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
-    app.state.last_inserted_text = "See you at noon."
+    rs.state.last_inserted_text = "See you at noon."
     assert app._press_key("ENTER", "test") is True
     assert pressed == [[((), "ENTER")]]
     # A sent message can't be backspaced away.
-    assert app.state.last_inserted_text == ""
+    assert rs.state.last_inserted_text == ""
 
 
 def test_both_typing_paths_know_the_enter_key():
@@ -247,7 +248,7 @@ def countdown(monkeypatch):
                         lambda text, **kw: labels.append(text))
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "brave-browser")
     monkeypatch.setattr(focused_window, "look", lambda: BRAVE)
-    monkeypatch.setattr(app.state, "last_inserted_window", "brave-browser")
+    monkeypatch.setattr(rs.state, "last_inserted_window", "brave-browser")
     TYPED.clear()
     monkeypatch.setattr(app, "_inject_text", lambda text, mode, **kw: TYPED.append(text) or "ok")
     return pressed, labels
@@ -327,12 +328,12 @@ def test_pressing_the_hold_key_holds_the_send_and_records(countdown, monkeypatch
     monkeypatch.setattr(app, "recording_indicator", None)
     try:
         assert app.start_recording(False, False, 0) is True
-        assert app.state.held_send is True
+        assert rs.state.held_send is True
         sends()[0].fire()
         assert pressed == []
     finally:
-        app.state.is_recording = False
-        app.state.stream = None
+        rs.state.is_recording = False
+        rs.state.stream = None
 
 
 def test_a_tap_too_short_to_dictate_says_not_sent(countdown, monkeypatch):
@@ -340,9 +341,9 @@ def test_a_tap_too_short_to_dictate_says_not_sent(countdown, monkeypatch):
     reasons = []
     monkeypatch.setattr(app, "cancel_recording",
                         lambda beeps, notify, reason="": reasons.append(reason))
-    monkeypatch.setattr(app.state, "held_send", True)
-    monkeypatch.setattr(app.state, "silence", None)
-    monkeypatch.setattr(app.state, "press_t0", app.time.time())
+    monkeypatch.setattr(rs.state, "held_send", True)
+    monkeypatch.setattr(rs.state, "silence", None)
+    monkeypatch.setattr(rs.state, "press_t0", app.time.time())
     assert app._finish_capture(False, False) is None
     assert reasons == [send_countdown.HELD_NOTICE]
     assert labels == [send_countdown.HELD_NOTICE]
@@ -416,7 +417,7 @@ def test_a_held_send_types_its_space_once_the_key_is_up(countdown, monkeypatch):
     """Ron, 2026-10-18: held a send, kept talking, got "delay.All right". The
     space waits for the hotkey to come up: typed while it's down, GNOME
     without the extension swallowed it (VM release test, 2026-10-18)."""
-    monkeypatch.setattr(app.state, "last_inserted_text", "Testing the delay.")
+    monkeypatch.setattr(rs.state, "last_inserted_text", "Testing the delay.")
     monkeypatch.setattr(send_countdown, "_owed", None)
     start_send("test", " ", "type")
     send_countdown.hold(announce=True)
@@ -424,7 +425,7 @@ def test_a_held_send_types_its_space_once_the_key_is_up(countdown, monkeypatch):
     send_countdown.type_owed_space()                 # ...and now it's up
     assert TYPED == [" "]
     # Undo still sees the whole dictation, space included.
-    assert app.state.last_inserted_text == "Testing the delay. "
+    assert rs.state.last_inserted_text == "Testing the delay. "
     assert send_countdown._owed is None
 
 
@@ -443,10 +444,10 @@ def test_a_short_tap_types_the_space_when_released(countdown, monkeypatch):
                         lambda beeps, notify, reason="": reasons.append(reason))
     monkeypatch.setattr(send_countdown, "_owed", None)
     start_send("test", " ", "type")
-    monkeypatch.setattr(app.state, "held_send", send_countdown.hold(announce=False))
-    monkeypatch.setattr(app.state, "silence", None)
-    monkeypatch.setattr(app.state, "chunks_submitted", 0)
-    monkeypatch.setattr(app.state, "press_t0", app.time.time())
+    monkeypatch.setattr(rs.state, "held_send", send_countdown.hold(announce=False))
+    monkeypatch.setattr(rs.state, "silence", None)
+    monkeypatch.setattr(rs.state, "chunks_submitted", 0)
+    monkeypatch.setattr(rs.state, "press_t0", app.time.time())
     assert app._finish_capture(False, False) is None
     assert TYPED == [" "] and reasons == [send_countdown.HELD_NOTICE]
 
@@ -462,10 +463,10 @@ def test_typing_the_space_doesnt_turn_a_tap_into_a_dictation(countdown, monkeypa
                         lambda text, mode, **kw: app.time.sleep(0.1) or TYPED.append(text) or "ok")
     monkeypatch.setattr(send_countdown, "_owed", None)
     start_send("test", " ", "type")
-    monkeypatch.setattr(app.state, "held_send", send_countdown.hold(announce=False))
-    monkeypatch.setattr(app.state, "silence", None)
-    monkeypatch.setattr(app.state, "chunks_submitted", 0)
-    monkeypatch.setattr(app.state, "press_t0", app.time.time() - 0.15)
+    monkeypatch.setattr(rs.state, "held_send", send_countdown.hold(announce=False))
+    monkeypatch.setattr(rs.state, "silence", None)
+    monkeypatch.setattr(rs.state, "chunks_submitted", 0)
+    monkeypatch.setattr(rs.state, "press_t0", app.time.time() - 0.15)
     assert app._finish_capture(False, False) is None
     assert TYPED == [" "] and reasons == [send_countdown.HELD_NOTICE]
 
@@ -540,9 +541,9 @@ def test_a_quick_tap_holds_the_send_even_when_recording_starts_slowly(
         monkeypatch.setattr(app, name, lambda *a, **k: None)
     monkeypatch.setattr(app, "recording_indicator", None)
     monkeypatch.setattr(send_countdown, "_owed", None)
-    monkeypatch.setattr(app.state, "silence", None)
-    monkeypatch.setattr(app.state, "chunks_submitted", 0)
-    monkeypatch.setattr(app.state, "frames", [])
+    monkeypatch.setattr(rs.state, "silence", None)
+    monkeypatch.setattr(rs.state, "chunks_submitted", 0)
+    monkeypatch.setattr(rs.state, "frames", [])
     cfg = SimpleNamespace(beeps=False, notify=False, smart_quotes=False, language=None,
                           auto_space=True, auto_period=True, injection_mode="type")
     keyboard = _Keyboard([F8] if still_down else [])
@@ -553,8 +554,8 @@ def test_a_quick_tap_holds_the_send_even_when_recording_starts_slowly(
                                   F8, F9, None, set(), [keyboard], cfg, 0)
     finally:
         app._release_all_grabs()
-        app.state.is_recording = False
-        app.state.stream = None
+        rs.state.is_recording = False
+        rs.state.stream = None
     if outcome == "held":
         assert reasons == [send_countdown.HELD_NOTICE] and dictated == []
     else:

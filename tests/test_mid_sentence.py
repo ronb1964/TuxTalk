@@ -13,13 +13,14 @@ as sentence starts and as names — so those are left as-is by design.
 import pytest
 
 from tuxtalk import app
+from tuxtalk import recording_state as rs
 
 
 @pytest.fixture
 def continuing():
-    app.state.continue_mid_sentence = True
+    rs.state.continue_mid_sentence = True
     yield
-    app.state.continue_mid_sentence = False
+    rs.state.continue_mid_sentence = False
 
 
 def _prep(text):
@@ -31,7 +32,7 @@ def test_the_pronoun_i_is_not_lowercased(continuing):
 
 
 def test_i_contractions_are_not_lowercased(continuing):
-    app.state.continue_mid_sentence = True
+    rs.state.continue_mid_sentence = True
     assert _prep("I'm going now").startswith("I'm")
 
 
@@ -46,9 +47,9 @@ def test_an_ordinary_word_is_still_lowercased(continuing):
 
 def test_the_flag_is_cleared_after_use(continuing):
     _prep("The cat sat")
-    assert app.state.continue_mid_sentence is False
+    assert rs.state.continue_mid_sentence is False
 
 
 def test_normal_dictation_is_untouched():
-    app.state.continue_mid_sentence = False
+    rs.state.continue_mid_sentence = False
     assert _prep("The cat sat") == "The cat sat."

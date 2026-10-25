@@ -15,6 +15,7 @@ import subprocess
 import pytest
 
 from tuxtalk import app, focused_window
+from tuxtalk import recording_state as rs
 
 
 class FakeCompleted:
@@ -201,11 +202,11 @@ def test_undo_buffer_records_only_what_actually_landed(monkeypatch, wayland):
     monkeypatch.setattr(app, "_type_text", lambda t: False)
     monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
-    app.state.last_inserted_text = "previous dictation"
+    rs.state.last_inserted_text = "previous dictation"
 
     app._inject_text("brand new text", "paste")
 
-    assert app.state.last_inserted_text == "", \
+    assert rs.state.last_inserted_text == "", \
         "undo buffer kept a length that no longer matches the document"
 
 
@@ -213,11 +214,11 @@ def test_undo_buffer_updates_on_a_successful_injection(monkeypatch, wayland):
     monkeypatch.setattr(app, "_paste_text", lambda *a, **k: True)
     monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
-    app.state.last_inserted_text = "previous"
+    rs.state.last_inserted_text = "previous"
 
     app._inject_text("brand new text", "paste")
 
-    assert app.state.last_inserted_text == "brand new text"
+    assert rs.state.last_inserted_text == "brand new text"
 
 
 # --- undo must confirm the deletion before shrinking its buffer ------------
@@ -226,10 +227,10 @@ def test_undo_buffer_updates_on_a_successful_injection(monkeypatch, wayland):
 def undo_env(monkeypatch):
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
     monkeypatch.setattr(app, "_notify", lambda *a, **k: None)
-    app.state.last_inserted_text = "hello world"
-    app.state.continue_mid_sentence = False
+    rs.state.last_inserted_text = "hello world"
+    rs.state.continue_mid_sentence = False
     yield
-    app.state.last_inserted_text = ""
+    rs.state.last_inserted_text = ""
 
 
 def test_undo_leaves_its_buffer_alone_when_the_backspaces_fail(monkeypatch, undo_env):
@@ -239,7 +240,7 @@ def test_undo_leaves_its_buffer_alone_when_the_backspaces_fail(monkeypatch, undo
 
     app._handle_undo("undo last word", beeps_on=False, notify_on=False)
 
-    assert app.state.last_inserted_text == "hello world"
+    assert rs.state.last_inserted_text == "hello world"
 
 
 def test_undo_shrinks_its_buffer_when_the_backspaces_land(monkeypatch, undo_env):
@@ -247,7 +248,7 @@ def test_undo_shrinks_its_buffer_when_the_backspaces_land(monkeypatch, undo_env)
 
     app._handle_undo("undo last word", beeps_on=False, notify_on=False)
 
-    assert app.state.last_inserted_text == "hello "
+    assert rs.state.last_inserted_text == "hello "
 
 
 # --- line breaks are part of the text, and part of the report ---------------
@@ -329,7 +330,7 @@ def test_typed_line_breaks_become_spaces_in_a_terminal(monkeypatch, window):
     typed = _typing_into(monkeypatch, window)
     assert app._inject_text(f"First line.{MARK}Second line.", "type") == "ok"
     assert typed == ["First line. Second line."]
-    assert app.state.last_inserted_text == "First line. Second line."
+    assert rs.state.last_inserted_text == "First line. Second line."
 
 
 def test_a_snippet_newline_becomes_a_space_in_a_terminal(monkeypatch):
@@ -375,13 +376,13 @@ def test_the_window_the_text_landed_in_is_remembered(monkeypatch, wayland):
     then refused to delete it there, saying it went to plasmashell."""
     _focus_moves_on_paste(monkeypatch, "plasmashell", "com.anthropic.Claude")
     assert app._inject_text("Testing 1, 2, 3. ", "paste") == "ok"
-    assert app.state.last_inserted_window == "com.anthropic.Claude"
+    assert rs.state.last_inserted_window == "com.anthropic.Claude"
 
 
 def test_an_unknown_window_after_typing_keeps_the_one_before(monkeypatch, wayland):
     _focus_moves_on_paste(monkeypatch, "org.kde.kwrite", None)
     app._inject_text("Hello. ", "paste")
-    assert app.state.last_inserted_window == "org.kde.kwrite"
+    assert rs.state.last_inserted_window == "org.kde.kwrite"
 
 
 @pytest.mark.parametrize("mode", ["type", "auto"])
@@ -393,4 +394,4 @@ def test_a_tab_said_mid_sentence_is_four_spaces_in_claude_desktop_however_it_typ
     monkeypatch.setattr(app, "_type_text_raw", lambda t: typed.append(t) or True)
     assert app._inject_text("Name\taddress. ", mode) == "ok"
     assert typed == ["Name    address. "]
-    assert app.state.last_inserted_text == "Name    address. "
+    assert rs.state.last_inserted_text == "Name    address. "

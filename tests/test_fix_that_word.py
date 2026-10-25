@@ -4,6 +4,7 @@ see a word retyped by hand."""
 import pytest
 
 from tuxtalk import app, explain, focused_window
+from tuxtalk import recording_state as rs
 
 
 @pytest.fixture
@@ -62,8 +63,8 @@ def test_the_voice_window_shows_only_the_newest_dictation(monkeypatch):
 @pytest.fixture
 def typed(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
-    monkeypatch.setattr(app.state, "last_inserted_text", " Mary had a lamb whose fleece was white. ")
-    monkeypatch.setattr(app.state, "last_inserted_window", "org.kde.kwrite")
+    monkeypatch.setattr(rs.state, "last_inserted_text", " Mary had a lamb whose fleece was white. ")
+    monkeypatch.setattr(rs.state, "last_inserted_window", "org.kde.kwrite")
     return tmp_path
 
 
@@ -78,7 +79,7 @@ def test_right_after_a_dictation_it_can_fix_the_text(opened, typed, monkeypatch)
     assert json.load(open(path)) == {"text": " Mary had a lamb whose fleece was white. ",
                                      "window": "org.kde.kwrite"}
     assert stat.S_IMODE(os.stat(path).st_mode) == 0o600          # only this user
-    assert app.state.last_inserted_text == ""                     # undo can't trust it now
+    assert rs.state.last_inserted_text == ""                     # undo can't trust it now
 
 
 def test_in_another_window_it_only_saves_the_fix(opened, typed, monkeypatch):

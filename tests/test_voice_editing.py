@@ -174,6 +174,7 @@ def test_the_engine_has_room_for_a_selection(monkeypatch):
 # --- 3. the setting and the engine --------------------------------------------------
 
 from tuxtalk import app, config
+from tuxtalk import recording_state as rs
 
 
 class FakeEngine:
@@ -264,20 +265,20 @@ def keyloop(monkeypatch):
     """_handle_key_event with recording and grabs recorded, not performed."""
     seen = {"starts": [], "stops": 0, "grab_codes": []}
     monkeypatch.setattr(app, "_voice_editing", True)
-    monkeypatch.setattr(app.state, "is_recording", False)
-    monkeypatch.setattr(app.state, "edit_mode", False, raising=False)
+    monkeypatch.setattr(rs.state, "is_recording", False)
+    monkeypatch.setattr(rs.state, "edit_mode", False, raising=False)
     monkeypatch.setattr(app, "_grab_keyboards_hiding", lambda devs, codes: seen["grab_codes"].append(set(codes)))
     monkeypatch.setattr(app, "_release_all_grabs", lambda: None)
 
     def start(beeps, notify, idx, from_toggle=False, edit_mode=False, held_send=False):
         seen["starts"].append({"from_toggle": from_toggle, "edit_mode": edit_mode})
-        app.state.is_recording = True
-        app.state.edit_mode = edit_mode
+        rs.state.is_recording = True
+        rs.state.edit_mode = edit_mode
         return True
 
     def stop(*a, **k):
         seen["stops"] += 1
-        app.state.is_recording = False
+        rs.state.is_recording = False
     monkeypatch.setattr(app, "start_recording", start)
     monkeypatch.setattr(app, "stop_recording", stop)
     monkeypatch.setattr(app, "_toggle_pressed_while_recording", lambda beeps: False)
@@ -325,7 +326,7 @@ def test_a_dictation_key_starts_only_as_the_desktop_holds_it(keyloop, monkeypatc
     held = {qt for _name, _text, qt in kwin_hotkeys.wanted_shortcuts(cfg)}
     for code, name in ((F8, "F8"), (F9, "F9")):
         keyloop["starts"].clear()
-        app.state.is_recording = False
+        rs.state.is_recording = False
         key(code, 1, {codes[m] for m in mods})
         assert bool(keyloop["starts"]) == ("+".join(mods + (name,)) in held), name
 
@@ -1117,7 +1118,7 @@ def test_the_edit_key_understands_select_commands_with_nothing_selected(edit_env
     monkeypatch.setattr(app, "_voice_navigation", True)
     monkeypatch.setattr(app, "_output_backend",
                         lambda: type("B", (), {"press_keys": lambda self, c: pressed.append(c) or True})())
-    monkeypatch.setattr(app.state, "last_inserted_text", "One. Two.")
+    monkeypatch.setattr(rs.state, "last_inserted_text", "One. Two.")
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "select the last sentence")
     edit_env["selection"]["text"] = ""
     run_edit()
@@ -1142,5 +1143,5 @@ def test_an_edit_says_whether_the_change_went_in(edit_env, monkeypatch, answer, 
     edit_env["engine"].answer = answer
     monkeypatch.setattr(app, "_inject_text", lambda text, mode, **kw: typing)
     done = app._edit_selection(lambda: "make it more professional", False, "type",
-                               "org.kde.kwrite", 0.0, app.state.message, spoken=True)
+                               "org.kde.kwrite", 0.0, rs.state.message, spoken=True)
     assert bool(done) is went_in

@@ -17,12 +17,13 @@ import types
 
 
 from tuxtalk import app
+from tuxtalk import recording_state as rs
 
 
 def _idle(monkeypatch):
     app._cmd_start_recording.clear()
     app._cmd_stop_recording.clear()
-    monkeypatch.setattr(app.state, "is_recording", False, raising=False)
+    monkeypatch.setattr(rs.state, "is_recording", False, raising=False)
 
 
 def _cfg(mic=""):

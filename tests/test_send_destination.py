@@ -16,6 +16,7 @@ from evdev import ecodes
 
 from tuxtalk import (app, atspi_helper, compositor_focus, dbus_service, focused_window, history,
                      modifier_hotkeys, send_countdown)
+from tuxtalk import recording_state as rs
 
 ENTER, RCTRL, F8, F9 = ecodes.KEY_ENTER, ecodes.KEY_RIGHTCTRL, ecodes.KEY_F8, ecodes.KEY_F9
 # Taken before conftest runs "Right away" on the test's own thread, and
@@ -38,7 +39,7 @@ def chat(monkeypatch, keyboard):
 
     def deliver(text, mode, one_block=False, *, where):
         typed.append((text, focus[1]))
-        app.state.last_inserted_text = text
+        rs.state.last_inserted_text = text
         return "ok"
     monkeypatch.setattr(app, "_deliver_text", deliver)
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
@@ -46,7 +47,7 @@ def chat(monkeypatch, keyboard):
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
     monkeypatch.setattr(app, "_press_enter_after", True)
     monkeypatch.setattr(app, "_usage_stats", False)
-    monkeypatch.setattr(app.state, "pending_boundary", None)
+    monkeypatch.setattr(rs.state, "pending_boundary", None)
     monkeypatch.setattr(history, "add_entry", lambda text, replaces=None: None)
     monkeypatch.setattr(send_countdown, "show_notice", notices.append)
     return focus, heard, typed, notices
@@ -292,10 +293,10 @@ def test_the_hold_key_holds_the_send_before_it_hides_itself(chat, keyboard, monk
     press = types.SimpleNamespace(type=ecodes.EV_KEY, code=hold_key, value=1)
     try:
         app._handle_key_event(press, hold_key, F9, None, set(), devices, cfg, 0)
-        assert keyboard.events == [] and app.state.held_send is True
+        assert keyboard.events == [] and rs.state.held_send is True
     finally:
-        app.state.is_recording = False
-        app.state.stream = None
+        rs.state.is_recording = False
+        rs.state.stream = None
 
 
 @pytest.fixture
@@ -340,9 +341,9 @@ def test_a_short_tap_of_the_hold_key_that_holds_the_send_says_so_aloud_once(
     for name in ("_stop_stream_safely", "_resume_media_players", "_notify_tray_recording_state"):
         monkeypatch.setattr(app, name, lambda *a, **k: None)
     monkeypatch.setattr(app, "recording_indicator", None)
-    monkeypatch.setattr(app.state, "held_send", True)
-    monkeypatch.setattr(app.state, "silence", None)
-    monkeypatch.setattr(app.state, "press_t0", app.time.time())
+    monkeypatch.setattr(rs.state, "held_send", True)
+    monkeypatch.setattr(rs.state, "silence", None)
+    monkeypatch.setattr(rs.state, "press_t0", app.time.time())
     assert app._finish_capture(False, notify_on) is None
     assert notices == [send_countdown.HELD_NOTICE] and notifications() == [HELD_TITLE]
 
@@ -364,7 +365,7 @@ def test_a_hold_key_press_whose_recording_cant_start_says_the_send_is_held(
     try:
         app._start_hold_recording(F8, set(), [], cfg, 0)
     finally:
-        app.state.is_recording = False
+        rs.state.is_recording = False
     assert keyboard.events == []
     assert notices == [send_countdown.HELD_NOTICE] and notifications() == [HELD_TITLE]
 
@@ -1086,7 +1087,7 @@ def test_a_phrase_queued_before_the_next_recording_keeps_its_own_message(chat, k
     focus, heard, typed, notices = chat
     monkeypatch.setattr(app, "_press_enter_after", False)
     app._arm_chunker(app.SAMPLE_RATE)               # recording A
-    first = app.state.message
+    first = rs.state.message
     frames = [(np.ones(app.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
     heard.append("See you at noon.")
     app._transcribe_and_inject(frames, app.SAMPLE_RATE, False, False, False,
@@ -1097,7 +1098,7 @@ def test_a_phrase_queued_before_the_next_recording_keeps_its_own_message(chat, k
     app._transcribe_and_inject(frames, app.SAMPLE_RATE, False, False, False,
                                chunk_role="last", message=first)
     assert keyboard.events == [] and notices == [send_countdown.SWITCHED_WINDOW_NOTICE]
-    assert not app.state.message.has_words          # B's own message untouched
+    assert not rs.state.message.has_words          # B's own message untouched
 
 
 def _rewrite_goes_in(monkeypatch, outcome):
@@ -1193,41 +1194,41 @@ def test_where_the_window_is_never_known_the_space_goes_only_where_the_words_did
     heard.append("see you at noon")
     dictate()
     assert [text for text, _ in typed] == ["See you at noon."]
-    assert app.state.last_inserted_window == "brave-browser"
+    assert rs.state.last_inserted_window == "brave-browser"
     # The refused space didn't wipe what "delete last sentence" works from.
-    assert app.state.last_inserted_text == "See you at noon."
+    assert rs.state.last_inserted_text == "See you at noon."
 
 
 
 def test_a_failed_space_may_have_gone_in_so_the_record_isnt_brought_back(monkeypatch):
     """"failed" can follow some of the text (wtype timing out): the old
     record of the dictation would then count the wrong characters."""
-    monkeypatch.setattr(app.state, "last_inserted_text", "See you at noon.")
+    monkeypatch.setattr(rs.state, "last_inserted_text", "See you at noon.")
 
     def inject(text, mode, into=None, **kw):
         """Forgets the dictation, as a delivery that stopped does."""
-        app.state.last_inserted_text = ""
+        rs.state.last_inserted_text = ""
         return "failed"
     monkeypatch.setattr(app, "_inject_text", inject)
     app._type_onto_dictation(" ", "type")
-    assert app.state.last_inserted_text == ""
+    assert rs.state.last_inserted_text == ""
 
 
 def test_a_space_that_went_nowhere_leaves_undo_on_the_dictations_window(monkeypatch):
     """Typing takes the focused window for the dictation's before the first
     key. Given up before it (Claude Desktop's four spaces for "press tab",
     the key still held), "undo that" there would delete the other app's text."""
-    monkeypatch.setattr(app.state, "last_inserted_text", "See you at noon.")
-    monkeypatch.setattr(app.state, "last_inserted_window", "brave-browser")
+    monkeypatch.setattr(rs.state, "last_inserted_text", "See you at noon.")
+    monkeypatch.setattr(rs.state, "last_inserted_window", "brave-browser")
 
     def inject(text, mode, into=None, **kw):
         """Takes the window, then gives up before typing."""
-        app.state.last_inserted_window = "claude"
+        rs.state.last_inserted_window = "claude"
         return "key_held"
     monkeypatch.setattr(app, "_inject_text", inject)
     app._type_onto_dictation("    ", "type")
-    assert app.state.last_inserted_text == "See you at noon."
-    assert app.state.last_inserted_window == "brave-browser"
+    assert rs.state.last_inserted_text == "See you at noon."
+    assert rs.state.last_inserted_window == "brave-browser"
 
 def test_a_phrase_cut_at_a_pause_takes_its_recordings_message_to_the_queue(chat, monkeypatch):
     """The phrase is queued when the pause is heard and typed later; the
@@ -1240,13 +1241,13 @@ def test_a_phrase_cut_at_a_pause_takes_its_recordings_message_to_the_queue(chat,
         beeps=False, smart_quotes=False, notify=False, language=None, auto_space=True,
         auto_period=True, injection_mode="type"))
     app._arm_chunker(app.SAMPLE_RATE)               # recording A
-    first = app.state.message
+    first = rs.state.message
     pause = types.SimpleNamespace(tail_samples=lambda: 0, last_pause=1.0)
-    monkeypatch.setattr(app.state, "chunker", pause)
-    monkeypatch.setattr(app.state, "frames",
+    monkeypatch.setattr(rs.state, "chunker", pause)
+    monkeypatch.setattr(rs.state, "frames",
                         [(np.ones(app.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()])
     app._cut_chunk(pause)                           # "see you at noon", then a pause
     app._arm_chunker(app.SAMPLE_RATE)               # recording B starts
     heard.append("See you at noon.")
     jobs[0]()
-    assert first.has_words and not app.state.message.has_words
+    assert first.has_words and not rs.state.message.has_words

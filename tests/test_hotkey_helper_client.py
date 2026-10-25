@@ -10,6 +10,7 @@ import socket
 import pytest
 
 from tuxtalk import app, focused_window, hotkey_helper as hh
+from tuxtalk import recording_state as rs
 from tuxtalk.hotkey_helper_client import HelperKeyboard, connect_helper, watch_specs
 from tuxtalk.hotkey_keys import track_modifier
 from test_hotkey_helper import FakeKeyboard
@@ -69,16 +70,16 @@ def rig(tmp_path, monkeypatch):
     monkeypatch.setattr(app, "_injected_pending", [])
     monkeypatch.setattr(app, "_voice_editing", False)
     monkeypatch.setattr(app, "_hotkey_test_active", lambda: False)
-    monkeypatch.setattr(app.state, "is_recording", False)
-    monkeypatch.setattr(app.state, "edit_mode", False, raising=False)
+    monkeypatch.setattr(rs.state, "is_recording", False)
+    monkeypatch.setattr(rs.state, "edit_mode", False, raising=False)
 
     def start(*_a, edit_mode=False, **_k):
         calls.append(("start", edit_mode))
-        app.state.is_recording = True
+        rs.state.is_recording = True
 
     def stop(*_a, **_k):
         calls.append(("stop",))
-        app.state.is_recording = False
+        rs.state.is_recording = False
 
     monkeypatch.setattr(app, "start_recording", start)
     monkeypatch.setattr(app, "stop_recording", stop)

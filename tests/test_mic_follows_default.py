@@ -14,6 +14,7 @@ import types
 import pytest
 
 from tuxtalk import app, config
+from tuxtalk import recording_state as rs
 
 
 @pytest.fixture
@@ -98,8 +99,8 @@ def test_start_recording_opens_the_new_default(desktop, monkeypatch):
     try:
         assert app.start_recording(False, False, 4) is True
     finally:
-        app.state.is_recording = False
-        app.state.stream = None
+        rs.state.is_recording = False
+        rs.state.stream = None
 
     assert opened == [6]
 

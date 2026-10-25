@@ -9,6 +9,7 @@ from evdev import ecodes
 
 from gtk_text import tree_text
 from tuxtalk import app, config, history, kwin_hotkeys
+from tuxtalk import recording_state as rs
 
 P = ecodes.KEY_P
 CTRL, ALT = ecodes.KEY_LEFTCTRL, ecodes.KEY_LEFTALT
@@ -36,8 +37,8 @@ def keys(monkeypatch):
     monkeypatch.setattr(app, "_inject_text", lambda text, mode: seen["typed"].append((text, mode)) or "ok")
     monkeypatch.setattr(app, "_beep", lambda on, *a: seen["beeps"].append(a))
     monkeypatch.setattr(history, "get_entries", lambda: ["Hello there.\nSecond line.", "older"])
-    monkeypatch.setattr(app.state, "is_recording", False)
-    monkeypatch.setattr(app.state, "paste_last", None, raising=False)
+    monkeypatch.setattr(rs.state, "is_recording", False)
+    monkeypatch.setattr(rs.state, "paste_last", None, raising=False)
     return seen
 
 
@@ -98,7 +99,7 @@ def test_nothing_dictated_yet_gives_the_cancel_beep(keys, monkeypatch):
 
 
 def test_not_while_recording(keys, monkeypatch):
-    monkeypatch.setattr(app.state, "is_recording", True)
+    monkeypatch.setattr(rs.state, "is_recording", True)
     held = set()
     press_combo(held)
     assert keys["grabbed"] == 0
@@ -233,9 +234,9 @@ def test_a_hold_started_while_the_combo_is_pending_still_stops(keys, monkeypatch
     running after F8 is let go."""
     stopped = []
     monkeypatch.setattr(app, "start_recording",
-                        lambda *a, **k: setattr(app.state, "is_recording", True) or True)
+                        lambda *a, **k: setattr(rs.state, "is_recording", True) or True)
     monkeypatch.setattr(app, "stop_recording",
-                        lambda *a, **k: stopped.append(True) or setattr(app.state, "is_recording", False))
+                        lambda *a, **k: stopped.append(True) or setattr(rs.state, "is_recording", False))
     monkeypatch.setattr(Cfg, "smart_quotes", False, raising=False)
     monkeypatch.setattr(Cfg, "language", None, raising=False)
     monkeypatch.setattr(Cfg, "auto_period", True, raising=False)

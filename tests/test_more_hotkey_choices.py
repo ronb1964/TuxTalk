@@ -17,6 +17,7 @@ from tuxtalk import kwin_hotkeys as kh
 from tuxtalk.config import HOTKEY_CHOICES
 from tuxtalk.hotkey_keys import keycode_from_name, track_modifier
 from tuxtalk.hotkey_labels import hotkey_label, layout_label
+from tuxtalk import recording_state as rs
 
 RCTRL, RALT, LCTRL = ecodes.KEY_RIGHTCTRL, ecodes.KEY_RIGHTALT, ecodes.KEY_LEFTCTRL
 
@@ -57,21 +58,21 @@ def service(monkeypatch):
 
     def start(*a, **k):
         done.append("start")
-        app.state.is_recording = True
+        rs.state.is_recording = True
         return True
 
     def stop(*a, **k):
         done.append("stop")
-        app.state.is_recording = False
+        rs.state.is_recording = False
 
     monkeypatch.setattr(app, "start_recording", start)
     monkeypatch.setattr(app, "stop_recording", stop)
-    app.state.is_recording = False
+    rs.state.is_recording = False
     send_countdown._pending = send_countdown._owed = None
-    app.state.hidden_key = None
+    rs.state.hidden_key = None
     yield done
-    app.state.is_recording = False
-    app.state.hidden_key = None
+    rs.state.is_recording = False
+    rs.state.hidden_key = None
 
 
 def key(code, value, held, hold=F8, toggle=None):
@@ -149,7 +150,7 @@ def test_a_right_ctrl_toggle_is_hidden_before_anything_is_typed(service):
 def test_a_right_ctrl_hold_key_pressed_during_hands_free_is_hidden(service):
     """Hands-free types each phrase as it goes; a Right Ctrl held then
     would turn it into shortcuts."""
-    app.state.is_recording = True
+    rs.state.is_recording = True
     held = set()
     key(RCTRL, 1, held, hold=RCTRL, toggle=ecodes.KEY_F9)
     assert service == ["grab"]
@@ -738,10 +739,10 @@ def real_grabs(keyboard, stuck_right_ctrl, monkeypatch):
     monkeypatch.setattr(app, "_hotkey_test_active", lambda: False)
     monkeypatch.setattr(app, "_grabbed_devices", [])
     monkeypatch.setattr(modifier_hotkeys, "_hidden", (frozenset(), ()))
-    app.state.is_recording = False
+    rs.state.is_recording = False
     yield
     app._release_all_grabs()
-    app.state.is_recording = False
+    rs.state.is_recording = False
 
 
 @pytest.fixture
@@ -749,14 +750,14 @@ def holding(real_grabs, monkeypatch):
     """Hold *code* as the hold key, through the real key handler and grab,
     on one keyboard; recording itself is left out."""
     monkeypatch.setattr(app, "start_recording",
-                        lambda *a, **k: setattr(app.state, "is_recording", True) or True)
+                        lambda *a, **k: setattr(rs.state, "is_recording", True) or True)
 
     def hold(code, grabs=True):
         board = Grabbable(lambda look: True, code, grabs)
         modifier_hotkeys.note([board], code, ecodes.KEY_F9)
         app._handle_key_event(Event(code, 1), code, ecodes.KEY_F9, None, {code},
                               [board], Cfg(), 0)
-        assert app.state.is_recording
+        assert rs.state.is_recording
     return hold
 
 
@@ -804,10 +805,10 @@ def test_a_double_tap_of_a_right_ctrl_or_alt_toggle_goes_hands_free(keyboard, re
         track_modifier(held, Event(code, value))
         app._handle_key_event(Event(code, value), F8, code, None, held, [board],
                               Cfg(), 0)
-        assert app.state.is_recording
-    assert app.state.silence is not None and stopped == []
+        assert rs.state.is_recording
+    assert rs.state.silence is not None and stopped == []
     assert app._grabbed_devices == []
-    app.state.silence = None
+    rs.state.silence = None
 
 
 def test_the_right_alt_guard_goes_while_right_alt_is_held(keyboard, no_hotkeys_noted):

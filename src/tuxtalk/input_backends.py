@@ -68,14 +68,14 @@ class PortalInputBackend(InputBackend):
         # (F8) and the toggle key (F9) both work at once — not a single mode-gated
         # key. "dictate_hold" = press-and-hold; "dictate_toggle" = tap on/off.
         sid = self._shortcut_id(params)
-        from . import app
+        from . import app, recording_state
         if sid == "dictate_hold":
             app._cmd_start_recording.set()
         elif sid == "dictate_toggle":
             # Ask the recording itself rather than keeping a private on/off
             # flag: a recording can end without this key (auto-stop, Esc), and
             # a stale flag would make the next press do nothing.
-            if not app.state.is_recording:
+            if not recording_state.state.is_recording:
                 app._cmd_start_from_toggle_key.set()
                 app._cmd_start_recording.set()
             elif not app._toggle_pressed_while_recording(getattr(self.cfg, "beeps", True)):

@@ -4,6 +4,7 @@ the hotkeys."""
 import threading
 
 from tuxtalk import app
+from tuxtalk import recording_state as rs
 
 
 def test_turning_the_ai_off_does_not_block_the_caller(monkeypatch):
@@ -62,9 +63,9 @@ def test_the_mic_stream_is_closed_even_when_stopping_it_fails(monkeypatch):
         def close(self, ignore_errors=True):
             Stream.closed = True
 
-    monkeypatch.setattr(app.state, "stream", Stream())
+    monkeypatch.setattr(rs.state, "stream", Stream())
 
     app._stop_stream_safely()
 
     assert Stream.closed
-    assert app.state.stream is None
+    assert rs.state.stream is None

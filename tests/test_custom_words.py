@@ -130,6 +130,7 @@ def test_real_speech_is_not_an_echo():
 import numpy as np
 
 from tuxtalk import app
+from tuxtalk import recording_state as rs
 from tuxtalk import whisper_vulkan as wv
 
 
@@ -209,7 +210,7 @@ def test_a_snippet_still_beats_a_word(with_words, monkeypatch):
 
 
 def test_continuing_mid_sentence_keeps_a_words_capitals(with_words, monkeypatch):
-    monkeypatch.setattr(app.state, "continue_mid_sentence", True)
+    monkeypatch.setattr(rs.state, "continue_mid_sentence", True)
     out = app._prepare_text("tux talk is running", True, False, False)
     assert out.startswith("TuxTalk")
 
@@ -285,7 +286,7 @@ def test_a_snippet_spoken_as_the_joined_word_still_fires(with_words, monkeypatch
 def test_continuing_mid_sentence_keeps_multi_word_and_possessive_names(raw, first, monkeypatch):
     monkeypatch.setattr(app, "_custom_words", ["New York", "TuxTalk"])
     monkeypatch.setattr(app, "_custom_commands", {})
-    monkeypatch.setattr(app.state, "continue_mid_sentence", True)
+    monkeypatch.setattr(rs.state, "continue_mid_sentence", True)
     assert app._prepare_text(raw, True, False, False).startswith(first)
 
 
