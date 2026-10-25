@@ -30,7 +30,7 @@ from . import notify as notify_module
 from . import recording_state as rs
 from .beeps import CANCEL_BEEP, READY_BEEP
 from .chunking import carry_question, hold_back_boundary
-from .key_commands import auto_send, split_key_command
+from .key_commands import auto_send, ends_unfinished, split_key_command
 from .logger import setup_logger
 from .window_classes import ELECTRON_PASTE_BROKEN_CLASSES, app_kind, is_document_window
 
@@ -415,6 +415,7 @@ def _deliver(words: _Words, audio_f32, job: _Job) -> None:
     if outcome == "password_field":
         last_dictation.unsay(said_before)
     last_dictation.remember_shown(rs.state.last_inserted_text, chunked, outcome == "ok")
+    job.message.ends_on = ends_unfinished(words.raw)
     _after_the_words(outcome, words.said, words.press, words.space_left_off, job.chunk_role,
                      job.beeps_on, job.injection_mode, job.message)
     if outcome == "ok":

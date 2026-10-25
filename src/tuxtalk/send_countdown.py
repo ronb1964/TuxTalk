@@ -114,6 +114,9 @@ class Message:
     has_words: bool = False
     # Every delivery of it went in whole.
     complete: bool = True
+    # The word its last words were cut off on ("and"), or "": at the end of
+    # a Type at pause recording, half a sentence isn't sent.
+    ends_on: str = ""
 
     def add(self, outcome: str, landed) -> None:
         """Words of it were delivered: delivery.inject_text's *outcome*, and
@@ -129,7 +132,7 @@ class Message:
 
     def start_over(self) -> None:
         """Enter or Tab ended it: what's typed next is a new message."""
-        self.to, self.has_words, self.complete = None, False, True
+        self.to, self.has_words, self.complete, self.ends_on = None, False, True, ""
 
 
 def _incomplete(message: Message) -> str | None:

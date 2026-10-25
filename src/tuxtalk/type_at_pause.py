@@ -329,27 +329,47 @@ def end_in_a_pause(message, beeps_on, auto_space, auto_period, injection_mode) -
     it: a held "no wait" is typed as said, the last phrase gets its mark,
     and "Send each dictation automatically" sends *message* if all of it
     went in."""
-    waiting = rs.state.edit_waiting
-    # "edit that", a pause, and nothing more: what to change never came, and
-    # the message isn't sent as it was.
-    unfinished_edit = waiting is not None and waiting["serial"] == rs.state.recording_serial
-    if unfinished_edit:
-        rs.state.edit_waiting = None
-        notices.edit_problem("edit_that_what", beeps_on)
-        message.add("failed", None)
+    unfinished_edit = _drop_unfinished_edit(message, beeps_on)
     if rs.state.held_cue:
         cue, rs.state.held_cue = rs.state.held_cue, ""
         if auto_period and cue[-1] not in ".?!":
             cue += "."
         delivery.inject_text(cue + (" " if auto_space else ""), injection_mode, message=message)
-    if (live.press_enter_after and message.has_words and message.complete
+    cut_off = _cut_off(message)
+    if (live.press_enter_after and message.has_words and message.complete and not cut_off
             and not is_document_window(focused_window.window_class())):
         flush_boundary(auto_period, False, injection_mode)
         pipeline.send_automatically(" " if auto_space else "", injection_mode, message)
         start_afresh(message)
     else:
-        flush_boundary(auto_period, auto_space, injection_mode)
+        flush_boundary(auto_period and not cut_off, auto_space, injection_mode)
     if not live.chunk_context_marks:
         rs.state.continue_mid_sentence = False   # it belongs to this recording
+    if cut_off:
+        rs.state.continue_mid_sentence = True    # what's said next carries it on
     if not unfinished_edit:                   # that one beeped its cancel
         beeps.beep(beeps_on, *READY_BEEP)
+
+
+def _drop_unfinished_edit(message, beeps_on) -> bool:
+    """"edit that", a pause, and nothing more: what to change never came,
+    and *message* isn't sent as it was. True when that's what happened."""
+    waiting = rs.state.edit_waiting
+    if waiting is None or waiting["serial"] != rs.state.recording_serial:
+        return False
+    rs.state.edit_waiting = None
+    notices.edit_problem("edit_that_what", beeps_on)
+    message.add("failed", None)
+    return True
+
+
+def _cut_off(message) -> str:
+    """The word *message* was cut off on as the key came up ("and"), with
+    "Send each dictation automatically" on, or "". Then it's held back with
+    no period, as a whole dictation is (key_commands.auto_send)."""
+    cut_off = message.ends_on if live.press_enter_after else ""
+    if cut_off:
+        logger.info(f'Held back the Enter: the dictation ended on "{cut_off}"')
+        if rs.state.pending_boundary is not None:
+            rs.state.pending_boundary["mark"] = ""
+    return cut_off

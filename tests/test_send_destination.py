@@ -163,6 +163,19 @@ def test_a_pause_at_the_end_in_the_same_window_types_the_mark_and_sends(chat, ke
     assert keyboard.typed_keys() == [ENTER] and notices == []
 
 
+def test_a_pause_after_and_at_the_end_sends_nothing(chat, keyboard, monkeypatch):
+    """Type at pause: "meet me at noon and", a pause, and the key let go.
+    Half a sentence was sent; without Type at pause it is held back, with
+    no period, and what's said next carries it on in lowercase."""
+    focus, heard, typed, notices = chat
+    monkeypatch.setattr(live, "chunk_context_marks", True)
+    heard.append("Meet me at noon and.")
+    dictate("middle")
+    dictate("last", audio=False)
+    assert typed == [("Meet me at noon and", FIRST[1]), (" ", FIRST[1])]
+    assert keyboard.events == [] and rs.state.continue_mid_sentence
+
+
 def test_the_mark_typed_at_the_end_doesnt_aim_the_enter_elsewhere(chat, keyboard,
                                                                   monkeypatch):
     """The held mark is typed where the focus is now, which the desktop

@@ -161,6 +161,15 @@ before 0.15.0, so older entries use that name.
 - Preferences' tabs each have a faint outline now. On Breeze dark the tabs
   you weren't on were just words in a row, and it was hard to see they were
   tabs at all.
+- With Type at pause and "Send each dictation automatically" both on, a
+  recording that ended in a pause right after "and" ("meet me at noon and")
+  got a period and was sent, half finished. Now it's held back with no
+  period, same as without Type at pause, and what you say next carries on
+  in lowercase.
+- When a send was called off because you clicked into another window, the
+  space after your words could end up in front of the next dictation in
+  that other window. That space only goes back into the window it belongs
+  to now.
 
 ## [0.18.2] - 2026-10-23
 
