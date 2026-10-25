@@ -171,7 +171,7 @@ def test_help_problems_opens_it(monkeypatch):
     shown, opened = [], []
     monkeypatch.setattr(Gtk.Dialog, "show_all", lambda self: shown.append(self))
     monkeypatch.setattr(Gtk.Dialog, "present", lambda self: None)
-    monkeypatch.setattr(problem_report_window, "ReportWindow", lambda parent: opened.append(parent))
+    monkeypatch.setattr(problem_report_window, "ReportWindow", lambda: opened.append(True))
     help_dialog.show_help_dialog()
     dialog = shown[0]
     try:
@@ -183,7 +183,7 @@ def test_help_problems_opens_it(monkeypatch):
                     yield from labels(child)
         problems = next(l for l in labels(dialog) if help_dialog.REPORT_LINK in l.get_label())
         assert problems.emit("activate-link", help_dialog.REPORT_LINK) is True
-        assert opened == [dialog]
+        assert opened == [True]
     finally:
         dialog.destroy()
 
@@ -197,7 +197,7 @@ def test_the_problems_tab_opens_with_a_report_button(monkeypatch):
     shown, opened = [], []
     monkeypatch.setattr(Gtk.Dialog, "show_all", lambda self: shown.append(self))
     monkeypatch.setattr(Gtk.Dialog, "present", lambda self: None)
-    monkeypatch.setattr(problem_report_window, "ReportWindow", lambda parent: opened.append(parent))
+    monkeypatch.setattr(problem_report_window, "ReportWindow", lambda: opened.append(True))
     help_dialog.show_help_dialog(tab="problems")
     dialog = shown[0]
     try:
@@ -206,6 +206,26 @@ def test_the_problems_tab_opens_with_a_report_button(monkeypatch):
         first = next(w for w in widgets(page) if isinstance(w, Gtk.Button))
         assert first.get_label() == "Report a Problem…"
         first.clicked()
-        assert opened == [dialog]
+        assert opened == [True]
+    finally:
+        dialog.destroy()
+
+
+def test_help_opens_the_report_as_a_window_of_its_own(window, monkeypatch):
+    """Closing it as a window transient for Help made KWin 6.7.5 eat memory
+    until the desktop froze; as a window of its own it doesn't. Opened from
+    Help's button, it has no transient parent."""
+    from gtk_text import widgets
+    monkeypatch.setattr(Gtk.Dialog, "show_all", lambda self: None)
+    monkeypatch.setattr(Gtk.Dialog, "present", lambda self: None)
+    dialog = help_dialog.show_help_dialog(tab="problems")
+    try:
+        button = next(w for w in widgets(dialog) if isinstance(w, Gtk.Button)
+                      and w.get_label() == "Report a Problem\u2026")
+        button.clicked()
+        report = next(w for w in Gtk.Window.list_toplevels()
+                      if w.get_title() == "Report a Problem")
+        assert report.get_transient_for() is None
+        report.destroy()
     finally:
         dialog.destroy()

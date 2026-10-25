@@ -46,15 +46,18 @@ class ReportWindow:
     copied, saved to a file or put in a new GitHub issue by the user.
     Nothing leaves the computer by itself."""
 
-    def __init__(self, parent=None):
-        """Open the window over *parent* and gather the report on a thread
-        of its own: asking the graphics card and the hotkey helper takes a
-        moment, and the window shows meanwhile."""
+    def __init__(self):
+        """Open the window and gather the report on a thread of its own:
+        asking the graphics card and the hotkey helper takes a moment, and
+        the window shows meanwhile."""
         from .problem_report import fact, layout_text
         from .ui_style import WARNING_AMBER
         self.window = Gtk.Window(title="Report a Problem")
-        if parent is not None:
-            self.window.set_transient_for(parent)
+        # Not transient for Help: on KWin 6.7.5 closing this window as one
+        # sent the compositor allocating gigabytes a second until the desktop
+        # froze (a window of its own did not). Kept above instead, as Help is,
+        # so Help doesn't hide it.
+        self.window.set_keep_above(True)
         self.window.set_default_size(760, 560)
         self.window.set_position(Gtk.WindowPosition.CENTER)
 

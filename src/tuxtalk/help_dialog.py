@@ -42,10 +42,10 @@ def _scroll(label, event, scrolled):
     return True
 
 
-def _open_report(widget):
-    """Open Report a Problem over the Help window *widget* is in."""
+def _open_report(_widget):
+    """Open Report a Problem (a window of its own; see problem_report_window)."""
     from .problem_report_window import ReportWindow
-    ReportWindow(widget.get_toplevel())
+    ReportWindow()
 
 
 def _on_link(label, uri):
