@@ -47,7 +47,7 @@ class PortalInputBackend(InputBackend):
     Registers the hold and toggle shortcuts; the desktop assigns their keys and
     sends Activated (press) / Deactivated (release) signals, which we translate into
     the same recording.start_requested / recording.stop_requested events the evdev
-    loop sets. A GLib timeout runs the shared app._service_tick so the recording
+    loop sets. A GLib timeout runs the shared service_tick.tick so the recording
     core and auto-timeout work identically."""
 
     IFACE = "org.freedesktop.portal.GlobalShortcuts"
@@ -88,8 +88,8 @@ class PortalInputBackend(InputBackend):
             recording.stop_requested.set()
 
     def _tick(self):
-        from . import app
-        app._service_tick(self.cfg, self._svc)
+        from . import service_tick
+        service_tick.tick(self.cfg, self._svc)
         return True  # keep the GLib timer running
 
     def start(self):
@@ -97,7 +97,7 @@ class PortalInputBackend(InputBackend):
         import gi
         gi.require_version("Gio", "2.0")
         from gi.repository import Gio, GLib
-        from . import app, portal_common as pc
+        from . import portal_common as pc, service_tick
         logger = logging.getLogger(__name__)
 
         bus = pc.session_bus()
@@ -148,7 +148,7 @@ class PortalInputBackend(InputBackend):
         bus.signal_subscribe(None, self.IFACE, "Deactivated", None, None,
                              Gio.DBusSignalFlags.NONE, self._on_deactivated)
 
-        self._svc = app._ServiceState(self.cfg, self.input_device_idx)
+        self._svc = service_tick.ServiceState(self.cfg, self.input_device_idx)
         GLib.timeout_add(50, self._tick)
         create_session()
         loop.run()

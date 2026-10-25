@@ -14,7 +14,7 @@ is saved before injection is even attempted.
 import numpy as np
 import pytest
 
-from tuxtalk import app, focused_window, window_classes
+from tuxtalk import focused_window, window_classes
 from tuxtalk import pipeline
 from tuxtalk import delivery
 from tuxtalk import engine
@@ -29,7 +29,7 @@ MARKER = "\xa7SHIFT_ENTER\xa7"
 @pytest.fixture
 def quiet(monkeypatch):
     """No real tools, sleeps, focus lookups or Electron detection."""
-    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    monkeypatch.setattr("time.sleep", lambda s: None)
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
     monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: True)
     monkeypatch.delenv("FLATPAK_ID", raising=False)

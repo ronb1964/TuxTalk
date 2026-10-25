@@ -24,6 +24,7 @@ from tuxtalk import delivery
 from tuxtalk import type_at_pause
 from tuxtalk import pipeline as dictation_pipeline
 from tuxtalk.beeps import CANCEL_BEEP, READY_BEEP
+from tuxtalk import service_tick
 
 SR = 16000
 BLOCK = 320   # 20 ms at 16 kHz
@@ -666,13 +667,13 @@ def test_cut_after_stop_snapshot_hands_nothing_on(recording):
 
 def test_drop_tail_samples_keeps_partial_blocks():
     frames = [b"\0\0" * 320, b"\0\0" * 320, b"\0\0" * 320]
-    capture.drop_tail_samples(frames, 700)   # two whole blocks fit, the third doesn't
+    from tuxtalk import chunking
+    chunking.drop_tail_samples(frames, 700)   # two whole blocks fit, the third doesn't
     assert len(frames) == 1
 
 
 def test_flatpak_stop_queues_the_last_chunk_on_the_worker(recording, monkeypatch):
     from types import SimpleNamespace
-    from tuxtalk import app
     texts, typed, _ = recording
     texts.extend(["we meet", "at three", "we meet at three"])
     monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TuxTalk")
@@ -681,7 +682,7 @@ def test_flatpak_stop_queues_the_last_chunk_on_the_worker(recording, monkeypatch
     svc = SimpleNamespace(input_device_idx=None, last_activity=0.0,
                           timeout_enabled=False, last_config_check=time.time())
     capture.stop_requested.set()
-    app._service_tick(live.chunk_cfg, svc)
+    service_tick.tick(live.chunk_cfg, svc)
     assert type_at_pause.chunk_worker().drain(5)
     assert "".join(typed) == "We meet at three "
 

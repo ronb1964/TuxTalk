@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 from gi.repository import Gio, GLib
 
-from tuxtalk import (app, atspi_helper, delivery_notices, focused_window, history,
+from tuxtalk import (atspi_helper, delivery_notices, focused_window, history,
                      screen_message, send_countdown)
 from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
@@ -174,7 +174,7 @@ def test_delivery_stops_when_the_focus_moves_into_a_password_field(desktop, monk
     """Pasted line by line, a dictation is asked about again before each line."""
     monkeypatch.setattr(delivery, "determine_injection_method", lambda mode: ("paste", "test"))
     monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: True)
-    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    monkeypatch.setattr("time.sleep", lambda s: None)
     desktop["answers"], desktop["password"] = [False], True   # a text box, then a password field
     assert delivery.inject_text("first line\nsecond line", "auto") == "password_field"
     assert desktop["pasted"] == ["first line"] and desktop["typed"] == []
@@ -185,7 +185,7 @@ def test_a_paste_stopped_there_isnt_finished_by_typing(desktop, monkeypatch):
     "no", and the rest of the dictation was then typed into the field."""
     monkeypatch.setattr(delivery, "determine_injection_method", lambda mode: ("paste", "test"))
     monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: True)
-    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    monkeypatch.setattr("time.sleep", lambda s: None)
     desktop["answers"] = [False, True]          # then "no" to any further question
     assert delivery.inject_text("first line\nsecond line", "auto") == "password_field"
     assert desktop["pasted"] == ["first line"] and desktop["typed"] == []
@@ -199,7 +199,7 @@ def test_typed_line_by_line_it_stops_there_too(desktop, monkeypatch):
                                                       type_text=keyboard_output.type_text))
     monkeypatch.setattr(keyboard_output, "type_text_raw", lambda t: keys.append(t) or True)
     monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: keys.append("SHIFT+ENTER") or True)
-    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    monkeypatch.setattr("time.sleep", lambda s: None)
     desktop["answers"], desktop["password"] = [False], True
     assert delivery.inject_text("first line\nsecond line", "auto") == "password_field"
     assert keys == ["first line", "SHIFT+ENTER"]
@@ -223,7 +223,7 @@ def test_sending_automatically_doesnt_press_enter_in_a_password_field(desktop, m
     there would submit the login form."""
     from tuxtalk.output_backends import VirtualKeyboardOutputBackend
     monkeypatch.setattr(keyboard_output, "output_backend", VirtualKeyboardOutputBackend)
-    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    monkeypatch.setattr("time.sleep", lambda s: None)
     monkeypatch.setattr(focused_window, "look", lambda: ("firefox", ("tray", "{f1}")))
     pending = {"to": focused_window.look(), "why": "sending automatically",
                "timer": None, "ticks": [], "press": keyboard_output.press_key}

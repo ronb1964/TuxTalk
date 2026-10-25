@@ -19,7 +19,7 @@ from . import recording_state as rs
 from . import live_settings as live
 from . import keyboard_output
 from . import engine
-from . import recording
+from . import chunking
 from . import last_dictation
 from . import notices
 from . import delivery
@@ -60,7 +60,7 @@ def cut_chunk(chunker):
         if rs.state.chunker is not chunker:
             return  # the recording ended while this block was arriving
         frames, rs.state.frames = rs.state.frames, []
-        recording.drop_tail_samples(frames, chunker.tail_samples())
+        chunking.drop_tail_samples(frames, chunker.tail_samples())
         rs.state.chunks_submitted += 1
         number = rs.state.chunks_submitted
         rec_sr = getattr(rs.state, "recording_samplerate", engine.SAMPLE_RATE)

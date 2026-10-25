@@ -8,6 +8,7 @@ import pytest
 
 from tuxtalk import config, recording_indicator as ri, window_geometry as wg
 from tuxtalk.window_geometry import Rect
+from tuxtalk import service_tick
 
 
 # --- where the active window is, as a rectangle --------------------------------------
@@ -85,11 +86,10 @@ def test_the_service_passes_it_to_the_indicator(service_main):
 
 
 def test_a_changed_setting_reaches_the_running_indicator(monkeypatch):
-    from tuxtalk import app
     applied = []
     indicator = types.SimpleNamespace(apply_settings=lambda *a, **k: applied.append(k))
-    monkeypatch.setattr(app, "load_config", lambda: config.Settings(indicator_follow_window=True))
-    app._reload_live_settings(config.Settings(), indicator)
+    monkeypatch.setattr(service_tick, "load_config", lambda: config.Settings(indicator_follow_window=True))
+    service_tick._reload_live_settings(config.Settings(), indicator)
     assert applied[0]["follow_window"] is True
 
 

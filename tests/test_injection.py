@@ -14,7 +14,7 @@ import subprocess
 
 import pytest
 
-from tuxtalk import app, focused_window
+from tuxtalk import focused_window
 from tuxtalk import delivery
 from tuxtalk import voice_commands
 from tuxtalk import keyboard_output
@@ -83,7 +83,7 @@ def wayland(monkeypatch):
     monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
     monkeypatch.setattr(keyboard_output, "which", lambda name: f"/usr/bin/{name}")
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
-    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    monkeypatch.setattr("time.sleep", lambda s: None)
 
 
 # --- the paste path must report its real outcome ---------------------------

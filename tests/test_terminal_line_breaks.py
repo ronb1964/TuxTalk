@@ -21,7 +21,7 @@ without that a terminal is indistinguishable from anything else.
 
 import pytest
 
-from tuxtalk import app, focused_window
+from tuxtalk import focused_window
 from tuxtalk import delivery
 from tuxtalk import keyboard_output
 
@@ -89,7 +89,7 @@ def test_new_line_in_kwrite_is_pasted_not_a_shift_enter(window, monkeypatch):
     the symbols the line above starts with: "$45", new line, "$25" came out
     as "$$25". A newline inside the paste is a plain one. A plain Enter
     would not do: in Kate's terminal panel it runs the line."""
-    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    monkeypatch.setattr("time.sleep", lambda s: None)
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     monkeypatch.setattr(delivery, "determine_injection_method", lambda m: ("paste", "test"))
     monkeypatch.setattr(focused_window, "look", lambda: (window, None))
@@ -104,7 +104,7 @@ def test_new_line_in_kwrite_is_pasted_not_a_shift_enter(window, monkeypatch):
 
 def test_new_line_in_a_chat_app_is_still_shift_enter(monkeypatch):
     """A newline pasted into a chat box like Claude Desktop sends the message."""
-    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    monkeypatch.setattr("time.sleep", lambda s: None)
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     monkeypatch.setattr(delivery, "determine_injection_method", lambda m: ("paste", "test"))
     monkeypatch.setattr(focused_window, "look", lambda: ("discord", None))
@@ -121,7 +121,7 @@ def test_a_paste_with_line_breaks_asks_which_window_only_before_and_after(monkey
     """Each question is a D-Bus call to the tray from the thread that types;
     the one made right before the paste already said it's KWrite."""
     looks = []
-    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    monkeypatch.setattr("time.sleep", lambda s: None)
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     monkeypatch.setattr(delivery, "determine_injection_method", lambda m: ("paste", "test"))
     monkeypatch.setattr(focused_window, "look",

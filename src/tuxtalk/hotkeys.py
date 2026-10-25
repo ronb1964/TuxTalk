@@ -2,7 +2,7 @@
 installed hotkey helper: hold to dictate, tap to toggle, a double-tap for
 hands-free, Shift for a voice edit, Esc to cancel, and the Voice Commands
 and Paste Last Dictation combos. run() is the input loop; each pass it also
-runs the service's shared tick (app._service_tick), and keyboards that come
+runs the service's shared tick (service_tick.tick), and keyboards that come
 and go are picked up while no recording runs."""
 from .logger import setup_logger
 import os
@@ -11,14 +11,12 @@ import time
 import atexit
 import select
 from evdev import InputDevice, ecodes, list_devices
-from typing import NamedTuple
 from .config import Settings
 from . import beeps
 from .beeps import CANCEL_BEEP
 from . import (delivery_notices, modifier_hotkeys, secure_input, send_countdown,
                uinput_helper)
-from .hotkey_keys import (MODIFIER_CODES, check_modifiers_held, keycode_from_name,
-                          parse_hotkey_combo, track_modifier)
+from .hotkey_keys import (MODIFIER_CODES, check_modifiers_held, track_modifier)
 from . import recording_state as rs
 from . import live_settings as live
 from . import keyboard_grab
@@ -27,6 +25,7 @@ from . import recording
 from . import notices
 from . import delivery
 from . import pipeline
+from . import hotkey_keys, service_tick
 
 logger = setup_logger(__name__)
 
@@ -107,36 +106,6 @@ def _devices_with_input(devices, timeout):
         # loop's error handling drops it.
         return list(devices)
     return ready
-
-
-class Hotkeys(NamedTuple):
-    """The hotkeys as keycodes, which the input loop keeps in locals and
-    rebinds after a live settings change."""
-    hold_key: int | None
-    toggle_key: int | None
-    vc_hotkey_str: str
-    voice_cmds_combo: tuple | None
-    voice_cmds_main_key: int | None
-    paste_last_combo: tuple | None = None
-
-    @classmethod
-    def from_settings(cls, cfg) -> "Hotkeys":
-        """The hotkeys *cfg* names."""
-        vc_hotkey_str = getattr(cfg, "voice_commands_hotkey", "")
-        voice_cmds_combo = parse_hotkey_combo(vc_hotkey_str)
-        return cls(
-            hold_key=keycode_from_name(cfg.hotkey),
-            toggle_key=keycode_from_name(cfg.toggle_hotkey) if cfg.toggle_hotkey else None,
-            vc_hotkey_str=vc_hotkey_str,
-            voice_cmds_combo=voice_cmds_combo,
-            voice_cmds_main_key=voice_cmds_combo[1] if voice_cmds_combo else None,
-            paste_last_combo=parse_hotkey_combo(getattr(cfg, "paste_last_hotkey", "")),
-        )
-
-    def watched(self) -> tuple:
-        """The keys whose presses count as using TuxTalk (for Power Saving)."""
-        return (self.hold_key, self.toggle_key, ecodes.KEY_ESC, self.voice_cmds_main_key,
-                self.paste_last_combo[1] if self.paste_last_combo else None)
 
 
 def _rediscover_devices(devices) -> int:
@@ -493,12 +462,11 @@ def run(cfg: Settings, input_device_idx, keyboards=None):
 
     *keyboards* is the hotkey helper (hotkey_helper_client.HelperKeyboard) when
     it is installed: then no keyboard is opened here at all."""
-    from . import app       # the service shell: the tick and state both backends share
     session = os.environ.get("XDG_SESSION_TYPE", "").lower()
     logger.info(f"Session type: {session}, Wayland: {session=='wayland'}")
     # Both hotkeys work whatever the mode setting says.
     logger.info(f"Hold key: {cfg.hotkey}, Toggle key: {cfg.toggle_hotkey or 'none'}")
-    svc = app._ServiceState(cfg, input_device_idx)
+    svc = service_tick.ServiceState(cfg, input_device_idx)
     logger.info(f"Auto-timeout: enabled={svc.timeout_enabled}, minutes={svc.timeout_minutes}")
 
     use_helper = keyboards is not None
@@ -529,7 +497,7 @@ def run(cfg: Settings, input_device_idx, keyboards=None):
         # Backend-agnostic work: D-Bus/portal start/stop commands, the
         # auto-timeout, and Preferences changes. Not _config_file_changed()
         # here: that check is edge-triggered, and the tick has consumed it.
-        reloaded = app._service_tick(cfg, svc)
+        reloaded = service_tick.tick(cfg, svc)
         if reloaded is not None:
             keys = reloaded
             # Re-claimed even if the hotkeys look unchanged: claiming is cheap.
@@ -586,7 +554,7 @@ def _keys_to_watch(cfg: Settings, devices):
         print("Onboarding not complete. No hotkeys will be active until setup is finished.")
         return None
 
-    keys = Hotkeys.from_settings(cfg)
+    keys = hotkey_keys.Hotkeys.from_settings(cfg)
     if keys.hold_key is None:
         logger.info("No hotkey configured - service will not monitor any keys")
         print("No hotkey configured. Complete onboarding to activate dictation.")
@@ -604,7 +572,7 @@ def _keys_to_watch(cfg: Settings, devices):
     return keys
 
 
-def _watch(cfg: Settings, devices, keys: "Hotkeys") -> None:
+def _watch(cfg: Settings, devices, keys: "hotkey_keys.Hotkeys") -> None:
     """Have the desktop hold *keys* back from the focused app (see
     _claim_desktop_hotkeys), and tell the hotkey helper and the modifier-key
     check which keys to look for."""
@@ -614,7 +582,7 @@ def _watch(cfg: Settings, devices, keys: "Hotkeys") -> None:
     modifier_hotkeys.note(devices, keys.hold_key, keys.toggle_key)
 
 
-def _read_key_events(devices, keys: "Hotkeys", held_modifiers, cfg: Settings, svc,
+def _read_key_events(devices, keys: "hotkey_keys.Hotkeys", held_modifiers, cfg: Settings, svc,
                      now: float) -> list:
     """Act on the key events waiting on *devices*; the devices that failed."""
     dead_devices = []

@@ -13,6 +13,7 @@ import ctypes as C
 
 import pytest
 
+from tuxtalk import hotkey_keys
 from tuxtalk import keyboard_layout as kl
 from tuxtalk import live_settings as live
 from tuxtalk import keyboard_output
@@ -447,7 +448,7 @@ def test_a_hotkey_letter_is_the_key_that_types_it(monkeypatch, layout, key):
     """KDE, GNOME and COSMIC hold Ctrl+Alt+Y back by the letter, so on a
     German keyboard the service must listen to that key too, not to the one
     US keyboards have Y on: that typed a "z" into the app instead."""
-    from tuxtalk import hotkey_keys, x11_hotkeys
+    from tuxtalk import x11_hotkeys
     monkeypatch.setattr(kl, "active_layout", lambda: layout)
     assert hotkey_keys.parse_hotkey_combo("Ctrl+Alt+Y") == ({"CTRL", "ALT"}, key)
     # And the X server holds the same key on other X11 desktops.

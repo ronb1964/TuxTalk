@@ -8,7 +8,7 @@ is really in the document, or "undo that" deletes the user's own writing.
 
 import pytest
 
-from tuxtalk import app, focused_window
+from tuxtalk import focused_window
 from tuxtalk import delivery
 from tuxtalk import keyboard_output
 from tuxtalk import recording_state as rs
@@ -18,7 +18,7 @@ MARKER = "\xa7SHIFT_ENTER\xa7"
 
 @pytest.fixture
 def quiet(monkeypatch):
-    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    monkeypatch.setattr("time.sleep", lambda s: None)
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     rs.state.last_inserted_text = ""
     yield

@@ -19,7 +19,7 @@ import subprocess
 
 import pytest
 
-from tuxtalk import (app, clipboard, compositor_focus, dbus_service, desktop_identity,
+from tuxtalk import (clipboard, compositor_focus, dbus_service, desktop_identity,
                      focused_window)
 from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
@@ -118,7 +118,7 @@ def paste_env(monkeypatch):
     """A Wayland session where wl-copy works; records what is run and pressed."""
     monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
     monkeypatch.setattr(keyboard_output, "which", lambda name: f"/usr/bin/{name}")
-    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    monkeypatch.setattr("time.sleep", lambda s: None)
     monkeypatch.setattr(live, "restore_clipboard", False)
     monkeypatch.setattr(clipboard, "wl_copy_command", lambda: ["wl-copy"])
     env = {"copies": [], "keys": [], "primary_rc": 0}

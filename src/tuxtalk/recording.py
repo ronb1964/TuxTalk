@@ -10,7 +10,8 @@ import time
 import numpy as np
 import sounddevice as sd
 
-from . import beeps, engine, keyboard_grab, notices, send_countdown, tray_link, type_at_pause
+from . import (beeps, chunking, engine, keyboard_grab, notices, send_countdown, tray_link,
+               type_at_pause)
 from . import config as config_module
 from . import notify as notify_module
 from . import live_settings as live
@@ -158,7 +159,7 @@ def trim_auto_stop_tail(frames):
     touched. Runs after the stream stops, so no block is still being added.
     """
     detector, rs.state.silence = rs.state.silence, None
-    drop_tail_samples(frames, detector.tail_to_trim() if detector is not None else 0)
+    chunking.drop_tail_samples(frames, detector.tail_to_trim() if detector is not None else 0)
 
 
 def drop_speechless_rest(frames):
@@ -169,17 +170,6 @@ def drop_speechless_rest(frames):
         logger.info("No speech after the last chunk; the rest isn't transcribed")
         return []
     return frames
-
-
-def drop_tail_samples(frames, to_trim):
-    """Remove whole trailing blocks (int16 mono) holding at most *to_trim*
-    samples. A block is never split, so speech is never touched."""
-    while frames and to_trim > 0:
-        block_samples = len(frames[-1]) // 2          # int16 mono
-        if block_samples > to_trim:
-            break
-        frames.pop()
-        to_trim -= block_samples
 
 
 def frames_f32(frames):

@@ -17,9 +17,10 @@ keeps the previous settings and carries on.
 
 import pytest
 
-from tuxtalk import hotkeys
+from tuxtalk import hotkey_keys
 from tuxtalk import config
 from tuxtalk import live_settings as live
+from tuxtalk import service_tick
 
 
 @pytest.fixture
@@ -50,9 +51,9 @@ class TestReloadLiveSettings:
         """The same object must be updated — the whole service holds a reference."""
         cfg = _settings(auto_period=True, beeps=True, injection_mode="type")
         fresh = _settings(auto_period=False, beeps=False, injection_mode="paste")
-        monkeypatch.setattr(app, "load_config", lambda: fresh)
+        monkeypatch.setattr(service_tick, "load_config", lambda: fresh)
 
-        app._reload_live_settings(cfg, None)
+        service_tick._reload_live_settings(cfg, None)
 
         assert cfg.auto_period is False
         assert cfg.beeps is False
@@ -62,9 +63,9 @@ class TestReloadLiveSettings:
         """model/device belong to the model that is already built and running."""
         cfg = _settings(model="small", device="cpu")
         fresh = _settings(model="large-v3", device="cuda")
-        monkeypatch.setattr(app, "load_config", lambda: fresh)
+        monkeypatch.setattr(service_tick, "load_config", lambda: fresh)
 
-        app._reload_live_settings(cfg, None)
+        service_tick._reload_live_settings(cfg, None)
 
         assert cfg.model == "small", (
             "Refreshing model on a running service would disagree with the "
@@ -75,13 +76,13 @@ class TestReloadLiveSettings:
     def test_returns_recomputed_hotkey_values(self, app, monkeypatch):
         cfg = _settings(hotkey="F8", toggle_hotkey="F9")
         fresh = _settings(hotkey="F7", toggle_hotkey="F9")
-        monkeypatch.setattr(app, "load_config", lambda: fresh)
+        monkeypatch.setattr(service_tick, "load_config", lambda: fresh)
 
-        live = app._reload_live_settings(cfg, None)
+        live = service_tick._reload_live_settings(cfg, None)
 
         assert live is not None
-        assert live.hold_key == hotkeys.keycode_from_name("F7")
-        assert live.toggle_key == hotkeys.keycode_from_name("F9")
+        assert live.hold_key == hotkey_keys.keycode_from_name("F7")
+        assert live.toggle_key == hotkey_keys.keycode_from_name("F9")
 
     def test_applies_indicator_settings(self, app, monkeypatch):
         cfg = _settings()
@@ -89,10 +90,10 @@ class TestReloadLiveSettings:
             indicator_position="top-left", indicator_size="large",
             indicator_offset_x=50, indicator_offset_y=-10,
         )
-        monkeypatch.setattr(app, "load_config", lambda: fresh)
+        monkeypatch.setattr(service_tick, "load_config", lambda: fresh)
         indicator = StubIndicator()
 
-        app._reload_live_settings(cfg, indicator)
+        service_tick._reload_live_settings(cfg, indicator)
 
         assert indicator.calls == [("top-left", "large", 50, -10)]
 
@@ -103,9 +104,9 @@ class TestReloadLiveSettings:
         def boom():
             raise config.ConfigNotLoadedError("unreadable")
 
-        monkeypatch.setattr(app, "load_config", boom)
+        monkeypatch.setattr(service_tick, "load_config", boom)
 
-        live = app._reload_live_settings(cfg, None)
+        live = service_tick._reload_live_settings(cfg, None)
 
         assert live is None
         assert cfg.auto_period is True, "previous settings must survive"
@@ -113,9 +114,9 @@ class TestReloadLiveSettings:
     def test_survives_any_unexpected_error(self, app, monkeypatch):
         """The input loop calls this; nothing here may escape into it."""
         cfg = _settings()
-        monkeypatch.setattr(app, "load_config", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+        monkeypatch.setattr(service_tick, "load_config", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
 
-        assert app._reload_live_settings(cfg, None) is None
+        assert service_tick._reload_live_settings(cfg, None) is None
 
 
 class TestConfigChangeDetection:

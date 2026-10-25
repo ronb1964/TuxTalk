@@ -4,9 +4,10 @@ Ron, 2026-10-17: "I really like the press enter, so you can just speak."
 A spoken "new line" stays Shift+Enter, which never sends a chat message.
 """
 import numpy as np
+import time
 import pytest
 
-from tuxtalk import app, config, focused_window, key_commands, send_countdown, window_classes
+from tuxtalk import config, focused_window, key_commands, send_countdown, window_classes
 from tuxtalk import hotkeys
 from tuxtalk import pipeline
 from tuxtalk import engine
@@ -181,7 +182,7 @@ def test_press_enter_key_uses_the_output_backend_and_forgets_undo(monkeypatch):
             pressed.append(chords)
             return True
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: Backend())
-    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    monkeypatch.setattr("time.sleep", lambda s: None)
     rs.state.last_inserted_text = "See you at noon."
     assert keyboard_output.press_key("ENTER", "test") is True
     assert pressed == [[((), "ENTER")]]
@@ -253,7 +254,7 @@ def countdown(monkeypatch):
             return True
         return False
     monkeypatch.setattr(keyboard_output, "press_key", press)
-    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    monkeypatch.setattr("time.sleep", lambda s: None)
     from tuxtalk import screen_message
     monkeypatch.setattr(screen_message, "show_over_active_window",
                         lambda text, **kw: labels.append(text))
@@ -356,7 +357,7 @@ def test_a_tap_too_short_to_dictate_says_not_sent(countdown, monkeypatch):
                         lambda beeps, notify, reason="": reasons.append(reason))
     monkeypatch.setattr(rs.state, "held_send", True)
     monkeypatch.setattr(rs.state, "silence", None)
-    monkeypatch.setattr(rs.state, "press_t0", app.time.time())
+    monkeypatch.setattr(rs.state, "press_t0", time.time())
     assert recording.finish_capture(False, False) is None
     assert reasons == [send_countdown.HELD_NOTICE]
     assert labels == [send_countdown.HELD_NOTICE]
@@ -460,7 +461,7 @@ def test_a_short_tap_types_the_space_when_released(countdown, monkeypatch):
     monkeypatch.setattr(rs.state, "held_send", send_countdown.hold(announce=False))
     monkeypatch.setattr(rs.state, "silence", None)
     monkeypatch.setattr(rs.state, "chunks_submitted", 0)
-    monkeypatch.setattr(rs.state, "press_t0", app.time.time())
+    monkeypatch.setattr(rs.state, "press_t0", time.time())
     assert recording.finish_capture(False, False) is None
     assert TYPED == [" "] and reasons == [send_countdown.HELD_NOTICE]
 
@@ -473,13 +474,13 @@ def test_typing_the_space_doesnt_turn_a_tap_into_a_dictation(countdown, monkeypa
     monkeypatch.setattr(recording, "cancel_recording",
                         lambda beeps, notify, reason="": reasons.append(reason))
     monkeypatch.setattr(delivery, "inject_text",
-                        lambda text, mode, **kw: app.time.sleep(0.1) or TYPED.append(text) or "ok")
+                        lambda text, mode, **kw: time.sleep(0.1) or TYPED.append(text) or "ok")
     monkeypatch.setattr(send_countdown, "_owed", None)
     start_send("test", " ", "type")
     monkeypatch.setattr(rs.state, "held_send", send_countdown.hold(announce=False))
     monkeypatch.setattr(rs.state, "silence", None)
     monkeypatch.setattr(rs.state, "chunks_submitted", 0)
-    monkeypatch.setattr(rs.state, "press_t0", app.time.time() - 0.15)
+    monkeypatch.setattr(rs.state, "press_t0", time.time() - 0.15)
     assert recording.finish_capture(False, False) is None
     assert TYPED == [" "] and reasons == [send_countdown.HELD_NOTICE]
 
@@ -543,7 +544,6 @@ def test_a_quick_tap_holds_the_send_even_when_recording_starts_slowly(
     from evdev import ecodes
     F8, F9 = ecodes.KEY_F8, ecodes.KEY_F9
     clock = _Clock()
-    monkeypatch.setattr(app, "time", clock)
     monkeypatch.setattr(recording, "time", clock)
     monkeypatch.setattr(hotkeys, "time", clock)
     reasons, dictated = [], []
@@ -698,7 +698,7 @@ def test_a_pause_at_the_end_after_switching_windows_sends_nothing(monkeypatch, k
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: focus[0])
     monkeypatch.setattr(delivery, "deliver_text",
                         lambda text, mode, one_block=False, *, where: "ok")
-    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    monkeypatch.setattr("time.sleep", lambda s: None)
     monkeypatch.setattr(engine, "transcribe", lambda audio, language: "see you at noon")
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr(live, "press_enter_after", True)

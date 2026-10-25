@@ -13,7 +13,7 @@ import types
 
 import pytest
 
-from tuxtalk import app
+from tuxtalk import service_tick
 from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
 from tuxtalk import recording
@@ -98,9 +98,9 @@ class TestTheServiceTickPicksItUp:
         _idle(monkeypatch)
         monkeypatch.setattr(live, "config_file_changed", lambda: False)
         cfg = _cfg()
-        svc = app._ServiceState(cfg)
+        svc = service_tick.ServiceState(cfg)
 
         _write(commands_file, {"btw": "by the way"})
-        app._service_tick(cfg, svc)
+        service_tick.tick(cfg, svc)
 
         assert live.commands == {"btw": "by the way"}

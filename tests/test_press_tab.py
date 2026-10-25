@@ -9,7 +9,7 @@ Mid-sentence "press tab" still types a tab character (normalize.py).
 import numpy as np
 import pytest
 
-from tuxtalk import app, libei_ctypes
+from tuxtalk import libei_ctypes
 from tuxtalk import pipeline
 from tuxtalk import engine
 from tuxtalk import keyboard_output
@@ -127,7 +127,7 @@ def test_pressing_tab_goes_through_the_output_backend_and_forgets_undo(monkeypat
             pressed.append(chords)
             return True
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: Backend())
-    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    monkeypatch.setattr("time.sleep", lambda s: None)
     monkeypatch.setattr(rs.state, "last_inserted_text", "John")
     monkeypatch.setattr(rs.state, "sent", None)
     assert keyboard_output.press_key("TAB", 'said "press tab"') is True
@@ -143,7 +143,7 @@ def test_a_key_that_couldnt_be_pressed_leaves_undo_and_no_send(monkeypatch, key)
         def press_keys(self, chords, claim=None):
             return False
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: Backend())
-    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    monkeypatch.setattr("time.sleep", lambda s: None)
     monkeypatch.setattr(rs.state, "last_inserted_text", "John")
     monkeypatch.setattr(rs.state, "sent", None)
     assert keyboard_output.press_key(key, "test") is False

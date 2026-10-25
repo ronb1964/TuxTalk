@@ -246,7 +246,6 @@ def test_the_setting_applies_without_a_restart():
 
 
 def test_paste_uses_the_keeper_only_when_the_setting_is_on(monkeypatch):
-    from tuxtalk import app
     events = []
 
     class Keeper:
@@ -272,7 +271,7 @@ def test_paste_uses_the_keeper_only_when_the_setting_is_on(monkeypatch):
     monkeypatch.setattr(keyboard_output, "which", lambda name: True)
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "kwrite")
     monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda cmd, **kw: commands.append(cmd) or Proc())
-    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    monkeypatch.setattr("time.sleep", lambda s: None)
     monkeypatch.setattr(cb, "wl_copy_command", lambda: ["wl-copy", "--sensitive"])
     monkeypatch.setattr(keyboard_output, "_clipboard_keeper", Keeper())
 

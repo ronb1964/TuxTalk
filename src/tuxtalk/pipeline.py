@@ -442,7 +442,7 @@ def stop_recording(
     """Stop recording, transcribe audio, and inject text — synchronously.
 
     Backend A (evdev): the whole pipeline runs on the caller's thread. Backend B
-    splits the two halves (see app._service_tick) so the slow transcription and
+    splits the two halves (see service_tick.tick) so the slow transcription and
     typing run off the hotkey loop.
     """
     edit_mode, rs.state.edit_mode = rs.state.edit_mode, False

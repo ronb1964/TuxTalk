@@ -19,8 +19,8 @@ import types
 
 import pytest
 
-from tuxtalk import app, hotkey_keys
-from tuxtalk import hotkeys
+from tuxtalk import hotkey_keys
+from tuxtalk import service_tick
 from tuxtalk import type_at_pause
 from tuxtalk import engine
 from tuxtalk import live_settings as live
@@ -49,22 +49,22 @@ class TestChangeSignalHasOneOwner:
         detector is edge-triggered — the tick already consumed it.
         """
         _idle(monkeypatch)
-        reloaded = hotkeys.Hotkeys(
+        reloaded = hotkey_keys.Hotkeys(
             hold_key=60, toggle_key=None, vc_hotkey_str="",
             voice_cmds_combo=None, voice_cmds_main_key=None,
         )
         monkeypatch.setattr(live, "config_file_changed", lambda: True)
-        monkeypatch.setattr(app, "_reload_live_settings", lambda cfg, ind: reloaded)
+        monkeypatch.setattr(service_tick, "_reload_live_settings", lambda cfg, ind: reloaded)
 
         cfg = _cfg()
-        assert app._service_tick(cfg, app._ServiceState(cfg)) is reloaded
+        assert service_tick.tick(cfg, service_tick.ServiceState(cfg)) is reloaded
 
     def test_tick_hands_back_nothing_when_the_config_is_unchanged(self, monkeypatch):
         _idle(monkeypatch)
         monkeypatch.setattr(live, "config_file_changed", lambda: False)
 
         cfg = _cfg()
-        assert app._service_tick(cfg, app._ServiceState(cfg)) is None
+        assert service_tick.tick(cfg, service_tick.ServiceState(cfg)) is None
 
     def test_a_new_hotkey_survives_the_tick(self, monkeypatch):
         """End to end: the change is detected once and the new key comes back.
@@ -74,14 +74,14 @@ class TestChangeSignalHasOneOwner:
         """
         _idle(monkeypatch)
         monkeypatch.setattr(live, "config_file_changed", lambda: True)
-        monkeypatch.setattr(app, "load_config", lambda: _cfg(
+        monkeypatch.setattr(service_tick, "load_config", lambda: _cfg(
             hotkey="F9", toggle_hotkey="", voice_commands_hotkey="", mode="hold",
             key_delay=12, log_transcripts=False,
         ))
 
         cfg = _cfg(hotkey="F8", toggle_hotkey="", voice_commands_hotkey="",
                    mode="hold", key_delay=12, log_transcripts=False)
-        reloaded = app._service_tick(cfg, app._ServiceState(cfg))
+        reloaded = service_tick.tick(cfg, service_tick.ServiceState(cfg))
 
         assert reloaded is not None, "the tick must return what it reloaded"
         assert reloaded.hold_key == hotkey_keys.keycode_from_name("F9")
@@ -102,7 +102,7 @@ class TestAutoTimeoutIsLive:
         """Untick 'auto-timeout' and the service must stop exiting on it."""
         _idle(monkeypatch)
         cfg = _cfg(auto_timeout_enabled=True, auto_timeout_minutes=5)
-        svc = app._ServiceState(cfg)
+        svc = service_tick.ServiceState(cfg)
 
         # What _reload_live_settings does: update cfg in place.
         cfg.auto_timeout_enabled = False
@@ -112,7 +112,7 @@ class TestAutoTimeoutIsLive:
     def test_enabling_the_timeout_takes_effect_without_a_restart(self, monkeypatch):
         _idle(monkeypatch)
         cfg = _cfg(auto_timeout_enabled=False, auto_timeout_minutes=1)
-        svc = app._ServiceState(cfg)
+        svc = service_tick.ServiceState(cfg)
 
         cfg.auto_timeout_enabled = True
 
@@ -122,7 +122,7 @@ class TestAutoTimeoutIsLive:
     def test_a_shortened_timeout_takes_effect_without_a_restart(self, monkeypatch):
         _idle(monkeypatch)
         cfg = _cfg(auto_timeout_enabled=True, auto_timeout_minutes=30)
-        svc = app._ServiceState(cfg)
+        svc = service_tick.ServiceState(cfg)
 
         cfg.auto_timeout_minutes = 2
 
@@ -134,14 +134,14 @@ class TestAutoTimeoutIsLive:
         _idle(monkeypatch)
         monkeypatch.setattr(live, "config_file_changed", lambda: False)
         cfg = _cfg(auto_timeout_enabled=True, auto_timeout_minutes=5)
-        svc = app._ServiceState(cfg)
+        svc = service_tick.ServiceState(cfg)
         svc.last_activity = 0.0  # idle since the epoch
 
         cfg.auto_timeout_enabled = False
         loaded = _Engine()
         monkeypatch.setattr(engine, "model", loaded)
 
-        app._service_tick(cfg, svc)
+        service_tick.tick(cfg, svc)
         assert engine.model is loaded          # not rested
 
     def test_switching_the_timeout_on_does_not_stop_the_service_at_once(self, monkeypatch):
@@ -152,7 +152,7 @@ class TestAutoTimeoutIsLive:
         monkeypatch.setattr(live, "commands_file_changed", lambda: False)
         monkeypatch.setattr(live, "words_file_changed", lambda: False)
         cfg = _cfg(auto_timeout_enabled=False, auto_timeout_minutes=5)
-        svc = app._ServiceState(cfg)
+        svc = service_tick.ServiceState(cfg)
         svc.last_activity = 0.0       # no D-Bus command since the epoch
         svc.last_config_check = 0.0
 
@@ -161,14 +161,14 @@ class TestAutoTimeoutIsLive:
             return None
 
         monkeypatch.setattr(live, "config_file_changed", lambda: True)
-        monkeypatch.setattr(app, "_reload_live_settings", reload)
+        monkeypatch.setattr(service_tick, "_reload_live_settings", reload)
         monkeypatch.setattr(svc, "refresh_input_device", lambda: None)
-        app._service_tick(cfg, svc)
+        service_tick.tick(cfg, svc)
 
         loaded = _Engine()
         monkeypatch.setattr(engine, "model", loaded)
         monkeypatch.setattr(live, "config_file_changed", lambda: False)
-        app._service_tick(cfg, svc)
+        service_tick.tick(cfg, svc)
         assert engine.model is loaded    # not rested on the very next pass
 
 
@@ -183,9 +183,9 @@ def test_power_saving_rests_the_model_and_keeps_the_service(monkeypatch):
     loaded = _Engine()
     monkeypatch.setattr(engine, "model", loaded)
     cfg = _cfg(auto_timeout_enabled=True, auto_timeout_minutes=5)
-    svc = app._ServiceState(cfg)
+    svc = service_tick.ServiceState(cfg)
     svc.last_activity = 0.0
-    app._service_tick(cfg, svc)           # no SystemExit: the hotkeys stay
+    service_tick.tick(cfg, svc)           # no SystemExit: the hotkeys stay
     assert engine.model is None and loaded.closed
     assert shown == []                    # nothing to explain: F8 still works
 
@@ -199,12 +199,12 @@ def test_power_saving_waits_for_a_transcription_still_running(monkeypatch):
     loaded = _Engine()
     monkeypatch.setattr(engine, "model", loaded)
     cfg = _cfg(auto_timeout_enabled=True, auto_timeout_minutes=1)
-    svc = app._ServiceState(cfg)
+    svc = service_tick.ServiceState(cfg)
     svc.last_activity = 0.0
     with type_at_pause.inject_lock:                # a dictation is being transcribed
-        app._service_tick(cfg, svc)
+        service_tick.tick(cfg, svc)
     assert engine.model is loaded and not loaded.closed
-    app._service_tick(cfg, svc)           # done: now it rests
+    service_tick.tick(cfg, svc)           # done: now it rests
     assert engine.model is None
 
 

@@ -9,10 +9,11 @@ These tests pin down the invariant that makes that impossible:
     no matter how recording ends, every grab is released.
 """
 
+import time
 import pytest
 from evdev import ecodes
 
-from tuxtalk import app, send_countdown
+from tuxtalk import send_countdown
 from tuxtalk import hotkeys
 from tuxtalk import tray_link
 from tuxtalk import keyboard_grab
@@ -782,9 +783,9 @@ def test_a_microphone_that_never_stops_cannot_freeze_the_service(monkeypatch):
     monkeypatch.setattr(mic_stream, "_closing", set())
     stream = StuckStream()
     rs.state.stream = stream
-    started = app.time.monotonic()
+    started = time.monotonic()
     recording.stop_stream_safely()
-    assert app.time.monotonic() - started < 1.0
+    assert time.monotonic() - started < 1.0
     assert rs.state.stream is None
     assert mic_stream._closing == {stream}
     release.set()

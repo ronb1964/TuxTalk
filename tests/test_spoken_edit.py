@@ -1,12 +1,13 @@
 """Voice editing without its key: "edit that, make it shorter" right after a
 dictation selects what TuxTalk typed and changes it (voice_edit.handle_spoken_edit,
 voice_edit_rules.spoken_edit). Labs, with voice editing on."""
+import time
 import types
 
 import numpy as np
 import pytest
 
-from tuxtalk import app, edit_notices
+from tuxtalk import edit_notices
 from tuxtalk import pipeline
 from tuxtalk import type_at_pause
 from tuxtalk import keyboard_output
@@ -174,7 +175,7 @@ def test_edit_that_right_after_an_automatic_send_says_why(editing, monkeypatch):
     line), then "edit that, make it more formal" was typed as words."""
     _pressed, edits, problems = editing
     monkeypatch.setattr(rs.state, "last_inserted_text", "")
-    monkeypatch.setattr(rs.state, "sent", {"at": app.time.time(), "automatic": True})
+    monkeypatch.setattr(rs.state, "sent", {"at": time.time(), "automatic": True})
     assert _said("Edit that, make it more formal.")
     assert problems == ["already_sent_auto"] and edits == []
 
@@ -182,7 +183,7 @@ def test_edit_that_right_after_an_automatic_send_says_why(editing, monkeypatch):
 def test_edit_that_after_saying_press_enter_says_it_was_sent(editing, monkeypatch):
     _pressed, _edits, problems = editing
     monkeypatch.setattr(rs.state, "last_inserted_text", "")
-    monkeypatch.setattr(rs.state, "sent", {"at": app.time.time(), "automatic": False})
+    monkeypatch.setattr(rs.state, "sent", {"at": time.time(), "automatic": False})
     assert _said("Edit that, make it shorter.")
     assert problems == ["already_sent"]
 
@@ -190,7 +191,7 @@ def test_edit_that_after_saying_press_enter_says_it_was_sent(editing, monkeypatc
 def test_long_after_a_send_edit_that_is_words_again(editing, monkeypatch):
     _pressed, _edits, problems = editing
     monkeypatch.setattr(rs.state, "last_inserted_text", "")
-    monkeypatch.setattr(rs.state, "sent", {"at": app.time.time() - 3600, "automatic": True})
+    monkeypatch.setattr(rs.state, "sent", {"at": time.time() - 3600, "automatic": True})
     assert not _said("Edit that, make it shorter.")
     assert problems == []
 
@@ -204,7 +205,7 @@ def test_pressing_enter_remembers_the_send(monkeypatch):
         def press_keys(self, chords, claim=None):
             return True
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: Backend())
-    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    monkeypatch.setattr("time.sleep", lambda s: None)
     monkeypatch.setattr(rs.state, "sent", None)
     keyboard_output.press_key("ENTER", "Send each dictation automatically is on")
     assert rs.state.sent["automatic"] is True

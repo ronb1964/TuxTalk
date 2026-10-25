@@ -338,3 +338,14 @@ def carry_question(text: str) -> str:
         return text
     logger.info("The question goes on across the pause: it ends with ?")
     return m.group(1) + "?" + m.group(2)
+
+
+def drop_tail_samples(frames, to_trim):
+    """Remove whole trailing blocks (int16 mono) holding at most *to_trim*
+    samples. A block is never split, so speech is never touched."""
+    while frames and to_trim > 0:
+        block_samples = len(frames[-1]) // 2          # int16 mono
+        if block_samples > to_trim:
+            break
+        frames.pop()
+        to_trim -= block_samples

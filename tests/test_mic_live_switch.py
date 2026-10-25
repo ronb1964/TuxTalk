@@ -16,7 +16,7 @@ there is one owner rather than a snapshot and a parameter that disagree.
 import types
 
 
-from tuxtalk import app
+from tuxtalk import service_tick
 from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
 from tuxtalk import recording
@@ -38,7 +38,7 @@ def _cfg(mic=""):
 class TestResolvingTheMic:
     def test_a_changed_mic_is_re_resolved(self, monkeypatch):
         cfg = _cfg(mic="Built-in")
-        svc = app._ServiceState(cfg, input_device_idx=3)
+        svc = service_tick.ServiceState(cfg, input_device_idx=3)
         monkeypatch.setattr(recording, "pick_input_device", lambda name: 7)
 
         cfg.mic = "Sennheiser"  # what _reload_live_settings does
@@ -49,7 +49,7 @@ class TestResolvingTheMic:
     def test_an_unchanged_mic_is_not_re_resolved(self, monkeypatch):
         """Re-enumerating audio devices every second would be wasteful."""
         cfg = _cfg(mic="Built-in")
-        svc = app._ServiceState(cfg, input_device_idx=3)
+        svc = service_tick.ServiceState(cfg, input_device_idx=3)
         calls = []
         monkeypatch.setattr(recording, "pick_input_device",
                             lambda name: calls.append(name) or 7)
@@ -62,7 +62,7 @@ class TestResolvingTheMic:
     def test_a_failed_re_resolve_keeps_the_working_device(self, monkeypatch):
         """A mic that cannot be resolved must not break the one in use."""
         cfg = _cfg(mic="Built-in")
-        svc = app._ServiceState(cfg, input_device_idx=3)
+        svc = service_tick.ServiceState(cfg, input_device_idx=3)
 
         def boom(name):
             raise RuntimeError("no such device")
@@ -84,7 +84,7 @@ class TestTheNextDictationUsesIt:
         monkeypatch.setattr(recording, "pick_input_device", lambda name: 7)
 
         cfg = _cfg(mic="Built-in")
-        svc = app._ServiceState(cfg, input_device_idx=3)
+        svc = service_tick.ServiceState(cfg, input_device_idx=3)
 
         started = []
         monkeypatch.setattr(recording, "start_recording",
@@ -93,6 +93,6 @@ class TestTheNextDictationUsesIt:
         cfg.mic = "Sennheiser"
         svc.refresh_input_device()
         recording.start_requested.set()
-        app._service_tick(cfg, svc)
+        service_tick.tick(cfg, svc)
 
         assert started == [7]

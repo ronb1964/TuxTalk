@@ -5,7 +5,7 @@ would type into whatever window has the focus on the computer running them.
 """
 import pytest
 
-from tuxtalk import app, virtual_keyboard
+from tuxtalk import virtual_keyboard
 from tuxtalk import delivery
 from tuxtalk import voice_commands
 from tuxtalk import keyboard_output
@@ -195,7 +195,7 @@ def breaks_once(keyboard, monkeypatch):
             raise OSError(19, "No such device")
         write(*a)
     monkeypatch.setattr(keyboard, "write", write_then_fail)
-    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    monkeypatch.setattr("time.sleep", lambda s: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a: None)
     return keyboard
 

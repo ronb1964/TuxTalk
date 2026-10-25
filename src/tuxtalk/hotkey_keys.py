@@ -5,6 +5,8 @@ The settings name keys the way Preferences shows them ("F8", "Right Ctrl",
 other, follows which modifiers are held, and asks the keyboards which keys
 are down.
 """
+from typing import NamedTuple
+
 from evdev import ecodes
 
 from .config import HOTKEY_CHOICES
@@ -102,3 +104,33 @@ def keys_down(keyboards) -> set:
         except OSError:
             pass
     return down
+
+
+class Hotkeys(NamedTuple):
+    """The hotkeys as keycodes, which the input loop keeps in locals and
+    rebinds after a live settings change."""
+    hold_key: int | None
+    toggle_key: int | None
+    vc_hotkey_str: str
+    voice_cmds_combo: tuple | None
+    voice_cmds_main_key: int | None
+    paste_last_combo: tuple | None = None
+
+    @classmethod
+    def from_settings(cls, cfg) -> "Hotkeys":
+        """The hotkeys *cfg* names."""
+        vc_hotkey_str = getattr(cfg, "voice_commands_hotkey", "")
+        voice_cmds_combo = parse_hotkey_combo(vc_hotkey_str)
+        return cls(
+            hold_key=keycode_from_name(cfg.hotkey),
+            toggle_key=keycode_from_name(cfg.toggle_hotkey) if cfg.toggle_hotkey else None,
+            vc_hotkey_str=vc_hotkey_str,
+            voice_cmds_combo=voice_cmds_combo,
+            voice_cmds_main_key=voice_cmds_combo[1] if voice_cmds_combo else None,
+            paste_last_combo=parse_hotkey_combo(getattr(cfg, "paste_last_hotkey", "")),
+        )
+
+    def watched(self) -> tuple:
+        """The keys whose presses count as using TuxTalk (for Power Saving)."""
+        return (self.hold_key, self.toggle_key, ecodes.KEY_ESC, self.voice_cmds_main_key,
+                self.paste_last_combo[1] if self.paste_last_combo else None)

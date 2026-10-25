@@ -7,6 +7,7 @@ line, and two windows of one app (two Brave windows) look the same by
 their class. These pin what someone would see: where the words were typed,
 and whether an Enter followed them there or anywhere else.
 """
+import time
 import threading
 import types
 
@@ -14,7 +15,7 @@ import numpy as np
 import pytest
 from evdev import ecodes
 
-from tuxtalk import (app, atspi_helper, compositor_focus, dbus_service, focused_window, history,
+from tuxtalk import (atspi_helper, compositor_focus, dbus_service, focused_window, history,
                      modifier_hotkeys, send_countdown)
 from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
@@ -54,7 +55,7 @@ def chat(monkeypatch, keyboard):
         rs.state.last_inserted_text = text
         return "ok"
     monkeypatch.setattr(delivery, "deliver_text", deliver)
-    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    monkeypatch.setattr("time.sleep", lambda s: None)
     monkeypatch.setattr(engine, "transcribe", lambda audio, language: heard.pop(0))
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr(live, "press_enter_after", True)
@@ -358,7 +359,7 @@ def test_a_short_tap_of_the_hold_key_that_holds_the_send_says_so_aloud_once(
     monkeypatch.setattr(recording, "indicator", None)
     monkeypatch.setattr(rs.state, "held_send", True)
     monkeypatch.setattr(rs.state, "silence", None)
-    monkeypatch.setattr(rs.state, "press_t0", app.time.time())
+    monkeypatch.setattr(rs.state, "press_t0", time.time())
     assert recording.finish_capture(False, notify_on) is None
     assert notices == [send_countdown.HELD_NOTICE] and notifications() == [HELD_TITLE]
 
@@ -495,7 +496,7 @@ def tray(monkeypatch):
     monkeypatch.setattr(dbus_service, "_clipboard_tool_focused", False)
     monkeypatch.setattr(focused_window, "reported", lambda: tuple(dbus_service.cached_focus()))
     monkeypatch.setattr(compositor_focus, "focused_window", lambda: (None, None))
-    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    monkeypatch.setattr("time.sleep", lambda s: None)
     service = object.__new__(dbus_service.TuxTalkDBusService)
     return lambda wm_class, window_id: dbus_service.TuxTalkDBusService.SetFocusedWindow(
         service, wm_class, window_id, "")
@@ -752,7 +753,7 @@ def test_a_switch_after_the_words_keeps_back_the_enter_said_after_them(chat, key
     """The click comes after the words are in, in the moment the app is
     given to take them in before the Enter."""
     focus, heard, typed, notices = chat
-    monkeypatch.setattr(app.time, "sleep", lambda s: focus.__setitem__(slice(None), SECOND))
+    monkeypatch.setattr("time.sleep", lambda s: focus.__setitem__(slice(None), SECOND))
     heard.append("see you at noon, press enter")
     dictate()
     assert keyboard.events == [] and notices == [send_countdown.SWITCHED_WINDOW_NOTICE]

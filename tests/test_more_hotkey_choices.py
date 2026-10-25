@@ -10,7 +10,7 @@ and Preferences says what each key gives up.
 import pytest
 from evdev import ecodes
 
-from tuxtalk import (app, cosmic_hotkeys, delivery_notices, focused_window, gnome_hotkeys,
+from tuxtalk import (cosmic_hotkeys, delivery_notices, focused_window, gnome_hotkeys,
                      keyboard_layout, modifier_hotkeys, send_countdown, virtual_keyboard,
                      x11_hotkeys)
 from tuxtalk import kwin_hotkeys as kh
@@ -410,7 +410,7 @@ def test_a_stuck_key_that_keeps_back_the_enter_says_so(keyboard, stuck_right_ctr
     from tuxtalk.output_backends import VirtualKeyboardOutputBackend
     stuck_right_ctrl()
     monkeypatch.setattr(keyboard_output, "output_backend", VirtualKeyboardOutputBackend)
-    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    monkeypatch.setattr("time.sleep", lambda s: None)
     monkeypatch.setattr(focused_window, "destination",
                         lambda: focused_window.Destination(*KWRITE, False))
     notes, notices = [], []
@@ -433,7 +433,7 @@ def typing_into_kwrite(monkeypatch):
     monkeypatch.setattr(delivery, "determine_injection_method", lambda mode: ("type", "test"))
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "kwrite")
     monkeypatch.setattr(focused_window, "look", lambda: KWRITE)
-    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    monkeypatch.setattr("time.sleep", lambda s: None)
 
 
 def test_a_key_stuck_after_the_first_line_says_only_part_was_typed(keyboard, stuck_right_ctrl,
@@ -547,7 +547,7 @@ def due_send(keyboard, no_hotkeys_noted, monkeypatch):
     has the focus is focused_window.look's, KWrite unless a test says else."""
     monkeypatch.setattr(focused_window, "look", lambda: KWRITE)
     monkeypatch.setattr(send_countdown, "_cancel_timers", lambda pending: None)
-    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    monkeypatch.setattr("time.sleep", lambda s: None)
     pending = {"to": focused_window.Destination(*KWRITE), "why": "test",
                "press": keyboard_output.press_key, "space": "", "mode": "type", "timer": None, "ticks": []}
     send_countdown._pending = pending
