@@ -8,6 +8,7 @@ import re
 import time
 
 from . import focused_window, keyboard_output, notices, send_countdown, virtual_keyboard
+from .keyboard_output import LINE_BREAK
 from . import recording_state as rs
 from .logger import setup_logger
 from .window_classes import (ELECTRON_PASTE_BROKEN_CLASSES, SMART_NEWLINE_CLASSES_LOWER,
@@ -81,11 +82,10 @@ def plan_line_breaks(text: str, one_paste: bool) -> list[str]:
     Everywhere else keeps the keystroke, because in a chat input like Claude
     Desktop a literal newline SUBMITS the message instead of breaking the line.
     """
-    marker = "\xa7SHIFT_ENTER\xa7"
-    normalised = text.replace("\n", marker)
+    normalised = text.replace("\n", LINE_BREAK)
     if one_paste:
-        return [normalised.replace(marker, "\n")]
-    return normalised.split(marker)
+        return [normalised.replace(LINE_BREAK, "\n")]
+    return normalised.split(LINE_BREAK)
 
 
 def inject_text(text: str, injection_mode: str, one_block: bool = False, into=None,
@@ -192,7 +192,7 @@ def deliver_text(text: str, injection_mode: str, one_block: bool = False, *, whe
     # injection updates the undo buffer; otherwise a later "undo last word"
     # would backspace characters the user's document never received.
     inject_ok = True
-    if use_paste and not one_block and ("\xa7SHIFT_ENTER\xa7" in text or "\n" in text):
+    if use_paste and not one_block and (LINE_BREAK in text or "\n" in text):
         outcome = _paste_in_parts(text, focused_class)
         if outcome is not None:
             return outcome
@@ -222,7 +222,7 @@ def _remember_delivered(text, inject_ok):
     # the text before it stopped, so the buffer matches neither this
     # dictation nor the last one: empty it, and undo then deletes nothing.
     if inject_ok:
-        rs.state.last_inserted_text = text.replace("\xa7SHIFT_ENTER\xa7", "\n")
+        rs.state.last_inserted_text = text.replace(LINE_BREAK, "\n")
         logger.debug(f"Kept {len(rs.state.last_inserted_text)} chars for undo")
     else:
         rs.state.last_inserted_text = ""
@@ -235,129 +235,81 @@ def _type_for_electron(text, focused_class, injection_start):
     breaks as Shift+Enter between the parts. The outcome, or None when
     nothing landed and the normal path may try again."""
     logger.info(f"Electron-paste-broken override: class={focused_class!r}, typing")
-
-    # Line breaks go in as Shift+Enter between the parts.
-    marker = "\xa7SHIFT_ENTER\xa7"
-    unified = text.replace("\n", marker) if "\n" in text else text
-    success = True
-    delivered_parts = 0  # chunks confirmed in the document
-    breaks_sent = 0      # line breaks confirmed after those chunks
-    password_field = False
-    if marker in unified:
-        parts = unified.split(marker)
-        for i, part in enumerate(parts):
-            if i and focused_window.is_password():
-                success, password_field = False, True
-                break
-            if part and not keyboard_output.type_text_raw(part):
-                success = False
-                break
-            delivered_parts = i + 1
-            if i < len(parts) - 1:
-                time.sleep(0.03)
-                if not keyboard_output.send_shift_enter():
-                    success = False
-                    break
-                breaks_sent += 1
-                time.sleep(0.03)
-    else:
-        success = keyboard_output.type_text_raw(unified)
-        delivered_parts = 1 if success else 0
-
-    if success:
+    parts = text.replace("\n", LINE_BREAK).split(LINE_BREAK)
+    delivered = keyboard_output.deliver_lines(parts, keyboard_output.type_text_raw, 0.03, 0.03)
+    if not delivered.stopped:
         injection_time = time.time() - injection_start
         logger.info(f"TIMING: Electron typing completed in {injection_time:.2f}s")
-        # Track injected text for undo. Store the typed form: tabs
-        # already replaced with 4 spaces, and each line-break marker
-        # as one '\n' (one Shift+Enter keystroke = one backspace),
-        # so backspace counts match what was actually sent.
-        rs.state.last_inserted_text = unified.replace(marker, "\n")
+        # Kept for undo in the typed form: tabs already four spaces, each
+        # line break one "\n", so backspace counts match what was sent.
+        rs.state.last_inserted_text = "\n".join(parts)
         logger.debug(f"Kept {len(rs.state.last_inserted_text)} chars for undo (typed)")
         return "ok"
+    if not delivered.parts:
+        # Nothing landed, so the normal injection path can safely try again.
+        logger.warning("Typing failed, falling through to normal injection")
+        return None
+    # Partial delivery: parts already in the document must not be sent
+    # again by the fallback, or the user gets a duplicate copy.
+    rs.state.last_inserted_text = delivered.landed(parts)
+    logger.warning(f"Typing stopped after {delivered.parts} chunk(s) — "
+                   "not re-injecting, undo buffer holds only what landed")
+    return "password_field" if delivered.stopped == "password_field" else "partial"
 
-    # Partial delivery: chunks already in the document must not be sent
-    # again by the fallback below, or the user gets a duplicate copy.
-    if delivered_parts:
-        landed = marker.join(unified.split(marker)[:delivered_parts])
-        if breaks_sent == delivered_parts:
-            landed += marker   # the break after the last chunk landed too
-        rs.state.last_inserted_text = landed.replace(marker, "\n")
-        logger.warning(
-            f"Typing stopped after {delivered_parts} chunk(s) — "
-            f"not re-injecting, undo buffer holds only what landed"
-        )
-        return "password_field" if password_field else "partial"
-    # Nothing landed, so the normal injection path can safely try again.
-    logger.warning("Typing failed, falling through to normal injection")
-    return None
+
+def _paste_part(part) -> bool:
+    """Paste one part of a hybrid paste, then give it a moment to land."""
+    logger.info(f"Pasting a part: {len(part)} chars")
+    if not keyboard_output.paste_text(part):
+        return False
+    time.sleep(0.08)
+    return True
 
 
 def _paste_in_parts(text, focused_class):
     """Smart hybrid paste: text with line breaks pasted part by part with
     Shift+Enter between, and whatever a failed paste couldn't deliver typed.
     The outcome when it stopped short, or None when all of it went in."""
-    marker = "\xa7SHIFT_ENTER\xa7"
     # A terminal honours a newline inside a paste, but treats Shift+Enter
     # like Enter, so it gets one chunk carrying real newlines and no
     # keystrokes at all; so do KDE's editors (plan_line_breaks).
     parts = plan_line_breaks(text, is_terminal_class(focused_class)
                              or (focused_class or "").lower() in SMART_NEWLINE_CLASSES_LOWER)
     logger.info(f"Smart hybrid mode: {len(parts)} part(s)")
-
-    # Track where delivery stopped, so the fallback types only the rest:
-    # re-injecting the whole text would duplicate the chunks that already
-    # landed, which undo can't clean up.
-    resume_at = None
-    needs_break = password_field = False
-    for i, part in enumerate(parts):
-        if i and focused_window.is_password():
-            resume_at, password_field = i, True
-            break
-        if part:
-            logger.info(f"Pasting part {i+1}/{len(parts)}: {len(part)} chars")
-            if not keyboard_output.paste_text(part):
-                logger.warning(f"Paste failed on part {i+1}; will type the remainder")
-                resume_at = i
-                break
-            time.sleep(0.08)
-        if i < len(parts) - 1:
-            logger.info(f"Sending Shift+Enter after part {i+1}")
-            if not keyboard_output.send_shift_enter():
-                # The chunk landed but its line break didn't: resume from
-                # the next chunk and supply the missing break.
-                logger.warning(f"Line break failed after part {i+1}; will type the remainder")
-                resume_at, needs_break = i + 1, True
-                break
-            time.sleep(0.05)
-
-    if resume_at is None:
+    delivered = keyboard_output.deliver_lines(parts, _paste_part, 0, 0.05)
+    if not delivered.stopped:
         logger.info(f"Smart hybrid paste completed: {len(parts)} chunks")
-    elif password_field:
+        return None
+    if delivered.stopped == "password_field":
         # Not asked again: a second answer that comes back "no" (a slow
         # app, out of time) would type the rest into the password field.
         # The chunks before reached the document, and so did the line
         # break after the last of them: the check comes after it.
-        delivered = marker.join(parts[:resume_at]) + marker
-        rs.state.last_inserted_text = delivered.replace(marker, "\n")
-        logger.warning(f"Stopped after {resume_at}/{len(parts)} chunks: a password field "
+        rs.state.last_inserted_text = delivered.landed(parts)
+        logger.warning(f"Stopped after {delivered.parts}/{len(parts)} chunks: a password field "
                        "has the focus now")
         return "password_field"
+    # Only the rest is typed: delivering the whole text again would
+    # duplicate the chunks that landed, which undo can't clean up.
+    if delivered.stopped == "part":
+        logger.warning(f"Paste failed on part {delivered.parts + 1}; will type the remainder")
     else:
-        return _type_rest(parts, resume_at, needs_break)
-    return None
+        logger.warning(f"Line break failed after part {delivered.parts}; "
+                       "will type the remainder")
+    return _type_rest(parts, delivered)
 
 
-def _type_rest(parts, resume_at, needs_break):
-    """Type the parts a hybrid paste stopped before (from *resume_at*, with
-    the line break that failed first when *needs_break*). None when all of
-    it went in, else the outcome."""
-    marker = "\xa7SHIFT_ENTER\xa7"
-    remainder = (marker if needs_break else "") + marker.join(parts[resume_at:])
+def _type_rest(parts, delivered):
+    """Type the parts a hybrid paste stopped before, with the line break
+    that failed first when that's where it stopped. None when all of it
+    went in, else the outcome."""
+    remainder = ((LINE_BREAK if delivered.stopped == "break" else "")
+                 + LINE_BREAK.join(parts[delivered.parts:]))
     # A terminal's single chunk carries real newlines for bracketed
     # paste. Typed, a newline is a plain Enter and Shift+Enter is no
     # safer in a terminal, so typed_breaks_for turns them into spaces
     # there; other apps get Shift+Enter.
-    remainder = typed_breaks_for(remainder.replace("\n", marker),
+    remainder = typed_breaks_for(remainder.replace("\n", LINE_BREAK),
                                  focused_window.window_class())
     # Delivered chunks and the typed remainder make the full text (None).
     if not keyboard_output.output_backend().type_text(remainder):
@@ -365,15 +317,12 @@ def _type_rest(parts, resume_at, needs_break):
         # the line break after the last of them unless that break is what
         # failed. Recording only those makes undo delete too little rather
         # than too much if part of the remainder was typed as well.
-        delivered = marker.join(parts[:resume_at])
-        if resume_at and not needs_break:
-            delivered += marker
-        rs.state.last_inserted_text = delivered.replace(marker, "\n")
+        rs.state.last_inserted_text = delivered.landed(parts)
         logger.warning(
-            f"Injection stopped after {resume_at}/{len(parts)} chunks \u2014 "
+            f"Injection stopped after {delivered.parts}/{len(parts)} chunks \u2014 "
             f"undo buffer holds only what landed"
         )
-        return "partial" if resume_at else "failed"
+        return "partial" if delivered.parts else "failed"
     return None
 
 
@@ -382,7 +331,7 @@ def _type_all(text, injection_start):
     # Typed, a real newline is a plain Enter, which sends a chat message or
     # runs a terminal's half-typed command. A snippet's line breaks are real
     # newlines, so they go in as Shift+Enter like a spoken "new line".
-    text = typed_breaks_for(text.replace("\n", "\xa7SHIFT_ENTER\xa7"),
+    text = typed_breaks_for(text.replace("\n", LINE_BREAK),
                             focused_window.window_class())
     backend = keyboard_output.output_backend()
     # The Flatpak's keyboard path types "…" as "..." and "café" as "cafe";

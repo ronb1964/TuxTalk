@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import threading
 import time
+from typing import NamedTuple
 
 from evdev import ecodes
 
@@ -191,28 +192,57 @@ class PasswordFieldNow(Exception):
     dictation of several lines. The lines before it are in the app."""
 
 
-def type_text(text: str) -> bool:
-    """Type text, its line-break markers as Shift+Enter. Returns True if it
-    was actually typed into the focused app, False if injection failed.
+# A line break in a dictation, typed as Shift+Enter: a plain Enter would
+# send a chat message or run a terminal's half-typed command.
+LINE_BREAK = "\xa7SHIFT_ENTER\xa7"
 
-    Stops at the first part or line break that fails: typing on after a gap
-    would leave the later lines run into the earlier ones. Before each
-    further line the focus is asked again, as the paste does, and a password
-    field there raises PasswordFieldNow."""
-    parts = text.split("\xa7SHIFT_ENTER\xa7")
+
+class Delivered(NamedTuple):
+    """How far deliver_lines got."""
+    parts: int      # parts confirmed in the app, from the first
+    breaks: int     # line breaks confirmed after them
+    stopped: str    # "" when all of it went in, else "password_field", "part" or "break"
+
+    def landed(self, parts) -> str:
+        """What of *parts* reached the app, its line breaks as "\n" (one
+        Shift+Enter, one character for undo to backspace)."""
+        text = "\n".join(parts[:self.parts])
+        return text + "\n" if self.parts and self.breaks == self.parts else text
+
+
+def deliver_lines(parts, put, before_break_s: float, after_break_s: float) -> Delivered:
+    """Deliver *parts* one by one with put(part), a Shift+Enter between each
+    two, waiting *before_break_s* and *after_break_s* around each break.
+
+    Stops at the first part or line break that fails: going on after a gap
+    would run the later lines into the earlier ones. Before each further
+    part the focus is asked again, and a password field there stops it."""
+    done = breaks = 0
     for i, part in enumerate(parts):
         if i and focused_window.is_password():
-            raise PasswordFieldNow()
-        if part and not type_text_raw(part):
-            return False
+            return Delivered(done, breaks, "password_field")
+        if part and not put(part):
+            return Delivered(done, breaks, "part")
+        done = i + 1
         if i < len(parts) - 1:
-            time.sleep(0.05)
-            # The line break is part of the text: a failed one is a
-            # partial injection, and the undo buffer must not count it.
+            time.sleep(before_break_s)
             if not send_shift_enter():
-                return False
-            time.sleep(0.05)
-    return True
+                return Delivered(done, breaks, "break")
+            breaks += 1
+            time.sleep(after_break_s)
+    return Delivered(done, breaks, "")
+
+
+def type_text(text: str) -> bool:
+    """Type text, its line-break markers as Shift+Enter. Returns True if it
+    was actually typed into the focused app, False if injection failed
+    (deliver_lines). A password field before a further line raises
+    PasswordFieldNow."""
+    stopped = deliver_lines(text.split(LINE_BREAK), type_text_raw, 0.05, 0.05).stopped
+    if stopped == "password_field":
+        raise PasswordFieldNow()
+    # A failed line break is a partial injection too: the undo buffer must not count it.
+    return not stopped
 
 
 def type_text_raw(text: str) -> bool:
