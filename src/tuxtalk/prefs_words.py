@@ -179,16 +179,15 @@ class WordsTab(Tab):
                 widget.editing_done()
                 widget.remove_widget()
 
-                # Move to next column or next row
+                # Tab: from the phrase to its replacement, from a replacement
+                # to the next row's phrase.
                 if column_idx == 0:
-                    # Move to replacement column (column 1)
                     GLib.idle_add(lambda: self.commands_tree.set_cursor(
                         Gtk.TreePath.new_from_string(path),
                         self.commands_tree.get_column(1),
                         True
                     ))
                 else:
-                    # Move to next row's phrase column (column 0)
                     current_path = Gtk.TreePath.new_from_string(path)
                     next_idx = current_path.get_indices()[0] + 1
                     if next_idx < len(self.commands_store):
@@ -197,13 +196,13 @@ class WordsTab(Tab):
                             self.commands_tree.get_column(0),
                             True
                         ))
-                return True  # Consume the Tab event
+                return True     # the Tab is handled: GTK mustn't move the focus too
             return False
 
         editable.connect("key-press-event", on_key_press)
 
     def _on_phrase_edited(self, renderer, path, new_text):
-        """Handle editing of the phrase column.
+        """A phrase typed into a snippet row.
 
         A phrase another row already has is refused: the snippets are saved
         by phrase, so one of the two rows would silently disappear.

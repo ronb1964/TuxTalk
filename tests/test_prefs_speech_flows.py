@@ -9,7 +9,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
 
 from tuxtalk import (download_progress_dialog, model_helper, prefs,  # noqa: E402
-                     prefs_speech, vulkan_setup_dialogs)
+                     prefs_speech, recommend, vulkan_setup_dialogs)
 
 
 @pytest.fixture
@@ -25,6 +25,14 @@ def speech(prefs_window, monkeypatch):
         monkeypatch.setattr(prefs.PreferencesWindow, "cuda_files_present", lambda self: False)
         monkeypatch.setattr(prefs.PreferencesWindow, "vulkan_offered",
                             lambda self: card is not None)
+        # What the recommendation sees, rather than this computer's own card.
+        names = {"nvidia": "NVIDIA RTX", "amd": "AMD graphics"}
+
+        def hardware(cfg=None):
+            slower = cfg is not None and getattr(cfg, "vulkan_slower", False)
+            return recommend.Hardware(None if slower else names.get(card),
+                                      card == "nvidia")
+        monkeypatch.setattr(recommend, "detect_hardware", hardware)
         window = prefs_window(**{"model": "small", "device": "cpu", **settings})
         return window.general_tab.speech
 

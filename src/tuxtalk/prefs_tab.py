@@ -1,7 +1,7 @@
 """What the tabs of Preferences share: the window they belong to, the amber
-of the warnings, the window a
-download or install runs in (run_with_progress), and the pieces every tab is built
-from (section headings, folds, dropdowns)."""
+of the warnings, the window a download or install runs in
+(run_with_progress), and the pieces every tab is built from (section
+headings, folds, dropdowns)."""
 import threading
 
 import gi

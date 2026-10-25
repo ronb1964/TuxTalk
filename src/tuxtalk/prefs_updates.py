@@ -494,7 +494,6 @@ class UpdatesTab(Tab):
         guidance = update_checker.get_update_guidance(
             install_type, latest, release.get("html_url", ""))
 
-        # Show/hide buttons based on the update method for this install type.
         if has_update:
             method = guidance["update_method"]
             show_download = (
@@ -585,7 +584,8 @@ class UpdatesTab(Tab):
                 from . import update_ui
                 update_ui.restart_via_tray()
                 return
-            error_msg = error_msg or "Unknown error"
+            error_msg = error_msg or ("Something TuxTalk didn't expect went wrong; "
+                                      "the log has the details.")
             self.update_status_label.set_markup(
                 f"<span color='red'>Update failed: "
                 f"{GLib.markup_escape_text(str(error_msg))}</span>\n"
