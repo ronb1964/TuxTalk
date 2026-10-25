@@ -9,33 +9,25 @@ init_cuda_for_pytorch()
 
 import sys
 import time
-import re
 import atexit
 import select
 import signal
-import numpy as np
 import sounddevice as sd
 from evdev import InputDevice, ecodes, list_devices
 
 from typing import NamedTuple
 
-from .normalize import safe_to_lowercase_first_word
 from .config import load_config, Settings, load_custom_commands
 # Imported as a module too, so the live-settings reload can read CONFIG_PATH and
 # LIVE_APPLIED_KEYS without pulling each name in separately.
 from . import config as config_module
 from . import notify as notify_module
 from . import beeps, mic_stream
-from .beeps import START_BEEP, HANDS_FREE_BEEP, CANCEL_BEEP, READY_BEEP
-from .chunking import (boundary_mark, carry_question, hold_back_boundary, word_count,
-                       words_in_context)
-from .key_commands import auto_send, split_key_command
+from .beeps import START_BEEP, HANDS_FREE_BEEP, CANCEL_BEEP
 from .logger import setup_logger
 from .recording_indicator import RecordingIndicator
 from . import (delivery_notices, focused_window, modifier_hotkeys, secure_input, send_countdown,
                silence, single_instance, uinput_helper, virtual_keyboard)
-from .window_classes import (ELECTRON_PASTE_BROKEN_CLASSES, app_kind, is_document_window,
-                             is_terminal_class)
 from .hotkey_keys import (MODIFIER_CODES, check_modifiers_held, keycode_from_name,
                           parse_hotkey_combo, track_modifier)
 from . import recording_state as rs
@@ -45,13 +37,11 @@ from . import keyboard_output
 from . import tray_link
 from . import engine
 from . import recording
-from . import last_dictation
 from . import notices
-from . import dictation_text
 from . import voice_edit
-from . import voice_edit_rules
-from . import voice_commands
 from . import delivery
+from . import type_at_pause
+from . import pipeline
 import threading
 
 logger = setup_logger(__name__)
@@ -99,23 +89,7 @@ _cmd_stop_recording = threading.Event()
 # Set alongside _cmd_start_recording when the Flatpak's toggle SHORTCUT (not a
 # menu) started it, so a quick second press can switch it to hands-free.
 _cmd_start_from_toggle_key = threading.Event()
-_inject_lock = threading.Lock()  # serialise Backend B transcribe/inject workers
 
-# Chunked dictation (chunking.py). The audio callback cuts chunks and the stop
-# path takes the rest; this lock keeps the two from both taking the same frames.
-_chunk_lock = threading.Lock()
-_chunk_worker_instance = None
-# How long stopping waits for the queued chunks to be typed (evdev path).
-CHUNK_DRAIN_TIMEOUT_S = 60.0
-
-
-def _chunk_worker():
-    """The one chunk worker of this service, started on first use."""
-    global _chunk_worker_instance
-    if _chunk_worker_instance is None:
-        from .chunking import ChunkWorker
-        _chunk_worker_instance = ChunkWorker(_inject_lock)
-    return _chunk_worker_instance
 
 # Hotkey test mode: while Preferences' Test Hotkeys dialog keeps its flag file
 # fresh (service_launcher.hotkey_test_flag_path), hotkey presses are reported via
@@ -202,7 +176,7 @@ def _sd_callback(indata, frames_count, time_info, status):
         # Chunked dictation: at a pause, the phrase so far goes off to be typed.
         chunker = rs.state.chunker
         if chunker is not None and chunker.feed(indata):
-            _cut_chunk(chunker)
+            type_at_pause.cut_chunk(chunker)
 
         # Hands-free auto-stop: when the speaker has finished, ask the service
         # loop to stop, exactly as a second press of the toggle key would.
@@ -217,69 +191,6 @@ def _sd_callback(indata, frames_count, time_info, status):
         # Feed the recording indicator whatever its active style needs.
         if recording_indicator:
             recording.feed_indicator(recording_indicator, indata, _spectrum_processor)
-
-
-def _cut_chunk(chunker):
-    """The speaker paused: hand the audio so far to the chunk worker.
-
-    Runs on the audio thread, so it only swaps a list and queues a job; the
-    transcription happens on the worker."""
-    with _chunk_lock:
-        if rs.state.chunker is not chunker:
-            return  # the recording ended while this block was arriving
-        frames, rs.state.frames = rs.state.frames, []
-        recording.drop_tail_samples(frames, chunker.tail_samples())
-        rs.state.chunks_submitted += 1
-        number = rs.state.chunks_submitted
-        rec_sr = getattr(rs.state, "recording_samplerate", engine.SAMPLE_RATE)
-        pause = chunker.last_pause
-        # Queued before the lock is let go: otherwise the stop could slip in
-        # between counting this chunk and queuing it, and queue the last chunk
-        # ahead of it. put() on the unbounded queue never blocks.
-        _chunk_worker().submit(lambda message=rs.state.message: _transcribe_chunk(
-            frames, rec_sr, "middle", number, pause, message))
-
-
-def _transcribe_chunk(frames, rec_sr, role, number, pause, message):
-    """Transcribe and type chunk *number*, cut during the recording after a
-    *pause* (seconds), with the settings as they are now, into *message*
-    (_transcribe_and_inject's)."""
-    # Logged here, on the worker, to keep file writes off the audio thread.
-    seconds = sum(len(f) for f in frames) / 2 / rec_sr
-    logger.info(f"Chunk {number}: {seconds:.1f}s of audio, cut after a {pause:.2f}s pause")
-    cfg = live.chunk_cfg
-    # Hands-free's "stop when quiet" waits while this phrase is worked on: an
-    # AI rewrite can take seconds, and the user is reading, not finished.
-    detector = rs.state.silence
-    if detector is not None:
-        detector.hold()
-    try:
-        _transcribe_and_inject(frames, rec_sr, cfg.beeps, cfg.smart_quotes, cfg.notify,
-                               cfg.language, cfg.auto_space, cfg.auto_period,
-                               cfg.injection_mode, chunk_role=role, message=message)
-    finally:
-        if detector is not None:
-            detector.release()
-
-
-def _arm_chunker(rec_sr, edit_mode=False):
-    """Give this recording a pause detector when chunked dictation is on.
-    Never for a voice edit: its instruction needs the whole recording."""
-    chunker = None
-    if live.chunk_pause_seconds > 0 and not edit_mode:
-        from .chunking import PauseDetector
-        chunker = PauseDetector(live.chunk_pause_seconds, rec_sr, speech_db=live.chunk_speech_db)
-        # Started here, so the audio callback never has to build it.
-        _chunk_worker()
-    with _chunk_lock:
-        rs.state.recording_serial += 1
-        rs.state.chunks_submitted = 0
-        rs.state.pending_boundary = None
-        rs.state.question_open = False
-        rs.state.message = send_countdown.Message()
-        rs.state.held_cue = ""
-        rs.state.edit_waiting = None
-        rs.state.chunker = chunker
 
 
 
@@ -539,7 +450,8 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
                 send_countdown.say_held()   # nothing to dictate onto it: it stays unsent
             return False
 
-    _arm_chunker(getattr(rs.state, "recording_samplerate", engine.SAMPLE_RATE), edit_mode)
+    type_at_pause.arm_chunker(getattr(rs.state, "recording_samplerate", engine.SAMPLE_RATE),
+                              edit_mode)
     recording.pause_media_players()
     rs.state.start_beep = beeps.beep(beeps_on, *START_BEEP)
     if notify_on: notify_module.notify("Recording… speak now", "")
@@ -636,7 +548,7 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
         else:
             cancel_recording(beeps_on, notify_on, f"Cancelled (held {held_ms} ms)")
         return None
-    with _chunk_lock:
+    with type_at_pause.chunk_lock:
         # No more cuts: from here on the audio is the last chunk.
         chunker, rs.state.chunker = rs.state.chunker, None
         rs.state.last_chunk_speech = chunker.speech_time if chunker is not None else None
@@ -656,552 +568,6 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
     return frames, rec_sr
 
 
-
-def _shortened(text, limit):
-    """*text* cut to *limit* characters for a notification, with … if cut."""
-    return f"{text[:limit]}{'…' if len(text) > limit else ''}"
-
-
-
-# Silence put between two chunks when the engine hears them together, so the
-# pause is still there to hear (the cut kept only 0.3 s of it).
-JOINT_GAP_S = 0.5
-# Seconds heard on each side of the pause for that: enough words for the
-# engine to judge the seam, so a long phrase isn't transcribed a second time
-# whole (a 45 s phrase took a second 45 s pass).
-CONTEXT_S = 6.0
-_SENTENCE_ENDS = (".", "?", "!", "…")
-
-
-def _context_samples() -> int:
-    return int(CONTEXT_S * engine.SAMPLE_RATE)
-
-
-
-def _corrects_across_pause(raw: str, chunk_role, message) -> bool:
-    """True when this phrase corrects the one typed before the pause ("no
-    wait, four" after "meet at three"), so the AI should hear both together.
-    Needs AI self-corrections on and a phrase of this recording typed."""
-    if chunk_role is None or not (message.has_words and message.complete):
-        return False
-    if not (live.ai_corrections and live.ai_engine is not None
-            and rs.state.last_inserted_text.strip()):
-        return False
-    if rs.state.held_cue:
-        return True
-    from . import ai_cleanup
-    return ai_cleanup.opens_with_correction(rs.state.last_inserted_text, raw)
-
-
-def _erase_typed(text: str) -> bool:
-    """Backspace over *text*, just typed by the phrase before the pause. False
-    when it can't be done safely; then nothing more is erased."""
-    focused = focused_window.window_class()
-    if keyboard_output.not_where_typed(focused):
-        logger.info("Correction across a pause skipped: the phrase is in another window")
-        return False
-    # The AI that found the correction can take seconds, time enough to
-    # click into a password field of the same window.
-    if focused_window.is_password():
-        logger.info("Correction across a pause skipped: a password field has the focus")
-        return False
-    try:
-        deleted = keyboard_output.output_backend().backspaces(len(text))
-    except virtual_keyboard.StoppedPartway:
-        logger.error("Correction across a pause stopped partway; typing the phrase as said")
-        rs.state.last_inserted_text = ""
-        last_dictation.forget_shown()
-        notify_module.notify("A correction stopped partway", "Check the text before it.")
-        return False
-    if deleted:
-        last_dictation.trim_shown(text, len(text))
-        rs.state.last_inserted_text = ""
-    return bool(deleted)
-
-
-def _correct_across_pause(text: str):
-    """(text to type, text taken back) for a phrase that corrects the one
-    before the pause.
-
-    The AI hears both phrases as one ("Meet at three. No wait, four."). When
-    it fixes the correction, the earlier phrase is backspaced and the fixed
-    whole is typed in its place ("Meet at four."); otherwise the phrase is
-    typed as said, a cue held back from the phrase before included, and
-    nothing is taken back."""
-    from . import ai_cleanup
-    prev = rs.state.last_inserted_text
-    cue, rs.state.held_cue = rs.state.held_cue, ""
-    if cue and cue[-1] not in ".?!,;:":
-        cue += ","
-    if (cue.endswith(",") and text[:1].isupper()
-            and safe_to_lowercase_first_word(text, live.words)):
-        text = text[0].lower() + text[1:]      # "No wait, four", not "Four"
-    said = f"{cue} {text}" if cue else text
-    joined = prev + ("" if prev[-1:].isspace() else " ") + said
-    fixed = ai_cleanup.fix_self_corrections(joined, live.ai_engine)
-    if fixed == joined or not fixed.strip():
-        return said, ""
-    if not _erase_typed(prev):
-        return said, ""
-    logger.info("AI cleanup fixed a self-correction across a pause")
-    return fixed, prev
-
-
-def _type_boundary(pending: dict, tail: str, injection_mode: str) -> None:
-    """Type what goes between a held-back chunk and what follows it, as part
-    of the message the chunk is in."""
-    if not tail:
-        return
-    last_dictation.remember_said(tail, chunked=True)
-    # Only into the phrase's window: the context pass before this can take a while.
-    ok = delivery.inject_text(tail, injection_mode, into=pending["where"],
-                      message=pending["message"]) == "ok"
-    last_dictation.remember_shown(tail, chunked=True, ok=ok)
-    if ok:
-        # Undo and "delete last sentence" then see the whole chunk.
-        rs.state.last_inserted_text = pending["typed"] + tail
-
-
-# A phrase this short that the context pass hears as "press enter" is taken
-# as "press enter": alone it's barely a second of audio, and Parakeet heard
-# "Press center." where both together read "... to say. Press enter."
-ENTER_IN_CONTEXT_MAX_WORDS = 3
-# A phrase this short (seconds) is typed as the context pass heard it when
-# that pass heard fewer words: alone, the engine can make a sentence up
-# around a word or two (chunking.words_in_context).
-SHORT_CHUNK_S = 2.0
-
-
-def _resolve_boundary(audio_f32, language, injection_mode, raw="", auto_period=True) -> str:
-    """The next chunk has arrived: decide the mark held back after the last
-    one, from the engine hearing both chunks together, and type it. Returns
-    the chunk's text: "press enter" when only the context pass heard that,
-    and for a very short chunk the words the context pass heard."""
-    pending, rs.state.pending_boundary = rs.state.pending_boundary, None
-    if focused_window.changed(pending["where"], focused_window.look()):
-        # The user switched windows during the pause: that phrase's mark
-        # belongs at its end, in the other window, not at the start of this
-        # one ("? What's next?"). This window starts afresh.
-        logger.info("Chunk boundary: another window has the focus now; "
-                    "its mark stays with its phrase")
-        rs.state.continue_mid_sentence = False
-        return raw
-    mark = pending["mark"]
-    joint = ""
-    try:
-        gap = np.zeros(int(JOINT_GAP_S * engine.SAMPLE_RATE), dtype=np.float32)
-        joint = engine.transcribe(np.concatenate(
-            [pending["audio"], gap, audio_f32[:_context_samples()]]), language) or ""
-        found = boundary_mark(pending["raw"], joint)
-        logger.info(f"Chunk boundary: {pending['mark']!r} alone, {found!r} in context")
-        if found is not None:
-            mark = found
-    except Exception as e:
-        logger.warning(f"Couldn't hear the chunk boundary in context: {e}")
-    if (raw and len(raw.split()) <= ENTER_IN_CONTEXT_MAX_WORDS
-            and not split_key_command(raw)[1] and split_key_command(joint)[1] == "ENTER"):
-        logger.info(f"Heard \"press enter\" in context ({live.loggable(raw)} alone)")
-        raw = "press enter"
-        # The sentence ends here, as it would after "press enter" said
-        # clearly (_flush_boundary): its mark, and no space to send.
-        mark = mark or ("." if auto_period else "")
-        _type_boundary(pending, mark, injection_mode)
-        rs.state.continue_mid_sentence = False
-        return raw
-    if joint and len(audio_f32) <= SHORT_CHUNK_S * engine.SAMPLE_RATE:
-        heard = words_in_context(pending["raw"], joint) or ""
-        # Whether to press a key stays the rule above's call.
-        if (0 < word_count(heard) < word_count(raw)
-                and split_key_command(heard)[1] == split_key_command(raw)[1]):
-            logger.info(f"Short phrase: {live.loggable(raw)} alone, {live.loggable(heard)} "
-                        "in context; typing what the context heard")
-            raw = heard
-    _type_boundary(pending, (mark + " ") if mark else " ", injection_mode)
-    # Lowercase on after a comma or no mark; a sentence end starts afresh.
-    rs.state.continue_mid_sentence = mark not in _SENTENCE_ENDS
-    # "do you think ... feature" (pause) "to make it work better": the engine
-    # heard a question before the pause and a sentence going on across it,
-    # so the question ends where this phrase does.
-    rs.state.question_open = pending["mark"] == "?" and mark not in _SENTENCE_ENDS
-    return raw
-
-
-def _flush_boundary(auto_period: bool, auto_space: bool, injection_mode: str) -> None:
-    """The dictation ended in a pause: type the mark held back after its last
-    chunk, or the auto-period when the engine wrote none, in its window only."""
-    pending, rs.state.pending_boundary = rs.state.pending_boundary, None
-    if pending is None:
-        return
-    now = focused_window.look()
-    if focused_window.changed(pending["where"], now):
-        return  # the end of this sentence isn't in the window that has focus
-    kind = app_kind(now[0]) if live.adapt_to_app else ""
-    mark = pending["mark"] or ("." if auto_period and not kind else "")
-    _type_boundary(pending, mark + (" " if auto_space and not kind else ""), injection_mode)
-
-
-def _start_afresh(ended=None) -> None:
-    """Type at pause pressed Enter or Tab mid-recording, or "edit that"
-    rewrote what was typed: what's said next reaches back across nothing (no
-    held-back mark, correction, lowercase start or screen copy). After Enter
-    or Tab the message *ended* starts over; a rewrite stays in the unsent one."""
-    if ended is not None:
-        ended.start_over()
-    rs.state.pending_boundary = None
-    rs.state.question_open = False
-    rs.state.held_cue = ""
-    rs.state.continue_mid_sentence = False
-    if rs.state.shown_text is not None and rs.state.shown_serial == rs.state.recording_serial:
-        rs.state.shown_text = ""
-
-
-def _press_said(key: str, chunk_role, after_words: bool = False, message=None) -> None:
-    """Press the key said at the end of a dictation ("press enter"). In Type
-    at pause that ends the message, and what's said next starts afresh; not
-    pressed (a key stuck down), the message is still in the box, to carry
-    on in and for "edit that" to reach whole. In Claude Desktop "press tab"
-    types four spaces, as a tab said mid-sentence does there: its Tab key
-    jumps to the Send button, and the next space typed would press it; after
-    words, they go where the Tab would. A password field there gets the
-    real Tab: spaces would be refused.
-
-    *after_words*: words of *message* (the recording's) were delivered
-    first, or tried, and the key goes only where they went, and only if all
-    of them did (send_countdown.press_where_sent), as an automatic Enter
-    does. Said alone it goes wherever the focus is: people type a password
-    by hand, then say "press enter" to log in."""
-    why = f'said "press {key.lower()}"'
-    if (key == "TAB" and focused_window.window_class() in ELECTRON_PASTE_BROKEN_CLASSES
-            and not focused_window.is_password()):
-        outcome = (send_countdown.type_where_sent("    ", key, message, _type_onto_dictation)
-                   if after_words else _type_onto_dictation("    ", "type"))
-        if outcome not in (None, "ok"):
-            logger.warning(f"Tab not typed as four spaces ({outcome})")
-            if outcome == "key_held":
-                notify_module.notify(*delivery_notices.key_not_pressed(key))
-        return
-    if after_words:
-        pressed = send_countdown.press_where_sent(key, why, message, keyboard_output.press_key)
-    else:
-        pressed = keyboard_output.press_key(key, why)
-    if pressed and chunk_role is not None:
-        _start_afresh(message)
-
-
-def _after_the_words(outcome: str, said: str, press: str, space: str, chunk_role,
-                     beeps_on: bool, injection_mode: str, message) -> None:
-    """What follows a dictation's words, by _inject_text's *outcome*: a
-    notice when they didn't all go in; else the key *said* after them, or
-    the automatic send's Enter when *press*. *space* is the auto-space left
-    off before the key."""
-    if outcome in delivery_notices.NOTICES:
-        notices.report_undelivered(outcome, beeps_on)
-    elif said:
-        _press_said(said, chunk_role, after_words=True, message=message)
-    elif press:
-        _send_automatically(space, injection_mode, message)
-        if chunk_role is not None:
-            _start_afresh(message)
-
-
-def _send_automatically(space: str, injection_mode: str, message) -> None:
-    """"Send each dictation automatically": Enter where *message* went (send_countdown)."""
-    send_countdown.send_automatically("Send each dictation automatically is on", message,
-                                      keyboard_output.press_key, _type_onto_dictation, space,
-                                      injection_mode)
-
-
-# _inject_text's outcomes that are sure nothing was typed: it gave up before
-# the first key (_delivery_stopped). "failed" may follow some of it (wtype
-# timing out), and "password_field" earlier lines.
-_GAVE_UP_UNTYPED = frozenset({"moved", "key_held"})
-
-
-def _type_onto_dictation(text: str, injection_mode: str, into=None) -> str:
-    """Type *text* right after the dictation, keeping undo's record of it
-    whole; _inject_text's outcome. *into* is _inject_text's. When none of
-    it went in (a space refused because the focus moved), the dictation is
-    in the app as it was, and so is everything that remembers it."""
-    kept = (rs.state.last_inserted_text, rs.state.continue_mid_sentence, rs.state.nav_context,
-            rs.state.shown_text, rs.state.last_inserted_window, rs.state.last_inserted_where)
-    outcome = delivery.inject_text(text, injection_mode, into=into)
-    if outcome == "ok":
-        rs.state.last_inserted_text = kept[0] + text
-    elif outcome in _GAVE_UP_UNTYPED:
-        # The window too: typing takes it for the dictation's before the first key.
-        (rs.state.last_inserted_text, rs.state.continue_mid_sentence, rs.state.nav_context,
-         rs.state.shown_text, rs.state.last_inserted_window, rs.state.last_inserted_where) = kept
-    return outcome
-
-
-def _end_in_a_pause(message, beeps_on, auto_space, auto_period, injection_mode) -> None:
-    """Type at pause's recording ended in a pause, with nothing said after
-    it: a held "no wait" is typed as said, the last phrase gets its mark,
-    and "Send each dictation automatically" sends *message* if all of it
-    went in."""
-    waiting = rs.state.edit_waiting
-    # "edit that", a pause, and nothing more: what to change never came, and
-    # the message isn't sent as it was.
-    unfinished_edit = waiting is not None and waiting["serial"] == rs.state.recording_serial
-    if unfinished_edit:
-        rs.state.edit_waiting = None
-        notices.edit_problem("edit_that_what", beeps_on)
-        message.add("failed", None)
-    if rs.state.held_cue:
-        cue, rs.state.held_cue = rs.state.held_cue, ""
-        if auto_period and cue[-1] not in ".?!":
-            cue += "."
-        delivery.inject_text(cue + (" " if auto_space else ""), injection_mode, message=message)
-    if (live.press_enter_after and message.has_words and message.complete
-            and not is_document_window(focused_window.window_class())):
-        _flush_boundary(auto_period, False, injection_mode)
-        _send_automatically(" " if auto_space else "", injection_mode, message)
-        _start_afresh(message)
-    else:
-        _flush_boundary(auto_period, auto_space, injection_mode)
-    if not live.chunk_context_marks:
-        rs.state.continue_mid_sentence = False   # it belongs to this recording
-    if not unfinished_edit:                   # that one beeped its cancel
-        beeps.beep(beeps_on, *READY_BEEP)
-
-
-def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
-                           language=None, auto_space=True, auto_period=True,
-                           injection_mode="type", chunk_role=None, message=None):
-    """The slow half of stopping: transcribe the captured audio and inject the
-    text. It touches no GTK (the indicator was already hidden in _finish_capture)
-    and uses only CPU + audio + D-Bus + the output backend, so it is safe on a
-    worker thread, which Backend B uses so the hotkey loop stays live.
-
-    *chunk_role* is set for chunked dictation (chunking.py): "middle" for a
-    chunk cut at a pause while recording goes on (no beep, no notice, silence
-    dropped quietly), "last" for the rest after the stop (the usual READY beep,
-    even when it holds no speech, since earlier chunks were typed).
-
-    *message* is the recording's (send_countdown.Message), taken when its
-    work was queued, so a recording started meanwhile can't change where
-    this one's Enter may go. By default this recording's."""
-    message = rs.state.message if message is None else message
-    print("Recording stopped. Transcribing…")
-    t0 = time.time()
-    logger.info("Recording stopped, starting transcription")
-
-    def _nothing_in_chunk(what: str) -> bool:
-        """For a chunk, handle an empty or silent one; False for a whole dictation."""
-        if chunk_role is None:
-            return False
-        logger.info(f"Chunk ({chunk_role}) {what}; nothing typed for it")
-        if chunk_role == "last":
-            _end_in_a_pause(message, beeps_on, auto_space, auto_period, injection_mode)
-        return True
-
-    try:
-        audio_f32 = recording.frames_f32(frames)
-        if audio_f32.size == 0:
-            if _nothing_in_chunk("had no audio"):
-                return
-            print("(No audio captured)")
-            return
-        if rec_sr != engine.SAMPLE_RATE:
-            audio_f32 = recording.resample(audio_f32, rec_sr, engine.SAMPLE_RATE)
-
-        # A second or more of pure digital silence: the microphone is muted,
-        # unplugged or dead, not a quiet room. Say so instead of typing nothing.
-        if silence.is_dead_mic(audio_f32, engine.SAMPLE_RATE):
-            beeps.beep(beeps_on, *CANCEL_BEEP)
-            notices.warn_silent_mic()
-            return
-
-        # A quick tap of the key with nothing said: speech engines can invent
-        # a word ("Thank you.") in a fraction of a second of room noise.
-        # Both stop with the cancel beep, as a too-short F8 tap and the
-        # hands-free "nothing said" stop do: silence there read as broken.
-        if silence.is_speechless_tap(audio_f32, engine.SAMPLE_RATE):
-            if _nothing_in_chunk("had no speech"):
-                return
-            print("(Short tap with no speech; nothing typed)")
-            logger.info(f"Skipped {len(audio_f32) / engine.SAMPLE_RATE:.2f}s with no speech in it")
-            beeps.beep(beeps_on, *CANCEL_BEEP)
-            return
-
-        # Stage 1: Transcribe audio → raw text
-        raw = engine.transcribe(audio_f32, language)
-        logger.info(f"TIMING: Transcription pipeline took {time.time() - t0:.2f}s")
-        if chunk_role is not None:
-            logger.info(f"Chunk ({chunk_role}): {len(audio_f32) / engine.SAMPLE_RATE:.1f}s, "
-                        f"raw: {live.loggable(raw)}")
-        if not raw:
-            if _nothing_in_chunk("was not recognised"):
-                return
-            print("(No speech recognized)")
-            logger.info("Nothing recognized, so nothing was typed")
-            beeps.beep(beeps_on, *CANCEL_BEEP)
-            return
-
-        rest, said = split_key_command(raw)
-        key_only = not rest.strip() and said
-        # A password field gets nothing: not the words, nor what Type at
-        # pause would type first (the mark held back from the last phrase, a
-        # held "No wait.", backspaces for a correction), and the local AI
-        # never sees them. Only "press enter" or "press tab" on its own still
-        # presses the key, there and not where the phrases before went:
-        # people type the password by hand, then say it to log in, or move
-        # between the boxes.
-        in_password = focused_window.is_password()
-        if in_password:
-            rs.state.pending_boundary, rs.state.held_cue = None, ""
-            if not key_only:
-                notices.password_field_refused(beeps_on)
-                return
-
-        # Chunked dictation: the chunk before this one held back its final
-        # mark; decide it now, before a command acts on what was typed.
-        # Only "press tab" after the pause leaves the box without one.
-        if chunk_role is not None and rs.state.pending_boundary is not None:
-            if key_only == "ENTER":
-                # Only "press enter" after the pause: the sentence before it
-                # ends here (its held-back mark, or the auto-period), with no
-                # space to go out in the sent message.
-                _flush_boundary(auto_period, False, injection_mode)
-            elif not key_only:
-                raw = _resolve_boundary(audio_f32, language, injection_mode, raw, auto_period)
-
-        # Stage 2: Check for undo commands ("undo that", "undo word", etc.)
-        if voice_commands.handle_undo(raw, beeps_on, notify_on):
-            return
-
-        # Select and move by voice ("select the last sentence"), when the
-        # whole dictation is one of its commands (TuxTalk Labs).
-        if voice_commands.handle_navigation(raw, beeps_on):
-            return
-
-        # "fix that word": Fix a Word on the dictation before this one.
-        if voice_commands.handle_fix_word(raw, beeps_on):
-            return
-
-        # "edit that, make it shorter": voice editing without its key, on
-        # what was just typed (TuxTalk Labs, with voice editing on).
-        if _handle_spoken_edit(raw, chunk_role, beeps_on, injection_mode, message):
-            return
-
-        # "... press enter": type the words, then a real Enter that sends the
-        # message or runs the command; "... press tab" moves on to the next
-        # box (key_commands.py). Or Enter every time, when "Send each
-        # dictation automatically" is on, but only at the end of the
-        # recording, not each phrase of Type at pause.
-        raw, said = split_key_command(raw)
-        press, cut_off = said, ""
-        if not said and live.press_enter_after and chunk_role != "middle":
-            sending, cut_off = auto_send(raw, is_document_window(focused_window.window_class()))
-            press = "ENTER" if sending else ""
-        if said and not raw.strip():
-            # Only "press enter" or "press tab" was said.
-            if chunk_role != "middle":
-                beeps.beep(beeps_on, *READY_BEEP)
-            _press_said(said, chunk_role, after_words=message.has_words and not in_password,
-                        message=message)
-            return
-
-        # Stage 3: Normalize text (voice commands, punctuation, spacing),
-        # plainer for a terminal or code editor ("Plain text in terminals and
-        # code editors").
-        kind = app_kind(focused_window.window_class()) if live.adapt_to_app else ""
-        # A pause is not a sentence end, so a middle chunk gets no auto-period
-        # of its own; the last chunk (or _flush_boundary) ends the sentence.
-        # "press enter" at the end of one does end it: the message is sent.
-        # Cut off on "and": the sentence isn't over either, so no period, and
-        # what's said next carries it on in lowercase. A form box left with
-        # "press tab" gets none: "John", not "John.".
-        chunk_period = (auto_period and (chunk_role != "middle" or said == "ENTER")
-                        and not cut_off and said != "TAB")
-        # A correction said after a pause ("meet at three" ... "no wait,
-        # four") goes to the AI together with the phrase it corrects.
-        across = _corrects_across_pause(raw, chunk_role, message)
-        text = dictation_text.prepare_text(raw, smart_quotes, chunk_period, auto_space,
-                                           app_kind=kind, ai=not across)
-        if cut_off:
-            # The engine may have put its own period after the "and".
-            text = re.sub(r"\.(\s*)$", r"\1", text)
-            rs.state.continue_mid_sentence = True
-        taken_back = ""
-        if across:
-            from . import ai_cleanup
-            if chunk_role == "middle" and ai_cleanup.is_bare_cue(text):
-                # Only "No wait.": the corrected value is in the next phrase.
-                rs.state.held_cue = text.strip()
-                logger.info("Chunk is only a correction cue; waiting for the next phrase")
-                return
-            text, taken_back = _correct_across_pause(text)
-        if rs.state.question_open and chunk_role is not None:
-            rs.state.question_open = False
-            text = carry_question(text)
-        held_mark = None
-        if chunk_role == "middle" and live.chunk_context_marks and not said:
-            text, held_mark = hold_back_boundary(text, raw)
-        space_left_off = ""
-        if press:
-            # No auto-space before Enter or Tab: it would end up in the sent
-            # message, or at the end of the box.
-            # Kept for a send that's held, which types it after all.
-            core = text.rstrip(" ")
-            space_left_off, text = text[len(core):], core
-
-        # Again before the beep and the "Transcribed" notification, which
-        # shows the words: the focus may have moved while the AI cleaned them.
-        if text and notices.refuse_password_field(beeps_on):
-            return
-
-        if chunk_role != "middle":
-            beeps.beep(beeps_on, *READY_BEEP)
-            if notify_on: notify_module.notify("Transcribed", _shortened(text, 80))
-
-        # Stage 4: Inject text into the active application. It goes into the
-        # Recent Dictations list first, so it can be recovered even if the
-        # injection lands in the wrong window or fails outright.
-        if text:
-            text = send_countdown.with_owed_space(text)
-            chunked = chunk_role is not None
-            said_before = last_dictation.remember_said(text, chunked, taken_back)
-            try:
-                outcome = delivery.inject_text(text, injection_mode, message=message)
-            except Exception as e:
-                # The transcription worked; only getting it into the window
-                # didn't, so this is reported as undelivered, not as the
-                # "Transcription error" below.
-                logger.error(f"Injection error: {e}", exc_info=True)
-                outcome = "failed"
-                message.add(outcome, None)
-            if outcome == "password_field":
-                last_dictation.unsay(said_before)
-            last_dictation.remember_shown(rs.state.last_inserted_text, chunked, outcome == "ok")
-            _after_the_words(outcome, said, press, space_left_off, chunk_role, beeps_on,
-                             injection_mode, message)
-            if chunk_role == "middle" and not live.chunk_context_marks and outcome == "ok" \
-                    and not press:
-                # Without the context pass the engine's own mark decides: after
-                # a comma or none, the next chunk carries on lowercase.
-                rs.state.continue_mid_sentence = not text.rstrip().endswith(_SENTENCE_ENDS)
-            if held_mark is not None and outcome == "ok":
-                # Only the end of the phrase is kept: the engine hears it with
-                # the start of the next one to decide the mark between them.
-                rs.state.pending_boundary = {"mark": held_mark,
-                                          "audio": audio_f32[-_context_samples():],
-                                          "raw": raw, "typed": rs.state.last_inserted_text,
-                                          "where": rs.state.last_inserted_where,
-                                          "message": message}
-            if live.usage_stats:
-                # After typing, so saving the counts never delays the text.
-                # Counts only (words, seconds dictating); see stats.py.
-                from .stats import count_words, record
-                record(count_words(text), len(audio_f32) / engine.SAMPLE_RATE)
-
-    except Exception as e:
-        logger.error(f"Transcription error: {e}", exc_info=True)
-        # The cancel beep and a notice whatever the notifications setting,
-        # like _report_undelivered: nothing was typed, and the "done" beep
-        # would sound like it worked.
-        beeps.beep(beeps_on, *CANCEL_BEEP)
-        notify_module.notify("Transcription failed", _shortened(str(e), 120))
 
 
 def stop_recording(
@@ -1233,76 +599,18 @@ def stop_recording(
         params = (beeps_on, smart_quotes, notify_on, language, auto_space,
                   auto_period, injection_mode)
         frames = recording.drop_speechless_rest(frames)
-        worker = _chunk_worker()
-        worker.submit(lambda message=rs.state.message: _transcribe_and_inject(
+        worker = type_at_pause.chunk_worker()
+        worker.submit(lambda message=rs.state.message: pipeline.transcribe_and_inject(
             frames, rec_sr, *params, chunk_role="last", message=message))
-        if not worker.drain(CHUNK_DRAIN_TIMEOUT_S):
+        if not worker.drain(type_at_pause.CHUNK_DRAIN_TIMEOUT_S):
             logger.warning("Chunked dictation: chunks still typing after "
-                           f"{CHUNK_DRAIN_TIMEOUT_S:.0f}s; not waiting longer")
+                           f"{type_at_pause.CHUNK_DRAIN_TIMEOUT_S:.0f}s; not waiting longer")
         return
-    _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
+    pipeline.transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                            language, auto_space, auto_period, injection_mode)
 
 
 # --- Voice editing ---
-
-
-def _handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: str,
-                        message) -> bool:
-    """Voice editing by voice alone (TuxTalk Labs): a dictation that starts
-    with "edit that" selects what TuxTalk just typed and changes it as the
-    rest says, as Shift+F8 does for a selection. True when it was handled
-    (done, or refused with a notice); False to type the words as text, which
-    is also what happens when nothing was just typed to edit."""
-    if not live.voice_editing:
-        return False
-    from . import voice_navigation as nav
-    waiting, rs.state.edit_waiting = rs.state.edit_waiting, None
-    if waiting is not None and waiting["serial"] == rs.state.recording_serial:
-        instruction, target = raw, waiting["target"]
-    else:
-        instruction = voice_edit_rules.spoken_edit(raw)
-        if instruction is None:
-            return False
-        target = voice_commands.spoken_edit_target()
-        if not target:
-            return voice_commands.refused_as_sent(beeps_on)
-    logger.info(f"Voice command: edit that ({len(target)} characters)")
-    if not keyboard_output.is_wayland_session():
-        notices.edit_problem("needs_wayland", beeps_on)
-        return True
-    focused_class = focused_window.window_class()
-    if is_terminal_class(focused_class):
-        notices.edit_problem("terminal", beeps_on)
-        return True
-    if not instruction.strip():
-        if chunk_role == "middle":
-            # "edit that", then a pause: the next phrase says what to change.
-            rs.state.edit_waiting = {"serial": rs.state.recording_serial, "target": target}
-            logger.info("Voice edit: waiting for the next phrase to say what to change")
-        else:
-            notices.edit_problem("edit_that_what", beeps_on)
-            message.add("failed", None)     # asked to change it: not sent as it is
-        return True
-    plan = nav.plan(nav.parse("select that"), target, "")
-    try:
-        selected = plan is not None and keyboard_output.output_backend().press_keys(plan.chords)
-    except Exception as e:
-        logger.error(f"Voice edit: selecting the text failed: {e}")
-        selected = False
-    # The text is selected now (and then replaced): undo's count and the
-    # screen copy no longer match it, and nothing in it reaches the next phrase.
-    rs.state.last_inserted_text = ""
-    _start_afresh()
-    last_dictation.forget_shown()
-    if not selected:
-        notices.edit_problem("shortcut_failed", beeps_on)
-    elif voice_edit.edit_selection(lambda: instruction, beeps_on, injection_mode, focused_class,
-                         time.time(), message, spoken=True):
-        return True
-    # Not changed as asked: no automatic Enter sends it as it was.
-    message.add("failed", None)
-    return True
 
 
 
@@ -1625,7 +933,7 @@ def _service_tick(cfg, svc: "_ServiceState") -> "LiveSettings | None":
                 # and would freeze THIS GLib loop — and F3/F4 with it — for as
                 # long as they run (10–20s on a CPU-only box). Snapshot the
                 # recording here (fast) and run the slow half on a worker
-                # thread so the hotkey stays responsive. _inject_lock serialises
+                # thread so the hotkey stays responsive. type_at_pause.inject_lock serialises
                 # workers so two dictations never transcribe/type at once.
                 cap = _finish_capture(cfg.beeps, cfg.notify)
                 if cap is not None:
@@ -1637,9 +945,9 @@ def _service_tick(cfg, svc: "_ServiceState") -> "LiveSettings | None":
                         role = "last" if rs.state.chunks_submitted else None
                         if role:
                             frames = recording.drop_speechless_rest(frames)
-                        _chunk_worker().submit(
+                        type_at_pause.chunk_worker().submit(
                             lambda frames=frames, rec_sr=rec_sr, cfg=cfg, role=role,
-                            message=rs.state.message: _transcribe_and_inject(
+                            message=rs.state.message: pipeline.transcribe_and_inject(
                                 frames, rec_sr, cfg.beeps, cfg.smart_quotes,
                                 cfg.notify, cfg.language, cfg.auto_space,
                                 cfg.auto_period, cfg.injection_mode, chunk_role=role,
@@ -1647,8 +955,8 @@ def _service_tick(cfg, svc: "_ServiceState") -> "LiveSettings | None":
                     else:
                         def _worker(frames=frames, rec_sr=rec_sr, cfg=cfg,
                                     message=rs.state.message):
-                            with _inject_lock:
-                                _transcribe_and_inject(
+                            with type_at_pause.inject_lock:
+                                pipeline.transcribe_and_inject(
                                     frames, rec_sr, cfg.beeps, cfg.smart_quotes,
                                     cfg.notify, cfg.language, cfg.auto_space,
                                     cfg.auto_period, cfg.injection_mode, message=message)
@@ -1658,10 +966,10 @@ def _service_tick(cfg, svc: "_ServiceState") -> "LiveSettings | None":
                 stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
                                cfg.auto_space, cfg.auto_period, cfg.injection_mode)
             svc.last_activity = now
-    # Not while a dictation is still being transcribed or typed: every worker
-    # holds _inject_lock, and the idle clock starts when the key comes up.
+    # Not mid-dictation (every worker holds inject_lock); idle counts from key-up.
     if (svc.timeout_enabled and not rs.state.is_recording and engine.model is not None
-            and not _inject_lock.locked() and now - svc.last_activity > svc.timeout_seconds):
+            and not type_at_pause.inject_lock.locked()
+            and now - svc.last_activity > svc.timeout_seconds):
         engine.rest(svc.timeout_minutes)
 
     # Pick up Preferences changes without a restart — indicator style/position,

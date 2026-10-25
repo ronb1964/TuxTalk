@@ -12,6 +12,7 @@ from tuxtalk import app
 from tuxtalk import recording_state as rs
 from tuxtalk import tray_link
 from tuxtalk import recording
+from tuxtalk import pipeline
 
 
 def test_finish_capture_snapshots_frames_surviving_next_recording(monkeypatch):
@@ -44,10 +45,10 @@ def test_finish_capture_returns_none_when_too_short(monkeypatch):
 
 
 def test_stop_recording_composes_finish_then_inject(monkeypatch):
-    # Backend A path: stop_recording = _finish_capture + _transcribe_and_inject.
+    # Backend A path: stop_recording = _finish_capture + pipeline.transcribe_and_inject.
     got = []
     monkeypatch.setattr(app, "_finish_capture", lambda b, n: ([b"aud"], 16000))
-    monkeypatch.setattr(app, "_transcribe_and_inject",
+    monkeypatch.setattr(pipeline, "transcribe_and_inject",
                         lambda frames, rec_sr, *a, **k: got.append((frames, rec_sr)))
     app.stop_recording(beeps_on=False, smart_quotes=True, notify_on=False)
     assert got == [([b"aud"], 16000)]
@@ -57,6 +58,6 @@ def test_stop_recording_skips_inject_when_capture_none(monkeypatch):
     # Cancelled / too-short recording: no transcription or injection at all.
     got = []
     monkeypatch.setattr(app, "_finish_capture", lambda b, n: None)
-    monkeypatch.setattr(app, "_transcribe_and_inject", lambda *a, **k: got.append(1))
+    monkeypatch.setattr(pipeline, "transcribe_and_inject", lambda *a, **k: got.append(1))
     app.stop_recording(beeps_on=False, smart_quotes=True, notify_on=False)
     assert got == []

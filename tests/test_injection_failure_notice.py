@@ -5,7 +5,7 @@ word) while nothing reaches the window, for example when paste is unavailable
 on X11 and typing fails too. Without a notice the app simply seems not to work.
 
 _inject_text reports how it went ("ok", "partial" or "failed"), and
-_transcribe_and_inject tells the user about anything but "ok": always with a
+pipeline.transcribe_and_inject tells the user about anything but "ok": always with a
 desktop notification, like a missing microphone, and with the low cancel beep
 when beeps are on. The notification points at Recent Dictations, where the text
 is saved before injection is even attempted.
@@ -15,11 +15,13 @@ import numpy as np
 import pytest
 
 from tuxtalk import app, focused_window, window_classes
+from tuxtalk import pipeline
 from tuxtalk import delivery
 from tuxtalk import engine
 from tuxtalk import live_settings as live
 from tuxtalk import keyboard_output
 from tuxtalk import dictation_text
+from tuxtalk.beeps import CANCEL_BEEP, READY_BEEP
 
 MARKER = "\xa7SHIFT_ENTER\xa7"
 
@@ -94,7 +96,7 @@ def test_typing_into_electron_stopping_partway_is_partial(monkeypatch, electron)
     assert delivery.inject_text(MARKER.join(["first", "second"]), "auto") == "partial"
 
 
-# --- _transcribe_and_inject tells the user --------------------------------------
+# --- pipeline.transcribe_and_inject tells the user --------------------------------------
 
 @pytest.fixture
 def dictation(monkeypatch):
@@ -115,7 +117,7 @@ def dictation(monkeypatch):
         else:
             monkeypatch.setattr(delivery, "inject_text", lambda text, mode, **kw: outcome)
         frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
-        app._transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=beeps_on,
+        pipeline.transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=beeps_on,
                                    smart_quotes=False, notify_on=notify_on)
         return notes, beeps
 
@@ -136,7 +138,7 @@ def test_a_partial_delivery_is_announced_as_partial(dictation):
 
 def test_a_failure_plays_the_low_beep_after_the_ready_beep(dictation):
     _, beeps = dictation("failed", beeps_on=True)
-    assert beeps == [app.READY_BEEP, app.CANCEL_BEEP]
+    assert beeps == [READY_BEEP, CANCEL_BEEP]
 
 
 def test_no_beep_when_beeps_are_off(dictation):
@@ -146,7 +148,7 @@ def test_no_beep_when_beeps_are_off(dictation):
 
 def test_success_stays_quiet(dictation):
     notes, beeps = dictation("ok", beeps_on=True, notify_on=False)
-    assert notes == [] and beeps == [app.READY_BEEP]
+    assert notes == [] and beeps == [READY_BEEP]
 
 
 def test_an_exception_while_typing_is_a_failure_too(dictation):
@@ -154,4 +156,4 @@ def test_an_exception_while_typing_is_a_failure_too(dictation):
     notifications on: the transcription worked."""
     notes, beeps = dictation(RuntimeError("the keyboard layout went away"), beeps_on=True)
     assert len(notes) == 1 and "Recent Dictations" in notes[0]
-    assert beeps == [app.READY_BEEP, app.CANCEL_BEEP]
+    assert beeps == [READY_BEEP, CANCEL_BEEP]

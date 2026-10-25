@@ -6,7 +6,7 @@ while the speaker goes on talking. The result is finished phrases appearing at
 natural pauses, never words appearing and changing mid-sentence (upstream's
 "live text", which it decided against).
 
-Off unless chunked_dictation is set in config.toml; see app._arm_chunker.
+Off unless chunked_dictation is set in config.toml; see type_at_pause.arm_chunker.
 """
 import collections
 import difflib
@@ -197,9 +197,9 @@ class PauseDetector:
 class ChunkWorker:
     """Transcribes and types chunks one at a time, in the order they were cut.
 
-    One per service process (app._chunk_worker), so a new recording's chunks
+    One per service process (type_at_pause.chunk_worker), so a new recording's chunks
     can never overtake the last one's. Each job runs holding *lock*
-    (app._inject_lock), the lock that already keeps two dictations from
+    (type_at_pause.inject_lock), the lock that already keeps two dictations from
     typing at once.
     """
 
@@ -311,7 +311,7 @@ def hold_back_boundary(text: str, raw: str):
     hold back: (text, mark), or (text, None) when nothing is held back.
 
     The engine heard the chunk alone, so its final period or question mark is
-    a guess; the next chunk decides it (app._resolve_boundary). The trailing
+    a guess; the next chunk decides it (type_at_pause.resolve_boundary). The trailing
     space waits too, so whatever comes next lands right after the last word."""
     core = text.rstrip(" ")
     if not core:

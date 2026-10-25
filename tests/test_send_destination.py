@@ -26,6 +26,8 @@ from tuxtalk import notices as service_notices
 from tuxtalk import recording
 from tuxtalk import delivery
 from tuxtalk import voice_edit
+from tuxtalk import type_at_pause
+from tuxtalk import pipeline
 
 ENTER, RCTRL, F8, F9 = ecodes.KEY_ENTER, ecodes.KEY_RIGHTCTRL, ecodes.KEY_F8, ecodes.KEY_F9
 # Taken before conftest runs "Right away" on the test's own thread, and
@@ -65,12 +67,12 @@ def chat(monkeypatch, keyboard):
 def send_automatically(sent_to):
     """An automatic send of words delivered to *sent_to* (a destination)."""
     send_countdown.send_automatically("test", send_countdown.Message(sent_to), keyboard_output.press_key,
-                                      app._type_onto_dictation)
+                                      pipeline.type_onto_dictation)
 
 
 def dictate(chunk_role=None, audio=True):
     frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()] if audio else []
-    app._transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False, smart_quotes=False,
+    pipeline.transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False, smart_quotes=False,
                                notify_on=False, chunk_role=chunk_role)
 
 
@@ -294,8 +296,7 @@ def test_the_hold_key_holds_the_send_before_it_hides_itself(chat, keyboard, monk
         send_countdown._send(waiting)                 # its thread got there first
     monkeypatch.setattr(keyboard_grab, "grab_keyboards_hiding", grab_then_the_send_runs)
     monkeypatch.setattr(app, "_open_input_stream", lambda idx: None)
-    for name in ("_arm_chunker",):
-        monkeypatch.setattr(app, name, lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.type_at_pause.arm_chunker", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.recording.pause_media_players", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.tray_link.notify_recording_state", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
@@ -636,7 +637,7 @@ def test_where_the_window_isnt_known_the_next_dictation_keeps_its_space(unknown_
     focus, heard, typed, notices = unknown_window
     heard.append("see you at noon")
     dictate()
-    app._arm_chunker(engine.SAMPLE_RATE)               # the next recording starts
+    type_at_pause.arm_chunker(engine.SAMPLE_RATE)               # the next recording starts
     heard.append("how are you")
     dictate()
     assert "".join(text for text, _ in typed).startswith("See you at noon. How are you")
@@ -649,7 +650,7 @@ def test_where_the_window_is_never_known_the_space_goes_after_the_words(chat, ke
     focus, heard, typed, notices = chat
     focus[1] = None                                 # COSMIC: only the app
     for words in ("see you at noon", "how are you"):
-        app._arm_chunker(engine.SAMPLE_RATE)
+        type_at_pause.arm_chunker(engine.SAMPLE_RATE)
         heard.append(words)
         dictate()
     assert [text for text, _ in typed] == ["See you at noon.", " ", "How are you.", " "]
@@ -763,7 +764,7 @@ def test_press_enter_said_alone_goes_wherever_the_focus_is(chat, keyboard):
     heard.append("see you at noon")
     dictate()
     focus[:] = SECOND
-    app._arm_chunker(engine.SAMPLE_RATE)               # the next recording starts
+    type_at_pause.arm_chunker(engine.SAMPLE_RATE)               # the next recording starts
     heard.append("press enter")
     dictate()
     assert keyboard.typed_keys() == [ENTER, ENTER] and notices == []
@@ -859,7 +860,7 @@ def test_where_the_window_is_never_known_the_notification_comes_once(chat, keybo
     focus, heard, typed, notices = chat
     focus[1] = None                                 # COSMIC: only the app
     for words in ("see you at noon", "how are you"):
-        app._arm_chunker(engine.SAMPLE_RATE)
+        type_at_pause.arm_chunker(engine.SAMPLE_RATE)
         heard.append(words)
         dictate()
     assert notices == [send_countdown.UNKNOWN_WINDOW_NOTICE] * 2
@@ -1085,7 +1086,7 @@ def test_after_a_send_refused_for_a_click_away_the_next_dictation_still_goes_in(
     dictate()
     assert keyboard.events == []                    # the send had nowhere to go
     monkeypatch.setattr(delivery, "deliver_text", into_the_chat)
-    app._arm_chunker(engine.SAMPLE_RATE)
+    type_at_pause.arm_chunker(engine.SAMPLE_RATE)
     heard.append("how are you")
     dictate()
     assert saved[-1].startswith("How are you") and typed[-1][0].startswith("How are you")
@@ -1100,16 +1101,16 @@ def test_a_phrase_queued_before_the_next_recording_keeps_its_own_message(chat, k
     window the user had switched to."""
     focus, heard, typed, notices = chat
     monkeypatch.setattr(live, "press_enter_after", False)
-    app._arm_chunker(engine.SAMPLE_RATE)               # recording A
+    type_at_pause.arm_chunker(engine.SAMPLE_RATE)               # recording A
     first = rs.state.message
     frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
     heard.append("See you at noon.")
-    app._transcribe_and_inject(frames, engine.SAMPLE_RATE, False, False, False,
+    pipeline.transcribe_and_inject(frames, engine.SAMPLE_RATE, False, False, False,
                                chunk_role="middle", message=first)
-    app._arm_chunker(engine.SAMPLE_RATE)               # recording B starts meanwhile
+    type_at_pause.arm_chunker(engine.SAMPLE_RATE)               # recording B starts meanwhile
     focus[:] = SECOND
     heard.append("press enter")
-    app._transcribe_and_inject(frames, engine.SAMPLE_RATE, False, False, False,
+    pipeline.transcribe_and_inject(frames, engine.SAMPLE_RATE, False, False, False,
                                chunk_role="last", message=first)
     assert keyboard.events == [] and notices == [send_countdown.SWITCHED_WINDOW_NOTICE]
     assert not rs.state.message.has_words          # B's own message untouched
@@ -1185,7 +1186,7 @@ def test_a_countdown_called_off_partway_still_gives_back_its_space(chat, keyboar
             pass
     monkeypatch.setattr(send_countdown.threading, "Timer", Timer)
     send_countdown.send_automatically("test", send_countdown.Message(focused_window.destination()),
-                                      keyboard_output.press_key, app._type_onto_dictation, " ")
+                                      keyboard_output.press_key, pipeline.type_onto_dictation, " ")
     focus[:] = SECOND
     timers[1].run(*timers[1].args)                  # "Sending in 2 s": another window
     focus[:] = FIRST
@@ -1224,7 +1225,7 @@ def test_a_failed_space_may_have_gone_in_so_the_record_isnt_brought_back(monkeyp
         rs.state.last_inserted_text = ""
         return "failed"
     monkeypatch.setattr(delivery, "inject_text", inject)
-    app._type_onto_dictation(" ", "type")
+    pipeline.type_onto_dictation(" ", "type")
     assert rs.state.last_inserted_text == ""
 
 
@@ -1240,7 +1241,7 @@ def test_a_space_that_went_nowhere_leaves_undo_on_the_dictations_window(monkeypa
         rs.state.last_inserted_window = "claude"
         return "key_held"
     monkeypatch.setattr(delivery, "inject_text", inject)
-    app._type_onto_dictation("    ", "type")
+    pipeline.type_onto_dictation("    ", "type")
     assert rs.state.last_inserted_text == "See you at noon."
     assert rs.state.last_inserted_window == "brave-browser"
 
@@ -1250,18 +1251,18 @@ def test_a_phrase_cut_at_a_pause_takes_its_recordings_message_to_the_queue(chat,
     was the new recording's."""
     focus, heard, typed, notices = chat
     jobs = []
-    monkeypatch.setattr(app, "_chunk_worker", lambda: types.SimpleNamespace(submit=jobs.append))
+    monkeypatch.setattr(type_at_pause, "chunk_worker", lambda: types.SimpleNamespace(submit=jobs.append))
     monkeypatch.setattr(live, "chunk_cfg", types.SimpleNamespace(
         beeps=False, smart_quotes=False, notify=False, language=None, auto_space=True,
         auto_period=True, injection_mode="type"))
-    app._arm_chunker(engine.SAMPLE_RATE)               # recording A
+    type_at_pause.arm_chunker(engine.SAMPLE_RATE)               # recording A
     first = rs.state.message
     pause = types.SimpleNamespace(tail_samples=lambda: 0, last_pause=1.0)
     monkeypatch.setattr(rs.state, "chunker", pause)
     monkeypatch.setattr(rs.state, "frames",
                         [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()])
-    app._cut_chunk(pause)                           # "see you at noon", then a pause
-    app._arm_chunker(engine.SAMPLE_RATE)               # recording B starts
+    type_at_pause.cut_chunk(pause)                           # "see you at noon", then a pause
+    type_at_pause.arm_chunker(engine.SAMPLE_RATE)               # recording B starts
     heard.append("See you at noon.")
     jobs[0]()
     assert first.has_words and not rs.state.message.has_words

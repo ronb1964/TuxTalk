@@ -101,7 +101,7 @@ def configure(cfg) -> None:
 @dataclass
 class Message:
     """What a recording has typed since it began, or since Enter or Tab
-    ended the message before it (app._start_afresh): one dictation, or Type
+    ended the message before it (type_at_pause.start_afresh): one dictation, or Type
     at pause's phrases, rewritten by "edit that" or not; each recording has
     its own. An automatic Enter and a key said after its words go only where
     they went, and only while all of them went in: a phrase that stopped

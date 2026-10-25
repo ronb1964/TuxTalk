@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 from tuxtalk import app, libei_ctypes
+from tuxtalk import pipeline
 from tuxtalk import engine
 from tuxtalk import keyboard_output
 from tuxtalk import recording_state as rs
@@ -39,7 +40,7 @@ def test_split_press_tab(raw, expected):
 
 
 def _dictate(monkeypatch, raw, window="brave-browser"):
-    """One dictation through _transcribe_and_inject with the real text
+    """One dictation through pipeline.transcribe_and_inject with the real text
     cleanup; what was typed and which keys were pressed, in order."""
     events = []
     monkeypatch.setattr(engine, "transcribe", lambda audio, language: raw)
@@ -50,7 +51,7 @@ def _dictate(monkeypatch, raw, window="brave-browser"):
     monkeypatch.setattr(keyboard_output, "press_key",
                         lambda key, why, claim=None: events.append((key, why)) or True)
     frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
-    app._transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False,
+    pipeline.transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False,
                                smart_quotes=False, notify_on=False)
     return events
 
@@ -198,5 +199,5 @@ def test_four_spaces_kept_back_by_a_stuck_key_say_so(monkeypatch):
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "com.anthropic.Claude")
     monkeypatch.setattr(delivery, "inject_text", lambda text, mode, **kw: "key_held")
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: notes.append((title, body)))
-    app._press_said("TAB", None)
+    pipeline.press_said("TAB", None)
     assert notes == [delivery_notices.key_not_pressed("TAB")]

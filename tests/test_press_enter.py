@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 from tuxtalk import app, config, focused_window, key_commands, send_countdown, window_classes
+from tuxtalk import pipeline
 from tuxtalk import engine
 from tuxtalk import keyboard_output
 from tuxtalk import keyboard_grab
@@ -40,7 +41,7 @@ def test_split_press_enter(raw, expected):
 
 
 def _dictate(monkeypatch, raw, prepared=None, outcome="ok", window="brave-browser"):
-    """Run one dictation through _transcribe_and_inject; what was typed and
+    """Run one dictation through pipeline.transcribe_and_inject; what was typed and
     whether Enter was pressed, in order."""
     events = []
     monkeypatch.setattr(engine, "transcribe", lambda audio, language: raw)
@@ -61,7 +62,7 @@ def _dictate(monkeypatch, raw, prepared=None, outcome="ok", window="brave-browse
     monkeypatch.setattr(keyboard_output, "press_key",
                         lambda key, why, claim=None: events.append((key.lower(), why)))
     frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
-    app._transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False,
+    pipeline.transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False,
                                smart_quotes=False, notify_on=False)
     return events
 
@@ -232,7 +233,7 @@ BRAVE = ("brave-browser", ("tray", "{b4a7}"))   # the countdown fixture's window
 def start_send(why="test", space="", mode="type"):
     """An automatic send for a dictation typed into the window focused now."""
     send_countdown.send_automatically(why, send_countdown.Message(focused_window.destination()),
-                                      keyboard_output.press_key, app._type_onto_dictation, space, mode)
+                                      keyboard_output.press_key, pipeline.type_onto_dictation, space, mode)
 
 
 @pytest.fixture
@@ -330,8 +331,7 @@ def test_pressing_the_hold_key_holds_the_send_and_records(countdown, monkeypatch
     pressed, _ = countdown
     start_send("test")
     monkeypatch.setattr(app, "_open_input_stream", lambda idx: None)
-    for name in ("_arm_chunker",):
-        monkeypatch.setattr(app, name, lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.type_at_pause.arm_chunker", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.recording.pause_media_players", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.tray_link.notify_recording_state", lambda *a, **k: None)
@@ -545,10 +545,9 @@ def test_a_quick_tap_holds_the_send_even_when_recording_starts_slowly(
     reasons, dictated = [], []
     monkeypatch.setattr(app, "cancel_recording",
                         lambda beeps, notify, reason="": reasons.append(reason))
-    monkeypatch.setattr(app, "_transcribe_and_inject", lambda *a, **k: dictated.append(1))
+    monkeypatch.setattr(pipeline, "transcribe_and_inject", lambda *a, **k: dictated.append(1))
     monkeypatch.setattr(app, "_open_input_stream", lambda idx: clock.sleep(start_s))
-    for name in ("_arm_chunker",):
-        monkeypatch.setattr(app, name, lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.type_at_pause.arm_chunker", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.recording.pause_media_players", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.recording.resume_media_players", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.recording.stop_stream_safely", lambda *a, **k: None)
@@ -705,10 +704,10 @@ def test_a_pause_at_the_end_after_switching_windows_sends_nothing(monkeypatch, k
     FakeTimer.made = []
     monkeypatch.setattr(send_countdown.threading, "Timer", FakeTimer)
     frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
-    app._transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False, smart_quotes=False,
+    pipeline.transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False, smart_quotes=False,
                                notify_on=False, chunk_role="middle")
     focus[:] = ["org.kde.konsole", ("compositor", 0x3400004)]     # the click into Konsole
-    app._transcribe_and_inject([], engine.SAMPLE_RATE, beeps_on=False, smart_quotes=False,
+    pipeline.transcribe_and_inject([], engine.SAMPLE_RATE, beeps_on=False, smart_quotes=False,
                                notify_on=False, chunk_role="last")
     for timer in FakeTimer.made:
         timer.fire()

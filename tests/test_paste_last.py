@@ -14,6 +14,7 @@ from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
 from tuxtalk import keyboard_grab
 from tuxtalk import delivery
+from tuxtalk.beeps import CANCEL_BEEP
 
 P = ecodes.KEY_P
 CTRL, ALT = ecodes.KEY_LEFTCTRL, ecodes.KEY_LEFTALT
@@ -98,7 +99,7 @@ def test_nothing_dictated_yet_gives_the_cancel_beep(keys, monkeypatch):
     press_combo(held)
     for code in (P, ALT, CTRL):
         send(code, 0, held)
-    assert keys["typed"] == [] and keys["beeps"] == [app.CANCEL_BEEP]
+    assert keys["typed"] == [] and keys["beeps"] == [CANCEL_BEEP]
     assert keys["released"] >= 1
 
 

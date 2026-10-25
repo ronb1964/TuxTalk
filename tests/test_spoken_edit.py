@@ -1,5 +1,5 @@
 """Voice editing without its key: "edit that, make it shorter" right after a
-dictation selects what TuxTalk typed and changes it (app._handle_spoken_edit,
+dictation selects what TuxTalk typed and changes it (voice_edit.handle_spoken_edit,
 voice_edit_rules.spoken_edit). Labs, with voice editing on."""
 import types
 
@@ -7,6 +7,8 @@ import numpy as np
 import pytest
 
 from tuxtalk import app, edit_notices
+from tuxtalk import pipeline
+from tuxtalk import type_at_pause
 from tuxtalk import keyboard_output
 from tuxtalk import recording_state as rs
 from tuxtalk.voice_edit_rules import spoken_edit
@@ -75,8 +77,8 @@ def editing(monkeypatch):
 
 
 def _said(raw, chunk_role=None):
-    """_handle_spoken_edit for *raw*, with beeps, typing and this recording's message."""
-    return app._handle_spoken_edit(raw, chunk_role, True, "type", rs.state.message)
+    """voice_edit.handle_spoken_edit for *raw*, with beeps, typing and this recording's message."""
+    return voice_edit.handle_spoken_edit(raw, chunk_role, True, "type", rs.state.message)
 
 def test_edit_that_selects_the_dictation_and_edits_it(editing):
     pressed, edits, problems = editing
@@ -160,7 +162,7 @@ def test_it_is_never_typed_as_text(editing, monkeypatch):
     monkeypatch.setattr(live, "voice_navigation", False)
     monkeypatch.setattr(live, "usage_stats", False)
     speech = (np.sin(np.linspace(0, 2000, 16000)) * 8000).astype(np.int16)
-    app._transcribe_and_inject([speech.tobytes()], 16000, True, True, False, None,
+    pipeline.transcribe_and_inject([speech.tobytes()], 16000, True, True, False, None,
                                True, True, "type", chunk_role="middle")
     assert typed == []
     _pressed, edits, _ = editing
@@ -240,9 +242,9 @@ def test_edit_that_then_only_a_pause_isnt_sent_as_it_was(editing, monkeypatch):
     pressed, edits, problems = editing
     sent = []
     monkeypatch.setattr(live, "press_enter_after", True)
-    monkeypatch.setattr(app, "_send_automatically", lambda *a: sent.append(a))
+    monkeypatch.setattr(pipeline, "send_automatically", lambda *a: sent.append(a))
     rs.state.message.add("ok", rs.state.message.to)       # the message's words
     assert _said("Edit that.", "middle")                    # waits for what to change
-    app._end_in_a_pause(rs.state.message, False, True, True, "type")
+    type_at_pause.end_in_a_pause(rs.state.message, False, True, True, "type")
     assert sent == [] and problems == ["edit_that_what"]
     assert rs.state.edit_waiting is None

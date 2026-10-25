@@ -7,7 +7,8 @@ import threading
 import time
 
 from . import (beeps, delivery, delivery_notices, dictation_text, engine, focused_window,
-               keyboard_output, notices, recording, silence, voice_commands, voice_edit_rules)
+               keyboard_output, last_dictation, notices, recording, silence, type_at_pause,
+               voice_commands, voice_edit_rules)
 from . import live_settings as live
 from . import recording_state as rs
 from .beeps import READY_BEEP
@@ -282,3 +283,61 @@ def edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0,
         return _type_rewrite(result, injection_mode, message, beeps_on)
     finally:
         _put_clipboard_back(put_back, result)
+
+
+def handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: str,
+                        message) -> bool:
+    """Voice editing by voice alone (TuxTalk Labs): a dictation that starts
+    with "edit that" selects what TuxTalk just typed and changes it as the
+    rest says, as Shift+F8 does for a selection. True when it was handled
+    (done, or refused with a notice); False to type the words as text, which
+    is also what happens when nothing was just typed to edit."""
+    if not live.voice_editing:
+        return False
+    from . import voice_navigation as nav
+    waiting, rs.state.edit_waiting = rs.state.edit_waiting, None
+    if waiting is not None and waiting["serial"] == rs.state.recording_serial:
+        instruction, target = raw, waiting["target"]
+    else:
+        instruction = voice_edit_rules.spoken_edit(raw)
+        if instruction is None:
+            return False
+        target = voice_commands.spoken_edit_target()
+        if not target:
+            return voice_commands.refused_as_sent(beeps_on)
+    logger.info(f"Voice command: edit that ({len(target)} characters)")
+    if not keyboard_output.is_wayland_session():
+        notices.edit_problem("needs_wayland", beeps_on)
+        return True
+    focused_class = focused_window.window_class()
+    if is_terminal_class(focused_class):
+        notices.edit_problem("terminal", beeps_on)
+        return True
+    if not instruction.strip():
+        if chunk_role == "middle":
+            # "edit that", then a pause: the next phrase says what to change.
+            rs.state.edit_waiting = {"serial": rs.state.recording_serial, "target": target}
+            logger.info("Voice edit: waiting for the next phrase to say what to change")
+        else:
+            notices.edit_problem("edit_that_what", beeps_on)
+            message.add("failed", None)     # asked to change it: not sent as it is
+        return True
+    plan = nav.plan(nav.parse("select that"), target, "")
+    try:
+        selected = plan is not None and keyboard_output.output_backend().press_keys(plan.chords)
+    except Exception as e:
+        logger.error(f"Voice edit: selecting the text failed: {e}")
+        selected = False
+    # The text is selected now (and then replaced): undo's count and the
+    # screen copy no longer match it, and nothing in it reaches the next phrase.
+    rs.state.last_inserted_text = ""
+    type_at_pause.start_afresh()
+    last_dictation.forget_shown()
+    if not selected:
+        notices.edit_problem("shortcut_failed", beeps_on)
+    elif edit_selection(lambda: instruction, beeps_on, injection_mode, focused_class,
+                         time.time(), message, spoken=True):
+        return True
+    # Not changed as asked: no automatic Enter sends it as it was.
+    message.add("failed", None)
+    return True

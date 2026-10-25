@@ -20,6 +20,7 @@ import types
 import pytest
 
 from tuxtalk import app, hotkey_keys
+from tuxtalk import type_at_pause
 from tuxtalk import engine
 from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
@@ -198,7 +199,7 @@ def test_power_saving_waits_for_a_transcription_still_running(monkeypatch):
     cfg = _cfg(auto_timeout_enabled=True, auto_timeout_minutes=1)
     svc = app._ServiceState(cfg)
     svc.last_activity = 0.0
-    with app._inject_lock:                # a dictation is being transcribed
+    with type_at_pause.inject_lock:                # a dictation is being transcribed
         app._service_tick(cfg, svc)
     assert engine.model is loaded and not loaded.closed
     app._service_tick(cfg, svc)           # done: now it rests

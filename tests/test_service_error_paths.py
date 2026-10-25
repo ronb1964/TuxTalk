@@ -3,11 +3,12 @@ the hotkeys."""
 
 import threading
 
-from tuxtalk import app
+from tuxtalk import pipeline
 from tuxtalk import engine
 from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
 from tuxtalk import recording
+from tuxtalk.beeps import CANCEL_BEEP
 
 
 def test_turning_the_ai_off_does_not_block_the_caller(monkeypatch):
@@ -50,9 +51,9 @@ def test_a_transcription_error_sounds_like_a_failure_and_says_so(monkeypatch):
     monkeypatch.setattr("tuxtalk.silence.is_speechless_tap", lambda *a: False)
 
     frames = [b"\xe8\x03" * 16000]   # speaking level; pure silence is a dead mic
-    app._transcribe_and_inject(frames, engine.SAMPLE_RATE, True, False, notify_on=False)
+    pipeline.transcribe_and_inject(frames, engine.SAMPLE_RATE, True, False, notify_on=False)
 
-    assert beeps == [app.CANCEL_BEEP], "the 'done' beep played for a failure"
+    assert beeps == [CANCEL_BEEP], "the 'done' beep played for a failure"
     assert notes and "Transcription failed" in notes[0]
 
 

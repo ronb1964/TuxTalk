@@ -53,7 +53,7 @@ class RecordingState:
     chunks_submitted: int = 0
     # The last chunk typed held back its final mark (chunking.hold_back_boundary):
     # {"mark", "audio", "raw", "typed"} until the next chunk decides it, else
-    # None. Belongs to its recording only (cleared by _arm_chunker).
+    # None. Belongs to its recording only (cleared by type_at_pause.arm_chunker).
     pending_boundary: object = None
     # The "?" held back at the last pause was heard as mid-sentence: the
     # question goes on, so this phrase ends with it, not a period
@@ -76,13 +76,13 @@ class RecordingState:
     # corrected value comes in the next phrase.
     held_cue: str = ""
     # "edit that" said alone as a Type at pause phrase: the next phrase of
-    # this recording says what to change (_handle_spoken_edit).
+    # this recording says what to change (voice_edit.handle_spoken_edit).
     edit_waiting: object = None
     # Speech the pause detector heard after its last cut, taken at the stop:
     # 0.0 means the rest of the recording is room noise only.
     last_chunk_speech: float = None
     # A recording typed in phrases (Type at pause) is still one dictation.
-    # recording_serial counts recordings (_arm_chunker). said_text is all the
+    # recording_serial counts recordings (type_at_pause.arm_chunker). said_text is all the
     # one numbered said_serial has typed or tried to: its Recent Dictations
     # entry (_remember_said). shown_text is the part of it on screen in
     # shown_window, ending at the cursor, for "fix that word" to fix in

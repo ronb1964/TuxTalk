@@ -24,6 +24,7 @@ from tuxtalk import keyboard_output
 from tuxtalk import tray_link
 from tuxtalk import engine
 from tuxtalk import delivery
+from tuxtalk import pipeline
 
 RCTRL, RALT, LCTRL = ecodes.KEY_RIGHTCTRL, ecodes.KEY_RIGHTALT, ecodes.KEY_LEFTCTRL
 
@@ -371,7 +372,7 @@ def test_a_dictation_stopped_by_a_stuck_key_stays_in_recent_dictations(
     monkeypatch.setattr(live, "press_enter_after", False)
     monkeypatch.setattr(history, "add_entry", lambda text, replaces=None: kept.append(text))
     frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
-    app._transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False, smart_quotes=False,
+    pipeline.transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False, smart_quotes=False,
                                notify_on=False)
     assert keyboard.events == []
     assert kept == ["Hello there. "]
@@ -414,7 +415,7 @@ def test_a_stuck_key_that_keeps_back_the_enter_says_so(keyboard, stuck_right_ctr
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: notes.append((title, body)))
     monkeypatch.setattr(send_countdown, "show_notice", notices.append)
     if enter == "said":
-        app._press_said("ENTER", None)
+        pipeline.press_said("ENTER", None)
         assert notes == [delivery_notices.key_not_pressed("ENTER")]
         assert notes[0][0] == "Enter not pressed: a dictation key stayed down"
     else:

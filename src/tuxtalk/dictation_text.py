@@ -63,7 +63,7 @@ def prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bo
     *app_kind* ("terminal", "code" or ""): the focused app wants plain text
     (no closing period; in a terminal, no starting capital either).
     *ai* False skips the AI self-corrections: Type at pause asks the AI about
-    a phrase together with the one before it instead (_correct_across_pause).
+    a phrase together with the one before it instead (type_at_pause.correct_across_pause).
 
     Returns the final text string ready for injection.
     """

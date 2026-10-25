@@ -22,6 +22,9 @@ from tuxtalk import keyboard_output
 from tuxtalk import engine
 from tuxtalk import dictation_text
 from tuxtalk import delivery
+from tuxtalk import type_at_pause
+from tuxtalk import pipeline
+from tuxtalk.beeps import CANCEL_BEEP
 
 ACTIVE = 1 << atspi_helper._STATE_ACTIVE
 FOCUSED = 1 << atspi_helper._STATE_FOCUSED
@@ -70,7 +73,7 @@ def desktop(monkeypatch):
 def dictate(monkeypatch, said="my secret is swordfish", beeps_on=True, chunk_role=None):
     monkeypatch.setattr(engine, "transcribe", lambda audio, language: said)
     frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
-    app._transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=beeps_on,
+    pipeline.transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=beeps_on,
                                smart_quotes=False, notify_on=True, chunk_role=chunk_role)
 
 
@@ -81,7 +84,7 @@ def test_a_dictation_in_a_password_field_is_not_typed_or_kept(desktop, monkeypat
     assert desktop["typed"] == [] and desktop["history"] == []
     # Not even in the "Transcribed: …" notification.
     assert not any("swordfish" in n for n in desktop["notes"])
-    assert desktop["beeps"] == [app.CANCEL_BEEP]
+    assert desktop["beeps"] == [CANCEL_BEEP]
     assert desktop["labels"] == [delivery_notices.PASSWORD_FIELD_LABEL]
     assert "password field" in caplog.text and "swordfish" not in caplog.text
 
@@ -115,8 +118,8 @@ def test_type_at_pause_types_nothing_of_its_own_into_a_password_field(desktop, m
     """The mark held back from the phrase before, a held "No wait." and the
     local AI all come before the words; none of them reach the field."""
     ran = []
-    monkeypatch.setattr(app, "_resolve_boundary", lambda *a, **k: ran.append("mark"))
-    monkeypatch.setattr(app, "_flush_boundary", lambda *a, **k: ran.append("mark"))
+    monkeypatch.setattr(type_at_pause, "resolve_boundary", lambda *a, **k: ran.append("mark"))
+    monkeypatch.setattr(type_at_pause, "flush_boundary", lambda *a, **k: ran.append("mark"))
     monkeypatch.setattr(dictation_text, "prepare_text", lambda *a, **k: ran.append("cleanup") or "x")
     monkeypatch.setattr(rs.state, "pending_boundary", {"mark": "."})
     monkeypatch.setattr(rs.state, "held_cue", "No wait.")
@@ -241,7 +244,7 @@ def test_no_wait_doesnt_backspace_in_a_password_field(desktop, monkeypatch):
                         lambda: types.SimpleNamespace(backspaces=lambda n: erased.append(n)))
     monkeypatch.setattr(rs.state, "last_inserted_window", None)
     desktop["password"] = True
-    assert app._erase_typed("Meet at three. ") is False
+    assert type_at_pause._erase_typed("Meet at three. ") is False
     assert erased == []
 
 

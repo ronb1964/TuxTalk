@@ -8,6 +8,7 @@ from tuxtalk import clipboard as cb
 from tuxtalk import keyboard_grab
 from tuxtalk import uinput_helper
 from tuxtalk import keyboard_output
+from tuxtalk.beeps import CANCEL_BEEP, READY_BEEP
 
 
 # --- 1. grabbing the selection ------------------------------------------------------
@@ -418,7 +419,7 @@ def test_each_problem_says_what_to_do(edit_env, setup, words):
     run_edit()
     assert edit_env["typed"] == []
     assert len(edit_env["notices"]) == 1 and words in edit_env["notices"][0]
-    assert edit_env["beeps"] == [app.CANCEL_BEEP]
+    assert edit_env["beeps"] == [CANCEL_BEEP]
 
 
 def test_without_the_ai_downloaded_it_says_where_to_turn_it_on(edit_env, monkeypatch):
@@ -433,7 +434,7 @@ def test_in_a_password_field_the_selection_isnt_even_read(edit_env, monkeypatch)
     monkeypatch.setattr(cb, "copy_selection", lambda send_copy: pytest.fail("read the selection"))
     run_edit()
     assert edit_env["typed"] == [] and edit_env["history"] == []
-    assert edit_env["engine"].asked == [] and edit_env["beeps"] == [app.CANCEL_BEEP]
+    assert edit_env["engine"].asked == [] and edit_env["beeps"] == [CANCEL_BEEP]
 
 
 def test_a_rewrite_is_not_typed_or_kept_if_the_focus_moved_to_a_password_field(edit_env,
@@ -444,7 +445,7 @@ def test_a_rewrite_is_not_typed_or_kept_if_the_focus_moved_to_a_password_field(e
                         lambda: answers.pop(0) if answers else True)
     run_edit()
     assert edit_env["typed"] == [] and edit_env["history"] == []
-    assert edit_env["beeps"] == [app.CANCEL_BEEP] and edit_env["put_back"] == 1
+    assert edit_env["beeps"] == [CANCEL_BEEP] and edit_env["put_back"] == 1
 
 
 def test_the_clipboard_comes_back_even_when_typing_fails(edit_env, monkeypatch):
@@ -886,7 +887,7 @@ def test_bold_in_a_word_processor_is_its_shortcut(edit_env, keys_sent, monkeypat
     run_edit()
     assert keys_sent == [[(29, 1), (48, 1), (48, 0), (29, 0)], [(29, 1), (23, 1), (23, 0), (29, 0)]]
     assert edit_env["typed"] == [] and edit_env["notices"] == [] and edit_env["engine"].asked == []
-    assert edit_env["beeps"] == [app.READY_BEEP] and edit_env["put_back"] == 1
+    assert edit_env["beeps"] == [READY_BEEP] and edit_env["put_back"] == 1
 
 
 def test_bold_in_a_plain_text_app_says_where_it_works(edit_env, keys_sent, monkeypatch):
@@ -1147,7 +1148,7 @@ def test_with_the_labs_switch_off_nothing_selected_still_says_select_first(edit_
     ("We completed the electrical work today.", "failed", False),
 ])
 def test_an_edit_says_whether_the_change_went_in(edit_env, monkeypatch, answer, typing, went_in):
-    """"edit that" holds back the automatic Enter when it didn't (app._handle_spoken_edit)."""
+    """"edit that" holds back the automatic Enter when it didn't (voice_edit.handle_spoken_edit)."""
     edit_env["engine"].answer = answer
     monkeypatch.setattr(delivery, "inject_text", lambda text, mode, **kw: typing)
     done = voice_edit.edit_selection(lambda: "make it more professional", False, "type",

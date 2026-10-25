@@ -10,6 +10,8 @@ from types import SimpleNamespace
 
 import numpy as np
 from tuxtalk import engine
+from tuxtalk import pipeline
+from tuxtalk.beeps import CANCEL_BEEP
 
 
 def test_parakeet_is_offered_valid_and_downloadable():
@@ -148,13 +150,13 @@ def test_parakeet_keeps_real_words_even_in_a_quiet_recording(monkeypatch):
 
 def test_nothing_recognized_plays_the_cancel_beep(monkeypatch):
     """A recording that types nothing ends with the cancel beep, not silence."""
-    from tuxtalk import app, silence
+    from tuxtalk import silence
     beeps = []
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda on, *tone: beeps.append(tone))
     monkeypatch.setattr(silence, "is_speechless_tap", lambda a, sr: False)
     monkeypatch.setattr(engine, "transcribe", lambda *a: None)
-    app._transcribe_and_inject([np.ones(16000, dtype=np.int16).tobytes()], 16000, True, False, False)
-    assert beeps == [app.CANCEL_BEEP]
+    pipeline.transcribe_and_inject([np.ones(16000, dtype=np.int16).tobytes()], 16000, True, False, False)
+    assert beeps == [CANCEL_BEEP]
 
 
 def test_the_log_says_your_words_steered_parakeet_but_not_which_word(caplog):

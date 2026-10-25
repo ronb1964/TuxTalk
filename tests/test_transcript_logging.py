@@ -20,6 +20,7 @@ from tuxtalk import engine as speech_engine  # noqa: E402
 from tuxtalk import dictation_text  # noqa: E402
 from tuxtalk import delivery  # noqa: E402
 from tuxtalk import voice_edit  # noqa: E402
+from tuxtalk import pipeline  # noqa: E402
 
 
 # --- config flag -----------------------------------------------------------
@@ -326,7 +327,6 @@ def test_a_dictation_never_writes_the_words(monkeypatch, caplog, capsys, keyboar
     """Every log line and print on the way from the recording to the typed
     text, with transcript logging off (the default)."""
     import numpy as np
-    from tuxtalk import app
     monkeypatch.setattr(live, "log_transcripts", False)
     monkeypatch.setattr(speech_engine, "transcribe",
                         lambda audio, language: "zanzibar quokka password hunter two")
@@ -334,7 +334,7 @@ def test_a_dictation_never_writes_the_words(monkeypatch, caplog, capsys, keyboar
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
     frames = [(np.ones(speech_engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
     _hear_every_level(caplog)
-    app._transcribe_and_inject(frames, speech_engine.SAMPLE_RATE, beeps_on=False,
+    pipeline.transcribe_and_inject(frames, speech_engine.SAMPLE_RATE, beeps_on=False,
                                smart_quotes=False, notify_on=False)
     assert keyboard.typed_keys(), "the dictation was not typed"
     assert "[hidden" in caplog.text                     # it did log, redacted

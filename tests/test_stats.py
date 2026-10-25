@@ -13,6 +13,7 @@ from tuxtalk import live_settings as live
 from tuxtalk import engine
 from tuxtalk import dictation_text
 from tuxtalk import delivery
+from tuxtalk import pipeline
 
 D = datetime.date
 
@@ -158,7 +159,7 @@ def _dictate(monkeypatch, app, seconds=2.0):
     monkeypatch.setattr(delivery, "inject_text", lambda text, mode, **kw: None)
     monkeypatch.setattr("tuxtalk.history.add_entry", lambda text: None)
     frames = [(np.ones(int(engine.SAMPLE_RATE * seconds), dtype=np.int16) * 1000).tobytes()]
-    app._transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False,
+    pipeline.transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False,
                                smart_quotes=False, notify_on=False)
 
 
@@ -231,7 +232,6 @@ def test_a_damaged_file_is_reported_not_shown_as_empty(stats_file):
 def test_stats_are_saved_after_the_text_is_typed(stats_file, monkeypatch):
     """Saving the counts must never delay the dictated text."""
     import numpy as np
-    from tuxtalk import app
     order = []
     monkeypatch.setattr(live, "usage_stats", True)
     monkeypatch.setattr(engine, "transcribe", lambda audio, language: "hello there")
@@ -243,7 +243,7 @@ def test_stats_are_saved_after_the_text_is_typed(stats_file, monkeypatch):
     # A full second: a near-silent 0.1 s would be dropped as an accidental tap
     # (silence.is_speechless_tap) before reaching the engine.
     frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
-    app._transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False,
+    pipeline.transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False,
                                smart_quotes=False, notify_on=False)
     assert order == ["typed", "counted"]
 

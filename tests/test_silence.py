@@ -18,6 +18,7 @@ from tuxtalk import tray_link
 from tuxtalk import engine
 from tuxtalk import notices
 from tuxtalk import recording
+from tuxtalk import pipeline
 
 SR = 16000
 BLOCK = 320   # 20 ms
@@ -595,10 +596,9 @@ def test_anything_longer_than_a_tap_is_never_judged():
 
 
 def test_the_service_skips_a_speechless_tap(monkeypatch):
-    from tuxtalk import app
     monkeypatch.setattr(engine, "transcribe",
                         lambda *a: pytest.fail("a speechless tap was transcribed"))
-    app._transcribe_and_inject([click().tobytes()], SR, False, False, False)
+    pipeline.transcribe_and_inject([click().tobytes()], SR, False, False, False)
 
 
 # --- Nothing said at all -----------------------------------------------------
@@ -681,13 +681,12 @@ def test_dead_mic_is_digital_silence_only():
 
 
 def test_a_dead_mic_is_reported_not_transcribed(monkeypatch):
-    from tuxtalk import app
     said, transcribed = [], []
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, msg: said.append((title, msg)))
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr(engine, "transcribe", lambda *a: transcribed.append(1) or "hi")
     frames = [np.zeros(engine.SAMPLE_RATE * 2, dtype=np.int16).tobytes()]
-    app._transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False,
+    pipeline.transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False,
                                smart_quotes=False, notify_on=False)
     assert transcribed == []
     # The pop-up shows the title and a line or two: the problem itself must be

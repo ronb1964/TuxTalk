@@ -1,6 +1,5 @@
 {
  "files": {
-  "app.py": 2075,
   "tray.py": 2477,
   "welcome_dialog.py": 3222
  },
@@ -339,15 +338,8 @@
    "decisions": 27,
    "lines": 162
   },
-  "app.py::_resolve_boundary": {
-   "decisions": 18
-  },
   "app.py::_service_tick": {
    "decisions": 20
-  },
-  "app.py::_transcribe_and_inject": {
-   "decisions": 60,
-   "lines": 237
   },
   "app.py::main": {
    "lines": 136

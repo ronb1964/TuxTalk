@@ -21,6 +21,9 @@ from tuxtalk import engine
 from tuxtalk import last_dictation
 from tuxtalk import recording as capture
 from tuxtalk import delivery
+from tuxtalk import type_at_pause
+from tuxtalk import pipeline as dictation_pipeline
+from tuxtalk.beeps import CANCEL_BEEP, READY_BEEP
 
 SR = 16000
 BLOCK = 320   # 20 ms at 16 kHz
@@ -375,7 +378,7 @@ def test_words_in_context(prev, joint, heard):
 
 @pytest.fixture
 def pipeline(monkeypatch):
-    """A fake engine and fake typing around the real _transcribe_and_inject.
+    """A fake engine and fake typing around the real pipeline.transcribe_and_inject.
     texts: what the engine 'hears', one per call, in call order (a chunk after
     a held-back one is transcribed alone, then together with it).
     Returns (texts, typed, beeps)."""
@@ -408,18 +411,16 @@ def frames_of(audio):
 
 
 def call(frames, role, auto_period=False):
-    from tuxtalk import app
-    app._transcribe_and_inject(frames, SR, True, True, False, None, True, auto_period,
+    dictation_pipeline.transcribe_and_inject(frames, SR, True, True, False, None, True, auto_period,
                                "type", chunk_role=role)
 
 
 def test_middle_chunk_types_without_the_ready_beep(pipeline):
-    from tuxtalk import app
     texts, typed, beeps = pipeline
     texts.append("we meet")
     call(frames_of(speech(1.0)), "middle")
     assert typed == ["We meet"]
-    assert app.READY_BEEP not in beeps
+    assert READY_BEEP not in beeps
 
 
 def test_middle_chunk_holds_back_its_final_mark(pipeline):
@@ -473,14 +474,13 @@ def test_last_chunk_gets_the_auto_period(pipeline):
 
 
 def test_stop_after_a_pause_types_the_held_mark(pipeline):
-    from tuxtalk import app
     texts, typed, beeps = pipeline
     texts.append("are you there?")
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     call([], "last", auto_period=True)
     assert typed == ["Are you there", "? "]
     assert rs.state.last_inserted_text == "Are you there? "
-    assert beeps == [app.READY_BEEP]
+    assert beeps == [READY_BEEP]
 
 
 def test_stop_after_a_pause_adds_the_auto_period(pipeline):
@@ -532,34 +532,30 @@ def test_silent_middle_chunk_is_dropped_without_a_sound(pipeline):
 
 
 def test_last_chunk_with_no_speech_still_beeps_ready(pipeline):
-    from tuxtalk import app
     _, typed, beeps = pipeline
     call(frames_of(noise(0.4)), "last")
     assert typed == []
-    assert beeps == [app.READY_BEEP]
+    assert beeps == [READY_BEEP]
 
 
 def test_last_chunk_with_no_audio_beeps_ready(pipeline):
-    from tuxtalk import app
     _, typed, beeps = pipeline
     call([], "last")
-    assert typed == [] and beeps == [app.READY_BEEP]
+    assert typed == [] and beeps == [READY_BEEP]
 
 
 def test_whole_dictation_is_unchanged(pipeline):
     """chunk_role=None: today's behaviour, a silent tap gets the cancel beep."""
-    from tuxtalk import app
     _, typed, beeps = pipeline
     call(frames_of(noise(0.4)), None)
-    assert typed == [] and beeps == [app.CANCEL_BEEP]
+    assert typed == [] and beeps == [CANCEL_BEEP]
 
 
 def test_held_mark_never_reaches_the_next_recording(pipeline):
-    from tuxtalk import app
     texts, typed, _ = pipeline
     texts.extend(["we meet.", "hello there"])
     call(frames_of(speech(1.0)), "middle")
-    app._arm_chunker(SR)            # the next recording starts
+    type_at_pause.arm_chunker(SR)            # the next recording starts
     assert rs.state.pending_boundary is None
     call(frames_of(speech(1.0)), None)
     assert typed[1].strip() == "Hello there"
@@ -573,7 +569,7 @@ def recording(monkeypatch, pipeline):
     fresh chunk worker and the fake engine/typing from `pipeline`."""
     from types import SimpleNamespace
     from tuxtalk import app
-    monkeypatch.setattr(app, "_chunk_worker_instance", None)
+    monkeypatch.setattr(type_at_pause, "_worker_instance", None)
     monkeypatch.setattr(live, "chunk_pause_seconds", 0.8)
     monkeypatch.setattr(live, "chunk_cfg", SimpleNamespace(
         beeps=True, smart_quotes=True, notify=False, language=None,
@@ -589,7 +585,7 @@ def recording(monkeypatch, pipeline):
     rs.state.edit_mode = False
     rs.state.press_t0 = time.time() - 10
     rs.state.is_recording = True
-    app._arm_chunker(SR)
+    type_at_pause.arm_chunker(SR)
     yield pipeline
     rs.state.is_recording = False
     rs.state.chunker = None
@@ -610,58 +606,53 @@ def stop(auto_period=False):
 
 
 def test_two_pauses_give_three_chunks_in_order(recording):
-    from tuxtalk import app
     texts, typed, beeps = recording
     texts.extend(["we meet.", "at three.", "we meet at three.",
                   "in the garden", "at three in the garden"])
     feed(np.concatenate([speech(1.0), noise(1.0), speech(1.0), noise(1.0), speech(0.8)]))
     stop()
     assert "".join(typed) == "We meet at three in the garden "
-    assert beeps.count(app.READY_BEEP) == 1
+    assert beeps.count(READY_BEEP) == 1
     assert rs.state.chunks_submitted == 2
 
 
 def test_chunking_off_types_one_dictation(recording, monkeypatch):
-    from tuxtalk import app
     texts, typed, beeps = recording
     monkeypatch.setattr(live, "chunk_pause_seconds", 0.0)
-    app._arm_chunker(SR)
+    type_at_pause.arm_chunker(SR)
     assert rs.state.chunker is None
     texts.append("we meet at three in the garden")
     feed(np.concatenate([speech(1.0), noise(1.0), speech(1.0), noise(1.0), speech(0.8)]))
     stop()
     assert len(typed) == 1
-    assert beeps.count(app.READY_BEEP) == 1
+    assert beeps.count(READY_BEEP) == 1
 
 
 def test_a_voice_edit_is_never_chunked(recording):
-    from tuxtalk import app
-    app._arm_chunker(SR, edit_mode=True)
+    type_at_pause.arm_chunker(SR, edit_mode=True)
     assert rs.state.chunker is None
 
 
 def test_auto_stop_after_a_cut_beeps_ready_once(recording):
     """Review focus 1: the rest after the cut is only room noise."""
-    from tuxtalk import app
     texts, typed, beeps = recording
     texts.append("we meet")
     feed(np.concatenate([speech(1.0), noise(1.2)]))
     stop()
     assert "".join(typed) == "We meet "
-    assert beeps == [app.READY_BEEP]
+    assert beeps == [READY_BEEP]
 
 
 def test_a_silent_rest_never_reaches_the_engine(recording):
     """After the last cut only the room was heard (1.2 s, too long for the tap
     check): the engine must not get it, or it invents a "Yeah."."""
-    from tuxtalk import app
     texts, typed, beeps = recording
     texts.extend(["we meet", "yeah"])
     feed(np.concatenate([speech(1.0), noise(2.0)]))
     stop(auto_period=True)
     assert "".join(typed) == "We meet. "
     assert texts == ["yeah"]
-    assert beeps == [app.READY_BEEP]
+    assert beeps == [READY_BEEP]
 
 
 def test_cut_after_stop_snapshot_hands_nothing_on(recording):
@@ -672,9 +663,9 @@ def test_cut_after_stop_snapshot_hands_nothing_on(recording):
     chunker = rs.state.chunker
     cap = app._finish_capture(beeps_on=False, notify_on=False)
     assert cap is not None
-    app._cut_chunk(chunker)
+    type_at_pause.cut_chunk(chunker)
     assert rs.state.chunks_submitted == 0
-    assert app._chunk_worker().drain(1)
+    assert type_at_pause.chunk_worker().drain(1)
 
 
 def test_drop_tail_samples_keeps_partial_blocks():
@@ -695,18 +686,17 @@ def test_flatpak_stop_queues_the_last_chunk_on_the_worker(recording, monkeypatch
                           timeout_enabled=False, last_config_check=time.time())
     app._cmd_stop_recording.set()
     app._service_tick(live.chunk_cfg, svc)
-    assert app._chunk_worker().drain(5)
+    assert type_at_pause.chunk_worker().drain(5)
     assert "".join(typed) == "We meet at three "
 
 
 def test_arming_starts_the_worker(monkeypatch):
     """The worker must exist before the first cut, so the audio callback never
     has to build it (a thread start and an import on the audio thread)."""
-    from tuxtalk import app
-    monkeypatch.setattr(app, "_chunk_worker_instance", None)
+    monkeypatch.setattr(type_at_pause, "_worker_instance", None)
     monkeypatch.setattr(live, "chunk_pause_seconds", 0.8)
-    app._arm_chunker(SR)
-    assert app._chunk_worker_instance is not None
+    type_at_pause.arm_chunker(SR)
+    assert type_at_pause._worker_instance is not None
     rs.state.chunker = None
 
 
@@ -714,10 +704,9 @@ def test_a_cut_queues_its_chunk_before_releasing_the_lock(recording, monkeypatch
     """Otherwise the stop could slip in between counting the chunk and queuing
     it, and queue the last chunk ahead of this one."""
     from types import SimpleNamespace
-    from tuxtalk import app
     held = []
-    monkeypatch.setattr(app, "_chunk_worker_instance",
-                        SimpleNamespace(submit=lambda job: held.append(app._chunk_lock.locked())))
+    monkeypatch.setattr(type_at_pause, "_worker_instance",
+                        SimpleNamespace(submit=lambda job: held.append(type_at_pause.chunk_lock.locked())))
     feed(np.concatenate([speech(1.0), noise(1.0)]))
     assert held == [True]
 
@@ -769,11 +758,10 @@ def test_service_reads_the_new_chunk_settings(monkeypatch):
 
 
 def test_speech_db_reaches_the_detector(monkeypatch):
-    from tuxtalk import app
     monkeypatch.setattr(live, "chunk_pause_seconds", 0.8)
     monkeypatch.setattr(live, "chunk_speech_db", 9.0)
-    monkeypatch.setattr(app, "_chunk_worker_instance", None)
-    app._arm_chunker(SR)
+    monkeypatch.setattr(type_at_pause, "_worker_instance", None)
+    type_at_pause.arm_chunker(SR)
     assert rs.state.chunker.speech_over_room == pytest.approx(10 ** (9 / 20))
     rs.state.chunker = None
 
@@ -934,7 +922,6 @@ def test_ai_off_leaves_a_correction_after_a_pause_alone(ai_on, monkeypatch):
 
 def test_the_context_pass_hears_only_the_seconds_around_the_pause(pipeline, monkeypatch):
     """A long phrase isn't transcribed a second time whole."""
-    from tuxtalk import app
     texts, typed, _ = pipeline
     heard = []
     real = engine.transcribe
@@ -944,7 +931,7 @@ def test_the_context_pass_hears_only_the_seconds_around_the_pause(pipeline, monk
     call(frames_of(speech(20.0)), "middle")
     call(frames_of(speech(20.0)), "middle")
     assert heard[:2] == [20.0, 20.0]
-    assert heard[2] == pytest.approx(2 * app.CONTEXT_S + app.JOINT_GAP_S)
+    assert heard[2] == pytest.approx(2 * type_at_pause.CONTEXT_S + type_at_pause.JOINT_GAP_S)
     assert typed == ["We meet", " ", "at three"]
 
 
@@ -963,25 +950,25 @@ def test_describe_says_how_close_a_pause_came():
 def recent(pipeline, monkeypatch, tmp_path):
     """`pipeline` with the real Recent Dictations list (in a private runtime
     folder) and a recording just started."""
-    from tuxtalk import app, history
+    from tuxtalk import history
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     monkeypatch.setattr(history, "add_entry", REAL_ADD_ENTRY)    # `pipeline` stubbed it
-    app._arm_chunker(SR)
+    type_at_pause.arm_chunker(SR)
     return pipeline
 
 
 def test_a_recording_is_one_recent_dictation(recent):
     """Phrases typed at pauses make one entry, so Fix a Word and Paste Last
     get the whole recording, not its last phrase."""
-    from tuxtalk import app, history
+    from tuxtalk import history
     texts, typed, _ = recent
     texts.extend(["we meet.", "the end.", "we meet. The end."])
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     call(frames_of(speech(1.0)), "last", auto_period=True)
     assert typed == ["We meet", ". ", "The end. "]
     assert history.get_entries() == ["We meet. The end."]
-    app._arm_chunker(SR)            # the next recording is an entry of its own
+    type_at_pause.arm_chunker(SR)            # the next recording is an entry of its own
     texts.append("hello there.")
     call(frames_of(speech(1.0)), None, auto_period=True)
     assert history.get_entries() == ["Hello there.", "We meet. The end."]
@@ -1018,8 +1005,7 @@ def fix_word(recent, monkeypatch):
 
 
 def say_fix_that_word(texts):
-    from tuxtalk import app
-    app._arm_chunker(SR)
+    type_at_pause.arm_chunker(SR)
     texts.append("fix that word")
     call(frames_of(speech(1.0)), None)
 
@@ -1035,14 +1021,13 @@ def test_fix_that_word_gets_the_whole_recording(fix_word):
 
 def test_fix_that_word_after_a_delete_gets_what_is_left(fix_word, monkeypatch):
     from types import SimpleNamespace
-    from tuxtalk import app
     texts, typed, opened = fix_word
     monkeypatch.setattr(keyboard_output, "output_backend",
                         lambda: SimpleNamespace(backspaces=lambda n: True))
     texts.extend(["we meet.", "the end is near.", "we meet. The end is near."])
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     call(frames_of(speech(1.0)), "last", auto_period=True)
-    app._arm_chunker(SR)
+    type_at_pause.arm_chunker(SR)
     texts.append("delete last word")
     call(frames_of(speech(1.0)), None)
     left = rs.state.last_inserted_text
@@ -1134,14 +1119,13 @@ def test_press_enter_after_a_pause_ends_the_phrase_before_it(enter):
     """ "we meet at three" ... pause ... "press enter": the held-back end of
     the phrase is typed (the auto-period, no space) before Enter, with no
     context pass deciding a mark against the words "press enter"."""
-    from tuxtalk import app
     texts, typed, beeps = enter
     texts.extend(["we meet at three", "press enter"])
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     assert typed == ["We meet at three", ".", "<ENTER>"]
     assert texts == []                       # transcribed once each, no joint pass
-    assert app.READY_BEEP not in beeps       # mid-recording: no beep
+    assert READY_BEEP not in beeps       # mid-recording: no beep
     assert rs.state.pending_boundary is None
 
 
@@ -1248,7 +1232,6 @@ def test_a_short_phrase_the_context_hears_differently_keeps_its_own_words(pipeli
 def test_a_phrase_being_worked_on_holds_hands_free_open(monkeypatch):
     """_transcribe_chunk holds the silence detector for as long as the phrase
     is being transcribed, edited and typed, and releases it after."""
-    from tuxtalk import app
     events = []
 
     class Detector:
@@ -1260,8 +1243,8 @@ def test_a_phrase_being_worked_on_holds_hands_free_open(monkeypatch):
     monkeypatch.setattr(rs.state, "silence", Detector())
     from tuxtalk.config import Settings
     monkeypatch.setattr(live, "chunk_cfg", Settings())
-    monkeypatch.setattr(app, "_transcribe_and_inject", lambda *a, **k: events.append("work"))
-    app._transcribe_chunk([b""], SR, "middle", 1, 0.5, rs.state.message)
+    monkeypatch.setattr(dictation_pipeline, "transcribe_and_inject", lambda *a, **k: events.append("work"))
+    type_at_pause._transcribe_chunk([b""], SR, "middle", 1, 0.5, rs.state.message)
     assert events == ["hold", "work", "release"]
 
 
