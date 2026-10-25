@@ -9,7 +9,7 @@ import sys
 import threading
 import time
 
-from . import focused_window, hallucinations, silence
+from . import hallucinations, silence
 from . import live_settings as live
 from . import notify as notify_module
 from . import tray_link
@@ -409,14 +409,8 @@ def notify_tray():
     """Tell the tray what's really running (see _running_engine)."""
     if _running_engine is None:
         return
-    try:
-        tray_link.get_proxy().NotifyRunningEngine(
-            *_running_engine,
-            dbus_interface='io.github.ronb1964.TalkType',
-            timeout=focused_window.TRAY_TIMEOUT_S,
-        )
-    except Exception as e:
-        logger.info(f"Could not tell the tray which engine is running: {e}")
+    tray_link.call("NotifyRunningEngine", *_running_engine,
+                   what="tell the tray which engine is running")
 
 
 def build(settings: Settings):

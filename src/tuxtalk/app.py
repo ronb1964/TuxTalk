@@ -23,7 +23,7 @@ from .config import load_config, load_custom_commands
 from . import config as config_module
 from .logger import setup_logger
 from .recording_indicator import RecordingIndicator
-from . import (focused_window, single_instance, virtual_keyboard)
+from . import (single_instance, virtual_keyboard)
 from . import recording_state as rs
 from . import live_settings as live
 from . import keyboard_grab
@@ -356,15 +356,9 @@ def _mark_service_ready():
         recording.start_requested.set()
     from .service_launcher import write_ready_pid
     write_ready_pid(os.getpid())
-    try:
-        import dbus
-        tray_link.get_proxy().NotifyServiceReady(
-            dbus.UInt32(os.getpid()),
-            dbus_interface='io.github.ronb1964.TalkType',
-            timeout=focused_window.TRAY_TIMEOUT_S,
-        )
-    except Exception as e:
-        logger.debug(f"Could not tell the tray the service is ready: {e}")
+    import dbus
+    tray_link.call("NotifyServiceReady", dbus.UInt32(os.getpid()),
+                   what="tell the tray the service is ready")
 
 
 def main():

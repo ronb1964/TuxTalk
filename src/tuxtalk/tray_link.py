@@ -12,27 +12,29 @@ logger = setup_logger(__name__)
 # The tray owns the D-Bus name and relays signals to the GNOME extension.
 _tray_dbus_proxy = None
 
+# The tray's D-Bus name and interface.
+_INTERFACE = "io.github.ronb1964.TalkType"
+
+
+def call(method: str, *args, what: str) -> None:
+    """Call the tray's D-Bus *method* with *args*. A failure is logged as
+    "Could not {what}". Every call has the short time limit
+    focused_window.TRAY_TIMEOUT_S: some are made with every keyboard
+    exclusively grabbed. Without introspection (get_proxy), anything that
+    isn't a plain str or bool needs its dbus type (dbus.UInt32, dbus.Array)."""
+    try:
+        getattr(get_proxy(), method)(*args, dbus_interface=_INTERFACE,
+                                     timeout=focused_window.TRAY_TIMEOUT_S)
+    except Exception as e:
+        logger.info(f"Could not {what}: {e}")
+
 
 def notify_recording_state(is_recording: bool):
-    """Send recording state to the tray's D-Bus service.
-
-    The tray process owns the D-Bus name that the GNOME extension listens to.
-    The service cannot emit signals that the extension will see, so it
-    calls the tray's NotifyRecordingState method, which emits the signal.
-
-    Called from start_recording/stop_recording — that is, with every keyboard
-    exclusively grabbed. It must never block for long: see focused_window.TRAY_TIMEOUT_S.
-    """
-    try:
-        import dbus
-        proxy = get_proxy()
-        proxy.NotifyRecordingState(
-            dbus.Boolean(is_recording),
-            dbus_interface='io.github.ronb1964.TalkType',
-            timeout=focused_window.TRAY_TIMEOUT_S,
-        )
-    except Exception as e:
-        logger.info(f"Could not notify tray of recording state: {e}")
+    """Tell the tray recording started or stopped. The tray owns the D-Bus
+    name the GNOME extension listens to, and emits the signal for us."""
+    import dbus
+    call("NotifyRecordingState", dbus.Boolean(is_recording),
+         what="notify tray of recording state")
 
 
 def get_proxy():
@@ -50,7 +52,7 @@ def get_proxy():
         dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
         bus = dbus.SessionBus()
         _tray_dbus_proxy = bus.get_object(
-            'io.github.ronb1964.TalkType',
+            _INTERFACE,
             '/io/github/ronb1964/TalkType',
             introspect=False,
         )
@@ -58,29 +60,11 @@ def get_proxy():
 
 
 def notify_hotkey_pressed(key_name: str):
-    """Send hotkey press notification to tray D-Bus service during test mode.
-
-    Called from the evdev loop while hotkey test mode is on. The tray's D-Bus
-    service emits a HotkeyPressed signal that the prefs dialog listens for.
-    """
-    try:
-        proxy = get_proxy()
-        proxy.NotifyHotkeyPressed(
-            key_name,
-            dbus_interface='io.github.ronb1964.TalkType',
-            timeout=focused_window.TRAY_TIMEOUT_S,
-        )
-    except Exception as e:
-        logger.info(f"Could not notify tray of hotkey press: {e}")
+    """Tell the tray which dictation key was pressed during the hotkey test;
+    its D-Bus service emits the HotkeyPressed signal Preferences listens for."""
+    call("NotifyHotkeyPressed", key_name, what="notify tray of hotkey press")
 
 
 def show_voice_commands():
-    """Tell the tray to show the voice commands quick reference via D-Bus."""
-    try:
-        proxy = get_proxy()
-        proxy.ShowVoiceCommands(
-            dbus_interface='io.github.ronb1964.TalkType',
-            timeout=focused_window.TRAY_TIMEOUT_S,
-        )
-    except Exception as e:
-        logger.info(f"Could not show voice commands via D-Bus: {e}")
+    """Tell the tray to show the voice commands quick reference."""
+    call("ShowVoiceCommands", what="show voice commands via D-Bus")

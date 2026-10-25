@@ -15,7 +15,7 @@ from typing import NamedTuple
 from .config import Settings
 from . import beeps
 from .beeps import CANCEL_BEEP
-from . import (delivery_notices, focused_window, modifier_hotkeys, secure_input, send_countdown,
+from . import (delivery_notices, modifier_hotkeys, secure_input, send_countdown,
                uinput_helper)
 from .hotkey_keys import (MODIFIER_CODES, check_modifiers_held, keycode_from_name,
                           parse_hotkey_combo, track_modifier)
@@ -71,15 +71,10 @@ def _claim_desktop_hotkeys(cfg):
     kwin_hotkeys.claim(cfg)
     cosmic_hotkeys.claim(cfg)
     x11_hotkeys.claim(cfg)
-    try:
-        import dbus
-        tray_link.get_proxy().NotifyClaimedHotkeys(
-            dbus.Array(gnome_hotkeys.accelerators(cfg), signature='s'),
-            dbus_interface='io.github.ronb1964.TalkType',
-            timeout=focused_window.TRAY_TIMEOUT_S,
-        )
-    except Exception as e:
-        logger.debug(f"Could not send the hotkeys to the tray: {e}")
+    import dbus
+    tray_link.call("NotifyClaimedHotkeys",
+                   dbus.Array(gnome_hotkeys.accelerators(cfg), signature='s'),
+                   what="send the hotkeys to the tray")
 
 
 # How often to look for input devices that have appeared or come back.

@@ -356,7 +356,7 @@ def test_stale_microphone_index_is_re_resolved_and_retried(monkeypatch, quiet_re
 
     monkeypatch.setattr(recording.sd, "InputStream", fake_input_stream)
     monkeypatch.setattr(recording, "pick_input_device", lambda mic: 3)
-    monkeypatch.setattr(app, "load_config", lambda: FakeConfig())
+    monkeypatch.setattr(recording, "load_config", lambda: FakeConfig())
 
     kb = keyboard()
     keyboard_grab.grab_all_devices([kb])
@@ -372,7 +372,7 @@ def test_keyboard_is_released_when_even_the_re_resolved_mic_fails(monkeypatch, q
     monkeypatch.setattr(recording.sd, "InputStream",
                         lambda *a, **k: (_ for _ in ()).throw(Exception("no mic anywhere")))
     monkeypatch.setattr(recording, "pick_input_device", lambda mic: 3)
-    monkeypatch.setattr(app, "load_config", lambda: FakeConfig())
+    monkeypatch.setattr(recording, "load_config", lambda: FakeConfig())
 
     kb = keyboard()
     keyboard_grab.grab_all_devices([kb])
@@ -823,7 +823,7 @@ def test_falling_back_to_another_mic_says_so(monkeypatch, quiet_recording):
     monkeypatch.setattr(recording.sd, "InputStream", fake_input_stream)
     monkeypatch.setattr(recording.sd, "query_devices", lambda idx: {"name": names[idx]})
     monkeypatch.setattr(recording, "pick_input_device", lambda mic: 8)
-    monkeypatch.setattr(app, "load_config", lambda: FakeConfig())
+    monkeypatch.setattr(recording, "load_config", lambda: FakeConfig())
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, text: notices.append(text))
 
     assert recording.start_recording(beeps_on=False, notify_on=False, input_device_idx=14) is True
@@ -849,7 +849,7 @@ def test_reopening_the_same_mic_says_nothing(monkeypatch, quiet_recording):
     notices = []
     monkeypatch.setattr(recording.sd, "InputStream", fake_input_stream)
     monkeypatch.setattr(recording, "pick_input_device", lambda mic: 14)
-    monkeypatch.setattr(app, "load_config", lambda: FakeConfig())
+    monkeypatch.setattr(recording, "load_config", lambda: FakeConfig())
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, text: notices.append(text))
 
     assert recording.start_recording(beeps_on=False, notify_on=False, input_device_idx=14) is True
