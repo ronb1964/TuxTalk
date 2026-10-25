@@ -13,7 +13,7 @@ that loop makes:
 * write()       the loop's "tell the desktop the key went up" events. The
                 helper does that itself on grab(), so here they're only echoed
                 back, the way the kernel echoes a real injected event, so the
-                loop's _is_own_injected_event skips them as before;
+                loop's keyboard_grab.is_own_injected_event skips them as before;
 * grab() / ungrab()  HIDE / UNHIDE: the helper hides the held hotkey from
                 the desktop and keeps the keyboards while it's held. Its
                 answer comes later, and may be no (another program holds
@@ -264,7 +264,7 @@ class HelperKeyboard:
         with self._lock:
             if event_type != EV_KEY:
                 return
-            # Echo it, as the kernel would, for _is_own_injected_event to skip.
+            # Echo it, as the kernel would, for keyboard_grab.is_own_injected_event to skip.
             self.queue.append(KeyEvent(EV_KEY, code, value))
             if value == 0:
                 self.to_hide.append(code)

@@ -129,3 +129,12 @@ class TestDefaultSourceName:
             raise FileNotFoundError("wpctl")
         monkeypatch.setattr(config.subprocess, "run", missing)
         assert config.default_source_name() is None
+
+
+def test_before_any_microphone_opens_audio_is_taken_at_the_engines_rate():
+    """Chunks, the double-tap check and the trims read the stream's rate
+    from the state; before a stream opens it must be the rate the engines
+    hear, or a phrase would be resampled from the wrong rate."""
+    from tuxtalk import engine
+    from tuxtalk.recording_state import RecordingState
+    assert RecordingState().recording_samplerate == engine.SAMPLE_RATE

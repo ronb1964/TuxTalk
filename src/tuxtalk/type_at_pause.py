@@ -5,32 +5,34 @@ two phrases is held back until the next one arrives, so the engine can
 hear both together and judge it (a comma, a period, a question going on);
 a phrase that corrects the one before ("no wait, four") is fixed with it
 by the AI."""
-from .logger import setup_logger
+import threading
+
 import numpy as np
-from .normalize import safe_to_lowercase_first_word
+
+from . import (
+    beeps,
+    chunking,
+    delivery,
+    engine,
+    focused_window,
+    keyboard_output,
+    last_dictation,
+    notices,
+    pipeline,
+    send_countdown,
+    virtual_keyboard,
+)
+from . import live_settings as live
 from . import notify as notify_module
-from . import beeps
+from . import recording_state as rs
 from .beeps import READY_BEEP
 from .chunking import boundary_mark, word_count, words_in_context
 from .key_commands import split_key_command
-from . import focused_window, send_countdown, virtual_keyboard
+from .logger import setup_logger
+from .normalize import safe_to_lowercase_first_word
 from .window_classes import app_kind, is_document_window
-from . import recording_state as rs
-from . import live_settings as live
-from . import keyboard_output
-from . import engine
-from . import chunking
-from . import last_dictation
-from . import notices
-from . import delivery
-from . import pipeline
-import threading
 
 logger = setup_logger(__name__)
-
-# One dictation is transcribed and typed at a time: the chunk worker and the
-# Flatpak backend's workers both take this.
-inject_lock = threading.Lock()
 
 # Chunked dictation (chunking.py). The audio callback cuts chunks and the stop
 # path takes the rest; this lock keeps the two from both taking the same frames.
@@ -47,7 +49,7 @@ def chunk_worker():
     global _worker_instance
     if _worker_instance is None:
         from .chunking import ChunkWorker
-        _worker_instance = ChunkWorker(inject_lock)
+        _worker_instance = ChunkWorker(pipeline.inject_lock)
     return _worker_instance
 
 
@@ -63,7 +65,7 @@ def cut_chunk(chunker):
         chunking.drop_tail_samples(frames, chunker.tail_samples())
         rs.state.chunks_submitted += 1
         number = rs.state.chunks_submitted
-        rec_sr = getattr(rs.state, "recording_samplerate", engine.SAMPLE_RATE)
+        rec_sr = rs.state.recording_samplerate
         pause = chunker.last_pause
         # Queued before the lock is let go: otherwise the stop could slip in
         # between counting this chunk and queuing it, and queue the last chunk
@@ -87,8 +89,8 @@ def _transcribe_chunk(frames, rec_sr, role, number, pause, message):
         detector.hold()
     try:
         pipeline.transcribe_and_inject(frames, rec_sr, cfg.beeps, cfg.smart_quotes, cfg.notify,
-                               cfg.language, cfg.auto_space, cfg.auto_period,
-                               cfg.injection_mode, chunk_role=role, message=message)
+                                       cfg.language, cfg.auto_space, cfg.auto_period,
+                                       cfg.injection_mode, chunk_role=role, message=message)
     finally:
         if detector is not None:
             detector.release()
@@ -207,7 +209,7 @@ def _type_boundary(pending: dict, tail: str, injection_mode: str) -> None:
     last_dictation.remember_said(tail, chunked=True)
     # Only into the phrase's window: the context pass before this can take a while.
     ok = delivery.inject_text(tail, injection_mode, into=pending["where"],
-                      message=pending["message"]) == "ok"
+                              message=pending["message"]) == "ok"
     last_dictation.remember_shown(tail, chunked=True, ok=ok)
     if ok:
         # Undo and "delete last sentence" then see the whole chunk.

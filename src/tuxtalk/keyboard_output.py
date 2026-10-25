@@ -20,6 +20,7 @@ from . import notify as notify_module
 from . import recording_state as rs
 from .key_commands import KEY_CODES
 from .logger import setup_logger
+from .normalize import LINE_BREAK
 from .window_classes import is_terminal_class
 
 logger = setup_logger(__name__)
@@ -83,7 +84,7 @@ def send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY_
     and a wait that gave up raises virtual_keyboard.GaveUp: the text must
     not go out another way (wtype, the clipboard) either. *claim* is
     virtual_keyboard.send's; in a delivery that may only go into one window
-    (_inject_text's *into*), the claim checks it's still that one.
+    (delivery.inject_text's *into*), the claim checks it's still that one.
     """
     if claim is None and this_thread.into is not None:
         claim = functools.partial(focused_window.claim_into, this_thread.into)
@@ -108,7 +109,7 @@ def send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY_
 
 
 class _ThisThread(threading.local):
-    """What send_keys knows of the delivery on this thread (_inject_text):
+    """What send_keys knows of the delivery on this thread (delivery.inject_text):
     how many sends went out whole, so a wait that gives up after earlier
     lines were typed stopped it partway, not before it began; and the only
     window it may go into, else None."""
@@ -190,11 +191,6 @@ def output_backend():
 class PasswordFieldNow(Exception):
     """The focus moved into a password field partway through typing a
     dictation of several lines. The lines before it are in the app."""
-
-
-# A line break in a dictation, typed as Shift+Enter: a plain Enter would
-# send a chat message or run a terminal's half-typed command.
-LINE_BREAK = "\xa7SHIFT_ENTER\xa7"
 
 
 class Delivered(NamedTuple):
@@ -527,7 +523,7 @@ def send_chords(chords, claim=None) -> bool:
 
 
 def send_copy_keystroke() -> bool:
-    """Ctrl+C. Terminals never get here (_transcribe_and_edit turns them away:
+    """Ctrl+C. Terminals never get here (voice_edit.transcribe_and_edit turns them away:
     Ctrl+C would stop the running program). True if it was sent."""
     return send_keys(ctrl_keys("c"), what="copy")
 

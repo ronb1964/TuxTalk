@@ -6,8 +6,7 @@ import os
 import re
 import time
 
-from . import (beeps, focused_window, keyboard_output, last_dictation, notices,
-               virtual_keyboard)
+from . import beeps, focused_window, keyboard_output, last_dictation, notices, virtual_keyboard
 from . import live_settings as live
 from . import notify as notify_module
 from . import recording_state as rs
@@ -40,7 +39,8 @@ def handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
     if not rs.state.last_inserted_text:
         logger.info("Undo requested but no previous text to undo")
         beeps.beep(beeps_on, *CANCEL_BEEP)
-        if notify_on: notify_module.notify("Nothing to undo", "")
+        if notify_on:
+            notify_module.notify("Nothing to undo", "")
         return True
 
     # Backspacing the last dictation's length in a different window would
@@ -80,11 +80,13 @@ def _clear_text_box(beeps_on, notify_on):
         last_dictation.forget_shown()
         rs.state.continue_mid_sentence = False
         beeps.beep(beeps_on, *READY_BEEP)
-        if notify_on: notify_module.notify("Cleared the text box", "")
+        if notify_on:
+            notify_module.notify("Cleared the text box", "")
     else:
         logger.warning("Could not clear the text box (text injection unavailable)")
         beeps.beep(beeps_on, *CANCEL_BEEP)
-        if notify_on: notify_module.notify("Couldn't clear the text box", "")
+        if notify_on:
+            notify_module.notify("Couldn't clear the text box", "")
 
 
 def _backspace_last(delete_count, label, beeps_on, notify_on):
@@ -126,7 +128,8 @@ def _backspace_last(delete_count, label, beeps_on, notify_on):
         else:
             rs.state.continue_mid_sentence = False
     beeps.beep(beeps_on, *READY_BEEP)
-    if notify_on: notify_module.notify(f"Undid the last {label}", "")
+    if notify_on:
+        notify_module.notify(f"Undid the last {label}", "")
 
 
 # "fix that word": the whole dictation is one of these (normalized: lower case,

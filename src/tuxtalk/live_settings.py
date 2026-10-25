@@ -46,9 +46,8 @@ def loggable(text):
 
 
 # Dictation cleanup (Preferences). remove_fillers enables the "um"/"uh" and
-# repeated-word rules; ai_engine is the running self-correction engine, or
-# None while that option is off. Both follow config through
-# apply(), at startup and on every live-settings reload.
+# repeated-word rules. It and the options below follow config through apply(),
+# at startup and on every live-settings reload.
 remove_fillers = False
 swiss_spelling = False     # ß -> ss in the finished text (Swiss Standard German)
 
@@ -69,10 +68,10 @@ press_enter_after = False      # after send_countdown's wait
 
 # The languages auto-detect may pick from, () for any (language_limit.py).
 auto_languages = ()
-ai_engine = None
 
-# Which of the two features using the AI engine are on. The engine runs while
-# either is; each checks its own flag before using it.
+# The local AI engine (ai_cleanup.py), and which of the two features using it
+# are on. The engine runs while either is; each checks its own flag first.
+ai_engine = None
 ai_corrections = False
 voice_editing = False
 
@@ -82,12 +81,10 @@ auto_stop_seconds = 0.0
 # Seconds of silence that end a chunk (0 = chunked dictation off), and the live
 # settings object middle chunks read beeps, quotes and language from.
 chunk_pause_seconds = 0.0
-
 chunk_cfg = None
 
 # Type at pause fine-tuning (Preferences → Advanced → TuxTalk Labs).
 chunk_speech_db = 6.0
-
 chunk_context_marks = True
 
 
@@ -148,10 +145,10 @@ def apply(cfg):
             logger.warning("The AI is on but not downloaded; "
                            "turn the option off and on in Preferences")
     elif not want_ai and ai_engine is not None:
-        engine, ai_engine = ai_engine, None
+        stopping, ai_engine = ai_engine, None
         # stop() can wait up to 5 s for the server to exit. This runs on the
         # input thread, which must keep reading the hotkeys meanwhile.
-        threading.Thread(target=engine.stop, daemon=True, name="tt-ai-stop").start()
+        threading.Thread(target=stopping.stop, daemon=True, name="tt-ai-stop").start()
 
 
 # Global custom commands (loaded from config in main)

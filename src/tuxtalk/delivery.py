@@ -7,12 +7,15 @@ import os
 import re
 import time
 
-from . import focused_window, keyboard_output, notices, send_countdown, virtual_keyboard
-from .keyboard_output import LINE_BREAK
+from . import focused_window, keyboard_output, last_dictation, send_countdown, virtual_keyboard
 from . import recording_state as rs
 from .logger import setup_logger
-from .window_classes import (ELECTRON_PASTE_BROKEN_CLASSES, SMART_NEWLINE_CLASSES_LOWER,
-                             is_terminal_class)
+from .normalize import LINE_BREAK
+from .window_classes import (
+    ELECTRON_PASTE_BROKEN_CLASSES,
+    SMART_NEWLINE_CLASSES_LOWER,
+    is_terminal_class,
+)
 
 logger = setup_logger(__name__)
 
@@ -25,7 +28,7 @@ def typed_breaks_for(text: str, window_class) -> str:
     pasted newlines as text."""
     if not is_terminal_class(window_class):
         return text
-    joined = re.sub(r"[ \t]*(?:\xa7SHIFT_ENTER\xa7|\n)+[ \t]*", " ", text)
+    joined = re.sub(r"[ \t]*(?:" + re.escape(LINE_BREAK) + r"|\n)+[ \t]*", " ", text)
     if joined != text:
         logger.info("Typing into a terminal: line breaks typed as spaces")
     return joined
@@ -109,14 +112,14 @@ def inject_text(text: str, injection_mode: str, one_block: bool = False, into=No
     keyboard_output.this_thread.into = into
     try:
         # Checked again right before each key, after the waits for the paste
-        # (wl-copy) or a dictation key held (_send_keys).
+        # (wl-copy) or a dictation key held (keyboard_output.send_keys).
         if into is not None:
             focused_window.claim_into(into, before)
         outcome = deliver_text(text, injection_mode, one_block, where=before)
     except (virtual_keyboard.StoppedPartway, virtual_keyboard.GaveUp,
             keyboard_output.PasswordFieldNow) as stop:
         typed_some = keyboard_output.this_thread.sends != sends_before
-        outcome = notices.delivery_stopped(stop, typed_some=typed_some)
+        outcome = _delivery_stopped(stop, typed_some=typed_some)
     finally:
         keyboard_output.this_thread.into = None
     if outcome in ("ok", "partial"):
@@ -200,6 +203,36 @@ def deliver_text(text: str, injection_mode: str, one_block: bool = False, *, whe
         text, inject_ok = _type_all(text, injection_start)
 
     return _remember_delivered(text, inject_ok)
+
+
+
+def _delivery_stopped(stop, typed_some: bool) -> str:
+    """The outcome of a delivery that *stop* ended early, after forgetting
+    what undo, "select that" and the next dictation's capital count on.
+
+    StoppedPartway: an unknown part of the text is in the app; typing or
+    pasting it again would double that part. PasswordFieldNow: the lines
+    before it are in the app, but in which form (pasted, typed after a
+    failed paste) isn't tracked. GaveUp: a Right Ctrl or Right Alt dictation
+    key stayed down, the window changed while typing waited for it
+    (modifier_hotkeys), or it isn't the one the text had to go into
+    (focused_window.claim_into); typing on any other way (wtype, the clipboard) would
+    do what the wait was there to prevent. *typed_some*: earlier lines were
+    typed before it gave up."""
+    rs.state.last_inserted_text = ""
+    rs.state.continue_mid_sentence = False
+    rs.state.nav_context = None
+    last_dictation.forget_shown()
+    if isinstance(stop, keyboard_output.PasswordFieldNow):
+        logger.warning("Stopped typing: a password field has the focus now")
+        return "password_field"
+    if isinstance(stop, virtual_keyboard.GaveUp) and not typed_some:
+        return stop.reason          # logged where it gave up
+    if stop.reason:
+        logger.warning(f"Typing stopped partway through the dictation ({stop.reason})")
+    else:
+        logger.error("The virtual keyboard stopped partway through the dictation")
+    return "partial"
 
 
 def _paste_whole(text, injection_start):

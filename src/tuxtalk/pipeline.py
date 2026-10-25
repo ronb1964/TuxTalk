@@ -3,31 +3,42 @@ window. Transcribe, drop what isn't speech, run what was said as a command
 ("undo that", "press enter", "edit that") or shape it into text, type it,
 then press the key said after it or send it automatically. Type at pause
 runs each phrase through here too (type_at_pause.py)."""
-from .logger import setup_logger
 import re
+import threading
 import time
 from typing import NamedTuple
+
+from . import (
+    beeps,
+    delivery,
+    delivery_notices,
+    dictation_text,
+    engine,
+    focused_window,
+    keyboard_output,
+    last_dictation,
+    notices,
+    recording,
+    send_countdown,
+    silence,
+    type_at_pause,
+    voice_commands,
+    voice_edit,
+)
+from . import live_settings as live
 from . import notify as notify_module
-from . import beeps
+from . import recording_state as rs
 from .beeps import CANCEL_BEEP, READY_BEEP
 from .chunking import carry_question, hold_back_boundary
 from .key_commands import auto_send, split_key_command
-from . import delivery_notices, focused_window, send_countdown, silence
+from .logger import setup_logger
 from .window_classes import ELECTRON_PASTE_BROKEN_CLASSES, app_kind, is_document_window
-from . import recording_state as rs
-from . import live_settings as live
-from . import keyboard_output
-from . import engine
-from . import recording
-from . import last_dictation
-from . import notices
-from . import dictation_text
-from . import voice_commands
-from . import delivery
-from . import type_at_pause
-from . import voice_edit
 
 logger = setup_logger(__name__)
+
+# One dictation is transcribed and typed at a time: the chunk worker and the
+# Flatpak backend's workers both take this.
+inject_lock = threading.Lock()
 
 
 def _shortened(text, limit):
@@ -70,7 +81,7 @@ def press_said(key: str, chunk_role, after_words: bool = False, message=None) ->
 
 def _after_the_words(outcome: str, said: str, press: str, space: str, chunk_role,
                      beeps_on: bool, injection_mode: str, message) -> None:
-    """What follows a dictation's words, by _inject_text's *outcome*: a
+    """What follows a dictation's words, by delivery.inject_text's *outcome*: a
     notice when they didn't all go in; else the key *said* after them, or
     the automatic send's Enter when *press*. *space* is the auto-space left
     off before the key."""
@@ -91,15 +102,15 @@ def send_automatically(space: str, injection_mode: str, message) -> None:
                                       injection_mode)
 
 
-# _inject_text's outcomes that are sure nothing was typed: it gave up before
-# the first key (_delivery_stopped). "failed" may follow some of it (wtype
+# delivery.inject_text's outcomes that are sure nothing was typed: it gave up before
+# the first key (delivery._delivery_stopped). "failed" may follow some of it (wtype
 # timing out), and "password_field" earlier lines.
 _GAVE_UP_UNTYPED = frozenset({"moved", "key_held"})
 
 
 def type_onto_dictation(text: str, injection_mode: str, into=None) -> str:
     """Type *text* right after the dictation, keeping undo's record of it
-    whole; _inject_text's outcome. *into* is _inject_text's. When none of
+    whole; delivery.inject_text's outcome, and *into* is its. When none of
     it went in (a space refused because the focus moved), the dictation is
     in the app as it was, and so is everything that remembers it."""
     kept = (rs.state.last_inserted_text, rs.state.continue_mid_sentence, rs.state.nav_context,
@@ -140,10 +151,10 @@ class _Words(NamedTuple):
 
 
 def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
-                           language=None, auto_space=True, auto_period=True,
-                           injection_mode="type", chunk_role=None, message=None):
+                          language=None, auto_space=True, auto_period=True,
+                          injection_mode="type", chunk_role=None, message=None):
     """The slow half of stopping: transcribe the captured audio and inject the
-    text. It touches no GTK (the indicator was already hidden in _finish_capture)
+    text. It touches no GTK (the indicator was already hidden in recording.finish_capture)
     and uses only CPU + audio + D-Bus + the output backend, so it is safe on a
     worker thread, which Backend B uses so the hotkey loop stays live.
 
@@ -334,7 +345,7 @@ def _shape_text(raw: str, said: str, press: str, cut_off: str, job: _Job):
         rs.state.continue_mid_sentence = True
     taken_back = ""
     if across:
-        corrected = _correct_across_pause(text, job)
+        corrected = _correction_or_held_cue(text, job)
         if corrected is None:
             return None
         text, taken_back = corrected
@@ -372,7 +383,7 @@ def _tell_done(text: str, job: _Job) -> None:
         notify_module.notify("Transcribed", _shortened(text, 80))
 
 
-def _correct_across_pause(text: str, job: _Job):
+def _correction_or_held_cue(text: str, job: _Job):
     """(text, the phrase taken back) for a phrase that corrects the one
     before the pause; None when it's only the cue ("No wait."), held for
     the next phrase, which has the corrected value."""
@@ -442,7 +453,7 @@ def stop_recording(
     """Stop recording, transcribe audio, and inject text — synchronously.
 
     Backend A (evdev): the whole pipeline runs on the caller's thread. Backend B
-    splits the two halves (see service_tick.tick) so the slow transcription and
+    splits the two halves (see service_tick._stop_off_the_loop) so the slow transcription and
     typing run off the hotkey loop.
     """
     edit_mode, rs.state.edit_mode = rs.state.edit_mode, False
@@ -468,4 +479,4 @@ def stop_recording(
                            f"{type_at_pause.CHUNK_DRAIN_TIMEOUT_S:.0f}s; not waiting longer")
         return
     transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
-                           language, auto_space, auto_period, injection_mode)
+                          language, auto_space, auto_period, injection_mode)

@@ -199,7 +199,7 @@ class ChunkWorker:
 
     One per service process (type_at_pause.chunk_worker), so a new recording's chunks
     can never overtake the last one's. Each job runs holding *lock*
-    (type_at_pause.inject_lock), the lock that already keeps two dictations from
+    (pipeline.inject_lock), the lock that already keeps two dictations from
     typing at once.
     """
 

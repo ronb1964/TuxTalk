@@ -26,9 +26,8 @@ import time
 
 from evdev import ecodes
 
-from . import modifier_hotkeys
+from . import modifier_hotkeys, uinput_helper
 from . import recording_state as rs
-from . import uinput_helper
 from .hotkey_keys import keys_down
 from .logger import setup_logger
 

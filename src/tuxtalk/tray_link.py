@@ -3,8 +3,8 @@ when recording starts and stops and when a hotkey is pressed, and asking it
 to show the voice commands. The tray re-sends these to the GNOME extension.
 Every call has a short time limit: a busy or missing tray must never hold
 up a dictation."""
-from .logger import setup_logger
 from . import focused_window
+from .logger import setup_logger
 
 logger = setup_logger(__name__)
 

@@ -4,6 +4,10 @@ line-break marker, and the result gets tidy punctuation, spacing and capitals.
 """
 import re
 
+# A line break in a dictation ("new line"). Typed, it's a Shift+Enter: a plain
+# Enter would send a chat message or run a terminal's half-typed command.
+LINE_BREAK = "\xa7SHIFT_ENTER\xa7"
+
 # =====================================================================
 # Precompiled regex patterns — compiled once at import time.
 # This avoids recompiling 40+ patterns on every dictation call.
@@ -145,8 +149,8 @@ _ENGINE_PERIOD = r"(?:(?<=[^\W\d_])(?<!\.[^\W\d_])\.\s+)?"
 _MULTI_WORD_REPLACEMENTS = [
     # A spoken "comma" is still a word here, so a comma written just before
     # the command is the engine's pause and goes, as it does for paragraphs.
-    (re.compile(r"[,\s]*\b(?:new\s*line|return|line\s+break)\b[,.:;\s]*", re.IGNORECASE), "§SHIFT_ENTER§"),
-    (re.compile(r"[,.\s]*\bnew\s+paragraph\b[,.:;\s]*|\bparagraph\s+break\b[,.:;\s]*", re.IGNORECASE), "§SHIFT_ENTER§§SHIFT_ENTER§"),
+    (re.compile(r"[,\s]*\b(?:new\s*line|return|line\s+break)\b[,.:;\s]*", re.IGNORECASE), LINE_BREAK),
+    (re.compile(r"[,.\s]*\bnew\s+paragraph\b[,.:;\s]*|\bparagraph\s+break\b[,.:;\s]*", re.IGNORECASE), LINE_BREAK * 2),
     (re.compile(r"[,.\s]*\bsoft\s+break\b[,.\s]*|\bsoft\s+line\b[,.\s]*", re.IGNORECASE), "   "),
     # Only "press tab" is a Tab: a bare "tab" is far more often the word ("every
     # tab shows"). Like "new line", it takes the spaces and punctuation the
@@ -488,7 +492,7 @@ def _space_after_ender_repl(m: re.Match) -> str:
 
 
 # Trailing line-break markers (possibly repeated) at the end of an utterance.
-_RE_TRAILING_BREAKS = re.compile(r"(?:\s*(?:§SHIFT_ENTER§))+\s*$")
+_RE_TRAILING_BREAKS = re.compile(r"(?:\s*(?:" + re.escape(LINE_BREAK) + r"))+\s*$")
 
 
 def _ends_punctuated(text: str) -> bool:
@@ -654,7 +658,7 @@ def normalize_text(text: str, auto_period: bool = True) -> str:
         return s[:i] + s[i].upper() + s[i+1:]
 
     # Temporarily convert §SHIFT_ENTER§ to newlines for capitalization processing
-    temp_text = text.replace("§SHIFT_ENTER§", "\n")
+    temp_text = text.replace(LINE_BREAK, "\n")
 
     lines = []
     split_lines = temp_text.split("\n")
@@ -676,7 +680,7 @@ def normalize_text(text: str, auto_period: bool = True) -> str:
     temp_text = "\n".join(lines)
 
     # Convert newlines back to §SHIFT_ENTER§ markers
-    text = temp_text.replace("\n", "§SHIFT_ENTER§")
+    text = temp_text.replace("\n", LINE_BREAK)
 
     # --- 11) Place sentence punctuation inside closing smart quote ---
     text = _RE_PUNCT_OUTSIDE_QUOTE.sub(r"\2" + "\u201d", text)
@@ -690,9 +694,9 @@ def normalize_text(text: str, auto_period: bool = True) -> str:
     # "__LIT_RETURN__" (whose first letter is already uppercase), so a line
     # STARTING with a protected word would stay lowercase ("return to sender
     # was..."). Idempotent: lines already capitalized are left untouched.
-    temp_text = text.replace("§SHIFT_ENTER§", "\n")
+    temp_text = text.replace(LINE_BREAK, "\n")
     temp_text = "\n".join(cap_first(line) for line in temp_text.split("\n"))
-    text = temp_text.replace("\n", "§SHIFT_ENTER§")
+    text = temp_text.replace("\n", LINE_BREAK)
 
     # --- 13) Restore quoted sections with actual quote marks ---
     for i, quoted_text in enumerate(quoted_sections):

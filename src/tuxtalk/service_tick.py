@@ -3,21 +3,24 @@ the hotkey loop (hotkeys.run) and the Flatpak's portal loop
 (input_backends). It takes the start and stop requests the tray, D-Bus or
 the portal made, lets the speech model rest when Power Saving is on, and
 picks up settings changed in Preferences without a restart."""
-from .logger import setup_logger
 import os
-import time
-from .config import load_config
-from . import config as config_module
-from . import recording_state as rs
-from . import live_settings as live
-from . import keyboard_grab
-from . import keyboard_output
-from . import engine
-from . import recording
-from . import type_at_pause
-from . import pipeline
-from . import hotkey_keys
 import threading
+import time
+
+from . import config as config_module
+from . import (
+    engine,
+    hotkey_keys,
+    keyboard_grab,
+    keyboard_output,
+    pipeline,
+    recording,
+    type_at_pause,
+)
+from . import live_settings as live
+from . import recording_state as rs
+from .config import load_config
+from .logger import setup_logger
 
 logger = setup_logger(__name__)
 
@@ -131,12 +134,12 @@ def tick(cfg, svc: "ServiceState") -> "hotkey_keys.Hotkeys | None":
     """One iteration of backend-agnostic service work: consume the thread-safe
     start/stop commands (set by the evdev loop OR the portal signal handlers),
     enforce the auto-timeout, and pick up settings changed in Preferences. Safe
-    from either backend — _release_all_grabs() is a no-op when nothing is
+    from either backend — keyboard_grab.release_all() is a no-op when nothing is
     grabbed (the portal case).
 
     Returns the reloaded hotkeys when the config changed, so a caller that
     keeps loop locals (the evdev loop's hold_key and toggle_key) can rebind them; None
-    otherwise. The return value matters because _config_file_changed() is
+    otherwise. The return value matters because live.config_file_changed() is
     edge-triggered: it reports a given change exactly once, so the caller cannot
     simply ask again.
 
@@ -147,7 +150,7 @@ def tick(cfg, svc: "ServiceState") -> "hotkey_keys.Hotkeys | None":
     _take_stop_request(cfg, svc, now)
     # Not mid-dictation (every worker holds inject_lock); idle counts from key-up.
     if (svc.timeout_enabled and not rs.state.is_recording and engine.model is not None
-            and not type_at_pause.inject_lock.locked()
+            and not pipeline.inject_lock.locked()
             and now - svc.last_activity > svc.timeout_seconds):
         engine.rest(svc.timeout_minutes)
     if not rs.state.is_recording and now - svc.last_config_check >= CONFIG_RECHECK_SECONDS:
@@ -190,7 +193,7 @@ def _stop_off_the_loop(cfg) -> None:
     freeze the GLib loop, and F3/F4 with it, for as long as they run (10-20 s
     on a CPU-only box). Snapshot the recording here (fast) and run the slow
     half on a worker thread so the hotkey stays responsive.
-    type_at_pause.inject_lock serialises workers so two dictations never
+    pipeline.inject_lock serialises workers so two dictations never
     transcribe or type at once."""
     cap = recording.finish_capture(cfg.beeps, cfg.notify)
     if cap is None:
@@ -212,7 +215,7 @@ def _stop_off_the_loop(cfg) -> None:
         return
 
     def _worker(frames=frames, rec_sr=rec_sr, cfg=cfg, message=rs.state.message):
-        with type_at_pause.inject_lock:
+        with pipeline.inject_lock:
             pipeline.transcribe_and_inject(
                 frames, rec_sr, cfg.beeps, cfg.smart_quotes,
                 cfg.notify, cfg.language, cfg.auto_space,

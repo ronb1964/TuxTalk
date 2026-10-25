@@ -7,44 +7,20 @@ import os
 
 import sounddevice as sd
 
-from . import (beeps, delivery_notices, edit_notices, engine, focused_window,
-               keyboard_output, last_dictation, uinput_helper, virtual_keyboard)
+from . import (
+    beeps,
+    delivery_notices,
+    edit_notices,
+    engine,
+    focused_window,
+    uinput_helper,
+)
 from . import live_settings as live
 from . import notify as notify_module
-from . import recording_state as rs
 from .beeps import CANCEL_BEEP
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
-
-
-def delivery_stopped(stop, typed_some: bool) -> str:
-    """The outcome of a delivery that *stop* ended early, after forgetting
-    what undo, "select that" and the next dictation's capital count on.
-
-    StoppedPartway: an unknown part of the text is in the app; typing or
-    pasting it again would double that part. PasswordFieldNow: the lines
-    before it are in the app, but in which form (pasted, typed after a
-    failed paste) isn't tracked. GaveUp: a Right Ctrl or Right Alt dictation
-    key stayed down, the window changed while typing waited for it
-    (modifier_hotkeys), or it isn't the one the text had to go into
-    (focused_window.claim_into); typing on any other way (wtype, the clipboard) would
-    do what the wait was there to prevent. *typed_some*: earlier lines were
-    typed before it gave up."""
-    rs.state.last_inserted_text = ""
-    rs.state.continue_mid_sentence = False
-    rs.state.nav_context = None
-    last_dictation.forget_shown()
-    if isinstance(stop, keyboard_output.PasswordFieldNow):
-        logger.warning("Stopped typing: a password field has the focus now")
-        return "password_field"
-    if isinstance(stop, virtual_keyboard.GaveUp) and not typed_some:
-        return stop.reason          # logged where it gave up
-    if stop.reason:
-        logger.warning(f"Typing stopped partway through the dictation ({stop.reason})")
-    else:
-        logger.error("The virtual keyboard stopped partway through the dictation")
-    return "partial"
 
 
 SILENT_MIC_TITLE = "No sound from the microphone"

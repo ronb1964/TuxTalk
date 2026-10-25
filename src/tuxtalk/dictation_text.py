@@ -6,8 +6,13 @@ from . import custom_commands, focused_window, keyboard_output
 from . import live_settings as live
 from . import recording_state as rs
 from .logger import setup_logger
-from .normalize import (append_auto_punct, normalize_text, plain_for_app,
-                        safe_to_lowercase_first_word, swiss_spelling)
+from .normalize import (
+    append_auto_punct,
+    normalize_text,
+    plain_for_app,
+    safe_to_lowercase_first_word,
+    swiss_spelling,
+)
 
 logger = setup_logger(__name__)
 

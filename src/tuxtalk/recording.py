@@ -1,8 +1,11 @@
-"""The microphone side of a dictation: which input device to record from
-(following the system's default as it changes), pausing music and turning
-other sound down while recording, stopping a stream safely, and trimming
-what a recording ends with (the auto-stop's silence, a speechless rest)
-before it is transcribed."""
+"""A dictation's recording, from the key going down to its audio handed on:
+starting, cancelling and finishing it (with the start and stop requests,
+the double-tap to hands-free and the recording indicator), the audio
+callback, which input device to record from (following the system's
+default as it changes), pausing music and turning other sound down
+meanwhile, stopping a stream safely, and trimming what a recording ends
+with (the auto-stop's silence, a speechless rest) before it is
+transcribed."""
 import atexit
 import threading
 import time
@@ -10,12 +13,21 @@ import time
 import numpy as np
 import sounddevice as sd
 
-from . import (beeps, chunking, engine, keyboard_grab, notices, send_countdown, tray_link,
-               type_at_pause)
+from . import (
+    beeps,
+    chunking,
+    engine,
+    keyboard_grab,
+    mic_stream,
+    notices,
+    send_countdown,
+    silence,
+    tray_link,
+    type_at_pause,
+)
 from . import config as config_module
-from . import notify as notify_module
 from . import live_settings as live
-from . import mic_stream, silence
+from . import notify as notify_module
 from . import recording_state as rs
 from .beeps import CANCEL_BEEP, HANDS_FREE_BEEP, START_BEEP
 from .config import load_config
@@ -188,14 +200,16 @@ MIN_HOLD_MS = 200
 # Generous: 0.4 s missed slower hands (#21); a quick word still comes, at auto-stop.
 DOUBLE_TAP_S = 0.7
 
-# Global recording indicator and D-Bus service (initialized in main)
+# The recording indicator, made by app.main when it's switched on; None if not.
 indicator = None
+# Built with the indicator; feed_indicator uses it for the bars style's
+# spectrum. None until then (and for other styles).
+spectrum_processor = None
 
-# Requests to start or stop recording, set by the signal handler or the D-Bus
-# thread and taken by the service loop.
-# Using two separate Events (rather than one flag) so start and stop can't overwrite each other.
+# Requests to start or stop recording, set by the signal handler, the D-Bus
+# thread or the audio callback, and taken by the service tick. Two Events
+# rather than one flag, so a start and a stop can't overwrite each other.
 start_requested = threading.Event()
-
 stop_requested = threading.Event()
 
 # Set alongside start_requested when the Flatpak's toggle SHORTCUT (not a
@@ -227,10 +241,6 @@ def _sd_callback(indata, frames_count, time_info, status):
         if indicator:
             feed_indicator(indicator, indata, spectrum_processor)
 
-
-# Built once when the recording indicator is created; used by _feed_indicator
-# to compute the bars spectrum. None until then (and for non-bars styles).
-spectrum_processor = None
 
 
 def open_input_stream(device_idx) -> None:
@@ -303,11 +313,11 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
                 send_countdown.say_held()   # nothing to dictate onto it: it stays unsent
             return False
 
-    type_at_pause.arm_chunker(getattr(rs.state, "recording_samplerate", engine.SAMPLE_RATE),
-                              edit_mode)
+    type_at_pause.arm_chunker(rs.state.recording_samplerate, edit_mode)
     pause_media_players()
     rs.state.start_beep = beeps.beep(beeps_on, *START_BEEP)
-    if notify_on: notify_module.notify("Recording… speak now", "")
+    if notify_on:
+        notify_module.notify("Recording… speak now", "")
     tray_link.notify_recording_state(True)
     if indicator:
         try:
@@ -335,7 +345,8 @@ def cancel_recording(beeps_on: bool, notify_on: bool, reason="Cancelled"):
     beeps.beep(beeps_on, *CANCEL_BEEP)
     print(reason)
     logger.debug(f"Recording cancelled: {reason}")
-    if notify_on: notify_module.notify(reason, "")
+    if notify_on:
+        notify_module.notify(reason, "")
 
     if indicator:
         indicator.hide_indicator()
@@ -355,7 +366,7 @@ def toggle_pressed_while_recording(beeps_on: bool) -> bool:
     if (live.auto_stop_seconds <= 0 or started is None or rs.state.silence is not None
             or time.time() - started > DOUBLE_TAP_S):
         return False
-    rate = getattr(rs.state, "recording_samplerate", engine.SAMPLE_RATE)
+    rate = rs.state.recording_samplerate
     detector = silence.SilenceDetector(live.auto_stop_seconds, rate)
     beep_hz = START_BEEP[0] if rs.state.start_beep is not None else None
     if silence.has_a_word(frames_f32(list(rs.state.frames)), rate, ignoring_hz=beep_hz):
@@ -384,7 +395,7 @@ def finish_capture(beeps_on: bool, notify_on: bool):
         frames = rs.state.frames  # snapshot the reference before it can be reassigned
     if chunker is not None and not rs.state.chunks_submitted:
         logger.info(f"Chunked dictation: no pause found ({chunker.describe()})")
-    rec_sr = getattr(rs.state, 'recording_samplerate', engine.SAMPLE_RATE)
+    rec_sr = rs.state.recording_samplerate
     rs.state.is_recording = False
     stop_stream_safely()
     resume_media_players()
@@ -404,7 +415,7 @@ def _dropped_as_silent(beeps_on: bool, notify_on: bool) -> bool:
     if rs.state.silence is None or not rs.state.silence.nothing_said:
         return False
     rs.state.silence = None
-    rate = getattr(rs.state, "recording_samplerate", engine.SAMPLE_RATE)
+    rate = rs.state.recording_samplerate
     dead_mic = frames_are_dead_mic(rs.state.frames, rate)
     cancel_recording(beeps_on, notify_on and not dead_mic, "Nothing heard, so nothing was typed")
     if dead_mic:

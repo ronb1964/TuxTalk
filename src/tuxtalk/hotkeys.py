@@ -4,28 +4,37 @@ hands-free, Shift for a voice edit, Esc to cancel, and the Voice Commands
 and Paste Last Dictation combos. run() is the input loop; each pass it also
 runs the service's shared tick (service_tick.tick), and keyboards that come
 and go are picked up while no recording runs."""
-from .logger import setup_logger
+import atexit
 import os
+import select
 import sys
 import time
-import atexit
-import select
+
 from evdev import InputDevice, ecodes, list_devices
-from .config import Settings
-from . import beeps
-from .beeps import CANCEL_BEEP
-from . import (delivery_notices, modifier_hotkeys, secure_input, send_countdown,
-               uinput_helper)
-from .hotkey_keys import (MODIFIER_CODES, check_modifiers_held, track_modifier)
-from . import recording_state as rs
+
+from . import (
+    beeps,
+    delivery,
+    delivery_notices,
+    hotkey_keys,
+    keyboard_grab,
+    modifier_hotkeys,
+    notices,
+    pipeline,
+    recording,
+    secure_input,
+    send_countdown,
+    service_tick,
+    tray_link,
+    uinput_helper,
+)
 from . import live_settings as live
-from . import keyboard_grab
-from . import tray_link
-from . import recording
-from . import notices
-from . import delivery
-from . import pipeline
-from . import hotkey_keys, service_tick
+from . import recording_state as rs
+from .beeps import CANCEL_BEEP
+from .config import Settings
+from .hotkey_keys import MODIFIER_CODES, check_modifiers_held, track_modifier
+from .logger import setup_logger
+from .normalize import LINE_BREAK
 
 logger = setup_logger(__name__)
 
@@ -207,13 +216,13 @@ def _someone_elses_shortcut(held_modifiers) -> bool:
 def _paste_last_dictation(cfg) -> None:
     """Type the newest Recent Dictations entry again, the way a dictation is
     typed (line breaks, injection mode, the trailing space)."""
-    from .history import get_entries, _LINE_BREAK_MARKER
+    from .history import get_entries
     entries = get_entries()
     if not entries:
         logger.info("Paste last dictation: nothing dictated yet")
         beeps.beep(cfg.beeps, *CANCEL_BEEP)
         return
-    text = entries[0].replace("\n", _LINE_BREAK_MARKER)
+    text = entries[0].replace("\n", LINE_BREAK)
     if getattr(cfg, "auto_space", True):
         text += " "
     logger.info("Paste last dictation")
@@ -270,14 +279,14 @@ def _start_hold_recording(hold_key, held_modifiers, devices, cfg, input_device_i
     The send goes first: once the key is hidden, an Enter that waits for it
     to come up goes out. The grab keeps the hotkey from the focused app,
     without leaving the desktop thinking it's still held (see
-    _grab_keyboards_hiding); start_recording lets go of it if the mic fails
+    keyboard_grab.grab_keyboards_hiding); start_recording lets go of it if the mic fails
     to open. Shift unhidden, the Ctrl+C that copies the selection would
     arrive as Ctrl+Shift+C."""
     held = send_countdown.hold(announce=False)
     shift = _held_shift(held_modifiers) if live.voice_editing else set()
     keyboard_grab.grab_keyboards_hiding(devices, {hold_key, *shift})
     if (recording.start_recording(cfg.beeps, cfg.notify, input_device_idx, edit_mode=bool(shift),
-                        held_send=held) and rs.state.held_send):
+                                  held_send=held) and rs.state.held_send):
         # The hold time counts from the press to when its release is read,
         # which waits for the start: 0.15 to 0.2 s in the test VMs, so a
         # quick tap to hold the send came to over MIN_HOLD_MS on Pop!_OS and
@@ -293,19 +302,15 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
                       devices, cfg, input_device_idx, paste_last_combo=None):
     """Handle a single keyboard event. Both hold (F8) and toggle (F9) are always active.
 
-    Grabbed devices are tracked in module state (see _grab_all_devices), not
+    Grabbed devices are tracked in module state (see keyboard_grab), not
     returned, so that every way recording can end — release, toggle, ESC, or an
     exception inside start_recording — releases the keyboard.
     """
     if modifier_hotkeys.right_alt_alone(event, (hold_key, toggle_key), held_modifiers):
         modifier_hotkeys.guard_alt_tap()
 
-    # Hotkey test mode: report presses via D-Bus instead of recording.
-    if event.value == 1 and _hotkey_test_active():
-        _report_test_press(event.code, hold_key, toggle_key)
-        return
-    if (_on_paste_last(event, paste_last_combo, held_modifiers, devices, cfg)
-            or _on_voice_commands_combo(event, voice_cmds_combo, held_modifiers, devices)):
+    if _on_test_or_combo(event, hold_key, toggle_key, voice_cmds_combo, paste_last_combo,
+                         held_modifiers, devices, cfg):
         return
     if toggle_key and _toggle_tap_holds_send(event, toggle_key, held_modifiers):
         return   # the tap only held the send: no recording
@@ -322,6 +327,17 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
     if event.code == ecodes.KEY_ESC and rs.state.is_recording and event.value == 1:
         recording.cancel_recording(cfg.beeps, cfg.notify, "Cancelled by ESC")
         keyboard_grab.release_all()
+
+
+def _on_test_or_combo(event, hold_key, toggle_key, voice_cmds_combo, paste_last_combo,
+                      held_modifiers, devices, cfg) -> bool:
+    """The hotkey test (presses reported to Preferences instead of
+    recording) and the two combos; True when *event* was theirs."""
+    if event.value == 1 and _hotkey_test_active():
+        _report_test_press(event.code, hold_key, toggle_key)
+        return True
+    return (_on_paste_last(event, paste_last_combo, held_modifiers, devices, cfg)
+            or _on_voice_commands_combo(event, voice_cmds_combo, held_modifiers, devices))
 
 
 def _stop_recording(cfg) -> None:
@@ -474,7 +490,7 @@ def run(cfg: Settings, input_device_idx, keyboards=None):
     last_device_scan = time.time()
     # Establish both files' current mtimes so the first poll does not report a
     # spurious change and re-apply what the service just started with.
-    # The recheck timer itself lives on _ServiceState — _service_tick owns it
+    # The recheck timer itself lives on ServiceState — service_tick.tick owns it
     # for both backends.
     live.config_file_changed()
     live.commands_file_changed()
@@ -495,7 +511,7 @@ def run(cfg: Settings, input_device_idx, keyboards=None):
     while True:
         current_time = time.time()
         # Backend-agnostic work: D-Bus/portal start/stop commands, the
-        # auto-timeout, and Preferences changes. Not _config_file_changed()
+        # auto-timeout, and Preferences changes. Not live.config_file_changed()
         # here: that check is edge-triggered, and the tick has consumed it.
         reloaded = service_tick.tick(cfg, svc)
         if reloaded is not None:

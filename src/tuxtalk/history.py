@@ -17,15 +17,13 @@ import os
 import tempfile
 
 from .logger import setup_logger
+from .normalize import LINE_BREAK
 
 logger = setup_logger(__name__)
 
 MAX_ENTRIES = 20
 PREVIEW_CHARS = 50
 
-# The marker normalize.py uses for a spoken "new line"; history stores a real
-# newline so the copied text pastes the way it was meant to look.
-_LINE_BREAK_MARKER = "\xa7SHIFT_ENTER\xa7"
 
 
 def _history_path():
@@ -52,7 +50,9 @@ def get_entries():
 
 
 def _clean(text):
-    return (text or "").replace(_LINE_BREAK_MARKER, "\n").strip()
+    """*text* as kept: a spoken "new line" as a real newline, so the copied
+    text pastes the way it was meant to look."""
+    return (text or "").replace(LINE_BREAK, "\n").strip()
 
 
 def add_entry(text, replaces=None):

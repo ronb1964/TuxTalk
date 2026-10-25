@@ -371,9 +371,6 @@
   "hotkey_helper.py::Helper.start_hide": {
    "decisions": 31
   },
-  "hotkeys.py::_handle_key_event": {
-   "decisions": 17
-  },
   "keyboard_layout.py::KeyPlanner._index": {
    "decisions": 17
   },

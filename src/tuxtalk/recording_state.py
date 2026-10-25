@@ -14,6 +14,9 @@ class RecordingState:
     was_cancelled: bool = False
     frames: list = None
     stream: object = None
+    # The open stream's rate, which may not be the engines' 16 kHz (an ALSA hw:
+    # device's own); engine.SAMPLE_RATE until a stream opens.
+    recording_samplerate: int = 16000
     press_t0: float = None
     # Undo history - tracks last inserted text for voice-activated undo
     last_inserted_text: str = ""
@@ -67,10 +70,10 @@ class RecordingState:
     # start made it read as a longer hold (see the hold key).
     released_while_starting: bool = False
     # A Right Ctrl or Right Alt dictation key that's down and hidden from
-    # the desktop (see _hide_modifier_hotkey), or None.
+    # the desktop (see hotkeys._hide_modifier_hotkey), or None.
     hidden_key: int | None = None
     # The last Enter TuxTalk pressed: {"at", "automatic"}, or None
-    # (_press_key). "edit that" just after it explains itself.
+    # (keyboard_output.press_key). "edit that" just after it explains itself.
     sent: object = None
     # A phrase that was only a correction cue ("No wait."), not typed yet: the
     # corrected value comes in the next phrase.
@@ -84,9 +87,9 @@ class RecordingState:
     # A recording typed in phrases (Type at pause) is still one dictation.
     # recording_serial counts recordings (type_at_pause.arm_chunker). said_text is all the
     # one numbered said_serial has typed or tried to: its Recent Dictations
-    # entry (_remember_said). shown_text is the part of it on screen in
+    # entry (last_dictation.remember_said). shown_text is the part of it on screen in
     # shown_window, ending at the cursor, for "fix that word" to fix in
-    # place; None once that isn't known (_remember_shown).
+    # place; None once that isn't known (last_dictation.remember_shown).
     recording_serial: int = 0
     said_serial: int = -1
     said_text: str = ""

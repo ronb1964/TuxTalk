@@ -810,7 +810,7 @@ LIVE_APPLIED_KEYS = {
     # Preferences takes effect on the next utterance, no restart.
     "log_transcripts",
     # Dictation cleanup. Read on each utterance; turning AI corrections on or
-    # off starts or stops its engine from the same reload (_apply_cleanup_settings).
+    # off starts or stops its engine from the same reload (live_settings.apply).
     "remove_fillers",
     "swiss_spelling",
     "numbers_as_digits",

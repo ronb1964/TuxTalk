@@ -5,6 +5,7 @@ which voice edits and "edit that" work from. The copy is dropped as soon as
 it can't be trusted."""
 from . import keyboard_output
 from . import recording_state as rs
+from .normalize import LINE_BREAK
 
 
 def remember_said(text: str, chunked: bool, takes_back: str = "") -> str:
@@ -14,7 +15,7 @@ def remember_said(text: str, chunked: bool, takes_back: str = "") -> str:
     replaced ("Meet at three. " for "Meet at four"). Returns the entry as it
     was before, for unsay."""
     from . import history
-    text = text.replace(history._LINE_BREAK_MARKER, "\n")
+    text = text.replace(LINE_BREAK, "\n")
     same_recording = rs.state.said_serial == rs.state.recording_serial
     old = rs.state.said_text if chunked and same_recording else ""
     base = old[:len(old) - len(takes_back)] if takes_back and old.endswith(takes_back) else old

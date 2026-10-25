@@ -136,11 +136,11 @@ def test_ellipses_and_accents_are_typed_as_their_plain_forms():
 def test_characters_without_a_plain_form_are_left_for_plan_keys_to_refuse():
     assert L.typeable_text("m² 5€ 日本") == "m² 5€ 日本"
     assert L.plan_keys("m²") is None
-    assert L.typeable_text("a" + L.SHIFT_ENTER_MARKER + "b") == "a" + L.SHIFT_ENTER_MARKER + "b"
+    assert L.typeable_text("a" + L.LINE_BREAK + "b") == "a" + L.LINE_BREAK + "b"
 
 
 def test_line_breaks_are_planned_as_enter_keys():
-    assert L.plan_keys("a" + L.SHIFT_ENTER_MARKER + "b\nc") == [
+    assert L.plan_keys("a" + L.LINE_BREAK + "b\nc") == [
         (L.CHAR_TO_KEYCODE["a"], False), (L.KEY_ENTER, True),
         (L.CHAR_TO_KEYCODE["b"], False), (L.KEY_ENTER, False),
         (L.CHAR_TO_KEYCODE["c"], False)]

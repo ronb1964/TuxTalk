@@ -15,6 +15,7 @@ import unicodedata
 
 from .key_commands import KEY_CODES
 from .logger import setup_logger
+from .normalize import LINE_BREAK
 
 _log = setup_logger(__name__)
 
@@ -35,10 +36,6 @@ KEY_ENTER = 28
 # Names voice_navigation and key_commands use -> key codes, for press_chords;
 # letters at their places on a US keyboard, like all typing here.
 _CHORD_KEYS = {**KEY_CODES, "A": KEY_A, "E": 18, "U": 22}
-
-# Soft-line-break marker used across TuxTalk (§SHIFT_ENTER§): type Shift+Enter,
-# not plain Enter, so it doesn't submit in chat apps.
-SHIFT_ENTER_MARKER = "\xa7SHIFT_ENTER\xa7"
 
 _LETTERS = {
     "a": 30, "b": 48, "c": 46, "d": 32, "e": 18, "f": 33, "g": 34, "h": 35,
@@ -157,9 +154,9 @@ def plan_keys(text: str):
     keys = []
     i, n = 0, len(text)
     while i < n:
-        if text.startswith(SHIFT_ENTER_MARKER, i):
+        if text.startswith(LINE_BREAK, i):
             keys.append((KEY_ENTER, True))          # soft line break
-            i += len(SHIFT_ENTER_MARKER)
+            i += len(LINE_BREAK)
             continue
         ch = text[i]
         if ch == "\n":

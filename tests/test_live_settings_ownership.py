@@ -19,13 +19,9 @@ import types
 
 import pytest
 
-from tuxtalk import hotkey_keys
-from tuxtalk import service_tick
-from tuxtalk import type_at_pause
-from tuxtalk import engine
+from tuxtalk import engine, hotkey_keys, pipeline, recording, service_tick
 from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
-from tuxtalk import recording
 
 
 def _idle(monkeypatch):
@@ -201,7 +197,7 @@ def test_power_saving_waits_for_a_transcription_still_running(monkeypatch):
     cfg = _cfg(auto_timeout_enabled=True, auto_timeout_minutes=1)
     svc = service_tick.ServiceState(cfg)
     svc.last_activity = 0.0
-    with type_at_pause.inject_lock:                # a dictation is being transcribed
+    with pipeline.inject_lock:                # a dictation is being transcribed
         service_tick.tick(cfg, svc)
     assert engine.model is loaded and not loaded.closed
     service_tick.tick(cfg, svc)           # done: now it rests

@@ -9,10 +9,9 @@ import sys
 import threading
 import time
 
-from . import hallucinations, silence
+from . import hallucinations, silence, tray_link
 from . import live_settings as live
 from . import notify as notify_module
-from . import tray_link
 from .config import Settings, load_config
 from .logger import setup_logger
 
@@ -29,7 +28,7 @@ _model_lock = threading.Lock()
 
 
 def _strip_hallucinations(text: str, no_speech_prob: float = 0.0) -> str:
-    """hallucinations.strip, logged the way transcripts are (_loggable)."""
+    """hallucinations.strip, logged the way transcripts are (live.loggable)."""
     stripped = hallucinations.strip(text, no_speech_prob)
     if stripped != text.strip():
         logger.info(f"Stripped a hallucination (no_speech_prob={no_speech_prob:.2f}): "

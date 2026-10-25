@@ -12,28 +12,27 @@ os.environ["HF_HUB_DISABLE_XET"] = "1"
 from .torch_init import init_cuda_for_pytorch
 init_cuda_for_pytorch()
 
-import sys
 import signal
+import sys
+import threading
 
-
+from . import engine, keyboard_output, recording, single_instance, tray_link, virtual_keyboard
+from . import live_settings as live
+from . import recording_state as rs
 from .config import load_config, load_custom_commands
-# Imported as a module too, so the live-settings reload can read CONFIG_PATH and
-# LIVE_APPLIED_KEYS without pulling each name in separately.
 from .logger import setup_logger
 from .recording_indicator import RecordingIndicator
-from . import (single_instance, virtual_keyboard)
-from . import recording_state as rs
-from . import live_settings as live
-from . import keyboard_output
-from . import tray_link
-from . import engine
-from . import recording
-import threading
 
 logger = setup_logger(__name__)
 
 
-# Optional desktop notifications via libnotify
+# The single-instance lock's file, open while the service runs.
+_lockfile_handle = None
+
+# The service's own D-Bus service when no tray runs (_start_dbus_stand_in),
+# held here for the life of the process.
+dbus_service = None
+
 
 def _acquire_single_instance():
     """Take the service's single-instance lock (single_instance.py), or exit
@@ -51,18 +50,9 @@ def _acquire_single_instance():
     _lockfile_handle = lockfile     # closing it, even by garbage collection, lets go
 
 
-# The single-instance lock's file, open while the service runs.
-_lockfile_handle = None
-
-
-# The service's own D-Bus service when no tray runs (_start_dbus_stand_in),
-# held here for the life of the process.
-dbus_service = None
-
-
 def _handle_sigusr1(signum, frame):
     """SIGUSR1 = toggle recording. Sent by the tray process via os.kill().
-    Sets the appropriate Event; the evdev loop consumes it from the main thread.
+    Sets the matching request; the service tick takes it.
     """
     if rs.state.is_recording:
         recording.stop_requested.set()
@@ -82,8 +72,6 @@ def _install_signal_handlers():
     while the model is still loading."""
     signal.signal(signal.SIGUSR1, _handle_sigusr1)
     signal.signal(signal.SIGUSR2, _handle_sigusr2)
-
-
 
 
 # tuxtalk --toggle/--start/--stop (control.py). The tray normally answers

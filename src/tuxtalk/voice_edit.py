@@ -6,9 +6,22 @@ clipboard the selection was copied through is put back afterwards."""
 import threading
 import time
 
-from . import (beeps, delivery, delivery_notices, dictation_text, engine, focused_window,
-               keyboard_output, last_dictation, notices, recording, silence, type_at_pause,
-               voice_commands, voice_edit_rules)
+from . import (
+    beeps,
+    delivery,
+    delivery_notices,
+    dictation_text,
+    engine,
+    focused_window,
+    keyboard_output,
+    last_dictation,
+    notices,
+    recording,
+    silence,
+    type_at_pause,
+    voice_commands,
+    voice_edit_rules,
+)
 from . import live_settings as live
 from . import recording_state as rs
 from .beeps import READY_BEEP
@@ -185,21 +198,21 @@ def _apply_steps(selected, steps, beeps_on):
     can be (voice_edit_rules.mechanical_edit) and by the AI where not: the
     changed text, or None when the AI was needed and couldn't help (and the
     user has been told why)."""
-    engine = live.ai_engine
+    ai = live.ai_engine
     text = selected
     for step in steps:
         done = voice_edit_rules.mechanical_edit(text, step)
         if done is not None:
             logger.info("Voice edit done in code, without the AI"
                         + (f" ({live.loggable(step)})" if len(steps) > 1 else ""))
-        elif engine is None:
+        elif ai is None:
             notices.edit_problem("not_installed", beeps_on)
             return None
-        elif not engine.is_ready():
+        elif not ai.is_ready():
             notices.edit_problem("not_ready", beeps_on)
             return None
         else:
-            done = engine.edit(text, step)
+            done = ai.edit(text, step)
             if done and done.split() == text.split():
                 # Only spacing changed ("select all" got the line ends
                 # trimmed): not an edit anyone asked for.
@@ -233,7 +246,7 @@ def _type_rewrite(result, injection_mode, message, beeps_on):
 
 
 def edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0, message,
-                    spoken=False):
+                   spoken=False):
     """Change the text selected in *focused_class* as the instruction
     *get_instruction()* says (called only once a selection is found), and
     type the result over it, as part of *message*. *spoken*: the instruction
@@ -286,7 +299,7 @@ def edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0,
 
 
 def handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: str,
-                        message) -> bool:
+                       message) -> bool:
     """Voice editing by voice alone (TuxTalk Labs): a dictation that starts
     with "edit that" selects what TuxTalk just typed and changes it as the
     rest says, as Shift+F8 does for a selection. True when it was handled
@@ -336,7 +349,7 @@ def handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: str
     if not selected:
         notices.edit_problem("shortcut_failed", beeps_on)
     elif edit_selection(lambda: instruction, beeps_on, injection_mode, focused_class,
-                         time.time(), message, spoken=True):
+                        time.time(), message, spoken=True):
         return True
     # Not changed as asked: no automatic Enter sends it as it was.
     message.add("failed", None)

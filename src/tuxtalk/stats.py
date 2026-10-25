@@ -17,6 +17,7 @@ import re
 import tempfile
 
 from .logger import setup_logger
+from .normalize import LINE_BREAK
 
 logger = setup_logger(__name__)
 
@@ -38,9 +39,6 @@ _VERSION = 1
 _CJK = "぀-ヿ㐀-䶿一-鿿豈-﫿"
 _LETTERS = rf"(?:(?![{_CJK}])[^\W_])+"          # letters/digits, CJK excluded
 _WORD_RE = re.compile(rf"[{_CJK}]|{_LETTERS}(?:['’]{_LETTERS})*")
-# normalize.py's marker for a spoken "new line", which history and the typed
-# text turn into a real line break.
-_LINE_BREAK_MARKER = "\xa7SHIFT_ENTER\xa7"
 
 
 def stats_path():
@@ -51,7 +49,7 @@ def stats_path():
 
 def count_words(text):
     """How many words *text* holds, by _WORD_RE's rules."""
-    return len(_WORD_RE.findall((text or "").replace(_LINE_BREAK_MARKER, " ")))
+    return len(_WORD_RE.findall((text or "").replace(LINE_BREAK, " ")))
 
 
 def _clean_day(value):
