@@ -18,6 +18,7 @@ from tuxtalk import notices
 from tuxtalk import dictation_text
 from tuxtalk import voice_commands
 from tuxtalk import delivery
+from tuxtalk import recording
 
 
 @pytest.mark.parametrize("raw, expected", [
@@ -330,15 +331,15 @@ def test_pressing_the_hold_key_holds_the_send_and_records(countdown, monkeypatch
     """Holding the key dictates more onto the unsent message."""
     pressed, _ = countdown
     start_send("test")
-    monkeypatch.setattr(app, "_open_input_stream", lambda idx: None)
+    monkeypatch.setattr(recording, "open_input_stream", lambda idx: None)
     monkeypatch.setattr("tuxtalk.type_at_pause.arm_chunker", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.recording.pause_media_players", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.tray_link.notify_recording_state", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
-    monkeypatch.setattr(app, "recording_indicator", None)
+    monkeypatch.setattr(recording, "indicator", None)
     try:
-        assert app.start_recording(False, False, 0) is True
+        assert recording.start_recording(False, False, 0) is True
         assert rs.state.held_send is True
         sends()[0].fire()
         assert pressed == []
@@ -350,12 +351,12 @@ def test_pressing_the_hold_key_holds_the_send_and_records(countdown, monkeypatch
 def test_a_tap_too_short_to_dictate_says_not_sent(countdown, monkeypatch):
     _, labels = countdown
     reasons = []
-    monkeypatch.setattr(app, "cancel_recording",
+    monkeypatch.setattr(recording, "cancel_recording",
                         lambda beeps, notify, reason="": reasons.append(reason))
     monkeypatch.setattr(rs.state, "held_send", True)
     monkeypatch.setattr(rs.state, "silence", None)
     monkeypatch.setattr(rs.state, "press_t0", app.time.time())
-    assert app._finish_capture(False, False) is None
+    assert recording.finish_capture(False, False) is None
     assert reasons == [send_countdown.HELD_NOTICE]
     assert labels == [send_countdown.HELD_NOTICE]
 
@@ -451,7 +452,7 @@ def test_a_dictation_added_to_a_held_send_starts_with_its_space(countdown, monke
 
 def test_a_short_tap_types_the_space_when_released(countdown, monkeypatch):
     reasons = []
-    monkeypatch.setattr(app, "cancel_recording",
+    monkeypatch.setattr(recording, "cancel_recording",
                         lambda beeps, notify, reason="": reasons.append(reason))
     monkeypatch.setattr(send_countdown, "_owed", None)
     start_send("test", " ", "type")
@@ -459,7 +460,7 @@ def test_a_short_tap_types_the_space_when_released(countdown, monkeypatch):
     monkeypatch.setattr(rs.state, "silence", None)
     monkeypatch.setattr(rs.state, "chunks_submitted", 0)
     monkeypatch.setattr(rs.state, "press_t0", app.time.time())
-    assert app._finish_capture(False, False) is None
+    assert recording.finish_capture(False, False) is None
     assert TYPED == [" "] and reasons == [send_countdown.HELD_NOTICE]
 
 
@@ -468,7 +469,7 @@ def test_typing_the_space_doesnt_turn_a_tap_into_a_dictation(countdown, monkeypa
     the space came to over MIN_HOLD_MS, so the held send got no "Not sent"
     notice. How long the key was down is what counts."""
     reasons = []
-    monkeypatch.setattr(app, "cancel_recording",
+    monkeypatch.setattr(recording, "cancel_recording",
                         lambda beeps, notify, reason="": reasons.append(reason))
     monkeypatch.setattr(delivery, "inject_text",
                         lambda text, mode, **kw: app.time.sleep(0.1) or TYPED.append(text) or "ok")
@@ -478,7 +479,7 @@ def test_typing_the_space_doesnt_turn_a_tap_into_a_dictation(countdown, monkeypa
     monkeypatch.setattr(rs.state, "silence", None)
     monkeypatch.setattr(rs.state, "chunks_submitted", 0)
     monkeypatch.setattr(rs.state, "press_t0", app.time.time() - 0.15)
-    assert app._finish_capture(False, False) is None
+    assert recording.finish_capture(False, False) is None
     assert TYPED == [" "] and reasons == [send_countdown.HELD_NOTICE]
 
 
@@ -542,11 +543,12 @@ def test_a_quick_tap_holds_the_send_even_when_recording_starts_slowly(
     F8, F9 = ecodes.KEY_F8, ecodes.KEY_F9
     clock = _Clock()
     monkeypatch.setattr(app, "time", clock)
+    monkeypatch.setattr(recording, "time", clock)
     reasons, dictated = [], []
-    monkeypatch.setattr(app, "cancel_recording",
+    monkeypatch.setattr(recording, "cancel_recording",
                         lambda beeps, notify, reason="": reasons.append(reason))
     monkeypatch.setattr(pipeline, "transcribe_and_inject", lambda *a, **k: dictated.append(1))
-    monkeypatch.setattr(app, "_open_input_stream", lambda idx: clock.sleep(start_s))
+    monkeypatch.setattr(recording, "open_input_stream", lambda idx: clock.sleep(start_s))
     monkeypatch.setattr("tuxtalk.type_at_pause.arm_chunker", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.recording.pause_media_players", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.recording.resume_media_players", lambda *a, **k: None)
@@ -554,7 +556,7 @@ def test_a_quick_tap_holds_the_send_even_when_recording_starts_slowly(
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.tray_link.notify_recording_state", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
-    monkeypatch.setattr(app, "recording_indicator", None)
+    monkeypatch.setattr(recording, "indicator", None)
     monkeypatch.setattr(send_countdown, "_owed", None)
     monkeypatch.setattr(rs.state, "silence", None)
     monkeypatch.setattr(rs.state, "chunks_submitted", 0)

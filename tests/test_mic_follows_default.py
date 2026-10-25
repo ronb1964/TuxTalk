@@ -13,7 +13,7 @@ import types
 
 import pytest
 
-from tuxtalk import app, config
+from tuxtalk import config
 from tuxtalk import recording_state as rs
 from tuxtalk import recording
 
@@ -89,18 +89,18 @@ def test_a_failed_re_resolve_keeps_the_device_in_use(desktop, monkeypatch):
 
 def test_start_recording_opens_the_new_default(desktop, monkeypatch):
     opened = []
-    monkeypatch.setattr(app, "_open_input_stream", lambda idx: opened.append(idx))
+    monkeypatch.setattr(recording, "open_input_stream", lambda idx: opened.append(idx))
     monkeypatch.setattr("tuxtalk.type_at_pause.arm_chunker", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.recording.pause_media_players", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.tray_link.notify_recording_state", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
-    monkeypatch.setattr(app, "recording_indicator", None)
+    monkeypatch.setattr(recording, "indicator", None)
 
     recording.pick_input_device("")
     desktop.source = "alsa_input.usb-TONOR_TD520S"
     try:
-        assert app.start_recording(False, False, 4) is True
+        assert recording.start_recording(False, False, 4) is True
     finally:
         rs.state.is_recording = False
         rs.state.stream = None

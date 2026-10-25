@@ -24,12 +24,13 @@ from tuxtalk import type_at_pause
 from tuxtalk import engine
 from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
+from tuxtalk import recording
 
 
 def _idle(monkeypatch):
     """A service that is running but not recording."""
-    app._cmd_start_recording.clear()
-    app._cmd_stop_recording.clear()
+    recording.start_requested.clear()
+    recording.stop_requested.clear()
     monkeypatch.setattr(rs.state, "is_recording", False, raising=False)
 
 

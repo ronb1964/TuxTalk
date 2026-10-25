@@ -23,8 +23,8 @@ from tuxtalk import recording
 
 
 def _idle(monkeypatch):
-    app._cmd_start_recording.clear()
-    app._cmd_stop_recording.clear()
+    recording.start_requested.clear()
+    recording.stop_requested.clear()
     monkeypatch.setattr(rs.state, "is_recording", False, raising=False)
 
 
@@ -87,12 +87,12 @@ class TestTheNextDictationUsesIt:
         svc = app._ServiceState(cfg, input_device_idx=3)
 
         started = []
-        monkeypatch.setattr(app, "start_recording",
+        monkeypatch.setattr(recording, "start_recording",
                             lambda beeps, notify, idx, **kw: started.append(idx))
 
         cfg.mic = "Sennheiser"
         svc.refresh_input_device()
-        app._cmd_start_recording.set()
+        recording.start_requested.set()
         app._service_tick(cfg, svc)
 
         assert started == [7]

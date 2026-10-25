@@ -18,6 +18,8 @@ from tuxtalk import keyboard_grab
 from tuxtalk import recording_state as rs
 from tuxtalk import uinput_helper
 from tuxtalk import recording
+from tuxtalk import mic_stream
+from tuxtalk import pipeline
 
 
 class FakeDevice:
@@ -87,8 +89,8 @@ def quiet_recording(monkeypatch):
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
     monkeypatch.setattr(tray_link, "notify_recording_state", lambda *a, **k: None)
-    monkeypatch.setattr(app.mic_stream, "input_samplerate", lambda idx, rate: 16000)
-    monkeypatch.setattr(app, "recording_indicator", None)
+    monkeypatch.setattr(mic_stream, "input_samplerate", lambda idx, rate: 16000)
+    monkeypatch.setattr(recording, "indicator", None)
     rs.state.is_recording = False
     yield
     rs.state.is_recording = False
@@ -152,12 +154,12 @@ def test_failed_recording_start_releases_the_keyboard(monkeypatch, quiet_recordi
     def boom(*args, **kwargs):
         raise Exception("PortAudioError: Error querying device 99")
 
-    monkeypatch.setattr(app.sd, "InputStream", boom)
+    monkeypatch.setattr(recording.sd, "InputStream", boom)
 
     devices = [keyboard("kb"), keyboard("laptop-internal")]
     keyboard_grab.grab_all_devices(devices)
 
-    started = app.start_recording(beeps_on=False, notify_on=False, input_device_idx=99)
+    started = recording.start_recording(beeps_on=False, notify_on=False, input_device_idx=99)
 
     assert started is False
     assert not any(d.is_grabbed for d in devices), "keyboard left grabbed after mic failure"
@@ -165,20 +167,20 @@ def test_failed_recording_start_releases_the_keyboard(monkeypatch, quiet_recordi
 
 def test_failed_recording_start_clears_the_recording_flag(monkeypatch, quiet_recording):
     """A stuck is_recording flag makes every later press take the wrong branch."""
-    monkeypatch.setattr(app.sd, "InputStream", lambda *a, **k: (_ for _ in ()).throw(Exception("no mic")))
+    monkeypatch.setattr(recording.sd, "InputStream", lambda *a, **k: (_ for _ in ()).throw(Exception("no mic")))
 
-    app.start_recording(beeps_on=False, notify_on=False, input_device_idx=0)
+    recording.start_recording(beeps_on=False, notify_on=False, input_device_idx=0)
 
     assert rs.state.is_recording is False
 
 
 def test_failed_recording_start_tells_the_user(monkeypatch, quiet_recording):
     """A silent failure leaves the user no way to recover, so they must be told."""
-    monkeypatch.setattr(app.sd, "InputStream", lambda *a, **k: (_ for _ in ()).throw(Exception("no mic")))
+    monkeypatch.setattr(recording.sd, "InputStream", lambda *a, **k: (_ for _ in ()).throw(Exception("no mic")))
     seen = []
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, msg: seen.append((title, msg)))
 
-    app.start_recording(beeps_on=False, notify_on=True, input_device_idx=0)
+    recording.start_recording(beeps_on=False, notify_on=True, input_device_idx=0)
 
     assert seen, "no notification shown when recording failed to start"
     assert "microphone" in " ".join(seen[0]).lower()
@@ -189,9 +191,9 @@ def test_successful_recording_start_reports_success(monkeypatch, quiet_recording
         def start(self):
             pass
 
-    monkeypatch.setattr(app.sd, "InputStream", lambda *a, **k: FakeStream())
+    monkeypatch.setattr(recording.sd, "InputStream", lambda *a, **k: FakeStream())
 
-    started = app.start_recording(beeps_on=False, notify_on=False, input_device_idx=0)
+    started = recording.start_recording(beeps_on=False, notify_on=False, input_device_idx=0)
 
     assert started is True
     assert rs.state.is_recording is True
@@ -264,9 +266,9 @@ def key_env(monkeypatch):
         rs.state.is_recording = False
         stopped.append(True)
 
-    monkeypatch.setattr(app, "start_recording", fake_start)
-    monkeypatch.setattr(app, "stop_recording", fake_stop)
-    monkeypatch.setattr(app, "cancel_recording", lambda *a, **k: setattr(rs.state, "is_recording", False))
+    monkeypatch.setattr(recording, "start_recording", fake_start)
+    monkeypatch.setattr(pipeline, "stop_recording", fake_stop)
+    monkeypatch.setattr(recording, "cancel_recording", lambda *a, **k: setattr(rs.state, "is_recording", False))
     rs.state.is_recording = False
     yield started, stopped
     rs.state.is_recording = False
@@ -321,7 +323,7 @@ def test_escape_releases_the_keyboard(key_env):
 
 def test_microphone_failure_during_hold_leaves_nothing_grabbed(monkeypatch, quiet_recording):
     """End to end: real start_recording, failing mic, keyboard must come back."""
-    monkeypatch.setattr(app.sd, "InputStream",
+    monkeypatch.setattr(recording.sd, "InputStream",
                         lambda *a, **k: (_ for _ in ()).throw(Exception("no mic")))
     kb = keyboard()
 
@@ -351,14 +353,14 @@ def test_stale_microphone_index_is_re_resolved_and_retried(monkeypatch, quiet_re
             raise Exception("PortAudioError: Error querying device 99")
         return FakeStream()
 
-    monkeypatch.setattr(app.sd, "InputStream", fake_input_stream)
+    monkeypatch.setattr(recording.sd, "InputStream", fake_input_stream)
     monkeypatch.setattr(recording, "pick_input_device", lambda mic: 3)
     monkeypatch.setattr(app, "load_config", lambda: FakeConfig())
 
     kb = keyboard()
     keyboard_grab.grab_all_devices([kb])
 
-    started = app.start_recording(beeps_on=False, notify_on=False, input_device_idx=99)
+    started = recording.start_recording(beeps_on=False, notify_on=False, input_device_idx=99)
 
     assert started is True
     assert tried == [99, 3], "stale index was not re-resolved"
@@ -366,7 +368,7 @@ def test_stale_microphone_index_is_re_resolved_and_retried(monkeypatch, quiet_re
 
 
 def test_keyboard_is_released_when_even_the_re_resolved_mic_fails(monkeypatch, quiet_recording):
-    monkeypatch.setattr(app.sd, "InputStream",
+    monkeypatch.setattr(recording.sd, "InputStream",
                         lambda *a, **k: (_ for _ in ()).throw(Exception("no mic anywhere")))
     monkeypatch.setattr(recording, "pick_input_device", lambda mic: 3)
     monkeypatch.setattr(app, "load_config", lambda: FakeConfig())
@@ -374,7 +376,7 @@ def test_keyboard_is_released_when_even_the_re_resolved_mic_fails(monkeypatch, q
     kb = keyboard()
     keyboard_grab.grab_all_devices([kb])
 
-    started = app.start_recording(beeps_on=False, notify_on=False, input_device_idx=99)
+    started = recording.start_recording(beeps_on=False, notify_on=False, input_device_idx=99)
 
     assert started is False
     assert not kb.is_grabbed
@@ -775,15 +777,15 @@ def test_a_microphone_that_never_stops_cannot_freeze_the_service(monkeypatch):
         def close(self, ignore_errors=True):
             pass
 
-    monkeypatch.setattr(app.mic_stream, "STOP_TIMEOUT_S", 0.1)
-    monkeypatch.setattr(app.mic_stream, "_closing", set())
+    monkeypatch.setattr(mic_stream, "STOP_TIMEOUT_S", 0.1)
+    monkeypatch.setattr(mic_stream, "_closing", set())
     stream = StuckStream()
     rs.state.stream = stream
     started = app.time.monotonic()
     recording.stop_stream_safely()
     assert app.time.monotonic() - started < 1.0
     assert rs.state.stream is None
-    assert app.mic_stream._closing == {stream}
+    assert mic_stream._closing == {stream}
     release.set()
 
 
@@ -797,10 +799,10 @@ def test_a_normal_stop_closes_the_stream(monkeypatch):
         def close(self, ignore_errors=True):
             calls.append("close")
 
-    monkeypatch.setattr(app.mic_stream, "_closing", set())
+    monkeypatch.setattr(mic_stream, "_closing", set())
     rs.state.stream = Stream()
     recording.stop_stream_safely()
-    assert calls == ["stop", "close"] and app.mic_stream._closing == set()
+    assert calls == ["stop", "close"] and mic_stream._closing == set()
 
 
 def test_falling_back_to_another_mic_says_so(monkeypatch, quiet_recording):
@@ -817,13 +819,13 @@ def test_falling_back_to_another_mic_says_so(monkeypatch, quiet_recording):
 
     names = {14: "Sennheiser Profile Mono", 8: "HD-Audio Generic: ALC897 Analog"}
     notices = []
-    monkeypatch.setattr(app.sd, "InputStream", fake_input_stream)
-    monkeypatch.setattr(app.sd, "query_devices", lambda idx: {"name": names[idx]})
+    monkeypatch.setattr(recording.sd, "InputStream", fake_input_stream)
+    monkeypatch.setattr(recording.sd, "query_devices", lambda idx: {"name": names[idx]})
     monkeypatch.setattr(recording, "pick_input_device", lambda mic: 8)
     monkeypatch.setattr(app, "load_config", lambda: FakeConfig())
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, text: notices.append(text))
 
-    assert app.start_recording(beeps_on=False, notify_on=False, input_device_idx=14) is True
+    assert recording.start_recording(beeps_on=False, notify_on=False, input_device_idx=14) is True
     assert len(notices) == 1
     assert notices[0].startswith("Sennheiser Profile Mono didn't respond, so TuxTalk is recording "
                                  "from HD-Audio Generic: ALC897 Analog instead.")
@@ -844,12 +846,12 @@ def test_reopening_the_same_mic_says_nothing(monkeypatch, quiet_recording):
         return FakeStream()
 
     notices = []
-    monkeypatch.setattr(app.sd, "InputStream", fake_input_stream)
+    monkeypatch.setattr(recording.sd, "InputStream", fake_input_stream)
     monkeypatch.setattr(recording, "pick_input_device", lambda mic: 14)
     monkeypatch.setattr(app, "load_config", lambda: FakeConfig())
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, text: notices.append(text))
 
-    assert app.start_recording(beeps_on=False, notify_on=False, input_device_idx=14) is True
+    assert recording.start_recording(beeps_on=False, notify_on=False, input_device_idx=14) is True
     assert notices == []
     keyboard_grab.release_all()
 

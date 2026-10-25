@@ -4,15 +4,15 @@ Tests such as test_a_real_cuda_failure_still_falls_back_to_cpu go through the
 real notification path, so conftest holds back notify._send, the one place a
 notice leaves for the desktop, for the whole suite.
 """
-from tuxtalk import app, notify
+from tuxtalk import notify, pipeline
 
 
 def test_notifications_are_held_back_during_tests():
     assert notify._send.__name__ == "_held_back"
 
 
-def test_app_notify_does_not_reach_the_desktop(monkeypatch):
-    assert app.notify_module is notify
+def test_the_service_notify_does_not_reach_the_desktop(monkeypatch):
+    assert pipeline.notify_module is notify
     # Count the calls that reach the held-back _send(). A notify() that found
     # another way to the desktop would leave the count at zero.
     held_back = notify._send

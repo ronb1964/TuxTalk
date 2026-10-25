@@ -21,6 +21,8 @@ from tuxtalk import app
 from tuxtalk import keyboard_grab
 from tuxtalk import recording_state as rs
 from tuxtalk import uinput_helper
+from tuxtalk import recording
+from tuxtalk import pipeline
 
 F8 = ecodes.KEY_F8
 
@@ -77,10 +79,10 @@ def kb(monkeypatch):
     keyboard_grab._injected_pending.clear()
     keyboard_grab.grabbed_devices.clear()
     monkeypatch.setattr(uinput_helper, "is_keyboard_device", lambda d: True)
-    monkeypatch.setattr(app, "start_recording",
+    monkeypatch.setattr(recording, "start_recording",
                         lambda *a, **k: setattr(rs.state, "is_recording", True) or True)
     stops = []
-    monkeypatch.setattr(app, "stop_recording",
+    monkeypatch.setattr(pipeline, "stop_recording",
                         lambda *a, **k: (stops.append(1), setattr(rs.state, "is_recording", False)))
     dev.stops = stops
     rs.state.is_recording = False

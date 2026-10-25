@@ -799,8 +799,9 @@ def service_main(monkeypatch):
     def step(name, result=None):
         return lambda *a, **k: done.append(name) or result
 
-    for name in ("dbus_service", "recording_indicator", "_spectrum_processor"):
-        monkeypatch.setattr(app, name, getattr(app, name))
+    monkeypatch.setattr(app, "dbus_service", app.dbus_service)
+    for name in ("indicator", "spectrum_processor"):
+        monkeypatch.setattr(recording, name, getattr(recording, name))
     monkeypatch.setattr(engine, "gtk_loop_running", engine.gtk_loop_running)
     monkeypatch.setattr(keyboard_output, "key_delay_ms", keyboard_output.key_delay_ms)
     for name in ("log_transcripts", "usage_stats", "restore_clipboard", "pause_media",
@@ -831,8 +832,8 @@ def service_main(monkeypatch):
 
     def ready():
         done.append(("says it is ready",
-                     app._cmd_start_recording.is_set() or app._cmd_stop_recording.is_set()
-                     or app._cmd_start_from_toggle_key.is_set()))
+                     recording.start_requested.is_set() or recording.stop_requested.is_set()
+                     or recording.started_from_toggle_key.is_set()))
 
     monkeypatch.setattr(app, "_acquire_single_instance", step("takes the service lock"))
     monkeypatch.setattr(app, "_install_signal_handlers", lambda: None)

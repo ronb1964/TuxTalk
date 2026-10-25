@@ -19,6 +19,7 @@ from tuxtalk import control
 from tuxtalk.control import WaitingStart, act_now, parse_action
 from tuxtalk import recording_state as rs
 from tuxtalk import tray_link
+from tuxtalk import recording
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -397,39 +398,38 @@ def service(monkeypatch):
             told.append(int(pid))
 
     monkeypatch.setattr(tray_link, "get_proxy", lambda: Tray())
-    app._cmd_start_recording.clear()
-    app._cmd_stop_recording.clear()
+    recording.start_requested.clear()
+    recording.stop_requested.clear()
     yield types.SimpleNamespace(app=app, written=written, told=told)
-    app._cmd_start_recording.clear()
-    app._cmd_stop_recording.clear()
+    recording.start_requested.clear()
+    recording.stop_requested.clear()
 
 
 def test_the_service_says_when_it_is_ready(service):
     service.app._mark_service_ready()
     assert service.told == [os.getpid()] and service.written == [os.getpid()]
-    assert not service.app._cmd_start_recording.is_set()
+    assert not recording.start_requested.is_set()
 
 
 def test_with_no_tray_the_service_keeps_a_request_until_it_is_ready(service):
     """The service owns the D-Bus name itself when no tray runs."""
     assert service.app._control_in_service("toggle") == "waiting"
-    assert not service.app._cmd_start_recording.is_set()
+    assert not recording.start_requested.is_set()
     service.app._mark_service_ready()
-    assert service.app._cmd_start_recording.is_set()
+    assert recording.start_requested.is_set()
 
 
 def test_with_no_tray_a_ready_service_toggles_at_once(service):
     service.app._mark_service_ready()
     assert service.app._control_in_service("toggle") == "started"
-    assert service.app._cmd_start_recording.is_set()
+    assert recording.start_requested.is_set()
 
 
 def test_ready_is_said_after_stale_toggles_are_cleared(service_main):
     """Said before the clear, a toggle sent in between would be thrown away;
     after the input backend starts, it would come too late to help."""
-    from tuxtalk import app
-    app._cmd_start_from_toggle_key.set()        # pressed while the model loaded
-    app._cmd_start_recording.set()
+    recording.started_from_toggle_key.set()        # pressed while the model loaded
+    recording.start_requested.set()
     started = service_main()
     assert ("says it is ready", False) in started
     assert started.index(("says it is ready", False)) < started.index("listens for hotkeys")

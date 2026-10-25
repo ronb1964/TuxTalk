@@ -12,7 +12,6 @@ import time
 import atexit
 import select
 import signal
-import sounddevice as sd
 from evdev import InputDevice, ecodes, list_devices
 
 from typing import NamedTuple
@@ -21,13 +20,12 @@ from .config import load_config, Settings, load_custom_commands
 # Imported as a module too, so the live-settings reload can read CONFIG_PATH and
 # LIVE_APPLIED_KEYS without pulling each name in separately.
 from . import config as config_module
-from . import notify as notify_module
-from . import beeps, mic_stream
-from .beeps import START_BEEP, HANDS_FREE_BEEP, CANCEL_BEEP
+from . import beeps
+from .beeps import CANCEL_BEEP
 from .logger import setup_logger
 from .recording_indicator import RecordingIndicator
 from . import (delivery_notices, focused_window, modifier_hotkeys, secure_input, send_countdown,
-               silence, single_instance, uinput_helper, virtual_keyboard)
+               single_instance, uinput_helper, virtual_keyboard)
 from .hotkey_keys import (MODIFIER_CODES, check_modifiers_held, keycode_from_name,
                           parse_hotkey_combo, track_modifier)
 from . import recording_state as rs
@@ -38,7 +36,6 @@ from . import tray_link
 from . import engine
 from . import recording
 from . import notices
-from . import voice_edit
 from . import delivery
 from . import type_at_pause
 from . import pipeline
@@ -68,27 +65,12 @@ def _acquire_single_instance():
 # The single-instance lock's file, open while the service runs.
 _lockfile_handle = None
 
-MIN_HOLD_MS = 200
-# Two toggle taps closer than this make the first tap's recording hands-free.
-# Generous: 0.4 s missed slower hands (#21); a quick word still comes, at auto-stop.
-DOUBLE_TAP_S = 0.7
 
-
-# Global recording indicator and D-Bus service (initialized in main)
-recording_indicator = None
 dbus_service = None
 
 # Undo voice-command parsing/length logic lives in tuxtalk.undo so it can
 # be unit-tested without dragging in heavy audio/CUDA imports.
 
-
-# Thread-safe recording command flags — set by signal handler or D-Bus thread, consumed by evdev loop.
-# Using two separate Events (rather than one flag) so start and stop can't overwrite each other.
-_cmd_start_recording = threading.Event()
-_cmd_stop_recording = threading.Event()
-# Set alongside _cmd_start_recording when the Flatpak's toggle SHORTCUT (not a
-# menu) started it, so a quick second press can switch it to hands-free.
-_cmd_start_from_toggle_key = threading.Event()
 
 
 # Hotkey test mode: while Preferences' Test Hotkeys dialog keeps its flag file
@@ -121,9 +103,9 @@ def _handle_sigusr1(signum, frame):
     Sets the appropriate Event; the evdev loop consumes it from the main thread.
     """
     if rs.state.is_recording:
-        _cmd_stop_recording.set()
+        recording.stop_requested.set()
     else:
-        _cmd_start_recording.set()
+        recording.start_requested.set()
 
 
 def _handle_sigusr2(signum, frame):
@@ -166,37 +148,6 @@ def _claim_desktop_hotkeys(cfg):
         logger.debug(f"Could not send the hotkeys to the tray: {e}")
 
 
-
-
-def _sd_callback(indata, frames_count, time_info, status):
-    """sounddevice's audio callback: collect frames while recording."""
-    if rs.state.is_recording:
-        rs.state.frames.append(indata.tobytes())
-
-        # Chunked dictation: at a pause, the phrase so far goes off to be typed.
-        chunker = rs.state.chunker
-        if chunker is not None and chunker.feed(indata):
-            type_at_pause.cut_chunk(chunker)
-
-        # Hands-free auto-stop: when the speaker has finished, ask the service
-        # loop to stop, exactly as a second press of the toggle key would.
-        detector = rs.state.silence
-        if detector is not None and detector.feed(indata):
-            if detector.nothing_said:
-                logger.info("Auto-stop: nothing said, stopping without typing anything")
-            else:
-                logger.info("Auto-stop: speaker went quiet, stopping the recording")
-            _cmd_stop_recording.set()
-
-        # Feed the recording indicator whatever its active style needs.
-        if recording_indicator:
-            recording.feed_indicator(recording_indicator, indata, _spectrum_processor)
-
-
-
-# Built once when the recording indicator is created; used by _feed_indicator
-# to compute the bars spectrum. None until then (and for non-bars styles).
-_spectrum_processor = None
 
 
 
@@ -374,240 +325,12 @@ def _drop_dead_devices(dead_devices, devices, cfg) -> None:
             "recording, since its key-up can no longer arrive"
         )
         keyboard_grab.release_all()
-        stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
+        pipeline.stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
                        cfg.auto_space, cfg.auto_period, cfg.injection_mode)
 
     dead_devices.clear()
 
 
-def _open_input_stream(device_idx) -> None:
-    """Open and start the microphone stream. Raises if the device is unusable."""
-    # Use the device's native sample rate (may differ from 16kHz on ALSA hw: devices)
-    rs.state.recording_samplerate = mic_stream.input_samplerate(device_idx, engine.SAMPLE_RATE)
-    sd.default.channels = recording.CHANNELS
-    sd.default.samplerate = rs.state.recording_samplerate
-    rs.state.stream = sd.InputStream(callback=_sd_callback, dtype='int16', device=device_idx)
-    rs.state.stream.start()
-
-
-def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
-                    from_toggle: bool = False, edit_mode: bool = False,
-                    held_send: bool = False) -> bool:
-    """Begin capturing audio. Returns True only if recording actually started.
-
-    *from_toggle* marks a start by the toggle key, so a quick second tap can
-    switch it to hands-free (see _toggle_pressed_while_recording).
-    *held_send*: the press that starts it already held a pending send.
-
-    On failure this releases any input-device grabs before returning. The
-    keyboard is grabbed just before this is called, so without that release a
-    microphone error would leave the user unable to type anywhere at all.
-    """
-    # Pressing a hotkey while a send counts down holds it: a tap leaves the
-    # text unsent, a hold dictates more onto it.
-    rs.state.held_send = send_countdown.hold(announce=False) or held_send
-    rs.state.frames = []
-    rs.state.was_cancelled = False
-    rs.state.silence = None
-    rs.state.chunker = None
-    rs.state.press_t0 = time.time()
-    rs.state.released_while_starting = False
-    rs.state.toggle_started_at = None
-    rs.state.edit_mode = edit_mode
-    # Set before the stream starts — _sd_callback drops frames unless it's set.
-    rs.state.is_recording = True
-    if engine.model is None:
-        # Power Saving let the model go: load it while the user talks.
-        threading.Thread(target=engine.wake, daemon=True, name="tt-wake-model").start()
-    input_device_idx = recording.follow_system_default(input_device_idx)
-    try:
-        _open_input_stream(input_device_idx)
-    except Exception as first_error:
-        # The mic is stored as a device NUMBER, resolved once at startup. Unplug
-        # a USB device and the numbering shifts, leaving that number pointing at
-        # nothing. Re-resolve by name and try once more before giving up.
-        logger.warning(f"Microphone {input_device_idx} failed ({first_error}); re-resolving")
-        recording.stop_stream_safely()
-        try:
-            fresh_idx = recording.pick_input_device(load_config().mic)
-            _open_input_stream(fresh_idx)
-            logger.info(f"Microphone re-resolved to device {fresh_idx}")
-            if fresh_idx != input_device_idx:
-                notices.warn_mic_switched(input_device_idx, fresh_idx)
-        except Exception as e:
-            # Genuinely unavailable: unplugged, or held exclusively by another
-            # app. Undo everything and tell the user; failing silently would
-            # leave the keyboard grabbed and the machine unusable.
-            logger.error(f"Could not start recording: {e}", exc_info=True)
-            rs.state.is_recording = False
-            recording.stop_stream_safely()
-            keyboard_grab.release_all()
-            beeps.beep(beeps_on, *CANCEL_BEEP)
-            if notify_on:
-                notify_module.notify("Microphone unavailable",
-                                     "Check that no other app is using it.")
-            if rs.state.held_send:
-                send_countdown.say_held()   # nothing to dictate onto it: it stays unsent
-            return False
-
-    type_at_pause.arm_chunker(getattr(rs.state, "recording_samplerate", engine.SAMPLE_RATE),
-                              edit_mode)
-    recording.pause_media_players()
-    rs.state.start_beep = beeps.beep(beeps_on, *START_BEEP)
-    if notify_on: notify_module.notify("Recording… speak now", "")
-    tray_link.notify_recording_state(True)
-    if recording_indicator:
-        try:
-            recording_indicator.show_at_position()
-            recording_indicator.start_recording()
-        except Exception as e:
-            logger.error(f"Failed to show recording indicator: {e}", exc_info=True)
-
-    # The double-tap is timed from here, the start beep heard: keys wait on
-    # this thread, so a tap made during a slow start still counts (#21).
-    if from_toggle and rs.state.start_beep is not None:
-        beeps.wait_until_played(over=rs.state.start_beep)
-    rs.state.toggle_started_at = time.time() if from_toggle else None
-    logger.info(f"Recording started in {time.time() - rs.state.press_t0:.2f}s")
-    return True
-
-
-
-def cancel_recording(beeps_on: bool, notify_on: bool, reason="Cancelled"):
-    """End a recording without transcribing it, telling the user *reason*."""
-    rs.state.is_recording = False
-    rs.state.was_cancelled = True
-    rs.state.edit_mode = False
-    recording.stop_stream_safely()
-    recording.resume_media_players()
-    beeps.beep(beeps_on, *CANCEL_BEEP)
-    print(reason)
-    logger.debug(f"Recording cancelled: {reason}")
-    if notify_on: notify_module.notify(reason, "")
-
-    if recording_indicator:
-        recording_indicator.hide_indicator()
-    tray_link.notify_recording_state(False)
-
-
-
-def _toggle_pressed_while_recording(beeps_on: bool) -> bool:
-    """A toggle-key press arrived during a recording. Returns True if it was
-    the second tap of a double-tap and switched the recording to hands-free
-    (the caller must then NOT stop it); False means a normal stop.
-
-    A single tap keeps the toggle a plain on/off switch. Only a double-tap,
-    with the option on, arms auto-stop. A word said before the second tap
-    counts as speech; the start beep the mic may pick up first does not.
-    """
-    started = rs.state.toggle_started_at
-    if (live.auto_stop_seconds <= 0 or started is None or rs.state.silence is not None
-            or time.time() - started > DOUBLE_TAP_S):
-        return False
-    rate = getattr(rs.state, "recording_samplerate", engine.SAMPLE_RATE)
-    detector = silence.SilenceDetector(live.auto_stop_seconds, rate)
-    beep_hz = START_BEEP[0] if rs.state.start_beep is not None else None
-    if silence.has_a_word(recording.frames_f32(list(rs.state.frames)), rate, ignoring_hz=beep_hz):
-        detector.heard_speech()
-    rs.state.silence = detector
-    logger.info("Double-tap: this recording will stop by itself when you go quiet")
-    beeps.beep(beeps_on, *HANDS_FREE_BEEP)
-    return True
-
-
-
-def _finish_capture(beeps_on: bool, notify_on: bool):
-    """End a recording quickly and hand back its audio (the fast half of stop).
-
-    Validates the hold time, stops the stream, hides the indicator, and SNAPSHOTS
-    the captured frames. Returns (frames, rec_sr) or None if the recording was
-    cancelled or too short. start_recording() reassigns state.frames to a fresh
-    list, so the returned reference stays valid even if a new recording begins
-    immediately, which is what lets Backend B run the slow transcription/typing
-    on a worker thread without dropping or mixing audio."""
-    if rs.state.silence is not None and rs.state.silence.nothing_said:
-        # Hands-free with nothing said: drop it. Transcribing room noise can
-        # type a stray "Thank you." (see silence.is_speechless_tap).
-        rs.state.silence = None
-        rate = getattr(rs.state, "recording_samplerate", engine.SAMPLE_RATE)
-        dead_mic = recording.frames_are_dead_mic(rs.state.frames, rate)
-        cancel_recording(beeps_on, notify_on and not dead_mic, "Nothing heard, so nothing was typed")
-        if dead_mic:
-            notices.warn_silent_mic()
-        return None
-    # Before the space below: the time typing it takes isn't part of the press.
-    held_ms = int((time.time() - (rs.state.press_t0 or time.time())) * 1000)
-    if rs.state.held_send and send_countdown.owes_space() and not rs.state.chunks_submitted:
-        # The hotkey that held the send is up now; a tap leaves the text as
-        # it is, a dictation goes after this space.
-        send_countdown.type_owed_space()
-    if held_ms < MIN_HOLD_MS or (rs.state.held_send and rs.state.released_while_starting):
-        if rs.state.held_send:
-            cancel_recording(beeps_on, False, send_countdown.HELD_NOTICE)
-            send_countdown.say_held()
-        else:
-            cancel_recording(beeps_on, notify_on, f"Cancelled (held {held_ms} ms)")
-        return None
-    with type_at_pause.chunk_lock:
-        # No more cuts: from here on the audio is the last chunk.
-        chunker, rs.state.chunker = rs.state.chunker, None
-        rs.state.last_chunk_speech = chunker.speech_time if chunker is not None else None
-        frames = rs.state.frames  # snapshot the reference before it can be reassigned
-    if chunker is not None and not rs.state.chunks_submitted:
-        logger.info(f"Chunked dictation: no pause found ({chunker.describe()})")
-    rec_sr = getattr(rs.state, 'recording_samplerate', engine.SAMPLE_RATE)
-    rs.state.is_recording = False
-    recording.stop_stream_safely()
-    recording.resume_media_players()
-    tray_link.notify_recording_state(False)  # the tray icon shows recording stopped
-    recording.trim_auto_stop_tail(frames)
-    if rs.state.was_cancelled:
-        return None
-    if recording_indicator:
-        recording_indicator.hide_indicator()
-    return frames, rec_sr
-
-
-
-
-def stop_recording(
-    beeps_on: bool,
-    smart_quotes: bool,
-    notify_on: bool,
-    language: str | None = None,
-    auto_space: bool = True,
-    auto_period: bool = True,
-    injection_mode: str = "type",
-):
-    """Stop recording, transcribe audio, and inject text — synchronously.
-
-    Backend A (evdev): the whole pipeline runs on the caller's thread. Backend B splits the two halves (see _service_tick) so the
-    slow transcription/typing runs off the hotkey loop.
-    """
-    edit_mode, rs.state.edit_mode = rs.state.edit_mode, False
-    cap = _finish_capture(beeps_on, notify_on)
-    if cap is None:
-        return
-    frames, rec_sr = cap
-    if edit_mode:
-        voice_edit.transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode)
-        return
-    if rs.state.chunks_submitted:
-        # Chunked dictation: the rest goes in after the chunks already queued,
-        # and stopping waits for all of them, as it waits for one
-        # transcription when nothing was chunked.
-        params = (beeps_on, smart_quotes, notify_on, language, auto_space,
-                  auto_period, injection_mode)
-        frames = recording.drop_speechless_rest(frames)
-        worker = type_at_pause.chunk_worker()
-        worker.submit(lambda message=rs.state.message: pipeline.transcribe_and_inject(
-            frames, rec_sr, *params, chunk_role="last", message=message))
-        if not worker.drain(type_at_pause.CHUNK_DRAIN_TIMEOUT_S):
-            logger.warning("Chunked dictation: chunks still typing after "
-                           f"{type_at_pause.CHUNK_DRAIN_TIMEOUT_S:.0f}s; not waiting longer")
-        return
-    pipeline.transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
-                           language, auto_space, auto_period, injection_mode)
 
 
 # --- Voice editing ---
@@ -713,7 +436,7 @@ def _start_hold_recording(hold_key, held_modifiers, devices, cfg, input_device_i
     held = send_countdown.hold(announce=False)
     shift = _held_shift(held_modifiers) if live.voice_editing else set()
     keyboard_grab.grab_keyboards_hiding(devices, {hold_key, *shift})
-    if (start_recording(cfg.beeps, cfg.notify, input_device_idx, edit_mode=bool(shift),
+    if (recording.start_recording(cfg.beeps, cfg.notify, input_device_idx, edit_mode=bool(shift),
                         held_send=held) and rs.state.held_send):
         # The hold time counts from the press to when its release is read,
         # which waits for the start: 0.15 to 0.2 s in the test VMs, so a
@@ -722,7 +445,7 @@ def _start_hold_recording(hold_key, held_modifiers, devices, cfg, input_device_i
         # tap; after a slower one it could have been a short word, so the
         # hold time decides.
         rs.state.released_while_starting = (
-            time.time() - rs.state.press_t0 < 2 * MIN_HOLD_MS / 1000
+            time.time() - rs.state.press_t0 < 2 * recording.MIN_HOLD_MS / 1000
             and keyboard_grab.wait_for_keys_up(devices, {hold_key}, 0))
 
 
@@ -802,7 +525,7 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
             # Let go of the keyboards before typing, so the user's own keys
             # reach the app again
             keyboard_grab.release_all()
-            stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
+            pipeline.stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
                            cfg.auto_space, cfg.auto_period, cfg.injection_mode)
 
     # --- Tap-to-toggle: press once to start, press again to stop ---
@@ -816,9 +539,9 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
         if not rs.state.is_recording:
             if shift:
                 # An edit: no double-tap hands-free, so not "from_toggle".
-                start_recording(cfg.beeps, cfg.notify, input_device_idx, edit_mode=True)
+                recording.start_recording(cfg.beeps, cfg.notify, input_device_idx, edit_mode=True)
             else:
-                start_recording(cfg.beeps, cfg.notify, input_device_idx, from_toggle=True)
+                recording.start_recording(cfg.beeps, cfg.notify, input_device_idx, from_toggle=True)
         elif rs.state.edit_mode:
             # A hold edit holds the keyboards (brushing the toggle key mid-hold
             # lands here): let go first, or they stay grabbed for the whole edit.
@@ -829,23 +552,23 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
             # after a slow edit and start a new recording by itself.
             if shift and not keyboard_grab.wait_for_keys_up(devices, _SHIFT_CODES,
                                                             EDIT_SHIFT_WAIT_S):
-                cancel_recording(cfg.beeps, cfg.notify,
+                recording.cancel_recording(cfg.beeps, cfg.notify,
                                  "Voice edit cancelled: let go of Shift to finish it")
                 return
-            stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
+            pipeline.stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
                            cfg.auto_space, cfg.auto_period, cfg.injection_mode)
-        elif _toggle_pressed_while_recording(cfg.beeps):
+        elif recording.toggle_pressed_while_recording(cfg.beeps):
             pass  # second tap of a double-tap: now hands-free, keep recording
         else:
             # Also reached by brushing the toggle key mid-hold. Release first,
             # or the hold key's release branch is skipped and the grab is stranded.
             keyboard_grab.release_all()
-            stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
+            pipeline.stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
                            cfg.auto_space, cfg.auto_period, cfg.injection_mode)
 
     # --- ESC cancels in any mode ---
     if event.code == ecodes.KEY_ESC and rs.state.is_recording and event.value == 1:
-        cancel_recording(cfg.beeps, cfg.notify, "Cancelled by ESC")
+        recording.cancel_recording(cfg.beeps, cfg.notify, "Cancelled by ESC")
         keyboard_grab.release_all()
 
 
@@ -915,17 +638,17 @@ def _service_tick(cfg, svc: "_ServiceState") -> "LiveSettings | None":
     The microphone comes off *svc*, not a parameter: it is re-resolved on a
     live reload, and a caller holding its own copy would keep the startup one."""
     now = time.time()
-    if _cmd_start_recording.is_set():
-        _cmd_start_recording.clear()
-        # Only the Flatpak's toggle SHORTCUT can double-tap; it says so. The
-        # tray and GNOME menu toggles and the hold shortcut are plain starts.
-        from_toggle = _cmd_start_from_toggle_key.is_set()
-        _cmd_start_from_toggle_key.clear()
+    if recording.start_requested.is_set():
+        recording.start_requested.clear()
+        # Only the Flatpak's toggle shortcut can double-tap; menus and the hold key can't.
+        from_toggle = recording.started_from_toggle_key.is_set()
+        recording.started_from_toggle_key.clear()
         if not rs.state.is_recording:
-            start_recording(cfg.beeps, cfg.notify, svc.input_device_idx, from_toggle=from_toggle)
+            recording.start_recording(cfg.beeps, cfg.notify, svc.input_device_idx,
+                                      from_toggle=from_toggle)
             svc.last_activity = now
-    if _cmd_stop_recording.is_set():
-        _cmd_stop_recording.clear()
+    if recording.stop_requested.is_set():
+        recording.stop_requested.clear()
         if rs.state.is_recording:
             keyboard_grab.release_all()
             if os.environ.get("FLATPAK_ID"):
@@ -935,7 +658,7 @@ def _service_tick(cfg, svc: "_ServiceState") -> "LiveSettings | None":
                 # recording here (fast) and run the slow half on a worker
                 # thread so the hotkey stays responsive. type_at_pause.inject_lock serialises
                 # workers so two dictations never transcribe/type at once.
-                cap = _finish_capture(cfg.beeps, cfg.notify)
+                cap = recording.finish_capture(cfg.beeps, cfg.notify)
                 if cap is not None:
                     frames, rec_sr = cap
                     if live.chunk_pause_seconds > 0:
@@ -963,7 +686,7 @@ def _service_tick(cfg, svc: "_ServiceState") -> "LiveSettings | None":
                         threading.Thread(target=_worker, daemon=True,
                                          name="tt-inject").start()
             else:
-                stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
+                pipeline.stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
                                cfg.auto_space, cfg.auto_period, cfg.injection_mode)
             svc.last_activity = now
     # Not mid-dictation (every worker holds inject_lock); idle counts from key-up.
@@ -994,7 +717,7 @@ def _service_tick(cfg, svc: "_ServiceState") -> "LiveSettings | None":
             # must not stop the service a second later because the clock still
             # counts from the last D-Bus command.
             svc.last_activity = now
-            reloaded = _reload_live_settings(cfg, recording_indicator)
+            reloaded = _reload_live_settings(cfg, recording.indicator)
             # cfg.mic is fresh now; the device number behind it may not be.
             svc.refresh_input_device()
             return reloaded
@@ -1213,7 +936,7 @@ def _mark_service_ready():
         start = _waiting_start is not None and _waiting_start.take()
     if start:
         logger.info("Starting the recording the command line asked for")
-        _cmd_start_recording.set()
+        recording.start_requested.set()
     from .service_launcher import write_ready_pid
     write_ready_pid(os.getpid())
     try:
@@ -1266,9 +989,9 @@ def main():
     input_device_idx = recording.pick_input_device(cfg.mic)
 
     # The D-Bus service and the recording indicator both need GTK's main loop.
-    global dbus_service, recording_indicator
+    global dbus_service
     dbus_service = None
-    recording_indicator = None
+    recording.indicator = None
     gtk_ok = False
     try:
         import gi
@@ -1281,7 +1004,7 @@ def main():
 
             from .service_dbus import AppInstance
 
-            app_instance = AppInstance(cfg, _cmd_start_recording, _cmd_stop_recording,
+            app_instance = AppInstance(cfg, recording.start_requested, recording.stop_requested,
                                        _control_in_service)
             # A stand-in only: the tray owns the bus name (see
             # TuxTalkDBusService). This succeeds only with no tray running.
@@ -1303,7 +1026,7 @@ def main():
 
         if cfg.recording_indicator:
             try:
-                recording_indicator = RecordingIndicator(
+                recording.indicator = RecordingIndicator(
                     position=cfg.indicator_position,
                     offset_x=cfg.indicator_offset_x,
                     offset_y=cfg.indicator_offset_y,
@@ -1314,10 +1037,9 @@ def main():
                     sensitivity=cfg.indicator_sensitivity,
                     follow_window=getattr(cfg, "indicator_follow_window", False),
                 )
-                # Spectrum processor for the bars style; _feed_indicator uses it.
-                global _spectrum_processor
+                # Spectrum processor for the bars style; recording.feed_indicator uses it.
                 from .indicator_dsp import SpectrumProcessor
-                _spectrum_processor = SpectrumProcessor(bins=20)
+                recording.spectrum_processor = SpectrumProcessor(bins=20)
                 logger.info(f"Recording indicator initialized at position: {cfg.indicator_position}, size: {cfg.indicator_size}")
             except Exception as e:
                 logger.error(f"Recording indicator initialization failed: {e}", exc_info=True)
@@ -1355,9 +1077,9 @@ def main():
     # A toggle sent while the model was loading would otherwise start a
     # recording seconds later, out of the blue, when the input loop starts.
     # One asked for on the command line waits in the tray instead (control.py).
-    _cmd_start_recording.clear()
-    _cmd_stop_recording.clear()
-    _cmd_start_from_toggle_key.clear()
+    recording.start_requested.clear()
+    recording.stop_requested.clear()
+    recording.started_from_toggle_key.clear()
     _mark_service_ready()
 
     # Run the input backend chosen by FLATPAK_ID: evdev everywhere

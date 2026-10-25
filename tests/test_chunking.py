@@ -568,13 +568,12 @@ def recording(monkeypatch, pipeline):
     """A recording in progress at 16 kHz with chunking on, no real stream, a
     fresh chunk worker and the fake engine/typing from `pipeline`."""
     from types import SimpleNamespace
-    from tuxtalk import app
     monkeypatch.setattr(type_at_pause, "_worker_instance", None)
     monkeypatch.setattr(live, "chunk_pause_seconds", 0.8)
     monkeypatch.setattr(live, "chunk_cfg", SimpleNamespace(
         beeps=True, smart_quotes=True, notify=False, language=None,
         auto_space=True, auto_period=False, injection_mode="type"))
-    monkeypatch.setattr(app, "recording_indicator", None)
+    monkeypatch.setattr(capture, "indicator", None)
     monkeypatch.setattr(capture, "stop_stream_safely", lambda: None)
     monkeypatch.setattr(capture, "resume_media_players", lambda: None)
     monkeypatch.setattr(tray_link, "notify_recording_state", lambda *a: None)
@@ -593,14 +592,12 @@ def recording(monkeypatch, pipeline):
 
 
 def feed(audio):
-    from tuxtalk import app
     for b in blocks(audio):
-        app._sd_callback(b.reshape(-1, 1), len(b), None, None)
+        capture._sd_callback(b.reshape(-1, 1), len(b), None, None)
 
 
 def stop(auto_period=False):
-    from tuxtalk import app
-    app.stop_recording(beeps_on=True, smart_quotes=True, notify_on=False,
+    dictation_pipeline.stop_recording(beeps_on=True, smart_quotes=True, notify_on=False,
                        language=None, auto_space=True, auto_period=auto_period,
                        injection_mode="type")
 
@@ -658,10 +655,9 @@ def test_a_silent_rest_never_reaches_the_engine(recording):
 def test_cut_after_stop_snapshot_hands_nothing_on(recording):
     """Review focus 2: a block arriving after the stop took its snapshot must
     not cut a chunk from frames the stop already owns."""
-    from tuxtalk import app
     feed(speech(1.0))
     chunker = rs.state.chunker
-    cap = app._finish_capture(beeps_on=False, notify_on=False)
+    cap = capture.finish_capture(beeps_on=False, notify_on=False)
     assert cap is not None
     type_at_pause.cut_chunk(chunker)
     assert rs.state.chunks_submitted == 0
@@ -684,7 +680,7 @@ def test_flatpak_stop_queues_the_last_chunk_on_the_worker(recording, monkeypatch
     feed(np.concatenate([speech(1.0), noise(1.0), speech(0.8)]))
     svc = SimpleNamespace(input_device_idx=None, last_activity=0.0,
                           timeout_enabled=False, last_config_check=time.time())
-    app._cmd_stop_recording.set()
+    capture.stop_requested.set()
     app._service_tick(live.chunk_cfg, svc)
     assert type_at_pause.chunk_worker().drain(5)
     assert "".join(typed) == "We meet at three "
@@ -715,10 +711,9 @@ def test_a_recording_without_a_pause_says_why(recording, caplog):
     """When no pause was found, the log names the room level, the threshold and
     the loudest block, so a mic the detector can't read is easy to spot."""
     import logging
-    from tuxtalk import app
     caplog.set_level(logging.INFO)
     feed(speech(2.0))
-    app._finish_capture(beeps_on=False, notify_on=False)
+    capture.finish_capture(beeps_on=False, notify_on=False)
     assert any("no pause found" in r.getMessage() and "room" in r.getMessage()
                for r in caplog.records)
 

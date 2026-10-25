@@ -15,6 +15,8 @@ from tuxtalk import live_settings as live
 from tuxtalk import keyboard_grab
 from tuxtalk import delivery
 from tuxtalk.beeps import CANCEL_BEEP
+from tuxtalk import recording
+from tuxtalk import pipeline
 
 P = ecodes.KEY_P
 CTRL, ALT = ecodes.KEY_LEFTCTRL, ecodes.KEY_LEFTALT
@@ -238,9 +240,9 @@ def test_a_hold_started_while_the_combo_is_pending_still_stops(keys, monkeypatch
     must still get through, or an F8 recording started in that moment keeps
     running after F8 is let go."""
     stopped = []
-    monkeypatch.setattr(app, "start_recording",
+    monkeypatch.setattr(recording, "start_recording",
                         lambda *a, **k: setattr(rs.state, "is_recording", True) or True)
-    monkeypatch.setattr(app, "stop_recording",
+    monkeypatch.setattr(pipeline, "stop_recording",
                         lambda *a, **k: stopped.append(True) or setattr(rs.state, "is_recording", False))
     monkeypatch.setattr(Cfg, "smart_quotes", False, raising=False)
     monkeypatch.setattr(Cfg, "language", None, raising=False)

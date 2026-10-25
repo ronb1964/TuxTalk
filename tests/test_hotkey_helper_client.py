@@ -17,6 +17,8 @@ from tuxtalk.hotkey_helper_client import HelperKeyboard, connect_helper, watch_s
 from tuxtalk.hotkey_keys import track_modifier
 from test_hotkey_helper import FakeKeyboard
 from tuxtalk import live_settings as live
+from tuxtalk import recording
+from tuxtalk import pipeline
 
 F8, F9, ESC = 66, 67, 1
 RCTRL = 97
@@ -84,8 +86,8 @@ def rig(tmp_path, monkeypatch):
         calls.append(("stop",))
         rs.state.is_recording = False
 
-    monkeypatch.setattr(app, "start_recording", start)
-    monkeypatch.setattr(app, "stop_recording", stop)
+    monkeypatch.setattr(recording, "start_recording", start)
+    monkeypatch.setattr(pipeline, "stop_recording", stop)
     held = set()
 
     class Cfg:
@@ -155,7 +157,7 @@ def test_a_quick_tap_still_starts_and_stops(rig):
 def test_esc_cancels(rig, monkeypatch):
     helper, kb, client, loop, calls = rig
     cancelled = []
-    monkeypatch.setattr(app, "cancel_recording", lambda *a, **k: cancelled.append(a[-1]))
+    monkeypatch.setattr(recording, "cancel_recording", lambda *a, **k: cancelled.append(a[-1]))
     kb.press(F9)
     kb.press(F9, 0)
     loop()

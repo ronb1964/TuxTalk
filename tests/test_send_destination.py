@@ -295,13 +295,13 @@ def test_the_hold_key_holds_the_send_before_it_hides_itself(chat, keyboard, monk
         modifier_hotkeys.note_hidden(set(codes), devices)
         send_countdown._send(waiting)                 # its thread got there first
     monkeypatch.setattr(keyboard_grab, "grab_keyboards_hiding", grab_then_the_send_runs)
-    monkeypatch.setattr(app, "_open_input_stream", lambda idx: None)
+    monkeypatch.setattr(recording, "open_input_stream", lambda idx: None)
     monkeypatch.setattr("tuxtalk.type_at_pause.arm_chunker", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.recording.pause_media_players", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.tray_link.notify_recording_state", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
     monkeypatch.setattr(keyboard_grab, "release_all", lambda: None)
-    monkeypatch.setattr(app, "recording_indicator", None)
+    monkeypatch.setattr(recording, "indicator", None)
     cfg = types.SimpleNamespace(beeps=False, notify=False)
     press = types.SimpleNamespace(type=ecodes.EV_KEY, code=hold_key, value=1)
     try:
@@ -354,11 +354,11 @@ def test_a_short_tap_of_the_hold_key_that_holds_the_send_says_so_aloud_once(
     monkeypatch.setattr("tuxtalk.recording.resume_media_players", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.recording.stop_stream_safely", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.tray_link.notify_recording_state", lambda *a, **k: None)
-    monkeypatch.setattr(app, "recording_indicator", None)
+    monkeypatch.setattr(recording, "indicator", None)
     monkeypatch.setattr(rs.state, "held_send", True)
     monkeypatch.setattr(rs.state, "silence", None)
     monkeypatch.setattr(rs.state, "press_t0", app.time.time())
-    assert app._finish_capture(False, notify_on) is None
+    assert recording.finish_capture(False, notify_on) is None
     assert notices == [send_countdown.HELD_NOTICE] and notifications() == [HELD_TITLE]
 
 
@@ -371,7 +371,7 @@ def test_a_hold_key_press_whose_recording_cant_start_says_the_send_is_held(
 
     def no_microphone(idx):
         raise OSError("Device unavailable")
-    monkeypatch.setattr(app, "_open_input_stream", no_microphone)
+    monkeypatch.setattr(recording, "open_input_stream", no_microphone)
     monkeypatch.setattr(recording, "pick_input_device", lambda mic: 0)
     monkeypatch.setattr(recording, "stop_stream_safely", lambda *a, **k: None)
     monkeypatch.setattr(keyboard_grab, "grab_keyboards_hiding", lambda *a, **k: None)

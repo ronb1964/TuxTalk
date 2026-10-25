@@ -9,7 +9,6 @@ import time
 
 import pytest
 
-from tuxtalk import app
 from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
 from tuxtalk import config as C
@@ -17,6 +16,7 @@ from tuxtalk.media_pause import MediaPauser
 from tuxtalk import keyboard_grab
 from tuxtalk import tray_link
 from tuxtalk import recording
+from tuxtalk import mic_stream
 
 
 class FakeBus:
@@ -149,9 +149,9 @@ def service(monkeypatch):
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
     monkeypatch.setattr(tray_link, "notify_recording_state", lambda *a, **k: None)
-    monkeypatch.setattr(app.mic_stream, "input_samplerate", lambda idx, rate: 16000)
-    monkeypatch.setattr(app, "recording_indicator", None)
-    monkeypatch.setattr(app.sd, "InputStream", lambda *a, **k: FakeStream())
+    monkeypatch.setattr(mic_stream, "input_samplerate", lambda idx, rate: 16000)
+    monkeypatch.setattr(recording, "indicator", None)
+    monkeypatch.setattr(recording.sd, "InputStream", lambda *a, **k: FakeStream())
     spy = SpyPauser()
     monkeypatch.setattr(recording, "_media_pauser", spy)
     monkeypatch.setattr(live, "pause_media", True)
@@ -178,35 +178,35 @@ def test_the_suite_cannot_reach_real_media_players():
 
 
 def test_recording_start_pauses_and_cancel_resumes(service):
-    assert app.start_recording(False, False, 0) is True
-    app.cancel_recording(False, False)
+    assert recording.start_recording(False, False, 0) is True
+    recording.cancel_recording(False, False)
     assert service.calls == ["pause", "resume"]
 
 
 def test_a_finished_recording_resumes(service):
-    app.start_recording(False, False, 0)
+    recording.start_recording(False, False, 0)
     rs.state.press_t0 -= 5           # held long enough to count
-    assert app._finish_capture(False, False) is not None
+    assert recording.finish_capture(False, False) is not None
     assert service.calls == ["pause", "resume"]
 
 
 def test_too_short_a_tap_still_resumes(service):
-    app.start_recording(False, False, 0)
-    assert app._finish_capture(False, False) is None
+    recording.start_recording(False, False, 0)
+    assert recording.finish_capture(False, False) is None
     assert service.calls == ["pause", "resume"]
 
 
 def test_switched_off_pauses_nothing(service, monkeypatch):
     monkeypatch.setattr(live, "pause_media", False)
-    app.start_recording(False, False, 0)
-    app.cancel_recording(False, False)
+    recording.start_recording(False, False, 0)
+    recording.cancel_recording(False, False)
     assert "pause" not in service.calls
 
 
 def test_a_microphone_failure_pauses_nothing(service, monkeypatch):
-    monkeypatch.setattr(app.sd, "InputStream",
+    monkeypatch.setattr(recording.sd, "InputStream",
                         lambda *a, **k: (_ for _ in ()).throw(Exception("no mic")))
     monkeypatch.setattr(recording, "pick_input_device", lambda mic: 0)
     monkeypatch.setattr(keyboard_grab, "release_all", lambda: None)
-    assert app.start_recording(False, False, 0) is False
+    assert recording.start_recording(False, False, 0) is False
     assert service.calls == []

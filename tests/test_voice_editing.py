@@ -9,6 +9,8 @@ from tuxtalk import keyboard_grab
 from tuxtalk import uinput_helper
 from tuxtalk import keyboard_output
 from tuxtalk.beeps import CANCEL_BEEP, READY_BEEP
+from tuxtalk import recording
+from tuxtalk import pipeline
 
 
 # --- 1. grabbing the selection ------------------------------------------------------
@@ -288,9 +290,9 @@ def keyloop(monkeypatch):
     def stop(*a, **k):
         seen["stops"] += 1
         rs.state.is_recording = False
-    monkeypatch.setattr(app, "start_recording", start)
-    monkeypatch.setattr(app, "stop_recording", stop)
-    monkeypatch.setattr(app, "_toggle_pressed_while_recording", lambda beeps: False)
+    monkeypatch.setattr(recording, "start_recording", start)
+    monkeypatch.setattr(pipeline, "stop_recording", stop)
+    monkeypatch.setattr(recording, "toggle_pressed_while_recording", lambda beeps: False)
     return seen
 
 
@@ -574,7 +576,7 @@ def test_shift_held_too_long_cancels_the_edit(keyloop, monkeypatch):
     monkeypatch.setattr(uinput_helper, "is_keyboard_device", lambda d: True)
     monkeypatch.setattr(app, "EDIT_SHIFT_WAIT_S", 0.05)
     cancelled = []
-    monkeypatch.setattr(app, "cancel_recording", lambda b, n, reason="": cancelled.append(reason))
+    monkeypatch.setattr(recording, "cancel_recording", lambda b, n, reason="": cancelled.append(reason))
     key(F9, 1, {SHIFT})
     app._handle_key_event(Ev(F9, 1), F8, F9, None, {SHIFT}, [FakeKeyboard([[SHIFT]])], Cfg(), 0)
     assert keyloop["stops"] == 0 and cancelled and "Shift" in cancelled[0]

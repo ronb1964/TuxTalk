@@ -46,7 +46,7 @@ class PortalInputBackend(InputBackend):
 
     Registers the hold and toggle shortcuts; the desktop assigns their keys and
     sends Activated (press) / Deactivated (release) signals, which we translate into
-    the same app._cmd_start_recording / app._cmd_stop_recording events the evdev
+    the same recording.start_requested / recording.stop_requested events the evdev
     loop sets. A GLib timeout runs the shared app._service_tick so the recording
     core and auto-timeout work identically."""
 
@@ -68,24 +68,24 @@ class PortalInputBackend(InputBackend):
         # (F8) and the toggle key (F9) both work at once — not a single mode-gated
         # key. "dictate_hold" = press-and-hold; "dictate_toggle" = tap on/off.
         sid = self._shortcut_id(params)
-        from . import app, recording_state
+        from . import recording, recording_state
         if sid == "dictate_hold":
-            app._cmd_start_recording.set()
+            recording.start_requested.set()
         elif sid == "dictate_toggle":
             # Ask the recording itself rather than keeping a private on/off
             # flag: a recording can end without this key (auto-stop, Esc), and
             # a stale flag would make the next press do nothing.
             if not recording_state.state.is_recording:
-                app._cmd_start_from_toggle_key.set()
-                app._cmd_start_recording.set()
-            elif not app._toggle_pressed_while_recording(getattr(self.cfg, "beeps", True)):
-                app._cmd_stop_recording.set()
+                recording.started_from_toggle_key.set()
+                recording.start_requested.set()
+            elif not recording.toggle_pressed_while_recording(getattr(self.cfg, "beeps", True)):
+                recording.stop_requested.set()
 
     def _on_deactivated(self, conn, sender, path, iface, signal, params):
         # Only the hold shortcut stops on release; toggle ignores key release.
         if self._shortcut_id(params) == "dictate_hold":
-            from . import app
-            app._cmd_stop_recording.set()
+            from . import recording
+            recording.stop_requested.set()
 
     def _tick(self):
         from . import app

@@ -11,11 +11,12 @@ import types
 from tuxtalk import app
 from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
+from tuxtalk import recording
 
 
 def test_service_tick_reloads_live_settings_when_config_changed(monkeypatch):
-    app._cmd_start_recording.clear()
-    app._cmd_stop_recording.clear()
+    recording.start_requested.clear()
+    recording.stop_requested.clear()
     monkeypatch.setattr(rs.state, "is_recording", False, raising=False)
 
     calls = []
@@ -33,8 +34,8 @@ def test_service_tick_reloads_live_settings_when_config_changed(monkeypatch):
 
 
 def test_service_tick_skips_reload_when_config_unchanged(monkeypatch):
-    app._cmd_start_recording.clear()
-    app._cmd_stop_recording.clear()
+    recording.start_requested.clear()
+    recording.stop_requested.clear()
     monkeypatch.setattr(rs.state, "is_recording", False, raising=False)
 
     calls = []

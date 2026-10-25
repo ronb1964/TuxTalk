@@ -428,3 +428,44 @@ def _carry_on_after(words: _Words, text: str, audio_f32, job: _Job) -> None:
                                      "raw": words.raw, "typed": rs.state.last_inserted_text,
                                      "where": rs.state.last_inserted_where,
                                      "message": job.message}
+
+
+def stop_recording(
+    beeps_on: bool,
+    smart_quotes: bool,
+    notify_on: bool,
+    language: str | None = None,
+    auto_space: bool = True,
+    auto_period: bool = True,
+    injection_mode: str = "type",
+):
+    """Stop recording, transcribe audio, and inject text — synchronously.
+
+    Backend A (evdev): the whole pipeline runs on the caller's thread. Backend B
+    splits the two halves (see app._service_tick) so the slow transcription and
+    typing run off the hotkey loop.
+    """
+    edit_mode, rs.state.edit_mode = rs.state.edit_mode, False
+    cap = recording.finish_capture(beeps_on, notify_on)
+    if cap is None:
+        return
+    frames, rec_sr = cap
+    if edit_mode:
+        voice_edit.transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode)
+        return
+    if rs.state.chunks_submitted:
+        # Chunked dictation: the rest goes in after the chunks already queued,
+        # and stopping waits for all of them, as it waits for one
+        # transcription when nothing was chunked.
+        params = (beeps_on, smart_quotes, notify_on, language, auto_space,
+                  auto_period, injection_mode)
+        frames = recording.drop_speechless_rest(frames)
+        worker = type_at_pause.chunk_worker()
+        worker.submit(lambda message=rs.state.message: transcribe_and_inject(
+            frames, rec_sr, *params, chunk_role="last", message=message))
+        if not worker.drain(type_at_pause.CHUNK_DRAIN_TIMEOUT_S):
+            logger.warning("Chunked dictation: chunks still typing after "
+                           f"{type_at_pause.CHUNK_DRAIN_TIMEOUT_S:.0f}s; not waiting longer")
+        return
+    transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
+                           language, auto_space, auto_period, injection_mode)
