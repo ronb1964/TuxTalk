@@ -45,6 +45,18 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gdk, Gtk  # noqa: E402  (Gtk opens the display)
 del os.environ["GDK_BACKEND"]
 
+# The suite gets an empty home folder of its own. Importing tuxtalk already
+# reads the home folder (the CUDA library path, the settings, the data
+# folder), and the programs tests start inherit it, so a test that forgets a
+# tmp_path can never read or change the user's settings, downloads or
+# Recent Dictations. Set before any tuxtalk import, as the two below are.
+_TEST_HOME = tempfile.mkdtemp(prefix="tuxtalk-test-home-")
+os.environ["HOME"] = _TEST_HOME
+for _var, _sub in (("XDG_CONFIG_HOME", ".config"), ("XDG_DATA_HOME", ".local/share"),
+                   ("XDG_CACHE_HOME", ".cache"), ("XDG_STATE_HOME", ".local/state")):
+    os.environ[_var] = os.path.join(_TEST_HOME, _sub)
+atexit.register(shutil.rmtree, _TEST_HOME, ignore_errors=True)
+
 _LOG_DIR = tempfile.mkdtemp(prefix="talktype-test-logs-")
 os.environ["TUXTALK_LOG_DIR"] = _LOG_DIR
 # Never move the real ~/.config/talktype or ~/.local/share/TalkType while the
@@ -53,7 +65,7 @@ os.environ["TUXTALK_NO_MIGRATE"] = "1"
 atexit.register(shutil.rmtree, _LOG_DIR, ignore_errors=True)
 
 # Only now: importing tuxtalk makes the log's file handler and runs the
-# rename migration, so the two settings above must come first.
+# rename migration, so the settings above must come first.
 from tuxtalk import engine, hotkeys, keyboard_output, recording  # noqa: E402
 from tuxtalk import live_settings as live  # noqa: E402
 from tuxtalk import recording_state as rs  # noqa: E402
