@@ -121,11 +121,15 @@ this_thread = _ThisThread()
 
 
 def not_where_typed(focused) -> bool:
-    """Whether the window class *focused* is known to be another app than the
-    last dictation or phrase went to: focused_window's rule, by the class alone,
-    which is all undo, select, the lowercase carry-on and the screen copy keep."""
-    return focused_window.same_window((focused, None),
-                                      (rs.state.last_inserted_window, None)) is False
+    """Whether the focused window, of class *focused*, is known to be another
+    one than the last dictation or phrase went to, for undo, select and move,
+    "edit that", "fix that word" and the lowercase carry-on. By the desktop's
+    window id where it gives one, so two KWrite documents aren't taken for
+    one, else by the class (focused_window.same_window)."""
+    if focused_window.same_window((focused, None),
+                                  (rs.state.last_inserted_window, None)) is False:
+        return True
+    return focused_window.same_window(rs.state.last_inserted_where, focused_window.look()) is False
 
 
 def press_key(key: str, why: str, claim=None) -> bool:

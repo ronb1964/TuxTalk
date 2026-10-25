@@ -1305,6 +1305,19 @@ def test_a_recording_that_opens_with_digital_silence_still_learns_the_room():
     assert not heard[-1], "steady room noise still counts as speech"
 
 
+def test_the_screen_copy_ends_at_another_window_of_the_same_app(monkeypatch):
+    """Two KWrite documents: phrases in each made one copy, so "edit that"
+    selected the first document's length of the second's text."""
+    for name, value in (("recording_serial", 3), ("shown_serial", 2), ("shown_text", ""),
+                        ("shown_window", None), ("last_inserted_window", "org.kde.kwrite")):
+        monkeypatch.setattr(rs.state, name, value)
+    monkeypatch.setattr(rs.state, "last_inserted_where", ("org.kde.kwrite", ("tray", "{first}")))
+    last_dictation.remember_shown("See you at noon.", chunked=True, ok=True)
+    monkeypatch.setattr(rs.state, "last_inserted_where", ("org.kde.kwrite", ("tray", "{second}")))
+    last_dictation.remember_shown(" How are you?", chunked=True, ok=True)
+    assert rs.state.shown_text is None
+
+
 def test_the_screen_copy_survives_the_two_spellings_of_one_app(monkeypatch):
     """Plasma's X11 session: KWin says "google-chrome", X11 "Google-chrome",
     and a busy tray leaves a phrase's look to X11. The copy "edit that" and

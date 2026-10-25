@@ -8,6 +8,7 @@ from tuxtalk import live_settings as live
 from tuxtalk import keyboard_output
 from tuxtalk import notices
 from tuxtalk import voice_commands
+from tuxtalk import focused_window
 
 C, S = "CTRL", "SHIFT"
 
@@ -305,6 +306,28 @@ def test_delete_last_word_in_another_window_deletes_nothing(dictation, monkeypat
     assert voice_commands.handle_undo("delete last word", False, False) is True
     assert deleted == [] and dictation["problems"] == ["undo_other_window"]
     assert rs.state.last_inserted_text == " We finished early."   # still there for its window
+
+
+def test_undo_in_another_window_of_the_same_app_deletes_nothing(dictation, monkeypatch):
+    """Two KWrite documents: dictated into one, "delete last word" in the
+    other deleted its text, as only the app was compared."""
+    deleted = []
+    dictation["backend"].backspaces = lambda n: deleted.append(n) or True
+    monkeypatch.setattr(rs.state, "last_inserted_window", "org.kde.kwrite")
+    monkeypatch.setattr(rs.state, "last_inserted_where", ("org.kde.kwrite", ("tray", "{first}")))
+    monkeypatch.setattr(focused_window, "look", lambda: ("org.kde.kwrite", ("tray", "{second}")))
+    assert voice_commands.handle_undo("delete last word", False, False) is True
+    assert deleted == [] and dictation["problems"] == ["undo_other_window"]
+
+
+def test_undo_in_the_same_window_by_its_id_still_works(dictation, monkeypatch):
+    deleted = []
+    dictation["backend"].backspaces = lambda n: deleted.append(n) or True
+    monkeypatch.setattr(rs.state, "last_inserted_window", "org.kde.kwrite")
+    monkeypatch.setattr(rs.state, "last_inserted_where", ("org.kde.kwrite", ("tray", "{first}")))
+    monkeypatch.setattr(focused_window, "look", lambda: ("org.kde.kwrite", ("tray", "{first}")))
+    assert voice_commands.handle_undo("delete last word", False, False) is True
+    assert deleted and dictation["problems"] == []
 
 
 def test_delete_last_word_in_its_own_window_still_works(dictation, monkeypatch):

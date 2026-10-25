@@ -3,7 +3,7 @@ Recent Dictations (one per recording, added to phrase by phrase when Type
 at pause is on), and its screen copy, the text it believes is in the box,
 which voice edits and "edit that" work from. The copy is dropped as soon as
 it can't be trusted."""
-from . import keyboard_output
+from . import focused_window
 from . import recording_state as rs
 from .normalize import LINE_BREAK
 
@@ -44,13 +44,18 @@ def remember_shown(piece: str, chunked: bool, ok: bool) -> None:
     window, one after the other."""
     if not (chunked and rs.state.shown_serial == rs.state.recording_serial):
         rs.state.shown_serial, rs.state.shown_text = rs.state.recording_serial, ""
-        rs.state.shown_window = rs.state.last_inserted_window
+        rs.state.shown_window = _where_typed()
     if rs.state.shown_text is None:
         return
-    if ok and not keyboard_output.not_where_typed(rs.state.shown_window):
+    if ok and focused_window.same_window(rs.state.shown_window, _where_typed()) is not False:
         rs.state.shown_text += piece
     else:
         rs.state.shown_text = None
+
+
+def _where_typed():
+    """(class, which window) the last piece went to, as focused_window looks."""
+    return rs.state.last_inserted_window, rs.state.last_inserted_where[1]
 
 
 def trim_shown(tail: str, count: int) -> None:

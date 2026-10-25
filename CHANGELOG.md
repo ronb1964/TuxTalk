@@ -179,6 +179,12 @@ before 0.15.0, so older entries use that name.
   clicking into another app before you said what to change selected text in
   that other app and rewrote it. Ctrl+Z got it back, but it shouldn't have
   happened. Now nothing is changed and it says you switched windows.
+- Undo ("delete that", "delete last word"), select and move by voice, "edit
+  that" and "fix that word" only work on what you just dictated, in the
+  window you dictated it into. But they only checked it was the same app,
+  so with two KWrite documents or two browser windows, undo in the other
+  one deleted its text. On KDE and GNOME, and wherever else the desktop
+  says which window it is, they tell the two windows apart now.
 
 ## [0.18.2] - 2026-10-23
 
