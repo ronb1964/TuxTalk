@@ -1192,7 +1192,28 @@ def test_a_countdown_called_off_partway_still_gives_back_its_space(chat, keyboar
     focus[:] = SECOND
     timers[1].run(*timers[1].args)                  # "Sending in 2 s": another window
     focus[:] = FIRST
-    assert send_countdown.with_owed_space("How are you.") == " How are you."
+    typed.clear()
+    heard.append("how are you")
+    dictate()
+    assert typed[:2] == [(" ", FIRST[1]), ("How are you.", FIRST[1])]
+
+
+def test_an_owed_space_never_goes_into_the_window_the_next_dictation_went_to(
+        chat, keyboard, monkeypatch):
+    """The space a called-off send owes goes only into its own window. The
+    look before the next dictation saw that window, then a click moved the
+    focus before the keys went out: the dictation goes where the focus is,
+    as always, but no space goes in front of it there."""
+    focus, heard, typed, notices = chat
+    monkeypatch.setattr(send_countdown, "_delay", 0.0)
+    monkeypatch.setattr(live, "press_enter_after", False)
+    send_countdown._owe_space({"to": focused_window.destination(), "space": " ", "mode": "type",
+                               "type": pipeline.type_onto_dictation})
+    monkeypatch.setattr(send_countdown, "_focus_left", lambda pending: False)   # looked: FIRST
+    focus[:] = SECOND                                                           # then a click
+    heard.append("how are you")
+    dictate()
+    assert typed == [("How are you. ", SECOND[1])]
 
 
 def test_where_the_window_is_never_known_the_space_goes_only_where_the_words_did(

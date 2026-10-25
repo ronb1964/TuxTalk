@@ -79,7 +79,7 @@ _hold_key_name = "F8"       # named in the "Sending in 2 s" label
 _pending = None
 # The send a tap held, or one refused once its countdown began, while the
 # space it left off waits for the hotkey that held it to come up
-# (type_owed_space) or the next dictation (with_owed_space), else None.
+# or the next dictation (type_owed_space), else None.
 # Typed while the key is down, GNOME without the extension sees the key
 # too and the space is lost.
 _owed = None
@@ -460,19 +460,17 @@ def _take_owed():
     return pending
 
 
-def type_owed_space() -> None:
-    """The hotkey that held a send is up: type the space it left off, in the
-    window its text went to."""
+def type_owed_space(before: str | None = None) -> None:
+    """Type the space a held or refused send left off, in the window its
+    text went to: once the hotkey that held it is up, or ahead of the next
+    dictation, whose text is *before*. On its own and held to that window,
+    never as part of the next dictation's text: a dictation goes wherever
+    the focus is, and a space in it would go along. Dropped when that
+    dictation is empty or brings its own space."""
     pending = _take_owed()
-    if pending is not None and not _focus_left(pending):
-        # Held to that window up to the key: the focus can move after this look.
-        pending["type"](pending["space"], pending["mode"], into=pending["to"])
-
-
-def with_owed_space(text: str) -> str:
-    """Put an owed space in front of *text*, the next dictation, when it
-    goes to the same window."""
-    pending = _take_owed()
-    if pending is None or not text or text[0].isspace() or _focus_left(pending):
-        return text
-    return pending["space"] + text
+    if pending is None or _focus_left(pending):
+        return
+    if before is not None and (not before or before[0].isspace()):
+        return
+    # Held to that window up to the key: the focus can move after this look.
+    pending["type"](pending["space"], pending["mode"], into=pending["to"])

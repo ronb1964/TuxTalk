@@ -399,7 +399,8 @@ def _deliver(words: _Words, audio_f32, job: _Job) -> None:
     """Type the words into the active application, then what follows them.
     They go into the Recent Dictations list first, so they can be recovered
     even if typing lands in the wrong window or fails outright."""
-    text = send_countdown.with_owed_space(words.text)
+    send_countdown.type_owed_space(before=words.text)
+    text = words.text
     chunked = job.chunk_role is not None
     said_before = last_dictation.remember_said(text, chunked, words.taken_back)
     try:

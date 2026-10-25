@@ -447,9 +447,17 @@ def test_a_dictation_added_to_a_held_send_starts_with_its_space(countdown, monke
     monkeypatch.setattr(send_countdown, "_owed", None)
     start_send("test", " ", "type")
     send_countdown.hold(announce=False)
-    added = "And this part was added. "
-    assert send_countdown.with_owed_space(added) == " " + added
-    assert send_countdown.with_owed_space("Next one. ") == "Next one. "    # only once
+    send_countdown.type_owed_space(before="And this part was added. ")
+    send_countdown.type_owed_space(before="Next one. ")
+    assert TYPED == [" "]                                       # only once
+
+
+def test_a_dictation_that_brings_its_own_space_drops_the_owed_one(countdown, monkeypatch):
+    monkeypatch.setattr(send_countdown, "_owed", None)
+    start_send("test", " ", "type")
+    send_countdown.hold(announce=False)
+    send_countdown.type_owed_space(before=" and more. ")
+    assert TYPED == [] and not send_countdown.owes_space()
 
 
 def test_a_short_tap_types_the_space_when_released(countdown, monkeypatch):
