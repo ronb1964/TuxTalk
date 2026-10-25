@@ -328,7 +328,7 @@ def test_a_dictation_never_writes_the_words(monkeypatch, caplog, capsys, keyboar
     monkeypatch.setattr(live, "log_transcripts", False)
     monkeypatch.setattr(speech_engine, "transcribe",
                         lambda audio, language: "zanzibar quokka password hunter two")
-    monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
     frames = [(np.ones(speech_engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
     _hear_every_level(caplog)
@@ -355,7 +355,7 @@ def test_a_voice_edit_never_writes_the_words(monkeypatch, caplog, capsys):
                         lambda send_copy: ("zanzibar quokka hunter", lambda also=(): None))
     monkeypatch.setattr(app, "_inject_text", lambda text, mode, one_block=False, **kw:
                         typed.append(text) or "ok")
-    monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr(app, "EDIT_RESTORE_DELAY_S", 0)
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
     monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)

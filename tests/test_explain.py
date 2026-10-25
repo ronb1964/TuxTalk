@@ -4,7 +4,8 @@ window explaining them, once per run; then the short label alone (Ron,
 before it could be read)."""
 import pytest
 
-from tuxtalk import app, edit_notices, explain
+from tuxtalk import edit_notices, explain
+from tuxtalk import notices
 
 # The real open_window, before the suite's stand-in replaces it (conftest).
 REAL_OPEN_WINDOW = explain.open_window
@@ -18,7 +19,7 @@ def problems(monkeypatch):
         seen["windows"].append(kind)
         return True
     monkeypatch.setattr(explain, "open_window", open_window)
-    monkeypatch.setattr(app, "_beep", lambda *a: None)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, msg: seen["notices"].append(msg))
     from tuxtalk import screen_message
     monkeypatch.setattr(screen_message, "show_over_active_window", seen["labels"].append)
@@ -27,15 +28,15 @@ def problems(monkeypatch):
 
 def test_the_window_explains_every_time(problems):
     """Someone who makes the same mistake twice is told twice (Ron)."""
-    app._edit_problem("nothing_said", False)
-    app._edit_problem("nothing_said", False)
+    notices.edit_problem("nothing_said", False)
+    notices.edit_problem("nothing_said", False)
     assert problems["windows"] == ["nothing_said", "nothing_said"]
     assert problems["labels"] == [] and problems["notices"] == []
 
 
 def test_a_window_already_open_is_not_stacked_on(problems, monkeypatch):
     monkeypatch.setattr(explain, "window_open", lambda: True)
-    app._edit_problem("nothing_said", False)
+    notices.edit_problem("nothing_said", False)
     assert problems["windows"] == []
     assert problems["labels"] == ["Works only right after dictating"] and problems["notices"] == []
 
@@ -43,18 +44,18 @@ def test_a_window_already_open_is_not_stacked_on(problems, monkeypatch):
 def test_dont_explain_again_is_kept(problems):
     explain.never_again("nav_terminal")
     assert not explain.should_explain("nav_terminal")
-    app._edit_problem("nav_terminal", False)
+    notices.edit_problem("nav_terminal", False)
     assert problems["windows"] == [] and problems["labels"] and problems["notices"] == []
 
 
 def test_a_real_error_keeps_the_notification(problems):
-    app._edit_problem("shortcut_failed", False)
+    notices.edit_problem("shortcut_failed", False)
     assert problems["windows"] == [] and problems["notices"]
 
 
 def test_if_the_window_cannot_open_the_notification_still_says_it(problems, monkeypatch):
     monkeypatch.setattr(explain, "open_window", lambda kind: False)
-    app._edit_problem("terminal", False)
+    notices.edit_problem("terminal", False)
     assert problems["notices"]
 
 

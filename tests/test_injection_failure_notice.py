@@ -101,7 +101,7 @@ def dictation(monkeypatch):
     monkeypatch.setattr(engine, "transcribe", lambda audio, language: "hello there")
     monkeypatch.setattr(app, "_prepare_text", lambda raw, *a, **k: "Hello there. ")
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: notes.append(f"{title}\n{body}"))
-    monkeypatch.setattr(app, "_beep", lambda enabled, *tone, **k: enabled and beeps.append(tone))
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda enabled, *tone, **k: enabled and beeps.append(tone))
     monkeypatch.setattr("tuxtalk.history.add_entry", lambda text: None)
     monkeypatch.setattr(live, "usage_stats", False, raising=False)
 

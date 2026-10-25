@@ -12,6 +12,7 @@ import pytest
 
 from tuxtalk import uinput_helper as U
 from tuxtalk import live_settings as live
+from tuxtalk import notices
 
 @pytest.fixture
 def host(monkeypatch):
@@ -67,27 +68,26 @@ def test_no_input_group_does_not_crash(host, monkeypatch):
 
 
 def test_failed_notice_names_the_cause(monkeypatch):
-    from tuxtalk import app
     shown = []
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: shown.append(body))
-    monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr(U, "typing_blocked_reason", lambda: U.TYPING_NO_PERMISSION)
 
-    app._report_undelivered("failed", beeps_on=False)
+    notices.report_undelivered("failed", beeps_on=False)
 
     assert shown and shown[0].startswith(U.TYPING_NO_PERMISSION)
     assert "Recent Dictations" in shown[0]
 
 
 def test_failed_notice_without_a_known_cause_is_unchanged(monkeypatch):
-    from tuxtalk import app, delivery_notices
+    from tuxtalk import delivery_notices
     monkeypatch.setattr(live, "paste_last_hotkey", "")   # its hint is tested in test_paste_last
     shown = []
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: shown.append(body))
-    monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr(U, "typing_blocked_reason", lambda: None)
 
-    app._report_undelivered("failed", beeps_on=False)
+    notices.report_undelivered("failed", beeps_on=False)
     assert shown == [delivery_notices.NOTICES["failed"]]
 
 

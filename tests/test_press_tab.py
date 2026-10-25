@@ -42,7 +42,7 @@ def _dictate(monkeypatch, raw, window="brave-browser"):
     cleanup; what was typed and which keys were pressed, in order."""
     events = []
     monkeypatch.setattr(engine, "transcribe", lambda audio, language: raw)
-    monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: window)
     monkeypatch.setattr(app, "_inject_text",
                         lambda text, mode, **kw: events.append(("typed", text)) or "ok")

@@ -16,6 +16,7 @@ from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
 from tuxtalk import tray_link
 from tuxtalk import engine
+from tuxtalk import notices
 
 SR = 16000
 BLOCK = 320   # 20 ms
@@ -122,7 +123,7 @@ def _start(monkeypatch, from_toggle=True, seconds=1.0, mic_delay=0.0, beeps_on=F
         rs.state.recording_samplerate = SR
     monkeypatch.setattr(app, "_open_input_stream", open_microphone)
     if not beeps_on:
-        monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
+        monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr(tray_link, "notify_recording_state", lambda *a: None)
     monkeypatch.setattr(app, "recording_indicator", None, raising=False)
     assert app.start_recording(beeps_on, False, 0, from_toggle=from_toggle)
@@ -682,7 +683,7 @@ def test_a_dead_mic_is_reported_not_transcribed(monkeypatch):
     from tuxtalk import app
     said, transcribed = [], []
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, msg: said.append((title, msg)))
-    monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr(engine, "transcribe", lambda *a: transcribed.append(1) or "hi")
     frames = [np.zeros(engine.SAMPLE_RATE * 2, dtype=np.int16).tobytes()]
     app._transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False,
@@ -690,7 +691,7 @@ def test_a_dead_mic_is_reported_not_transcribed(monkeypatch):
     assert transcribed == []
     # The pop-up shows the title and a line or two: the problem itself must be
     # the title, not "TuxTalk", which the desktop already shows as the sender.
-    assert said == [("No sound from the microphone", app.SILENT_MIC_NOTICE)]
+    assert said == [("No sound from the microphone", notices.SILENT_MIC_NOTICE)]
 
 
 def _feed(det, audio):

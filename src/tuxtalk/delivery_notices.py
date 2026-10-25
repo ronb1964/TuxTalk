@@ -11,7 +11,7 @@ PASSWORD_FIELD_NOTICE = ("TuxTalk doesn't type into password fields, so it stopp
                          "Type the password on the keyboard.")
 
 # The text is in Recent Dictations by then (it's saved before injection
-# starts), unless a password field refused it (app._unsay).
+# starts), unless a password field refused it (last_dictation.unsay).
 TITLES = {
     "failed": "Couldn't type the dictation",
     "partial": "Only part of the dictation was typed",
@@ -24,7 +24,7 @@ NOTICES = {
               "then paste with Ctrl+V.",
     "partial": "The whole text is saved in Recent Dictations in the TuxTalk menu: click "
                "it to copy, then paste with Ctrl+V.",
-    # Said its own way, with a label over the window (app._password_field_refused).
+    # Said its own way, with a label over the window (notices.password_field_refused).
     "password_field": PASSWORD_FIELD_NOTICE,
     "key_held": f"Right Ctrl or Right Alt read as held down for "
                 f"{HELD_LIMIT_S:g} seconds, and the text would have gone "

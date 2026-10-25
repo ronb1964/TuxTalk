@@ -83,7 +83,7 @@ def clean_grab_registry():
 @pytest.fixture
 def quiet_recording(monkeypatch):
     """Silence the parts of start_recording that touch real hardware."""
-    monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
     monkeypatch.setattr(tray_link, "notify_recording_state", lambda *a, **k: None)
     monkeypatch.setattr(app.mic_stream, "input_samplerate", lambda idx, rate: 16000)

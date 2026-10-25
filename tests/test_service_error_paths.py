@@ -39,7 +39,7 @@ def test_turning_the_ai_off_does_not_block_the_caller(monkeypatch):
 
 def test_a_transcription_error_sounds_like_a_failure_and_says_so(monkeypatch):
     beeps, notes = [], []
-    monkeypatch.setattr(app, "_beep", lambda on, *tone: beeps.append(tone))
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda on, *tone: beeps.append(tone))
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: notes.append(f"{title}\n{body}"))
 
     def broken(*a, **k):

@@ -55,7 +55,7 @@ def desktop(monkeypatch):
     monkeypatch.setattr(history, "add_entry",
                         lambda text, replaces=None: seen["history"].append(text))
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: seen["notes"].append(body))
-    monkeypatch.setattr(app, "_beep", lambda on, *tone, **k: on and seen["beeps"].append(tone))
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda on, *tone, **k: on and seen["beeps"].append(tone))
     monkeypatch.setattr(screen_message, "show_over_active_window",
                         lambda text, **k: seen["labels"].append(text))
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)

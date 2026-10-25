@@ -18,6 +18,7 @@ from tuxtalk import keyboard_grab
 from tuxtalk import keyboard_output
 from tuxtalk import tray_link
 from tuxtalk import engine
+from tuxtalk import last_dictation
 
 SR = 16000
 BLOCK = 320   # 20 ms at 16 kHz
@@ -388,7 +389,7 @@ def pipeline(monkeypatch):
         return "ok"
 
     monkeypatch.setattr(app, "_inject_text", fake_inject)
-    monkeypatch.setattr(app, "_beep", lambda enabled, *tone: beeps.append(tone))
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda enabled, *tone: beeps.append(tone))
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
     monkeypatch.setattr(live, "adapt_to_app", False)
@@ -1073,13 +1074,12 @@ def test_fix_that_word_after_a_window_change_gets_the_last_phrase(fix_word, monk
 def test_fix_that_word_after_a_voice_move_gets_the_last_phrase(fix_word, monkeypatch):
     """A phrase moved the cursor ("go to the start of the line"): what came
     before isn't beside the cursor any more."""
-    from tuxtalk import app
     texts, typed, opened = fix_word
     texts.extend(["we meet.", "the end.", "we meet. The end."])
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     rs.state.last_inserted_text = ""       # what a voice move does
-    app._forget_shown()
+    last_dictation.forget_shown()
     texts.extend(["at noon.", "the end. At noon."])
     call(frames_of(speech(1.0)), "last", auto_period=True)
     say_fix_that_word(texts)
@@ -1330,15 +1330,14 @@ def test_the_screen_copy_survives_the_two_spellings_of_one_app(monkeypatch):
     """Plasma's X11 session: KWin says "google-chrome", X11 "Google-chrome",
     and a busy tray leaves a phrase's look to X11. The copy "edit that" and
     "fix that word" work on was dropped as if the phrase went elsewhere."""
-    from tuxtalk import app
     for name, value in (("recording_serial", 3), ("shown_serial", 2), ("shown_text", ""),
                         ("shown_window", None)):
         monkeypatch.setattr(rs.state, name, value)
     monkeypatch.setattr(rs.state, "last_inserted_window", "google-chrome")
-    app._remember_shown("See you at noon.", chunked=True, ok=True)
+    last_dictation.remember_shown("See you at noon.", chunked=True, ok=True)
     monkeypatch.setattr(rs.state, "last_inserted_window", "Google-chrome")
-    app._remember_shown(" How are you?", chunked=True, ok=True)
+    last_dictation.remember_shown(" How are you?", chunked=True, ok=True)
     assert rs.state.shown_text == "See you at noon. How are you?"
     monkeypatch.setattr(rs.state, "last_inserted_window", "org.kde.kwrite")
-    app._remember_shown(" Bye.", chunked=True, ok=True)
+    last_dictation.remember_shown(" Bye.", chunked=True, ok=True)
     assert rs.state.shown_text is None                 # another app: not trusted

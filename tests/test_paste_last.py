@@ -9,6 +9,7 @@ from evdev import ecodes
 
 from gtk_text import tree_text
 from tuxtalk import app, config, history, kwin_hotkeys
+from tuxtalk import notices
 from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
 from tuxtalk import keyboard_grab
@@ -37,7 +38,7 @@ def keys(monkeypatch):
     monkeypatch.setattr(keyboard_grab, "grab_keyboards_hiding", lambda devs, codes: seen.__setitem__("grabbed", seen["grabbed"] + 1))
     monkeypatch.setattr(keyboard_grab, "release_all", lambda: seen.__setitem__("released", seen["released"] + 1))
     monkeypatch.setattr(app, "_inject_text", lambda text, mode: seen["typed"].append((text, mode)) or "ok")
-    monkeypatch.setattr(app, "_beep", lambda on, *a: seen["beeps"].append(a))
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda on, *a: seen["beeps"].append(a))
     monkeypatch.setattr(history, "get_entries", lambda: ["Hello there.\nSecond line.", "older"])
     monkeypatch.setattr(rs.state, "is_recording", False)
     monkeypatch.setattr(rs.state, "paste_last", None, raising=False)
@@ -158,22 +159,22 @@ def test_preferences_offers_it(prefs_window):
 def test_the_undelivered_notice_offers_the_hotkey(outcome, monkeypatch):
     told = []
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, msg: told.append(msg))
-    monkeypatch.setattr(app, "_beep", lambda *a: None)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a: None)
     monkeypatch.setattr(live, "paste_last_hotkey", "Ctrl+Alt+P")
     import tuxtalk.uinput_helper as uh
     monkeypatch.setattr(uh, "typing_blocked_reason", lambda: None)
-    app._report_undelivered(outcome, False)
+    notices.report_undelivered(outcome, False)
     assert "Or press Ctrl+Alt+P to type it again where your cursor is." in told[0]
 
 
 def test_no_hint_when_the_hotkey_is_off(monkeypatch):
     told = []
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, msg: told.append(msg))
-    monkeypatch.setattr(app, "_beep", lambda *a: None)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a: None)
     monkeypatch.setattr(live, "paste_last_hotkey", "")
     import tuxtalk.uinput_helper as uh
     monkeypatch.setattr(uh, "typing_blocked_reason", lambda: None)
-    app._report_undelivered("failed", False)
+    notices.report_undelivered("failed", False)
     assert "Ctrl+Alt+P" not in told[0]
 
 

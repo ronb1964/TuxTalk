@@ -12,6 +12,7 @@ from tuxtalk import recording_state as rs
 from tuxtalk.voice_edit_rules import spoken_edit
 from tuxtalk import live_settings as live
 from tuxtalk import engine
+from tuxtalk import notices
 
 S = "SHIFT"
 
@@ -59,7 +60,7 @@ def editing(monkeypatch):
     monkeypatch.setattr(app, "_edit_selection",
                         lambda get, beeps, mode, focused, t0, message, spoken=False:
                         edits.append((get(), focused, spoken)) or True)
-    monkeypatch.setattr(app, "_edit_problem", lambda kind, beeps: problems.append(kind))
+    monkeypatch.setattr(notices, "edit_problem", lambda kind, beeps: problems.append(kind))
     monkeypatch.setattr(rs.state, "last_inserted_text", "We meet at three. ")
     monkeypatch.setattr(rs.state, "last_inserted_window", "org.kde.kwrite")
     monkeypatch.setattr(rs.state, "shown_text", None)
@@ -152,7 +153,7 @@ def test_it_is_never_typed_as_text(editing, monkeypatch):
     typed = []
     monkeypatch.setattr(engine, "transcribe", lambda audio, lang: "Edit that, make it shorter.")
     monkeypatch.setattr(app, "_inject_text", lambda text, *a, **k: typed.append(text) or "ok")
-    monkeypatch.setattr(app, "_beep", lambda *a: None)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
     monkeypatch.setattr(live, "voice_navigation", False)
     monkeypatch.setattr(live, "usage_stats", False)

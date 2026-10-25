@@ -87,7 +87,7 @@ def test_an_undo_stopped_partway_forgets_the_buffer(monkeypatch):
     """Most of the text may be gone already, so keeping the buffer would make
     the next undo backspace that many characters again, into the user's own
     writing."""
-    monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
 
     def partway(count):

@@ -1,5 +1,5 @@
 """What TuxTalk says when a voice edit, or select and move by voice, didn't
-happen (app._edit_problem), by kind: the whole sentence for the notification,
+happen (notices.edit_problem), by kind: the whole sentence for the notification,
 and a few words for the label floating over the window. explain.py has the
 longer explanations for the kinds that are rules rather than errors.
 """

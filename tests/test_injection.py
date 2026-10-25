@@ -226,7 +226,7 @@ def test_undo_buffer_updates_on_a_successful_injection(monkeypatch, wayland):
 
 @pytest.fixture
 def undo_env(monkeypatch):
-    monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
     rs.state.last_inserted_text = "hello world"
     rs.state.continue_mid_sentence = False

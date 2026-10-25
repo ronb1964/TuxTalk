@@ -150,7 +150,7 @@ def test_nothing_recognized_plays_the_cancel_beep(monkeypatch):
     """A recording that types nothing ends with the cancel beep, not silence."""
     from tuxtalk import app, silence
     beeps = []
-    monkeypatch.setattr(app, "_beep", lambda on, *tone: beeps.append(tone))
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda on, *tone: beeps.append(tone))
     monkeypatch.setattr(silence, "is_speechless_tap", lambda a, sr: False)
     monkeypatch.setattr(engine, "transcribe", lambda *a: None)
     app._transcribe_and_inject([np.ones(16000, dtype=np.int16).tobytes()], 16000, True, False, False)

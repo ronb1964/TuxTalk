@@ -198,7 +198,7 @@ def test_handle_undo_everything_routes_through_backend(monkeypatch):
     # on the Flatpak (libei) exactly like on the host (the virtual keyboard).
     from tuxtalk import app
     monkeypatch.setattr(app, "detect_undo_command", lambda raw: ("everything", 1))
-    monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
     calls = []
 
@@ -216,7 +216,7 @@ def test_handle_undo_char_undo_routes_backspaces_through_backend(monkeypatch):
     # Character-level undo must send its backspaces through the backend too.
     from tuxtalk import app
     monkeypatch.setattr(app, "detect_undo_command", lambda raw: ("word", 1))
-    monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
     rs.state.last_inserted_text = "hello world"
     got = []

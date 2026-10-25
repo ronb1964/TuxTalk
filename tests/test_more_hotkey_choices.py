@@ -365,7 +365,7 @@ def test_a_dictation_stopped_by_a_stuck_key_stays_in_recent_dictations(
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
     monkeypatch.setattr(focused_window, "look", lambda: (None, None))
     monkeypatch.setattr(focused_window, "is_password", lambda: False)
-    monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: notes.append(body))
     monkeypatch.setattr(live, "press_enter_after", False)
     monkeypatch.setattr(history, "add_entry", lambda text, replaces=None: kept.append(text))
@@ -798,7 +798,7 @@ def test_a_double_tap_of_a_right_ctrl_or_alt_toggle_goes_hands_free(keyboard, re
     and the second tap's release doesn't stop it."""
     monkeypatch.setattr(live, "auto_stop_seconds", 2.0)
     monkeypatch.setattr(app, "_open_input_stream", lambda idx: None)
-    monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr(tray_link, "notify_recording_state", lambda *a: None)
     monkeypatch.setattr(app, "recording_indicator", None, raising=False)
     stopped = []

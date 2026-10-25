@@ -27,14 +27,14 @@ from .config import load_config, Settings, load_custom_commands
 from . import config as config_module
 from . import notify as notify_module
 from . import beeps, mic_stream
-from .beeps import START_BEEP, HANDS_FREE_BEEP, CANCEL_BEEP, READY_BEEP, beep as _beep
+from .beeps import START_BEEP, HANDS_FREE_BEEP, CANCEL_BEEP, READY_BEEP
 from .chunking import (boundary_mark, carry_question, hold_back_boundary, word_count,
                        words_in_context)
 from .key_commands import auto_send, split_key_command
 from .logger import setup_logger
 from .recording_indicator import RecordingIndicator
 from .undo import detect_undo_command, calculate_undo_length
-from . import (custom_commands, delivery_notices, edit_notices, focused_window, modifier_hotkeys,
+from . import (custom_commands, delivery_notices, focused_window, modifier_hotkeys,
                secure_input, send_countdown, silence, single_instance, uinput_helper,
                virtual_keyboard)
 from .window_classes import (ELECTRON_PASTE_BROKEN_CLASSES, SMART_NEWLINE_CLASSES_LOWER,
@@ -47,6 +47,8 @@ from . import keyboard_grab
 from . import keyboard_output
 from . import tray_link
 from . import engine
+from . import last_dictation
+from . import notices
 import threading
 
 logger = setup_logger(__name__)
@@ -639,7 +641,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
             _open_input_stream(fresh_idx)
             logger.info(f"Microphone re-resolved to device {fresh_idx}")
             if fresh_idx != input_device_idx:
-                _warn_mic_switched(input_device_idx, fresh_idx)
+                notices.warn_mic_switched(input_device_idx, fresh_idx)
         except Exception as e:
             # Genuinely unavailable: unplugged, or held exclusively by another
             # app. Undo everything and tell the user; failing silently would
@@ -648,7 +650,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
             rs.state.is_recording = False
             _stop_stream_safely()
             keyboard_grab.release_all()
-            _beep(beeps_on, *CANCEL_BEEP)
+            beeps.beep(beeps_on, *CANCEL_BEEP)
             if notify_on:
                 notify_module.notify("Microphone unavailable",
                                      "Check that no other app is using it.")
@@ -658,7 +660,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
 
     _arm_chunker(getattr(rs.state, "recording_samplerate", engine.SAMPLE_RATE), edit_mode)
     _pause_media_players()
-    rs.state.start_beep = _beep(beeps_on, *START_BEEP)
+    rs.state.start_beep = beeps.beep(beeps_on, *START_BEEP)
     if notify_on: notify_module.notify("Recording… speak now", "")
     tray_link.notify_recording_state(True)
     if recording_indicator:
@@ -692,7 +694,7 @@ def cancel_recording(beeps_on: bool, notify_on: bool, reason="Cancelled"):
     rs.state.edit_mode = False
     _stop_stream_safely()
     _resume_media_players()
-    _beep(beeps_on, *CANCEL_BEEP)
+    beeps.beep(beeps_on, *CANCEL_BEEP)
     print(reason)
     logger.debug(f"Recording cancelled: {reason}")
     if notify_on: notify_module.notify(reason, "")
@@ -805,19 +807,19 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
             cleared = backend.select_all_delete()
         if cleared:
             rs.state.last_inserted_text = ""
-            _forget_shown()
+            last_dictation.forget_shown()
             rs.state.continue_mid_sentence = False
-            _beep(beeps_on, *READY_BEEP)
+            beeps.beep(beeps_on, *READY_BEEP)
             if notify_on: notify_module.notify("Cleared the text box", "")
         else:
             print("Could not clear input field (text injection unavailable)")
-            _beep(beeps_on, *CANCEL_BEEP)
+            beeps.beep(beeps_on, *CANCEL_BEEP)
             if notify_on: notify_module.notify("Couldn't clear the text box", "")
         return True
 
     if not rs.state.last_inserted_text:
         logger.info("Undo requested but no previous text to undo")
-        _beep(beeps_on, *CANCEL_BEEP)
+        beeps.beep(beeps_on, *CANCEL_BEEP)
         if notify_on: notify_module.notify("Nothing to undo", "")
         return True
 
@@ -828,7 +830,7 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
     if keyboard_output.not_where_typed(focused):
         logger.info(f"Undo refused: the last dictation went to {rs.state.last_inserted_window!r}, "
                     f"not {focused!r}")
-        _edit_problem("undo_other_window", beeps_on)
+        notices.edit_problem("undo_other_window", beeps_on)
         return True
 
     # Calculate how many characters to delete (iterates `count` times)
@@ -847,20 +849,20 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
             # the only safe choice: a later undo then deletes nothing.
             logger.error("Undo stopped partway: an unknown number of backspaces landed; undo buffer cleared")
             rs.state.last_inserted_text = ""
-            _forget_shown()
+            last_dictation.forget_shown()
             rs.state.continue_mid_sentence = False
-            _beep(beeps_on, *CANCEL_BEEP)
+            beeps.beep(beeps_on, *CANCEL_BEEP)
             if notify_on:
                 notify_module.notify("Undo stopped partway", "Some of the text may still be there.")
             return True
         if not deleted:
             logger.error("Undo failed: backspaces were not delivered; buffer left unchanged")
-            _beep(beeps_on, *CANCEL_BEEP)
+            beeps.beep(beeps_on, *CANCEL_BEEP)
             if notify_on:
                 notify_module.notify("Undo failed", "The text couldn't be deleted.")
             return True
 
-        _trim_shown(rs.state.last_inserted_text, delete_count)
+        last_dictation.trim_shown(rs.state.last_inserted_text, delete_count)
         if delete_count >= len(rs.state.last_inserted_text):
             rs.state.last_inserted_text = ""
             rs.state.continue_mid_sentence = False
@@ -872,11 +874,11 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
                 logger.info("Mid-sentence continuation enabled for next dictation")
             else:
                 rs.state.continue_mid_sentence = False
-        _beep(beeps_on, *READY_BEEP)
+        beeps.beep(beeps_on, *READY_BEEP)
         if notify_on: notify_module.notify(f"Undid the last {label}", "")
     else:
         print("Nothing to undo for this scope")
-        _beep(beeps_on, *CANCEL_BEEP)
+        beeps.beep(beeps_on, *CANCEL_BEEP)
     return True
 
 
@@ -1005,7 +1007,7 @@ def _inject_text(text: str, injection_mode: str, one_block: bool = False, into=N
     except (virtual_keyboard.StoppedPartway, virtual_keyboard.GaveUp,
             keyboard_output.PasswordFieldNow) as stop:
         typed_some = keyboard_output.this_thread.sends != sends_before
-        outcome = _delivery_stopped(stop, typed_some=typed_some)
+        outcome = notices.delivery_stopped(stop, typed_some=typed_some)
     finally:
         keyboard_output.this_thread.into = None
     if outcome in ("ok", "partial"):
@@ -1021,34 +1023,6 @@ def _inject_text(text: str, injection_mode: str, one_block: bool = False, into=N
         message.add(outcome, landed)
     return outcome
 
-
-def _delivery_stopped(stop, typed_some: bool) -> str:
-    """The outcome of a delivery that *stop* ended early, after forgetting
-    what undo, "select that" and the next dictation's capital count on.
-
-    StoppedPartway: an unknown part of the text is in the app; typing or
-    pasting it again would double that part. PasswordFieldNow: the lines
-    before it are in the app, but in which form (pasted, typed after a
-    failed paste) isn't tracked. GaveUp: a Right Ctrl or Right Alt dictation
-    key stayed down, the window changed while typing waited for it
-    (modifier_hotkeys), or it isn't the one the text had to go into
-    (focused_window.claim_into); typing on any other way (wtype, the clipboard) would
-    do what the wait was there to prevent. *typed_some*: earlier lines were
-    typed before it gave up."""
-    rs.state.last_inserted_text = ""
-    rs.state.continue_mid_sentence = False
-    rs.state.nav_context = None
-    _forget_shown()
-    if isinstance(stop, keyboard_output.PasswordFieldNow):
-        logger.warning("Stopped typing: a password field has the focus now")
-        return "password_field"
-    if isinstance(stop, virtual_keyboard.GaveUp) and not typed_some:
-        return stop.reason          # logged where it gave up
-    if stop.reason:
-        logger.warning(f"Typing stopped partway through the dictation ({stop.reason})")
-    else:
-        logger.error("The virtual keyboard stopped partway through the dictation")
-    return "partial"
 
 
 def _deliver_text(text: str, injection_mode: str, one_block: bool = False, *, where) -> str:
@@ -1295,7 +1269,7 @@ def _toggle_pressed_while_recording(beeps_on: bool) -> bool:
         detector.heard_speech()
     rs.state.silence = detector
     logger.info("Double-tap: this recording will stop by itself when you go quiet")
-    _beep(beeps_on, *HANDS_FREE_BEEP)
+    beeps.beep(beeps_on, *HANDS_FREE_BEEP)
     return True
 
 
@@ -1348,7 +1322,7 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
         dead_mic = _frames_are_dead_mic(rs.state.frames, rate)
         cancel_recording(beeps_on, notify_on and not dead_mic, "Nothing heard, so nothing was typed")
         if dead_mic:
-            _warn_silent_mic()
+            notices.warn_silent_mic()
         return None
     # Before the space below: the time typing it takes isn't part of the press.
     held_ms = int((time.time() - (rs.state.press_t0 or time.time())) * 1000)
@@ -1383,43 +1357,6 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
     return frames, rec_sr
 
 
-SILENT_MIC_TITLE = "No sound from the microphone"
-SILENT_MIC_NOTICE = ("TuxTalk heard only silence. If you spoke, check that the microphone "
-                     "isn't muted or unplugged, and that the right one is picked in "
-                     "Preferences \u2192 Audio.")
-
-
-def _warn_silent_mic():
-    """The microphone sent nothing at all (silence.is_dead_mic). Always
-    said, like a dictation that didn't arrive: a dead wireless mic otherwise
-    looks like TuxTalk ignoring you (asked for in Handy, Wispr Flow added it
-    Oct 2026)."""
-    print(SILENT_MIC_NOTICE)
-    logger.warning("The microphone sent only silence (muted, unplugged or the wrong one?)")
-    notify_module.notify(SILENT_MIC_TITLE, SILENT_MIC_NOTICE)
-
-
-def _device_name(idx) -> str:
-    """The microphone's name for a notice, or "" when it can't be read."""
-    try:
-        return sd.query_devices(idx)["name"] if idx is not None else ""
-    except Exception:
-        return ""
-
-
-def _warn_mic_switched(old_idx, new_idx):
-    """The microphone wouldn't open and TuxTalk is recording from another one.
-    Always said: otherwise you talk into a jack with nothing plugged in and
-    get silence or room noise with no idea why (Ron, 2026-10-18: a USB
-    headset stopped answering and TuxTalk quietly used the motherboard input)."""
-    old, new = _device_name(old_idx), _device_name(new_idx)
-    notice = (f"{old or 'Your microphone'} didn't respond, so TuxTalk is recording from "
-              f"{new or 'another input'} instead. Unplugging the microphone and plugging it "
-              "back in usually fixes this.")
-    print(notice)
-    logger.warning(f"Recording from {new or new_idx!r}: {old or old_idx!r} didn't open")
-    notify_module.notify("Recording from another microphone", notice)
-
 
 def _shortened(text, limit):
     """*text* cut to *limit* characters for a notification, with … if cut."""
@@ -1436,58 +1373,6 @@ def _frames_are_dead_mic(frames, rec_sr) -> bool:
     return silence.is_dead_mic(_frames_f32(frames), rec_sr)
 
 
-def _report_undelivered(outcome: str, beeps_on: bool):
-    """Tell the user a dictation didn't (fully) reach the window.
-
-    Always shown, whatever the notifications setting, like a missing microphone:
-    otherwise words that are transcribed but never arrive look like a computer
-    too slow to dictate. The low cancel beep follows the "done" beep, which has already played, so a
-    desktop without notifications still hears that something went wrong.
-    """
-    if outcome == "password_field":
-        _password_field_refused(beeps_on)
-        return
-    message = delivery_notices.NOTICES[outcome]
-    if outcome == "failed":
-        # When the typing setup is the reason, say what fixes it.
-        try:
-            reason = uinput_helper.typing_blocked_reason()
-            if reason:
-                message = (f"{reason} The dictation is saved in Recent Dictations "
-                           "in the TuxTalk menu: click it to copy, then paste with Ctrl+V.")
-        except Exception as e:
-            logger.debug(f"Couldn't work out why typing failed: {e}")
-    if live.paste_last_hotkey:
-        message += f" Or press {live.paste_last_hotkey} to type it again where your cursor is."
-    logger.warning(f"Dictation not delivered ({outcome}); told the user")
-    _beep(beeps_on, *CANCEL_BEEP)
-    notify_module.notify(delivery_notices.TITLES[outcome], message)
-
-
-def _refuse_password_field(beeps_on: bool) -> bool:
-    """True when the cursor is in a password field (focused_window.is_password), after
-    saying so (_password_field_refused)."""
-    if not focused_window.is_password():
-        return False
-    _password_field_refused(beeps_on)
-    return True
-
-
-def _password_field_refused(beeps_on: bool) -> None:
-    """Nothing is typed in a password field, and the text stays out of Recent
-    Dictations too, since it may be the password itself. The cancel beep and
-    a label over the window say so, whatever the notifications setting. The
-    notification is only for when neither would be noticed: beeps off, or no
-    X display or GTK loop for the label (the check below);
-    otherwise it's a rule, not an error (like _edit_problem's)."""
-    logger.info("Not typed: the cursor is in a password field")
-    _beep(beeps_on, *CANCEL_BEEP)
-    from . import screen_message
-    screen_message.show_over_active_window(delivery_notices.PASSWORD_FIELD_LABEL)
-    if not (beeps_on and engine.gtk_loop_running and os.environ.get("DISPLAY")):
-        notify_module.notify(delivery_notices.PASSWORD_FIELD_TITLE,
-                             delivery_notices.PASSWORD_FIELD_NOTICE)
-
 
 # Silence put between two chunks when the engine hears them together, so the
 # pause is still there to hear (the cut kept only 0.3 s of it).
@@ -1502,62 +1387,6 @@ _SENTENCE_ENDS = (".", "?", "!", "…")
 def _context_samples() -> int:
     return int(CONTEXT_S * engine.SAMPLE_RATE)
 
-
-def _remember_said(text: str, chunked: bool, takes_back: str = "") -> str:
-    """Put *text* in Recent Dictations, one entry per recording: a phrase of
-    a recording typed at pauses (*chunked*) adds to its recording's entry.
-    *takes_back* is the end of that entry a correction across a pause
-    replaced ("Meet at three. " for "Meet at four"). Returns the entry as it
-    was before, for _unsay."""
-    from . import history
-    text = text.replace(history._LINE_BREAK_MARKER, "\n")
-    same_recording = rs.state.said_serial == rs.state.recording_serial
-    old = rs.state.said_text if chunked and same_recording else ""
-    base = old[:len(old) - len(takes_back)] if takes_back and old.endswith(takes_back) else old
-    rs.state.said_serial, rs.state.said_text = rs.state.recording_serial, base + text
-    if old:
-        history.add_entry(rs.state.said_text, replaces=old)
-    else:
-        history.add_entry(rs.state.said_text)
-    return old
-
-
-def _unsay(before: str) -> None:
-    """Undo the last _remember_said, which returned *before*: the text went
-    into Recent Dictations first and was then refused for a password field."""
-    from . import history
-    said, rs.state.said_text = rs.state.said_text, before
-    if before:
-        history.add_entry(before, replaces=said)
-    else:
-        history.forget(said)
-
-
-def _remember_shown(piece: str, chunked: bool, ok: bool) -> None:
-    """*piece* was just typed (*ok*) or tried: add it to this recording's
-    screen copy. The copy is only trusted while every piece landed, in one
-    window, one after the other."""
-    if not (chunked and rs.state.shown_serial == rs.state.recording_serial):
-        rs.state.shown_serial, rs.state.shown_text = rs.state.recording_serial, ""
-        rs.state.shown_window = rs.state.last_inserted_window
-    if rs.state.shown_text is None:
-        return
-    if ok and not keyboard_output.not_where_typed(rs.state.shown_window):
-        rs.state.shown_text += piece
-    else:
-        rs.state.shown_text = None
-
-
-def _trim_shown(tail: str, count: int) -> None:
-    """*count* characters were backspaced off *tail*, the newest typing."""
-    shown = rs.state.shown_text
-    if shown is not None:
-        rs.state.shown_text = shown[:len(shown) - count] if tail and shown.endswith(tail) else None
-
-
-def _forget_shown() -> None:
-    """The cursor moved or the text changed: the screen copy can't be trusted."""
-    rs.state.shown_text = None
 
 
 def _corrects_across_pause(raw: str, chunk_role, message) -> bool:
@@ -1592,11 +1421,11 @@ def _erase_typed(text: str) -> bool:
     except virtual_keyboard.StoppedPartway:
         logger.error("Correction across a pause stopped partway; typing the phrase as said")
         rs.state.last_inserted_text = ""
-        _forget_shown()
+        last_dictation.forget_shown()
         notify_module.notify("A correction stopped partway", "Check the text before it.")
         return False
     if deleted:
-        _trim_shown(text, len(text))
+        last_dictation.trim_shown(text, len(text))
         rs.state.last_inserted_text = ""
     return bool(deleted)
 
@@ -1634,11 +1463,11 @@ def _type_boundary(pending: dict, tail: str, injection_mode: str) -> None:
     of the message the chunk is in."""
     if not tail:
         return
-    _remember_said(tail, chunked=True)
+    last_dictation.remember_said(tail, chunked=True)
     # Only into the phrase's window: the context pass before this can take a while.
     ok = _inject_text(tail, injection_mode, into=pending["where"],
                       message=pending["message"]) == "ok"
-    _remember_shown(tail, chunked=True, ok=ok)
+    last_dictation.remember_shown(tail, chunked=True, ok=ok)
     if ok:
         # Undo and "delete last sentence" then see the whole chunk.
         rs.state.last_inserted_text = pending["typed"] + tail
@@ -1777,7 +1606,7 @@ def _after_the_words(outcome: str, said: str, press: str, space: str, chunk_role
     the automatic send's Enter when *press*. *space* is the auto-space left
     off before the key."""
     if outcome in delivery_notices.NOTICES:
-        _report_undelivered(outcome, beeps_on)
+        notices.report_undelivered(outcome, beeps_on)
     elif said:
         _press_said(said, chunk_role, after_words=True, message=message)
     elif press:
@@ -1827,7 +1656,7 @@ def _end_in_a_pause(message, beeps_on, auto_space, auto_period, injection_mode) 
     unfinished_edit = waiting is not None and waiting["serial"] == rs.state.recording_serial
     if unfinished_edit:
         rs.state.edit_waiting = None
-        _edit_problem("edit_that_what", beeps_on)
+        notices.edit_problem("edit_that_what", beeps_on)
         message.add("failed", None)
     if rs.state.held_cue:
         cue, rs.state.held_cue = rs.state.held_cue, ""
@@ -1844,7 +1673,7 @@ def _end_in_a_pause(message, beeps_on, auto_space, auto_period, injection_mode) 
     if not live.chunk_context_marks:
         rs.state.continue_mid_sentence = False   # it belongs to this recording
     if not unfinished_edit:                   # that one beeped its cancel
-        _beep(beeps_on, *READY_BEEP)
+        beeps.beep(beeps_on, *READY_BEEP)
 
 
 def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
@@ -1890,8 +1719,8 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # A second or more of pure digital silence: the microphone is muted,
         # unplugged or dead, not a quiet room. Say so instead of typing nothing.
         if silence.is_dead_mic(audio_f32, engine.SAMPLE_RATE):
-            _beep(beeps_on, *CANCEL_BEEP)
-            _warn_silent_mic()
+            beeps.beep(beeps_on, *CANCEL_BEEP)
+            notices.warn_silent_mic()
             return
 
         # A quick tap of the key with nothing said: speech engines can invent
@@ -1903,7 +1732,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                 return
             print("(Short tap with no speech; nothing typed)")
             logger.info(f"Skipped {len(audio_f32) / engine.SAMPLE_RATE:.2f}s with no speech in it")
-            _beep(beeps_on, *CANCEL_BEEP)
+            beeps.beep(beeps_on, *CANCEL_BEEP)
             return
 
         # Stage 1: Transcribe audio → raw text
@@ -1917,7 +1746,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                 return
             print("(No speech recognized)")
             logger.info("Nothing recognized, so nothing was typed")
-            _beep(beeps_on, *CANCEL_BEEP)
+            beeps.beep(beeps_on, *CANCEL_BEEP)
             return
 
         rest, said = split_key_command(raw)
@@ -1933,7 +1762,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         if in_password:
             rs.state.pending_boundary, rs.state.held_cue = None, ""
             if not key_only:
-                _password_field_refused(beeps_on)
+                notices.password_field_refused(beeps_on)
                 return
 
         # Chunked dictation: the chunk before this one held back its final
@@ -1979,7 +1808,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         if said and not raw.strip():
             # Only "press enter" or "press tab" was said.
             if chunk_role != "middle":
-                _beep(beeps_on, *READY_BEEP)
+                beeps.beep(beeps_on, *READY_BEEP)
             _press_said(said, chunk_role, after_words=message.has_words and not in_password,
                         message=message)
             return
@@ -2030,11 +1859,11 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
 
         # Again before the beep and the "Transcribed" notification, which
         # shows the words: the focus may have moved while the AI cleaned them.
-        if text and _refuse_password_field(beeps_on):
+        if text and notices.refuse_password_field(beeps_on):
             return
 
         if chunk_role != "middle":
-            _beep(beeps_on, *READY_BEEP)
+            beeps.beep(beeps_on, *READY_BEEP)
             if notify_on: notify_module.notify("Transcribed", _shortened(text, 80))
 
         # Stage 4: Inject text into the active application. It goes into the
@@ -2043,7 +1872,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         if text:
             text = send_countdown.with_owed_space(text)
             chunked = chunk_role is not None
-            said_before = _remember_said(text, chunked, taken_back)
+            said_before = last_dictation.remember_said(text, chunked, taken_back)
             try:
                 outcome = _inject_text(text, injection_mode, message=message)
             except Exception as e:
@@ -2054,8 +1883,8 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                 outcome = "failed"
                 message.add(outcome, None)
             if outcome == "password_field":
-                _unsay(said_before)
-            _remember_shown(rs.state.last_inserted_text, chunked, outcome == "ok")
+                last_dictation.unsay(said_before)
+            last_dictation.remember_shown(rs.state.last_inserted_text, chunked, outcome == "ok")
             _after_the_words(outcome, said, press, space_left_off, chunk_role, beeps_on,
                              injection_mode, message)
             if chunk_role == "middle" and not live.chunk_context_marks and outcome == "ok" \
@@ -2082,7 +1911,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # The cancel beep and a notice whatever the notifications setting,
         # like _report_undelivered: nothing was typed, and the "done" beep
         # would sound like it worked.
-        _beep(beeps_on, *CANCEL_BEEP)
+        beeps.beep(beeps_on, *CANCEL_BEEP)
         notify_module.notify("Transcription failed", _shortened(str(e), 120))
 
 
@@ -2134,39 +1963,6 @@ def stop_recording(
 EDIT_RESTORE_DELAY_S = 1.0
 
 
-def _edit_problem(kind: str, beeps_on: bool) -> None:
-    """Tell the user a voice edit didn't happen, and why. Always shown, like
-    _report_undelivered: otherwise nothing at all would seem to happen.
-
-    A problem that is really a rule ("select works right after you dictate")
-    opens a small window explaining it, every time, until "Don't explain
-    this again" is ticked for it (explain.py); then the short floating label
-    alone. The notification is for real errors only: a whole
-    explanation in it is gone before it can be read."""
-    message = edit_notices.NOTICES[kind]
-    logger.info(f"Voice edit not done: {kind}")
-    _beep(beeps_on, *CANCEL_BEEP)
-    from . import explain
-    # "Don't explain this again" ticked, or a window already open: the
-    # label is enough. Not opened (no window could start): the notification
-    # as before.
-    explained = False
-    if explain.should_explain(kind) and not explain.window_open():
-        if explain.open_window(kind):
-            return
-    else:
-        explained = kind in explain.EXPLANATIONS
-    # Where the user is looking: over the active window (screen_message.py).
-    # The notification stays as a backup, in the notification history.
-    try:
-        from . import screen_message
-        screen_message.show_over_active_window(edit_notices.LABELS[kind])
-    except Exception as e:
-        logger.debug(f"Could not float the message over the window: {e}")
-    if not explained:
-        notify_module.notify(edit_notices.LABELS[kind], message)
-
-
 
 def _focus_moved(focused_class) -> bool:
     """Whether another window has the focus than when the edit started. Only
@@ -2213,17 +2009,17 @@ def _handle_fix_word(raw: str, beeps_on: bool) -> bool:
             # The text is about to change: undo and voice moves can't trust
             # their counts any more.
             rs.state.last_inserted_text = ""
-            _forget_shown()
+            last_dictation.forget_shown()
             rs.state.nav_context = None
         except OSError as e:
             logger.debug(f"Fix a Word can't fix it in the text: {e}")
     try:
         from .explain import start_helper_window
         start_helper_window("tuxtalk.fix_word_dialog", *args)
-        _beep(beeps_on, *READY_BEEP)
+        beeps.beep(beeps_on, *READY_BEEP)
     except Exception as e:
         logger.warning(f"Could not open Fix a Word: {e}")
-        _beep(beeps_on, *CANCEL_BEEP)
+        beeps.beep(beeps_on, *CANCEL_BEEP)
         notify_module.notify("Fix a Word didn't open", "Choose it in the TuxTalk menu instead.")
     return True
 
@@ -2245,7 +2041,7 @@ def _handle_navigation(raw: str, beeps_on: bool, focused_class=_UNKNOWN_WINDOW) 
     if focused_class is _UNKNOWN_WINDOW:
         focused_class = focused_window.window_class()
     if is_terminal_class(focused_class):
-        _edit_problem("nav_terminal", beeps_on)
+        notices.edit_problem("nav_terminal", beeps_on)
         return True
     # Right after a dictation the cursor is at its end; after an exact move,
     # nav_context says where in it. Only in the window it was typed into:
@@ -2261,7 +2057,7 @@ def _handle_navigation(raw: str, beeps_on: bool, focused_class=_UNKNOWN_WINDOW) 
     if plan is None:
         # One message for "just restarted" and "dictated somewhere else since":
         # both come down to the one rule (it teaches the rule, too).
-        _edit_problem("nothing_said", beeps_on)
+        notices.edit_problem("nothing_said", beeps_on)
         return True
     try:
         pressed = keyboard_output.output_backend().press_keys(plan.chords)
@@ -2271,12 +2067,12 @@ def _handle_navigation(raw: str, beeps_on: bool, focused_class=_UNKNOWN_WINDOW) 
     # The cursor has moved (or may have): undo's character count no longer
     # matches the document, and "delete last word" would eat the wrong text.
     rs.state.last_inserted_text = ""
-    _forget_shown()
+    last_dictation.forget_shown()
     rs.state.nav_context = (plan.left, plan.right) if pressed and plan.left is not None else None
     if pressed:
-        _beep(beeps_on, *READY_BEEP)
+        beeps.beep(beeps_on, *READY_BEEP)
     else:
-        _edit_problem("shortcut_failed", beeps_on)
+        notices.edit_problem("shortcut_failed", beeps_on)
     return True
 
 
@@ -2307,7 +2103,7 @@ def _refused_as_sent(beeps_on: bool) -> bool:
     sent = rs.state.sent
     if sent is None or time.time() - sent["at"] >= EDIT_AFTER_SEND_S:
         return False
-    _edit_problem("already_sent_auto" if sent["automatic"] else "already_sent", beeps_on)
+    notices.edit_problem("already_sent_auto" if sent["automatic"] else "already_sent", beeps_on)
     return True
 
 
@@ -2334,11 +2130,11 @@ def _handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: st
             return _refused_as_sent(beeps_on)
     logger.info(f"Voice command: edit that ({len(target)} characters)")
     if not keyboard_output.is_wayland_session():
-        _edit_problem("needs_wayland", beeps_on)
+        notices.edit_problem("needs_wayland", beeps_on)
         return True
     focused_class = focused_window.window_class()
     if is_terminal_class(focused_class):
-        _edit_problem("terminal", beeps_on)
+        notices.edit_problem("terminal", beeps_on)
         return True
     if not instruction.strip():
         if chunk_role == "middle":
@@ -2346,7 +2142,7 @@ def _handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: st
             rs.state.edit_waiting = {"serial": rs.state.recording_serial, "target": target}
             logger.info("Voice edit: waiting for the next phrase to say what to change")
         else:
-            _edit_problem("edit_that_what", beeps_on)
+            notices.edit_problem("edit_that_what", beeps_on)
             message.add("failed", None)     # asked to change it: not sent as it is
         return True
     plan = nav.plan(nav.parse("select that"), target, "")
@@ -2359,9 +2155,9 @@ def _handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: st
     # screen copy no longer match it, and nothing in it reaches the next phrase.
     rs.state.last_inserted_text = ""
     _start_afresh()
-    _forget_shown()
+    last_dictation.forget_shown()
     if not selected:
-        _edit_problem("shortcut_failed", beeps_on)
+        notices.edit_problem("shortcut_failed", beeps_on)
     elif _edit_selection(lambda: instruction, beeps_on, injection_mode, focused_class,
                          time.time(), message, spoken=True):
         return True
@@ -2386,11 +2182,11 @@ def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
     if not keyboard_output.is_wayland_session():
         # The selection is read with wl-copy / wl-paste, which have no X11
         # side; without this every edit would say "select some text first".
-        _edit_problem("needs_wayland", beeps_on)
+        notices.edit_problem("needs_wayland", beeps_on)
         return
     focused_class = focused_window.window_class()
     if is_terminal_class(focused_class):
-        _edit_problem("terminal", beeps_on)
+        notices.edit_problem("terminal", beeps_on)
         return
     heard = []
 
@@ -2408,18 +2204,18 @@ def _delete_selection(focused_class, beeps_on) -> bool:
     meanwhile, so it needs a window to compare with."""
     if focused_class is None:
         logger.info("Voice edit: the focused window is unknown, so Delete can't be checked")
-        _edit_problem("cant_check_window", beeps_on)
+        notices.edit_problem("cant_check_window", beeps_on)
         return False
     if _focus_moved(focused_class):
-        _edit_problem("focus_moved", beeps_on)
+        notices.edit_problem("focus_moved", beeps_on)
         return False
-    if _refuse_password_field(beeps_on):
+    if notices.refuse_password_field(beeps_on):
         return False
     if not keyboard_output.send_keys([(111, 1), (111, 0)], what="delete"):     # KEY_DELETE
-        _edit_problem("shortcut_failed", beeps_on)
+        notices.edit_problem("shortcut_failed", beeps_on)
         return False
     logger.info("Voice edit: deleted the selection")
-    _beep(beeps_on, *READY_BEEP)
+    beeps.beep(beeps_on, *READY_BEEP)
     return True
 
 
@@ -2430,18 +2226,18 @@ def _format_selection(fmt, focused_class, beeps_on) -> bool:
     from . import voice_edit_rules
     if not voice_edit_rules.has_formatting_shortcuts(focused_class):
         logger.info(f"Voice edit: no formatting shortcuts in {focused_class!r}")
-        _edit_problem("no_shortcuts", beeps_on)
+        notices.edit_problem("no_shortcuts", beeps_on)
         return False
     if _focus_moved(focused_class):
-        _edit_problem("focus_moved", beeps_on)
+        notices.edit_problem("focus_moved", beeps_on)
         return False
-    if _refuse_password_field(beeps_on):
+    if notices.refuse_password_field(beeps_on):
         return False
     if not all(keyboard_output.send_format_shortcut(kind) for kind in fmt):
-        _edit_problem("shortcut_failed", beeps_on)
+        notices.edit_problem("shortcut_failed", beeps_on)
         return False
     logger.info(f"Voice edit: {', '.join(fmt)} with the app's shortcut ({focused_class})")
-    _beep(beeps_on, *READY_BEEP)
+    beeps.beep(beeps_on, *READY_BEEP)
     return True
 
 
@@ -2455,14 +2251,14 @@ def _edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0
     from . import ai_cleanup, clipboard, history, voice_edit_rules
     # Before copying the selection or hearing the instruction; checked
     # again before the rewrite replaces it.
-    if _refuse_password_field(beeps_on):
+    if notices.refuse_password_field(beeps_on):
         return
     # The selection first, so "select some text first" comes up even when
     # nothing was said.
     try:
         selected, put_back = clipboard.copy_selection(keyboard_output.send_copy_keystroke)
     except clipboard.ClipboardUnavailable:
-        _edit_problem("no_clipboard", beeps_on)
+        notices.edit_problem("no_clipboard", beeps_on)
         return
     if not selected:
         # "select the last sentence" needs nothing selected: it makes the selection the
@@ -2471,13 +2267,13 @@ def _edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0
             said = get_instruction()
             if said and _handle_navigation(said, beeps_on, focused_class):
                 return
-        _edit_problem("no_selection", beeps_on)
+        notices.edit_problem("no_selection", beeps_on)
         return
     result = None
     try:
         instruction = get_instruction()
         if not instruction:
-            _edit_problem("no_instruction", beeps_on)
+            notices.edit_problem("no_instruction", beeps_on)
             return
         if _handle_navigation(instruction, beeps_on, focused_class):
             return
@@ -2487,14 +2283,14 @@ def _edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0
             return _delete_selection(focused_class, beeps_on)
         fmt = voice_edit_rules.formatting(instruction)
         if fmt == voice_edit_rules.CANT_FORMAT:
-            _edit_problem("cant_format", beeps_on)
+            notices.edit_problem("cant_format", beeps_on)
             return
         if fmt:
             return _format_selection(fmt, focused_class, beeps_on)
         # Deleting and formatting press keys only, so any length will do; a
         # rewrite is typed back, and the AI's context holds only so much.
         if len(selected) > ai_cleanup.MAX_EDIT_CHARS:
-            _edit_problem("too_long", beeps_on)
+            notices.edit_problem("too_long", beeps_on)
             return
         # "make it formal and remove the commas" is two changes, made one
         # after the other, each in code or by the AI (split_steps).
@@ -2509,10 +2305,10 @@ def _edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0
                 logger.info("Voice edit done in code, without the AI"
                             + (f" ({live.loggable(step)})" if len(steps) > 1 else ""))
             elif engine is None:
-                _edit_problem("not_installed", beeps_on)
+                notices.edit_problem("not_installed", beeps_on)
                 return
             elif not engine.is_ready():
-                _edit_problem("not_ready", beeps_on)
+                notices.edit_problem("not_ready", beeps_on)
                 return
             else:
                 done = engine.edit(text, step)
@@ -2533,9 +2329,9 @@ def _edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0
         # Exact: for an edit done in code, spacing may be the whole change
         # (indenting one line); the AI's spacing-only answers are dropped above.
         if not result or result == selected:
-            _edit_problem("no_answer", beeps_on)
+            notices.edit_problem("no_answer", beeps_on)
             return
-        if _refuse_password_field(beeps_on):
+        if notices.refuse_password_field(beeps_on):
             return
         logger.info(f"Voice edit result: {live.loggable(result)} "
                     f"(took {time.time() - t0:.2f}s)")
@@ -2546,7 +2342,7 @@ def _edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0
             logger.info("Voice edit: the focused window is unknown, so typing goes ahead unchecked")
         elif _focus_moved(focused_class):
             # Typing now would put the rewrite into whatever window has focus.
-            _edit_problem("window_changed", beeps_on)
+            notices.edit_problem("window_changed", beeps_on)
             return
         # The selection is still active, so typing or pasting replaces it, in
         # one block (see _inject_text).
@@ -2559,9 +2355,9 @@ def _edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0
         if outcome == "password_field":
             history.forget(result)
         if outcome in delivery_notices.NOTICES:
-            _report_undelivered(outcome, beeps_on)
+            notices.report_undelivered(outcome, beeps_on)
         else:
-            _beep(beeps_on, *READY_BEEP)
+            beeps.beep(beeps_on, *READY_BEEP)
         return outcome == "ok"
     finally:
         # A pasted rewrite may still be on the clipboard, whole or (pasted a
@@ -2607,7 +2403,7 @@ def _paste_last_dictation(cfg) -> None:
     entries = get_entries()
     if not entries:
         logger.info("Paste last dictation: nothing dictated yet")
-        _beep(cfg.beeps, *CANCEL_BEEP)
+        beeps.beep(cfg.beeps, *CANCEL_BEEP)
         return
     text = entries[0].replace("\n", _LINE_BREAK_MARKER)
     if getattr(cfg, "auto_space", True):
@@ -2615,7 +2411,7 @@ def _paste_last_dictation(cfg) -> None:
     logger.info("Paste last dictation")
     outcome = _inject_text(text, cfg.injection_mode)
     if outcome in delivery_notices.NOTICES:
-        _report_undelivered(outcome, cfg.beeps)
+        notices.report_undelivered(outcome, cfg.beeps)
 
 
 def _report_test_press(code, hold_key, toggle_key) -> None:

@@ -8,6 +8,7 @@ import pytest
 
 from tuxtalk import compositor_focus, window_geometry as wg
 from tuxtalk.window_geometry import Rect
+from tuxtalk import notices
 
 SRC = pathlib.Path(wg.__file__).parent
 EXT = next((SRC.parent.parent / "gnome-extension").glob("*/"))
@@ -159,12 +160,12 @@ def test_the_label_stays_on_the_monitor():
 # --- voice edit problems show there -----------------------------------------------------------------
 
 def test_a_voice_edit_problem_floats_over_the_active_window(monkeypatch):
-    from tuxtalk import app, screen_message
+    from tuxtalk import screen_message
     shown = []
     monkeypatch.setattr(screen_message, "show_over_active_window", shown.append)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a: None)
-    monkeypatch.setattr(app, "_beep", lambda *a: None)
-    app._edit_problem("no_selection", False)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a: None)
+    notices.edit_problem("no_selection", False)
     assert shown == ["Select some text first"]
 
 
@@ -211,14 +212,14 @@ def test_long_enough_to_read():
 
 
 def test_the_label_says_it_short_and_the_notification_in_full(monkeypatch):
-    from tuxtalk import app, edit_notices, screen_message
+    from tuxtalk import edit_notices, screen_message
     shown, notified = [], []
     monkeypatch.setattr(screen_message, "show_over_active_window", shown.append)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, msg: notified.append(msg))
-    monkeypatch.setattr(app, "_beep", lambda *a: None)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a: None)
     for kind in edit_notices.NOTICES:
         shown.clear(); notified.clear()
-        app._edit_problem(kind, False)
+        notices.edit_problem(kind, False)
         assert len(shown[0].split()) <= 7, (kind, shown[0])
         assert notified[0] == edit_notices.NOTICES[kind]
 

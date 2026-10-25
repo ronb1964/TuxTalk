@@ -89,8 +89,9 @@ def test_a_failed_re_resolve_keeps_the_device_in_use(desktop, monkeypatch):
 def test_start_recording_opens_the_new_default(desktop, monkeypatch):
     opened = []
     monkeypatch.setattr(app, "_open_input_stream", lambda idx: opened.append(idx))
-    for name in ("_beep", "_arm_chunker", "_pause_media_players"):
+    for name in ("_arm_chunker", "_pause_media_players"):
         monkeypatch.setattr(app, name, lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.tray_link.notify_recording_state", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
     monkeypatch.setattr(app, "recording_indicator", None)

@@ -13,6 +13,7 @@ from tuxtalk import keyboard_grab
 from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
 from tuxtalk.key_commands import split_key_command
+from tuxtalk import notices
 
 
 @pytest.mark.parametrize("raw, expected", [
@@ -42,13 +43,13 @@ def _dictate(monkeypatch, raw, prepared=None, outcome="ok", window="brave-browse
     monkeypatch.setattr(engine, "transcribe", lambda audio, language: raw)
     if prepared is not None:
         monkeypatch.setattr(app, "_prepare_text", lambda r, *a, **k: prepared(r))
-    monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr(app, "_handle_undo", lambda *a, **k: False)
     monkeypatch.setattr(app, "_handle_navigation", lambda *a, **k: False)
     monkeypatch.setattr(app, "_handle_fix_word", lambda *a, **k: False)
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: window)
     monkeypatch.setattr(focused_window, "look", lambda: (window, ("tray", "{window}")))
-    monkeypatch.setattr(app, "_report_undelivered", lambda *a, **k: events.append("not delivered"))
+    monkeypatch.setattr(notices, "report_undelivered", lambda *a, **k: events.append("not delivered"))
 
     def inject(text, mode, message=None):
         events.append(("typed", text))
@@ -326,8 +327,9 @@ def test_pressing_the_hold_key_holds_the_send_and_records(countdown, monkeypatch
     pressed, _ = countdown
     start_send("test")
     monkeypatch.setattr(app, "_open_input_stream", lambda idx: None)
-    for name in ("_beep", "_arm_chunker", "_pause_media_players"):
+    for name in ("_arm_chunker", "_pause_media_players"):
         monkeypatch.setattr(app, name, lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.tray_link.notify_recording_state", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
     monkeypatch.setattr(app, "recording_indicator", None)
@@ -541,8 +543,9 @@ def test_a_quick_tap_holds_the_send_even_when_recording_starts_slowly(
                         lambda beeps, notify, reason="": reasons.append(reason))
     monkeypatch.setattr(app, "_transcribe_and_inject", lambda *a, **k: dictated.append(1))
     monkeypatch.setattr(app, "_open_input_stream", lambda idx: clock.sleep(start_s))
-    for name in ("_beep", "_arm_chunker", "_pause_media_players", "_resume_media_players", "_stop_stream_safely"):
+    for name in ("_arm_chunker", "_pause_media_players", "_resume_media_players", "_stop_stream_safely"):
         monkeypatch.setattr(app, name, lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.tray_link.notify_recording_state", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
     monkeypatch.setattr(app, "recording_indicator", None)
@@ -687,7 +690,7 @@ def test_a_pause_at_the_end_after_switching_windows_sends_nothing(monkeypatch, k
                         lambda text, mode, one_block=False, *, where: "ok")
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     monkeypatch.setattr(engine, "transcribe", lambda audio, language: "see you at noon")
-    monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr(live, "press_enter_after", True)
     monkeypatch.setattr(live, "usage_stats", False)
     monkeypatch.setattr(history, "add_entry", lambda text, replaces=None: None)

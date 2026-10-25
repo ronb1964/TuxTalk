@@ -371,7 +371,7 @@ def edit_env(monkeypatch):
     monkeypatch.setattr(cb, "copy_selection", copy_selection)
     monkeypatch.setattr(app, "_inject_text", lambda text, mode, one_block=False, **kw: seen["typed"].append(text) or "ok")
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, msg: seen["notices"].append(msg))
-    monkeypatch.setattr(app, "_beep", lambda on, *a: seen["beeps"].append(a))
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda on, *a: seen["beeps"].append(a))
     monkeypatch.setattr(history, "add_entry", lambda text: seen["history"].append(text))
     monkeypatch.setattr(app, "EDIT_RESTORE_DELAY_S", 0)
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")

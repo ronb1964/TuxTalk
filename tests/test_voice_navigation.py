@@ -6,6 +6,7 @@ from tuxtalk import voice_navigation as nav
 from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
 from tuxtalk import keyboard_output
+from tuxtalk import notices
 
 C, S = "CTRL", "SHIFT"
 
@@ -160,8 +161,8 @@ def dictation(monkeypatch):
     monkeypatch.setattr(live, "voice_navigation", True)
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: backend)
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
-    monkeypatch.setattr(app, "_edit_problem", lambda kind, beeps: seen["problems"].append(kind))
-    monkeypatch.setattr(app, "_beep", lambda on, *a: seen.__setitem__("beeps", seen["beeps"] + 1))
+    monkeypatch.setattr(notices, "edit_problem", lambda kind, beeps: seen["problems"].append(kind))
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda on, *a: seen.__setitem__("beeps", seen["beeps"] + 1))
     monkeypatch.setattr(rs.state, "last_inserted_text", " We finished early.")
     seen["app"], seen["backend"] = app, backend
     return seen

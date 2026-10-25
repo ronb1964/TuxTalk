@@ -12,7 +12,7 @@ from tuxtalk import recording_state as rs
 def opened(monkeypatch):
     started = []
     monkeypatch.setattr(explain, "start_helper_window", lambda module, *a: started.append(module))
-    monkeypatch.setattr(app, "_beep", lambda *a: None)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a: None)
     return started
 
 
@@ -34,7 +34,7 @@ def test_a_window_that_cannot_start_says_so(monkeypatch):
     notices = []
     monkeypatch.setattr(explain, "start_helper_window",
                         lambda *a: (_ for _ in ()).throw(OSError("no python")))
-    monkeypatch.setattr(app, "_beep", lambda *a: None)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, msg: notices.append(msg))
     assert app._handle_fix_word("fix that word", False) is True
     assert notices and "TuxTalk menu" in notices[0]

@@ -21,6 +21,8 @@ from tuxtalk import live_settings as live
 from tuxtalk import keyboard_grab
 from tuxtalk import keyboard_output
 from tuxtalk import engine
+from tuxtalk import last_dictation
+from tuxtalk import notices as service_notices
 
 ENTER, RCTRL, F8, F9 = ecodes.KEY_ENTER, ecodes.KEY_RIGHTCTRL, ecodes.KEY_F8, ecodes.KEY_F9
 # Taken before conftest runs "Right away" on the test's own thread, and
@@ -48,7 +50,7 @@ def chat(monkeypatch, keyboard):
     monkeypatch.setattr(app, "_deliver_text", deliver)
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     monkeypatch.setattr(engine, "transcribe", lambda audio, language: heard.pop(0))
-    monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr(live, "press_enter_after", True)
     monkeypatch.setattr(live, "usage_stats", False)
     monkeypatch.setattr(rs.state, "pending_boundary", None)
@@ -723,7 +725,7 @@ def test_a_tab_said_after_the_words_types_no_spaces_into_claude_if_they_went_els
     if when == "while":
         clicked_away_while_the_words_went_in(monkeypatch, focus, CLAUDE)
     else:                                   # once the words are in
-        monkeypatch.setattr(app, "_remember_shown",
+        monkeypatch.setattr(last_dictation, "remember_shown",
                             lambda *a, **k: focus.__setitem__(slice(None), CLAUDE))
     heard.append("john, press tab")
     dictate()
@@ -917,7 +919,7 @@ def phrases_that_go_in(monkeypatch, *outcomes):
     ("partial": its typing stopped partway, a key stuck down)."""
     deliver, left = app._deliver_text, iter(outcomes)
     monkeypatch.setattr(app, "_deliver_text", lambda *a, **k: deliver(*a, **k) and next(left))
-    monkeypatch.setattr(app, "_report_undelivered", lambda outcome, beeps_on: None)
+    monkeypatch.setattr(service_notices, "report_undelivered", lambda outcome, beeps_on: None)
     monkeypatch.setattr(live, "chunk_context_marks", False)
 
 
@@ -1132,7 +1134,7 @@ def test_a_rewrite_that_didnt_all_go_in_leaves_the_message_unsent(edit_that, key
     and the recording's stop sent whatever was in the box."""
     focus, heard, typed, notices = edit_that
     _rewrite_goes_in(monkeypatch, outcome)
-    monkeypatch.setattr(app, "_report_undelivered", lambda outcome, beeps_on: None)
+    monkeypatch.setattr(service_notices, "report_undelivered", lambda outcome, beeps_on: None)
     heard.append("See you at noon.")
     dictate("middle")
     heard.append("edit that, make it friendlier")
