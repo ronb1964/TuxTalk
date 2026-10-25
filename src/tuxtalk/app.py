@@ -1,3 +1,8 @@
+"""The dictation service's shell: one process that loads the speech model,
+reads the hotkeys (hotkeys.py) and runs each dictation through the pipeline
+(pipeline.py). Here are its single-instance lock and signals, the tick both
+input backends run each pass (start and stop requests, Power Saving, live
+settings), the command-line toggle when no tray runs, and main()."""
 import os
 # CRITICAL: Disable HuggingFace XET downloads BEFORE any imports
 # XET bypasses tqdm_class progress tracking, breaking our download progress UI
@@ -368,7 +373,6 @@ def _mark_service_ready():
         )
     except Exception as e:
         logger.debug(f"Could not tell the tray the service is ready: {e}")
-
 
 
 def main():
