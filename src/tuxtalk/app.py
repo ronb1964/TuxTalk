@@ -61,12 +61,9 @@ def _acquire_single_instance():
 _lockfile_handle = None
 
 
+# The service's own D-Bus service when no tray runs (_start_dbus_stand_in),
+# held here for the life of the process.
 dbus_service = None
-
-# Undo voice-command parsing/length logic lives in tuxtalk.undo so it can
-# be unit-tested without dragging in heavy audio/CUDA imports.
-
-
 
 
 def _handle_sigusr1(signum, frame):
@@ -150,11 +147,6 @@ def _reload_live_settings(cfg, indicator):
     except Exception as e:
         logger.warning(f"Could not apply reloaded settings: {e}", exc_info=True)
         return None
-
-
-
-# --- Voice editing ---
-
 
 
 
@@ -548,9 +540,8 @@ def _run_service_entry():
     `-m` runs this file as the module "__main__", but the input backends import
     it as "tuxtalk.app", a DIFFERENT module object with its own globals. Running
     the package module's main() keeps the whole service in ONE namespace, so the
-    globals main() sets (model, _custom_commands, ...) are the ones the
-    recording loop reads; otherwise transcription fails with
-    `NameError: name 'model'`.
+    globals main() sets (the ready flag, the lock, the stand-in D-Bus service)
+    are the ones the input loop's tick reads.
     """
     from tuxtalk.app import main
     main()

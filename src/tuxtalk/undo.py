@@ -3,7 +3,7 @@ Undo voice-command parsing and character-length calculation.
 
 Pure logic — no keyboard, GTK, or audio dependencies. Importable from tests
 without dragging in CUDA/Whisper/etc. The keystroke-sending side
-(`_send_backspaces`, `_send_select_all_delete`) lives in app.py.
+(`send_backspaces`, `send_select_all_delete`) lives in keyboard_output.py.
 """
 
 import re

@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from tuxtalk import app, model_helper
+from tuxtalk import model_helper
 from tuxtalk import engine
 
 
@@ -192,12 +192,14 @@ def test_power_saving_never_opens_a_download_off_the_gtk_thread(monkeypatch):
     shown = []
     monkeypatch.setattr(engine, "model", None)
     monkeypatch.setattr(engine, "gtk_loop_running", True)
-    monkeypatch.setattr(app, "load_config", lambda: _settings(device="cpu"))
-    monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda m: False)
+    monkeypatch.setattr(engine, "load_config", lambda: _settings(device="cpu"))
+    checked = []
+    monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda m: checked.append(m) or False)
     monkeypatch.setattr(model_helper, "message_dialog", no_dialogs)
     monkeypatch.setattr(model_helper.Gtk, "Dialog", no_dialogs)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: shown.append(body))
     assert engine.wake() is None
+    assert "small" in checked          # the settings above, not the user's own
     assert shown and "Restart Service" in shown[0]
 
 

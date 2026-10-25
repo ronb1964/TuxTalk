@@ -119,3 +119,12 @@ def test_package_loggers_reach_the_log_even_without_setup_logger():
     assert logging.getLogger("tuxtalk.download_utils").getEffectiveLevel() <= logging.INFO
     # Module loggers carry no handler of their own, so nothing is written twice.
     assert logging.getLogger("tuxtalk.config").handlers == []
+
+
+def test_the_test_suite_never_writes_to_the_real_log():
+    """conftest points the log at a temporary folder before anything imports
+    tuxtalk. A tuxtalk import above that line makes the one file handler on
+    the user's real log, and every test's fake dictation lands there."""
+    from pathlib import Path
+    from tuxtalk import logger as log
+    assert Path(log._handler.baseFilename).parent == Path(os.environ["TUXTALK_LOG_DIR"])

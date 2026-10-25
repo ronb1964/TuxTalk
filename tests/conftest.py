@@ -14,12 +14,6 @@ import threading
 
 import gi
 import pytest
-from tuxtalk import recording_state as rs
-from tuxtalk import live_settings as live
-from tuxtalk import keyboard_output
-from tuxtalk import engine
-from tuxtalk import recording
-from tuxtalk import hotkeys
 
 # No program a test starts can reach the speakers, nor this one. Every
 # program inherits this, so a child Python's sounddevice, a player started
@@ -57,6 +51,12 @@ os.environ["TUXTALK_LOG_DIR"] = _LOG_DIR
 # suite imports tuxtalk (the rename migration runs on package import).
 os.environ["TUXTALK_NO_MIGRATE"] = "1"
 atexit.register(shutil.rmtree, _LOG_DIR, ignore_errors=True)
+
+# Only now: importing tuxtalk makes the log's file handler and runs the
+# rename migration, so the two settings above must come first.
+from tuxtalk import engine, hotkeys, keyboard_output, recording  # noqa: E402
+from tuxtalk import live_settings as live  # noqa: E402
+from tuxtalk import recording_state as rs  # noqa: E402
 
 
 def _not_private(address):

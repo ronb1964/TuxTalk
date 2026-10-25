@@ -4,7 +4,7 @@ TuxTalk starts and stops recording from a global hotkey. Outside a Flatpak it
 reads the key directly with evdev (Backend A); inside a Flatpak that is blocked,
 so it registers a shortcut with the GlobalShortcuts portal and reacts to the
 desktop's press/release signals (Backend B). Both backends drive the SAME
-thread-safe events in app.py (_cmd_start_recording / _cmd_stop_recording), so the
+thread-safe events (recording.start_requested / recording.stop_requested), so the
 recording core is identical either way. Chosen once at startup by FLATPAK_ID.
 
 Outside a Flatpak, when TuxTalk's hotkey helper is installed (hotkey_helper.py,
@@ -26,7 +26,7 @@ class InputBackend:
 
 
 class EvdevInputBackend(InputBackend):
-    """Backend A: app.py's evdev loop, reading the keyboard directly."""
+    """Backend A: hotkeys.run, reading the keyboard directly."""
 
     def __init__(self, cfg, input_device_idx, helper=None):
         self.cfg = cfg

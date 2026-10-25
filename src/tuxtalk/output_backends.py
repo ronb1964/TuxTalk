@@ -49,7 +49,7 @@ class OutputBackend:
 
 
 class VirtualKeyboardOutputBackend(OutputBackend):
-    """Backend A: app.py's typing on TuxTalk's own virtual keyboard."""
+    """Backend A: keyboard_output's typing on TuxTalk's own virtual keyboard."""
 
     def type_text(self, text: str) -> bool:
         from . import keyboard_output

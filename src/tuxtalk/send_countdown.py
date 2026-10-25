@@ -32,7 +32,7 @@ ways (_why_not's *spoken*).
 The send waiting is _pending, and the space a held or refused one owes,
 _owed, both guarded by _send_lock. The owed space follows a gentler rule than the
 Enter: it goes in unless another window is known to have the focus, since
-typing still refuses a password field. The typing is app.py's: the
+typing still refuses a password field. The typing is the pipeline's: the
 dictation hands over what presses a key and what types more onto it.
 """
 import threading
