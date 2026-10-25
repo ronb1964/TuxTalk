@@ -146,6 +146,7 @@ def _load_settings():
     _install_signal_handlers()
 
     cfg = load_config()
+    _log_what_runs(cfg)
     engine.guard_large_v3_without_cuda(cfg)
 
     keyboard_output.key_delay_ms = cfg.key_delay
@@ -170,6 +171,18 @@ def _load_settings():
     if live.words:
         logger.info(f"Loaded your words ({len(live.words)})")
     return cfg
+
+
+def _log_what_runs(cfg) -> None:
+    """The version, how it's installed and the hands-free setting, at the top
+    of each start in the log: a log sent with a bug report then says what it
+    came from."""
+    from . import __version__
+    from .update_checker import get_install_type
+    hands_free = (f"stops after {cfg.auto_stop_seconds:g} s of quiet" if cfg.auto_stop_silence
+                  else "off")
+    logger.info(f"TuxTalk {__version__} ({get_install_type()}) starting; "
+                f"hands-free (double-tap): {hands_free}")
 
 
 def _start_gtk(cfg) -> bool:

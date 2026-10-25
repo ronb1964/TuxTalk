@@ -156,3 +156,20 @@ def test_the_dictation_services_status_doesnt_load_the_tray():
         "assert 'tuxtalk.tray' not in sys.modules, 'the tray was imported'\n")
     ran = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True)
     assert ran.returncode == 0, ran.stderr[-800:]
+
+
+@pytest.mark.parametrize("settings, says", [
+    ({"auto_stop_silence": True, "auto_stop_seconds": 2.5},
+     "hands-free (double-tap): stops after 2.5 s"),
+    ({"auto_stop_silence": False}, "hands-free (double-tap): off"),
+])
+def test_each_start_logs_the_version_and_the_hands_free_setting(service_main, monkeypatch,
+                                                               settings, says):
+    """A log sent with a bug report says which TuxTalk it came from and how
+    hands-free was set, without asking the user."""
+    from tuxtalk import __version__, app
+    lines = []
+    monkeypatch.setattr(app.logger, "info", lambda msg, *a, **k: lines.append(msg))
+    service_main(**settings)
+    start = next(line for line in lines if line.startswith("TuxTalk "))
+    assert __version__ in start and says in start
