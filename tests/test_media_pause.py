@@ -10,6 +10,7 @@ import time
 import pytest
 
 from tuxtalk import app
+from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
 from tuxtalk import config as C
 from tuxtalk.media_pause import MediaPauser
@@ -150,7 +151,7 @@ def service(monkeypatch):
     monkeypatch.setattr(app.sd, "InputStream", lambda *a, **k: FakeStream())
     spy = SpyPauser()
     monkeypatch.setattr(app, "_media_pauser", spy)
-    monkeypatch.setattr(app, "_pause_media", True)
+    monkeypatch.setattr(live, "pause_media", True)
     rs.state.is_recording = False
     yield spy
     rs.state.is_recording = False
@@ -161,7 +162,7 @@ def test_the_service_never_pauses_real_players_until_config_says_so():
     """The service turns this on from config at startup, not at import."""
     import subprocess, sys
     out = subprocess.run(
-        [sys.executable, "-c", "from tuxtalk import app; print(app._pause_media, app._media_pauser)"],
+        [sys.executable, "-c", "from tuxtalk import app, live_settings; print(live_settings.pause_media, app._media_pauser)"],
         capture_output=True, text=True, check=True)
     assert out.stdout.split()[-2:] == ["False", "None"]
 
@@ -192,7 +193,7 @@ def test_too_short_a_tap_still_resumes(service):
 
 
 def test_switched_off_pauses_nothing(service, monkeypatch):
-    monkeypatch.setattr(app, "_pause_media", False)
+    monkeypatch.setattr(live, "pause_media", False)
     app.start_recording(False, False, 0)
     app.cancel_recording(False, False)
     assert "pause" not in service.calls

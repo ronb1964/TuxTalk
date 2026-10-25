@@ -9,6 +9,7 @@ import types
 import pytest
 
 from tuxtalk import ai_cleanup as ai
+from tuxtalk import live_settings as live
 
 
 SAFE = [
@@ -197,7 +198,6 @@ def test_download_is_pinned_to_a_checksum():
 
 def test_settings_start_and_stop_the_engine(monkeypatch):
     from types import SimpleNamespace
-    from tuxtalk import app
 
     events = []
 
@@ -207,13 +207,13 @@ def test_settings_start_and_stop_the_engine(monkeypatch):
 
     monkeypatch.setattr(ai, "CorrectionEngine", Engine)
     monkeypatch.setattr(ai, "is_installed", lambda: True)
-    monkeypatch.setattr(app, "_ai_engine", None)
+    monkeypatch.setattr(live, "ai_engine", None)
 
-    app._apply_cleanup_settings(SimpleNamespace(remove_fillers=True, ai_corrections=True))
-    assert app._remove_fillers and app._ai_engine is not None
-    app._apply_cleanup_settings(SimpleNamespace(remove_fillers=True, ai_corrections=True))
-    app._apply_cleanup_settings(SimpleNamespace(remove_fillers=False, ai_corrections=False))
-    assert events == ["start", "stop"] and app._ai_engine is None
+    live.apply(SimpleNamespace(remove_fillers=True, ai_corrections=True))
+    assert live.remove_fillers and live.ai_engine is not None
+    live.apply(SimpleNamespace(remove_fillers=True, ai_corrections=True))
+    live.apply(SimpleNamespace(remove_fillers=False, ai_corrections=False))
+    assert events == ["start", "stop"] and live.ai_engine is None
 
 
 def test_cleanup_settings_apply_without_a_restart():

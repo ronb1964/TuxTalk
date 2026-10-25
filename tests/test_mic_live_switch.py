@@ -18,6 +18,7 @@ import types
 
 from tuxtalk import app
 from tuxtalk import recording_state as rs
+from tuxtalk import live_settings as live
 
 
 def _idle(monkeypatch):
@@ -77,8 +78,8 @@ class TestTheNextDictationUsesIt:
     def test_recording_starts_on_the_newly_chosen_mic(self, monkeypatch):
         """End to end through the tick both backends share."""
         _idle(monkeypatch)
-        monkeypatch.setattr(app, "_config_file_changed", lambda: False)
-        monkeypatch.setattr(app, "_commands_file_changed", lambda: False)
+        monkeypatch.setattr(live, "config_file_changed", lambda: False)
+        monkeypatch.setattr(live, "commands_file_changed", lambda: False)
         monkeypatch.setattr(app, "_pick_input_device", lambda name: 7)
 
         cfg = _cfg(mic="Built-in")

@@ -4,6 +4,7 @@ the hotkeys."""
 import threading
 
 from tuxtalk import app
+from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
 
 
@@ -19,7 +20,7 @@ def test_turning_the_ai_off_does_not_block_the_caller(monkeypatch):
             release.wait(5)
             stopped.set()
 
-    monkeypatch.setattr(app, "_ai_engine", SlowEngine())
+    monkeypatch.setattr(live, "ai_engine", SlowEngine())
 
     class Cfg:
         auto_stop_silence = False
@@ -27,9 +28,9 @@ def test_turning_the_ai_off_does_not_block_the_caller(monkeypatch):
         ai_corrections = False
         voice_editing = False
 
-    app._apply_cleanup_settings(Cfg())
+    live.apply(Cfg())
 
-    assert app._ai_engine is None
+    assert live.ai_engine is None
     assert not stopped.is_set(), "the caller waited for the engine to stop"
     release.set()
     assert stopped.wait(2), "the engine was never stopped"

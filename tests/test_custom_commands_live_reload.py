@@ -14,6 +14,7 @@ import types
 import pytest
 
 from tuxtalk import app
+from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
 
 
@@ -24,8 +25,8 @@ def commands_file(tmp_path, monkeypatch):
 
     path = tmp_path / "custom_commands.toml"
     monkeypatch.setattr(config_module, "CUSTOM_COMMANDS_PATH", str(path))
-    monkeypatch.setattr(app, "_last_commands_mtime", None, raising=False)
-    monkeypatch.setattr(app, "_custom_commands", {}, raising=False)
+    monkeypatch.setattr(live, "_last_commands_mtime", None, raising=False)
+    monkeypatch.setattr(live, "commands", {}, raising=False)
     return path
 
 
@@ -49,43 +50,43 @@ def _cfg():
 class TestDetectingTheEdit:
     def test_a_new_commands_file_is_a_change(self, commands_file):
         _write(commands_file, {"my email": "ron@example.com"})
-        assert app._commands_file_changed() is True
+        assert live.commands_file_changed() is True
 
     def test_an_unchanged_file_is_not_a_change(self, commands_file):
         _write(commands_file, {"my email": "ron@example.com"})
-        app._commands_file_changed()
-        assert app._commands_file_changed() is False
+        live.commands_file_changed()
+        assert live.commands_file_changed() is False
 
     def test_a_missing_file_is_not_a_change(self, commands_file):
-        assert app._commands_file_changed() is False
+        assert live.commands_file_changed() is False
 
 
 class TestApplyingTheEdit:
     def test_an_added_command_reaches_the_running_service(self, commands_file):
         _write(commands_file, {"my email": "ron@example.com"})
 
-        app._reload_custom_commands()
+        live.reload_commands()
 
-        assert app._custom_commands == {"my email": "ron@example.com"}
+        assert live.commands == {"my email": "ron@example.com"}
 
     def test_a_removed_command_stops_being_applied(self, commands_file):
         _write(commands_file, {"my email": "ron@example.com"})
-        app._reload_custom_commands()
+        live.reload_commands()
 
         _write(commands_file, {})
-        app._reload_custom_commands()
+        live.reload_commands()
 
-        assert app._custom_commands == {}
+        assert live.commands == {}
 
     def test_a_damaged_file_keeps_the_commands_already_running(self, commands_file):
         """Same rule as the config reload: never degrade a live session."""
         _write(commands_file, {"my email": "ron@example.com"})
-        app._reload_custom_commands()
+        live.reload_commands()
 
         commands_file.write_text("[commands\nthis is not valid toml")
-        app._reload_custom_commands()
+        live.reload_commands()
 
-        assert app._custom_commands == {"my email": "ron@example.com"}
+        assert live.commands == {"my email": "ron@example.com"}
 
 
 class TestTheServiceTickPicksItUp:
@@ -94,11 +95,11 @@ class TestTheServiceTickPicksItUp:
     ):
         """The whole point: no config.toml change, and it still takes effect."""
         _idle(monkeypatch)
-        monkeypatch.setattr(app, "_config_file_changed", lambda: False)
+        monkeypatch.setattr(live, "config_file_changed", lambda: False)
         cfg = _cfg()
         svc = app._ServiceState(cfg)
 
         _write(commands_file, {"btw": "by the way"})
         app._service_tick(cfg, svc)
 
-        assert app._custom_commands == {"btw": "by the way"}
+        assert live.commands == {"btw": "by the way"}

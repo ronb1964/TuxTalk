@@ -9,6 +9,7 @@ import json
 import pytest
 
 from tuxtalk import stats
+from tuxtalk import live_settings as live
 
 D = datetime.date
 
@@ -160,7 +161,7 @@ def _dictate(monkeypatch, app, seconds=2.0):
 
 def test_a_dictation_is_counted_with_its_words_and_speaking_time(stats_file, monkeypatch):
     from tuxtalk import app
-    monkeypatch.setattr(app, "_usage_stats", True)
+    monkeypatch.setattr(live, "usage_stats", True)
     _dictate(monkeypatch, app, seconds=2.0)
 
     today = stats.load()[datetime.date.today().isoformat()]
@@ -170,7 +171,7 @@ def test_a_dictation_is_counted_with_its_words_and_speaking_time(stats_file, mon
 
 def test_turning_stats_off_stops_counting(stats_file, monkeypatch):
     from tuxtalk import app
-    monkeypatch.setattr(app, "_usage_stats", False)
+    monkeypatch.setattr(live, "usage_stats", False)
     _dictate(monkeypatch, app)
     assert not stats_file.exists()
 
@@ -229,7 +230,7 @@ def test_stats_are_saved_after_the_text_is_typed(stats_file, monkeypatch):
     import numpy as np
     from tuxtalk import app
     order = []
-    monkeypatch.setattr(app, "_usage_stats", True)
+    monkeypatch.setattr(live, "usage_stats", True)
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, language: "hello there")
     monkeypatch.setattr(app, "_prepare_text", lambda raw, *a, **k: "Hello there. ")
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)

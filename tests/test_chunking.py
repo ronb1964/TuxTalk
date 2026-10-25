@@ -13,6 +13,7 @@ import pytest
 from tuxtalk.history import add_entry as REAL_ADD_ENTRY
 from tuxtalk import focused_window
 from tuxtalk import recording_state as rs
+from tuxtalk import live_settings as live
 
 SR = 16000
 BLOCK = 320   # 20 ms at 16 kHz
@@ -317,25 +318,23 @@ def test_chunk_settings_apply_without_a_restart():
 
 def test_chunk_setting_follows_config(monkeypatch):
     from types import SimpleNamespace
-    from tuxtalk import app
-    monkeypatch.setattr(app, "_ai_engine", None)
+    monkeypatch.setattr(live, "ai_engine", None)
     on = SimpleNamespace(chunked_dictation=True, chunk_pause_seconds=1.0)
-    app._apply_cleanup_settings(on)
-    assert app._chunk_pause_seconds == 1.0
-    assert app._chunk_cfg is on
-    app._apply_cleanup_settings(SimpleNamespace(chunked_dictation=False, chunk_pause_seconds=1.0))
-    assert app._chunk_pause_seconds == 0.0
+    live.apply(on)
+    assert live.chunk_pause_seconds == 1.0
+    assert live.chunk_cfg is on
+    live.apply(SimpleNamespace(chunked_dictation=False, chunk_pause_seconds=1.0))
+    assert live.chunk_pause_seconds == 0.0
 
 
 def test_chunk_pause_stays_below_auto_stop(monkeypatch):
     from types import SimpleNamespace
-    from tuxtalk import app
-    monkeypatch.setattr(app, "_ai_engine", None)
-    app._apply_cleanup_settings(SimpleNamespace(
+    monkeypatch.setattr(live, "ai_engine", None)
+    live.apply(SimpleNamespace(
         chunked_dictation=True, chunk_pause_seconds=1.5,
         auto_stop_silence=True, auto_stop_seconds=1.0))
-    assert app._chunk_pause_seconds == pytest.approx(0.8)
-    app._apply_cleanup_settings(SimpleNamespace(chunked_dictation=False))
+    assert live.chunk_pause_seconds == pytest.approx(0.8)
+    live.apply(SimpleNamespace(chunked_dictation=False))
 
 
 # --- where a sentence ends at a pause (the engine's word, in context) ---------
@@ -388,8 +387,8 @@ def pipeline(monkeypatch):
     monkeypatch.setattr(app, "_beep", lambda enabled, *tone: beeps.append(tone))
     monkeypatch.setattr(app, "_notify", lambda *a, **k: None)
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
-    monkeypatch.setattr(app, "_adapt_to_app", False)
-    monkeypatch.setattr(app, "_usage_stats", False)
+    monkeypatch.setattr(live, "adapt_to_app", False)
+    monkeypatch.setattr(live, "usage_stats", False)
     monkeypatch.setattr(history, "add_entry", lambda text, replaces=None: None)
     monkeypatch.setattr(rs.state, "continue_mid_sentence", False)
     monkeypatch.setattr(rs.state, "pending_boundary", None)
@@ -569,8 +568,8 @@ def recording(monkeypatch, pipeline):
     from types import SimpleNamespace
     from tuxtalk import app
     monkeypatch.setattr(app, "_chunk_worker_instance", None)
-    monkeypatch.setattr(app, "_chunk_pause_seconds", 0.8)
-    monkeypatch.setattr(app, "_chunk_cfg", SimpleNamespace(
+    monkeypatch.setattr(live, "chunk_pause_seconds", 0.8)
+    monkeypatch.setattr(live, "chunk_cfg", SimpleNamespace(
         beeps=True, smart_quotes=True, notify=False, language=None,
         auto_space=True, auto_period=False, injection_mode="type"))
     monkeypatch.setattr(app, "recording_indicator", None)
@@ -619,7 +618,7 @@ def test_two_pauses_give_three_chunks_in_order(recording):
 def test_chunking_off_types_one_dictation(recording, monkeypatch):
     from tuxtalk import app
     texts, typed, beeps = recording
-    monkeypatch.setattr(app, "_chunk_pause_seconds", 0.0)
+    monkeypatch.setattr(live, "chunk_pause_seconds", 0.0)
     app._arm_chunker(SR)
     assert rs.state.chunker is None
     texts.append("we meet at three in the garden")
@@ -690,7 +689,7 @@ def test_flatpak_stop_queues_the_last_chunk_on_the_worker(recording, monkeypatch
     svc = SimpleNamespace(input_device_idx=None, last_activity=0.0,
                           timeout_enabled=False, last_config_check=time.time())
     app._cmd_stop_recording.set()
-    app._service_tick(app._chunk_cfg, svc)
+    app._service_tick(live.chunk_cfg, svc)
     assert app._chunk_worker().drain(5)
     assert "".join(typed) == "We meet at three "
 
@@ -700,7 +699,7 @@ def test_arming_starts_the_worker(monkeypatch):
     has to build it (a thread start and an import on the audio thread)."""
     from tuxtalk import app
     monkeypatch.setattr(app, "_chunk_worker_instance", None)
-    monkeypatch.setattr(app, "_chunk_pause_seconds", 0.8)
+    monkeypatch.setattr(live, "chunk_pause_seconds", 0.8)
     app._arm_chunker(SR)
     assert app._chunk_worker_instance is not None
     rs.state.chunker = None
@@ -754,21 +753,20 @@ def test_new_chunk_settings_apply_without_a_restart():
 
 def test_service_reads_the_new_chunk_settings(monkeypatch):
     from types import SimpleNamespace
-    from tuxtalk import app
-    monkeypatch.setattr(app, "_ai_engine", None)
-    app._apply_cleanup_settings(SimpleNamespace(
+    monkeypatch.setattr(live, "ai_engine", None)
+    live.apply(SimpleNamespace(
         chunked_dictation=True, chunk_speech_db=9.0, chunk_context_marks=False))
-    assert app._chunk_speech_db == 9.0
-    assert app._chunk_context_marks is False
-    app._apply_cleanup_settings(SimpleNamespace(chunked_dictation=False))
-    assert app._chunk_speech_db == 6.0
-    assert app._chunk_context_marks is True
+    assert live.chunk_speech_db == 9.0
+    assert live.chunk_context_marks is False
+    live.apply(SimpleNamespace(chunked_dictation=False))
+    assert live.chunk_speech_db == 6.0
+    assert live.chunk_context_marks is True
 
 
 def test_speech_db_reaches_the_detector(monkeypatch):
     from tuxtalk import app
-    monkeypatch.setattr(app, "_chunk_pause_seconds", 0.8)
-    monkeypatch.setattr(app, "_chunk_speech_db", 9.0)
+    monkeypatch.setattr(live, "chunk_pause_seconds", 0.8)
+    monkeypatch.setattr(live, "chunk_speech_db", 9.0)
     monkeypatch.setattr(app, "_chunk_worker_instance", None)
     app._arm_chunker(SR)
     assert rs.state.chunker.speech_over_room == pytest.approx(10 ** (9 / 20))
@@ -778,8 +776,7 @@ def test_speech_db_reaches_the_detector(monkeypatch):
 def test_context_marks_off_types_the_engines_mark(pipeline, monkeypatch):
     """Off: the chunk is typed as Parakeet wrote it, mark and space included,
     and nothing waits for the next chunk."""
-    from tuxtalk import app
-    monkeypatch.setattr(app, "_chunk_context_marks", False)
+    monkeypatch.setattr(live, "chunk_context_marks", False)
     texts, typed, _ = pipeline
     texts.append("we meet.")
     call(frames_of(speech(1.0)), "middle", auto_period=True)
@@ -792,8 +789,7 @@ def test_context_marks_off_types_the_engines_mark(pipeline, monkeypatch):
 def test_context_marks_off_carries_on_after_a_comma(pipeline, monkeypatch):
     """Off, a chunk ending in a comma (or no mark) is mid-sentence: the next one
     must not start with a capital."""
-    from tuxtalk import app
-    monkeypatch.setattr(app, "_chunk_context_marks", False)
+    monkeypatch.setattr(live, "chunk_context_marks", False)
     texts, typed, _ = pipeline
     texts.extend(["we meet,", "at the station"])
     call(frames_of(speech(1.0)), "middle")
@@ -802,8 +798,7 @@ def test_context_marks_off_carries_on_after_a_comma(pipeline, monkeypatch):
 
 
 def test_context_marks_off_does_not_carry_past_the_recording(pipeline, monkeypatch):
-    from tuxtalk import app
-    monkeypatch.setattr(app, "_chunk_context_marks", False)
+    monkeypatch.setattr(live, "chunk_context_marks", False)
     texts, typed, _ = pipeline
     texts.append("we meet,")
     call(frames_of(speech(1.0)), "middle")
@@ -830,8 +825,8 @@ def ai_on(pipeline, monkeypatch):
     from tuxtalk import app
     ai = FakeAI()
     erased = []
-    monkeypatch.setattr(app, "_ai_corrections", True)
-    monkeypatch.setattr(app, "_ai_engine", ai)
+    monkeypatch.setattr(live, "ai_corrections", True)
+    monkeypatch.setattr(live, "ai_engine", ai)
     monkeypatch.setattr(app, "_output_backend",
                         lambda: SimpleNamespace(backspaces=lambda n: (erased.append(n), True)[1]))
     monkeypatch.setattr(rs.state, "held_cue", "")
@@ -925,8 +920,7 @@ def test_correction_never_reaches_into_the_dictation_before(ai_on):
 
 
 def test_ai_off_leaves_a_correction_after_a_pause_alone(ai_on, monkeypatch):
-    from tuxtalk import app
-    monkeypatch.setattr(app, "_ai_corrections", False)
+    monkeypatch.setattr(live, "ai_corrections", False)
     texts, typed, erased, _ = ai_on
     texts.extend(["meet at three.", "no wait, four.", "meet at three. No wait, four."])
     call(frames_of(speech(1.0)), "middle")
@@ -1104,7 +1098,7 @@ def enter(pipeline, monkeypatch):
         rs.state.last_inserted_text = ""
         return True
     monkeypatch.setattr(app, "_press_key", fake_enter)
-    monkeypatch.setattr(app, "_press_enter_after", False)
+    monkeypatch.setattr(live, "press_enter_after", False)
     monkeypatch.setattr(rs.state, "held_cue", "")
     return texts, typed, beeps
 
@@ -1175,9 +1169,8 @@ def test_press_tab_after_a_pause_types_no_mark_before_it(enter):
 
 
 def test_press_enter_after_each_dictation_waits_for_the_end(enter, monkeypatch):
-    from tuxtalk import app
     texts, typed, _ = enter
-    monkeypatch.setattr(app, "_press_enter_after", True)
+    monkeypatch.setattr(live, "press_enter_after", True)
     texts.extend(["we meet", "at three", "we meet at three"])
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     assert "<ENTER>" not in typed
@@ -1186,9 +1179,8 @@ def test_press_enter_after_each_dictation_waits_for_the_end(enter, monkeypatch):
 
 
 def test_press_enter_after_each_dictation_when_it_ends_in_a_pause(enter, monkeypatch):
-    from tuxtalk import app
     texts, typed, _ = enter
-    monkeypatch.setattr(app, "_press_enter_after", True)
+    monkeypatch.setattr(live, "press_enter_after", True)
     texts.append("we meet")
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     call([], "last", auto_period=True)
@@ -1268,7 +1260,7 @@ def test_a_phrase_being_worked_on_holds_hands_free_open(monkeypatch):
             events.append("release")
     monkeypatch.setattr(rs.state, "silence", Detector())
     from tuxtalk.config import Settings
-    monkeypatch.setattr(app, "_chunk_cfg", Settings())
+    monkeypatch.setattr(live, "chunk_cfg", Settings())
     monkeypatch.setattr(app, "_transcribe_and_inject", lambda *a, **k: events.append("work"))
     app._transcribe_chunk([b""], SR, "middle", 1, 0.5, rs.state.message)
     assert events == ["hold", "work", "release"]

@@ -15,6 +15,7 @@ import numpy as np
 import pytest
 
 from tuxtalk import app, focused_window, window_classes
+from tuxtalk import live_settings as live
 
 MARKER = "\xa7SHIFT_ENTER\xa7"
 
@@ -100,7 +101,7 @@ def dictation(monkeypatch):
     monkeypatch.setattr(app, "_notify", lambda title, body: notes.append(f"{title}\n{body}"))
     monkeypatch.setattr(app, "_beep", lambda enabled, *tone, **k: enabled and beeps.append(tone))
     monkeypatch.setattr("tuxtalk.history.add_entry", lambda text: None)
-    monkeypatch.setattr(app, "_usage_stats", False, raising=False)
+    monkeypatch.setattr(live, "usage_stats", False, raising=False)
 
     def run(outcome, beeps_on=True, notify_on=False):
         if isinstance(outcome, Exception):

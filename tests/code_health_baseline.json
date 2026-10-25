@@ -1,6 +1,6 @@
 {
  "files": {
-  "app.py": 4859,
+  "app.py": 4611,
   "tray.py": 2477,
   "welcome_dialog.py": 3222
  },
@@ -13,7 +13,6 @@
   "ai_cleanup.py::make_engine_download_func.download::undocumented": 1,
   "app.py::<module>::long_line": 2,
   "app.py::<module>::undocumented": 1,
-  "app.py::_apply_cleanup_settings::long_line": 2,
   "app.py::_build_model_or_exit::swallowed_error": 1,
   "app.py::_build_parakeet_gpu_model::swallowed_error": 1,
   "app.py::_build_vulkan_model::swallowed_error": 1,
@@ -398,7 +397,7 @@
    "lines": 104
   },
   "app.py::main": {
-   "lines": 261
+   "lines": 245
   },
   "audio_duck.py::AudioDucker._restore_now": {
    "decisions": 16

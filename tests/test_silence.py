@@ -13,6 +13,7 @@ import pytest
 from tuxtalk import beeps, silence
 from tuxtalk.silence import SilenceDetector
 from tuxtalk import recording_state as rs
+from tuxtalk import live_settings as live
 
 SR = 16000
 BLOCK = 320   # 20 ms
@@ -112,7 +113,7 @@ def _start(monkeypatch, from_toggle=True, seconds=1.0, mic_delay=0.0, beeps_on=F
     """A recording started as the service starts one, on a microphone that
     takes *mic_delay* to open."""
     from tuxtalk import app
-    monkeypatch.setattr(app, "_auto_stop_seconds", seconds)
+    monkeypatch.setattr(live, "auto_stop_seconds", seconds)
 
     def open_microphone(idx):
         time.sleep(mic_delay)
@@ -518,12 +519,11 @@ def test_auto_stop_settings_apply_without_a_restart():
 
 def test_setting_follows_config(monkeypatch):
     from types import SimpleNamespace
-    from tuxtalk import app
-    monkeypatch.setattr(app, "_ai_engine", None)
-    app._apply_cleanup_settings(SimpleNamespace(auto_stop_silence=True, auto_stop_seconds=3.0))
-    assert app._auto_stop_seconds == 3.0
-    app._apply_cleanup_settings(SimpleNamespace(auto_stop_silence=False, auto_stop_seconds=3.0))
-    assert app._auto_stop_seconds == 0.0
+    monkeypatch.setattr(live, "ai_engine", None)
+    live.apply(SimpleNamespace(auto_stop_silence=True, auto_stop_seconds=3.0))
+    assert live.auto_stop_seconds == 3.0
+    live.apply(SimpleNamespace(auto_stop_silence=False, auto_stop_seconds=3.0))
+    assert live.auto_stop_seconds == 0.0
 
 
 # --- an accidental tap of the hold key ------------------------------------------

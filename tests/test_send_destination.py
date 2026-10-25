@@ -17,6 +17,7 @@ from evdev import ecodes
 from tuxtalk import (app, atspi_helper, compositor_focus, dbus_service, focused_window, history,
                      modifier_hotkeys, send_countdown)
 from tuxtalk import recording_state as rs
+from tuxtalk import live_settings as live
 
 ENTER, RCTRL, F8, F9 = ecodes.KEY_ENTER, ecodes.KEY_RIGHTCTRL, ecodes.KEY_F8, ecodes.KEY_F9
 # Taken before conftest runs "Right away" on the test's own thread, and
@@ -45,8 +46,8 @@ def chat(monkeypatch, keyboard):
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, language: heard.pop(0))
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
-    monkeypatch.setattr(app, "_press_enter_after", True)
-    monkeypatch.setattr(app, "_usage_stats", False)
+    monkeypatch.setattr(live, "press_enter_after", True)
+    monkeypatch.setattr(live, "usage_stats", False)
     monkeypatch.setattr(rs.state, "pending_boundary", None)
     monkeypatch.setattr(history, "add_entry", lambda text, replaces=None: None)
     monkeypatch.setattr(send_countdown, "show_notice", notices.append)
@@ -129,7 +130,7 @@ def test_a_pause_then_another_window_of_the_app_gets_neither_mark_nor_enter(chat
     window; the recording ends in that pause. The period went into the other
     window, and the Enter followed it there, sending what was in its box."""
     focus, heard, typed, notices = chat
-    monkeypatch.setattr(app, "_chunk_context_marks", True)
+    monkeypatch.setattr(live, "chunk_context_marks", True)
     heard.append("See you at noon.")
     dictate("middle")
     assert typed == [("See you at noon", FIRST[1])]
@@ -142,7 +143,7 @@ def test_a_pause_then_another_window_of_the_app_gets_neither_mark_nor_enter(chat
 def test_a_pause_at_the_end_in_the_same_window_types_the_mark_and_sends(chat, keyboard,
                                                                         monkeypatch):
     focus, heard, typed, notices = chat
-    monkeypatch.setattr(app, "_chunk_context_marks", True)
+    monkeypatch.setattr(live, "chunk_context_marks", True)
     heard.append("See you at noon.")
     dictate("middle")
     dictate("last", audio=False)
@@ -156,7 +157,7 @@ def test_the_mark_typed_at_the_end_doesnt_aim_the_enter_elsewhere(chat, keyboard
     can't tell from the phrase's window (only the app is known). Its own
     delivery must not become where the Enter goes."""
     focus, heard, typed, notices = chat
-    monkeypatch.setattr(app, "_chunk_context_marks", True)
+    monkeypatch.setattr(live, "chunk_context_marks", True)
     heard.append("See you at noon.")
     dictate("middle")
     focus[1] = None                                     # the tray didn't answer
@@ -445,7 +446,7 @@ def test_a_click_while_the_mark_is_put_on_the_clipboard_keeps_it_out_of_the_othe
     monkeypatch.setattr(app, "_deliver_text", DELIVER_TEXT)
     monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
     monkeypatch.setattr(app, "_which", lambda name: f"/usr/bin/{name}")
-    monkeypatch.setattr(app, "_restore_clipboard", False)
+    monkeypatch.setattr(live, "restore_clipboard", False)
     monkeypatch.setattr(clipboard, "wl_copy_command", lambda: ["wl-copy"])
     monkeypatch.setattr(app.subprocess, "Popen",
                         lambda cmd, **kw: WlCopy(lambda: focus.__setitem__(slice(None), SECOND)))
@@ -657,7 +658,7 @@ def test_where_the_window_isnt_known_a_key_said_after_the_words_still_goes(
         unknown_window, keyboard, monkeypatch, key):
     """The user asked for the key, looking at the window."""
     focus, heard, typed, notices = unknown_window
-    monkeypatch.setattr(app, "_press_enter_after", False)
+    monkeypatch.setattr(live, "press_enter_after", False)
     heard.append(f"see you at noon, press {key}")
     dictate()
     assert keyboard.typed_keys() == [getattr(ecodes, f"KEY_{key.upper()}")] and notices == []
@@ -761,7 +762,7 @@ def test_a_pause_then_another_window_keeps_back_press_enter_said_alone(chat, key
     into the other during the pause, then only "press enter": it sent the
     other window's box."""
     focus, heard, typed, notices = chat
-    monkeypatch.setattr(app, "_press_enter_after", False)
+    monkeypatch.setattr(live, "press_enter_after", False)
     heard.append("See you at noon.")
     dictate("middle")
     focus[:] = SECOND
@@ -775,7 +776,7 @@ def test_a_pause_then_press_enter_alone_in_a_password_field_logs_in(chat, keyboa
     """Hands-free: a phrase dictated, then a password typed by hand in a
     login box, then "press enter"."""
     focus, heard, typed, notices = chat
-    monkeypatch.setattr(app, "_press_enter_after", False)
+    monkeypatch.setattr(live, "press_enter_after", False)
     heard.append("See you at noon.")
     dictate("middle")
     focus[:] = SECOND
@@ -791,8 +792,8 @@ def test_a_click_while_the_pause_is_heard_again_keeps_its_mark_out_of_the_other_
     next to choose its mark, which can take a moment. Clicked into the other
     Brave window meanwhile, the first window's period went there."""
     focus, heard, typed, notices = chat
-    monkeypatch.setattr(app, "_chunk_context_marks", True)
-    monkeypatch.setattr(app, "_press_enter_after", False)
+    monkeypatch.setattr(live, "chunk_context_marks", True)
+    monkeypatch.setattr(live, "press_enter_after", False)
     heard.append("See you at noon.")
     dictate("middle")
     heard.extend(["how are you", "See you at noon. How are you"])
@@ -910,7 +911,7 @@ def phrases_that_go_in(monkeypatch, *outcomes):
     deliver, left = app._deliver_text, iter(outcomes)
     monkeypatch.setattr(app, "_deliver_text", lambda *a, **k: deliver(*a, **k) and next(left))
     monkeypatch.setattr(app, "_report_undelivered", lambda outcome, beeps_on: None)
-    monkeypatch.setattr(app, "_chunk_context_marks", False)
+    monkeypatch.setattr(live, "chunk_context_marks", False)
 
 
 def test_a_phrase_that_stopped_partway_leaves_the_message_unsent(chat, keyboard, monkeypatch):
@@ -965,7 +966,7 @@ def test_a_click_away_while_a_phrase_went_in_keeps_the_message_unsent(chat, keyb
         monkeypatch.setattr(app, "_deliver_text", deliver)
         return outcome
     monkeypatch.setattr(app, "_deliver_text", first_one_then_switch)
-    monkeypatch.setattr(app, "_chunk_context_marks", False)
+    monkeypatch.setattr(live, "chunk_context_marks", False)
     heard.extend(["See you at noon,", "and bring the cake"])
     dictate("middle")
     dictate("last")
@@ -978,7 +979,7 @@ def test_press_enter_alone_after_a_phrase_that_stopped_partway_isnt_pressed_anyw
     into the other window, then only "press enter": nothing said it came
     after words, and it sent the other window's box."""
     focus, heard, typed, notices = chat
-    monkeypatch.setattr(app, "_press_enter_after", False)
+    monkeypatch.setattr(live, "press_enter_after", False)
     phrases_that_go_in(monkeypatch, "ok", "partial")
     heard.extend(["See you at noon,", "and bring the cake", "press enter"])
     dictate("middle")
@@ -1009,8 +1010,8 @@ def edit_that(chat, monkeypatch):
 
         def edit(self, text, instruction):
             return "Hope to see you at noon!"
-    monkeypatch.setattr(app, "_voice_editing", True)
-    monkeypatch.setattr(app, "_ai_engine", Engine())
+    monkeypatch.setattr(live, "voice_editing", True)
+    monkeypatch.setattr(live, "ai_engine", Engine())
     monkeypatch.setattr(app, "_is_wayland_session", lambda: True)
     backend = app._output_backend()
     # Selecting what was typed is faked; Enter goes to the test's keyboard.
@@ -1030,7 +1031,7 @@ def test_after_edit_that_press_enter_alone_in_another_window_isnt_pressed(edit_t
     "press enter". The rewrite is still unsent in the first window, but the
     edit forgot the message, so Enter sent the other window's box."""
     focus, heard, typed, notices = edit_that
-    monkeypatch.setattr(app, "_press_enter_after", False)
+    monkeypatch.setattr(live, "press_enter_after", False)
     heard.append("See you at noon.")
     dictate("middle")
     heard.append("edit that, make it friendlier")
@@ -1046,7 +1047,7 @@ def test_after_edit_that_press_enter_sends_the_rewrite_where_it_is(edit_that, ke
                                                                   monkeypatch):
     """The same in one window: Enter sends the rewritten message."""
     focus, heard, typed, notices = edit_that
-    monkeypatch.setattr(app, "_press_enter_after", False)
+    monkeypatch.setattr(live, "press_enter_after", False)
     heard.append("See you at noon.")
     dictate("middle")
     heard.append("edit that, make it friendlier")
@@ -1085,7 +1086,7 @@ def test_a_phrase_queued_before_the_next_recording_keeps_its_own_message(chat, k
     the old recording's lone "press enter" was pressed unguarded in the
     window the user had switched to."""
     focus, heard, typed, notices = chat
-    monkeypatch.setattr(app, "_press_enter_after", False)
+    monkeypatch.setattr(live, "press_enter_after", False)
     app._arm_chunker(app.SAMPLE_RATE)               # recording A
     first = rs.state.message
     frames = [(np.ones(app.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
@@ -1237,7 +1238,7 @@ def test_a_phrase_cut_at_a_pause_takes_its_recordings_message_to_the_queue(chat,
     focus, heard, typed, notices = chat
     jobs = []
     monkeypatch.setattr(app, "_chunk_worker", lambda: types.SimpleNamespace(submit=jobs.append))
-    monkeypatch.setattr(app, "_chunk_cfg", types.SimpleNamespace(
+    monkeypatch.setattr(live, "chunk_cfg", types.SimpleNamespace(
         beeps=False, smart_quotes=False, notify=False, language=None, auto_space=True,
         auto_period=True, injection_mode="type"))
     app._arm_chunker(app.SAMPLE_RATE)               # recording A

@@ -14,6 +14,7 @@ import ctypes as C
 import pytest
 
 from tuxtalk import keyboard_layout as kl
+from tuxtalk import live_settings as live
 
 xkb = pytest.importorskip("ctypes").CDLL("libxkbcommon.so.0")
 P = C.c_void_p
@@ -359,7 +360,7 @@ def test_type_mode_on_a_us_keyboard_types_us_keys(typing, keyboard, monkeypatch)
 def test_untypable_text_is_pasted_instead(typing, keyboard, monkeypatch, caplog):
     app, calls = typing
     monkeypatch.setattr(kl, "active_layout", lambda: ("de", ""))
-    monkeypatch.setattr(app, "_log_transcripts", False)
+    monkeypatch.setattr(live, "log_transcripts", False)
     assert app._type_text_raw("nice 👍") is True
     assert calls == [("paste", "nice 👍")]
     assert not keyboard.events, "typed part of a dictation that was then pasted whole"

@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from tuxtalk import app, config, language_limit
+from tuxtalk import live_settings as live
 from tuxtalk import whisper_vulkan as wv
 
 
@@ -72,11 +73,11 @@ def test_the_setting_defaults_to_any_language_and_applies_without_a_restart():
 
 
 def test_the_service_reads_it_on_each_reload(monkeypatch):
-    monkeypatch.setattr(app, "_ai_engine", None)
-    app._apply_cleanup_settings(config.Settings(auto_languages="en,es"))
-    assert app._auto_languages == ("en", "es")
-    app._apply_cleanup_settings(config.Settings())
-    assert app._auto_languages == ()
+    monkeypatch.setattr(live, "ai_engine", None)
+    live.apply(config.Settings(auto_languages="en,es"))
+    assert live.auto_languages == ("en", "es")
+    live.apply(config.Settings())
+    assert live.auto_languages == ()
 
 
 # --- the processor and CUDA engine (faster-whisper) ---------------------------------
@@ -97,12 +98,12 @@ class FakeWhisper:
 
 @pytest.fixture
 def words_off(monkeypatch):
-    monkeypatch.setattr(app, "_custom_words", [])
+    monkeypatch.setattr(live, "words", [])
 
 
 def _transcribe(monkeypatch, fake, languages, language=None):
     monkeypatch.setattr(app, "model", fake, raising=False)
-    monkeypatch.setattr(app, "_auto_languages", languages)
+    monkeypatch.setattr(live, "auto_languages", languages)
     return app._transcribe_audio(np.zeros(16000, dtype=np.float32), language)
 
 

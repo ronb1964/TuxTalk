@@ -15,6 +15,7 @@ import threading
 import gi
 import pytest
 from tuxtalk import recording_state as rs
+from tuxtalk import live_settings as live
 
 # No program a test starts can reach the speakers, nor this one. Every
 # program inherits this, so a child Python's sounddevice, a player started
@@ -150,21 +151,20 @@ def _no_remembered_dictation_window(monkeypatch):
 def _dictation_state_put_back():
     """Each test starts from the dictation state and cleanup settings the
     last one started from. Tests set rs.state.is_recording and the like
-    directly, and run the settings reload (_apply_cleanup_settings), and put
+    directly, and run the settings reload (live_settings.apply), and put
     them back after their asserts: one failing assert left is_recording on
     for every later test, so one failure showed as many, depending on order."""
     import dis
-    from tuxtalk import app
     fields = {name: list(value) if isinstance(value, list) else value
               for name, value in vars(rs.state).items()}
-    names = {i.argval for i in dis.get_instructions(app._apply_cleanup_settings)
+    names = {i.argval for i in dis.get_instructions(live.apply)
              if i.opname == "STORE_GLOBAL"}
-    settings = {name: getattr(app, name) for name in names}
+    settings = {name: getattr(live, name) for name in names}
     yield
     vars(rs.state).clear()
     vars(rs.state).update(fields)
     for name, value in settings.items():
-        setattr(app, name, value)
+        setattr(live, name, value)
 
 
 @pytest.fixture(autouse=True)
@@ -403,10 +403,10 @@ def _no_real_snippets_or_words(monkeypatch, tmp_path_factory):
     against the user's real files, a test would do that for real. Tests that
     need these files point the path at their own folder.
     """
-    from tuxtalk import app, config
+    from tuxtalk import config
     folder = tmp_path_factory.mktemp("snippets")
     monkeypatch.setattr(config, "CUSTOM_COMMANDS_PATH", str(folder / "custom_commands.toml"))
-    monkeypatch.setattr(app, "_custom_words", [])
+    monkeypatch.setattr(live, "words", [])
 
 
 @pytest.fixture(autouse=True)
@@ -799,10 +799,11 @@ def service_main(monkeypatch):
         return lambda *a, **k: done.append(name) or result
 
     for name in ("model", "_gtk_loop_running", "dbus_service", "recording_indicator",
-                 "_spectrum_processor", "_key_delay_ms", "_log_transcripts", "_usage_stats",
-                 "_restore_clipboard", "_pause_media", "_duck_audio", "_paste_last_hotkey",
-                 "_custom_commands", "_custom_words"):
+                 "_spectrum_processor", "_key_delay_ms"):
         monkeypatch.setattr(app, name, getattr(app, name))
+    for name in ("log_transcripts", "usage_stats", "restore_clipboard", "pause_media",
+                 "duck_audio", "paste_last_hotkey", "commands", "words"):
+        monkeypatch.setattr(live, name, getattr(live, name))
     monkeypatch.setattr(app, "model", None)
 
     class Bus:
@@ -834,7 +835,7 @@ def service_main(monkeypatch):
     monkeypatch.setattr(app, "_acquire_single_instance", step("takes the service lock"))
     monkeypatch.setattr(app, "_install_signal_handlers", lambda: None)
     monkeypatch.setattr(app, "_guard_large_v3_without_cuda", lambda cfg: None)
-    monkeypatch.setattr(app, "_apply_cleanup_settings", lambda cfg: None)
+    monkeypatch.setattr(live, "apply", lambda cfg: None)
     monkeypatch.setattr(app, "_pick_input_device", lambda mic: None)
     monkeypatch.setattr(app, "load_custom_commands", lambda: {})
     monkeypatch.setattr(custom_words, "load", lambda: [])

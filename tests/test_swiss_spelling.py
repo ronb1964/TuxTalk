@@ -6,6 +6,7 @@ swaps it in the finished text, so it works the same with every engine.
 import pytest
 
 from tuxtalk import app, config
+from tuxtalk import live_settings as live
 from tuxtalk.normalize import swiss_spelling
 
 
@@ -51,10 +52,10 @@ def test_it_applies_without_a_restart():
 
 
 def _prepare(monkeypatch, on):
-    monkeypatch.setattr(app, "_swiss_spelling", on)
-    monkeypatch.setattr(app, "_custom_words", [])
-    monkeypatch.setattr(app, "_remove_fillers", False)
-    monkeypatch.setattr(app, "_ai_corrections", False)
+    monkeypatch.setattr(live, "swiss_spelling", on)
+    monkeypatch.setattr(live, "words", [])
+    monkeypatch.setattr(live, "remove_fillers", False)
+    monkeypatch.setattr(live, "ai_corrections", False)
     return app._prepare_text("die straße ist groß", smart_quotes=True,
                              auto_period=True, auto_space=False)
 
@@ -68,11 +69,11 @@ def test_dictation_keeps_sharp_s_when_off(monkeypatch):
 
 
 def test_the_setting_is_read_on_each_reload(monkeypatch):
-    monkeypatch.setattr(app, "_ai_engine", None)
-    app._apply_cleanup_settings(config.Settings(swiss_spelling=True))
-    assert app._swiss_spelling is True
-    app._apply_cleanup_settings(config.Settings(swiss_spelling=False))
-    assert app._swiss_spelling is False
+    monkeypatch.setattr(live, "ai_engine", None)
+    live.apply(config.Settings(swiss_spelling=True))
+    assert live.swiss_spelling is True
+    live.apply(config.Settings(swiss_spelling=False))
+    assert live.swiss_spelling is False
 
 
 def test_preferences_has_the_checkbox_bound_to_the_setting():

@@ -174,6 +174,7 @@ def test_the_engine_has_room_for_a_selection(monkeypatch):
 # --- 3. the setting and the engine --------------------------------------------------
 
 from tuxtalk import app, config
+from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
 
 
@@ -194,9 +195,9 @@ class FakeEngine:
 def no_engine(monkeypatch):
     monkeypatch.setattr(ai_cleanup, "CorrectionEngine", FakeEngine)
     monkeypatch.setattr(ai_cleanup, "is_installed", lambda: True)
-    monkeypatch.setattr(app, "_ai_engine", None)
-    monkeypatch.setattr(app, "_ai_corrections", False)
-    monkeypatch.setattr(app, "_voice_editing", False)
+    monkeypatch.setattr(live, "ai_engine", None)
+    monkeypatch.setattr(live, "ai_corrections", False)
+    monkeypatch.setattr(live, "voice_editing", False)
     FakeEngine.started = 0
 
 
@@ -206,32 +207,32 @@ def test_off_by_default_and_applied_without_a_restart():
 
 
 def test_voice_editing_alone_starts_the_engine_but_not_self_corrections(no_engine):
-    app._apply_cleanup_settings(config.Settings(voice_editing=True))
+    live.apply(config.Settings(voice_editing=True))
     assert FakeEngine.started == 1
-    assert app._voice_editing is True and app._ai_corrections is False
+    assert live.voice_editing is True and live.ai_corrections is False
 
 
 def test_self_corrections_are_skipped_while_only_voice_editing_is_on(no_engine, monkeypatch):
-    app._apply_cleanup_settings(config.Settings(voice_editing=True))
+    live.apply(config.Settings(voice_editing=True))
     called = []
     monkeypatch.setattr(ai_cleanup, "fix_self_corrections", lambda t, e: called.append(t) or t)
-    monkeypatch.setattr(app, "_custom_commands", {})
+    monkeypatch.setattr(live, "commands", {})
     app._prepare_text("order two boxes, no wait, three boxes", True, True, False)
     assert called == []
 
 
 def test_the_engine_stops_when_both_are_off(no_engine):
-    app._apply_cleanup_settings(config.Settings(voice_editing=True, ai_corrections=True))
-    engine = app._ai_engine
-    app._apply_cleanup_settings(config.Settings(voice_editing=False, ai_corrections=False))
-    assert engine.stopped and app._ai_engine is None
+    live.apply(config.Settings(voice_editing=True, ai_corrections=True))
+    engine = live.ai_engine
+    live.apply(config.Settings(voice_editing=False, ai_corrections=False))
+    assert engine.stopped and live.ai_engine is None
 
 
 def test_turning_one_off_keeps_the_engine_for_the_other(no_engine):
-    app._apply_cleanup_settings(config.Settings(voice_editing=True, ai_corrections=True))
-    engine = app._ai_engine
-    app._apply_cleanup_settings(config.Settings(voice_editing=True, ai_corrections=False))
-    assert app._ai_engine is engine and not engine.stopped
+    live.apply(config.Settings(voice_editing=True, ai_corrections=True))
+    engine = live.ai_engine
+    live.apply(config.Settings(voice_editing=True, ai_corrections=False))
+    assert live.ai_engine is engine and not engine.stopped
 
 
 # --- 4. Shift + the dictation key, and the edit itself --------------------------------
@@ -264,7 +265,7 @@ class Cfg:
 def keyloop(monkeypatch):
     """_handle_key_event with recording and grabs recorded, not performed."""
     seen = {"starts": [], "stops": 0, "grab_codes": []}
-    monkeypatch.setattr(app, "_voice_editing", True)
+    monkeypatch.setattr(live, "voice_editing", True)
     monkeypatch.setattr(rs.state, "is_recording", False)
     monkeypatch.setattr(rs.state, "edit_mode", False, raising=False)
     monkeypatch.setattr(app, "_grab_keyboards_hiding", lambda devs, codes: seen["grab_codes"].append(set(codes)))
@@ -303,7 +304,7 @@ def test_plain_f8_still_dictates(keyloop):
 def test_with_voice_editing_off_shift_f8_is_left_to_the_app(keyloop, monkeypatch):
     """The desktop doesn't hold Shift+F8 back then, so the app gets it: a
     dictation as well would answer one key twice."""
-    monkeypatch.setattr(app, "_voice_editing", False)
+    monkeypatch.setattr(live, "voice_editing", False)
     key(F8, 1, {SHIFT})
     key(F9, 1, {SHIFT})
     assert keyloop["starts"] == []
@@ -320,7 +321,7 @@ def test_a_dictation_key_starts_only_as_the_desktop_holds_it(keyloop, monkeypatc
     from tuxtalk import kwin_hotkeys
     codes = {"Shift": SHIFT, "Alt": ecodes.KEY_LEFTALT, "Ctrl": ecodes.KEY_LEFTCTRL,
              "Meta": ecodes.KEY_LEFTMETA}
-    monkeypatch.setattr(app, "_voice_editing", voice_editing)
+    monkeypatch.setattr(live, "voice_editing", voice_editing)
     cfg = types.SimpleNamespace(hotkey="F8", toggle_hotkey="F9", voice_commands_hotkey="",
                                 paste_last_hotkey="", voice_editing=voice_editing)
     held = {qt for _name, _text, qt in kwin_hotkeys.wanted_shortcuts(cfg)}
@@ -354,7 +355,7 @@ def edit_env(monkeypatch):
             return self.answer
 
     engine = Engine()
-    monkeypatch.setattr(app, "_ai_engine", engine)
+    monkeypatch.setattr(live, "ai_engine", engine)
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "make it more professional")
     monkeypatch.setattr("tuxtalk.silence.is_speechless_tap", lambda a, sr: False)
     selection = {"text": "We finished the electrical today."}
@@ -414,7 +415,7 @@ def test_each_problem_says_what_to_do(edit_env, setup, words):
 
 
 def test_without_the_ai_downloaded_it_says_where_to_turn_it_on(edit_env, monkeypatch):
-    monkeypatch.setattr(app, "_ai_engine", None)
+    monkeypatch.setattr(live, "ai_engine", None)
     run_edit()
     assert "Preferences" in edit_env["notices"][0] and edit_env["typed"] == []
 
@@ -1030,7 +1031,7 @@ def test_indenting_one_line_counts_as_a_change(edit_env, monkeypatch, said, sele
 def test_delete_and_exact_jobs_work_without_the_ai_downloaded(edit_env, keys_sent, monkeypatch):
     """Edits done with a key or in code must not say "needs its AI" when the
     AI download is missing."""
-    monkeypatch.setattr(app, "_ai_engine", None)
+    monkeypatch.setattr(live, "ai_engine", None)
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Delete this.")
     run_edit()
     assert keys_sent == [[(111, 1), (111, 0)]] and edit_env["notices"] == []
@@ -1078,7 +1079,7 @@ def test_an_image_copied_during_the_probe_is_left_alone(monkeypatch):
 
 def test_a_rewrite_uses_ss_with_swiss_spelling_on(edit_env, monkeypatch):
     """The AI writes ß like the speech engines do (issue #10)."""
-    monkeypatch.setattr(app, "_swiss_spelling", True)
+    monkeypatch.setattr(live, "swiss_spelling", True)
     edit_env["engine"].answer = "Die Straße ist gross."
     run_edit()
     assert edit_env["typed"] == ["Die Strasse ist gross."]
@@ -1104,7 +1105,7 @@ def test_a_step_with_no_change_does_not_stop_the_others(edit_env, monkeypatch):
 
 
 def test_a_rewording_step_needs_the_ai(edit_env, monkeypatch):
-    monkeypatch.setattr(app, "_ai_engine", None)
+    monkeypatch.setattr(live, "ai_engine", None)
     monkeypatch.setattr(app, "_transcribe_audio",
                         lambda audio, lang: "remove the commas and make it formal")
     run_edit()
@@ -1115,7 +1116,7 @@ def test_a_rewording_step_needs_the_ai(edit_env, monkeypatch):
 def test_the_edit_key_understands_select_commands_with_nothing_selected(edit_env, monkeypatch):
     """Shift+F8 "select the last sentence", then Shift+F8 "make it formal"."""
     pressed = []
-    monkeypatch.setattr(app, "_voice_navigation", True)
+    monkeypatch.setattr(live, "voice_navigation", True)
     monkeypatch.setattr(app, "_output_backend",
                         lambda: type("B", (), {"press_keys": lambda self, c: pressed.append(c) or True})())
     monkeypatch.setattr(rs.state, "last_inserted_text", "One. Two.")
@@ -1126,7 +1127,7 @@ def test_the_edit_key_understands_select_commands_with_nothing_selected(edit_env
 
 
 def test_with_the_labs_switch_off_nothing_selected_still_says_select_first(edit_env, monkeypatch):
-    monkeypatch.setattr(app, "_voice_navigation", False)
+    monkeypatch.setattr(live, "voice_navigation", False)
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "select the last sentence")
     edit_env["selection"]["text"] = ""
     run_edit()

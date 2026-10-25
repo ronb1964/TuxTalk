@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 from tuxtalk import app, config, focused_window, key_commands, send_countdown, window_classes
+from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
 from tuxtalk.key_commands import split_key_command
 
@@ -59,7 +60,7 @@ def _dictate(monkeypatch, raw, prepared=None, outcome="ok", window="brave-browse
 
 
 def test_press_enter_types_the_words_then_presses_enter(monkeypatch):
-    monkeypatch.setattr(app, "_press_enter_after", False)
+    monkeypatch.setattr(live, "press_enter_after", False)
     events = _dictate(monkeypatch, "See you at noon, press enter",
                       prepared=lambda r: r + ". ")
     # No auto-space before Enter: it would be sent with the message.
@@ -67,19 +68,19 @@ def test_press_enter_types_the_words_then_presses_enter(monkeypatch):
 
 
 def test_press_enter_alone_only_presses_enter(monkeypatch):
-    monkeypatch.setattr(app, "_press_enter_after", False)
+    monkeypatch.setattr(live, "press_enter_after", False)
     events = _dictate(monkeypatch, "Press enter.")
     assert events == [("enter", 'said "press enter"')]
 
 
 def test_no_enter_without_the_command(monkeypatch):
-    monkeypatch.setattr(app, "_press_enter_after", False)
+    monkeypatch.setattr(live, "press_enter_after", False)
     events = _dictate(monkeypatch, "Hello there", prepared=lambda r: r + ". ")
     assert events == [("typed", "Hello there. ")]
 
 
 def test_press_enter_after_each_dictation(monkeypatch):
-    monkeypatch.setattr(app, "_press_enter_after", True)
+    monkeypatch.setattr(live, "press_enter_after", True)
     events = _dictate(monkeypatch, "Hello there", prepared=lambda r: r + ". ")
     assert events == [("typed", "Hello there."),
                       ("enter", "Send each dictation automatically is on")]
@@ -88,7 +89,7 @@ def test_press_enter_after_each_dictation(monkeypatch):
 def test_a_cut_off_dictation_is_typed_but_not_sent(monkeypatch):
     """Letting go of the key after "and" means the sentence wasn't finished;
     sending half a message can't be taken back."""
-    monkeypatch.setattr(app, "_press_enter_after", True)
+    monkeypatch.setattr(live, "press_enter_after", True)
     events = _dictate(monkeypatch, "You can go ahead and add that. And",
                       prepared=lambda r: r + ". ")
     # No period after "And" either: the sentence isn't over, and what's said
@@ -101,7 +102,7 @@ def test_a_cut_off_dictation_is_typed_but_not_sent(monkeypatch):
 def test_a_cut_off_dictation_gets_no_period_in_a_text_editor_either(monkeypatch):
     """Ron, 2026-10-20: KWrite got "Meet me at noon and." The text-editor rule
     turned the send off before the "and" was looked at."""
-    monkeypatch.setattr(app, "_press_enter_after", True)
+    monkeypatch.setattr(live, "press_enter_after", True)
     events = _dictate(monkeypatch, "Meet me at noon and", prepared=lambda r: r + ". ",
                       window="org.kde.kwrite")
     assert events == [("typed", "Meet me at noon and ")]
@@ -121,7 +122,7 @@ def test_a_cut_off_sentence_goes_on_in_lowercase_only_in_its_own_window(monkeypa
                                                                          typed):
     """Ron, 2026-10-20: "meet me at noon and" in KWrite, then a message in
     another window began with a small letter."""
-    monkeypatch.setattr(app, "_press_enter_after", False)
+    monkeypatch.setattr(live, "press_enter_after", False)
     monkeypatch.setattr(rs.state, "continue_mid_sentence", True)
     monkeypatch.setattr(rs.state, "last_inserted_window", "org.kde.kwrite")
     events = _dictate(monkeypatch, "This is where it goes on", window=window)
@@ -129,7 +130,7 @@ def test_a_cut_off_sentence_goes_on_in_lowercase_only_in_its_own_window(monkeypa
 
 
 def test_saying_press_enter_sends_even_after_and(monkeypatch):
-    monkeypatch.setattr(app, "_press_enter_after", True)
+    monkeypatch.setattr(live, "press_enter_after", True)
     events = _dictate(monkeypatch, "Bring chips and, press enter",
                       prepared=lambda r: r + ".")
     assert ("enter", 'said "press enter"') in events
@@ -155,7 +156,7 @@ def test_whole_sentences_are_not_cut_off(text):
 
 def test_no_enter_when_the_text_did_not_arrive(monkeypatch):
     """Enter on a half-typed message would send the wrong thing."""
-    monkeypatch.setattr(app, "_press_enter_after", False)
+    monkeypatch.setattr(live, "press_enter_after", False)
     events = _dictate(monkeypatch, "See you at noon, press enter",
                       prepared=lambda r: r + ".", outcome="partial")
     assert ("enter", 'said "press enter"') not in events
@@ -188,12 +189,12 @@ def test_setting_is_off_by_default_and_applies_live():
     assert config.Settings().press_enter_after is False
     assert "press_enter_after" in config.LIVE_APPLIED_KEYS
     cfg = config.Settings(press_enter_after=True)
-    app._apply_cleanup_settings(cfg)
+    live.apply(cfg)
     try:
-        assert app._press_enter_after is True
+        assert live.press_enter_after is True
     finally:
-        app._apply_cleanup_settings(config.Settings())
-    assert app._press_enter_after is False
+        live.apply(config.Settings())
+    assert live.press_enter_after is False
 
 
 # --- The wait before an automatic send, and holding it (Ron, 2026-10-18) ---
@@ -396,7 +397,7 @@ def test_a_held_send_stops_counting(countdown, monkeypatch):
 
 
 def test_saying_press_enter_never_waits(monkeypatch):
-    monkeypatch.setattr(app, "_press_enter_after", True)
+    monkeypatch.setattr(live, "press_enter_after", True)
     monkeypatch.setattr(send_countdown, "_delay", 3.0)
     events = _dictate(monkeypatch, "See you at noon, press enter",
                       prepared=lambda r: r + ". ")
@@ -406,11 +407,11 @@ def test_saying_press_enter_never_waits(monkeypatch):
 def test_the_wait_is_a_setting_applied_live():
     assert config.Settings().press_enter_delay == 2.0
     assert "press_enter_delay" in config.LIVE_APPLIED_KEYS
-    app._apply_cleanup_settings(config.Settings(press_enter_delay=3.0, hotkey="F7"))
+    live.apply(config.Settings(press_enter_delay=3.0, hotkey="F7"))
     try:
         assert send_countdown._delay == 3.0 and send_countdown._hold_key_name == "F7"
     finally:
-        app._apply_cleanup_settings(config.Settings())
+        live.apply(config.Settings())
 
 
 def test_a_held_send_types_its_space_once_the_key_is_up(countdown, monkeypatch):
@@ -598,7 +599,7 @@ def test_the_owed_space_keeps_to_the_window_after_the_last_look(countdown, monke
     assert TYPED == []
 
 def test_the_dictation_hands_its_left_off_space_to_the_send(monkeypatch):
-    monkeypatch.setattr(app, "_press_enter_after", True)
+    monkeypatch.setattr(live, "press_enter_after", True)
     sends = []
     monkeypatch.setattr(send_countdown, "send_automatically",
                         lambda why, window, press, type_more, space="", mode="type":
@@ -644,14 +645,14 @@ def test_switching_in_the_last_second_says_not_sent(countdown, monkeypatch):
 
 def test_no_automatic_send_in_a_text_editor(monkeypatch):
     """Ron, 2026-10-18: in KWrite every dictation ended with a new line."""
-    monkeypatch.setattr(app, "_press_enter_after", True)
+    monkeypatch.setattr(live, "press_enter_after", True)
     events = _dictate(monkeypatch, "Hello there", prepared=lambda r: r + ". ",
                       window="org.kde.kwrite")
     assert events == [("typed", "Hello there. ")]     # its space kept, no Enter
 
 
 def test_saying_press_enter_still_works_in_a_text_editor(monkeypatch):
-    monkeypatch.setattr(app, "_press_enter_after", True)
+    monkeypatch.setattr(live, "press_enter_after", True)
     events = _dictate(monkeypatch, "See you at noon, press enter",
                       prepared=lambda r: r + ". ", window="org.kde.kwrite")
     assert events[-1] == ("enter", 'said "press enter"')
@@ -682,8 +683,8 @@ def test_a_pause_at_the_end_after_switching_windows_sends_nothing(monkeypatch, k
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, language: "see you at noon")
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
-    monkeypatch.setattr(app, "_press_enter_after", True)
-    monkeypatch.setattr(app, "_usage_stats", False)
+    monkeypatch.setattr(live, "press_enter_after", True)
+    monkeypatch.setattr(live, "usage_stats", False)
     monkeypatch.setattr(history, "add_entry", lambda text, replaces=None: None)
     monkeypatch.setattr(send_countdown, "_delay", wait)
     FakeTimer.made = []

@@ -8,6 +8,7 @@ import pytest
 
 from tuxtalk import clipboard as cb
 from tuxtalk import config as C
+from tuxtalk import live_settings as live
 
 
 class FakeClipboard:
@@ -206,7 +207,7 @@ def test_the_unknown_window_paste_saves_the_primary_before_setting_it(monkeypatc
                                     wait=lambda timeout: 0, poll=lambda: 0, stderr=None)
     monkeypatch.setattr(app, "_is_wayland_session", lambda: True)
     monkeypatch.setattr(app, "_which", lambda name: f"/usr/bin/{name}")
-    monkeypatch.setattr(app, "_restore_clipboard", True)
+    monkeypatch.setattr(live, "restore_clipboard", True)
     monkeypatch.setattr(app, "_clipboard_keeper", Keeper())
     monkeypatch.setattr(app.subprocess, "Popen", lambda *a, **k: wl_copy)
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
@@ -275,11 +276,11 @@ def test_paste_uses_the_keeper_only_when_the_setting_is_on(monkeypatch):
     monkeypatch.setattr(cb, "wl_copy_command", lambda: ["wl-copy", "--sensitive"])
     monkeypatch.setattr(app, "_clipboard_keeper", Keeper())
 
-    monkeypatch.setattr(app, "_restore_clipboard", False)
+    monkeypatch.setattr(live, "restore_clipboard", False)
     assert app._paste_text("hello") is True
     assert events == [] and commands[-1] == ["wl-copy", "--sensitive"]
 
-    monkeypatch.setattr(app, "_restore_clipboard", True)
+    monkeypatch.setattr(live, "restore_clipboard", True)
     assert app._paste_text("hello") is True
     assert events == ["save", ("restore", "hello")]
 

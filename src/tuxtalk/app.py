@@ -33,7 +33,7 @@ from .beeps import START_BEEP, HANDS_FREE_BEEP, CANCEL_BEEP, READY_BEEP, beep as
 from .chunking import (boundary_mark, carry_question, hold_back_boundary, word_count,
                        words_in_context)
 from .key_commands import KEY_CODES, auto_send, split_key_command
-from .logger import setup_logger, redact_text
+from .logger import setup_logger
 from .recording_indicator import RecordingIndicator
 from .undo import detect_undo_command, calculate_undo_length
 from . import (custom_commands, delivery_notices, edit_notices, focused_window, hallucinations,
@@ -45,48 +45,28 @@ from .window_classes import (ELECTRON_PASTE_BROKEN_CLASSES, SMART_NEWLINE_CLASSE
 from .hotkey_keys import (MODIFIER_CODES, check_modifiers_held, keycode_from_name, keys_down,
                           parse_hotkey_combo, track_modifier)
 from . import recording_state as rs
+from . import live_settings as live
 import threading
 
 logger = setup_logger(__name__)
 
-# Whether the full text of transcriptions may be written to the on-disk log.
-# Off by default so dictation never persists in plain text; refreshed from
-# config at startup and by the live-settings reload, so the Preferences toggle
-# takes effect on the next utterance without a restart.
-_log_transcripts = False
-# Whether each dictation is counted in the usage stats (stats.py, Preferences >
-# Stats). Numbers only; the text itself is never stored.
-_usage_stats = True
-# Put the user's clipboard back after pasting a dictation (config
-# restore_clipboard, issue #7); refreshed with the other live settings.
-_restore_clipboard = False
 _clipboard_keeper = None        # clipboard.ClipboardKeeper, created on the first paste that needs it
-# Pause music and videos while recording (config pause_media, media_pause.py).
-# Off until the service reads config at startup, so tests that call the real
-# start_recording never pause anyone's music; refreshed with the live settings.
-_pause_media = False
 _media_pauser = None            # media_pause.MediaPauser, created on the first pause
-# Turn other apps' sound down while recording (config duck_audio, audio_duck.py).
-# Off until the service reads config, for the same reason as _pause_media.
-_duck_audio = False
 _audio_ducker = None            # audio_duck.AudioDucker, created on the first duck
-# The Paste Last Dictation combo (config paste_last_hotkey), for the "couldn't
-# type that" notice; refreshed with the live settings. "" when turned off.
-_paste_last_hotkey = ""
 
 
 def _pause_media_players():
     """Pause playing music and videos and turn other sounds down, as the
     options say, in the background (the keyboard is grabbed)."""
     global _media_pauser, _audio_ducker
-    if _duck_audio:
+    if live.duck_audio:
         if _audio_ducker is None:
             from .audio_duck import AudioDucker
             _audio_ducker = AudioDucker()
             # Quitting mid-dictation would otherwise leave everything quiet.
             atexit.register(_audio_ducker.restore_now)
         _audio_ducker.duck()
-    if not _pause_media:
+    if not live.pause_media:
         return
     if _media_pauser is None:
         from .media_pause import MediaPauser
@@ -106,99 +86,6 @@ def _resume_media_players():
         _audio_ducker.restore()
 
 
-def _loggable(text):
-    """Render transcribed text for a log line, redacted unless the user opted in."""
-    return redact_text(text, reveal=_log_transcripts)
-
-
-# Dictation cleanup (Preferences). _remove_fillers enables the "um"/"uh" and
-# repeated-word rules; _ai_engine is the running self-correction engine, or
-# None while that option is off. Both follow config through
-# _apply_cleanup_settings(), at startup and on every live-settings reload.
-_remove_fillers = False
-_swiss_spelling = False     # ß -> ss in the finished text (Swiss Standard German)
-# Spoken numbers as digits: None (off), "all" or "small_as_words" (one to nine
-# stay words), and the language to read them in. See spoken_numbers.py.
-_numbers_mode = None
-_numbers_language = "en"
-# Select and move by voice (TuxTalk Labs, voice_navigation.py).
-_voice_navigation = False
-# Plain text in terminals and code editors (app_kind, plain_for_app).
-_adapt_to_app = True
-# Press Enter after every dictation, as if each ended with "press enter"
-# (key_commands.py).
-_press_enter_after = False      # after send_countdown's wait
-# The languages auto-detect may pick from, () for any (language_limit.py).
-_auto_languages = ()
-_ai_engine = None
-# Which of the two features using the AI engine are on. The engine runs while
-# either is; each checks its own flag before using it.
-_ai_corrections = False
-_voice_editing = False
-
-# Seconds of silence that end a toggle recording (0 = auto-stop off).
-_auto_stop_seconds = 0.0
-
-# Seconds of silence that end a chunk (0 = chunked dictation off), and the live
-# settings object middle chunks read beeps, quotes and language from.
-_chunk_pause_seconds = 0.0
-_chunk_cfg = None
-# Type at pause fine-tuning (Preferences → Advanced → TuxTalk Labs).
-_chunk_speech_db = 6.0
-_chunk_context_marks = True
-
-
-def _apply_cleanup_settings(cfg):
-    """Bring the cleanup and auto-stop options in line with *cfg*; start or
-    stop the AI engine."""
-    global _remove_fillers, _ai_engine, _auto_stop_seconds, _ai_corrections, _voice_editing, _swiss_spelling
-    global _numbers_mode, _numbers_language, _voice_navigation, _adapt_to_app, _auto_languages
-    global _press_enter_after
-    global _chunk_pause_seconds, _chunk_cfg, _chunk_speech_db, _chunk_context_marks
-    _auto_stop_seconds = (float(getattr(cfg, "auto_stop_seconds", 2.0))
-                          if getattr(cfg, "auto_stop_silence", False) else 0.0)
-    _chunk_cfg = cfg
-    _chunk_speech_db = float(getattr(cfg, "chunk_speech_db", 6.0))
-    _chunk_context_marks = bool(getattr(cfg, "chunk_context_marks", True))
-    pause = (float(getattr(cfg, "chunk_pause_seconds", 0.8))
-             if getattr(cfg, "chunked_dictation", False) else 0.0)
-    if pause > 0 and _auto_stop_seconds > 0 and pause >= _auto_stop_seconds:
-        # A pause as long as auto-stop's would end the recording instead of
-        # the chunk, so the chunk pause gives way.
-        clamped = max(0.3, _auto_stop_seconds - 0.2)
-        logger.warning(f"chunk_pause_seconds {pause} is not below auto_stop_seconds "
-                       f"{_auto_stop_seconds}; using {clamped}")
-        pause = clamped
-    _chunk_pause_seconds = pause
-    _remove_fillers = bool(getattr(cfg, "remove_fillers", False))
-    _swiss_spelling = bool(getattr(cfg, "swiss_spelling", False))
-    _voice_navigation = bool(getattr(cfg, "voice_navigation", False))
-    _adapt_to_app = bool(getattr(cfg, "adapt_to_app", True))
-    _press_enter_after = bool(getattr(cfg, "press_enter_after", False))
-    send_countdown.configure(cfg)
-    from . import language_limit
-    _auto_languages = language_limit.parse(getattr(cfg, "auto_languages", ""))
-    if getattr(cfg, "numbers_as_digits", False):
-        _numbers_mode = "small_as_words" if getattr(cfg, "numbers_small_as_words", False) else "all"
-    else:
-        _numbers_mode = None
-    from .recommend import effective_language
-    _numbers_language = effective_language(cfg)
-    _ai_corrections = bool(getattr(cfg, "ai_corrections", False))
-    _voice_editing = bool(getattr(cfg, "voice_editing", False))
-    want_ai = _ai_corrections or _voice_editing
-    if want_ai and _ai_engine is None:
-        from . import ai_cleanup
-        if ai_cleanup.is_installed():
-            _ai_engine = ai_cleanup.CorrectionEngine()
-            _ai_engine.start()
-        else:
-            logger.warning("The AI is on but not downloaded; turn the option off and on in Preferences")
-    elif not want_ai and _ai_engine is not None:
-        engine, _ai_engine = _ai_engine, None
-        # stop() can wait up to 5 s for the server to exit. This runs on the
-        # input thread, which must keep reading the hotkeys meanwhile.
-        threading.Thread(target=engine.stop, daemon=True, name="tt-ai-stop").start()
 
 # Cached tool path lookups — avoids searching PATH on every text injection
 _tool_cache = {}
@@ -426,21 +313,13 @@ def _show_voice_commands_via_dbus():
 # Milliseconds after each typed key event (config key_delay, set in main)
 _key_delay_ms = virtual_keyboard.KEY_DELAY_MS
 
-# Global custom commands (loaded from config in main)
-_custom_commands: dict[str, str] = {}
-# Your Words (custom_words.py): names and terms to spell the user's way. Told
-# to Whisper before it listens, and fixed in every engine's output afterwards.
-# Empty until main() loads them; reloaded when custom_words.txt changes.
-_custom_words: list[str] = []
-_last_words_mtime = None
-
 
 def _apply_custom_commands(text: str) -> tuple[str, dict[str, str]]:
     """The user's custom voice commands applied to the transcribed *text*
     (custom_commands.apply), with Your Words."""
-    result, protected = custom_commands.apply(text, _custom_commands, _custom_words)
+    result, protected = custom_commands.apply(text, live.commands, live.words)
     if result != text:
-        logger.info(f"Custom commands applied: {_loggable(text)} -> {_loggable(result)}")
+        logger.info(f"Custom commands applied: {live.loggable(text)} -> {live.loggable(result)}")
     return result, protected
 
 
@@ -449,7 +328,7 @@ def _strip_hallucinations(text: str, no_speech_prob: float = 0.0) -> str:
     stripped = hallucinations.strip(text, no_speech_prob)
     if stripped != text.strip():
         logger.info(f"Stripped a hallucination (no_speech_prob={no_speech_prob:.2f}): "
-                    f"{_loggable(text)} -> {_loggable(stripped)}")
+                    f"{live.loggable(text)} -> {live.loggable(stripped)}")
     return stripped
 
 
@@ -506,7 +385,7 @@ def _transcribe_chunk(frames, rec_sr, role, number, pause, message):
     # Logged here, on the worker, to keep file writes off the audio thread.
     seconds = sum(len(f) for f in frames) / 2 / rec_sr
     logger.info(f"Chunk {number}: {seconds:.1f}s of audio, cut after a {pause:.2f}s pause")
-    cfg = _chunk_cfg
+    cfg = live.chunk_cfg
     # Hands-free's "stop when quiet" waits while this phrase is worked on: an
     # AI rewrite can take seconds, and the user is reading, not finished.
     detector = rs.state.silence
@@ -525,9 +404,9 @@ def _arm_chunker(rec_sr, edit_mode=False):
     """Give this recording a pause detector when chunked dictation is on.
     Never for a voice edit: its instruction needs the whole recording."""
     chunker = None
-    if _chunk_pause_seconds > 0 and not edit_mode:
+    if live.chunk_pause_seconds > 0 and not edit_mode:
         from .chunking import PauseDetector
-        chunker = PauseDetector(_chunk_pause_seconds, rec_sr, speech_db=_chunk_speech_db)
+        chunker = PauseDetector(live.chunk_pause_seconds, rec_sr, speech_db=live.chunk_speech_db)
         # Started here, so the audio callback never has to build it.
         _chunk_worker()
     with _chunk_lock:
@@ -674,13 +553,6 @@ def _devices_with_input(devices, timeout):
 # poll is what makes them take effect. One stat() per second.
 CONFIG_RECHECK_SECONDS = 1.0
 
-# mtime of the config file as of the last check. None means "not yet seen".
-_last_config_mtime = None
-
-# Same, for custom_commands.toml. It is a separate file, so it needs its own
-# mtime — config.toml's says nothing about whether the commands changed.
-_last_commands_mtime = None
-
 
 class LiveSettings(NamedTuple):
     """Values the main loop keeps in locals and must rebind after a reload."""
@@ -691,96 +563,6 @@ class LiveSettings(NamedTuple):
     voice_cmds_main_key: int | None
     paste_last_combo: tuple | None = None
 
-
-def _config_file_changed() -> bool:
-    """Whether config.toml's mtime has moved since the last check.
-
-    Returns True on the very first call once the file exists, so a service that
-    starts before the file is written still picks it up. A missing or unreadable
-    file is not a change — there is nothing new to apply.
-    """
-    global _last_config_mtime
-    try:
-        mtime = os.path.getmtime(config_module.CONFIG_PATH)
-    except OSError:
-        return False
-
-    if mtime == _last_config_mtime:
-        return False
-
-    _last_config_mtime = mtime
-    return True
-
-
-def _commands_file_changed() -> bool:
-    """Whether custom_commands.toml's mtime has moved since the last check.
-
-    Custom commands live in their own file, so config.toml's mtime says nothing
-    about them; this is what makes an edit in the Commands tab take effect.
-
-    Same contract as _config_file_changed(): True once per change, and a missing
-    or unreadable file is not a change.
-    """
-    global _last_commands_mtime
-    try:
-        mtime = os.path.getmtime(config_module.CUSTOM_COMMANDS_PATH)
-    except OSError:
-        return False
-
-    if mtime == _last_commands_mtime:
-        return False
-
-    _last_commands_mtime = mtime
-    return True
-
-
-def _reload_custom_commands() -> None:
-    """Re-read custom_commands.toml into the running service.
-
-    A damaged file leaves the commands already in force untouched. load_config's
-    reload follows the same rule: a bad file must never degrade a live dictation
-    session, and load_custom_commands() returns {} on a read failure, which would
-    otherwise silently disable every command mid-session.
-    """
-    global _custom_commands
-    try:
-        fresh = load_custom_commands()
-        if config_module._commands_read_failed:
-            logger.warning("Custom commands unreadable, keeping the current ones")
-            return
-        _custom_commands = fresh
-        logger.info(f"Reloaded {len(_custom_commands)} custom voice command(s)")
-    except Exception as e:
-        logger.warning(f"Could not reload custom commands, keeping current: {e}")
-
-
-def _words_file_changed() -> bool:
-    """Whether custom_words.txt's mtime has moved since the last check.
-    Same contract as _commands_file_changed()."""
-    global _last_words_mtime
-    from . import custom_words
-    try:
-        mtime = os.path.getmtime(custom_words.path())
-    except OSError:
-        return False
-    if mtime == _last_words_mtime:
-        return False
-    _last_words_mtime = mtime
-    return True
-
-
-def _reload_custom_words() -> None:
-    """Re-read custom_words.txt into the running service. A file that can't
-    be read keeps the words already in force, like _reload_custom_commands."""
-    global _custom_words
-    from . import custom_words
-    try:
-        fresh = custom_words.load(strict=True)
-    except (OSError, UnicodeDecodeError) as e:
-        logger.warning(f"Could not reload your words, keeping the current ones: {e}")
-        return
-    _custom_words = fresh
-    logger.info(f"Reloaded your words ({len(_custom_words)})")
 
 
 def _reload_live_settings(cfg, indicator):
@@ -814,23 +596,7 @@ def _reload_live_settings(cfg, indicator):
         global _key_delay_ms
         _key_delay_ms = cfg.key_delay
 
-        global _log_transcripts
-        _log_transcripts = getattr(cfg, "log_transcripts", False)
-
-        global _usage_stats
-        _usage_stats = getattr(cfg, "usage_stats", True)
-
-        global _restore_clipboard
-        _restore_clipboard = getattr(cfg, "restore_clipboard", False)
-
-        global _pause_media, _duck_audio
-        _pause_media = getattr(cfg, "pause_media", True)
-        _duck_audio = getattr(cfg, "duck_audio", False)
-
-        global _paste_last_hotkey
-        _paste_last_hotkey = getattr(cfg, "paste_last_hotkey", "")
-
-        _apply_cleanup_settings(cfg)
+        live.apply(cfg)
 
         if indicator is not None:
             indicator.apply_settings(
@@ -1374,7 +1140,7 @@ def _type_text_raw(text: str) -> bool:
         events = keyboard_layout.layout_key_events(text)
     except keyboard_layout.UntypableText as e:
         layout, blocker = e.args
-        logger.info(f"The {layout} keyboard layout can't type {_loggable(blocker)}; "
+        logger.info(f"The {layout} keyboard layout can't type {live.loggable(blocker)}; "
                     "pasting instead")
         if _is_wayland_session():
             return _paste_text(text)
@@ -1507,7 +1273,7 @@ def _paste_text(text: str) -> bool:
             # be re-pasted if it landed in the wrong window.
             from . import clipboard
             global _clipboard_keeper
-            keeping = _restore_clipboard
+            keeping = live.restore_clipboard
             if keeping:
                 if _clipboard_keeper is None:
                     _clipboard_keeper = clipboard.ClipboardKeeper()
@@ -1694,13 +1460,13 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
 
     from .whisper_vulkan import VulkanWhisperModel
     from . import custom_words, language_limit
-    words_prompt = custom_words.prompt(_custom_words)
+    words_prompt = custom_words.prompt(live.words)
     # Auto-detect held to the user's languages: one language is simply used,
     # two or more are checked against Whisper's own pick (language_limit.py).
     # Parakeet below has no language setting, so this changes nothing there.
     if not language:
-        language = language_limit.forced_language(_auto_languages)
-    limit_to = () if language else _auto_languages
+        language = language_limit.forced_language(live.auto_languages)
+    limit_to = () if language else live.auto_languages
     if isinstance(engine, VulkanWhisperModel):
         # Only pass a prompt or a language list when there is one, so nothing
         # changes without them.
@@ -1711,12 +1477,12 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
             extra["limit_to"] = limit_to
         raw, _no_speech = engine.transcribe(audio_f32, language, **extra)
         logger.info(f"TIMING: Transcription completed in {time.time() - transcribe_start:.2f}s (Vulkan GPU)")
-        logger.info(f"Raw transcription (Vulkan GPU): {_loggable(raw)}")
+        logger.info(f"Raw transcription (Vulkan GPU): {live.loggable(raw)}")
         # whisper.cpp's no-speech score isn't reliable (0.90 on clear speech,
         # 0.00 on silence, see whisper_vulkan.parse_result), so the recording's
         # own loudness stands in for it. With nobody talking, a lone "Thanks
         # for watching!" is invented; said aloud, it is kept.
-        if custom_words.is_echo(raw, _custom_words):
+        if custom_words.is_echo(raw, live.words):
             logger.info("Whisper read your words back with nothing said; dropped")
             return None
         no_speech = 1.0 if silence.has_no_speech(audio_f32, SAMPLE_RATE) else 0.0
@@ -1732,11 +1498,11 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
         # talking counts as no speech, and a filler alone is dropped.
         # Your Words steer Parakeet's decoder (parakeet_bias.py).
         from .parakeet_gpu import _steer
-        _steer(engine, _custom_words)
+        _steer(engine, live.words)
         raw = engine.recognize(audio_f32)
         where = " on GPU" if isinstance(engine, ParakeetGpuModel) else ""
         logger.info(f"TIMING: Transcription completed in {time.time() - transcribe_start:.2f}s (Parakeet{where})")
-        logger.info(f"Raw transcription (Parakeet): {_loggable(raw)}")
+        logger.info(f"Raw transcription (Parakeet): {live.loggable(raw)}")
         no_speech = 1.0 if raw and silence.has_no_speech(audio_f32, SAMPLE_RATE) else 0.0
         return _strip_hallucinations(raw, no_speech_prob=no_speech) or None
 
@@ -1785,16 +1551,16 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
 
     raw = " ".join(seg.text for seg in seg_list).strip()
     max_no_speech_prob = max((seg.no_speech_prob for seg in seg_list), default=0.0)
-    logger.info(f"Raw transcription (before hallucination filter): {_loggable(raw)}  [no_speech_prob={max_no_speech_prob:.2f}]")
+    logger.info(f"Raw transcription (before hallucination filter): {live.loggable(raw)}  [no_speech_prob={max_no_speech_prob:.2f}]")
 
-    if custom_words.is_echo(raw, _custom_words):
+    if custom_words.is_echo(raw, live.words):
         logger.info("Whisper read your words back with nothing said; dropped")
         return None
 
     # Strip common Whisper hallucinations like "thank you" from the end
     raw = _strip_hallucinations(raw, no_speech_prob=max_no_speech_prob)
     if raw:
-        logger.info(f"Raw transcription (after hallucination filter): {_loggable(raw)}")
+        logger.info(f"Raw transcription (after hallucination filter): {live.loggable(raw)}")
     return raw or None
 
 
@@ -1904,10 +1670,11 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
 
 def _numbers_to_digits(text: str) -> str:
     """*text* with spoken numbers as digits, when that option is on."""
-    if not _numbers_mode:
+    if not live.numbers_mode:
         return text
     from .spoken_numbers import to_digits
-    return to_digits(text, _numbers_language, small_as_words=_numbers_mode == "small_as_words")
+    return to_digits(text, live.numbers_language,
+                     small_as_words=live.numbers_mode == "small_as_words")
 
 
 def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bool,
@@ -1928,9 +1695,9 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
     processed, protected = _apply_custom_commands(raw)
     # Your Words, first pass: before tidying, a hyphen inside a word can only
     # have come from the engine ("Tux-Talk"), so it may join here.
-    if _custom_words:
+    if live.words:
         from .custom_words import fix_spelling
-        processed = fix_spelling(processed, _custom_words)
+        processed = fix_spelling(processed, live.words)
 
     # Normalize text (capitalization, punctuation, etc.). auto_period is passed
     # through because this pass otherwise ends every line with a full stop of
@@ -1947,21 +1714,21 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
     # Optional cleanup, while quoted custom-command replacements are still
     # placeholders, so a literal replacement is never "cleaned". Rules first
     # ("um", "the the"), then the AI for sentences with a self-correction.
-    if _remove_fillers:
+    if live.remove_fillers:
         from .cleanup import clean_fillers_and_repeats
         text = clean_fillers_and_repeats(text)
-    if ai and _ai_corrections and _ai_engine is not None:
+    if ai and live.ai_corrections and live.ai_engine is not None:
         from . import ai_cleanup
-        text = ai_cleanup.fix_self_corrections(text, _ai_engine)
+        text = ai_cleanup.fix_self_corrections(text, live.ai_engine)
 
     # Your Words, second pass: "tux talk" -> "TuxTalk" and iPhone's capitals
     # back after a sentence start made it IPhone. After snippets, so a snippet
     # whose phrase contains the split-up word still matches; while quoted
     # snippets are still placeholders, so a literal one is never touched; and
     # with no hyphen joins, since by now a hyphen means the user said "dash".
-    if _custom_words:
+    if live.words:
         from .custom_words import fix_spelling
-        text = fix_spelling(text, _custom_words, hyphens=False)
+        text = fix_spelling(text, live.words, hyphens=False)
 
     # Spoken numbers as digits. Before the quoted snippets come back, so a
     # literal snippet is typed exactly as written.
@@ -1973,7 +1740,7 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
 
     # Swiss Standard German writes ss where the engines write ß. Last, so it
     # also covers snippets, Your Words and the AI's corrections.
-    if _swiss_spelling:
+    if live.swiss_spelling:
         text = swiss_spelling(text)
 
     # Handle mid-sentence continuation after undo:
@@ -1983,7 +1750,7 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
         # noon and" in KWrite mustn't begin with a small letter.
         focused = _query_focused_window_class()
         if (not _not_where_typed(focused) and text[0].isupper()
-                and safe_to_lowercase_first_word(text, _custom_words)):
+                and safe_to_lowercase_first_word(text, live.words)):
             text = text[0].lower() + text[1:]
             logger.info("Lowercased first letter for mid-sentence continuation")
         rs.state.continue_mid_sentence = False
@@ -1994,7 +1761,7 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
     text = append_auto_punct(text, auto_period, auto_space)
     if app_kind:
         text = plain_for_app(text, app_kind)
-    logger.info(f"Normalized text: {_loggable(text)}")
+    logger.info(f"Normalized text: {live.loggable(text)}")
     return text
 
 
@@ -2304,11 +2071,11 @@ def _toggle_pressed_while_recording(beeps_on: bool) -> bool:
     counts as speech; the start beep the mic may pick up first does not.
     """
     started = rs.state.toggle_started_at
-    if (_auto_stop_seconds <= 0 or started is None or rs.state.silence is not None
+    if (live.auto_stop_seconds <= 0 or started is None or rs.state.silence is not None
             or time.time() - started > DOUBLE_TAP_S):
         return False
     rate = getattr(rs.state, "recording_samplerate", SAMPLE_RATE)
-    detector = silence.SilenceDetector(_auto_stop_seconds, rate)
+    detector = silence.SilenceDetector(live.auto_stop_seconds, rate)
     beep_hz = START_BEEP[0] if rs.state.start_beep is not None else None
     if silence.has_a_word(_frames_f32(list(rs.state.frames)), rate, ignoring_hz=beep_hz):
         detector.heard_speech()
@@ -2472,8 +2239,8 @@ def _report_undelivered(outcome: str, beeps_on: bool):
                            "in the TuxTalk menu: click it to copy, then paste with Ctrl+V.")
         except Exception as e:
             logger.debug(f"Couldn't work out why typing failed: {e}")
-    if _paste_last_hotkey:
-        message += f" Or press {_paste_last_hotkey} to type it again where your cursor is."
+    if live.paste_last_hotkey:
+        message += f" Or press {live.paste_last_hotkey} to type it again where your cursor is."
     logger.warning(f"Dictation not delivered ({outcome}); told the user")
     _beep(beeps_on, *CANCEL_BEEP)
     _notify(delivery_notices.TITLES[outcome], message)
@@ -2580,7 +2347,8 @@ def _corrects_across_pause(raw: str, chunk_role, message) -> bool:
     Needs AI self-corrections on and a phrase of this recording typed."""
     if chunk_role is None or not (message.has_words and message.complete):
         return False
-    if not (_ai_corrections and _ai_engine is not None and rs.state.last_inserted_text.strip()):
+    if not (live.ai_corrections and live.ai_engine is not None
+            and rs.state.last_inserted_text.strip()):
         return False
     if rs.state.held_cue:
         return True
@@ -2629,11 +2397,11 @@ def _correct_across_pause(text: str):
     if cue and cue[-1] not in ".?!,;:":
         cue += ","
     if (cue.endswith(",") and text[:1].isupper()
-            and safe_to_lowercase_first_word(text, _custom_words)):
+            and safe_to_lowercase_first_word(text, live.words)):
         text = text[0].lower() + text[1:]      # "No wait, four", not "Four"
     said = f"{cue} {text}" if cue else text
     joined = prev + ("" if prev[-1:].isspace() else " ") + said
-    fixed = ai_cleanup.fix_self_corrections(joined, _ai_engine)
+    fixed = ai_cleanup.fix_self_corrections(joined, live.ai_engine)
     if fixed == joined or not fixed.strip():
         return said, ""
     if not _erase_typed(prev):
@@ -2695,7 +2463,7 @@ def _resolve_boundary(audio_f32, language, injection_mode, raw="", auto_period=T
         logger.warning(f"Couldn't hear the chunk boundary in context: {e}")
     if (raw and len(raw.split()) <= ENTER_IN_CONTEXT_MAX_WORDS
             and not split_key_command(raw)[1] and split_key_command(joint)[1] == "ENTER"):
-        logger.info(f"Heard \"press enter\" in context ({_loggable(raw)} alone)")
+        logger.info(f"Heard \"press enter\" in context ({live.loggable(raw)} alone)")
         raw = "press enter"
         # The sentence ends here, as it would after "press enter" said
         # clearly (_flush_boundary): its mark, and no space to send.
@@ -2708,7 +2476,7 @@ def _resolve_boundary(audio_f32, language, injection_mode, raw="", auto_period=T
         # Whether to press a key stays the rule above's call.
         if (0 < word_count(heard) < word_count(raw)
                 and split_key_command(heard)[1] == split_key_command(raw)[1]):
-            logger.info(f"Short phrase: {_loggable(raw)} alone, {_loggable(heard)} "
+            logger.info(f"Short phrase: {live.loggable(raw)} alone, {live.loggable(heard)} "
                         "in context; typing what the context heard")
             raw = heard
     _type_boundary(pending, (mark + " ") if mark else " ", injection_mode)
@@ -2730,7 +2498,7 @@ def _flush_boundary(auto_period: bool, auto_space: bool, injection_mode: str) ->
     now = focused_window.look()
     if focused_window.changed(pending["where"], now):
         return  # the end of this sentence isn't in the window that has focus
-    kind = app_kind(now[0]) if _adapt_to_app else ""
+    kind = app_kind(now[0]) if live.adapt_to_app else ""
     mark = pending["mark"] or ("." if auto_period and not kind else "")
     _type_boundary(pending, mark + (" " if auto_space and not kind else ""), injection_mode)
 
@@ -2846,14 +2614,14 @@ def _end_in_a_pause(message, beeps_on, auto_space, auto_period, injection_mode) 
         if auto_period and cue[-1] not in ".?!":
             cue += "."
         _inject_text(cue + (" " if auto_space else ""), injection_mode, message=message)
-    if (_press_enter_after and message.has_words and message.complete
+    if (live.press_enter_after and message.has_words and message.complete
             and not is_document_window(_query_focused_window_class())):
         _flush_boundary(auto_period, False, injection_mode)
         _send_automatically(" " if auto_space else "", injection_mode, message)
         _start_afresh(message)
     else:
         _flush_boundary(auto_period, auto_space, injection_mode)
-    if not _chunk_context_marks:
+    if not live.chunk_context_marks:
         rs.state.continue_mid_sentence = False   # it belongs to this recording
     if not unfinished_edit:                   # that one beeped its cancel
         _beep(beeps_on, *READY_BEEP)
@@ -2923,7 +2691,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         logger.info(f"TIMING: Transcription pipeline took {time.time() - t0:.2f}s")
         if chunk_role is not None:
             logger.info(f"Chunk ({chunk_role}): {len(audio_f32) / SAMPLE_RATE:.1f}s of audio, "
-                        f"raw: {_loggable(raw)}")
+                        f"raw: {live.loggable(raw)}")
         if not raw:
             if _nothing_in_chunk("was not recognised"):
                 return
@@ -2985,7 +2753,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # recording, not each phrase of Type at pause.
         raw, said = split_key_command(raw)
         press, cut_off = said, ""
-        if not said and _press_enter_after and chunk_role != "middle":
+        if not said and live.press_enter_after and chunk_role != "middle":
             sending, cut_off = auto_send(raw, is_document_window(_query_focused_window_class()))
             press = "ENTER" if sending else ""
         if said and not raw.strip():
@@ -2999,7 +2767,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # Stage 3: Normalize text (voice commands, punctuation, spacing),
         # plainer for a terminal or code editor ("Plain text in terminals and
         # code editors").
-        kind = app_kind(_query_focused_window_class()) if _adapt_to_app else ""
+        kind = app_kind(_query_focused_window_class()) if live.adapt_to_app else ""
         # A pause is not a sentence end, so a middle chunk gets no auto-period
         # of its own; the last chunk (or _flush_boundary) ends the sentence.
         # "press enter" at the end of one does end it: the message is sent.
@@ -3030,7 +2798,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             rs.state.question_open = False
             text = carry_question(text)
         held_mark = None
-        if chunk_role == "middle" and _chunk_context_marks and not said:
+        if chunk_role == "middle" and live.chunk_context_marks and not said:
             text, held_mark = hold_back_boundary(text, raw)
         space_left_off = ""
         if press:
@@ -3070,7 +2838,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             _remember_shown(rs.state.last_inserted_text, chunked, outcome == "ok")
             _after_the_words(outcome, said, press, space_left_off, chunk_role, beeps_on,
                              injection_mode, message)
-            if chunk_role == "middle" and not _chunk_context_marks and outcome == "ok" \
+            if chunk_role == "middle" and not live.chunk_context_marks and outcome == "ok" \
                     and not press:
                 # Without the context pass the engine's own mark decides: after
                 # a comma or none, the next chunk carries on lowercase.
@@ -3083,7 +2851,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                                           "raw": raw, "typed": rs.state.last_inserted_text,
                                           "where": rs.state.last_inserted_where,
                                           "message": message}
-            if _usage_stats:
+            if live.usage_stats:
                 # After typing, so saving the counts never delays the text.
                 # Counts only (words, seconds dictating); see stats.py.
                 from .stats import count_words, record
@@ -3261,7 +3029,7 @@ def _handle_navigation(raw: str, beeps_on: bool, focused_class=_UNKNOWN_WINDOW) 
     """Select and move by voice (TuxTalk Labs). True when the whole dictation
     was one of voice_navigation's commands, done or refused with a notice;
     False to type it as text."""
-    if not _voice_navigation:
+    if not live.voice_navigation:
         return False
     from . import voice_navigation as nav
     command = nav.parse(raw)
@@ -3344,7 +3112,7 @@ def _handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: st
     rest says, as Shift+F8 does for a selection. True when it was handled
     (done, or refused with a notice); False to type the words as text, which
     is also what happens when nothing was just typed to edit."""
-    if not _voice_editing:
+    if not live.voice_editing:
         return False
     from . import voice_edit_rules
     from . import voice_navigation as nav
@@ -3493,7 +3261,7 @@ def _edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0
     if not selected:
         # "select the last sentence" needs nothing selected: it makes the selection the
         # next edit works on. The clipboard is already back (copy_selection does that).
-        if _voice_navigation and not spoken:
+        if live.voice_navigation and not spoken:
             said = get_instruction()
             if said and _handle_navigation(said, beeps_on, focused_class):
                 return
@@ -3507,7 +3275,7 @@ def _edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0
             return
         if _handle_navigation(instruction, beeps_on, focused_class):
             return
-        logger.info(f"Voice edit: {_loggable(instruction)} ({len(selected)} characters)")
+        logger.info(f"Voice edit: {live.loggable(instruction)} ({len(selected)} characters)")
         # Deleting, formatting and exact jobs need no AI (voice_edit_rules.py).
         if voice_edit_rules.is_delete(instruction):
             return _delete_selection(focused_class, beeps_on)
@@ -3527,13 +3295,13 @@ def _edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0
         steps = voice_edit_rules.split_steps(instruction)
         if len(steps) > 1:
             logger.info(f"Voice edit: {len(steps)} changes, one at a time")
-        engine = _ai_engine
+        engine = live.ai_engine
         text = selected
         for step in steps:
             done = voice_edit_rules.mechanical_edit(text, step)
             if done is not None:
                 logger.info("Voice edit done in code, without the AI"
-                            + (f" ({_loggable(step)})" if len(steps) > 1 else ""))
+                            + (f" ({live.loggable(step)})" if len(steps) > 1 else ""))
             elif engine is None:
                 _edit_problem("not_installed", beeps_on)
                 return
@@ -3548,11 +3316,11 @@ def _edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0
                     done = None
                 if done is None and len(steps) > 1:
                     # One change the AI had nothing for needn't cost the others.
-                    logger.info(f"Voice edit: no change for {_loggable(step)}")
+                    logger.info(f"Voice edit: no change for {live.loggable(step)}")
             if done is not None:
                 text = done
         result = text if text != selected else None
-        if result and _swiss_spelling:
+        if result and live.swiss_spelling:
             result = swiss_spelling(result)
         if result:
             result = _numbers_to_digits(result)
@@ -3563,7 +3331,7 @@ def _edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0
             return
         if _refuse_password_field(beeps_on):
             return
-        logger.info(f"Voice edit result: {_loggable(result)} "
+        logger.info(f"Voice edit result: {live.loggable(result)} "
                     f"(took {time.time() - t0:.2f}s)")
         history.add_entry(result)
         if focused_class is None:
@@ -3634,7 +3402,7 @@ def _someone_elses_shortcut(held_modifiers) -> bool:
     for us (kwin_hotkeys.wanted_shortcuts: the plain key, and Shift with it
     when voice editing is on). Such a press reaches the app (Alt+F8 resizes
     the window on KDE and GNOME), so it mustn't start a dictation as well."""
-    allowed = _SHIFT_CODES if _voice_editing else frozenset()
+    allowed = _SHIFT_CODES if live.voice_editing else frozenset()
     return bool(set(held_modifiers) - allowed)
 
 
@@ -3693,7 +3461,7 @@ def _toggle_tap_holds_send(event, toggle_key, held_modifiers) -> bool:
     the key, could go out before the hold."""
     return (event.code == toggle_key and event.value == 1 and not rs.state.is_recording
             and not _someone_elses_shortcut(held_modifiers - {toggle_key})
-            and not (_voice_editing and _held_shift(held_modifiers))
+            and not (live.voice_editing and _held_shift(held_modifiers))
             and send_countdown.hold(announce=True))
 
 
@@ -3708,7 +3476,7 @@ def _start_hold_recording(hold_key, held_modifiers, devices, cfg, input_device_i
     to open. Shift unhidden, the Ctrl+C that copies the selection would
     arrive as Ctrl+Shift+C."""
     held = send_countdown.hold(announce=False)
-    shift = _held_shift(held_modifiers) if _voice_editing else set()
+    shift = _held_shift(held_modifiers) if live.voice_editing else set()
     _grab_keyboards_hiding(devices, {hold_key, *shift})
     if (start_recording(cfg.beeps, cfg.notify, input_device_idx, edit_mode=bool(shift),
                         held_send=held) and rs.state.held_send):
@@ -3809,7 +3577,7 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
 
     if (toggle_key and event.code == toggle_key and event.value == 1
             and not _someone_elses_shortcut(held_modifiers - {toggle_key})):
-        shift = _held_shift(held_modifiers) if _voice_editing else set()
+        shift = _held_shift(held_modifiers) if live.voice_editing else set()
         if not rs.state.is_recording:
             if shift:
                 # An edit: no double-tap hands-free, so not "from_toggle".
@@ -3977,7 +3745,7 @@ def _service_tick(cfg, svc: "_ServiceState") -> "LiveSettings | None":
                 cap = _finish_capture(cfg.beeps, cfg.notify)
                 if cap is not None:
                     frames, rec_sr = cap
-                    if _chunk_pause_seconds > 0:
+                    if live.chunk_pause_seconds > 0:
                         # Chunked dictation: through the chunk worker, so the
                         # rest is typed after this recording's chunks and
                         # before the next recording's. No wait, as below.
@@ -4024,19 +3792,19 @@ def _service_tick(cfg, svc: "_ServiceState") -> "LiveSettings | None":
         # tick. Unconditionally, and before the early return below: an edit to
         # the Commands tab alone leaves config.toml untouched, so gating this on
         # a config change would be gating it on the thing that did not happen.
-        if _commands_file_changed():
-            _reload_custom_commands()
-        if _words_file_changed():
-            _reload_custom_words()
-        if _config_file_changed():
+        if live.commands_file_changed():
+            live.reload_commands()
+        if live.words_file_changed():
+            live.reload_words()
+        if live.config_file_changed():
             # Saving settings is activity too. Switching the auto-timeout on
             # must not stop the service a second later because the clock still
             # counts from the last D-Bus command.
             svc.last_activity = now
-            live = _reload_live_settings(cfg, recording_indicator)
+            reloaded = _reload_live_settings(cfg, recording_indicator)
             # cfg.mic is fresh now; the device number behind it may not be.
             svc.refresh_input_device()
-            return live
+            return reloaded
     return None
 
 
@@ -4082,9 +3850,9 @@ def _loop_evdev(cfg: Settings, input_device_idx, keyboards=None):
     # spurious change and re-apply what the service just started with.
     # The recheck timer itself lives on _ServiceState — _service_tick owns it
     # for both backends.
-    _config_file_changed()
-    _commands_file_changed()
-    _words_file_changed()
+    live.config_file_changed()
+    live.commands_file_changed()
+    live.words_file_changed()
 
     # First run check: exit early if onboarding not complete
     try:
@@ -4149,14 +3917,14 @@ def _loop_evdev(cfg: Settings, input_device_idx, keyboards=None):
         # from what the tick reloaded. It must not check _config_file_changed()
         # itself: that check is edge-triggered, and the tick has already
         # consumed the change.
-        live = _service_tick(cfg, svc)
-        if live is not None:
-            hold_key = live.hold_key
-            toggle_key = live.toggle_key
-            vc_hotkey_str = live.vc_hotkey_str
-            voice_cmds_combo = live.voice_cmds_combo
-            voice_cmds_main_key = live.voice_cmds_main_key
-            paste_last_combo = live.paste_last_combo
+        reloaded = _service_tick(cfg, svc)
+        if reloaded is not None:
+            hold_key = reloaded.hold_key
+            toggle_key = reloaded.toggle_key
+            vc_hotkey_str = reloaded.vc_hotkey_str
+            voice_cmds_combo = reloaded.voice_cmds_combo
+            voice_cmds_main_key = reloaded.voice_cmds_main_key
+            paste_last_combo = reloaded.paste_last_combo
             # Re-claim even if the hotkeys look unchanged: claim() is cheap,
             # and comparing would mean a second copy of the hotkey fields.
             _claim_desktop_hotkeys(cfg)
@@ -4599,38 +4367,22 @@ def main():
     if not os.environ.get("FLATPAK_ID"):
         virtual_keyboard.start()
 
-    # Whether transcribed text may be written to the log (off = redacted).
-    global _log_transcripts
-    _log_transcripts = getattr(cfg, 'log_transcripts', False)
-
-    global _usage_stats
-    _usage_stats = getattr(cfg, 'usage_stats', True)
-    global _restore_clipboard
-    _restore_clipboard = getattr(cfg, 'restore_clipboard', False)
-    global _pause_media, _duck_audio
-    _pause_media = getattr(cfg, 'pause_media', True)
-    _duck_audio = getattr(cfg, 'duck_audio', False)
     # A service that stopped mid-dictation may have left other apps quiet.
     try:
         from .audio_duck import restore_left_over
         restore_left_over()
     except Exception as e:
         logger.debug(f"Could not check for sounds left turned down: {e}")
-    global _paste_last_hotkey
-    _paste_last_hotkey = getattr(cfg, 'paste_last_hotkey', '')
+    # The live options; the AI engine (if on) loads in the background.
+    live.apply(cfg)
 
-    # Dictation cleanup; the AI engine (if on) loads in the background.
-    _apply_cleanup_settings(cfg)
-
-    global _custom_commands
-    _custom_commands = load_custom_commands()
-    if _custom_commands:
-        logger.info(f"Loaded {len(_custom_commands)} custom voice command(s)")
-    global _custom_words
+    live.commands = load_custom_commands()
+    if live.commands:
+        logger.info(f"Loaded {len(live.commands)} custom voice command(s)")
     from . import custom_words
-    _custom_words = custom_words.load()
-    if _custom_words:
-        logger.info(f"Loaded your words ({len(_custom_words)})")
+    live.words = custom_words.load()
+    if live.words:
+        logger.info(f"Loaded your words ({len(live.words)})")
 
     input_device_idx = _pick_input_device(cfg.mic)
 

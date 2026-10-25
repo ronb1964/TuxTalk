@@ -14,6 +14,7 @@ from tuxtalk import recording_state as rs
 from tuxtalk.hotkey_helper_client import HelperKeyboard, connect_helper, watch_specs
 from tuxtalk.hotkey_keys import track_modifier
 from test_hotkey_helper import FakeKeyboard
+from tuxtalk import live_settings as live
 
 F8, F9, ESC = 66, 67, 1
 RCTRL = 97
@@ -68,7 +69,7 @@ def rig(tmp_path, monkeypatch):
     calls = []
     monkeypatch.setattr(app, "_grabbed_devices", [])
     monkeypatch.setattr(app, "_injected_pending", [])
-    monkeypatch.setattr(app, "_voice_editing", False)
+    monkeypatch.setattr(live, "voice_editing", False)
     monkeypatch.setattr(app, "_hotkey_test_active", lambda: False)
     monkeypatch.setattr(rs.state, "is_recording", False)
     monkeypatch.setattr(rs.state, "edit_mode", False, raising=False)
@@ -127,7 +128,7 @@ def test_holding_the_dictation_key_records_and_hides_it(rig):
 
 def test_shift_with_the_dictation_key_starts_an_edit_and_hides_shift_too(rig, monkeypatch):
     helper, kb, client, loop, calls = rig
-    monkeypatch.setattr(app, "_voice_editing", True)
+    monkeypatch.setattr(live, "voice_editing", True)
     kb.press(LSHIFT)
     kb.press(F8)
     loop()

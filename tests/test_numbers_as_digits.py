@@ -8,6 +8,7 @@ choice keeps one to nine as words, the way many style guides write them.
 import pytest
 
 from tuxtalk import app, config
+from tuxtalk import live_settings as live
 from tuxtalk.spoken_numbers import SUPPORTED_LANGUAGES, to_digits
 
 
@@ -125,12 +126,12 @@ def test_it_applies_without_a_restart():
 
 
 def _prepare(monkeypatch, mode, raw="i have three cats and twenty five chickens"):
-    monkeypatch.setattr(app, "_numbers_mode", mode)
-    monkeypatch.setattr(app, "_numbers_language", "en")
-    monkeypatch.setattr(app, "_custom_words", [])
-    monkeypatch.setattr(app, "_remove_fillers", False)
-    monkeypatch.setattr(app, "_ai_corrections", False)
-    monkeypatch.setattr(app, "_swiss_spelling", False)
+    monkeypatch.setattr(live, "numbers_mode", mode)
+    monkeypatch.setattr(live, "numbers_language", "en")
+    monkeypatch.setattr(live, "words", [])
+    monkeypatch.setattr(live, "remove_fillers", False)
+    monkeypatch.setattr(live, "ai_corrections", False)
+    monkeypatch.setattr(live, "swiss_spelling", False)
     return app._prepare_text(raw, smart_quotes=True, auto_period=True, auto_space=False)
 
 
@@ -148,21 +149,21 @@ def test_dictation_is_unchanged_when_off(monkeypatch):
 
 def test_settings_pick_the_mode_and_language(monkeypatch):
     # Put back whatever the other tests expect once this one is done.
-    monkeypatch.setattr(app, "_numbers_mode", None)
-    monkeypatch.setattr(app, "_numbers_language", "en")
-    monkeypatch.setattr(app, "_ai_engine", None)
+    monkeypatch.setattr(live, "numbers_mode", None)
+    monkeypatch.setattr(live, "numbers_language", "en")
+    monkeypatch.setattr(live, "ai_engine", None)
     cfg = config.Settings()
     cfg.numbers_as_digits = True
     cfg.dictation_language = "de"
-    app._apply_cleanup_settings(cfg)
-    assert app._numbers_mode == "all"
-    assert app._numbers_language == "de"
+    live.apply(cfg)
+    assert live.numbers_mode == "all"
+    assert live.numbers_language == "de"
     cfg.numbers_small_as_words = True
-    app._apply_cleanup_settings(cfg)
-    assert app._numbers_mode == "small_as_words"
+    live.apply(cfg)
+    assert live.numbers_mode == "small_as_words"
     cfg.numbers_as_digits = False
-    app._apply_cleanup_settings(cfg)
-    assert app._numbers_mode is None
+    live.apply(cfg)
+    assert live.numbers_mode is None
 
 
 def test_preferences_has_one_numbers_dropdown_over_both_settings():

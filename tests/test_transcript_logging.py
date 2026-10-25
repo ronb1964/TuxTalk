@@ -14,6 +14,7 @@ from gi.repository import Gtk  # noqa: E402
 from gtk_text import find, shown_text  # noqa: E402
 from tuxtalk import config  # noqa: E402
 from tuxtalk import logger as tlog  # noqa: E402
+from tuxtalk import live_settings as live  # noqa: E402
 
 
 # --- config flag -----------------------------------------------------------
@@ -47,16 +48,14 @@ def test_redact_is_robust_to_non_strings():
 # --- app wiring: the service's live flag gates redaction -------------------
 
 def test_app_defaults_to_not_logging_transcripts():
-    from tuxtalk import app
-    assert app._log_transcripts is False
+    assert live.log_transcripts is False
 
 
 def test_app_loggable_respects_the_live_flag(monkeypatch):
-    from tuxtalk import app
-    monkeypatch.setattr(app, "_log_transcripts", False)
-    assert app._loggable("secret words") == "[hidden, 12 chars]"
-    monkeypatch.setattr(app, "_log_transcripts", True)
-    assert app._loggable("secret words") == "'secret words'"
+    monkeypatch.setattr(live, "log_transcripts", False)
+    assert live.loggable("secret words") == "[hidden, 12 chars]"
+    monkeypatch.setattr(live, "log_transcripts", True)
+    assert live.loggable("secret words") == "'secret words'"
 
 
 # --- end-to-end: a real logging site keeps the words out of the log --------
@@ -67,8 +66,8 @@ def test_custom_command_log_line_redacts_the_text(monkeypatch, caplog):
     against a future edit reverting `{_loggable(x)}` back to `{x!r}`."""
     import logging
     from tuxtalk import app
-    monkeypatch.setattr(app, "_log_transcripts", False)
-    monkeypatch.setattr(app, "_custom_commands", {"banana": "apple"})
+    monkeypatch.setattr(live, "log_transcripts", False)
+    monkeypatch.setattr(live, "commands", {"banana": "apple"})
     secret = "my banana passphrase"
     with caplog.at_level(logging.INFO, logger="tuxtalk.app"):
         app._apply_custom_commands(secret)
@@ -324,7 +323,7 @@ def test_a_dictation_never_writes_the_words(monkeypatch, caplog, capsys, keyboar
     text, with transcript logging off (the default)."""
     import numpy as np
     from tuxtalk import app
-    monkeypatch.setattr(app, "_log_transcripts", False)
+    monkeypatch.setattr(live, "log_transcripts", False)
     monkeypatch.setattr(app, "_transcribe_audio",
                         lambda audio, language: "zanzibar quokka password hunter two")
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
@@ -346,8 +345,8 @@ def test_a_voice_edit_never_writes_the_words(monkeypatch, caplog, capsys):
     typed = []
     engine = type("Engine", (), {"is_ready": lambda self: True,
                                  "edit": lambda self, text, instruction: "Quokka hunter, formally."})()
-    monkeypatch.setattr(app, "_log_transcripts", False)
-    monkeypatch.setattr(app, "_ai_engine", engine)
+    monkeypatch.setattr(live, "log_transcripts", False)
+    monkeypatch.setattr(live, "ai_engine", engine)
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "make the zanzibar formal")
     monkeypatch.setattr("tuxtalk.silence.is_speechless_tap", lambda a, sr: False)
     monkeypatch.setattr(cb, "copy_selection",
@@ -406,7 +405,7 @@ def _engine(kind, monkeypatch):
 def test_no_speech_engine_writes_the_words(monkeypatch, caplog, capsys, kind):
     import numpy as np
     from tuxtalk import app
-    monkeypatch.setattr(app, "_log_transcripts", False)
+    monkeypatch.setattr(live, "log_transcripts", False)
     monkeypatch.setattr(app, "model", _engine(kind, monkeypatch))
     _hear_every_level(caplog)
     raw = app._transcribe_audio(np.full(16000, 0.2, dtype=np.float32), language=None)

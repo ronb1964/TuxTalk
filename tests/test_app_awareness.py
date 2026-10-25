@@ -4,6 +4,7 @@ types `ls -la`, not `Ls -la.`. Chat apps keep full punctuation."""
 import pytest
 
 from tuxtalk import app, config, window_classes
+from tuxtalk import live_settings as live
 from tuxtalk.normalize import plain_for_app
 
 
@@ -35,11 +36,11 @@ def test_app_kind(window_class, kind):
 
 
 def _prepare(monkeypatch, raw, kind):
-    monkeypatch.setattr(app, "_custom_words", [])
-    monkeypatch.setattr(app, "_remove_fillers", False)
-    monkeypatch.setattr(app, "_ai_corrections", False)
-    monkeypatch.setattr(app, "_swiss_spelling", False)
-    monkeypatch.setattr(app, "_numbers_mode", None)
+    monkeypatch.setattr(live, "words", [])
+    monkeypatch.setattr(live, "remove_fillers", False)
+    monkeypatch.setattr(live, "ai_corrections", False)
+    monkeypatch.setattr(live, "swiss_spelling", False)
+    monkeypatch.setattr(live, "numbers_mode", None)
     return app._prepare_text(raw, smart_quotes=True, auto_period=True, auto_space=True,
                              app_kind=kind)
 
@@ -62,8 +63,8 @@ def test_on_by_default_and_live():
 
 
 def test_the_setting_decides(monkeypatch):
-    monkeypatch.setattr(app, "_ai_engine", None)
-    app._apply_cleanup_settings(config.Settings(adapt_to_app=False))
-    assert app._adapt_to_app is False
-    app._apply_cleanup_settings(config.Settings())
-    assert app._adapt_to_app is True
+    monkeypatch.setattr(live, "ai_engine", None)
+    live.apply(config.Settings(adapt_to_app=False))
+    assert live.adapt_to_app is False
+    live.apply(config.Settings())
+    assert live.adapt_to_app is True

@@ -17,6 +17,7 @@ from gi.repository import Gio, GLib
 from tuxtalk import (app, atspi_helper, delivery_notices, focused_window, history,
                      screen_message, send_countdown)
 from tuxtalk import recording_state as rs
+from tuxtalk import live_settings as live
 
 ACTIVE = 1 << atspi_helper._STATE_ACTIVE
 FOCUSED = 1 << atspi_helper._STATE_FOCUSED
@@ -56,7 +57,7 @@ def desktop(monkeypatch):
     monkeypatch.setattr(screen_message, "show_over_active_window",
                         lambda text, **k: seen["labels"].append(text))
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
-    monkeypatch.setattr(app, "_usage_stats", False, raising=False)
+    monkeypatch.setattr(live, "usage_stats", False, raising=False)
     monkeypatch.setattr(atspi_helper, "focused_is_password",
                         lambda: seen["answers"].pop(0) if seen["answers"] else seen["password"])
     return seen

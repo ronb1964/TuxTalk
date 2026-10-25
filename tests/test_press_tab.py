@@ -12,6 +12,7 @@ import pytest
 from tuxtalk import app, libei_ctypes
 from tuxtalk import recording_state as rs
 from tuxtalk.key_commands import split_key_command
+from tuxtalk import live_settings as live
 
 
 @pytest.mark.parametrize("raw, expected", [
@@ -53,7 +54,7 @@ def _dictate(monkeypatch, raw, window="brave-browser"):
 
 @pytest.fixture
 def no_auto_send(monkeypatch):
-    monkeypatch.setattr(app, "_press_enter_after", False)
+    monkeypatch.setattr(live, "press_enter_after", False)
 
 
 def test_a_form_box_gets_the_words_then_the_tab_key(monkeypatch, no_auto_send):
@@ -97,7 +98,7 @@ def test_press_tab_still_presses_the_key_elsewhere(monkeypatch, no_auto_send):
 
 def test_sending_automatically_doesnt_send_a_box_left_with_press_tab(monkeypatch):
     """The user is moving on to the next box, not submitting the form."""
-    monkeypatch.setattr(app, "_press_enter_after", True)
+    monkeypatch.setattr(live, "press_enter_after", True)
     assert _dictate(monkeypatch, "John press tab") == [
         ("typed", "John"), ("TAB", 'said "press tab"')]
 
@@ -105,7 +106,7 @@ def test_sending_automatically_doesnt_send_a_box_left_with_press_tab(monkeypatch
 def test_a_box_ending_on_and_is_not_a_cut_off_dictation(monkeypatch):
     """ "Salt and press tab" was said in full: the next box doesn't carry on
     in lowercase, as it would after a dictation cut off on "and"."""
-    monkeypatch.setattr(app, "_press_enter_after", True)
+    monkeypatch.setattr(live, "press_enter_after", True)
     monkeypatch.setattr(rs.state, "continue_mid_sentence", False)
     assert _dictate(monkeypatch, "Salt and press tab") == [
         ("typed", "Salt and"), ("TAB", 'said "press tab"')]

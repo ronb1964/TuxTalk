@@ -20,6 +20,7 @@ import types
 import pytest
 
 from tuxtalk import app, hotkey_keys
+from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
 
 
@@ -44,19 +45,19 @@ class TestChangeSignalHasOneOwner:
         detector is edge-triggered — the tick already consumed it.
         """
         _idle(monkeypatch)
-        live = app.LiveSettings(
+        reloaded = app.LiveSettings(
             hold_key=60, toggle_key=None, vc_hotkey_str="",
             voice_cmds_combo=None, voice_cmds_main_key=None,
         )
-        monkeypatch.setattr(app, "_config_file_changed", lambda: True)
-        monkeypatch.setattr(app, "_reload_live_settings", lambda cfg, ind: live)
+        monkeypatch.setattr(live, "config_file_changed", lambda: True)
+        monkeypatch.setattr(app, "_reload_live_settings", lambda cfg, ind: reloaded)
 
         cfg = _cfg()
-        assert app._service_tick(cfg, app._ServiceState(cfg)) is live
+        assert app._service_tick(cfg, app._ServiceState(cfg)) is reloaded
 
     def test_tick_hands_back_nothing_when_the_config_is_unchanged(self, monkeypatch):
         _idle(monkeypatch)
-        monkeypatch.setattr(app, "_config_file_changed", lambda: False)
+        monkeypatch.setattr(live, "config_file_changed", lambda: False)
 
         cfg = _cfg()
         assert app._service_tick(cfg, app._ServiceState(cfg)) is None
@@ -68,7 +69,7 @@ class TestChangeSignalHasOneOwner:
         change a second time, which can never succeed.
         """
         _idle(monkeypatch)
-        monkeypatch.setattr(app, "_config_file_changed", lambda: True)
+        monkeypatch.setattr(live, "config_file_changed", lambda: True)
         monkeypatch.setattr(app, "load_config", lambda: _cfg(
             hotkey="F9", toggle_hotkey="", voice_commands_hotkey="", mode="hold",
             key_delay=12, log_transcripts=False,
@@ -76,10 +77,10 @@ class TestChangeSignalHasOneOwner:
 
         cfg = _cfg(hotkey="F8", toggle_hotkey="", voice_commands_hotkey="",
                    mode="hold", key_delay=12, log_transcripts=False)
-        live = app._service_tick(cfg, app._ServiceState(cfg))
+        reloaded = app._service_tick(cfg, app._ServiceState(cfg))
 
-        assert live is not None, "the tick must return what it reloaded"
-        assert live.hold_key == hotkey_keys.keycode_from_name("F9")
+        assert reloaded is not None, "the tick must return what it reloaded"
+        assert reloaded.hold_key == hotkey_keys.keycode_from_name("F9")
 
 
 class _Engine:
@@ -127,7 +128,7 @@ class TestAutoTimeoutIsLive:
     def test_a_disabled_timeout_does_not_shut_the_service_down(self, monkeypatch):
         """The user-visible failure: 'disabled' and it exits anyway."""
         _idle(monkeypatch)
-        monkeypatch.setattr(app, "_config_file_changed", lambda: False)
+        monkeypatch.setattr(live, "config_file_changed", lambda: False)
         cfg = _cfg(auto_timeout_enabled=True, auto_timeout_minutes=5)
         svc = app._ServiceState(cfg)
         svc.last_activity = 0.0  # idle since the epoch
@@ -144,8 +145,8 @@ class TestAutoTimeoutIsLive:
         off, or after a long session of F8 dictation, ticking it on stops the
         service on the next pass, right after the user turned the option on."""
         _idle(monkeypatch)
-        monkeypatch.setattr(app, "_commands_file_changed", lambda: False)
-        monkeypatch.setattr(app, "_words_file_changed", lambda: False)
+        monkeypatch.setattr(live, "commands_file_changed", lambda: False)
+        monkeypatch.setattr(live, "words_file_changed", lambda: False)
         cfg = _cfg(auto_timeout_enabled=False, auto_timeout_minutes=5)
         svc = app._ServiceState(cfg)
         svc.last_activity = 0.0       # no D-Bus command since the epoch
@@ -155,14 +156,14 @@ class TestAutoTimeoutIsLive:
             c.auto_timeout_enabled = True   # what Preferences just saved
             return None
 
-        monkeypatch.setattr(app, "_config_file_changed", lambda: True)
+        monkeypatch.setattr(live, "config_file_changed", lambda: True)
         monkeypatch.setattr(app, "_reload_live_settings", reload)
         monkeypatch.setattr(svc, "refresh_input_device", lambda: None)
         app._service_tick(cfg, svc)
 
         engine = _Engine()
         monkeypatch.setattr(app, "model", engine)
-        monkeypatch.setattr(app, "_config_file_changed", lambda: False)
+        monkeypatch.setattr(live, "config_file_changed", lambda: False)
         app._service_tick(cfg, svc)
         assert app.model is engine    # not rested on the very next pass
 
@@ -172,7 +173,7 @@ def test_power_saving_rests_the_model_and_keeps_the_service(monkeypatch):
     Saving used to end the service, and F8 did nothing until dictation was
     turned back on from the menu. Now it lets go of the model and stays."""
     _idle(monkeypatch)
-    monkeypatch.setattr(app, "_config_file_changed", lambda: False)
+    monkeypatch.setattr(live, "config_file_changed", lambda: False)
     shown = []
     monkeypatch.setattr(app, "_notify", lambda title, body: shown.append((title, body)))
     engine = _Engine()
@@ -190,7 +191,7 @@ def test_power_saving_waits_for_a_transcription_still_running(monkeypatch):
     long transcription or Type at pause chunks still typing could outlast a
     1-minute timeout and lose the Vulkan engine mid-request."""
     _idle(monkeypatch)
-    monkeypatch.setattr(app, "_config_file_changed", lambda: False)
+    monkeypatch.setattr(live, "config_file_changed", lambda: False)
     engine = _Engine()
     monkeypatch.setattr(app, "model", engine)
     cfg = _cfg(auto_timeout_enabled=True, auto_timeout_minutes=1)

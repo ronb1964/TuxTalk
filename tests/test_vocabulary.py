@@ -8,6 +8,7 @@ after the model heard it, which Parakeet has no other way to take.
 import pytest
 
 from tuxtalk import config, vocabulary
+from tuxtalk import live_settings as live
 
 
 # --- which words were picked -------------------------------------------------
@@ -109,7 +110,7 @@ def test_saved_fix_is_applied_to_the_next_dictation(commands_file, monkeypatch):
     from tuxtalk import app
 
     vocabulary.save_fix("bamboo studio", "BambuStudio")
-    monkeypatch.setattr(app, "_custom_commands", config.load_custom_commands())
+    monkeypatch.setattr(live, "commands", config.load_custom_commands())
 
     text, _protected = app._apply_custom_commands("i opened Bamboo Studio today")
     assert text == "i opened BambuStudio today"

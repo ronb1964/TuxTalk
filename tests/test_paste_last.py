@@ -10,6 +10,7 @@ from evdev import ecodes
 from gtk_text import tree_text
 from tuxtalk import app, config, history, kwin_hotkeys
 from tuxtalk import recording_state as rs
+from tuxtalk import live_settings as live
 
 P = ecodes.KEY_P
 CTRL, ALT = ecodes.KEY_LEFTCTRL, ecodes.KEY_LEFTALT
@@ -157,7 +158,7 @@ def test_the_undelivered_notice_offers_the_hotkey(outcome, monkeypatch):
     told = []
     monkeypatch.setattr(app, "_notify", lambda title, msg: told.append(msg))
     monkeypatch.setattr(app, "_beep", lambda *a: None)
-    monkeypatch.setattr(app, "_paste_last_hotkey", "Ctrl+Alt+P")
+    monkeypatch.setattr(live, "paste_last_hotkey", "Ctrl+Alt+P")
     import tuxtalk.uinput_helper as uh
     monkeypatch.setattr(uh, "typing_blocked_reason", lambda: None)
     app._report_undelivered(outcome, False)
@@ -168,7 +169,7 @@ def test_no_hint_when_the_hotkey_is_off(monkeypatch):
     told = []
     monkeypatch.setattr(app, "_notify", lambda title, msg: told.append(msg))
     monkeypatch.setattr(app, "_beep", lambda *a: None)
-    monkeypatch.setattr(app, "_paste_last_hotkey", "")
+    monkeypatch.setattr(live, "paste_last_hotkey", "")
     import tuxtalk.uinput_helper as uh
     monkeypatch.setattr(uh, "typing_blocked_reason", lambda: None)
     app._report_undelivered("failed", False)

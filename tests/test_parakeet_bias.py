@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 
 from tuxtalk import parakeet_bias as pb
+from tuxtalk import live_settings as live
 
 # A tiny vocabulary in onnx-asr's form (word start = a plain space).
 VOCAB = {0: " T", 1: "uck", 2: "ux", 3: " talk", 4: "Talk", 5: " on", 6: " Linux",
@@ -178,7 +179,7 @@ def test_dictation_hands_parakeet_the_word_list(monkeypatch, raw):
         def recognize(self, audio):
             return raw
     monkeypatch.setattr(app, "model", Model(), raising=False)  # set by main() normally
-    monkeypatch.setattr(app, "_custom_words", ["TuxTalk"])
+    monkeypatch.setattr(live, "words", ["TuxTalk"])
     audio = np.zeros(16000, dtype=np.float32)
     app._transcribe_audio(audio, None)
     assert seen == [("TuxTalk",)]

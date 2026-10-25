@@ -22,6 +22,7 @@ import pytest
 from tuxtalk import (app, clipboard, compositor_focus, dbus_service, desktop_identity,
                      focused_window)
 from tuxtalk import recording_state as rs
+from tuxtalk import live_settings as live
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 EXT = ROOT / "gnome-extension" / "talktype@ronb1964.github.io"
@@ -116,7 +117,7 @@ def paste_env(monkeypatch):
     monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
     monkeypatch.setattr(app, "_which", lambda name: f"/usr/bin/{name}")
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
-    monkeypatch.setattr(app, "_restore_clipboard", False)
+    monkeypatch.setattr(live, "restore_clipboard", False)
     monkeypatch.setattr(clipboard, "wl_copy_command", lambda: ["wl-copy"])
     env = {"copies": [], "keys": [], "primary_rc": 0}
     monkeypatch.setattr(app.subprocess, "Popen",

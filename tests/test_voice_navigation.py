@@ -4,6 +4,7 @@ import pytest
 
 from tuxtalk import voice_navigation as nav
 from tuxtalk import recording_state as rs
+from tuxtalk import live_settings as live
 
 C, S = "CTRL", "SHIFT"
 
@@ -155,7 +156,7 @@ def dictation(monkeypatch):
             return self.ok
 
     backend = Backend()
-    monkeypatch.setattr(app, "_voice_navigation", True)
+    monkeypatch.setattr(live, "voice_navigation", True)
     monkeypatch.setattr(app, "_output_backend", lambda: backend)
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.kwrite")
     monkeypatch.setattr(app, "_edit_problem", lambda kind, beeps: seen["problems"].append(kind))
@@ -179,7 +180,7 @@ def test_ordinary_dictation_is_not_a_command(dictation):
 
 
 def test_off_means_typed_as_text(dictation, monkeypatch):
-    monkeypatch.setattr(dictation["app"], "_voice_navigation", False)
+    monkeypatch.setattr(live, "voice_navigation", False)
     assert dictation["app"]._handle_navigation("select all", False) is False
 
 

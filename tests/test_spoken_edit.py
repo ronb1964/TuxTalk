@@ -9,6 +9,7 @@ import pytest
 from tuxtalk import app, edit_notices
 from tuxtalk import recording_state as rs
 from tuxtalk.voice_edit_rules import spoken_edit
+from tuxtalk import live_settings as live
 
 S = "SHIFT"
 
@@ -49,7 +50,7 @@ def editing(monkeypatch):
             pressed.extend(chords)
             return True
 
-    monkeypatch.setattr(app, "_voice_editing", True)
+    monkeypatch.setattr(live, "voice_editing", True)
     monkeypatch.setattr(app, "_is_wayland_session", lambda: True)
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.kwrite")
     monkeypatch.setattr(app, "_output_backend", lambda: Backend())
@@ -108,7 +109,7 @@ def test_a_dictation_in_another_window_isnt_edited(editing, monkeypatch):
 
 def test_off_unless_voice_editing_is_on(editing, monkeypatch):
     _pressed, edits, _ = editing
-    monkeypatch.setattr(app, "_voice_editing", False)
+    monkeypatch.setattr(live, "voice_editing", False)
     assert not _said("Edit that, make it shorter.")
     assert edits == []
 
@@ -151,8 +152,8 @@ def test_it_is_never_typed_as_text(editing, monkeypatch):
     monkeypatch.setattr(app, "_inject_text", lambda text, *a, **k: typed.append(text) or "ok")
     monkeypatch.setattr(app, "_beep", lambda *a: None)
     monkeypatch.setattr(app, "_notify", lambda *a, **k: None)
-    monkeypatch.setattr(app, "_voice_navigation", False)
-    monkeypatch.setattr(app, "_usage_stats", False)
+    monkeypatch.setattr(live, "voice_navigation", False)
+    monkeypatch.setattr(live, "usage_stats", False)
     speech = (np.sin(np.linspace(0, 2000, 16000)) * 8000).astype(np.int16)
     app._transcribe_and_inject([speech.tobytes()], 16000, True, True, False, None,
                                True, True, "type", chunk_role="middle")
@@ -233,7 +234,7 @@ def test_edit_that_then_only_a_pause_isnt_sent_as_it_was(editing, monkeypatch):
     out unchanged."""
     pressed, edits, problems = editing
     sent = []
-    monkeypatch.setattr(app, "_press_enter_after", True)
+    monkeypatch.setattr(live, "press_enter_after", True)
     monkeypatch.setattr(app, "_send_automatically", lambda *a: sent.append(a))
     rs.state.message.add("ok", rs.state.message.to)       # the message's words
     assert _said("Edit that.", "middle")                    # waits for what to change

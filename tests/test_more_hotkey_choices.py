@@ -18,6 +18,7 @@ from tuxtalk.config import HOTKEY_CHOICES
 from tuxtalk.hotkey_keys import keycode_from_name, track_modifier
 from tuxtalk.hotkey_labels import hotkey_label, layout_label
 from tuxtalk import recording_state as rs
+from tuxtalk import live_settings as live
 
 RCTRL, RALT, LCTRL = ecodes.KEY_RIGHTCTRL, ecodes.KEY_RIGHTALT, ecodes.KEY_LEFTCTRL
 
@@ -362,7 +363,7 @@ def test_a_dictation_stopped_by_a_stuck_key_stays_in_recent_dictations(
     monkeypatch.setattr(focused_window, "is_password", lambda: False)
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
     monkeypatch.setattr(app, "_notify", lambda title, body: notes.append(body))
-    monkeypatch.setattr(app, "_press_enter_after", False)
+    monkeypatch.setattr(live, "press_enter_after", False)
     monkeypatch.setattr(history, "add_entry", lambda text, replaces=None: kept.append(text))
     frames = [(np.ones(app.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
     app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=False, smart_quotes=False,
@@ -791,7 +792,7 @@ def test_a_double_tap_of_a_right_ctrl_or_alt_toggle_goes_hands_free(keyboard, re
     """The real key handler and recording start, the microphone left out:
     two quick taps start a recording that stops by itself when you go quiet,
     and the second tap's release doesn't stop it."""
-    monkeypatch.setattr(app, "_auto_stop_seconds", 2.0)
+    monkeypatch.setattr(live, "auto_stop_seconds", 2.0)
     monkeypatch.setattr(app, "_open_input_stream", lambda idx: None)
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
     monkeypatch.setattr(app, "_notify_tray_recording_state", lambda *a: None)

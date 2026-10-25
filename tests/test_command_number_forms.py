@@ -14,12 +14,13 @@ gets typed still comes out exactly as Whisper and the normalizer produced it.
 import pytest
 
 from tuxtalk import app
+from tuxtalk import live_settings as live
 
 
 @pytest.fixture
 def commands(monkeypatch):
     def _install(mapping):
-        monkeypatch.setattr(app, "_custom_commands", mapping, raising=False)
+        monkeypatch.setattr(live, "commands", mapping, raising=False)
     return _install
 
 

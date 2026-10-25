@@ -13,13 +13,14 @@ can happen:
 import pytest
 
 from tuxtalk import app, custom_commands
+from tuxtalk import live_settings as live
 
 
 @pytest.fixture
 def commands(monkeypatch):
     """Install a set of custom commands for one test."""
     def install(mapping):
-        monkeypatch.setattr(app, "_custom_commands", mapping)
+        monkeypatch.setattr(live, "commands", mapping)
         return lambda text: app._apply_custom_commands(text)[0]
     return install
 
@@ -30,7 +31,7 @@ def pipeline(monkeypatch):
     from tuxtalk.normalize import normalize_text
 
     def install(mapping):
-        monkeypatch.setattr(app, "_custom_commands", mapping)
+        monkeypatch.setattr(live, "commands", mapping)
 
         def run(text):
             processed, protected = app._apply_custom_commands(text)
@@ -174,7 +175,7 @@ def test_unquoted_replacements_are_still_normalized(pipeline):
 # --- robustness -------------------------------------------------------------
 
 def test_no_commands_configured_leaves_text_untouched(monkeypatch):
-    monkeypatch.setattr(app, "_custom_commands", {})
+    monkeypatch.setattr(live, "commands", {})
 
     assert app._apply_custom_commands("hello there") == ("hello there", {})
 
