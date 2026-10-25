@@ -24,12 +24,13 @@ from tuxtalk import engine
 from tuxtalk import last_dictation
 from tuxtalk import notices as service_notices
 from tuxtalk import recording
+from tuxtalk import delivery
 
 ENTER, RCTRL, F8, F9 = ecodes.KEY_ENTER, ecodes.KEY_RIGHTCTRL, ecodes.KEY_F8, ecodes.KEY_F9
 # Taken before conftest runs "Right away" on the test's own thread, and
 # before the chat fixture fakes the delivery.
 SEND_RIGHT_AWAY = send_countdown._send_right_away
-DELIVER_TEXT = app._deliver_text
+DELIVER_TEXT = delivery.deliver_text
 FIRST = ("brave-browser", ("tray", "{5c1d0e2a}"))
 SECOND = ("brave-browser", ("tray", "{9f04b7c3}"))      # another window, same app
 
@@ -48,7 +49,7 @@ def chat(monkeypatch, keyboard):
         typed.append((text, focus[1]))
         rs.state.last_inserted_text = text
         return "ok"
-    monkeypatch.setattr(app, "_deliver_text", deliver)
+    monkeypatch.setattr(delivery, "deliver_text", deliver)
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     monkeypatch.setattr(engine, "transcribe", lambda audio, language: heard.pop(0))
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
@@ -85,13 +86,13 @@ def test_a_window_switch_while_the_words_go_in_sends_nothing(chat, keyboard, mon
     Brave window while it went in. The look taken after it said the second
     window, and the Enter went there."""
     focus, heard, typed, notices = chat
-    deliver = app._deliver_text
+    deliver = delivery.deliver_text
 
     def clicked_away_meanwhile(*a, **k):
         outcome = deliver(*a, **k)
         focus[:] = SECOND
         return outcome
-    monkeypatch.setattr(app, "_deliver_text", clicked_away_meanwhile)
+    monkeypatch.setattr(delivery, "deliver_text", clicked_away_meanwhile)
     heard.append("see you at noon")
     dictate()
     assert typed == [("See you at noon.", FIRST[1])]                 # the words stay
@@ -104,13 +105,13 @@ def test_no_countdown_after_a_switch_while_the_words_went_in(chat, keyboard, mon
     monkeypatch.setattr(send_countdown, "_delay", 2.0)
     monkeypatch.setattr(send_countdown.threading, "Timer",
                         lambda *a, **k: started.append(a) or pytest.fail("a countdown"))
-    deliver = app._deliver_text
+    deliver = delivery.deliver_text
 
     def clicked_away_meanwhile(*a, **k):
         outcome = deliver(*a, **k)
         focus[:] = SECOND
         return outcome
-    monkeypatch.setattr(app, "_deliver_text", clicked_away_meanwhile)
+    monkeypatch.setattr(delivery, "deliver_text", clicked_away_meanwhile)
     heard.append("see you at noon")
     dictate()
     assert started == [] and notices == [send_countdown.MOVED_NOTICE]
@@ -167,13 +168,13 @@ def test_the_mark_typed_at_the_end_doesnt_aim_the_enter_elsewhere(chat, keyboard
     heard.append("See you at noon.")
     dictate("middle")
     focus[1] = None                                     # the tray didn't answer
-    deliver = app._deliver_text
+    deliver = delivery.deliver_text
 
     def mark_then_switch(*a, **k):
         outcome = deliver(*a, **k)
         focus[:] = SECOND                               # clicked away as it went in
         return outcome
-    monkeypatch.setattr(app, "_deliver_text", mark_then_switch)
+    monkeypatch.setattr(delivery, "deliver_text", mark_then_switch)
     dictate("last", audio=False)
     assert typed[-1] == (".", None)
     assert keyboard.events == [] and notices == [send_countdown.SWITCHED_WINDOW_NOTICE]
@@ -240,13 +241,13 @@ def test_right_away_a_tap_the_hotkey_loop_reads_holds_the_enter(chat, keyboard, 
     focus, heard, typed, notices = chat
     monkeypatch.setattr(send_countdown, "_send_right_away", SEND_RIGHT_AWAY)
     words_in, tap_read = threading.Event(), threading.Event()
-    deliver = app._deliver_text
+    deliver = delivery.deliver_text
 
     def deliver_then_note(*a, **k):
         outcome = deliver(*a, **k)
         words_in.set()
         return outcome
-    monkeypatch.setattr(app, "_deliver_text", deliver_then_note)
+    monkeypatch.setattr(delivery, "deliver_text", deliver_then_note)
     monkeypatch.setattr(atspi_helper, "focused_is_password",
                         lambda: words_in.is_set() and tap_read.wait(2) and False)
     heard.append("see you at noon")
@@ -454,14 +455,14 @@ def test_a_click_while_the_mark_is_put_on_the_clipboard_keeps_it_out_of_the_othe
     other one meanwhile, and Ctrl+V put the period there."""
     from tuxtalk import clipboard
     focus, _, _, _ = chat
-    monkeypatch.setattr(app, "_deliver_text", DELIVER_TEXT)
+    monkeypatch.setattr(delivery, "deliver_text", DELIVER_TEXT)
     monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
     monkeypatch.setattr(keyboard_output, "which", lambda name: f"/usr/bin/{name}")
     monkeypatch.setattr(live, "restore_clipboard", False)
     monkeypatch.setattr(clipboard, "wl_copy_command", lambda: ["wl-copy"])
     monkeypatch.setattr(keyboard_output.subprocess, "Popen",
                         lambda cmd, **kw: WlCopy(lambda: focus.__setitem__(slice(None), SECOND)))
-    assert app._inject_text(".", "paste", into=focused_window.Destination(*FIRST)) == "moved"
+    assert delivery.inject_text(".", "paste", into=focused_window.Destination(*FIRST)) == "moved"
     assert keyboard.events == []
 
 
@@ -470,14 +471,14 @@ def test_a_click_while_typing_waits_for_the_dictation_key_keeps_the_mark_out(
     """Right Ctrl down as the mark is typed: the click came as the wait
     began, so it compared the other window with itself."""
     focus, _, _, _ = chat
-    monkeypatch.setattr(app, "_deliver_text", DELIVER_TEXT)
+    monkeypatch.setattr(delivery, "deliver_text", DELIVER_TEXT)
 
     def pressed(look):
         if look == 1:
             focus[:] = SECOND
         return look <= 3
     right_ctrl_toggle(pressed)
-    assert app._inject_text(".", "type", into=focused_window.Destination(*FIRST)) == "moved"
+    assert delivery.inject_text(".", "type", into=focused_window.Destination(*FIRST)) == "moved"
     assert keyboard.events == []
 
 
@@ -604,13 +605,13 @@ def unknown_window(request, chat, monkeypatch):
     monkeypatch.setattr(focused_window, "look", REAL_LOOK)
     monkeypatch.setattr(focused_window, "reported", lambda: said[0][0])
     monkeypatch.setattr(compositor_focus, "focused_window", lambda: said[0][1])
-    deliver = app._deliver_text
+    deliver = delivery.deliver_text
 
     def words_in_then_after(*a, **k):
         outcome = deliver(*a, **k)
         said.pop(0) if len(said) > 1 else None
         return outcome
-    monkeypatch.setattr(app, "_deliver_text", words_in_then_after)
+    monkeypatch.setattr(delivery, "deliver_text", words_in_then_after)
     return chat
 
 
@@ -683,13 +684,13 @@ def test_a_known_window_still_gets_its_automatic_enter(chat, keyboard):
 # --- "... press enter" said after the words: the same rule ---------------------------------
 
 def clicked_away_while_the_words_went_in(monkeypatch, focus, to=SECOND):
-    deliver = app._deliver_text
+    deliver = delivery.deliver_text
 
     def deliver_then_switch(*a, **k):
         outcome = deliver(*a, **k)
         focus[:] = to
         return outcome
-    monkeypatch.setattr(app, "_deliver_text", deliver_then_switch)
+    monkeypatch.setattr(delivery, "deliver_text", deliver_then_switch)
 
 
 @pytest.mark.parametrize("key", ["enter", "tab"])
@@ -919,8 +920,8 @@ def test_a_countdown_says_nothing_aloud_until_it_ends(chat, keyboard, monkeypatc
 def phrases_that_go_in(monkeypatch, *outcomes):
     """Type at pause's phrases, the next one going in as *outcomes* says
     ("partial": its typing stopped partway, a key stuck down)."""
-    deliver, left = app._deliver_text, iter(outcomes)
-    monkeypatch.setattr(app, "_deliver_text", lambda *a, **k: deliver(*a, **k) and next(left))
+    deliver, left = delivery.deliver_text, iter(outcomes)
+    monkeypatch.setattr(delivery, "deliver_text", lambda *a, **k: deliver(*a, **k) and next(left))
     monkeypatch.setattr(service_notices, "report_undelivered", lambda outcome, beeps_on: None)
     monkeypatch.setattr(live, "chunk_context_marks", False)
 
@@ -969,14 +970,14 @@ def test_a_click_away_while_a_phrase_went_in_keeps_the_message_unsent(chat, keyb
     """The first phrase may be in either Brave window: the next one, typed
     whole into the second, doesn't say where the first went."""
     focus, heard, typed, notices = chat
-    deliver = app._deliver_text
+    deliver = delivery.deliver_text
 
     def first_one_then_switch(*a, **k):
         outcome = deliver(*a, **k)
         focus[:] = SECOND
-        monkeypatch.setattr(app, "_deliver_text", deliver)
+        monkeypatch.setattr(delivery, "deliver_text", deliver)
         return outcome
-    monkeypatch.setattr(app, "_deliver_text", first_one_then_switch)
+    monkeypatch.setattr(delivery, "deliver_text", first_one_then_switch)
     monkeypatch.setattr(live, "chunk_context_marks", False)
     heard.extend(["See you at noon,", "and bring the cake"])
     dictate("middle")
@@ -1077,12 +1078,12 @@ def test_after_a_send_refused_for_a_click_away_the_next_dictation_still_goes_in(
     focus, heard, typed, notices = chat
     saved = []
     monkeypatch.setattr(history, "add_entry", lambda text, replaces=None: saved.append(text))
-    into_the_chat = app._deliver_text
+    into_the_chat = delivery.deliver_text
     clicked_away_while_the_words_went_in(monkeypatch, focus)
     heard.append("see you at noon")
     dictate()
     assert keyboard.events == []                    # the send had nowhere to go
-    monkeypatch.setattr(app, "_deliver_text", into_the_chat)
+    monkeypatch.setattr(delivery, "deliver_text", into_the_chat)
     app._arm_chunker(engine.SAMPLE_RATE)
     heard.append("how are you")
     dictate()
@@ -1116,7 +1117,7 @@ def test_a_phrase_queued_before_the_next_recording_keeps_its_own_message(chat, k
 def _rewrite_goes_in(monkeypatch, outcome):
     """The chat's delivery, with the voice edit's rewrite going in as
     *outcome* ("raise": typing it raised)."""
-    deliver = app._deliver_text
+    deliver = delivery.deliver_text
 
     def rewrite(text, *a, **k):
         if text.startswith("Hope"):
@@ -1125,7 +1126,7 @@ def _rewrite_goes_in(monkeypatch, outcome):
             deliver(text, *a, **k)
             return outcome
         return deliver(text, *a, **k)
-    monkeypatch.setattr(app, "_deliver_text", rewrite)
+    monkeypatch.setattr(delivery, "deliver_text", rewrite)
 
 
 @pytest.mark.parametrize("outcome", ["raise", "partial"])
@@ -1221,7 +1222,7 @@ def test_a_failed_space_may_have_gone_in_so_the_record_isnt_brought_back(monkeyp
         """Forgets the dictation, as a delivery that stopped does."""
         rs.state.last_inserted_text = ""
         return "failed"
-    monkeypatch.setattr(app, "_inject_text", inject)
+    monkeypatch.setattr(delivery, "inject_text", inject)
     app._type_onto_dictation(" ", "type")
     assert rs.state.last_inserted_text == ""
 
@@ -1237,7 +1238,7 @@ def test_a_space_that_went_nowhere_leaves_undo_on_the_dictations_window(monkeypa
         """Takes the window, then gives up before typing."""
         rs.state.last_inserted_window = "claude"
         return "key_held"
-    monkeypatch.setattr(app, "_inject_text", inject)
+    monkeypatch.setattr(delivery, "inject_text", inject)
     app._type_onto_dictation("    ", "type")
     assert rs.state.last_inserted_text == "See you at noon."
     assert rs.state.last_inserted_window == "brave-browser"

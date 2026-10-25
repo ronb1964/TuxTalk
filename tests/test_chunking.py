@@ -20,6 +20,7 @@ from tuxtalk import tray_link
 from tuxtalk import engine
 from tuxtalk import last_dictation
 from tuxtalk import recording as capture
+from tuxtalk import delivery
 
 SR = 16000
 BLOCK = 320   # 20 ms at 16 kHz
@@ -378,7 +379,7 @@ def pipeline(monkeypatch):
     texts: what the engine 'hears', one per call, in call order (a chunk after
     a held-back one is transcribed alone, then together with it).
     Returns (texts, typed, beeps)."""
-    from tuxtalk import app, history
+    from tuxtalk import history
     texts, typed, beeps = [], [], []
     monkeypatch.setattr(engine, "transcribe", lambda audio, lang: texts.pop(0))
 
@@ -389,7 +390,7 @@ def pipeline(monkeypatch):
             message.add("ok", message.to)       # into the window its words went to
         return "ok"
 
-    monkeypatch.setattr(app, "_inject_text", fake_inject)
+    monkeypatch.setattr(delivery, "inject_text", fake_inject)
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda enabled, *tone: beeps.append(tone))
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
@@ -1053,7 +1054,6 @@ def test_fix_that_word_after_a_delete_gets_what_is_left(fix_word, monkeypatch):
 def test_fix_that_word_after_a_window_change_gets_the_last_phrase(fix_word, monkeypatch):
     """The phrases landed in two windows: only the last one is at the cursor,
     so fixing in place may only count on that one."""
-    from tuxtalk import app
     texts, typed, opened = fix_word
     windows = iter(["kwrite", "kwrite", "konsole"])
 
@@ -1063,7 +1063,7 @@ def test_fix_that_word_after_a_window_change_gets_the_last_phrase(fix_word, monk
         rs.state.last_inserted_window = next(windows)
         return "ok"
 
-    monkeypatch.setattr(app, "_inject_text", fake_inject)
+    monkeypatch.setattr(delivery, "inject_text", fake_inject)
     texts.extend(["we meet.", "the end.", "we meet. The end."])
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     call(frames_of(speech(1.0)), "last", auto_period=True)

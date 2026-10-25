@@ -4,6 +4,7 @@ import os
 from tuxtalk import recording_state as rs
 from tuxtalk import keyboard_output
 from tuxtalk import voice_commands
+from tuxtalk import delivery
 
 
 def _portal_fd():
@@ -235,7 +236,6 @@ def test_flatpak_electron_app_types_via_libei_not_the_virtual_keyboard(monkeypat
     # use the virtual keyboard (no /dev/uinput in the sandbox). It types through
     # the libei backend directly, keeping only the tab→spaces safety (a real Tab
     # jumps focus to Claude Desktop's Send button).
-    from tuxtalk import app
     monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TalkType")
     from tuxtalk import focused_window
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "Claude")
@@ -249,7 +249,7 @@ def test_flatpak_electron_app_types_via_libei_not_the_virtual_keyboard(monkeypat
             return True
 
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: FakeBackend())
-    app._inject_text("line1\tindented", "auto")
+    delivery.inject_text("line1\tindented", "auto")
 
     assert keyboard.events == [], "the virtual keyboard must not be used on the Flatpak"
     assert typed == ["line1    indented"], "tab→4 spaces, delivered via libei"
@@ -332,7 +332,6 @@ def test_a_portal_that_never_answers_times_out(monkeypatch):
 
 def test_flatpak_typing_records_what_libei_types_for_undo(monkeypatch):
     """libei types "…" as "..." (three keys), so undo must count three."""
-    from tuxtalk import app
     from tuxtalk.output_backends import LibeiOutputBackend
     monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TalkType")
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
@@ -344,7 +343,7 @@ def test_flatpak_typing_records_what_libei_types_for_undo(monkeypatch):
             return True
 
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: FakeLibei())
-    assert app._inject_text("Wait… café", "auto") == "ok"
+    assert delivery.inject_text("Wait… café", "auto") == "ok"
     assert typed == ["Wait... cafe"]
     assert rs.state.last_inserted_text == "Wait... cafe"
 

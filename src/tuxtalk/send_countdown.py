@@ -116,7 +116,7 @@ class Message:
     complete: bool = True
 
     def add(self, outcome: str, landed) -> None:
-        """Words of it were delivered: app._inject_text's *outcome*, and
+        """Words of it were delivered: delivery.inject_text's *outcome*, and
         where they went (*landed*, None when not all of them did). Words
         known to be in another window move it there (the user switched
         windows between two phrases); a look that can't tell (a held-back

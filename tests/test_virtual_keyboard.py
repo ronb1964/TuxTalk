@@ -6,6 +6,7 @@ would type into whatever window has the focus on the computer running them.
 import pytest
 
 from tuxtalk import app, virtual_keyboard
+from tuxtalk import delivery
 from tuxtalk import voice_commands
 from tuxtalk import keyboard_output
 from tuxtalk import recording_state as rs
@@ -203,9 +204,9 @@ def test_a_dictation_typed_partway_is_partial_and_not_typed_again(breaks_once, m
     """Claude Desktop: the typing fell back to typing it all again, so the
     first words came out twice."""
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "Claude")
-    monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
+    monkeypatch.setattr(delivery, "determine_injection_method", lambda m: ("paste", "test"))
     monkeypatch.setattr(rs.state, "last_inserted_text", "earlier dictation")
-    assert app._inject_text("hello world", "auto") == "partial"
+    assert delivery.inject_text("hello world", "auto") == "partial"
     assert len(breaks_once.events) == 6
     assert rs.state.last_inserted_text == "", "undo would count on text that may not be there"
 
@@ -228,7 +229,7 @@ def test_a_paste_shortcut_cut_off_is_partial_and_not_typed_after(breaks_once, mo
         def poll(self):
             return 0
     monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda *a, **k: Copied())
-    assert app._inject_text("hello world", "paste") == "partial"
+    assert delivery.inject_text("hello world", "paste") == "partial"
     keys = {code for code, _value in breaks_once.events[4:]}
     assert keys == {29, 47}, "typed the text after a paste that may have landed"
     assert breaks_once.events[-2:] == [(47, 0), (29, 0)], "Ctrl and V left down"

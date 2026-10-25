@@ -13,6 +13,7 @@ from tuxtalk import notices
 from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
 from tuxtalk import keyboard_grab
+from tuxtalk import delivery
 
 P = ecodes.KEY_P
 CTRL, ALT = ecodes.KEY_LEFTCTRL, ecodes.KEY_LEFTALT
@@ -37,7 +38,7 @@ def keys(monkeypatch):
     seen = {"grabbed": 0, "released": 0, "typed": [], "beeps": []}
     monkeypatch.setattr(keyboard_grab, "grab_keyboards_hiding", lambda devs, codes: seen.__setitem__("grabbed", seen["grabbed"] + 1))
     monkeypatch.setattr(keyboard_grab, "release_all", lambda: seen.__setitem__("released", seen["released"] + 1))
-    monkeypatch.setattr(app, "_inject_text", lambda text, mode: seen["typed"].append((text, mode)) or "ok")
+    monkeypatch.setattr(delivery, "inject_text", lambda text, mode: seen["typed"].append((text, mode)) or "ok")
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda on, *a: seen["beeps"].append(a))
     monkeypatch.setattr(history, "get_entries", lambda: ["Hello there.\nSecond line.", "older"])
     monkeypatch.setattr(rs.state, "is_recording", False)

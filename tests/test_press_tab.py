@@ -15,6 +15,7 @@ from tuxtalk import keyboard_output
 from tuxtalk import recording_state as rs
 from tuxtalk.key_commands import split_key_command
 from tuxtalk import live_settings as live
+from tuxtalk import delivery
 
 
 @pytest.mark.parametrize("raw, expected", [
@@ -44,7 +45,7 @@ def _dictate(monkeypatch, raw, window="brave-browser"):
     monkeypatch.setattr(engine, "transcribe", lambda audio, language: raw)
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: window)
-    monkeypatch.setattr(app, "_inject_text",
+    monkeypatch.setattr(delivery, "inject_text",
                         lambda text, mode, **kw: events.append(("typed", text)) or "ok")
     monkeypatch.setattr(keyboard_output, "press_key",
                         lambda key, why, claim=None: events.append((key, why)) or True)
@@ -195,7 +196,7 @@ def test_four_spaces_kept_back_by_a_stuck_key_say_so(monkeypatch):
     from tuxtalk import delivery_notices
     notes = []
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "com.anthropic.Claude")
-    monkeypatch.setattr(app, "_inject_text", lambda text, mode, **kw: "key_held")
+    monkeypatch.setattr(delivery, "inject_text", lambda text, mode, **kw: "key_held")
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: notes.append((title, body)))
     app._press_said("TAB", None)
     assert notes == [delivery_notices.key_not_pressed("TAB")]

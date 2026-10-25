@@ -107,7 +107,7 @@ def apply(cfg):
     duck_audio = getattr(cfg, "duck_audio", False)
     paste_last_hotkey = getattr(cfg, "paste_last_hotkey", "")
     auto_stop_seconds = (float(getattr(cfg, "auto_stop_seconds", 2.0))
-                          if getattr(cfg, "auto_stop_silence", False) else 0.0)
+                         if getattr(cfg, "auto_stop_silence", False) else 0.0)
     chunk_cfg = cfg
     chunk_speech_db = float(getattr(cfg, "chunk_speech_db", 6.0))
     chunk_context_marks = bool(getattr(cfg, "chunk_context_marks", True))

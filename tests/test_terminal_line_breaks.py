@@ -22,6 +22,7 @@ without that a terminal is indistinguishable from anything else.
 import pytest
 
 from tuxtalk import app, focused_window
+from tuxtalk import delivery
 from tuxtalk import keyboard_output
 
 
@@ -41,44 +42,44 @@ class TestDeliveryPlan:
     """The decision, isolated from the injection machinery."""
 
     def test_a_terminal_gets_one_paste_with_a_real_newline(self):
-        plan = app.plan_line_breaks("first\xa7SHIFT_ENTER\xa7second", one_paste=True)
+        plan = delivery.plan_line_breaks("first\xa7SHIFT_ENTER\xa7second", one_paste=True)
         assert plan == ["first\nsecond"]
 
     def test_a_chat_app_gets_chunks_split_for_keystrokes(self):
-        plan = app.plan_line_breaks("first\xa7SHIFT_ENTER\xa7second", one_paste=False)
+        plan = delivery.plan_line_breaks("first\xa7SHIFT_ENTER\xa7second", one_paste=False)
         assert plan == ["first", "second"]
 
     def test_a_blank_line_survives_in_a_terminal(self):
         """"new paragraph" is two markers in a row."""
         text = "a\xa7SHIFT_ENTER\xa7\xa7SHIFT_ENTER\xa7b"
-        assert app.plan_line_breaks(text, one_paste=True) == ["a\n\nb"]
+        assert delivery.plan_line_breaks(text, one_paste=True) == ["a\n\nb"]
 
     def test_a_blank_line_still_becomes_two_keystrokes_elsewhere(self):
         text = "a\xa7SHIFT_ENTER\xa7\xa7SHIFT_ENTER\xa7b"
-        assert app.plan_line_breaks(text, one_paste=False) == ["a", "", "b"]
+        assert delivery.plan_line_breaks(text, one_paste=False) == ["a", "", "b"]
 
     def test_plain_text_is_one_paste_either_way(self):
-        assert app.plan_line_breaks("hello", one_paste=True) == ["hello"]
-        assert app.plan_line_breaks("hello", one_paste=False) == ["hello"]
+        assert delivery.plan_line_breaks("hello", one_paste=True) == ["hello"]
+        assert delivery.plan_line_breaks("hello", one_paste=False) == ["hello"]
 
     def test_an_existing_newline_is_kept_as_a_newline_in_a_terminal(self):
-        assert app.plan_line_breaks("a\nb", one_paste=True) == ["a\nb"]
+        assert delivery.plan_line_breaks("a\nb", one_paste=True) == ["a\nb"]
 
     def test_an_existing_newline_still_splits_for_a_chat_app(self):
-        assert app.plan_line_breaks("a\nb", one_paste=False) == ["a", "b"]
+        assert delivery.plan_line_breaks("a\nb", one_paste=False) == ["a", "b"]
 
 
 class TestNoKeystrokesInATerminal:
     def test_a_terminal_receives_no_shift_enter_at_all(self, paste_spy):
         """The keystroke is inert there; sending it is pure noise."""
         pasted, breaks = paste_spy
-        plan = app.plan_line_breaks("one\xa7SHIFT_ENTER\xa7two", one_paste=True)
+        plan = delivery.plan_line_breaks("one\xa7SHIFT_ENTER\xa7two", one_paste=True)
 
         assert len(plan) == 1, "a terminal must not be split into chunks"
         assert "\n" in plan[0]
 
     def test_a_chat_app_still_needs_one_break_between_chunks(self):
-        plan = app.plan_line_breaks("one\xa7SHIFT_ENTER\xa7two", one_paste=False)
+        plan = delivery.plan_line_breaks("one\xa7SHIFT_ENTER\xa7two", one_paste=False)
         assert len(plan) - 1 == 1
 
 
@@ -90,13 +91,13 @@ def test_new_line_in_kwrite_is_pasted_not_a_shift_enter(window, monkeypatch):
     would not do: in Kate's terminal panel it runs the line."""
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     monkeypatch.delenv("FLATPAK_ID", raising=False)
-    monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
+    monkeypatch.setattr(delivery, "determine_injection_method", lambda m: ("paste", "test"))
     monkeypatch.setattr(focused_window, "look", lambda: (window, None))
     pasted, keys = [], []
     monkeypatch.setattr(keyboard_output, "paste_text", lambda t: pasted.append(t) or True)
     monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: keys.append("shift+enter") or True)
 
-    assert app._inject_text("$45.\xa7SHIFT_ENTER\xa7$25. ", "auto") == "ok"
+    assert delivery.inject_text("$45.\xa7SHIFT_ENTER\xa7$25. ", "auto") == "ok"
     assert pasted == ["$45.\n$25. "]
     assert keys == []
 
@@ -105,13 +106,13 @@ def test_new_line_in_a_chat_app_is_still_shift_enter(monkeypatch):
     """A newline pasted into a chat box like Claude Desktop sends the message."""
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     monkeypatch.delenv("FLATPAK_ID", raising=False)
-    monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
+    monkeypatch.setattr(delivery, "determine_injection_method", lambda m: ("paste", "test"))
     monkeypatch.setattr(focused_window, "look", lambda: ("discord", None))
     pasted, keys = [], []
     monkeypatch.setattr(keyboard_output, "paste_text", lambda t: pasted.append(t) or True)
     monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: keys.append("shift+enter") or True)
 
-    assert app._inject_text("one\xa7SHIFT_ENTER\xa7two", "auto") == "ok"
+    assert delivery.inject_text("one\xa7SHIFT_ENTER\xa7two", "auto") == "ok"
     assert pasted == ["one", "two"]
     assert keys == ["shift+enter"]
 
@@ -122,9 +123,9 @@ def test_a_paste_with_line_breaks_asks_which_window_only_before_and_after(monkey
     looks = []
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     monkeypatch.delenv("FLATPAK_ID", raising=False)
-    monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
+    monkeypatch.setattr(delivery, "determine_injection_method", lambda m: ("paste", "test"))
     monkeypatch.setattr(focused_window, "look",
                         lambda: looks.append(1) or ("org.kde.kwrite", None))
     monkeypatch.setattr(keyboard_output, "paste_text", lambda t: True)
-    assert app._inject_text("$45.\xa7SHIFT_ENTER\xa7$25. ", "auto") == "ok"
+    assert delivery.inject_text("$45.\xa7SHIFT_ENTER\xa7$25. ", "auto") == "ok"
     assert len(looks) == 2

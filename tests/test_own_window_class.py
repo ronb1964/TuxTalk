@@ -24,6 +24,7 @@ from tuxtalk import (app, clipboard, compositor_focus, dbus_service, desktop_ide
 from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
 from tuxtalk import keyboard_output
+from tuxtalk import delivery
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 EXT = ROOT / "gnome-extension" / "talktype@ronb1964.github.io"
@@ -247,6 +248,6 @@ def test_undo_remembers_the_window_the_text_went_to_not_wl_copys(monkeypatch, tr
 
     monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
     monkeypatch.setattr(keyboard_output, "paste_text", paste)
-    monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
-    app._inject_text("Hello. ", "paste")
+    monkeypatch.setattr(delivery, "determine_injection_method", lambda m: ("paste", "test"))
+    delivery.inject_text("Hello. ", "paste")
     assert rs.state.last_inserted_window == "org.kde.kwrite"

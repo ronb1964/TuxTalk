@@ -34,8 +34,8 @@ from .logger import setup_logger
 from .recording_indicator import RecordingIndicator
 from . import (delivery_notices, focused_window, modifier_hotkeys, secure_input, send_countdown,
                silence, single_instance, uinput_helper, virtual_keyboard)
-from .window_classes import (ELECTRON_PASTE_BROKEN_CLASSES, SMART_NEWLINE_CLASSES_LOWER,
-                             app_kind, is_document_window, is_terminal_class)
+from .window_classes import (ELECTRON_PASTE_BROKEN_CLASSES, app_kind, is_document_window,
+                             is_terminal_class)
 from .hotkey_keys import (MODIFIER_CODES, check_modifiers_held, keycode_from_name,
                           parse_hotkey_combo, track_modifier)
 from . import recording_state as rs
@@ -49,6 +49,7 @@ from . import last_dictation
 from . import notices
 from . import dictation_text
 from . import voice_commands
+from . import delivery
 import threading
 
 logger = setup_logger(__name__)
@@ -575,350 +576,6 @@ def cancel_recording(beeps_on: bool, notify_on: bool, reason="Cancelled"):
     tray_link.notify_recording_state(False)
 
 
-def _typed_breaks_for(text: str, window_class) -> str:
-    """*text* ready to type into *window_class*. Typed line breaks go in as
-    Shift+Enter, but terminals such as gnome-terminal treat Shift+Enter as
-    Enter and would run the half-dictated command, so in a terminal every
-    line break becomes a space. Pasting (Wayland) keeps them: a terminal takes
-    pasted newlines as text."""
-    if not is_terminal_class(window_class):
-        return text
-    joined = re.sub(r"[ \t]*(?:\xa7SHIFT_ENTER\xa7|\n)+[ \t]*", " ", text)
-    if joined != text:
-        logger.info("Typing into a terminal: line breaks typed as spaces")
-    return joined
-
-
-
-def _determine_injection_method(injection_mode: str) -> tuple[str, str]:
-    """
-    Decide between typing and pasting for this dictation.
-
-    Args:
-        injection_mode: User's configured mode ("type", "paste", or "auto")
-
-    Returns:
-        Tuple of (actual_mode, reason)
-        - actual_mode: "type" or "paste" (what to actually use)
-        - reason: str (explanation for logging)
-
-    Auto pastes on Wayland: the paste keystroke is picked per paste from the
-    focused window's class (Ctrl+Shift+V in a terminal), and Electron apps where
-    paste is broken are typed into instead, in _inject_text. It types on X11.
-    """
-    # Inside a Flatpak, clipboard-paste needs wl-copy (not bundled) and the libei
-    # output backend types directly — always type, never attempt paste.
-    if os.environ.get("FLATPAK_ID"):
-        return ("type", "Flatpak: libei typing")
-
-    # If not auto mode, use user's choice directly
-    if injection_mode.lower() != "auto":
-        mode = "paste" if injection_mode.lower() == "paste" else "type"
-        return (mode, f"User selected {mode} mode")
-
-    # Pasting needs wl-copy, which only talks to a Wayland compositor. On X11
-    # every paste would fail and fall back to typing anyway.
-    if not keyboard_output.is_wayland_session():
-        return ("type", "Auto: not a Wayland session, typing")
-    return ("paste", "Auto: paste")
-
-def plan_line_breaks(text: str, one_paste: bool) -> list[str]:
-    """How to deliver *text*'s line breaks: the chunks to paste, in order.
-
-    One chunk means one paste with real newlines in it. More than one means
-    paste each and send Shift+Enter between them.
-
-    Terminals bind no soft-newline key — Enter runs the command — so the
-    keystroke is simply ignored there and everything lands on one line. What a
-    terminal does accept is a newline inside pasted text: bracketed paste (on by
-    default in modern bash and zsh) inserts it literally instead of executing at
-    it. So a terminal gets one paste carrying real newlines, and so do KDE's
-    editors (SMART_NEWLINE_CLASSES_LOWER), where a pasted newline copies
-    nothing from the line above (in a code mode Kate still indents it, as
-    any paste). Not a plain Enter there: Kate's terminal panel would run it.
-
-    Everywhere else keeps the keystroke, because in a chat input like Claude
-    Desktop a literal newline SUBMITS the message instead of breaking the line.
-    """
-    marker = "\xa7SHIFT_ENTER\xa7"
-    normalised = text.replace("\n", marker)
-    if one_paste:
-        return [normalised.replace(marker, "\n")]
-    return normalised.split(marker)
-
-
-
-
-
-def _inject_text(text: str, injection_mode: str, one_block: bool = False, into=None,
-                 message=None) -> str:
-    """Insert *text* into the active app (_deliver_text), then remember the
-    window it landed in, for undo, "fix that word" and select and move.
-    *into*, a look taken earlier, is the only window it may go into: "moved"
-    when another has the focus by the time it would. Words of *message*
-    (send_countdown.Message) are added to it, with where they went, for an
-    automatic Enter or a key said after them.
-
-    The focus is checked once more after typing because the report from
-    before can be out of date. On KDE, clicking the desktop reports
-    plasmashell; wl-copy's clipboard window then hands the focus back to the
-    last real window, and the text lands there, where "delete last
-    sentence" must work. No automatic Enter follows it there: a focus that
-    moved while the words went in can't be told from the user switching.
-    """
-    before = focused_window.destination()
-    sends_before, landed = keyboard_output.this_thread.sends, None
-    keyboard_output.this_thread.into = into
-    try:
-        # Checked again right before each key, after the waits for the paste
-        # (wl-copy) or a dictation key held (_send_keys).
-        if into is not None:
-            focused_window.claim_into(into, before)
-        outcome = _deliver_text(text, injection_mode, one_block, where=before)
-    except (virtual_keyboard.StoppedPartway, virtual_keyboard.GaveUp,
-            keyboard_output.PasswordFieldNow) as stop:
-        typed_some = keyboard_output.this_thread.sends != sends_before
-        outcome = notices.delivery_stopped(stop, typed_some=typed_some)
-    finally:
-        keyboard_output.this_thread.into = None
-    if outcome in ("ok", "partial"):
-        after = focused_window.look()
-        if after[0]:
-            if after[0].casefold() != (rs.state.last_inserted_window or "").casefold():
-                logger.info(f"The text went to {after[0]!r}, not {rs.state.last_inserted_window!r}")
-            rs.state.last_inserted_window = after[0]
-        rs.state.last_inserted_where = (rs.state.last_inserted_window, after[1])
-        if outcome == "ok":
-            landed = send_countdown.landed(before, after)
-    if message is not None:
-        message.add(outcome, landed)
-    return outcome
-
-
-
-def _deliver_text(text: str, injection_mode: str, one_block: bool = False, *, where) -> str:
-    """Determine the best injection method and insert text into the active app.
-
-    Pastes or types as _determine_injection_method decides, typing whatever a
-    failed paste could not deliver.
-
-    Returns how it went: "ok" (all of it arrived), "partial" (some chunks of a
-    multi-part dictation arrived, then it stopped), "failed" (none did) or
-    "password_field" (the focus is in one, so the rest wasn't sent).
-    The caller tells the user about anything but "ok", so a dictation that
-    never arrived doesn't fail silently.
-
-    The focus may have moved into a password field since the text was made:
-    *where* (focused_window.destination, asked right before) says, and so
-    does a check before each further chunk of a multi-part delivery. No check
-    closes the milliseconds between the last answer and the keys after it.
-
-    *one_block* (voice editing) pastes text with line breaks in one go, real
-    newlines and all. Line by line with Enter in between, an editor continues
-    each "- " list line and the dashes pile up. Typed, the breaks still go in
-    as Shift+Enter, since a plain Enter would send a chat message; that holds
-    for every typed line break, not only voice editing's.
-    """
-    if where.password:
-        return "password_field"
-    # Which window this text goes into, so select and move by voice only
-    # trusts "what I just said" in that same window.
-    rs.state.last_inserted_window = focused_class = where.wm_class
-    if focused_class in ELECTRON_PASTE_BROKEN_CLASSES:
-        # A tab as four spaces, however it's typed: a real Tab moves the
-        # focus from Claude Desktop's box to the Send button, and the next
-        # space typed sends the message.
-        text = text.replace("\t", "    ")
-    # Determine injection method (auto mode does smart detection)
-    detection_start = time.time()
-    actual_mode, reason = _determine_injection_method(injection_mode)
-    detection_time = time.time() - detection_start
-    if detection_time > 0.1:
-        logger.warning(f"Injection method detection slow: {detection_time:.2f}s")
-
-    injection_start = time.time()
-
-    # Electron-paste-broken override: if the focused window is an Electron app
-    # where synthetic Ctrl+V silently fails on Wayland, skip clipboard-paste and
-    # type instead. Only kicks in for auto/paste — if the user explicitly chose
-    # "type", we already use Type mode.
-    if injection_mode != "type":
-        if focused_class in ELECTRON_PASTE_BROKEN_CLASSES and not os.environ.get("FLATPAK_ID"):
-            logger.info(f"Electron-paste-broken override: class={focused_class!r}, typing")
-
-            # Line breaks go in as Shift+Enter between the parts.
-            marker = "\xa7SHIFT_ENTER\xa7"
-            unified = text.replace("\n", marker) if "\n" in text else text
-            success = True
-            delivered_parts = 0  # chunks confirmed in the document
-            breaks_sent = 0      # line breaks confirmed after those chunks
-            password_field = False
-            if marker in unified:
-                parts = unified.split(marker)
-                for i, part in enumerate(parts):
-                    if i and focused_window.is_password():
-                        success, password_field = False, True
-                        break
-                    if part and not keyboard_output.type_text_raw(part):
-                        success = False
-                        break
-                    delivered_parts = i + 1
-                    if i < len(parts) - 1:
-                        time.sleep(0.03)
-                        if not keyboard_output.send_shift_enter():
-                            success = False
-                            break
-                        breaks_sent += 1
-                        time.sleep(0.03)
-            else:
-                success = keyboard_output.type_text_raw(unified)
-                delivered_parts = 1 if success else 0
-
-            if success:
-                injection_time = time.time() - injection_start
-                logger.info(f"TIMING: Electron typing completed in {injection_time:.2f}s")
-                # Track injected text for undo. Store the typed form: tabs
-                # already replaced with 4 spaces, and each line-break marker
-                # as one '\n' (one Shift+Enter keystroke = one backspace),
-                # so backspace counts match what was actually sent.
-                rs.state.last_inserted_text = unified.replace(marker, "\n")
-                logger.debug(f"Kept {len(rs.state.last_inserted_text)} chars for undo (typed)")
-                return "ok"
-
-            # Partial delivery: chunks already in the document must not be sent
-            # again by the fallback below, or the user gets a duplicate copy.
-            if delivered_parts:
-                landed = marker.join(unified.split(marker)[:delivered_parts])
-                if breaks_sent == delivered_parts:
-                    landed += marker   # the break after the last chunk landed too
-                rs.state.last_inserted_text = landed.replace(marker, "\n")
-                logger.warning(
-                    f"Typing stopped after {delivered_parts} chunk(s) — "
-                    f"not re-injecting, undo buffer holds only what landed"
-                )
-                return "password_field" if password_field else "partial"
-            # Nothing landed, so the normal injection path can safely try again.
-            logger.warning("Typing failed, falling through to normal injection")
-
-    use_paste = (actual_mode == "paste")
-    logger.info(f"Injection mode: configured={injection_mode!r}, actual={actual_mode!r}, reason={reason}")
-
-    # Tracks whether text actually reached the focused app. Only a confirmed
-    # injection updates the undo buffer; otherwise a later "undo last word"
-    # would backspace characters the user's document never received.
-    inject_ok = True
-
-    # --- Smart hybrid paste (text with line-break markers) ---
-    if use_paste and not one_block and ("\xa7SHIFT_ENTER\xa7" in text or "\n" in text):
-        marker = "\xa7SHIFT_ENTER\xa7"
-        # A terminal honours a newline inside a paste, but treats Shift+Enter
-        # like Enter, so it gets one chunk carrying real newlines and no
-        # keystrokes at all; so do KDE's editors (plan_line_breaks).
-        parts = plan_line_breaks(text, is_terminal_class(focused_class)
-                                 or (focused_class or "").lower() in SMART_NEWLINE_CLASSES_LOWER)
-        logger.info(f"Smart hybrid mode: {len(parts)} part(s)")
-
-        # Track where delivery stopped, so the fallback types only the rest:
-        # re-injecting the whole text would duplicate the chunks that already
-        # landed, which undo can't clean up.
-        resume_at = None
-        needs_break = password_field = False
-        for i, part in enumerate(parts):
-            if i and focused_window.is_password():
-                resume_at, password_field = i, True
-                break
-            if part:
-                logger.info(f"Pasting part {i+1}/{len(parts)}: {len(part)} chars")
-                if not keyboard_output.paste_text(part):
-                    logger.warning(f"Paste failed on part {i+1}; will type the remainder")
-                    resume_at = i
-                    break
-                time.sleep(0.08)
-            if i < len(parts) - 1:
-                logger.info(f"Sending Shift+Enter after part {i+1}")
-                if not keyboard_output.send_shift_enter():
-                    # The chunk landed but its line break didn't: resume from
-                    # the next chunk and supply the missing break.
-                    logger.warning(f"Line break failed after part {i+1}; will type the remainder")
-                    resume_at, needs_break = i + 1, True
-                    break
-                time.sleep(0.05)
-
-        if resume_at is None:
-            logger.info(f"Smart hybrid paste completed: {len(parts)} chunks")
-        elif password_field:
-            # Not asked again: a second answer that comes back "no" (a slow
-            # app, out of time) would type the rest into the password field.
-            # The chunks before reached the document, and so did the line
-            # break after the last of them: the check comes after it.
-            delivered = marker.join(parts[:resume_at]) + marker
-            rs.state.last_inserted_text = delivered.replace(marker, "\n")
-            logger.warning(f"Stopped after {resume_at}/{len(parts)} chunks: a password field "
-                           "has the focus now")
-            return "password_field"
-        else:
-            remainder = (marker if needs_break else "") + marker.join(parts[resume_at:])
-            # A terminal's single chunk carries real newlines for bracketed
-            # paste. Typed, a newline is a plain Enter and Shift+Enter is no
-            # safer in a terminal, so _typed_breaks_for turns them into spaces
-            # there; other apps get Shift+Enter.
-            remainder = _typed_breaks_for(remainder.replace("\n", marker),
-                                          focused_window.window_class())
-            if keyboard_output.output_backend().type_text(remainder):
-                inject_ok = True  # delivered chunks + typed remainder == full text
-            else:
-                # The chunks before the failure reached the document, and so did
-                # the line break after the last of them unless that break is what
-                # failed. Recording only those makes undo delete too little rather
-                # than too much if part of the remainder was typed as well.
-                delivered = marker.join(parts[:resume_at])
-                if resume_at and not needs_break:
-                    delivered += marker
-                rs.state.last_inserted_text = delivered.replace(marker, "\n")
-                logger.warning(
-                    f"Injection stopped after {resume_at}/{len(parts)} chunks \u2014 "
-                    f"undo buffer holds only what landed"
-                )
-                return "partial" if resume_at else "failed"
-
-    # --- Simple paste (no markers) ---
-    elif use_paste and keyboard_output.paste_text(text):
-        injection_time = time.time() - injection_start
-        logger.info(f"Text injected via paste: {len(text)} chars in {injection_time:.2f}s")
-        if injection_time > 1.0:
-            logger.warning(f"Paste injection slow: {injection_time:.2f}s")
-
-    # --- Typing fallback ---
-    else:
-        # Typed, a real newline is a plain Enter, which sends a chat message or
-        # runs a terminal's half-typed command. A snippet's line breaks are real
-        # newlines, so they go in as Shift+Enter like a spoken "new line".
-        text = _typed_breaks_for(text.replace("\n", "\xa7SHIFT_ENTER\xa7"),
-                                 focused_window.window_class())
-        backend = keyboard_output.output_backend()
-        # The Flatpak's keyboard path types "…" as "..." and "café" as "cafe";
-        # recording that form below keeps undo's backspace count right.
-        text = backend.typeable(text)
-        inject_ok = backend.type_text(text)
-        injection_time = time.time() - injection_start
-        logger.info(f"Text injected via typing: {len(text)} chars in {injection_time:.2f}s")
-        if injection_time > 1.0:
-            logger.warning(f"Typing injection slow: {injection_time:.2f}s")
-
-    # Track injected text for undo — but ONLY when injection actually
-    # succeeded. Line-break markers are stored as '\n' (one keystroke on
-    # screen = one character in the buffer) so undo backspace counts stay in
-    # sync with what was typed. A failed typing run may have typed part of
-    # the text before it stopped, so the buffer matches neither this
-    # dictation nor the last one: empty it, and undo then deletes nothing.
-    if inject_ok:
-        rs.state.last_inserted_text = text.replace("\xa7SHIFT_ENTER\xa7", "\n")
-        logger.debug(f"Kept {len(rs.state.last_inserted_text)} chars for undo")
-    else:
-        rs.state.last_inserted_text = ""
-        logger.warning("Injection failed — undo buffer cleared")
-    return "ok" if inject_ok else "failed"
-
 
 def _toggle_pressed_while_recording(beeps_on: bool) -> bool:
     """A toggle-key press arrived during a recording. Returns True if it was
@@ -1095,7 +752,7 @@ def _type_boundary(pending: dict, tail: str, injection_mode: str) -> None:
         return
     last_dictation.remember_said(tail, chunked=True)
     # Only into the phrase's window: the context pass before this can take a while.
-    ok = _inject_text(tail, injection_mode, into=pending["where"],
+    ok = delivery.inject_text(tail, injection_mode, into=pending["where"],
                       message=pending["message"]) == "ok"
     last_dictation.remember_shown(tail, chunked=True, ok=ok)
     if ok:
@@ -1265,7 +922,7 @@ def _type_onto_dictation(text: str, injection_mode: str, into=None) -> str:
     in the app as it was, and so is everything that remembers it."""
     kept = (rs.state.last_inserted_text, rs.state.continue_mid_sentence, rs.state.nav_context,
             rs.state.shown_text, rs.state.last_inserted_window, rs.state.last_inserted_where)
-    outcome = _inject_text(text, injection_mode, into=into)
+    outcome = delivery.inject_text(text, injection_mode, into=into)
     if outcome == "ok":
         rs.state.last_inserted_text = kept[0] + text
     elif outcome in _GAVE_UP_UNTYPED:
@@ -1292,7 +949,7 @@ def _end_in_a_pause(message, beeps_on, auto_space, auto_period, injection_mode) 
         cue, rs.state.held_cue = rs.state.held_cue, ""
         if auto_period and cue[-1] not in ".?!":
             cue += "."
-        _inject_text(cue + (" " if auto_space else ""), injection_mode, message=message)
+        delivery.inject_text(cue + (" " if auto_space else ""), injection_mode, message=message)
     if (live.press_enter_after and message.has_words and message.complete
             and not is_document_window(focused_window.window_class())):
         _flush_boundary(auto_period, False, injection_mode)
@@ -1504,7 +1161,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             chunked = chunk_role is not None
             said_before = last_dictation.remember_said(text, chunked, taken_back)
             try:
-                outcome = _inject_text(text, injection_mode, message=message)
+                outcome = delivery.inject_text(text, injection_mode, message=message)
             except Exception as e:
                 # The transcription worked; only getting it into the window
                 # didn't, so this is reported as undelivered, not as the
@@ -1845,7 +1502,7 @@ def _edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0
         # The selection is still active, so typing or pasting replaces it, in
         # one block (see _inject_text).
         try:
-            outcome = _inject_text(result, injection_mode, one_block=True, message=message)
+            outcome = delivery.inject_text(result, injection_mode, one_block=True, message=message)
         except Exception as e:
             logger.error(f"Voice edit: typing the rewrite failed: {e}", exc_info=True)
             outcome = "failed"
@@ -1907,7 +1564,7 @@ def _paste_last_dictation(cfg) -> None:
     if getattr(cfg, "auto_space", True):
         text += " "
     logger.info("Paste last dictation")
-    outcome = _inject_text(text, cfg.injection_mode)
+    outcome = delivery.inject_text(text, cfg.injection_mode)
     if outcome in delivery_notices.NOTICES:
         notices.report_undelivered(outcome, cfg.beeps)
 

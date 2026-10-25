@@ -1,6 +1,6 @@
 {
  "files": {
-  "app.py": 2636,
+  "app.py": 2293,
   "tray.py": 2477,
   "welcome_dialog.py": 3222
  },
@@ -14,7 +14,6 @@
   "app.py::<module>::long_line": 1,
   "app.py::<module>::undocumented": 1,
   "app.py::_claim_desktop_hotkeys::swallowed_error": 1,
-  "app.py::_deliver_text::long_line": 1,
   "app.py::_finish_capture::long_line": 1,
   "app.py::_loop_evdev::swallowed_error": 1,
   "app.py::_mark_service_ready::swallowed_error": 1,
@@ -328,10 +327,6 @@
   },
   "ai_cleanup.py::fix_self_corrections": {
    "decisions": 24
-  },
-  "app.py::_deliver_text": {
-   "decisions": 47,
-   "lines": 222
   },
   "app.py::_edit_selection": {
    "decisions": 39,

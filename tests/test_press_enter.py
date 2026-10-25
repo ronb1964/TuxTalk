@@ -16,6 +16,7 @@ from tuxtalk.key_commands import split_key_command
 from tuxtalk import notices
 from tuxtalk import dictation_text
 from tuxtalk import voice_commands
+from tuxtalk import delivery
 
 
 @pytest.mark.parametrize("raw, expected", [
@@ -56,7 +57,7 @@ def _dictate(monkeypatch, raw, prepared=None, outcome="ok", window="brave-browse
     def inject(text, mode, message=None):
         events.append(("typed", text))
         return outcome
-    monkeypatch.setattr(app, "_inject_text", inject)
+    monkeypatch.setattr(delivery, "inject_text", inject)
     monkeypatch.setattr(keyboard_output, "press_key",
                         lambda key, why, claim=None: events.append((key.lower(), why)))
     frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
@@ -257,7 +258,7 @@ def countdown(monkeypatch):
     monkeypatch.setattr(focused_window, "look", lambda: BRAVE)
     monkeypatch.setattr(rs.state, "last_inserted_window", "brave-browser")
     TYPED.clear()
-    monkeypatch.setattr(app, "_inject_text", lambda text, mode, **kw: TYPED.append(text) or "ok")
+    monkeypatch.setattr(delivery, "inject_text", lambda text, mode, **kw: TYPED.append(text) or "ok")
     return pressed, labels
 
 
@@ -469,7 +470,7 @@ def test_typing_the_space_doesnt_turn_a_tap_into_a_dictation(countdown, monkeypa
     reasons = []
     monkeypatch.setattr(app, "cancel_recording",
                         lambda beeps, notify, reason="": reasons.append(reason))
-    monkeypatch.setattr(app, "_inject_text",
+    monkeypatch.setattr(delivery, "inject_text",
                         lambda text, mode, **kw: app.time.sleep(0.1) or TYPED.append(text) or "ok")
     monkeypatch.setattr(send_countdown, "_owed", None)
     start_send("test", " ", "type")
@@ -608,7 +609,7 @@ def test_the_owed_space_keeps_to_the_window_after_the_last_look(countdown, monke
             return "moved"
         TYPED.append(text)
         return "ok"
-    monkeypatch.setattr(app, "_inject_text", inject)
+    monkeypatch.setattr(delivery, "inject_text", inject)
     send_countdown.type_owed_space()
     assert TYPED == []
 
@@ -692,7 +693,7 @@ def test_a_pause_at_the_end_after_switching_windows_sends_nothing(monkeypatch, k
     focus = ["brave-browser", ("compositor", 0x3200007)]
     monkeypatch.setattr(focused_window, "look", lambda: tuple(focus))
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: focus[0])
-    monkeypatch.setattr(app, "_deliver_text",
+    monkeypatch.setattr(delivery, "deliver_text",
                         lambda text, mode, one_block=False, *, where: "ok")
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     monkeypatch.setattr(engine, "transcribe", lambda audio, language: "see you at noon")

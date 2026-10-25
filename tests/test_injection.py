@@ -15,6 +15,7 @@ import subprocess
 import pytest
 
 from tuxtalk import app, focused_window
+from tuxtalk import delivery
 from tuxtalk import voice_commands
 from tuxtalk import keyboard_output
 from tuxtalk import recording_state as rs
@@ -180,12 +181,12 @@ def test_failed_chunk_only_retypes_the_remainder(monkeypatch, wayland):
     monkeypatch.setattr(keyboard_output, "paste_text", fake_paste)
     monkeypatch.setattr(keyboard_output, "type_text", lambda t: typed.append(t) or True)
     monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: True)
-    monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
+    monkeypatch.setattr(delivery, "determine_injection_method", lambda m: ("paste", "test"))
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
 
     marker = "\xa7SHIFT_ENTER\xa7"
     text = marker.join(["first", "second", "third", "fourth"])
-    app._inject_text(text, "paste")
+    delivery.inject_text(text, "paste")
 
     assert typed, "nothing was retyped after the failure"
     retyped = "".join(typed)
@@ -202,11 +203,11 @@ def test_undo_buffer_records_only_what_actually_landed(monkeypatch, wayland):
     to delete: the buffer is emptied, and undo then deletes nothing."""
     monkeypatch.setattr(keyboard_output, "paste_text", lambda *a, **k: False)
     monkeypatch.setattr(keyboard_output, "type_text", lambda t: False)
-    monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
+    monkeypatch.setattr(delivery, "determine_injection_method", lambda m: ("paste", "test"))
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
     rs.state.last_inserted_text = "previous dictation"
 
-    app._inject_text("brand new text", "paste")
+    delivery.inject_text("brand new text", "paste")
 
     assert rs.state.last_inserted_text == "", \
         "undo buffer kept a length that no longer matches the document"
@@ -214,11 +215,11 @@ def test_undo_buffer_records_only_what_actually_landed(monkeypatch, wayland):
 
 def test_undo_buffer_updates_on_a_successful_injection(monkeypatch, wayland):
     monkeypatch.setattr(keyboard_output, "paste_text", lambda *a, **k: True)
-    monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
+    monkeypatch.setattr(delivery, "determine_injection_method", lambda m: ("paste", "test"))
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
     rs.state.last_inserted_text = "previous"
 
-    app._inject_text("brand new text", "paste")
+    delivery.inject_text("brand new text", "paste")
 
     assert rs.state.last_inserted_text == "brand new text"
 
@@ -283,24 +284,21 @@ def test_type_text_still_reports_failure_when_a_text_part_fails(monkeypatch):
 def test_injection_method_forces_type_in_flatpak(monkeypatch):
     """Inside a Flatpak there is no wl-copy, and libei types directly — so the
     method must be 'type', never 'paste', regardless of the configured mode."""
-    from tuxtalk import app
     monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TalkType")
     for mode in ("auto", "paste", "type"):
-        actual, _reason = app._determine_injection_method(mode)
+        actual, _reason = delivery.determine_injection_method(mode)
         assert actual == "type", mode
 
 
 def test_injection_method_respects_user_choice_on_host(monkeypatch):
-    from tuxtalk import app
     monkeypatch.delenv("FLATPAK_ID", raising=False)
-    assert app._determine_injection_method("paste")[0] == "paste"
-    assert app._determine_injection_method("type")[0] == "type"
+    assert delivery.determine_injection_method("paste")[0] == "paste"
+    assert delivery.determine_injection_method("type")[0] == "type"
 
 
 def test_auto_mode_pastes_without_scanning_processes(monkeypatch):
     """Auto always pastes, so the answer must not cost a pgrep over every
     process on each dictation."""
-    from tuxtalk import app
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
 
@@ -308,7 +306,7 @@ def test_auto_mode_pastes_without_scanning_processes(monkeypatch):
         raise AssertionError("auto mode must not start a process")
     monkeypatch.setattr(keyboard_output.subprocess, "run", no_subprocess)
 
-    assert app._determine_injection_method("auto")[0] == "paste"
+    assert delivery.determine_injection_method("auto")[0] == "paste"
 
 
 # --- a typed line break must never run a terminal command --------------------
@@ -321,7 +319,7 @@ MARK = "\xa7SHIFT_ENTER\xa7"
 def _typing_into(monkeypatch, window_class, mode="type"):
     typed = []
     monkeypatch.setattr(keyboard_output, "type_text", lambda t: typed.append(t) or True)
-    monkeypatch.setattr(app, "_determine_injection_method", lambda m: (mode, "test"))
+    monkeypatch.setattr(delivery, "determine_injection_method", lambda m: (mode, "test"))
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: window_class)
     monkeypatch.setattr(focused_window, "look", lambda: (window_class, None))
     return typed
@@ -330,27 +328,27 @@ def _typing_into(monkeypatch, window_class, mode="type"):
 @pytest.mark.parametrize("window", ["Gnome-terminal", "org.kde.konsole", "xfce4-terminal"])
 def test_typed_line_breaks_become_spaces_in_a_terminal(monkeypatch, window):
     typed = _typing_into(monkeypatch, window)
-    assert app._inject_text(f"First line.{MARK}Second line.", "type") == "ok"
+    assert delivery.inject_text(f"First line.{MARK}Second line.", "type") == "ok"
     assert typed == ["First line. Second line."]
     assert rs.state.last_inserted_text == "First line. Second line."
 
 
 def test_a_snippet_newline_becomes_a_space_in_a_terminal(monkeypatch):
     typed = _typing_into(monkeypatch, "Gnome-terminal")
-    app._inject_text("Best,\nRon", "type")
+    delivery.inject_text("Best,\nRon", "type")
     assert typed == ["Best, Ron"]
 
 
 def test_typed_line_breaks_stay_line_breaks_in_other_apps(monkeypatch):
     typed = _typing_into(monkeypatch, "xed")
-    app._inject_text(f"First line.{MARK}Second line.", "type")
+    delivery.inject_text(f"First line.{MARK}Second line.", "type")
     assert typed == [f"First line.{MARK}Second line."]
 
 
 def test_the_typed_remainder_after_a_failed_paste_has_no_breaks_in_a_terminal(monkeypatch, wayland):
     typed = _typing_into(monkeypatch, "org.kde.konsole", mode="paste")
     monkeypatch.setattr(keyboard_output, "paste_text", lambda *a, **k: False)
-    app._inject_text(f"First line.{MARK}Second line.", "paste")
+    delivery.inject_text(f"First line.{MARK}Second line.", "paste")
     assert typed and all(MARK not in t and "\n" not in t for t in typed)
 
 
@@ -368,7 +366,7 @@ def _focus_moves_on_paste(monkeypatch, before, after):
         return True
 
     monkeypatch.setattr(keyboard_output, "paste_text", fake_paste)
-    monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
+    monkeypatch.setattr(delivery, "determine_injection_method", lambda m: ("paste", "test"))
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: focus["now"])
     monkeypatch.setattr(focused_window, "look", lambda: (focus["now"], None))
 
@@ -377,13 +375,13 @@ def test_the_window_the_text_landed_in_is_remembered(monkeypatch, wayland):
     """Ron clicked the desktop, dictated, and the text landed in Claude. Undo
     then refused to delete it there, saying it went to plasmashell."""
     _focus_moves_on_paste(monkeypatch, "plasmashell", "com.anthropic.Claude")
-    assert app._inject_text("Testing 1, 2, 3. ", "paste") == "ok"
+    assert delivery.inject_text("Testing 1, 2, 3. ", "paste") == "ok"
     assert rs.state.last_inserted_window == "com.anthropic.Claude"
 
 
 def test_an_unknown_window_after_typing_keeps_the_one_before(monkeypatch, wayland):
     _focus_moves_on_paste(monkeypatch, "org.kde.kwrite", None)
-    app._inject_text("Hello. ", "paste")
+    delivery.inject_text("Hello. ", "paste")
     assert rs.state.last_inserted_window == "org.kde.kwrite"
 
 
@@ -394,6 +392,6 @@ def test_a_tab_said_mid_sentence_is_four_spaces_in_claude_desktop_however_it_typ
     and the next space typed sends the message halfway through."""
     typed = _typing_into(monkeypatch, "com.anthropic.Claude", mode="type")
     monkeypatch.setattr(keyboard_output, "type_text_raw", lambda t: typed.append(t) or True)
-    assert app._inject_text("Name\taddress. ", mode) == "ok"
+    assert delivery.inject_text("Name\taddress. ", mode) == "ok"
     assert typed == ["Name    address. "]
     assert rs.state.last_inserted_text == "Name    address. "

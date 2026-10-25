@@ -1,5 +1,5 @@
 """What TuxTalk says when a dictation didn't reach the window, by how its
-delivery ended (app._inject_text's outcome): a title for the notification
+delivery ended (delivery.inject_text's outcome): a title for the notification
 and the sentence under it, and the label a password field gets over the
 window.
 """

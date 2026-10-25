@@ -66,7 +66,7 @@ def key_delay() -> int:
 
 
 def send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY_MS,
-               raise_if_partial: bool = False, claim=None) -> bool:
+              raise_if_partial: bool = False, claim=None) -> bool:
     """Press keys [(evdev code, 1 down / 0 up)] on TuxTalk's virtual keyboard.
     True only if all of them were sent: keystrokes that never happened must
     not reach the undo buffer.
@@ -462,7 +462,7 @@ def send_backspaces(count: int) -> bool:
     # KEY_BACKSPACE = 14, pressed and released once per character.
     try:
         return send_keys([(14, 1), (14, 0)] * count, what=f"{count} backspaces",
-                          delay_ms=key_delay(), raise_if_partial=True)
+                         delay_ms=key_delay(), raise_if_partial=True)
     except virtual_keyboard.GaveUp:
         return False        # none sent, and there's no other way to send them
 
@@ -493,7 +493,7 @@ def send_chords(chords, claim=None) -> bool:
             code = nav_keycode(key)
             events += [(code, 1), (code, 0)]
     return send_keys(events, what=f"{len(chords)} navigation keys", delay_ms=key_delay(),
-                      claim=claim)
+                     claim=claim)
 
 
 def send_copy_keystroke() -> bool:

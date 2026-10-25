@@ -15,6 +15,7 @@ import numpy as np
 import pytest
 
 from tuxtalk import app, focused_window, window_classes
+from tuxtalk import delivery
 from tuxtalk import engine
 from tuxtalk import live_settings as live
 from tuxtalk import keyboard_output
@@ -33,7 +34,7 @@ def quiet(monkeypatch):
 
 
 def _paste_mode(monkeypatch):
-    monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
+    monkeypatch.setattr(delivery, "determine_injection_method", lambda m: ("paste", "test"))
 
 
 # --- _inject_text reports its outcome ------------------------------------------
@@ -41,7 +42,7 @@ def _paste_mode(monkeypatch):
 def test_a_paste_that_lands_is_ok(monkeypatch, quiet):
     _paste_mode(monkeypatch)
     monkeypatch.setattr(keyboard_output, "paste_text", lambda *a, **k: True)
-    assert app._inject_text("hello", "auto") == "ok"
+    assert delivery.inject_text("hello", "auto") == "ok"
 
 
 def test_nothing_landing_is_failed(monkeypatch, quiet):
@@ -49,14 +50,14 @@ def test_nothing_landing_is_failed(monkeypatch, quiet):
     _paste_mode(monkeypatch)
     monkeypatch.setattr(keyboard_output, "paste_text", lambda *a, **k: False)
     monkeypatch.setattr(keyboard_output, "type_text", lambda t: False)
-    assert app._inject_text("Привіт", "auto") == "failed"
+    assert delivery.inject_text("Привіт", "auto") == "failed"
 
 
 def test_typing_that_lands_after_a_refused_paste_is_ok(monkeypatch, quiet):
     _paste_mode(monkeypatch)
     monkeypatch.setattr(keyboard_output, "paste_text", lambda *a, **k: False)
     monkeypatch.setattr(keyboard_output, "type_text", lambda t: True)
-    assert app._inject_text("hello", "auto") == "ok"
+    assert delivery.inject_text("hello", "auto") == "ok"
 
 
 def test_some_chunks_landing_is_partial(monkeypatch, quiet):
@@ -64,13 +65,13 @@ def test_some_chunks_landing_is_partial(monkeypatch, quiet):
     monkeypatch.setattr(keyboard_output, "paste_text", lambda part, *a, **k: part != "third")
     monkeypatch.setattr(keyboard_output, "type_text", lambda t: False)
     text = MARKER.join(["first", "second", "third"])
-    assert app._inject_text(text, "auto") == "partial"
+    assert delivery.inject_text(text, "auto") == "partial"
 
 
 def test_type_mode_failure_is_failed(monkeypatch, quiet):
-    monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("type", "test"))
+    monkeypatch.setattr(delivery, "determine_injection_method", lambda m: ("type", "test"))
     monkeypatch.setattr(keyboard_output, "type_text", lambda t: False)
-    assert app._inject_text("hello", "type") == "failed"
+    assert delivery.inject_text("hello", "type") == "failed"
 
 
 @pytest.fixture
@@ -84,13 +85,13 @@ def electron(monkeypatch, quiet):
 
 def test_typing_into_electron_that_lands_is_ok(monkeypatch, electron):
     monkeypatch.setattr(keyboard_output, "type_text_raw", lambda t: True)
-    assert app._inject_text("hello", "auto") == "ok"
+    assert delivery.inject_text("hello", "auto") == "ok"
 
 
 def test_typing_into_electron_stopping_partway_is_partial(monkeypatch, electron):
     calls = []
     monkeypatch.setattr(keyboard_output, "type_text_raw", lambda t: calls.append(t) or len(calls) == 1)
-    assert app._inject_text(MARKER.join(["first", "second"]), "auto") == "partial"
+    assert delivery.inject_text(MARKER.join(["first", "second"]), "auto") == "partial"
 
 
 # --- _transcribe_and_inject tells the user --------------------------------------
@@ -110,9 +111,9 @@ def dictation(monkeypatch):
         if isinstance(outcome, Exception):
             def boom(*a, **k):
                 raise outcome
-            monkeypatch.setattr(app, "_inject_text", boom)
+            monkeypatch.setattr(delivery, "inject_text", boom)
         else:
-            monkeypatch.setattr(app, "_inject_text", lambda text, mode, **kw: outcome)
+            monkeypatch.setattr(delivery, "inject_text", lambda text, mode, **kw: outcome)
         frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
         app._transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=beeps_on,
                                    smart_quotes=False, notify_on=notify_on)

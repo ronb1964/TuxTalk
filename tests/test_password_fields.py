@@ -21,6 +21,7 @@ from tuxtalk import live_settings as live
 from tuxtalk import keyboard_output
 from tuxtalk import engine
 from tuxtalk import dictation_text
+from tuxtalk import delivery
 
 ACTIVE = 1 << atspi_helper._STATE_ACTIVE
 FOCUSED = 1 << atspi_helper._STATE_FOCUSED
@@ -50,7 +51,7 @@ def desktop(monkeypatch):
             return True
 
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: Keyboard())
-    monkeypatch.setattr(app, "_determine_injection_method", lambda mode: ("type", "test"))
+    monkeypatch.setattr(delivery, "determine_injection_method", lambda mode: ("type", "test"))
     monkeypatch.setattr(keyboard_output, "paste_text",
                         lambda text, *a, **k: seen["pasted"].append(text) or True)
     monkeypatch.setattr(history, "add_entry",
@@ -167,22 +168,22 @@ def test_paste_last_dictation_types_nothing_in_a_password_field(desktop, monkeyp
 
 def test_delivery_stops_when_the_focus_moves_into_a_password_field(desktop, monkeypatch):
     """Pasted line by line, a dictation is asked about again before each line."""
-    monkeypatch.setattr(app, "_determine_injection_method", lambda mode: ("paste", "test"))
+    monkeypatch.setattr(delivery, "determine_injection_method", lambda mode: ("paste", "test"))
     monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: True)
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     desktop["answers"], desktop["password"] = [False], True   # a text box, then a password field
-    assert app._inject_text("first line\nsecond line", "auto") == "password_field"
+    assert delivery.inject_text("first line\nsecond line", "auto") == "password_field"
     assert desktop["pasted"] == ["first line"] and desktop["typed"] == []
 
 
 def test_a_paste_stopped_there_isnt_finished_by_typing(desktop, monkeypatch):
     """Not asked a second time: a slow app whose answer runs out of time says
     "no", and the rest of the dictation was then typed into the field."""
-    monkeypatch.setattr(app, "_determine_injection_method", lambda mode: ("paste", "test"))
+    monkeypatch.setattr(delivery, "determine_injection_method", lambda mode: ("paste", "test"))
     monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: True)
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     desktop["answers"] = [False, True]          # then "no" to any further question
-    assert app._inject_text("first line\nsecond line", "auto") == "password_field"
+    assert delivery.inject_text("first line\nsecond line", "auto") == "password_field"
     assert desktop["pasted"] == ["first line"] and desktop["typed"] == []
 
 
@@ -196,7 +197,7 @@ def test_typed_line_by_line_it_stops_there_too(desktop, monkeypatch):
     monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: keys.append("SHIFT+ENTER") or True)
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     desktop["answers"], desktop["password"] = [False], True
-    assert app._inject_text("first line\nsecond line", "auto") == "password_field"
+    assert delivery.inject_text("first line\nsecond line", "auto") == "password_field"
     assert keys == ["first line", "SHIFT+ENTER"]
     assert rs.state.last_inserted_text == ""      # undo deletes nothing it can't count
 

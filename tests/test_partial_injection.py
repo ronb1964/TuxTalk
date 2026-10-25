@@ -9,6 +9,7 @@ is really in the document, or "undo that" deletes the user's own writing.
 import pytest
 
 from tuxtalk import app, focused_window
+from tuxtalk import delivery
 from tuxtalk import keyboard_output
 from tuxtalk import recording_state as rs
 
@@ -51,14 +52,14 @@ def test_terminal_remainder_never_presses_a_plain_enter(monkeypatch, quiet):
     """A terminal gets one paste with real newlines. If that paste fails, the
     remainder is typed with its line breaks as spaces: Enter would run the
     command, and terminals such as gnome-terminal treat Shift+Enter as Enter."""
-    monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
+    monkeypatch.setattr(delivery, "determine_injection_method", lambda m: ("paste", "test"))
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "konsole")
     monkeypatch.setattr(keyboard_output, "paste_text", lambda t: False)
     typed, shift_enters = [], []
     monkeypatch.setattr(keyboard_output, "type_text_raw", lambda t: typed.append(t) or True)
     monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: shift_enters.append(1) or True)
 
-    outcome = app._inject_text(f"ls{MARKER}foo", "auto")
+    outcome = delivery.inject_text(f"ls{MARKER}foo", "auto")
 
     assert outcome == "ok"
     assert not any("\n" in t for t in typed), "a plain Enter was typed in a terminal"
@@ -68,7 +69,7 @@ def test_terminal_remainder_never_presses_a_plain_enter(monkeypatch, quiet):
 def test_auto_mode_types_on_x11(monkeypatch, quiet):
     """Paste can't work without Wayland, so auto goes straight to typing."""
     monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
-    assert app._determine_injection_method("auto")[0] == "type"
+    assert delivery.determine_injection_method("auto")[0] == "type"
 
 
 def test_typed_snippet_newline_is_shift_enter_on_x11(monkeypatch, quiet):
@@ -80,7 +81,7 @@ def test_typed_snippet_newline_is_shift_enter_on_x11(monkeypatch, quiet):
     monkeypatch.setattr(keyboard_output, "type_text_raw", lambda t: keys.append(t) or True)
     monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: keys.append("SHIFT+ENTER") or True)
 
-    outcome = app._inject_text("Best regards,\nRon ", "auto")
+    outcome = delivery.inject_text("Best regards,\nRon ", "auto")
 
     assert outcome == "ok"
     assert keys == ["Best regards,", "SHIFT+ENTER", "Ron "]
@@ -90,50 +91,50 @@ def test_typed_snippet_newline_is_shift_enter_on_x11(monkeypatch, quiet):
 # --- the undo buffer after a partial failure ----------------------------------
 
 def test_failed_typing_empties_the_undo_buffer(monkeypatch, quiet):
-    monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("type", "test"))
+    monkeypatch.setattr(delivery, "determine_injection_method", lambda m: ("type", "test"))
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
     monkeypatch.setattr(keyboard_output, "type_text", lambda t: False)
     rs.state.last_inserted_text = "the previous dictation"
 
-    assert app._inject_text("a dictation that stopped partway", "type") == "failed"
+    assert delivery.inject_text("a dictation that stopped partway", "type") == "failed"
     assert rs.state.last_inserted_text == ""
 
 
 def test_smart_paste_records_the_line_break_that_landed(monkeypatch, quiet):
     """Part 1 and the break after it land, then part 2's paste fails. The
     buffer must include that break, or an undo leaves a stray blank line."""
-    monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
+    monkeypatch.setattr(delivery, "determine_injection_method", lambda m: ("paste", "test"))
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
     monkeypatch.setattr(keyboard_output, "paste_text", lambda t: t == "first")
     monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: True)
     monkeypatch.setattr(keyboard_output, "type_text", lambda t: False)
 
-    outcome = app._inject_text(f"first{MARKER}second", "paste")
+    outcome = delivery.inject_text(f"first{MARKER}second", "paste")
 
     assert outcome == "partial"
     assert rs.state.last_inserted_text == "first\n"
 
 
 def test_smart_paste_leaves_out_a_line_break_that_failed(monkeypatch, quiet):
-    monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
+    monkeypatch.setattr(delivery, "determine_injection_method", lambda m: ("paste", "test"))
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
     monkeypatch.setattr(keyboard_output, "paste_text", lambda t: True)
     monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: False)
     monkeypatch.setattr(keyboard_output, "type_text", lambda t: False)
 
-    app._inject_text(f"first{MARKER}second", "paste")
+    delivery.inject_text(f"first{MARKER}second", "paste")
 
     assert rs.state.last_inserted_text == "first"
 
 
 def test_typing_into_electron_records_the_line_break_that_landed(monkeypatch, quiet):
-    monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
+    monkeypatch.setattr(delivery, "determine_injection_method", lambda m: ("paste", "test"))
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "Claude")
     monkeypatch.setattr(focused_window, "look", lambda: ("Claude", None))
     monkeypatch.setattr(keyboard_output, "type_text_raw", lambda t: t == "first")
     monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: True)
 
-    outcome = app._inject_text(f"first{MARKER}second", "paste")
+    outcome = delivery.inject_text(f"first{MARKER}second", "paste")
 
     assert outcome == "partial"
     assert rs.state.last_inserted_text == "first\n"

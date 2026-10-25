@@ -177,6 +177,7 @@ def test_the_engine_has_room_for_a_selection(monkeypatch):
 # --- 3. the setting and the engine --------------------------------------------------
 
 from tuxtalk import app, config
+from tuxtalk import delivery
 from tuxtalk import dictation_text
 from tuxtalk import engine as speech_engine
 from tuxtalk import live_settings as live
@@ -370,7 +371,7 @@ def edit_env(monkeypatch):
             seen["put_back"] += 1
         return selection["text"], put_back
     monkeypatch.setattr(cb, "copy_selection", copy_selection)
-    monkeypatch.setattr(app, "_inject_text", lambda text, mode, one_block=False, **kw: seen["typed"].append(text) or "ok")
+    monkeypatch.setattr(delivery, "inject_text", lambda text, mode, one_block=False, **kw: seen["typed"].append(text) or "ok")
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, msg: seen["notices"].append(msg))
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda on, *a: seen["beeps"].append(a))
     monkeypatch.setattr(history, "add_entry", lambda text: seen["history"].append(text))
@@ -398,7 +399,7 @@ def test_a_multi_line_rewrite_goes_in_as_one_block(edit_env, monkeypatch):
     """Line by line with Enter in between, KWrite continues each "- " list
     line and the dashes pile up ("- - 2", "- - - 3")."""
     calls = []
-    monkeypatch.setattr(app, "_inject_text", lambda text, mode, one_block=False, **kw: calls.append((text, one_block)) or "ok")
+    monkeypatch.setattr(delivery, "inject_text", lambda text, mode, one_block=False, **kw: calls.append((text, one_block)) or "ok")
     edit_env["engine"].answer = "- Buy plywood\n- Call George"
     run_edit()
     assert calls == [("- Buy plywood\n- Call George", True)]
@@ -446,7 +447,7 @@ def test_a_rewrite_is_not_typed_or_kept_if_the_focus_moved_to_a_password_field(e
 
 
 def test_the_clipboard_comes_back_even_when_typing_fails(edit_env, monkeypatch):
-    monkeypatch.setattr(app, "_inject_text", lambda text, mode, one_block=False, **kw: (_ for _ in ()).throw(RuntimeError("boom")))
+    monkeypatch.setattr(delivery, "inject_text", lambda text, mode, one_block=False, **kw: (_ for _ in ()).throw(RuntimeError("boom")))
     run_edit()
     assert edit_env["put_back"] == 1
 
@@ -727,23 +728,23 @@ def injection(monkeypatch):
 
 
 def test_one_block_is_pasted_once_with_its_line_breaks(injection, monkeypatch):
-    monkeypatch.setattr(app, "_determine_injection_method", lambda mode: ("paste", "test"))
-    app._inject_text("- 1\n- 2\n- 3", "auto", one_block=True)
+    monkeypatch.setattr(delivery, "determine_injection_method", lambda mode: ("paste", "test"))
+    delivery.inject_text("- 1\n- 2\n- 3", "auto", one_block=True)
     assert injection["pasted"] == ["- 1\n- 2\n- 3"] and injection["shift_enter"] == 0
 
 
 def test_dictation_still_pastes_line_by_line(injection, monkeypatch):
     """In a chat app; KDE's editors get one paste (test_terminal_line_breaks)."""
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "discord")
-    monkeypatch.setattr(app, "_determine_injection_method", lambda mode: ("paste", "test"))
-    app._inject_text("one§SHIFT_ENTER§two", "auto")
+    monkeypatch.setattr(delivery, "determine_injection_method", lambda mode: ("paste", "test"))
+    delivery.inject_text("one§SHIFT_ENTER§two", "auto")
     assert injection["pasted"] == ["one", "two"] and injection["shift_enter"] == 1
 
 
 def test_a_typed_block_uses_shift_enter_not_enter(injection, monkeypatch):
     """Typing a plain Enter would send the message in a chat box."""
-    monkeypatch.setattr(app, "_determine_injection_method", lambda mode: ("type", "test"))
-    app._inject_text("- 1\n- 2", "type", one_block=True)
+    monkeypatch.setattr(delivery, "determine_injection_method", lambda mode: ("type", "test"))
+    delivery.inject_text("- 1\n- 2", "type", one_block=True)
     assert injection["typed"] == ["- 1§SHIFT_ENTER§- 2"]
 
 
@@ -1147,7 +1148,7 @@ def test_with_the_labs_switch_off_nothing_selected_still_says_select_first(edit_
 def test_an_edit_says_whether_the_change_went_in(edit_env, monkeypatch, answer, typing, went_in):
     """"edit that" holds back the automatic Enter when it didn't (app._handle_spoken_edit)."""
     edit_env["engine"].answer = answer
-    monkeypatch.setattr(app, "_inject_text", lambda text, mode, **kw: typing)
+    monkeypatch.setattr(delivery, "inject_text", lambda text, mode, **kw: typing)
     done = app._edit_selection(lambda: "make it more professional", False, "type",
                                "org.kde.kwrite", 0.0, rs.state.message, spoken=True)
     assert bool(done) is went_in
