@@ -175,6 +175,10 @@ before 0.15.0, so older entries use that name.
   that bus had stopped answering, the time ran out and the dictation was
   typed anyway, even when the password field was in the first app it
   asked. Now it checks each app the moment it finds it.
+- Voice editing by voice (TuxTalk Labs): saying "edit that", pausing, then
+  clicking into another app before you said what to change selected text in
+  that other app and rewrote it. Ctrl+Z got it back, but it shouldn't have
+  happened. Now nothing is changed and it says you switched windows.
 
 ## [0.18.2] - 2026-10-23
 

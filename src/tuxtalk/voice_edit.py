@@ -311,6 +311,11 @@ def handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: str
     waiting, rs.state.edit_waiting = rs.state.edit_waiting, None
     if waiting is not None and waiting["serial"] == rs.state.recording_serial:
         instruction, target = raw, waiting["target"]
+        # A click into another app during the pause: selecting there would
+        # rewrite as many characters of its text.
+        if keyboard_output.not_where_typed(focused_window.window_class()):
+            notices.edit_problem("focus_moved", beeps_on)
+            return True
     else:
         instruction = voice_edit_rules.spoken_edit(raw)
         if instruction is None:

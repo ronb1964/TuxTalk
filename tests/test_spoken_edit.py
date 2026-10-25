@@ -139,6 +139,16 @@ def test_edit_that_then_a_pause_waits_for_the_next_phrase(editing):
     assert pressed.count(((S,), "LEFT")) == len("We meet at three.")
 
 
+def test_a_switch_during_the_pause_after_edit_that_changes_nothing(editing, monkeypatch):
+    """"edit that", a pause, a click into another app, then what to change:
+    as many characters of the other app's text were selected and rewritten."""
+    pressed, edits, problems = editing
+    assert _said("Edit that.", "middle")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "google-chrome")
+    assert _said("Make it more formal.", "middle")       # not typed into Chrome either
+    assert pressed == [] and edits == [] and problems == ["focus_moved"]
+
+
 def test_the_wait_ends_with_the_recording(editing):
     _pressed, edits, _ = editing
     assert _said("Edit that.", "middle")
