@@ -218,91 +218,110 @@ def _service_tick(cfg, svc: "_ServiceState") -> "hotkeys.Hotkeys | None":
     The microphone comes off *svc*, not a parameter: it is re-resolved on a
     live reload, and a caller holding its own copy would keep the startup one."""
     now = time.time()
-    if recording.start_requested.is_set():
-        recording.start_requested.clear()
-        # Only the Flatpak's toggle shortcut can double-tap; menus and the hold key can't.
-        from_toggle = recording.started_from_toggle_key.is_set()
-        recording.started_from_toggle_key.clear()
-        if not rs.state.is_recording:
-            recording.start_recording(cfg.beeps, cfg.notify, svc.input_device_idx,
-                                      from_toggle=from_toggle)
-            svc.last_activity = now
-    if recording.stop_requested.is_set():
-        recording.stop_requested.clear()
-        if rs.state.is_recording:
-            keyboard_grab.release_all()
-            if os.environ.get("FLATPAK_ID"):
-                # Backend B (Flatpak): transcription + portal typing are slow
-                # and would freeze THIS GLib loop — and F3/F4 with it — for as
-                # long as they run (10–20s on a CPU-only box). Snapshot the
-                # recording here (fast) and run the slow half on a worker
-                # thread so the hotkey stays responsive. type_at_pause.inject_lock serialises
-                # workers so two dictations never transcribe/type at once.
-                cap = recording.finish_capture(cfg.beeps, cfg.notify)
-                if cap is not None:
-                    frames, rec_sr = cap
-                    if live.chunk_pause_seconds > 0:
-                        # Chunked dictation: through the chunk worker, so the
-                        # rest is typed after this recording's chunks and
-                        # before the next recording's. No wait, as below.
-                        role = "last" if rs.state.chunks_submitted else None
-                        if role:
-                            frames = recording.drop_speechless_rest(frames)
-                        type_at_pause.chunk_worker().submit(
-                            lambda frames=frames, rec_sr=rec_sr, cfg=cfg, role=role,
-                            message=rs.state.message: pipeline.transcribe_and_inject(
-                                frames, rec_sr, cfg.beeps, cfg.smart_quotes,
-                                cfg.notify, cfg.language, cfg.auto_space,
-                                cfg.auto_period, cfg.injection_mode, chunk_role=role,
-                                message=message))
-                    else:
-                        def _worker(frames=frames, rec_sr=rec_sr, cfg=cfg,
-                                    message=rs.state.message):
-                            with type_at_pause.inject_lock:
-                                pipeline.transcribe_and_inject(
-                                    frames, rec_sr, cfg.beeps, cfg.smart_quotes,
-                                    cfg.notify, cfg.language, cfg.auto_space,
-                                    cfg.auto_period, cfg.injection_mode, message=message)
-                        threading.Thread(target=_worker, daemon=True,
-                                         name="tt-inject").start()
-            else:
-                pipeline.stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
-                               cfg.auto_space, cfg.auto_period, cfg.injection_mode)
-            svc.last_activity = now
+    _take_start_request(cfg, svc, now)
+    _take_stop_request(cfg, svc, now)
     # Not mid-dictation (every worker holds inject_lock); idle counts from key-up.
     if (svc.timeout_enabled and not rs.state.is_recording and engine.model is not None
             and not type_at_pause.inject_lock.locked()
             and now - svc.last_activity > svc.timeout_seconds):
         engine.rest(svc.timeout_minutes)
-
-    # Pick up Preferences changes without a restart — indicator style/position,
-    # typing delay, etc. The evdev loop (Backend A) does this inline; Backend B
-    # (the portal path used by the Flatpak) runs ONLY this tick, so without the
-    # same recheck live settings never apply there — the recording indicator
-    # stays on whatever it was built with. Idle-only and throttled, mirroring the
-    # evdev path. _reload_live_settings updates cfg in place and pushes the new
-    # values into the running recording indicator.
     if not rs.state.is_recording and now - svc.last_config_check >= CONFIG_RECHECK_SECONDS:
-        svc.last_config_check = now
-        # Custom commands live in their own file and are checked on the same
-        # tick. Unconditionally, and before the early return below: an edit to
-        # the Commands tab alone leaves config.toml untouched, so gating this on
-        # a config change would be gating it on the thing that did not happen.
-        if live.commands_file_changed():
-            live.reload_commands()
-        if live.words_file_changed():
-            live.reload_words()
-        if live.config_file_changed():
-            # Saving settings is activity too. Switching the auto-timeout on
-            # must not stop the service a second later because the clock still
-            # counts from the last D-Bus command.
-            svc.last_activity = now
-            reloaded = _reload_live_settings(cfg, recording.indicator)
-            # cfg.mic is fresh now; the device number behind it may not be.
-            svc.refresh_input_device()
-            return reloaded
+        return _reload_if_changed(cfg, svc, now)
     return None
 
+
+def _take_start_request(cfg, svc: _ServiceState, now: float) -> None:
+    """Start a recording if the tray, D-Bus or the portal asked for one."""
+    if not recording.start_requested.is_set():
+        return
+    recording.start_requested.clear()
+    # Only the Flatpak's toggle shortcut can double-tap; menus and the hold key can't.
+    from_toggle = recording.started_from_toggle_key.is_set()
+    recording.started_from_toggle_key.clear()
+    if not rs.state.is_recording:
+        recording.start_recording(cfg.beeps, cfg.notify, svc.input_device_idx,
+                                  from_toggle=from_toggle)
+        svc.last_activity = now
+
+
+def _take_stop_request(cfg, svc: _ServiceState, now: float) -> None:
+    """Stop the recording and type it if the tray, D-Bus or the portal asked."""
+    if not recording.stop_requested.is_set():
+        return
+    recording.stop_requested.clear()
+    if not rs.state.is_recording:
+        return
+    keyboard_grab.release_all()
+    if os.environ.get("FLATPAK_ID"):
+        _stop_off_the_loop(cfg)
+    else:
+        pipeline.stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
+                                cfg.auto_space, cfg.auto_period, cfg.injection_mode)
+    svc.last_activity = now
+
+
+def _stop_off_the_loop(cfg) -> None:
+    """Backend B (Flatpak): transcription + portal typing are slow and would
+    freeze the GLib loop, and F3/F4 with it, for as long as they run (10-20 s
+    on a CPU-only box). Snapshot the recording here (fast) and run the slow
+    half on a worker thread so the hotkey stays responsive.
+    type_at_pause.inject_lock serialises workers so two dictations never
+    transcribe or type at once."""
+    cap = recording.finish_capture(cfg.beeps, cfg.notify)
+    if cap is None:
+        return
+    frames, rec_sr = cap
+    if live.chunk_pause_seconds > 0:
+        # Chunked dictation: through the chunk worker, so the rest is typed
+        # after this recording's chunks and before the next recording's.
+        role = "last" if rs.state.chunks_submitted else None
+        if role:
+            frames = recording.drop_speechless_rest(frames)
+        type_at_pause.chunk_worker().submit(
+            lambda frames=frames, rec_sr=rec_sr, cfg=cfg, role=role,
+            message=rs.state.message: pipeline.transcribe_and_inject(
+                frames, rec_sr, cfg.beeps, cfg.smart_quotes,
+                cfg.notify, cfg.language, cfg.auto_space,
+                cfg.auto_period, cfg.injection_mode, chunk_role=role,
+                message=message))
+        return
+
+    def _worker(frames=frames, rec_sr=rec_sr, cfg=cfg, message=rs.state.message):
+        with type_at_pause.inject_lock:
+            pipeline.transcribe_and_inject(
+                frames, rec_sr, cfg.beeps, cfg.smart_quotes,
+                cfg.notify, cfg.language, cfg.auto_space,
+                cfg.auto_period, cfg.injection_mode, message=message)
+    threading.Thread(target=_worker, daemon=True, name="tt-inject").start()
+
+
+def _reload_if_changed(cfg, svc: _ServiceState, now: float):
+    """Pick up Preferences changes without a restart (indicator style and
+    position, typing delay, etc.); the reloaded hotkeys, or None.
+
+    Both backends run this from the tick: Backend B (the Flatpak's portal
+    path) runs only the tick, so without it live settings would never apply
+    there. Idle-only and throttled. _reload_live_settings updates cfg in
+    place and pushes the new values into the running recording indicator."""
+    svc.last_config_check = now
+    # Custom commands live in their own file and are checked on the same
+    # tick. Unconditionally, and before the config check: an edit to the
+    # Commands tab alone leaves config.toml untouched, so gating this on a
+    # config change would be gating it on the thing that did not happen.
+    if live.commands_file_changed():
+        live.reload_commands()
+    if live.words_file_changed():
+        live.reload_words()
+    if not live.config_file_changed():
+        return None
+    # Saving settings is activity too. Switching the auto-timeout on must
+    # not stop the service a second later because the clock still counts
+    # from the last D-Bus command.
+    svc.last_activity = now
+    reloaded = _reload_live_settings(cfg, recording.indicator)
+    # cfg.mic is fresh now; the device number behind it may not be.
+    svc.refresh_input_device()
+    return reloaded
 
 
 # tuxtalk --toggle/--start/--stop (control.py). The tray normally answers

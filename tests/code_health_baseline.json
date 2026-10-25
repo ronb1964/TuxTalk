@@ -320,9 +320,6 @@
   "ai_cleanup.py::fix_self_corrections": {
    "decisions": 24
   },
-  "app.py::_service_tick": {
-   "decisions": 20
-  },
   "audio_duck.py::AudioDucker._restore_now": {
    "decisions": 16
   },
