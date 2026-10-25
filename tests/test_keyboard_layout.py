@@ -15,6 +15,7 @@ import pytest
 
 from tuxtalk import keyboard_layout as kl
 from tuxtalk import live_settings as live
+from tuxtalk import keyboard_output
 
 xkb = pytest.importorskip("ctypes").CDLL("libxkbcommon.so.0")
 P = C.c_void_p
@@ -129,7 +130,7 @@ def test_a_layout_that_cant_be_read_is_typed_as_us(monkeypatch):
 
 
 def test_a_smart_apostrophe_on_a_us_keyboard_is_untypable_not_garbled():
-    """US has no key for it; the dictation is pasted instead (app._type_text_raw)."""
+    """US has no key for it; the dictation is pasted instead (keyboard_output.type_text_raw)."""
     planner = kl.planner_for(kl.US)
     assert planner.plan("I\u2019m") is None
 
@@ -336,23 +337,23 @@ def test_a_detection_failure_means_unknown(monkeypatch):
 def typing(monkeypatch, keyboard):
     from tuxtalk import app
     calls = []
-    monkeypatch.setattr(app, "_paste_text", lambda text, **kw: calls.append(("paste", text)) or True)
-    monkeypatch.setattr(app, "_paste_text_x11", lambda text: calls.append(("x11 paste", text)) or True)
-    monkeypatch.setattr(app, "_is_wayland_session", lambda: True)
+    monkeypatch.setattr(keyboard_output, "paste_text", lambda text, **kw: calls.append(("paste", text)) or True)
+    monkeypatch.setattr(keyboard_output, "paste_text_x11", lambda text: calls.append(("x11 paste", text)) or True)
+    monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
     return app, calls
 
 
 def test_type_mode_on_a_swiss_keyboard_sends_the_right_keys(typing, keyboard, monkeypatch):
     app, calls = typing
     monkeypatch.setattr(kl, "active_layout", lambda: ("ch", ""))
-    assert app._type_text_raw("my") is True
+    assert keyboard_output.type_text_raw("my") is True
     assert keyboard.events == [(50, 1), (50, 0), (44, 1), (44, 0)]   # m, then y on the Z key
 
 
 def test_type_mode_on_a_us_keyboard_types_us_keys(typing, keyboard, monkeypatch):
     app, calls = typing
     monkeypatch.setattr(kl, "active_layout", lambda: ("us", ""))
-    assert app._type_text_raw("my keyboard") is True
+    assert keyboard_output.type_text_raw("my keyboard") is True
     assert replay(kl.planner_for(kl.US), keyboard.events) == "my keyboard"
     assert not calls
 
@@ -361,7 +362,7 @@ def test_untypable_text_is_pasted_instead(typing, keyboard, monkeypatch, caplog)
     app, calls = typing
     monkeypatch.setattr(kl, "active_layout", lambda: ("de", ""))
     monkeypatch.setattr(live, "log_transcripts", False)
-    assert app._type_text_raw("nice 👍") is True
+    assert keyboard_output.type_text_raw("nice 👍") is True
     assert calls == [("paste", "nice 👍")]
     assert not keyboard.events, "typed part of a dictation that was then pasted whole"
     assert "👍" not in caplog.text, "a character of the dictation was logged"
@@ -370,23 +371,23 @@ def test_untypable_text_is_pasted_instead(typing, keyboard, monkeypatch, caplog)
 def test_untypable_text_on_x11_uses_the_x11_clipboard(typing, monkeypatch):
     """wl-copy can't reach an X11 display, so _paste_text refuses there."""
     app, calls = typing
-    monkeypatch.setattr(app, "_is_wayland_session", lambda: False)
+    monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: False)
     monkeypatch.setattr(kl, "active_layout", lambda: ("ua", ""))
-    assert app._type_text_raw("Це Windows 10") is True
+    assert keyboard_output.type_text_raw("Це Windows 10") is True
     assert calls == [("x11 paste", "Це Windows 10")]
 
 
 def test_ukrainian_on_a_ukrainian_layout_is_typed(typing, keyboard, monkeypatch):
     app, calls = typing
     monkeypatch.setattr(kl, "active_layout", lambda: ("ua", ""))
-    assert app._type_text_raw("Привіт") is True
+    assert keyboard_output.type_text_raw("Привіт") is True
     assert replay(kl.planner_for(("ua", "")), keyboard.events) == "Привіт"
 
 
 def test_cyrillic_on_a_us_layout_is_pasted_not_typed(typing, monkeypatch):
     app, calls = typing
     monkeypatch.setattr(kl, "active_layout", lambda: ("us", ""))
-    assert app._type_text_raw("Привіт") is True
+    assert keyboard_output.type_text_raw("Привіт") is True
     assert calls == [("paste", "Привіт")]
 
 
@@ -462,8 +463,7 @@ def test_the_shortcuts_tuxtalk_presses_use_the_letter_on_the_users_keyboard(
         monkeypatch, layout, letter, key):
     """Ctrl+A sent by position was Ctrl+Q on AZERTY: "clear the whole box"
     quit the app. Dvorak got Ctrl+K for paste."""
-    from tuxtalk import app
     monkeypatch.setattr(kl, "active_layout", lambda: layout)
-    assert app._ctrl_keys(letter) == [(29, 1), (key, 1), (key, 0), (29, 0)]
-    assert app._ctrl_keys(letter, shift=True) == [(42, 1), (29, 1), (key, 1), (key, 0),
+    assert keyboard_output.ctrl_keys(letter) == [(29, 1), (key, 1), (key, 0), (29, 0)]
+    assert keyboard_output.ctrl_keys(letter, shift=True) == [(42, 1), (29, 1), (key, 1), (key, 0),
                                                   (29, 0), (42, 0)]

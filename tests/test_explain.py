@@ -19,7 +19,7 @@ def problems(monkeypatch):
         return True
     monkeypatch.setattr(explain, "open_window", open_window)
     monkeypatch.setattr(app, "_beep", lambda *a: None)
-    monkeypatch.setattr(app, "_notify", lambda title, msg: seen["notices"].append(msg))
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, msg: seen["notices"].append(msg))
     from tuxtalk import screen_message
     monkeypatch.setattr(screen_message, "show_over_active_window", seen["labels"].append)
     return seen

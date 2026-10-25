@@ -10,12 +10,9 @@ init_cuda_for_pytorch()
 import sys
 import time
 import re
-import shutil
-import subprocess
 import atexit
 import select
 import signal
-import functools
 import numpy as np
 import sounddevice as sd
 from evdev import InputDevice, ecodes, list_devices
@@ -28,18 +25,18 @@ from .config import load_config, Settings, load_custom_commands
 # Imported as a module too, so the live-settings reload can read CONFIG_PATH and
 # LIVE_APPLIED_KEYS without pulling each name in separately.
 from . import config as config_module
+from . import notify as notify_module
 from . import beeps, mic_stream
 from .beeps import START_BEEP, HANDS_FREE_BEEP, CANCEL_BEEP, READY_BEEP, beep as _beep
 from .chunking import (boundary_mark, carry_question, hold_back_boundary, word_count,
                        words_in_context)
-from .key_commands import KEY_CODES, auto_send, split_key_command
+from .key_commands import auto_send, split_key_command
 from .logger import setup_logger
 from .recording_indicator import RecordingIndicator
 from .undo import detect_undo_command, calculate_undo_length
 from . import (custom_commands, delivery_notices, edit_notices, focused_window, hallucinations,
                modifier_hotkeys, secure_input, send_countdown, silence, single_instance,
                uinput_helper, virtual_keyboard)
-from .focused_window import window_class as _query_focused_window_class
 from .window_classes import (ELECTRON_PASTE_BROKEN_CLASSES, SMART_NEWLINE_CLASSES_LOWER,
                              app_kind, is_document_window, is_terminal_class)
 from .hotkey_keys import (MODIFIER_CODES, check_modifiers_held, keycode_from_name,
@@ -47,11 +44,11 @@ from .hotkey_keys import (MODIFIER_CODES, check_modifiers_held, keycode_from_nam
 from . import recording_state as rs
 from . import live_settings as live
 from . import keyboard_grab
+from . import keyboard_output
 import threading
 
 logger = setup_logger(__name__)
 
-_clipboard_keeper = None        # clipboard.ClipboardKeeper, created on the first paste that needs it
 _media_pauser = None            # media_pause.MediaPauser, created on the first pause
 _audio_ducker = None            # audio_duck.AudioDucker, created on the first duck
 
@@ -87,16 +84,8 @@ def _resume_media_players():
         _audio_ducker.restore()
 
 
-# Cached tool path lookups — avoids searching PATH on every text injection
-_tool_cache = {}
-def _which(name):
-    """Cached shutil.which() — tools don't move during a session."""
-    if name not in _tool_cache:
-        _tool_cache[name] = shutil.which(name)
-    return _tool_cache[name]
 
 # Optional desktop notifications via libnotify
-from .notify import notify as _notify
 
 def _acquire_single_instance():
     """Take the service's single-instance lock (single_instance.py), or exit
@@ -309,9 +298,6 @@ def _show_voice_commands_via_dbus():
         )
     except Exception as e:
         logger.debug(f"Could not show voice commands via D-Bus: {e}")
-
-# Milliseconds after each typed key event (config key_delay, set in main)
-_key_delay_ms = virtual_keyboard.KEY_DELAY_MS
 
 
 def _apply_custom_commands(text: str) -> tuple[str, dict[str, str]]:
@@ -579,8 +565,7 @@ def _reload_live_settings(cfg, indicator):
             if hasattr(fresh, key) and hasattr(cfg, key):
                 setattr(cfg, key, getattr(fresh, key))
 
-        global _key_delay_ms
-        _key_delay_ms = cfg.key_delay
+        keyboard_output.key_delay_ms = cfg.key_delay
 
         live.apply(cfg)
 
@@ -749,7 +734,8 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
             keyboard_grab.release_all()
             _beep(beeps_on, *CANCEL_BEEP)
             if notify_on:
-                _notify("Microphone unavailable", "Check that no other app is using it.")
+                notify_module.notify("Microphone unavailable",
+                                     "Check that no other app is using it.")
             if rs.state.held_send:
                 send_countdown.say_held()   # nothing to dictate onto it: it stays unsent
             return False
@@ -757,7 +743,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     _arm_chunker(getattr(rs.state, "recording_samplerate", SAMPLE_RATE), edit_mode)
     _pause_media_players()
     rs.state.start_beep = _beep(beeps_on, *START_BEEP)
-    if notify_on: _notify("Recording… speak now", "")
+    if notify_on: notify_module.notify("Recording… speak now", "")
     _notify_tray_recording_state(True)
     if recording_indicator:
         try:
@@ -793,95 +779,11 @@ def cancel_recording(beeps_on: bool, notify_on: bool, reason="Cancelled"):
     _beep(beeps_on, *CANCEL_BEEP)
     print(reason)
     logger.debug(f"Recording cancelled: {reason}")
-    if notify_on: _notify(reason, "")
+    if notify_on: notify_module.notify(reason, "")
 
     if recording_indicator:
         recording_indicator.hide_indicator()
     _notify_tray_recording_state(False)
-
-def _is_wayland_session() -> bool:
-    """True when a Wayland compositor is available for wl-copy to talk to."""
-    return bool(os.environ.get("WAYLAND_DISPLAY"))
-
-
-# The wtype fallback types a whole utterance, so it needs far longer than a
-# single keystroke. wtype has no per-key delay, so a fixed ceiling is enough.
-WTYPE_TIMEOUT_S = 20.0
-
-# How long wl-copy may take to hand the dictation to the compositor. It is
-# usually a few milliseconds; a slower one is stuck, and nothing is pasted.
-WL_COPY_READY_TIMEOUT_S = 1.0
-
-# Shortcuts and single keys (Ctrl+V, Enter, Delete) keep ydotool's pace from
-# before TuxTalk had its own keyboard: they're four key events at most, so
-# speed doesn't show, and every app TuxTalk knows has taken them like this.
-SHORTCUT_DELAY_MS = 12
-
-
-def _key_delay() -> int:
-    """The wait after each key of typed text, backspaces and moves."""
-    return max(1, min(50, _key_delay_ms))
-
-
-def _send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY_MS,
-               raise_if_partial: bool = False, claim=None) -> bool:
-    """Press keys [(evdev code, 1 down / 0 up)] on TuxTalk's virtual keyboard.
-    True only if all of them were sent: keystrokes that never happened must
-    not reach the undo buffer.
-
-    Each key waits while a Right Ctrl or Right Alt dictation key is down and
-    not yet hidden from the desktop (modifier_hotkeys): pressed under it,
-    letters are shortcuts (Ctrl+W closes the tab). Typing on the hotkey
-    loop's own thread, TuxTalk hasn't read the press yet to hide it.
-
-    With *raise_if_partial*, a keyboard that failed partway raises
-    virtual_keyboard.StoppedPartway instead of returning False, for a caller
-    that must tell "none of the keys were sent" from "some of them were";
-    and a wait that gave up raises virtual_keyboard.GaveUp: the text must
-    not go out another way (wtype, the clipboard) either. *claim* is
-    virtual_keyboard.send's; in a delivery that may only go into one window
-    (_inject_text's *into*), the claim checks it's still that one.
-    """
-    if claim is None and _this_thread.into is not None:
-        claim = functools.partial(focused_window.claim_into, _this_thread.into)
-    before_press = modifier_hotkeys.wait_while_held(focused_window.destination)
-    try:
-        sent = virtual_keyboard.send(events, delay_ms, before_press, claim)
-    except virtual_keyboard.StoppedPartway as stop:
-        if stop.reason is None:     # a wait that gave up said why already
-            logger.error(f"{what}: the virtual keyboard stopped partway")
-        if raise_if_partial:
-            raise
-        return False
-    except virtual_keyboard.GaveUp:
-        if raise_if_partial:
-            raise
-        return False        # nothing sent: the key stayed down (logged there)
-    if not sent:
-        logger.error(f"Couldn't send {what}: TuxTalk's virtual keyboard isn't working")
-    else:
-        _this_thread.sends += 1
-    return sent
-
-
-class _ThisThread(threading.local):
-    """What _send_keys knows of the delivery on this thread (_inject_text):
-    how many sends went out whole, so a wait that gives up after earlier
-    lines were typed stopped it partway, not before it began; and the only
-    window it may go into, else None."""
-    sends = 0
-    into = None
-
-
-_this_thread = _ThisThread()
-
-
-def _not_where_typed(focused) -> bool:
-    """Whether the window class *focused* is known to be another app than the
-    last dictation or phrase went to: focused_window's rule, by the class alone,
-    which is all undo, select, the lowercase carry-on and the screen copy keep."""
-    return focused_window.same_window((focused, None),
-                                      (rs.state.last_inserted_window, None)) is False
 
 
 def _typed_breaks_for(text: str, window_class) -> str:
@@ -898,313 +800,6 @@ def _typed_breaks_for(text: str, window_class) -> str:
     return joined
 
 
-def _press_key(key: str, why: str, claim=None) -> bool:
-    """A real "ENTER" or "TAB" after a dictation (key_commands.py): Enter
-    sends a chat message, runs a command or submits a form; Tab moves on to
-    a form's next box. Undo can't reach what's behind either, so once pressed
-    it forgets the dictation; not pressed, the text stays where undo reaches
-    it, and a key stuck down says so (an automatic send says it its own way).
-    *claim* can still stop it right before it goes down (send_countdown)."""
-    time.sleep(0.05)   # let the app take in the typed text first
-    if not _output_backend().press_keys([((), key)], claim=claim):
-        logger.warning(f"{key.title()} not pressed ({why})")
-        if claim is None and modifier_hotkeys.stuck():
-            _notify(*delivery_notices.key_not_pressed(key))
-        return False
-    rs.state.last_inserted_text = ""
-    if key == "ENTER":
-        # "edit that" right after this says why there's nothing to edit.
-        rs.state.sent = {"at": time.time(), "automatic": why.startswith("Send each")}
-    logger.info(f"Pressed {key.title()} ({why})")
-    return True
-
-
-def _send_shift_enter():
-    """Send Shift+Enter keystrokes to create line break without submitting."""
-    return _send_keys([(ecodes.KEY_LEFTSHIFT, 1), (ecodes.KEY_ENTER, 1), (ecodes.KEY_ENTER, 0),
-                       (ecodes.KEY_LEFTSHIFT, 0)], what="shift+enter", raise_if_partial=True)
-
-def _ctrl_keys(letter: str, shift: bool = False) -> list:
-    """Ctrl+*letter* (Ctrl+Shift with *shift*), on the key that is that letter
-    on the user's keyboard layout. On AZERTY the US A key is Q, so Ctrl+A
-    sent by position quit the app; on Dvorak the US V key is K."""
-    from .keyboard_layout import shortcut_keycode
-    key = shortcut_keycode(letter)
-    held = [42, 29] if shift else [29]          # KEY_LEFTSHIFT, KEY_LEFTCTRL
-    return ([(k, 1) for k in held] + [(key, 1), (key, 0)]
-            + [(k, 0) for k in reversed(held)])
-
-
-def _send_select_all_delete():
-    """Ctrl+A, then Backspace: "delete everything" clears the whole box,
-    whatever put the text there."""
-    if not _send_keys(_ctrl_keys("a"), what="select-all"):
-        return False
-    time.sleep(0.05)
-    return _send_keys([(14, 1), (14, 0)], what="delete")    # KEY_BACKSPACE
-
-_OUTPUT_BACKEND = None
-
-
-def _output_backend():
-    """Process-wide OutputBackend, chosen once by FLATPAK_ID: TuxTalk's own
-    virtual keyboard (_type_text below), or libei inside a Flatpak."""
-    global _OUTPUT_BACKEND
-    if _OUTPUT_BACKEND is None:
-        from .output_backends import get_output_backend
-        _OUTPUT_BACKEND = get_output_backend()
-    return _OUTPUT_BACKEND
-
-
-class PasswordFieldNow(Exception):
-    """The focus moved into a password field partway through typing a
-    dictation of several lines. The lines before it are in the app."""
-
-
-def _type_text(text: str) -> bool:
-    """Type text, its line-break markers as Shift+Enter. Returns True if it
-    was actually typed into the focused app, False if injection failed.
-
-    Stops at the first part or line break that fails: typing on after a gap
-    would leave the later lines run into the earlier ones. Before each
-    further line the focus is asked again, as the paste does, and a password
-    field there raises PasswordFieldNow."""
-    parts = text.split("\xa7SHIFT_ENTER\xa7")
-    for i, part in enumerate(parts):
-        if i and focused_window.is_password():
-            raise PasswordFieldNow()
-        if part and not _type_text_raw(part):
-            return False
-        if i < len(parts) - 1:
-            time.sleep(0.05)
-            # The line break is part of the text: a failed one is a
-            # partial injection, and the undo buffer must not count it.
-            if not _send_shift_enter():
-                return False
-            time.sleep(0.05)
-    return True
-
-def _type_text_raw(text: str) -> bool:
-    """Type *text* on TuxTalk's virtual keyboard, with the keys of the active
-    layout (keyboard_layout). True only if it was typed.
-
-    Text the layout has no keys for (an emoji, Latin text on a Ukrainian
-    layout) is pasted instead, which works on any layout. Without a virtual
-    keyboard (no access to /dev/uinput), wtype, where the desktop has one.
-    Raises virtual_keyboard.StoppedPartway when the keyboard failed partway:
-    some of the text is in the app, and nothing may type it again; and
-    virtual_keyboard.GaveUp when typing stopped for a dictation key held
-    down (_send_keys)."""
-    from . import keyboard_layout
-    events = None
-    try:
-        events = keyboard_layout.layout_key_events(text)
-    except keyboard_layout.UntypableText as e:
-        layout, blocker = e.args
-        logger.info(f"The {layout} keyboard layout can't type {live.loggable(blocker)}; "
-                    "pasting instead")
-        if _is_wayland_session():
-            return _paste_text(text)
-        return _paste_text_x11(text)
-    except (OSError, AttributeError) as e:
-        # No libxkbcommon, or one older than 1.0 without the calls it needs.
-        logger.error(f"Couldn't load libxkbcommon to work out the keys: {e}")
-    if events is not None:
-        started = time.time()
-        delay = _key_delay()
-        if _send_keys(events, what=f"{len(text)} chars", delay_ms=delay, raise_if_partial=True):
-            logger.info(f"Typed {len(text)} chars in {time.time() - started:.2f}s "
-                        f"({delay} ms a key event)")
-            return True
-    if _which("wtype"):
-        # The real exit code, so the undo buffer tracks only typed text; a
-        # bounded wait, so a stalled compositor can't freeze dictation; the
-        # text on stdin ("-"), as every user can read a command line. wtype
-        # reads stdin in its locale's encoding, and under a C locale stops at
-        # the first letter outside ASCII, dropping the rest without an error.
-        proc = subprocess.Popen(["wtype", "-"], stdin=subprocess.PIPE,
-                                env=dict(os.environ, LC_ALL="C.UTF-8"))
-        try:
-            proc.communicate(text.encode("utf-8"), timeout=WTYPE_TIMEOUT_S)
-        except subprocess.TimeoutExpired:
-            # Kill and reap, so it cannot come back to life and type into
-            # whatever the user has focused by then.
-            proc.kill()
-            proc.communicate()
-            logger.error(f"wtype timed out after {WTYPE_TIMEOUT_S}s; killed the process")
-            return False
-        return proc.returncode == 0
-    if _which("wl-copy"):
-        try:
-            import pyperclip
-            pyperclip.copy(text)
-            logger.info("Text copied to clipboard (fallback mode)")
-            # Nothing was actually typed into the field — report failure so
-            # the undo buffer doesn't track text the user must paste manually.
-            return False
-        except Exception as e:      # pyperclip missing, or no clipboard it can use
-            logger.warning(f"Couldn't copy the text to the clipboard either: {e}")
-    logger.error("Could not type text: no virtual keyboard, wtype or wl-copy")
-    return False
-
-
-def _send_paste_keystroke(focused_class: str | None, primary_holds_text: bool = False) -> bool:
-    """Send the paste shortcut for *focused_class*. True if it was sent.
-
-    A terminal gets Ctrl+Shift+V (Ctrl+V is readline's quoted-insert there and
-    shows nothing) and other known apps Ctrl+V. An unknown window gets
-    Shift+Insert when the primary selection holds the text too: GUI toolkits
-    paste the clipboard on Shift+Insert and terminals paste the primary
-    selection, so it lands either way. Without that, Ctrl+V, which suits most
-    apps."""
-    if is_terminal_class(focused_class):
-        keys = _ctrl_keys("v", shift=True)
-        logger.info(f"Paste: Ctrl+Shift+V (terminal class={focused_class!r})")
-    elif focused_class is None and primary_holds_text:
-        keys = [(42, 1), (110, 1), (110, 0), (42, 0)]  # Shift+Insert (KEY_INSERT=110)
-        logger.info("Paste: Shift+Insert (window unknown; clipboard and primary selection set)")
-    else:
-        keys = _ctrl_keys("v")
-        logger.info(f"Paste: Ctrl+V (class={focused_class!r})")
-    if not _send_keys(keys, what="paste", raise_if_partial=True):
-        # The keystroke never reached the desktop: the text is sitting on the
-        # clipboard but never made it into the app.
-        logger.error("Paste keystroke failed — text was not inserted")
-        return False
-    return True
-
-
-def _copy_to_primary(text: str) -> bool:
-    """Put *text* on the primary selection as well (wl-copy --primary). True
-    once wl-copy has handed it to the compositor; False if the desktop has no
-    primary selection or wl-copy failed."""
-    from . import clipboard
-    try:
-        result = subprocess.run(clipboard.wl_copy_command() + ["--primary"],
-                                input=text.encode("utf-8"), stdout=subprocess.DEVNULL,
-                                stderr=subprocess.DEVNULL, timeout=WL_COPY_READY_TIMEOUT_S)
-    except Exception as e:
-        logger.info(f"Could not set the primary selection: {e}")
-        return False
-    if result.returncode != 0:
-        logger.info(f"Could not set the primary selection (wl-copy exit {result.returncode})")
-        return False
-    return True
-
-
-def _paste_text_x11(text: str) -> bool:
-    """Paste on an X11 session, for text the keyboard layout can't type.
-
-    _paste_text needs wl-copy, which only talks to Wayland. Here the service
-    puts the text on the X11 clipboard through its own GTK loop and then sends
-    the same paste keystroke. It's only the fallback for untypable text
-    (Latin words on a Ukrainian layout, an emoji); ordinary X11 dictation is
-    still typed. True only if the text reached the app.
-    """
-    from . import clipboard
-    if not clipboard.copy_text_on_gtk_thread(text):
-        logger.error("X11 paste: couldn't put the text on the clipboard; nothing was inserted")
-        return False
-    time.sleep(0.08)    # let the selection settle before the app asks for it
-    return _send_paste_keystroke(_query_focused_window_class())
-
-
-def _paste_text(text: str) -> bool:
-    """Wayland paste: put *text* on the clipboard with wl-copy, then send the
-    paste keystroke (_send_paste_keystroke picks Ctrl+V, Ctrl+Shift+V or
-    Shift+Insert).
-
-    Returns True only when the text actually reached the focused app: the undo
-    buffer records it, and a paste over an unset clipboard would insert
-    whatever the user copied earlier. *text* must not contain §SHIFT_ENTER§.
-    """
-    # wl-copy talks to a Wayland compositor. On an X11 login it fails instantly,
-    # and firing Ctrl+V anyway pastes the previous clipboard contents.
-    if not _is_wayland_session():
-        logger.info("Paste unavailable: not a Wayland session — falling back to typing")
-        return False
-
-    try:
-        if _which("wl-copy"):
-            # Copy text to clipboard
-            paste_start = time.time()
-            logger.info(f"TIMING: Starting paste operation for {len(text)} chars")
-            # Optionally keep what the user had copied, to put back afterwards
-            # (issue #7). Off by default: a dictation left on the clipboard can
-            # be re-pasted if it landed in the wrong window.
-            from . import clipboard
-            global _clipboard_keeper
-            keeping = live.restore_clipboard
-            if keeping:
-                if _clipboard_keeper is None:
-                    _clipboard_keeper = clipboard.ClipboardKeeper()
-                _clipboard_keeper.before_paste()
-            # --sensitive keeps the dictation out of clipboard managers' history
-            # (Klipper saves every entry to disk) where wl-copy supports it.
-            proc = subprocess.Popen(clipboard.wl_copy_command(), stdin=subprocess.PIPE,
-                                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-            try:
-                proc.stdin.write(text.encode("utf-8"))
-                proc.stdin.close()
-
-                # wl-copy forks a background copy to serve the clipboard once
-                # the compositor has accepted the selection, and the process we
-                # started then exits 0. Until it exits the clipboard may still
-                # hold the old contents, and pasting would insert those.
-                try:
-                    status = proc.wait(timeout=WL_COPY_READY_TIMEOUT_S)
-                except subprocess.TimeoutExpired:
-                    logger.error(f"wl-copy did not set the clipboard within "
-                                 f"{WL_COPY_READY_TIMEOUT_S}s — skipping paste")
-                    return False
-                if status != 0:
-                    err = proc.stderr.read().decode(errors="replace").strip() if proc.stderr else ""
-                    logger.error(f"wl-copy failed (exit {status}): {err} — clipboard not set, skipping paste")
-                    return False
-                wl_copy_time = time.time() - paste_start
-                logger.info(f"TIMING: wl-copy set the clipboard in {wl_copy_time:.3f}s")
-
-                # With the window unknown, the primary selection gets the text
-                # too, so the paste key works in a terminal as well.
-                focused_class = _query_focused_window_class()
-                primary_holds_text = False
-                if focused_class is None:
-                    if keeping:
-                        _clipboard_keeper.before_primary()
-                    primary_holds_text = _copy_to_primary(text)
-
-                keystroke_start = time.time()
-                if not _send_paste_keystroke(focused_class, primary_holds_text):
-                    return False
-                logger.info(f"TIMING: paste keystroke took {time.time() - keystroke_start:.3f}s")
-
-                # Brief delay for paste to register
-                time.sleep(0.05)
-                total_paste_time = time.time() - paste_start
-                logger.info(f"TIMING: Total paste operation time: {total_paste_time:.3f}s")
-                return True
-            finally:
-                # Only a wl-copy that never finished handing off is still ours
-                # to stop; the background copy serving the clipboard is not.
-                try:
-                    if proc.poll() is None:
-                        proc.terminate()
-                        proc.wait(timeout=0.3)
-                except Exception:
-                    pass  # wl-copy cleanup is best-effort
-                if proc.stderr is not None:
-                    proc.stderr.close()
-                # Restore even after a failed paste, so the user's clipboard
-                # isn't lost either way.
-                if keeping:
-                    _clipboard_keeper.after_paste(text)
-    except (virtual_keyboard.StoppedPartway, virtual_keyboard.GaveUp):
-        raise       # the paste may have happened, or must not: nothing may deliver it now
-    except subprocess.TimeoutExpired as e:
-        logger.error(f"Paste injection timeout: {e}")
-    except Exception as e:
-        logger.error(f"Paste injection failed: {e}")
-    return False
 
 def _determine_injection_method(injection_mode: str) -> tuple[str, str]:
     """
@@ -1234,7 +829,7 @@ def _determine_injection_method(injection_mode: str) -> tuple[str, str]:
 
     # Pasting needs wl-copy, which only talks to a Wayland compositor. On X11
     # every paste would fail and fall back to typing anyway.
-    if not _is_wayland_session():
+    if not keyboard_output.is_wayland_session():
         return ("type", "Auto: not a Wayland session, typing")
     return ("paste", "Auto: paste")
 
@@ -1262,51 +857,6 @@ def plan_line_breaks(text: str, one_paste: bool) -> list[str]:
         return [normalised.replace(marker, "\n")]
     return normalised.split(marker)
 
-
-def _send_backspaces(count: int) -> bool:
-    """Send *count* backspace keypresses. True only if they were delivered.
-
-    The caller updates the undo buffer from this result, so a wrong answer here
-    desynchronises the buffer from the document and the next undo eats the
-    user's own writing. Raises virtual_keyboard.StoppedPartway when the
-    keyboard failed after some of the backspaces had already landed.
-    """
-    if count <= 0:
-        return True
-    # KEY_BACKSPACE = 14, pressed and released once per character.
-    try:
-        return _send_keys([(14, 1), (14, 0)] * count, what=f"{count} backspaces",
-                          delay_ms=_key_delay(), raise_if_partial=True)
-    except virtual_keyboard.GaveUp:
-        return False        # none sent, and there's no other way to send them
-
-def _nav_keycode(name: str) -> int:
-    """The key code for a key name of _send_chords: a letter (Ctrl+A) is
-    looked up on the active layout, as Ctrl shortcuts are matched by letter."""
-    if name in KEY_CODES:
-        return KEY_CODES[name]
-    from .keyboard_layout import shortcut_keycode
-    return shortcut_keycode(name.lower())
-
-
-def _send_chords(chords, claim=None) -> bool:
-    """Press [(modifiers, key)] in order. Consecutive keys with the same
-    modifiers share one press of them (Shift held once across forty Lefts,
-    not pressed forty times), which halves the events and never leaves a
-    modifier flapping. True only if they were delivered. *claim* is
-    virtual_keyboard.send's."""
-    events = []
-    held = ()
-    for mods, key in list(chords) + [((), None)]:
-        if tuple(mods) != held:
-            events += [(_nav_keycode(m), 0) for m in reversed(held)]
-            events += [(_nav_keycode(m), 1) for m in mods]
-            held = tuple(mods)
-        if key is not None:
-            code = _nav_keycode(key)
-            events += [(code, 1), (code, 0)]
-    return _send_keys(events, what=f"{len(chords)} navigation keys", delay_ms=_key_delay(),
-                      claim=claim)
 
 
 def _transcribe_audio(audio_f32, language: str | None) -> str | None:
@@ -1444,37 +994,37 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
     # No tracked dictation required: it wipes whatever is in the textarea,
     # including text that wasn't typed by TuxTalk.
     if undo_type == 'everything':
-        # In a terminal Ctrl+A jumps to the start of the line and Backspace
-        # there deletes nothing, so the line is cleared the shell's way:
-        # Ctrl+E to its end, Ctrl+U to delete back to the prompt (bash, zsh,
-        # fish). Ctrl+A would also be screen's prefix key.
-        if is_terminal_class(_query_focused_window_class()):
-            cleared = _output_backend().press_keys([(("CTRL",), "E"), (("CTRL",), "U")])
+        # In a terminal Ctrl+A jumps to the start of the line and Backspace there
+        # deletes nothing, so the line is cleared the shell's way: Ctrl+E to its end,
+        # Ctrl+U to delete back to the prompt (bash, zsh, fish; Ctrl+A is screen's).
+        backend = keyboard_output.output_backend()
+        if is_terminal_class(focused_window.window_class()):
+            cleared = backend.press_keys([(("CTRL",), "E"), (("CTRL",), "U")])
         else:
-            cleared = _output_backend().select_all_delete()
+            cleared = backend.select_all_delete()
         if cleared:
             rs.state.last_inserted_text = ""
             _forget_shown()
             rs.state.continue_mid_sentence = False
             _beep(beeps_on, *READY_BEEP)
-            if notify_on: _notify("Cleared the text box", "")
+            if notify_on: notify_module.notify("Cleared the text box", "")
         else:
             print("Could not clear input field (text injection unavailable)")
             _beep(beeps_on, *CANCEL_BEEP)
-            if notify_on: _notify("Couldn't clear the text box", "")
+            if notify_on: notify_module.notify("Couldn't clear the text box", "")
         return True
 
     if not rs.state.last_inserted_text:
         logger.info("Undo requested but no previous text to undo")
         _beep(beeps_on, *CANCEL_BEEP)
-        if notify_on: _notify("Nothing to undo", "")
+        if notify_on: notify_module.notify("Nothing to undo", "")
         return True
 
     # Backspacing the last dictation's length in a different window would
     # delete text there that TuxTalk never typed. Unknown windows go ahead,
     # as before.
-    focused = _query_focused_window_class()
-    if _not_where_typed(focused):
+    focused = focused_window.window_class()
+    if keyboard_output.not_where_typed(focused):
         logger.info(f"Undo refused: the last dictation went to {rs.state.last_inserted_window!r}, "
                     f"not {focused!r}")
         _edit_problem("undo_other_window", beeps_on)
@@ -1489,7 +1039,7 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
         # falls out of step with the document and the next undo backspaces
         # over the user's own text.
         try:
-            deleted = _output_backend().backspaces(delete_count)
+            deleted = keyboard_output.output_backend().backspaces(delete_count)
         except virtual_keyboard.StoppedPartway:
             # Some of the text is gone and some isn't, by an unknown amount,
             # so the buffer no longer matches the document. Forgetting it is
@@ -1500,13 +1050,13 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
             rs.state.continue_mid_sentence = False
             _beep(beeps_on, *CANCEL_BEEP)
             if notify_on:
-                _notify("Undo stopped partway", "Some of the text may still be there.")
+                notify_module.notify("Undo stopped partway", "Some of the text may still be there.")
             return True
         if not deleted:
             logger.error("Undo failed: backspaces were not delivered; buffer left unchanged")
             _beep(beeps_on, *CANCEL_BEEP)
             if notify_on:
-                _notify("Undo failed", "The text couldn't be deleted.")
+                notify_module.notify("Undo failed", "The text couldn't be deleted.")
             return True
 
         _trim_shown(rs.state.last_inserted_text, delete_count)
@@ -1522,7 +1072,7 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
             else:
                 rs.state.continue_mid_sentence = False
         _beep(beeps_on, *READY_BEEP)
-        if notify_on: _notify(f"Undid the last {label}", "")
+        if notify_on: notify_module.notify(f"Undid the last {label}", "")
     else:
         print("Nothing to undo for this scope")
         _beep(beeps_on, *CANCEL_BEEP)
@@ -1609,8 +1159,8 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
     if rs.state.continue_mid_sentence and text:
         # In another window it's a new sentence: a message after "meet me at
         # noon and" in KWrite mustn't begin with a small letter.
-        focused = _query_focused_window_class()
-        if (not _not_where_typed(focused) and text[0].isupper()
+        focused = focused_window.window_class()
+        if (not keyboard_output.not_where_typed(focused) and text[0].isupper()
                 and safe_to_lowercase_first_word(text, live.words)):
             text = text[0].lower() + text[1:]
             logger.info("Lowercased first letter for mid-sentence continuation")
@@ -1643,18 +1193,20 @@ def _inject_text(text: str, injection_mode: str, one_block: bool = False, into=N
     moved while the words went in can't be told from the user switching.
     """
     before = focused_window.destination()
-    sends_before, landed = _this_thread.sends, None
-    _this_thread.into = into
+    sends_before, landed = keyboard_output.this_thread.sends, None
+    keyboard_output.this_thread.into = into
     try:
         # Checked again right before each key, after the waits for the paste
         # (wl-copy) or a dictation key held (_send_keys).
         if into is not None:
             focused_window.claim_into(into, before)
         outcome = _deliver_text(text, injection_mode, one_block, where=before)
-    except (virtual_keyboard.StoppedPartway, virtual_keyboard.GaveUp, PasswordFieldNow) as stop:
-        outcome = _delivery_stopped(stop, typed_some=_this_thread.sends != sends_before)
+    except (virtual_keyboard.StoppedPartway, virtual_keyboard.GaveUp,
+            keyboard_output.PasswordFieldNow) as stop:
+        typed_some = keyboard_output.this_thread.sends != sends_before
+        outcome = _delivery_stopped(stop, typed_some=typed_some)
     finally:
-        _this_thread.into = None
+        keyboard_output.this_thread.into = None
     if outcome in ("ok", "partial"):
         after = focused_window.look()
         if after[0]:
@@ -1686,7 +1238,7 @@ def _delivery_stopped(stop, typed_some: bool) -> str:
     rs.state.continue_mid_sentence = False
     rs.state.nav_context = None
     _forget_shown()
-    if isinstance(stop, PasswordFieldNow):
+    if isinstance(stop, keyboard_output.PasswordFieldNow):
         logger.warning("Stopped typing: a password field has the focus now")
         return "password_field"
     if isinstance(stop, virtual_keyboard.GaveUp) and not typed_some:
@@ -1761,19 +1313,19 @@ def _deliver_text(text: str, injection_mode: str, one_block: bool = False, *, wh
                     if i and focused_window.is_password():
                         success, password_field = False, True
                         break
-                    if part and not _type_text_raw(part):
+                    if part and not keyboard_output.type_text_raw(part):
                         success = False
                         break
                     delivered_parts = i + 1
                     if i < len(parts) - 1:
                         time.sleep(0.03)
-                        if not _send_shift_enter():
+                        if not keyboard_output.send_shift_enter():
                             success = False
                             break
                         breaks_sent += 1
                         time.sleep(0.03)
             else:
-                success = _type_text_raw(unified)
+                success = keyboard_output.type_text_raw(unified)
                 delivered_parts = 1 if success else 0
 
             if success:
@@ -1831,14 +1383,14 @@ def _deliver_text(text: str, injection_mode: str, one_block: bool = False, *, wh
                 break
             if part:
                 logger.info(f"Pasting part {i+1}/{len(parts)}: {len(part)} chars")
-                if not _paste_text(part):
+                if not keyboard_output.paste_text(part):
                     logger.warning(f"Paste failed on part {i+1}; will type the remainder")
                     resume_at = i
                     break
                 time.sleep(0.08)
             if i < len(parts) - 1:
                 logger.info(f"Sending Shift+Enter after part {i+1}")
-                if not _send_shift_enter():
+                if not keyboard_output.send_shift_enter():
                     # The chunk landed but its line break didn't: resume from
                     # the next chunk and supply the missing break.
                     logger.warning(f"Line break failed after part {i+1}; will type the remainder")
@@ -1865,8 +1417,8 @@ def _deliver_text(text: str, injection_mode: str, one_block: bool = False, *, wh
             # safer in a terminal, so _typed_breaks_for turns them into spaces
             # there; other apps get Shift+Enter.
             remainder = _typed_breaks_for(remainder.replace("\n", marker),
-                                          _query_focused_window_class())
-            if _output_backend().type_text(remainder):
+                                          focused_window.window_class())
+            if keyboard_output.output_backend().type_text(remainder):
                 inject_ok = True  # delivered chunks + typed remainder == full text
             else:
                 # The chunks before the failure reached the document, and so did
@@ -1884,7 +1436,7 @@ def _deliver_text(text: str, injection_mode: str, one_block: bool = False, *, wh
                 return "partial" if resume_at else "failed"
 
     # --- Simple paste (no markers) ---
-    elif use_paste and _paste_text(text):
+    elif use_paste and keyboard_output.paste_text(text):
         injection_time = time.time() - injection_start
         logger.info(f"Text injected via paste: {len(text)} chars in {injection_time:.2f}s")
         if injection_time > 1.0:
@@ -1896,8 +1448,8 @@ def _deliver_text(text: str, injection_mode: str, one_block: bool = False, *, wh
         # runs a terminal's half-typed command. A snippet's line breaks are real
         # newlines, so they go in as Shift+Enter like a spoken "new line".
         text = _typed_breaks_for(text.replace("\n", "\xa7SHIFT_ENTER\xa7"),
-                                 _query_focused_window_class())
-        backend = _output_backend()
+                                 focused_window.window_class())
+        backend = keyboard_output.output_backend()
         # The Flatpak's keyboard path types "…" as "..." and "café" as "cafe";
         # recording that form below keeps undo's backspace count right.
         text = backend.typeable(text)
@@ -2043,7 +1595,7 @@ def _warn_silent_mic():
     Oct 2026)."""
     print(SILENT_MIC_NOTICE)
     logger.warning("The microphone sent only silence (muted, unplugged or the wrong one?)")
-    _notify(SILENT_MIC_TITLE, SILENT_MIC_NOTICE)
+    notify_module.notify(SILENT_MIC_TITLE, SILENT_MIC_NOTICE)
 
 
 def _device_name(idx) -> str:
@@ -2065,7 +1617,12 @@ def _warn_mic_switched(old_idx, new_idx):
               "back in usually fixes this.")
     print(notice)
     logger.warning(f"Recording from {new or new_idx!r}: {old or old_idx!r} didn't open")
-    _notify("Recording from another microphone", notice)
+    notify_module.notify("Recording from another microphone", notice)
+
+
+def _shortened(text, limit):
+    """*text* cut to *limit* characters for a notification, with … if cut."""
+    return f"{text[:limit]}{'…' if len(text) > limit else ''}"
 
 
 def _frames_f32(frames):
@@ -2103,7 +1660,7 @@ def _report_undelivered(outcome: str, beeps_on: bool):
         message += f" Or press {live.paste_last_hotkey} to type it again where your cursor is."
     logger.warning(f"Dictation not delivered ({outcome}); told the user")
     _beep(beeps_on, *CANCEL_BEEP)
-    _notify(delivery_notices.TITLES[outcome], message)
+    notify_module.notify(delivery_notices.TITLES[outcome], message)
 
 
 def _refuse_password_field(beeps_on: bool) -> bool:
@@ -2127,7 +1684,8 @@ def _password_field_refused(beeps_on: bool) -> None:
     from . import screen_message
     screen_message.show_over_active_window(delivery_notices.PASSWORD_FIELD_LABEL)
     if not (beeps_on and _gtk_loop_running and os.environ.get("DISPLAY")):
-        _notify(delivery_notices.PASSWORD_FIELD_TITLE, delivery_notices.PASSWORD_FIELD_NOTICE)
+        notify_module.notify(delivery_notices.PASSWORD_FIELD_TITLE,
+                             delivery_notices.PASSWORD_FIELD_NOTICE)
 
 
 # Silence put between two chunks when the engine hears them together, so the
@@ -2183,7 +1741,7 @@ def _remember_shown(piece: str, chunked: bool, ok: bool) -> None:
         rs.state.shown_window = rs.state.last_inserted_window
     if rs.state.shown_text is None:
         return
-    if ok and not _not_where_typed(rs.state.shown_window):
+    if ok and not keyboard_output.not_where_typed(rs.state.shown_window):
         rs.state.shown_text += piece
     else:
         rs.state.shown_text = None
@@ -2219,8 +1777,8 @@ def _corrects_across_pause(raw: str, chunk_role, message) -> bool:
 def _erase_typed(text: str) -> bool:
     """Backspace over *text*, just typed by the phrase before the pause. False
     when it can't be done safely; then nothing more is erased."""
-    focused = _query_focused_window_class()
-    if _not_where_typed(focused):
+    focused = focused_window.window_class()
+    if keyboard_output.not_where_typed(focused):
         logger.info("Correction across a pause skipped: the phrase is in another window")
         return False
     # The AI that found the correction can take seconds, time enough to
@@ -2229,12 +1787,12 @@ def _erase_typed(text: str) -> bool:
         logger.info("Correction across a pause skipped: a password field has the focus")
         return False
     try:
-        deleted = _output_backend().backspaces(len(text))
+        deleted = keyboard_output.output_backend().backspaces(len(text))
     except virtual_keyboard.StoppedPartway:
         logger.error("Correction across a pause stopped partway; typing the phrase as said")
         rs.state.last_inserted_text = ""
         _forget_shown()
-        _notify("A correction stopped partway", "Check the text before it.")
+        notify_module.notify("A correction stopped partway", "Check the text before it.")
         return False
     if deleted:
         _trim_shown(text, len(text))
@@ -2394,19 +1952,19 @@ def _press_said(key: str, chunk_role, after_words: bool = False, message=None) -
     does. Said alone it goes wherever the focus is: people type a password
     by hand, then say "press enter" to log in."""
     why = f'said "press {key.lower()}"'
-    if (key == "TAB" and _query_focused_window_class() in ELECTRON_PASTE_BROKEN_CLASSES
+    if (key == "TAB" and focused_window.window_class() in ELECTRON_PASTE_BROKEN_CLASSES
             and not focused_window.is_password()):
         outcome = (send_countdown.type_where_sent("    ", key, message, _type_onto_dictation)
                    if after_words else _type_onto_dictation("    ", "type"))
         if outcome not in (None, "ok"):
             logger.warning(f"Tab not typed as four spaces ({outcome})")
             if outcome == "key_held":
-                _notify(*delivery_notices.key_not_pressed(key))
+                notify_module.notify(*delivery_notices.key_not_pressed(key))
         return
     if after_words:
-        pressed = send_countdown.press_where_sent(key, why, message, _press_key)
+        pressed = send_countdown.press_where_sent(key, why, message, keyboard_output.press_key)
     else:
-        pressed = _press_key(key, why)
+        pressed = keyboard_output.press_key(key, why)
     if pressed and chunk_role is not None:
         _start_afresh(message)
 
@@ -2430,7 +1988,8 @@ def _after_the_words(outcome: str, said: str, press: str, space: str, chunk_role
 def _send_automatically(space: str, injection_mode: str, message) -> None:
     """"Send each dictation automatically": Enter where *message* went (send_countdown)."""
     send_countdown.send_automatically("Send each dictation automatically is on", message,
-                                      _press_key, _type_onto_dictation, space, injection_mode)
+                                      keyboard_output.press_key, _type_onto_dictation, space,
+                                      injection_mode)
 
 
 # _inject_text's outcomes that are sure nothing was typed: it gave up before
@@ -2475,7 +2034,7 @@ def _end_in_a_pause(message, beeps_on, auto_space, auto_period, injection_mode) 
             cue += "."
         _inject_text(cue + (" " if auto_space else ""), injection_mode, message=message)
     if (live.press_enter_after and message.has_words and message.complete
-            and not is_document_window(_query_focused_window_class())):
+            and not is_document_window(focused_window.window_class())):
         _flush_boundary(auto_period, False, injection_mode)
         _send_automatically(" " if auto_space else "", injection_mode, message)
         _start_afresh(message)
@@ -2614,7 +2173,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         raw, said = split_key_command(raw)
         press, cut_off = said, ""
         if not said and live.press_enter_after and chunk_role != "middle":
-            sending, cut_off = auto_send(raw, is_document_window(_query_focused_window_class()))
+            sending, cut_off = auto_send(raw, is_document_window(focused_window.window_class()))
             press = "ENTER" if sending else ""
         if said and not raw.strip():
             # Only "press enter" or "press tab" was said.
@@ -2627,7 +2186,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # Stage 3: Normalize text (voice commands, punctuation, spacing),
         # plainer for a terminal or code editor ("Plain text in terminals and
         # code editors").
-        kind = app_kind(_query_focused_window_class()) if live.adapt_to_app else ""
+        kind = app_kind(focused_window.window_class()) if live.adapt_to_app else ""
         # A pause is not a sentence end, so a middle chunk gets no auto-period
         # of its own; the last chunk (or _flush_boundary) ends the sentence.
         # "press enter" at the end of one does end it: the message is sent.
@@ -2675,7 +2234,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
 
         if chunk_role != "middle":
             _beep(beeps_on, *READY_BEEP)
-            if notify_on: _notify("Transcribed", f"{text[:80]}{'…' if len(text) > 80 else ''}")
+            if notify_on: notify_module.notify("Transcribed", _shortened(text, 80))
 
         # Stage 4: Inject text into the active application. It goes into the
         # Recent Dictations list first, so it can be recovered even if the
@@ -2723,7 +2282,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # like _report_undelivered: nothing was typed, and the "done" beep
         # would sound like it worked.
         _beep(beeps_on, *CANCEL_BEEP)
-        _notify("Transcription failed", f"{str(e)[:120]}{'…' if len(str(e)) > 120 else ''}")
+        notify_module.notify("Transcription failed", _shortened(str(e), 120))
 
 
 def stop_recording(
@@ -2804,29 +2363,15 @@ def _edit_problem(kind: str, beeps_on: bool) -> None:
     except Exception as e:
         logger.debug(f"Could not float the message over the window: {e}")
     if not explained:
-        _notify(edit_notices.LABELS[kind], message)
+        notify_module.notify(edit_notices.LABELS[kind], message)
 
-
-def _send_copy_keystroke() -> bool:
-    """Ctrl+C. Terminals never get here (_transcribe_and_edit turns them away:
-    Ctrl+C would stop the running program). True if it was sent."""
-    return _send_keys(_ctrl_keys("c"), what="copy")
-
-
-_FORMAT_LETTERS = {"bold": "b", "italic": "i", "underline": "u"}
-
-
-def _send_format_shortcut(kind: str) -> bool:
-    """Ctrl+B, Ctrl+I or Ctrl+U, on the key that is that letter on the user's
-    keyboard layout. Sent only to word processors (voice_edit_rules)."""
-    return _send_keys(_ctrl_keys(_FORMAT_LETTERS[kind]), what=kind)
 
 
 def _focus_moved(focused_class) -> bool:
     """Whether another window has the focus than when the edit started. Only
     the class is known, so a second window of the same app is not noticed.
     A window that can't be found now counts as moved: it can't be checked."""
-    now = _query_focused_window_class()
+    now = focused_window.window_class()
     if now is None and focused_class is not None:
         logger.info("Voice edit: the focused window can't be found now, so it can't be checked")
     return now != focused_class
@@ -2851,11 +2396,11 @@ def _handle_fix_word(raw: str, beeps_on: bool) -> bool:
     # the text: it gets exactly what was typed, through a file only this
     # user can read (the runtime folder), which it deletes once read.
     args = []
-    focused = _query_focused_window_class()
+    focused = focused_window.window_class()
     typed = rs.state.last_inserted_text
     if typed and rs.state.shown_text and rs.state.shown_text.endswith(typed):
         typed = rs.state.shown_text        # the whole recording, phrases and all
-    if typed.strip() and not _not_where_typed(focused):
+    if typed.strip() and not keyboard_output.not_where_typed(focused):
         try:
             import json
             path = os.path.join(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"),
@@ -2878,7 +2423,7 @@ def _handle_fix_word(raw: str, beeps_on: bool) -> bool:
     except Exception as e:
         logger.warning(f"Could not open Fix a Word: {e}")
         _beep(beeps_on, *CANCEL_BEEP)
-        _notify("Fix a Word didn't open", "Choose it in the TuxTalk menu instead.")
+        notify_module.notify("Fix a Word didn't open", "Choose it in the TuxTalk menu instead.")
     return True
 
 
@@ -2897,7 +2442,7 @@ def _handle_navigation(raw: str, beeps_on: bool, focused_class=_UNKNOWN_WINDOW) 
         return False
     logger.info(f"Voice command: {command.name}")
     if focused_class is _UNKNOWN_WINDOW:
-        focused_class = _query_focused_window_class()
+        focused_class = focused_window.window_class()
     if is_terminal_class(focused_class):
         _edit_problem("nav_terminal", beeps_on)
         return True
@@ -2905,7 +2450,7 @@ def _handle_navigation(raw: str, beeps_on: bool, focused_class=_UNKNOWN_WINDOW) 
     # nav_context says where in it. Only in the window it was typed into:
     # dictating into a chat, then saying "select the last sentence" in Writer
     # would otherwise select the chat message's length of Writer's text.
-    if _not_where_typed(focused_class):
+    if keyboard_output.not_where_typed(focused_class):
         left, right = None, ""
     elif rs.state.last_inserted_text:
         left, right = rs.state.last_inserted_text, ""
@@ -2918,7 +2463,7 @@ def _handle_navigation(raw: str, beeps_on: bool, focused_class=_UNKNOWN_WINDOW) 
         _edit_problem("nothing_said", beeps_on)
         return True
     try:
-        pressed = _output_backend().press_keys(plan.chords)
+        pressed = keyboard_output.output_backend().press_keys(plan.chords)
     except Exception as e:
         logger.error(f"Voice command: pressing the keys failed: {e}")
         pressed = False
@@ -2941,8 +2486,8 @@ def _spoken_edit_target():
     typed = rs.state.last_inserted_text
     if not typed or not typed.strip():
         return ""
-    focused = _query_focused_window_class()
-    if _not_where_typed(focused):
+    focused = focused_window.window_class()
+    if keyboard_output.not_where_typed(focused):
         return ""
     shown = rs.state.shown_text
     if shown and rs.state.shown_serial == rs.state.recording_serial and shown.endswith(typed):
@@ -2987,10 +2532,10 @@ def _handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: st
         if not target:
             return _refused_as_sent(beeps_on)
     logger.info(f"Voice command: edit that ({len(target)} characters)")
-    if not _is_wayland_session():
+    if not keyboard_output.is_wayland_session():
         _edit_problem("needs_wayland", beeps_on)
         return True
-    focused_class = _query_focused_window_class()
+    focused_class = focused_window.window_class()
     if is_terminal_class(focused_class):
         _edit_problem("terminal", beeps_on)
         return True
@@ -3005,7 +2550,7 @@ def _handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: st
         return True
     plan = nav.plan(nav.parse("select that"), target, "")
     try:
-        selected = plan is not None and _output_backend().press_keys(plan.chords)
+        selected = plan is not None and keyboard_output.output_backend().press_keys(plan.chords)
     except Exception as e:
         logger.error(f"Voice edit: selecting the text failed: {e}")
         selected = False
@@ -3037,12 +2582,12 @@ def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
     if silence.is_speechless_tap(audio_f32, SAMPLE_RATE):
         return
 
-    if not _is_wayland_session():
+    if not keyboard_output.is_wayland_session():
         # The selection is read with wl-copy / wl-paste, which have no X11
         # side; without this every edit would say "select some text first".
         _edit_problem("needs_wayland", beeps_on)
         return
-    focused_class = _query_focused_window_class()
+    focused_class = focused_window.window_class()
     if is_terminal_class(focused_class):
         _edit_problem("terminal", beeps_on)
         return
@@ -3069,7 +2614,7 @@ def _delete_selection(focused_class, beeps_on) -> bool:
         return False
     if _refuse_password_field(beeps_on):
         return False
-    if not _send_keys([(111, 1), (111, 0)], what="delete"):     # KEY_DELETE
+    if not keyboard_output.send_keys([(111, 1), (111, 0)], what="delete"):     # KEY_DELETE
         _edit_problem("shortcut_failed", beeps_on)
         return False
     logger.info("Voice edit: deleted the selection")
@@ -3091,7 +2636,7 @@ def _format_selection(fmt, focused_class, beeps_on) -> bool:
         return False
     if _refuse_password_field(beeps_on):
         return False
-    if not all(_send_format_shortcut(kind) for kind in fmt):
+    if not all(keyboard_output.send_format_shortcut(kind) for kind in fmt):
         _edit_problem("shortcut_failed", beeps_on)
         return False
     logger.info(f"Voice edit: {', '.join(fmt)} with the app's shortcut ({focused_class})")
@@ -3114,7 +2659,7 @@ def _edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0
     # The selection first, so "select some text first" comes up even when
     # nothing was said.
     try:
-        selected, put_back = clipboard.copy_selection(_send_copy_keystroke)
+        selected, put_back = clipboard.copy_selection(keyboard_output.send_copy_keystroke)
     except clipboard.ClipboardUnavailable:
         _edit_problem("no_clipboard", beeps_on)
         return
@@ -3498,7 +3043,7 @@ def _wake_model():
                 model = build_model(load_config())
             except ModelUnavailable as e:
                 logger.error(f"Power saving: the speech model wouldn't load again: {e}")
-                _notify("The speech model wouldn't load",
+                notify_module.notify("The speech model wouldn't load",
                 "Choose Restart Service in the TuxTalk menu, or pick a model in Preferences.")
                 return None
             _notify_tray_running_engine()
@@ -3873,7 +3418,7 @@ def _guard_large_v3_without_cuda(cfg):
             )
             print("large-v3 requires CUDA (not installed). Falling back to 'medium'.")
             cfg.model = "medium"
-            _notify("Using Medium instead of Large-v3",
+            notify_module.notify("Using Medium instead of Large-v3",
                         "Large-v3 needs the CUDA files, which aren't installed. Pick CUDA "
                         "under Preferences, General, Device to download them and use "
                         "Large-v3 again.")
@@ -3935,7 +3480,7 @@ def _build_model_or_exit(settings: Settings):
             logger.warning(f"Dictation service stopping: fallback {fallback} could not load either")
             sys.exit(1)
         if isinstance(e, ModelWontLoad):
-            _notify(f"Using {model_title(fallback)} for now",
+            notify_module.notify(f"Using {model_title(fallback)} for now",
                     f"{model_title(wanted)} is downloaded but wouldn't load. TuxTalk tries "
                     "it again the next time dictation starts.")
             return model
@@ -3946,7 +3491,7 @@ def _build_model_or_exit(settings: Settings):
             save_config(saved)
         except Exception as save_error:
             logger.warning(f"Could not save the fallback model to settings: {save_error}")
-        _notify(f"Using {model_title(fallback)} for now",
+        notify_module.notify(f"Using {model_title(fallback)} for now",
                 f"{model_title(wanted)} wasn't downloaded. You can choose it again in "
                 "Preferences.")
         return model
@@ -3973,7 +3518,7 @@ def _build_vulkan_model(settings: Settings):
         except Exception as e:
             reason = f"the graphics engine failed to start ({e})"
     logger.warning(f"Vulkan GPU not used for {settings.model}: {reason}; using the processor")
-    _notify("Couldn't use the graphics card",
+    notify_module.notify("Couldn't use the graphics card",
                 "TuxTalk is using the processor for now. Choose the device again in "
                 "Preferences to set it up.")
     return None
@@ -4005,7 +3550,7 @@ def _build_parakeet_gpu_model(settings: Settings):
     except Exception as e:
         reason = f"the graphics helper failed to start ({e})"
     logger.warning(f"Vulkan GPU not used for Parakeet: {reason}; using the processor")
-    _notify("Couldn't run Parakeet on the graphics card",
+    notify_module.notify("Couldn't run Parakeet on the graphics card",
                 "TuxTalk is using the processor for now. Choose the device again in "
                 "Preferences to set it up.")
     return None
@@ -4114,7 +3659,7 @@ def build_model(settings: Settings):
             # past every fallback below. Processor for this run; the setting
             # stays, since downloading CUDA again in Preferences fixes it.
             logger.warning("Device is CUDA but the CUDA libraries are missing; using the processor")
-            _notify("The CUDA files are missing",
+            notify_module.notify("The CUDA files are missing",
                         "TuxTalk is using the processor for now. Pick CUDA under Preferences, "
                         "General, Device to download them again.")
             settings = Settings(**{**vars(settings), "device": "cpu"})
@@ -4169,7 +3714,7 @@ def build_model(settings: Settings):
                 _record_engine(settings.model, "cpu")
                 # This switches the saved device to the processor (below), so
                 # the user is told.
-                _notify("Couldn't use the NVIDIA graphics card",
+                notify_module.notify("Couldn't use the NVIDIA graphics card",
                             "TuxTalk switched to the processor. Choose the device again in "
                             "Preferences to try the graphics card.")
 
@@ -4208,8 +3753,7 @@ def main():
     cfg = load_config()
     _guard_large_v3_without_cuda(cfg)
 
-    global _key_delay_ms
-    _key_delay_ms = cfg.key_delay
+    keyboard_output.key_delay_ms = cfg.key_delay
     # Made now, so the desktop has taken it on long before the first
     # dictation is typed. The Flatpak types through the portal instead.
     if not os.environ.get("FLATPAK_ID"):

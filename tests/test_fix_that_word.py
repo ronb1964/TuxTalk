@@ -4,6 +4,7 @@ see a word retyped by hand."""
 import pytest
 
 from tuxtalk import app, explain, focused_window
+from tuxtalk import keyboard_output
 from tuxtalk import recording_state as rs
 
 
@@ -34,7 +35,7 @@ def test_a_window_that_cannot_start_says_so(monkeypatch):
     monkeypatch.setattr(explain, "start_helper_window",
                         lambda *a: (_ for _ in ()).throw(OSError("no python")))
     monkeypatch.setattr(app, "_beep", lambda *a: None)
-    monkeypatch.setattr(app, "_notify", lambda title, msg: notices.append(msg))
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, msg: notices.append(msg))
     assert app._handle_fix_word("fix that word", False) is True
     assert notices and "TuxTalk menu" in notices[0]
 
@@ -71,7 +72,7 @@ def typed(monkeypatch, tmp_path):
 def test_right_after_a_dictation_it_can_fix_the_text(opened, typed, monkeypatch):
     calls = []
     monkeypatch.setattr(explain, "start_helper_window", lambda module, *a: calls.append(a))
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.kwrite")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
     app._handle_fix_word("fix that word", False)
     flag, path = calls[0]
     import json, os, stat
@@ -85,7 +86,7 @@ def test_right_after_a_dictation_it_can_fix_the_text(opened, typed, monkeypatch)
 def test_in_another_window_it_only_saves_the_fix(opened, typed, monkeypatch):
     calls = []
     monkeypatch.setattr(explain, "start_helper_window", lambda module, *a: calls.append(a))
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "libreoffice-writer")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "libreoffice-writer")
     app._handle_fix_word("fix that word", False)
     assert calls == [()]
 
@@ -104,7 +105,7 @@ def test_fix_in_text_swaps_only_the_word(monkeypatch):
             typed_text.append(text)
             return True
     monkeypatch.setattr(fw, "_REFOCUS_S", 0)
-    monkeypatch.setattr(app, "_output_backend", lambda: Backend())
+    monkeypatch.setattr(keyboard_output, "output_backend", lambda: Backend())
     monkeypatch.setattr(focused_window, "window_class", lambda: "org.kde.kwrite")
     old = " Whose fleas was white. "                  # as typed, outer spaces and all
     core = old.strip()
@@ -129,8 +130,8 @@ def test_fix_in_text_leaves_another_window_alone(monkeypatch):
     notices = []
     monkeypatch.setattr(fw, "_REFOCUS_S", 0)
     monkeypatch.setattr(focused_window, "window_class", lambda: "firefox")
-    monkeypatch.setattr(app, "_notify", lambda t, m: notices.append(f"{t}\n{m}"))
-    monkeypatch.setattr(app, "_output_backend", lambda: pytest.fail("typed into the wrong window"))
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda t, m: notices.append(f"{t}\n{m}"))
+    monkeypatch.setattr(keyboard_output, "output_backend", lambda: pytest.fail("typed into the wrong window"))
     assert fw.fix_in_text(" Hello. ", (0, 5, "Hi"), "org.kde.kwrite") is False
     assert notices and "wasn't changed" in notices[0]
 
@@ -173,12 +174,12 @@ def test_fixing_in_the_text_uses_the_users_speed_and_waits_for_the_last_keys(mon
     monkeypatch.setattr(fw, "_FixWordDialog", Dialog)
     monkeypatch.setattr(fw.Gtk, "main", lambda: None)
     monkeypatch.setattr(config, "load_config", lambda: config.Settings(key_delay=20))
-    monkeypatch.setattr(app, "_key_delay_ms", app._key_delay_ms)
+    monkeypatch.setattr(keyboard_output, "key_delay_ms", keyboard_output.key_delay_ms)
     monkeypatch.setattr(fw, "fix_in_text", lambda *a: True)
     waits = []
     monkeypatch.setattr(fw.time, "sleep", waits.append)
     assert fw.main(["--in-place", str(path)]) == 0
-    assert app._key_delay_ms == 20
+    assert keyboard_output.key_delay_ms == 20
     assert waits == [fw.LAST_KEYS_S]
 
 

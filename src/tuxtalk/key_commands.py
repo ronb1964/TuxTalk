@@ -28,7 +28,7 @@ logger = setup_logger(__name__)
 
 # The keys these commands and select and move by voice (voice_navigation.py)
 # press, by name, as Linux key codes: one table for both ways of typing
-# (app._send_chords, libei_ctypes.press_chords). Letters aren't in it: their
+# (keyboard_output.send_chords, libei_ctypes.press_chords). Letters aren't in it: their
 # keys depend on the keyboard layout.
 KEY_CODES = {"CTRL": 29, "SHIFT": 42, "LEFT": 105, "RIGHT": 106, "UP": 103,
              "DOWN": 108, "HOME": 102, "END": 107, "ENTER": 28, "TAB": 15}

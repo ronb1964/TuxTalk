@@ -23,6 +23,7 @@ from tuxtalk import (app, clipboard, compositor_focus, dbus_service, desktop_ide
                      focused_window)
 from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
+from tuxtalk import keyboard_output
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 EXT = ROOT / "gnome-extension" / "talktype@ronb1964.github.io"
@@ -59,7 +60,7 @@ def test_a_tuxtalk_window_told_to_the_tray_is_its_own_and_no_paste_target(monkey
     dbus_service.TuxTalkDBusService.SetFocusedWindow(service, "org.gnome.Ptyxis", "4", "")
     dbus_service.TuxTalkDBusService.SetFocusedWindowClass(service, "tuxtalk")   # 0.18's extension
     assert focused_window.look() == (None, ("own", None))
-    assert app._query_focused_window_class() is None
+    assert focused_window.window_class() is None
 
 
 def _reported(monkeypatch, wm_class, asked):
@@ -71,12 +72,12 @@ def _reported(monkeypatch, wm_class, asked):
 def test_a_reported_tuxtalk_window_gets_no_paste_class(monkeypatch):
     """An older extension still reports TuxTalk's windows."""
     _reported(monkeypatch, "tuxtalk", None)
-    assert app._query_focused_window_class() is None
+    assert focused_window.window_class() is None
 
 
 def test_a_tuxtalk_window_from_the_compositor_gets_no_paste_class(monkeypatch):
     _reported(monkeypatch, "", "Tuxtalk")
-    assert app._query_focused_window_class() is None
+    assert focused_window.window_class() is None
 
 
 def test_the_extension_clears_the_focus_when_it_is_turned_off():
@@ -115,25 +116,25 @@ class _Copy:
 def paste_env(monkeypatch):
     """A Wayland session where wl-copy works; records what is run and pressed."""
     monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
-    monkeypatch.setattr(app, "_which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(keyboard_output, "which", lambda name: f"/usr/bin/{name}")
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     monkeypatch.setattr(live, "restore_clipboard", False)
     monkeypatch.setattr(clipboard, "wl_copy_command", lambda: ["wl-copy"])
     env = {"copies": [], "keys": [], "primary_rc": 0}
-    monkeypatch.setattr(app.subprocess, "Popen",
+    monkeypatch.setattr(keyboard_output.subprocess, "Popen",
                         lambda cmd, **kw: env["copies"].append(list(cmd)) or _Copy())
 
     def run(cmd, **kw):
         env["copies"].append(list(cmd))
         return subprocess.CompletedProcess(cmd, env["primary_rc"])
-    monkeypatch.setattr(app.subprocess, "run", run)
-    monkeypatch.setattr(app, "_send_keys", lambda keys, **kw: env["keys"].append(list(keys)) or True)
+    monkeypatch.setattr(keyboard_output.subprocess, "run", run)
+    monkeypatch.setattr(keyboard_output, "send_keys", lambda keys, **kw: env["keys"].append(list(keys)) or True)
     return env
 
 
 def test_an_unknown_window_gets_the_text_on_both_selections_and_shift_insert(monkeypatch, paste_env):
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
-    assert app._paste_text("hello") is True
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
+    assert keyboard_output.paste_text("hello") is True
     assert ["wl-copy"] in paste_env["copies"]
     assert ["wl-copy", "--primary"] in paste_env["copies"]
     assert paste_env["keys"] == [SHIFT_INSERT]
@@ -141,9 +142,9 @@ def test_an_unknown_window_gets_the_text_on_both_selections_and_shift_insert(mon
 
 def test_without_a_primary_selection_an_unknown_window_gets_ctrl_v(monkeypatch, paste_env):
     """Shift+Insert would paste the old primary selection into a terminal."""
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
     paste_env["primary_rc"] = 1
-    assert app._paste_text("hello") is True
+    assert keyboard_output.paste_text("hello") is True
     assert paste_env["keys"] == [CTRL_V]
 
 
@@ -153,8 +154,8 @@ def test_without_a_primary_selection_an_unknown_window_gets_ctrl_v(monkeypatch, 
 ])
 def test_a_known_window_keeps_its_shortcut_and_leaves_the_primary_alone(monkeypatch, paste_env,
                                                                         wm_class, keys):
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: wm_class)
-    assert app._paste_text("hello") is True
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: wm_class)
+    assert keyboard_output.paste_text("hello") is True
     assert not any("--primary" in c for c in paste_env["copies"])
     assert paste_env["keys"] == [keys]
 
@@ -210,8 +211,8 @@ def tray(monkeypatch):
 def test_a_terminal_gets_the_terminal_paste_while_wl_copy_has_the_focus(monkeypatch, paste_env,
                                                                          tray):
     tray.report("org.kde.konsole", KONSOLE_AT)
-    monkeypatch.setattr(app.subprocess, "Popen", lambda cmd, **kw: _CopyReportingItsWindow(tray))
-    assert app._paste_text("git status") is True
+    monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda cmd, **kw: _CopyReportingItsWindow(tray))
+    assert keyboard_output.paste_text("git status") is True
     assert paste_env["keys"] == [CTRL_SHIFT_V]
 
 
@@ -226,14 +227,14 @@ def test_the_next_window_after_wl_copy_is_followed_again(tray):
     tray.report("org.kde.konsole", KONSOLE_AT)
     tray.report(WL_COPY, WL_COPY_AT)
     tray.report("org.kde.kwrite", KWRITE_AT)
-    assert app._query_focused_window_class() == "org.kde.kwrite"
+    assert focused_window.window_class() == "org.kde.kwrite"
     assert tray.geometry() == KWRITE_AT
 
 
 def test_wl_copys_window_from_the_compositor_counts_as_unknown(monkeypatch):
     """Sway, Hyprland and niri are asked directly, without the tray."""
     _reported(monkeypatch, "", WL_COPY)
-    assert app._query_focused_window_class() is None
+    assert focused_window.window_class() is None
 
 
 def test_undo_remembers_the_window_the_text_went_to_not_wl_copys(monkeypatch, tray):
@@ -245,7 +246,7 @@ def test_undo_remembers_the_window_the_text_went_to_not_wl_copys(monkeypatch, tr
         return True
 
     monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
-    monkeypatch.setattr(app, "_paste_text", paste)
+    monkeypatch.setattr(keyboard_output, "paste_text", paste)
     monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
     app._inject_text("Hello. ", "paste")
     assert rs.state.last_inserted_window == "org.kde.kwrite"

@@ -23,7 +23,7 @@ If the helper goes away (restarted, updated), every key it said was down is
 released here, so a recording can't hang on a key-up that will never come,
 and it reconnects within a second or so.
 
-active_keys() is also asked from the threads that type (app._send_keys
+active_keys() is also asked from the threads that type (keyboard_output.send_keys
 waits for a Right Ctrl dictation key to come up), so what the helper said is
 taken in under a lock.
 """

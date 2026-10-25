@@ -23,6 +23,7 @@ import subprocess
 import pytest
 
 from tuxtalk import config as config_module
+from tuxtalk import keyboard_output
 
 
 class TestRecordingTheUpdateCheck:
@@ -118,9 +119,8 @@ class TestPackageInstallIsBounded:
 
 class TestWtypeIsBounded:
     def test_a_stalled_wtype_is_killed_and_reported(self, monkeypatch):
-        from tuxtalk import app
 
-        monkeypatch.setattr(app, "_which", lambda name: name == "wtype")
+        monkeypatch.setattr(keyboard_output, "which", lambda name: name == "wtype")
         # No access to /dev/uinput: wtype is the way left to type.
         from tuxtalk import virtual_keyboard
         monkeypatch.setattr(virtual_keyboard, "_open", lambda: None)
@@ -136,7 +136,7 @@ class TestWtypeIsBounded:
             def kill(self):
                 killed.append(True)
 
-        monkeypatch.setattr(app.subprocess, "Popen", lambda *a, **k: HungProc())
+        monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda *a, **k: HungProc())
 
-        assert app._type_text_raw("hello") is False
+        assert keyboard_output.type_text_raw("hello") is False
         assert killed, "a hung wtype must be killed, not left typing later"

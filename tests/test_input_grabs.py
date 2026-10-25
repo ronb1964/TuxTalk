@@ -83,7 +83,7 @@ def clean_grab_registry():
 def quiet_recording(monkeypatch):
     """Silence the parts of start_recording that touch real hardware."""
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
-    monkeypatch.setattr(app, "_notify", lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
     monkeypatch.setattr(app, "_notify_tray_recording_state", lambda *a, **k: None)
     monkeypatch.setattr(app.mic_stream, "input_samplerate", lambda idx, rate: 16000)
     monkeypatch.setattr(app, "recording_indicator", None)
@@ -174,7 +174,7 @@ def test_failed_recording_start_tells_the_user(monkeypatch, quiet_recording):
     """A silent failure leaves the user no way to recover, so they must be told."""
     monkeypatch.setattr(app.sd, "InputStream", lambda *a, **k: (_ for _ in ()).throw(Exception("no mic")))
     seen = []
-    monkeypatch.setattr(app, "_notify", lambda title, msg: seen.append((title, msg)))
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, msg: seen.append((title, msg)))
 
     app.start_recording(beeps_on=False, notify_on=True, input_device_idx=0)
 
@@ -819,7 +819,7 @@ def test_falling_back_to_another_mic_says_so(monkeypatch, quiet_recording):
     monkeypatch.setattr(app.sd, "query_devices", lambda idx: {"name": names[idx]})
     monkeypatch.setattr(app, "_pick_input_device", lambda mic: 8)
     monkeypatch.setattr(app, "load_config", lambda: FakeConfig())
-    monkeypatch.setattr(app, "_notify", lambda title, text: notices.append(text))
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, text: notices.append(text))
 
     assert app.start_recording(beeps_on=False, notify_on=False, input_device_idx=14) is True
     assert len(notices) == 1
@@ -845,7 +845,7 @@ def test_reopening_the_same_mic_says_nothing(monkeypatch, quiet_recording):
     monkeypatch.setattr(app.sd, "InputStream", fake_input_stream)
     monkeypatch.setattr(app, "_pick_input_device", lambda mic: 14)
     monkeypatch.setattr(app, "load_config", lambda: FakeConfig())
-    monkeypatch.setattr(app, "_notify", lambda title, text: notices.append(text))
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, text: notices.append(text))
 
     assert app.start_recording(beeps_on=False, notify_on=False, input_device_idx=14) is True
     assert notices == []

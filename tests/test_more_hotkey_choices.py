@@ -20,6 +20,7 @@ from tuxtalk.hotkey_labels import hotkey_label, layout_label
 from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
 from tuxtalk import keyboard_grab
+from tuxtalk import keyboard_output
 
 RCTRL, RALT, LCTRL = ecodes.KEY_RIGHTCTRL, ecodes.KEY_RIGHTALT, ecodes.KEY_LEFTCTRL
 
@@ -55,7 +56,7 @@ def service(monkeypatch):
     monkeypatch.setattr(app, "_hotkey_test_active", lambda: False)
     monkeypatch.setattr(keyboard_grab, "grab_keyboards_hiding", lambda devices, codes: done.append("grab"))
     monkeypatch.setattr(keyboard_grab, "release_all", lambda: done.append("let go"))
-    monkeypatch.setattr(app, "_send_keys", lambda events, **k: done.append(("keys", events)) or True)
+    monkeypatch.setattr(keyboard_output, "send_keys", lambda events, **k: done.append(("keys", events)) or True)
     monkeypatch.setattr(modifier_hotkeys, "guard_alt_tap", lambda: done.append("Ctrl guard"))
 
     def start(*a, **k):
@@ -227,7 +228,7 @@ def test_typing_waits_while_right_ctrl_is_pressed_mid_text(keyboard, no_hotkeys_
         return 3 <= look <= 6           # pressed before the third key, held a while
 
     modifier_hotkeys.note([Keyboard(pressed)], RCTRL, ecodes.KEY_F9)
-    assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)] * 4, what="aaaa")
+    assert keyboard_output.send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)] * 4, what="aaaa")
     assert written_at_look[3] == written_at_look[6] == written_at_look[7] == 4
     assert keyboard.typed_keys() == [ecodes.KEY_A] * 4
 
@@ -245,7 +246,7 @@ def test_typing_that_waits_for_right_alt_doesnt_hold_up_the_menu_guard(keyboard,
         looked.set()        # the first look is made with the keyboard taken
         return not up.wait(0.002)
     modifier_hotkeys.note([Keyboard(pressed, code=RALT)], RALT, None)
-    typer = threading.Thread(target=app._send_keys, args=([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)],))
+    typer = threading.Thread(target=keyboard_output.send_keys, args=([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)],))
     typer.start()
     try:
         assert looked.wait(2)
@@ -264,7 +265,7 @@ def test_a_shift_held_for_a_capital_is_let_go_while_typing_waits(keyboard, no_ho
     """Others may type while it waits; under our Shift their letters would be capitals."""
     shift = ecodes.KEY_LEFTSHIFT
     modifier_hotkeys.note([Keyboard(lambda look: look in (2, 3))], RCTRL, None)
-    assert app._send_keys([(shift, 1), (ecodes.KEY_B, 1), (ecodes.KEY_B, 0), (shift, 0)],
+    assert keyboard_output.send_keys([(shift, 1), (ecodes.KEY_B, 1), (ecodes.KEY_B, 0), (shift, 0)],
                           what="B")
     assert keyboard.events == [(shift, 1), (shift, 0), (shift, 1), (ecodes.KEY_B, 1),
                                (ecodes.KEY_B, 0), (shift, 0)]
@@ -273,7 +274,7 @@ def test_a_shift_held_for_a_capital_is_let_go_while_typing_waits(keyboard, no_ho
 def test_f_keys_never_hold_typing_up(keyboard, no_hotkeys_noted):
     hotkeys = Keyboard(lambda look: True, code=F8)
     modifier_hotkeys.note([hotkeys], F8, ecodes.KEY_F9)
-    assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
+    assert keyboard_output.send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
     assert hotkeys.looks == 0
 
 
@@ -283,7 +284,7 @@ def test_an_unplugged_keyboard_never_holds_typing_up(keyboard, no_hotkeys_noted)
             raise OSError(19, "No such device")
 
     modifier_hotkeys.note([Unplugged(lambda look: True)], RCTRL, ecodes.KEY_F9)
-    assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
+    assert keyboard_output.send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
     assert keyboard.typed_keys() == [ecodes.KEY_A]
 
 
@@ -308,7 +309,7 @@ def test_a_stuck_right_ctrl_stops_typing_after_a_while(keyboard, stuck_right_ctr
     """Typing used to wait for it forever, with nothing in the log."""
     stuck_right_ctrl()
     with caplog.at_level("WARNING", logger="tuxtalk.modifier_hotkeys"):
-        assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a") is False
+        assert keyboard_output.send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a") is False
     assert keyboard.events == []
     assert modifier_hotkeys.HELD_LIMIT_S <= keyboard.clock.now < modifier_hotkeys.HELD_LIMIT_S + 1
     assert "Right Ctrl has been down" in caplog.text
@@ -322,7 +323,7 @@ def test_a_key_stuck_partway_lets_go_of_shift_and_says_partway(keyboard, stuck_r
     events = [(ecodes.KEY_A, 1), (ecodes.KEY_A, 0), (shift, 1), (ecodes.KEY_B, 1),
               (ecodes.KEY_B, 0), (shift, 0)]
     with pytest.raises(virtual_keyboard.StoppedPartway):
-        app._send_keys(events, what="aB", raise_if_partial=True)
+        keyboard_output.send_keys(events, what="aB", raise_if_partial=True)
     assert keyboard.typed_keys() == [ecodes.KEY_A, shift]
     assert keyboard.events[-1] == (shift, 0)
 
@@ -330,9 +331,9 @@ def test_a_key_stuck_partway_lets_go_of_shift_and_says_partway(keyboard, stuck_r
 def test_while_the_key_stays_stuck_the_next_typing_gives_up_at_once(keyboard, stuck_right_ctrl):
     """A paste that fails and falls back to typing would wait twice."""
     stuck_right_ctrl()
-    app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
+    keyboard_output.send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
     waited = keyboard.clock.now
-    assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a") is False
+    assert keyboard_output.send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a") is False
     assert keyboard.clock.now - waited < 1
 
 
@@ -342,12 +343,12 @@ def test_a_stuck_key_let_go_and_pressed_again_is_waited_for(keyboard, stuck_righ
     stops the next dictation, still held as typing starts, is waited for
     rather than giving up on the dictation at once."""
     board = stuck_right_ctrl()
-    app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
+    keyboard_output.send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
     monkeypatch.setattr(app, "_hotkey_test_active", lambda: False)
     app._handle_key_event(Event(RCTRL, 0), F8, RCTRL, None, set(), [board], Cfg(), 0)
     looked = board.looks
     board.pressed = lambda look: look <= looked + 3     # down again, for a moment
-    assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
+    assert keyboard_output.send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
     assert keyboard.typed_keys() == [ecodes.KEY_A]
 
 
@@ -359,11 +360,11 @@ def test_a_dictation_stopped_by_a_stuck_key_stays_in_recent_dictations(
     kept, notes = [], []
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, language: "hello there")
     monkeypatch.setattr(app, "_determine_injection_method", lambda mode: ("type", "test"))
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
     monkeypatch.setattr(focused_window, "look", lambda: (None, None))
     monkeypatch.setattr(focused_window, "is_password", lambda: False)
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
-    monkeypatch.setattr(app, "_notify", lambda title, body: notes.append(body))
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: notes.append(body))
     monkeypatch.setattr(live, "press_enter_after", False)
     monkeypatch.setattr(history, "add_entry", lambda text, replaces=None: kept.append(text))
     frames = [(np.ones(app.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
@@ -383,11 +384,11 @@ def test_a_stuck_key_types_nothing_another_way(keyboard, stuck_right_ctrl, monke
     import pyperclip
     stuck_right_ctrl()
     ran = []
-    monkeypatch.setattr(app, "_which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(keyboard_output, "which", lambda name: f"/usr/bin/{name}")
     monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: ran.append(a) or 1 / 0)
     monkeypatch.setattr(pyperclip, "copy", lambda text: ran.append(text))
     monkeypatch.setattr(app, "_determine_injection_method", lambda mode: ("type", "test"))
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "kwrite")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "kwrite")
     monkeypatch.setattr(focused_window, "look", lambda: KWRITE)
     assert app._inject_text("hello there", "type") == "key_held"
     assert ran == [] and keyboard.events == []
@@ -402,12 +403,12 @@ def test_a_stuck_key_that_keeps_back_the_enter_says_so(keyboard, stuck_right_ctr
     the log said the Enter wasn't pressed."""
     from tuxtalk.output_backends import VirtualKeyboardOutputBackend
     stuck_right_ctrl()
-    monkeypatch.setattr(app, "_output_backend", VirtualKeyboardOutputBackend)
+    monkeypatch.setattr(keyboard_output, "output_backend", VirtualKeyboardOutputBackend)
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     monkeypatch.setattr(focused_window, "destination",
                         lambda: focused_window.Destination(*KWRITE, False))
     notes, notices = [], []
-    monkeypatch.setattr(app, "_notify", lambda title, body: notes.append((title, body)))
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: notes.append((title, body)))
     monkeypatch.setattr(send_countdown, "show_notice", notices.append)
     if enter == "said":
         app._press_said("ENTER", None)
@@ -416,7 +417,7 @@ def test_a_stuck_key_that_keeps_back_the_enter_says_so(keyboard, stuck_right_ctr
     else:
         monkeypatch.setattr(send_countdown, "_delay", 0.0)
         message = send_countdown.Message(focused_window.Destination(*KWRITE))
-        send_countdown.send_automatically("test", message, app._press_key, None)
+        send_countdown.send_automatically("test", message, keyboard_output.press_key, None)
         assert notices == [send_countdown.HELD_NOTICE]
     assert keyboard.events == []
 
@@ -424,7 +425,7 @@ def test_a_stuck_key_that_keeps_back_the_enter_says_so(keyboard, stuck_right_ctr
 @pytest.fixture
 def typing_into_kwrite(monkeypatch):
     monkeypatch.setattr(app, "_determine_injection_method", lambda mode: ("type", "test"))
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "kwrite")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "kwrite")
     monkeypatch.setattr(focused_window, "look", lambda: KWRITE)
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
 
@@ -453,17 +454,17 @@ def test_a_clipboard_fallback_that_fails_says_why_in_the_log(monkeypatch, caplog
     """With no virtual keyboard and no wtype, the last way out is the
     clipboard; when that failed too, the log said only that nothing worked."""
     import pyperclip
-    monkeypatch.setattr(app, "_send_keys", lambda *a, **k: False)
-    monkeypatch.setattr(app, "_which", lambda name: name == "wl-copy" and "/usr/bin/wl-copy")
+    monkeypatch.setattr(keyboard_output, "send_keys", lambda *a, **k: False)
+    monkeypatch.setattr(keyboard_output, "which", lambda name: name == "wl-copy" and "/usr/bin/wl-copy")
     monkeypatch.setattr(pyperclip, "copy", lambda text: 1 / 0)
     with caplog.at_level("WARNING", logger="tuxtalk.app"):
-        assert app._type_text_raw("hello") is False
+        assert keyboard_output.type_text_raw("hello") is False
     assert "clipboard" in caplog.text and "division by zero" in caplog.text
 
 
 def test_undo_under_a_stuck_key_deletes_nothing_and_says_so(keyboard, stuck_right_ctrl):
     stuck_right_ctrl()
-    assert app._send_backspaces(3) is False
+    assert keyboard_output.send_backspaces(3) is False
     assert keyboard.events == []
 
 
@@ -476,7 +477,7 @@ def test_typing_that_waited_stops_if_the_focus_moved_meanwhile(keyboard, no_hotk
     monkeypatch.setattr(focused_window, "destination", lambda: next(answers))
     modifier_hotkeys.note([Keyboard(lambda look: look <= 3)], RCTRL, None)
     with pytest.raises(virtual_keyboard.GaveUp) as stop:
-        app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a", raise_if_partial=True)
+        keyboard_output.send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a", raise_if_partial=True)
     assert stop.value.reason == "moved" and keyboard.events == []
     assert "Recent Dictations" in delivery_notices.NOTICES["moved"]
 
@@ -489,7 +490,7 @@ def test_typing_that_waited_stops_if_another_window_of_the_app_has_the_focus(
     monkeypatch.setattr(focused_window, "is_password", lambda: False)
     modifier_hotkeys.note([Keyboard(lambda look: look <= 3)], RCTRL, None)
     with pytest.raises(virtual_keyboard.GaveUp) as stop:
-        app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a", raise_if_partial=True)
+        keyboard_output.send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a", raise_if_partial=True)
     assert stop.value.reason == "moved" and keyboard.events == []
 
 
@@ -500,14 +501,14 @@ def test_a_focus_answer_that_didnt_come_isnt_a_move(keyboard, no_hotkeys_noted, 
     answers = iter([("kwrite", ("tray", "{4b1e}"), False), now])
     monkeypatch.setattr(focused_window, "destination", lambda: next(answers))
     modifier_hotkeys.note([Keyboard(lambda look: look <= 3)], RCTRL, None)
-    assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
+    assert keyboard_output.send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
     assert keyboard.typed_keys() == [ecodes.KEY_A]
 
 
 def test_typing_that_waited_goes_on_where_it_was_going(keyboard, no_hotkeys_noted, monkeypatch):
     monkeypatch.setattr(focused_window, "destination", lambda: ("kwrite", None, False))
     modifier_hotkeys.note([Keyboard(lambda look: look <= 3)], RCTRL, None)
-    assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
+    assert keyboard_output.send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
     assert keyboard.typed_keys() == [ecodes.KEY_A]
 
 
@@ -516,7 +517,7 @@ def test_a_tap_while_a_due_send_waits_for_right_ctrl_still_holds_it(keyboard, no
     """The send stays pending while it waits: the tap of a Right Ctrl toggle
     the hotkey loop reads meanwhile holds it. Taken before the wait, the
     tap found nothing to hold and the Enter went out after it."""
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "kwrite")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "kwrite")
     monkeypatch.setattr(focused_window, "look", lambda: KWRITE)
     held = []
 
@@ -526,7 +527,7 @@ def test_a_tap_while_a_due_send_waits_for_right_ctrl_still_holds_it(keyboard, no
         return look <= 3
     modifier_hotkeys.note([Keyboard(pressed)], ecodes.KEY_F8, RCTRL)
     pending = {"to": focused_window.Destination(*KWRITE), "why": "test",
-               "press": app._press_key, "space": "", "mode": "type", "timer": None, "ticks": []}
+               "press": keyboard_output.press_key, "space": "", "mode": "type", "timer": None, "ticks": []}
     monkeypatch.setattr(send_countdown, "_cancel_timers", lambda pending: None)
     send_countdown._pending = pending
     send_countdown._send(pending)
@@ -542,7 +543,7 @@ def due_send(keyboard, no_hotkeys_noted, monkeypatch):
     monkeypatch.setattr(send_countdown, "_cancel_timers", lambda pending: None)
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     pending = {"to": focused_window.Destination(*KWRITE), "why": "test",
-               "press": app._press_key, "space": "", "mode": "type", "timer": None, "ticks": []}
+               "press": keyboard_output.press_key, "space": "", "mode": "type", "timer": None, "ticks": []}
     send_countdown._pending = pending
 
     def fire(pressed):
@@ -557,7 +558,7 @@ def test_a_tap_while_the_enter_itself_waits_for_right_ctrl_still_holds_it(keyboa
     """Right Ctrl went down after the first wait, as the Enter was about to
     go: the Enter waits again, and a tap read meanwhile still holds the send.
     Taken before the Enter, the tap found nothing to hold, and Enter went."""
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "kwrite")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "kwrite")
     monkeypatch.setattr(focused_window, "look", lambda: KWRITE)
     held = []
 
@@ -573,7 +574,7 @@ def test_where_the_enter_goes_is_asked_once_it_has_waited(keyboard, due_send, mo
     """Clicked into another window while the Enter waited for Right Ctrl:
     asked before the wait, the answer was out of date."""
     focus = ["kwrite"]
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: focus[0])
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: focus[0])
     monkeypatch.setattr(focused_window, "look", lambda: named(focus[0]))
 
     def pressed(look):
@@ -612,7 +613,7 @@ def test_a_tap_during_the_focus_questions_holds_the_send(keyboard, due_send, mon
     def focused():
         held.append(send_countdown.hold(announce=True))
         return "kwrite"
-    monkeypatch.setattr(app, "_query_focused_window_class", focused)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", focused)
     monkeypatch.setattr(focused_window, "look", lambda: named(focused()))
     monkeypatch.setattr(focused_window, "is_password", lambda: False)
     due_send(lambda look: False)
@@ -625,7 +626,7 @@ def test_a_tap_while_the_enter_waits_for_the_keyboard_holds_the_send(keyboard, d
     send is taken only once the Enter has the keyboard, so a tap read while
     it waited still holds it."""
     import threading
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "kwrite")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "kwrite")
     monkeypatch.setattr(focused_window, "look", lambda: KWRITE)
     monkeypatch.setattr(focused_window, "is_password", lambda: False)
     held, typing, checked = [], threading.Event(), threading.Event()
@@ -687,7 +688,7 @@ def test_a_right_ctrl_pressed_during_the_focus_questions_makes_the_enter_wait(
             written_while_down.append(len(keyboard.events))
         return down
     board_looks = [0]
-    monkeypatch.setattr(app, "_query_focused_window_class", focused)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", focused)
     monkeypatch.setattr(focused_window, "look", lambda: named(focused()))
     monkeypatch.setattr(focused_window, "is_password", lambda: False)
     due_send(pressed)
@@ -698,7 +699,7 @@ def test_a_right_ctrl_pressed_during_the_focus_questions_makes_the_enter_wait(
 def test_a_key_stuck_through_a_due_send_holds_it_and_says_so(keyboard, due_send, monkeypatch):
     monkeypatch.setattr(modifier_hotkeys, "time", keyboard.clock)
     monkeypatch.setattr(modifier_hotkeys, "_stuck", set())
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "kwrite")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "kwrite")
     monkeypatch.setattr(focused_window, "look", lambda: KWRITE)
     notices = []
     monkeypatch.setattr(send_countdown, "show_notice", notices.append)
@@ -708,7 +709,7 @@ def test_a_key_stuck_through_a_due_send_holds_it_and_says_so(keyboard, due_send,
 
 
 def test_a_due_send_with_nothing_held_presses_enter(keyboard, due_send, monkeypatch):
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "kwrite")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "kwrite")
     monkeypatch.setattr(focused_window, "look", lambda: KWRITE)
     due_send(lambda look: False)
     assert keyboard.typed_keys() == [ecodes.KEY_ENTER] and send_countdown._pending is None
@@ -769,7 +770,7 @@ def test_type_at_pause_types_while_a_hidden_hold_key_is_held(keyboard, holding, 
     typed at a pause needn't wait for it; waiting typed nothing until the key
     came up and dropped the phrases after 30 s as a stuck key."""
     holding(code)
-    assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
+    assert keyboard_output.send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
     assert keyboard.typed_keys()[-1] == ecodes.KEY_A
     assert keyboard.clock.now < 1
 
@@ -777,14 +778,14 @@ def test_type_at_pause_types_while_a_hidden_hold_key_is_held(keyboard, holding, 
 def test_a_hold_key_the_grab_couldnt_hide_still_holds_typing_up(keyboard, holding):
     """The desktop still sees it down: letters typed now would be Ctrl shortcuts."""
     holding(RCTRL, grabs=False)
-    assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a") is False
+    assert keyboard_output.send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a") is False
     assert keyboard.events == []
 
 
 def test_letting_go_of_the_grab_stops_hiding_the_key(keyboard, holding):
     holding(RCTRL)
     keyboard_grab.release_all()
-    assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a") is False
+    assert keyboard_output.send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a") is False
 
 
 @pytest.mark.parametrize("code", [RCTRL, RALT])
@@ -830,7 +831,7 @@ def test_typing_that_waits_for_right_alt_presses_the_guard_itself(keyboard, no_h
         seen.append((look <= 4, list(keyboard.events)))
         return look <= 4
     modifier_hotkeys.note([Keyboard(pressed, code=RALT)], RALT, None)
-    assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
+    assert keyboard_output.send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
     assert keyboard.events == [(LCTRL, 1), (LCTRL, 0), (ecodes.KEY_A, 1), (ecodes.KEY_A, 0)]
     assert any(down and (LCTRL, 0) in events for down, events in seen)
 
@@ -847,7 +848,7 @@ def test_the_guard_goes_before_the_slow_questions_about_the_window(keyboard, no_
         return ("soffice", None, False)
     monkeypatch.setattr(focused_window, "destination", destination)
     modifier_hotkeys.note([Keyboard(lambda look: look <= 4, code=RALT)], RALT, None)
-    assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
+    assert keyboard_output.send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
     assert guarded_when_asked and guarded_when_asked[0] is True
 
 
@@ -859,7 +860,7 @@ def test_typing_waits_for_right_alt_without_a_guard_when_ctrl_is_held_too(keyboa
             self.looks += 1
             return [RALT, LCTRL] if self.looks <= 4 else []
     modifier_hotkeys.note([BothDown(None, code=RALT)], RALT, None)
-    assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
+    assert keyboard_output.send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
     assert keyboard.events == [(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)]
 
 

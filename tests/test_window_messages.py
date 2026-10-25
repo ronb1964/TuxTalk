@@ -162,7 +162,7 @@ def test_a_voice_edit_problem_floats_over_the_active_window(monkeypatch):
     from tuxtalk import app, screen_message
     shown = []
     monkeypatch.setattr(screen_message, "show_over_active_window", shown.append)
-    monkeypatch.setattr(app, "_notify", lambda *a: None)
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda *a: None)
     monkeypatch.setattr(app, "_beep", lambda *a: None)
     app._edit_problem("no_selection", False)
     assert shown == ["Select some text first"]
@@ -214,7 +214,7 @@ def test_the_label_says_it_short_and_the_notification_in_full(monkeypatch):
     from tuxtalk import app, edit_notices, screen_message
     shown, notified = [], []
     monkeypatch.setattr(screen_message, "show_over_active_window", shown.append)
-    monkeypatch.setattr(app, "_notify", lambda title, msg: notified.append(msg))
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, msg: notified.append(msg))
     monkeypatch.setattr(app, "_beep", lambda *a: None)
     for kind in edit_notices.NOTICES:
         shown.clear(); notified.clear()

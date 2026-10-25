@@ -9,6 +9,7 @@ import pytest
 from tuxtalk import clipboard as cb
 from tuxtalk import config as C
 from tuxtalk import live_settings as live
+from tuxtalk import keyboard_output
 
 
 class FakeClipboard:
@@ -190,7 +191,6 @@ def test_the_unknown_window_paste_saves_the_primary_before_setting_it(monkeypatc
     """The dictation goes on the primary selection too when the window is
     unknown; what the user had highlighted is kept first, or it's lost."""
     import types
-    from tuxtalk import app
     done = []
 
     class Keeper:
@@ -205,15 +205,15 @@ def test_the_unknown_window_paste_saves_the_primary_before_setting_it(monkeypatc
 
     wl_copy = types.SimpleNamespace(stdin=types.SimpleNamespace(write=len, close=lambda: None),
                                     wait=lambda timeout: 0, poll=lambda: 0, stderr=None)
-    monkeypatch.setattr(app, "_is_wayland_session", lambda: True)
-    monkeypatch.setattr(app, "_which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
+    monkeypatch.setattr(keyboard_output, "which", lambda name: f"/usr/bin/{name}")
     monkeypatch.setattr(live, "restore_clipboard", True)
-    monkeypatch.setattr(app, "_clipboard_keeper", Keeper())
-    monkeypatch.setattr(app.subprocess, "Popen", lambda *a, **k: wl_copy)
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
-    monkeypatch.setattr(app, "_copy_to_primary", lambda text: done.append("sets the primary") or True)
-    monkeypatch.setattr(app, "_send_paste_keystroke", lambda cls, primary: done.append("pastes") or True)
-    assert app._paste_text("dictated words") is True
+    monkeypatch.setattr(keyboard_output, "_clipboard_keeper", Keeper())
+    monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda *a, **k: wl_copy)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
+    monkeypatch.setattr(keyboard_output, "copy_to_primary", lambda text: done.append("sets the primary") or True)
+    monkeypatch.setattr(keyboard_output, "send_paste_keystroke", lambda cls, primary: done.append("pastes") or True)
+    assert keyboard_output.paste_text("dictated words") is True
     assert done == ["keeps the clipboard", "keeps the primary", "sets the primary", "pastes",
                     "puts them back"]
 
@@ -269,19 +269,19 @@ def test_paste_uses_the_keeper_only_when_the_setting_is_on(monkeypatch):
 
     commands = []
     monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
-    monkeypatch.setattr(app, "_which", lambda name: True)
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "kwrite")
-    monkeypatch.setattr(app.subprocess, "Popen", lambda cmd, **kw: commands.append(cmd) or Proc())
+    monkeypatch.setattr(keyboard_output, "which", lambda name: True)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "kwrite")
+    monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda cmd, **kw: commands.append(cmd) or Proc())
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     monkeypatch.setattr(cb, "wl_copy_command", lambda: ["wl-copy", "--sensitive"])
-    monkeypatch.setattr(app, "_clipboard_keeper", Keeper())
+    monkeypatch.setattr(keyboard_output, "_clipboard_keeper", Keeper())
 
     monkeypatch.setattr(live, "restore_clipboard", False)
-    assert app._paste_text("hello") is True
+    assert keyboard_output.paste_text("hello") is True
     assert events == [] and commands[-1] == ["wl-copy", "--sensitive"]
 
     monkeypatch.setattr(live, "restore_clipboard", True)
-    assert app._paste_text("hello") is True
+    assert keyboard_output.paste_text("hello") is True
     assert events == ["save", ("restore", "hello")]
 
 

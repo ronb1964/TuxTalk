@@ -357,18 +357,18 @@ def fix_in_text(typed, fix, window):
     the replacement and steps forward again; nothing else is retyped. Not
     when another window than *window* has the focus (None: unknown, go
     ahead). True if done."""
-    from . import app, focused_window
+    from . import focused_window, keyboard_output, notify
     start, end, replacement = fix
     time.sleep(_REFOCUS_S)
     focused = focused_window.window_class()
     if window and focused and focused != window:
         logger.info(f"Fix a Word: {focused!r} has the focus, not {window!r}; text left as it was")
-        app._notify("Your text wasn't changed",
+        notify.notify("Your text wasn't changed",
                     "The fix is saved, but another window had the focus.")
         return False
     if focused_window.is_password():
         logger.info("Fix a Word: a password field has the focus; text left as it was")
-        app._notify("Your text wasn't changed",
+        notify.notify("Your text wasn't changed",
                     "The fix is saved, but the cursor is in a password field.")
         return False
     core = typed.strip()
@@ -376,7 +376,7 @@ def fix_in_text(typed, fix, window):
     # the dictation, then whatever followed the words in it.
     back = (len(typed) - len(typed.rstrip())) + (len(core) - end)
     from . import virtual_keyboard
-    backend = app._output_backend()
+    backend = keyboard_output.output_backend()
     try:
         done = (backend.press_keys([((), "LEFT")] * back + [(("SHIFT",), "LEFT")] * (end - start))
                 and backend.type_text(replacement)
@@ -427,9 +427,9 @@ def main(argv=None):
         # now, the desktop has taken it on (and, on X11, given it the user's
         # layout) long before the window closes. The service sets the user's
         # typing speed in its own main(); this process has to read it.
-        from . import app, virtual_keyboard
+        from . import keyboard_output, virtual_keyboard
         from .config import load_config
-        app._key_delay_ms = load_config().key_delay
+        keyboard_output.key_delay_ms = load_config().key_delay
         virtual_keyboard.start()
     dialog = _FixWordDialog(entries, 0, copy_text, before_show=place_over_active_window,
                             in_place=in_place)

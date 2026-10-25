@@ -157,7 +157,7 @@ def test_preferences_offers_it(prefs_window):
 @pytest.mark.parametrize("outcome", ["failed", "partial"])
 def test_the_undelivered_notice_offers_the_hotkey(outcome, monkeypatch):
     told = []
-    monkeypatch.setattr(app, "_notify", lambda title, msg: told.append(msg))
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, msg: told.append(msg))
     monkeypatch.setattr(app, "_beep", lambda *a: None)
     monkeypatch.setattr(live, "paste_last_hotkey", "Ctrl+Alt+P")
     import tuxtalk.uinput_helper as uh
@@ -168,7 +168,7 @@ def test_the_undelivered_notice_offers_the_hotkey(outcome, monkeypatch):
 
 def test_no_hint_when_the_hotkey_is_off(monkeypatch):
     told = []
-    monkeypatch.setattr(app, "_notify", lambda title, msg: told.append(msg))
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, msg: told.append(msg))
     monkeypatch.setattr(app, "_beep", lambda *a: None)
     monkeypatch.setattr(live, "paste_last_hotkey", "")
     import tuxtalk.uinput_helper as uh

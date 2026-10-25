@@ -9,7 +9,8 @@ import subprocess
 
 import pytest
 
-from tuxtalk import app, clipboard, virtual_keyboard
+from tuxtalk import clipboard, virtual_keyboard
+from tuxtalk import keyboard_output
 
 # Starts like an option, so it also shows the text can't be read as one.
 SECRET = "--my bank pin is 4321"
@@ -56,11 +57,11 @@ def recorder(monkeypatch):
 
 
 def test_wtype_gets_the_dictation_on_stdin(recorder, monkeypatch):
-    monkeypatch.setattr(app, "_which", lambda name: name == "wtype")
+    monkeypatch.setattr(keyboard_output, "which", lambda name: name == "wtype")
     # No access to /dev/uinput: wtype is the way left to type.
     monkeypatch.setattr(virtual_keyboard, "_open", lambda: None)
 
-    assert app._type_text_raw(SECRET) is True
+    assert keyboard_output.type_text_raw(SECRET) is True
     assert recorder.argvs == [["wtype", "-"]]
     assert recorder.stdin == [SECRET.encode("utf-8")]
 
@@ -69,11 +70,11 @@ def test_wtype_reads_the_dictation_as_utf8_under_any_locale(recorder, monkeypatc
     """Under a C locale wtype stopped at "é" and dropped the rest unseen."""
     from tuxtalk import keyboard_layout
     monkeypatch.setenv("LC_ALL", "C")
-    monkeypatch.setattr(app, "_which", lambda name: name == "wtype")
+    monkeypatch.setattr(keyboard_output, "which", lambda name: name == "wtype")
     monkeypatch.setattr(virtual_keyboard, "_open", lambda: None)
     # A layout with é on it (French, say), so it isn't pasted instead.
     monkeypatch.setattr(keyboard_layout, "layout_key_events", lambda text: [(30, 1), (30, 0)])
-    assert app._type_text_raw("café au lait") is True
+    assert keyboard_output.type_text_raw("café au lait") is True
     assert recorder.stdin == ["café au lait".encode("utf-8")]
     assert recorder.env["LC_ALL"] == "C.UTF-8"
 
@@ -82,7 +83,7 @@ def test_wtype_reads_the_dictation_as_utf8_under_any_locale(recorder, monkeypatc
     lambda text: clipboard.copy_text(text),
     lambda text: clipboard._wl_copy_sensitive(text),
     lambda text: clipboard._wl_copy_primary(text),
-    lambda text: app._copy_to_primary(text),
+    lambda text: keyboard_output.copy_to_primary(text),
 ], ids=["copy", "copy marked sensitive", "primary selection", "primary before a paste"])
 def test_wl_copy_gets_the_dictation_on_stdin(recorder, monkeypatch, copy):
     monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")

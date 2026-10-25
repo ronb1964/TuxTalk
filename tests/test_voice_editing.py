@@ -7,6 +7,7 @@ import pytest
 from tuxtalk import clipboard as cb
 from tuxtalk import keyboard_grab
 from tuxtalk import uinput_helper
+from tuxtalk import keyboard_output
 
 
 # --- 1. grabbing the selection ------------------------------------------------------
@@ -368,12 +369,12 @@ def edit_env(monkeypatch):
         return selection["text"], put_back
     monkeypatch.setattr(cb, "copy_selection", copy_selection)
     monkeypatch.setattr(app, "_inject_text", lambda text, mode, one_block=False, **kw: seen["typed"].append(text) or "ok")
-    monkeypatch.setattr(app, "_notify", lambda title, msg: seen["notices"].append(msg))
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, msg: seen["notices"].append(msg))
     monkeypatch.setattr(app, "_beep", lambda on, *a: seen["beeps"].append(a))
     monkeypatch.setattr(history, "add_entry", lambda text: seen["history"].append(text))
     monkeypatch.setattr(app, "EDIT_RESTORE_DELAY_S", 0)
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.kwrite")
-    monkeypatch.setattr(app, "_is_wayland_session", lambda: True)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
+    monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
     seen["engine"], seen["selection"] = engine, selection
     return seen
 
@@ -650,7 +651,7 @@ def test_a_cut_off_answer_is_not_used(engine, monkeypatch):
 
 
 def test_no_edit_in_a_terminal(edit_env, monkeypatch):
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.konsole")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.konsole")
     run_edit()
     assert edit_env["typed"] == [] and "terminal" in edit_env["notices"][0]
 
@@ -662,7 +663,7 @@ def test_yakuake_counts_as_a_terminal():
 
 def test_a_window_change_while_the_ai_works_keeps_the_rewrite_safe(edit_env, monkeypatch):
     classes = iter(["org.kde.kwrite", "org.mozilla.firefox"])
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: next(classes))
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: next(classes))
     run_edit()
     assert edit_env["typed"] == []
     assert edit_env["history"] == ["We completed the electrical work today."]
@@ -709,9 +710,9 @@ def test_tapping_the_toggle_key_during_a_hold_edit_lets_go_of_the_keyboard(keylo
 def injection(monkeypatch):
     """_inject_text with the desktop faked: what was pasted, typed, keyed."""
     seen = {"pasted": [], "typed": [], "shift_enter": 0}
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.kwrite")
-    monkeypatch.setattr(app, "_paste_text", lambda t: seen["pasted"].append(t) or True)
-    monkeypatch.setattr(app, "_send_shift_enter", lambda: seen.__setitem__("shift_enter", seen["shift_enter"] + 1) or True)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
+    monkeypatch.setattr(keyboard_output, "paste_text", lambda t: seen["pasted"].append(t) or True)
+    monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: seen.__setitem__("shift_enter", seen["shift_enter"] + 1) or True)
 
     from tuxtalk.output_backends import OutputBackend
 
@@ -719,7 +720,7 @@ def injection(monkeypatch):
         def type_text(self, t):
             seen["typed"].append(t)
             return True
-    monkeypatch.setattr(app, "_output_backend", lambda: Backend())
+    monkeypatch.setattr(keyboard_output, "output_backend", lambda: Backend())
     return seen
 
 
@@ -731,7 +732,7 @@ def test_one_block_is_pasted_once_with_its_line_breaks(injection, monkeypatch):
 
 def test_dictation_still_pastes_line_by_line(injection, monkeypatch):
     """In a chat app; KDE's editors get one paste (test_terminal_line_breaks)."""
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "discord")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "discord")
     monkeypatch.setattr(app, "_determine_injection_method", lambda mode: ("paste", "test"))
     app._inject_text("one§SHIFT_ENTER§two", "auto")
     assert injection["pasted"] == ["one", "two"] and injection["shift_enter"] == 1
@@ -870,14 +871,14 @@ def test_exact_jobs_are_done_in_code_even_before_the_ai_is_ready(edit_env, monke
 @pytest.fixture
 def keys_sent(edit_env, monkeypatch):
     sent = []
-    monkeypatch.setattr(app, "_send_keys", lambda keys, what="", **kw: sent.append(list(keys)) or True)
+    monkeypatch.setattr(keyboard_output, "send_keys", lambda keys, what="", **kw: sent.append(list(keys)) or True)
     monkeypatch.setattr("tuxtalk.keyboard_layout.active_layout", lambda: ("us", ""))
     return sent
 
 
 def test_bold_in_a_word_processor_is_its_shortcut(edit_env, keys_sent, monkeypatch):
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Make this bold and italic.")
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "libreoffice-writer")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "libreoffice-writer")
     run_edit()
     assert keys_sent == [[(29, 1), (48, 1), (48, 0), (29, 0)], [(29, 1), (23, 1), (23, 0), (29, 0)]]
     assert edit_env["typed"] == [] and edit_env["notices"] == [] and edit_env["engine"].asked == []
@@ -894,7 +895,7 @@ def test_bold_in_a_plain_text_app_says_where_it_works(edit_env, keys_sent, monke
 
 def test_font_size_says_it_cant(edit_env, keys_sent, monkeypatch):
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Make this text larger.")
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "libreoffice-writer")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "libreoffice-writer")
     run_edit()
     assert keys_sent == [] and edit_env["typed"] == []
     assert "font, size or color" in edit_env["notices"][0]
@@ -937,7 +938,7 @@ def test_indenting_still_counts_as_a_change(edit_env, monkeypatch):
 def test_on_x11_it_says_voice_editing_needs_wayland(edit_env, monkeypatch):
     """The selection is read with wl-copy / wl-paste, so on X11 every edit
     would say "select some text first" with text selected."""
-    monkeypatch.setattr(app, "_is_wayland_session", lambda: False)
+    monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: False)
     copied = []
     monkeypatch.setattr(cb, "copy_selection", lambda send: copied.append(1))
     run_edit()
@@ -977,7 +978,7 @@ def test_no_key_goes_to_a_window_switched_to_while_transcribing(edit_env, keys_s
     """Delete and Ctrl+B are sent after transcription, so without a check they
     could land in whatever window the user had clicked into."""
     classes = iter([focused, "org.kde.konsole"])
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: next(classes))
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: next(classes))
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: said)
     run_edit()
     assert keys_sent == [] and edit_env["typed"] == []
@@ -989,7 +990,7 @@ def test_no_key_goes_to_a_window_switched_to_while_transcribing(edit_env, keys_s
 def test_no_key_is_pressed_when_the_window_is_unknown(edit_env, keys_sent, monkeypatch, said):
     """Unknown both times (None == None) is not "the same window", or a
     switch during transcription goes unnoticed."""
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: said)
     run_edit()
     assert keys_sent == [] and edit_env["typed"] == []
@@ -1000,7 +1001,7 @@ def test_no_key_is_pressed_when_the_window_is_unknown(edit_env, keys_sent, monke
 def test_a_window_that_cant_be_found_after_transcribing_counts_as_moved(edit_env, keys_sent,
                                                                        monkeypatch, said):
     classes = iter(["libreoffice-writer", None])
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: next(classes))
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: next(classes))
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: said)
     run_edit()
     assert keys_sent == [] and edit_env["typed"] == []
@@ -1010,7 +1011,7 @@ def test_a_window_that_cant_be_found_after_transcribing_counts_as_moved(edit_env
 def test_a_rewrite_is_still_typed_where_the_window_is_never_known(edit_env, monkeypatch):
     """Refusing would turn voice editing off on desktops that can't report
     the window; the rewrite is typed like ordinary dictation."""
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
     run_edit()
     assert edit_env["typed"] == ["We completed the electrical work today."]
     assert edit_env["notices"] == []
@@ -1046,7 +1047,7 @@ def test_a_long_selection_can_still_be_deleted_or_made_bold(edit_env, keys_sent,
     edit_env["selection"]["text"] = "x " * 2000
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Delete this.")
     run_edit()
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "libreoffice-writer")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "libreoffice-writer")
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Make this bold.")
     run_edit()
     assert keys_sent == [[(111, 1), (111, 0)], [(29, 1), (48, 1), (48, 0), (29, 0)]]
@@ -1119,7 +1120,7 @@ def test_the_edit_key_understands_select_commands_with_nothing_selected(edit_env
     """Shift+F8 "select the last sentence", then Shift+F8 "make it formal"."""
     pressed = []
     monkeypatch.setattr(live, "voice_navigation", True)
-    monkeypatch.setattr(app, "_output_backend",
+    monkeypatch.setattr(keyboard_output, "output_backend",
                         lambda: type("B", (), {"press_keys": lambda self, c: pressed.append(c) or True})())
     monkeypatch.setattr(rs.state, "last_inserted_text", "One. Two.")
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "select the last sentence")

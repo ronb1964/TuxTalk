@@ -5,6 +5,7 @@ import pytest
 from tuxtalk import voice_navigation as nav
 from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
+from tuxtalk import keyboard_output
 
 C, S = "CTRL", "SHIFT"
 
@@ -157,8 +158,8 @@ def dictation(monkeypatch):
 
     backend = Backend()
     monkeypatch.setattr(live, "voice_navigation", True)
-    monkeypatch.setattr(app, "_output_backend", lambda: backend)
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.kwrite")
+    monkeypatch.setattr(keyboard_output, "output_backend", lambda: backend)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
     monkeypatch.setattr(app, "_edit_problem", lambda kind, beeps: seen["problems"].append(kind))
     monkeypatch.setattr(app, "_beep", lambda on, *a: seen.__setitem__("beeps", seen["beeps"] + 1))
     monkeypatch.setattr(rs.state, "last_inserted_text", " We finished early.")
@@ -186,7 +187,7 @@ def test_off_means_typed_as_text(dictation, monkeypatch):
 
 def test_a_terminal_is_refused(dictation, monkeypatch):
     app = dictation["app"]
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.konsole")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.konsole")
     assert app._handle_navigation("select all", False) is True
     assert dictation["pressed"] == [] and dictation["problems"] == ["nav_terminal"]
 
@@ -205,8 +206,7 @@ def test_keys_that_could_not_be_pressed_say_so(dictation):
 
 
 def test_each_modifier_is_held_around_its_key(keyboard):
-    from tuxtalk import app
-    assert app._send_chords([((C, S), "LEFT"), ((), "END")]) is True
+    assert keyboard_output.send_chords([((C, S), "LEFT"), ((), "END")]) is True
     assert keyboard.events == [(29, 1), (42, 1), (105, 1), (105, 0), (42, 0), (29, 0),
                                (107, 1), (107, 0)]
 
@@ -214,8 +214,7 @@ def test_each_modifier_is_held_around_its_key(keyboard):
 def test_shift_is_held_once_across_a_run_of_keys(keyboard):
     """Selecting a sentence crawled across the line: forty Shift presses at
     ydotool's typing speed (Ron, 2026-10-14)."""
-    from tuxtalk import app
-    app._send_chords([((), "LEFT")] + [((S,), "LEFT")] * 3)
+    keyboard_output.send_chords([((), "LEFT")] + [((S,), "LEFT")] * 3)
     assert keyboard.events == [(105, 1), (105, 0), (42, 1), (105, 1), (105, 0), (105, 1),
                                (105, 0), (105, 1), (105, 0), (42, 0)]
 
@@ -225,7 +224,7 @@ def test_what_i_said_is_only_trusted_in_the_window_it_went_to(dictation, monkeyp
     Writer: it selected the chat sentence's length of Writer's text."""
     app = dictation["app"]
     monkeypatch.setattr(rs.state, "last_inserted_window", "claude")
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "libreoffice-writer")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "libreoffice-writer")
     assert app._handle_navigation("select the last sentence", False) is True
     assert dictation["pressed"] == [] and dictation["problems"] == ["nothing_said"]
     # A word move there uses the app's own keys instead of counting.
@@ -307,7 +306,7 @@ def test_delete_last_word_in_another_window_deletes_nothing(dictation, monkeypat
     deleted = []
     dictation["backend"].backspaces = lambda n: deleted.append(n) or True
     monkeypatch.setattr(rs.state, "last_inserted_window", "claude")
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "libreoffice-writer")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "libreoffice-writer")
     assert app._handle_undo("delete last word", False, False) is True
     assert deleted == [] and dictation["problems"] == ["undo_other_window"]
     assert rs.state.last_inserted_text == " We finished early."   # still there for its window
@@ -326,7 +325,7 @@ def test_delete_everything_in_a_terminal_clears_the_line_the_shells_way(dictatio
     """Ctrl+A in Konsole jumped to the start of the line and Backspace
     deleted nothing (Ron, 2026-10-14)."""
     app = dictation["app"]
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.konsole")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.konsole")
     dictation["backend"].select_all_delete = lambda: pytest.fail("Ctrl+A in a terminal")
     assert app._handle_undo("delete everything", False, False) is True
     assert dictation["pressed"] == [[((C,), "E"), ((C,), "U")]]

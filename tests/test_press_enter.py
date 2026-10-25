@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 from tuxtalk import app, config, focused_window, key_commands, send_countdown, window_classes
+from tuxtalk import keyboard_output
 from tuxtalk import keyboard_grab
 from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
@@ -44,7 +45,7 @@ def _dictate(monkeypatch, raw, prepared=None, outcome="ok", window="brave-browse
     monkeypatch.setattr(app, "_handle_undo", lambda *a, **k: False)
     monkeypatch.setattr(app, "_handle_navigation", lambda *a, **k: False)
     monkeypatch.setattr(app, "_handle_fix_word", lambda *a, **k: False)
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: window)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: window)
     monkeypatch.setattr(focused_window, "look", lambda: (window, ("tray", "{window}")))
     monkeypatch.setattr(app, "_report_undelivered", lambda *a, **k: events.append("not delivered"))
 
@@ -52,7 +53,7 @@ def _dictate(monkeypatch, raw, prepared=None, outcome="ok", window="brave-browse
         events.append(("typed", text))
         return outcome
     monkeypatch.setattr(app, "_inject_text", inject)
-    monkeypatch.setattr(app, "_press_key",
+    monkeypatch.setattr(keyboard_output, "press_key",
                         lambda key, why, claim=None: events.append((key.lower(), why)))
     frames = [(np.ones(app.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
     app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=False,
@@ -171,10 +172,10 @@ def test_press_enter_key_uses_the_output_backend_and_forgets_undo(monkeypatch):
         def press_keys(self, chords, claim=None):
             pressed.append(chords)
             return True
-    monkeypatch.setattr(app, "_output_backend", lambda: Backend())
+    monkeypatch.setattr(keyboard_output, "output_backend", lambda: Backend())
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     rs.state.last_inserted_text = "See you at noon."
-    assert app._press_key("ENTER", "test") is True
+    assert keyboard_output.press_key("ENTER", "test") is True
     assert pressed == [[((), "ENTER")]]
     # A sent message can't be backspaced away.
     assert rs.state.last_inserted_text == ""
@@ -182,7 +183,7 @@ def test_press_enter_key_uses_the_output_backend_and_forgets_undo(monkeypatch):
 
 def test_both_typing_paths_know_the_enter_key():
     from tuxtalk import libei_ctypes
-    assert app._nav_keycode("ENTER") == 28
+    assert keyboard_output.nav_keycode("ENTER") == 28
     assert libei_ctypes._CHORD_KEYS["ENTER"] == 28
 
 
@@ -226,7 +227,7 @@ BRAVE = ("brave-browser", ("tray", "{b4a7}"))   # the countdown fixture's window
 def start_send(why="test", space="", mode="type"):
     """An automatic send for a dictation typed into the window focused now."""
     send_countdown.send_automatically(why, send_countdown.Message(focused_window.destination()),
-                                      app._press_key, app._type_onto_dictation, space, mode)
+                                      keyboard_output.press_key, app._type_onto_dictation, space, mode)
 
 
 @pytest.fixture
@@ -235,7 +236,7 @@ def countdown(monkeypatch):
     monkeypatch.setattr(send_countdown.threading, "Timer", FakeTimer)
     monkeypatch.setattr(send_countdown, "_delay", 2.0)
     pressed, labels = [], []
-    press_key = app._press_key
+    press_key = keyboard_output.press_key
 
     def press(key, why, **claim):
         """Pressed on the test keyboard, and noted by why."""
@@ -243,12 +244,12 @@ def countdown(monkeypatch):
             pressed.append(why)
             return True
         return False
-    monkeypatch.setattr(app, "_press_key", press)
+    monkeypatch.setattr(keyboard_output, "press_key", press)
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     from tuxtalk import screen_message
     monkeypatch.setattr(screen_message, "show_over_active_window",
                         lambda text, **kw: labels.append(text))
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "brave-browser")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "brave-browser")
     monkeypatch.setattr(focused_window, "look", lambda: BRAVE)
     monkeypatch.setattr(rs.state, "last_inserted_window", "brave-browser")
     TYPED.clear()
@@ -292,7 +293,7 @@ def test_no_enter_into_another_window(countdown, monkeypatch):
     """Enter in whatever the user switched to could send something else."""
     pressed, _ = countdown
     start_send("test")
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "konsole")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "konsole")
     monkeypatch.setattr(focused_window, "look", lambda: ("konsole", None))
     sends()[0].fire()
     assert pressed == []
@@ -324,9 +325,10 @@ def test_pressing_the_hold_key_holds_the_send_and_records(countdown, monkeypatch
     pressed, _ = countdown
     start_send("test")
     monkeypatch.setattr(app, "_open_input_stream", lambda idx: None)
-    for name in ("_beep", "_notify", "_notify_tray_recording_state",
+    for name in ("_beep", "_notify_tray_recording_state",
                  "_arm_chunker", "_pause_media_players"):
         monkeypatch.setattr(app, name, lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
     monkeypatch.setattr(app, "recording_indicator", None)
     try:
         assert app.start_recording(False, False, 0) is True
@@ -538,9 +540,10 @@ def test_a_quick_tap_holds_the_send_even_when_recording_starts_slowly(
                         lambda beeps, notify, reason="": reasons.append(reason))
     monkeypatch.setattr(app, "_transcribe_and_inject", lambda *a, **k: dictated.append(1))
     monkeypatch.setattr(app, "_open_input_stream", lambda idx: clock.sleep(start_s))
-    for name in ("_beep", "_notify", "_notify_tray_recording_state", "_arm_chunker",
+    for name in ("_beep", "_notify_tray_recording_state", "_arm_chunker",
                  "_pause_media_players", "_resume_media_players", "_stop_stream_safely"):
         monkeypatch.setattr(app, name, lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
     monkeypatch.setattr(app, "recording_indicator", None)
     monkeypatch.setattr(send_countdown, "_owed", None)
     monkeypatch.setattr(rs.state, "silence", None)
@@ -575,7 +578,7 @@ def test_no_space_into_another_window(countdown, monkeypatch):
     monkeypatch.setattr(send_countdown, "_owed", None)
     start_send("test", " ", "type")
     send_countdown.hold(announce=True)
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "konsole")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "konsole")
     monkeypatch.setattr(focused_window, "look", lambda: ("konsole", None))
     send_countdown.type_owed_space()
     assert TYPED == []
@@ -624,7 +627,7 @@ def test_switching_windows_stops_the_countdown_at_once(countdown, monkeypatch):
     monkeypatch.setattr(screen_message, "relabel", lambda tag, text: relabels.append(text))
     monkeypatch.setattr(send_countdown, "_delay", 4.0)
     start_send("test")
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "konsole")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "konsole")
     monkeypatch.setattr(focused_window, "look", lambda: ("konsole", None))
     ticks = [t for t in FakeTimer.made if t.fn is send_countdown._count_down]
     ticks[0].fire()
@@ -638,7 +641,7 @@ def test_switching_windows_stops_the_countdown_at_once(countdown, monkeypatch):
 def test_switching_in_the_last_second_says_not_sent(countdown, monkeypatch):
     pressed, labels = countdown
     start_send("test")
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "konsole")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "konsole")
     monkeypatch.setattr(focused_window, "look", lambda: ("konsole", None))
     sends()[0].fire()
     assert pressed == [] and labels[-1] == send_countdown.SWITCHED_WINDOW_NOTICE
@@ -678,7 +681,7 @@ def test_a_pause_at_the_end_after_switching_windows_sends_nothing(monkeypatch, k
     from tuxtalk import history
     focus = ["brave-browser", ("compositor", 0x3200007)]
     monkeypatch.setattr(focused_window, "look", lambda: tuple(focus))
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: focus[0])
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: focus[0])
     monkeypatch.setattr(app, "_deliver_text",
                         lambda text, mode, one_block=False, *, where: "ok")
     monkeypatch.setattr(app.time, "sleep", lambda s: None)

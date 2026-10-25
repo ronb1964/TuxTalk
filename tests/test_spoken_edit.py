@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 from tuxtalk import app, edit_notices
+from tuxtalk import keyboard_output
 from tuxtalk import recording_state as rs
 from tuxtalk.voice_edit_rules import spoken_edit
 from tuxtalk import live_settings as live
@@ -51,9 +52,9 @@ def editing(monkeypatch):
             return True
 
     monkeypatch.setattr(live, "voice_editing", True)
-    monkeypatch.setattr(app, "_is_wayland_session", lambda: True)
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.kwrite")
-    monkeypatch.setattr(app, "_output_backend", lambda: Backend())
+    monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
+    monkeypatch.setattr(keyboard_output, "output_backend", lambda: Backend())
     monkeypatch.setattr(app, "_edit_selection",
                         lambda get, beeps, mode, focused, t0, message, spoken=False:
                         edits.append((get(), focused, spoken)) or True)
@@ -102,7 +103,7 @@ def test_nothing_just_typed_means_the_words_are_typed(editing):
 
 def test_a_dictation_in_another_window_isnt_edited(editing, monkeypatch):
     _pressed, edits, _ = editing
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "google-chrome")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "google-chrome")
     assert not _said("Edit that, make it shorter.")
     assert edits == []
 
@@ -116,7 +117,7 @@ def test_off_unless_voice_editing_is_on(editing, monkeypatch):
 
 def test_not_in_a_terminal(editing, monkeypatch):
     pressed, edits, problems = editing
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.konsole")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.konsole")
     monkeypatch.setattr(rs.state, "last_inserted_window", "org.kde.konsole")
     assert _said("Edit that, make it shorter.")
     assert problems == ["terminal"] and pressed == [] and edits == []
@@ -151,7 +152,7 @@ def test_it_is_never_typed_as_text(editing, monkeypatch):
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Edit that, make it shorter.")
     monkeypatch.setattr(app, "_inject_text", lambda text, *a, **k: typed.append(text) or "ok")
     monkeypatch.setattr(app, "_beep", lambda *a: None)
-    monkeypatch.setattr(app, "_notify", lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
     monkeypatch.setattr(live, "voice_navigation", False)
     monkeypatch.setattr(live, "usage_stats", False)
     speech = (np.sin(np.linspace(0, 2000, 16000)) * 8000).astype(np.int16)
@@ -196,12 +197,12 @@ def test_pressing_enter_remembers_the_send(monkeypatch):
     class Backend:
         def press_keys(self, chords, claim=None):
             return True
-    monkeypatch.setattr(app, "_output_backend", lambda: Backend())
+    monkeypatch.setattr(keyboard_output, "output_backend", lambda: Backend())
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     monkeypatch.setattr(rs.state, "sent", None)
-    app._press_key("ENTER", "Send each dictation automatically is on")
+    keyboard_output.press_key("ENTER", "Send each dictation automatically is on")
     assert rs.state.sent["automatic"] is True
-    app._press_key("ENTER", 'said "press enter"')
+    keyboard_output.press_key("ENTER", 'said "press enter"')
     assert rs.state.sent["automatic"] is False
 
 
@@ -220,7 +221,7 @@ def test_an_edit_that_didnt_change_the_text_isnt_sent_as_it_was(editing, monkeyp
     if why == "no rewrite":
         monkeypatch.setattr(app, "_edit_selection", lambda *a, **k: False)
     elif why == "not selected":
-        monkeypatch.setattr(app, "_output_backend", lambda: types.SimpleNamespace(
+        monkeypatch.setattr(keyboard_output, "output_backend", lambda: types.SimpleNamespace(
             press_keys=lambda chords, claim=None: False))
     else:
         raw = "Edit that."

@@ -273,7 +273,7 @@ def test_service_falls_back_to_the_processor_when_the_engine_is_missing(monkeypa
     from tuxtalk import app
     loaded, told = [], []
     monkeypatch.setattr(wv, "is_installed", lambda m: False)
-    monkeypatch.setattr(app, "_notify", lambda *a: told.append(a))
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda *a: told.append(a))
     monkeypatch.setattr("tuxtalk.model_helper.download_model_with_progress",
                         lambda model, device, compute_type, **k: loaded.append(device) or "cpu-model")
     settings = _settings()
@@ -319,7 +319,7 @@ def test_parakeet_on_vulkan_without_its_files_quietly_uses_the_processor(monkeyp
     told = []
     monkeypatch.setattr(wv, "is_installed", lambda m: False)
     monkeypatch.setattr(parakeet_gpu, "ParakeetGpuModel", lambda *a: pytest.fail("started the helper"))
-    monkeypatch.setattr(app, "_notify", lambda *a: told.append(a))
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda *a: told.append(a))
     monkeypatch.setattr("tuxtalk.model_helper.download_model_with_progress",
                         lambda model, device, compute_type, **k: f"parakeet-on-{device}")
     assert app.build_model(_settings(model=PARAKEET_MODEL)) == "parakeet-on-cpu"
@@ -337,7 +337,7 @@ def test_parakeet_falls_back_to_the_processor_when_the_helper_fails(monkeypatch)
     monkeypatch.setattr(wv, "is_installed", lambda m: True)
     monkeypatch.setattr(wv, "find_device", lambda: 0)
     monkeypatch.setattr(parakeet_gpu, "ParakeetGpuModel", broken)
-    monkeypatch.setattr(app, "_notify", lambda *a: told.append(a))
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda *a: told.append(a))
     monkeypatch.setattr("tuxtalk.model_helper.download_model_with_progress",
                         lambda model, device, compute_type, **k: f"parakeet-on-{device}")
     settings = _settings(model=PARAKEET_MODEL)

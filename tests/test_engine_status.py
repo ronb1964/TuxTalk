@@ -72,7 +72,7 @@ def loads(monkeypatch):
     engine the service then says is running."""
     from tuxtalk import app, config, cuda_helper, model_helper, parakeet_gpu, whisper_vulkan
     monkeypatch.setattr(app, "_running_engine", None)
-    monkeypatch.setattr(app, "_notify", lambda *a: None)
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda *a: None)
     monkeypatch.setattr(whisper_vulkan, "is_installed", lambda m: True)
     monkeypatch.setattr(whisper_vulkan, "find_device", lambda: 0)
     monkeypatch.setattr(whisper_vulkan, "VulkanWhisperModel", lambda m, d: "whisper on vulkan")

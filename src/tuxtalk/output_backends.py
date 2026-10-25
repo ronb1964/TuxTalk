@@ -52,20 +52,20 @@ class VirtualKeyboardOutputBackend(OutputBackend):
     """Backend A: app.py's typing on TuxTalk's own virtual keyboard."""
 
     def type_text(self, text: str) -> bool:
-        from . import app
-        return app._type_text(text)
+        from . import keyboard_output
+        return keyboard_output.type_text(text)
 
     def select_all_delete(self) -> bool:
-        from . import app
-        return app._send_select_all_delete()
+        from . import keyboard_output
+        return keyboard_output.send_select_all_delete()
 
     def backspaces(self, count: int) -> bool:
-        from . import app
-        return app._send_backspaces(count)
+        from . import keyboard_output
+        return keyboard_output.send_backspaces(count)
 
     def press_keys(self, chords, claim=None) -> bool:
-        from . import app
-        return app._send_chords(chords, claim)
+        from . import keyboard_output
+        return keyboard_output.send_chords(chords, claim)
 
 
 class LibeiOutputBackend(OutputBackend):

@@ -155,7 +155,7 @@ def start() -> bool:
 def send(events, delay_ms: float = KEY_DELAY_MS, before_press=None, claim=None) -> bool:
     """Press and release keys: *events* is [(evdev key code, 1 down / 0 up)].
     *before_press*, if given, is called before each key goes down, and
-    returns None or a function that waits (app._send_keys: until a Right
+    returns None or a function that waits (keyboard_output.send_keys: until a Right
     Ctrl dictation key is let go) and may raise GaveUp; that runs with the
     keyboard free for others (_unlocked), and the keys are looked at again
     once it has the keyboard back: one pressed meanwhile is waited for too.

@@ -69,7 +69,7 @@ def test_no_input_group_does_not_crash(host, monkeypatch):
 def test_failed_notice_names_the_cause(monkeypatch):
     from tuxtalk import app
     shown = []
-    monkeypatch.setattr(app, "_notify", lambda title, body: shown.append(body))
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: shown.append(body))
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
     monkeypatch.setattr(U, "typing_blocked_reason", lambda: U.TYPING_NO_PERMISSION)
 
@@ -83,7 +83,7 @@ def test_failed_notice_without_a_known_cause_is_unchanged(monkeypatch):
     from tuxtalk import app, delivery_notices
     monkeypatch.setattr(live, "paste_last_hotkey", "")   # its hint is tested in test_paste_last
     shown = []
-    monkeypatch.setattr(app, "_notify", lambda title, body: shown.append(body))
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: shown.append(body))
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
     monkeypatch.setattr(U, "typing_blocked_reason", lambda: None)
 

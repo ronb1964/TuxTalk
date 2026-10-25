@@ -22,6 +22,7 @@ without that a terminal is indistinguishable from anything else.
 import pytest
 
 from tuxtalk import app, focused_window
+from tuxtalk import keyboard_output
 
 
 @pytest.fixture
@@ -30,9 +31,9 @@ def paste_spy(monkeypatch):
     pasted = []
     breaks = []
 
-    monkeypatch.setattr(app, "_paste_text", lambda t: pasted.append(t) or True)
-    monkeypatch.setattr(app, "_send_shift_enter", lambda: breaks.append(1) or True)
-    monkeypatch.setattr(app, "_type_text", lambda t: pasted.append(("typed", t)) or True)
+    monkeypatch.setattr(keyboard_output, "paste_text", lambda t: pasted.append(t) or True)
+    monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: breaks.append(1) or True)
+    monkeypatch.setattr(keyboard_output, "type_text", lambda t: pasted.append(("typed", t)) or True)
     return pasted, breaks
 
 
@@ -92,8 +93,8 @@ def test_new_line_in_kwrite_is_pasted_not_a_shift_enter(window, monkeypatch):
     monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
     monkeypatch.setattr(focused_window, "look", lambda: (window, None))
     pasted, keys = [], []
-    monkeypatch.setattr(app, "_paste_text", lambda t: pasted.append(t) or True)
-    monkeypatch.setattr(app, "_send_shift_enter", lambda: keys.append("shift+enter") or True)
+    monkeypatch.setattr(keyboard_output, "paste_text", lambda t: pasted.append(t) or True)
+    monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: keys.append("shift+enter") or True)
 
     assert app._inject_text("$45.\xa7SHIFT_ENTER\xa7$25. ", "auto") == "ok"
     assert pasted == ["$45.\n$25. "]
@@ -107,8 +108,8 @@ def test_new_line_in_a_chat_app_is_still_shift_enter(monkeypatch):
     monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
     monkeypatch.setattr(focused_window, "look", lambda: ("discord", None))
     pasted, keys = [], []
-    monkeypatch.setattr(app, "_paste_text", lambda t: pasted.append(t) or True)
-    monkeypatch.setattr(app, "_send_shift_enter", lambda: keys.append("shift+enter") or True)
+    monkeypatch.setattr(keyboard_output, "paste_text", lambda t: pasted.append(t) or True)
+    monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: keys.append("shift+enter") or True)
 
     assert app._inject_text("one\xa7SHIFT_ENTER\xa7two", "auto") == "ok"
     assert pasted == ["one", "two"]
@@ -124,6 +125,6 @@ def test_a_paste_with_line_breaks_asks_which_window_only_before_and_after(monkey
     monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
     monkeypatch.setattr(focused_window, "look",
                         lambda: looks.append(1) or ("org.kde.kwrite", None))
-    monkeypatch.setattr(app, "_paste_text", lambda t: True)
+    monkeypatch.setattr(keyboard_output, "paste_text", lambda t: True)
     assert app._inject_text("$45.\xa7SHIFT_ENTER\xa7$25. ", "auto") == "ok"
     assert len(looks) == 2

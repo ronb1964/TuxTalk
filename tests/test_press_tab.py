@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 from tuxtalk import app, libei_ctypes
+from tuxtalk import keyboard_output
 from tuxtalk import recording_state as rs
 from tuxtalk.key_commands import split_key_command
 from tuxtalk import live_settings as live
@@ -41,10 +42,10 @@ def _dictate(monkeypatch, raw, window="brave-browser"):
     events = []
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, language: raw)
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: window)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: window)
     monkeypatch.setattr(app, "_inject_text",
                         lambda text, mode, **kw: events.append(("typed", text)) or "ok")
-    monkeypatch.setattr(app, "_press_key",
+    monkeypatch.setattr(keyboard_output, "press_key",
                         lambda key, why, claim=None: events.append((key, why)) or True)
     frames = [(np.ones(app.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
     app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=False,
@@ -122,11 +123,11 @@ def test_pressing_tab_goes_through_the_output_backend_and_forgets_undo(monkeypat
         def press_keys(self, chords, claim=None):
             pressed.append(chords)
             return True
-    monkeypatch.setattr(app, "_output_backend", lambda: Backend())
+    monkeypatch.setattr(keyboard_output, "output_backend", lambda: Backend())
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     monkeypatch.setattr(rs.state, "last_inserted_text", "John")
     monkeypatch.setattr(rs.state, "sent", None)
-    assert app._press_key("TAB", 'said "press tab"') is True
+    assert keyboard_output.press_key("TAB", 'said "press tab"') is True
     assert pressed == [[((), "TAB")]]
     assert rs.state.last_inserted_text == "" and rs.state.sent is None
 
@@ -138,16 +139,16 @@ def test_a_key_that_couldnt_be_pressed_leaves_undo_and_no_send(monkeypatch, key)
     class Backend:
         def press_keys(self, chords, claim=None):
             return False
-    monkeypatch.setattr(app, "_output_backend", lambda: Backend())
+    monkeypatch.setattr(keyboard_output, "output_backend", lambda: Backend())
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     monkeypatch.setattr(rs.state, "last_inserted_text", "John")
     monkeypatch.setattr(rs.state, "sent", None)
-    assert app._press_key(key, "test") is False
+    assert keyboard_output.press_key(key, "test") is False
     assert rs.state.last_inserted_text == "John" and rs.state.sent is None
 
 
 def test_both_typing_paths_know_the_tab_key():
-    assert app._nav_keycode("TAB") == 15
+    assert keyboard_output.nav_keycode("TAB") == 15
     assert libei_ctypes._CHORD_KEYS["TAB"] == 15
 
 
@@ -192,8 +193,8 @@ def test_four_spaces_kept_back_by_a_stuck_key_say_so(monkeypatch):
     instead must too, or the box looks as if nothing was heard."""
     from tuxtalk import delivery_notices
     notes = []
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "com.anthropic.Claude")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "com.anthropic.Claude")
     monkeypatch.setattr(app, "_inject_text", lambda text, mode, **kw: "key_held")
-    monkeypatch.setattr(app, "_notify", lambda title, body: notes.append((title, body)))
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: notes.append((title, body)))
     app._press_said("TAB", None)
     assert notes == [delivery_notices.key_not_pressed("TAB")]

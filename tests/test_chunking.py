@@ -15,6 +15,7 @@ from tuxtalk import focused_window
 from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
 from tuxtalk import keyboard_grab
+from tuxtalk import keyboard_output
 
 SR = 16000
 BLOCK = 320   # 20 ms at 16 kHz
@@ -386,8 +387,8 @@ def pipeline(monkeypatch):
 
     monkeypatch.setattr(app, "_inject_text", fake_inject)
     monkeypatch.setattr(app, "_beep", lambda enabled, *tone: beeps.append(tone))
-    monkeypatch.setattr(app, "_notify", lambda *a, **k: None)
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
     monkeypatch.setattr(live, "adapt_to_app", False)
     monkeypatch.setattr(live, "usage_stats", False)
     monkeypatch.setattr(history, "add_entry", lambda text, replaces=None: None)
@@ -508,10 +509,9 @@ def test_a_line_break_is_not_held_back():
 def test_a_command_after_a_pause_sees_the_finished_chunk(pipeline, monkeypatch):
     """'delete last sentence' must delete the chunk before it, mark and all."""
     from types import SimpleNamespace
-    from tuxtalk import app
     texts, typed, _ = pipeline
     erased = []
-    monkeypatch.setattr(app, "_output_backend",
+    monkeypatch.setattr(keyboard_output, "output_backend",
                         lambda: SimpleNamespace(backspaces=lambda n: (erased.append(n), True)[1]))
     texts.extend(["we meet.", "delete last sentence", "we meet. Delete last sentence."])
     call(frames_of(speech(1.0)), "middle")
@@ -823,12 +823,11 @@ class FakeAI:
 def ai_on(pipeline, monkeypatch):
     """`pipeline` with AI self-corrections on and backspaces recorded."""
     from types import SimpleNamespace
-    from tuxtalk import app
     ai = FakeAI()
     erased = []
     monkeypatch.setattr(live, "ai_corrections", True)
     monkeypatch.setattr(live, "ai_engine", ai)
-    monkeypatch.setattr(app, "_output_backend",
+    monkeypatch.setattr(keyboard_output, "output_backend",
                         lambda: SimpleNamespace(backspaces=lambda n: (erased.append(n), True)[1]))
     monkeypatch.setattr(rs.state, "held_cue", "")
     monkeypatch.setattr(rs.state, "last_inserted_window", None)
@@ -900,12 +899,11 @@ def test_ai_unchanged_types_the_phrase_as_said(ai_on):
 
 
 def test_correction_never_reaches_into_another_window(ai_on, monkeypatch):
-    from tuxtalk import app
     texts, typed, erased, _ = ai_on
     texts.extend(["meet at three.", "no wait, four.", "meet at three. No wait, four."])
     call(frames_of(speech(1.0)), "middle")
     rs.state.last_inserted_window = "kwrite"
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "konsole")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "konsole")
     call(frames_of(speech(1.0)), "middle")
     assert erased == []
     assert typed[-1] == "No wait, four"
@@ -1035,7 +1033,7 @@ def test_fix_that_word_after_a_delete_gets_what_is_left(fix_word, monkeypatch):
     from types import SimpleNamespace
     from tuxtalk import app
     texts, typed, opened = fix_word
-    monkeypatch.setattr(app, "_output_backend",
+    monkeypatch.setattr(keyboard_output, "output_backend",
                         lambda: SimpleNamespace(backspaces=lambda n: True))
     texts.extend(["we meet.", "the end is near.", "we meet. The end is near."])
     call(frames_of(speech(1.0)), "middle", auto_period=True)
@@ -1091,14 +1089,13 @@ def test_fix_that_word_after_a_voice_move_gets_the_last_phrase(fix_word, monkeyp
 @pytest.fixture
 def enter(pipeline, monkeypatch):
     """The pipeline, with Enter presses recorded among the typing as "<ENTER>"."""
-    from tuxtalk import app
     texts, typed, beeps = pipeline
 
     def fake_enter(key, why, claim=None):
         typed.append(f"<{key}>")
         rs.state.last_inserted_text = ""
         return True
-    monkeypatch.setattr(app, "_press_key", fake_enter)
+    monkeypatch.setattr(keyboard_output, "press_key", fake_enter)
     monkeypatch.setattr(live, "press_enter_after", False)
     monkeypatch.setattr(rs.state, "held_cue", "")
     return texts, typed, beeps
@@ -1120,9 +1117,8 @@ def test_press_enter_at_the_end_of_a_phrase_sends_it(enter):
 def test_an_enter_that_couldnt_be_pressed_leaves_the_message_open(enter, monkeypatch):
     """A Right Ctrl stuck down stopped the Enter: the phrase is still in the
     box, so "edit that" must still reach all of it, not start afresh."""
-    from tuxtalk import app
     texts, typed, _ = enter
-    monkeypatch.setattr(app, "_press_key", lambda key, why, claim=None: False)
+    monkeypatch.setattr(keyboard_output, "press_key", lambda key, why, claim=None: False)
     monkeypatch.setattr(rs.state, "recording_serial", 7)
     texts.extend(["see you at noon, press enter", "press enter"])
     call(frames_of(speech(1.0)), "middle", auto_period=True)
@@ -1271,10 +1267,9 @@ def test_a_held_mark_stays_in_the_window_its_phrase_went_to(pipeline, monkeypatc
     """Ron, 2026-10-17: "What's next" typed into the wrong window, a click into
     the chat, "What's next" again: the chat got "? What's next". The first
     phrase's held "?" belongs in the first window; the chat starts afresh."""
-    from tuxtalk import app
     texts, typed, _ = pipeline
     focus = {"now": "brave-browser"}
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: focus["now"])
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: focus["now"])
     monkeypatch.setattr(focused_window, "look", lambda: (focus["now"], None))
     texts.extend(["what's next?", "what's next?"])
     call(frames_of(speech(1.0)), "middle", auto_period=True)

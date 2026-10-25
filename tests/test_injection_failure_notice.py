@@ -16,6 +16,7 @@ import pytest
 
 from tuxtalk import app, focused_window, window_classes
 from tuxtalk import live_settings as live
+from tuxtalk import keyboard_output
 
 MARKER = "\xa7SHIFT_ENTER\xa7"
 
@@ -24,8 +25,8 @@ MARKER = "\xa7SHIFT_ENTER\xa7"
 def quiet(monkeypatch):
     """No real tools, sleeps, focus lookups or Electron detection."""
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
-    monkeypatch.setattr(app, "_send_shift_enter", lambda: True)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
+    monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: True)
     monkeypatch.delenv("FLATPAK_ID", raising=False)
 
 
@@ -37,36 +38,36 @@ def _paste_mode(monkeypatch):
 
 def test_a_paste_that_lands_is_ok(monkeypatch, quiet):
     _paste_mode(monkeypatch)
-    monkeypatch.setattr(app, "_paste_text", lambda *a, **k: True)
+    monkeypatch.setattr(keyboard_output, "paste_text", lambda *a, **k: True)
     assert app._inject_text("hello", "auto") == "ok"
 
 
 def test_nothing_landing_is_failed(monkeypatch, quiet):
     """Paste unavailable on X11, then typing fails too."""
     _paste_mode(monkeypatch)
-    monkeypatch.setattr(app, "_paste_text", lambda *a, **k: False)
-    monkeypatch.setattr(app, "_type_text", lambda t: False)
+    monkeypatch.setattr(keyboard_output, "paste_text", lambda *a, **k: False)
+    monkeypatch.setattr(keyboard_output, "type_text", lambda t: False)
     assert app._inject_text("Привіт", "auto") == "failed"
 
 
 def test_typing_that_lands_after_a_refused_paste_is_ok(monkeypatch, quiet):
     _paste_mode(monkeypatch)
-    monkeypatch.setattr(app, "_paste_text", lambda *a, **k: False)
-    monkeypatch.setattr(app, "_type_text", lambda t: True)
+    monkeypatch.setattr(keyboard_output, "paste_text", lambda *a, **k: False)
+    monkeypatch.setattr(keyboard_output, "type_text", lambda t: True)
     assert app._inject_text("hello", "auto") == "ok"
 
 
 def test_some_chunks_landing_is_partial(monkeypatch, quiet):
     _paste_mode(monkeypatch)
-    monkeypatch.setattr(app, "_paste_text", lambda part, *a, **k: part != "third")
-    monkeypatch.setattr(app, "_type_text", lambda t: False)
+    monkeypatch.setattr(keyboard_output, "paste_text", lambda part, *a, **k: part != "third")
+    monkeypatch.setattr(keyboard_output, "type_text", lambda t: False)
     text = MARKER.join(["first", "second", "third"])
     assert app._inject_text(text, "auto") == "partial"
 
 
 def test_type_mode_failure_is_failed(monkeypatch, quiet):
     monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("type", "test"))
-    monkeypatch.setattr(app, "_type_text", lambda t: False)
+    monkeypatch.setattr(keyboard_output, "type_text", lambda t: False)
     assert app._inject_text("hello", "type") == "failed"
 
 
@@ -74,19 +75,19 @@ def test_type_mode_failure_is_failed(monkeypatch, quiet):
 def electron(monkeypatch, quiet):
     """Claude Desktop focused: typed, not pasted."""
     cls = next(iter(window_classes.ELECTRON_PASTE_BROKEN_CLASSES))
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: cls)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: cls)
     monkeypatch.setattr(focused_window, "look", lambda: (cls, None))
     _paste_mode(monkeypatch)
 
 
 def test_typing_into_electron_that_lands_is_ok(monkeypatch, electron):
-    monkeypatch.setattr(app, "_type_text_raw", lambda t: True)
+    monkeypatch.setattr(keyboard_output, "type_text_raw", lambda t: True)
     assert app._inject_text("hello", "auto") == "ok"
 
 
 def test_typing_into_electron_stopping_partway_is_partial(monkeypatch, electron):
     calls = []
-    monkeypatch.setattr(app, "_type_text_raw", lambda t: calls.append(t) or len(calls) == 1)
+    monkeypatch.setattr(keyboard_output, "type_text_raw", lambda t: calls.append(t) or len(calls) == 1)
     assert app._inject_text(MARKER.join(["first", "second"]), "auto") == "partial"
 
 
@@ -98,7 +99,7 @@ def dictation(monkeypatch):
     notes, beeps = [], []
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, language: "hello there")
     monkeypatch.setattr(app, "_prepare_text", lambda raw, *a, **k: "Hello there. ")
-    monkeypatch.setattr(app, "_notify", lambda title, body: notes.append(f"{title}\n{body}"))
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: notes.append(f"{title}\n{body}"))
     monkeypatch.setattr(app, "_beep", lambda enabled, *tone, **k: enabled and beeps.append(tone))
     monkeypatch.setattr("tuxtalk.history.add_entry", lambda text: None)
     monkeypatch.setattr(live, "usage_stats", False, raising=False)

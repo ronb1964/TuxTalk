@@ -16,6 +16,7 @@ import gi
 import pytest
 from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
+from tuxtalk import keyboard_output
 
 # No program a test starts can reach the speakers, nor this one. Every
 # program inherits this, so a child Python's sounddevice, a player started
@@ -123,7 +124,7 @@ def _hold_back_notifications():
     """Desktop notifications from tests must never reach the user's desktop.
 
     Patched here, at conftest import, so it covers module-level code too;
-    tests that check a message stub app._notify themselves.
+    tests that check a message stub tuxtalk.notify.notify themselves.
     """
     from tuxtalk import notify
 
@@ -799,8 +800,9 @@ def service_main(monkeypatch):
         return lambda *a, **k: done.append(name) or result
 
     for name in ("model", "_gtk_loop_running", "dbus_service", "recording_indicator",
-                 "_spectrum_processor", "_key_delay_ms"):
+                 "_spectrum_processor"):
         monkeypatch.setattr(app, name, getattr(app, name))
+    monkeypatch.setattr(keyboard_output, "key_delay_ms", keyboard_output.key_delay_ms)
     for name in ("log_transcripts", "usage_stats", "restore_clipboard", "pause_media",
                  "duck_audio", "paste_last_hotkey", "commands", "words"):
         monkeypatch.setattr(live, name, getattr(live, name))

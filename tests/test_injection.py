@@ -15,6 +15,7 @@ import subprocess
 import pytest
 
 from tuxtalk import app, focused_window
+from tuxtalk import keyboard_output
 from tuxtalk import recording_state as rs
 
 
@@ -78,8 +79,8 @@ class _FakeStdin:
 def wayland(monkeypatch):
     """A working Wayland session with both tools present."""
     monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
-    monkeypatch.setattr(app, "_which", lambda name: f"/usr/bin/{name}")
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
+    monkeypatch.setattr(keyboard_output, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
 
 
@@ -95,27 +96,27 @@ def no_keyboard(monkeypatch):
 def test_paste_reports_failure_without_a_keyboard_to_press_ctrl_v(monkeypatch, wayland, no_keyboard):
     """Reporting a paste that never happened as success would make the undo
     buffer record text the document never got."""
-    monkeypatch.setattr(app.subprocess, "Popen", lambda *a, **k: FakePopen(returncode=0))
-    monkeypatch.setattr(app.subprocess, "run", lambda *a, **k: FakeCompleted(returncode=0))
+    monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda *a, **k: FakePopen(returncode=0))
+    monkeypatch.setattr(keyboard_output.subprocess, "run", lambda *a, **k: FakeCompleted(returncode=0))
 
-    assert app._paste_text("hello") is False
+    assert keyboard_output.paste_text("hello") is False
 
 
 def test_paste_reports_failure_when_the_clipboard_tool_dies(monkeypatch, wayland):
     """If wl-copy can't reach the compositor the clipboard was never set —
     pressing Ctrl+V then pastes whatever the user had copied earlier."""
-    monkeypatch.setattr(app.subprocess, "Popen", lambda *a, **k: FakePopen(returncode=1))
-    monkeypatch.setattr(app.subprocess, "run", lambda *a, **k: FakeCompleted(returncode=0))
+    monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda *a, **k: FakePopen(returncode=1))
+    monkeypatch.setattr(keyboard_output.subprocess, "run", lambda *a, **k: FakeCompleted(returncode=0))
 
-    assert app._paste_text("hello") is False
+    assert keyboard_output.paste_text("hello") is False
 
 
 def test_paste_reports_success_when_the_clipboard_is_set_and_ctrl_v_sent(monkeypatch, wayland, keyboard):
-    monkeypatch.setattr(app.subprocess, "Popen", lambda *a, **k: FakePopen(returncode=0))
-    monkeypatch.setattr(app.subprocess, "run", lambda *a, **k: FakeCompleted(returncode=0))
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.kwrite")
+    monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda *a, **k: FakePopen(returncode=0))
+    monkeypatch.setattr(keyboard_output.subprocess, "run", lambda *a, **k: FakeCompleted(returncode=0))
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
 
-    assert app._paste_text("hello") is True
+    assert keyboard_output.paste_text("hello") is True
     assert keyboard.events == [(29, 1), (47, 1), (47, 0), (29, 0)]     # Ctrl+V
 
 
@@ -124,20 +125,20 @@ def test_paste_waits_for_wl_copy_to_set_the_clipboard(monkeypatch, wayland, keyb
     has not got that far, so Ctrl+V would paste the old clipboard contents,
     and killing it afterwards would stop it before it could serve the new one."""
     proc = FakePopen(returncode=None)
-    monkeypatch.setattr(app.subprocess, "Popen", lambda *a, **k: proc)
-    monkeypatch.setattr(app.subprocess, "run", lambda *a, **k: FakeCompleted(returncode=0))
+    monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda *a, **k: proc)
+    monkeypatch.setattr(keyboard_output.subprocess, "run", lambda *a, **k: FakeCompleted(returncode=0))
 
-    assert app._paste_text("hello") is False
+    assert keyboard_output.paste_text("hello") is False
     assert not keyboard.events, "pasted before the clipboard held the dictation"
     assert proc.terminated, "a stuck wl-copy was left running"
 
 
 def test_a_wl_copy_that_handed_off_is_not_killed(monkeypatch, wayland):
     proc = FakePopen(returncode=0)
-    monkeypatch.setattr(app.subprocess, "Popen", lambda *a, **k: proc)
-    monkeypatch.setattr(app.subprocess, "run", lambda *a, **k: FakeCompleted(returncode=0))
+    monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda *a, **k: proc)
+    monkeypatch.setattr(keyboard_output.subprocess, "run", lambda *a, **k: FakeCompleted(returncode=0))
 
-    assert app._paste_text("hello") is True
+    assert keyboard_output.paste_text("hello") is True
     assert not proc.terminated
 
 
@@ -145,20 +146,20 @@ def test_paste_is_refused_outside_a_wayland_session(monkeypatch, keyboard):
     """On an X11 login the clipboard tool fails instantly, and sending Ctrl+V
     anyway would paste the user's previous clipboard contents into their document."""
     monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
-    monkeypatch.setattr(app, "_which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(keyboard_output, "which", lambda name: f"/usr/bin/{name}")
 
-    assert app._paste_text("hello") is False
+    assert keyboard_output.paste_text("hello") is False
     assert not keyboard.events, "sent a paste keystroke on a session where the clipboard was never set"
 
 
 # --- backspaces must report whether they landed ----------------------------
 
 def test_send_backspaces_reports_failure_without_a_keyboard(wayland, no_keyboard):
-    assert app._send_backspaces(5) is False
+    assert keyboard_output.send_backspaces(5) is False
 
 
 def test_send_backspaces_presses_backspace_that_many_times(wayland, keyboard):
-    assert app._send_backspaces(5) is True
+    assert keyboard_output.send_backspaces(5) is True
     assert keyboard.typed_keys() == [14] * 5
 
 
@@ -175,11 +176,11 @@ def test_failed_chunk_only_retypes_the_remainder(monkeypatch, wayland):
         pasted.append(part)
         return part != "third"  # third chunk fails
 
-    monkeypatch.setattr(app, "_paste_text", fake_paste)
-    monkeypatch.setattr(app, "_type_text", lambda t: typed.append(t) or True)
-    monkeypatch.setattr(app, "_send_shift_enter", lambda: True)
+    monkeypatch.setattr(keyboard_output, "paste_text", fake_paste)
+    monkeypatch.setattr(keyboard_output, "type_text", lambda t: typed.append(t) or True)
+    monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: True)
     monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
 
     marker = "\xa7SHIFT_ENTER\xa7"
     text = marker.join(["first", "second", "third", "fourth"])
@@ -198,10 +199,10 @@ def test_undo_buffer_records_only_what_actually_landed(monkeypatch, wayland):
     own writing. A failed typing run may have typed part of the text before it
     stopped, so neither this dictation nor the previous one is a safe length
     to delete: the buffer is emptied, and undo then deletes nothing."""
-    monkeypatch.setattr(app, "_paste_text", lambda *a, **k: False)
-    monkeypatch.setattr(app, "_type_text", lambda t: False)
+    monkeypatch.setattr(keyboard_output, "paste_text", lambda *a, **k: False)
+    monkeypatch.setattr(keyboard_output, "type_text", lambda t: False)
     monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
     rs.state.last_inserted_text = "previous dictation"
 
     app._inject_text("brand new text", "paste")
@@ -211,9 +212,9 @@ def test_undo_buffer_records_only_what_actually_landed(monkeypatch, wayland):
 
 
 def test_undo_buffer_updates_on_a_successful_injection(monkeypatch, wayland):
-    monkeypatch.setattr(app, "_paste_text", lambda *a, **k: True)
+    monkeypatch.setattr(keyboard_output, "paste_text", lambda *a, **k: True)
     monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
     rs.state.last_inserted_text = "previous"
 
     app._inject_text("brand new text", "paste")
@@ -226,7 +227,7 @@ def test_undo_buffer_updates_on_a_successful_injection(monkeypatch, wayland):
 @pytest.fixture
 def undo_env(monkeypatch):
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
-    monkeypatch.setattr(app, "_notify", lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
     rs.state.last_inserted_text = "hello world"
     rs.state.continue_mid_sentence = False
     yield
@@ -236,7 +237,7 @@ def undo_env(monkeypatch):
 def test_undo_leaves_its_buffer_alone_when_the_backspaces_fail(monkeypatch, undo_env):
     """Otherwise TuxTalk reports a successful undo, nothing is deleted, and the
     next undo deletes that many characters of the user's own writing."""
-    monkeypatch.setattr(app, "_send_backspaces", lambda count: False)
+    monkeypatch.setattr(keyboard_output, "send_backspaces", lambda count: False)
 
     app._handle_undo("undo last word", beeps_on=False, notify_on=False)
 
@@ -244,7 +245,7 @@ def test_undo_leaves_its_buffer_alone_when_the_backspaces_fail(monkeypatch, undo
 
 
 def test_undo_shrinks_its_buffer_when_the_backspaces_land(monkeypatch, undo_env):
-    monkeypatch.setattr(app, "_send_backspaces", lambda count: True)
+    monkeypatch.setattr(keyboard_output, "send_backspaces", lambda count: True)
 
     app._handle_undo("undo last word", beeps_on=False, notify_on=False)
 
@@ -258,24 +259,24 @@ def test_type_text_reports_failure_when_the_shift_enter_key_fails(monkeypatch):
     between them, so _type_text must check what the key returns as well as
     the text parts. Otherwise the undo buffer counts a line break the
     document never got, and "undo that" backspaces into the user's own text."""
-    monkeypatch.setattr(app, "_type_text_raw", lambda t: True)
-    monkeypatch.setattr(app, "_send_shift_enter", lambda: False)
+    monkeypatch.setattr(keyboard_output, "type_text_raw", lambda t: True)
+    monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: False)
 
-    assert app._type_text("hello§SHIFT_ENTER§world") is False
+    assert keyboard_output.type_text("hello§SHIFT_ENTER§world") is False
 
 
 def test_type_text_reports_success_when_every_part_lands(monkeypatch):
-    monkeypatch.setattr(app, "_type_text_raw", lambda t: True)
-    monkeypatch.setattr(app, "_send_shift_enter", lambda: True)
+    monkeypatch.setattr(keyboard_output, "type_text_raw", lambda t: True)
+    monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: True)
 
-    assert app._type_text("hello§SHIFT_ENTER§world") is True
+    assert keyboard_output.type_text("hello§SHIFT_ENTER§world") is True
 
 
 def test_type_text_still_reports_failure_when_a_text_part_fails(monkeypatch):
-    monkeypatch.setattr(app, "_type_text_raw", lambda t: False)
-    monkeypatch.setattr(app, "_send_shift_enter", lambda: True)
+    monkeypatch.setattr(keyboard_output, "type_text_raw", lambda t: False)
+    monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: True)
 
-    assert app._type_text("hello§SHIFT_ENTER§world") is False
+    assert keyboard_output.type_text("hello§SHIFT_ENTER§world") is False
 
 
 def test_injection_method_forces_type_in_flatpak(monkeypatch):
@@ -304,7 +305,7 @@ def test_auto_mode_pastes_without_scanning_processes(monkeypatch):
 
     def no_subprocess(*a, **k):
         raise AssertionError("auto mode must not start a process")
-    monkeypatch.setattr(app.subprocess, "run", no_subprocess)
+    monkeypatch.setattr(keyboard_output.subprocess, "run", no_subprocess)
 
     assert app._determine_injection_method("auto")[0] == "paste"
 
@@ -318,9 +319,9 @@ MARK = "\xa7SHIFT_ENTER\xa7"
 
 def _typing_into(monkeypatch, window_class, mode="type"):
     typed = []
-    monkeypatch.setattr(app, "_type_text", lambda t: typed.append(t) or True)
+    monkeypatch.setattr(keyboard_output, "type_text", lambda t: typed.append(t) or True)
     monkeypatch.setattr(app, "_determine_injection_method", lambda m: (mode, "test"))
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: window_class)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: window_class)
     monkeypatch.setattr(focused_window, "look", lambda: (window_class, None))
     return typed
 
@@ -347,7 +348,7 @@ def test_typed_line_breaks_stay_line_breaks_in_other_apps(monkeypatch):
 
 def test_the_typed_remainder_after_a_failed_paste_has_no_breaks_in_a_terminal(monkeypatch, wayland):
     typed = _typing_into(monkeypatch, "org.kde.konsole", mode="paste")
-    monkeypatch.setattr(app, "_paste_text", lambda *a, **k: False)
+    monkeypatch.setattr(keyboard_output, "paste_text", lambda *a, **k: False)
     app._inject_text(f"First line.{MARK}Second line.", "paste")
     assert typed and all(MARK not in t and "\n" not in t for t in typed)
 
@@ -365,9 +366,9 @@ def _focus_moves_on_paste(monkeypatch, before, after):
         focus["now"] = after
         return True
 
-    monkeypatch.setattr(app, "_paste_text", fake_paste)
+    monkeypatch.setattr(keyboard_output, "paste_text", fake_paste)
     monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: focus["now"])
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: focus["now"])
     monkeypatch.setattr(focused_window, "look", lambda: (focus["now"], None))
 
 
@@ -391,7 +392,7 @@ def test_a_tab_said_mid_sentence_is_four_spaces_in_claude_desktop_however_it_typ
     """With Keystroke Typing too: a real Tab there jumps to the Send button,
     and the next space typed sends the message halfway through."""
     typed = _typing_into(monkeypatch, "com.anthropic.Claude", mode="type")
-    monkeypatch.setattr(app, "_type_text_raw", lambda t: typed.append(t) or True)
+    monkeypatch.setattr(keyboard_output, "type_text_raw", lambda t: typed.append(t) or True)
     assert app._inject_text("Name\taddress. ", mode) == "ok"
     assert typed == ["Name    address. "]
     assert rs.state.last_inserted_text == "Name    address. "

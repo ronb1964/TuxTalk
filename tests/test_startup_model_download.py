@@ -33,7 +33,7 @@ def test_missing_cuda_files_use_the_processor_instead_of_crashing(monkeypatch):
     loaded, notes = [], []
     monkeypatch.setattr(model_helper, "download_model_with_progress",
                         lambda *a, **k: loaded.append(k.get("device")) or object())
-    monkeypatch.setattr(app, "_notify", lambda *a: notes.append(a))
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda *a: notes.append(a))
     settings = _settings(device="cuda")
     app.build_model(settings)
     assert loaded == ["cpu"]
@@ -124,7 +124,7 @@ def test_cancel_falls_back_to_a_downloaded_model_and_saves_it(monkeypatch):
     monkeypatch.setattr(cuda_helper, "has_cuda_libraries", lambda: False)
     monkeypatch.setattr(config, "load_config", lambda: SimpleNamespace(model="parakeet-v3"))
     monkeypatch.setattr(config, "save_config", lambda cfg: saved.append(cfg.model))
-    monkeypatch.setattr(app, "_notify", lambda title, body: notes.append(f"{title}\n{body}"))
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: notes.append(f"{title}\n{body}"))
 
     settings = _settings(model="parakeet-v3", device="cpu")
     assert app._build_model_or_exit(settings) == "model:small"
@@ -195,7 +195,7 @@ def test_power_saving_never_opens_a_download_off_the_gtk_thread(monkeypatch):
     monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda m: False)
     monkeypatch.setattr(model_helper, "message_dialog", no_dialogs)
     monkeypatch.setattr(model_helper.Gtk, "Dialog", no_dialogs)
-    monkeypatch.setattr(app, "_notify", lambda title, body: shown.append(body))
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: shown.append(body))
     assert app._wake_model() is None
     assert shown and "Restart Service" in shown[0]
 
@@ -232,7 +232,7 @@ def test_a_model_that_wont_load_falls_back_without_replacing_the_choice(monkeypa
     monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda m: m in ("small", "medium"))
     monkeypatch.setattr(cuda_helper, "has_cuda_libraries", lambda: False)
     monkeypatch.setattr(config, "save_config", lambda cfg: saved.append(cfg.model))
-    monkeypatch.setattr(app, "_notify", lambda title, body: notes.append(f"{title}\n{body}"))
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: notes.append(f"{title}\n{body}"))
 
     settings = _settings(model="medium", device="cpu")
     assert app._build_model_or_exit(settings) == "model:small"

@@ -1,6 +1,6 @@
 {
  "files": {
-  "app.py": 4459,
+  "app.py": 4003,
   "tray.py": 2477,
   "welcome_dialog.py": 3222
  },
@@ -11,7 +11,7 @@
   "ai_cleanup.py::_model_path::swallowed_error": 1,
   "ai_cleanup.py::fix_self_corrections::long_line": 1,
   "ai_cleanup.py::make_engine_download_func.download::undocumented": 1,
-  "app.py::<module>::long_line": 2,
+  "app.py::<module>::long_line": 1,
   "app.py::<module>::undocumented": 1,
   "app.py::_build_model_or_exit::swallowed_error": 1,
   "app.py::_build_parakeet_gpu_model::swallowed_error": 1,
@@ -28,8 +28,6 @@
   "app.py::_notify_tray_hotkey_pressed::swallowed_error": 1,
   "app.py::_notify_tray_recording_state::swallowed_error": 1,
   "app.py::_notify_tray_running_engine::swallowed_error": 1,
-  "app.py::_paste_text::long_line": 1,
-  "app.py::_paste_text::swallowed_error": 1,
   "app.py::_rediscover_devices::swallowed_error": 1,
   "app.py::_report_undelivered::swallowed_error": 1,
   "app.py::_resample_audio::long_line": 1,
@@ -370,9 +368,6 @@
    "decisions": 27,
    "lines": 162
   },
-  "app.py::_paste_text": {
-   "decisions": 18
-  },
   "app.py::_prepare_text": {
    "decisions": 17
   },
@@ -383,7 +378,7 @@
    "decisions": 20
   },
   "app.py::_transcribe_and_inject": {
-   "decisions": 62,
+   "decisions": 60,
    "lines": 237
   },
   "app.py::_transcribe_audio": {
@@ -395,7 +390,7 @@
    "lines": 104
   },
   "app.py::main": {
-   "lines": 245
+   "lines": 244
   },
   "audio_duck.py::AudioDucker._restore_now": {
    "decisions": 16

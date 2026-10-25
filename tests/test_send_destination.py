@@ -19,6 +19,7 @@ from tuxtalk import (app, atspi_helper, compositor_focus, dbus_service, focused_
 from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
 from tuxtalk import keyboard_grab
+from tuxtalk import keyboard_output
 
 ENTER, RCTRL, F8, F9 = ecodes.KEY_ENTER, ecodes.KEY_RIGHTCTRL, ecodes.KEY_F8, ecodes.KEY_F9
 # Taken before conftest runs "Right away" on the test's own thread, and
@@ -37,7 +38,7 @@ def chat(monkeypatch, keyboard):
     focus = list(FIRST)
     heard, typed, notices = [], [], []
     monkeypatch.setattr(focused_window, "look", lambda: tuple(focus))
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: focus[0])
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: focus[0])
 
     def deliver(text, mode, one_block=False, *, where):
         typed.append((text, focus[1]))
@@ -57,7 +58,7 @@ def chat(monkeypatch, keyboard):
 
 def send_automatically(sent_to):
     """An automatic send of words delivered to *sent_to* (a destination)."""
-    send_countdown.send_automatically("test", send_countdown.Message(sent_to), app._press_key,
+    send_countdown.send_automatically("test", send_countdown.Message(sent_to), keyboard_output.press_key,
                                       app._type_onto_dictation)
 
 
@@ -287,9 +288,10 @@ def test_the_hold_key_holds_the_send_before_it_hides_itself(chat, keyboard, monk
         send_countdown._send(waiting)                 # its thread got there first
     monkeypatch.setattr(keyboard_grab, "grab_keyboards_hiding", grab_then_the_send_runs)
     monkeypatch.setattr(app, "_open_input_stream", lambda idx: None)
-    for name in ("_notify", "_notify_tray_recording_state", "_arm_chunker",
+    for name in ("_notify_tray_recording_state", "_arm_chunker",
                  "_pause_media_players"):
         monkeypatch.setattr(app, name, lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
     monkeypatch.setattr(keyboard_grab, "release_all", lambda: None)
     monkeypatch.setattr(app, "recording_indicator", None)
     cfg = types.SimpleNamespace(beeps=False, notify=False)
@@ -448,10 +450,10 @@ def test_a_click_while_the_mark_is_put_on_the_clipboard_keeps_it_out_of_the_othe
     focus, _, _, _ = chat
     monkeypatch.setattr(app, "_deliver_text", DELIVER_TEXT)
     monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
-    monkeypatch.setattr(app, "_which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(keyboard_output, "which", lambda name: f"/usr/bin/{name}")
     monkeypatch.setattr(live, "restore_clipboard", False)
     monkeypatch.setattr(clipboard, "wl_copy_command", lambda: ["wl-copy"])
-    monkeypatch.setattr(app.subprocess, "Popen",
+    monkeypatch.setattr(keyboard_output.subprocess, "Popen",
                         lambda cmd, **kw: WlCopy(lambda: focus.__setitem__(slice(None), SECOND)))
     assert app._inject_text(".", "paste", into=focused_window.Destination(*FIRST)) == "moved"
     assert keyboard.events == []
@@ -533,9 +535,9 @@ def test_a_tuxtalk_window_however_the_desktop_names_it_gets_no_key(
     if told == "tray":                    # 0.18's extension: the class alone
         dbus_service.TuxTalkDBusService.SetFocusedWindowClass(service, "tuxtalk")
     if key == "auto":
-        send_countdown.send_automatically("test", message, app._press_key, None)
+        send_countdown.send_automatically("test", message, keyboard_output.press_key, None)
     else:
-        send_countdown.press_where_sent(key.upper(), "test", message, app._press_key)
+        send_countdown.press_where_sent(key.upper(), "test", message, keyboard_output.press_key)
     assert keyboard.events == []
     if key == "auto" and before[1] is None:     # COSMIC: no automatic Enter at all
         assert notices == [send_countdown.UNKNOWN_WINDOW_NOTICE]
@@ -564,10 +566,10 @@ def test_words_dictated_into_a_tuxtalk_box_get_only_the_key_said_after_them(
         monkeypatch.setattr(compositor_focus, "focused_window", lambda: window)
     message = send_countdown.Message(focused_window.destination(), has_words=True)
     if key == "auto":
-        send_countdown.send_automatically("test", message, app._press_key, None)
+        send_countdown.send_automatically("test", message, keyboard_output.press_key, None)
         assert keyboard.events == [] and notices == [send_countdown.OWN_WINDOW_NOTICE]
     else:
-        send_countdown.press_where_sent(key.upper(), "test", message, app._press_key)
+        send_countdown.press_where_sent(key.upper(), "test", message, keyboard_output.press_key)
         assert keyboard.typed_keys() == [getattr(ecodes, f"KEY_{key.upper()}")]
 
 
@@ -1015,10 +1017,10 @@ def edit_that(chat, monkeypatch):
             return "Hope to see you at noon!"
     monkeypatch.setattr(live, "voice_editing", True)
     monkeypatch.setattr(live, "ai_engine", Engine())
-    monkeypatch.setattr(app, "_is_wayland_session", lambda: True)
-    backend = app._output_backend()
+    monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
+    backend = keyboard_output.output_backend()
     # Selecting what was typed is faked; Enter goes to the test's keyboard.
-    monkeypatch.setattr(app, "_output_backend", lambda: types.SimpleNamespace(
+    monkeypatch.setattr(keyboard_output, "output_backend", lambda: types.SimpleNamespace(
         press_keys=lambda chords, claim=None: (backend.press_keys(chords, claim=claim)
                                                if chords == [((), "ENTER")] else True)))
     monkeypatch.setattr(clipboard, "copy_selection",
@@ -1175,7 +1177,7 @@ def test_a_countdown_called_off_partway_still_gives_back_its_space(chat, keyboar
             pass
     monkeypatch.setattr(send_countdown.threading, "Timer", Timer)
     send_countdown.send_automatically("test", send_countdown.Message(focused_window.destination()),
-                                      app._press_key, app._type_onto_dictation, " ")
+                                      keyboard_output.press_key, app._type_onto_dictation, " ")
     focus[:] = SECOND
     timers[1].run(*timers[1].args)                  # "Sending in 2 s": another window
     focus[:] = FIRST

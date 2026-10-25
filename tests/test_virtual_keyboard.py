@@ -6,6 +6,7 @@ would type into whatever window has the focus on the computer running them.
 import pytest
 
 from tuxtalk import app, virtual_keyboard
+from tuxtalk import keyboard_output
 from tuxtalk import recording_state as rs
 
 
@@ -21,21 +22,21 @@ def test_a_short_dictation_types_in_a_fraction_of_the_time_ydotool_took(settled)
     """ydotool needed about 0.6 s for 25 characters (24 ms a letter, VM
     measurement 2026-10-20); typing is the slowest step anyone sees."""
     started = settled.clock.now
-    assert app._type_text_raw("see you at noon tomorrow.") is True
+    assert keyboard_output.type_text_raw("see you at noon tomorrow.") is True
     assert settled.clock.now - started < 0.15
 
 
 def test_a_long_dictation_is_typed_to_the_end(keyboard):
     """ydotool's time limit cut long dictations off partway; nothing here may."""
     text = "word " * 400
-    assert app._type_text_raw(text) is True
+    assert keyboard_output.type_text_raw(text) is True
     assert keyboard.typed_keys().count(57) == 400      # every space
 
 
 def test_the_key_delay_setting_slows_every_key(settled, monkeypatch):
-    monkeypatch.setattr(app, "_key_delay_ms", 20)
+    monkeypatch.setattr(keyboard_output, "key_delay_ms", 20)
     started = settled.clock.now
-    app._type_text_raw("abcde")
+    keyboard_output.type_text_raw("abcde")
     assert settled.clock.now - started == pytest.approx(10 * 0.020)
 
 
@@ -51,14 +52,14 @@ def test_keys_wait_until_the_desktop_has_taken_on_a_new_keyboard(keyboard, monke
 
 def test_a_keyboard_that_fails_before_any_key_reports_nothing_sent(keyboard):
     keyboard.fail_after = 0
-    assert app._send_backspaces(5) is False
+    assert keyboard_output.send_backspaces(5) is False
 
 
 def test_a_keyboard_that_fails_partway_says_so(keyboard):
     """Undo must know some backspaces landed: its buffer no longer matches."""
     keyboard.fail_after = 3
     with pytest.raises(virtual_keyboard.StoppedPartway):
-        app._send_backspaces(5)
+        keyboard_output.send_backspaces(5)
 
 
 def test_a_keyboard_that_failed_is_made_again_next_time(keyboard):
@@ -78,8 +79,8 @@ def test_keys_left_down_are_let_go(keyboard):
 
 def test_without_access_to_uinput_nothing_is_typed(monkeypatch):
     monkeypatch.setattr(virtual_keyboard, "_open", lambda: None)
-    monkeypatch.setattr(app, "_which", lambda name: None)
-    assert app._type_text_raw("hello") is False
+    monkeypatch.setattr(keyboard_output, "which", lambda name: None)
+    assert keyboard_output.type_text_raw("hello") is False
 
 
 def test_an_undo_stopped_partway_forgets_the_buffer(monkeypatch):
@@ -87,12 +88,12 @@ def test_an_undo_stopped_partway_forgets_the_buffer(monkeypatch):
     the next undo backspace that many characters again, into the user's own
     writing."""
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
-    monkeypatch.setattr(app, "_notify", lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
 
     def partway(count):
         raise virtual_keyboard.StoppedPartway("backspaces")
 
-    monkeypatch.setattr(app, "_send_backspaces", partway)
+    monkeypatch.setattr(keyboard_output, "send_backspaces", partway)
     rs.state.last_inserted_text = "a long dictation that was being undone"
     try:
         assert app._handle_undo("undo last sentence", beeps_on=False, notify_on=False) is True
@@ -124,7 +125,7 @@ def test_it_has_every_key_a_layout_can_type_and_no_joystick_buttons():
 def test_a_shortcut_cut_off_partway_reports_failure(keyboard):
     """Ctrl+V that broke after Ctrl went down: the paste didn't happen."""
     keyboard.fail_after = 1
-    assert app._send_keys([(29, 1), (47, 1), (47, 0), (29, 0)], what="paste") is False
+    assert keyboard_output.send_keys([(29, 1), (47, 1), (47, 0), (29, 0)], what="paste") is False
 
 
 def test_events_sent_before_a_failed_syn_count_as_landed(keyboard, monkeypatch):
@@ -193,14 +194,14 @@ def breaks_once(keyboard, monkeypatch):
         write(*a)
     monkeypatch.setattr(keyboard, "write", write_then_fail)
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
-    monkeypatch.setattr(app, "_notify", lambda *a: None)
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda *a: None)
     return keyboard
 
 
 def test_a_dictation_typed_partway_is_partial_and_not_typed_again(breaks_once, monkeypatch):
     """Claude Desktop: the typing fell back to typing it all again, so the
     first words came out twice."""
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "Claude")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "Claude")
     monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
     monkeypatch.setattr(rs.state, "last_inserted_text", "earlier dictation")
     assert app._inject_text("hello world", "auto") == "partial"
@@ -213,8 +214,8 @@ def test_a_paste_shortcut_cut_off_is_partial_and_not_typed_after(breaks_once, mo
     then would put it in twice."""
     breaks_once.events.extend([(0, 0)] * 4)       # the failure comes inside Ctrl+V
     monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.kwrite")
-    monkeypatch.setattr(app, "_which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
+    monkeypatch.setattr(keyboard_output, "which", lambda name: f"/usr/bin/{name}")
 
     class Copied:
         stdin = type("In", (), {"write": lambda self, d: None, "close": lambda self: None})()
@@ -225,7 +226,7 @@ def test_a_paste_shortcut_cut_off_is_partial_and_not_typed_after(breaks_once, mo
 
         def poll(self):
             return 0
-    monkeypatch.setattr(app.subprocess, "Popen", lambda *a, **k: Copied())
+    monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda *a, **k: Copied())
     assert app._inject_text("hello world", "paste") == "partial"
     keys = {code for code, _value in breaks_once.events[4:]}
     assert keys == {29, 47}, "typed the text after a paste that may have landed"

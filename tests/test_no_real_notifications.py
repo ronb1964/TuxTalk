@@ -12,7 +12,7 @@ def test_notifications_are_held_back_during_tests():
 
 
 def test_app_notify_does_not_reach_the_desktop(monkeypatch):
-    assert app._notify is notify.notify
+    assert app.notify_module is notify
     # Count the calls that reach the held-back _send(). A notify() that found
     # another way to the desktop would leave the count at zero.
     held_back = notify._send
@@ -55,7 +55,7 @@ def test_a_notice_goes_to_the_desktops_notification_service(monkeypatch):
         real._send("TuxTalk", "Heard only silence")
     finally:
         # The module as it was, so notify.notify is again the function
-        # app._notify holds and _send is held back, whatever runs next.
+        # the service calls and _send is held back, whatever runs next.
         vars(notify).update(before)
     assert calls[0] == ("org.freedesktop.Notifications", "/org/freedesktop/Notifications")
     args, kwargs = calls[1]

@@ -18,6 +18,7 @@ from tuxtalk import (app, atspi_helper, delivery_notices, focused_window, histor
                      screen_message, send_countdown)
 from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
+from tuxtalk import keyboard_output
 
 ACTIVE = 1 << atspi_helper._STATE_ACTIVE
 FOCUSED = 1 << atspi_helper._STATE_FOCUSED
@@ -46,17 +47,17 @@ def desktop(monkeypatch):
             seen["typed"].append(text)
             return True
 
-    monkeypatch.setattr(app, "_output_backend", lambda: Keyboard())
+    monkeypatch.setattr(keyboard_output, "output_backend", lambda: Keyboard())
     monkeypatch.setattr(app, "_determine_injection_method", lambda mode: ("type", "test"))
-    monkeypatch.setattr(app, "_paste_text",
+    monkeypatch.setattr(keyboard_output, "paste_text",
                         lambda text, *a, **k: seen["pasted"].append(text) or True)
     monkeypatch.setattr(history, "add_entry",
                         lambda text, replaces=None: seen["history"].append(text))
-    monkeypatch.setattr(app, "_notify", lambda title, body: seen["notes"].append(body))
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: seen["notes"].append(body))
     monkeypatch.setattr(app, "_beep", lambda on, *tone, **k: on and seen["beeps"].append(tone))
     monkeypatch.setattr(screen_message, "show_over_active_window",
                         lambda text, **k: seen["labels"].append(text))
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
     monkeypatch.setattr(live, "usage_stats", False, raising=False)
     monkeypatch.setattr(atspi_helper, "focused_is_password",
                         lambda: seen["answers"].pop(0) if seen["answers"] else seen["password"])
@@ -126,7 +127,7 @@ def test_type_at_pause_types_nothing_of_its_own_into_a_password_field(desktop, m
 def test_saying_only_press_enter_still_presses_enter_there(desktop, monkeypatch):
     """Type the password by hand, then say "press enter" to log in."""
     pressed = []
-    monkeypatch.setattr(app, "_press_key", lambda key, why: pressed.append(why) or True)
+    monkeypatch.setattr(keyboard_output, "press_key", lambda key, why: pressed.append(why) or True)
     desktop["password"] = True
     dictate(monkeypatch, said="press enter")
     assert pressed and desktop["typed"] == [] and desktop["labels"] == []
@@ -135,7 +136,7 @@ def test_saying_only_press_enter_still_presses_enter_there(desktop, monkeypatch)
 def test_saying_only_press_tab_still_presses_tab_there(desktop, monkeypatch):
     """Move from the password box to the next one by voice."""
     pressed = []
-    monkeypatch.setattr(app, "_press_key", lambda key, why: pressed.append(key) or True)
+    monkeypatch.setattr(keyboard_output, "press_key", lambda key, why: pressed.append(key) or True)
     desktop["password"] = True
     dictate(monkeypatch, said="Press tab.")
     assert pressed == ["TAB"] and desktop["typed"] == [] and desktop["labels"] == []
@@ -143,7 +144,7 @@ def test_saying_only_press_tab_still_presses_tab_there(desktop, monkeypatch):
 
 def test_words_before_press_tab_are_not_typed_there(desktop, monkeypatch):
     pressed = []
-    monkeypatch.setattr(app, "_press_key", lambda key, why: pressed.append(key) or True)
+    monkeypatch.setattr(keyboard_output, "press_key", lambda key, why: pressed.append(key) or True)
     desktop["password"] = True
     dictate(monkeypatch, said="swordfish press tab")
     assert pressed == [] and desktop["typed"] == [] and desktop["history"] == []
@@ -165,7 +166,7 @@ def test_paste_last_dictation_types_nothing_in_a_password_field(desktop, monkeyp
 def test_delivery_stops_when_the_focus_moves_into_a_password_field(desktop, monkeypatch):
     """Pasted line by line, a dictation is asked about again before each line."""
     monkeypatch.setattr(app, "_determine_injection_method", lambda mode: ("paste", "test"))
-    monkeypatch.setattr(app, "_send_shift_enter", lambda: True)
+    monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: True)
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     desktop["answers"], desktop["password"] = [False], True   # a text box, then a password field
     assert app._inject_text("first line\nsecond line", "auto") == "password_field"
@@ -176,7 +177,7 @@ def test_a_paste_stopped_there_isnt_finished_by_typing(desktop, monkeypatch):
     """Not asked a second time: a slow app whose answer runs out of time says
     "no", and the rest of the dictation was then typed into the field."""
     monkeypatch.setattr(app, "_determine_injection_method", lambda mode: ("paste", "test"))
-    monkeypatch.setattr(app, "_send_shift_enter", lambda: True)
+    monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: True)
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     desktop["answers"] = [False, True]          # then "no" to any further question
     assert app._inject_text("first line\nsecond line", "auto") == "password_field"
@@ -186,11 +187,11 @@ def test_a_paste_stopped_there_isnt_finished_by_typing(desktop, monkeypatch):
 def test_typed_line_by_line_it_stops_there_too(desktop, monkeypatch):
     """X11 types every dictation, and asks again before each line as the paste does."""
     keys = []
-    monkeypatch.setattr(app, "_output_backend",
+    monkeypatch.setattr(keyboard_output, "output_backend",
                         lambda: types.SimpleNamespace(typeable=lambda t: t,
-                                                      type_text=app._type_text))
-    monkeypatch.setattr(app, "_type_text_raw", lambda t: keys.append(t) or True)
-    monkeypatch.setattr(app, "_send_shift_enter", lambda: keys.append("SHIFT+ENTER") or True)
+                                                      type_text=keyboard_output.type_text))
+    monkeypatch.setattr(keyboard_output, "type_text_raw", lambda t: keys.append(t) or True)
+    monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: keys.append("SHIFT+ENTER") or True)
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     desktop["answers"], desktop["password"] = [False], True
     assert app._inject_text("first line\nsecond line", "auto") == "password_field"
@@ -214,11 +215,11 @@ def test_sending_automatically_doesnt_press_enter_in_a_password_field(desktop, m
     """Dictate a username, tab into the password box during the wait: Enter
     there would submit the login form."""
     from tuxtalk.output_backends import VirtualKeyboardOutputBackend
-    monkeypatch.setattr(app, "_output_backend", VirtualKeyboardOutputBackend)
+    monkeypatch.setattr(keyboard_output, "output_backend", VirtualKeyboardOutputBackend)
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
     monkeypatch.setattr(focused_window, "look", lambda: ("firefox", ("tray", "{f1}")))
     pending = {"to": focused_window.look(), "why": "sending automatically",
-               "timer": None, "ticks": [], "press": app._press_key}
+               "timer": None, "ticks": [], "press": keyboard_output.press_key}
     monkeypatch.setattr(send_countdown, "_pending", pending)
     desktop["password"] = True
     send_countdown._send(pending)
@@ -233,7 +234,7 @@ def test_sending_automatically_doesnt_press_enter_in_a_password_field(desktop, m
 def test_no_wait_doesnt_backspace_in_a_password_field(desktop, monkeypatch):
     """The AI behind "no wait" can take seconds after the first check."""
     erased = []
-    monkeypatch.setattr(app, "_output_backend",
+    monkeypatch.setattr(keyboard_output, "output_backend",
                         lambda: types.SimpleNamespace(backspaces=lambda n: erased.append(n)))
     monkeypatch.setattr(rs.state, "last_inserted_window", None)
     desktop["password"] = True
@@ -245,7 +246,7 @@ def test_fix_a_word_doesnt_touch_a_password_field(desktop, monkeypatch):
     from tuxtalk import fix_word_dialog
     keys = []
     monkeypatch.setattr(fix_word_dialog, "_REFOCUS_S", 0)
-    monkeypatch.setattr(app, "_output_backend",
+    monkeypatch.setattr(keyboard_output, "output_backend",
                         lambda: types.SimpleNamespace(press_keys=lambda c: keys.append(c) or True,
                                                       type_text=lambda t: keys.append(t) or True))
     desktop["password"] = True

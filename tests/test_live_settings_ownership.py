@@ -175,7 +175,7 @@ def test_power_saving_rests_the_model_and_keeps_the_service(monkeypatch):
     _idle(monkeypatch)
     monkeypatch.setattr(live, "config_file_changed", lambda: False)
     shown = []
-    monkeypatch.setattr(app, "_notify", lambda title, body: shown.append((title, body)))
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: shown.append((title, body)))
     engine = _Engine()
     monkeypatch.setattr(app, "model", engine)
     cfg = _cfg(auto_timeout_enabled=True, auto_timeout_minutes=5)
@@ -226,6 +226,6 @@ def test_a_model_that_wont_load_again_is_said_not_raised(monkeypatch):
     monkeypatch.setattr(app, "build_model",
                         lambda s: (_ for _ in ()).throw(app.ModelUnavailable("not downloaded")))
     monkeypatch.setattr(app, "_build_model_or_exit", lambda s: pytest.fail("fell back"))
-    monkeypatch.setattr(app, "_notify", lambda title, body: shown.append(body))
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: shown.append(body))
     assert app._wake_model() is None
     assert shown and "Restart Service" in shown[0]

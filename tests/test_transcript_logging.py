@@ -15,6 +15,7 @@ from gtk_text import find, shown_text  # noqa: E402
 from tuxtalk import config  # noqa: E402
 from tuxtalk import logger as tlog  # noqa: E402
 from tuxtalk import live_settings as live  # noqa: E402
+from tuxtalk import keyboard_output  # noqa: E402
 
 
 # --- config flag -----------------------------------------------------------
@@ -327,7 +328,7 @@ def test_a_dictation_never_writes_the_words(monkeypatch, caplog, capsys, keyboar
     monkeypatch.setattr(app, "_transcribe_audio",
                         lambda audio, language: "zanzibar quokka password hunter two")
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.kwrite")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
     frames = [(np.ones(app.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
     _hear_every_level(caplog)
     app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=False,
@@ -355,8 +356,8 @@ def test_a_voice_edit_never_writes_the_words(monkeypatch, caplog, capsys):
                         typed.append(text) or "ok")
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
     monkeypatch.setattr(app, "EDIT_RESTORE_DELAY_S", 0)
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.kwrite")
-    monkeypatch.setattr(app, "_is_wayland_session", lambda: True)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
+    monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
     frames = [np.full(16000, 1000, dtype=np.int16).tobytes()]
     _hear_every_level(caplog)
     app._transcribe_and_edit(frames, 16000, False, "", "type")

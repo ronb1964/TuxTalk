@@ -679,7 +679,7 @@ def test_dead_mic_is_digital_silence_only():
 def test_a_dead_mic_is_reported_not_transcribed(monkeypatch):
     from tuxtalk import app
     said, transcribed = [], []
-    monkeypatch.setattr(app, "_notify", lambda title, msg: said.append((title, msg)))
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, msg: said.append((title, msg)))
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
     monkeypatch.setattr(app, "_transcribe_audio", lambda *a: transcribed.append(1) or "hi")
     frames = [np.zeros(app.SAMPLE_RATE * 2, dtype=np.int16).tobytes()]

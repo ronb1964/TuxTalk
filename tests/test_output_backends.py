@@ -1,7 +1,8 @@
-"""The virtual-keyboard backend must keep delegating to app._type_text so the non-Flatpak
+"""The virtual-keyboard backend must keep delegating to keyboard_output.type_text so the non-Flatpak
 typing path is behaviorally unchanged."""
 import os
 from tuxtalk import recording_state as rs
+from tuxtalk import keyboard_output
 
 
 def _portal_fd():
@@ -26,10 +27,9 @@ class _FakeSessionBase:
 
 
 def test_virtual_keyboard_backend_delegates_to_type_text(monkeypatch):
-    from tuxtalk import app
     from tuxtalk.output_backends import VirtualKeyboardOutputBackend
     calls = []
-    monkeypatch.setattr(app, "_type_text", lambda t: calls.append(t) or True)
+    monkeypatch.setattr(keyboard_output, "type_text", lambda t: calls.append(t) or True)
     assert VirtualKeyboardOutputBackend().type_text("hello") is True
     assert calls == ["hello"]
 
@@ -113,10 +113,9 @@ def test_the_restore_token_is_readable_by_its_user_only(tmp_path, monkeypatch):
 def test_output_backend_accessor_returns_the_virtual_keyboard_on_host(monkeypatch):
     # No FLATPAK_ID on the host -> the virtual-keyboard backend.
     monkeypatch.delenv("FLATPAK_ID", raising=False)
-    from tuxtalk import app
-    app._OUTPUT_BACKEND = None  # reset the process cache for the test
+    keyboard_output._OUTPUT_BACKEND = None  # reset the process cache for the test
     from tuxtalk.output_backends import VirtualKeyboardOutputBackend
-    assert isinstance(app._output_backend(), VirtualKeyboardOutputBackend)
+    assert isinstance(keyboard_output.output_backend(), VirtualKeyboardOutputBackend)
 
 
 # --- Editing key-combos must route through the backend, not the host keyboard ---
@@ -125,19 +124,17 @@ def test_output_backend_accessor_returns_the_virtual_keyboard_on_host(monkeypatc
 # /dev/uinput), so calling it directly would silently fail there.
 
 def test_virtual_keyboard_backend_select_all_delete_delegates(monkeypatch):
-    from tuxtalk import app
     from tuxtalk.output_backends import VirtualKeyboardOutputBackend
     calls = []
-    monkeypatch.setattr(app, "_send_select_all_delete", lambda: calls.append("clear") or True)
+    monkeypatch.setattr(keyboard_output, "send_select_all_delete", lambda: calls.append("clear") or True)
     assert VirtualKeyboardOutputBackend().select_all_delete() is True
     assert calls == ["clear"]
 
 
 def test_virtual_keyboard_backend_backspaces_delegates(monkeypatch):
-    from tuxtalk import app
     from tuxtalk.output_backends import VirtualKeyboardOutputBackend
     calls = []
-    monkeypatch.setattr(app, "_send_backspaces", lambda n: calls.append(n) or True)
+    monkeypatch.setattr(keyboard_output, "send_backspaces", lambda n: calls.append(n) or True)
     assert VirtualKeyboardOutputBackend().backspaces(5) is True
     assert calls == [5]
 
@@ -202,7 +199,7 @@ def test_handle_undo_everything_routes_through_backend(monkeypatch):
     from tuxtalk import app
     monkeypatch.setattr(app, "detect_undo_command", lambda raw: ("everything", 1))
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
-    monkeypatch.setattr(app, "_notify", lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
     calls = []
 
     class FakeBackend:
@@ -210,7 +207,7 @@ def test_handle_undo_everything_routes_through_backend(monkeypatch):
             calls.append("clear")
             return True
 
-    monkeypatch.setattr(app, "_output_backend", lambda: FakeBackend())
+    monkeypatch.setattr(keyboard_output, "output_backend", lambda: FakeBackend())
     assert app._handle_undo("delete everything", False, False) is True
     assert calls == ["clear"]
 
@@ -220,7 +217,7 @@ def test_handle_undo_char_undo_routes_backspaces_through_backend(monkeypatch):
     from tuxtalk import app
     monkeypatch.setattr(app, "detect_undo_command", lambda raw: ("word", 1))
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
-    monkeypatch.setattr(app, "_notify", lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
     rs.state.last_inserted_text = "hello world"
     got = []
 
@@ -229,7 +226,7 @@ def test_handle_undo_char_undo_routes_backspaces_through_backend(monkeypatch):
             got.append(n)
             return True
 
-    monkeypatch.setattr(app, "_output_backend", lambda: FakeBackend())
+    monkeypatch.setattr(keyboard_output, "output_backend", lambda: FakeBackend())
     assert app._handle_undo("undo that", False, False) is True
     assert got and got[0] > 0  # deleted a positive number of characters
 
@@ -242,7 +239,7 @@ def test_flatpak_electron_app_types_via_libei_not_the_virtual_keyboard(monkeypat
     from tuxtalk import app
     monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TalkType")
     from tuxtalk import focused_window
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "Claude")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "Claude")
     monkeypatch.setattr(focused_window, "look", lambda: ("Claude", None))
     typed = []
     from tuxtalk.output_backends import OutputBackend
@@ -252,7 +249,7 @@ def test_flatpak_electron_app_types_via_libei_not_the_virtual_keyboard(monkeypat
             typed.append(t)
             return True
 
-    monkeypatch.setattr(app, "_output_backend", lambda: FakeBackend())
+    monkeypatch.setattr(keyboard_output, "output_backend", lambda: FakeBackend())
     app._inject_text("line1\tindented", "auto")
 
     assert keyboard.events == [], "the virtual keyboard must not be used on the Flatpak"
@@ -339,7 +336,7 @@ def test_flatpak_typing_records_what_libei_types_for_undo(monkeypatch):
     from tuxtalk import app
     from tuxtalk.output_backends import LibeiOutputBackend
     monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TalkType")
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.kwrite")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
     typed = []
 
     class FakeLibei(LibeiOutputBackend):
@@ -347,7 +344,7 @@ def test_flatpak_typing_records_what_libei_types_for_undo(monkeypatch):
             typed.append(t)
             return True
 
-    monkeypatch.setattr(app, "_output_backend", lambda: FakeLibei())
+    monkeypatch.setattr(keyboard_output, "output_backend", lambda: FakeLibei())
     assert app._inject_text("Wait… café", "auto") == "ok"
     assert typed == ["Wait... cafe"]
     assert rs.state.last_inserted_text == "Wait... cafe"
