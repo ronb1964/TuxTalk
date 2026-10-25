@@ -25,6 +25,7 @@ from tuxtalk import last_dictation
 from tuxtalk import notices as service_notices
 from tuxtalk import recording
 from tuxtalk import delivery
+from tuxtalk import voice_edit
 
 ENTER, RCTRL, F8, F9 = ecodes.KEY_ENTER, ecodes.KEY_RIGHTCTRL, ecodes.KEY_F8, ecodes.KEY_F9
 # Taken before conftest runs "Right away" on the test's own thread, and
@@ -1032,7 +1033,7 @@ def edit_that(chat, monkeypatch):
                                                if chords == [((), "ENTER")] else True)))
     monkeypatch.setattr(clipboard, "copy_selection",
                         lambda send_copy: ("See you at noon.", lambda also=(): None))
-    monkeypatch.setattr(app, "EDIT_RESTORE_DELAY_S", 0)
+    monkeypatch.setattr(voice_edit, "EDIT_RESTORE_DELAY_S", 0)
     return chat
 
 

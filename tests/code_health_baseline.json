@@ -1,6 +1,6 @@
 {
  "files": {
-  "app.py": 2293,
+  "app.py": 2075,
   "tray.py": 2477,
   "welcome_dialog.py": 3222
  },
@@ -327,10 +327,6 @@
   },
   "ai_cleanup.py::fix_self_corrections": {
    "decisions": 24
-  },
-  "app.py::_edit_selection": {
-   "decisions": 39,
-   "lines": 126
   },
   "app.py::_finish_capture": {
    "decisions": 18

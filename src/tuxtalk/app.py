@@ -19,7 +19,7 @@ from evdev import InputDevice, ecodes, list_devices
 
 from typing import NamedTuple
 
-from .normalize import safe_to_lowercase_first_word, swiss_spelling
+from .normalize import safe_to_lowercase_first_word
 from .config import load_config, Settings, load_custom_commands
 # Imported as a module too, so the live-settings reload can read CONFIG_PATH and
 # LIVE_APPLIED_KEYS without pulling each name in separately.
@@ -48,6 +48,8 @@ from . import recording
 from . import last_dictation
 from . import notices
 from . import dictation_text
+from . import voice_edit
+from . import voice_edit_rules
 from . import voice_commands
 from . import delivery
 import threading
@@ -1222,7 +1224,7 @@ def stop_recording(
         return
     frames, rec_sr = cap
     if edit_mode:
-        _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode)
+        voice_edit.transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode)
         return
     if rs.state.chunks_submitted:
         # Chunked dictation: the rest goes in after the chunks already queued,
@@ -1244,23 +1246,6 @@ def stop_recording(
 
 # --- Voice editing ---
 
-# How long after typing the rewrite the user's clipboard is put back: after
-# ClipboardKeeper's own restore (0.5 s) when "Restore clipboard" is on, and
-# after the app has read a pasted rewrite.
-EDIT_RESTORE_DELAY_S = 1.0
-
-
-
-def _focus_moved(focused_class) -> bool:
-    """Whether another window has the focus than when the edit started. Only
-    the class is known, so a second window of the same app is not noticed.
-    A window that can't be found now counts as moved: it can't be checked."""
-    now = focused_window.window_class()
-    if now is None and focused_class is not None:
-        logger.info("Voice edit: the focused window can't be found now, so it can't be checked")
-    return now != focused_class
-
-
 
 def _handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: str,
                         message) -> bool:
@@ -1271,7 +1256,6 @@ def _handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: st
     is also what happens when nothing was just typed to edit."""
     if not live.voice_editing:
         return False
-    from . import voice_edit_rules
     from . import voice_navigation as nav
     waiting, rs.state.edit_waiting = rs.state.edit_waiting, None
     if waiting is not None and waiting["serial"] == rs.state.recording_serial:
@@ -1313,215 +1297,13 @@ def _handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: st
     last_dictation.forget_shown()
     if not selected:
         notices.edit_problem("shortcut_failed", beeps_on)
-    elif _edit_selection(lambda: instruction, beeps_on, injection_mode, focused_class,
+    elif voice_edit.edit_selection(lambda: instruction, beeps_on, injection_mode, focused_class,
                          time.time(), message, spoken=True):
         return True
     # Not changed as asked: no automatic Enter sends it as it was.
     message.add("failed", None)
     return True
 
-
-def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
-    """Voice editing: the recording is an instruction ("make this more formal")
-    for the text selected in the focused app, which the AI rewrites and the
-    rewrite replaces. Ctrl+Z in the app undoes it."""
-    t0 = time.time()
-    audio_f32 = recording.frames_f32(frames)
-    if audio_f32.size == 0:
-        return
-    if rec_sr != engine.SAMPLE_RATE:
-        audio_f32 = recording.resample(audio_f32, rec_sr, engine.SAMPLE_RATE)
-    if silence.is_speechless_tap(audio_f32, engine.SAMPLE_RATE):
-        return
-
-    if not keyboard_output.is_wayland_session():
-        # The selection is read with wl-copy / wl-paste, which have no X11
-        # side; without this every edit would say "select some text first".
-        notices.edit_problem("needs_wayland", beeps_on)
-        return
-    focused_class = focused_window.window_class()
-    if is_terminal_class(focused_class):
-        notices.edit_problem("terminal", beeps_on)
-        return
-    heard = []
-
-    def instruction():
-        if not heard:
-            heard.append(engine.transcribe(audio_f32, language))
-        return heard[0]
-    _edit_selection(instruction, beeps_on, injection_mode, focused_class, t0, rs.state.message)
-
-
-def _delete_selection(focused_class, beeps_on) -> bool:
-    """"Delete this": Delete on the selection, still selected in
-    *focused_class*. True when it was pressed. Transcribing can take
-    seconds, and Delete must not reach a window the user has switched to
-    meanwhile, so it needs a window to compare with."""
-    if focused_class is None:
-        logger.info("Voice edit: the focused window is unknown, so Delete can't be checked")
-        notices.edit_problem("cant_check_window", beeps_on)
-        return False
-    if _focus_moved(focused_class):
-        notices.edit_problem("focus_moved", beeps_on)
-        return False
-    if notices.refuse_password_field(beeps_on):
-        return False
-    if not keyboard_output.send_keys([(111, 1), (111, 0)], what="delete"):     # KEY_DELETE
-        notices.edit_problem("shortcut_failed", beeps_on)
-        return False
-    logger.info("Voice edit: deleted the selection")
-    beeps.beep(beeps_on, *READY_BEEP)
-    return True
-
-
-def _format_selection(fmt, focused_class, beeps_on) -> bool:
-    """Bold, italic or underline (*fmt*, voice_edit_rules.formatting) with
-    the app's own shortcut on the selection, still selected. True when it
-    was pressed."""
-    from . import voice_edit_rules
-    if not voice_edit_rules.has_formatting_shortcuts(focused_class):
-        logger.info(f"Voice edit: no formatting shortcuts in {focused_class!r}")
-        notices.edit_problem("no_shortcuts", beeps_on)
-        return False
-    if _focus_moved(focused_class):
-        notices.edit_problem("focus_moved", beeps_on)
-        return False
-    if notices.refuse_password_field(beeps_on):
-        return False
-    if not all(keyboard_output.send_format_shortcut(kind) for kind in fmt):
-        notices.edit_problem("shortcut_failed", beeps_on)
-        return False
-    logger.info(f"Voice edit: {', '.join(fmt)} with the app's shortcut ({focused_class})")
-    beeps.beep(beeps_on, *READY_BEEP)
-    return True
-
-
-def _edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0, message,
-                    spoken=False):
-    """Change the text selected in *focused_class* as the instruction
-    *get_instruction()* says (called only once a selection is found), and
-    type the result over it, as part of *message*. *spoken*: the instruction
-    came after "edit that" in a dictation, which selected the text itself.
-    True when the change went in."""
-    from . import ai_cleanup, clipboard, history, voice_edit_rules
-    # Before copying the selection or hearing the instruction; checked
-    # again before the rewrite replaces it.
-    if notices.refuse_password_field(beeps_on):
-        return
-    # The selection first, so "select some text first" comes up even when
-    # nothing was said.
-    try:
-        selected, put_back = clipboard.copy_selection(keyboard_output.send_copy_keystroke)
-    except clipboard.ClipboardUnavailable:
-        notices.edit_problem("no_clipboard", beeps_on)
-        return
-    if not selected:
-        # "select the last sentence" needs nothing selected: it makes the selection the
-        # next edit works on. The clipboard is already back (copy_selection does that).
-        if live.voice_navigation and not spoken:
-            said = get_instruction()
-            if said and voice_commands.handle_navigation(said, beeps_on, focused_class):
-                return
-        notices.edit_problem("no_selection", beeps_on)
-        return
-    result = None
-    try:
-        instruction = get_instruction()
-        if not instruction:
-            notices.edit_problem("no_instruction", beeps_on)
-            return
-        if voice_commands.handle_navigation(instruction, beeps_on, focused_class):
-            return
-        logger.info(f"Voice edit: {live.loggable(instruction)} ({len(selected)} characters)")
-        # Deleting, formatting and exact jobs need no AI (voice_edit_rules.py).
-        if voice_edit_rules.is_delete(instruction):
-            return _delete_selection(focused_class, beeps_on)
-        fmt = voice_edit_rules.formatting(instruction)
-        if fmt == voice_edit_rules.CANT_FORMAT:
-            notices.edit_problem("cant_format", beeps_on)
-            return
-        if fmt:
-            return _format_selection(fmt, focused_class, beeps_on)
-        # Deleting and formatting press keys only, so any length will do; a
-        # rewrite is typed back, and the AI's context holds only so much.
-        if len(selected) > ai_cleanup.MAX_EDIT_CHARS:
-            notices.edit_problem("too_long", beeps_on)
-            return
-        # "make it formal and remove the commas" is two changes, made one
-        # after the other, each in code or by the AI (split_steps).
-        steps = voice_edit_rules.split_steps(instruction)
-        if len(steps) > 1:
-            logger.info(f"Voice edit: {len(steps)} changes, one at a time")
-        engine = live.ai_engine
-        text = selected
-        for step in steps:
-            done = voice_edit_rules.mechanical_edit(text, step)
-            if done is not None:
-                logger.info("Voice edit done in code, without the AI"
-                            + (f" ({live.loggable(step)})" if len(steps) > 1 else ""))
-            elif engine is None:
-                notices.edit_problem("not_installed", beeps_on)
-                return
-            elif not engine.is_ready():
-                notices.edit_problem("not_ready", beeps_on)
-                return
-            else:
-                done = engine.edit(text, step)
-                if done and done.split() == text.split():
-                    # Only spacing changed ("select all" got the line ends
-                    # trimmed): not an edit anyone asked for.
-                    done = None
-                if done is None and len(steps) > 1:
-                    # One change the AI had nothing for needn't cost the others.
-                    logger.info(f"Voice edit: no change for {live.loggable(step)}")
-            if done is not None:
-                text = done
-        result = text if text != selected else None
-        if result and live.swiss_spelling:
-            result = swiss_spelling(result)
-        if result:
-            result = dictation_text.numbers_to_digits(result)
-        # Exact: for an edit done in code, spacing may be the whole change
-        # (indenting one line); the AI's spacing-only answers are dropped above.
-        if not result or result == selected:
-            notices.edit_problem("no_answer", beeps_on)
-            return
-        if notices.refuse_password_field(beeps_on):
-            return
-        logger.info(f"Voice edit result: {live.loggable(result)} "
-                    f"(took {time.time() - t0:.2f}s)")
-        history.add_entry(result)
-        if focused_class is None:
-            # Typed unchecked, as ordinary dictation is: refusing here would
-            # turn voice editing off wherever the window can't be found.
-            logger.info("Voice edit: the focused window is unknown, so typing goes ahead unchecked")
-        elif _focus_moved(focused_class):
-            # Typing now would put the rewrite into whatever window has focus.
-            notices.edit_problem("window_changed", beeps_on)
-            return
-        # The selection is still active, so typing or pasting replaces it, in
-        # one block (see _inject_text).
-        try:
-            outcome = delivery.inject_text(result, injection_mode, one_block=True, message=message)
-        except Exception as e:
-            logger.error(f"Voice edit: typing the rewrite failed: {e}", exc_info=True)
-            outcome = "failed"
-            message.add(outcome, None)      # what's in the box isn't known now
-        if outcome == "password_field":
-            history.forget(result)
-        if outcome in delivery_notices.NOTICES:
-            notices.report_undelivered(outcome, beeps_on)
-        else:
-            beeps.beep(beeps_on, *READY_BEEP)
-        return outcome == "ok"
-    finally:
-        # A pasted rewrite may still be on the clipboard, whole or (pasted a
-        # line at a time) its last line; that may be replaced.
-        also = (result, *result.split("\n")) if result else ()
-        if EDIT_RESTORE_DELAY_S:
-            threading.Timer(EDIT_RESTORE_DELAY_S, put_back, kwargs={"also": also}).start()
-        else:
-            put_back(also=also)
 
 
 # A combo press whose keys aren't all let go within this long is dropped, so a

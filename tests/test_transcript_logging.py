@@ -19,6 +19,7 @@ from tuxtalk import keyboard_output  # noqa: E402
 from tuxtalk import engine as speech_engine  # noqa: E402
 from tuxtalk import dictation_text  # noqa: E402
 from tuxtalk import delivery  # noqa: E402
+from tuxtalk import voice_edit  # noqa: E402
 
 
 # --- config flag -----------------------------------------------------------
@@ -343,7 +344,6 @@ def test_a_dictation_never_writes_the_words(monkeypatch, caplog, capsys, keyboar
 def test_a_voice_edit_never_writes_the_words(monkeypatch, caplog, capsys):
     """The selection, the spoken instruction and the AI's rewrite."""
     import numpy as np
-    from tuxtalk import app
     from tuxtalk import clipboard as cb
     typed = []
     engine = type("Engine", (), {"is_ready": lambda self: True,
@@ -357,12 +357,12 @@ def test_a_voice_edit_never_writes_the_words(monkeypatch, caplog, capsys):
     monkeypatch.setattr(delivery, "inject_text", lambda text, mode, one_block=False, **kw:
                         typed.append(text) or "ok")
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
-    monkeypatch.setattr(app, "EDIT_RESTORE_DELAY_S", 0)
+    monkeypatch.setattr(voice_edit, "EDIT_RESTORE_DELAY_S", 0)
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
     monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
     frames = [np.full(16000, 1000, dtype=np.int16).tobytes()]
     _hear_every_level(caplog)
-    app._transcribe_and_edit(frames, 16000, False, "", "type")
+    voice_edit.transcribe_and_edit(frames, 16000, False, "", "type")
     assert typed == ["Quokka hunter, formally."]
     assert _leaks(caplog, capsys) == []
 

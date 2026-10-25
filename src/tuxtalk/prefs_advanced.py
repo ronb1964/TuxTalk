@@ -344,7 +344,7 @@ class AdvancedTab(Tab):
         grid.attach(subheading("Editing by voice"), 0, row, 2, 1)
         row += 1
 
-        # Voice editing (app._transcribe_and_edit): the AI that fixes
+        # Voice editing (voice_edit.transcribe_and_edit): the AI that fixes
         # self-corrections rewrites the selected text the way the user says.
         self.voice_editing_check = Gtk.CheckButton(
             label="Voice editing: select text, hold Shift with your dictation key, "

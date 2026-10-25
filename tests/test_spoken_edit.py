@@ -14,6 +14,7 @@ from tuxtalk import live_settings as live
 from tuxtalk import engine
 from tuxtalk import notices
 from tuxtalk import delivery
+from tuxtalk import voice_edit
 
 S = "SHIFT"
 
@@ -58,7 +59,7 @@ def editing(monkeypatch):
     monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: Backend())
-    monkeypatch.setattr(app, "_edit_selection",
+    monkeypatch.setattr(voice_edit, "edit_selection",
                         lambda get, beeps, mode, focused, t0, message, spoken=False:
                         edits.append((get(), focused, spoken)) or True)
     monkeypatch.setattr(notices, "edit_problem", lambda kind, beeps: problems.append(kind))
@@ -222,7 +223,7 @@ def test_an_edit_that_didnt_change_the_text_isnt_sent_as_it_was(editing, monkeyp
     pressed, edits, problems = editing
     raw = "Edit that, make it less angry."
     if why == "no rewrite":
-        monkeypatch.setattr(app, "_edit_selection", lambda *a, **k: False)
+        monkeypatch.setattr(voice_edit, "edit_selection", lambda *a, **k: False)
     elif why == "not selected":
         monkeypatch.setattr(keyboard_output, "output_backend", lambda: types.SimpleNamespace(
             press_keys=lambda chords, claim=None: False))

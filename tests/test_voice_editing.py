@@ -177,6 +177,7 @@ def test_the_engine_has_room_for_a_selection(monkeypatch):
 # --- 3. the setting and the engine --------------------------------------------------
 
 from tuxtalk import app, config
+from tuxtalk import voice_edit
 from tuxtalk import delivery
 from tuxtalk import dictation_text
 from tuxtalk import engine as speech_engine
@@ -375,7 +376,7 @@ def edit_env(monkeypatch):
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, msg: seen["notices"].append(msg))
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda on, *a: seen["beeps"].append(a))
     monkeypatch.setattr(history, "add_entry", lambda text: seen["history"].append(text))
-    monkeypatch.setattr(app, "EDIT_RESTORE_DELAY_S", 0)
+    monkeypatch.setattr(voice_edit, "EDIT_RESTORE_DELAY_S", 0)
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
     monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
     seen["engine"], seen["selection"] = engine, selection
@@ -384,7 +385,7 @@ def edit_env(monkeypatch):
 
 def run_edit():
     frames = [np.full(16000, 1000, dtype=np.int16).tobytes()]
-    app._transcribe_and_edit(frames, 16000, False, "", "type")
+    voice_edit.transcribe_and_edit(frames, 16000, False, "", "type")
 
 
 def test_an_edit_replaces_the_selection(edit_env):
@@ -1149,6 +1150,6 @@ def test_an_edit_says_whether_the_change_went_in(edit_env, monkeypatch, answer, 
     """"edit that" holds back the automatic Enter when it didn't (app._handle_spoken_edit)."""
     edit_env["engine"].answer = answer
     monkeypatch.setattr(delivery, "inject_text", lambda text, mode, **kw: typing)
-    done = app._edit_selection(lambda: "make it more professional", False, "type",
+    done = voice_edit.edit_selection(lambda: "make it more professional", False, "type",
                                "org.kde.kwrite", 0.0, rs.state.message, spoken=True)
     assert bool(done) is went_in
