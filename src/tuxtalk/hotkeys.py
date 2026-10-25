@@ -210,8 +210,7 @@ def _drop_dead_devices(dead_devices, devices, cfg) -> None:
             "recording, since its key-up can no longer arrive"
         )
         keyboard_grab.release_all()
-        pipeline.stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
-                       cfg.auto_space, cfg.auto_period, cfg.injection_mode)
+        _stop_recording(cfg)
 
     dead_devices.clear()
 
@@ -337,21 +336,47 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
     if modifier_hotkeys.right_alt_alone(event, (hold_key, toggle_key), held_modifiers):
         modifier_hotkeys.guard_alt_tap()
 
-    # --- Hotkey test mode: report presses via D-Bus instead of recording ---
+    # Hotkey test mode: report presses via D-Bus instead of recording.
     if event.value == 1 and _hotkey_test_active():
         _report_test_press(event.code, hold_key, toggle_key)
-        return  # Don't process hotkeys normally in test mode
+        return
+    if (_on_paste_last(event, paste_last_combo, held_modifiers, devices, cfg)
+            or _on_voice_commands_combo(event, voice_cmds_combo, held_modifiers, devices)):
+        return
+    if toggle_key and _toggle_tap_holds_send(event, toggle_key, held_modifiers):
+        return   # the tap only held the send: no recording
+    if event.code in MODIFIER_CODES and event.code in (hold_key, toggle_key):
+        _hide_modifier_hotkey(event, toggle_key, devices, held_modifiers)
 
-    # --- Paste Last Dictation combo (e.g. Ctrl+Alt+P) ---
-    # Typed only once every key of the combo is let go: typing while Ctrl and
-    # Alt are still down would turn each letter into a Ctrl+Alt shortcut.
+    if event.code == hold_key:
+        _on_hold_key(event, hold_key, held_modifiers, devices, cfg, input_device_idx)
+    if (toggle_key and event.code == toggle_key
+            and _on_toggle_key(event, toggle_key, held_modifiers, devices, cfg, input_device_idx)):
+        return   # a voice edit was cancelled
+
+    # ESC cancels in any mode.
+    if event.code == ecodes.KEY_ESC and rs.state.is_recording and event.value == 1:
+        recording.cancel_recording(cfg.beeps, cfg.notify, "Cancelled by ESC")
+        keyboard_grab.release_all()
+
+
+def _stop_recording(cfg) -> None:
+    """Stop the recording and type what was said, with *cfg*'s settings."""
+    pipeline.stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
+                            cfg.auto_space, cfg.auto_period, cfg.injection_mode)
+
+
+def _on_paste_last(event, combo, held_modifiers, devices, cfg) -> bool:
+    """Paste Last Dictation's combo (e.g. Ctrl+Alt+P); True when *event* was
+    its. Typed only once every key of the combo is let go: typing while Ctrl
+    and Alt are still down would turn each letter into a Ctrl+Alt shortcut."""
     pending = rs.state.paste_last
     if pending is not None:
         if time.time() - pending["at"] > PASTE_LAST_EXPIRY_S:
-            rs.state.paste_last = pending = None
+            rs.state.paste_last = None
         elif event.value == 0 and (event.code == pending["key"] or event.code in MODIFIER_CODES):
             # Only the combo's own keys are waited for. Any other release
-            # goes on to the handlers below: swallowing it would lose a hold
+            # goes on to the handlers: swallowing it would lose a hold
             # key's key-up and leave that recording running.
             if event.code == pending["key"]:
                 pending["key_up"] = True
@@ -359,94 +384,96 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
                 rs.state.paste_last = None
                 if not rs.state.is_recording:
                     _paste_last_dictation(cfg)
-            return
-    if paste_last_combo and event.value == 1 and not rs.state.is_recording:
-        required_mods, main_key = paste_last_combo
+            return True
+    if combo and event.value == 1 and not rs.state.is_recording:
+        required_mods, main_key = combo
         if event.code == main_key and check_modifiers_held(required_mods, held_modifiers):
-            # Same brief grab as the Voice Commands combo below, so the key
+            # Same brief grab as the Voice Commands combo, so the key
             # press doesn't reach the focused app.
             keyboard_grab.grab_keyboards_hiding(devices, {main_key, *held_modifiers})
             keyboard_grab.release_all()
             rs.state.paste_last = {"key": main_key, "key_up": False, "at": time.time()}
-            return
+            return True
+    return False
 
-    # --- Voice Commands combo hotkey (e.g. Ctrl+Shift+H) ---
-    # Not while recording: its brief grab ends by releasing every grab, which
-    # would also drop the ones a hold recording depends on.
-    if voice_cmds_combo and event.value == 1 and not rs.state.is_recording:
-        required_mods, main_key = voice_cmds_combo
-        if event.code == main_key and check_modifiers_held(required_mods, held_modifiers):
-            # Briefly grab the keyboards (not the pointer) to stop the keypress
-            # leaking into the focused app. The same tracked grabs as recording,
-            # and a finally that always releases, so a failing tray call can't
-            # strand them. The modifiers are balanced too: a stuck Ctrl in the
-            # desktop would be far worse than a stuck F8.
-            keyboard_grab.grab_keyboards_hiding(devices, {main_key, *held_modifiers})
-            try:
-                tray_link.show_voice_commands()
-            finally:
-                keyboard_grab.release_all()
-            return
 
-    if toggle_key and _toggle_tap_holds_send(event, toggle_key, held_modifiers):
-        return   # the tap only held the send: no recording
-    if event.code in MODIFIER_CODES and event.code in (hold_key, toggle_key):
-        _hide_modifier_hotkey(event, toggle_key, devices, held_modifiers)
-
-    # --- Hold-to-talk: hold key down to record, release to stop ---
-    if event.code == hold_key:
-        if (event.value == 1 and not rs.state.is_recording
-                and not _someone_elses_shortcut(held_modifiers - {hold_key})):
-            _start_hold_recording(hold_key, held_modifiers, devices, cfg, input_device_idx)
-        elif event.value == 0 and rs.state.is_recording:
-            # Let go of the keyboards before typing, so the user's own keys
-            # reach the app again
-            keyboard_grab.release_all()
-            pipeline.stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
-                           cfg.auto_space, cfg.auto_period, cfg.injection_mode)
-
-    # --- Tap-to-toggle: press once to start, press again to stop ---
-    if (toggle_key and event.code == toggle_key and event.value == 0
-            and send_countdown.owes_space() and not rs.state.is_recording):
-        send_countdown.type_owed_space()   # the tap that held the send is over
-
-    if (toggle_key and event.code == toggle_key and event.value == 1
-            and not _someone_elses_shortcut(held_modifiers - {toggle_key})):
-        shift = _held_shift(held_modifiers) if live.voice_editing else set()
-        if not rs.state.is_recording:
-            if shift:
-                # An edit: no double-tap hands-free, so not "from_toggle".
-                recording.start_recording(cfg.beeps, cfg.notify, input_device_idx, edit_mode=True)
-            else:
-                recording.start_recording(cfg.beeps, cfg.notify, input_device_idx, from_toggle=True)
-        elif rs.state.edit_mode:
-            # A hold edit holds the keyboards (brushing the toggle key mid-hold
-            # lands here): let go first, or they stay grabbed for the whole edit.
-            keyboard_grab.release_all()
-            # Stopping an edit. If Shift is down again, wait for the user to let go, or
-            # the Ctrl+C that copies the selection would arrive as Ctrl+Shift+C. Hiding
-            # it with injected key events, as the hold key does, would replay them
-            # after a slow edit and start a new recording by itself.
-            if shift and not keyboard_grab.wait_for_keys_up(devices, _SHIFT_CODES,
-                                                            EDIT_SHIFT_WAIT_S):
-                recording.cancel_recording(cfg.beeps, cfg.notify,
-                                 "Voice edit cancelled: let go of Shift to finish it")
-                return
-            pipeline.stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
-                           cfg.auto_space, cfg.auto_period, cfg.injection_mode)
-        elif recording.toggle_pressed_while_recording(cfg.beeps):
-            pass  # second tap of a double-tap: now hands-free, keep recording
-        else:
-            # Also reached by brushing the toggle key mid-hold. Release first,
-            # or the hold key's release branch is skipped and the grab is stranded.
-            keyboard_grab.release_all()
-            pipeline.stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
-                           cfg.auto_space, cfg.auto_period, cfg.injection_mode)
-
-    # --- ESC cancels in any mode ---
-    if event.code == ecodes.KEY_ESC and rs.state.is_recording and event.value == 1:
-        recording.cancel_recording(cfg.beeps, cfg.notify, "Cancelled by ESC")
+def _on_voice_commands_combo(event, combo, held_modifiers, devices) -> bool:
+    """The Voice Commands combo (e.g. Ctrl+Shift+H) opens the cheat sheet;
+    True when *event* was its. Not while recording: its brief grab ends by
+    releasing every grab, which would also drop the ones a hold recording
+    depends on."""
+    if not combo or event.value != 1 or rs.state.is_recording:
+        return False
+    required_mods, main_key = combo
+    if event.code != main_key or not check_modifiers_held(required_mods, held_modifiers):
+        return False
+    # Briefly grab the keyboards (not the pointer) to stop the keypress
+    # leaking into the focused app. The same tracked grabs as recording,
+    # and a finally that always releases, so a failing tray call can't
+    # strand them. The modifiers are balanced too: a stuck Ctrl in the
+    # desktop would be far worse than a stuck F8.
+    keyboard_grab.grab_keyboards_hiding(devices, {main_key, *held_modifiers})
+    try:
+        tray_link.show_voice_commands()
+    finally:
         keyboard_grab.release_all()
+    return True
+
+
+def _on_hold_key(event, hold_key, held_modifiers, devices, cfg, input_device_idx) -> None:
+    """Hold-to-talk: the hold key down records, let go stops and types."""
+    if (event.value == 1 and not rs.state.is_recording
+            and not _someone_elses_shortcut(held_modifiers - {hold_key})):
+        _start_hold_recording(hold_key, held_modifiers, devices, cfg, input_device_idx)
+    elif event.value == 0 and rs.state.is_recording:
+        # Let go of the keyboards before typing, so the user's own keys
+        # reach the app again
+        keyboard_grab.release_all()
+        _stop_recording(cfg)
+
+
+def _on_toggle_key(event, toggle_key, held_modifiers, devices, cfg, input_device_idx) -> bool:
+    """Tap-to-toggle: a tap starts a recording, the next stops it, and a
+    quick second tap makes it hands-free. With Shift (voice editing on) it
+    is a voice edit. True when a voice edit was cancelled."""
+    if event.value == 0 and send_countdown.owes_space() and not rs.state.is_recording:
+        send_countdown.type_owed_space()   # the tap that held the send is over
+    if event.value != 1 or _someone_elses_shortcut(held_modifiers - {toggle_key}):
+        return False
+    shift = _held_shift(held_modifiers) if live.voice_editing else set()
+    if not rs.state.is_recording:
+        if shift:
+            # An edit: no double-tap hands-free, so not "from_toggle".
+            recording.start_recording(cfg.beeps, cfg.notify, input_device_idx, edit_mode=True)
+        else:
+            recording.start_recording(cfg.beeps, cfg.notify, input_device_idx, from_toggle=True)
+    elif rs.state.edit_mode:
+        return _stop_edit(shift, devices, cfg)
+    elif not recording.toggle_pressed_while_recording(cfg.beeps):
+        # Not the second tap of a double-tap (that one keeps recording,
+        # hands-free). Also reached by brushing the toggle key mid-hold:
+        # release first, or the hold key's release is skipped and the grab
+        # is stranded.
+        keyboard_grab.release_all()
+        _stop_recording(cfg)
+    return False
+
+
+def _stop_edit(shift, devices, cfg) -> bool:
+    """The toggle key stops a voice edit; True when it was cancelled instead."""
+    # A hold edit holds the keyboards (brushing the toggle key mid-hold
+    # lands here): let go first, or they stay grabbed for the whole edit.
+    keyboard_grab.release_all()
+    # If Shift is down again, wait for the user to let go, or the Ctrl+C
+    # that copies the selection would arrive as Ctrl+Shift+C. Hiding it
+    # with injected key events, as the hold key does, would replay them
+    # after a slow edit and start a new recording by itself.
+    if shift and not keyboard_grab.wait_for_keys_up(devices, _SHIFT_CODES, EDIT_SHIFT_WAIT_S):
+        recording.cancel_recording(cfg.beeps, cfg.notify,
+                                   "Voice edit cancelled: let go of Shift to finish it")
+        return True
+    _stop_recording(cfg)
+    return False
 
 
 def _helper_watch(devices, hold_key, toggle_key, voice_cmds_combo, paste_last_combo):
