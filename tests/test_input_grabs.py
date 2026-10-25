@@ -13,6 +13,7 @@ import pytest
 from evdev import ecodes
 
 from tuxtalk import app, send_countdown
+from tuxtalk import tray_link
 from tuxtalk import keyboard_grab
 from tuxtalk import recording_state as rs
 from tuxtalk import uinput_helper
@@ -84,7 +85,7 @@ def quiet_recording(monkeypatch):
     """Silence the parts of start_recording that touch real hardware."""
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
-    monkeypatch.setattr(app, "_notify_tray_recording_state", lambda *a, **k: None)
+    monkeypatch.setattr(tray_link, "notify_recording_state", lambda *a, **k: None)
     monkeypatch.setattr(app.mic_stream, "input_samplerate", lambda idx, rate: 16000)
     monkeypatch.setattr(app, "recording_indicator", None)
     rs.state.is_recording = False
@@ -455,7 +456,7 @@ def test_the_apps_own_virtual_keyboard_is_not_grabbed():
 
 def _press_voice_combo(devices, monkeypatch, dbus=None):
     """Press the Ctrl+Alt+V style combo (no modifiers required, for brevity)."""
-    monkeypatch.setattr(app, "_show_voice_commands_via_dbus", dbus or (lambda: None))
+    monkeypatch.setattr(tray_link, "show_voice_commands", dbus or (lambda: None))
     app._handle_key_event(FakeEvent(ecodes.KEY_V, 1), HOLD, TOGGLE,
                           (set(), ecodes.KEY_V), set(), devices, FakeConfig(), 0)
 
@@ -533,9 +534,9 @@ class RecordingProxy:
 @pytest.fixture
 def tray_proxy(monkeypatch):
     proxy = RecordingProxy()
-    monkeypatch.setattr(app, "_tray_dbus_proxy", proxy)
+    monkeypatch.setattr(tray_link, "_tray_dbus_proxy", proxy)
     yield proxy
-    monkeypatch.setattr(app, "_tray_dbus_proxy", None)
+    monkeypatch.setattr(tray_link, "_tray_dbus_proxy", None)
 
 
 def test_recording_state_notification_is_time_bounded(tray_proxy):
@@ -545,7 +546,7 @@ def test_recording_state_notification_is_time_bounded(tray_proxy):
     an unresponsive tray could freeze every keyboard system-wide for ~50
     seconds. Nothing on that path may block without a bound.
     """
-    app._notify_tray_recording_state(True)
+    tray_link.notify_recording_state(True)
 
     assert tray_proxy.calls, "no D-Bus call was made"
     _, kwargs = tray_proxy.calls[0]
@@ -555,7 +556,7 @@ def test_recording_state_notification_is_time_bounded(tray_proxy):
 
 def test_voice_commands_notification_is_time_bounded(tray_proxy):
     """Same path, but this one also holds the grab across the call."""
-    app._show_voice_commands_via_dbus()
+    tray_link.show_voice_commands()
 
     assert tray_proxy.calls
     _, kwargs = tray_proxy.calls[0]
@@ -564,7 +565,7 @@ def test_voice_commands_notification_is_time_bounded(tray_proxy):
 
 
 def test_hotkey_press_notification_is_time_bounded(tray_proxy):
-    app._notify_tray_hotkey_pressed("hold")
+    tray_link.notify_hotkey_pressed("hold")
 
     assert tray_proxy.calls
     _, kwargs = tray_proxy.calls[0]
@@ -727,7 +728,7 @@ def test_rediscovery_survives_an_unreadable_device(monkeypatch):
 def test_the_voice_commands_combo_mid_hold_keeps_the_recordings_grab(key_env, monkeypatch):
     """The combo's brief grab must not end by releasing the hold recording's
     grab too, or the rest of that dictation's keys reach the app."""
-    monkeypatch.setattr(app, "_show_voice_commands_via_dbus", lambda: None)
+    monkeypatch.setattr(tray_link, "show_voice_commands", lambda: None)
     kb = keyboard()
     press_hold([kb])
     assert kb.is_grabbed

@@ -15,6 +15,7 @@ from tuxtalk import recording_state as rs
 from tuxtalk import config as C
 from tuxtalk.media_pause import MediaPauser
 from tuxtalk import keyboard_grab
+from tuxtalk import tray_link
 
 
 class FakeBus:
@@ -146,7 +147,7 @@ def service(monkeypatch):
     """start/stop/cancel with the hardware faked out and a spy pauser."""
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
-    monkeypatch.setattr(app, "_notify_tray_recording_state", lambda *a, **k: None)
+    monkeypatch.setattr(tray_link, "notify_recording_state", lambda *a, **k: None)
     monkeypatch.setattr(app.mic_stream, "input_samplerate", lambda idx, rate: 16000)
     monkeypatch.setattr(app, "recording_indicator", None)
     monkeypatch.setattr(app.sd, "InputStream", lambda *a, **k: FakeStream())

@@ -45,6 +45,7 @@ from . import recording_state as rs
 from . import live_settings as live
 from . import keyboard_grab
 from . import keyboard_output
+from . import tray_link
 import threading
 
 logger = setup_logger(__name__)
@@ -122,9 +123,6 @@ dbus_service = None
 # Undo voice-command parsing/length logic lives in tuxtalk.undo so it can
 # be unit-tested without dragging in heavy audio/CUDA imports.
 
-# D-Bus proxy for notifying the tray process of recording state changes.
-# The tray owns the D-Bus name and relays signals to the GNOME extension.
-_tray_dbus_proxy = None
 
 # Thread-safe recording command flags — set by signal handler or D-Bus thread, consumed by evdev loop.
 # Using two separate Events (rather than one flag) so start and stop can't overwrite each other.
@@ -189,26 +187,6 @@ def _handle_sigusr1(signum, frame):
     else:
         _cmd_start_recording.set()
 
-def _notify_tray_recording_state(is_recording: bool):
-    """Send recording state to the tray's D-Bus service.
-
-    The tray process owns the D-Bus name that the GNOME extension listens to.
-    App.py cannot emit signals that the extension will see, so we call
-    the tray's NotifyRecordingState method which then emits the signal.
-
-    Called from start_recording/stop_recording — that is, with every keyboard
-    exclusively grabbed. It must never block for long: see focused_window.TRAY_TIMEOUT_S.
-    """
-    try:
-        import dbus
-        proxy = _get_tray_dbus_proxy()
-        proxy.NotifyRecordingState(
-            dbus.Boolean(is_recording),
-            dbus_interface='io.github.ronb1964.TalkType',
-            timeout=focused_window.TRAY_TIMEOUT_S,
-        )
-    except Exception as e:
-        logger.debug(f"Could not notify tray of recording state: {e}")
 
 def _handle_sigusr2(signum, frame):
     """SIGUSR2 is accepted and ignored: unhandled, it ends the process, and an
@@ -222,27 +200,6 @@ def _install_signal_handlers():
     while the model is still loading."""
     signal.signal(signal.SIGUSR1, _handle_sigusr1)
     signal.signal(signal.SIGUSR2, _handle_sigusr2)
-
-def _get_tray_dbus_proxy():
-    """Get or create the D-Bus proxy for communicating with the tray process.
-
-    introspect=False: Introspect() is itself a blocking call with the 25-second
-    reply timeout, so it would double the worst-case stall on a busy tray.
-    Without it dbus-python guesses argument types from the Python values, so
-    wrap anything that isn't a plain str or bool (dbus.Array(..., signature=...)).
-    """
-    global _tray_dbus_proxy
-    import dbus
-    if _tray_dbus_proxy is None:
-        import dbus.mainloop.glib
-        dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
-        bus = dbus.SessionBus()
-        _tray_dbus_proxy = bus.get_object(
-            'io.github.ronb1964.TalkType',
-            '/io/github/ronb1964/TalkType',
-            introspect=False,
-        )
-    return _tray_dbus_proxy
 
 
 def _claim_desktop_hotkeys(cfg):
@@ -262,7 +219,7 @@ def _claim_desktop_hotkeys(cfg):
     x11_hotkeys.claim(cfg)
     try:
         import dbus
-        _get_tray_dbus_proxy().NotifyClaimedHotkeys(
+        tray_link.get_proxy().NotifyClaimedHotkeys(
             dbus.Array(gnome_hotkeys.accelerators(cfg), signature='s'),
             dbus_interface='io.github.ronb1964.TalkType',
             timeout=focused_window.TRAY_TIMEOUT_S,
@@ -270,34 +227,6 @@ def _claim_desktop_hotkeys(cfg):
     except Exception as e:
         logger.debug(f"Could not send the hotkeys to the tray: {e}")
 
-
-def _notify_tray_hotkey_pressed(key_name: str):
-    """Send hotkey press notification to tray D-Bus service during test mode.
-
-    Called from the evdev loop while hotkey test mode is on. The tray's D-Bus
-    service emits a HotkeyPressed signal that the prefs dialog listens for.
-    """
-    try:
-        proxy = _get_tray_dbus_proxy()
-        proxy.NotifyHotkeyPressed(
-            key_name,
-            dbus_interface='io.github.ronb1964.TalkType',
-            timeout=focused_window.TRAY_TIMEOUT_S,
-        )
-    except Exception as e:
-        logger.debug(f"Could not notify tray of hotkey press: {e}")
-
-
-def _show_voice_commands_via_dbus():
-    """Tell the tray to show the voice commands quick reference via D-Bus."""
-    try:
-        proxy = _get_tray_dbus_proxy()
-        proxy.ShowVoiceCommands(
-            dbus_interface='io.github.ronb1964.TalkType',
-            timeout=focused_window.TRAY_TIMEOUT_S,
-        )
-    except Exception as e:
-        logger.debug(f"Could not show voice commands via D-Bus: {e}")
 
 
 def _apply_custom_commands(text: str) -> tuple[str, dict[str, str]]:
@@ -744,7 +673,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     _pause_media_players()
     rs.state.start_beep = _beep(beeps_on, *START_BEEP)
     if notify_on: notify_module.notify("Recording… speak now", "")
-    _notify_tray_recording_state(True)
+    tray_link.notify_recording_state(True)
     if recording_indicator:
         try:
             recording_indicator.show_at_position()
@@ -783,7 +712,7 @@ def cancel_recording(beeps_on: bool, notify_on: bool, reason="Cancelled"):
 
     if recording_indicator:
         recording_indicator.hide_indicator()
-    _notify_tray_recording_state(False)
+    tray_link.notify_recording_state(False)
 
 
 def _typed_breaks_for(text: str, window_class) -> str:
@@ -1573,7 +1502,7 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
     rs.state.is_recording = False
     _stop_stream_safely()
     _resume_media_players()
-    _notify_tray_recording_state(False)  # the tray icon shows recording stopped
+    tray_link.notify_recording_state(False)  # the tray icon shows recording stopped
     _trim_auto_stop_tail(frames)
     if rs.state.was_cancelled:
         return None
@@ -2820,9 +2749,9 @@ def _paste_last_dictation(cfg) -> None:
 def _report_test_press(code, hold_key, toggle_key) -> None:
     """In the hotkey test, tell the tray which dictation key *code* is."""
     if code == hold_key:
-        _notify_tray_hotkey_pressed("hold")
+        tray_link.notify_hotkey_pressed("hold")
     elif toggle_key and code == toggle_key:
-        _notify_tray_hotkey_pressed("toggle")
+        tray_link.notify_hotkey_pressed("toggle")
 
 
 def _hide_modifier_hotkey(event, toggle_key, devices, held_modifiers) -> None:
@@ -2941,7 +2870,7 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
             # desktop would be far worse than a stuck F8.
             keyboard_grab.grab_keyboards_hiding(devices, {main_key, *held_modifiers})
             try:
-                _show_voice_commands_via_dbus()
+                tray_link.show_voice_commands()
             finally:
                 keyboard_grab.release_all()
             return
@@ -3580,7 +3509,7 @@ def _notify_tray_running_engine():
     if _running_engine is None:
         return
     try:
-        _get_tray_dbus_proxy().NotifyRunningEngine(
+        tray_link.get_proxy().NotifyRunningEngine(
             *_running_engine,
             dbus_interface='io.github.ronb1964.TalkType',
             timeout=focused_window.TRAY_TIMEOUT_S,
@@ -3626,7 +3555,7 @@ def _mark_service_ready():
     write_ready_pid(os.getpid())
     try:
         import dbus
-        _get_tray_dbus_proxy().NotifyServiceReady(
+        tray_link.get_proxy().NotifyServiceReady(
             dbus.UInt32(os.getpid()),
             dbus_interface='io.github.ronb1964.TalkType',
             timeout=focused_window.TRAY_TIMEOUT_S,

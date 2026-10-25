@@ -288,9 +288,9 @@ def test_the_hold_key_holds_the_send_before_it_hides_itself(chat, keyboard, monk
         send_countdown._send(waiting)                 # its thread got there first
     monkeypatch.setattr(keyboard_grab, "grab_keyboards_hiding", grab_then_the_send_runs)
     monkeypatch.setattr(app, "_open_input_stream", lambda idx: None)
-    for name in ("_notify_tray_recording_state", "_arm_chunker",
-                 "_pause_media_players"):
+    for name in ("_arm_chunker", "_pause_media_players"):
         monkeypatch.setattr(app, name, lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.tray_link.notify_recording_state", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
     monkeypatch.setattr(keyboard_grab, "release_all", lambda: None)
     monkeypatch.setattr(app, "recording_indicator", None)
@@ -343,8 +343,9 @@ def test_a_tap_of_the_toggle_key_that_holds_the_send_says_so_aloud(chat, keyboar
 def test_a_short_tap_of_the_hold_key_that_holds_the_send_says_so_aloud_once(
         chat, keyboard, monkeypatch, notifications, notify_on):
     focus, heard, typed, notices = chat
-    for name in ("_stop_stream_safely", "_resume_media_players", "_notify_tray_recording_state"):
+    for name in ("_stop_stream_safely", "_resume_media_players"):
         monkeypatch.setattr(app, name, lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.tray_link.notify_recording_state", lambda *a, **k: None)
     monkeypatch.setattr(app, "recording_indicator", None)
     monkeypatch.setattr(rs.state, "held_send", True)
     monkeypatch.setattr(rs.state, "silence", None)

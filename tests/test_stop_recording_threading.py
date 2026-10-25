@@ -10,11 +10,12 @@ import time
 
 from tuxtalk import app
 from tuxtalk import recording_state as rs
+from tuxtalk import tray_link
 
 
 def test_finish_capture_snapshots_frames_surviving_next_recording(monkeypatch):
     monkeypatch.setattr(app, "_stop_stream_safely", lambda: None)
-    monkeypatch.setattr(app, "_notify_tray_recording_state", lambda *_a: None)
+    monkeypatch.setattr(tray_link, "notify_recording_state", lambda *_a: None)
     monkeypatch.setattr(app, "recording_indicator", None)
 
     rs.state.frames = [b"hello-audio"]

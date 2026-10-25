@@ -14,6 +14,7 @@ from tuxtalk import beeps, silence
 from tuxtalk.silence import SilenceDetector
 from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
+from tuxtalk import tray_link
 
 SR = 16000
 BLOCK = 320   # 20 ms
@@ -121,7 +122,7 @@ def _start(monkeypatch, from_toggle=True, seconds=1.0, mic_delay=0.0, beeps_on=F
     monkeypatch.setattr(app, "_open_input_stream", open_microphone)
     if not beeps_on:
         monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
-    monkeypatch.setattr(app, "_notify_tray_recording_state", lambda *a: None)
+    monkeypatch.setattr(tray_link, "notify_recording_state", lambda *a: None)
     monkeypatch.setattr(app, "recording_indicator", None, raising=False)
     assert app.start_recording(beeps_on, False, 0, from_toggle=from_toggle)
     app._cmd_stop_recording.clear()
@@ -490,7 +491,7 @@ def test_a_hold_recording_cannot_become_hands_free(monkeypatch):
 def test_the_silent_tail_is_trimmed_and_speech_is_kept(monkeypatch):
     from tuxtalk import app
     monkeypatch.setattr(app, "_stop_stream_safely", lambda: None)
-    monkeypatch.setattr(app, "_notify_tray_recording_state", lambda *a: None)
+    monkeypatch.setattr(tray_link, "notify_recording_state", lambda *a: None)
     monkeypatch.setattr(app, "recording_indicator", None, raising=False)
     det = SilenceDetector(2.0, SR)
     talk, quiet = speech(1.0), noise(2.4)   # 2.4 s: blocks keep arriving after it fires

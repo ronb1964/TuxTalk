@@ -16,6 +16,7 @@ from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
 from tuxtalk import keyboard_grab
 from tuxtalk import keyboard_output
+from tuxtalk import tray_link
 
 SR = 16000
 BLOCK = 320   # 20 ms at 16 kHz
@@ -576,7 +577,7 @@ def recording(monkeypatch, pipeline):
     monkeypatch.setattr(app, "recording_indicator", None)
     monkeypatch.setattr(app, "_stop_stream_safely", lambda: None)
     monkeypatch.setattr(app, "_resume_media_players", lambda: None)
-    monkeypatch.setattr(app, "_notify_tray_recording_state", lambda *a: None)
+    monkeypatch.setattr(tray_link, "notify_recording_state", lambda *a: None)
     monkeypatch.setattr(rs.state, "silence", None)
     monkeypatch.setattr(rs.state, "recording_samplerate", SR, raising=False)
     rs.state.frames = []

@@ -21,6 +21,7 @@ from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
 from tuxtalk import keyboard_grab
 from tuxtalk import keyboard_output
+from tuxtalk import tray_link
 
 RCTRL, RALT, LCTRL = ecodes.KEY_RIGHTCTRL, ecodes.KEY_RIGHTALT, ecodes.KEY_LEFTCTRL
 
@@ -189,7 +190,7 @@ def test_a_right_alt_toggle_presses_ctrl_then_hides(service):
 def test_the_hotkey_test_sees_a_right_ctrl_toggle_and_nothing_else_happens(service, monkeypatch):
     reported = []
     monkeypatch.setattr(app, "_hotkey_test_active", lambda: True)
-    monkeypatch.setattr(app, "_notify_tray_hotkey_pressed", reported.append)
+    monkeypatch.setattr(tray_link, "notify_hotkey_pressed", reported.append)
     held = set()
     key(RCTRL, 1, held, toggle=RCTRL)
     key(RCTRL, 0, held, toggle=RCTRL)
@@ -797,7 +798,7 @@ def test_a_double_tap_of_a_right_ctrl_or_alt_toggle_goes_hands_free(keyboard, re
     monkeypatch.setattr(live, "auto_stop_seconds", 2.0)
     monkeypatch.setattr(app, "_open_input_stream", lambda idx: None)
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
-    monkeypatch.setattr(app, "_notify_tray_recording_state", lambda *a: None)
+    monkeypatch.setattr(tray_link, "notify_recording_state", lambda *a: None)
     monkeypatch.setattr(app, "recording_indicator", None, raising=False)
     stopped = []
     monkeypatch.setattr(app, "stop_recording", lambda *a, **k: stopped.append(a))

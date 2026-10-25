@@ -18,6 +18,7 @@ import pytest
 from tuxtalk import control
 from tuxtalk.control import WaitingStart, act_now, parse_action
 from tuxtalk import recording_state as rs
+from tuxtalk import tray_link
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -395,7 +396,7 @@ def service(monkeypatch):
         def NotifyServiceReady(self, pid, dbus_interface, timeout):
             told.append(int(pid))
 
-    monkeypatch.setattr(app, "_get_tray_dbus_proxy", lambda: Tray())
+    monkeypatch.setattr(tray_link, "get_proxy", lambda: Tray())
     app._cmd_start_recording.clear()
     app._cmd_stop_recording.clear()
     yield types.SimpleNamespace(app=app, written=written, told=told)
