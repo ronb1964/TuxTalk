@@ -18,6 +18,7 @@ from tuxtalk import (app, atspi_helper, compositor_focus, dbus_service, focused_
                      modifier_hotkeys, send_countdown)
 from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
+from tuxtalk import keyboard_grab
 
 ENTER, RCTRL, F8, F9 = ecodes.KEY_ENTER, ecodes.KEY_RIGHTCTRL, ecodes.KEY_F8, ecodes.KEY_F9
 # Taken before conftest runs "Right away" on the test's own thread, and
@@ -284,11 +285,12 @@ def test_the_hold_key_holds_the_send_before_it_hides_itself(chat, keyboard, monk
     def grab_then_the_send_runs(devices, codes):
         modifier_hotkeys.note_hidden(set(codes), devices)
         send_countdown._send(waiting)                 # its thread got there first
-    monkeypatch.setattr(app, "_grab_keyboards_hiding", grab_then_the_send_runs)
+    monkeypatch.setattr(keyboard_grab, "grab_keyboards_hiding", grab_then_the_send_runs)
     monkeypatch.setattr(app, "_open_input_stream", lambda idx: None)
     for name in ("_notify", "_notify_tray_recording_state", "_arm_chunker",
-                 "_pause_media_players", "_release_all_grabs"):
+                 "_pause_media_players"):
         monkeypatch.setattr(app, name, lambda *a, **k: None)
+    monkeypatch.setattr(keyboard_grab, "release_all", lambda: None)
     monkeypatch.setattr(app, "recording_indicator", None)
     cfg = types.SimpleNamespace(beeps=False, notify=False)
     press = types.SimpleNamespace(type=ecodes.EV_KEY, code=hold_key, value=1)
@@ -360,8 +362,9 @@ def test_a_hold_key_press_whose_recording_cant_start_says_the_send_is_held(
         raise OSError("Device unavailable")
     monkeypatch.setattr(app, "_open_input_stream", no_microphone)
     monkeypatch.setattr(app, "_pick_input_device", lambda mic: 0)
-    for name in ("_grab_keyboards_hiding", "_stop_stream_safely", "_release_all_grabs"):
-        monkeypatch.setattr(app, name, lambda *a, **k: None)
+    monkeypatch.setattr(app, "_stop_stream_safely", lambda *a, **k: None)
+    monkeypatch.setattr(keyboard_grab, "grab_keyboards_hiding", lambda *a, **k: None)
+    monkeypatch.setattr(keyboard_grab, "release_all", lambda: None)
     cfg = types.SimpleNamespace(beeps=False, notify=False)
     try:
         app._start_hold_recording(F8, set(), [], cfg, 0)

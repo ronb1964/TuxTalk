@@ -14,6 +14,7 @@ from tuxtalk.history import add_entry as REAL_ADD_ENTRY
 from tuxtalk import focused_window
 from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
+from tuxtalk import keyboard_grab
 
 SR = 16000
 BLOCK = 320   # 20 ms at 16 kHz
@@ -684,7 +685,7 @@ def test_flatpak_stop_queues_the_last_chunk_on_the_worker(recording, monkeypatch
     texts, typed, _ = recording
     texts.extend(["we meet", "at three", "we meet at three"])
     monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TuxTalk")
-    monkeypatch.setattr(app, "_release_all_grabs", lambda: None)
+    monkeypatch.setattr(keyboard_grab, "release_all", lambda: None)
     feed(np.concatenate([speech(1.0), noise(1.0), speech(0.8)]))
     svc = SimpleNamespace(input_device_idx=None, last_activity=0.0,
                           timeout_enabled=False, last_config_check=time.time())

@@ -11,6 +11,7 @@ from gtk_text import tree_text
 from tuxtalk import app, config, history, kwin_hotkeys
 from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
+from tuxtalk import keyboard_grab
 
 P = ecodes.KEY_P
 CTRL, ALT = ecodes.KEY_LEFTCTRL, ecodes.KEY_LEFTALT
@@ -33,8 +34,8 @@ class Cfg:
 def keys(monkeypatch):
     """A fake keyboard: grabs, typing and the Recent Dictations list recorded."""
     seen = {"grabbed": 0, "released": 0, "typed": [], "beeps": []}
-    monkeypatch.setattr(app, "_grab_keyboards_hiding", lambda devs, codes: seen.__setitem__("grabbed", seen["grabbed"] + 1))
-    monkeypatch.setattr(app, "_release_all_grabs", lambda: seen.__setitem__("released", seen["released"] + 1))
+    monkeypatch.setattr(keyboard_grab, "grab_keyboards_hiding", lambda devs, codes: seen.__setitem__("grabbed", seen["grabbed"] + 1))
+    monkeypatch.setattr(keyboard_grab, "release_all", lambda: seen.__setitem__("released", seen["released"] + 1))
     monkeypatch.setattr(app, "_inject_text", lambda text, mode: seen["typed"].append((text, mode)) or "ok")
     monkeypatch.setattr(app, "_beep", lambda on, *a: seen["beeps"].append(a))
     monkeypatch.setattr(history, "get_entries", lambda: ["Hello there.\nSecond line.", "older"])

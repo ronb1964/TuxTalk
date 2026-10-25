@@ -5,6 +5,8 @@ local AI model.
 import pytest
 
 from tuxtalk import clipboard as cb
+from tuxtalk import keyboard_grab
+from tuxtalk import uinput_helper
 
 
 # --- 1. grabbing the selection ------------------------------------------------------
@@ -268,8 +270,8 @@ def keyloop(monkeypatch):
     monkeypatch.setattr(live, "voice_editing", True)
     monkeypatch.setattr(rs.state, "is_recording", False)
     monkeypatch.setattr(rs.state, "edit_mode", False, raising=False)
-    monkeypatch.setattr(app, "_grab_keyboards_hiding", lambda devs, codes: seen["grab_codes"].append(set(codes)))
-    monkeypatch.setattr(app, "_release_all_grabs", lambda: None)
+    monkeypatch.setattr(keyboard_grab, "grab_keyboards_hiding", lambda devs, codes: seen["grab_codes"].append(set(codes)))
+    monkeypatch.setattr(keyboard_grab, "release_all", lambda: None)
 
     def start(beeps, notify, idx, from_toggle=False, edit_mode=False, held_send=False):
         seen["starts"].append({"from_toggle": from_toggle, "edit_mode": edit_mode})
@@ -554,7 +556,7 @@ class FakeKeyboard:
 def test_stopping_with_shift_waits_for_it_without_injecting_keys(keyloop, monkeypatch):
     """Injected key events replayed after a slow edit would start a new
     recording, so TuxTalk just waits for the real Shift release."""
-    monkeypatch.setattr(app, "_is_keyboard_device", lambda d: True)
+    monkeypatch.setattr(uinput_helper, "is_keyboard_device", lambda d: True)
     kb = FakeKeyboard([[SHIFT], [SHIFT], []])
     key(F9, 1, {SHIFT})
     keyloop["grab_codes"].clear()
@@ -563,7 +565,7 @@ def test_stopping_with_shift_waits_for_it_without_injecting_keys(keyloop, monkey
 
 
 def test_shift_held_too_long_cancels_the_edit(keyloop, monkeypatch):
-    monkeypatch.setattr(app, "_is_keyboard_device", lambda d: True)
+    monkeypatch.setattr(uinput_helper, "is_keyboard_device", lambda d: True)
     monkeypatch.setattr(app, "EDIT_SHIFT_WAIT_S", 0.05)
     cancelled = []
     monkeypatch.setattr(app, "cancel_recording", lambda b, n, reason="": cancelled.append(reason))
@@ -695,7 +697,7 @@ def test_a_line_by_line_pasted_rewrite_still_restores(edit_env, monkeypatch):
 
 def test_tapping_the_toggle_key_during_a_hold_edit_lets_go_of_the_keyboard(keyloop, monkeypatch):
     released = []
-    monkeypatch.setattr(app, "_release_all_grabs", lambda: released.append(True))
+    monkeypatch.setattr(keyboard_grab, "release_all", lambda: released.append(True))
     key(F8, 1, {SHIFT})                      # hold edit: keyboards grabbed
     key(F9, 1, set())                        # brush the toggle key
     assert keyloop["stops"] == 1 and released

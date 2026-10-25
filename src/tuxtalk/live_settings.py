@@ -3,11 +3,12 @@ from config.toml at startup and again whenever Preferences saves it
 (apply), with Your Words and the snippets, each from its own file. The
 service reads them here at the moment it uses them, as live_settings.X."""
 import os
-from .config import load_custom_commands
-from . import config as config_module
-from .logger import redact_text, setup_logger
-from . import send_countdown
 import threading
+
+from . import config as config_module
+from . import send_countdown
+from .config import load_custom_commands
+from .logger import redact_text, setup_logger
 
 logger = setup_logger(__name__)
 

@@ -50,7 +50,7 @@ def note(devices, *keys) -> None:
 
 def note_hidden(codes, keyboards=()) -> None:
     """Remember the keys a grab of *keyboards* has just hidden from the
-    desktop (app._grab_keyboards_hiding), or none once it lets go. The
+    desktop (keyboard_grab.grab_keyboards_hiding), or none once it lets go. The
     desktop has been told they're up, so typing under them is safe: Type at
     pause types each phrase while the hold key is still held.
 

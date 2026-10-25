@@ -38,14 +38,15 @@ from .recording_indicator import RecordingIndicator
 from .undo import detect_undo_command, calculate_undo_length
 from . import (custom_commands, delivery_notices, edit_notices, focused_window, hallucinations,
                modifier_hotkeys, secure_input, send_countdown, silence, single_instance,
-               virtual_keyboard)
+               uinput_helper, virtual_keyboard)
 from .focused_window import window_class as _query_focused_window_class
 from .window_classes import (ELECTRON_PASTE_BROKEN_CLASSES, SMART_NEWLINE_CLASSES_LOWER,
                              app_kind, is_document_window, is_terminal_class)
-from .hotkey_keys import (MODIFIER_CODES, check_modifiers_held, keycode_from_name, keys_down,
+from .hotkey_keys import (MODIFIER_CODES, check_modifiers_held, keycode_from_name,
                           parse_hotkey_combo, track_modifier)
 from . import recording_state as rs
 from . import live_settings as live
+from . import keyboard_grab
 import threading
 
 logger = setup_logger(__name__)
@@ -84,7 +85,6 @@ def _resume_media_players():
         _media_pauser.resume()
     if _audio_ducker is not None:
         _audio_ducker.restore()
-
 
 
 # Cached tool path lookups — avoids searching PATH on every text injection
@@ -503,19 +503,6 @@ def _resample_audio(audio, orig_sr, target_sr):
     orig_indices = np.linspace(0, len(audio) - 1, target_len)
     return np.interp(orig_indices, np.arange(len(audio)), audio.astype(np.float64)).astype(audio.dtype)
 
-# ---------------------------------------------------------------------------
-# Exclusive input-device grabs
-#
-# While recording we take an exclusive grab on the keyboard so the hotkey
-# doesn't leak through to whatever app has focus. A grab that is taken and
-# never released leaves the user's keyboard dead SYSTEM-WIDE until TuxTalk
-# exits, so the grabbed devices are tracked in module state rather than being
-# threaded through return values — that way every exit path (normal stop,
-# cancel, toggle, ESC, or an exception) can release them with one call.
-# ---------------------------------------------------------------------------
-
-# Devices we currently hold an exclusive grab on.
-_grabbed_devices = []
 
 # How often to look for input devices that have appeared or come back.
 # Frequent enough that a reconnected keyboard starts working on its own,
@@ -562,7 +549,6 @@ class LiveSettings(NamedTuple):
     voice_cmds_combo: tuple | None
     voice_cmds_main_key: int | None
     paste_last_combo: tuple | None = None
-
 
 
 def _reload_live_settings(cfg, indicator):
@@ -626,117 +612,6 @@ def _reload_live_settings(cfg, indicator):
         logger.warning(f"Could not apply reloaded settings: {e}", exc_info=True)
         return None
 
-# The service grabs only real keyboards; the same test tells onboarding and
-# Preferences whether the service will hear the hotkey.
-from .uinput_helper import LETTER_KEYS as _LETTER_KEYS  # noqa: E402,F401
-from .uinput_helper import is_keyboard_device as _is_keyboard_device  # noqa: E402
-
-
-# --- Keeping the desktop's key state honest across a grab --------------------
-#
-# The desktop (libinput, in KWin or GNOME Shell) sees a hotkey go DOWN before we
-# can grab the keyboard, but the grab hides the key going UP. libinput counts
-# presses minus releases per key, so the key stays "held" for the rest of the
-# session and each dictation adds another. Most apps never notice; anything
-# that asks which keys are held (VM viewers, remote desktop, games) sees F8
-# stuck and auto-repeats it. See freedesktop bug 101796.
-#
-# So before grabbing, send the release the desktop is owed, through the
-# same keyboard device, so it sees a balanced press/release. After grabbing,
-# send the press back, which only we see, so we still get the real release
-# when the key comes up. Our own read loop hears both injected events and must
-# skip them, or the injected release would end the recording it just started.
-
-_INJECTED_TTL_S = 2.0
-_injected_pending: list = []   # [(device path, code, value, expiry time)]
-
-
-def _inject_key(dev, code: int, value: int) -> bool:
-    """Send a key event through *dev* and remember to skip it when it comes back."""
-    try:
-        dev.write(ecodes.EV_KEY, code, value)
-        dev.write(ecodes.EV_SYN, ecodes.SYN_REPORT, 0)
-    except Exception as e:
-        logger.warning(f"Could not inject key {code}={value} on {getattr(dev, 'name', dev)}: {e}")
-        return False
-    _injected_pending.append((getattr(dev, "path", None), code, value, time.time() + _INJECTED_TTL_S))
-    return True
-
-
-def _is_own_injected_event(dev, event) -> bool:
-    """True (once) if *event* is one we injected. Stale entries expire, so a
-    lost injection can never swallow a real key event later."""
-    now = time.time()
-    _injected_pending[:] = [p for p in _injected_pending if p[3] > now]
-    path = getattr(dev, "path", None)
-    for i, (p, code, value, _) in enumerate(_injected_pending):
-        if p == path and code == event.code and value == event.value:
-            del _injected_pending[i]
-            return True
-    return False
-
-
-def _grab_keyboards_hiding(devices, codes) -> None:
-    """Grab the keyboards without leaving the desktop believing *codes* are held.
-
-    Only keys the kernel still reports as down are balanced: if one was already
-    released (a very fast tap), the desktop saw that release and nothing is owed.
-    """
-    keyboards = [d for d in devices if _is_keyboard_device(d)]
-    held, shown = [], set()     # shown: keys the desktop may still see down
-    for dev in keyboards:
-        try:
-            down = set(dev.active_keys())
-        except Exception:
-            continue
-        for code in codes & down:
-            if _inject_key(dev, code, 0):
-                held.append((dev, code))
-            else:
-                shown.add(code)
-    _grab_all_devices(keyboards)
-    # Mark the keys down again. With the grab in place only we see this, and it
-    # lets the kernel pass us the real release when the key comes up. On a
-    # device the grab failed on, the desktop sees it too, but then it also sees
-    # the real release, so it stays balanced either way.
-    for dev, code in held:
-        _inject_key(dev, code, 1)
-        if dev not in _grabbed_devices:
-            shown.add(code)
-    modifier_hotkeys.note_hidden(set(codes) - shown, [d for d in devices if d in _grabbed_devices])
-
-
-def _grab_all_devices(devices) -> None:
-    """Take an exclusive grab on each device, tracking the ones that succeed.
-
-    Devices that refuse the grab (permissions, already grabbed) are skipped and
-    left untracked so we never try to release something we don't hold.
-    """
-    for dev in devices:
-        try:
-            dev.grab()
-            _grabbed_devices.append(dev)
-            logger.info(f"Grabbed device: {dev.name}")
-        except Exception as e:
-            logger.warning(f"Could not grab {getattr(dev, 'name', dev)}: {e}")
-
-
-def _release_all_grabs() -> None:
-    """Release every grab we hold. Idempotent, and safe to call from any path.
-
-    One unplugged device must not strand the grabs on every other keyboard, so
-    each release is attempted independently and the registry is always cleared.
-    """
-    global _grabbed_devices
-    for dev in _grabbed_devices:
-        try:
-            dev.ungrab()
-            logger.info(f"Ungrabbed device: {getattr(dev, 'name', dev)}")
-        except Exception as e:
-            logger.warning(f"Could not ungrab {getattr(dev, 'name', dev)}: {e}")
-    _grabbed_devices = []
-    modifier_hotkeys.note_hidden(())
-
 
 def _rediscover_devices(devices) -> int:
     """Add keyboards that have appeared since the last scan. Returns how many.
@@ -757,7 +632,7 @@ def _rediscover_devices(devices) -> int:
             continue
         try:
             dev = InputDevice(path)
-            if not _is_keyboard_device(dev):
+            if not uinput_helper.is_keyboard_device(dev):
                 # Closed now, not whenever it is garbage-collected: every
                 # mouse and button node is opened again on each scan.
                 dev.close()
@@ -798,30 +673,16 @@ def _drop_dead_devices(dead_devices, devices, cfg) -> None:
     # The hold key works whatever the configured mode, so the grabs, not the
     # mode, tell a hold recording apart. A toggle or hands-free recording
     # holds no grab and carries on: any keyboard can still stop it.
-    if rs.state.is_recording and _grabbed_devices:
+    if rs.state.is_recording and keyboard_grab.grabbed_devices:
         logger.warning(
             "Input device died while the hold hotkey was down — ending the "
             "recording, since its key-up can no longer arrive"
         )
-        _release_all_grabs()
+        keyboard_grab.release_all()
         stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
                        cfg.auto_space, cfg.auto_period, cfg.injection_mode)
 
     dead_devices.clear()
-
-
-def _release_grabs_if_not_recording() -> bool:
-    """Safety net: holding an exclusive grab while not recording is always a bug.
-
-    Called once per event-loop pass so that any path which fails to release —
-    including one added later — self-heals within milliseconds instead of
-    leaving the user with a dead keyboard. Returns True if it had to recover.
-    """
-    if _grabbed_devices and not rs.state.is_recording:
-        logger.warning(f"Releasing {len(_grabbed_devices)} stranded input grab(s)")
-        _release_all_grabs()
-        return True
-    return False
 
 
 def _open_input_stream(device_idx) -> None:
@@ -885,7 +746,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
             logger.error(f"Could not start recording: {e}", exc_info=True)
             rs.state.is_recording = False
             _stop_stream_safely()
-            _release_all_grabs()
+            keyboard_grab.release_all()
             _beep(beeps_on, *CANCEL_BEEP)
             if notify_on:
                 _notify("Microphone unavailable", "Check that no other app is using it.")
@@ -2232,7 +2093,6 @@ def _report_undelivered(outcome: str, beeps_on: bool):
     if outcome == "failed":
         # When the typing setup is the reason, say what fixes it.
         try:
-            from . import uinput_helper
             reason = uinput_helper.typing_blocked_reason()
             if reason:
                 message = (f"{reason} The dictation is saved in Recent Dictations "
@@ -3379,18 +3239,6 @@ _SHIFT_CODES = frozenset({ecodes.KEY_LEFTSHIFT, ecodes.KEY_RIGHTSHIFT})
 EDIT_SHIFT_WAIT_S = 2.0
 
 
-def _wait_for_keys_up(devices, codes, timeout) -> bool:
-    """Wait until none of *codes* is down on any keyboard. False on timeout."""
-    keyboards = [d for d in devices if _is_keyboard_device(d)]
-    deadline = time.time() + timeout
-    while True:
-        if not keys_down(keyboards) & set(codes):
-            return True
-        if time.time() >= deadline:
-            return False
-        time.sleep(0.02)
-
-
 def _held_shift(held_modifiers) -> set:
     """The Shift keys among *held_modifiers*: Shift + the dictation key starts
     a voice edit instead of a dictation."""
@@ -3442,16 +3290,16 @@ def _hide_modifier_hotkey(event, toggle_key, devices, held_modifiers) -> None:
     told it's up either way. Not with another modifier held: that press is
     the user's own shortcut (Ctrl+Alt+T with Right Ctrl), which hiding the
     key would break."""
-    if (event.value == 1 and not _grabbed_devices
+    if (event.value == 1 and not keyboard_grab.grabbed_devices
             and (event.code == toggle_key or rs.state.is_recording)
             and not _someone_elses_shortcut(held_modifiers - {event.code})):
-        _grab_keyboards_hiding(devices, {event.code})
+        keyboard_grab.grab_keyboards_hiding(devices, {event.code})
         rs.state.hidden_key = event.code
     elif event.value == 0:
         modifier_hotkeys.note_released(event.code)
         if event.code == rs.state.hidden_key:
             rs.state.hidden_key = None
-            _release_all_grabs()
+            keyboard_grab.release_all()
 
 
 def _toggle_tap_holds_send(event, toggle_key, held_modifiers) -> bool:
@@ -3477,7 +3325,7 @@ def _start_hold_recording(hold_key, held_modifiers, devices, cfg, input_device_i
     arrive as Ctrl+Shift+C."""
     held = send_countdown.hold(announce=False)
     shift = _held_shift(held_modifiers) if live.voice_editing else set()
-    _grab_keyboards_hiding(devices, {hold_key, *shift})
+    keyboard_grab.grab_keyboards_hiding(devices, {hold_key, *shift})
     if (start_recording(cfg.beeps, cfg.notify, input_device_idx, edit_mode=bool(shift),
                         held_send=held) and rs.state.held_send):
         # The hold time counts from the press to when its release is read,
@@ -3488,7 +3336,7 @@ def _start_hold_recording(hold_key, held_modifiers, devices, cfg, input_device_i
         # hold time decides.
         rs.state.released_while_starting = (
             time.time() - rs.state.press_t0 < 2 * MIN_HOLD_MS / 1000
-            and _wait_for_keys_up(devices, {hold_key}, 0))
+            and keyboard_grab.wait_for_keys_up(devices, {hold_key}, 0))
 
 
 def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifiers,
@@ -3530,8 +3378,8 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
         if event.code == main_key and check_modifiers_held(required_mods, held_modifiers):
             # Same brief grab as the Voice Commands combo below, so the key
             # press doesn't reach the focused app.
-            _grab_keyboards_hiding(devices, {main_key, *held_modifiers})
-            _release_all_grabs()
+            keyboard_grab.grab_keyboards_hiding(devices, {main_key, *held_modifiers})
+            keyboard_grab.release_all()
             rs.state.paste_last = {"key": main_key, "key_up": False, "at": time.time()}
             return
 
@@ -3546,11 +3394,11 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
             # and a finally that always releases, so a failing tray call can't
             # strand them. The modifiers are balanced too: a stuck Ctrl in the
             # desktop would be far worse than a stuck F8.
-            _grab_keyboards_hiding(devices, {main_key, *held_modifiers})
+            keyboard_grab.grab_keyboards_hiding(devices, {main_key, *held_modifiers})
             try:
                 _show_voice_commands_via_dbus()
             finally:
-                _release_all_grabs()
+                keyboard_grab.release_all()
             return
 
     if toggle_key and _toggle_tap_holds_send(event, toggle_key, held_modifiers):
@@ -3566,7 +3414,7 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
         elif event.value == 0 and rs.state.is_recording:
             # Let go of the keyboards before typing, so the user's own keys
             # reach the app again
-            _release_all_grabs()
+            keyboard_grab.release_all()
             stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
                            cfg.auto_space, cfg.auto_period, cfg.injection_mode)
 
@@ -3587,13 +3435,13 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
         elif rs.state.edit_mode:
             # A hold edit holds the keyboards (brushing the toggle key mid-hold
             # lands here): let go first, or they stay grabbed for the whole edit.
-            _release_all_grabs()
-            # Stopping an edit. If Shift is down again, wait for the user to
-            # let go, or the Ctrl+C that copies the selection would arrive as
-            # Ctrl+Shift+C. Hiding it with injected key events, as the hold key
-            # does, would replay them after a slow edit and start a new
-            # recording by itself.
-            if shift and not _wait_for_keys_up(devices, _SHIFT_CODES, EDIT_SHIFT_WAIT_S):
+            keyboard_grab.release_all()
+            # Stopping an edit. If Shift is down again, wait for the user to let go, or
+            # the Ctrl+C that copies the selection would arrive as Ctrl+Shift+C. Hiding
+            # it with injected key events, as the hold key does, would replay them
+            # after a slow edit and start a new recording by itself.
+            if shift and not keyboard_grab.wait_for_keys_up(devices, _SHIFT_CODES,
+                                                            EDIT_SHIFT_WAIT_S):
                 cancel_recording(cfg.beeps, cfg.notify,
                                  "Voice edit cancelled: let go of Shift to finish it")
                 return
@@ -3604,14 +3452,14 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
         else:
             # Also reached by brushing the toggle key mid-hold. Release first,
             # or the hold key's release branch is skipped and the grab is stranded.
-            _release_all_grabs()
+            keyboard_grab.release_all()
             stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
                            cfg.auto_space, cfg.auto_period, cfg.injection_mode)
 
     # --- ESC cancels in any mode ---
     if event.code == ecodes.KEY_ESC and rs.state.is_recording and event.value == 1:
         cancel_recording(cfg.beeps, cfg.notify, "Cancelled by ESC")
-        _release_all_grabs()
+        keyboard_grab.release_all()
 
 
 def _rest_model(minutes):
@@ -3734,7 +3582,7 @@ def _service_tick(cfg, svc: "_ServiceState") -> "LiveSettings | None":
     if _cmd_stop_recording.is_set():
         _cmd_stop_recording.clear()
         if rs.state.is_recording:
-            _release_all_grabs()
+            keyboard_grab.release_all()
             if os.environ.get("FLATPAK_ID"):
                 # Backend B (Flatpak): transcription + portal typing are slow
                 # and would freeze THIS GLib loop — and F3/F4 with it — for as
@@ -3938,7 +3786,7 @@ def _loop_evdev(cfg: Settings, input_device_idx, keyboards=None):
                     if event.type == ecodes.EV_KEY:
                         # Our own injected key events (see _grab_keyboards_hiding)
                         # come back through this same read; they are not input.
-                        if _is_own_injected_event(dev, event):
+                        if keyboard_grab.is_own_injected_event(dev, event):
                             continue
                         track_modifier(held_modifiers, event)
 
@@ -3981,7 +3829,7 @@ def _loop_evdev(cfg: Settings, input_device_idx, keyboards=None):
             _rediscover_devices(devices)
 
         # Backstop: we must never hold a keyboard grab while not recording.
-        _release_grabs_if_not_recording()
+        keyboard_grab.release_if_not_recording()
 
         pass_time = time.time() - current_time
         if pass_time < INPUT_MIN_PASS_S:

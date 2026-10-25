@@ -19,6 +19,7 @@ from tuxtalk.hotkey_keys import keycode_from_name, track_modifier
 from tuxtalk.hotkey_labels import hotkey_label, layout_label
 from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
+from tuxtalk import keyboard_grab
 
 RCTRL, RALT, LCTRL = ecodes.KEY_RIGHTCTRL, ecodes.KEY_RIGHTALT, ecodes.KEY_LEFTCTRL
 
@@ -52,8 +53,8 @@ def service(monkeypatch):
     """The key handler with recording, grabs and typing recorded, not done."""
     done = []
     monkeypatch.setattr(app, "_hotkey_test_active", lambda: False)
-    monkeypatch.setattr(app, "_grab_keyboards_hiding", lambda devices, codes: done.append("grab"))
-    monkeypatch.setattr(app, "_release_all_grabs", lambda: done.append("let go"))
+    monkeypatch.setattr(keyboard_grab, "grab_keyboards_hiding", lambda devices, codes: done.append("grab"))
+    monkeypatch.setattr(keyboard_grab, "release_all", lambda: done.append("let go"))
     monkeypatch.setattr(app, "_send_keys", lambda events, **k: done.append(("keys", events)) or True)
     monkeypatch.setattr(modifier_hotkeys, "guard_alt_tap", lambda: done.append("Ctrl guard"))
 
@@ -738,11 +739,11 @@ def real_grabs(keyboard, stuck_right_ctrl, monkeypatch):
     """The key handler's real grabs, on keyboards a test makes; the waits run
     on the keyboard's fake clock."""
     monkeypatch.setattr(app, "_hotkey_test_active", lambda: False)
-    monkeypatch.setattr(app, "_grabbed_devices", [])
+    monkeypatch.setattr(keyboard_grab, "grabbed_devices", [])
     monkeypatch.setattr(modifier_hotkeys, "_hidden", (frozenset(), ()))
     rs.state.is_recording = False
     yield
-    app._release_all_grabs()
+    keyboard_grab.release_all()
     rs.state.is_recording = False
 
 
@@ -782,7 +783,7 @@ def test_a_hold_key_the_grab_couldnt_hide_still_holds_typing_up(keyboard, holdin
 
 def test_letting_go_of_the_grab_stops_hiding_the_key(keyboard, holding):
     holding(RCTRL)
-    app._release_all_grabs()
+    keyboard_grab.release_all()
     assert app._send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a") is False
 
 
@@ -808,7 +809,7 @@ def test_a_double_tap_of_a_right_ctrl_or_alt_toggle_goes_hands_free(keyboard, re
                               Cfg(), 0)
         assert rs.state.is_recording
     assert rs.state.silence is not None and stopped == []
-    assert app._grabbed_devices == []
+    assert keyboard_grab.grabbed_devices == []
     rs.state.silence = None
 
 

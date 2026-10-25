@@ -10,6 +10,7 @@ import socket
 import pytest
 
 from tuxtalk import app, focused_window, hotkey_helper as hh
+from tuxtalk import keyboard_grab
 from tuxtalk import recording_state as rs
 from tuxtalk.hotkey_helper_client import HelperKeyboard, connect_helper, watch_specs
 from tuxtalk.hotkey_keys import track_modifier
@@ -67,8 +68,8 @@ def rig(tmp_path, monkeypatch):
     client.active_keys()                    # and TuxTalk its OK
 
     calls = []
-    monkeypatch.setattr(app, "_grabbed_devices", [])
-    monkeypatch.setattr(app, "_injected_pending", [])
+    monkeypatch.setattr(keyboard_grab, "grabbed_devices", [])
+    monkeypatch.setattr(keyboard_grab, "_injected_pending", [])
     monkeypatch.setattr(live, "voice_editing", False)
     monkeypatch.setattr(app, "_hotkey_test_active", lambda: False)
     monkeypatch.setattr(rs.state, "is_recording", False)
@@ -101,7 +102,7 @@ def rig(tmp_path, monkeypatch):
                 except BlockingIOError:
                     continue
                 for event in events:
-                    if app._is_own_injected_event(dev, event):
+                    if keyboard_grab.is_own_injected_event(dev, event):
                         continue
                     track_modifier(held, event)
                     app._handle_key_event(event, hold, F9, None, held,
@@ -123,7 +124,7 @@ def test_holding_the_dictation_key_records_and_hides_it(rig):
     loop()
     assert calls == [("start", False), ("stop",)]
     assert helper.hide is None and kb.calls[-1] == ("grab", False)
-    assert app._grabbed_devices == []
+    assert keyboard_grab.grabbed_devices == []
 
 
 def test_shift_with_the_dictation_key_starts_an_edit_and_hides_shift_too(rig, monkeypatch):
@@ -176,7 +177,7 @@ def test_if_the_helper_goes_away_a_held_key_is_let_go(rig):
             except BlockingIOError:
                 continue
             for event in events:
-                if not app._is_own_injected_event(dev, event):
+                if not keyboard_grab.is_own_injected_event(dev, event):
                     app._handle_key_event(event, F8, F9, None, set(),
                                           [client], type("C", (), {"beeps": True, "notify": True,
                                                                     "smart_quotes": True, "language": "",

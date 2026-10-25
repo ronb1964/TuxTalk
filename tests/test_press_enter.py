@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 from tuxtalk import app, config, focused_window, key_commands, send_countdown, window_classes
+from tuxtalk import keyboard_grab
 from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
 from tuxtalk.key_commands import split_key_command
@@ -554,7 +555,7 @@ def test_a_quick_tap_holds_the_send_even_when_recording_starts_slowly(
             app._handle_key_event(SimpleNamespace(type=ecodes.EV_KEY, code=F8, value=value),
                                   F8, F9, None, set(), [keyboard], cfg, 0)
     finally:
-        app._release_all_grabs()
+        keyboard_grab.release_all()
         rs.state.is_recording = False
         rs.state.stream = None
     if outcome == "held":

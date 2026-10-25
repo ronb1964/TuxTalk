@@ -14,6 +14,7 @@ from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
 from tuxtalk import config as C
 from tuxtalk.media_pause import MediaPauser
+from tuxtalk import keyboard_grab
 
 
 class FakeBus:
@@ -203,6 +204,6 @@ def test_a_microphone_failure_pauses_nothing(service, monkeypatch):
     monkeypatch.setattr(app.sd, "InputStream",
                         lambda *a, **k: (_ for _ in ()).throw(Exception("no mic")))
     monkeypatch.setattr(app, "_pick_input_device", lambda mic: 0)
-    monkeypatch.setattr(app, "_release_all_grabs", lambda: None)
+    monkeypatch.setattr(keyboard_grab, "release_all", lambda: None)
     assert app.start_recording(False, False, 0) is False
     assert service.calls == []

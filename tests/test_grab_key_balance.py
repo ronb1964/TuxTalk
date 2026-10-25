@@ -18,7 +18,9 @@ import pytest
 from evdev import ecodes
 
 from tuxtalk import app
+from tuxtalk import keyboard_grab
 from tuxtalk import recording_state as rs
+from tuxtalk import uinput_helper
 
 F8 = ecodes.KEY_F8
 
@@ -72,9 +74,9 @@ class KernelKeyboard:
 @pytest.fixture
 def kb(monkeypatch):
     dev = KernelKeyboard()
-    app._injected_pending.clear()
-    app._grabbed_devices.clear()
-    monkeypatch.setattr(app, "_is_keyboard_device", lambda d: True)
+    keyboard_grab._injected_pending.clear()
+    keyboard_grab.grabbed_devices.clear()
+    monkeypatch.setattr(uinput_helper, "is_keyboard_device", lambda d: True)
     monkeypatch.setattr(app, "start_recording",
                         lambda *a, **k: setattr(rs.state, "is_recording", True) or True)
     stops = []
@@ -84,8 +86,8 @@ def kb(monkeypatch):
     rs.state.is_recording = False
     yield dev
     rs.state.is_recording = False
-    app._grabbed_devices.clear()
-    app._injected_pending.clear()
+    keyboard_grab.grabbed_devices.clear()
+    keyboard_grab._injected_pending.clear()
 
 
 class Cfg:
@@ -96,7 +98,7 @@ class Cfg:
 def pump(kb):
     """Run TuxTalk's read loop over whatever the kernel delivered to it."""
     for event in kb.read():
-        if app._is_own_injected_event(kb, event):
+        if keyboard_grab.is_own_injected_event(kb, event):
             continue
         app._handle_key_event(event, F8, None, None, set(), [kb], Cfg(), 0)
 
@@ -134,21 +136,21 @@ def test_a_tap_released_before_the_grab_needs_no_balancing(kb):
     kb.physical(F8, 0)                                # both happen before TuxTalk acts
     pump(kb)
     assert kb.desktop_count.get(F8, 0) == 0
-    assert app._injected_pending == []                # nothing was injected
+    assert keyboard_grab._injected_pending == []                # nothing was injected
 
 
 def test_without_the_fix_the_desktop_is_left_holding_f8(kb, monkeypatch):
     """A plain grab, without _grab_keyboards_hiding, leaves F8 held."""
-    monkeypatch.setattr(app, "_grab_keyboards_hiding",
-                        lambda devices, codes: app._grab_all_devices(devices))
+    monkeypatch.setattr(keyboard_grab, "grab_keyboards_hiding",
+                        lambda devices, codes: keyboard_grab.grab_all_devices(devices))
     kb.physical(F8, 1); pump(kb)
     kb.physical(F8, 0); pump(kb)
     assert kb.desktop_count[F8] == 1                  # stuck "held"
 
 
 def test_stale_injections_expire_and_never_swallow_real_keys(kb, monkeypatch):
-    app._injected_pending.append((kb.path, F8, 0, time.time() - 1))   # already expired
-    assert app._is_own_injected_event(kb, Event(F8, 0)) is False
+    keyboard_grab._injected_pending.append((kb.path, F8, 0, time.time() - 1))   # already expired
+    assert keyboard_grab.is_own_injected_event(kb, Event(F8, 0)) is False
 
 
 def test_a_failed_write_falls_back_to_the_old_behaviour(kb, monkeypatch):

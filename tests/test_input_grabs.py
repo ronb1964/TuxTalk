@@ -13,7 +13,9 @@ import pytest
 from evdev import ecodes
 
 from tuxtalk import app, send_countdown
+from tuxtalk import keyboard_grab
 from tuxtalk import recording_state as rs
+from tuxtalk import uinput_helper
 
 
 class FakeDevice:
@@ -72,9 +74,9 @@ def power_button(name="Power Button"):
 @pytest.fixture(autouse=True)
 def clean_grab_registry():
     """Every test starts and ends with no devices grabbed."""
-    app._release_all_grabs()
+    keyboard_grab.release_all()
     yield
-    app._release_all_grabs()
+    keyboard_grab.release_all()
 
 
 @pytest.fixture
@@ -95,20 +97,20 @@ def quiet_recording(monkeypatch):
 
 def test_release_all_grabs_releases_every_grabbed_device():
     devices = [keyboard("kb1"), keyboard("kb2"), keyboard("kb3")]
-    app._grab_all_devices(devices)
+    keyboard_grab.grab_all_devices(devices)
     assert all(d.is_grabbed for d in devices)
 
-    app._release_all_grabs()
+    keyboard_grab.release_all()
 
     assert not any(d.is_grabbed for d in devices)
 
 
 def test_release_all_grabs_is_idempotent():
     devices = [keyboard()]
-    app._grab_all_devices(devices)
+    keyboard_grab.grab_all_devices(devices)
 
-    app._release_all_grabs()
-    app._release_all_grabs()  # must not raise
+    keyboard_grab.release_all()
+    keyboard_grab.release_all()  # must not raise
 
     assert not devices[0].is_grabbed
 
@@ -118,9 +120,9 @@ def test_release_continues_when_one_device_fails_to_ungrab():
     good_before = keyboard("before")
     broken = FakeDevice("unplugged", fail_ungrab=True)
     good_after = keyboard("after")
-    app._grab_all_devices([good_before, broken, good_after])
+    keyboard_grab.grab_all_devices([good_before, broken, good_after])
 
-    app._release_all_grabs()
+    keyboard_grab.release_all()
 
     assert not good_before.is_grabbed
     assert not good_after.is_grabbed
@@ -130,10 +132,10 @@ def test_devices_that_fail_to_grab_are_not_tracked():
     ok = keyboard("ok")
     denied = FakeDevice("no permission", fail_grab=True)
 
-    app._grab_all_devices([ok, denied])
+    keyboard_grab.grab_all_devices([ok, denied])
 
     assert ok.is_grabbed
-    assert denied not in app._grabbed_devices
+    assert denied not in keyboard_grab.grabbed_devices
 
 
 # --- a failed start must not lock the keyboard -----------------------------
@@ -151,7 +153,7 @@ def test_failed_recording_start_releases_the_keyboard(monkeypatch, quiet_recordi
     monkeypatch.setattr(app.sd, "InputStream", boom)
 
     devices = [keyboard("kb"), keyboard("laptop-internal")]
-    app._grab_all_devices(devices)
+    keyboard_grab.grab_all_devices(devices)
 
     started = app.start_recording(beeps_on=False, notify_on=False, input_device_idx=99)
 
@@ -197,24 +199,24 @@ def test_successful_recording_start_reports_success(monkeypatch, quiet_recording
 
 def test_pointer_devices_are_not_treated_as_keyboards():
     """Grabbing mice freezes the pointer for the whole recording."""
-    assert app._is_keyboard_device(mouse()) is False
-    assert app._is_keyboard_device(touchpad()) is False
+    assert uinput_helper.is_keyboard_device(mouse()) is False
+    assert uinput_helper.is_keyboard_device(touchpad()) is False
 
 
 def test_real_keyboards_are_recognised():
-    assert app._is_keyboard_device(keyboard()) is True
+    assert uinput_helper.is_keyboard_device(keyboard()) is True
 
 
 def test_power_button_is_not_treated_as_a_keyboard():
     """It reports EV_KEY but has no letter keys — grabbing it kills the power button."""
-    assert app._is_keyboard_device(power_button()) is False
+    assert uinput_helper.is_keyboard_device(power_button()) is False
 
 
 def test_grab_filtering_leaves_the_mouse_alone():
     kb = keyboard()
     mx = mouse()
 
-    app._grab_all_devices([d for d in (kb, mx) if app._is_keyboard_device(d)])
+    keyboard_grab.grab_all_devices([d for d in (kb, mx) if uinput_helper.is_keyboard_device(d)])
 
     assert kb.is_grabbed
     assert not mx.is_grabbed, "mouse was grabbed — pointer would freeze while recording"
@@ -352,7 +354,7 @@ def test_stale_microphone_index_is_re_resolved_and_retried(monkeypatch, quiet_re
     monkeypatch.setattr(app, "load_config", lambda: FakeConfig())
 
     kb = keyboard()
-    app._grab_all_devices([kb])
+    keyboard_grab.grab_all_devices([kb])
 
     started = app.start_recording(beeps_on=False, notify_on=False, input_device_idx=99)
 
@@ -368,7 +370,7 @@ def test_keyboard_is_released_when_even_the_re_resolved_mic_fails(monkeypatch, q
     monkeypatch.setattr(app, "load_config", lambda: FakeConfig())
 
     kb = keyboard()
-    app._grab_all_devices([kb])
+    keyboard_grab.grab_all_devices([kb])
 
     started = app.start_recording(beeps_on=False, notify_on=False, input_device_idx=99)
 
@@ -386,10 +388,10 @@ def test_grabs_held_while_not_recording_are_released():
     with a dead keyboard.
     """
     kb = keyboard()
-    app._grab_all_devices([kb])
+    keyboard_grab.grab_all_devices([kb])
     rs.state.is_recording = False
 
-    recovered = app._release_grabs_if_not_recording()
+    recovered = keyboard_grab.release_if_not_recording()
 
     assert recovered is True
     assert not kb.is_grabbed
@@ -397,10 +399,10 @@ def test_grabs_held_while_not_recording_are_released():
 
 def test_grabs_held_while_recording_are_left_alone():
     kb = keyboard()
-    app._grab_all_devices([kb])
+    keyboard_grab.grab_all_devices([kb])
     rs.state.is_recording = True
     try:
-        recovered = app._release_grabs_if_not_recording()
+        recovered = keyboard_grab.release_if_not_recording()
     finally:
         rs.state.is_recording = False
 
@@ -417,12 +419,12 @@ def test_keyboard_declaring_the_pointer_event_type_is_still_a_keyboard():
     hotkey leak into whatever app has focus.
     """
     k800 = FakeDevice("Logitech K800", {
-        ecodes.EV_KEY: sorted(app._LETTER_KEYS) + [ecodes.KEY_F8],
+        ecodes.EV_KEY: sorted(uinput_helper.LETTER_KEYS) + [ecodes.KEY_F8],
         ecodes.EV_REL: [],
         ecodes.EV_ABS: [],
     })
 
-    assert app._is_keyboard_device(k800) is True
+    assert uinput_helper.is_keyboard_device(k800) is True
 
 
 def test_unifying_mouse_advertising_letter_keys_is_not_grabbed():
@@ -433,11 +435,11 @@ def test_unifying_mouse_advertising_letter_keys_is_not_grabbed():
     mouse buttons. Grabbing them freezes the pointer for the whole recording.
     """
     mx = FakeDevice("Logitech MX Master", {
-        ecodes.EV_KEY: sorted(app._LETTER_KEYS) + [ecodes.KEY_F8, ecodes.BTN_LEFT, ecodes.BTN_RIGHT],
+        ecodes.EV_KEY: sorted(uinput_helper.LETTER_KEYS) + [ecodes.KEY_F8, ecodes.BTN_LEFT, ecodes.BTN_RIGHT],
         ecodes.EV_REL: [ecodes.REL_X, ecodes.REL_Y],
     })
 
-    assert app._is_keyboard_device(mx) is False
+    assert uinput_helper.is_keyboard_device(mx) is False
 
 
 def test_the_apps_own_virtual_keyboard_is_not_grabbed():
@@ -446,7 +448,7 @@ def test_the_apps_own_virtual_keyboard_is_not_grabbed():
     from tuxtalk import virtual_keyboard
     ours = FakeDevice(virtual_keyboard.NAME, virtual_keyboard._capabilities())
 
-    assert app._is_keyboard_device(ours) is False
+    assert uinput_helper.is_keyboard_device(ours) is False
 
 
 # --- the Voice Commands hotkey is a grab path too ---------------------------
@@ -480,7 +482,7 @@ def test_voice_commands_grabs_are_visible_to_the_recovery_backstop(key_env,
     during = {}
 
     _press_voice_combo([kb], monkeypatch,
-                       dbus=lambda: during.update(tracked=list(app._grabbed_devices)))
+                       dbus=lambda: during.update(tracked=list(keyboard_grab.grabbed_devices)))
 
     assert kb in during["tracked"], "grab was invisible to the recovery paths"
 
@@ -491,7 +493,7 @@ def test_voice_commands_hotkey_leaves_nothing_grabbed(key_env, monkeypatch):
 
     assert not kb.is_grabbed
     assert not mx.is_grabbed
-    assert app._grabbed_devices == []
+    assert keyboard_grab.grabbed_devices == []
 
 
 def test_voice_commands_grabs_are_released_even_if_the_tray_call_fails(key_env,
@@ -511,7 +513,7 @@ def test_voice_commands_grabs_are_released_even_if_the_tray_call_fails(key_env,
         _press_voice_combo([kb], monkeypatch, dbus=boom)
 
     assert not kb.is_grabbed, "keyboard left grabbed after the tray call failed"
-    assert app._grabbed_devices == []
+    assert keyboard_grab.grabbed_devices == []
 
 
 # --- no unbounded blocking while the keyboard is grabbed --------------------
@@ -606,7 +608,7 @@ def test_dropping_a_device_releases_every_other_keyboard(key_env):
     app._drop_dead_devices([kb1], devices, FakeConfig())
 
     assert not kb2.is_grabbed, "other keyboards left grabbed — user cannot type"
-    assert app._grabbed_devices == []
+    assert keyboard_grab.grabbed_devices == []
 
 
 def test_dropping_a_device_while_idle_just_removes_it(key_env):
@@ -823,7 +825,7 @@ def test_falling_back_to_another_mic_says_so(monkeypatch, quiet_recording):
     assert len(notices) == 1
     assert notices[0].startswith("Sennheiser Profile Mono didn't respond, so TuxTalk is recording "
                                  "from HD-Audio Generic: ALC897 Analog instead.")
-    app._release_all_grabs()
+    keyboard_grab.release_all()
 
 
 def test_reopening_the_same_mic_says_nothing(monkeypatch, quiet_recording):
@@ -847,7 +849,7 @@ def test_reopening_the_same_mic_says_nothing(monkeypatch, quiet_recording):
 
     assert app.start_recording(beeps_on=False, notify_on=False, input_device_idx=14) is True
     assert notices == []
-    app._release_all_grabs()
+    keyboard_grab.release_all()
 
 
 def test_letting_go_of_the_toggle_key_types_a_held_sends_space(key_env, monkeypatch):

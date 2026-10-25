@@ -19,6 +19,7 @@ from evdev import ecodes
 
 from tuxtalk import app, service_launcher
 from tuxtalk import recording_state as rs
+from tuxtalk import keyboard_grab
 
 
 class FakeEvent:
@@ -44,7 +45,7 @@ TOGGLE = ecodes.KEY_F9
 def keys(monkeypatch):
     reported, started = [], []
     monkeypatch.setattr(app, "_notify_tray_hotkey_pressed", reported.append)
-    monkeypatch.setattr(app, "_grab_keyboards_hiding", lambda *a, **k: None)
+    monkeypatch.setattr(keyboard_grab, "grab_keyboards_hiding", lambda *a, **k: None)
     monkeypatch.setattr(app, "start_recording", lambda *a, **k: started.append(True) or True)
     rs.state.is_recording = False
     yield reported, started
