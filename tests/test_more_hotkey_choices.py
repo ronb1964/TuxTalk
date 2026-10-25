@@ -22,6 +22,7 @@ from tuxtalk import live_settings as live
 from tuxtalk import keyboard_grab
 from tuxtalk import keyboard_output
 from tuxtalk import tray_link
+from tuxtalk import engine
 
 RCTRL, RALT, LCTRL = ecodes.KEY_RIGHTCTRL, ecodes.KEY_RIGHTALT, ecodes.KEY_LEFTCTRL
 
@@ -359,7 +360,7 @@ def test_a_dictation_stopped_by_a_stuck_key_stays_in_recent_dictations(
     from tuxtalk import history
     stuck_right_ctrl()
     kept, notes = [], []
-    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, language: "hello there")
+    monkeypatch.setattr(engine, "transcribe", lambda audio, language: "hello there")
     monkeypatch.setattr(app, "_determine_injection_method", lambda mode: ("type", "test"))
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
     monkeypatch.setattr(focused_window, "look", lambda: (None, None))
@@ -368,8 +369,8 @@ def test_a_dictation_stopped_by_a_stuck_key_stays_in_recent_dictations(
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: notes.append(body))
     monkeypatch.setattr(live, "press_enter_after", False)
     monkeypatch.setattr(history, "add_entry", lambda text, replaces=None: kept.append(text))
-    frames = [(np.ones(app.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
-    app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=False, smart_quotes=False,
+    frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
+    app._transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False, smart_quotes=False,
                                notify_on=False)
     assert keyboard.events == []
     assert kept == ["Hello there. "]

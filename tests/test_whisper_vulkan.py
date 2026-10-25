@@ -13,6 +13,7 @@ import numpy as np
 import pytest
 
 from tuxtalk import whisper_vulkan as wv
+from tuxtalk import engine
 
 # Exactly what the engine printed on the development machine (NVIDIA card plus
 # the Ryzen's built-in AMD graphics).
@@ -244,15 +245,13 @@ def _audio(voiced):
 def test_vulkan_drops_a_sign_off_invented_from_silence(monkeypatch):
     """whisper.cpp's no-speech score is 0.00 on silence, so without a stand-in
     a held key with nothing said would type "Thanks for watching!"."""
-    from tuxtalk import app
-    monkeypatch.setattr(app, "model", SignOffEngine(), raising=False)
-    assert app._transcribe_audio(_audio(voiced=False), "en") is None
+    monkeypatch.setattr(engine, "model", SignOffEngine(), raising=False)
+    assert engine.transcribe(_audio(voiced=False), "en") is None
 
 
 def test_vulkan_keeps_a_sign_off_said_aloud(monkeypatch):
-    from tuxtalk import app
-    monkeypatch.setattr(app, "model", SignOffEngine(), raising=False)
-    assert app._transcribe_audio(_audio(voiced=True), "en") == "Thanks for watching!"
+    monkeypatch.setattr(engine, "model", SignOffEngine(), raising=False)
+    assert engine.transcribe(_audio(voiced=True), "en") == "Thanks for watching!"
 
 
 def _settings(**kw):
@@ -261,35 +260,32 @@ def _settings(**kw):
 
 
 def test_service_runs_whisper_on_the_amd_or_intel_chip(monkeypatch):
-    from tuxtalk import app
     monkeypatch.setattr(wv, "is_installed", lambda m: True)
     monkeypatch.setattr(wv, "find_device", lambda: 1)
     monkeypatch.setattr(wv, "VulkanWhisperModel", FakeEngine)
-    model = app.build_model(_settings())
+    model = engine.build(_settings())
     assert isinstance(model, FakeEngine) and (model.model_name, model.device_index) == ("small", 1)
 
 
 def test_service_falls_back_to_the_processor_when_the_engine_is_missing(monkeypatch):
-    from tuxtalk import app
     loaded, told = [], []
     monkeypatch.setattr(wv, "is_installed", lambda m: False)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a: told.append(a))
     monkeypatch.setattr("tuxtalk.model_helper.download_model_with_progress",
                         lambda model, device, compute_type, **k: loaded.append(device) or "cpu-model")
     settings = _settings()
-    assert app.build_model(settings) == "cpu-model"
+    assert engine.build(settings) == "cpu-model"
     assert loaded == ["cpu"] and told
     assert settings.device == "vulkan"        # the user's choice is not overwritten
 
 
 def test_parakeet_never_uses_the_whisper_engine(monkeypatch):
-    from tuxtalk import app
     from tuxtalk.parakeet_engine import PARAKEET_MODEL
     monkeypatch.setattr(wv, "VulkanWhisperModel", lambda *a: pytest.fail("used the Whisper engine"))
     monkeypatch.setattr(wv, "is_installed", lambda m: False)
     monkeypatch.setattr("tuxtalk.model_helper.download_model_with_progress",
                         lambda model, device, compute_type, **k: "parakeet-model")
-    assert app.build_model(_settings(model=PARAKEET_MODEL)) == "parakeet-model"
+    assert engine.build(_settings(model=PARAKEET_MODEL)) == "parakeet-model"
 
 
 class FakeParakeetGpu:
@@ -301,12 +297,12 @@ class FakeParakeetGpu:
 
 
 def test_service_runs_parakeet_on_the_graphics_chip(monkeypatch):
-    from tuxtalk import app, parakeet_gpu
+    from tuxtalk import parakeet_gpu
     from tuxtalk.parakeet_engine import PARAKEET_MODEL
     monkeypatch.setattr(wv, "is_installed", lambda m: True)
     monkeypatch.setattr(wv, "find_device", lambda: 0)
     monkeypatch.setattr(parakeet_gpu, "ParakeetGpuModel", FakeParakeetGpu)
-    model = app.build_model(_settings(model=PARAKEET_MODEL))
+    model = engine.build(_settings(model=PARAKEET_MODEL))
     assert isinstance(model, FakeParakeetGpu) and model.device_index == 0
 
 
@@ -314,7 +310,7 @@ def test_parakeet_on_vulkan_without_its_files_quietly_uses_the_processor(monkeyp
     """Someone on 0.13.1 with Vulkan as the device and Parakeet as the model
     has never downloaded Parakeet's graphics files. They keep the processor,
     as before, without a warning at every start."""
-    from tuxtalk import app, parakeet_gpu
+    from tuxtalk import parakeet_gpu
     from tuxtalk.parakeet_engine import PARAKEET_MODEL
     told = []
     monkeypatch.setattr(wv, "is_installed", lambda m: False)
@@ -322,12 +318,12 @@ def test_parakeet_on_vulkan_without_its_files_quietly_uses_the_processor(monkeyp
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a: told.append(a))
     monkeypatch.setattr("tuxtalk.model_helper.download_model_with_progress",
                         lambda model, device, compute_type, **k: f"parakeet-on-{device}")
-    assert app.build_model(_settings(model=PARAKEET_MODEL)) == "parakeet-on-cpu"
+    assert engine.build(_settings(model=PARAKEET_MODEL)) == "parakeet-on-cpu"
     assert told == []
 
 
 def test_parakeet_falls_back_to_the_processor_when_the_helper_fails(monkeypatch):
-    from tuxtalk import app, parakeet_gpu
+    from tuxtalk import parakeet_gpu
     from tuxtalk.parakeet_engine import PARAKEET_MODEL
     told = []
 
@@ -341,24 +337,23 @@ def test_parakeet_falls_back_to_the_processor_when_the_helper_fails(monkeypatch)
     monkeypatch.setattr("tuxtalk.model_helper.download_model_with_progress",
                         lambda model, device, compute_type, **k: f"parakeet-on-{device}")
     settings = _settings(model=PARAKEET_MODEL)
-    assert app.build_model(settings) == "parakeet-on-cpu"
+    assert engine.build(settings) == "parakeet-on-cpu"
     assert told and settings.device == "vulkan"
 
 
 def test_parakeet_on_the_graphics_chip_transcribes(monkeypatch):
-    from tuxtalk import app, parakeet_gpu
+    from tuxtalk import parakeet_gpu
     gpu = parakeet_gpu.ParakeetGpuModel.__new__(parakeet_gpu.ParakeetGpuModel)
     monkeypatch.setattr(parakeet_gpu.ParakeetGpuModel, "recognize", lambda self, a: "Hello there.")
-    monkeypatch.setattr(app, "model", gpu, raising=False)
-    assert app._transcribe_audio(np.zeros(16000, dtype=np.float32), None) == "Hello there."
+    monkeypatch.setattr(engine, "model", gpu, raising=False)
+    assert engine.transcribe(np.zeros(16000, dtype=np.float32), None) == "Hello there."
 
 
 def test_transcription_ignores_the_engines_no_speech_score(monkeypatch):
     """A real "Thank you." must survive even though the engine scored it 0.95.
     Real means the recording has speech in it; silence has its own test."""
-    from tuxtalk import app
-    monkeypatch.setattr(app, "model", FakeEngine("small", 1), raising=False)
-    assert app._transcribe_audio(_audio(voiced=True), "en") == "Thank you."
+    monkeypatch.setattr(engine, "model", FakeEngine("small", 1), raising=False)
+    assert engine.transcribe(_audio(voiced=True), "en") == "Thank you."
 
 
 # --- first-run setup: the light choice for NVIDIA ---------------------------------

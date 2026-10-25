@@ -130,6 +130,7 @@ def test_real_speech_is_not_an_echo():
 import numpy as np
 
 from tuxtalk import app
+from tuxtalk import engine
 from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
 from tuxtalk import whisper_vulkan as wv
@@ -168,35 +169,35 @@ def test_the_service_starts_with_no_words():
 
 def test_vulkan_whisper_is_told_the_words(with_words, monkeypatch):
     fake = FakeVulkan("I like TuxTalk.")
-    monkeypatch.setattr(app, "model", fake, raising=False)
-    assert app._transcribe_audio(np.zeros(16000, dtype=np.float32), "en") == "I like TuxTalk."
+    monkeypatch.setattr(engine, "model", fake, raising=False)
+    assert engine.transcribe(np.zeros(16000, dtype=np.float32), "en") == "I like TuxTalk."
     assert fake.prompts == ["TuxTalk, BambuStudio, ydotool."]
 
 
 def test_vulkan_whisper_without_words_gets_no_prompt(monkeypatch):
     fake = FakeVulkan("Hello.")
-    monkeypatch.setattr(app, "model", fake, raising=False)
-    app._transcribe_audio(np.zeros(16000, dtype=np.float32), "en")
+    monkeypatch.setattr(engine, "model", fake, raising=False)
+    engine.transcribe(np.zeros(16000, dtype=np.float32), "en")
     assert fake.prompts == [None]
 
 
 def test_faster_whisper_gets_them_as_hotwords(with_words, monkeypatch):
     fake = FakeWhisper()
-    monkeypatch.setattr(app, "model", fake, raising=False)
-    app._transcribe_audio(np.zeros(16000, dtype=np.float32), "en")
+    monkeypatch.setattr(engine, "model", fake, raising=False)
+    engine.transcribe(np.zeros(16000, dtype=np.float32), "en")
     assert fake.kwargs["hotwords"] == "TuxTalk, BambuStudio, ydotool."
 
 
 def test_faster_whisper_without_words_gets_no_hotwords(monkeypatch):
     fake = FakeWhisper()
-    monkeypatch.setattr(app, "model", fake, raising=False)
-    app._transcribe_audio(np.zeros(16000, dtype=np.float32), "en")
+    monkeypatch.setattr(engine, "model", fake, raising=False)
+    engine.transcribe(np.zeros(16000, dtype=np.float32), "en")
     assert fake.kwargs["hotwords"] is None
 
 
 def test_whisper_reading_the_list_back_counts_as_nothing_said(with_words, monkeypatch):
-    monkeypatch.setattr(app, "model", FakeVulkan("TuxTalk, BambuStudio, ydotool."), raising=False)
-    assert app._transcribe_audio(np.zeros(16000, dtype=np.float32), "en") is None
+    monkeypatch.setattr(engine, "model", FakeVulkan("TuxTalk, BambuStudio, ydotool."), raising=False)
+    assert engine.transcribe(np.zeros(16000, dtype=np.float32), "en") is None
 
 
 def test_parakeet_output_gets_the_spelling_pass(with_words):

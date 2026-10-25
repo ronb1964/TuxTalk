@@ -7,6 +7,7 @@ when Whisper reports the audio was probably not speech.
 """
 
 from tuxtalk import hallucinations
+from tuxtalk import engine
 
 
 # --- ordinary sentences must survive ---------------------------------------
@@ -106,9 +107,8 @@ def test_a_deliberate_thank_you_is_kept():
 def test_spaces_trimmed_off_a_dictation_arent_logged_as_a_hallucination(caplog):
     """Trimming the spaces was enough for the log to say "Stripped a
     hallucination", which buried the real ones."""
-    from tuxtalk import app
     with caplog.at_level("INFO", logger="tuxtalk.app"):
-        assert app._strip_hallucinations(" Hello there. ") == "Hello there."
+        assert engine._strip_hallucinations(" Hello there. ") == "Hello there."
         assert "Stripped a hallucination" not in caplog.text
-        app._strip_hallucinations("Hello there. Like and subscribe.")
+        engine._strip_hallucinations("Hello there. Like and subscribe.")
     assert "Stripped a hallucination" in caplog.text

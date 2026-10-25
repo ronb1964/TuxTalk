@@ -34,9 +34,9 @@ from .key_commands import auto_send, split_key_command
 from .logger import setup_logger
 from .recording_indicator import RecordingIndicator
 from .undo import detect_undo_command, calculate_undo_length
-from . import (custom_commands, delivery_notices, edit_notices, focused_window, hallucinations,
-               modifier_hotkeys, secure_input, send_countdown, silence, single_instance,
-               uinput_helper, virtual_keyboard)
+from . import (custom_commands, delivery_notices, edit_notices, focused_window, modifier_hotkeys,
+               secure_input, send_countdown, silence, single_instance, uinput_helper,
+               virtual_keyboard)
 from .window_classes import (ELECTRON_PASTE_BROKEN_CLASSES, SMART_NEWLINE_CLASSES_LOWER,
                              app_kind, is_document_window, is_terminal_class)
 from .hotkey_keys import (MODIFIER_CODES, check_modifiers_held, keycode_from_name,
@@ -46,6 +46,7 @@ from . import live_settings as live
 from . import keyboard_grab
 from . import keyboard_output
 from . import tray_link
+from . import engine
 import threading
 
 logger = setup_logger(__name__)
@@ -107,8 +108,6 @@ def _acquire_single_instance():
 # The single-instance lock's file, open while the service runs.
 _lockfile_handle = None
 
-# --- Runtime state ---
-SAMPLE_RATE = 16000
 CHANNELS = 1
 MIN_HOLD_MS = 200
 # Two toggle taps closer than this make the first tap's recording hands-free.
@@ -132,10 +131,6 @@ _cmd_stop_recording = threading.Event()
 # menu) started it, so a quick second press can switch it to hands-free.
 _cmd_start_from_toggle_key = threading.Event()
 _inject_lock = threading.Lock()  # serialise Backend B transcribe/inject workers
-# The loaded speech model, built by main(). None until then, and while Power
-# Saving rests it (_rest_model) until the next dictation loads it (_wake_model).
-model = None
-_model_lock = threading.Lock()
 
 # Chunked dictation (chunking.py). The audio callback cuts chunks and the stop
 # path takes the rest; this lock keeps the two from both taking the same frames.
@@ -238,14 +233,6 @@ def _apply_custom_commands(text: str) -> tuple[str, dict[str, str]]:
     return result, protected
 
 
-def _strip_hallucinations(text: str, no_speech_prob: float = 0.0) -> str:
-    """hallucinations.strip, logged the way transcripts are (_loggable)."""
-    stripped = hallucinations.strip(text, no_speech_prob)
-    if stripped != text.strip():
-        logger.info(f"Stripped a hallucination (no_speech_prob={no_speech_prob:.2f}): "
-                    f"{live.loggable(text)} -> {live.loggable(stripped)}")
-    return stripped
-
 
 def _sd_callback(indata, frames_count, time_info, status):
     """sounddevice's audio callback: collect frames while recording."""
@@ -284,7 +271,7 @@ def _cut_chunk(chunker):
         _drop_tail_samples(frames, chunker.tail_samples())
         rs.state.chunks_submitted += 1
         number = rs.state.chunks_submitted
-        rec_sr = getattr(rs.state, "recording_samplerate", SAMPLE_RATE)
+        rec_sr = getattr(rs.state, "recording_samplerate", engine.SAMPLE_RATE)
         pause = chunker.last_pause
         # Queued before the lock is let go: otherwise the stop could slip in
         # between counting this chunk and queuing it, and queue the last chunk
@@ -602,7 +589,7 @@ def _drop_dead_devices(dead_devices, devices, cfg) -> None:
 def _open_input_stream(device_idx) -> None:
     """Open and start the microphone stream. Raises if the device is unusable."""
     # Use the device's native sample rate (may differ from 16kHz on ALSA hw: devices)
-    rs.state.recording_samplerate = mic_stream.input_samplerate(device_idx, SAMPLE_RATE)
+    rs.state.recording_samplerate = mic_stream.input_samplerate(device_idx, engine.SAMPLE_RATE)
     sd.default.channels = CHANNELS
     sd.default.samplerate = rs.state.recording_samplerate
     rs.state.stream = sd.InputStream(callback=_sd_callback, dtype='int16', device=device_idx)
@@ -635,9 +622,9 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     rs.state.edit_mode = edit_mode
     # Set before the stream starts — _sd_callback drops frames unless it's set.
     rs.state.is_recording = True
-    if model is None:
+    if engine.model is None:
         # Power Saving let the model go: load it while the user talks.
-        threading.Thread(target=_wake_model, daemon=True, name="tt-wake-model").start()
+        threading.Thread(target=engine.wake, daemon=True, name="tt-wake-model").start()
     input_device_idx = _follow_system_default(input_device_idx)
     try:
         _open_input_stream(input_device_idx)
@@ -669,7 +656,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
                 send_countdown.say_held()   # nothing to dictate onto it: it stays unsent
             return False
 
-    _arm_chunker(getattr(rs.state, "recording_samplerate", SAMPLE_RATE), edit_mode)
+    _arm_chunker(getattr(rs.state, "recording_samplerate", engine.SAMPLE_RATE), edit_mode)
     _pause_media_players()
     rs.state.start_beep = _beep(beeps_on, *START_BEEP)
     if notify_on: notify_module.notify("Recording… speak now", "")
@@ -787,121 +774,6 @@ def plan_line_breaks(text: str, one_paste: bool) -> list[str]:
     return normalised.split(marker)
 
 
-
-def _transcribe_audio(audio_f32, language: str | None) -> str | None:
-    """Transcribe audio with the loaded engine (Whisper or Parakeet) and filter hallucinations.
-
-    Returns the raw transcribed text, or None if no speech was detected.
-    """
-    transcribe_start = time.time()
-    engine = _wake_model()
-    if engine is None:
-        return None
-
-    from .whisper_vulkan import VulkanWhisperModel
-    from . import custom_words, language_limit
-    words_prompt = custom_words.prompt(live.words)
-    # Auto-detect held to the user's languages: one language is simply used,
-    # two or more are checked against Whisper's own pick (language_limit.py).
-    # Parakeet below has no language setting, so this changes nothing there.
-    if not language:
-        language = language_limit.forced_language(live.auto_languages)
-    limit_to = () if language else live.auto_languages
-    if isinstance(engine, VulkanWhisperModel):
-        # Only pass a prompt or a language list when there is one, so nothing
-        # changes without them.
-        extra = {}
-        if words_prompt:
-            extra["prompt"] = words_prompt
-        if limit_to:
-            extra["limit_to"] = limit_to
-        raw, _no_speech = engine.transcribe(audio_f32, language, **extra)
-        logger.info(f"TIMING: Transcription completed in {time.time() - transcribe_start:.2f}s (Vulkan GPU)")
-        logger.info(f"Raw transcription (Vulkan GPU): {live.loggable(raw)}")
-        # whisper.cpp's no-speech score isn't reliable (0.90 on clear speech,
-        # 0.00 on silence, see whisper_vulkan.parse_result), so the recording's
-        # own loudness stands in for it. With nobody talking, a lone "Thanks
-        # for watching!" is invented; said aloud, it is kept.
-        if custom_words.is_echo(raw, live.words):
-            logger.info("Whisper read your words back with nothing said; dropped")
-            return None
-        no_speech = 1.0 if silence.has_no_speech(audio_f32, SAMPLE_RATE) else 0.0
-        return _strip_hallucinations(raw, no_speech_prob=no_speech) or None
-
-    from .parakeet_engine import ParakeetModel
-    from .parakeet_gpu import ParakeetGpuModel
-    if isinstance(engine, (ParakeetModel, ParakeetGpuModel)):
-        # Parakeet detects the language itself and has no Whisper-style
-        # decoding options. It has no no-speech score either, yet it does
-        # invent a word in silence: an F9 tap with nothing said typed
-        # "Mm-hmm." So, as for the Vulkan engine, a recording with nobody
-        # talking counts as no speech, and a filler alone is dropped.
-        # Your Words steer Parakeet's decoder (parakeet_bias.py).
-        from .parakeet_gpu import _steer
-        _steer(engine, live.words)
-        raw = engine.recognize(audio_f32)
-        where = " on GPU" if isinstance(engine, ParakeetGpuModel) else ""
-        logger.info(f"TIMING: Transcription completed in {time.time() - transcribe_start:.2f}s (Parakeet{where})")
-        logger.info(f"Raw transcription (Parakeet): {live.loggable(raw)}")
-        no_speech = 1.0 if raw and silence.has_no_speech(audio_f32, SAMPLE_RATE) else 0.0
-        return _strip_hallucinations(raw, no_speech_prob=no_speech) or None
-
-    whisper_options = dict(
-        vad_filter=False,
-        beam_size=5,
-        condition_on_previous_text=True,
-        temperature=0.0,
-        # Word-level timestamps strengthen Whisper's long-form seek logic,
-        # preventing dropped words at pause boundaries.
-        word_timestamps=True,
-        # Repetition-loop guards: Whisper can get stuck repeating one phrase
-        # many times in a row. A mild penalty plus n-gram blocking breaks
-        # the loop without changing normal decoding.
-        repetition_penalty=1.1,
-        no_repeat_ngram_size=5,
-        # Your Words, so Whisper spells them the user's way. faster-whisper
-        # puts them in the prompt of every 30-second window.
-        hotwords=words_prompt,
-        # vad_filter is disabled: Silero VAD trims speech onsets at segment
-        # boundaries (especially the start of recordings and after sentence
-        # pauses), causing leading words to vanish from raw Whisper output.
-        # See: github.com/SYSTRAN/faster-whisper/issues/925
-        # Push-to-talk dictation has minimal non-speech audio to filter,
-        # so disabling VAD has near-zero quality cost.
-        # hallucination_silence_threshold also stays unset — same reason:
-        # it drops real speech after natural 2+ second pauses. Trailing
-        # hallucination phrases are handled by _strip_hallucinations().
-    )
-    segments, info = engine.transcribe(audio_f32, language=(language or None), **whisper_options)
-    # faster-whisper detects the language before it decodes a word (segments
-    # is a generator), so starting again in another language costs only that
-    # detection, and only when its pick is off the user's list.
-    better = (language_limit.redirect(info.language, dict(info.all_language_probs or ()), limit_to)
-              if limit_to else None)
-    if better:
-        logger.info(f"Language: Whisper heard {info.language}, which isn't on your list; using {better}")
-        segments, info = engine.transcribe(audio_f32, language=better, **whisper_options)
-    transcribe_time = time.time() - transcribe_start
-    logger.info(f"TIMING: Transcription completed in {transcribe_time:.2f}s")
-    if transcribe_time > 2.0:
-        logger.warning(f"Transcription took {transcribe_time:.2f}s (first run may be slower due to CUDA compilation)")
-
-    # Collect segments (generator can only be consumed once)
-    seg_list = list(segments)
-
-    raw = " ".join(seg.text for seg in seg_list).strip()
-    max_no_speech_prob = max((seg.no_speech_prob for seg in seg_list), default=0.0)
-    logger.info(f"Raw transcription (before hallucination filter): {live.loggable(raw)}  [no_speech_prob={max_no_speech_prob:.2f}]")
-
-    if custom_words.is_echo(raw, live.words):
-        logger.info("Whisper read your words back with nothing said; dropped")
-        return None
-
-    # Strip common Whisper hallucinations like "thank you" from the end
-    raw = _strip_hallucinations(raw, no_speech_prob=max_no_speech_prob)
-    if raw:
-        logger.info(f"Raw transcription (after hallucination filter): {live.loggable(raw)}")
-    return raw or None
 
 
 def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
@@ -1416,7 +1288,7 @@ def _toggle_pressed_while_recording(beeps_on: bool) -> bool:
     if (live.auto_stop_seconds <= 0 or started is None or rs.state.silence is not None
             or time.time() - started > DOUBLE_TAP_S):
         return False
-    rate = getattr(rs.state, "recording_samplerate", SAMPLE_RATE)
+    rate = getattr(rs.state, "recording_samplerate", engine.SAMPLE_RATE)
     detector = silence.SilenceDetector(live.auto_stop_seconds, rate)
     beep_hz = START_BEEP[0] if rs.state.start_beep is not None else None
     if silence.has_a_word(_frames_f32(list(rs.state.frames)), rate, ignoring_hz=beep_hz):
@@ -1472,8 +1344,8 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
         # Hands-free with nothing said: drop it. Transcribing room noise can
         # type a stray "Thank you." (see silence.is_speechless_tap).
         rs.state.silence = None
-        dead_mic = _frames_are_dead_mic(rs.state.frames,
-                                        getattr(rs.state, "recording_samplerate", SAMPLE_RATE))
+        rate = getattr(rs.state, "recording_samplerate", engine.SAMPLE_RATE)
+        dead_mic = _frames_are_dead_mic(rs.state.frames, rate)
         cancel_recording(beeps_on, notify_on and not dead_mic, "Nothing heard, so nothing was typed")
         if dead_mic:
             _warn_silent_mic()
@@ -1498,7 +1370,7 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
         frames = rs.state.frames  # snapshot the reference before it can be reassigned
     if chunker is not None and not rs.state.chunks_submitted:
         logger.info(f"Chunked dictation: no pause found ({chunker.describe()})")
-    rec_sr = getattr(rs.state, 'recording_samplerate', SAMPLE_RATE)
+    rec_sr = getattr(rs.state, 'recording_samplerate', engine.SAMPLE_RATE)
     rs.state.is_recording = False
     _stop_stream_safely()
     _resume_media_players()
@@ -1612,7 +1484,7 @@ def _password_field_refused(beeps_on: bool) -> None:
     _beep(beeps_on, *CANCEL_BEEP)
     from . import screen_message
     screen_message.show_over_active_window(delivery_notices.PASSWORD_FIELD_LABEL)
-    if not (beeps_on and _gtk_loop_running and os.environ.get("DISPLAY")):
+    if not (beeps_on and engine.gtk_loop_running and os.environ.get("DISPLAY")):
         notify_module.notify(delivery_notices.PASSWORD_FIELD_TITLE,
                              delivery_notices.PASSWORD_FIELD_NOTICE)
 
@@ -1628,7 +1500,7 @@ _SENTENCE_ENDS = (".", "?", "!", "…")
 
 
 def _context_samples() -> int:
-    return int(CONTEXT_S * SAMPLE_RATE)
+    return int(CONTEXT_S * engine.SAMPLE_RATE)
 
 
 def _remember_said(text: str, chunked: bool, takes_back: str = "") -> str:
@@ -1799,8 +1671,8 @@ def _resolve_boundary(audio_f32, language, injection_mode, raw="", auto_period=T
     mark = pending["mark"]
     joint = ""
     try:
-        gap = np.zeros(int(JOINT_GAP_S * SAMPLE_RATE), dtype=np.float32)
-        joint = _transcribe_audio(np.concatenate(
+        gap = np.zeros(int(JOINT_GAP_S * engine.SAMPLE_RATE), dtype=np.float32)
+        joint = engine.transcribe(np.concatenate(
             [pending["audio"], gap, audio_f32[:_context_samples()]]), language) or ""
         found = boundary_mark(pending["raw"], joint)
         logger.info(f"Chunk boundary: {pending['mark']!r} alone, {found!r} in context")
@@ -1818,7 +1690,7 @@ def _resolve_boundary(audio_f32, language, injection_mode, raw="", auto_period=T
         _type_boundary(pending, mark, injection_mode)
         rs.state.continue_mid_sentence = False
         return raw
-    if joint and len(audio_f32) <= SHORT_CHUNK_S * SAMPLE_RATE:
+    if joint and len(audio_f32) <= SHORT_CHUNK_S * engine.SAMPLE_RATE:
         heard = words_in_context(pending["raw"], joint) or ""
         # Whether to press a key stays the rule above's call.
         if (0 < word_count(heard) < word_count(raw)
@@ -2012,12 +1884,12 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                 return
             print("(No audio captured)")
             return
-        if rec_sr != SAMPLE_RATE:
-            audio_f32 = _resample_audio(audio_f32, rec_sr, SAMPLE_RATE)
+        if rec_sr != engine.SAMPLE_RATE:
+            audio_f32 = _resample_audio(audio_f32, rec_sr, engine.SAMPLE_RATE)
 
         # A second or more of pure digital silence: the microphone is muted,
         # unplugged or dead, not a quiet room. Say so instead of typing nothing.
-        if silence.is_dead_mic(audio_f32, SAMPLE_RATE):
+        if silence.is_dead_mic(audio_f32, engine.SAMPLE_RATE):
             _beep(beeps_on, *CANCEL_BEEP)
             _warn_silent_mic()
             return
@@ -2026,19 +1898,19 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # a word ("Thank you.") in a fraction of a second of room noise.
         # Both stop with the cancel beep, as a too-short F8 tap and the
         # hands-free "nothing said" stop do: silence there read as broken.
-        if silence.is_speechless_tap(audio_f32, SAMPLE_RATE):
+        if silence.is_speechless_tap(audio_f32, engine.SAMPLE_RATE):
             if _nothing_in_chunk("had no speech"):
                 return
             print("(Short tap with no speech; nothing typed)")
-            logger.info(f"Skipped a {len(audio_f32) / SAMPLE_RATE:.2f}s recording with no speech in it")
+            logger.info(f"Skipped {len(audio_f32) / engine.SAMPLE_RATE:.2f}s with no speech in it")
             _beep(beeps_on, *CANCEL_BEEP)
             return
 
         # Stage 1: Transcribe audio → raw text
-        raw = _transcribe_audio(audio_f32, language)
+        raw = engine.transcribe(audio_f32, language)
         logger.info(f"TIMING: Transcription pipeline took {time.time() - t0:.2f}s")
         if chunk_role is not None:
-            logger.info(f"Chunk ({chunk_role}): {len(audio_f32) / SAMPLE_RATE:.1f}s of audio, "
+            logger.info(f"Chunk ({chunk_role}): {len(audio_f32) / engine.SAMPLE_RATE:.1f}s, "
                         f"raw: {live.loggable(raw)}")
         if not raw:
             if _nothing_in_chunk("was not recognised"):
@@ -2203,7 +2075,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                 # After typing, so saving the counts never delays the text.
                 # Counts only (words, seconds dictating); see stats.py.
                 from .stats import count_words, record
-                record(count_words(text), len(audio_f32) / SAMPLE_RATE)
+                record(count_words(text), len(audio_f32) / engine.SAMPLE_RATE)
 
     except Exception as e:
         logger.error(f"Transcription error: {e}", exc_info=True)
@@ -2506,9 +2378,9 @@ def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
     audio_f32 = _frames_f32(frames)
     if audio_f32.size == 0:
         return
-    if rec_sr != SAMPLE_RATE:
-        audio_f32 = _resample_audio(audio_f32, rec_sr, SAMPLE_RATE)
-    if silence.is_speechless_tap(audio_f32, SAMPLE_RATE):
+    if rec_sr != engine.SAMPLE_RATE:
+        audio_f32 = _resample_audio(audio_f32, rec_sr, engine.SAMPLE_RATE)
+    if silence.is_speechless_tap(audio_f32, engine.SAMPLE_RATE):
         return
 
     if not keyboard_output.is_wayland_session():
@@ -2524,7 +2396,7 @@ def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
 
     def instruction():
         if not heard:
-            heard.append(_transcribe_audio(audio_f32, language))
+            heard.append(engine.transcribe(audio_f32, language))
         return heard[0]
     _edit_selection(instruction, beeps_on, injection_mode, focused_class, t0, rs.state.message)
 
@@ -2936,48 +2808,6 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
         keyboard_grab.release_all()
 
 
-def _rest_model(minutes):
-    """Power Saving: let go of the speech model, and the processor and
-    graphics card time it holds, after *minutes* without dictation. The
-    hotkeys keep working; the next dictation loads it again (_wake_model).
-    It used to end the service, and F8 then did nothing until dictation was
-    turned back on from the menu, which looked like TuxTalk had broken."""
-    global model
-    with _model_lock:
-        resting, model = model, None
-    # The Vulkan engine and Parakeet on the graphics card run a helper process.
-    close = getattr(resting, "close", None)
-    if close is not None:
-        close()
-    del resting
-    import gc
-    gc.collect()
-    logger.info(f"Power saving: no dictation for {minutes} minute{'s' if minutes != 1 else ''}; "
-                "let go of the speech model until the next dictation")
-
-
-def _wake_model():
-    """The speech model, loaded again first if Power Saving let it go, or
-    None if it won't load. Called when a recording starts and before every
-    transcription."""
-    global model
-    with _model_lock:
-        if model is None:
-            logger.info("Power saving: loading the speech model again for this dictation")
-            try:
-                # Not _build_model_or_exit: its fallback saves another model
-                # over the user's choice, which a graphics card that fails
-                # once on waking shouldn't do, and its exit would end only
-                # this dictation's thread. The next dictation tries again.
-                model = build_model(load_config())
-            except ModelUnavailable as e:
-                logger.error(f"Power saving: the speech model wouldn't load again: {e}")
-                notify_module.notify("The speech model wouldn't load",
-                "Choose Restart Service in the TuxTalk menu, or pick a model in Preferences.")
-                return None
-            _notify_tray_running_engine()
-        return model
-
 
 class _ServiceState:
     """Backend-agnostic per-service state (auto-timeout tracking), shared by the
@@ -3097,9 +2927,9 @@ def _service_tick(cfg, svc: "_ServiceState") -> "LiveSettings | None":
             svc.last_activity = now
     # Not while a dictation is still being transcribed or typed: every worker
     # holds _inject_lock, and the idle clock starts when the key comes up.
-    if (svc.timeout_enabled and not rs.state.is_recording and model is not None
+    if (svc.timeout_enabled and not rs.state.is_recording and engine.model is not None
             and not _inject_lock.locked() and now - svc.last_activity > svc.timeout_seconds):
-        _rest_model(svc.timeout_minutes)
+        engine.rest(svc.timeout_minutes)
 
     # Pick up Preferences changes without a restart — indicator style/position,
     # typing delay, etc. The evdev loop (Backend A) does this inline; Backend B
@@ -3309,214 +3139,6 @@ def _loop_evdev(cfg: Settings, input_device_idx, keyboards=None):
         if pass_time < INPUT_MIN_PASS_S:
             time.sleep(INPUT_MIN_PASS_S - pass_time)
 
-class ModelUnavailable(Exception):
-    """The speech model is not downloaded and the user cancelled the download,
-    or it failed. Nothing to retry: the service cannot run without a model."""
-
-
-class ModelWontLoad(ModelUnavailable):
-    """The speech model is downloaded but won't load. Unlike a missing model,
-    choosing it again in Preferences downloads nothing, so the fallback is for
-    this run only and the user's choice stays."""
-
-
-# Speech models from best quality to fastest. When the chosen model is not
-# downloaded, the service falls back to the downloaded model nearest to it here.
-_QUALITY_ORDER = ("large-v3", "parakeet-v3", "medium", "small", "base", "tiny")
-
-
-def _guard_large_v3_without_cuda(cfg):
-    """large-v3 without any CUDA libraries runs as medium.
-
-    Without CUDA, large-v3 would run on the processor, far too slowly to use.
-    This keeps the service usable for someone who set up large-v3 with CUDA
-    and later lost the libraries (a fresh profile, a cleaned data folder). It
-    uses the same check as Preferences, which accepts a system-wide CUDA
-    install, so a model Preferences offers is never swapped here. It applies
-    to every device but Vulkan: large-v3 runs there without any CUDA library,
-    and Vulkan has its own fallback, which tells the user.
-    """
-    if cfg.model != "large-v3" or str(cfg.device).lower() == "vulkan":
-        return
-    try:
-        from .cuda_helper import has_cuda_libraries
-        if not has_cuda_libraries():
-            logger.warning(
-                "large-v3 selected but CUDA libraries not found — "
-                "falling back to 'medium' to prevent non-functional state."
-            )
-            print("large-v3 requires CUDA (not installed). Falling back to 'medium'.")
-            cfg.model = "medium"
-            notify_module.notify("Using Medium instead of Large-v3",
-                        "Large-v3 needs the CUDA files, which aren't installed. Pick CUDA "
-                        "under Preferences, General, Device to download them and use "
-                        "Large-v3 again.")
-    except Exception:
-        pass  # If cuda_helper unavailable, let the existing error handling deal with it
-
-
-def _pick_fallback_model(wanted, downloaded, has_cuda):
-    """The downloaded model closest in quality to *wanted*, or None.
-
-    Ties go to the faster model. large-v3 is skipped without CUDA, where it
-    is too slow to use (main() refuses it there for the same reason).
-    """
-    rank = {m: i for i, m in enumerate(_QUALITY_ORDER)}
-    target = rank.get(wanted, rank["small"])
-    options = [m for m in downloaded
-               if m in rank and m != wanted and (m != "large-v3" or has_cuda)]
-    if not options:
-        return None
-    return min(options, key=lambda m: (abs(rank[m] - target), -rank[m]))
-
-
-def _build_model_or_exit(settings: Settings):
-    """build_model, falling back to an already-downloaded model when the chosen
-    one is not downloaded (the user cancelled, or the download failed).
-
-    Cancelling usually means "not now", not "turn dictation off", so dictation
-    carries on with the nearest model already on disk. The switch is saved, so
-    every menu shows the model actually running, and the user is told. Only
-    with no model downloaded at all does the service stop.
-
-    A model that is downloaded but won't load (ModelWontLoad) gets the same
-    fallback for this run only: saving it would replace the user's choice at
-    every start, since choosing the model again downloads nothing.
-    """
-    try:
-        return build_model(settings)
-    except ModelUnavailable as e:
-        from .model_helper import OFFERED_MODELS, is_model_cached_fast
-        from .recommend import model_title
-        try:
-            from .cuda_helper import has_cuda_libraries
-            has_cuda = has_cuda_libraries()
-        except Exception:
-            has_cuda = False
-        wanted = settings.model
-        downloaded = [m for m in OFFERED_MODELS if is_model_cached_fast(m)]
-        fallback = _pick_fallback_model(wanted, downloaded, has_cuda)
-        if fallback is None:
-            logger.warning(f"Dictation service stopping: {e}, and no other model is downloaded")
-            print(f"{e}. Choose a model in Preferences to start dictating.")
-            sys.exit(1)
-
-        logger.warning(f"{e}; falling back to the downloaded {fallback} model")
-        settings.model = fallback      # the D-Bus menus read this same object
-        try:
-            model = build_model(settings)
-        except ModelUnavailable:
-            logger.warning(f"Dictation service stopping: fallback {fallback} could not load either")
-            sys.exit(1)
-        if isinstance(e, ModelWontLoad):
-            notify_module.notify(f"Using {model_title(fallback)} for now",
-                    f"{model_title(wanted)} is downloaded but wouldn't load. TuxTalk tries "
-                    "it again the next time dictation starts.")
-            return model
-        try:
-            from .config import load_config, save_config
-            saved = load_config()
-            saved.model = fallback
-            save_config(saved)
-        except Exception as save_error:
-            logger.warning(f"Could not save the fallback model to settings: {save_error}")
-        notify_module.notify(f"Using {model_title(fallback)} for now",
-                f"{model_title(wanted)} wasn't downloaded. You can choose it again in "
-                "Preferences.")
-        return model
-
-
-def _build_vulkan_model(settings: Settings):
-    """The Vulkan graphics engine for settings.model, or None to use the
-    processor instead (with the reason logged and the user told). Never stops
-    dictation: anything missing or broken falls back to the CPU."""
-    from . import whisper_vulkan
-    reason = None
-    if not whisper_vulkan.is_installed(settings.model):
-        reason = "its download isn't there"
-    else:
-        try:
-            device_index = whisper_vulkan.find_device()
-            if device_index is None:
-                reason = "no graphics chip was found"
-            else:
-                model = whisper_vulkan.VulkanWhisperModel(settings.model, device_index)
-                logger.info(f"Model loaded: {settings.model} on vulkan device {device_index}")
-                _record_engine(settings.model, "vulkan")
-                return model
-        except Exception as e:
-            reason = f"the graphics engine failed to start ({e})"
-    logger.warning(f"Vulkan GPU not used for {settings.model}: {reason}; using the processor")
-    notify_module.notify("Couldn't use the graphics card",
-                "TuxTalk is using the processor for now. Choose the device again in "
-                "Preferences to set it up.")
-    return None
-
-
-def _build_parakeet_gpu_model(settings: Settings):
-    """Parakeet on the graphics chip through Vulkan (parakeet_gpu.py), or None
-    to use the processor.
-
-    Without its graphics files that's quiet: a setup with Vulkan as the device
-    and Parakeet as the model can predate those files, and shouldn't get a
-    warning at every start. Choosing Vulkan again in Preferences sets it up.
-    A real failure is reported."""
-    from . import parakeet_gpu, whisper_vulkan
-    from .parakeet_engine import PARAKEET_MODEL
-    if not whisper_vulkan.is_installed(PARAKEET_MODEL):
-        logger.info("Parakeet's graphics files aren't downloaded; Parakeet runs on the processor")
-        return None
-    reason = None
-    try:
-        device_index = whisper_vulkan.find_device()
-        if device_index is None:
-            reason = "no graphics chip was found"
-        else:
-            model = parakeet_gpu.ParakeetGpuModel(device_index)
-            logger.info(f"Model loaded: {PARAKEET_MODEL} on vulkan device {device_index}")
-            _record_engine(PARAKEET_MODEL, "vulkan")
-            return model
-    except Exception as e:
-        reason = f"the graphics helper failed to start ({e})"
-    logger.warning(f"Vulkan GPU not used for Parakeet: {reason}; using the processor")
-    notify_module.notify("Couldn't run Parakeet on the graphics card",
-                "TuxTalk is using the processor for now. Choose the device again in "
-                "Preferences to set it up.")
-    return None
-
-
-# What the service really loaded, as (model, device) with device "cpu", "cuda" or
-# "vulkan". It can differ from the settings: Vulkan or CUDA falls back to the
-# processor, Parakeet can't use CUDA, a missing model is swapped for one that's
-# downloaded. The tray and the GNOME menu show this rather than the settings,
-# which could say "GPU (Vulkan)" while the processor does the work.
-_running_engine = None
-
-# True once Gtk.main() runs on its own thread. From then on the service's main
-# thread must not open the model download dialogs: two threads driving GTK at
-# once crash the service.
-_gtk_loop_running = False
-
-
-def _record_engine(model, device):
-    """Remember what was really loaded (see _running_engine)."""
-    global _running_engine
-    _running_engine = (str(model), str(device).lower())
-
-
-def _notify_tray_running_engine():
-    """Tell the tray what's really running (see _running_engine)."""
-    if _running_engine is None:
-        return
-    try:
-        tray_link.get_proxy().NotifyRunningEngine(
-            *_running_engine,
-            dbus_interface='io.github.ronb1964.TalkType',
-            timeout=focused_window.TRAY_TIMEOUT_S,
-        )
-    except Exception as e:
-        logger.debug(f"Could not tell the tray which engine is running: {e}")
-
 
 # tuxtalk --toggle/--start/--stop (control.py). The tray normally answers
 # them; these serve a service running without a tray, which then owns the
@@ -3564,110 +3186,6 @@ def _mark_service_ready():
         logger.debug(f"Could not tell the tray the service is ready: {e}")
 
 
-def build_model(settings: Settings):
-    """Load the speech model on the configured device, falling back to the
-    processor when the graphics card can't be used."""
-    from .model_helper import BrokenModelFiles, download_model_with_progress
-    from .parakeet_engine import is_parakeet
-
-    if settings.device.lower() == "vulkan":
-        build_on_gpu = _build_parakeet_gpu_model if is_parakeet(settings.model) else _build_vulkan_model
-        vulkan_model = build_on_gpu(settings)
-        if vulkan_model is not None:
-            return vulkan_model
-        # Fall through to the processor for this run only. settings.device is
-        # left alone: a missing download or a driver hiccup is fixed from
-        # Preferences, and saving "cpu" would quietly undo the user's choice.
-        settings = Settings(**{**vars(settings), "device": "cpu"})
-
-    if settings.device.lower() == "cuda" and not is_parakeet(settings.model):
-        from . import cuda_helper
-        if not cuda_helper.has_cuda_libraries():
-            # The model loads "on cuda" without these files, then the first
-            # dictation crashes inside the speech library (libcudnn missing),
-            # past every fallback below. Processor for this run; the setting
-            # stays, since downloading CUDA again in Preferences fixes it.
-            logger.warning("Device is CUDA but the CUDA libraries are missing; using the processor")
-            notify_module.notify("The CUDA files are missing",
-                        "TuxTalk is using the processor for now. Pick CUDA under Preferences, "
-                        "General, Device to download them again.")
-            settings = Settings(**{**vars(settings), "device": "cpu"})
-
-    compute_type = "float16" if settings.device.lower() == "cuda" else "int8"
-    try:
-        # Use model helper with progress dialog
-        model = download_model_with_progress(
-            settings.model,
-            device=settings.device,
-            compute_type=compute_type,
-            dialogs=not _gtk_loop_running,
-        )
-
-        if model is None:
-            raise ModelUnavailable(f"The {settings.model} model was not downloaded (cancelled or failed)")
-
-        # Parakeet gets here only on the processor (the graphics route returned above).
-        where = "cpu" if is_parakeet(settings.model) else settings.device
-        logger.info(f"Model loaded: {settings.model} on {where}")
-        _record_engine(settings.model, where)
-        return model
-    except BrokenModelFiles as e:
-        raise ModelWontLoad(str(e)) from e
-    except ModelUnavailable:
-        # Never "fall back to CPU" here. That fallback exists for a CUDA load
-        # failure; treating a cancel as one would re-run the download without
-        # asking and ignore the user's Cancel.
-        raise
-    except Exception as e:
-        if settings.device.lower() == "cuda" and not is_parakeet(settings.model):
-            logger.error(f"CUDA error: {type(e).__name__}: {str(e)}")
-            logger.debug("CUDA traceback:", exc_info=True)
-            print("Falling back to CPU...")
-            try:
-                # Fall back to CPU — skip confirmation dialog since the user already
-                # chose this model via the preset; a surprise dialog in a background
-                # process would block silently and cause the service to hang.
-                model = download_model_with_progress(
-                    settings.model,
-                    device="cpu",
-                    compute_type="int8",
-                    show_confirmation=False,
-                    dialogs=not _gtk_loop_running,
-                )
-
-                if model is None:
-                    raise ModelUnavailable(
-                        f"The {settings.model} model was not downloaded (cancelled or failed)")
-
-                logger.info("Model loaded on CPU (fallback from CUDA)")
-                _record_engine(settings.model, "cpu")
-                # This switches the saved device to the processor (below), so
-                # the user is told.
-                notify_module.notify("Couldn't use the NVIDIA graphics card",
-                            "TuxTalk switched to the processor. Choose the device again in "
-                            "Preferences to try the graphics card.")
-
-                # Persist device=cpu to config so future service restarts don't
-                # try CUDA again and crash in a loop.
-                try:
-                    from .config import load_config, save_config
-                    _cfg = load_config()
-                    if _cfg.device == "cuda":
-                        _cfg.device = "cpu"
-                        save_config(_cfg)
-                        logger.info("Updated config: device=cpu (CUDA unavailable — preventing crash loop)")
-                except Exception as _ce:
-                    logger.warning(f"Could not persist device=cpu after CUDA fallback: {_ce}")
-
-                return model
-            except BrokenModelFiles as cpu_e:
-                raise ModelWontLoad(str(cpu_e)) from cpu_e
-            except Exception as cpu_e:
-                logger.error(f"CPU fallback failed: {cpu_e}")
-                raise
-        else:
-            logger.error(f"Model loading failed: {e}")
-            raise
 
 def main():
     from . import desktop_identity, ui_style
@@ -3675,12 +3193,11 @@ def main():
     ui_style.prepare_windows()   # emoji that show, buttons clear of panels and docks
     # The loaded speech model. Usually built after the GTK loop starts; built
     # earlier when it must first be downloaded (see the GTK section below).
-    global model, _gtk_loop_running
     _acquire_single_instance()
     _install_signal_handlers()
 
     cfg = load_config()
-    _guard_large_v3_without_cuda(cfg)
+    engine.guard_large_v3_without_cuda(cfg)
 
     keyboard_output.key_delay_ms = cfg.key_delay
     # Made now, so the desktop has taken it on long before the first
@@ -3885,7 +3402,7 @@ def main():
         # loop is up.
         from .model_helper import is_model_cached_fast
         if not is_model_cached_fast(cfg.model):
-            model = _build_model_or_exit(cfg)
+            engine.model = engine.build_or_exit(cfg)
 
         # Start single GTK main loop in a background thread for both D-Bus and recording indicator
         def run_gtk_loop():
@@ -3894,13 +3411,13 @@ def main():
 
         gtk_thread = threading.Thread(target=run_gtk_loop, daemon=True)
         gtk_thread.start()
-        _gtk_loop_running = True
+        engine.gtk_loop_running = True
         print("GTK main loop started in background thread")
 
-    if model is None:
-        model = _build_model_or_exit(cfg)
+    if engine.model is None:
+        engine.model = engine.build_or_exit(cfg)
     logger.info(f"Configuration: model={cfg.model}, device={cfg.device}, language={cfg.language or 'auto'}, auto_space={cfg.auto_space}, auto_period={cfg.auto_period}")
-    _notify_tray_running_engine()
+    engine.notify_tray()
     # A toggle sent while the model was loading would otherwise start a
     # recording seconds later, out of the blue, when the input loop starts.
     # One asked for on the command line waits in the tray instead (control.py).

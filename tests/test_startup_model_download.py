@@ -10,6 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from tuxtalk import app, model_helper
+from tuxtalk import engine
 
 
 def _settings(model="small", device="cuda"):
@@ -35,7 +36,7 @@ def test_missing_cuda_files_use_the_processor_instead_of_crashing(monkeypatch):
                         lambda *a, **k: loaded.append(k.get("device")) or object())
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a: notes.append(a))
     settings = _settings(device="cuda")
-    app.build_model(settings)
+    engine.build(settings)
     assert loaded == ["cpu"]
     assert settings.device == "cuda"          # the user's choice is kept
     assert notes and "CUDA" in notes[0][1]
@@ -46,8 +47,8 @@ def test_cancel_is_respected_on_an_nvidia_setup(monkeypatch):
     calls = []
     monkeypatch.setattr(model_helper, "download_model_with_progress",
                         lambda *a, **k: calls.append(k) or None)
-    with pytest.raises(app.ModelUnavailable):
-        app.build_model(_settings(device="cuda"))
+    with pytest.raises(engine.ModelUnavailable):
+        engine.build(_settings(device="cuda"))
     assert len(calls) == 1   # asked once; no silent CPU retry
 
 
@@ -55,7 +56,7 @@ def test_cancel_stops_the_service_when_no_other_model_is_downloaded(monkeypatch)
     monkeypatch.setattr(model_helper, "download_model_with_progress", lambda *a, **k: None)
     monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda m: False)
     with pytest.raises(SystemExit):
-        app._build_model_or_exit(_settings())
+        engine.build_or_exit(_settings())
 
 
 def test_parakeet_never_takes_the_cuda_fallback(monkeypatch):
@@ -67,7 +68,7 @@ def test_parakeet_never_takes_the_cuda_fallback(monkeypatch):
 
     monkeypatch.setattr(model_helper, "download_model_with_progress", fail)
     with pytest.raises(RuntimeError):
-        app.build_model(_settings(model="parakeet-v3", device="cuda"))
+        engine.build(_settings(model="parakeet-v3", device="cuda"))
     assert len(calls) == 1
 
 
@@ -82,7 +83,7 @@ def test_a_real_cuda_failure_still_falls_back_to_cpu(monkeypatch):
 
     monkeypatch.setattr(model_helper, "download_model_with_progress", load)
     monkeypatch.setattr("tuxtalk.config.save_config", lambda cfg: None)
-    assert app.build_model(_settings(device="cuda")) is not None
+    assert engine.build(_settings(device="cuda")) is not None
     assert calls == ["cuda", "cpu"]
 
 
@@ -108,7 +109,7 @@ def test_a_downloaded_model_loads_after_the_gtk_thread_starts(service_main):
     ("tiny", ["tiny"], False, None),                            # never "falls back" to itself
 ])
 def test_fallback_picks_the_nearest_downloaded_model(wanted, downloaded, cuda, expected):
-    assert app._pick_fallback_model(wanted, downloaded, cuda) == expected
+    assert engine._pick_fallback_model(wanted, downloaded, cuda) == expected
 
 
 def test_cancel_falls_back_to_a_downloaded_model_and_saves_it(monkeypatch):
@@ -127,7 +128,7 @@ def test_cancel_falls_back_to_a_downloaded_model_and_saves_it(monkeypatch):
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: notes.append(f"{title}\n{body}"))
 
     settings = _settings(model="parakeet-v3", device="cpu")
-    assert app._build_model_or_exit(settings) == "model:small"
+    assert engine.build_or_exit(settings) == "model:small"
     assert settings.model == "small" and saved == ["small"]
     assert "Parakeet wasn't downloaded" in notes[0] and "Small" in notes[0]
 
@@ -142,8 +143,8 @@ def test_a_cancelled_cpu_retry_is_a_missing_model_not_a_crash(monkeypatch):
         return None
 
     monkeypatch.setattr(model_helper, "download_model_with_progress", load)
-    with pytest.raises(app.ModelUnavailable):
-        app.build_model(_settings(device="cuda"))
+    with pytest.raises(engine.ModelUnavailable):
+        engine.build(_settings(device="cuda"))
 
 
 def test_a_model_load_error_is_not_reported_as_a_gtk_failure(service_main, monkeypatch, caplog):
@@ -155,7 +156,7 @@ def test_a_model_load_error_is_not_reported_as_a_gtk_failure(service_main, monke
     def broken(cfg):
         builds.append(cfg.model)
         raise RuntimeError("bad model.bin")
-    monkeypatch.setattr(app, "_build_model_or_exit", broken)
+    monkeypatch.setattr(engine, "build_or_exit", broken)
     with pytest.raises(RuntimeError, match="bad model.bin"):
         service_main(cached=False)
     assert builds == ["parakeet-v3"]
@@ -189,14 +190,14 @@ def test_power_saving_never_opens_a_download_off_the_gtk_thread(monkeypatch):
         raise AssertionError("a GTK dialog was opened")
 
     shown = []
-    monkeypatch.setattr(app, "model", None)
-    monkeypatch.setattr(app, "_gtk_loop_running", True)
+    monkeypatch.setattr(engine, "model", None)
+    monkeypatch.setattr(engine, "gtk_loop_running", True)
     monkeypatch.setattr(app, "load_config", lambda: _settings(device="cpu"))
     monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda m: False)
     monkeypatch.setattr(model_helper, "message_dialog", no_dialogs)
     monkeypatch.setattr(model_helper.Gtk, "Dialog", no_dialogs)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: shown.append(body))
-    assert app._wake_model() is None
+    assert engine.wake() is None
     assert shown and "Restart Service" in shown[0]
 
 
@@ -207,10 +208,10 @@ def test_the_service_treats_broken_files_as_an_unavailable_model(monkeypatch):
         asked.append(k.get("dialogs"))
         raise model_helper.BrokenModelFiles("small won't load")
 
-    monkeypatch.setattr(app, "_gtk_loop_running", True)
+    monkeypatch.setattr(engine, "gtk_loop_running", True)
     monkeypatch.setattr(model_helper, "download_model_with_progress", broken)
-    with pytest.raises(app.ModelUnavailable):
-        app.build_model(_settings(device="cpu"))
+    with pytest.raises(engine.ModelUnavailable):
+        engine.build(_settings(device="cpu"))
     assert asked == [False]
 
 
@@ -235,6 +236,6 @@ def test_a_model_that_wont_load_falls_back_without_replacing_the_choice(monkeypa
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: notes.append(f"{title}\n{body}"))
 
     settings = _settings(model="medium", device="cpu")
-    assert app._build_model_or_exit(settings) == "model:small"
+    assert engine.build_or_exit(settings) == "model:small"
     assert settings.model == "small" and saved == []
     assert "wouldn't load" in notes[0] and "wasn't downloaded" not in notes[0]

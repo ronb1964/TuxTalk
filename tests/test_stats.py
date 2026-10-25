@@ -10,6 +10,7 @@ import pytest
 
 from tuxtalk import stats
 from tuxtalk import live_settings as live
+from tuxtalk import engine
 
 D = datetime.date
 
@@ -149,13 +150,13 @@ def test_format_duration(seconds, text):
 
 def _dictate(monkeypatch, app, seconds=2.0):
     import numpy as np
-    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, language: "hello there friend")
+    monkeypatch.setattr(engine, "transcribe", lambda audio, language: "hello there friend")
     monkeypatch.setattr(app, "_prepare_text", lambda raw, *a, **k: "Hello there, friend. ")
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
     monkeypatch.setattr(app, "_inject_text", lambda text, mode, **kw: None)
     monkeypatch.setattr("tuxtalk.history.add_entry", lambda text: None)
-    frames = [(np.ones(int(app.SAMPLE_RATE * seconds), dtype=np.int16) * 1000).tobytes()]
-    app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=False,
+    frames = [(np.ones(int(engine.SAMPLE_RATE * seconds), dtype=np.int16) * 1000).tobytes()]
+    app._transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False,
                                smart_quotes=False, notify_on=False)
 
 
@@ -231,7 +232,7 @@ def test_stats_are_saved_after_the_text_is_typed(stats_file, monkeypatch):
     from tuxtalk import app
     order = []
     monkeypatch.setattr(live, "usage_stats", True)
-    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, language: "hello there")
+    monkeypatch.setattr(engine, "transcribe", lambda audio, language: "hello there")
     monkeypatch.setattr(app, "_prepare_text", lambda raw, *a, **k: "Hello there. ")
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.history.add_entry", lambda text: None)
@@ -239,8 +240,8 @@ def test_stats_are_saved_after_the_text_is_typed(stats_file, monkeypatch):
     monkeypatch.setattr(stats, "record", lambda words, seconds: order.append("counted"))
     # A full second: a near-silent 0.1 s would be dropped as an accidental tap
     # (silence.is_speechless_tap) before reaching the engine.
-    frames = [(np.ones(app.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
-    app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=False,
+    frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
+    app._transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False,
                                smart_quotes=False, notify_on=False)
     assert order == ["typed", "counted"]
 

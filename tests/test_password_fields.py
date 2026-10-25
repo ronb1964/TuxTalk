@@ -19,6 +19,7 @@ from tuxtalk import (app, atspi_helper, delivery_notices, focused_window, histor
 from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
 from tuxtalk import keyboard_output
+from tuxtalk import engine
 
 ACTIVE = 1 << atspi_helper._STATE_ACTIVE
 FOCUSED = 1 << atspi_helper._STATE_FOCUSED
@@ -65,9 +66,9 @@ def desktop(monkeypatch):
 
 
 def dictate(monkeypatch, said="my secret is swordfish", beeps_on=True, chunk_role=None):
-    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, language: said)
-    frames = [(np.ones(app.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
-    app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=beeps_on,
+    monkeypatch.setattr(engine, "transcribe", lambda audio, language: said)
+    frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
+    app._transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=beeps_on,
                                smart_quotes=False, notify_on=True, chunk_role=chunk_role)
 
 
@@ -91,7 +92,7 @@ def test_a_dictation_anywhere_else_is_typed_and_kept(desktop, monkeypatch):
 
 
 def test_beep_and_label_say_it_without_a_notification(desktop, monkeypatch):
-    monkeypatch.setattr(app, "_gtk_loop_running", True)
+    monkeypatch.setattr(engine, "gtk_loop_running", True)
     monkeypatch.setenv("DISPLAY", ":0")
     desktop["password"] = True
     dictate(monkeypatch)
@@ -101,7 +102,7 @@ def test_beep_and_label_say_it_without_a_notification(desktop, monkeypatch):
 @pytest.mark.parametrize("beeps_on, label_can_show", [(False, True), (True, False)])
 def test_a_notification_says_it_when_beep_or_label_cant(desktop, monkeypatch, beeps_on,
                                                         label_can_show):
-    monkeypatch.setattr(app, "_gtk_loop_running", label_can_show)
+    monkeypatch.setattr(engine, "gtk_loop_running", label_can_show)
     monkeypatch.setenv("DISPLAY", ":0")
     desktop["password"] = True
     dictate(monkeypatch, beeps_on=beeps_on)

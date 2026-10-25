@@ -9,6 +9,7 @@ reaches it. Where its files come from is tests/test_parakeet_ultra.py.
 from types import SimpleNamespace
 
 import numpy as np
+from tuxtalk import engine
 
 
 def test_parakeet_is_offered_valid_and_downloadable():
@@ -54,28 +55,26 @@ def test_cache_checks_use_parakeet_files(monkeypatch):
 
 
 def test_dictation_audio_goes_to_parakeet(monkeypatch):
-    from tuxtalk import app
     from tuxtalk.parakeet_engine import ParakeetModel
 
     received = []
     fake = ParakeetModel.__new__(ParakeetModel)  # skip loading the real model
     fake.recognize = lambda audio: received.append(audio) or "Hello there."
-    monkeypatch.setattr(app, "model", fake, raising=False)
+    monkeypatch.setattr(engine, "model", fake, raising=False)
 
     audio = np.zeros(16000, dtype=np.float32)
-    assert app._transcribe_audio(audio, language="de") == "Hello there."
+    assert engine.transcribe(audio, language="de") == "Hello there."
     assert received and received[0] is audio
 
 
 def test_parakeet_silence_returns_none(monkeypatch):
-    from tuxtalk import app
     from tuxtalk.parakeet_engine import ParakeetModel
 
     fake = ParakeetModel.__new__(ParakeetModel)
     fake.recognize = lambda audio: ""
-    monkeypatch.setattr(app, "model", fake, raising=False)
+    monkeypatch.setattr(engine, "model", fake, raising=False)
 
-    assert app._transcribe_audio(np.zeros(8000, dtype=np.float32), language=None) is None
+    assert engine.transcribe(np.zeros(8000, dtype=np.float32), language=None) is None
 
 
 def test_the_download_question_names_the_model_as_the_menus_do(monkeypatch):
@@ -124,13 +123,13 @@ def test_parakeet_is_on_the_graphics_chip_only_once_its_vulkan_files_are_there(m
 
 
 def _parakeet_saying(monkeypatch, text, nobody_talked):
-    from tuxtalk import app, silence
+    from tuxtalk import silence
     from tuxtalk.parakeet_engine import ParakeetModel
     fake = ParakeetModel.__new__(ParakeetModel)
     fake.recognize = lambda audio: text
-    monkeypatch.setattr(app, "model", fake, raising=False)
+    monkeypatch.setattr(engine, "model", fake, raising=False)
     monkeypatch.setattr(silence, "has_no_speech", lambda a, sr: nobody_talked)
-    return app._transcribe_audio(np.zeros(16000, dtype=np.float32), language=None)
+    return engine.transcribe(np.zeros(16000, dtype=np.float32), language=None)
 
 
 def test_parakeet_inventing_mm_hmm_in_silence_types_nothing(monkeypatch):
@@ -153,7 +152,7 @@ def test_nothing_recognized_plays_the_cancel_beep(monkeypatch):
     beeps = []
     monkeypatch.setattr(app, "_beep", lambda on, *tone: beeps.append(tone))
     monkeypatch.setattr(silence, "is_speechless_tap", lambda a, sr: False)
-    monkeypatch.setattr(app, "_transcribe_audio", lambda *a: None)
+    monkeypatch.setattr(engine, "transcribe", lambda *a: None)
     app._transcribe_and_inject([np.ones(16000, dtype=np.int16).tobytes()], 16000, True, False, False)
     assert beeps == [app.CANCEL_BEEP]
 

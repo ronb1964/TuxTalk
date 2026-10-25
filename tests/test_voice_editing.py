@@ -177,6 +177,7 @@ def test_the_engine_has_room_for_a_selection(monkeypatch):
 # --- 3. the setting and the engine --------------------------------------------------
 
 from tuxtalk import app, config
+from tuxtalk import engine as speech_engine
 from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
 
@@ -359,7 +360,7 @@ def edit_env(monkeypatch):
 
     engine = Engine()
     monkeypatch.setattr(live, "ai_engine", engine)
-    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "make it more professional")
+    monkeypatch.setattr(speech_engine, "transcribe", lambda audio, lang: "make it more professional")
     monkeypatch.setattr("tuxtalk.silence.is_speechless_tap", lambda a, sr: False)
     selection = {"text": "We finished the electrical today."}
 
@@ -746,14 +747,14 @@ def test_a_typed_block_uses_shift_enter_not_enter(injection, monkeypatch):
 
 
 def test_nothing_selected_says_so_even_with_nothing_said(edit_env, monkeypatch):
-    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: None)
+    monkeypatch.setattr(speech_engine, "transcribe", lambda audio, lang: None)
     edit_env["selection"]["text"] = None
     run_edit()
     assert len(edit_env["notices"]) == 1 and "Select the text" in edit_env["notices"][0]
 
 
 def test_a_selection_with_nothing_said_says_so(edit_env, monkeypatch):
-    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: None)
+    monkeypatch.setattr(speech_engine, "transcribe", lambda audio, lang: None)
     run_edit()
     assert edit_env["typed"] == []
     assert len(edit_env["notices"]) == 1 and "didn't catch" in edit_env["notices"][0]
@@ -860,7 +861,7 @@ def test_a_failed_line_fails_the_whole_edit(engine, monkeypatch):
 # --- done without the AI, and formatting --------------------------------------------------
 
 def test_exact_jobs_are_done_in_code_even_before_the_ai_is_ready(edit_env, monkeypatch):
-    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Make this all caps.")
+    monkeypatch.setattr(speech_engine, "transcribe", lambda audio, lang: "Make this all caps.")
     edit_env["selection"]["text"] = "Testing one.\nTesting two."
     edit_env["engine"].ready = False
     run_edit()
@@ -877,7 +878,7 @@ def keys_sent(edit_env, monkeypatch):
 
 
 def test_bold_in_a_word_processor_is_its_shortcut(edit_env, keys_sent, monkeypatch):
-    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Make this bold and italic.")
+    monkeypatch.setattr(speech_engine, "transcribe", lambda audio, lang: "Make this bold and italic.")
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "libreoffice-writer")
     run_edit()
     assert keys_sent == [[(29, 1), (48, 1), (48, 0), (29, 0)], [(29, 1), (23, 1), (23, 0), (29, 0)]]
@@ -887,14 +888,14 @@ def test_bold_in_a_word_processor_is_its_shortcut(edit_env, keys_sent, monkeypat
 
 def test_bold_in_a_plain_text_app_says_where_it_works(edit_env, keys_sent, monkeypatch):
     """KWrite has no bold; its Ctrl+B sets a bookmark."""
-    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Make this bold.")
+    monkeypatch.setattr(speech_engine, "transcribe", lambda audio, lang: "Make this bold.")
     run_edit()
     assert keys_sent == [] and edit_env["typed"] == [] and edit_env["engine"].asked == []
     assert "LibreOffice" in edit_env["notices"][0]
 
 
 def test_font_size_says_it_cant(edit_env, keys_sent, monkeypatch):
-    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Make this text larger.")
+    monkeypatch.setattr(speech_engine, "transcribe", lambda audio, lang: "Make this text larger.")
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "libreoffice-writer")
     run_edit()
     assert keys_sent == [] and edit_env["typed"] == []
@@ -910,7 +911,7 @@ def test_a_none_answer_is_no_answer(engine, monkeypatch, answer):
 
 
 def test_delete_this_presses_delete(edit_env, keys_sent, monkeypatch):
-    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Delete this.")
+    monkeypatch.setattr(speech_engine, "transcribe", lambda audio, lang: "Delete this.")
     run_edit()
     assert keys_sent == [[(111, 1), (111, 0)]]
     assert edit_env["typed"] == [] and edit_env["engine"].asked == [] and edit_env["notices"] == []
@@ -919,7 +920,7 @@ def test_delete_this_presses_delete(edit_env, keys_sent, monkeypatch):
 def test_an_ai_answer_that_only_changes_spacing_is_no_change(edit_env, monkeypatch):
     """An answer that only trims the line ends (as the AI does for "Select
     all") changes nothing."""
-    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Select all.")
+    monkeypatch.setattr(speech_engine, "transcribe", lambda audio, lang: "Select all.")
     edit_env["selection"]["text"] = "Testing one. \nTesting two. "
     edit_env["engine"].answer = "Testing one.\nTesting two."
     run_edit()
@@ -927,7 +928,7 @@ def test_an_ai_answer_that_only_changes_spacing_is_no_change(edit_env, monkeypat
 
 
 def test_indenting_still_counts_as_a_change(edit_env, monkeypatch):
-    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Indent this.")
+    monkeypatch.setattr(speech_engine, "transcribe", lambda audio, lang: "Indent this.")
     edit_env["selection"]["text"] = "One\nTwo"
     run_edit()
     assert edit_env["typed"] == ["    One\n    Two"]
@@ -979,7 +980,7 @@ def test_no_key_goes_to_a_window_switched_to_while_transcribing(edit_env, keys_s
     could land in whatever window the user had clicked into."""
     classes = iter([focused, "org.kde.konsole"])
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: next(classes))
-    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: said)
+    monkeypatch.setattr(speech_engine, "transcribe", lambda audio, lang: said)
     run_edit()
     assert keys_sent == [] and edit_env["typed"] == []
     assert len(edit_env["notices"]) == 1 and "switched windows" in edit_env["notices"][0]
@@ -991,7 +992,7 @@ def test_no_key_is_pressed_when_the_window_is_unknown(edit_env, keys_sent, monke
     """Unknown both times (None == None) is not "the same window", or a
     switch during transcription goes unnoticed."""
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
-    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: said)
+    monkeypatch.setattr(speech_engine, "transcribe", lambda audio, lang: said)
     run_edit()
     assert keys_sent == [] and edit_env["typed"] == []
     assert len(edit_env["notices"]) == 1
@@ -1002,7 +1003,7 @@ def test_a_window_that_cant_be_found_after_transcribing_counts_as_moved(edit_env
                                                                        monkeypatch, said):
     classes = iter(["libreoffice-writer", None])
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: next(classes))
-    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: said)
+    monkeypatch.setattr(speech_engine, "transcribe", lambda audio, lang: said)
     run_edit()
     assert keys_sent == [] and edit_env["typed"] == []
     assert len(edit_env["notices"]) == 1 and "switched windows" in edit_env["notices"][0]
@@ -1023,7 +1024,7 @@ def test_a_rewrite_is_still_typed_where_the_window_is_never_known(edit_env, monk
 ])
 def test_indenting_one_line_counts_as_a_change(edit_env, monkeypatch, said, selected, typed):
     """The only change is spacing, which a strip() comparison would remove."""
-    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: said)
+    monkeypatch.setattr(speech_engine, "transcribe", lambda audio, lang: said)
     edit_env["selection"]["text"] = selected
     run_edit()
     assert edit_env["typed"] == [typed] and edit_env["notices"] == []
@@ -1035,20 +1036,20 @@ def test_delete_and_exact_jobs_work_without_the_ai_downloaded(edit_env, keys_sen
     """Edits done with a key or in code must not say "needs its AI" when the
     AI download is missing."""
     monkeypatch.setattr(live, "ai_engine", None)
-    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Delete this.")
+    monkeypatch.setattr(speech_engine, "transcribe", lambda audio, lang: "Delete this.")
     run_edit()
     assert keys_sent == [[(111, 1), (111, 0)]] and edit_env["notices"] == []
-    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Make this all caps.")
+    monkeypatch.setattr(speech_engine, "transcribe", lambda audio, lang: "Make this all caps.")
     run_edit()
     assert edit_env["typed"] == ["WE FINISHED THE ELECTRICAL TODAY."] and edit_env["notices"] == []
 
 
 def test_a_long_selection_can_still_be_deleted_or_made_bold(edit_env, keys_sent, monkeypatch):
     edit_env["selection"]["text"] = "x " * 2000
-    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Delete this.")
+    monkeypatch.setattr(speech_engine, "transcribe", lambda audio, lang: "Delete this.")
     run_edit()
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "libreoffice-writer")
-    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Make this bold.")
+    monkeypatch.setattr(speech_engine, "transcribe", lambda audio, lang: "Make this bold.")
     run_edit()
     assert keys_sent == [[(111, 1), (111, 0)], [(29, 1), (48, 1), (48, 0), (29, 0)]]
     assert edit_env["notices"] == []
@@ -1091,7 +1092,7 @@ def test_a_rewrite_uses_ss_with_swiss_spelling_on(edit_env, monkeypatch):
 def test_two_changes_are_done_one_after_the_other(edit_env, monkeypatch):
     """"make it formal and remove the commas": the AI rewords, then the
     commas go in code, exactly."""
-    monkeypatch.setattr(app, "_transcribe_audio",
+    monkeypatch.setattr(speech_engine, "transcribe",
                         lambda audio, lang: "make it formal and remove the commas")
     edit_env["engine"].answer = "We completed the electrical work, as planned, today."
     run_edit()
@@ -1100,7 +1101,7 @@ def test_two_changes_are_done_one_after_the_other(edit_env, monkeypatch):
 
 
 def test_a_step_with_no_change_does_not_stop_the_others(edit_env, monkeypatch):
-    monkeypatch.setattr(app, "_transcribe_audio",
+    monkeypatch.setattr(speech_engine, "transcribe",
                         lambda audio, lang: "make it formal and make it all caps")
     edit_env["engine"].answer = None              # the AI has nothing for step one
     run_edit()
@@ -1109,7 +1110,7 @@ def test_a_step_with_no_change_does_not_stop_the_others(edit_env, monkeypatch):
 
 def test_a_rewording_step_needs_the_ai(edit_env, monkeypatch):
     monkeypatch.setattr(live, "ai_engine", None)
-    monkeypatch.setattr(app, "_transcribe_audio",
+    monkeypatch.setattr(speech_engine, "transcribe",
                         lambda audio, lang: "remove the commas and make it formal")
     run_edit()
     assert edit_env["typed"] == []
@@ -1123,7 +1124,7 @@ def test_the_edit_key_understands_select_commands_with_nothing_selected(edit_env
     monkeypatch.setattr(keyboard_output, "output_backend",
                         lambda: type("B", (), {"press_keys": lambda self, c: pressed.append(c) or True})())
     monkeypatch.setattr(rs.state, "last_inserted_text", "One. Two.")
-    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "select the last sentence")
+    monkeypatch.setattr(speech_engine, "transcribe", lambda audio, lang: "select the last sentence")
     edit_env["selection"]["text"] = ""
     run_edit()
     assert len(pressed) == 1 and edit_env["notices"] == [] and edit_env["typed"] == []
@@ -1131,7 +1132,7 @@ def test_the_edit_key_understands_select_commands_with_nothing_selected(edit_env
 
 def test_with_the_labs_switch_off_nothing_selected_still_says_select_first(edit_env, monkeypatch):
     monkeypatch.setattr(live, "voice_navigation", False)
-    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "select the last sentence")
+    monkeypatch.setattr(speech_engine, "transcribe", lambda audio, lang: "select the last sentence")
     edit_env["selection"]["text"] = ""
     run_edit()
     assert edit_env["notices"] and "Select the text" in edit_env["notices"][0]

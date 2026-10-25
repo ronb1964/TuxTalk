@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 from tuxtalk import app, libei_ctypes
+from tuxtalk import engine
 from tuxtalk import keyboard_output
 from tuxtalk import recording_state as rs
 from tuxtalk.key_commands import split_key_command
@@ -40,15 +41,15 @@ def _dictate(monkeypatch, raw, window="brave-browser"):
     """One dictation through _transcribe_and_inject with the real text
     cleanup; what was typed and which keys were pressed, in order."""
     events = []
-    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, language: raw)
+    monkeypatch.setattr(engine, "transcribe", lambda audio, language: raw)
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: window)
     monkeypatch.setattr(app, "_inject_text",
                         lambda text, mode, **kw: events.append(("typed", text)) or "ok")
     monkeypatch.setattr(keyboard_output, "press_key",
                         lambda key, why, claim=None: events.append((key, why)) or True)
-    frames = [(np.ones(app.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
-    app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=False,
+    frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
+    app._transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False,
                                smart_quotes=False, notify_on=False)
     return events
 

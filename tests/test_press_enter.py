@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 from tuxtalk import app, config, focused_window, key_commands, send_countdown, window_classes
+from tuxtalk import engine
 from tuxtalk import keyboard_output
 from tuxtalk import keyboard_grab
 from tuxtalk import live_settings as live
@@ -38,7 +39,7 @@ def _dictate(monkeypatch, raw, prepared=None, outcome="ok", window="brave-browse
     """Run one dictation through _transcribe_and_inject; what was typed and
     whether Enter was pressed, in order."""
     events = []
-    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, language: raw)
+    monkeypatch.setattr(engine, "transcribe", lambda audio, language: raw)
     if prepared is not None:
         monkeypatch.setattr(app, "_prepare_text", lambda r, *a, **k: prepared(r))
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
@@ -55,8 +56,8 @@ def _dictate(monkeypatch, raw, prepared=None, outcome="ok", window="brave-browse
     monkeypatch.setattr(app, "_inject_text", inject)
     monkeypatch.setattr(keyboard_output, "press_key",
                         lambda key, why, claim=None: events.append((key.lower(), why)))
-    frames = [(np.ones(app.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
-    app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=False,
+    frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
+    app._transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False,
                                smart_quotes=False, notify_on=False)
     return events
 
@@ -685,7 +686,7 @@ def test_a_pause_at_the_end_after_switching_windows_sends_nothing(monkeypatch, k
     monkeypatch.setattr(app, "_deliver_text",
                         lambda text, mode, one_block=False, *, where: "ok")
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
-    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, language: "see you at noon")
+    monkeypatch.setattr(engine, "transcribe", lambda audio, language: "see you at noon")
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
     monkeypatch.setattr(live, "press_enter_after", True)
     monkeypatch.setattr(live, "usage_stats", False)
@@ -693,11 +694,11 @@ def test_a_pause_at_the_end_after_switching_windows_sends_nothing(monkeypatch, k
     monkeypatch.setattr(send_countdown, "_delay", wait)
     FakeTimer.made = []
     monkeypatch.setattr(send_countdown.threading, "Timer", FakeTimer)
-    frames = [(np.ones(app.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
-    app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=False, smart_quotes=False,
+    frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
+    app._transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False, smart_quotes=False,
                                notify_on=False, chunk_role="middle")
     focus[:] = ["org.kde.konsole", ("compositor", 0x3400004)]     # the click into Konsole
-    app._transcribe_and_inject([], app.SAMPLE_RATE, beeps_on=False, smart_quotes=False,
+    app._transcribe_and_inject([], engine.SAMPLE_RATE, beeps_on=False, smart_quotes=False,
                                notify_on=False, chunk_role="last")
     for timer in FakeTimer.made:
         timer.fire()

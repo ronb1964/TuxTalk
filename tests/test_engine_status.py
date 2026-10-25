@@ -12,6 +12,7 @@ from tuxtalk.dbus_service import TuxTalkDBusService
 from tuxtalk.recommend import engine_status
 from tuxtalk.tray import preset_notice
 from tuxtalk import tray_link
+from tuxtalk import engine
 
 
 @pytest.mark.parametrize("cfg_model,cfg_device,running,expected", [
@@ -71,8 +72,8 @@ def test_a_stopped_service_falls_back_to_the_settings(svc):
 def loads(monkeypatch):
     """The service's model loading with every engine faked; returns the
     engine the service then says is running."""
-    from tuxtalk import app, config, cuda_helper, model_helper, parakeet_gpu, whisper_vulkan
-    monkeypatch.setattr(app, "_running_engine", None)
+    from tuxtalk import config, cuda_helper, model_helper, parakeet_gpu, whisper_vulkan
+    monkeypatch.setattr(engine, "_running_engine", None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a: None)
     monkeypatch.setattr(whisper_vulkan, "is_installed", lambda m: True)
     monkeypatch.setattr(whisper_vulkan, "find_device", lambda: 0)
@@ -88,8 +89,8 @@ def loads(monkeypatch):
                 raise RuntimeError("CUDA driver missing")
             return f"{name} on {device}"
         monkeypatch.setattr(model_helper, "download_model_with_progress", download)
-        assert app.build_model(config.Settings(model=model, device=device))
-        return app._running_engine
+        assert engine.build(config.Settings(model=model, device=device))
+        return engine._running_engine
     return load
 
 
@@ -112,12 +113,11 @@ def test_the_service_tells_the_tray_once_the_model_is_loaded(service_main):
 
 
 def test_the_tray_is_told_what_was_loaded(monkeypatch):
-    from tuxtalk import app
     told = []
-    monkeypatch.setattr(app, "_running_engine", ("small", "cpu"))
+    monkeypatch.setattr(engine, "_running_engine", ("small", "cpu"))
     monkeypatch.setattr(tray_link, "get_proxy", lambda: types.SimpleNamespace(
         NotifyRunningEngine=lambda *engine, **k: told.append(engine)))
-    app._notify_tray_running_engine()
+    engine.notify_tray()
     assert told == [("small", "cpu")]
 
 

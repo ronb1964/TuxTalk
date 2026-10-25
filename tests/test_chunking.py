@@ -17,6 +17,7 @@ from tuxtalk import live_settings as live
 from tuxtalk import keyboard_grab
 from tuxtalk import keyboard_output
 from tuxtalk import tray_link
+from tuxtalk import engine
 
 SR = 16000
 BLOCK = 320   # 20 ms at 16 kHz
@@ -377,7 +378,7 @@ def pipeline(monkeypatch):
     Returns (texts, typed, beeps)."""
     from tuxtalk import app, history
     texts, typed, beeps = [], [], []
-    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: texts.pop(0))
+    monkeypatch.setattr(engine, "transcribe", lambda audio, lang: texts.pop(0))
 
     def fake_inject(text, mode, one_block=False, into=None, message=None):
         typed.append(text)
@@ -934,8 +935,8 @@ def test_the_context_pass_hears_only_the_seconds_around_the_pause(pipeline, monk
     from tuxtalk import app
     texts, typed, _ = pipeline
     heard = []
-    real = app._transcribe_audio
-    monkeypatch.setattr(app, "_transcribe_audio",
+    real = engine.transcribe
+    monkeypatch.setattr(engine, "transcribe",
                         lambda audio, lang: (heard.append(len(audio) / SR), real(audio, lang))[1])
     texts.extend(["we meet.", "at three.", "we meet at three."])
     call(frames_of(speech(20.0)), "middle")

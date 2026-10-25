@@ -17,6 +17,7 @@ import pytest
 from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
 from tuxtalk import keyboard_output
+from tuxtalk import engine
 
 # No program a test starts can reach the speakers, nor this one. Every
 # program inherits this, so a child Python's sounddevice, a player started
@@ -174,9 +175,8 @@ def _no_real_speech_model(monkeypatch):
     loads the real one when none is in memory (Power Saving, _wake_model):
     seconds on a computer that has it, a 670 MB download in CI, where the
     suite ran into its 20-minute limit (2026-10-18). Tests of the loading
-    itself set app.model to None."""
-    from tuxtalk import app
-    monkeypatch.setattr(app, "model", object())
+    itself set engine.model to None."""
+    monkeypatch.setattr(engine, "model", object())
 
 
 @pytest.fixture(autouse=True)
@@ -799,14 +799,14 @@ def service_main(monkeypatch):
     def step(name, result=None):
         return lambda *a, **k: done.append(name) or result
 
-    for name in ("model", "_gtk_loop_running", "dbus_service", "recording_indicator",
-                 "_spectrum_processor"):
+    for name in ("dbus_service", "recording_indicator", "_spectrum_processor"):
         monkeypatch.setattr(app, name, getattr(app, name))
+    monkeypatch.setattr(engine, "gtk_loop_running", engine.gtk_loop_running)
     monkeypatch.setattr(keyboard_output, "key_delay_ms", keyboard_output.key_delay_ms)
     for name in ("log_transcripts", "usage_stats", "restore_clipboard", "pause_media",
                  "duck_audio", "paste_last_hotkey", "commands", "words"):
         monkeypatch.setattr(live, name, getattr(live, name))
-    monkeypatch.setattr(app, "model", None)
+    monkeypatch.setattr(engine, "model", None)
 
     class Bus:
         def __init__(self, instance, primary=True):
@@ -836,7 +836,7 @@ def service_main(monkeypatch):
 
     monkeypatch.setattr(app, "_acquire_single_instance", step("takes the service lock"))
     monkeypatch.setattr(app, "_install_signal_handlers", lambda: None)
-    monkeypatch.setattr(app, "_guard_large_v3_without_cuda", lambda cfg: None)
+    monkeypatch.setattr(engine, "guard_large_v3_without_cuda", lambda cfg: None)
     monkeypatch.setattr(live, "apply", lambda cfg: None)
     monkeypatch.setattr(app, "_pick_input_device", lambda mic: None)
     monkeypatch.setattr(app, "load_custom_commands", lambda: {})
@@ -846,8 +846,8 @@ def service_main(monkeypatch):
     monkeypatch.setattr(tuxtalk.dbus_service, "TuxTalkDBusService", Bus)
     monkeypatch.setattr(app, "RecordingIndicator", Indicator)
     monkeypatch.setattr(app, "threading", types.SimpleNamespace(Thread=Thread))
-    monkeypatch.setattr(app, "_build_model_or_exit", step("loads the speech model", "model"))
-    monkeypatch.setattr(app, "_notify_tray_running_engine", step("tells the tray what runs"))
+    monkeypatch.setattr(engine, "build_or_exit", step("loads the speech model", "model"))
+    monkeypatch.setattr(engine, "notify_tray", step("tells the tray what runs"))
     monkeypatch.setattr(app, "_mark_service_ready", ready)
     monkeypatch.setattr(input_backends, "get_input_backend",
                         lambda **k: types.SimpleNamespace(start=step("listens for hotkeys")))

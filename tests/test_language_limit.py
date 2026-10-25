@@ -7,7 +7,8 @@ the likeliest language that is.
 import numpy as np
 import pytest
 
-from tuxtalk import app, config, language_limit
+from tuxtalk import config, language_limit
+from tuxtalk import engine
 from tuxtalk import live_settings as live
 from tuxtalk import whisper_vulkan as wv
 
@@ -102,9 +103,9 @@ def words_off(monkeypatch):
 
 
 def _transcribe(monkeypatch, fake, languages, language=None):
-    monkeypatch.setattr(app, "model", fake, raising=False)
+    monkeypatch.setattr(engine, "model", fake, raising=False)
     monkeypatch.setattr(live, "auto_languages", languages)
-    return app._transcribe_audio(np.zeros(16000, dtype=np.float32), language)
+    return engine.transcribe(np.zeros(16000, dtype=np.float32), language)
 
 
 def test_faster_whisper_runs_again_in_a_listed_language(words_off, monkeypatch):

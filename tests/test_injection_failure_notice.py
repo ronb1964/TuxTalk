@@ -15,6 +15,7 @@ import numpy as np
 import pytest
 
 from tuxtalk import app, focused_window, window_classes
+from tuxtalk import engine
 from tuxtalk import live_settings as live
 from tuxtalk import keyboard_output
 
@@ -97,7 +98,7 @@ def test_typing_into_electron_stopping_partway_is_partial(monkeypatch, electron)
 def dictation(monkeypatch):
     """A dictation that transcribes to "Hello there." with everything recorded."""
     notes, beeps = [], []
-    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, language: "hello there")
+    monkeypatch.setattr(engine, "transcribe", lambda audio, language: "hello there")
     monkeypatch.setattr(app, "_prepare_text", lambda raw, *a, **k: "Hello there. ")
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: notes.append(f"{title}\n{body}"))
     monkeypatch.setattr(app, "_beep", lambda enabled, *tone, **k: enabled and beeps.append(tone))
@@ -111,8 +112,8 @@ def dictation(monkeypatch):
             monkeypatch.setattr(app, "_inject_text", boom)
         else:
             monkeypatch.setattr(app, "_inject_text", lambda text, mode, **kw: outcome)
-        frames = [(np.ones(app.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
-        app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=beeps_on,
+        frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
+        app._transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=beeps_on,
                                    smart_quotes=False, notify_on=notify_on)
         return notes, beeps
 

@@ -11,6 +11,7 @@ from tuxtalk import keyboard_output
 from tuxtalk import recording_state as rs
 from tuxtalk.voice_edit_rules import spoken_edit
 from tuxtalk import live_settings as live
+from tuxtalk import engine
 
 S = "SHIFT"
 
@@ -149,7 +150,7 @@ def test_edit_that_alone_at_the_end_asks_what_to_change(editing):
 def test_it_is_never_typed_as_text(editing, monkeypatch):
     """Through the whole pipeline: the command phrase is acted on, not typed."""
     typed = []
-    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Edit that, make it shorter.")
+    monkeypatch.setattr(engine, "transcribe", lambda audio, lang: "Edit that, make it shorter.")
     monkeypatch.setattr(app, "_inject_text", lambda text, *a, **k: typed.append(text) or "ok")
     monkeypatch.setattr(app, "_beep", lambda *a: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)

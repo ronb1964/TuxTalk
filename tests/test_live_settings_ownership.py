@@ -20,6 +20,7 @@ import types
 import pytest
 
 from tuxtalk import app, hotkey_keys
+from tuxtalk import engine
 from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
 
@@ -134,11 +135,11 @@ class TestAutoTimeoutIsLive:
         svc.last_activity = 0.0  # idle since the epoch
 
         cfg.auto_timeout_enabled = False
-        engine = _Engine()
-        monkeypatch.setattr(app, "model", engine)
+        loaded = _Engine()
+        monkeypatch.setattr(engine, "model", loaded)
 
         app._service_tick(cfg, svc)
-        assert app.model is engine          # not rested
+        assert engine.model is loaded          # not rested
 
     def test_switching_the_timeout_on_does_not_stop_the_service_at_once(self, monkeypatch):
         """The idle clock must not count only D-Bus commands while the option is
@@ -161,11 +162,11 @@ class TestAutoTimeoutIsLive:
         monkeypatch.setattr(svc, "refresh_input_device", lambda: None)
         app._service_tick(cfg, svc)
 
-        engine = _Engine()
-        monkeypatch.setattr(app, "model", engine)
+        loaded = _Engine()
+        monkeypatch.setattr(engine, "model", loaded)
         monkeypatch.setattr(live, "config_file_changed", lambda: False)
         app._service_tick(cfg, svc)
-        assert app.model is engine    # not rested on the very next pass
+        assert engine.model is loaded    # not rested on the very next pass
 
 
 def test_power_saving_rests_the_model_and_keeps_the_service(monkeypatch):
@@ -176,13 +177,13 @@ def test_power_saving_rests_the_model_and_keeps_the_service(monkeypatch):
     monkeypatch.setattr(live, "config_file_changed", lambda: False)
     shown = []
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: shown.append((title, body)))
-    engine = _Engine()
-    monkeypatch.setattr(app, "model", engine)
+    loaded = _Engine()
+    monkeypatch.setattr(engine, "model", loaded)
     cfg = _cfg(auto_timeout_enabled=True, auto_timeout_minutes=5)
     svc = app._ServiceState(cfg)
     svc.last_activity = 0.0
     app._service_tick(cfg, svc)           # no SystemExit: the hotkeys stay
-    assert app.model is None and engine.closed
+    assert engine.model is None and loaded.closed
     assert shown == []                    # nothing to explain: F8 still works
 
 
@@ -192,28 +193,28 @@ def test_power_saving_waits_for_a_transcription_still_running(monkeypatch):
     1-minute timeout and lose the Vulkan engine mid-request."""
     _idle(monkeypatch)
     monkeypatch.setattr(live, "config_file_changed", lambda: False)
-    engine = _Engine()
-    monkeypatch.setattr(app, "model", engine)
+    loaded = _Engine()
+    monkeypatch.setattr(engine, "model", loaded)
     cfg = _cfg(auto_timeout_enabled=True, auto_timeout_minutes=1)
     svc = app._ServiceState(cfg)
     svc.last_activity = 0.0
     with app._inject_lock:                # a dictation is being transcribed
         app._service_tick(cfg, svc)
-    assert app.model is engine and not engine.closed
+    assert engine.model is loaded and not loaded.closed
     app._service_tick(cfg, svc)           # done: now it rests
-    assert app.model is None
+    assert engine.model is None
 
 
 def test_the_next_dictation_loads_the_model_again(monkeypatch):
     built = []
-    monkeypatch.setattr(app, "model", None)
-    monkeypatch.setattr(app, "load_config", lambda: "settings")
-    monkeypatch.setattr(app, "build_model",
+    monkeypatch.setattr(engine, "model", None)
+    monkeypatch.setattr(engine, "load_config", lambda: "settings")
+    monkeypatch.setattr(engine, "build",
                         lambda settings: built.append(settings) or _Engine())
-    monkeypatch.setattr(app, "_notify_tray_running_engine", lambda: None)
-    first = app._wake_model()
+    monkeypatch.setattr(engine, "notify_tray", lambda: None)
+    first = engine.wake()
     assert isinstance(first, _Engine) and built == ["settings"]
-    assert app._wake_model() is first and len(built) == 1     # loaded once
+    assert engine.wake() is first and len(built) == 1     # loaded once
 
 
 def test_a_model_that_wont_load_again_is_said_not_raised(monkeypatch):
@@ -221,11 +222,11 @@ def test_a_model_that_wont_load_again_is_said_not_raised(monkeypatch):
     service without a model. And no other model is saved over the user's
     choice: a graphics card failing once on waking shouldn't change it."""
     shown = []
-    monkeypatch.setattr(app, "model", None)
-    monkeypatch.setattr(app, "load_config", lambda: "settings")
-    monkeypatch.setattr(app, "build_model",
-                        lambda s: (_ for _ in ()).throw(app.ModelUnavailable("not downloaded")))
-    monkeypatch.setattr(app, "_build_model_or_exit", lambda s: pytest.fail("fell back"))
+    monkeypatch.setattr(engine, "model", None)
+    monkeypatch.setattr(engine, "load_config", lambda: "settings")
+    monkeypatch.setattr(engine, "build",
+                        lambda s: (_ for _ in ()).throw(engine.ModelUnavailable("not downloaded")))
+    monkeypatch.setattr(engine, "build_or_exit", lambda s: pytest.fail("fell back"))
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: shown.append(body))
-    assert app._wake_model() is None
+    assert engine.wake() is None
     assert shown and "Restart Service" in shown[0]

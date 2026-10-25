@@ -16,6 +16,7 @@ from tuxtalk import config  # noqa: E402
 from tuxtalk import logger as tlog  # noqa: E402
 from tuxtalk import live_settings as live  # noqa: E402
 from tuxtalk import keyboard_output  # noqa: E402
+from tuxtalk import engine as speech_engine  # noqa: E402
 
 
 # --- config flag -----------------------------------------------------------
@@ -325,13 +326,13 @@ def test_a_dictation_never_writes_the_words(monkeypatch, caplog, capsys, keyboar
     import numpy as np
     from tuxtalk import app
     monkeypatch.setattr(live, "log_transcripts", False)
-    monkeypatch.setattr(app, "_transcribe_audio",
+    monkeypatch.setattr(speech_engine, "transcribe",
                         lambda audio, language: "zanzibar quokka password hunter two")
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
-    frames = [(np.ones(app.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
+    frames = [(np.ones(speech_engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
     _hear_every_level(caplog)
-    app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=False,
+    app._transcribe_and_inject(frames, speech_engine.SAMPLE_RATE, beeps_on=False,
                                smart_quotes=False, notify_on=False)
     assert keyboard.typed_keys(), "the dictation was not typed"
     assert "[hidden" in caplog.text                     # it did log, redacted
@@ -348,7 +349,7 @@ def test_a_voice_edit_never_writes_the_words(monkeypatch, caplog, capsys):
                                  "edit": lambda self, text, instruction: "Quokka hunter, formally."})()
     monkeypatch.setattr(live, "log_transcripts", False)
     monkeypatch.setattr(live, "ai_engine", engine)
-    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "make the zanzibar formal")
+    monkeypatch.setattr(speech_engine, "transcribe", lambda audio, lang: "make the zanzibar formal")
     monkeypatch.setattr("tuxtalk.silence.is_speechless_tap", lambda a, sr: False)
     monkeypatch.setattr(cb, "copy_selection",
                         lambda send_copy: ("zanzibar quokka hunter", lambda also=(): None))
@@ -405,11 +406,10 @@ def _engine(kind, monkeypatch):
                                   "whisper on vulkan", "faster-whisper"])
 def test_no_speech_engine_writes_the_words(monkeypatch, caplog, capsys, kind):
     import numpy as np
-    from tuxtalk import app
     monkeypatch.setattr(live, "log_transcripts", False)
-    monkeypatch.setattr(app, "model", _engine(kind, monkeypatch))
+    monkeypatch.setattr(speech_engine, "model", _engine(kind, monkeypatch))
     _hear_every_level(caplog)
-    raw = app._transcribe_audio(np.full(16000, 0.2, dtype=np.float32), language=None)
+    raw = speech_engine.transcribe(np.full(16000, 0.2, dtype=np.float32), language=None)
     assert raw and "quokka" in raw
     assert _leaks(caplog, capsys) == []
 

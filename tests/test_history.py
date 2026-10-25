@@ -13,6 +13,7 @@ import numpy as np
 import pytest
 
 from tuxtalk import history
+from tuxtalk import engine
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -94,7 +95,7 @@ def test_dictation_is_recorded_before_it_is_typed(monkeypatch):
     from tuxtalk import app
 
     order = []
-    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, language: "hello there")
+    monkeypatch.setattr(engine, "transcribe", lambda audio, language: "hello there")
     monkeypatch.setattr(app, "_prepare_text", lambda raw, *a, **k: "Hello there. ")
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
     monkeypatch.setattr(app, "_inject_text",
@@ -102,8 +103,8 @@ def test_dictation_is_recorded_before_it_is_typed(monkeypatch):
 
     # A full second: a near-silent 0.1 s would be dropped as an accidental tap
     # (silence.is_speechless_tap) before reaching the engine.
-    frames = [(np.ones(app.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
-    app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=False,
+    frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
+    app._transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False,
                                smart_quotes=False, notify_on=False)
 
     assert order == [("typed", ["Hello there."])]

@@ -4,6 +4,7 @@ the hotkeys."""
 import threading
 
 from tuxtalk import app
+from tuxtalk import engine
 from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
 
@@ -44,11 +45,11 @@ def test_a_transcription_error_sounds_like_a_failure_and_says_so(monkeypatch):
     def broken(*a, **k):
         raise RuntimeError("engine crashed")
 
-    monkeypatch.setattr(app, "_transcribe_audio", broken)
+    monkeypatch.setattr(engine, "transcribe", broken)
     monkeypatch.setattr("tuxtalk.silence.is_speechless_tap", lambda *a: False)
 
     frames = [b"\xe8\x03" * 16000]   # speaking level; pure silence is a dead mic
-    app._transcribe_and_inject(frames, app.SAMPLE_RATE, True, False, notify_on=False)
+    app._transcribe_and_inject(frames, engine.SAMPLE_RATE, True, False, notify_on=False)
 
     assert beeps == [app.CANCEL_BEEP], "the 'done' beep played for a failure"
     assert notes and "Transcription failed" in notes[0]
