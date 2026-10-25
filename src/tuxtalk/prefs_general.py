@@ -266,7 +266,7 @@ class GeneralTab(Tab):
         shortcuts.attach(self.vc_hotkey_combo, 1, 0, 1, 1)
 
         # Types the last dictation again, for when it went to the wrong window
-        # (app._paste_last_dictation).
+        # (hotkeys._paste_last_dictation).
         label = Gtk.Label(label="Paste Last Dictation:", xalign=0)
         label.set_tooltip_text(
             "Press this key combo to type your last dictation again where the cursor is,\n"

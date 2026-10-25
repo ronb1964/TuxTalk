@@ -25,6 +25,7 @@ from tuxtalk import delivery
 from tuxtalk import type_at_pause
 from tuxtalk import pipeline
 from tuxtalk.beeps import CANCEL_BEEP
+from tuxtalk import hotkeys
 
 ACTIVE = 1 << atspi_helper._STATE_ACTIVE
 FOCUSED = 1 << atspi_helper._STATE_FOCUSED
@@ -161,11 +162,11 @@ def test_paste_last_dictation_types_nothing_in_a_password_field(desktop, monkeyp
     monkeypatch.setattr(history, "get_entries", lambda: ["my secret is swordfish"])
     cfg = types.SimpleNamespace(beeps=True, auto_space=True, injection_mode="type")
     desktop["password"] = True
-    app._paste_last_dictation(cfg)
+    hotkeys._paste_last_dictation(cfg)
     assert desktop["typed"] == []
     assert desktop["labels"] == [delivery_notices.PASSWORD_FIELD_LABEL]
     desktop["password"] = False
-    app._paste_last_dictation(cfg)
+    hotkeys._paste_last_dictation(cfg)
     assert desktop["typed"] == ["my secret is swordfish "]
 
 

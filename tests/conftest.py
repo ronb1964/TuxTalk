@@ -19,6 +19,7 @@ from tuxtalk import live_settings as live
 from tuxtalk import keyboard_output
 from tuxtalk import engine
 from tuxtalk import recording
+from tuxtalk import hotkeys
 
 # No program a test starts can reach the speakers, nor this one. Every
 # program inherits this, so a child Python's sounddevice, a player started
@@ -382,10 +383,10 @@ def _no_real_hotkey_test_flag(monkeypatch):
     Test Hotkeys open in the real Preferences would otherwise turn every key
     press a test sends into a test-mode report. Tests of the flag write here.
     """
-    from tuxtalk import app, service_launcher
+    from tuxtalk import service_launcher
 
     monkeypatch.setattr(service_launcher, "hotkey_test_flag_path", lambda: _HOTKEY_TEST_FLAG)
-    monkeypatch.setattr(app, "_hotkey_test_flag", None)
+    monkeypatch.setattr(hotkeys, "_hotkey_test_flag", None)
     yield
     try:
         os.remove(_HOTKEY_TEST_FLAG)

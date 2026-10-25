@@ -11,10 +11,7 @@
   "ai_cleanup.py::fix_self_corrections::long_line": 1,
   "ai_cleanup.py::make_engine_download_func.download::undocumented": 1,
   "app.py::<module>::undocumented": 1,
-  "app.py::_claim_desktop_hotkeys::swallowed_error": 1,
-  "app.py::_loop_evdev::swallowed_error": 1,
   "app.py::_mark_service_ready::swallowed_error": 1,
-  "app.py::_rediscover_devices::swallowed_error": 1,
   "app.py::main::long_line": 2,
   "app.py::main::swallowed_error": 1,
   "app.py::main::undocumented": 1,
@@ -110,6 +107,8 @@
   "hotkey_helper.py::main::undocumented": 1,
   "hotkey_helper_client.py::HelperKeyboard._handle::long_line": 1,
   "hotkey_helper_client.py::HelperKeyboard._handle::undocumented": 1,
+  "hotkeys.py::_claim_desktop_hotkeys::swallowed_error": 1,
+  "hotkeys.py::_rediscover_devices::swallowed_error": 1,
   "input_backends.py::PortalInputBackend._on_activated::undocumented": 1,
   "input_backends.py::PortalInputBackend._shortcut_id::swallowed_error": 1,
   "input_backends.py::PortalInputBackend.start.bind::undocumented": 1,
@@ -324,14 +323,6 @@
   "ai_cleanup.py::fix_self_corrections": {
    "decisions": 24
   },
-  "app.py::_handle_key_event": {
-   "decisions": 52,
-   "lines": 121
-  },
-  "app.py::_loop_evdev": {
-   "decisions": 27,
-   "lines": 162
-  },
   "app.py::_service_tick": {
    "decisions": 20
   },
@@ -391,6 +382,10 @@
   },
   "hotkey_helper.py::Helper.start_hide": {
    "decisions": 31
+  },
+  "hotkeys.py::_handle_key_event": {
+   "decisions": 52,
+   "lines": 121
   },
   "keyboard_layout.py::KeyPlanner._index": {
    "decisions": 17

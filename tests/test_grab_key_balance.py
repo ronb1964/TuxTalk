@@ -17,7 +17,7 @@ import time
 import pytest
 from evdev import ecodes
 
-from tuxtalk import app
+from tuxtalk import hotkeys
 from tuxtalk import keyboard_grab
 from tuxtalk import recording_state as rs
 from tuxtalk import uinput_helper
@@ -102,7 +102,7 @@ def pump(kb):
     for event in kb.read():
         if keyboard_grab.is_own_injected_event(kb, event):
             continue
-        app._handle_key_event(event, F8, None, None, set(), [kb], Cfg(), 0)
+        hotkeys._handle_key_event(event, F8, None, None, set(), [kb], Cfg(), 0)
 
 
 def test_hold_to_talk_leaves_the_desktop_balanced(kb):

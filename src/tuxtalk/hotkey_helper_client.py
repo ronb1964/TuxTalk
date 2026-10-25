@@ -3,7 +3,7 @@
 When the helper is installed, the dictation service doesn't open any keyboard
 itself: the user needn't be in the "input" group, and nothing they run gets
 to read their keys. HelperKeyboard stands in for the keyboards so that
-app._loop_evdev, with all its care for hold, toggle, double-tap, Shift edits,
+hotkeys.run, with all its care for hold, toggle, double-tap, Shift edits,
 Ctrl+Alt+P and Esc, works unchanged. It answers the handful of evdev calls
 that loop makes:
 
@@ -69,7 +69,7 @@ def watch_specs(hold_key, toggle_key, esc_key, combos):
 
 
 class HelperKeyboard:
-    """The hotkey helper, seen by app._loop_evdev as one keyboard."""
+    """The hotkey helper, seen by hotkeys.run as one keyboard."""
 
     path = "tuxtalk-hotkeys"
     name = "TuxTalk hotkey helper"
@@ -226,7 +226,7 @@ class HelperKeyboard:
         if not ok:
             logger.warning(f"Hotkey helper refused {asked}: {' '.join(args)}")
 
-    # -- what app._loop_evdev calls -------------------------------------------------
+    # -- what hotkeys.run calls -------------------------------------------------
 
     def fileno(self):
         sock = self.sock    # once: a typing thread may drop it meanwhile

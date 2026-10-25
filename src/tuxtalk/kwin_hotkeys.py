@@ -131,7 +131,7 @@ def wanted_shortcuts(cfg):
         ("paste-last", "paste last dictation", getattr(cfg, "paste_last_hotkey", "")),
     )
     if getattr(cfg, "voice_editing", False):
-        # Shift + a dictation key starts a voice edit (app._held_shift).
+        # Shift + a dictation key starts a voice edit (hotkeys._held_shift).
         roles += tuple((f"edit-{role}", "voice edit", f"Shift+{name}")
                        for role, _what, name in roles[:2] if name)
     out, seen = [], set()

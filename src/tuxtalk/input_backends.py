@@ -34,11 +34,11 @@ class EvdevInputBackend(InputBackend):
         self.helper = helper        # hotkey_helper_client.HelperKeyboard, or None
 
     def start(self):
-        from . import app
+        from . import hotkeys
         if self.helper is not None:
-            app._loop_evdev(self.cfg, self.input_device_idx, keyboards=[self.helper])
+            hotkeys.run(self.cfg, self.input_device_idx, keyboards=[self.helper])
         else:
-            app._loop_evdev(self.cfg, self.input_device_idx)
+            hotkeys.run(self.cfg, self.input_device_idx)
 
 
 class PortalInputBackend(InputBackend):

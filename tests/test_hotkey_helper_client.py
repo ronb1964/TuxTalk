@@ -1,6 +1,6 @@
 """TuxTalk's side of the hotkey helper (hotkey_helper_client.py).
 
-These run the service's real key handling (app._handle_key_event and the
+These run the service's real key handling (hotkeys._handle_key_event and the
 grab code around it) against a real helper over a real socket, with a fake
 keyboard underneath, to show the helper can stand in for the keyboards
 without changing what hold, Shift+hold and the safety nets do.
@@ -9,7 +9,8 @@ import socket
 
 import pytest
 
-from tuxtalk import app, focused_window, hotkey_helper as hh
+from tuxtalk import focused_window, hotkey_helper as hh
+from tuxtalk import hotkeys
 from tuxtalk import keyboard_output
 from tuxtalk import keyboard_grab
 from tuxtalk import recording_state as rs
@@ -74,7 +75,7 @@ def rig(tmp_path, monkeypatch):
     monkeypatch.setattr(keyboard_grab, "grabbed_devices", [])
     monkeypatch.setattr(keyboard_grab, "_injected_pending", [])
     monkeypatch.setattr(live, "voice_editing", False)
-    monkeypatch.setattr(app, "_hotkey_test_active", lambda: False)
+    monkeypatch.setattr(hotkeys, "_hotkey_test_active", lambda: False)
     monkeypatch.setattr(rs.state, "is_recording", False)
     monkeypatch.setattr(rs.state, "edit_mode", False, raising=False)
 
@@ -96,10 +97,10 @@ def rig(tmp_path, monkeypatch):
         injection_mode = "type"
 
     def loop(times=3, hold=F8):
-        """What _loop_evdev does each pass, for the helper's one 'keyboard'."""
+        """What hotkeys.run does each pass, for the helper's one 'keyboard'."""
         for _ in range(times):
             helper.run_once(timeout=0.01)
-            for dev in app._devices_with_input([client], 0.01):
+            for dev in hotkeys._devices_with_input([client], 0.01):
                 try:
                     events = list(dev.read())
                 except BlockingIOError:
@@ -108,7 +109,7 @@ def rig(tmp_path, monkeypatch):
                     if keyboard_grab.is_own_injected_event(dev, event):
                         continue
                     track_modifier(held, event)
-                    app._handle_key_event(event, hold, F9, None, held,
+                    hotkeys._handle_key_event(event, hold, F9, None, held,
                                           [client], Cfg, None)
 
     yield helper, kb, client, loop, calls
@@ -174,14 +175,14 @@ def test_if_the_helper_goes_away_a_held_key_is_let_go(rig):
     for c in list(helper.clients.values()):
         helper.drop_client(c)            # helper restarted
     for _ in range(3):
-        for dev in app._devices_with_input([client], 0.01):
+        for dev in hotkeys._devices_with_input([client], 0.01):
             try:
                 events = list(dev.read())
             except BlockingIOError:
                 continue
             for event in events:
                 if not keyboard_grab.is_own_injected_event(dev, event):
-                    app._handle_key_event(event, F8, F9, None, set(),
+                    hotkeys._handle_key_event(event, F8, F9, None, set(),
                                           [client], type("C", (), {"beeps": True, "notify": True,
                                                                     "smart_quotes": True, "language": "",
                                                                     "auto_space": True, "auto_period": True,
@@ -261,7 +262,7 @@ def test_events_taken_in_early_are_read_without_waiting(rig):
     helper.run_once(timeout=0.01)
     client.active_keys()                 # takes the DOWN in, as _grab_keyboards_hiding does
     assert client.needs_service()
-    assert app._devices_with_input([client], 5.0) == [client]
+    assert hotkeys._devices_with_input([client], 5.0) == [client]
 
 
 def test_no_helper_means_none(tmp_path):

@@ -20,6 +20,7 @@ import types
 import pytest
 
 from tuxtalk import app, hotkey_keys
+from tuxtalk import hotkeys
 from tuxtalk import type_at_pause
 from tuxtalk import engine
 from tuxtalk import live_settings as live
@@ -48,7 +49,7 @@ class TestChangeSignalHasOneOwner:
         detector is edge-triggered — the tick already consumed it.
         """
         _idle(monkeypatch)
-        reloaded = app.LiveSettings(
+        reloaded = hotkeys.Hotkeys(
             hold_key=60, toggle_key=None, vc_hotkey_str="",
             voice_cmds_combo=None, voice_cmds_main_key=None,
         )

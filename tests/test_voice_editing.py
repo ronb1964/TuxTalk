@@ -179,7 +179,8 @@ def test_the_engine_has_room_for_a_selection(monkeypatch):
 
 # --- 3. the setting and the engine --------------------------------------------------
 
-from tuxtalk import app, config
+from tuxtalk import config
+from tuxtalk import hotkeys
 from tuxtalk import voice_edit
 from tuxtalk import delivery
 from tuxtalk import dictation_text
@@ -297,7 +298,7 @@ def keyloop(monkeypatch):
 
 
 def key(code, value, held):
-    app._handle_key_event(Ev(code, value), F8, F9, None, held, [], Cfg(), 0)
+    hotkeys._handle_key_event(Ev(code, value), F8, F9, None, held, [], Cfg(), 0)
 
 
 def test_shift_f8_starts_an_edit_and_hides_shift_from_the_desktop(keyloop):
@@ -568,17 +569,17 @@ def test_stopping_with_shift_waits_for_it_without_injecting_keys(keyloop, monkey
     kb = FakeKeyboard([[SHIFT], [SHIFT], []])
     key(F9, 1, {SHIFT})
     keyloop["grab_codes"].clear()
-    app._handle_key_event(Ev(F9, 1), F8, F9, None, {SHIFT}, [kb], Cfg(), 0)
+    hotkeys._handle_key_event(Ev(F9, 1), F8, F9, None, {SHIFT}, [kb], Cfg(), 0)
     assert keyloop["stops"] == 1 and keyloop["grab_codes"] == []
 
 
 def test_shift_held_too_long_cancels_the_edit(keyloop, monkeypatch):
     monkeypatch.setattr(uinput_helper, "is_keyboard_device", lambda d: True)
-    monkeypatch.setattr(app, "EDIT_SHIFT_WAIT_S", 0.05)
+    monkeypatch.setattr(hotkeys, "EDIT_SHIFT_WAIT_S", 0.05)
     cancelled = []
     monkeypatch.setattr(recording, "cancel_recording", lambda b, n, reason="": cancelled.append(reason))
     key(F9, 1, {SHIFT})
-    app._handle_key_event(Ev(F9, 1), F8, F9, None, {SHIFT}, [FakeKeyboard([[SHIFT]])], Cfg(), 0)
+    hotkeys._handle_key_event(Ev(F9, 1), F8, F9, None, {SHIFT}, [FakeKeyboard([[SHIFT]])], Cfg(), 0)
     assert keyloop["stops"] == 0 and cancelled and "Shift" in cancelled[0]
 
 

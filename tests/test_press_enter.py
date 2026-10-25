@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 from tuxtalk import app, config, focused_window, key_commands, send_countdown, window_classes
+from tuxtalk import hotkeys
 from tuxtalk import pipeline
 from tuxtalk import engine
 from tuxtalk import keyboard_output
@@ -544,6 +545,7 @@ def test_a_quick_tap_holds_the_send_even_when_recording_starts_slowly(
     clock = _Clock()
     monkeypatch.setattr(app, "time", clock)
     monkeypatch.setattr(recording, "time", clock)
+    monkeypatch.setattr(hotkeys, "time", clock)
     reasons, dictated = [], []
     monkeypatch.setattr(recording, "cancel_recording",
                         lambda beeps, notify, reason="": reasons.append(reason))
@@ -567,7 +569,7 @@ def test_a_quick_tap_holds_the_send_even_when_recording_starts_slowly(
     start_send("test", " ", "type")
     try:
         for value in (1, 0):        # the release was waiting while recording started
-            app._handle_key_event(SimpleNamespace(type=ecodes.EV_KEY, code=F8, value=value),
+            hotkeys._handle_key_event(SimpleNamespace(type=ecodes.EV_KEY, code=F8, value=value),
                                   F8, F9, None, set(), [keyboard], cfg, 0)
     finally:
         keyboard_grab.release_all()

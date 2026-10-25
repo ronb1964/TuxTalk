@@ -8,7 +8,8 @@ import pytest
 from evdev import ecodes
 
 from gtk_text import tree_text
-from tuxtalk import app, config, history, kwin_hotkeys
+from tuxtalk import config, history, kwin_hotkeys
+from tuxtalk import hotkeys
 from tuxtalk import notices
 from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
@@ -53,7 +54,7 @@ def send(code, value, held, combo=COMBO):
     """Deliver one key event the way the main loop does: modifier state first."""
     if code in (CTRL, ALT):
         (held.add if value else held.discard)(code)
-    app._handle_key_event(Event(code, value), ecodes.KEY_F8, None,
+    hotkeys._handle_key_event(Event(code, value), ecodes.KEY_F8, None,
                           None, held, [], Cfg(), 0, paste_last_combo=combo)
 
 

@@ -8,7 +8,7 @@ on an idle laptop.
 import os
 import time
 
-from tuxtalk import app
+from tuxtalk import hotkeys
 
 
 class PipeDevice:
@@ -32,7 +32,7 @@ def test_an_idle_device_list_sleeps_for_the_wait():
     dev = PipeDevice()
     try:
         start = time.monotonic()
-        assert app._devices_with_input([dev], 0.05) == []
+        assert hotkeys._devices_with_input([dev], 0.05) == []
         assert time.monotonic() - start >= 0.04
     finally:
         dev.close()
@@ -42,7 +42,7 @@ def test_only_devices_with_events_are_returned():
     quiet, busy = PipeDevice(), PipeDevice()
     try:
         os.write(busy.w, b"x")
-        assert app._devices_with_input([quiet, busy], 1.0) == [busy]
+        assert hotkeys._devices_with_input([quiet, busy], 1.0) == [busy]
     finally:
         quiet.close()
         busy.close()
@@ -53,12 +53,12 @@ def test_a_closed_device_is_handed_back_to_be_dropped():
     good, gone = PipeDevice(), PipeDevice()
     gone.close()
     try:
-        assert app._devices_with_input([good, gone], 0.01) == [good, gone]
+        assert hotkeys._devices_with_input([good, gone], 0.01) == [good, gone]
     finally:
         good.close()
 
 
 def test_no_devices_still_waits_instead_of_spinning():
     start = time.monotonic()
-    assert app._devices_with_input([], 0.03) == []
+    assert hotkeys._devices_with_input([], 0.03) == []
     assert time.monotonic() - start >= 0.02

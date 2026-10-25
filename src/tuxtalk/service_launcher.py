@@ -256,7 +256,7 @@ def stop_dictation_service(force: bool = False) -> None:
 
 
 def release_desktop_hotkeys() -> None:
-    """Hand back the hotkeys app._claim_desktop_hotkeys had the desktop hold,
+    """Hand back the hotkeys hotkeys._claim_desktop_hotkeys had the desktop hold,
     or KWin or COSMIC would keep swallowing F8 with dictation off. The X
     server lets go by itself when the service's connection closes, and
     GNOME's extension when the tray reports the service stopped. Never

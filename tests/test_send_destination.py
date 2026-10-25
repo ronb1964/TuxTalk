@@ -28,6 +28,7 @@ from tuxtalk import delivery
 from tuxtalk import voice_edit
 from tuxtalk import type_at_pause
 from tuxtalk import pipeline
+from tuxtalk import hotkeys
 
 ENTER, RCTRL, F8, F9 = ecodes.KEY_ENTER, ecodes.KEY_RIGHTCTRL, ecodes.KEY_F8, ecodes.KEY_F9
 # Taken before conftest runs "Right away" on the test's own thread, and
@@ -256,7 +257,7 @@ def test_right_away_a_tap_the_hotkey_loop_reads_holds_the_enter(chat, keyboard, 
     heard.append("see you at noon")
     dictate()
     tap = types.SimpleNamespace(type=ecodes.EV_KEY, code=F9, value=1)
-    app._handle_key_event(tap, F8, F9, None, set(), [], None, None)
+    hotkeys._handle_key_event(tap, F8, F9, None, set(), [], None, None)
     tap_read.set()
     for thread in threading.enumerate():
         if thread.name == "send-right-away":
@@ -305,7 +306,7 @@ def test_the_hold_key_holds_the_send_before_it_hides_itself(chat, keyboard, monk
     cfg = types.SimpleNamespace(beeps=False, notify=False)
     press = types.SimpleNamespace(type=ecodes.EV_KEY, code=hold_key, value=1)
     try:
-        app._handle_key_event(press, hold_key, F9, None, set(), devices, cfg, 0)
+        hotkeys._handle_key_event(press, hold_key, F9, None, set(), devices, cfg, 0)
         assert keyboard.events == [] and rs.state.held_send is True
     finally:
         rs.state.is_recording = False
@@ -343,7 +344,7 @@ def test_a_tap_of_the_toggle_key_that_holds_the_send_says_so_aloud(chat, keyboar
     focus, heard, typed, notices = chat
     counting_down(monkeypatch)
     tap = types.SimpleNamespace(type=ecodes.EV_KEY, code=F9, value=1)
-    app._handle_key_event(tap, F8, F9, None, set(), [], None, None)
+    hotkeys._handle_key_event(tap, F8, F9, None, set(), [], None, None)
     assert notices == [send_countdown.HELD_NOTICE] and notifications() == [HELD_TITLE]
 
 
@@ -378,7 +379,7 @@ def test_a_hold_key_press_whose_recording_cant_start_says_the_send_is_held(
     monkeypatch.setattr(keyboard_grab, "release_all", lambda: None)
     cfg = types.SimpleNamespace(beeps=False, notify=False)
     try:
-        app._start_hold_recording(F8, set(), [], cfg, 0)
+        hotkeys._start_hold_recording(F8, set(), [], cfg, 0)
     finally:
         rs.state.is_recording = False
     assert keyboard.events == []

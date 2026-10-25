@@ -17,6 +17,7 @@ keeps the previous settings and carries on.
 
 import pytest
 
+from tuxtalk import hotkeys
 from tuxtalk import config
 from tuxtalk import live_settings as live
 
@@ -79,8 +80,8 @@ class TestReloadLiveSettings:
         live = app._reload_live_settings(cfg, None)
 
         assert live is not None
-        assert live.hold_key == app.keycode_from_name("F7")
-        assert live.toggle_key == app.keycode_from_name("F9")
+        assert live.hold_key == hotkeys.keycode_from_name("F7")
+        assert live.toggle_key == hotkeys.keycode_from_name("F9")
 
     def test_applies_indicator_settings(self, app, monkeypatch):
         cfg = _settings()

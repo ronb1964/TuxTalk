@@ -18,6 +18,7 @@ import pytest
 from evdev import ecodes
 
 from tuxtalk import app, service_launcher
+from tuxtalk import hotkeys
 from tuxtalk import recording_state as rs
 from tuxtalk import keyboard_grab
 from tuxtalk import tray_link
@@ -55,7 +56,7 @@ def keys(monkeypatch):
 
 
 def press(code):
-    app._handle_key_event(FakeEvent(code, 1), HOLD, TOGGLE,
+    hotkeys._handle_key_event(FakeEvent(code, 1), HOLD, TOGGLE,
                           None, set(), [], FakeConfig(), 0)
 
 
