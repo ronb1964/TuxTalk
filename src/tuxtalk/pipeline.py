@@ -172,9 +172,11 @@ def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
     t0 = time.time()
     logger.info("Recording stopped, starting transcription")
     try:
-        audio_f32 = _audio_to_hear(frames, rec_sr, job)
+        # Once before the engine hears it, once after: a phrase can be
+        # queued or transcribed when Esc cancels its recording.
+        audio_f32 = None if _cancelled(job) else _audio_to_hear(frames, rec_sr, job)
         raw = None if audio_f32 is None else _hear(audio_f32, job, t0)
-        if raw is None:
+        if raw is None or _cancelled(job):
             return
         raw, in_password = _before_the_words(raw, audio_f32, job)
         if raw is None or _ran_as_command(raw, job):
@@ -199,6 +201,13 @@ def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # beep would sound like it worked.
         beeps.beep(beeps_on, *CANCEL_BEEP)
         notify_module.notify("Transcription failed", _shortened(str(e), 120))
+
+
+def _cancelled(job: _Job) -> bool:
+    """Whether the recording *job* is part of was cancelled."""
+    if job.message.cancelled:
+        logger.info("Not typed: the recording was cancelled")
+    return job.message.cancelled
 
 
 def _nothing_in_chunk(what: str, job: _Job) -> bool:

@@ -338,6 +338,7 @@ def cancel_recording(beeps_on: bool, notify_on: bool, reason="Cancelled"):
     """End a recording without transcribing it, telling the user *reason*."""
     rs.state.is_recording = False
     rs.state.was_cancelled = True
+    rs.state.message.cancelled = True
     rs.state.edit_mode = False
     stop_stream_safely()
     resume_media_players()

@@ -190,6 +190,10 @@ before 0.15.0, so older entries use that name.
   dictation as it was said, so it could be a few characters longer than what
   was on screen, and "undo that" deleted some of your own typing too. It
   counts what was typed now.
+- With Type at pause, pressing Esc stops the recording, but a phrase that
+  had already been cut at a pause still got typed if it was waiting its
+  turn or being transcribed. Esc drops those now. Phrases already typed
+  stay where they are.
 
 ## [0.18.2] - 2026-10-23
 

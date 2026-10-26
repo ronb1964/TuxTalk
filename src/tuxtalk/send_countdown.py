@@ -117,6 +117,9 @@ class Message:
     # The word its last words were cut off on ("and"), or "": at the end of
     # a Type at pause recording, half a sentence isn't sent.
     ends_on: str = ""
+    # Its recording was cancelled (Esc): a phrase of it still waiting to be
+    # typed is dropped.
+    cancelled: bool = False
 
     def add(self, outcome: str, landed) -> None:
         """Words of it were delivered: delivery.inject_text's *outcome*, and

@@ -176,6 +176,20 @@ def test_a_pause_after_and_at_the_end_sends_nothing(chat, keyboard, monkeypatch)
     assert keyboard.events == [] and rs.state.continue_mid_sentence
 
 
+def test_esc_while_a_phrase_is_transcribed_types_none_of_it(chat, keyboard, monkeypatch):
+    """Type at pause: a phrase cut at a pause was still being transcribed
+    (or waiting its turn) when Esc cancelled the recording, and it was typed."""
+    focus, heard, typed, notices = chat
+
+    def heard_then_esc(audio, language):
+        recording.cancel_recording(False, False, "Cancelled by ESC")
+        return "see you at noon"
+    monkeypatch.setattr(engine, "transcribe", heard_then_esc)
+    dictate("middle")
+    dictate("middle")                       # one queued behind it
+    assert typed == [] and keyboard.events == []
+
+
 def test_the_mark_typed_at_the_end_doesnt_aim_the_enter_elsewhere(chat, keyboard,
                                                                   monkeypatch):
     """The held mark is typed where the focus is now, which the desktop
