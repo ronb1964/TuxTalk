@@ -39,10 +39,12 @@ def helper(monkeypatch):
     return asked, updates, restarts, answer, parakeet
 
 
-def test_update_helper_updates_it_and_restarts_dictation(helper):
+def test_update_helper_updates_it_without_restarting_dictation(helper):
+    """A restart would throw away a dictation under way; the service's
+    helper connection comes back by itself and asks for its keys again."""
     asked, updates, restarts, answer, parakeet = helper
     assert offers._offer_in_turn(restarts.append) is False
-    assert asked == ["1.4"] and updates == [1] and restarts == [None]
+    assert asked == ["1.4"] and updates == [1] and restarts == []
 
 
 def test_not_now_asks_again_next_start(helper):
@@ -108,3 +110,27 @@ def test_not_now_is_the_default_button(monkeypatch):
     assert update_offers._ask_helper_update("1.4") is False
     assert ("set_default_response", (update_offers.Gtk.ResponseType.CANCEL,)) in calls
     assert ("add_button", ("Update Helper", update_offers.Gtk.ResponseType.OK)) in calls
+
+
+def test_the_update_runs_off_gtk_s_thread_and_answers_on_it(monkeypatch):
+    """pkexec waits for the password for up to five minutes: on GTK's thread
+    the tray (or Preferences) froze, and the answer must come back there."""
+    import threading
+    from tuxtalk import secure_input
+    started, may_finish, queued, answers = threading.Event(), threading.Event(), [], []
+
+    def install_with_pkexec():
+        started.set()
+        assert may_finish.wait(5)
+        return True, ""
+    monkeypatch.setattr(secure_input, "install_with_pkexec", install_with_pkexec)
+    monkeypatch.setattr(offers, "GLib", types.SimpleNamespace(idle_add=queued.append))
+    offers.update_helper(lambda ok, message: answers.append(ok))
+    assert started.wait(5)                  # it returned while the update waits
+    may_finish.set()
+    for _ in range(500):
+        if queued:
+            break
+        threading.Event().wait(0.01)
+    assert answers == [] and len(queued) == 1      # handed to GTK's loop, not run there
+    assert queued[0]() is False and answers == [True]

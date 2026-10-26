@@ -453,7 +453,7 @@ def _deliver(words: _Words, audio_f32, job: _Job) -> None:
     _after_the_words(outcome, words.said, words.press, words.space_left_off, job.chunk_role,
                      job.beeps_on, job.injection_mode, job.message)
     if outcome == "ok" and words.held_back:
-        send_countdown.say_held_back(words.held_back)
+        send_countdown.say_held_back(words.held_back, job.message)
     if outcome == "ok":
         _carry_on_after(words, text, audio_f32, job)
     if live.usage_stats:

@@ -36,14 +36,14 @@ def _offer_in_turn(restart) -> bool:
         return False
     if not find_service_pids():
         return True
-    if not offer_helper_update(restart):
+    if not offer_helper_update():
         maybe_offer_parakeet_update(restart)
     return False
 
 
 # --- The hotkey helper ----------------------------------------------------------
 
-def offer_helper_update(restart) -> bool:
+def offer_helper_update() -> bool:
     """While the installed hotkey helper is older than the one this TuxTalk
     brings (secure_input.is_older), ask to update it, at every start until
     it is. True when it asked. The Flatpak has no helper to update."""
@@ -55,7 +55,7 @@ def offer_helper_update(restart) -> bool:
         if not secure_input.is_older(running):
             return False
         if _ask_helper_update(running):
-            _update_helper(restart)
+            update_helper(_helper_updated)
         else:
             logger.info("Hotkey helper update offer: not now")
         return True
@@ -93,9 +93,12 @@ def _ask_helper_update(running) -> bool:
     return answer == Gtk.ResponseType.OK
 
 
-def _update_helper(restart) -> None:
-    """The update System check's button makes, off the GTK thread (pkexec
-    waits for the password), then dictation restarts on it."""
+def update_helper(done) -> None:
+    """Update the hotkey helper as System check's button does, off the GTK
+    thread (pkexec waits for the password), then *done*(ok, message) on
+    GTK's thread. Dictation needn't restart: the service's helper connection
+    comes back within a second (hotkey_helper_client) and asks for its keys
+    again, and a restart would throw away a dictation under way."""
     from . import secure_input
 
     def work():
@@ -104,26 +107,28 @@ def _update_helper(restart) -> None:
         except Exception as e:
             logger.warning(f"Updating the hotkey helper failed: {e}")
             ok, message = False, str(e)
-        GLib.idle_add(_helper_updated, ok, message, restart)
+
+        def finish():
+            done(ok, message)
+            return False        # once
+        GLib.idle_add(finish)
     threading.Thread(target=work, daemon=True, name="helper-update").start()
 
 
-def _helper_updated(ok, message, restart) -> bool:
-    """Back on the GTK thread: restart dictation onto the new helper, or say
-    it wasn't updated (a cancelled password prompt says nothing more: the
-    offer comes back next start)."""
+def _helper_updated(ok, message) -> None:
+    """The offer's update is over: say so, or that it wasn't updated (a
+    cancelled password prompt says nothing more: the offer comes back next
+    start)."""
     from .notify import notify
     if ok:
         logger.info("Updated the hotkey helper from the offer at start")
-        notify("Hotkey helper updated", "Dictation restarts now to use it.")
-        restart(None)
+        notify("Hotkey helper updated", "Your dictation keys use it straight away.")
     elif "cancelled" in message.lower():
         logger.info("Hotkey helper update: the password prompt was cancelled")
     else:
         logger.warning(f"Hotkey helper update failed: {message}")
         notify("The hotkey helper wasn't updated",
                f"{message} TuxTalk offers it again when it next starts.")
-    return False
 
 
 # --- Parakeet Ultra -------------------------------------------------------------

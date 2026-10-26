@@ -236,14 +236,8 @@ def _refuse(pending, why: str) -> None:
 
 def _say_not_sent(why: str, relabel: bool = False, key: str = "ENTER") -> None:
     """Say why the Enter (or *key*) of a send didn't go: in the log, over
-    the window, and as a desktop notification whatever the notifications
-    setting. A screen reader reads the notification, not the label, and
-    without XWayland the label can't be shown at all. The notification goes
-    from a thread of its own, as say_held's does: this runs on the
-    dictation worker or a send's timer, and a slow notification service
-    would hold up what comes after it."""
+    the window, and as a desktop notification (_notify_in_background)."""
     global _told_unknown_window
-    from .notify import notify
     text, notice = _NOT_SENT[why]
     what = "Not sent" if key == "ENTER" else f"{key.title()} not pressed"
     if key != "ENTER":
@@ -256,8 +250,7 @@ def _say_not_sent(why: str, relabel: bool = False, key: str = "ENTER") -> None:
     once = why == "unknown_window"
     if not (once and _told_unknown_window):
         _told_unknown_window = _told_unknown_window or once
-        threading.Thread(target=notify, name="send-not-sent-notice", daemon=True,
-                         args=(f"{what}: {text}", body)).start()
+        _notify_in_background(f"{what}: {text}", body)
     if relabel:
         from . import screen_message
         screen_message.relabel(LABEL_TAG, notice)
@@ -444,22 +437,40 @@ def _send(pending: dict) -> None:
 
 def say_held() -> None:
     """A tap held the send: said over the window and as a desktop
-    notification whatever the notifications setting, as every other end
-    of a send without its Enter is (_say_not_sent). The notification goes
-    from a thread of its own: the tap is read on the hotkey loop, and a
-    slow notification service would hold up the keys after it."""
-    from .notify import notify
+    notification, as every other end of a send without its Enter is
+    (_notify_in_background; here the tap is read on the hotkey loop)."""
     show_notice(HELD_NOTICE)
-    threading.Thread(target=notify, name="send-held-notice", daemon=True, args=(
-        "Not sent: you held it",
-        "The text is still in the box. Press Enter when you're ready.")).start()
+    _notify_in_background("Not sent: you held it",
+                          "The text is still in the box. Press Enter when you're ready.")
 
 
-def say_held_back(word: str) -> None:
-    """An automatic Enter held back because the dictation ended on *word*
-    ("and", key_commands.ends_unfinished): said over the window, or it
-    looks as if sending were off."""
-    show_notice(f"Not sent: it ended on \u201c{word}\u201d. Press Enter when you're ready.")
+def say_held_back(word: str, message: Message) -> None:
+    """An automatic Enter held back because *message* ended on *word*
+    ("and", key_commands.ends_unfinished): said as any unsent message is
+    (_say_not_sent), or it looks as if sending were off. Where the Enter
+    couldn't have gone anyway (part of the message missing, another window
+    in front), that reason is the one said."""
+    why = _incomplete(message) or _why_not(message.to, focused_window.destination())
+    if why:
+        _say_not_sent(why)
+        return
+    ended = f"it ended on \u201c{word}\u201d"
+    _notify_in_background(f"Not sent: {ended}",
+                          "The text is still in the box. Press Enter when you're ready, or "
+                          "go on dictating: the next dictation carries the sentence on.")
+    show_notice(f"Not sent: {ended}. Press Enter when you're ready.")
+
+
+def _notify_in_background(title: str, body: str) -> None:
+    """A desktop notification whatever the notifications setting, from a
+    thread of its own: a slow notification service would hold up what the
+    calling thread does next (the dictation worker, a send's timer, the
+    hotkey loop). A
+    screen reader reads it, not the label over the window, and without
+    XWayland the label can't be shown at all."""
+    from .notify import notify
+    threading.Thread(target=notify, name="send-not-sent-notice", daemon=True,
+                     args=(title, body)).start()
 
 
 def show_notice(text: str) -> None:

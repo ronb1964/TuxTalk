@@ -2,7 +2,6 @@
 (prefs_speech.py), start at login and Power Saving, and the question after
 OK or Apply when a hotkey changed."""
 import os
-import threading
 import time
 
 import gi
@@ -430,30 +429,26 @@ class GeneralTab(Tab):
         return True
 
     def _update_helper(self, unheard) -> bool:
-        """Update Helper in the hotkey question: the update System check's
-        button makes, waiting for it with the window drawn (pkexec waits for
-        the password, and after OK the window closes as soon as this returns),
-        then dictation restarts on it. True when it was updated; otherwise
-        it's said why, and where to update it later."""
-        from . import secure_input
+        """Update Helper in the hotkey question (update_offers.update_helper),
+        waiting for it with the window drawn: pkexec waits for the password,
+        and after OK the window closes as soon as this returns. True when it
+        was updated; otherwise it's said why, and where to update it later."""
+        from . import secure_input, update_offers
         answer = {}
-
-        def work():
-            try:
-                answer["ok"], answer["message"] = secure_input.install_with_pkexec()
-            except Exception as e:
-                logger.warning(f"Updating the hotkey helper failed: {e}")
-                answer["ok"], answer["message"] = False, str(e)
-        thread = threading.Thread(target=work, daemon=True, name="helper-update")
-        thread.start()
-        self._while_drawn(lambda: not thread.is_alive(), secure_input.PKEXEC_TIMEOUT + 10)
+        update_offers.update_helper(lambda ok, message: answer.update(ok=ok, message=message))
+        finished = self._while_drawn(lambda: answer, secure_input.PKEXEC_TIMEOUT + 10)
         if answer.get("ok"):
             logger.info("Updated the hotkey helper from the hotkey question")
-            self.win.restart_service()      # as System check's update does
             return True
-        message = answer.get("message") or "It took too long."
         later = (f"{_needs(unheard)} it. You can update it later: Advanced tab, "
                  f"Show system check, {UPDATE_HELPER_LABEL}.")
+        if not finished:
+            # Past pkexec's own time-out the script can still be running as root.
+            show_message(self.window, Gtk.MessageType.WARNING, "The update is taking a while",
+                         "It may still finish by itself. If not, update it later: "
+                         f"Advanced tab, Show system check, {UPDATE_HELPER_LABEL}.")
+            return False
+        message = answer["message"]
         show_message(self.window, Gtk.MessageType.WARNING, "The hotkey helper wasn't updated",
                      later if "cancelled" in message.lower() else f"{message}\n\n{later}")
         return False

@@ -139,15 +139,14 @@ def right_ctrl_question(prefs_window, monkeypatch):
     return tab, steps, warnings
 
 
-def test_update_helper_updates_it_restarts_dictation_and_then_offers_the_test(
-        right_ctrl_question, monkeypatch):
+def test_update_helper_updates_it_and_then_offers_the_test(right_ctrl_question, monkeypatch):
+    """No dictation restart: it would throw away a dictation under way."""
     from tuxtalk import secure_input
     tab, steps, warnings = right_ctrl_question
     monkeypatch.setattr(secure_input, "install_with_pkexec",
                         lambda: steps.append("updated") or (True, ""))
     assert tab.after_hotkey_change({"hotkey"}, 0)
-    assert steps == [("Right Ctrl needs a newer hotkey helper", True),
-                     "updated", "restarted", "test"]
+    assert steps == [("Right Ctrl needs a newer hotkey helper", True), "updated", "test"]
     assert warnings == []
 
 

@@ -52,7 +52,7 @@ def test_a_failed_download_is_offered_again_next_start(env):
 
 def test_it_waits_for_dictation_and_never_shows_on_first_run(env, monkeypatch):
     cfg, asked, saved, restarts, _ = env
-    monkeypatch.setattr(offers, "offer_helper_update", lambda restart: False)
+    monkeypatch.setattr(offers, "offer_helper_update", lambda: False)
     monkeypatch.setattr("tuxtalk.service_launcher.find_service_pids", lambda: [])
     assert offers._offer_in_turn(restarts.append) is True and asked == []
     monkeypatch.setattr("tuxtalk.service_launcher.find_service_pids", lambda: [4242])

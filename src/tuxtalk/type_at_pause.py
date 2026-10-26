@@ -322,7 +322,7 @@ def end_in_a_pause(message, beeps_on, auto_space, auto_period, injection_mode) -
             cue += "."
         delivery.inject_text(cue + (" " if auto_space else ""), injection_mode, message=message)
     cut_off = _cut_off(message)
-    sends = _would_send(message)
+    sends = _may_send(message)
     if sends and not cut_off:
         flush_boundary(message, auto_period, False, injection_mode)
         pipeline.send_automatically(" " if auto_space else "", injection_mode, message)
@@ -330,7 +330,7 @@ def end_in_a_pause(message, beeps_on, auto_space, auto_period, injection_mode) -
     else:
         flush_boundary(message, auto_period and not cut_off, auto_space, injection_mode)
         if sends:
-            send_countdown.say_held_back(cut_off)
+            send_countdown.say_held_back(cut_off, message)
     if not live.chunk_context_marks:
         rs.state.continue_mid_sentence = False   # it belongs to this recording
     if cut_off:
@@ -350,9 +350,10 @@ def _drop_unfinished_edit(message, beeps_on) -> bool:
     return True
 
 
-def _would_send(message) -> bool:
-    """Whether the automatic Enter goes after *message*, all of it typed,
-    unless it was cut off ("and"): a text editor never gets one."""
+def _may_send(message) -> bool:
+    """Whether an automatic Enter is set up after *message*: the setting on,
+    and all of it typed outside a text editor (send_automatically then
+    checks the window). Not whether it was cut off ("and")."""
     return (live.press_enter_after and message.has_words and message.complete
             and not is_document_window(focused_window.window_class()))
 

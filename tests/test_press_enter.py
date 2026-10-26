@@ -110,33 +110,6 @@ def test_a_cut_off_dictation_is_typed_but_not_sent(monkeypatch):
     rs.state.continue_mid_sentence = False
 
 
-def test_a_held_back_send_says_why_over_the_window(monkeypatch):
-    """Held back in silence, it looked as if "Send each dictation
-    automatically" had stopped working."""
-    from tuxtalk import send_countdown
-    said = []
-    monkeypatch.setattr(send_countdown, "show_notice", said.append)
-    monkeypatch.setattr(live, "press_enter_after", True)
-    _dictate(monkeypatch, "Meet me at noon and", prepared=lambda r: r + ". ")
-    assert said == ["Not sent: it ended on \u201cand\u201d. Press Enter when you're ready."]
-    rs.state.continue_mid_sentence = False
-
-
-@pytest.mark.parametrize("window, outcome", [("org.kde.kwrite", "ok"),
-                                             ("brave-browser", "failed")])
-def test_no_held_back_notice_where_nothing_would_be_sent(monkeypatch, window, outcome):
-    """A text editor never gets an automatic Enter, and words that didn't go
-    in get their own notice."""
-    from tuxtalk import send_countdown
-    said = []
-    monkeypatch.setattr(send_countdown, "show_notice", said.append)
-    monkeypatch.setattr(live, "press_enter_after", True)
-    _dictate(monkeypatch, "Meet me at noon and", prepared=lambda r: r + ". ", window=window,
-             outcome=outcome)
-    assert said == []
-    rs.state.continue_mid_sentence = False
-
-
 def test_a_cut_off_dictation_gets_no_period_in_a_text_editor_either(monkeypatch):
     """Ron, 2026-10-20: KWrite got "Meet me at noon and." The text-editor rule
     turned the send off before the "and" was looked at."""

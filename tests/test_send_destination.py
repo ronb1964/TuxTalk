@@ -194,6 +194,71 @@ def test_a_pause_after_and_at_the_end_sends_nothing(chat, keyboard, monkeypatch)
     assert notices == ["Not sent: it ended on \u201cand\u201d. Press Enter when you're ready."]
 
 
+
+@pytest.fixture
+def notified(monkeypatch):
+    """The desktop notifications a send without its Enter gives, by title."""
+    titles = []
+    monkeypatch.setattr(send_countdown, "_notify_in_background",
+                        lambda title, body: titles.append(title))
+    return titles
+
+
+def test_a_dictation_held_back_on_and_says_why(chat, keyboard, notified):
+    """Held back in silence, it looked as if "Send each dictation
+    automatically" had stopped working; a screen reader reads the
+    notification, not the label."""
+    focus, heard, typed, notices = chat
+    heard.append("Meet me at noon and")
+    dictate()
+    assert keyboard.typed_keys() == []
+    assert notices == ["Not sent: it ended on \u201cand\u201d. Press Enter when you're ready."]
+    assert notified == ["Not sent: it ended on \u201cand\u201d"]
+    rs.state.continue_mid_sentence = False
+
+
+def test_held_back_after_the_focus_moved_says_that_instead(chat, keyboard, monkeypatch, notified):
+    """Enter wouldn't have gone into the window the focus moved to either:
+    "press Enter when you're ready" there would send someone else's text."""
+    focus, heard, typed, notices = chat
+    deliver = delivery.deliver_text
+
+    def clicked_away_meanwhile(*a, **k):
+        outcome = deliver(*a, **k)
+        focus[:] = SECOND
+        return outcome
+    monkeypatch.setattr(delivery, "deliver_text", clicked_away_meanwhile)
+    heard.append("Meet me at noon and")
+    dictate()
+    assert keyboard.typed_keys() == [] and notices == [send_countdown.MOVED_NOTICE]
+    rs.state.continue_mid_sentence = False
+
+
+def test_held_back_with_a_phrase_missing_says_that_instead(chat, keyboard, monkeypatch, notified):
+    """Type at pause: an earlier phrase didn't go in, the last one ends on
+    "and". The message couldn't have been sent as it is."""
+    focus, heard, typed, notices = chat
+    deliver = delivery.deliver_text
+    outcomes = iter(["failed"])
+    monkeypatch.setattr(delivery, "deliver_text",
+                        lambda *a, **k: deliver(*a, **k) and next(outcomes, "ok"))
+    monkeypatch.setattr("tuxtalk.notices.report_undelivered", lambda *a, **k: None)
+    heard.extend(["See you at noon.", "and"])
+    dictate("middle")
+    dictate("last")
+    assert keyboard.typed_keys() == [] and notices == [send_countdown.INCOMPLETE_NOTICE]
+    rs.state.continue_mid_sentence = False
+
+
+def test_no_held_back_notice_in_a_text_editor(chat, keyboard, notified):
+    """A text editor never gets an automatic Enter: nothing was held back."""
+    focus, heard, typed, notices = chat
+    focus[:] = ("org.kde.kwrite", ("tray", "{kwrite}"))
+    heard.append("Meet me at noon and")
+    dictate()
+    assert notices == [] and notified == []
+    rs.state.continue_mid_sentence = False
+
 def test_esc_while_a_phrase_is_transcribed_types_none_of_it(chat, keyboard, monkeypatch):
     """Type at pause: a phrase cut at a pause was still being transcribed
     (or waiting its turn) when Esc cancelled the recording, and it was typed."""
