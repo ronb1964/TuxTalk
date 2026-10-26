@@ -306,6 +306,10 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
             # leave the keyboard grabbed and the machine unusable.
             logger.error(f"Could not start recording: {e}", exc_info=True)
             rs.state.is_recording = False
+            # Counted already (recording_begins), so a send set up meanwhile
+            # was held for it: this one ended, cancelled, and that's said.
+            rs.state.message = send_countdown.Message(serial=rs.state.recording_serial,
+                                                      cancelled=True)
             stop_stream_safely()
             keyboard_grab.release_all()
             beeps.beep(beeps_on, *CANCEL_BEEP)

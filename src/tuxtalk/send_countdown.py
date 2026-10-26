@@ -364,10 +364,13 @@ def recording_begins() -> tuple[int, bool]:
     for this one instead (send_automatically); one set up before is held
     here."""
     global _begun
+    # The count and the hold in one go: the Enter's claim (_claim) checks
+    # under the same lock that its send is still pending.
     with _send_lock:
         _begun += 1
         number = _begun
-    return number, hold(announce=False)
+        pending = _take_pending()
+    return number, _stop_held(pending, announce=False)
 
 
 def _send_right_away(pending: dict) -> None:
@@ -462,11 +465,24 @@ def hold(announce: bool) -> bool:
     """Stop a counting-down send; True when there was one. *announce* says
     "Not sent" at once (a tap of the toggle key, say_held); a press of the
     hold key waits to see whether it's a tap or more dictation."""
-    global _pending, _owed
     with _send_lock:
-        pending, _pending = _pending, None
-        if pending is not None and pending.get("space"):
-            _owed = pending
+        pending = _take_pending()
+    return _stop_held(pending, announce)
+
+
+def _take_pending():
+    """The send counting down, no longer pending, its space owed; None if
+    there was none. With _send_lock held."""
+    global _pending, _owed
+    pending, _pending = _pending, None
+    if pending is not None and pending.get("space"):
+        _owed = pending
+    return pending
+
+
+def _stop_held(pending, announce: bool) -> bool:
+    """Stop *pending*, just taken (_take_pending), and say so as hold does;
+    False when there was none."""
     if pending is None:
         return False
     pending["stopped"] = True       # its press, if under way, says nothing more

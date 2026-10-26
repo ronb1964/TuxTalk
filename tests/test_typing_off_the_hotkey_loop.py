@@ -153,3 +153,18 @@ def test_a_tap_while_the_words_were_typed_holds_the_send_and_says_so(sent, monke
     pipeline.send_automatically(" ", "type", message)
     assert keys == [] and said == ["Not sent"] and typed == [" "]
     assert not send_countdown.owes_space()
+
+
+def test_a_send_about_to_claim_its_enter_when_a_recording_begins_stays_held(sent, monkeypatch):
+    """Counted, then held: an Enter claimed in between went out at the
+    start of the next recording (Codex, checking the fix)."""
+    from tuxtalk import focused_window, virtual_keyboard
+    monkeypatch.setattr(focused_window, "look", lambda: CHAT[:2])
+    monkeypatch.setattr(focused_window, "destination", lambda: CHAT)
+    monkeypatch.setattr(send_countdown, "_send_right_away", lambda pending: None)
+    pipeline.send_automatically(" ", "type", send_countdown.Message(CHAT, has_words=True))
+    pending = send_countdown._pending
+    take = send_countdown._claim(pending)          # the claim's checks pass...
+    send_countdown.recording_begins()              # ...then the next recording begins
+    with pytest.raises(virtual_keyboard.GaveUp):
+        take()                                     # right before the Enter goes down
