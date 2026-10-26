@@ -224,9 +224,9 @@ def no_hotkeys_noted(monkeypatch):
 
 
 def test_typing_waits_while_right_ctrl_is_pressed_mid_text(keyboard, no_hotkeys_noted):
-    """Typing on the hotkey loop's thread, TuxTalk can't hide a Right Ctrl
-    pressed meanwhile: each key waits for it, or the rest of the paragraph
-    would arrive as Ctrl shortcuts (Ctrl+W closes the tab)."""
+    """While text is typed, TuxTalk can't hide a Right Ctrl pressed
+    meanwhile: each key waits for it, or the rest of the paragraph would
+    arrive as Ctrl shortcuts (Ctrl+W closes the tab)."""
     written_at_look = {}
 
     def pressed(look):
@@ -830,10 +830,10 @@ def test_the_right_alt_guard_goes_while_right_alt_is_held(keyboard, no_hotkeys_n
 
 
 def test_typing_that_waits_for_right_alt_presses_the_guard_itself(keyboard, no_hotkeys_noted):
-    """Typing a paragraph on the hotkey loop's thread, a Right Alt pressed
-    for the next dictation is read only once typing is done, after it's let
-    go: the desktop saw a lone Alt tap, and the rest of the paragraph went
-    into Firefox's menu bar as menu letters."""
+    """A Right Alt pressed for the next dictation while a paragraph is
+    typed: typing can get to it before the hotkey loop guards it, and the
+    desktop saw a lone Alt tap; the rest of the paragraph went into
+    Firefox's menu bar as menu letters."""
     seen = []
 
     def pressed(look):

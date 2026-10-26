@@ -146,10 +146,11 @@ def guard_alt_tap() -> None:
 
 def _guard_if_alone(keyboards) -> None:
     """Typing that waits for a Right Alt dictation key presses the guard
-    itself: on the hotkey loop's own thread (stop_recording types there), the
-    loop reads the press only once typing is done, after the user has let
-    go, and the desktop has seen a lone Alt tap. Not with another modifier
-    down, for right_alt_alone's reason."""
+    itself, rather than count on the hotkey loop having read the press
+    first (it guards it as it reads it): typing, on the dictation worker,
+    can get to the key before the loop does, and the desktop would see a
+    lone Alt tap. Not with another modifier down, for right_alt_alone's
+    reason."""
     if not keys_down(keyboards) & (MODIFIER_CODES - {ecodes.KEY_RIGHTALT}):
         guard_alt_tap()
 

@@ -342,9 +342,9 @@ def send_automatically(why: str, message: Message, press, type_more, space: str 
 
 def _send_right_away(pending: dict) -> None:
     """"Right away": the Enter on a thread of its own, as after a countdown.
-    A dictation is typed on the hotkey loop's own thread (stop_recording),
-    and run there the Enter's checks and its wait for a Right Ctrl or Right
-    Alt dictation key kept the loop from reading the tap that holds it."""
+    Run on the dictation worker, which typed the words, its checks and its
+    wait for a Right Ctrl or Right Alt dictation key would hold up whatever
+    is queued after it."""
     threading.Thread(target=_send, args=(pending,), name="send-right-away", daemon=True).start()
 
 
@@ -448,6 +448,19 @@ def hold(announce: bool) -> bool:
         from . import screen_message
         screen_message.hide(LABEL_TAG)
     return True
+
+
+def hold_for_the_next(space: str, injection_mode: str, message: Message, type_more,
+                      announce: bool) -> None:
+    """A newer recording began before *message* was sent (its key is read
+    while text is still being typed): the send is held, as a press during
+    its countdown holds it (hold), and the space left off is owed to the
+    next dictation into its window (type_owed_space). *announce* says "Not
+    sent", for a newer recording that was only a tap."""
+    logger.info("Held the send: another recording began before it")
+    _owe_space({"to": message.to, "space": space, "mode": injection_mode, "type": type_more})
+    if announce:
+        say_held()
 
 
 def _owe_space(pending: dict) -> None:

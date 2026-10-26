@@ -47,10 +47,10 @@ def focus_moved(focused_class) -> bool:
     return now != focused_class
 
 
-def transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
-    """Voice editing: the recording is an instruction ("make this more formal")
-    for the text selected in the focused app, which the AI rewrites and the
-    rewrite replaces. Ctrl+Z in the app undoes it."""
+def transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode, message):
+    """Voice editing: the recording, whose *message* it is, is an instruction
+    ("make this more formal") for the text selected in the focused app, which
+    the AI rewrites and the rewrite replaces. Ctrl+Z in the app undoes it."""
     t0 = time.time()
     audio_f32 = recording.frames_f32(frames)
     if audio_f32.size == 0:
@@ -75,7 +75,7 @@ def transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
         if not heard:
             heard.append(engine.transcribe(audio_f32, language))
         return heard[0]
-    edit_selection(instruction, beeps_on, injection_mode, focused_class, t0, rs.state.message)
+    edit_selection(instruction, beeps_on, injection_mode, focused_class, t0, message)
 
 
 def _delete_selection(focused_class, beeps_on) -> bool:

@@ -16,6 +16,7 @@ import sounddevice as sd
 from . import (
     beeps,
     chunking,
+    dictation_worker,
     engine,
     keyboard_grab,
     mic_stream,
@@ -431,8 +432,9 @@ def _dropped_as_a_tap(beeps_on: bool, notify_on: bool) -> bool:
     held_ms = int((time.time() - (rs.state.press_t0 or time.time())) * 1000)
     if rs.state.held_send and send_countdown.owes_space() and not rs.state.chunks_submitted:
         # The hotkey that held the send is up now; a tap leaves the text as
-        # it is, a dictation goes after this space.
-        send_countdown.type_owed_space()
+        # it is, a dictation goes after this space. On the dictation worker,
+        # after what's still being typed.
+        dictation_worker.submit(send_countdown.type_owed_space)
     if held_ms >= MIN_HOLD_MS and not (rs.state.held_send and rs.state.released_while_starting):
         return False
     if rs.state.held_send:

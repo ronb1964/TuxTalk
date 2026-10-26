@@ -4,7 +4,6 @@ window. Transcribe, drop what isn't speech, run what was said as a command
 then press the key said after it or send it automatically. Type at pause
 runs each phrase through here too (type_at_pause.py)."""
 import re
-import threading
 import time
 from typing import NamedTuple
 
@@ -13,6 +12,7 @@ from . import (
     delivery,
     delivery_notices,
     dictation_text,
+    dictation_worker,
     engine,
     focused_window,
     keyboard_output,
@@ -35,10 +35,6 @@ from .logger import setup_logger
 from .window_classes import ELECTRON_PASTE_BROKEN_CLASSES, app_kind, is_document_window
 
 logger = setup_logger(__name__)
-
-# One dictation is transcribed and typed at a time: the chunk worker and the
-# Flatpak backend's workers both take this.
-inject_lock = threading.Lock()
 
 
 def _shortened(text, limit):
@@ -96,7 +92,16 @@ def _after_the_words(outcome: str, said: str, press: str, space: str, chunk_role
 
 
 def send_automatically(space: str, injection_mode: str, message) -> None:
-    """"Send each dictation automatically": Enter where *message* went (send_countdown)."""
+    """"Send each dictation automatically": Enter where *message* went
+    (send_countdown). Held when a newer recording has begun since, as a
+    press of the hold key during the countdown holds it: what's said there
+    is added to this message, which is sent at its end; a tap that only
+    held it says so."""
+    newer = rs.state.message
+    if newer is not message:
+        send_countdown.hold_for_the_next(space, injection_mode, message, type_onto_dictation,
+                                         announce=newer.cancelled)
+        return
     send_countdown.send_automatically("Send each dictation automatically is on", message,
                                       keyboard_output.press_key, type_onto_dictation, space,
                                       injection_mode)
@@ -462,33 +467,26 @@ def stop_recording(
     auto_period: bool = True,
     injection_mode: str = "type",
 ):
-    """Stop recording, transcribe audio, and inject text — synchronously.
-
-    Backend A (evdev): the whole pipeline runs on the caller's thread. Backend B
-    splits the two halves (see service_tick._stop_off_the_loop) so the slow transcription and
-    typing run off the hotkey loop.
-    """
+    """Stop recording, and transcribe and type it on the dictation worker,
+    after whatever an earlier recording is still typing. Only the stop
+    itself (finish_capture) runs here, so the hotkey loop goes back to
+    reading keys at once: a dictation key pressed while text is still being
+    typed starts the next recording."""
     edit_mode, rs.state.edit_mode = rs.state.edit_mode, False
     cap = recording.finish_capture(beeps_on, notify_on)
     if cap is None:
         return
     frames, rec_sr = cap
+    message = rs.state.message
     if edit_mode:
-        voice_edit.transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode)
+        dictation_worker.submit(lambda: voice_edit.transcribe_and_edit(
+            frames, rec_sr, beeps_on, language, injection_mode, message))
         return
-    if rs.state.chunks_submitted:
-        # Chunked dictation: the rest goes in after the chunks already queued,
-        # and stopping waits for all of them, as it waits for one
-        # transcription when nothing was chunked.
-        params = (beeps_on, smart_quotes, notify_on, language, auto_space,
-                  auto_period, injection_mode)
+    # Type at pause: the rest is the recording's last phrase, typed after
+    # those already queued.
+    chunk_role = "last" if rs.state.chunks_submitted else None
+    if chunk_role:
         frames = recording.drop_speechless_rest(frames)
-        worker = type_at_pause.chunk_worker()
-        worker.submit(lambda message=rs.state.message: transcribe_and_inject(
-            frames, rec_sr, *params, chunk_role="last", message=message))
-        if not worker.drain(type_at_pause.CHUNK_DRAIN_TIMEOUT_S):
-            logger.warning("Chunked dictation: chunks still typing after "
-                           f"{type_at_pause.CHUNK_DRAIN_TIMEOUT_S:.0f}s; not waiting longer")
-        return
-    transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
-                          language, auto_space, auto_period, injection_mode)
+    dictation_worker.submit(lambda: transcribe_and_inject(
+        frames, rec_sr, beeps_on, smart_quotes, notify_on, language, auto_space,
+        auto_period, injection_mode, chunk_role=chunk_role, message=message))

@@ -1,6 +1,6 @@
 """Type at pause (TuxTalk Labs): while the user is still talking, each
 phrase is typed when they pause. The audio callback cuts a phrase at a
-pause and the one chunk worker transcribes and types it; the mark between
+pause and the dictation worker transcribes and types it; the mark between
 two phrases is held back until the next one arrives, so the engine can
 hear both together and judge it (a comma, a period, a question going on);
 a phrase that corrects the one before ("no wait, four") is fixed with it
@@ -13,6 +13,7 @@ from . import (
     beeps,
     chunking,
     delivery,
+    dictation_worker,
     engine,
     focused_window,
     keyboard_output,
@@ -38,23 +39,8 @@ logger = setup_logger(__name__)
 # path takes the rest; this lock keeps the two from both taking the same frames.
 chunk_lock = threading.Lock()
 
-_worker_instance = None
-
-# How long stopping waits for the queued chunks to be typed (evdev path).
-CHUNK_DRAIN_TIMEOUT_S = 60.0
-
-
-def chunk_worker():
-    """The one chunk worker of this service, started on first use."""
-    global _worker_instance
-    if _worker_instance is None:
-        from .chunking import ChunkWorker
-        _worker_instance = ChunkWorker(pipeline.inject_lock)
-    return _worker_instance
-
-
 def cut_chunk(chunker):
-    """The speaker paused: hand the audio so far to the chunk worker.
+    """The speaker paused: hand the audio so far to the dictation worker.
 
     Runs on the audio thread, so it only swaps a list and queues a job; the
     transcription happens on the worker."""
@@ -70,27 +56,28 @@ def cut_chunk(chunker):
         # Queued before the lock is let go: otherwise the stop could slip in
         # between counting this chunk and queuing it, and queue the last chunk
         # ahead of it. put() on the unbounded queue never blocks.
-        chunk_worker().submit(lambda message=rs.state.message: _transcribe_chunk(
-            frames, rec_sr, "middle", number, pause, message))
+        dictation_worker.submit(lambda message=rs.state.message, detector=rs.state.silence:
+                                _transcribe_chunk(frames, rec_sr, number, pause, message,
+                                                  detector))
 
 
-def _transcribe_chunk(frames, rec_sr, role, number, pause, message):
+def _transcribe_chunk(frames, rec_sr, number, pause, message, detector):
     """Transcribe and type chunk *number*, cut during the recording after a
     *pause* (seconds), with the settings as they are now, into *message*
-    (pipeline.transcribe_and_inject's)."""
+    (pipeline.transcribe_and_inject's). *detector* is that recording's
+    hands-free silence detector, or None."""
     # Logged here, on the worker, to keep file writes off the audio thread.
     seconds = sum(len(f) for f in frames) / 2 / rec_sr
     logger.info(f"Chunk {number}: {seconds:.1f}s of audio, cut after a {pause:.2f}s pause")
     cfg = live.chunk_cfg
     # Hands-free's "stop when quiet" waits while this phrase is worked on: an
     # AI rewrite can take seconds, and the user is reading, not finished.
-    detector = rs.state.silence
     if detector is not None:
         detector.hold()
     try:
         pipeline.transcribe_and_inject(frames, rec_sr, cfg.beeps, cfg.smart_quotes, cfg.notify,
                                        cfg.language, cfg.auto_space, cfg.auto_period,
-                                       cfg.injection_mode, chunk_role=role, message=message)
+                                       cfg.injection_mode, chunk_role="middle", message=message)
     finally:
         if detector is not None:
             detector.release()
@@ -103,8 +90,8 @@ def arm_chunker(rec_sr, edit_mode=False):
     if live.chunk_pause_seconds > 0 and not edit_mode:
         from .chunking import PauseDetector
         chunker = PauseDetector(live.chunk_pause_seconds, rec_sr, speech_db=live.chunk_speech_db)
-        # Started here, so the audio callback never has to build it.
-        chunk_worker()
+    # Started here, so the audio callback never has to start it.
+    dictation_worker.worker()
     with chunk_lock:
         rs.state.recording_serial += 1
         rs.state.chunks_submitted = 0

@@ -28,6 +28,7 @@ from tuxtalk import recording
 from tuxtalk import delivery
 from tuxtalk import voice_edit
 from tuxtalk import type_at_pause
+from tuxtalk import dictation_worker
 from tuxtalk import pipeline
 from tuxtalk import hotkeys
 
@@ -283,9 +284,9 @@ def test_right_away_a_tap_while_the_enter_waits_holds_it(chat, keyboard, right_c
 
 
 def test_right_away_a_tap_the_hotkey_loop_reads_holds_the_enter(chat, keyboard, monkeypatch):
-    """The words are typed on the hotkey loop's thread, then the Enter's
-    checks run. Run there too, the loop read the tap of F9 only once the
-    Enter had gone out."""
+    """Right away, the Enter's checks run on a thread of their own, so a tap
+    of F9 read while they run still holds it; run where the words were
+    typed, the tap was read only once the Enter had gone out."""
     focus, heard, typed, notices = chat
     monkeypatch.setattr(send_countdown, "_send_right_away", SEND_RIGHT_AWAY)
     words_in, tap_read = threading.Event(), threading.Event()
@@ -1317,7 +1318,7 @@ def test_a_phrase_cut_at_a_pause_takes_its_recordings_message_to_the_queue(chat,
     was the new recording's."""
     focus, heard, typed, notices = chat
     jobs = []
-    monkeypatch.setattr(type_at_pause, "chunk_worker", lambda: types.SimpleNamespace(submit=jobs.append))
+    monkeypatch.setattr(dictation_worker, "_instance", types.SimpleNamespace(submit=jobs.append))
     monkeypatch.setattr(live, "chunk_cfg", types.SimpleNamespace(
         beeps=False, smart_quotes=False, notify=False, language=None, auto_space=True,
         auto_period=True, injection_mode="type"))

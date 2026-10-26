@@ -3,19 +3,17 @@ the hotkey loop (hotkeys.run) and the Flatpak's portal loop
 (input_backends). It takes the start and stop requests the tray, D-Bus or
 the portal made, lets the speech model rest when Power Saving is on, and
 picks up settings changed in Preferences without a restart."""
-import os
-import threading
 import time
 
 from . import config as config_module
 from . import (
+    dictation_worker,
     engine,
     hotkey_keys,
     keyboard_grab,
     keyboard_output,
     pipeline,
     recording,
-    type_at_pause,
 )
 from . import live_settings as live
 from . import recording_state as rs
@@ -148,9 +146,9 @@ def tick(cfg, svc: "ServiceState") -> "hotkey_keys.Hotkeys | None":
     now = time.time()
     _take_start_request(cfg, svc, now)
     _take_stop_request(cfg, svc, now)
-    # Not mid-dictation (every worker holds inject_lock); idle counts from key-up.
+    # Not mid-dictation, nor with one waiting to be typed; idle counts from key-up.
     if (svc.timeout_enabled and not rs.state.is_recording and engine.model is not None
-            and not pipeline.inject_lock.locked()
+            and dictation_worker.idle()
             and now - svc.last_activity > svc.timeout_seconds):
         engine.rest(svc.timeout_minutes)
     if not rs.state.is_recording and now - svc.last_config_check >= CONFIG_RECHECK_SECONDS:
@@ -180,47 +178,9 @@ def _take_stop_request(cfg, svc: ServiceState, now: float) -> None:
     if not rs.state.is_recording:
         return
     keyboard_grab.release_all()
-    if os.environ.get("FLATPAK_ID"):
-        _stop_off_the_loop(cfg)
-    else:
-        pipeline.stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
-                                cfg.auto_space, cfg.auto_period, cfg.injection_mode)
+    pipeline.stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
+                            cfg.auto_space, cfg.auto_period, cfg.injection_mode)
     svc.last_activity = now
-
-
-def _stop_off_the_loop(cfg) -> None:
-    """Backend B (Flatpak): transcription + portal typing are slow and would
-    freeze the GLib loop, and F3/F4 with it, for as long as they run (10-20 s
-    on a CPU-only box). Snapshot the recording here (fast) and run the slow
-    half on a worker thread so the hotkey stays responsive.
-    pipeline.inject_lock serialises workers so two dictations never
-    transcribe or type at once."""
-    cap = recording.finish_capture(cfg.beeps, cfg.notify)
-    if cap is None:
-        return
-    frames, rec_sr = cap
-    if live.chunk_pause_seconds > 0:
-        # Chunked dictation: through the chunk worker, so the rest is typed
-        # after this recording's chunks and before the next recording's.
-        role = "last" if rs.state.chunks_submitted else None
-        if role:
-            frames = recording.drop_speechless_rest(frames)
-        type_at_pause.chunk_worker().submit(
-            lambda frames=frames, rec_sr=rec_sr, cfg=cfg, role=role,
-            message=rs.state.message: pipeline.transcribe_and_inject(
-                frames, rec_sr, cfg.beeps, cfg.smart_quotes,
-                cfg.notify, cfg.language, cfg.auto_space,
-                cfg.auto_period, cfg.injection_mode, chunk_role=role,
-                message=message))
-        return
-
-    def _worker(frames=frames, rec_sr=rec_sr, cfg=cfg, message=rs.state.message):
-        with pipeline.inject_lock:
-            pipeline.transcribe_and_inject(
-                frames, rec_sr, cfg.beeps, cfg.smart_quotes,
-                cfg.notify, cfg.language, cfg.auto_space,
-                cfg.auto_period, cfg.injection_mode, message=message)
-    threading.Thread(target=_worker, daemon=True, name="tt-inject").start()
 
 
 def _reload_if_changed(cfg, svc: ServiceState, now: float):

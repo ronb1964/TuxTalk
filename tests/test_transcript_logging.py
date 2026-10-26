@@ -20,6 +20,7 @@ from tuxtalk import engine as speech_engine  # noqa: E402
 from tuxtalk import dictation_text  # noqa: E402
 from tuxtalk import delivery  # noqa: E402
 from tuxtalk import voice_edit  # noqa: E402
+from tuxtalk import recording_state as rs  # noqa: E402
 from tuxtalk import pipeline  # noqa: E402
 
 
@@ -362,7 +363,7 @@ def test_a_voice_edit_never_writes_the_words(monkeypatch, caplog, capsys):
     monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
     frames = [np.full(16000, 1000, dtype=np.int16).tobytes()]
     _hear_every_level(caplog)
-    voice_edit.transcribe_and_edit(frames, 16000, False, "", "type")
+    voice_edit.transcribe_and_edit(frames, 16000, False, "", "type", rs.state.message)
     assert typed == ["Quokka hunter, formally."]
     assert _leaks(caplog, capsys) == []
 

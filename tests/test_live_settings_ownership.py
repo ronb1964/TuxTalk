@@ -19,7 +19,7 @@ import types
 
 import pytest
 
-from tuxtalk import engine, hotkey_keys, pipeline, recording, service_tick
+from tuxtalk import dictation_worker, engine, hotkey_keys, recording, service_tick
 from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
 
@@ -197,8 +197,10 @@ def test_power_saving_waits_for_a_transcription_still_running(monkeypatch):
     cfg = _cfg(auto_timeout_enabled=True, auto_timeout_minutes=1)
     svc = service_tick.ServiceState(cfg)
     svc.last_activity = 0.0
-    with pipeline.inject_lock:                # a dictation is being transcribed
-        service_tick.tick(cfg, svc)
+    busy = types.SimpleNamespace(idle=lambda: False)     # a dictation being transcribed
+    monkeypatch.setattr(dictation_worker, "_instance", busy)
+    service_tick.tick(cfg, svc)
+    monkeypatch.setattr(dictation_worker, "_instance", None)
     assert engine.model is loaded and not loaded.closed
     service_tick.tick(cfg, svc)           # done: now it rests
     assert engine.model is None

@@ -16,6 +16,7 @@ from . import (
     beeps,
     delivery,
     delivery_notices,
+    dictation_worker,
     hotkey_keys,
     keyboard_grab,
     modifier_hotkeys,
@@ -361,7 +362,8 @@ def _on_paste_last(event, combo, held_modifiers, devices, cfg) -> bool:
             if pending["key_up"] and not held_modifiers:
                 rs.state.paste_last = None
                 if not rs.state.is_recording:
-                    _paste_last_dictation(cfg)
+                    # After what's still being typed, not into the middle of it.
+                    dictation_worker.submit(lambda: _paste_last_dictation(cfg))
             return True
     if combo and event.value == 1 and not rs.state.is_recording:
         required_mods, main_key = combo
@@ -415,7 +417,8 @@ def _on_toggle_key(event, toggle_key, held_modifiers, devices, cfg, input_device
     quick second tap makes it hands-free. With Shift (voice editing on) it
     is a voice edit. True when a voice edit was cancelled."""
     if event.value == 0 and send_countdown.owes_space() and not rs.state.is_recording:
-        send_countdown.type_owed_space()   # the tap that held the send is over
+        # The tap that held the send is over; typed after what's still being typed.
+        dictation_worker.submit(send_countdown.type_owed_space)
     if event.value != 1 or _someone_elses_shortcut(held_modifiers - {toggle_key}):
         return False
     shift = _held_shift(held_modifiers) if live.voice_editing else set()

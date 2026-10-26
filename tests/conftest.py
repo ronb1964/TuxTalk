@@ -196,6 +196,27 @@ def _no_real_speech_model(monkeypatch):
     monkeypatch.setattr(engine, "_wake_failed", False)
 
 
+class InlineWorker:
+    """Stands in for the dictation worker: a job runs as it's submitted, on
+    the test's own thread, so a test sees the text typed when the key is let
+    go. Tests of the real worker's order and timing use DictationWorker."""
+
+    def submit(self, job):
+        job()
+
+    def idle(self):
+        return True
+
+    def drain(self, timeout=None):
+        return True
+
+
+@pytest.fixture(autouse=True)
+def _dictation_work_runs_at_once(monkeypatch):
+    from tuxtalk import dictation_worker
+    monkeypatch.setattr(dictation_worker, "_instance", InlineWorker())
+
+
 @pytest.fixture(autouse=True)
 def _no_followed_default_mic(monkeypatch):
     """Start each test without a tracked System Default mic. A test that runs

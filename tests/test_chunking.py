@@ -1,10 +1,10 @@
-"""Chunked dictation: the pause detector and chunk worker on synthetic audio,
+"""Chunked dictation: the pause detector and dictation worker on synthetic audio,
 and the app's chunk pipeline with a fake engine and fake typing.
 
 Audio is built like test_silence.py: quiet room noise and louder "speech"
 (noise plus a tone, with syllable gaps), fed in 20 ms blocks.
 """
-import threading
+
 import time
 
 import numpy as np
@@ -22,6 +22,7 @@ from tuxtalk import last_dictation
 from tuxtalk import recording as capture
 from tuxtalk import delivery
 from tuxtalk import type_at_pause
+from tuxtalk import dictation_worker
 from tuxtalk import pipeline as dictation_pipeline
 from tuxtalk.beeps import CANCEL_BEEP, READY_BEEP
 from tuxtalk import service_tick
@@ -254,11 +255,11 @@ def test_default_sensitivity_is_six_db():
     assert PauseDetector(0.8, SR).speech_over_room == pytest.approx(1.995, abs=0.01)
 
 
-# --- the chunk worker --------------------------------------------------------
+# --- the dictation worker ----------------------------------------------------
 
 def test_worker_runs_jobs_in_order():
-    from tuxtalk.chunking import ChunkWorker
-    w = ChunkWorker()
+    from tuxtalk.dictation_worker import DictationWorker
+    w = DictationWorker()
     done = []
     for i in range(5):
         w.submit(lambda i=i: (time.sleep(0.01 * (5 - i)), done.append(i)))
@@ -267,8 +268,8 @@ def test_worker_runs_jobs_in_order():
 
 
 def test_a_failing_chunk_does_not_stop_the_next():
-    from tuxtalk.chunking import ChunkWorker
-    w = ChunkWorker()
+    from tuxtalk.dictation_worker import DictationWorker
+    w = DictationWorker()
     done = []
 
     def boom():
@@ -282,29 +283,17 @@ def test_a_failing_chunk_does_not_stop_the_next():
 
 
 def test_drain_waits_for_the_job_in_progress():
-    from tuxtalk.chunking import ChunkWorker
-    w = ChunkWorker()
+    from tuxtalk.dictation_worker import DictationWorker
+    w = DictationWorker()
     w.submit(lambda: time.sleep(0.5))
     assert w.drain(0.1) is False
     assert w.drain(5) is True
 
 
 def test_drain_with_nothing_queued_returns_at_once():
-    from tuxtalk.chunking import ChunkWorker
-    assert ChunkWorker().drain(0.01) is True
+    from tuxtalk.dictation_worker import DictationWorker
+    assert DictationWorker().drain(0.01) is True
 
-
-def test_jobs_run_holding_the_lock():
-    from tuxtalk.chunking import ChunkWorker
-    lock = threading.Lock()
-    w = ChunkWorker(lock)
-    seen = []
-    w.submit(lambda: seen.append(lock.locked()))
-    assert w.drain(5)
-    assert seen == [True]
-
-
-# --- settings ----------------------------------------------------------------
 
 def test_chunk_settings_default_off():
     from tuxtalk.config import Settings
@@ -567,9 +556,8 @@ def test_held_mark_never_reaches_the_next_recording(pipeline):
 @pytest.fixture
 def recording(monkeypatch, pipeline):
     """A recording in progress at 16 kHz with chunking on, no real stream, a
-    fresh chunk worker and the fake engine/typing from `pipeline`."""
+    worker that runs each job at once and the fake engine/typing from `pipeline`."""
     from types import SimpleNamespace
-    monkeypatch.setattr(type_at_pause, "_worker_instance", None)
     monkeypatch.setattr(live, "chunk_pause_seconds", 0.8)
     monkeypatch.setattr(live, "chunk_cfg", SimpleNamespace(
         beeps=True, smart_quotes=True, notify=False, language=None,
@@ -662,7 +650,7 @@ def test_cut_after_stop_snapshot_hands_nothing_on(recording):
     assert cap is not None
     type_at_pause.cut_chunk(chunker)
     assert rs.state.chunks_submitted == 0
-    assert type_at_pause.chunk_worker().drain(1)
+    assert dictation_worker.worker().drain(1)
 
 
 def test_drop_tail_samples_keeps_partial_blocks():
@@ -683,17 +671,17 @@ def test_flatpak_stop_queues_the_last_chunk_on_the_worker(recording, monkeypatch
                           timeout_enabled=False, last_config_check=time.time())
     capture.stop_requested.set()
     service_tick.tick(live.chunk_cfg, svc)
-    assert type_at_pause.chunk_worker().drain(5)
+    assert dictation_worker.worker().drain(5)
     assert "".join(typed) == "We meet at three "
 
 
 def test_arming_starts_the_worker(monkeypatch):
     """The worker must exist before the first cut, so the audio callback never
     has to build it (a thread start and an import on the audio thread)."""
-    monkeypatch.setattr(type_at_pause, "_worker_instance", None)
+    monkeypatch.setattr(dictation_worker, "_instance", None)
     monkeypatch.setattr(live, "chunk_pause_seconds", 0.8)
     type_at_pause.arm_chunker(SR)
-    assert type_at_pause._worker_instance is not None
+    assert dictation_worker._instance is not None
     rs.state.chunker = None
 
 
@@ -702,7 +690,7 @@ def test_a_cut_queues_its_chunk_before_releasing_the_lock(recording, monkeypatch
     it, and queue the last chunk ahead of this one."""
     from types import SimpleNamespace
     held = []
-    monkeypatch.setattr(type_at_pause, "_worker_instance",
+    monkeypatch.setattr(dictation_worker, "_instance",
                         SimpleNamespace(submit=lambda job: held.append(type_at_pause.chunk_lock.locked())))
     feed(np.concatenate([speech(1.0), noise(1.0)]))
     assert held == [True]
@@ -756,7 +744,6 @@ def test_service_reads_the_new_chunk_settings(monkeypatch):
 def test_speech_db_reaches_the_detector(monkeypatch):
     monkeypatch.setattr(live, "chunk_pause_seconds", 0.8)
     monkeypatch.setattr(live, "chunk_speech_db", 9.0)
-    monkeypatch.setattr(type_at_pause, "_worker_instance", None)
     type_at_pause.arm_chunker(SR)
     assert rs.state.chunker.speech_over_room == pytest.approx(10 ** (9 / 20))
     rs.state.chunker = None
@@ -1236,11 +1223,10 @@ def test_a_phrase_being_worked_on_holds_hands_free_open(monkeypatch):
 
         def release(self):
             events.append("release")
-    monkeypatch.setattr(rs.state, "silence", Detector())
     from tuxtalk.config import Settings
     monkeypatch.setattr(live, "chunk_cfg", Settings())
     monkeypatch.setattr(dictation_pipeline, "transcribe_and_inject", lambda *a, **k: events.append("work"))
-    type_at_pause._transcribe_chunk([b""], SR, "middle", 1, 0.5, rs.state.message)
+    type_at_pause._transcribe_chunk([b""], SR, 1, 0.5, rs.state.message, Detector())
     assert events == ["hold", "work", "release"]
 
 

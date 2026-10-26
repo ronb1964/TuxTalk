@@ -389,7 +389,7 @@ def edit_env(monkeypatch):
 
 def run_edit():
     frames = [np.full(16000, 1000, dtype=np.int16).tobytes()]
-    voice_edit.transcribe_and_edit(frames, 16000, False, "", "type")
+    voice_edit.transcribe_and_edit(frames, 16000, False, "", "type", rs.state.message)
 
 
 def test_an_edit_replaces_the_selection(edit_env):
