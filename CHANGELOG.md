@@ -239,6 +239,10 @@ before 0.15.0, so older entries use that name.
   listens, as dictation does. Before, it only fixed their spelling
   afterwards, so names came out wrong more often in a file than when you
   dictated them.
+- Select and move by voice (TuxTalk Labs): after "..., press enter", a
+  move like "select the last word" could count on where the cursor was in
+  an older dictation and select the wrong text. Once Enter or Tab is
+  pressed it knows there's nothing fresh to work on and says so.
 
 ## [0.18.2] - 2026-10-23
 

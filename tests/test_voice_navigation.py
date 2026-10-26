@@ -296,6 +296,22 @@ def test_dictation_remembers_the_place_between_moves(dictation):
     assert rs.state.nav_context == (" ", "We finished early.")
 
 
+def test_after_press_enter_a_move_doesnt_count_on_an_older_one(dictation, monkeypatch):
+    """A move's memory of where the cursor sits outlived "..., press enter":
+    the next "select the last word" counted on a dictation long gone and
+    selected the wrong text."""
+    class Keys:
+        def press_keys(self, chords, claim=None):
+            return True
+    monkeypatch.setattr(keyboard_output, "output_backend", lambda: Keys())
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    monkeypatch.setattr(rs.state, "nav_context", ("An older dictation.", ""))
+    assert keyboard_output.press_key("ENTER", 'said "press enter"')
+    monkeypatch.setattr(keyboard_output, "output_backend", lambda: dictation["backend"])
+    assert voice_commands.handle_navigation("select the last word", False) is True
+    assert dictation["pressed"] == [] and dictation["problems"] == ["nothing_said"]
+
+
 # --- the same check for "delete last word" ------------------------------------------------
 
 def test_delete_last_word_in_another_window_deletes_nothing(dictation, monkeypatch):
