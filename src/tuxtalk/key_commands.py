@@ -73,8 +73,11 @@ def split_key_command(raw: str) -> tuple[str, str]:
 # means the dictation was cut off. Kept short on purpose. "so", "to", "that"
 # and "then" are left out because "I think so", "I'd love to", "I like that"
 # and "see you then" are whole sentences.
+# Not "with" or "of": a sentence can end on either ("to play around with",
+# "what it's made of"), and holding back a finished message looks as if
+# sending were off.
 _UNFINISHED = frozenset({
-    "and", "but", "or", "because", "the", "a", "an", "of", "with", "if",
+    "and", "but", "or", "because", "the", "a", "an", "if",
     "my", "your", "our", "their", "um", "uh",
 })
 

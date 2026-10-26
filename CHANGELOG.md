@@ -20,6 +20,12 @@ before 0.15.0, so older entries use that name.
   Right Alt on their own now. Preferences offers the update, and you're asked
   for your password once. Until then Right Ctrl and Right Alt do nothing, and
   Preferences says so when you pick one.
+- With "Send each dictation automatically" on, a dictation that ends on "and"
+  or "the" isn't sent, because you probably let go of the key mid-sentence.
+  It used to hold back in silence, so it looked like sending had stopped
+  working. Now it says so over the window: Not sent: it ended on “and”.
+  Press Enter when you're ready. And "with" and "of" are off that list: "something
+  to play around with" is a whole sentence, and it gets sent.
 - Saying "tab" in a sentence ("every tab shows", "the tabs in Claude
   Desktop") typed a tab character instead of the word, almost every time.
   Now only "press tab" makes a tab, and "tab" on its own is just the word.

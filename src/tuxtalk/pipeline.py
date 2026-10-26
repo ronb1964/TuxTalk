@@ -167,6 +167,7 @@ class _Words(NamedTuple):
     space_left_off: str     # the auto-space left off before that key
     taken_back: str         # the phrase backspaced for a correction across a pause
     held_mark: str | None   # the mark held back for the next phrase to decide
+    held_back: str          # the word ("and") the automatic Enter was held back on, or ""
 
 
 def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
@@ -201,11 +202,11 @@ def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         if raw is None or _ran_as_command(raw, job):
             return
         raw, said = split_key_command(raw)
-        press, cut_off = _key_to_press(raw, said, job)
+        key = _key_to_press(raw, said, job)
         if said and not raw.strip():
             _press_alone(said, in_password, job)
             return
-        words = _shape_text(raw, said, press, cut_off, job)
+        words = _shape_text(raw, said, key, job)
         # Again before the beep and the "Transcribed" notification, which
         # shows the words: the focus may have moved while the AI cleaned them.
         if words is None or (words.text and notices.refuse_password_field(beeps_on)):
@@ -336,21 +337,24 @@ def _ran_as_command(raw: str, job: _Job) -> bool:
 
 
 def _key_to_press(raw: str, said: str, job: _Job):
-    """(key to press after the words, the "and" the automatic send was held
-    back by). "... press enter" types the words, then a real Enter that
-    sends the message or runs the command; "... press tab" moves on to the
-    next box (key_commands.py). Or Enter every time, when "Send each
-    dictation automatically" is on, but only at the end of the recording,
-    not each phrase of Type at pause."""
+    """(key to press after the words, the "and" they were cut off on, the
+    "and" the automatic send was held back by: only where it would have
+    sent). "... press enter" types the words, then a real Enter that sends
+    the message or runs the command; "... press tab" moves on to the next
+    box (key_commands.py). Or Enter every time, when "Send each dictation
+    automatically" is on, but only at the end of the recording, not each
+    phrase of Type at pause."""
     if said or not live.press_enter_after or job.chunk_role == "middle":
-        return said, ""
-    sending, cut_off = auto_send(raw, is_document_window(focused_window.window_class()))
-    return ("ENTER" if sending else ""), cut_off
+        return said, "", ""
+    in_document = is_document_window(focused_window.window_class())
+    sending, cut_off = auto_send(raw, in_document)
+    return ("ENTER" if sending else ""), cut_off, ("" if in_document else cut_off)
 
 
-def _shape_text(raw: str, said: str, press: str, cut_off: str, job: _Job):
+def _shape_text(raw: str, said: str, key, job: _Job):
     """The words as they'll be typed (_Words); None when a phrase is only a
-    correction cue, held for the next one."""
+    correction cue, held for the next one. *key* is _key_to_press's answer."""
+    press, cut_off, held_back = key
     # Normalize text (voice commands, punctuation, spacing), plainer for a
     # terminal or code editor ("Plain text in terminals and code editors").
     kind = app_kind(focused_window.window_class()) if live.adapt_to_app else ""
@@ -390,7 +394,7 @@ def _shape_text(raw: str, said: str, press: str, cut_off: str, job: _Job):
         # Kept for a send that's held, which types it after all.
         core = text.rstrip(" ")
         space_left_off, text = text[len(core):], core
-    return _Words(text, raw, said, press, space_left_off, taken_back, held_mark)
+    return _Words(text, raw, said, press, space_left_off, taken_back, held_mark, held_back)
 
 
 def _press_alone(said: str, in_password: bool, job: _Job) -> None:
@@ -448,6 +452,8 @@ def _deliver(words: _Words, audio_f32, job: _Job) -> None:
     job.message.ends_on = ends_unfinished(words.raw)
     _after_the_words(outcome, words.said, words.press, words.space_left_off, job.chunk_role,
                      job.beeps_on, job.injection_mode, job.message)
+    if outcome == "ok" and words.held_back:
+        send_countdown.say_held_back(words.held_back)
     if outcome == "ok":
         _carry_on_after(words, text, audio_f32, job)
     if live.usage_stats:

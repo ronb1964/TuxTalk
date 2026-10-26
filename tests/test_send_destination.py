@@ -191,6 +191,7 @@ def test_a_pause_after_and_at_the_end_sends_nothing(chat, keyboard, monkeypatch)
     dictate("last", audio=False)
     assert typed == [("Meet me at noon and", FIRST[1]), (" ", FIRST[1])]
     assert keyboard.events == [] and rs.state.continue_mid_sentence
+    assert notices == ["Not sent: it ended on \u201cand\u201d. Press Enter when you're ready."]
 
 
 def test_esc_while_a_phrase_is_transcribed_types_none_of_it(chat, keyboard, monkeypatch):

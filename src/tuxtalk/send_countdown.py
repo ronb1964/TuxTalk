@@ -455,6 +455,13 @@ def say_held() -> None:
         "The text is still in the box. Press Enter when you're ready.")).start()
 
 
+def say_held_back(word: str) -> None:
+    """An automatic Enter held back because the dictation ended on *word*
+    ("and", key_commands.ends_unfinished): said over the window, or it
+    looks as if sending were off."""
+    show_notice(f"Not sent: it ended on \u201c{word}\u201d. Press Enter when you're ready.")
+
+
 def show_notice(text: str) -> None:
     """Say over the window, where the countdown was, what became of the send."""
     from . import screen_message
