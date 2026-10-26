@@ -24,12 +24,11 @@ _noted = ([], frozenset())
 # for that; set by note_hidden().
 _hidden = (frozenset(), ())
 
-# How long typing waits for the key to come up. Pressed again while the last
-# dictation is still being typed, it holds the rest up for as long as it's
-# held, as if dictating the next sentence; that sentence isn't recorded,
-# though: the hotkey loop is the thread typing, and reads the press only
-# once typing is done (CODE_HEALTH.md). So this is longer than nearly any
-# dictation; a key that reads as down for longer is stuck (a KVM switch, a
+# How long typing waits for the key to come up while the desktop can see it.
+# Pressed again while the last dictation is still being typed, it starts the
+# next recording, whose grab hides it within moments, and typing carries on
+# under it (note_hidden). Longer than nearly any dictation all the same: a
+# key that reads as down and unhidden for longer is stuck (a KVM switch, a
 # remapper's keyboard that never sent the release). Typing then stops, and
 # the dictation stays in Recent Dictations: typing on would turn the rest
 # into Ctrl shortcuts wherever the desktop sees the key down too.
