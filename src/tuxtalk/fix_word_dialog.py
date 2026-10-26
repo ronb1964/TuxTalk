@@ -349,19 +349,30 @@ _REFOCUS_S = 0.5
 LAST_KEYS_S = 0.1
 
 
-def fix_in_text(typed, fix, window):
+def _as_tuples(saved):
+    """A window id read back from JSON, in tuples again as focused_window
+    compares them (("tray", "{id}"), or ("own", ("tray", "{id}")))."""
+    if not isinstance(saved, list):
+        return saved
+    return tuple(_as_tuples(part) for part in saved)
+
+
+def fix_in_text(typed, fix, window, where=None):
     """Swap just the picked words in what TuxTalk *typed*, in the focused
     app. *fix* is (start, end, replacement), offsets in the typed text
     without its outer spaces, as the window showed it. The cursor, still at
     the end of the dictation, steps back to the words, selects them, types
     the replacement and steps forward again; nothing else is retyped. Not
-    when another window than *window* has the focus (None: unknown, go
-    ahead). True if done."""
+    when another window than *window* (its class) has the focus, nor another
+    than *where* (its id, focused_window.look's) of that app; None: unknown,
+    go ahead. True if done."""
     from . import focused_window, keyboard_output, notify
     start, end, replacement = fix
     time.sleep(_REFOCUS_S)
     focused = focused_window.window_class()
-    if window and focused and focused != window:
+    if (window and focused and focused != window) or (
+            where is not None
+            and focused_window.same_window((window, where), focused_window.look()) is False):
         logger.info(f"Fix a Word: {focused!r} has the focus, not {window!r}; text left as it was")
         notify.notify("Your text wasn't changed",
                     "The fix is saved, but another window had the focus.")
@@ -404,12 +415,12 @@ def main(argv=None):
         logger.warning(f"Couldn't set up the window's icon, emoji or size: {e}")
     from .clipboard import copy_text
     from .explain import place_over_active_window
-    typed = window = None
+    typed = window = where = None
     if len(argv) == 2 and argv[0] == "--in-place":
         try:
             with open(argv[1]) as f:
                 data = json.load(f)
-            typed, window = data["text"], data.get("window")
+            typed, window, where = data["text"], data.get("window"), _as_tuples(data.get("where"))
         except (OSError, ValueError, KeyError, TypeError) as e:
             logger.debug(f"Fix a Word: no text to fix in place: {e}")
         finally:
@@ -436,7 +447,8 @@ def main(argv=None):
     dialog.window.connect("destroy", lambda _w: Gtk.main_quit())
     dialog.window.present()
     Gtk.main()
-    if dialog.fixed_for_text is not None and fix_in_text(typed, dialog.fixed_for_text, window):
+    if dialog.fixed_for_text is not None and fix_in_text(typed, dialog.fixed_for_text, window,
+                                                         where):
         # The keyboard goes when this process ends, and with it any keys the
         # desktop hasn't read yet.
         time.sleep(LAST_KEYS_S)

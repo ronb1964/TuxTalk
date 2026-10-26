@@ -79,9 +79,30 @@ def test_right_after_a_dictation_it_can_fix_the_text(opened, typed, monkeypatch)
     import json, os, stat
     assert flag == "--in-place"
     assert json.load(open(path)) == {"text": " Mary had a lamb whose fleece was white. ",
-                                     "window": "org.kde.kwrite"}
+                                     "window": "org.kde.kwrite", "where": None}
     assert stat.S_IMODE(os.stat(path).st_mode) == 0o600          # only this user
     assert rs.state.last_inserted_text == ""                     # undo can't trust it now
+
+
+def test_fix_a_word_gets_the_window_the_dictation_went_to(opened, typed, monkeypatch):
+    import json
+    from tuxtalk import fix_word_dialog as fw
+    calls, fixed = [], []
+    monkeypatch.setattr(rs.state, "last_inserted_where", ("org.kde.kwrite", ("tray", "{first}")))
+    monkeypatch.setattr(explain, "start_helper_window", lambda module, *a: calls.append(a))
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
+    voice_commands.handle_fix_word("fix that word", False)
+    assert json.load(open(calls[0][1]))["where"] == ["tray", "{first}"]
+
+    class Dialog:
+        def __init__(self, *a, **k):
+            self.fixed_for_text = (0, 4, "Marie")
+            self.window = type("W", (), {"connect": lambda *a: None, "present": lambda *a: None})()
+    monkeypatch.setattr(fw, "_FixWordDialog", Dialog)
+    monkeypatch.setattr(fw.Gtk, "main", lambda: None)
+    monkeypatch.setattr(fw, "fix_in_text", lambda *a: fixed.append(a) or False)
+    fw.main(list(calls[0]))
+    assert fixed[0][2:] == ("org.kde.kwrite", ("tray", "{first}"))     # tuples, as looked
 
 
 def test_in_another_window_it_only_saves_the_fix(opened, typed, monkeypatch):
@@ -135,6 +156,19 @@ def test_fix_in_text_leaves_another_window_alone(monkeypatch):
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: pytest.fail("typed into the wrong window"))
     assert fw.fix_in_text(" Hello. ", (0, 5, "Hi"), "org.kde.kwrite") is False
     assert notices and "wasn't changed" in notices[0]
+
+
+def test_fix_in_text_leaves_another_window_of_the_same_app_alone(monkeypatch):
+    """Two KWrite documents: "fix that word" after dictating into one, then
+    a click into the other while Fix a Word was open, replaced its words."""
+    from tuxtalk import fix_word_dialog as fw
+    monkeypatch.setattr(fw, "_REFOCUS_S", 0)
+    monkeypatch.setattr(focused_window, "window_class", lambda: "org.kde.kwrite")
+    monkeypatch.setattr(focused_window, "look", lambda: ("org.kde.kwrite", ("tray", "{second}")))
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda t, m: None)
+    monkeypatch.setattr(keyboard_output, "output_backend",
+                        lambda: pytest.fail("typed into the other document"))
+    assert fw.fix_in_text(" Hello. ", (0, 5, "Hi"), "org.kde.kwrite", ("tray", "{first}")) is False
 
 
 def test_the_checkbox_says_what_it_does(monkeypatch):

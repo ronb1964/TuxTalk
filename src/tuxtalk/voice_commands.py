@@ -162,7 +162,10 @@ def handle_fix_word(raw: str, beeps_on: bool) -> bool:
                                 "tuxtalk-fix-word.json")
             fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
             with os.fdopen(fd, "w") as f:
-                json.dump({"text": typed, "window": focused}, f)
+                # Which of the app's windows, where the desktop says (two
+                # KWrite documents), for the fix to go only there.
+                json.dump({"text": typed, "window": focused,
+                           "where": rs.state.last_inserted_where[1]}, f)
             args = ["--in-place", path]
             # The text is about to change: undo and voice moves can't trust
             # their counts any more.
