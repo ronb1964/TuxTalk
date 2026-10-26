@@ -61,7 +61,7 @@ def editing(monkeypatch):
 
     monkeypatch.setattr(live, "voice_editing", True)
     monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
-    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
+    monkeypatch.setattr("tuxtalk.focused_window.look", lambda: ("org.kde.kwrite", None))
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: Backend())
     monkeypatch.setattr(voice_edit, "edit_selection",
                         lambda get, beeps, mode, focused, t0, message, spoken=False, window=None:
@@ -111,7 +111,7 @@ def test_nothing_just_typed_means_the_words_are_typed(editing):
 
 def test_a_dictation_in_another_window_isnt_edited(editing, monkeypatch):
     _pressed, edits, _ = editing
-    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "google-chrome")
+    monkeypatch.setattr("tuxtalk.focused_window.look", lambda: ("google-chrome", None))
     assert not _said("Edit that, make it shorter.")
     assert edits == []
 
@@ -125,7 +125,7 @@ def test_off_unless_voice_editing_is_on(editing, monkeypatch):
 
 def test_not_in_a_terminal(editing, monkeypatch):
     pressed, edits, problems = editing
-    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.konsole")
+    monkeypatch.setattr("tuxtalk.focused_window.look", lambda: ("org.kde.konsole", None))
     monkeypatch.setattr(rs.state, "last_inserted_window", "org.kde.konsole")
     assert _said("Edit that, make it shorter.")
     assert problems == ["terminal"] and pressed == [] and edits == []
@@ -145,7 +145,7 @@ def test_a_switch_during_the_pause_after_edit_that_changes_nothing(editing, monk
     as many characters of the other app's text were selected and rewritten."""
     pressed, edits, problems = editing
     assert _said("Edit that.", "middle")
-    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "google-chrome")
+    monkeypatch.setattr("tuxtalk.focused_window.look", lambda: ("google-chrome", None))
     assert _said("Make it more formal.", "middle")       # not typed into Chrome either
     assert pressed == [] and edits == [] and problems == ["focus_moved"]
 
@@ -260,3 +260,29 @@ def test_edit_that_then_only_a_pause_isnt_sent_as_it_was(editing, monkeypatch):
     type_at_pause.end_in_a_pause(rs.state.message, False, True, True, "type")
     assert sent == [] and problems == ["edit_that_what"]
     assert rs.state.message.edit_waiting is None
+
+
+def test_edit_that_selects_nothing_in_a_window_switched_to_before_the_keys(editing, monkeypatch):
+    """A click into a second KWrite document between "edit that" and its
+    select keys: Shift+Left there would select as many characters of that
+    document's text, and the rewrite would replace them."""
+    from tuxtalk import focused_window, virtual_keyboard
+    pressed, edits, problems = editing
+    first, second = ("org.kde.kwrite", ("tray", "{first}")), ("org.kde.kwrite", ("tray", "{second}"))
+    now = {"look": first}
+    monkeypatch.setattr(focused_window, "look", lambda: now["look"])
+    monkeypatch.setattr(rs.state, "last_inserted_where", first)
+
+    class Backend:
+        def press_keys(self, chords, claim=None):
+            now["look"] = second                # the click, right before the keys
+            try:
+                if claim is not None:
+                    claim()
+            except virtual_keyboard.GaveUp:
+                return False
+            pressed.extend(chords)
+            return True
+    monkeypatch.setattr(keyboard_output, "output_backend", lambda: Backend())
+    assert _said("Edit that, make it shorter.")
+    assert pressed == [] and edits == [] and problems == ["shortcut_failed"]

@@ -3,6 +3,7 @@ says ("make this more formal", "remove the commas", "make this bold"),
 in code where an exact rule covers it (voice_edit_rules.py) and by the
 local AI where not, then type the result over the selection. The
 clipboard the selection was copied through is put back afterwards."""
+import functools
 import threading
 import time
 
@@ -46,7 +47,8 @@ def focus_moved(focused_class, window=None) -> bool:
     now = focused_window.window_class()
     if now is None and focused_class is not None:
         logger.info("Voice edit: the focused window can't be found now, so it can't be checked")
-    if now != focused_class:
+    # KWin lowercases the class and X11 doesn't (focused_window.same_window).
+    if (now or "").casefold() != (focused_class or "").casefold():
         return True
     return window is not None and focused_window.changed((focused_class, window),
                                                          focused_window.look())
@@ -92,6 +94,21 @@ def transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode, mess
                    window=where[1] if where is not None else None)
 
 
+def _only_into(focused_class, window):
+    """virtual_keyboard.send's claim for keys that may only go into the
+    window the edit started in, made right before the first key goes down:
+    the password check and a wait for a held Right Ctrl come after
+    focus_moved, and the user can switch windows during either."""
+    return functools.partial(focused_window.claim_into, (focused_class, window))
+
+
+def _not_pressed(focused_class, window, beeps_on) -> None:
+    """Tell the user why keys meant for the selection didn't go in: the
+    window changed right before them (the claim), or they couldn't be sent."""
+    moved = focus_moved(focused_class, window)
+    notices.edit_problem("focus_moved" if moved else "shortcut_failed", beeps_on)
+
+
 def _delete_selection(focused_class, window, beeps_on) -> bool:
     """"Delete this": Delete on the selection, still selected in
     *focused_class*. True when it was pressed. Transcribing can take
@@ -101,13 +118,14 @@ def _delete_selection(focused_class, window, beeps_on) -> bool:
         logger.info("Voice edit: the focused window is unknown, so Delete can't be checked")
         notices.edit_problem("cant_check_window", beeps_on)
         return False
+    if notices.refuse_password_field(beeps_on):
+        return False
     if focus_moved(focused_class, window):
         notices.edit_problem("focus_moved", beeps_on)
         return False
-    if notices.refuse_password_field(beeps_on):
-        return False
-    if not keyboard_output.send_keys([(111, 1), (111, 0)], what="delete"):     # KEY_DELETE
-        notices.edit_problem("shortcut_failed", beeps_on)
+    if not keyboard_output.send_keys([(111, 1), (111, 0)], what="delete",     # KEY_DELETE
+                                     claim=_only_into(focused_class, window)):
+        _not_pressed(focused_class, window, beeps_on)
         return False
     logger.info("Voice edit: deleted the selection")
     beeps.beep(beeps_on, *READY_BEEP)
@@ -122,13 +140,14 @@ def _format_selection(fmt, focused_class, window, beeps_on) -> bool:
         logger.info(f"Voice edit: no formatting shortcuts in {focused_class!r}")
         notices.edit_problem("no_shortcuts", beeps_on)
         return False
+    if notices.refuse_password_field(beeps_on):
+        return False
     if focus_moved(focused_class, window):
         notices.edit_problem("focus_moved", beeps_on)
         return False
-    if notices.refuse_password_field(beeps_on):
-        return False
-    if not all(keyboard_output.send_format_shortcut(kind) for kind in fmt):
-        notices.edit_problem("shortcut_failed", beeps_on)
+    claim = _only_into(focused_class, window)
+    if not all(keyboard_output.send_format_shortcut(kind, claim) for kind in fmt):
+        _not_pressed(focused_class, window, beeps_on)
         return False
     logger.info(f"Voice edit: {', '.join(fmt)} with the app's shortcut ({focused_class})")
     beeps.beep(beeps_on, *READY_BEEP)
@@ -239,13 +258,15 @@ def _apply_steps(selected, steps, beeps_on):
     return text
 
 
-def _type_rewrite(result, injection_mode, message, beeps_on):
+def _type_rewrite(result, injection_mode, message, beeps_on, into):
     """Type or paste *result* over the selection, which is still active, in
-    one block (see delivery.inject_text), as part of *message*; True when it
+    one block (see delivery.inject_text), as part of *message*, and only
+    into *into* (a look, or None when the window isn't known); True when it
     all went in."""
     from . import history
     try:
-        outcome = delivery.inject_text(result, injection_mode, one_block=True, message=message)
+        outcome = delivery.inject_text(result, injection_mode, one_block=True, into=into,
+                                       message=message)
     except Exception as e:
         logger.error(f"Voice edit: typing the rewrite failed: {e}", exc_info=True)
         outcome = "failed"
@@ -300,15 +321,17 @@ def edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0,
         logger.info(f"Voice edit result: {live.loggable(result)} "
                     f"(took {time.time() - t0:.2f}s)")
         history.add_entry(result)
+        into = (focused_class, window)
         if focused_class is None:
             # Typed unchecked, as ordinary dictation is: refusing here would
             # turn voice editing off wherever the window can't be found.
             logger.info("Voice edit: the focused window is unknown, so typing goes ahead unchecked")
+            into = None
         elif focus_moved(focused_class, window):
             # Typing now would put the rewrite into whatever window has focus.
             notices.edit_problem("window_changed", beeps_on)
             return
-        return _type_rewrite(result, injection_mode, message, beeps_on)
+        return _type_rewrite(result, injection_mode, message, beeps_on, into)
     finally:
         _put_clipboard_back(put_back, result)
 
@@ -342,7 +365,10 @@ def handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: str
     if not keyboard_output.is_wayland_session():
         notices.edit_problem("needs_wayland", beeps_on)
         return True
-    focused_class = focused_window.window_class()
+    # Taken before selecting: the select keys, Delete or the rewrite go
+    # only into this window.
+    where = focused_window.look()
+    focused_class = where[0]
     if is_terminal_class(focused_class):
         notices.edit_problem("terminal", beeps_on)
         return True
@@ -357,7 +383,8 @@ def handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: str
         return True
     plan = nav.plan(nav.parse("select that"), target, "")
     try:
-        selected = plan is not None and keyboard_output.output_backend().press_keys(plan.chords)
+        selected = plan is not None and keyboard_output.output_backend().press_keys(
+            plan.chords, claim=_only_into(*where))
     except Exception as e:
         logger.error(f"Voice edit: selecting the text failed: {e}")
         selected = False
@@ -369,7 +396,7 @@ def handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: str
     if not selected:
         notices.edit_problem("shortcut_failed", beeps_on)
     elif edit_selection(lambda: instruction, beeps_on, injection_mode, focused_class,
-                        time.time(), message, spoken=True, window=focused_window.look()[1]):
+                        time.time(), message, spoken=True, window=where[1]):
         return True
     # Not changed as asked: no automatic Enter sends it as it was.
     message.add("failed", None)

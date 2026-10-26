@@ -419,6 +419,44 @@ def test_a_rewrite_never_goes_into_another_window_of_the_same_app(edit_env, monk
     assert edit_env["notices"] == ["window_changed"]
 
 
+@pytest.mark.parametrize("said, focused", [
+    ("Delete this.", "org.kde.kwrite"),
+    ("Make this bold.", "libreoffice-writer"),
+])
+def test_no_key_goes_to_a_window_switched_to_while_it_waited(edit_env, keyboard, monkeypatch,
+                                                            said, focused):
+    """Every check passed, then the key waited (a Right Ctrl dictation key
+    still down, or the password-field question): a click into a second
+    document of the same app meanwhile got the Delete or the Ctrl+B."""
+    first, second = (focused, ("tray", "{first}")), (focused, ("tray", "{second}"))
+    now = {"look": first}
+    monkeypatch.setattr(focused_window, "look", lambda: now["look"])
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: focused)
+    monkeypatch.setattr("tuxtalk.keyboard_layout.active_layout", lambda: ("us", ""))
+    monkeypatch.setattr(speech_engine, "transcribe", lambda audio, lang: said)
+
+    def wait_while_held(destination=None):
+        def before_press():
+            now["look"] = second                # the click, while the key waited
+        return before_press
+    monkeypatch.setattr("tuxtalk.modifier_hotkeys.wait_while_held", wait_while_held)
+    run_edit(where=first)
+    assert keyboard.events == [] and edit_env["typed"] == []
+    assert len(edit_env["notices"]) == 1 and "switched windows" in edit_env["notices"][0]
+
+
+def test_a_rewrite_goes_only_into_the_window_the_edit_started_in(edit_env, monkeypatch):
+    """Checked once more right before its keys (delivery.inject_text's
+    *into*): a click into another document after the last check here must
+    not get the rewrite either."""
+    first = ("org.kde.kwrite", ("tray", "{first}"))
+    monkeypatch.setattr(focused_window, "look", lambda: first)
+    into = []
+    monkeypatch.setattr(delivery, "inject_text",
+                        lambda text, mode, one_block=False, **kw: into.append(kw.get("into")) or "ok")
+    run_edit(where=first)
+    assert into == [first]
+
 def test_an_edit_replaces_the_selection(edit_env):
     run_edit()
     assert edit_env["engine"].asked == [("We finished the electrical today.", "make it more professional")]

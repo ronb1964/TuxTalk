@@ -136,9 +136,9 @@ def not_where_typed(focused) -> bool:
 def press_key(key: str, why: str, claim=None) -> bool:
     """A real "ENTER" or "TAB" after a dictation (key_commands.py): Enter
     sends a chat message, runs a command or submits a form; Tab moves on to
-    a form's next box. Undo can't reach what's behind either, so once pressed
-    it forgets the dictation; not pressed, the text stays where undo reaches
-    it, and a key stuck down says so (an automatic send says it its own way).
+    a form's next box. Undo can't reach what's behind either; the caller
+    forgets the dictation once it's pressed (pipeline.press_key). Not
+    pressed, a key stuck down says so (an automatic send says it its own way).
     *claim* can still stop it right before it goes down (send_countdown)."""
     time.sleep(0.05)   # let the app take in the typed text first
     if not output_backend().press_keys([((), key)], claim=claim):
@@ -544,7 +544,8 @@ def send_copy_keystroke() -> bool:
 _FORMAT_LETTERS = {"bold": "b", "italic": "i", "underline": "u"}
 
 
-def send_format_shortcut(kind: str) -> bool:
+def send_format_shortcut(kind: str, claim=None) -> bool:
     """Ctrl+B, Ctrl+I or Ctrl+U, on the key that is that letter on the user's
-    keyboard layout. Sent only to word processors (voice_edit_rules)."""
-    return send_keys(ctrl_keys(_FORMAT_LETTERS[kind]), what=kind)
+    keyboard layout. Sent only to word processors (voice_edit_rules).
+    *claim* is virtual_keyboard.send's."""
+    return send_keys(ctrl_keys(_FORMAT_LETTERS[kind]), what=kind, claim=claim)
