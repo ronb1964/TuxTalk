@@ -189,6 +189,22 @@ def test_parakeet_text_gets_your_words_spelling():
     assert engine.text(_speech(1)) == "I like TuxTalk"
 
 
+def test_parakeet_is_steered_toward_your_words_before_it_hears_the_file():
+    """Dictation hands Parakeet Your Words before each recording, so its
+    decoder leans toward them; a file only got the spelling fixed after."""
+    steered = []
+
+    class Parakeet:
+        def set_words(self, words):
+            steered.append(list(words))
+
+        def recognize(self, audio):
+            return "I like TuxTalk" if steered else "I like tax talks"
+    engine = ft.FileEngine(Parakeet(), "parakeet", "Parakeet", words=["TuxTalk"])
+    assert engine.text(_speech(1)) == "I like TuxTalk"
+    assert steered == [["TuxTalk"]]
+
+
 def test_whisper_text_honours_the_language_list():
     class Whisper:
         def __init__(self):

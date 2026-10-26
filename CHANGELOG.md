@@ -235,6 +235,10 @@ before 0.15.0, so older entries use that name.
   failed (a full disk, say), TuxTalk in your app menu still pointed at the
   copy that never arrived and opened nothing. It points at the AppImage
   you ran instead now, as starting at login already did.
+- Transcribe a File on Parakeet now leans toward Your Words while it
+  listens, as dictation does. Before, it only fixed their spelling
+  afterwards, so names came out wrong more often in a file than when you
+  dictated them.
 
 ## [0.18.2] - 2026-10-23
 

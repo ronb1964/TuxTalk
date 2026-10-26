@@ -147,6 +147,8 @@ class FileEngine:
     def text(self, audio):
         from . import custom_words, language_limit
         if self.kind == "parakeet":
+            from .parakeet_gpu import _steer
+            _steer(self.model, self.words)      # as dictation does (engine._transcribe_parakeet)
             text = self.model.recognize(audio)
         elif self.kind == "vulkan":
             extra = {"limit_to": self.limit_to} if self.limit_to else {}
