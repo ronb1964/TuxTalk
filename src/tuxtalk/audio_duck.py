@@ -245,19 +245,7 @@ class AudioDucker:
         put_back = 0
         reset = {}
         for index, (original, lowered, app) in ducked.items():
-            if index not in now:
-                # Ended while turned down: the desktop would keep it that
-                # quiet for the app's next sound. Put that right now, or else
-                # owe it until the app is seen again.
-                if app and self._reset(app, original):
-                    reset[app] = {"original": original, "lowered": lowered}
-                elif app:
-                    self._owed[app] = {"original": original, "lowered": lowered}
-                continue
-            if now[index] != lowered:
-                continue        # the user set its volume themselves meanwhile
-            if _set_volume(index, original, self._run):
-                put_back += 1
+            put_back += self._put_back(index, original, lowered, app, now, reset)
         if reset:
             # The memory is right again, but the app may have opened its next
             # sound before that, at the lowered level: Brave resuming a video
@@ -273,6 +261,29 @@ class AudioDucker:
         self._save()
         if self._owed:
             self._follow_up(self._round, 0)
+
+    def _put_back(self, index, original, lowered, app, now, reset) -> int:
+        """Stream *index*, turned down from *original* to *lowered*, back at
+        its volume: 1 when that's done now. *now* is each stream's volume;
+        *reset* gets an ended stream whose app's memory was put right."""
+        entry = {"original": original, "lowered": lowered}
+        if index not in now:
+            # Ended while turned down: the desktop would keep it that quiet
+            # for the app's next sound. Put that right now, or else owe it
+            # until the app is seen again.
+            if app and self._reset(app, original):
+                reset[app] = entry
+            elif app:
+                self._owed[app] = entry
+            return 0
+        if now[index] != lowered:
+            return 0        # the user set its volume themselves meanwhile
+        if _set_volume(index, original, self._run):
+            return 1
+        if app:
+            # Owed, so it's tried again: the desktop would keep it quiet.
+            self._owed[app] = entry
+        return 0
 
     def _follow_up(self, round_, step):
         """Look again for apps owed their volume, at FOLLOW_UP_S, until none
@@ -303,10 +314,12 @@ class AudioDucker:
             owed = self._owed.get(st["app"])
             if owed is None or st["index"] in self._ducked:
                 continue
-            if st["volumes"] == owed["lowered"] and _set_volume(st["index"], owed["original"], self._run):
+            if st["volumes"] == owed["lowered"]:
+                if not _set_volume(st["index"], owed["original"], self._run):
+                    continue    # still owed: the next look tries again
                 st["volumes"] = list(owed["original"])
                 fixed += 1
-            # At the lowered level or not (the user set another), it's settled.
+            # Put back, or at a level the user set: it's settled.
             del self._owed[st["app"]]
         if fixed:
             logger.info(f"Put {fixed} app(s) back to the volume a dictation turned down")

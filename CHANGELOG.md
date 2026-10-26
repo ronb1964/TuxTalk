@@ -221,6 +221,11 @@ before 0.15.0, so older entries use that name.
   when a paste failed and TuxTalk typed instead) it still happened. Typed
   line breaks there are a pasted newline now, so they go through the
   clipboard, even with Keystroke Typing.
+- With "Turn everything down" picked for other sounds, if putting an app's
+  volume back failed even once when you finished dictating, TuxTalk forgot
+  about it, and the app stayed at half volume (your desktop remembers each
+  app's volume, so it stayed that way). It keeps trying now, the next time
+  it looks and the next time TuxTalk starts.
 
 ## [0.18.2] - 2026-10-23
 

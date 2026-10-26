@@ -25,6 +25,7 @@ class FakePactl:
         # index -> {"pid":, "volumes": [...], "mute":, "app":, "role":}
         self.streams = streams
         self.calls = []
+        self.failing_sets = 0       # the next this many set-volumes fail (a pactl hiccup)
 
     def __call__(self, cmd, **kw):
         self.calls.append(cmd[1:])
@@ -45,6 +46,9 @@ class FakePactl:
             index = int(args[1])
             if index not in self.streams:
                 return subprocess.CompletedProcess(cmd, 1, "", "No such entity")
+            if self.failing_sets:
+                self.failing_sets -= 1
+                return subprocess.CompletedProcess(cmd, 1, "", "Connection failure")
             self.streams[index]["volumes"] = [int(v) for v in args[2:]]
             return subprocess.CompletedProcess(cmd, 0, "", "")
         return subprocess.CompletedProcess(cmd, 1, "", "unknown")
@@ -91,6 +95,22 @@ def test_a_volume_the_user_changed_meanwhile_is_kept(tmp_path):
     pactl.streams[7]["volumes"] = [30000]          # turned up by hand during dictation
     d._restore_now()
     assert pactl.streams[7]["volumes"] == [30000]
+
+
+def test_a_volume_that_wouldnt_go_back_is_tried_again(tmp_path, monkeypatch):
+    """A pactl hiccup as the dictation ended: the app's record was thrown
+    away, and the desktop remembered it at half volume for good."""
+    monkeypatch.setattr(audio_duck, "FOLLOW_UP_S", ())     # the follow-up is run by hand
+    pactl = FakePactl({7: {"pid": 100, "volumes": [65536]}})
+    d = _ducker(tmp_path, pactl)
+    d._duck_now()
+    pactl.failing_sets = 2                     # the restore, and the look right after it
+    d._restore_now()
+    assert pactl.streams[7]["volumes"] == [32768]
+    assert (tmp_path / "ducked.json").exists()  # owed, at the next start too
+    d._settle_later(d._round, 0)
+    assert pactl.streams[7]["volumes"] == [65536]
+    assert not (tmp_path / "ducked.json").exists()
 
 
 def test_a_stream_that_ended_is_skipped(tmp_path):

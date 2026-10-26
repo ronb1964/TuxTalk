@@ -15,7 +15,6 @@
   "audio_duck.py::AudioDucker._restore_now::dated_comment": 1,
   "audio_duck.py::AudioDucker._restore_now::undocumented": 1,
   "audio_duck.py::AudioDucker._run_jobs::swallowed_error": 1,
-  "audio_duck.py::AudioDucker._settle_owed::long_line": 1,
   "audio_duck.py::_set_volume::long_line": 1,
   "audio_duck.py::reset_remembered::long_line": 1,
   "cleanup.py::<module>::long_line": 1,
@@ -316,9 +315,6 @@
   },
   "ai_cleanup.py::fix_self_corrections": {
    "decisions": 24
-  },
-  "audio_duck.py::AudioDucker._restore_now": {
-   "decisions": 16
   },
   "autostart.py::get_launch_command": {
    "decisions": 22
