@@ -155,20 +155,68 @@ def test_a_tap_while_the_words_were_typed_holds_the_send_and_says_so(sent, monke
     assert not send_countdown.owes_space()
 
 
+class _LockThatLetsAClaimIn:
+    """send_countdown's _send_lock that runs *claim* the first time it's let
+    go: another thread making the Enter's claim at that very moment."""
+
+    def __init__(self, lock, claim):
+        self.lock, self.claim, self.refused = lock, claim, None
+
+    def __enter__(self):
+        self.lock.acquire()
+
+    def __exit__(self, *exc):
+        self.lock.release()
+        claim, self.claim = self.claim, None
+        if claim is not None:
+            from tuxtalk import virtual_keyboard
+            try:
+                claim()
+                self.refused = False
+            except virtual_keyboard.GaveUp:
+                self.refused = True
+
+
 def test_a_send_about_to_claim_its_enter_when_a_recording_begins_stays_held(sent, monkeypatch):
-    """Counted, then held: an Enter claimed in between went out at the
-    start of the next recording (Codex, checking the fix)."""
-    from tuxtalk import focused_window, virtual_keyboard
+    """The claim's checks pass, then the next recording begins: an Enter
+    claimed the moment that recording was counted, before its send was held,
+    went out as the user started talking again."""
+    from tuxtalk import focused_window
     monkeypatch.setattr(focused_window, "look", lambda: CHAT[:2])
     monkeypatch.setattr(focused_window, "destination", lambda: CHAT)
     monkeypatch.setattr(send_countdown, "_send_right_away", lambda pending: None)
     pipeline.send_automatically(" ", "type", send_countdown.Message(CHAT, has_words=True))
-    pending = send_countdown._pending
-    take = send_countdown._claim(pending)          # the claim's checks pass...
-    send_countdown.recording_begins()              # ...then the next recording begins
-    with pytest.raises(virtual_keyboard.GaveUp):
-        take()                                     # right before the Enter goes down
+    take = send_countdown._claim(send_countdown._pending)
+    lock = _LockThatLetsAClaimIn(send_countdown._send_lock, take)
+    monkeypatch.setattr(send_countdown, "_send_lock", lock)
+    send_countdown.recording_begins()
+    assert lock.refused is True
 
+
+def test_a_dictation_typed_right_after_the_send_keeps_its_undo(real_worker, monkeypatch):
+    """The Enter went down, and before its timer thread had queued the
+    forgetting, the next dictation was typed: forgotten after it, "undo
+    that", "edit that" and voice moves lost the new dictation, and "edit
+    that" said it had been sent."""
+    from tuxtalk import delivery, focused_window
+
+    def deliver_text(text, mode, one_block=False, *, where):
+        rs.state.last_inserted_text = text
+        return "ok"
+    monkeypatch.setattr(delivery, "deliver_text", deliver_text)
+    monkeypatch.setattr(focused_window, "look", lambda: CHAT[:2])
+    monkeypatch.setattr(focused_window, "destination", lambda: CHAT)
+    monkeypatch.setattr(rs.state, "sent", None)
+
+    def press_key(key, why, claim=None):
+        # The next dictation, typed by the worker while this thread is held up.
+        real_worker.submit(lambda: delivery.inject_text("How are you? ", "type"))
+        assert real_worker.drain(5)
+        return True
+    monkeypatch.setattr(keyboard_output, "press_key", press_key)
+    assert pipeline.press_key("ENTER", "Send each dictation automatically is on")
+    assert real_worker.drain(5)
+    assert rs.state.last_inserted_text == "How are you? " and rs.state.sent is None
 
 def test_an_enter_from_the_send_timer_forgets_in_order_with_the_typing(real_worker, monkeypatch):
     """The automatic send's Enter goes from a timer thread. Forgotten there

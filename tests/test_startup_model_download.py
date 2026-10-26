@@ -2,8 +2,9 @@
 
 Cancel on the startup "Download model?" question is honoured on NVIDIA setups
 too, not taken for a CUDA failure that the CUDA fallback answers by
-downloading without asking. And a startup download's dialogs run before
-Gtk.main() is live on another thread, or they crash the service.
+downloading without asking. And a startup download's windows are made and
+run on GTK's own thread (gtk_loop), the one Gtk.main() runs on, never the
+service's main thread, which only one thread may drive.
 """
 from types import SimpleNamespace
 

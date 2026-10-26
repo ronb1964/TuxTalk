@@ -93,12 +93,14 @@ def _after_the_words(outcome: str, said: str, press: str, space: str, chunk_role
 
 def press_key(key: str, why: str, claim=None) -> bool:
     """keyboard_output.press_key, then the dictation behind the key is
-    forgotten, in order with the typing: an automatic send presses its Enter
-    on a timer thread, and forgotten from there it could take a dictation
-    typed since with it."""
+    forgotten, in order with the typing. An automatic send presses its Enter
+    on a timer thread, and a dictation can be typed after the key and before
+    the forgetting is queued, so the deliveries are counted before the key:
+    one more by the time it runs is a dictation the key didn't send."""
+    typed = rs.state.deliveries
     pressed = keyboard_output.press_key(key, why, claim=claim)
     if pressed:
-        dictation_worker.in_order(lambda: last_dictation.forget_after_key(key, why))
+        dictation_worker.in_order(lambda: last_dictation.forget_after_key(key, why, typed))
     return pressed
 
 

@@ -434,7 +434,6 @@ def _dropped_as_silent(beeps_on: bool, notify_on: bool) -> bool:
 def _dropped_as_a_tap(beeps_on: bool, notify_on: bool) -> bool:
     """A press too short to be a dictation: cancel it. A tap that held a
     pending send leaves that text unsent, as it is."""
-    # Before the space below: the time typing it takes isn't part of the press.
     held_ms = int((time.time() - (rs.state.press_t0 or time.time())) * 1000)
     if rs.state.held_send and send_countdown.owes_space() and not rs.state.chunks_submitted:
         # The hotkey that held the send is up now; a tap leaves the text as

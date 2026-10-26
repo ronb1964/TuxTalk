@@ -133,6 +133,7 @@ def inject_text(text: str, injection_mode: str, one_block: bool = False, into=No
             landed = send_countdown.landed(before, after)
     if message is not None:
         message.add(outcome, landed)
+    rs.state.deliveries += 1
     return outcome
 
 
