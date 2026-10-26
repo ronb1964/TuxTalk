@@ -95,7 +95,7 @@ chmod +x ~/AppImages/TuxTalk-v*.AppImage
 ```
 
 ### Step 5: Ask Permission for Fresh Start
-- Say: "I need to run `./fresh-start-for-testing.sh` which will kill all TuxTalk processes, remove AppImage config/data, CUDA libs, cached models, and the GNOME extension. Your dev environment stays untouched. Is that okay?"
+- Say: "I need to run `./fresh-start-for-testing.sh` which will kill all TuxTalk processes, remove AppImage config/data, CUDA libs, cached models, and the GNOME extension. Your dev settings and data stay, but the speech and AI models are shared with dev, so dev downloads them again afterwards. Is that okay?"
 - WAIT for explicit "yes" or "go ahead"
 
 ### Step 6: Run Fresh Start and Verify

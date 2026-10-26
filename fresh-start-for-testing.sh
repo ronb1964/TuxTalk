@@ -1,7 +1,9 @@
 #!/bin/bash
-# TuxTalk Fresh Start Script - Cleans ONLY AppImage environment
-# Dev environment (~/.config/tuxtalk-dev/ and ~/.local/share/TuxTalk-dev/, plus
-# their pre-rename talktype-dev / TalkType-dev links) is preserved!
+# TuxTalk Fresh Start Script - Cleans the AppImage environment
+# Dev's settings and data (~/.config/tuxtalk-dev/ and ~/.local/share/TuxTalk-dev/,
+# plus their pre-rename talktype-dev / TalkType-dev links) are kept. The speech
+# and AI models in ~/.cache/huggingface are shared with dev, so they go too and
+# dev downloads them again.
 # Since the 0.15.0 rename it clears both names: TuxTalk and the old TalkType.
 #
 #   ./fresh-start-for-testing.sh                # clean up before a release test
@@ -30,8 +32,8 @@ fi
 echo "🧹 TuxTalk AppImage Fresh Start Cleanup"
 echo "========================================"
 echo ""
-echo "NOTE: This ONLY cleans AppImage environment."
-echo "Your dev environment stays intact!"
+echo "NOTE: This cleans the AppImage environment. Your dev settings and data stay;"
+echo "the shared speech and AI models go, and dev downloads them again."
 echo ""
 
 # 1. Kill all TuxTalk (and old TalkType) processes
@@ -90,13 +92,9 @@ if [ -d ~/.cache/huggingface/hub ]; then
 else
     echo "   ✓ No model cache found"
 fi
-# Also clear the xet cache: Hugging Face's shared download chunk cache, which
-# can be huge. Other apps keep their models (those are in hub/), but their
-# next download starts from scratch.
-if [ -d ~/.cache/huggingface/xet ]; then
-    rm -rf ~/.cache/huggingface/xet
-    echo "   ✓ HuggingFace xet chunk cache removed"
-fi
+# Hugging Face's xet chunk cache (~/.cache/huggingface/xet) is left alone:
+# TuxTalk downloads with HF_HUB_DISABLE_XET=1 and never fills it, so only
+# other apps' downloads are in it.
 
 # 5. Uninstall GNOME extension (both via gnome-extensions and direct folder removal)
 echo "5. Uninstalling GNOME extension..."
