@@ -189,8 +189,11 @@ def _no_real_speech_model(monkeypatch):
     loads the real one when none is in memory (Power Saving, _wake_model):
     seconds on a computer that has it, a 670 MB download in CI, where the
     suite ran into its 20-minute limit (2026-10-18). Tests of the loading
-    itself set engine.model to None."""
+    itself set engine.model to None. Nor what an earlier test's start or
+    failed wake left (engine.built_from, engine._wake_failed)."""
     monkeypatch.setattr(engine, "model", object())
+    monkeypatch.setattr(engine, "built_from", None)
+    monkeypatch.setattr(engine, "_wake_failed", False)
 
 
 @pytest.fixture(autouse=True)

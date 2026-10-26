@@ -280,7 +280,8 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     rs.state.is_recording = True
     if engine.model is None:
         # Power Saving let the model go: load it while the user talks.
-        threading.Thread(target=engine.wake, daemon=True, name="tt-wake-model").start()
+        threading.Thread(target=engine.wake, kwargs={"fresh": True}, daemon=True,
+                         name="tt-wake-model").start()
     input_device_idx = follow_system_default(input_device_idx)
     try:
         open_input_stream(input_device_idx)

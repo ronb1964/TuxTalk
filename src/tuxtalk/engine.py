@@ -23,6 +23,12 @@ SAMPLE_RATE = 16000
 # The loaded speech model, built by main(). None until then, and while Power
 # Saving rests it (rest) until the next dictation loads it (wake).
 model = None
+# The settings main() built it from, after guard_large_v3_without_cuda and
+# build_or_exit's fallback changed them: what wake loads again, rather than
+# the model the settings file names.
+built_from = None
+# The last wake failed: only the next recording's start tries again.
+_wake_failed = False
 
 _model_lock = threading.Lock()
 
@@ -185,25 +191,34 @@ def rest(minutes):
                 "let go of the speech model until the next dictation")
 
 
-def wake():
+def wake(fresh: bool = False):
     """The speech model, loaded again first if Power Saving let it go, or
-    None if it won't load. Called when a recording starts and before every
-    transcription."""
-    global model
+    None if it won't load. Called with *fresh* when a recording starts,
+    and without before its transcription, which doesn't try again after
+    the start's try failed: one dictation, one notice."""
+    global model, _wake_failed
     with _model_lock:
         if model is None:
+            if _wake_failed and not fresh:
+                return None
             logger.info("Power saving: loading the speech model again for this dictation")
             try:
                 # Not build_or_exit: its fallback saves another model
                 # over the user's choice, which a graphics card that fails
                 # once on waking shouldn't do, and its exit would end only
                 # this dictation's thread. The next dictation tries again.
-                model = build(load_config())
-            except ModelUnavailable as e:
-                logger.error(f"Power saving: the speech model wouldn't load again: {e}")
+                # The model that was running, after the startup checks.
+                model = build(built_from or load_config())
+            except Exception as e:
+                # On a thread of its own when a recording starts: anything
+                # not caught here would be lost to the log.
+                logger.error(f"Power saving: the speech model wouldn't load again: {e}",
+                             exc_info=not isinstance(e, ModelUnavailable))
+                _wake_failed = True
                 notify_module.notify("The speech model wouldn't load",
                 "Choose Restart Service in the TuxTalk menu, or pick a model in Preferences.")
                 return None
+            _wake_failed = False
             notify_tray()
         return model
 

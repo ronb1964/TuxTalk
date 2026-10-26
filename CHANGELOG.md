@@ -194,6 +194,13 @@ before 0.15.0, so older entries use that name.
   had already been cut at a pause still got typed if it was waiting its
   turn or being transcribed. Esc drops those now. Phrases already typed
   stay where they are.
+- Power Saving lets go of the speech model after a while without
+  dictation, and loads it again when you next press the key. It loaded the
+  model named in your settings, which isn't always the one that was running:
+  if your model wouldn't load at startup and TuxTalk used another one, it
+  tried the broken one again after every rest. Now it loads the one that
+  was running. And if it fails, you get one notice for that dictation, not
+  two.
 
 ## [0.18.2] - 2026-10-23
 

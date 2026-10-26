@@ -229,3 +229,39 @@ def test_a_model_that_wont_load_again_is_said_not_raised(monkeypatch):
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: shown.append(body))
     assert engine.wake() is None
     assert shown and "Restart Service" in shown[0]
+
+
+def test_waking_loads_the_model_that_was_running_not_the_settings_file(monkeypatch):
+    """Large-v3 without CUDA runs as Medium, and a model that won't load
+    runs as the nearest one downloaded; after a rest it woke as the file's
+    model again: Large-v3 on the processor, or the one that failed."""
+    built = []
+    running = types.SimpleNamespace(model="medium", device="cpu")
+    monkeypatch.setattr(engine, "model", None)
+    monkeypatch.setattr(engine, "built_from", running)
+    monkeypatch.setattr(engine, "load_config", lambda: pytest.fail("read the settings file"))
+    monkeypatch.setattr(engine, "build", lambda settings: built.append(settings) or _Engine())
+    monkeypatch.setattr(engine, "notify_tray", lambda: None)
+    assert isinstance(engine.wake(fresh=True), _Engine)
+    assert built == [running]
+
+
+def test_a_failed_wake_is_tried_once_per_dictation(monkeypatch, caplog):
+    """The recording's start tried, then its transcription tried again: two
+    failures and two notices for one dictation. And an error other than a
+    missing model never reached the log."""
+    tries, shown = [], []
+    monkeypatch.setattr(engine, "model", None)
+    monkeypatch.setattr(engine, "built_from", types.SimpleNamespace(model="small", device="cpu"))
+
+    def broken(settings):
+        tries.append(settings)
+        raise RuntimeError("CUDA driver version is insufficient")
+    monkeypatch.setattr(engine, "build", broken)
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: shown.append(title))
+    with caplog.at_level("ERROR", logger="tuxtalk.engine"):
+        assert engine.wake(fresh=True) is None          # the recording starts
+        assert engine.wake() is None                    # its transcription
+    assert len(tries) == 1 and len(shown) == 1
+    assert "CUDA driver version is insufficient" in caplog.text
+    assert engine.wake(fresh=True) is None and len(tries) == 2     # the next dictation tries

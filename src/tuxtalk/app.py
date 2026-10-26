@@ -274,6 +274,7 @@ def _load_model(cfg, gtk_ok: bool) -> None:
 
     if engine.model is None:
         engine.model = engine.build_or_exit(cfg)
+    engine.built_from = cfg
     logger.info(f"Configuration: model={cfg.model}, device={cfg.device}, "
                 f"language={cfg.language or 'auto'}, auto_space={cfg.auto_space}, "
                 f"auto_period={cfg.auto_period}")
