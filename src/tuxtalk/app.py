@@ -16,7 +16,8 @@ import signal
 import sys
 import threading
 
-from . import engine, keyboard_output, recording, single_instance, tray_link, virtual_keyboard
+from . import (engine, gtk_loop, keyboard_output, recording, single_instance, tray_link,
+               virtual_keyboard)
 from . import live_settings as live
 from . import recording_state as rs
 from .config import load_config, load_custom_commands
@@ -186,8 +187,9 @@ def _log_what_runs(cfg) -> None:
 
 
 def _start_gtk(cfg) -> bool:
-    """Make what needs GTK's main loop (the stand-in D-Bus service and the
-    recording indicator); whether GTK could be set up at all."""
+    """Start GTK's main loop and make what needs it, the stand-in D-Bus
+    service and the recording indicator, on its thread; whether GTK could be
+    set up at all."""
     global dbus_service
     dbus_service = None
     recording.indicator = None
@@ -195,13 +197,20 @@ def _start_gtk(cfg) -> bool:
         import gi
         gi.require_version('Gtk', '3.0')
         from gi.repository import Gtk  # noqa: F401  (fails here when GTK can't load)
-        dbus_service = _start_dbus_stand_in(cfg)
-        if cfg.recording_indicator:
-            _make_indicator(cfg)
-        return True
     except Exception as e:
         logger.error(f"GTK initialization failed: {e}", exc_info=True)
         return False
+    gtk_loop.start()
+    gtk_loop.call(_make_gtk_parts, cfg)
+    return True
+
+
+def _make_gtk_parts(cfg) -> None:
+    """On GTK's thread: the stand-in D-Bus service, and the indicator if it's on."""
+    global dbus_service
+    dbus_service = _start_dbus_stand_in(cfg)
+    if cfg.recording_indicator:
+        _make_indicator(cfg)
 
 
 def _start_dbus_stand_in(cfg):
@@ -257,41 +266,19 @@ def _make_indicator(cfg) -> None:
 
 
 def _load_model(cfg, gtk_ok: bool) -> None:
-    """Load the speech model, and start GTK's main loop when GTK is there."""
-    # Outside _start_gtk's try: a model that fails to load is not a GTK
-    # failure, and must not be loaded a second time below.
-    if gtk_ok:
-        # If the model still has to be downloaded, do it NOW, before the GTK
-        # loop thread starts. The download shows GTK dialogs and runs them on
-        # this thread; with Gtk.main() already running on the thread below,
-        # two threads would drive GTK at once and crash the service. An
-        # already-downloaded model (the normal case) loads later, after the
-        # loop is up.
-        from .model_helper import is_model_cached_fast
-        if not is_model_cached_fast(cfg.model):
-            engine.model = engine.build_or_exit(cfg)
-        _start_gtk_loop()
-
-    if engine.model is None:
+    """Load the speech model. One still to be downloaded is downloaded on
+    GTK's thread, which its windows need; one already downloaded (the
+    normal case) loads here, while GTK's loop answers D-Bus meanwhile."""
+    from .model_helper import is_model_cached_fast
+    if gtk_ok and not is_model_cached_fast(cfg.model):
+        engine.model = gtk_loop.call(engine.build_or_exit, cfg)
+    else:
         engine.model = engine.build_or_exit(cfg)
     engine.built_from = cfg
     logger.info(f"Configuration: model={cfg.model}, device={cfg.device}, "
                 f"language={cfg.language or 'auto'}, auto_space={cfg.auto_space}, "
                 f"auto_period={cfg.auto_period}")
     engine.notify_tray()
-
-
-def _start_gtk_loop() -> None:
-    """One GTK main loop, on its own thread, for D-Bus and the indicator."""
-    from gi.repository import Gtk
-
-    def run_gtk_loop():
-        print("Starting GTK main loop...")
-        Gtk.main()
-
-    threading.Thread(target=run_gtk_loop, daemon=True).start()
-    engine.gtk_loop_running = True
-    print("GTK main loop started in background thread")
 
 
 def _run_service_entry():

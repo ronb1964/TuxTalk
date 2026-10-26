@@ -20,6 +20,7 @@ from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
 from tuxtalk import keyboard_output
 from tuxtalk import engine
+from tuxtalk import gtk_loop
 from tuxtalk import dictation_text
 from tuxtalk import delivery
 from tuxtalk import type_at_pause
@@ -98,7 +99,7 @@ def test_a_dictation_anywhere_else_is_typed_and_kept(desktop, monkeypatch):
 
 
 def test_beep_and_label_say_it_without_a_notification(desktop, monkeypatch):
-    monkeypatch.setattr(engine, "gtk_loop_running", True)
+    monkeypatch.setattr(gtk_loop, "_thread", object())       # the label can show
     monkeypatch.setenv("DISPLAY", ":0")
     desktop["password"] = True
     dictate(monkeypatch)
@@ -108,7 +109,7 @@ def test_beep_and_label_say_it_without_a_notification(desktop, monkeypatch):
 @pytest.mark.parametrize("beeps_on, label_can_show", [(False, True), (True, False)])
 def test_a_notification_says_it_when_beep_or_label_cant(desktop, monkeypatch, beeps_on,
                                                         label_can_show):
-    monkeypatch.setattr(engine, "gtk_loop_running", label_can_show)
+    monkeypatch.setattr(gtk_loop, "_thread", object() if label_can_show else None)
     monkeypatch.setenv("DISPLAY", ":0")
     desktop["password"] = True
     dictate(monkeypatch, beeps_on=beeps_on)

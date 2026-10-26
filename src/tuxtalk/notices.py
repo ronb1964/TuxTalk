@@ -11,8 +11,8 @@ from . import (
     beeps,
     delivery_notices,
     edit_notices,
-    engine,
     focused_window,
+    gtk_loop,
     uinput_helper,
 )
 from . import live_settings as live
@@ -111,7 +111,7 @@ def password_field_refused(beeps_on: bool) -> None:
     beeps.beep(beeps_on, *CANCEL_BEEP)
     from . import screen_message
     screen_message.show_over_active_window(delivery_notices.PASSWORD_FIELD_LABEL)
-    if not (beeps_on and engine.gtk_loop_running and os.environ.get("DISPLAY")):
+    if not (beeps_on and gtk_loop.running() and os.environ.get("DISPLAY")):
         notify_module.notify(delivery_notices.PASSWORD_FIELD_TITLE,
                              delivery_notices.PASSWORD_FIELD_NOTICE)
 

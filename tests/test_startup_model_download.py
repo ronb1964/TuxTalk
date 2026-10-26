@@ -11,6 +11,7 @@ import pytest
 
 from tuxtalk import model_helper
 from tuxtalk import engine
+from tuxtalk import gtk_loop
 
 
 def _settings(model="small", device="cuda"):
@@ -87,16 +88,25 @@ def test_a_real_cuda_failure_still_falls_back_to_cpu(monkeypatch):
     assert calls == ["cuda", "cpu"]
 
 
-def test_a_needed_download_happens_before_the_gtk_thread_starts(service_main):
-    """Only one thread may drive GTK: the download dialogs must run before
-    Gtk.main() starts on its background thread."""
+def test_a_needed_download_runs_on_gtk_s_thread(service_main):
+    """Only one thread may drive GTK: the download's windows run on the
+    thread Gtk.main() runs on, not the service's main thread."""
     started = service_main(cached=False)
-    assert started.index("loads the speech model") < started.index("starts the GTK loop")
+    assert started.index("starts the GTK loop") < started.index("loads the speech model")
+    assert engine.build_or_exit in started.on_gtk
 
 
-def test_a_downloaded_model_loads_after_the_gtk_thread_starts(service_main):
+def test_a_downloaded_model_loads_while_gtk_answers_d_bus(service_main):
     started = service_main(cached=True)
     assert started.index("starts the GTK loop") < started.index("loads the speech model")
+    assert engine.build_or_exit not in started.on_gtk
+
+
+def test_the_indicator_and_the_d_bus_stand_in_are_made_on_gtk_s_thread(service_main):
+    """Made on the main thread, they were run by Gtk.main() on another."""
+    started = service_main()
+    assert started.index("starts the GTK loop") < started.index("offers its D-Bus service")
+    assert [fn.__name__ for fn in started.on_gtk] == ["_make_gtk_parts"]
 
 
 @pytest.mark.parametrize("wanted,downloaded,cuda,expected", [
@@ -191,7 +201,7 @@ def test_power_saving_never_opens_a_download_off_the_gtk_thread(monkeypatch):
 
     shown = []
     monkeypatch.setattr(engine, "model", None)
-    monkeypatch.setattr(engine, "gtk_loop_running", True)
+    monkeypatch.setattr(gtk_loop, "_thread", object())       # GTK runs on another thread
     monkeypatch.setattr(engine, "load_config", lambda: _settings(device="cpu"))
     checked = []
     monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda m: checked.append(m) or False)
@@ -210,7 +220,7 @@ def test_the_service_treats_broken_files_as_an_unavailable_model(monkeypatch):
         asked.append(k.get("dialogs"))
         raise model_helper.BrokenModelFiles("small won't load")
 
-    monkeypatch.setattr(engine, "gtk_loop_running", True)
+    monkeypatch.setattr(gtk_loop, "_thread", object())       # GTK runs on another thread
     monkeypatch.setattr(model_helper, "download_model_with_progress", broken)
     with pytest.raises(engine.ModelUnavailable):
         engine.build(_settings(device="cpu"))

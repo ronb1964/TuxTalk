@@ -829,8 +829,8 @@ def service_main(monkeypatch):
     """The dictation service's main(): *cached* says whether the speech model
     is already downloaded. The service's own globals are put back afterwards."""
     import types
-    from tuxtalk import (app, config, custom_words, desktop_identity, input_backends,
-                         model_helper, ui_style, virtual_keyboard)
+    from tuxtalk import (app, config, custom_words, desktop_identity, gtk_loop,
+                         input_backends, model_helper, ui_style, virtual_keyboard)
     import tuxtalk.dbus_service
     from tuxtalk import audio_duck
     done = _Steps()
@@ -841,7 +841,7 @@ def service_main(monkeypatch):
     monkeypatch.setattr(app, "dbus_service", app.dbus_service)
     for name in ("indicator", "spectrum_processor"):
         monkeypatch.setattr(recording, name, getattr(recording, name))
-    monkeypatch.setattr(engine, "gtk_loop_running", engine.gtk_loop_running)
+    monkeypatch.setattr(gtk_loop, "_thread", gtk_loop._thread)
     monkeypatch.setattr(keyboard_output, "key_delay_ms", keyboard_output.key_delay_ms)
     for name in ("log_transcripts", "usage_stats", "restore_clipboard", "pause_media",
                  "duck_audio", "paste_last_hotkey", "commands", "words"):
@@ -862,12 +862,11 @@ def service_main(monkeypatch):
         def __init__(self, **options):
             done.append(("shows the indicator", options))
 
-    class Thread:
-        def __init__(self, target, daemon=None):
-            self.target = target
+    done.on_gtk = []        # what was run on GTK's thread (gtk_loop.call)
 
-        def start(self):
-            done.append("starts the GTK loop")
+    def on_gtk_thread(fn, *args):
+        done.on_gtk.append(fn)
+        return fn(*args)
 
     def ready():
         done.append(("says it is ready",
@@ -885,7 +884,8 @@ def service_main(monkeypatch):
     monkeypatch.setattr(audio_duck, "restore_left_over", lambda: None)
     monkeypatch.setattr(tuxtalk.dbus_service, "TuxTalkDBusService", Bus)
     monkeypatch.setattr(app, "RecordingIndicator", Indicator)
-    monkeypatch.setattr(app, "threading", types.SimpleNamespace(Thread=Thread))
+    monkeypatch.setattr(gtk_loop, "start", step("starts the GTK loop"))
+    monkeypatch.setattr(gtk_loop, "call", on_gtk_thread)
     monkeypatch.setattr(engine, "build_or_exit", step("loads the speech model", "model"))
     monkeypatch.setattr(engine, "notify_tray", step("tells the tray what runs"))
     monkeypatch.setattr(app, "_mark_service_ready", ready)

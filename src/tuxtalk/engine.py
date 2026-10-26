@@ -9,7 +9,7 @@ import sys
 import threading
 import time
 
-from . import hallucinations, silence, tray_link
+from . import gtk_loop, hallucinations, silence, tray_link
 from . import live_settings as live
 from . import notify as notify_module
 from .config import Settings, load_config
@@ -407,12 +407,6 @@ def _build_parakeet_gpu_model(settings: Settings):
 # which could say "GPU (Vulkan)" while the processor does the work.
 _running_engine = None
 
-# True once Gtk.main() runs on its own thread. From then on the service's main
-# thread must not open the model download dialogs: two threads driving GTK at
-# once crash the service.
-gtk_loop_running = False
-
-
 def _record_engine(model, device):
     """Remember what was really loaded (see _running_engine)."""
     global _running_engine
@@ -451,7 +445,7 @@ def build(settings: Settings):
             settings.model,
             device=settings.device,
             compute_type=compute_type,
-            dialogs=not gtk_loop_running,
+            dialogs=gtk_loop.here(),
         )
         if model is None:
             raise ModelUnavailable(
@@ -508,7 +502,7 @@ def _cpu_fallback_after_cuda(settings, error):
             device="cpu",
             compute_type="int8",
             show_confirmation=False,
-            dialogs=not gtk_loop_running,
+            dialogs=gtk_loop.here(),
         )
     except BrokenModelFiles as cpu_e:
         raise ModelWontLoad(str(cpu_e)) from cpu_e
