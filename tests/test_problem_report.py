@@ -2,6 +2,7 @@
 in full before the person shares it anywhere. TuxTalk sends nothing itself.
 """
 import time
+import types
 import urllib.parse
 
 import pytest
@@ -211,27 +212,18 @@ def test_the_problems_tab_opens_with_a_report_button(monkeypatch):
         dialog.destroy()
 
 
-def test_the_report_opens_in_front_of_help(window, monkeypatch):
-    """Both kept above other windows, KDE put the new Report window behind
-    Help, where it couldn't be seen. Help steps down while it's open, and
-    back up once it's closed."""
-    from gtk_text import widgets
-    kept_above = []
-    monkeypatch.setattr(Gtk.Dialog, "show_all", lambda self: None)
-    monkeypatch.setattr(Gtk.Dialog, "present", lambda self: None)
-    monkeypatch.setattr(Gtk.Dialog, "set_keep_above", lambda self, above: kept_above.append(above))
-    dialog = help_dialog.show_help_dialog(tab="problems")
+def test_the_report_window_asks_to_come_to_the_front(monkeypatch):
+    """Only shown, KDE opened it behind Help, where it couldn't be seen."""
+    presented = []
+    monkeypatch.setattr(Gtk.Window, "present", lambda self: presented.append(self.get_title()))
+    monkeypatch.setattr(Gtk.Window, "show_all", lambda self: None)
+    monkeypatch.setattr(problem_report_window.threading, "Thread",
+                        lambda **k: types.SimpleNamespace(start=lambda: None))
+    report = problem_report_window.ReportWindow()
     try:
-        button = next(w for w in widgets(dialog) if isinstance(w, Gtk.Button)
-                      and w.get_label() == "Report a Problem\u2026")
-        button.clicked()
-        assert kept_above == [True, False]
-        report = next(w for w in Gtk.Window.list_toplevels()
-                      if w.get_title() == "Report a Problem")
-        report.destroy()
-        assert kept_above == [True, False, True]
+        assert presented == ["Report a Problem"]
     finally:
-        dialog.destroy()
+        report.window.destroy()
 
 
 def test_help_opens_the_report_as_a_window_of_its_own(window, monkeypatch):
