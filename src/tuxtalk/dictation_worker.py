@@ -24,7 +24,8 @@ class DictationWorker:
 
     def __init__(self):
         self._queue = queue.Queue()
-        threading.Thread(target=self._run, daemon=True, name="tt-dictation").start()
+        self.thread = threading.Thread(target=self._run, daemon=True, name="tt-dictation")
+        self.thread.start()
 
     def submit(self, job) -> None:
         self._queue.put(job)
@@ -72,6 +73,15 @@ def worker() -> DictationWorker:
 def submit(job) -> None:
     """Run *job* on the worker, after everything submitted before it."""
     worker().submit(job)
+
+
+def in_order(job) -> None:
+    """Run *job* now when on the worker, within what it's doing; from any
+    other thread, after what the worker has been given (submit)."""
+    if _instance is not None and threading.current_thread() is getattr(_instance, "thread", None):
+        job()
+    else:
+        submit(job)
 
 
 def idle() -> bool:

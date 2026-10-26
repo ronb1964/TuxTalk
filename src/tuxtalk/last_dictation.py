@@ -3,6 +3,8 @@ Recent Dictations (one per recording, added to phrase by phrase when Type
 at pause is on), and its screen copy, the text it believes is in the box,
 which voice edits and "edit that" work from. The copy is dropped as soon as
 it can't be trusted."""
+import time
+
 from . import focused_window
 from . import recording_state as rs
 from .normalize import LINE_BREAK
@@ -57,6 +59,17 @@ def remember_shown(piece: str, chunked: bool, ok: bool, serial: int) -> None:
 def _where_typed():
     """(class, which window) the last piece went to, as focused_window looks."""
     return rs.state.last_inserted_window, rs.state.last_inserted_where[1]
+
+
+def forget_after_key(key: str, why: str) -> None:
+    """TuxTalk pressed *key* ("ENTER" or "TAB") after a dictation, for *why*:
+    what's behind it is out of reach of undo, "edit that" and voice moves,
+    which would count on a dictation that's gone. After Enter, "edit that"
+    says it was sent. Run in order with the typing (dictation_worker.in_order),
+    so it can't forget a dictation typed after the key."""
+    rs.state.last_inserted_text, rs.state.nav_context = "", None
+    if key == "ENTER":
+        rs.state.sent = {"at": time.time(), "automatic": why.startswith("Send each")}
 
 
 def trim_shown(tail: str, count: int) -> None:

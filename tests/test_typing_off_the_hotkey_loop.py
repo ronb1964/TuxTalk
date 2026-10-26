@@ -168,3 +168,26 @@ def test_a_send_about_to_claim_its_enter_when_a_recording_begins_stays_held(sent
     send_countdown.recording_begins()              # ...then the next recording begins
     with pytest.raises(virtual_keyboard.GaveUp):
         take()                                     # right before the Enter goes down
+
+
+def test_an_enter_from_the_send_timer_forgets_in_order_with_the_typing(real_worker, monkeypatch):
+    """The automatic send's Enter goes from a timer thread. Forgotten there
+    at once, the dictation memory could take a dictation the worker typed
+    since with it, and "undo that" found nothing. It's forgotten on the
+    worker, after what it was given before, and before what comes after."""
+    monkeypatch.setattr(keyboard_output, "press_key", lambda key, why, claim=None: True)
+    typing, may_finish = threading.Event(), threading.Event()
+
+    def still_typing():
+        rs.state.last_inserted_text = "See you at noon."
+        typing.set()
+        assert may_finish.wait(5)
+    real_worker.submit(still_typing)
+    assert typing.wait(5)
+    assert pipeline.press_key("ENTER", "Send each dictation automatically is on")
+    assert rs.state.last_inserted_text == "See you at noon."     # not from this thread
+    real_worker.submit(lambda: setattr(rs.state, "last_inserted_text", "How are you? "))
+    may_finish.set()
+    assert real_worker.drain(5)
+    assert rs.state.last_inserted_text == "How are you? "
+    assert rs.state.sent is not None

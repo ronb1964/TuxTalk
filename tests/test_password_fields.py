@@ -135,7 +135,7 @@ def test_type_at_pause_types_nothing_of_its_own_into_a_password_field(desktop, m
 def test_saying_only_press_enter_still_presses_enter_there(desktop, monkeypatch):
     """Type the password by hand, then say "press enter" to log in."""
     pressed = []
-    monkeypatch.setattr(keyboard_output, "press_key", lambda key, why: pressed.append(why) or True)
+    monkeypatch.setattr(keyboard_output, "press_key", lambda key, why, claim=None: pressed.append(why) or True)
     desktop["password"] = True
     dictate(monkeypatch, said="press enter")
     assert pressed and desktop["typed"] == [] and desktop["labels"] == []
@@ -144,7 +144,7 @@ def test_saying_only_press_enter_still_presses_enter_there(desktop, monkeypatch)
 def test_saying_only_press_tab_still_presses_tab_there(desktop, monkeypatch):
     """Move from the password box to the next one by voice."""
     pressed = []
-    monkeypatch.setattr(keyboard_output, "press_key", lambda key, why: pressed.append(key) or True)
+    monkeypatch.setattr(keyboard_output, "press_key", lambda key, why, claim=None: pressed.append(key) or True)
     desktop["password"] = True
     dictate(monkeypatch, said="Press tab.")
     assert pressed == ["TAB"] and desktop["typed"] == [] and desktop["labels"] == []
@@ -152,7 +152,7 @@ def test_saying_only_press_tab_still_presses_tab_there(desktop, monkeypatch):
 
 def test_words_before_press_tab_are_not_typed_there(desktop, monkeypatch):
     pressed = []
-    monkeypatch.setattr(keyboard_output, "press_key", lambda key, why: pressed.append(key) or True)
+    monkeypatch.setattr(keyboard_output, "press_key", lambda key, why, claim=None: pressed.append(key) or True)
     desktop["password"] = True
     dictate(monkeypatch, said="swordfish press tab")
     assert pressed == [] and desktop["typed"] == [] and desktop["history"] == []

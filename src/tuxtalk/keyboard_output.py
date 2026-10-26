@@ -146,12 +146,6 @@ def press_key(key: str, why: str, claim=None) -> bool:
         if claim is None and modifier_hotkeys.stuck():
             notify_module.notify(*delivery_notices.key_not_pressed(key))
         return False
-    # What's behind the key is out of reach, a voice move's memory of the
-    # cursor included: it would count on a dictation that's gone.
-    rs.state.last_inserted_text, rs.state.nav_context = "", None
-    if key == "ENTER":
-        # "edit that" right after this says why there's nothing to edit.
-        rs.state.sent = {"at": time.time(), "automatic": why.startswith("Send each")}
     logger.info(f"Pressed {key.title()} ({why})")
     return True
 

@@ -65,7 +65,7 @@ class RecordingState:
     # the desktop (see hotkeys._hide_modifier_hotkey), or None.
     hidden_key: int | None = None
     # The last Enter TuxTalk pressed: {"at", "automatic"}, or None
-    # (keyboard_output.press_key). "edit that" just after it explains itself.
+    # (last_dictation.forget_after_key). "edit that" just after it explains itself.
     sent: object = None
     # Speech the pause detector heard after its last cut, taken at the stop:
     # 0.0 means the rest of the recording is room noise only.

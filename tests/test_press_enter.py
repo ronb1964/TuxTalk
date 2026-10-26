@@ -184,7 +184,7 @@ def test_press_enter_key_uses_the_output_backend_and_forgets_undo(monkeypatch):
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: Backend())
     monkeypatch.setattr("time.sleep", lambda s: None)
     rs.state.last_inserted_text = "See you at noon."
-    assert keyboard_output.press_key("ENTER", "test") is True
+    assert pipeline.press_key("ENTER", "test") is True
     assert pressed == [[((), "ENTER")]]
     # A sent message can't be backspaced away.
     assert rs.state.last_inserted_text == ""

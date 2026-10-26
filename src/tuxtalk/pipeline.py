@@ -68,9 +68,9 @@ def press_said(key: str, chunk_role, after_words: bool = False, message=None) ->
                 notify_module.notify(*delivery_notices.key_not_pressed(key))
         return
     if after_words:
-        pressed = send_countdown.press_where_sent(key, why, message, keyboard_output.press_key)
+        pressed = send_countdown.press_where_sent(key, why, message, press_key)
     else:
-        pressed = keyboard_output.press_key(key, why)
+        pressed = press_key(key, why)
     if pressed and chunk_role is not None:
         type_at_pause.start_afresh(message)
 
@@ -91,6 +91,17 @@ def _after_the_words(outcome: str, said: str, press: str, space: str, chunk_role
             type_at_pause.start_afresh(message)
 
 
+def press_key(key: str, why: str, claim=None) -> bool:
+    """keyboard_output.press_key, then the dictation behind the key is
+    forgotten, in order with the typing: an automatic send presses its Enter
+    on a timer thread, and forgotten from there it could take a dictation
+    typed since with it."""
+    pressed = keyboard_output.press_key(key, why, claim=claim)
+    if pressed:
+        dictation_worker.in_order(lambda: last_dictation.forget_after_key(key, why))
+    return pressed
+
+
 def send_automatically(space: str, injection_mode: str, message) -> None:
     """"Send each dictation automatically": Enter where *message* went
     (send_countdown). Held when a newer recording has begun since, as a
@@ -99,7 +110,7 @@ def send_automatically(space: str, injection_mode: str, message) -> None:
     only a tap (or heard nothing) is over already: that's said, and the
     space left off goes in now, its key long up."""
     if send_countdown.send_automatically("Send each dictation automatically is on", message,
-                                         keyboard_output.press_key, type_onto_dictation, space,
+                                         press_key, type_onto_dictation, space,
                                          injection_mode):
         if rs.state.message.cancelled and not rs.state.is_recording:
             send_countdown.say_held()
