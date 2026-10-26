@@ -12,6 +12,7 @@ from tuxtalk import pipeline
 from tuxtalk import type_at_pause
 from tuxtalk import keyboard_output
 from tuxtalk import recording_state as rs
+from tuxtalk import send_countdown
 from tuxtalk.voice_edit_rules import spoken_edit
 from tuxtalk import live_settings as live
 from tuxtalk import engine
@@ -69,9 +70,9 @@ def editing(monkeypatch):
     monkeypatch.setattr(rs.state, "last_inserted_text", "We meet at three. ")
     monkeypatch.setattr(rs.state, "last_inserted_window", "org.kde.kwrite")
     monkeypatch.setattr(rs.state, "shown_text", None)
-    monkeypatch.setattr(rs.state, "edit_waiting", None)
-    monkeypatch.setattr(rs.state, "pending_boundary", None)
-    monkeypatch.setattr(rs.state, "held_cue", "")
+    monkeypatch.setattr(rs.state.message, "edit_waiting", None)
+    monkeypatch.setattr(rs.state.message, "held_mark", None)
+    monkeypatch.setattr(rs.state.message, "held_cue", "")
     monkeypatch.setattr(rs.state, "sent", None)
     return pressed, edits, problems
 
@@ -152,7 +153,7 @@ def test_a_switch_during_the_pause_after_edit_that_changes_nothing(editing, monk
 def test_the_wait_ends_with_the_recording(editing):
     _pressed, edits, _ = editing
     assert _said("Edit that.", "middle")
-    rs.state.recording_serial += 1                  # a new recording
+    rs.state.message = send_countdown.Message(serial=1)     # a new recording, its own
     assert not _said("Make it more formal.", "middle")
     assert edits == []
 
@@ -258,4 +259,4 @@ def test_edit_that_then_only_a_pause_isnt_sent_as_it_was(editing, monkeypatch):
     assert _said("Edit that.", "middle")                    # waits for what to change
     type_at_pause.end_in_a_pause(rs.state.message, False, True, True, "type")
     assert sent == [] and problems == ["edit_that_what"]
-    assert rs.state.edit_waiting is None
+    assert rs.state.message.edit_waiting is None

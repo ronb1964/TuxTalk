@@ -308,9 +308,9 @@ def handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: str
     if not live.voice_editing:
         return False
     from . import voice_navigation as nav
-    waiting, rs.state.edit_waiting = rs.state.edit_waiting, None
-    if waiting is not None and waiting["serial"] == rs.state.recording_serial:
-        instruction, target = raw, waiting["target"]
+    waiting, message.edit_waiting = message.edit_waiting, None
+    if waiting is not None:
+        instruction, target = raw, waiting
         # A click into another app during the pause: selecting there would
         # rewrite as many characters of its text.
         if keyboard_output.not_where_typed(focused_window.window_class()):
@@ -320,7 +320,7 @@ def handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: str
         instruction = voice_edit_rules.spoken_edit(raw)
         if instruction is None:
             return False
-        target = voice_commands.spoken_edit_target()
+        target = voice_commands.spoken_edit_target(message.serial)
         if not target:
             return voice_commands.refused_as_sent(beeps_on)
     logger.info(f"Voice command: edit that ({len(target)} characters)")
@@ -334,7 +334,7 @@ def handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: str
     if not instruction.strip():
         if chunk_role == "middle":
             # "edit that", then a pause: the next phrase says what to change.
-            rs.state.edit_waiting = {"serial": rs.state.recording_serial, "target": target}
+            message.edit_waiting = target
             logger.info("Voice edit: waiting for the next phrase to say what to change")
         else:
             notices.edit_problem("edit_that_what", beeps_on)
@@ -349,7 +349,7 @@ def handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: str
     # The text is selected now (and then replaced): undo's count and the
     # screen copy no longer match it, and nothing in it reaches the next phrase.
     rs.state.last_inserted_text = ""
-    type_at_pause.start_afresh()
+    type_at_pause.start_afresh(message, ended=False)
     last_dictation.forget_shown()
     if not selected:
         notices.edit_problem("shortcut_failed", beeps_on)

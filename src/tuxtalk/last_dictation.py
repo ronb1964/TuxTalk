@@ -8,18 +8,19 @@ from . import recording_state as rs
 from .normalize import LINE_BREAK
 
 
-def remember_said(text: str, chunked: bool, takes_back: str = "") -> str:
+def remember_said(text: str, chunked: bool, serial: int, takes_back: str = "") -> str:
     """Put *text* in Recent Dictations, one entry per recording: a phrase of
-    a recording typed at pauses (*chunked*) adds to its recording's entry.
+    a recording typed at pauses (*chunked*) adds to its recording's entry,
+    the one numbered *serial* (send_countdown.Message.serial).
     *takes_back* is the end of that entry a correction across a pause
     replaced ("Meet at three. " for "Meet at four"). Returns the entry as it
     was before, for unsay."""
     from . import history
     text = text.replace(LINE_BREAK, "\n")
-    same_recording = rs.state.said_serial == rs.state.recording_serial
+    same_recording = rs.state.said_serial == serial
     old = rs.state.said_text if chunked and same_recording else ""
     base = old[:len(old) - len(takes_back)] if takes_back and old.endswith(takes_back) else old
-    rs.state.said_serial, rs.state.said_text = rs.state.recording_serial, base + text
+    rs.state.said_serial, rs.state.said_text = serial, base + text
     if old:
         history.add_entry(rs.state.said_text, replaces=old)
     else:
@@ -38,12 +39,12 @@ def unsay(before: str) -> None:
         history.forget(said)
 
 
-def remember_shown(piece: str, chunked: bool, ok: bool) -> None:
-    """*piece* was just typed (*ok*) or tried: add it to this recording's
-    screen copy. The copy is only trusted while every piece landed, in one
-    window, one after the other."""
-    if not (chunked and rs.state.shown_serial == rs.state.recording_serial):
-        rs.state.shown_serial, rs.state.shown_text = rs.state.recording_serial, ""
+def remember_shown(piece: str, chunked: bool, ok: bool, serial: int) -> None:
+    """*piece* was just typed (*ok*) or tried: add it to the screen copy of
+    recording *serial*. The copy is only trusted while every piece landed,
+    in one window, one after the other."""
+    if not (chunked and rs.state.shown_serial == serial):
+        rs.state.shown_serial, rs.state.shown_text = serial, ""
         rs.state.shown_window = _where_typed()
     if rs.state.shown_text is None:
         return

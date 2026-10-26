@@ -31,7 +31,7 @@ class RecordingState:
     last_inserted_where: tuple = (None, None)
     # What this recording has typed since it began or since its last
     # message ended, and where: where an automatic Enter or a key said after
-    # it may go (send_countdown.Message).
+    # it may go, and what its phrases wait on (send_countdown.Message).
     message: send_countdown.Message = field(default_factory=send_countdown.Message)
     # Mid-sentence continuation - if True, lowercase the first letter of next dictation
     continue_mid_sentence: bool = False
@@ -54,14 +54,6 @@ class RecordingState:
     # or None, and how many chunks it has cut so far.
     chunker: object = None
     chunks_submitted: int = 0
-    # The last chunk typed held back its final mark (chunking.hold_back_boundary):
-    # {"mark", "audio", "raw", "typed"} until the next chunk decides it, else
-    # None. Belongs to its recording only (cleared by type_at_pause.arm_chunker).
-    pending_boundary: object = None
-    # The "?" held back at the last pause was heard as mid-sentence: the
-    # question goes on, so this phrase ends with it, not a period
-    # (chunking.carry_question). Belongs to its recording only.
-    question_open: bool = False
     # This recording's press held a pending send, so a tap that's too short
     # to be a dictation says "Not sent" rather than "Cancelled".
     held_send: bool = False
@@ -75,12 +67,6 @@ class RecordingState:
     # The last Enter TuxTalk pressed: {"at", "automatic"}, or None
     # (keyboard_output.press_key). "edit that" just after it explains itself.
     sent: object = None
-    # A phrase that was only a correction cue ("No wait."), not typed yet: the
-    # corrected value comes in the next phrase.
-    held_cue: str = ""
-    # "edit that" said alone as a Type at pause phrase: the next phrase of
-    # this recording says what to change (voice_edit.handle_spoken_edit).
-    edit_waiting: object = None
     # Speech the pause detector heard after its last cut, taken at the stop:
     # 0.0 means the rest of the recording is room noise only.
     last_chunk_speech: float = None

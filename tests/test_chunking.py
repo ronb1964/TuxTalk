@@ -402,7 +402,7 @@ def pipeline(monkeypatch):
     monkeypatch.setattr(live, "usage_stats", False)
     monkeypatch.setattr(history, "add_entry", lambda text, replaces=None: None)
     monkeypatch.setattr(rs.state, "continue_mid_sentence", False)
-    monkeypatch.setattr(rs.state, "pending_boundary", None)
+    monkeypatch.setattr(rs.state.message, "held_mark", None)
     monkeypatch.setattr(rs.state, "last_inserted_text", "")
     return texts, typed, beeps
 
@@ -431,7 +431,7 @@ def test_middle_chunk_holds_back_its_final_mark(pipeline):
     texts.append("we meet.")
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     assert typed == ["We meet"]
-    assert rs.state.pending_boundary["mark"] == "."
+    assert rs.state.message.held_mark["mark"] == "."
 
 
 def test_context_without_a_period_carries_the_sentence_on(pipeline):
@@ -557,7 +557,7 @@ def test_held_mark_never_reaches_the_next_recording(pipeline):
     texts.extend(["we meet.", "hello there"])
     call(frames_of(speech(1.0)), "middle")
     type_at_pause.arm_chunker(SR)            # the next recording starts
-    assert rs.state.pending_boundary is None
+    assert rs.state.message.held_mark is None
     call(frames_of(speech(1.0)), None)
     assert typed[1].strip() == "Hello there"
 
@@ -770,7 +770,7 @@ def test_context_marks_off_types_the_engines_mark(pipeline, monkeypatch):
     texts.append("we meet.")
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     assert typed == ["We meet. "]
-    assert rs.state.pending_boundary is None
+    assert rs.state.message.held_mark is None
 
 
 # --- final review fixes ------------------------------------------------------
@@ -817,7 +817,7 @@ def ai_on(pipeline, monkeypatch):
     monkeypatch.setattr(live, "ai_engine", ai)
     monkeypatch.setattr(keyboard_output, "output_backend",
                         lambda: SimpleNamespace(backspaces=lambda n: (erased.append(n), True)[1]))
-    monkeypatch.setattr(rs.state, "held_cue", "")
+    monkeypatch.setattr(rs.state.message, "held_cue", "")
     monkeypatch.setattr(rs.state, "last_inserted_window", None)
     texts, typed, beeps = pipeline
     return texts, typed, erased, ai
@@ -832,7 +832,7 @@ def test_correction_after_a_pause_fixes_the_phrase_before(ai_on):
     call(frames_of(speech(1.0)), "middle")
     assert erased == [len("Meet at three. ")]
     assert typed[-1] == "Meet at four"
-    assert rs.state.pending_boundary["mark"] == "."
+    assert rs.state.message.held_mark["mark"] == "."
 
 
 def test_correction_on_the_last_phrase(ai_on):
@@ -864,7 +864,7 @@ def test_a_bare_cue_said_last_is_typed(ai_on):
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     call([], "last", auto_period=True)
     assert typed == ["Meet at three", ". ", "No wait. "]
-    assert erased == [] and rs.state.held_cue == ""
+    assert erased == [] and rs.state.message.held_cue == ""
 
 
 def test_no_correction_types_the_phrase_as_said(ai_on):
@@ -1080,7 +1080,7 @@ def enter(pipeline, monkeypatch):
         return True
     monkeypatch.setattr(keyboard_output, "press_key", fake_enter)
     monkeypatch.setattr(live, "press_enter_after", False)
-    monkeypatch.setattr(rs.state, "held_cue", "")
+    monkeypatch.setattr(rs.state.message, "held_cue", "")
     return texts, typed, beeps
 
 
@@ -1092,7 +1092,7 @@ def test_press_enter_at_the_end_of_a_phrase_sends_it(enter):
     texts.extend(["see you at noon, press enter", "how are you"])
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     assert typed == ["See you at noon.", "<ENTER>"]
-    assert rs.state.pending_boundary is None and not rs.state.message.has_words
+    assert rs.state.message.held_mark is None and not rs.state.message.has_words
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     assert typed[2:] == ["How are you"]
 
@@ -1122,7 +1122,7 @@ def test_press_enter_after_a_pause_ends_the_phrase_before_it(enter):
     assert typed == ["We meet at three", ".", "<ENTER>"]
     assert texts == []                       # transcribed once each, no joint pass
     assert READY_BEEP not in beeps       # mid-recording: no beep
-    assert rs.state.pending_boundary is None
+    assert rs.state.message.held_mark is None
 
 
 def test_press_tab_at_the_end_of_a_phrase_leaves_the_box_without_a_mark(enter):
@@ -1132,7 +1132,7 @@ def test_press_tab_at_the_end_of_a_phrase_leaves_the_box_without_a_mark(enter):
     texts.extend(["john, press tab", "smith"])
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     assert typed == ["John", "<TAB>"]
-    assert rs.state.pending_boundary is None and not rs.state.message.has_words
+    assert rs.state.message.held_mark is None and not rs.state.message.has_words
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     assert typed[2:] == ["Smith"]
 
@@ -1144,7 +1144,7 @@ def test_press_tab_after_a_pause_types_no_mark_before_it(enter):
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     assert typed == ["John", "<TAB>"]
     assert texts == []                       # no context pass against "press tab"
-    assert rs.state.pending_boundary is None
+    assert rs.state.message.held_mark is None
 
 
 def test_press_enter_after_each_dictation_waits_for_the_end(enter, monkeypatch):
@@ -1254,7 +1254,7 @@ def test_a_held_mark_stays_in_the_window_its_phrase_went_to(pipeline, monkeypatc
     monkeypatch.setattr(focused_window, "look", lambda: (focus["now"], None))
     texts.extend(["what's next?", "what's next?"])
     call(frames_of(speech(1.0)), "middle", auto_period=True)
-    rs.state.pending_boundary["where"] = ("brave-browser", None)
+    rs.state.message.held_mark["where"] = ("brave-browser", None)
     focus["now"] = "com.anthropic.Claude"             # the click into the chat
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     assert typed == ["What's next", "What's next"]
@@ -1273,7 +1273,7 @@ def test_a_question_goes_on_across_a_pause(pipeline):
     call(frames_of(speech(1.0)), "last", auto_period=True)
     assert typed[:2] == ["Do you think we need a setting", " "]
     assert typed[2].rstrip() == "to make it work better?"
-    assert rs.state.question_open is False
+    assert rs.state.message.question_open is False
 
 
 def test_a_question_that_ended_at_the_pause_is_not_carried(pipeline):
@@ -1312,9 +1312,9 @@ def test_the_screen_copy_ends_at_another_window_of_the_same_app(monkeypatch):
                         ("shown_window", None), ("last_inserted_window", "org.kde.kwrite")):
         monkeypatch.setattr(rs.state, name, value)
     monkeypatch.setattr(rs.state, "last_inserted_where", ("org.kde.kwrite", ("tray", "{first}")))
-    last_dictation.remember_shown("See you at noon.", chunked=True, ok=True)
+    last_dictation.remember_shown("See you at noon.", chunked=True, ok=True, serial=rs.state.recording_serial)
     monkeypatch.setattr(rs.state, "last_inserted_where", ("org.kde.kwrite", ("tray", "{second}")))
-    last_dictation.remember_shown(" How are you?", chunked=True, ok=True)
+    last_dictation.remember_shown(" How are you?", chunked=True, ok=True, serial=rs.state.recording_serial)
     assert rs.state.shown_text is None
 
 
@@ -1326,10 +1326,10 @@ def test_the_screen_copy_survives_the_two_spellings_of_one_app(monkeypatch):
                         ("shown_window", None)):
         monkeypatch.setattr(rs.state, name, value)
     monkeypatch.setattr(rs.state, "last_inserted_window", "google-chrome")
-    last_dictation.remember_shown("See you at noon.", chunked=True, ok=True)
+    last_dictation.remember_shown("See you at noon.", chunked=True, ok=True, serial=rs.state.recording_serial)
     monkeypatch.setattr(rs.state, "last_inserted_window", "Google-chrome")
-    last_dictation.remember_shown(" How are you?", chunked=True, ok=True)
+    last_dictation.remember_shown(" How are you?", chunked=True, ok=True, serial=rs.state.recording_serial)
     assert rs.state.shown_text == "See you at noon. How are you?"
     monkeypatch.setattr(rs.state, "last_inserted_window", "org.kde.kwrite")
-    last_dictation.remember_shown(" Bye.", chunked=True, ok=True)
+    last_dictation.remember_shown(" Bye.", chunked=True, ok=True, serial=rs.state.recording_serial)
     assert rs.state.shown_text is None                 # another app: not trusted

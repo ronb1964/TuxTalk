@@ -108,11 +108,7 @@ def arm_chunker(rec_sr, edit_mode=False):
     with chunk_lock:
         rs.state.recording_serial += 1
         rs.state.chunks_submitted = 0
-        rs.state.pending_boundary = None
-        rs.state.question_open = False
-        rs.state.message = send_countdown.Message()
-        rs.state.held_cue = ""
-        rs.state.edit_waiting = None
+        rs.state.message = send_countdown.Message(serial=rs.state.recording_serial)
         rs.state.chunker = chunker
 
 
@@ -141,7 +137,7 @@ def corrects_across_pause(raw: str, chunk_role, message) -> bool:
     if not (live.ai_corrections and live.ai_engine is not None
             and rs.state.last_inserted_text.strip()):
         return False
-    if rs.state.held_cue:
+    if message.held_cue:
         return True
     from . import ai_cleanup
     return ai_cleanup.opens_with_correction(rs.state.last_inserted_text, raw)
@@ -173,9 +169,9 @@ def _erase_typed(text: str) -> bool:
     return bool(deleted)
 
 
-def correct_across_pause(text: str):
-    """(text to type, text taken back) for a phrase that corrects the one
-    before the pause.
+def correct_across_pause(text: str, message):
+    """(text to type, text taken back) for a phrase of *message*'s recording
+    that corrects the one before the pause.
 
     The AI hears both phrases as one ("Meet at three. No wait, four."). When
     it fixes the correction, the earlier phrase is backspaced and the fixed
@@ -184,7 +180,7 @@ def correct_across_pause(text: str):
     nothing is taken back."""
     from . import ai_cleanup
     prev = rs.state.last_inserted_text
-    cue, rs.state.held_cue = rs.state.held_cue, ""
+    cue, message.held_cue = message.held_cue, ""
     if cue and cue[-1] not in ".?!,;:":
         cue += ","
     if (cue.endswith(",") and text[:1].isupper()
@@ -201,16 +197,16 @@ def correct_across_pause(text: str):
     return fixed, prev
 
 
-def _type_boundary(pending: dict, tail: str, injection_mode: str) -> None:
+def _type_boundary(message, pending: dict, tail: str, injection_mode: str) -> None:
     """Type what goes between a held-back chunk and what follows it, as part
-    of the message the chunk is in."""
+    of *message*, the one the chunk is in."""
     if not tail:
         return
-    last_dictation.remember_said(tail, chunked=True)
+    last_dictation.remember_said(tail, True, message.serial)
     # Only into the phrase's window: the context pass before this can take a while.
     ok = delivery.inject_text(tail, injection_mode, into=pending["where"],
-                              message=pending["message"]) == "ok"
-    last_dictation.remember_shown(tail, chunked=True, ok=ok)
+                              message=message) == "ok"
+    last_dictation.remember_shown(tail, True, ok, message.serial)
     if ok:
         # Undo and "delete last sentence" then see the whole chunk.
         rs.state.last_inserted_text = pending["typed"] + tail
@@ -227,12 +223,14 @@ ENTER_IN_CONTEXT_MAX_WORDS = 3
 SHORT_CHUNK_S = 2.0
 
 
-def resolve_boundary(audio_f32, language, injection_mode, raw="", auto_period=True) -> str:
-    """The next chunk has arrived: decide the mark held back after the last
-    one, from the engine hearing both chunks together, and type it. Returns
+def resolve_boundary(message, audio_f32, language, injection_mode, raw="",
+                     auto_period=True) -> str:
+    """The next chunk of *message*'s recording has arrived: decide the mark
+    held back after the last one, from the engine hearing both chunks
+    together, and type it. Returns
     the chunk's text: "press enter" when only the context pass heard that,
     and for a very short chunk the words the context pass heard."""
-    pending, rs.state.pending_boundary = rs.state.pending_boundary, None
+    pending, message.held_mark = message.held_mark, None
     if focused_window.changed(pending["where"], focused_window.look()):
         # The user switched windows during the pause: that phrase's mark
         # belongs at its end, in the other window, not at the start of this
@@ -249,18 +247,18 @@ def resolve_boundary(audio_f32, language, injection_mode, raw="", auto_period=Tr
         # The sentence ends here, as it would after "press enter" said
         # clearly (flush_boundary): its mark, and no space to send.
         mark = mark or ("." if auto_period else "")
-        _type_boundary(pending, mark, injection_mode)
+        _type_boundary(message, pending, mark, injection_mode)
         rs.state.continue_mid_sentence = False
         return raw
     if joint and len(audio_f32) <= SHORT_CHUNK_S * engine.SAMPLE_RATE:
         raw = _short_phrase_in_context(raw, pending["raw"], joint)
-    _type_boundary(pending, (mark + " ") if mark else " ", injection_mode)
+    _type_boundary(message, pending, (mark + " ") if mark else " ", injection_mode)
     # Lowercase on after a comma or no mark; a sentence end starts afresh.
     rs.state.continue_mid_sentence = mark not in SENTENCE_ENDS
     # "do you think ... feature" (pause) "to make it work better": the engine
     # heard a question before the pause and a sentence going on across it,
     # so the question ends where this phrase does.
-    rs.state.question_open = pending["mark"] == "?" and mark not in SENTENCE_ENDS
+    message.question_open = pending["mark"] == "?" and mark not in SENTENCE_ENDS
     return raw
 
 
@@ -295,10 +293,11 @@ def _short_phrase_in_context(raw: str, before: str, joint: str) -> str:
     return raw
 
 
-def flush_boundary(auto_period: bool, auto_space: bool, injection_mode: str) -> None:
-    """The dictation ended in a pause: type the mark held back after its last
-    chunk, or the auto-period when the engine wrote none, in its window only."""
-    pending, rs.state.pending_boundary = rs.state.pending_boundary, None
+def flush_boundary(message, auto_period: bool, auto_space: bool, injection_mode: str) -> None:
+    """*message*'s dictation ended in a pause: type the mark held back after
+    its last chunk, or the auto-period when the engine wrote none, in its
+    window only."""
+    pending, message.held_mark = message.held_mark, None
     if pending is None:
         return
     now = focused_window.look()
@@ -306,21 +305,21 @@ def flush_boundary(auto_period: bool, auto_space: bool, injection_mode: str) -> 
         return  # the end of this sentence isn't in the window that has focus
     kind = app_kind(now[0]) if live.adapt_to_app else ""
     mark = pending["mark"] or ("." if auto_period and not kind else "")
-    _type_boundary(pending, mark + (" " if auto_space and not kind else ""), injection_mode)
+    _type_boundary(message, pending, mark + (" " if auto_space and not kind else ""),
+                   injection_mode)
 
 
-def start_afresh(ended=None) -> None:
+def start_afresh(message, ended=True) -> None:
     """Type at pause pressed Enter or Tab mid-recording, or "edit that"
-    rewrote what was typed: what's said next reaches back across nothing (no
-    held-back mark, correction, lowercase start or screen copy). After Enter
-    or Tab the message *ended* starts over; a rewrite stays in the unsent one."""
-    if ended is not None:
-        ended.start_over()
-    rs.state.pending_boundary = None
-    rs.state.question_open = False
-    rs.state.held_cue = ""
+    rewrote what was typed: what's said next in *message*'s recording reaches
+    back across nothing (no held-back mark, correction, lowercase start or
+    screen copy). After Enter or Tab (*ended*) the message starts over; a
+    rewrite stays in the unsent one."""
+    if ended:
+        message.start_over()
+    message.held_mark, message.question_open, message.held_cue = None, False, ""
     rs.state.continue_mid_sentence = False
-    if rs.state.shown_text is not None and rs.state.shown_serial == rs.state.recording_serial:
+    if rs.state.shown_text is not None and rs.state.shown_serial == message.serial:
         rs.state.shown_text = ""
 
 
@@ -330,19 +329,19 @@ def end_in_a_pause(message, beeps_on, auto_space, auto_period, injection_mode) -
     and "Send each dictation automatically" sends *message* if all of it
     went in."""
     unfinished_edit = _drop_unfinished_edit(message, beeps_on)
-    if rs.state.held_cue:
-        cue, rs.state.held_cue = rs.state.held_cue, ""
+    if message.held_cue:
+        cue, message.held_cue = message.held_cue, ""
         if auto_period and cue[-1] not in ".?!":
             cue += "."
         delivery.inject_text(cue + (" " if auto_space else ""), injection_mode, message=message)
     cut_off = _cut_off(message)
     if (live.press_enter_after and message.has_words and message.complete and not cut_off
             and not is_document_window(focused_window.window_class())):
-        flush_boundary(auto_period, False, injection_mode)
+        flush_boundary(message, auto_period, False, injection_mode)
         pipeline.send_automatically(" " if auto_space else "", injection_mode, message)
         start_afresh(message)
     else:
-        flush_boundary(auto_period and not cut_off, auto_space, injection_mode)
+        flush_boundary(message, auto_period and not cut_off, auto_space, injection_mode)
     if not live.chunk_context_marks:
         rs.state.continue_mid_sentence = False   # it belongs to this recording
     if cut_off:
@@ -354,10 +353,9 @@ def end_in_a_pause(message, beeps_on, auto_space, auto_period, injection_mode) -
 def _drop_unfinished_edit(message, beeps_on) -> bool:
     """"edit that", a pause, and nothing more: what to change never came,
     and *message* isn't sent as it was. True when that's what happened."""
-    waiting = rs.state.edit_waiting
-    if waiting is None or waiting["serial"] != rs.state.recording_serial:
+    if message.edit_waiting is None:
         return False
-    rs.state.edit_waiting = None
+    message.edit_waiting = None
     notices.edit_problem("edit_that_what", beeps_on)
     message.add("failed", None)
     return True
@@ -370,6 +368,6 @@ def _cut_off(message) -> str:
     cut_off = message.ends_on if live.press_enter_after else ""
     if cut_off:
         logger.info(f'Held back the Enter: the dictation ended on "{cut_off}"')
-        if rs.state.pending_boundary is not None:
-            rs.state.pending_boundary["mark"] = ""
+        if message.held_mark is not None:
+            message.held_mark["mark"] = ""
     return cut_off

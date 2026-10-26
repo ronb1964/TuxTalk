@@ -237,10 +237,11 @@ def handle_navigation(raw: str, beeps_on: bool, focused_class=_UNKNOWN_WINDOW) -
     return True
 
 
-def spoken_edit_target():
-    """What "edit that" changes: this recording's text on screen (every
-    phrase since the last Enter, with Type at pause), else the last
-    dictation; "" when there's nothing fresh in the focused window."""
+def spoken_edit_target(serial: int):
+    """What "edit that" changes: the text on screen of recording *serial*,
+    the one it's said in (every phrase since the last Enter, with Type at
+    pause), else the last dictation; "" when there's nothing fresh in the
+    focused window."""
     typed = rs.state.last_inserted_text
     if not typed or not typed.strip():
         return ""
@@ -248,7 +249,7 @@ def spoken_edit_target():
     if keyboard_output.not_where_typed(focused):
         return ""
     shown = rs.state.shown_text
-    if shown and rs.state.shown_serial == rs.state.recording_serial and shown.endswith(typed):
+    if shown and rs.state.shown_serial == serial and shown.endswith(typed):
         return shown
     return typed
 

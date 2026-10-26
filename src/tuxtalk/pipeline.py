@@ -283,7 +283,7 @@ def _before_the_words(raw: str, audio_f32, job: _Job):
     # between the boxes.
     in_password = focused_window.is_password()
     if in_password:
-        rs.state.pending_boundary, rs.state.held_cue = None, ""
+        job.message.held_mark, job.message.held_cue = None, ""
         if not key_only:
             notices.password_field_refused(job.beeps_on)
             return None, True
@@ -291,15 +291,15 @@ def _before_the_words(raw: str, audio_f32, job: _Job):
     # Chunked dictation: the chunk before this one held back its final
     # mark; decide it now, before a command acts on what was typed.
     # Only "press tab" after the pause leaves the box without one.
-    if job.chunk_role is not None and rs.state.pending_boundary is not None:
+    if job.chunk_role is not None and job.message.held_mark is not None:
         if key_only == "ENTER":
             # Only "press enter" after the pause: the sentence before it
             # ends here (its held-back mark, or the auto-period), with no
             # space to go out in the sent message.
-            type_at_pause.flush_boundary(job.auto_period, False, job.injection_mode)
+            type_at_pause.flush_boundary(job.message, job.auto_period, False, job.injection_mode)
         elif not key_only:
-            raw = type_at_pause.resolve_boundary(audio_f32, job.language, job.injection_mode,
-                                                 raw, job.auto_period)
+            raw = type_at_pause.resolve_boundary(job.message, audio_f32, job.language,
+                                                 job.injection_mode, raw, job.auto_period)
     return raw, in_password
 
 
@@ -358,8 +358,8 @@ def _shape_text(raw: str, said: str, press: str, cut_off: str, job: _Job):
         if corrected is None:
             return None
         text, taken_back = corrected
-    if rs.state.question_open and job.chunk_role is not None:
-        rs.state.question_open = False
+    if job.message.question_open and job.chunk_role is not None:
+        job.message.question_open = False
         text = carry_question(text)
     held_mark = None
     if job.chunk_role == "middle" and live.chunk_context_marks and not said:
@@ -398,10 +398,10 @@ def _correction_or_held_cue(text: str, job: _Job):
     the next phrase, which has the corrected value."""
     from . import ai_cleanup
     if job.chunk_role == "middle" and ai_cleanup.is_bare_cue(text):
-        rs.state.held_cue = text.strip()
+        job.message.held_cue = text.strip()
         logger.info("Chunk is only a correction cue; waiting for the next phrase")
         return None
-    return type_at_pause.correct_across_pause(text)
+    return type_at_pause.correct_across_pause(text, job.message)
 
 
 def _deliver(words: _Words, audio_f32, job: _Job) -> None:
@@ -411,7 +411,8 @@ def _deliver(words: _Words, audio_f32, job: _Job) -> None:
     send_countdown.type_owed_space(before=words.text)
     text = words.text
     chunked = job.chunk_role is not None
-    said_before = last_dictation.remember_said(text, chunked, words.taken_back)
+    said_before = last_dictation.remember_said(text, chunked, job.message.serial,
+                                               words.taken_back)
     try:
         outcome = delivery.inject_text(text, job.injection_mode, message=job.message)
     except Exception as e:
@@ -423,7 +424,8 @@ def _deliver(words: _Words, audio_f32, job: _Job) -> None:
         job.message.add(outcome, None)
     if outcome == "password_field":
         last_dictation.unsay(said_before)
-    last_dictation.remember_shown(rs.state.last_inserted_text, chunked, outcome == "ok")
+    last_dictation.remember_shown(rs.state.last_inserted_text, chunked, outcome == "ok",
+                                  job.message.serial)
     job.message.ends_on = ends_unfinished(words.raw)
     _after_the_words(outcome, words.said, words.press, words.space_left_off, job.chunk_role,
                      job.beeps_on, job.injection_mode, job.message)
@@ -445,11 +447,10 @@ def _carry_on_after(words: _Words, text: str, audio_f32, job: _Job) -> None:
     if words.held_mark is not None:
         # Only the end of the phrase is kept: the engine hears it with
         # the start of the next one to decide the mark between them.
-        rs.state.pending_boundary = {"mark": words.held_mark,
-                                     "audio": audio_f32[-type_at_pause.context_samples():],
-                                     "raw": words.raw, "typed": rs.state.last_inserted_text,
-                                     "where": rs.state.last_inserted_where,
-                                     "message": job.message}
+        job.message.held_mark = {"mark": words.held_mark,
+                                 "audio": audio_f32[-type_at_pause.context_samples():],
+                                 "raw": words.raw, "typed": rs.state.last_inserted_text,
+                                 "where": rs.state.last_inserted_where}
 
 
 def stop_recording(

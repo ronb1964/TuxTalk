@@ -60,7 +60,7 @@ def chat(monkeypatch, keyboard):
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr(live, "press_enter_after", True)
     monkeypatch.setattr(live, "usage_stats", False)
-    monkeypatch.setattr(rs.state, "pending_boundary", None)
+    monkeypatch.setattr(rs.state.message, "held_mark", None)
     monkeypatch.setattr(history, "add_entry", lambda text, replaces=None: None)
     monkeypatch.setattr(send_countdown, "show_notice", notices.append)
     return focus, heard, typed, notices
@@ -161,6 +161,22 @@ def test_a_pause_at_the_end_in_the_same_window_types_the_mark_and_sends(chat, ke
     dictate("last", audio=False)
     assert typed == [("See you at noon", FIRST[1]), (".", FIRST[1])]
     assert keyboard.typed_keys() == [ENTER] and notices == []
+
+
+def test_a_new_recording_doesnt_take_the_last_ones_held_mark(chat, keyboard, monkeypatch):
+    """The next recording started before the last one's end was typed (the
+    hotkey is read while typing goes on): starting it threw the last
+    phrase's held-back period away, so that sentence never got its end."""
+    focus, heard, typed, notices = chat
+    monkeypatch.setattr(live, "chunk_context_marks", True)
+    heard.append("See you at noon.")
+    dictate("middle")
+    first = rs.state.message
+    type_at_pause.arm_chunker(engine.SAMPLE_RATE)          # the next recording starts
+    assert rs.state.message is not first
+    pipeline.transcribe_and_inject([], engine.SAMPLE_RATE, beeps_on=False, smart_quotes=False,
+                                   notify_on=False, chunk_role="last", message=first)
+    assert typed[:2] == [("See you at noon", FIRST[1]), (".", FIRST[1])]
 
 
 def test_a_pause_after_and_at_the_end_sends_nothing(chat, keyboard, monkeypatch):

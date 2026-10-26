@@ -117,6 +117,21 @@ class Message:
     # The word its last words were cut off on ("and"), or "": at the end of
     # a Type at pause recording, half a sentence isn't sent.
     ends_on: str = ""
+    # Which recording it is (rs.state.recording_serial when that began):
+    # Recent Dictations and the screen copy keep a recording's phrases together.
+    serial: int = 0
+    # What Type at pause's next phrase of this recording picks up: the last
+    # phrase's final mark, held back for it to decide
+    # (chunking.hold_back_boundary: {"mark", "audio", "raw", "typed",
+    # "where"}); a "No wait." said alone, whose corrected value comes next; a
+    # "?" heard as mid-sentence, so the question ends with the next phrase
+    # (chunking.carry_question); and the text "edit that" said alone is to
+    # change. Each recording's own, so a recording started before the last
+    # one's phrases are typed can't take them over.
+    held_mark: dict | None = None
+    held_cue: str = ""
+    question_open: bool = False
+    edit_waiting: str | None = None
     # Its recording was cancelled (Esc): a phrase of it still waiting to be
     # typed is dropped.
     cancelled: bool = False
