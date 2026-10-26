@@ -17,9 +17,11 @@ before 0.15.0, so older entries use that name.
 - Pause isn't on the list. Most keyboards send it as let go the moment it's
   pressed, so you can't hold it.
 - The hotkey helper is version 1.6, because it has to report Right Ctrl and
-  Right Alt on their own now. Preferences offers the update, and you're asked
-  for your password once. Until then Right Ctrl and Right Alt do nothing, and
-  Preferences says so when you pick one.
+  Right Alt on their own now. TuxTalk asks about the update by itself a few
+  seconds after it starts, and keeps asking each start until it's done. It
+  takes your password once and no restart. Until then Right Ctrl and Right
+  Alt do nothing, and if you pick one in Preferences it says so and offers
+  the update right there.
 - With "Send each dictation automatically" on, a dictation that ends on "and"
   or "the" isn't sent, because you probably let go of the key mid-sentence.
   It used to hold back in silence, so it looked like sending had stopped

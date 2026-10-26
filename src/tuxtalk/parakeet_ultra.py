@@ -19,7 +19,7 @@ is checked against its SHA256 below before it lands:
 
 Someone who set Parakeet up with an earlier TuxTalk has the original v3 files.
 Those keep working (parakeet_engine.cached_model_dir, whisper_vulkan.model_path)
-until they take the one-time offer to update (tray.maybe_offer_parakeet_update).
+until they take the one-time offer to update (update_offers.maybe_offer_parakeet_update).
 """
 import os
 

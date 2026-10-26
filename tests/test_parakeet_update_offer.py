@@ -6,7 +6,7 @@ import types
 import pytest
 
 from tuxtalk import parakeet_ultra as pu
-from tuxtalk import tray
+from tuxtalk import update_offers as offers
 
 
 @pytest.fixture
@@ -19,18 +19,18 @@ def env(monkeypatch):
     monkeypatch.setattr("tuxtalk.service_launcher.find_service_pids", lambda: [4242])
     monkeypatch.setattr("tuxtalk.model_helper.parakeet_update_needed", lambda c: "vulkan")
     answer = {"value": True}
-    monkeypatch.setattr(tray, "_offer_parakeet_update",
+    monkeypatch.setattr(offers, "_offer_parakeet_update",
                         lambda device: asked.append(device) or answer["value"])
     return cfg, asked, saved, restarts, answer
 
 
 def _run(restarts):
-    return tray.maybe_offer_parakeet_update(restarts.append)
+    offers.maybe_offer_parakeet_update(restarts.append)
 
 
 def test_a_yes_downloads_restarts_dictation_and_is_not_asked_again(env):
     cfg, asked, saved, restarts, _ = env
-    assert _run(restarts) is False
+    _run(restarts)
     assert asked == ["vulkan"] and saved == [True] and restarts == [None]
     _run(restarts)
     assert len(asked) == 1
@@ -52,11 +52,14 @@ def test_a_failed_download_is_offered_again_next_start(env):
 
 def test_it_waits_for_dictation_and_never_shows_on_first_run(env, monkeypatch):
     cfg, asked, saved, restarts, _ = env
+    monkeypatch.setattr(offers, "offer_helper_update", lambda restart: False)
     monkeypatch.setattr("tuxtalk.service_launcher.find_service_pids", lambda: [])
-    assert _run(restarts) is True and asked == []
+    assert offers._offer_in_turn(restarts.append) is True and asked == []
     monkeypatch.setattr("tuxtalk.service_launcher.find_service_pids", lambda: [4242])
     monkeypatch.setattr("tuxtalk.cuda_helper.is_first_run", lambda: True)
-    assert _run(restarts) is False and asked == []
+    assert offers._offer_in_turn(restarts.append) is False and asked == []
+    monkeypatch.setattr("tuxtalk.cuda_helper.is_first_run", lambda: False)
+    assert offers._offer_in_turn(restarts.append) is False and asked == ["vulkan"]
 
 
 def test_nothing_to_offer_asks_nothing(env, monkeypatch):
@@ -113,10 +116,10 @@ def test_the_offer_names_its_real_size(disk, monkeypatch):
         def destroy(self): pass
 
         def run(self):
-            return tray.Gtk.ResponseType.CANCEL
+            return offers.Gtk.ResponseType.CANCEL
 
     monkeypatch.setattr("tuxtalk.ui_style.message_dialog", lambda **k: Dialog(**k))
-    assert tray._offer_parakeet_update("vulkan") is False
+    assert offers._offer_parakeet_update("vulkan") is False
     assert shown[0] == "Parakeet got more accurate"
     assert "Download (669 MB)" in shown and "Not Now" in shown
 
@@ -140,7 +143,7 @@ def test_enter_on_the_offer_means_not_now(disk, monkeypatch):
     monkeypatch.setattr("tuxtalk.ui_style.message_dialog", lambda **k: Dialog())
     monkeypatch.setattr("tuxtalk.model_helper.download_parakeet_update",
                         lambda device: pytest.fail("Enter started the download"))
-    assert tray._offer_parakeet_update("vulkan") is False
+    assert offers._offer_parakeet_update("vulkan") is False
 
 
 @pytest.fixture
@@ -150,14 +153,14 @@ def prefs_row(monkeypatch):
     from tuxtalk.prefs_speech import SpeechSection
     w = SpeechSection.__new__(SpeechSection)
     w.win = SimpleNamespace(window=None, restart_service=lambda: w.restarts.append(True))
-    w.device_combo = tray.Gtk.ComboBoxText()
+    w.device_combo = offers.Gtk.ComboBoxText()
     w.device_combo.append("vulkan", "Vulkan")
     w.device_combo.set_active_id("vulkan")
-    w.model_combo = tray.Gtk.ComboBoxText()
+    w.model_combo = offers.Gtk.ComboBoxText()
     w.model_combo.append("parakeet-v3", "Parakeet")
     w.model_combo.set_active_id("parakeet-v3")
-    w.parakeet_update_row = tray.Gtk.Box()
-    w.parakeet_update_btn = tray.Gtk.Button()
+    w.parakeet_update_row = offers.Gtk.Box()
+    w.parakeet_update_btn = offers.Gtk.Button()
     need = {"device": "vulkan"}
     monkeypatch.setattr("tuxtalk.model_helper.parakeet_update_needed", lambda cfg: need["device"])
     monkeypatch.setattr("tuxtalk.model_helper.parakeet_update_size", lambda device: "669 MB")

@@ -20,7 +20,7 @@ import time
 import sys
 import warnings
 from .logger import setup_logger
-from . import single_instance
+from . import single_instance, update_offers
 
 # The tray menu's icons need Gtk.ImageMenuItem: AppIndicator sends only its
 # image to the desktop. It is deprecated but stays in GTK3, so its warnings
@@ -350,73 +350,6 @@ def maybe_show_recommend_notice():
     return False
 
 
-def _offer_parakeet_update(device):
-    """Ask, then download. True when Parakeet Ultra arrived, False when the
-    user said no or cancelled, None when the download failed (ask again on
-    the next start)."""
-    from .model_helper import download_parakeet_update, parakeet_update_size
-    from .ui_style import message_dialog
-    size_text = parakeet_update_size(device)
-    dialog = message_dialog(message_type=Gtk.MessageType.QUESTION, buttons=Gtk.ButtonsType.NONE,
-                            text="Parakeet got more accurate")
-    dialog.format_secondary_text(
-        "TuxTalk now uses Parakeet Ultra, a retrained Parakeet that makes fewer mistakes "
-        f"at the same speed. It's a one-time {size_text} download, and your Parakeet "
-        "keeps working while it downloads.")
-    dialog.add_button("Not Now", Gtk.ResponseType.CANCEL)
-    dialog.add_button(f"Download ({size_text})", Gtk.ResponseType.OK)
-    # It comes up by itself while people may be typing: an Enter meant for
-    # their own window must not start a 670 MB download.
-    dialog.set_default_response(Gtk.ResponseType.CANCEL)
-    dialog.set_keep_above(True)
-    answer = dialog.run()
-    dialog.destroy()
-    if answer != Gtk.ResponseType.OK:
-        logger.info("Parakeet Ultra offer: not now")
-        return False
-    updated = download_parakeet_update(device)
-    if updated is None:
-        from .notify import notify
-        notify("The Parakeet update didn't finish",
-               "TuxTalk will offer it again the next time it starts.")
-    return updated
-
-
-def maybe_offer_parakeet_update(restart):
-    """Once, on the first start after updating: offer someone still on the
-    original Parakeet v3 the download of Parakeet Ultra (parakeet_ultra.py),
-    then *restart* dictation onto it. Their Parakeet works either way. A
-    GLib timeout like maybe_show_recommend_notice: True (ask again) until
-    the dictation service is up, then False."""
-    try:
-        from .config import load_config, save_config
-        from .cuda_helper import is_first_run
-        if is_first_run():
-            return False
-        from .service_launcher import find_service_pids
-        if not find_service_pids():
-            return True        # the service isn't up yet: ask again next tick
-        cfg = load_config()
-        if cfg.parakeet_update_offered:
-            return False
-        from .model_helper import parakeet_update_needed
-        device = parakeet_update_needed(cfg)
-        if device is None:
-            return False
-        updated = _offer_parakeet_update(device)
-        if updated is None:
-            return False
-        cfg = load_config()     # the download took minutes; settings may have changed
-        cfg.parakeet_update_offered = True
-        save_config(cfg)
-        if updated:
-            logger.info(f"Parakeet Ultra downloaded ({device}); restarting dictation onto it")
-            restart(None)
-    except Exception as e:
-        logger.warning(f"Parakeet update offer skipped: {e}")
-    return False
-
-
 class DictationTray:
     def __init__(self):
         # TuxTalk is a dark-themed app. This is a global Gtk setting, so setting
@@ -483,10 +416,10 @@ class DictationTray:
         # Check service status every second to keep the icon and menu current
         GLib.timeout_add_seconds(1, self.update_status_and_menu)
 
-        # Once after updating: point existing users at the recommended setup,
-        # and offer Parakeet Ultra to those on the original Parakeet.
+        # After updating: point existing users at the recommended setup, and
+        # offer the hotkey helper or Parakeet Ultra this TuxTalk brings.
         GLib.timeout_add_seconds(15, maybe_show_recommend_notice)
-        GLib.timeout_add_seconds(20, maybe_offer_parakeet_update, self.restart_service)
+        update_offers.start(self.restart_service)
 
         # Auto-start will be triggered after welcome dialog on first run
         # or immediately if not first run (handled in main())
