@@ -185,6 +185,11 @@ before 0.15.0, so older entries use that name.
   so with two KWrite documents or two browser windows, undo in the other
   one deleted its text. On KDE and GNOME, and wherever else the desktop
   says which window it is, they tell the two windows apart now.
+- In a terminal, if pasting a dictation with line breaks failed, TuxTalk
+  typed it instead, with spaces for the line breaks. Undo still counted the
+  dictation as it was said, so it could be a few characters longer than what
+  was on screen, and "undo that" deleted some of your own typing too. It
+  counts what was typed now.
 
 ## [0.18.2] - 2026-10-23
 

@@ -352,6 +352,17 @@ def test_the_typed_remainder_after_a_failed_paste_has_no_breaks_in_a_terminal(mo
     assert typed and all(MARK not in t and "\n" not in t for t in typed)
 
 
+def test_undo_counts_what_was_typed_after_a_failed_paste_in_a_terminal(monkeypatch, wayland):
+    """The typed rest joins the lines with one space, spaces around the break
+    and all, but undo kept the text as dictated: three characters longer
+    here, so "undo that" deleted three of the user's own."""
+    typed = _typing_into(monkeypatch, "org.kde.konsole", mode="paste")
+    monkeypatch.setattr(keyboard_output, "paste_text", lambda *a, **k: False)
+    assert delivery.inject_text(f"First line. {MARK} Second line.", "paste") == "ok"
+    assert typed == ["First line. Second line."]
+    assert rs.state.last_inserted_text == "First line. Second line."
+
+
 # --- the remembered window is the one the text landed in -------------------
 
 def _focus_moves_on_paste(monkeypatch, before, after):

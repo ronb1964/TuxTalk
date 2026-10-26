@@ -301,7 +301,8 @@ def _paste_part(part) -> bool:
 def _paste_in_parts(text, focused_class):
     """Smart hybrid paste: text with line breaks pasted part by part with
     Shift+Enter between, and whatever a failed paste couldn't deliver typed.
-    The outcome when it stopped short, or None when all of it went in."""
+    None when the paste put all of it in, else the outcome of typing the rest
+    or where it stopped."""
     # A terminal honours a newline inside a paste, but treats Shift+Enter
     # like Enter, so it gets one chunk carrying real newlines and no
     # keystrokes at all; so do KDE's editors (plan_line_breaks).
@@ -333,8 +334,8 @@ def _paste_in_parts(text, focused_class):
 
 def _type_rest(parts, delivered):
     """Type the parts a hybrid paste stopped before, with the line break
-    that failed first when that's where it stopped. None when all of it
-    went in, else the outcome."""
+    that failed first when that's where it stopped: the outcome, with what
+    went in kept for undo."""
     remainder = ((LINE_BREAK if delivered.stopped == "break" else "")
                  + LINE_BREAK.join(parts[delivered.parts:]))
     # A terminal's single chunk carries real newlines for bracketed
@@ -343,7 +344,6 @@ def _type_rest(parts, delivered):
     # there; other apps get Shift+Enter.
     remainder = typed_breaks_for(remainder.replace("\n", LINE_BREAK),
                                  focused_window.window_class())
-    # Delivered chunks and the typed remainder make the full text (None).
     if not keyboard_output.output_backend().type_text(remainder):
         # The chunks before the failure reached the document, and so did
         # the line break after the last of them unless that break is what
@@ -355,7 +355,10 @@ def _type_rest(parts, delivered):
             f"undo buffer holds only what landed"
         )
         return "partial" if delivered.parts else "failed"
-    return None
+    # Undo counts what's on screen: in a terminal the typed rest has spaces
+    # where the dictation had line breaks, fewer of them than it had.
+    rs.state.last_inserted_text = (delivered.landed(parts) + remainder).replace(LINE_BREAK, "\n")
+    return "ok"
 
 
 def _type_all(text, injection_start):
