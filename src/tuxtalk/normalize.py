@@ -7,6 +7,9 @@ import re
 # A line break in a dictation ("new line"). Typed, it's a Shift+Enter: a plain
 # Enter would send a chat message or run a terminal's half-typed command.
 LINE_BREAK = "\xa7SHIFT_ENTER\xa7"
+# "soft break": three spaces, held as this until the space tidy is over,
+# which would make them one.
+_SOFT_BREAK = "\xa7SOFT_BREAK\xa7"
 
 # =====================================================================
 # Precompiled regex patterns — compiled once at import time.
@@ -151,7 +154,7 @@ _MULTI_WORD_REPLACEMENTS = [
     # the command is the engine's pause and goes, as it does for paragraphs.
     (re.compile(r"[,\s]*\b(?:new\s*line|return|line\s+break)\b[,.:;\s]*", re.IGNORECASE), LINE_BREAK),
     (re.compile(r"[,.\s]*\bnew\s+paragraph\b[,.:;\s]*|\bparagraph\s+break\b[,.:;\s]*", re.IGNORECASE), LINE_BREAK * 2),
-    (re.compile(r"[,.\s]*\bsoft\s+break\b[,.\s]*|\bsoft\s+line\b[,.\s]*", re.IGNORECASE), "   "),
+    (re.compile(r"[,.\s]*\bsoft\s+(?:break|line)\b[,.\s]*", re.IGNORECASE), _SOFT_BREAK),
     # Only "press tab" is a Tab: a bare "tab" is far more often the word ("every
     # tab shows"). Like "new line", it takes the spaces and punctuation the
     # engine wrote around it, so the next field doesn't start with a space.
@@ -630,7 +633,7 @@ def normalize_text(text: str, auto_period: bool = True) -> str:
         core = core.lstrip(" ")
         core = _RE_MULTI_SPACE.sub(" ", core)
         line = ("\t" * leading_tabs) + core
-        lines.append(line.rstrip())
+        lines.append(line.rstrip().removesuffix(_SOFT_BREAK).rstrip())   # nothing after it
     text = "\n".join(lines)
 
     # Capitalize standalone lowercase "i" (and "i'll", "i'm", "i've", "i'd")
@@ -685,8 +688,8 @@ def normalize_text(text: str, auto_period: bool = True) -> str:
     # --- 11) Place sentence punctuation inside closing smart quote ---
     text = _RE_PUNCT_OUTSIDE_QUOTE.sub(r"\2" + "\u201d", text)
 
-    # --- 12) Restore literal tokens ---
-    for placeholder, word in LITERAL_RESTORE.items():
+    # --- 12) Restore literal tokens, and a soft break's three spaces ---
+    for placeholder, word in (*LITERAL_RESTORE.items(), (_SOFT_BREAK, "   ")):
         text = text.replace(placeholder, word)
 
     # --- 12.5) Re-capitalize line starts after literal restore ---

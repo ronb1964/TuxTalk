@@ -247,6 +247,8 @@ before 0.15.0, so older entries use that name.
   "Switch to Hotkey Helper" (or "Update Hotkey Helper"), the button came
   back as "Fix Typing Permissions", and clicking it ran the older fix,
   which leaves you in the input group. The button comes back as it was now.
+- Saying "soft break" (or "soft line") is meant to type three spaces, as
+  Help and Voice Commands say, but it typed one. It types three now.
 
 ## [0.18.2] - 2026-10-23
 

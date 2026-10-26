@@ -850,3 +850,14 @@ def test_a_carriage_return_talked_about_stays_words():
     carriage" and a line break."""
     assert normalize_text("it inserted a carriage return") == "It inserted a carriage return."
     assert normalize_text("thank you return") != "Thank you return."   # the command still works
+
+
+@pytest.mark.parametrize("said, typed", [
+    ("name soft break address", "Name   address."),
+    ("one, soft line, two", "One   two."),
+    ("name soft break", "Name."),           # nothing after it: no spaces to keep
+])
+def test_soft_break_is_three_spaces(said, typed):
+    """Help and Voice Commands promise three spaces; the space tidy made
+    them one."""
+    assert normalize_text(said) == typed
