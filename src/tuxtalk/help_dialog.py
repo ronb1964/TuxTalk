@@ -42,10 +42,16 @@ def _scroll(label, event, scrolled):
     return True
 
 
-def _open_report(_widget):
-    """Open Report a Problem (a window of its own; see problem_report_window)."""
+def _open_report(widget):
+    """Open Report a Problem (a window of its own; see problem_report_window)
+    over Help, whose *widget* was clicked. Both kept above other windows,
+    KDE put the new one behind Help, so Help stops being kept above while
+    the report is open."""
     from .problem_report_window import ReportWindow
-    ReportWindow()
+    help_window = widget.get_toplevel()
+    help_window.set_keep_above(False)
+    report = ReportWindow()
+    report.window.connect("destroy", lambda _w: help_window.set_keep_above(True))
 
 
 def _on_link(label, uri):
