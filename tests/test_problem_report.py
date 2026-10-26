@@ -2,7 +2,6 @@
 in full before the person shares it anywhere. TuxTalk sends nothing itself.
 """
 import time
-import types
 import urllib.parse
 
 import pytest
@@ -170,8 +169,8 @@ def test_help_problems_opens_it(monkeypatch):
     if not Gtk.init_check()[0]:
         pytest.skip("no display")
     shown, opened = [], []
-    monkeypatch.setattr(Gtk.Dialog, "show_all", lambda self: shown.append(self))
-    monkeypatch.setattr(Gtk.Dialog, "present", lambda self: None)
+    monkeypatch.setattr(Gtk.Window, "show_all", lambda self: shown.append(self))
+    monkeypatch.setattr(Gtk.Window, "present", lambda self: None)
     monkeypatch.setattr(problem_report_window, "ReportWindow", lambda: opened.append(True))
     help_dialog.show_help_dialog()
     dialog = shown[0]
@@ -196,8 +195,8 @@ def test_the_problems_tab_opens_with_a_report_button(monkeypatch):
         pytest.skip("no display")
     from gtk_text import widgets
     shown, opened = [], []
-    monkeypatch.setattr(Gtk.Dialog, "show_all", lambda self: shown.append(self))
-    monkeypatch.setattr(Gtk.Dialog, "present", lambda self: None)
+    monkeypatch.setattr(Gtk.Window, "show_all", lambda self: shown.append(self))
+    monkeypatch.setattr(Gtk.Window, "present", lambda self: None)
     monkeypatch.setattr(problem_report_window, "ReportWindow", lambda: opened.append(True))
     help_dialog.show_help_dialog(tab="problems")
     dialog = shown[0]
@@ -212,18 +211,26 @@ def test_the_problems_tab_opens_with_a_report_button(monkeypatch):
         dialog.destroy()
 
 
-def test_the_report_window_asks_to_come_to_the_front(monkeypatch):
-    """Only shown, KDE opened it behind Help, where it couldn't be seen."""
-    presented = []
-    monkeypatch.setattr(Gtk.Window, "present", lambda self: presented.append(self.get_title()))
-    monkeypatch.setattr(Gtk.Window, "show_all", lambda self: None)
-    monkeypatch.setattr(problem_report_window.threading, "Thread",
-                        lambda **k: types.SimpleNamespace(start=lambda: None))
-    report = problem_report_window.ReportWindow()
+def test_help_is_a_plain_window_so_the_report_opens_in_front_of_it(window):
+    """KWin keeps a Gtk.Dialog with no parent above every other window of
+    its app, so Report a Problem, opened from Help, came up behind it
+    (seen in KWin's stacking order, 2026-10-25). Escape still closes Help."""
+    dialog = help_dialog.show_help_dialog(tab="problems")
     try:
-        assert presented == ["Report a Problem"]
+        assert type(dialog) is Gtk.Window
     finally:
-        report.window.destroy()
+        dialog.destroy()
+
+
+def test_escape_closes_help(window):
+    from gi.repository import Gdk
+    dialog = help_dialog.show_help_dialog()
+    closed = []
+    dialog.connect("destroy", lambda _w: closed.append(True))
+    event = Gdk.Event.new(Gdk.EventType.KEY_PRESS)
+    event.keyval = Gdk.KEY_Escape
+    dialog.emit("key-press-event", event)
+    assert closed == [True]
 
 
 def test_help_opens_the_report_as_a_window_of_its_own(window, monkeypatch):
@@ -231,8 +238,8 @@ def test_help_opens_the_report_as_a_window_of_its_own(window, monkeypatch):
     until the desktop froze; as a window of its own it doesn't. Opened from
     Help's button, it has no transient parent."""
     from gtk_text import widgets
-    monkeypatch.setattr(Gtk.Dialog, "show_all", lambda self: None)
-    monkeypatch.setattr(Gtk.Dialog, "present", lambda self: None)
+    monkeypatch.setattr(Gtk.Window, "show_all", lambda self: None)
+    monkeypatch.setattr(Gtk.Window, "present", lambda self: None)
     dialog = help_dialog.show_help_dialog(tab="problems")
     try:
         button = next(w for w in widgets(dialog) if isinstance(w, Gtk.Button)

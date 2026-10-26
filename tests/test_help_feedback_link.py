@@ -20,8 +20,8 @@ def dialog(monkeypatch):
         pytest.skip("no display")
     shown = []
     # Build the window without putting it on screen.
-    monkeypatch.setattr(Gtk.Dialog, "show_all", lambda self: shown.append(self))
-    monkeypatch.setattr(Gtk.Dialog, "present", lambda self: None)
+    monkeypatch.setattr(Gtk.Window, "show_all", lambda self: shown.append(self))
+    monkeypatch.setattr(Gtk.Window, "present", lambda self: None)
     help_dialog.show_help_dialog()
     yield shown[0]
     shown[0].destroy()
@@ -37,13 +37,6 @@ def test_the_link_is_outside_the_sections_so_every_section_shows_it(dialog):
     link = next(w for w in widgets(dialog) if isinstance(w, Gtk.LinkButton))
     notebook = next(w for w in widgets(dialog) if isinstance(w, Gtk.Notebook))
     assert link not in list(widgets(notebook))
-
-
-def test_clicking_the_link_does_not_close_help(dialog):
-    """Action-area buttons close Help (its response handler destroys it), so
-    the link must not be one of them."""
-    link = next(w for w in widgets(dialog) if isinstance(w, Gtk.LinkButton))
-    assert dialog.get_response_for_widget(link) == Gtk.ResponseType.NONE
 
 
 def test_troubleshooting_links_can_be_clicked(dialog):

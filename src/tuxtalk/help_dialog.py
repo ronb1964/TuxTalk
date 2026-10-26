@@ -112,11 +112,11 @@ def _sections():
     return notebook
 
 
-def _fit(dialog, notebook):
+def _fit(window, notebook):
     """Size Help: a page _LINE_CHARS wide, or the row of tabs if wider. On a
     screen narrower than that (large text, a small or portrait screen) Help
     takes the screen less a margin, its lines wrap and the tabs scroll."""
-    context = dialog.get_pango_context()
+    context = window.get_pango_context()
     char = context.get_metrics(context.get_font_description(), None).get_approximate_char_width()
     tabs = notebook.get_preferred_width()[0] + _FRAME_PX
     wanted = max(int(_LINE_CHARS * char / Pango.SCALE + _FRAME_PX), tabs)
@@ -124,7 +124,7 @@ def _fit(dialog, notebook):
     if screen and wanted > screen - _SCREEN_MARGIN_PX:
         notebook.set_scrollable(True)
         wanted = screen - _SCREEN_MARGIN_PX
-    dialog.set_default_size(wanted, HEIGHT)
+    window.set_default_size(wanted, HEIGHT)
 
 
 def open_section(notebook, word):
@@ -138,18 +138,21 @@ def open_section(notebook, word):
 def show_help_dialog(tab=None):
     """Show Help, on its first section (Start Here), or on the section whose
     title contains *tab* ("writing" from Preferences' TuxTalk Labs section).
-    Returns the dialog."""
-    dialog = Gtk.Dialog(title="TuxTalk Help")
-    dialog.set_resizable(True)
-    dialog.set_modal(False)  # Non-modal so it works without parent window
-    dialog.set_position(Gtk.WindowPosition.CENTER)
-    dialog.set_keep_above(True)  # Ensure it appears on top
+    Returns the window.
 
-    content = dialog.get_content_area()
+    A plain window, not a Gtk.Dialog: KWin keeps a dialog with no parent
+    above every other window of its app, so the Report a Problem window it
+    opens came up behind it."""
+    window = Gtk.Window(title="TuxTalk Help")
+    window.set_position(Gtk.WindowPosition.CENTER)
+    window.connect("key-press-event", _close_on_escape)
+
+    content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
     for side in ("top", "bottom", "start", "end"):
         getattr(content, f"set_margin_{side}")(10)
+    window.add(content)
 
-    ui_style.use_tuxtalk_style(dialog)
+    ui_style.use_tuxtalk_style(window)
     title = Gtk.Label()
     title.set_markup("<big><b>TuxTalk Help</b></big>")
     content.pack_start(title, False, False, 6)
@@ -158,8 +161,7 @@ def show_help_dialog(tab=None):
 
     # A passive feedback link under the sections, so it's there whichever
     # one is open. Help never asks for feedback on its own; this is only for
-    # people who go looking. Not an action-area button: those emit a
-    # response, and the response handler below closes Help.
+    # people who go looking.
     feedback_link = Gtk.LinkButton.new_with_label(
         FEEDBACK_URL, "Questions or feedback? Leave a note on TuxTalk Discussions")
     feedback_link.set_halign(Gtk.Align.START)
@@ -167,17 +169,27 @@ def show_help_dialog(tab=None):
     content.pack_start(feedback_link, False, False, 0)
 
     close_button = Gtk.Button(label="Close")
-    close_button.connect("clicked", lambda w: dialog.destroy())
-    dialog.add_action_widget(close_button, Gtk.ResponseType.CLOSE)
-    dialog.connect("response", lambda d, r: d.destroy())
+    close_button.connect("clicked", lambda w: window.destroy())
+    buttons = Gtk.Box()
+    buttons.set_margin_top(6)
+    buttons.pack_end(close_button, False, False, 0)
+    content.pack_start(buttons, False, False, 0)
 
     content.show_all()      # a hidden widget asks for no width
-    _fit(dialog, notebook)
+    _fit(window, notebook)
     if tab:
         open_section(notebook, tab)
     # The keyboard and a screen reader start on the tabs, at the section
     # shown: the arrows change section and Tab goes into its text.
     notebook.grab_focus()
-    dialog.show_all()
-    dialog.present()  # Bring to front and focus
-    return dialog
+    window.show_all()
+    window.present()  # Bring to front and focus
+    return window
+
+
+def _close_on_escape(window, event):
+    """Escape closes Help, as it would a dialog."""
+    if event.keyval != Gdk.KEY_Escape:
+        return False
+    window.destroy()
+    return True

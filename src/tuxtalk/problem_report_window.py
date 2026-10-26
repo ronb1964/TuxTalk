@@ -55,9 +55,7 @@ class ReportWindow:
         self.window = Gtk.Window(title="Report a Problem")
         # Not transient for Help: on KWin 6.7.5 closing this window as one
         # sent the compositor allocating gigabytes a second until the desktop
-        # froze (a window of its own did not). Kept above, as Help is, on X11;
-        # on Wayland GTK 3 ignores that, and present() below brings it in front.
-        self.window.set_keep_above(True)
+        # froze (a window of its own did not).
         self.window.set_default_size(760, 560)
         self.window.set_position(Gtk.WindowPosition.CENTER)
 
@@ -112,9 +110,6 @@ class ReportWindow:
         self.closed = False
         self.window.connect("destroy", lambda _w: setattr(self, "closed", True))
         self.window.show_all()
-        # Asks the desktop to activate it (on Wayland with an xdg-activation
-        # token from the window clicked). Only shown, KWin's focus stealing
-        # prevention opened it behind Help.
         self.window.present()
         layout = fact(layout_text)
         threading.Thread(target=self._gather, args=(layout,), name="problem-report",

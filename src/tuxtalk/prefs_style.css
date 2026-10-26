@@ -14,8 +14,7 @@
  */
 
 /* Window background - clean dark */
-window.talktype-prefs,
-dialog.talktype-prefs {   /* Help is a dialog, its own node name */
+window.talktype-prefs {
     background: #1e1e1e;
 }
 
