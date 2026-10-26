@@ -232,10 +232,7 @@ def make_model_download_func(model_name, repo_id=None, only_files=None):
                     downloaded_bytes[0] += n
                     if total_bytes > 0:
                         percent = min(99, int((downloaded_bytes[0] / total_bytes) * 99))
-                        progress_callback(
-                            f"Downloading {self._current_file}...",
-                            percent
-                        )
+                        progress_callback(f"Downloading {self._current_file}...", percent)
 
             failed_files = []
             for filename, file_size in files_with_sizes:
@@ -243,12 +240,15 @@ def make_model_download_func(model_name, repo_id=None, only_files=None):
                     return False
 
                 bytes_before = downloaded_bytes[0]
+
+                def fetch(filename=filename, bytes_before=bytes_before):
+                    # A retried file counts its bytes once.
+                    downloaded_bytes[0] = bytes_before
+                    return hf_hub_download(repo_id=repo, filename=filename,
+                                           tqdm_class=ProgressTqdm)
+
                 try:
-                    hf_hub_download(
-                        repo_id=repo,
-                        filename=filename,
-                        tqdm_class=ProgressTqdm,
-                    )
+                    _fetch_with_retry(fetch, filename)
                     # No progress means the file was already cached; count it anyway.
                     if downloaded_bytes[0] == bytes_before:
                         downloaded_bytes[0] += file_size
@@ -386,7 +386,6 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
     """
     cached = is_model_cached_fast(model_name)
     logger.info(f"Model cache check: {model_name} cached={cached}")
-    print(f"Model cache check: {model_name} cached={cached}")
 
     if cached:
         logger.info(f"Model {model_name} already cached, loading directly (no download window)")
@@ -401,6 +400,7 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
             if not dialogs:
                 raise BrokenModelFiles(
                     f"{model_name} looked downloaded but won't load: {e}") from e
+            # Afresh (force_download below): the cache's copy is what won't load.
             logger.warning(f"Model {model_name} looked downloaded but won't load "
                            f"({e}); downloading it again")
 
@@ -609,7 +609,7 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
                     # A retried file counts its bytes once.
                     progress_state['downloaded_bytes'] = bytes_before
                     return hf_hub_download(repo_id=repo_id, filename=filename,
-                                           tqdm_class=GtkProgressTqdm)
+                                           tqdm_class=GtkProgressTqdm, force_download=cached)
 
                 try:
                     _fetch_with_retry(fetch, filename)

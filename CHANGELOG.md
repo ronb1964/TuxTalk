@@ -204,6 +204,13 @@ before 0.15.0, so older entries use that name.
 - Transcribe a File stopped at the first damaged spot in a recording and
   still said Done, so the rest of the file was just missing from the
   transcript. Now it skips the bit that won't play and carries on.
+- Downloads from Preferences and the first-run window (speech models, the
+  graphics card engine's models, the AI model) gave up on the first network
+  hiccup, so one timeout partway through a 3 GB download meant starting
+  over. Each file is tried three times now, like the downloads at startup.
+- If a model's files on disk were damaged, TuxTalk said it would download it
+  again, then found the same files already there and fetched nothing, so it
+  failed the same way. It really downloads them again now.
 
 ## [0.18.2] - 2026-10-23
 

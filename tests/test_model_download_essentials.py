@@ -61,6 +61,7 @@ def test_a_file_asked_for_by_name_is_never_optional(monkeypatch):
     def fails(**kwargs):
         raise OSError("connection reset")
     monkeypatch.setattr(huggingface_hub, "hf_hub_download", fails)
+    monkeypatch.setattr(M, "_RETRY_WAITS", (0, 0))
     monkeypatch.setattr(M, "_files_to_download", lambda repo: [("model.gguf", 10)])
     download = M.make_model_download_func("AI model", repo_id="some/repo",
                                           only_files=["model.gguf"])
@@ -85,3 +86,47 @@ def test_the_disk_space_check_looks_where_the_files_go(monkeypatch):
                     type("E", (), {"is_set": lambda self: False})()) is False
     assert asked == ["/elsewhere/hub"]
     assert "Not enough disk space" in messages[-1]
+
+
+def test_one_dropped_connection_doesnt_sink_the_download(monkeypatch):
+    """Preferences and the first-run window fetch through this function, and
+    one read timeout in a 3 GB Large-v3 failed the whole download."""
+    import huggingface_hub
+    from tuxtalk import download_utils
+    from tuxtalk import model_helper as M
+    tries = []
+
+    def flaky(**kwargs):
+        tries.append(kwargs["filename"])
+        if len(tries) == 1:
+            raise OSError("Read timed out")
+        return "/cache/model.bin"
+    monkeypatch.setattr(huggingface_hub, "hf_hub_download", flaky)
+    monkeypatch.setattr(M, "_files_to_download", lambda repo: [("model.bin", 10)])
+    monkeypatch.setattr(M, "_RETRY_WAITS", (0, 0))
+    monkeypatch.setattr(download_utils, "free_space_bytes", lambda path: 10 ** 12)
+    download = M.make_model_download_func("small")
+    assert download(lambda *a: None, type("E", (), {"is_set": lambda self: False})()) is True
+    assert tries == ["model.bin", "model.bin"]
+
+
+def test_a_model_that_looked_downloaded_but_wont_load_is_fetched_afresh(monkeypatch):
+    """Damaged files in the cache: the download "again" found them cached,
+    fetched nothing, and the model failed to load again."""
+    import huggingface_hub
+    from tuxtalk import model_helper as M
+    fetched, loads = [], []
+
+    def load(name, device="cpu", compute_type="int8"):
+        loads.append(name)
+        if len(loads) == 1:
+            raise RuntimeError("Unable to open file 'model.bin' in model")
+        return "model"
+    monkeypatch.setattr(M, "is_model_cached_fast", lambda name: True)
+    monkeypatch.setattr(M, "_loads_on_cpu", lambda name: False)
+    monkeypatch.setattr(M, "load_model", load)
+    monkeypatch.setattr(M, "_files_to_download", lambda repo: [("model.bin", 10)])
+    monkeypatch.setattr(huggingface_hub, "hf_hub_download",
+                        lambda **kwargs: fetched.append(kwargs) or "/cache/model.bin")
+    assert M.download_model_with_progress("small", show_confirmation=False) == "model"
+    assert fetched and all(kwargs.get("force_download") for kwargs in fetched)
