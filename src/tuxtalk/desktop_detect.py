@@ -19,6 +19,9 @@ def get_desktop_environment() -> str:
     desktop = os.environ.get('XDG_CURRENT_DESKTOP', '').lower()
     session = os.environ.get('DESKTOP_SESSION', '').lower()
 
+    if _gnome_without_its_shell(desktop, session):
+        return 'unknown'
+
     # GNOME
     if 'gnome' in desktop or 'gnome' in session:
         return 'gnome'
@@ -44,6 +47,14 @@ def get_desktop_environment() -> str:
         return 'cosmic'
 
     return 'unknown'
+
+
+def _gnome_without_its_shell(desktop: str, session: str) -> bool:
+    """Budgie and GNOME Flashback name GNOME as well ("Budgie:GNOME") but run
+    no GNOME Shell: TuxTalk's extension can't load there, and on X11 the
+    hotkeys are TuxTalk's own grab to make (x11_hotkeys.should_claim)."""
+    return (any(part in ('budgie', 'gnome-flashback') for part in desktop.split(':'))
+            or session.startswith(('budgie', 'gnome-flashback')))
 
 
 def flatpak_hotkey_hint() -> str:

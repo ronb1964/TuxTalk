@@ -226,6 +226,11 @@ before 0.15.0, so older entries use that name.
   about it, and the app stayed at half volume (your desktop remembers each
   app's volume, so it stayed that way). It keeps trying now, the next time
   it looks and the next time TuxTalk starts.
+- On Budgie and GNOME Flashback, TuxTalk thought it was on GNOME, because
+  those desktops say so too. It offered the GNOME Shell extension, which
+  can't run there, and on X11 it left F8 and F9 to an extension that
+  wasn't there, so they typed junk like "^[[19~" into terminals. It tells
+  them apart now.
 
 ## [0.18.2] - 2026-10-23
 
