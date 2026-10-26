@@ -415,6 +415,25 @@ def test_preferences_package_update_restarts_through_the_tray(prefs_update, monk
     assert prefs_update.asked == ["restart"]
 
 
+@pytest.mark.parametrize("saved", [True, False])
+def test_a_package_update_saves_what_isnt_saved_before_it_restarts(prefs_update, monkeypatch,
+                                                                    saved):
+    """The AppImage's Download & Install saves first; a .deb or .rpm install
+    restarted with unsaved settings and snippets, and they were lost. A
+    save that fails (it says why) keeps TuxTalk from restarting."""
+    from tuxtalk import update_ui
+    ran = []
+    monkeypatch.setattr(uc, "get_install_type", lambda: "rpm")
+    monkeypatch.setattr(update_ui, "run_package_update",
+                        lambda release, kind, restart_callback: ran.append(restart_callback))
+    monkeypatch.setattr(prefs_update.win, "save_before_restart",
+                        lambda: prefs_update.asked.append("save") or saved)
+    prefs_update._on_download_update_clicked(None)
+    assert prefs_update.asked == []                 # nothing saved before "Restart Now"
+    ran[0]()
+    assert prefs_update.asked == (["save", "restart"] if saved else ["save"])
+
+
 # ---- package updates ----------------------------------------------------
 
 def _package(tmp_path):

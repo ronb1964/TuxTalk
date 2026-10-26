@@ -524,6 +524,13 @@ class UpdatesTab(Tab):
         else:
             self.update_extension_btn.hide()
 
+    def _restart_after_package_update(self):
+        """The package is installed and Restart Now was clicked: what isn't
+        saved yet is saved first, as before the AppImage's restart."""
+        from . import update_ui
+        if self.win.save_before_restart():
+            update_ui.restart_via_tray()
+
     def _on_download_update_clicked(self, _button):
         """Download & Install, by how TuxTalk was installed: a package update
         through the shared pkexec flow, the release page (AUR, Flatpak, the
@@ -539,7 +546,7 @@ class UpdatesTab(Tab):
         if method == "pkexec_package":
             from . import update_ui
             update_ui.run_package_update(self._current_release, install_type,
-                                         restart_callback=update_ui.restart_via_tray)
+                                         restart_callback=self._restart_after_package_update)
             return
         url = self._current_release.get("appimage_url")
         if not url:

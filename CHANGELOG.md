@@ -211,6 +211,10 @@ before 0.15.0, so older entries use that name.
 - If a model's files on disk were damaged, TuxTalk said it would download it
   again, then found the same files already there and fetched nothing, so it
   failed the same way. It really downloads them again now.
+- Installed from the .deb or .rpm, Preferences' Download & Install
+  restarted TuxTalk after the update without saving what you'd changed in
+  Preferences, so those settings and any new snippets were lost. It saves
+  them first now, as the AppImage update always did.
 
 ## [0.18.2] - 2026-10-23
 
