@@ -144,8 +144,9 @@ def draw_waveform(cr, w, h, samples, level, color_rgb, sensitivity):
     cr.stroke()
 
 
-def draw_bars(cr, w, h, spectrum, color_rgb):
-    """The bars style: one bar per spectrum band, rising from a baseline."""
+def draw_bars(cr, w, h, spectrum, color_rgb, sensitivity=1.0):
+    """The bars style: one bar per spectrum band, rising from a baseline,
+    each band's level scaled by *sensitivity* (Animation response)."""
     draw_backing(cr, w / 2, h / 2, w * 0.49, h * 0.46)
     n = len(spectrum)
     if n == 0:
@@ -157,6 +158,7 @@ def draw_bars(cr, w, h, spectrum, color_rgb):
     ch = h * 0.40
     baseline = h / 2 + ch / 2
     for i, mag in enumerate(spectrum):
+        mag = min(1.0, mag * sensitivity)
         x = x0 + i * (bw + gap)
         bh = max(2, mag * ch)
         cr.set_source_rgba(*_fg(color_rgb, mag, alpha=0.64 + 0.36 * mag))

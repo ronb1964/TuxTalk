@@ -371,6 +371,7 @@ class RecordingIndicator(Gtk.Window):
             def _do_resize():
                 # GTK is not thread-safe: two threads touching it at once
                 # can crash the service.
+                self.base_size = int(15 * new_scale)     # the orb, with its window
                 self.set_default_size(width, height)
                 self.resize(width, height)
                 return False
@@ -385,6 +386,12 @@ class RecordingIndicator(Gtk.Window):
             self.custom_color = custom_color
         if sensitivity is not None:
             self.sensitivity = sensitivity
+
+    @property
+    def _orb_level(self):
+        """The audio level as the orb shows it, scaled by Animation response
+        (sensitivity) as the other styles' levels are."""
+        return min(1.0, self.audio_level * self.sensitivity)
 
     def set_audio_level(self, level: float):
         """Update the audio level for satellite animation (0.0 - 1.0)"""
@@ -473,7 +480,7 @@ class RecordingIndicator(Gtk.Window):
             elif self.style == "bars":
                 st.draw_bars(cr, width, height,
                              self.spectrum if self.spectrum is not None else [],
-                             color)
+                             color, self.sensitivity)
             elif self.style == "radial":
                 st.draw_radial(cr, width, height, wave,
                                self.audio_level, color, self.sensitivity,
@@ -553,7 +560,7 @@ class RecordingIndicator(Gtk.Window):
             glow_radius = current_size * (1.5 - i * 0.15)
             gradient = cairo.RadialGradient(x, y, current_size * 0.5, x, y, glow_radius)
 
-            alpha = 0.4 * (1.0 - i * 0.3) if not self.is_recording else 0.4 * self.audio_level * (1.0 - i * 0.3)
+            alpha = 0.4 * (1.0 - i * 0.3) if not self.is_recording else 0.4 * self._orb_level * (1.0 - i * 0.3)
             gradient.add_color_stop_rgba(0, glow_color[0], glow_color[1], glow_color[2], alpha)
             gradient.add_color_stop_rgba(1, glow_color[0], glow_color[1], glow_color[2], 0)
 
@@ -600,7 +607,7 @@ class RecordingIndicator(Gtk.Window):
 
             if self.is_recording:
                 # Move radially based on audio level
-                particle_radial_extend = self.audio_level
+                particle_radial_extend = self._orb_level
             else:
                 # Stay at rest position
                 particle_radial_extend = 0.0
@@ -614,7 +621,7 @@ class RecordingIndicator(Gtk.Window):
             # Particle size: subtle pulse at rest, or responds to voice when active
             if self.is_recording:
                 # Size varies with voice level
-                particle_size = 4 + (self.audio_level * 2)
+                particle_size = 4 + (self._orb_level * 2)
             else:
                 # Subtle individual pulse at rest (each particle slightly offset)
                 individual_offset = i * 0.4  # Stagger the pulse per particle
@@ -635,7 +642,7 @@ class RecordingIndicator(Gtk.Window):
                 b = 1.0
 
             # Particle glow (brighter when more energetic)
-            alpha = 0.6 + (self.audio_level * 0.3) if self.is_recording else 0.6
+            alpha = 0.6 + (self._orb_level * 0.3) if self.is_recording else 0.6
             particle_gradient = cairo.RadialGradient(px, py, 0, px, py, particle_size * 1.5)
             particle_gradient.add_color_stop_rgba(0, r, g, b, alpha)
             particle_gradient.add_color_stop_rgba(1, r * 0.7, g * 0.7, b * 0.7, 0)

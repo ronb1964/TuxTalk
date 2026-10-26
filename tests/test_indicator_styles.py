@@ -62,16 +62,19 @@ def test_orb_palette_derives_from_the_base_color():
     assert len(pal["core"]) == 5
 
 
-def _has_ink(draw):
-    """Whether *draw* put the style's blue on the surface: the dark backing
+def _ink(draw):
+    """How many pixels *draw* put the style's blue on: the dark backing
     behind every style doesn't count."""
     cairo = pytest.importorskip("cairo")
     surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, 200, 120)
-    cr = cairo.Context(surf)
-    draw(cr)
+    draw(cairo.Context(surf))
     surf.flush()
     pixels = np.frombuffer(surf.get_data(), np.uint8).reshape(120, surf.get_stride() // 4, 4)
-    return bool((pixels[:, :200, 0] > 40).any())     # ARGB32 keeps blue first
+    return int((pixels[:, :200, 0] > 40).sum())     # ARGB32 keeps blue first
+
+
+def _has_ink(draw):
+    return _ink(draw) > 0
 
 
 def _wave():
@@ -85,6 +88,14 @@ def test_waveform_draws_something():
 def test_bars_draw_something():
     spec = np.linspace(0.1, 1.0, 20).astype(np.float32)
     assert _has_ink(lambda cr: S.draw_bars(cr, 200, 120, spec, (0.3, 0.7, 0.96)))
+
+
+def test_animation_response_moves_the_bars():
+    """The slider changed the waveform and the ring, never the bars."""
+    spec = np.full(20, 0.3, dtype=np.float32)
+    calm = _ink(lambda cr: S.draw_bars(cr, 200, 120, spec, (0.3, 0.7, 0.96), 1.0))
+    lively = _ink(lambda cr: S.draw_bars(cr, 200, 120, spec, (0.3, 0.7, 0.96), 2.0))
+    assert lively > calm
 
 
 def test_radial_draws_something():

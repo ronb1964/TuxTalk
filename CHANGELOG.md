@@ -249,6 +249,11 @@ before 0.15.0, so older entries use that name.
   which leaves you in the input group. The button comes back as it was now.
 - Saying "soft break" (or "soft line") is meant to type three spaces, as
   Help and Voice Commands say, but it typed one. It types three now.
+- The recording indicator's "Animation response" slider did nothing for
+  the orb, which is the style you get unless you pick another, or for the
+  bars. It works for every style now. And when you changed the indicator's
+  size, the orb kept its old size inside the resized window until TuxTalk
+  restarted.
 
 ## [0.18.2] - 2026-10-23
 

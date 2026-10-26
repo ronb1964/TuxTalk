@@ -55,6 +55,20 @@ class TestApplySettings:
         indicator.apply_settings("center", "small", 0, 0)
         assert indicator.scale == pytest.approx(0.6)
 
+    def test_a_size_change_resizes_the_orb_too(self, indicator):
+        """The window grew, and the orb in it stayed its old size until a restart."""
+        from gi.repository import Gtk
+        indicator.apply_settings("center", "large", 0, 0)
+        while Gtk.events_pending():
+            Gtk.main_iteration()
+        assert indicator.base_size == int(15 * 1.4)
+
+    def test_animation_response_moves_the_orb(self, indicator):
+        """The orb, the default style, ignored the slider."""
+        indicator.set_audio_level(0.3)
+        indicator.apply_settings("center", "medium", 0, 0, sensitivity=2.0)
+        assert indicator._orb_level == pytest.approx(0.6)
+
     def test_unknown_size_falls_back_to_medium(self, indicator):
         """Matches __init__'s behaviour rather than crashing the service loop."""
         indicator.apply_settings("center", "enormous", 0, 0)
