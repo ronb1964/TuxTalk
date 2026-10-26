@@ -243,6 +243,10 @@ before 0.15.0, so older entries use that name.
   move like "select the last word" could count on where the cursor was in
   an older dictation and select the wrong text. Once Enter or Tab is
   pressed it knows there's nothing fresh to work on and says so.
+- Preferences, System check: if you cancelled the password prompt for
+  "Switch to Hotkey Helper" (or "Update Hotkey Helper"), the button came
+  back as "Fix Typing Permissions", and clicking it ran the older fix,
+  which leaves you in the input group. The button comes back as it was now.
 
 ## [0.18.2] - 2026-10-23
 

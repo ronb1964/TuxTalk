@@ -68,6 +68,9 @@ def test_pkexec_runs_off_the_gtk_thread_and_a_failure_resets_the_button(monkeypa
     d = SimpleNamespace(window=None, typing_status_label=SimpleNamespace(set_markup=lambda m: None))
     d._finish_fix_typing = lambda *a: SystemCheck._finish_fix_typing(d, *a)
     button = FakeButton()
+    # Checked again, the state offers the fix again.
+    d._check_typing_status = lambda: (button.set_label(P.FIX_TYPING_LABEL),
+                                      button.set_sensitive(True))
 
     SystemCheck._on_fix_typing_clicked(d, button)
     assert ran_in == [], "pkexec ran inside the click handler"

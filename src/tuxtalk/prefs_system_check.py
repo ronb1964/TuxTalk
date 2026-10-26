@@ -506,12 +506,14 @@ class SystemCheck(Tab):
                          "directly into your applications.")
             self._check_typing_status()
         else:
-            button.set_sensitive(True)
-            button.set_label(FIX_TYPING_LABEL)
+            # The state names the button again: after a cancelled Switch to
+            # (or Update) Hotkey Helper, the plain fix would leave the user
+            # in the input group.
+            self._check_typing_status()
             if "cancelled" in message.lower():
                 self.typing_status_label.set_markup(
                     '<span color="#FF9800">⚠ Setup cancelled. Click '
-                    f'{FIX_TYPING_LABEL} to try again</span>'
+                    f'{button.get_label()} to try again</span>'
                 )
             else:
                 show_message(self.window, Gtk.MessageType.ERROR, "Setup Failed", message)
