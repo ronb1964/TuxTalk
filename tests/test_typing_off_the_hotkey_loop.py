@@ -218,6 +218,32 @@ def test_a_dictation_typed_right_after_the_send_keeps_its_undo(real_worker, monk
     assert real_worker.drain(5)
     assert rs.state.last_inserted_text == "How are you? " and rs.state.sent is None
 
+
+def test_a_paste_typed_before_the_send_s_claim_is_forgotten_with_it(real_worker, monkeypatch):
+    """Paste Last Dictation went in while the Enter waited to be pressed, and
+    the Enter sent it too: "edit that" then selected and rewrote text that
+    was already gone."""
+    from tuxtalk import delivery, focused_window
+
+    def deliver_text(text, mode, one_block=False, *, where):
+        rs.state.last_inserted_text = text
+        return "ok"
+    monkeypatch.setattr(delivery, "deliver_text", deliver_text)
+    monkeypatch.setattr(focused_window, "look", lambda: CHAT[:2])
+    monkeypatch.setattr(focused_window, "destination", lambda: CHAT)
+    monkeypatch.setattr(rs.state, "sent", None)
+
+    def press_key(key, why, claim=None):
+        real_worker.submit(lambda: delivery.inject_text("See you at noon. ", "type"))
+        assert real_worker.drain(5)             # the paste, while the Enter waited
+        claim()()                               # then the claim, and the key
+        return True
+    monkeypatch.setattr(keyboard_output, "press_key", press_key)
+    assert pipeline.press_key("ENTER", "Send each dictation automatically is on",
+                              claim=lambda: lambda: None)
+    assert real_worker.drain(5)
+    assert rs.state.last_inserted_text == "" and rs.state.sent is not None
+
 def test_an_enter_from_the_send_timer_forgets_in_order_with_the_typing(real_worker, monkeypatch):
     """The automatic send's Enter goes from a timer thread. Forgotten there
     at once, the dictation memory could take a dictation the worker typed

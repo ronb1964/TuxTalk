@@ -107,6 +107,7 @@ def inject_text(text: str, injection_mode: str, one_block: bool = False, into=No
     sentence" must work. No automatic Enter follows it there: a focus that
     moved while the words went in can't be told from the user switching.
     """
+    rs.state.deliveries += 1        # before any key (pipeline.press_key)
     before = focused_window.destination()
     sends_before, landed = keyboard_output.this_thread.sends, None
     keyboard_output.this_thread.into = into
@@ -133,7 +134,6 @@ def inject_text(text: str, injection_mode: str, one_block: bool = False, into=No
             landed = send_countdown.landed(before, after)
     if message is not None:
         message.add(outcome, landed)
-    rs.state.deliveries += 1
     return outcome
 
 

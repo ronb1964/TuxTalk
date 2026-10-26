@@ -68,9 +68,9 @@ def forget_after_key(key: str, why: str, typed: int) -> None:
     """TuxTalk pressed *key* ("ENTER" or "TAB") after a dictation, for *why*:
     what's behind it is out of reach of undo, "edit that" and voice moves,
     which would count on a dictation that's gone. After Enter, "edit that"
-    says it was sent. Run on the dictation worker (dictation_worker.in_order);
-    *typed* is rs.state.deliveries from before the key, and a delivery since
-    is a dictation the key didn't send, which is left as it is."""
+    says it was sent. Run on the dictation worker (dictation_worker.in_order).
+    *typed* is rs.state.deliveries when the key was claimed (pipeline.press_key):
+    a delivery begun since is a dictation the key didn't send, left as it is."""
     if rs.state.deliveries != typed:
         logger.info(f"{key.title()} pressed: a dictation typed since stays where undo reaches it")
         return

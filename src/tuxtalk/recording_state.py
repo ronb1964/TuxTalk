@@ -67,8 +67,8 @@ class RecordingState:
     # The last Enter TuxTalk pressed: {"at", "automatic"}, or None
     # (last_dictation.forget_after_key). "edit that" just after it explains itself.
     sent: object = None
-    # How many times delivery.inject_text has typed (or tried to), counted on the
-    # dictation worker; an Enter's forgetting is skipped when one came after it.
+    # How many deliveries delivery.inject_text has begun, on the dictation worker:
+    # one begun after an automatic Enter's claim wasn't sent by it (pipeline.press_key).
     deliveries: int = 0
     # Speech the pause detector heard after its last cut, taken at the stop:
     # 0.0 means the rest of the recording is room noise only.
