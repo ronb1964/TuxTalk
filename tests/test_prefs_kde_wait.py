@@ -13,7 +13,9 @@ from tuxtalk.prefs_general import GeneralTab
 def _tab(window):
     """The General tab of the stand-in *window*, whose busy() is the real one."""
     window.busy = lambda: PreferencesWindow.busy(window)
-    return SimpleNamespace(win=window, window=window.window)
+    tab = SimpleNamespace(win=window, window=window.window)
+    tab._while_drawn = lambda finished, seconds: GeneralTab._while_drawn(tab, finished, seconds)
+    return tab
 
 
 def test_the_window_is_locked_while_waiting_and_unlocked_after(monkeypatch):

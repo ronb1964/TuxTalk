@@ -2,6 +2,7 @@
 (prefs_speech.py), start at login and Power Saving, and the question after
 OK or Apply when a hotkey changed."""
 import os
+import threading
 import time
 
 import gi
@@ -15,7 +16,7 @@ from .prefs_hotkey_test import run_hotkey_test
 from .prefs_speech import SpeechSection
 from .prefs_system_check import UPDATE_HELPER_LABEL
 from .prefs_tab import Tab, dropdown, fold, scroll_into_view, section_header
-from .ui_style import WARNING_AMBER, message_dialog
+from .ui_style import WARNING_AMBER, message_dialog, show_message
 
 logger = setup_logger(__name__)
 
@@ -35,14 +36,9 @@ PASTE_LAST_KEYS = [
 ]
 
 
-def _newer_helper_lines(unheard):
-    """For hotkey_change_message: what to do about *unheard*, new keys the
-    running hotkey helper is too old to report."""
-    if not unheard:
-        return []
-    return [f"{' and '.join(unheard)} need{'s' if len(unheard) == 1 else ''} "
-            "the hotkey helper this TuxTalk brings. "
-            f"Update it first: Advanced tab, Show system check, {UPDATE_HELPER_LABEL}."]
+def _needs(keys):
+    """"Right Ctrl needs" or "Right Ctrl and Right Alt need"."""
+    return f"{' and '.join(keys)} need{'s' if len(keys) == 1 else ''}"
 
 
 def hotkey_change_message(cfg, changed, refused, apps=None, unheard=()):
@@ -53,7 +49,8 @@ def hotkey_change_message(cfg, changed, refused, apps=None, unheard=()):
     (kwin_hotkeys.refused_since), None when unknown; *apps*: {key: app} for
     those that open an app (kwin_hotkeys.app_shortcuts_since); *unheard*: new
     keys the running hotkey helper is too old to report. A changed key is
-    offered the same test first run gives it.
+    offered the same test first run gives it; a key the helper won't report
+    is offered the update first (Update Helper), and the test after it.
 
     A key KDE also uses comes first, in the title as well: someone who reads
     only the top of the window must still learn that the key does two things.
@@ -65,21 +62,19 @@ def hotkey_change_message(cfg, changed, refused, apps=None, unheard=()):
     clashes = []        # (our name for the key, the app or None)
     if changed & set(all_keys):
         clashes = [(ours[key], (apps or {}).get(key)) for key in refused or [] if key in ours]
-    lines = []
-    for name, app in clashes:
-        if app:
-            lines.append(f"KDE opens {app} with {name}, so pressing {name} does that too. "
-                         f"Pick another key, or change that shortcut in System Settings, "
-                         f"Keyboard, Shortcuts.")
-        else:
-            lines.append(f"KDE already uses {name} for one of its own shortcuts, so "
-                         f"pressing it does that too. Pick another key if that gets in the way.")
+    lines = [_clash_line(name, app) for name, app in clashes]
 
     roles = (("hotkey", "hold-to-talk key"), ("toggle_hotkey", "tap-to-start key"))
     new_keys = [f"Your {what} is now {cfg.get(key)}." for key, what in roles
                 if key in changed and cfg.get(key)]
-    offer_test = bool(new_keys)
-    lines += new_keys + _newer_helper_lines(unheard)
+    lines += new_keys
+    if unheard:
+        does = "it does" if len(unheard) == 1 else "they do"
+        lines.append(f"The hotkey helper on this computer is older than this TuxTalk and "
+                     f"doesn't report {' or '.join(unheard)}, so {does} nothing yet. Update "
+                     f"Helper updates it now: one password prompt, no restart. Then try "
+                     f"the key in the test.")
+    offer_test = bool(new_keys) and not unheard
     if offer_test:
         lines.append("Try it once in the test to make sure it reaches TuxTalk. On some "
                      "laptops the F-keys change the brightness or volume unless you hold Fn; "
@@ -89,16 +84,32 @@ def hotkey_change_message(cfg, changed, refused, apps=None, unheard=()):
                      "the General tab.")
     if not lines:
         return None
+    return _question_title(clashes, unheard), "\n\n".join(lines), offer_test, bool(clashes)
 
+
+def _clash_line(name, app):
+    """hotkey_change_message's paragraph on key *name*, which KDE uses: to
+    open *app*, or (None) for one of its own shortcuts."""
+    if app:
+        return (f"KDE opens {app} with {name}, so pressing {name} does that too. "
+                f"Pick another key, or change that shortcut in System Settings, "
+                f"Keyboard, Shortcuts.")
+    return (f"KDE already uses {name} for one of its own shortcuts, so "
+            f"pressing it does that too. Pick another key if that gets in the way.")
+
+
+def _question_title(clashes, unheard):
+    """hotkey_change_message's title: a key KDE uses first, then keys the
+    hotkey helper is too old for, else the offer of the test."""
     if len(clashes) > 1:
-        title = "KDE already uses some of these keys"
-    elif clashes and clashes[0][1]:
-        title = f"{clashes[0][0]} also opens {clashes[0][1]}"
-    elif clashes:
-        title = f"KDE already uses {clashes[0][0]}"
-    else:
-        title = "Try your new hotkey?"
-    return title, "\n\n".join(lines), offer_test, bool(clashes)
+        return "KDE already uses some of these keys"
+    if clashes and clashes[0][1]:
+        return f"{clashes[0][0]} also opens {clashes[0][1]}"
+    if clashes:
+        return f"KDE already uses {clashes[0][0]}"
+    if unheard:
+        return f"{_needs(unheard)} a newer hotkey helper"
+    return "Try your new hotkey?"
 
 
 class GeneralTab(Tab):
@@ -412,12 +423,58 @@ class GeneralTab(Tab):
                                         unheard)
         if message is None:
             return False
-        if self._ask_hotkey_question(*message) == Gtk.ResponseType.OK:
+        if self._ask_hotkey_question(*message, update=bool(unheard)) != Gtk.ResponseType.OK:
+            return True
+        if not unheard or self._update_helper(unheard):
             run_hotkey_test(self.window, self.config)
         return True
 
-    def _ask_hotkey_question(self, title, text, offer_test, clash):
-        """The question hotkey_change_message words; returns the answer."""
+    def _update_helper(self, unheard) -> bool:
+        """Update Helper in the hotkey question: the update System check's
+        button makes, waiting for it with the window drawn (pkexec waits for
+        the password, and after OK the window closes as soon as this returns),
+        then dictation restarts on it. True when it was updated; otherwise
+        it's said why, and where to update it later."""
+        from . import secure_input
+        answer = {}
+
+        def work():
+            try:
+                answer["ok"], answer["message"] = secure_input.install_with_pkexec()
+            except Exception as e:
+                logger.warning(f"Updating the hotkey helper failed: {e}")
+                answer["ok"], answer["message"] = False, str(e)
+        thread = threading.Thread(target=work, daemon=True, name="helper-update")
+        thread.start()
+        self._while_drawn(lambda: not thread.is_alive(), secure_input.PKEXEC_TIMEOUT + 10)
+        if answer.get("ok"):
+            logger.info("Updated the hotkey helper from the hotkey question")
+            self.win.restart_service()      # as System check's update does
+            return True
+        message = answer.get("message") or "It took too long."
+        later = (f"{_needs(unheard)} it. You can update it later: Advanced tab, "
+                 f"Show system check, {UPDATE_HELPER_LABEL}.")
+        show_message(self.window, Gtk.MessageType.WARNING, "The hotkey helper wasn't updated",
+                     later if "cancelled" in message.lower() else f"{message}\n\n{later}")
+        return False
+
+    def _while_drawn(self, finished, seconds) -> bool:
+        """Run the main loop until *finished*() or *seconds* have passed, so
+        the window stays drawn while it waits (and can't be used: a second
+        Apply, OK or Cancel would run inside the first). True when finished."""
+        deadline = time.monotonic() + seconds
+        with self.win.busy():
+            while time.monotonic() < deadline:
+                if finished():
+                    return True
+                while Gtk.events_pending():
+                    Gtk.main_iteration()
+                time.sleep(0.1)
+        return False
+
+    def _ask_hotkey_question(self, title, text, offer_test, clash, update=False):
+        """The question hotkey_change_message words; returns the answer.
+        With *update*, its main button is Update Helper."""
         dialog = message_dialog(transient_for=self.window, modal=True,
                                 message_type=Gtk.MessageType.QUESTION
                                 if offer_test and not clash else Gtk.MessageType.WARNING,
@@ -435,12 +492,13 @@ class GeneralTab(Tab):
                 + (f"\n\n{esc(rest)}" if rest else ""))
         else:
             dialog.format_secondary_text(text)
-        if offer_test:
+        if update or offer_test:
             dialog.add_button("Not Now", Gtk.ResponseType.CANCEL)
-            dialog.add_button("Test Now", Gtk.ResponseType.OK)
+            dialog.add_button("Update Helper" if update else "Test Now", Gtk.ResponseType.OK)
         else:
             dialog.add_button("OK", Gtk.ResponseType.CANCEL)
-        dialog.set_default_response(Gtk.ResponseType.OK if offer_test else Gtk.ResponseType.CANCEL)
+        dialog.set_default_response(Gtk.ResponseType.OK if update or offer_test
+                                    else Gtk.ResponseType.CANCEL)
         answer = dialog.run()
         dialog.destroy()
         return answer
@@ -457,14 +515,9 @@ class GeneralTab(Tab):
         except Exception as e:
             logger.warning(f"Could not tell whether KDE holds the new keys: {e}")
             return None
-        deadline = time.monotonic() + 6
-        # The wait keeps the window drawn by running the main loop.
-        with self.win.busy():
-            while time.monotonic() < deadline:
-                found = kwin_hotkeys.refused_since(since)
-                if found is not None:
-                    return found
-                while Gtk.events_pending():
-                    Gtk.main_iteration()
-                time.sleep(0.1)
-            return None
+        found = []
+
+        def answered():
+            found[:] = [kwin_hotkeys.refused_since(since)]
+            return found[0] is not None
+        return found[0] if self._while_drawn(answered, 6) else None
