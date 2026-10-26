@@ -282,6 +282,22 @@ def test_a_failing_chunk_does_not_stop_the_next():
     assert done == [1, 3]
 
 
+
+def test_a_call_from_another_thread_gets_the_job_s_answer_or_its_error(monkeypatch):
+    """pipeline.press_key's Enter waits for its answer on the send's timer
+    thread; an error in it reaches that thread, and the worker goes on."""
+    from tuxtalk import dictation_worker
+    from tuxtalk.dictation_worker import DictationWorker
+    monkeypatch.setattr(dictation_worker, "_instance", DictationWorker())
+
+    def boom():
+        raise RuntimeError("keyboard fell over")
+    assert dictation_worker.call(lambda: "pressed") == "pressed"
+    with pytest.raises(dictation_worker.JobFailed):
+        dictation_worker.call(boom)
+    assert dictation_worker.call(lambda: dictation_worker.call(lambda: "on the worker")) == \
+        "on the worker"
+
 def test_drain_waits_for_the_job_in_progress():
     from tuxtalk.dictation_worker import DictationWorker
     w = DictationWorker()

@@ -75,13 +75,29 @@ def submit(job) -> None:
     worker().submit(job)
 
 
-def in_order(job) -> None:
-    """Run *job* now when on the worker, within what it's doing; from any
-    other thread, after what the worker has been given (submit)."""
+def call(job):
+    """*job*() on the worker, and what it returns: now when on the worker,
+    within what it's doing; from any other thread, after what the worker
+    has been given (submit), waiting for it. A job that fails there is
+    logged by the worker, and raises JobFailed here."""
     if _instance is not None and threading.current_thread() is getattr(_instance, "thread", None):
-        job()
-    else:
-        submit(job)
+        return job()
+    done, answer = threading.Event(), {}
+
+    def run():
+        try:
+            answer["value"] = job()
+        finally:
+            done.set()
+    submit(run)
+    done.wait()
+    if "value" not in answer:
+        raise JobFailed("a job on the dictation worker failed (logged there)")
+    return answer["value"]
+
+
+class JobFailed(RuntimeError):
+    """A job run with call() raised on the worker."""
 
 
 def idle() -> bool:

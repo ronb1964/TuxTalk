@@ -374,10 +374,10 @@ def recording_begins() -> tuple[int, bool]:
 
 
 def _send_right_away(pending: dict) -> None:
-    """"Right away": the Enter on a thread of its own, as after a countdown.
-    Run on the dictation worker, which typed the words, its checks and its
-    wait for a Right Ctrl or Right Alt dictation key would hold up whatever
-    is queued after it."""
+    """"Right away": the Enter on a thread of its own, as after a countdown,
+    so the dictation worker, which typed the words, goes on to what's
+    queued after them first; the Enter waits its turn there
+    (pipeline.press_key), and a recording begun meanwhile holds it."""
     threading.Thread(target=_send, args=(pending,), name="send-right-away", daemon=True).start()
 
 

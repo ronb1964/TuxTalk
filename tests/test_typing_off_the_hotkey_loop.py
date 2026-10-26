@@ -193,63 +193,47 @@ def test_a_send_about_to_claim_its_enter_when_a_recording_begins_stays_held(sent
     assert lock.refused is True
 
 
-def test_a_dictation_typed_right_after_the_send_keeps_its_undo(real_worker, monkeypatch):
-    """The Enter went down, and before its timer thread had queued the
-    forgetting, the next dictation was typed: forgotten after it, "undo
-    that", "edit that" and voice moves lost the new dictation, and "edit
-    that" said it had been sent."""
-    from tuxtalk import delivery, focused_window
-
-    def deliver_text(text, mode, one_block=False, *, where):
-        rs.state.last_inserted_text = text
-        return "ok"
-    monkeypatch.setattr(delivery, "deliver_text", deliver_text)
-    monkeypatch.setattr(focused_window, "look", lambda: CHAT[:2])
-    monkeypatch.setattr(focused_window, "destination", lambda: CHAT)
-    monkeypatch.setattr(rs.state, "sent", None)
-
-    def press_key(key, why, claim=None):
-        # The next dictation, typed by the worker while this thread is held up.
-        real_worker.submit(lambda: delivery.inject_text("How are you? ", "type"))
-        assert real_worker.drain(5)
-        return True
-    monkeypatch.setattr(keyboard_output, "press_key", press_key)
-    assert pipeline.press_key("ENTER", "Send each dictation automatically is on")
-    assert real_worker.drain(5)
-    assert rs.state.last_inserted_text == "How are you? " and rs.state.sent is None
+def _press_from_the_send_timer():
+    """pipeline.press_key as the automatic send's timer thread calls it:
+    the thread, and a list that gets its answer."""
+    answer = []
+    thread = threading.Thread(target=lambda: answer.append(
+        pipeline.press_key("ENTER", "Send each dictation automatically is on")))
+    thread.start()
+    return thread, answer
 
 
-def test_a_paste_typed_before_the_send_s_claim_is_forgotten_with_it(real_worker, monkeypatch):
-    """Paste Last Dictation went in while the Enter waited to be pressed, and
-    the Enter sent it too: "edit that" then selected and rewrote text that
-    was already gone."""
-    from tuxtalk import delivery, focused_window
+def test_the_send_s_enter_waits_for_the_typing_under_way(real_worker, monkeypatch):
+    """A Paste Last Dictation (or a phrase) had made its checks and not yet
+    typed when the countdown ran out: pressed from the timer thread at once,
+    the Enter went down between them, sent the box, and the text landed in
+    the empty box after it."""
+    order = []
+    under_way, may_finish = threading.Event(), threading.Event()
 
-    def deliver_text(text, mode, one_block=False, *, where):
-        rs.state.last_inserted_text = text
-        return "ok"
-    monkeypatch.setattr(delivery, "deliver_text", deliver_text)
-    monkeypatch.setattr(focused_window, "look", lambda: CHAT[:2])
-    monkeypatch.setattr(focused_window, "destination", lambda: CHAT)
-    monkeypatch.setattr(rs.state, "sent", None)
+    def paste():
+        order.append("checks")
+        under_way.set()
+        assert may_finish.wait(5)
+        order.append("typed")
+    monkeypatch.setattr(keyboard_output, "press_key",
+                        lambda key, why, claim=None: order.append(key) or True)
+    real_worker.submit(paste)
+    assert under_way.wait(5)
+    thread, answer = _press_from_the_send_timer()
+    thread.join(0.2)
+    assert order == ["checks"]                  # the Enter waits its turn
+    may_finish.set()
+    thread.join(5)
+    assert order == ["checks", "typed", "ENTER"] and answer == [True]
 
-    def press_key(key, why, claim=None):
-        real_worker.submit(lambda: delivery.inject_text("See you at noon. ", "type"))
-        assert real_worker.drain(5)             # the paste, while the Enter waited
-        claim()()                               # then the claim, and the key
-        return True
-    monkeypatch.setattr(keyboard_output, "press_key", press_key)
-    assert pipeline.press_key("ENTER", "Send each dictation automatically is on",
-                              claim=lambda: lambda: None)
-    assert real_worker.drain(5)
-    assert rs.state.last_inserted_text == "" and rs.state.sent is not None
 
-def test_an_enter_from_the_send_timer_forgets_in_order_with_the_typing(real_worker, monkeypatch):
-    """The automatic send's Enter goes from a timer thread. Forgotten there
-    at once, the dictation memory could take a dictation the worker typed
-    since with it, and "undo that" found nothing. It's forgotten on the
-    worker, after what it was given before, and before what comes after."""
+def test_an_enter_forgets_what_it_sent_and_not_what_comes_after(real_worker, monkeypatch):
+    """The Enter and its forgetting are one step on the worker: the dictation
+    typed before it is forgotten ("edit that" says it was sent), and one
+    typed after it keeps its undo, "edit that" and voice moves."""
     monkeypatch.setattr(keyboard_output, "press_key", lambda key, why, claim=None: True)
+    monkeypatch.setattr(rs.state, "sent", None)
     typing, may_finish = threading.Event(), threading.Event()
 
     def still_typing():
@@ -258,10 +242,10 @@ def test_an_enter_from_the_send_timer_forgets_in_order_with_the_typing(real_work
         assert may_finish.wait(5)
     real_worker.submit(still_typing)
     assert typing.wait(5)
-    assert pipeline.press_key("ENTER", "Send each dictation automatically is on")
-    assert rs.state.last_inserted_text == "See you at noon."     # not from this thread
+    thread, answer = _press_from_the_send_timer()
+    thread.join(0.2)
     real_worker.submit(lambda: setattr(rs.state, "last_inserted_text", "How are you? "))
     may_finish.set()
-    assert real_worker.drain(5)
-    assert rs.state.last_inserted_text == "How are you? "
-    assert rs.state.sent is not None
+    thread.join(5)
+    assert real_worker.drain(5) and answer == [True]
+    assert rs.state.last_inserted_text == "How are you? " and rs.state.sent is not None

@@ -92,23 +92,18 @@ def _after_the_words(outcome: str, said: str, press: str, space: str, chunk_role
 
 
 def press_key(key: str, why: str, claim=None) -> bool:
-    """keyboard_output.press_key, then the dictation behind the key is
-    forgotten, in order with the typing. An automatic send presses its Enter
-    on a timer thread, with a *claim* (send_countdown) that refuses it when
-    any key went out after the claim was made; so a delivery begun by then
-    went in before the Enter and was sent with it, and one begun later
-    wasn't, and is left where undo reaches it. Without a claim the key is
-    pressed on the dictation worker, where nothing is typed meanwhile."""
-    typed = [rs.state.deliveries]
-    counted = claim
-    if claim is not None:
-        def counted():
-            typed[0] = rs.state.deliveries
-            return claim()
-    pressed = keyboard_output.press_key(key, why, claim=counted)
-    if pressed:
-        dictation_worker.in_order(lambda: last_dictation.forget_after_key(key, why, typed[0]))
-    return pressed
+    """keyboard_output.press_key, and the dictation behind the key forgotten
+    with it, in one step on the dictation worker. An automatic send's Enter
+    comes from a timer thread: pressed there, it could go down between a
+    delivery's checks and its keys, and the forgetting take a dictation
+    typed after it. From another thread it waits its turn, after what the
+    worker is typing; a tap meanwhile still holds the send (*claim*)."""
+    def press_and_forget():
+        pressed = keyboard_output.press_key(key, why, claim=claim)
+        if pressed:
+            last_dictation.forget_after_key(key, why)
+        return pressed
+    return dictation_worker.call(press_and_forget)
 
 
 def send_automatically(space: str, injection_mode: str, message) -> None:

@@ -7,10 +7,7 @@ import time
 
 from . import focused_window
 from . import recording_state as rs
-from .logger import setup_logger
 from .normalize import LINE_BREAK
-
-logger = setup_logger(__name__)
 
 
 def remember_said(text: str, chunked: bool, serial: int, takes_back: str = "") -> str:
@@ -64,16 +61,12 @@ def _where_typed():
     return rs.state.last_inserted_window, rs.state.last_inserted_where[1]
 
 
-def forget_after_key(key: str, why: str, typed: int) -> None:
+def forget_after_key(key: str, why: str) -> None:
     """TuxTalk pressed *key* ("ENTER" or "TAB") after a dictation, for *why*:
     what's behind it is out of reach of undo, "edit that" and voice moves,
     which would count on a dictation that's gone. After Enter, "edit that"
-    says it was sent. Run on the dictation worker (dictation_worker.in_order).
-    *typed* is rs.state.deliveries when the key was claimed (pipeline.press_key):
-    a delivery begun since is a dictation the key didn't send, left as it is."""
-    if rs.state.deliveries != typed:
-        logger.info(f"{key.title()} pressed: a dictation typed since stays where undo reaches it")
-        return
+    says it was sent. Run on the dictation worker in the same step as the
+    key (pipeline.press_key), so nothing can be typed between them."""
     rs.state.last_inserted_text, rs.state.nav_context = "", None
     if key == "ENTER":
         rs.state.sent = {"at": time.time(), "automatic": why.startswith("Send each")}
