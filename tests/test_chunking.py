@@ -1212,10 +1212,13 @@ def test_a_short_phrase_the_context_hears_differently_keeps_its_own_words(pipeli
     assert "".join(typed) == "We meet at three at the press center"
 
 
-def test_a_phrase_being_worked_on_holds_hands_free_open(monkeypatch):
-    """_transcribe_chunk holds the silence detector for as long as the phrase
-    is being transcribed, edited and typed, and releases it after."""
-    events = []
+def test_a_phrase_waiting_its_turn_holds_hands_free_open(monkeypatch):
+    """Hands-free's "stop when quiet" is held from the moment a phrase is cut
+    until it's typed: held only once its turn came, a phrase waiting behind
+    the last dictation let the quiet count, and the recording stopped while
+    the user waited for the phrase to appear."""
+    from types import SimpleNamespace
+    events, jobs = [], []
 
     class Detector:
         def hold(self):
@@ -1226,7 +1229,14 @@ def test_a_phrase_being_worked_on_holds_hands_free_open(monkeypatch):
     from tuxtalk.config import Settings
     monkeypatch.setattr(live, "chunk_cfg", Settings())
     monkeypatch.setattr(dictation_pipeline, "transcribe_and_inject", lambda *a, **k: events.append("work"))
-    type_at_pause._transcribe_chunk([b""], SR, 1, 0.5, rs.state.message, Detector())
+    monkeypatch.setattr(dictation_worker, "_instance", SimpleNamespace(submit=jobs.append))
+    pause = SimpleNamespace(tail_samples=lambda: 0, last_pause=1.0)
+    for name, value in (("silence", Detector()), ("chunker", pause), ("frames", [b"\0\0"]),
+                        ("recording_samplerate", SR)):
+        monkeypatch.setattr(rs.state, name, value)
+    type_at_pause.cut_chunk(pause)
+    assert events == ["hold"]                    # queued, not typed yet
+    jobs[0]()
     assert events == ["hold", "work", "release"]
 
 

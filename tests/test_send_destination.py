@@ -1195,9 +1195,8 @@ def test_a_rewrite_that_didnt_all_go_in_leaves_the_message_unsent(edit_that, key
 
 
 def test_a_send_that_doesnt_go_notifies_from_a_thread_of_its_own(chat, keyboard, monkeypatch):
-    """The typing runs on the hotkey loop: a slow notification service
-    there held up reading the next key, so a press and its release read
-    together counted as a tap."""
+    """A slow notification service held up the thread that typed, then the
+    hotkey loop: a press and its release read together counted as a tap."""
     from tuxtalk import notify
     threads = []
     monkeypatch.setattr(notify, "_send", lambda title, body: threads.append(

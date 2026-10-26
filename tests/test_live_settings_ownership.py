@@ -267,3 +267,22 @@ def test_a_failed_wake_is_tried_once_per_dictation(monkeypatch, caplog):
     assert len(tries) == 1 and len(shown) == 1
     assert "CUDA driver version is insufficient" in caplog.text
     assert engine.wake(fresh=True) is None and len(tries) == 2     # the next dictation tries
+
+
+def test_settings_wait_to_reload_until_no_dictation_is_typed(monkeypatch):
+    """A reload can stop the AI engine (AI corrections turned off in
+    Preferences) while a correction across a pause is using it: the
+    phrase failed, and never reached Recent Dictations."""
+    reloads = []
+    monkeypatch.setattr(service_tick, "_reload_if_changed",
+                        lambda cfg, svc, now: reloads.append(now))
+    monkeypatch.setattr(rs.state, "is_recording", False)
+    cfg = _cfg()
+    svc = service_tick.ServiceState(cfg)
+    svc.last_config_check = 0.0
+    monkeypatch.setattr(dictation_worker, "_instance", types.SimpleNamespace(idle=lambda: False))
+    service_tick.tick(cfg, svc)
+    assert reloads == []
+    monkeypatch.setattr(dictation_worker, "_instance", None)
+    service_tick.tick(cfg, svc)
+    assert len(reloads) == 1

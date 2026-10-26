@@ -151,7 +151,10 @@ def tick(cfg, svc: "ServiceState") -> "hotkey_keys.Hotkeys | None":
             and dictation_worker.idle()
             and now - svc.last_activity > svc.timeout_seconds):
         engine.rest(svc.timeout_minutes)
-    if not rs.state.is_recording and now - svc.last_config_check >= CONFIG_RECHECK_SECONDS:
+    # Nor while a dictation is typed: a reload can stop the AI engine a
+    # correction across a pause is using.
+    if (not rs.state.is_recording and dictation_worker.idle()
+            and now - svc.last_config_check >= CONFIG_RECHECK_SECONDS):
         return _reload_if_changed(cfg, svc, now)
     return None
 

@@ -71,7 +71,7 @@ class RecordingState:
     # 0.0 means the rest of the recording is room noise only.
     last_chunk_speech: float = None
     # A recording typed in phrases (Type at pause) is still one dictation.
-    # recording_serial counts recordings (type_at_pause.arm_chunker). said_text is all the
+    # recording_serial counts recordings (send_countdown.recording_begins). said_text is all the
     # one numbered said_serial has typed or tried to: its Recent Dictations
     # entry (last_dictation.remember_said). shown_text is the part of it on screen in
     # shown_window, ending at the cursor, for "fix that word" to fix in

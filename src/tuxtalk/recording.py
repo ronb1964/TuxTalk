@@ -267,8 +267,10 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     microphone error would leave the user unable to type anywhere at all.
     """
     # Pressing a hotkey while a send counts down holds it: a tap leaves the
-    # text unsent, a hold dictates more onto it.
-    rs.state.held_send = send_countdown.hold(announce=False) or held_send
+    # text unsent, a hold dictates more onto it. Counted before the
+    # microphone opens, so a send set up meanwhile waits for this recording.
+    rs.state.recording_serial, held = send_countdown.recording_begins()
+    rs.state.held_send = held or held_send
     rs.state.frames = []
     rs.state.was_cancelled = False
     rs.state.silence = None
@@ -386,8 +388,8 @@ def finish_capture(beeps_on: bool, notify_on: bool):
     the captured frames. Returns (frames, rec_sr) or None if the recording was
     cancelled or too short. start_recording() reassigns state.frames to a fresh
     list, so the returned reference stays valid even if a new recording begins
-    immediately, which is what lets Backend B run the slow transcription/typing
-    on a worker thread without dropping or mixing audio."""
+    immediately, which is what lets the dictation worker transcribe and type
+    it while the next recording records, without dropping or mixing audio."""
     if _dropped_as_silent(beeps_on, notify_on) or _dropped_as_a_tap(beeps_on, notify_on):
         return None
     with type_at_pause.chunk_lock:

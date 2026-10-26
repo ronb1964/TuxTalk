@@ -53,27 +53,28 @@ def cut_chunk(chunker):
         number = rs.state.chunks_submitted
         rec_sr = rs.state.recording_samplerate
         pause = chunker.last_pause
+        # Hands-free's "stop when quiet" waits from now until the phrase is
+        # typed: it can wait its turn behind the last dictation, and an AI
+        # rewrite can take seconds, while the user reads rather than talks.
+        detector = rs.state.silence
+        if detector is not None:
+            detector.hold()
         # Queued before the lock is let go: otherwise the stop could slip in
         # between counting this chunk and queuing it, and queue the last chunk
         # ahead of it. put() on the unbounded queue never blocks.
-        dictation_worker.submit(lambda message=rs.state.message, detector=rs.state.silence:
-                                _transcribe_chunk(frames, rec_sr, number, pause, message,
-                                                  detector))
+        dictation_worker.submit(lambda message=rs.state.message: _transcribe_chunk(
+            frames, rec_sr, number, pause, message, detector))
 
 
 def _transcribe_chunk(frames, rec_sr, number, pause, message, detector):
     """Transcribe and type chunk *number*, cut during the recording after a
     *pause* (seconds), with the settings as they are now, into *message*
     (pipeline.transcribe_and_inject's). *detector* is that recording's
-    hands-free silence detector, or None."""
+    hands-free silence detector, held since the cut (cut_chunk), or None."""
     # Logged here, on the worker, to keep file writes off the audio thread.
     seconds = sum(len(f) for f in frames) / 2 / rec_sr
     logger.info(f"Chunk {number}: {seconds:.1f}s of audio, cut after a {pause:.2f}s pause")
     cfg = live.chunk_cfg
-    # Hands-free's "stop when quiet" waits while this phrase is worked on: an
-    # AI rewrite can take seconds, and the user is reading, not finished.
-    if detector is not None:
-        detector.hold()
     try:
         pipeline.transcribe_and_inject(frames, rec_sr, cfg.beeps, cfg.smart_quotes, cfg.notify,
                                        cfg.language, cfg.auto_space, cfg.auto_period,
@@ -93,7 +94,6 @@ def arm_chunker(rec_sr, edit_mode=False):
     # Started here, so the audio callback never has to start it.
     dictation_worker.worker()
     with chunk_lock:
-        rs.state.recording_serial += 1
         rs.state.chunks_submitted = 0
         rs.state.message = send_countdown.Message(serial=rs.state.recording_serial)
         rs.state.chunker = chunker

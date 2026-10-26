@@ -47,10 +47,15 @@ def focus_moved(focused_class) -> bool:
     return now != focused_class
 
 
-def transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode, message):
+def transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode, message, where):
     """Voice editing: the recording, whose *message* it is, is an instruction
     ("make this more formal") for the text selected in the focused app, which
-    the AI rewrites and the rewrite replaces. Ctrl+Z in the app undoes it."""
+    the AI rewrites and the rewrite replaces. Ctrl+Z in the app undoes it.
+
+    *where* is the window that had the focus when the recording stopped
+    (focused_window.look), None when not known. The edit can wait its turn
+    behind a dictation still being typed; another window that has the focus
+    by then, its own selection perhaps, is left alone."""
     t0 = time.time()
     audio_f32 = recording.frames_f32(frames)
     if audio_f32.size == 0:
@@ -64,6 +69,9 @@ def transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode, mess
         # The selection is read with wl-copy / wl-paste, which have no X11
         # side; without this every edit would say "select some text first".
         notices.edit_problem("needs_wayland", beeps_on)
+        return
+    if where is not None and focused_window.changed(where, focused_window.look()):
+        notices.edit_problem("focus_moved", beeps_on)
         return
     focused_class = focused_window.window_class()
     if is_terminal_class(focused_class):

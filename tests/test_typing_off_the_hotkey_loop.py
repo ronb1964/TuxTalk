@@ -5,10 +5,12 @@ read it only once typing was done: with F8 the start of what was said was
 lost, and with Right Ctrl or Right Alt the press and its release came in
 together, a start beep and a cancel beep."""
 import threading
+import types
 
 import pytest
+from evdev import ecodes
 
-from tuxtalk import dictation_worker, keyboard_output, pipeline, recording, send_countdown
+from tuxtalk import dictation_worker, hotkeys, keyboard_output, pipeline, recording, send_countdown
 from tuxtalk import recording_state as rs
 from tuxtalk.dictation_worker import DictationWorker
 from tuxtalk.focused_window import Destination
@@ -61,30 +63,93 @@ def test_dictations_are_typed_in_the_order_they_were_recorded(real_worker, monke
     assert real_worker.drain(5) and typed == ["first", "second"]
 
 
+def _key(code, value):
+    """One key event, as the hotkey loop hands it to its handler."""
+    event = types.SimpleNamespace(type=ecodes.EV_KEY, code=code, value=value)
+    cfg = types.SimpleNamespace(beeps=False, notify=False, smart_quotes=False, language=None,
+                                auto_space=True, auto_period=True, injection_mode="type")
+    hotkeys._handle_key_event(event, ecodes.KEY_F8, ecodes.KEY_F9, None, set(), [], cfg, 0)
+
+
+def test_the_hotkey_is_read_while_the_last_dictation_is_still_typing(real_worker, monkeypatch):
+    """F8 held, let go, and held again while that dictation is still being
+    typed: the second press starts a recording at once. Read only once
+    typing was done, the start of what was said was lost."""
+    starts, typing, may_finish = [], threading.Event(), threading.Event()
+
+    def start(beeps_on, notify_on, device, from_toggle=False, edit_mode=False, held_send=False):
+        rs.state.is_recording = True
+        starts.append(device)
+        return True
+
+    def stop(beeps_on, notify_on):
+        rs.state.is_recording = False
+        return ["audio"], 16000
+
+    def long_dictation(*a, **k):
+        typing.set()
+        assert may_finish.wait(5)
+    monkeypatch.setattr(recording, "start_recording", start)
+    monkeypatch.setattr(recording, "finish_capture", stop)
+    monkeypatch.setattr(pipeline, "transcribe_and_inject", long_dictation)
+    _key(ecodes.KEY_F8, 1)
+    _key(ecodes.KEY_F8, 0)                      # let go: typed on the worker
+    assert typing.wait(5)
+    _key(ecodes.KEY_F8, 1)                      # pressed again while it types
+    assert len(starts) == 2 and rs.state.is_recording and not real_worker.idle()
+    may_finish.set()
+    _key(ecodes.KEY_F8, 0)
+    assert real_worker.drain(5)
+
+
 @pytest.fixture
 def sent(monkeypatch):
-    """Enters and spaces sent, and "Not sent" notices said."""
-    keys, said = [], []
+    """Enters pressed, spaces typed and "Not sent" notices said, for a
+    dictation whose words went into a chat box."""
+    keys, typed, said = [], [], []
     monkeypatch.setattr(keyboard_output, "press_key", lambda key, why, claim=None:
                         keys.append(key) or True)
+    monkeypatch.setattr(pipeline, "type_onto_dictation", lambda text, mode, into=None:
+                        typed.append(text) or "ok")
     monkeypatch.setattr(send_countdown, "say_held", lambda: said.append("Not sent"))
-    monkeypatch.setattr(send_countdown, "_owed", None)
-    return keys, said
+    monkeypatch.setattr(send_countdown, "_delay", 0.0)
+    monkeypatch.setattr(send_countdown, "_send_right_away", send_countdown._send)
+    return keys, typed, said
 
 
-def test_a_send_waits_for_a_recording_started_while_its_words_were_typed(sent, monkeypatch):
-    """The next recording began before this dictation's Enter: it's held, as
-    a press during the countdown holds it, and what's said next joins it."""
-    keys, said = sent
+def test_a_recording_begun_while_the_words_were_typed_holds_their_send(sent):
+    """Its key was read (and its microphone was still opening) before this
+    dictation's Enter was set up: the Enter went out 2 s later, mid-dictation,
+    and the message went out in two."""
+    keys, typed, said = sent
     message = send_countdown.Message(CHAT, has_words=True)
-    monkeypatch.setattr(rs.state, "message", send_countdown.Message())   # the next recording
+    send_countdown.recording_begins()                   # the next recording
     pipeline.send_automatically(" ", "type", message)
     assert keys == [] and said == [] and send_countdown.owes_space()
 
 
+def test_a_recording_begun_once_the_send_is_set_up_holds_it_too(sent, monkeypatch):
+    keys, typed, said = sent
+    monkeypatch.setattr(send_countdown, "_send_right_away", lambda pending: None)
+    pipeline.send_automatically(" ", "type", send_countdown.Message(CHAT, has_words=True))
+    number, held = send_countdown.recording_begins()
+    assert held and keys == []
+
+
+def test_without_a_newer_recording_the_send_goes(sent):
+    keys, typed, said = sent
+    pipeline.send_automatically(" ", "type", send_countdown.Message(CHAT, has_words=True))
+    assert keys == ["ENTER"]
+
+
 def test_a_tap_while_the_words_were_typed_holds_the_send_and_says_so(sent, monkeypatch):
-    keys, said = sent
+    """The tap is over, its key up: "Not sent", and the space goes in now
+    rather than in front of the next message after the user's own Enter."""
+    keys, typed, said = sent
     message = send_countdown.Message(CHAT, has_words=True)
-    monkeypatch.setattr(rs.state, "message", send_countdown.Message(cancelled=True))
+    send_countdown.recording_begins()
+    monkeypatch.setattr(rs.state, "message", send_countdown.Message(serial=1, cancelled=True))
+    monkeypatch.setattr(rs.state, "is_recording", False)
     pipeline.send_automatically(" ", "type", message)
-    assert keys == [] and said == ["Not sent"]
+    assert keys == [] and said == ["Not sent"] and typed == [" "]
+    assert not send_countdown.owes_space()

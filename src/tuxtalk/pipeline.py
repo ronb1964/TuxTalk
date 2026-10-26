@@ -95,16 +95,15 @@ def send_automatically(space: str, injection_mode: str, message) -> None:
     """"Send each dictation automatically": Enter where *message* went
     (send_countdown). Held when a newer recording has begun since, as a
     press of the hold key during the countdown holds it: what's said there
-    is added to this message, which is sent at its end; a tap that only
-    held it says so."""
-    newer = rs.state.message
-    if newer is not message:
-        send_countdown.hold_for_the_next(space, injection_mode, message, type_onto_dictation,
-                                         announce=newer.cancelled)
-        return
-    send_countdown.send_automatically("Send each dictation automatically is on", message,
-                                      keyboard_output.press_key, type_onto_dictation, space,
-                                      injection_mode)
+    is added to this message and sent at its end. A newer one that was
+    only a tap (or heard nothing) is over already: that's said, and the
+    space left off goes in now, its key long up."""
+    if send_countdown.send_automatically("Send each dictation automatically is on", message,
+                                         keyboard_output.press_key, type_onto_dictation, space,
+                                         injection_mode):
+        if rs.state.message.cancelled and not rs.state.is_recording:
+            send_countdown.say_held()
+            send_countdown.type_owed_space()
 
 
 # delivery.inject_text's outcomes that are sure nothing was typed: it gave up before
@@ -158,10 +157,10 @@ class _Words(NamedTuple):
 def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                           language=None, auto_space=True, auto_period=True,
                           injection_mode="type", chunk_role=None, message=None):
-    """The slow half of stopping: transcribe the captured audio and inject the
-    text. It touches no GTK (the indicator was already hidden in recording.finish_capture)
-    and uses only CPU + audio + D-Bus + the output backend, so it is safe on a
-    worker thread, which Backend B uses so the hotkey loop stays live.
+    """The slow half of stopping, on the dictation worker: transcribe the
+    captured audio and type the text. It touches no GTK (the indicator was
+    already hidden in recording.finish_capture), so it can run off the
+    hotkey loop and the GTK loop both.
 
     *chunk_role* is set for chunked dictation (chunking.py): "middle" for a
     chunk cut at a pause while recording goes on (no beep, no notice, silence
@@ -170,7 +169,7 @@ def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
 
     *message* is the recording's (send_countdown.Message), taken when its
     work was queued, so a recording started meanwhile can't change where
-    this one's Enter may go. By default this recording's."""
+    this one's Enter may go. By default the current recording's."""
     job = _Job(beeps_on, smart_quotes, notify_on, language, auto_space, auto_period,
                injection_mode, chunk_role, rs.state.message if message is None else message)
     print("Recording stopped. Transcribing…")
@@ -479,8 +478,9 @@ def stop_recording(
     frames, rec_sr = cap
     message = rs.state.message
     if edit_mode:
+        where = focused_window.look()       # the window the edit is for
         dictation_worker.submit(lambda: voice_edit.transcribe_and_edit(
-            frames, rec_sr, beeps_on, language, injection_mode, message))
+            frames, rec_sr, beeps_on, language, injection_mode, message, where))
         return
     # Type at pause: the rest is the recording's last phrase, typed after
     # those already queued.

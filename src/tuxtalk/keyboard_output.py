@@ -75,8 +75,9 @@ def send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY_
 
     Each key waits while a Right Ctrl or Right Alt dictation key is down and
     not yet hidden from the desktop (modifier_hotkeys): pressed under it,
-    letters are shortcuts (Ctrl+W closes the tab). Typing on the hotkey
-    loop's own thread, TuxTalk hasn't read the press yet to hide it.
+    letters are shortcuts (Ctrl+W closes the tab). Typing on the dictation
+    worker can get to a key before the hotkey loop has read the press and
+    hidden it.
 
     With *raise_if_partial*, a keyboard that failed partway raises
     virtual_keyboard.StoppedPartway instead of returning False, for a caller

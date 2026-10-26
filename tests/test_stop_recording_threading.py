@@ -1,8 +1,8 @@
-"""stop_recording is split so Backend B (Flatpak) can run the slow half
-(transcribe + portal typing) on a worker thread, keeping the F3/F4 hotkey loop
-responsive instead of freezing it for 10-20s per dictation on a CPU-only box.
+"""stop_recording is split: the hotkey loop only ends the recording, and the
+slow half (transcribing and typing) runs on the dictation worker, so a key
+pressed meanwhile is read at once.
 
-The correctness hinge is that _finish_capture SNAPSHOTS the audio frames on the
+The correctness hinge is that finish_capture SNAPSHOTS the audio frames on the
 loop before the worker starts, so a new recording (which reassigns state.frames)
 can't clobber the audio being transcribed.
 """
@@ -44,7 +44,7 @@ def test_finish_capture_returns_none_when_too_short(monkeypatch):
 
 
 def test_stop_recording_composes_finish_then_inject(monkeypatch):
-    # Backend A path: stop_recording = _finish_capture + pipeline.transcribe_and_inject.
+    # stop_recording = finish_capture, then transcribe_and_inject on the worker.
     got = []
     monkeypatch.setattr(recording, "finish_capture", lambda b, n: ([b"aud"], 16000))
     monkeypatch.setattr(pipeline, "transcribe_and_inject",

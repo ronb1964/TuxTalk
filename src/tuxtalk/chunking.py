@@ -245,8 +245,7 @@ def words_in_context(prev_raw: str, joint_raw: str):
 
     A very short chunk alone is barely a word or two, and Parakeet sometimes
     invents a sentence for it: "it" came out as "It's a little bit
-    more than a little bit." (Ron, 2026-10-18), while the joint pass heard
-    "... run out it"."""
+    more than a little bit.", while the joint pass heard "... run out it"."""
     seam = _seam(prev_raw, joint_raw)
     if seam is None:
         return None

@@ -182,6 +182,8 @@ def test_the_engine_has_room_for_a_selection(monkeypatch):
 from tuxtalk import config
 from tuxtalk import hotkeys
 from tuxtalk import voice_edit
+from tuxtalk import focused_window
+from tuxtalk import notices
 from tuxtalk import delivery
 from tuxtalk import dictation_text
 from tuxtalk import engine as speech_engine
@@ -387,9 +389,21 @@ def edit_env(monkeypatch):
     return seen
 
 
-def run_edit():
+def run_edit(where=None):
     frames = [np.full(16000, 1000, dtype=np.int16).tobytes()]
-    voice_edit.transcribe_and_edit(frames, 16000, False, "", "type", rs.state.message)
+    voice_edit.transcribe_and_edit(frames, 16000, False, "", "type", rs.state.message, where)
+
+
+def test_an_edit_waiting_its_turn_leaves_another_windows_selection_alone(edit_env, monkeypatch):
+    """Shift+F8 let go in one KWrite document while a dictation was still
+    typing; a click into a second one and a selection there before the
+    edit's turn came: that selection was rewritten."""
+    copied = []
+    monkeypatch.setattr(cb, "copy_selection", lambda send_copy: copied.append(1))
+    monkeypatch.setattr(focused_window, "look", lambda: ("org.kde.kwrite", ("tray", "{second}")))
+    monkeypatch.setattr(notices, "edit_problem", lambda kind, beeps: edit_env["notices"].append(kind))
+    run_edit(where=("org.kde.kwrite", ("tray", "{first}")))
+    assert copied == [] and edit_env["typed"] == [] and edit_env["notices"] == ["focus_moved"]
 
 
 def test_an_edit_replaces_the_selection(edit_env):

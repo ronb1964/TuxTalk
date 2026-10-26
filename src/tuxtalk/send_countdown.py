@@ -83,6 +83,9 @@ _pending = None
 # Typed while the key is down, GNOME without the extension sees the key
 # too and the space is lost.
 _owed = None
+# Recordings begun so far (recording_begins). A recording's Message carries
+# its number (serial); a send for one with an older number waits for the newer.
+_begun = 0
 # Whether this session's notifications have said why an automatic send
 # can't go where the focus can't be told: on such a desktop it's every
 # dictation, so after once only the floating notice says so.
@@ -236,8 +239,9 @@ def _say_not_sent(why: str, relabel: bool = False, key: str = "ENTER") -> None:
     the window, and as a desktop notification whatever the notifications
     setting. A screen reader reads the notification, not the label, and
     without XWayland the label can't be shown at all. The notification goes
-    from a thread of its own, as say_held's does: this runs on the typing
-    thread, which reads the hotkeys."""
+    from a thread of its own, as say_held's does: this runs on the
+    dictation worker or a send's timer, and a slow notification service
+    would hold up what comes after it."""
     global _told_unknown_window
     from .notify import notify
     text, notice = _NOT_SENT[why]
@@ -292,14 +296,18 @@ def type_where_sent(text: str, key: str, message: Message, type_more) -> str | N
 # --- The countdown ------------------------------------------------------------
 
 def send_automatically(why: str, message: Message, press, type_more, space: str = "",
-                       injection_mode: str = "type") -> None:
+                       injection_mode: str = "type") -> bool:
     """Press Enter for *message*, just delivered, after the wait (hold),
     through the one claim. *press*(key, why, claim=None) presses it, as
     keyboard_output.press_key; *type_more*(text, mode) types onto the dictation.
 
     *space* is the auto-space left off so it wouldn't be sent; a held send
-    types it, or what's said next sticks to the last word ("delay.All")."""
-    global _pending
+    types it, or what's said next sticks to the last word ("delay.All").
+
+    True when a newer recording had begun (recording_begins), its key read
+    while these words were still being typed: the send is held for it, as a
+    press during the countdown holds it, and its space owed."""
+    global _pending, _owed
     pending = {"to": message.to, "why": why, "press": press, "type": type_more,
                "space": space, "mode": injection_mode, "timer": None, "ticks": []}
     # Nothing to count down to when no Enter could go: part of the message
@@ -316,7 +324,7 @@ def send_automatically(why: str, message: Message, press, type_more, space: str 
             type_more(space, injection_mode, into=message.to)
         else:
             _owe_space(pending)
-        return
+        return False
     delay = _delay
     if delay > 0:
         pending["timer"] = threading.Timer(delay, _send, args=(pending,))
@@ -324,13 +332,21 @@ def send_automatically(why: str, message: Message, press, type_more, space: str 
         pending["ticks"] = [threading.Timer(delay - left, _count_down, args=(pending, left))
                             for left in range(int(delay) - 1, 0, -1)]
     with _send_lock:
-        if _pending is not None:
-            _cancel_timers(_pending)
-            _pending["stopped"] = True
-        _pending = pending
+        newer = message.serial != _begun
+        if newer:
+            if space and message.to is not None:
+                _owed = pending
+        else:
+            if _pending is not None:
+                _cancel_timers(_pending)
+                _pending["stopped"] = True
+            _pending = pending
+    if newer:
+        logger.info("Held the send: another recording began before it")
+        return True
     if delay <= 0:
         _send_right_away(pending)
-        return
+        return False
     for timer in [pending["timer"], *pending["ticks"]]:
         timer.daemon = True
         timer.start()
@@ -338,6 +354,20 @@ def send_automatically(why: str, message: Message, press, type_more, space: str 
     from . import screen_message
     screen_message.show_over_active_window(
         _label(delay), seconds=delay, warning=False, tag=LABEL_TAG, low=True)
+    return False
+
+
+def recording_begins() -> tuple[int, bool]:
+    """A recording begins, before its microphone opens: its number, and
+    whether it held a send counting down (hold). Counted under the send's
+    lock, so a send set up from now on for an earlier recording is held
+    for this one instead (send_automatically); one set up before is held
+    here."""
+    global _begun
+    with _send_lock:
+        _begun += 1
+        number = _begun
+    return number, hold(announce=False)
 
 
 def _send_right_away(pending: dict) -> None:
@@ -448,19 +478,6 @@ def hold(announce: bool) -> bool:
         from . import screen_message
         screen_message.hide(LABEL_TAG)
     return True
-
-
-def hold_for_the_next(space: str, injection_mode: str, message: Message, type_more,
-                      announce: bool) -> None:
-    """A newer recording began before *message* was sent (its key is read
-    while text is still being typed): the send is held, as a press during
-    its countdown holds it (hold), and the space left off is owed to the
-    next dictation into its window (type_owed_space). *announce* says "Not
-    sent", for a newer recording that was only a tap."""
-    logger.info("Held the send: another recording began before it")
-    _owe_space({"to": message.to, "space": space, "mode": injection_mode, "type": type_more})
-    if announce:
-        say_held()
 
 
 def _owe_space(pending: dict) -> None:
