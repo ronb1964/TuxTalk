@@ -102,6 +102,22 @@ def test_new_line_in_kwrite_is_pasted_not_a_shift_enter(window, monkeypatch):
     assert keys == []
 
 
+def test_new_line_typed_into_kwrite_is_a_pasted_newline_too(monkeypatch):
+    """Keystroke Typing (or what's typed after a failed paste) still sent
+    Shift+Enter there, so "$45", new line, "$25" came out as "$$25"."""
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    monkeypatch.setattr(focused_window, "look", lambda: ("org.kde.kwrite", None))
+    monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
+    sent = []
+    monkeypatch.setattr(keyboard_output, "type_text_raw", lambda t: sent.append(t) or True)
+    monkeypatch.setattr(keyboard_output, "paste_text", lambda t: sent.append(("paste", t)) or True)
+    monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: sent.append("shift+enter") or True)
+
+    assert delivery.inject_text("$45.\xa7SHIFT_ENTER\xa7$25. ", "type") == "ok"
+    assert sent == ["$45.", ("paste", "\n"), "$25. "]
+
+
 def test_new_line_in_a_chat_app_is_still_shift_enter(monkeypatch):
     """A newline pasted into a chat box like Claude Desktop sends the message."""
     monkeypatch.setattr("time.sleep", lambda s: None)

@@ -21,7 +21,7 @@ from . import recording_state as rs
 from .key_commands import KEY_CODES
 from .logger import setup_logger
 from .normalize import LINE_BREAK
-from .window_classes import is_terminal_class
+from .window_classes import SMART_NEWLINE_CLASSES_LOWER, is_terminal_class
 
 logger = setup_logger(__name__)
 
@@ -210,9 +210,11 @@ class Delivered(NamedTuple):
         return text + "\n" if self.parts and self.breaks == self.parts else text
 
 
-def deliver_lines(parts, put, before_break_s: float, after_break_s: float) -> Delivered:
+def deliver_lines(parts, put, before_break_s: float, after_break_s: float,
+                  send_break=None) -> Delivered:
     """Deliver *parts* one by one with put(part), a Shift+Enter between each
-    two, waiting *before_break_s* and *after_break_s* around each break.
+    two (or send_break()), waiting *before_break_s* and *after_break_s*
+    around each break.
 
     Stops at the first part or line break that fails: going on after a gap
     would run the later lines into the earlier ones. Before each further
@@ -226,7 +228,7 @@ def deliver_lines(parts, put, before_break_s: float, after_break_s: float) -> De
         done = i + 1
         if i < len(parts) - 1:
             time.sleep(before_break_s)
-            if not send_shift_enter():
+            if not (send_break or send_shift_enter)():
                 return Delivered(done, breaks, "break")
             breaks += 1
             time.sleep(after_break_s)
@@ -234,15 +236,25 @@ def deliver_lines(parts, put, before_break_s: float, after_break_s: float) -> De
 
 
 def type_text(text: str) -> bool:
-    """Type text, its line-break markers as Shift+Enter. Returns True if it
-    was actually typed into the focused app, False if injection failed
-    (deliver_lines). A password field before a further line raises
-    PasswordFieldNow."""
-    stopped = deliver_lines(text.split(LINE_BREAK), type_text_raw, 0.05, 0.05).stopped
+    """Type text, its line-break markers as Shift+Enter, or in KDE's editors
+    as a pasted newline (_paste_newline). Returns True if it was actually
+    typed into the focused app, False if injection failed (deliver_lines).
+    A password field before a further line raises PasswordFieldNow."""
+    in_kde_editor = (focused_window.window_class() or "").lower() in SMART_NEWLINE_CLASSES_LOWER
+    stopped = deliver_lines(text.split(LINE_BREAK), type_text_raw, 0.05, 0.05,
+                            send_break=_paste_newline if in_kde_editor else None).stopped
     if stopped == "password_field":
         raise PasswordFieldNow()
     # A failed line break is a partial injection too: the undo buffer must not count it.
     return not stopped
+
+
+def _paste_newline() -> bool:
+    """A line break in KDE's editors, where Shift+Enter is Insert Smart
+    Newline: "$45", new line, "$25" came out as "$$25". A plain Enter won't
+    do either, since in Kate's terminal panel it runs the line; a pasted
+    newline is a plain one in both, as the paste path delivers it."""
+    return paste_text("\n") if is_wayland_session() else paste_text_x11("\n")
 
 
 def type_text_raw(text: str) -> bool:

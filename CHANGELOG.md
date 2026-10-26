@@ -215,6 +215,12 @@ before 0.15.0, so older entries use that name.
   restarted TuxTalk after the update without saving what you'd changed in
   Preferences, so those settings and any new snippets were lost. It saves
   them first now, as the AppImage update always did.
+- In KWrite and Kate, Shift+Enter is "smart new line", which copies the
+  symbols at the start of the line above: "$45", new line, "$25" came out
+  as "$$25". Pasting already got around it, but with Keystroke Typing (or
+  when a paste failed and TuxTalk typed instead) it still happened. Typed
+  line breaks there are a pasted newline now, so they go through the
+  clipboard, even with Keystroke Typing.
 
 ## [0.18.2] - 2026-10-23
 

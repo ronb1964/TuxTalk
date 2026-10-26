@@ -437,9 +437,12 @@ def typing_into_kwrite(monkeypatch):
 
 
 def test_a_key_stuck_after_the_first_line_says_only_part_was_typed(keyboard, stuck_right_ctrl,
-                                                                   typing_into_kwrite):
+                                                                   typing_into_kwrite,
+                                                                   monkeypatch):
     """The first line is in the app: "Not typed" would have the user paste it
-    all again over it."""
+    all again over it. In an editor whose line break is Shift+Enter (KWrite's
+    is pasted, through the clipboard)."""
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "xed")
     board = stuck_right_ctrl()
     board.pressed = lambda look: len(keyboard.events) >= 2      # once "a" is typed
     assert delivery.inject_text("a\xa7SHIFT_ENTER\xa7b", "type") == "partial"

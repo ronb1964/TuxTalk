@@ -76,7 +76,7 @@ def test_typed_snippet_newline_is_shift_enter_on_x11(monkeypatch, quiet):
     """A snippet keeps real newlines. Typed as a plain Enter, the first line of
     a signature would send a chat message or run a terminal command."""
     monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
-    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "kwrite")
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "discord")
     keys = []
     monkeypatch.setattr(keyboard_output, "type_text_raw", lambda t: keys.append(t) or True)
     monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: keys.append("SHIFT+ENTER") or True)
