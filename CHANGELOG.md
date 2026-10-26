@@ -231,6 +231,10 @@ before 0.15.0, so older entries use that name.
   can't run there, and on X11 it left F8 and F9 to an extension that
   wasn't there, so they typed junk like "^[[19~" into terminals. It tells
   them apart now.
+- First-run setup copies the AppImage into ~/AppImages. If that copy
+  failed (a full disk, say), TuxTalk in your app menu still pointed at the
+  copy that never arrived and opened nothing. It points at the AppImage
+  you ran instead now, as starting at login already did.
 
 ## [0.18.2] - 2026-10-23
 

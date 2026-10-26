@@ -2726,7 +2726,7 @@ def show_welcome_and_install():
             copy_appimage_to_standard_location,
             create_desktop_launcher,
             desktop_launcher_exists,
-            APPIMAGE_PATH
+            point_at_running_appimage, APPIMAGE_PATH
         )
 
         if is_running_from_appimage():
@@ -2743,7 +2743,7 @@ def show_welcome_and_install():
                         logger.info(f"AppImage installed to standard location: {APPIMAGE_PATH}")
                     else:
                         logger.warning(f"AppImage install failed: {msg}")
-                        GLib.idle_add(_autostart_running_appimage)
+                        GLib.idle_add(point_at_running_appimage, current_path)
 
                 # Not a daemon: quitting TuxTalk waits for the copy to finish
                 # instead of cutting it off, and the Ready screen's Restart
@@ -2869,20 +2869,6 @@ def _after_appimage_copy(callback, timeout=120.0):
         return False
 
     GLib.timeout_add(200, poll)
-
-
-def _autostart_running_appimage():
-    """Point launch-at-login back at the running AppImage when the copy into
-    ~/AppImages failed, so login doesn't start a file that isn't there."""
-    try:
-        from tuxtalk import autostart
-        from tuxtalk.config import load_config
-        if getattr(load_config(), "launch_at_login", False):
-            autostart.set_autostart(True, prefer_installed_appimage=False)
-            logger.info("Launch at login points at the running AppImage instead")
-    except Exception as e:
-        logger.warning(f"Could not repoint launch at login: {e}")
-    return False
 
 
 def _saved_hold_key():

@@ -1,7 +1,7 @@
 {
  "files": {
   "tray.py": 2477,
-  "welcome_dialog.py": 3222
+  "welcome_dialog.py": 3208
  },
  "findings": {
   "ai_cleanup.py::<module>::long_line": 4,

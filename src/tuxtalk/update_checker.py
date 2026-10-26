@@ -1137,12 +1137,33 @@ def desktop_actions(program: str) -> str:
     return out
 
 
-def create_desktop_launcher() -> Tuple[bool, str]:
+def point_at_running_appimage(running: str) -> bool:
+    """Point launch-at-login and the menu launcher back at the AppImage
+    *running* when first-run setup's copy into ~/AppImages failed, so
+    neither starts a file that isn't there. False, for GLib.idle_add."""
+    try:
+        from .autostart import set_autostart
+        from .config import load_config
+        if getattr(load_config(), "launch_at_login", False):
+            set_autostart(True, prefer_installed_appimage=False)
+            logger.info("Launch at login points at the running AppImage instead")
+    except Exception as e:
+        logger.warning(f"Could not repoint launch at login: {e}")
+    ok, msg = create_desktop_launcher(running)
+    if ok:
+        logger.info("The menu launcher points at the running AppImage instead")
+    else:
+        logger.warning(f"Could not repoint the menu launcher: {msg}")
+    return False
+
+
+def create_desktop_launcher(appimage_exec_path: Optional[str] = None) -> Tuple[bool, str]:
     """
     Create a desktop launcher (.desktop file) for TuxTalk.
 
     Creates a launcher in ~/.local/share/applications/ that points to
-    the standard AppImage location (APPIMAGE_PATH, ~/AppImages/TuxTalk.AppImage).
+    the standard AppImage location (APPIMAGE_PATH, ~/AppImages/TuxTalk.AppImage),
+    or to *appimage_exec_path*: the running AppImage, when the copy there failed.
 
     Returns:
         Tuple[bool, str]: (success, message)
@@ -1161,9 +1182,8 @@ def create_desktop_launcher() -> Tuple[bool, str]:
         version = get_current_version()
 
         # The file first-run setup and the updater install to.
-        appimage_exec_path = APPIMAGE_PATH
+        appimage_exec_path = appimage_exec_path or APPIMAGE_PATH
         logger.info(f"Desktop launcher Exec path: {appimage_exec_path}")
-        print(f"Desktop launcher will use: {appimage_exec_path}")
 
         # Desktop file content
         desktop_content = f"""[Desktop Entry]

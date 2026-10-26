@@ -207,17 +207,24 @@ def test_the_restart_button_waits_for_the_first_run_copy(monkeypatch):
     assert rebooted == [True]
 
 
-def test_a_failed_copy_points_login_back_at_the_running_appimage(monkeypatch):
+def test_a_failed_copy_points_login_and_the_menu_back_at_the_running_appimage(
+        monkeypatch, tmp_path):
+    """A full disk stopped the first-run copy into ~/AppImages: the menu's
+    launcher still started that file, and opened nothing."""
     from types import SimpleNamespace
     from tuxtalk import autostart, config
-    from tuxtalk import welcome_dialog as wd
     calls = []
     monkeypatch.setattr(config, "load_config", lambda: SimpleNamespace(launch_at_login=True))
     monkeypatch.setattr(autostart, "set_autostart",
                         lambda enable, prefer_installed_appimage=False:
                         calls.append(prefer_installed_appimage) or True)
-    assert wd._autostart_running_appimage() is False
+    monkeypatch.setattr(uc, "DESKTOP_FILE_PATH", str(tmp_path / "apps" / "tuxtalk.desktop"))
+    monkeypatch.setattr(uc, "_install_app_icon", lambda: "tuxtalk")
+    monkeypatch.setattr(uc, "_refresh_desktop_menu_cache", lambda: None)
+    running = str(tmp_path / "Downloads" / "TuxTalk-v0.19.0-x86_64.AppImage")
+    assert uc.point_at_running_appimage(running) is False
     assert calls == [False]
+    assert f"Exec={running}\n" in (tmp_path / "apps" / "tuxtalk.desktop").read_text()
 
 
 # ---- restarting ---------------------------------------------------------
