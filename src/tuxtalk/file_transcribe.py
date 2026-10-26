@@ -91,15 +91,15 @@ def _decode_with_av(path):
     with av.open(path, mode="r") as container:
         if not container.streams.audio:
             return np.zeros(0, dtype=np.float32)
-        frames = container.decode(audio=0)
-        while True:
+        # Packet by packet: container.decode() is a generator, and the first
+        # frame that won't decode ends it, with the rest of the file unread.
+        for packet in container.demux(container.streams.audio[0]):
             try:
-                frame = next(frames)
-            except StopIteration:
-                break
+                frames = packet.decode()
             except av.error.InvalidDataError:
                 continue
-            add(resampler.resample(frame))
+            for frame in frames:
+                add(resampler.resample(frame))
         add(resampler.resample(None))       # what the resampler still holds
     if not chunks:
         return np.zeros(0, dtype=np.float32)

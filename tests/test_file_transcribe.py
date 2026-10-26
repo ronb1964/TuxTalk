@@ -3,6 +3,7 @@
 The file is cut into pieces at quiet moments, pieces nobody talks in are
 skipped, and the rest come out as paragraphs or as SRT subtitles.
 """
+import types
 import wave
 
 import numpy as np
@@ -131,6 +132,44 @@ def test_a_wav_file_is_read_as_16khz_mono(tmp_path):
     audio = ft.decode(str(path))
     assert audio.dtype == np.float32
     assert len(audio) == pytest.approx(SR, abs=SR // 50)
+
+
+def test_a_damaged_spot_skips_only_that_bit(monkeypatch):
+    """One frame of a recording that won't decode ended the decoding there,
+    and the window said Done with the rest of the file missing."""
+    import av
+
+    def second():
+        frame = av.AudioFrame.from_ndarray((np.ones((1, SR)) * 1000).astype("int16"),
+                                           format="s16", layout="mono")
+        frame.sample_rate = SR
+        return frame
+
+    def damaged():
+        raise av.error.InvalidDataError(1094995529, "Invalid data found when processing input")
+
+    class Packet:
+        def __init__(self, decode):
+            self.decode = decode
+
+    class Container:
+        streams = types.SimpleNamespace(audio=[object()])
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def demux(self, stream):
+            return iter([Packet(lambda: [second()]), Packet(damaged), Packet(lambda: [second()])])
+
+        def decode(self, audio):         # how PyAV decodes the whole stream in one go
+            yield second()
+            damaged()
+            yield second()
+    monkeypatch.setattr(av, "open", lambda path, mode: Container())
+    assert len(ft.decode("talk.mp3")) == pytest.approx(2 * SR, abs=SR // 50)
 
 
 def test_a_file_without_sound_says_so(tmp_path):

@@ -201,6 +201,9 @@ before 0.15.0, so older entries use that name.
   tried the broken one again after every rest. Now it loads the one that
   was running. And if it fails, you get one notice for that dictation, not
   two.
+- Transcribe a File stopped at the first damaged spot in a recording and
+  still said Done, so the rest of the file was just missing from the
+  transcript. Now it skips the bit that won't play and carries on.
 
 ## [0.18.2] - 2026-10-23
 
