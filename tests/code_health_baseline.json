@@ -1,6 +1,6 @@
 {
  "files": {
-  "tray.py": 2477,
+  "tray.py": 2461,
   "welcome_dialog.py": 3208
  },
  "findings": {
@@ -203,7 +203,6 @@
   "tray.py::DictationTray._auto_start_service::long_line": 1,
   "tray.py::DictationTray._build_performance_submenu::long_line": 2,
   "tray.py::DictationTray._check_tray_visibility::swallowed_error": 1,
-  "tray.py::DictationTray._download_update.download_complete::long_line": 1,
   "tray.py::DictationTray._get_current_preset::swallowed_error": 1,
   "tray.py::DictationTray._init_dbus_service.TrayAppInstance.config::swallowed_error": 1,
   "tray.py::DictationTray._shut_down::swallowed_error": 1,
@@ -420,7 +419,7 @@
    "lines": 126
   },
   "tray.py::DictationTray._download_update": {
-   "lines": 128
+   "lines": 112
   },
   "tray.py::DictationTray._init_dbus_service": {
    "lines": 151

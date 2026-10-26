@@ -254,6 +254,9 @@ before 0.15.0, so older entries use that name.
   bars. It works for every style now. And when you changed the indicator's
   size, the orb kept its old size inside the resized window until TuxTalk
   restarted.
+- Installing an AppImage update from the tray froze the "Installing
+  Update..." window and the tray menu while the new version was copied
+  into place. The copy runs in the background now.
 
 ## [0.18.2] - 2026-10-23
 

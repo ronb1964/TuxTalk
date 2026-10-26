@@ -318,22 +318,24 @@ def idle_queue(monkeypatch):
 
 @pytest.mark.parametrize("installed", [True, False])
 def test_tray_download_install_restarts_through_restart_app(monkeypatch, idle_queue, installed):
+    """The install (a copy of the whole AppImage) runs off the GTK thread:
+    on it, the "Installing Update..." window and the tray menu froze."""
     import gi
+    import threading
     gi.require_version("Gtk", "3.0")
     from gi.repository import Gtk
     from tuxtalk import tray
     steps = []
     monkeypatch.setattr(uc, "download_update", lambda *a, **k: "/updates/TuxTalk.AppImage")
-    monkeypatch.setattr(uc, "install_appimage_update",
-                        lambda path: steps.append(("install", path)) or (installed, "disk full"))
+    monkeypatch.setattr(uc, "install_appimage_update", lambda path: steps.append(
+        ("install", path, threading.current_thread() is threading.main_thread()))
+        or (installed, "disk full"))
     monkeypatch.setattr(Gtk.Dialog, "run", lambda d: steps.append("error shown"))
     stub = types.SimpleNamespace(restart_app=lambda: steps.append("restart"))
     tray.DictationTray._download_update(stub, {"appimage_url": "https://x/TuxTalk.AppImage"})
     idle_queue(lambda: len(steps) >= 2)
-    if installed:
-        assert steps == [("install", "/updates/TuxTalk.AppImage"), "restart"]
-    else:
-        assert steps == [("install", "/updates/TuxTalk.AppImage"), "error shown"]
+    install = ("install", "/updates/TuxTalk.AppImage", False)
+    assert steps == [install, "restart" if installed else "error shown"]
 
 
 # ---- Preferences asks the tray ------------------------------------------

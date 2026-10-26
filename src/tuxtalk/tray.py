@@ -13,7 +13,7 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("AyatanaAppIndicator3", "0.1")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gtk, Gdk, GLib
-from .ui_style import message_dialog
+from .ui_style import message_dialog, show_message
 from gi.repository import AyatanaAppIndicator3 as AppIndicator3
 import subprocess
 import time
@@ -1725,67 +1725,51 @@ class DictationTray:
             GLib.idle_add(download_complete)
 
         def download_complete():
-            """Handle download completion."""
+            """Install what was downloaded, behind a status window, off the
+            GTK thread: the copy of the AppImage would freeze the window and
+            the tray menu for its length."""
             progress_dialog.destroy()
-
             downloaded_path = result_holder[0]
-            if downloaded_path:
-                # Success - automatically install and restart
-                # Show brief status dialog
-                status_dialog = message_dialog(
-                    closable=False,
-                    message_type=Gtk.MessageType.INFO,
-                    buttons=Gtk.ButtonsType.NONE,
-                    text="Installing Update..."
-                )
-                status_dialog.format_secondary_text(
-                    "TuxTalk will restart automatically with the new version."
-                )
-                status_dialog.set_position(Gtk.WindowPosition.CENTER)
-                status_dialog.set_keep_above(True)
-                status_dialog.show_all()
+            if not downloaded_path:
+                show_message(None, Gtk.MessageType.ERROR, "Download Failed",
+                             "The download could not be completed.\n"
+                             "Please try again or download manually from GitHub.",
+                             keep_above=True)
+                return False
+            status_dialog = message_dialog(
+                closable=False,
+                message_type=Gtk.MessageType.INFO,
+                buttons=Gtk.ButtonsType.NONE,
+                text="Installing Update..."
+            )
+            status_dialog.format_secondary_text(
+                "TuxTalk will restart automatically with the new version."
+            )
+            status_dialog.set_position(Gtk.WindowPosition.CENTER)
+            status_dialog.set_keep_above(True)
+            status_dialog.show_all()
 
-                # Process events so dialog shows
-                while Gtk.events_pending():
-                    Gtk.main_iteration()
-
+            def install():
                 try:
                     success, message = update_checker.install_appimage_update(downloaded_path)
                 except Exception as install_error:
                     logger.error(f"Exception during install_appimage_update: {install_error}")
                     success = False
                     message = f"Install failed with exception: {install_error}"
+                GLib.idle_add(installed, success, message)
 
+            def installed(success, message):
                 status_dialog.destroy()
-                logger.info(f"install_appimage_update returned: success={success}, message={message}")
+                logger.info(f"install_appimage_update returned: success={success}, "
+                            f"message={message}")
                 if success:
                     self.restart_app()
                 else:
-                    error_dialog = message_dialog(
-                        message_type=Gtk.MessageType.ERROR,
-                        buttons=Gtk.ButtonsType.OK,
-                        text="Update Failed"
-                    )
-                    error_dialog.format_secondary_text(message)
-                    error_dialog.set_position(Gtk.WindowPosition.CENTER)
-                    error_dialog.set_keep_above(True)
-                    error_dialog.run()
-                    error_dialog.destroy()
-            else:
-                # Download failed
-                error_dialog = message_dialog(
-                    message_type=Gtk.MessageType.ERROR,
-                    buttons=Gtk.ButtonsType.OK,
-                    text="Download Failed"
-                )
-                error_dialog.format_secondary_text(
-                    "The download could not be completed.\n"
-                    "Please try again or download manually from GitHub."
-                )
-                error_dialog.set_position(Gtk.WindowPosition.CENTER)
-                error_dialog.set_keep_above(True)
-                error_dialog.run()
-                error_dialog.destroy()
+                    show_message(None, Gtk.MessageType.ERROR, "Update Failed", message,
+                                 keep_above=True)
+                return False
+            threading.Thread(target=install, name="install-update").start()
+            return False
 
         # Start download
         thread = threading.Thread(target=do_download, daemon=True)
