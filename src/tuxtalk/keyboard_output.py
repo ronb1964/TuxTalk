@@ -121,16 +121,18 @@ class _ThisThread(threading.local):
 this_thread = _ThisThread()
 
 
-def not_where_typed(focused) -> bool:
+def not_where_typed(focused, now=None) -> bool:
     """Whether the focused window, of class *focused*, is known to be another
     one than the last dictation or phrase went to, for undo, select and move,
     "edit that", "fix that word" and the lowercase carry-on. By the desktop's
     window id where it gives one, so two KWrite documents aren't taken for
-    one, else by the class (focused_window.same_window)."""
+    one, else by the class (focused_window.same_window). *now* is a look
+    already taken, else one is taken here."""
     if focused_window.same_window((focused, None),
                                   (rs.state.last_inserted_window, None)) is False:
         return True
-    return focused_window.same_window(rs.state.last_inserted_where, focused_window.look()) is False
+    now = focused_window.look() if now is None else now
+    return focused_window.same_window(rs.state.last_inserted_where, now) is False
 
 
 def press_key(key: str, why: str, claim=None) -> bool:
@@ -535,10 +537,11 @@ def send_chords(chords, claim=None) -> bool:
                      claim=claim)
 
 
-def send_copy_keystroke() -> bool:
+def send_copy_keystroke(claim=None) -> bool:
     """Ctrl+C. Terminals never get here (voice_edit.transcribe_and_edit turns them away:
-    Ctrl+C would stop the running program). True if it was sent."""
-    return send_keys(ctrl_keys("c"), what="copy")
+    Ctrl+C would stop the running program). True if it was sent. *claim* is
+    virtual_keyboard.send's."""
+    return send_keys(ctrl_keys("c"), what="copy", claim=claim)
 
 
 _FORMAT_LETTERS = {"bold": "b", "italic": "i", "underline": "u"}

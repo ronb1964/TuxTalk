@@ -182,8 +182,8 @@ def test_it_is_never_typed_as_text(editing, monkeypatch):
 
 
 def test_edit_that_right_after_an_automatic_send_says_why(editing, monkeypatch):
-    """Ron, 2026-10-18: the countdown sent the sentence (in KWrite, a new
-    line), then "edit that, make it more formal" was typed as words."""
+    """The countdown sent the sentence (in KWrite, a new line), then "edit
+    that, make it more formal" was typed as words."""
     _pressed, edits, problems = editing
     monkeypatch.setattr(rs.state, "last_inserted_text", "")
     monkeypatch.setattr(rs.state, "sent", {"at": time.time(), "automatic": True})
@@ -260,6 +260,21 @@ def test_edit_that_then_only_a_pause_isnt_sent_as_it_was(editing, monkeypatch):
     type_at_pause.end_in_a_pause(rs.state.message, False, True, True, "type")
     assert sent == [] and problems == ["edit_that_what"]
     assert rs.state.message.edit_waiting is None
+
+
+def test_edit_that_edits_nothing_in_a_window_switched_to_after_the_target_was_found(editing,
+                                                                                   monkeypatch):
+    """The dictation was found in the first KWrite document, then a click
+    into a second: as many characters of the second one's text were selected
+    and rewritten."""
+    from tuxtalk import focused_window
+    pressed, edits, problems = editing
+    first, second = ("org.kde.kwrite", ("tray", "{first}")), ("org.kde.kwrite", ("tray", "{second}"))
+    looks = iter([first, first])                # finding what was typed there, then...
+    monkeypatch.setattr(focused_window, "look", lambda: next(looks, second))
+    monkeypatch.setattr(rs.state, "last_inserted_where", first)
+    assert _said("Edit that, make it shorter.")
+    assert pressed == [] and edits == [] and problems == ["focus_moved"]
 
 
 def test_edit_that_selects_nothing_in_a_window_switched_to_before_the_keys(editing, monkeypatch):

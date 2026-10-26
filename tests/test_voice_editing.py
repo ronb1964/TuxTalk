@@ -445,6 +445,28 @@ def test_no_key_goes_to_a_window_switched_to_while_it_waited(edit_env, keyboard,
     assert len(edit_env["notices"]) == 1 and "switched windows" in edit_env["notices"][0]
 
 
+def test_no_ctrl_c_goes_to_a_terminal_switched_to_during_the_password_check(edit_env, keyboard,
+                                                                            monkeypatch):
+    """The selection is copied with Ctrl+C after the password-field question,
+    which can take a quarter of a second: in a terminal clicked into
+    meanwhile, Ctrl+C stopped the program running there."""
+    kwrite, konsole = ("org.kde.kwrite", ("tray", "{kwrite}")), ("org.kde.konsole", ("tray", "{konsole}"))
+    now = {"look": kwrite}
+    monkeypatch.setattr(focused_window, "look", lambda: now["look"])
+    monkeypatch.setattr("tuxtalk.keyboard_layout.active_layout", lambda: ("us", ""))
+
+    def password_check(beeps):
+        now["look"] = konsole                   # the click, while it was asked
+        return False
+    monkeypatch.setattr(notices, "refuse_password_field", password_check)
+
+    def copy_selection(send_copy):
+        return ("selected text" if send_copy() else None), lambda also=(): None
+    monkeypatch.setattr(cb, "copy_selection", copy_selection)
+    run_edit(where=kwrite)
+    assert keyboard.events == [] and edit_env["typed"] == []
+    assert len(edit_env["notices"]) == 1 and "switched windows" in edit_env["notices"][0]
+
 def test_a_rewrite_goes_only_into_the_window_the_edit_started_in(edit_env, monkeypatch):
     """Checked once more right before its keys (delivery.inject_text's
     *into*): a click into another document after the last check here must

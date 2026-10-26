@@ -96,9 +96,10 @@ def transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode, mess
 
 def _only_into(focused_class, window):
     """virtual_keyboard.send's claim for keys that may only go into the
-    window the edit started in, made right before the first key goes down:
-    the password check and a wait for a held Right Ctrl come after
-    focus_moved, and the user can switch windows during either."""
+    window the edit started in, made right before the first key goes down.
+    The checks before the keys (the password-field question can take a
+    quarter of a second) and a wait for a held Right Ctrl leave time to
+    switch windows."""
     return functools.partial(focused_window.claim_into, (focused_class, window))
 
 
@@ -294,11 +295,20 @@ def edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0,
     if notices.refuse_password_field(beeps_on):
         return
     # The selection first, so "select some text first" comes up even when
-    # nothing was said.
+    # nothing was said. Ctrl+C in a terminal switched to during the password
+    # check would stop the program running there.
+    copy_sent = []
+
+    def send_copy():
+        copy_sent.append(keyboard_output.send_copy_keystroke(_only_into(focused_class, window)))
+        return copy_sent[-1]
     try:
-        selected, put_back = clipboard.copy_selection(keyboard_output.send_copy_keystroke)
+        selected, put_back = clipboard.copy_selection(send_copy)
     except clipboard.ClipboardUnavailable:
         notices.edit_problem("no_clipboard", beeps_on)
+        return
+    if copy_sent == [False]:
+        _not_pressed(focused_class, window, beeps_on)
         return
     if not selected:
         _nothing_selected(get_instruction, spoken, focused_class, beeps_on)
@@ -349,11 +359,6 @@ def handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: str
     waiting, message.edit_waiting = message.edit_waiting, None
     if waiting is not None:
         instruction, target = raw, waiting
-        # A click into another app during the pause: selecting there would
-        # rewrite as many characters of its text.
-        if keyboard_output.not_where_typed(focused_window.window_class()):
-            notices.edit_problem("focus_moved", beeps_on)
-            return True
     else:
         instruction = voice_edit_rules.spoken_edit(raw)
         if instruction is None:
@@ -365,9 +370,14 @@ def handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: str
     if not keyboard_output.is_wayland_session():
         notices.edit_problem("needs_wayland", beeps_on)
         return True
-    # Taken before selecting: the select keys, Delete or the rewrite go
-    # only into this window.
+    # Taken before selecting: the select keys, Delete or the rewrite go only
+    # into this window, and it must be the one the text was typed into. A
+    # click into another document (during the pause, or just now) would have
+    # as many characters of its text selected and rewritten.
     where = focused_window.look()
+    if keyboard_output.not_where_typed(where[0], where):
+        notices.edit_problem("focus_moved", beeps_on)
+        return True
     focused_class = where[0]
     if is_terminal_class(focused_class):
         notices.edit_problem("terminal", beeps_on)
