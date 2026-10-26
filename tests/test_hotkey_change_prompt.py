@@ -182,3 +182,19 @@ def test_the_question_s_main_button_is_update_helper(prefs_window, monkeypatch):
     tab._ask_hotkey_question("Right Ctrl needs a newer hotkey helper", "", False, False,
                              update=True)
     assert buttons == ["Not Now", "Update Helper"]
+
+
+def test_an_update_that_outlasts_the_wait_says_how_it_ended(right_ctrl_question, monkeypatch):
+    """Past pkexec's time-out the script can still run as root: the window
+    stopped waiting, and nobody heard that it finished after all."""
+    from tuxtalk import update_offers
+    tab, steps, warnings = right_ctrl_question
+    finish, told = [], []
+    monkeypatch.setattr(update_offers, "update_helper", finish.append)
+    monkeypatch.setattr(tab, "_while_drawn", lambda finished, seconds: False)
+    monkeypatch.setattr(update_offers, "say_helper_updated", lambda ok, message: told.append(ok))
+    assert tab.after_hotkey_change({"hotkey"}, 0)
+    [(title, text)] = warnings
+    assert title == "The update is taking a while" and "a notification says when" in text
+    finish[0](True, "")                         # the update ends after all
+    assert told == [True] and "test" not in steps

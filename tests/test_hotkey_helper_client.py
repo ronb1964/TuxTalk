@@ -191,6 +191,37 @@ def test_if_the_helper_goes_away_a_held_key_is_let_go(rig):
     assert helper.hide is None           # and the keyboards were given back
 
 
+
+def test_after_the_helper_restarts_the_dictation_keys_work_again(rig):
+    """Updating the hotkey helper restarts it, and dictation isn't restarted
+    with it (a dictation under way would be lost; update_offers.update_helper):
+    the connection must come back by itself and watch its keys again."""
+    import threading
+    helper, kb, client, loop, calls = rig
+    for c in list(helper.clients.values()):
+        helper.drop_client(c)                   # the helper restarted
+    serving = threading.Event()
+
+    def serve():
+        while not serving.is_set():
+            helper.run_once(timeout=0.01)
+    t = threading.Thread(target=serve)
+    t.start()
+    try:
+        for _ in range(100):
+            client._pump()                      # sees it gone, then connects again
+            client.reconnect_at = 0.0
+            if client.sock is not None and helper.clients:
+                break
+            serving.wait(0.01)
+    finally:
+        serving.set()
+        t.join(5)
+    assert client.sock is not None
+    kb.press(F8)
+    loop()
+    assert calls == [("start", False)]
+
 @pytest.fixture
 def right_ctrl(rig, keyboard, monkeypatch):
     """The rig with Right Ctrl as the hold key, and typing's waits on the

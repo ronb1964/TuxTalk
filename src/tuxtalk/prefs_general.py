@@ -434,8 +434,13 @@ class GeneralTab(Tab):
         and after OK the window closes as soon as this returns. True when it
         was updated; otherwise it's said why, and where to update it later."""
         from . import secure_input, update_offers
-        answer = {}
-        update_offers.update_helper(lambda ok, message: answer.update(ok=ok, message=message))
+        answer, gave_up = {}, []
+
+        def done(ok, message):
+            answer.update(ok=ok, message=message)
+            if gave_up:             # the window stopped waiting: a notification says it
+                update_offers.say_helper_updated(ok, message)
+        update_offers.update_helper(done)
         finished = self._while_drawn(lambda: answer, secure_input.PKEXEC_TIMEOUT + 10)
         if answer.get("ok"):
             logger.info("Updated the hotkey helper from the hotkey question")
@@ -444,9 +449,11 @@ class GeneralTab(Tab):
                  f"Show system check, {UPDATE_HELPER_LABEL}.")
         if not finished:
             # Past pkexec's own time-out the script can still be running as root.
+            gave_up.append(True)
             show_message(self.window, Gtk.MessageType.WARNING, "The update is taking a while",
-                         "It may still finish by itself. If not, update it later: "
-                         f"Advanced tab, Show system check, {UPDATE_HELPER_LABEL}.")
+                         "It may still finish by itself, and a notification says when. "
+                         f"If not, update it later: Advanced tab, Show system check, "
+                         f"{UPDATE_HELPER_LABEL}.")
             return False
         message = answer["message"]
         show_message(self.window, Gtk.MessageType.WARNING, "The hotkey helper wasn't updated",

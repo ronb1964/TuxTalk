@@ -55,7 +55,7 @@ def offer_helper_update() -> bool:
         if not secure_input.is_older(running):
             return False
         if _ask_helper_update(running):
-            update_helper(_helper_updated)
+            update_helper(say_helper_updated)
         else:
             logger.info("Hotkey helper update offer: not now")
         return True
@@ -115,8 +115,9 @@ def update_helper(done) -> None:
     threading.Thread(target=work, daemon=True, name="helper-update").start()
 
 
-def _helper_updated(ok, message) -> None:
-    """The offer's update is over: say so, or that it wasn't updated (a
+def say_helper_updated(ok, message) -> None:
+    """An update nobody is waiting on is over (the offer's, or one that
+    outlasted Preferences' wait): say so, or that it wasn't updated (a
     cancelled password prompt says nothing more: the offer comes back next
     start)."""
     from .notify import notify
