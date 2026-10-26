@@ -76,19 +76,16 @@ def test_installing_an_update_has_no_close_button(Gtk, monkeypatch):
     import types
     from gi.repository import GLib
     from tuxtalk import tray, update_checker
-    waiting, seen = queue.Queue(), []
-    monkeypatch.setattr(GLib, "idle_add", lambda fn, *args: waiting.put(fn))
+    waiting = queue.Queue()
+    monkeypatch.setattr(GLib, "idle_add", lambda fn, *args: waiting.put(lambda: fn(*args)))
     monkeypatch.setattr(update_checker, "download_update", lambda *a, **k: "/u/TuxTalk.AppImage")
-
-    def install(path):
-        box = _open_box(Gtk, "Installing Update...")
-        seen.append(box is not None and not box.get_deletable())
-        return True, ""
-    monkeypatch.setattr(update_checker, "install_appimage_update", install)
+    monkeypatch.setattr(update_checker, "install_appimage_update", lambda path: (True, ""))
     tray.DictationTray._download_update(types.SimpleNamespace(restart_app=lambda: None),
                                         {"appimage_url": "https://x/TuxTalk.AppImage"})
-    waiting.get(timeout=5)()
-    assert seen == [True]
+    waiting.get(timeout=5)()          # downloaded: the box shows, the install starts
+    box = _open_box(Gtk, "Installing Update...")
+    assert box is not None and not box.get_deletable()
+    waiting.get(timeout=5)()          # installed, back on the GTK thread: the box goes
 
 
 def test_an_explicit_title_is_kept(Gtk):
