@@ -1170,7 +1170,7 @@ def test_press_enter_after_each_dictation_when_it_ends_in_a_pause(enter, monkeyp
 
 
 def test_a_press_enter_misheard_alone_is_caught_by_the_context_pass(enter):
-    """Ron, 2026-10-17: alone the short phrase came out "Press center.", heard
+    """Alone, the short phrase came out "Press center.", heard
     with the end of the one before it was "... to say. Press enter."."""
     texts, typed, _ = enter
     texts.extend(["we meet at three", "Press center.", "We meet at three. Press enter."])
@@ -1197,7 +1197,7 @@ def test_a_longer_phrase_is_never_turned_into_press_enter(enter):
 
 
 def test_a_sentence_made_up_for_a_short_phrase_gives_way_to_the_context(pipeline):
-    """Ron, 2026-10-18: he said "it" after a pause; alone, 1.7 s of audio came
+    """The user said "it" after a pause; alone, 1.7 s of audio came
     out "It's a little bit more than a little bit.", while heard with the
     phrase before it was "... run out it"."""
     texts, typed, _ = pipeline
@@ -1257,7 +1257,7 @@ def test_a_phrase_waiting_its_turn_holds_hands_free_open(monkeypatch):
 
 
 def test_a_held_mark_stays_in_the_window_its_phrase_went_to(pipeline, monkeypatch):
-    """Ron, 2026-10-17: "What's next" typed into the wrong window, a click into
+    """"What's next" typed into the wrong window, a click into
     the chat, "What's next" again: the chat got "? What's next". The first
     phrase's held "?" belongs in the first window; the chat starts afresh."""
     texts, typed, _ = pipeline
@@ -1274,7 +1274,7 @@ def test_a_held_mark_stays_in_the_window_its_phrase_went_to(pipeline, monkeypatc
 
 
 def test_a_question_goes_on_across_a_pause(pipeline):
-    """Ron, 2026-10-18: "do you think ... feature" (pause) "to make it work
+    """"do you think ... feature" (pause) "to make it work
     better" came out ending in a period. The engine heard a question before
     the pause and a sentence going on across it, so the question ends at the
     end of the next phrase."""

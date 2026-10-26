@@ -5,6 +5,7 @@ read it only once typing was done: with F8 the start of what was said was
 lost, and with Right Ctrl or Right Alt the press and its release came in
 together, a start beep and a cancel beep."""
 import threading
+import time
 import types
 
 import pytest
@@ -193,14 +194,25 @@ def test_a_send_about_to_claim_its_enter_when_a_recording_begins_stays_held(sent
     assert lock.refused is True
 
 
-def _press_from_the_send_timer():
-    """pipeline.press_key as the automatic send's timer thread calls it:
+def _press_from_the_send_timer(worker):
+    """pipeline.press_key as the automatic send's timer thread calls it,
+    returned once its Enter is queued behind the job *worker* is running:
     the thread, and a list that gets its answer."""
     answer = []
     thread = threading.Thread(target=lambda: answer.append(
         pipeline.press_key("ENTER", "Send each dictation automatically is on")))
     thread.start()
+    _until_queued(worker, 2)
     return thread, answer
+
+
+def _until_queued(worker, jobs):
+    """Wait until *worker* has *jobs* running or waiting."""
+    for _ in range(500):
+        if worker._queue.unfinished_tasks >= jobs:
+            return
+        time.sleep(0.01)
+    raise AssertionError("the job never reached the worker")
 
 
 def test_the_send_s_enter_waits_for_the_typing_under_way(real_worker, monkeypatch):
@@ -220,8 +232,7 @@ def test_the_send_s_enter_waits_for_the_typing_under_way(real_worker, monkeypatc
                         lambda key, why, claim=None: order.append(key) or True)
     real_worker.submit(paste)
     assert under_way.wait(5)
-    thread, answer = _press_from_the_send_timer()
-    thread.join(0.2)
+    thread, answer = _press_from_the_send_timer(real_worker)
     assert order == ["checks"]                  # the Enter waits its turn
     may_finish.set()
     thread.join(5)
@@ -242,10 +253,52 @@ def test_an_enter_forgets_what_it_sent_and_not_what_comes_after(real_worker, mon
         assert may_finish.wait(5)
     real_worker.submit(still_typing)
     assert typing.wait(5)
-    thread, answer = _press_from_the_send_timer()
-    thread.join(0.2)
+    thread, answer = _press_from_the_send_timer(real_worker)
     real_worker.submit(lambda: setattr(rs.state, "last_inserted_text", "How are you? "))
     may_finish.set()
     thread.join(5)
     assert real_worker.drain(5) and answer == [True]
     assert rs.state.last_inserted_text == "How are you? " and rs.state.sent is not None
+
+
+@pytest.mark.parametrize("meanwhile", ["tap", "switch"])
+def test_a_send_held_or_switched_away_from_while_its_enter_waits_its_turn(real_worker,
+                                                                         monkeypatch, meanwhile):
+    """The countdown ran out while the worker was still busy, and the Enter
+    waited its turn there: a tap of the hold key, or a click into another
+    window, during that wait must still keep it from going, and the
+    dictation stays where undo reaches it."""
+    from tuxtalk import focused_window, virtual_keyboard
+    now = {"look": CHAT}
+    monkeypatch.setattr(focused_window, "look", lambda: now["look"][:2])
+    monkeypatch.setattr(focused_window, "destination", lambda: now["look"])
+    monkeypatch.setattr(send_countdown, "_say_not_sent", lambda *a, **k: None)
+    monkeypatch.setattr(send_countdown, "_delay", 0.0)
+    queued = []
+    monkeypatch.setattr(send_countdown, "_send_right_away", queued.append)
+    keys = []
+
+    def press_key(key, why, claim=None):
+        try:
+            claim()()                           # as the virtual keyboard makes it
+        except virtual_keyboard.GaveUp:
+            return False
+        keys.append(key)
+        return True
+    monkeypatch.setattr(keyboard_output, "press_key", press_key)
+    monkeypatch.setattr(rs.state, "last_inserted_text", "See you at noon.")
+    pipeline.send_automatically(" ", "type", send_countdown.Message(CHAT, has_words=True))
+    busy, may_finish = threading.Event(), threading.Event()
+    real_worker.submit(lambda: busy.set() or may_finish.wait(5))
+    assert busy.wait(5)
+    timer = threading.Thread(target=send_countdown._send, args=(queued[0],))
+    timer.start()
+    _until_queued(real_worker, 2)
+    if meanwhile == "tap":
+        send_countdown.recording_begins()
+    else:
+        now["look"] = Destination("org.kde.konsole", ("tray", "{9a0b}"))
+    may_finish.set()
+    timer.join(5)
+    assert real_worker.drain(5)
+    assert keys == [] and rs.state.last_inserted_text == "See you at noon."
