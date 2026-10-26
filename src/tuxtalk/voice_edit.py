@@ -37,14 +37,19 @@ logger = setup_logger(__name__)
 EDIT_RESTORE_DELAY_S = 1.0
 
 
-def focus_moved(focused_class) -> bool:
-    """Whether another window has the focus than when the edit started. Only
-    the class is known, so a second window of the same app is not noticed.
-    A window that can't be found now counts as moved: it can't be checked."""
+def focus_moved(focused_class, window=None) -> bool:
+    """Whether another window has the focus than when the edit started, of
+    class *focused_class*: another app, or, by *window* (focused_window.look's
+    which-window part, None when not known), another window of the same app
+    (two KWrite documents). A window that can't be found now counts as
+    moved: it can't be checked."""
     now = focused_window.window_class()
     if now is None and focused_class is not None:
         logger.info("Voice edit: the focused window can't be found now, so it can't be checked")
-    return now != focused_class
+    if now != focused_class:
+        return True
+    return window is not None and focused_window.changed((focused_class, window),
+                                                         focused_window.look())
 
 
 def transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode, message, where):
@@ -83,10 +88,11 @@ def transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode, mess
         if not heard:
             heard.append(engine.transcribe(audio_f32, language))
         return heard[0]
-    edit_selection(instruction, beeps_on, injection_mode, focused_class, t0, message)
+    edit_selection(instruction, beeps_on, injection_mode, focused_class, t0, message,
+                   window=where[1] if where is not None else None)
 
 
-def _delete_selection(focused_class, beeps_on) -> bool:
+def _delete_selection(focused_class, window, beeps_on) -> bool:
     """"Delete this": Delete on the selection, still selected in
     *focused_class*. True when it was pressed. Transcribing can take
     seconds, and Delete must not reach a window the user has switched to
@@ -95,7 +101,7 @@ def _delete_selection(focused_class, beeps_on) -> bool:
         logger.info("Voice edit: the focused window is unknown, so Delete can't be checked")
         notices.edit_problem("cant_check_window", beeps_on)
         return False
-    if focus_moved(focused_class):
+    if focus_moved(focused_class, window):
         notices.edit_problem("focus_moved", beeps_on)
         return False
     if notices.refuse_password_field(beeps_on):
@@ -108,7 +114,7 @@ def _delete_selection(focused_class, beeps_on) -> bool:
     return True
 
 
-def _format_selection(fmt, focused_class, beeps_on) -> bool:
+def _format_selection(fmt, focused_class, window, beeps_on) -> bool:
     """Bold, italic or underline (*fmt*, voice_edit_rules.formatting) with
     the app's own shortcut on the selection, still selected. True when it
     was pressed."""
@@ -116,7 +122,7 @@ def _format_selection(fmt, focused_class, beeps_on) -> bool:
         logger.info(f"Voice edit: no formatting shortcuts in {focused_class!r}")
         notices.edit_problem("no_shortcuts", beeps_on)
         return False
-    if focus_moved(focused_class):
+    if focus_moved(focused_class, window):
         notices.edit_problem("focus_moved", beeps_on)
         return False
     if notices.refuse_password_field(beeps_on):
@@ -157,17 +163,17 @@ def _put_clipboard_back(put_back, result):
 _NOT_A_KEY_EDIT = object()
 
 
-def _edit_with_keys(instruction, focused_class, beeps_on):
+def _edit_with_keys(instruction, focused_class, window, beeps_on):
     """Deleting and formatting, which need no AI and press keys only: what
     the edit returned, or _NOT_A_KEY_EDIT for a rewrite."""
     if voice_edit_rules.is_delete(instruction):
-        return _delete_selection(focused_class, beeps_on)
+        return _delete_selection(focused_class, window, beeps_on)
     fmt = voice_edit_rules.formatting(instruction)
     if fmt == voice_edit_rules.CANT_FORMAT:
         notices.edit_problem("cant_format", beeps_on)
         return None
     if fmt:
-        return _format_selection(fmt, focused_class, beeps_on)
+        return _format_selection(fmt, focused_class, window, beeps_on)
     return _NOT_A_KEY_EDIT
 
 
@@ -254,12 +260,13 @@ def _type_rewrite(result, injection_mode, message, beeps_on):
 
 
 def edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0, message,
-                   spoken=False):
+                   spoken=False, window=None):
     """Change the text selected in *focused_class* as the instruction
     *get_instruction()* says (called only once a selection is found), and
     type the result over it, as part of *message*. *spoken*: the instruction
     came after "edit that" in a dictation, which selected the text itself.
-    True when the change went in."""
+    *window* says which of the app's windows it is, where the desktop says
+    (focus_moved). True when the change went in."""
     from . import clipboard, history
     # Before copying the selection or hearing the instruction; checked
     # again before the rewrite replaces it.
@@ -284,7 +291,7 @@ def edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0,
         if voice_commands.handle_navigation(instruction, beeps_on, focused_class):
             return
         logger.info(f"Voice edit: {live.loggable(instruction)} ({len(selected)} characters)")
-        keys = _edit_with_keys(instruction, focused_class, beeps_on)
+        keys = _edit_with_keys(instruction, focused_class, window, beeps_on)
         if keys is not _NOT_A_KEY_EDIT:
             return keys
         result = _rewritten(selected, instruction, beeps_on)
@@ -297,7 +304,7 @@ def edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0,
             # Typed unchecked, as ordinary dictation is: refusing here would
             # turn voice editing off wherever the window can't be found.
             logger.info("Voice edit: the focused window is unknown, so typing goes ahead unchecked")
-        elif focus_moved(focused_class):
+        elif focus_moved(focused_class, window):
             # Typing now would put the rewrite into whatever window has focus.
             notices.edit_problem("window_changed", beeps_on)
             return
@@ -362,7 +369,7 @@ def handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: str
     if not selected:
         notices.edit_problem("shortcut_failed", beeps_on)
     elif edit_selection(lambda: instruction, beeps_on, injection_mode, focused_class,
-                        time.time(), message, spoken=True):
+                        time.time(), message, spoken=True, window=focused_window.look()[1]):
         return True
     # Not changed as asked: no automatic Enter sends it as it was.
     message.add("failed", None)

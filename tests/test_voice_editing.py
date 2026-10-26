@@ -406,6 +406,19 @@ def test_an_edit_waiting_its_turn_leaves_another_windows_selection_alone(edit_en
     assert copied == [] and edit_env["typed"] == [] and edit_env["notices"] == ["focus_moved"]
 
 
+def test_a_rewrite_never_goes_into_another_window_of_the_same_app(edit_env, monkeypatch):
+    """The selection was copied in one KWrite document; a click into a
+    second while the AI worked: the rewrite went in there, over whatever it
+    had selected, as only the app was compared."""
+    first, second = ("org.kde.kwrite", ("tray", "{first}")), ("org.kde.kwrite", ("tray", "{second}"))
+    looks = iter([first])                       # the check at the edit's start, then...
+    monkeypatch.setattr(focused_window, "look", lambda: next(looks, second))
+    monkeypatch.setattr(notices, "edit_problem", lambda kind, beeps: edit_env["notices"].append(kind))
+    run_edit(where=first)
+    assert edit_env["engine"].asked and edit_env["typed"] == []
+    assert edit_env["notices"] == ["window_changed"]
+
+
 def test_an_edit_replaces_the_selection(edit_env):
     run_edit()
     assert edit_env["engine"].asked == [("We finished the electrical today.", "make it more professional")]
