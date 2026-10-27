@@ -360,13 +360,16 @@ def _as_tuples(saved):
 def fix_in_text(typed, fix, window, where=None):
     """Swap just the picked words in what TuxTalk *typed*, in the focused
     app. *fix* is (start, end, replacement), offsets in the typed text
-    without its outer spaces, as the window showed it. The cursor, still at
-    the end of the dictation, steps back to the words, selects them, types
-    the replacement and steps forward again; nothing else is retyped. Not
-    when another window than *window* (its class) has the focus, nor another
+    without its outer spaces, as the window showed it. The cursor, taken to
+    be at the end of the dictation, steps back to the words, selects them,
+    and only if the selection is those words (_selected_is) types the
+    replacement and steps forward again; nothing else is retyped. Not when
+    another window than *window* (its class) has the focus, nor another
     than *where* (its id, focused_window.look's) of that app; None: unknown,
-    go ahead. True if done."""
+    go ahead. Nor in a terminal, where Shift+Left selects nothing. True if
+    done."""
     from . import focused_window, keyboard_output, notify
+    from .window_classes import is_terminal_class
     start, end, replacement = fix
     time.sleep(_REFOCUS_S)
     focused = focused_window.window_class()
@@ -382,6 +385,11 @@ def fix_in_text(typed, fix, window, where=None):
         notify.notify("Your text wasn't changed",
                     "The fix is saved, but the cursor is in a password field.")
         return False
+    if is_terminal_class(focused or window):
+        logger.info("Fix a Word: a terminal has the focus; text left as it was")
+        notify.notify("Your text wasn't changed",
+                      "The fix is saved. TuxTalk doesn't change text in a terminal.")
+        return False
     core = typed.strip()
     # From the cursor back to the end of the picked words: the spaces after
     # the dictation, then whatever followed the words in it.
@@ -389,13 +397,39 @@ def fix_in_text(typed, fix, window, where=None):
     from . import virtual_keyboard
     backend = keyboard_output.output_backend()
     try:
-        done = (backend.press_keys([((), "LEFT")] * back + [(("SHIFT",), "LEFT")] * (end - start))
-                and backend.type_text(replacement)
+        selected = backend.press_keys([((), "LEFT")] * back
+                                      + [(("SHIFT",), "LEFT")] * (end - start))
+        if selected and not _selected_is(core[start:end]):
+            # Moved since the dictation (a click, the arrow keys): the same
+            # count of keys selected other words. Put the cursor back.
+            backend.press_keys([((), "RIGHT")] * (back + 1))
+            logger.info("Fix a Word: the cursor had moved; text left as it was")
+            notify.notify("Your text wasn't changed",
+                          "The fix is saved, but the cursor wasn't where the dictation ended.")
+            return False
+        done = (selected and backend.type_text(replacement)
                 and backend.press_keys([((), "RIGHT")] * back))
     except virtual_keyboard.StoppedPartway:
         done = False
     logger.info("Fix a Word: fixed it in the text" if done else "Fix a Word: couldn't fix the text")
     return bool(done)
+
+
+def _selected_is(words) -> bool:
+    """Whether the app's selection is *words*, read through the clipboard
+    as voice editing reads it (the user's clipboard is put back). Where the
+    selection can't be read (an X11 session has no wl-paste), it's taken
+    to be them, as it always was."""
+    from . import clipboard, keyboard_output
+    if not keyboard_output.is_wayland_session():
+        return True
+    try:
+        selected, put_back = clipboard.copy_selection(keyboard_output.send_copy_keystroke)
+    except clipboard.ClipboardUnavailable:
+        logger.info("Fix a Word: the selection can't be read; fixing it as picked")
+        return True
+    put_back(also=(selected,) if selected else ())
+    return selected == words
 
 
 def main(argv=None):

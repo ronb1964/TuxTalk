@@ -28,6 +28,11 @@ before 0.15.0, so older entries use that name.
   working. Now it says so over the window: Not sent: it ended on “and”.
   Press Enter when you're ready. And "with" and "of" are off that list: "something
   to play around with" is a whole sentence, and it gets sent.
+- "Fix that word" fixes the word in your text only if the cursor is still
+  where the dictation ended. If you'd clicked somewhere else or used the
+  arrow keys first, it used to replace whatever words were at that spot.
+  Now it saves the fix to Your Words and leaves your text alone. In a
+  terminal it never changes the text, since it can't select words there.
 - Saying "tab" in a sentence ("every tab shows", "the tabs in Claude
   Desktop") typed a tab character instead of the word, almost every time.
   Now only "press tab" makes a tab, and "tab" on its own is just the word.

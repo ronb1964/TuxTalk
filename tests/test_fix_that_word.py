@@ -140,6 +140,63 @@ def test_fix_in_text_swaps_only_the_word(monkeypatch):
     assert pressed[1] == [((), "RIGHT")] * after       # back to the end
 
 
+
+@pytest.fixture
+def selection(monkeypatch):
+    """fix_in_text's keys, and what the app's selection reads back as."""
+    from tuxtalk import clipboard
+    from tuxtalk import fix_word_dialog as fw
+    pressed, typed_text, reads = [], [], {"text": "fleas"}
+
+    class Backend:
+        def press_keys(self, chords):
+            pressed.append(chords)
+            return True
+
+        def type_text(self, text):
+            typed_text.append(text)
+            return True
+    monkeypatch.setattr(fw, "_REFOCUS_S", 0)
+    monkeypatch.setattr(keyboard_output, "output_backend", lambda: Backend())
+    monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
+    monkeypatch.setattr(focused_window, "window_class", lambda: "org.kde.kwrite")
+    monkeypatch.setattr(clipboard, "copy_selection",
+                        lambda send: (reads["text"], lambda also=(): None))
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda t, m: reads.setdefault("notice", m))
+    return pressed, typed_text, reads
+
+
+def test_a_cursor_moved_since_the_dictation_changes_nothing(selection):
+    """A click or the arrow keys after dictating: counting back from where
+    the dictation ended selected other words, and the fix replaced them."""
+    from tuxtalk import fix_word_dialog as fw
+    pressed, typed_text, reads = selection
+    reads["text"] = "was w"                            # what those keys selected now
+    old = " Whose fleas was white. "
+    start = old.strip().index("fleas")
+    assert fw.fix_in_text(old, (start, start + 5, "fleece"), "org.kde.kwrite") is False
+    after = len(" was white.") + 1
+    assert typed_text == [] and pressed[1] == [((), "RIGHT")] * (after + 1)   # put back
+    assert "wasn't where the dictation ended" in reads["notice"]
+
+
+def test_the_picked_words_still_selected_are_fixed(selection):
+    from tuxtalk import fix_word_dialog as fw
+    pressed, typed_text, reads = selection
+    old = " Whose fleas was white. "
+    start = old.strip().index("fleas")
+    assert fw.fix_in_text(old, (start, start + 5, "fleece"), "org.kde.kwrite") is True
+    assert typed_text == ["fleece"]
+
+
+def test_a_terminal_isnt_changed(selection, monkeypatch):
+    """Shift+Left selects nothing there: the replacement went in mid-line."""
+    from tuxtalk import fix_word_dialog as fw
+    pressed, typed_text, reads = selection
+    monkeypatch.setattr(focused_window, "window_class", lambda: "org.kde.konsole")
+    assert fw.fix_in_text(" git stats ", (4, 9, "status"), "org.kde.konsole") is False
+    assert pressed == [] and "terminal" in reads["notice"]
+
 def test_the_word_span_leaves_its_punctuation_out():
     from tuxtalk import vocabulary
     text = "I use Bamboo Studio, daily."
