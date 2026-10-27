@@ -81,3 +81,24 @@ def test_pkexec_runs_off_the_gtk_thread_and_a_failure_resets_the_button(monkeypa
     fn(*args)                         # back on the GTK thread
 
     assert button.label == P.FIX_TYPING_LABEL and button.sensitive
+
+
+def test_update_hotkey_helper_leaves_dictation_running(monkeypatch):
+    """It restarted dictation afterwards, which threw away a dictation under
+    way; the service's helper connection comes back by itself."""
+    from tuxtalk import update_offers
+    titles, restarts, finish = [], [], []
+    monkeypatch.setattr(P, "show_message", lambda win, kind, title, text, **k:
+                        titles.append(title) or P.Gtk.ResponseType.YES)
+    monkeypatch.setattr(update_offers, "update_helper", finish.append)
+    d = SimpleNamespace(window=None, win=SimpleNamespace(restart_service=lambda: restarts.append(1)),
+                        typing_status_label=SimpleNamespace(set_markup=lambda m: None))
+    d._finish_update = lambda *a: SystemCheck._finish_update(d, *a)
+    d._finish_fix_typing = lambda *a, **k: SystemCheck._finish_fix_typing(d, *a, **k)
+    d._check_typing_status = lambda: None
+    button = FakeButton()
+    button.set_label(P.UPDATE_HELPER_LABEL)
+    SystemCheck._on_fix_typing_clicked(d, button)
+    assert button.label == "Setting up..."
+    finish[0](True, "")                             # the update is over
+    assert restarts == [] and titles[-1] == "Hotkey helper updated"

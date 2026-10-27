@@ -1,3 +1,5 @@
+"""The tray process: the tray icon and its menu, starting and watching the
+dictation service, and the D-Bus calls the GNOME extension and Preferences make."""
 import os
 import signal
 # CRITICAL: Disable HuggingFace XET downloads BEFORE any imports
@@ -639,11 +641,8 @@ class DictationTray:
 
         # Slow path: scan /proc to find an existing service process
         # (handles case where service started before tray, e.g., at boot)
-        try:
-            from .service_launcher import find_service_pids
-            pids = find_service_pids()
-        except Exception:
-            return False
+        from .service_launcher import find_service_pids
+        pids = find_service_pids()
         if pids:
             self._service_pid = pids[0]
             return True

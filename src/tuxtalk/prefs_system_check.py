@@ -400,6 +400,10 @@ class SystemCheck(Tab):
 
             button.set_sensitive(False)
             button.set_label("Setting up...")
+            if updating:
+                from .update_offers import update_helper
+                update_helper(lambda ok, message: self._finish_update(button, ok, message))
+                return
         except Exception as e:
             logger.warning(f"Could not fix typing permissions: {e}")
             button.set_sensitive(True)
@@ -411,8 +415,8 @@ class SystemCheck(Tab):
         def work():
             needs_restart = True
             try:
-                if switching or updating:
-                    success, message = secure_input.install_with_pkexec(leave_group=switching)
+                if switching:
+                    success, message = secure_input.install_with_pkexec(leave_group=True)
                     needs_restart = False
                 else:
                     success, message, needs_restart = secure_input.fix_permissions()
@@ -471,6 +475,17 @@ class SystemCheck(Tab):
             show_message(self.window, Gtk.MessageType.ERROR, "That didn't work", message)
         self._check_typing_status()
         return False
+
+    def _finish_update(self, button, ok, message):
+        """Back on the GTK thread after Update Hotkey Helper. Dictation isn't
+        restarted: it would throw away a dictation under way, and the
+        service's helper connection comes back by itself (update_helper)."""
+        if not ok:
+            self._finish_fix_typing(button, ok, message, needs_restart=False)
+            return
+        show_message(self.window, Gtk.MessageType.INFO, "Hotkey helper updated",
+                     "Your dictation keys use it straight away. No restart is needed.")
+        self._check_typing_status()
 
     def _finish_fix_typing(self, button, success, message, needs_restart=True, switching=False):
         """Back on the GTK thread: report how Fix Typing Permissions went."""

@@ -1,6 +1,6 @@
 {
  "files": {
-  "tray.py": 2394,
+  "tray.py": 2393,
   "welcome_dialog.py": 3208
  },
  "findings": {
@@ -197,7 +197,6 @@
   "transcribe_window.py::TranscribeWindow._work::undocumented": 1,
   "transcribe_window.py::TranscribeWindow.show_kept::long_line": 1,
   "transcribe_window.py::TranscribeWindow::undocumented": 1,
-  "tray.py::<module>::undocumented": 1,
   "tray.py::DictationTray.__init__::swallowed_error": 1,
   "tray.py::DictationTray.__init__::undocumented": 1,
   "tray.py::DictationTray._auto_start_service::long_line": 1,
@@ -207,7 +206,6 @@
   "tray.py::DictationTray._init_dbus_service.TrayAppInstance.config::swallowed_error": 1,
   "tray.py::DictationTray._shut_down::swallowed_error": 1,
   "tray.py::DictationTray._stop_kwin_focus_provider::swallowed_error": 1,
-  "tray.py::DictationTray.is_service_running::swallowed_error": 1,
   "tray.py::DictationTray.restart_service._do_restart::undocumented": 1,
   "tray.py::DictationTray.set_performance_preset::long_line": 2,
   "tray.py::DictationTray.set_performance_preset::swallowed_error": 1,
