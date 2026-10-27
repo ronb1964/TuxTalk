@@ -965,7 +965,7 @@ def first_run(monkeypatch):
     from an AppImage in Downloads, with each screen and download faked.
     Returns the steps it took, in order."""
     import types
-    from tuxtalk import autostart, update_checker, welcome_dialog
+    from tuxtalk import appimage_copy, autostart, update_checker, welcome_dialog
     done = _Steps()
 
     class Thread:
@@ -975,8 +975,8 @@ def first_run(monkeypatch):
         def start(self):
             done.append(("copies the AppImage", self))
 
-    monkeypatch.setattr(welcome_dialog, "threading", types.SimpleNamespace(Thread=Thread))
-    monkeypatch.setattr(welcome_dialog, "_appimage_copy_thread", None)
+    monkeypatch.setattr(appimage_copy, "threading", types.SimpleNamespace(Thread=Thread))
+    monkeypatch.setattr(appimage_copy, "_thread", None)
     monkeypatch.setattr(welcome_dialog, "show_welcome_dialog", lambda: done.append("welcome") or
                         {"continue": True, "model": "parakeet-v3", "device": "cpu"})
     monkeypatch.setattr(welcome_dialog, "show_hotkey_test_dialog",

@@ -143,16 +143,16 @@ def test_restart_now_waits_for_the_first_run_copy(monkeypatch):
     """Restart Now reboots only once the copy into ~/AppImages has finished,
     and waits through GLib timeouts instead of freezing the window."""
     import threading
-    from tuxtalk import welcome_dialog as wd
+    from tuxtalk import appimage_copy
     release = threading.Event()
     thread = threading.Thread(target=lambda: release.wait(5))
     thread.start()
-    monkeypatch.setattr(wd, "_appimage_copy_thread", thread)
+    monkeypatch.setattr(appimage_copy, "_thread", thread)
     polls = []
-    monkeypatch.setattr(wd.GLib, "timeout_add", lambda ms, fn: polls.append(fn))
+    monkeypatch.setattr(appimage_copy.GLib, "timeout_add", lambda ms, fn: polls.append(fn))
     rebooted = []
 
-    wd._after_appimage_copy(lambda: rebooted.append(True))
+    appimage_copy.after(lambda: rebooted.append(True), lambda: rebooted.append(False))
     assert rebooted == [] and len(polls) == 1
     assert polls[0]() is True              # still copying: keep waiting
     release.set()
@@ -162,20 +162,38 @@ def test_restart_now_waits_for_the_first_run_copy(monkeypatch):
 
 
 def test_restart_now_goes_straight_on_without_a_copy(monkeypatch):
-    from tuxtalk import welcome_dialog as wd
-    monkeypatch.setattr(wd, "_appimage_copy_thread", None)
+    from tuxtalk import appimage_copy
+    monkeypatch.setattr(appimage_copy, "_thread", None)
     rebooted = []
-    wd._after_appimage_copy(lambda: rebooted.append(True))
+    appimage_copy.after(lambda: rebooted.append(True), lambda: rebooted.append(False))
     assert rebooted == [True]
 
+
+
+def test_a_copy_still_going_after_the_wait_doesnt_reboot(monkeypatch):
+    """A very slow disk: after two minutes it rebooted anyway, and the menu
+    launcher pointed at a half-copied AppImage."""
+    import threading
+    from tuxtalk import appimage_copy
+    release = threading.Event()
+    thread = threading.Thread(target=lambda: release.wait(5))
+    thread.start()
+    monkeypatch.setattr(appimage_copy, "_thread", thread)
+    polls, outcome = [], []
+    monkeypatch.setattr(appimage_copy.GLib, "timeout_add", lambda ms, fn: polls.append(fn))
+    appimage_copy.after(lambda: outcome.append("reboot"), lambda: outcome.append("told"),
+                            timeout=0)
+    assert polls[0]() is False and outcome == ["told"]
+    release.set()
+    thread.join(5)
 
 def test_first_run_copy_thread_is_not_a_daemon(first_run):
     """Quitting TuxTalk waits for the copy into ~/AppImages instead of
     cutting it off, and Restart computer now waits for it (below)."""
-    from tuxtalk import welcome_dialog as wd
+    from tuxtalk import appimage_copy
     copies = [step[1] for step in first_run() if step[0] == "copies the AppImage"]
     assert len(copies) == 1 and copies[0].daemon is False
-    assert wd._appimage_copy_thread is copies[0]
+    assert appimage_copy._thread is copies[0]
 
 
 def test_the_restart_button_waits_for_the_first_run_copy(monkeypatch):
@@ -185,14 +203,15 @@ def test_the_restart_button_waits_for_the_first_run_copy(monkeypatch):
     from gi.repository import Gtk
     from gtk_text import find
     from tuxtalk import cuda_helper, uinput_helper
+    from tuxtalk import appimage_copy
     from tuxtalk import welcome_dialog as wd
     copying = types.SimpleNamespace(alive=True)
     copying.is_alive = lambda: copying.alive
-    monkeypatch.setattr(wd, "_appimage_copy_thread", copying)
+    monkeypatch.setattr(appimage_copy, "_thread", copying)
     monkeypatch.setattr(cuda_helper, "mark_first_run_complete", lambda: None)
     rebooted, polls = [], []
     monkeypatch.setattr(uinput_helper, "reboot_system", lambda: rebooted.append(True) or True)
-    monkeypatch.setattr(wd.GLib, "timeout_add", lambda ms, fn, *a: polls.append(fn))
+    monkeypatch.setattr(appimage_copy.GLib, "timeout_add", lambda ms, fn, *a: polls.append(fn))
 
     def run(dialog):
         if not isinstance(dialog, Gtk.MessageDialog):       # Setup Complete itself

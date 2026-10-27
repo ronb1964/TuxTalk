@@ -1,7 +1,7 @@
 {
  "files": {
   "tray.py": 2393,
-  "welcome_dialog.py": 3208
+  "welcome_dialog.py": 3153
  },
  "findings": {
   "ai_cleanup.py::<module>::long_line": 4,
@@ -292,7 +292,6 @@
   "welcome_dialog.py::show_setup_complete_dialog.on_restart_now::undocumented": 1,
   "welcome_dialog.py::show_setup_complete_dialog::dated_comment": 1,
   "welcome_dialog.py::show_setup_complete_dialog::long_line": 1,
-  "welcome_dialog.py::show_welcome_and_install._bg_install::swallowed_error": 1,
   "welcome_dialog.py::show_welcome_dialog.show_dialog_after_splash::swallowed_error": 1,
   "whisper_vulkan.py::VulkanWhisperModel.__init__::undocumented": 1,
   "whisper_vulkan.py::VulkanWhisperModel._start::swallowed_error": 1,
@@ -480,11 +479,11 @@
   },
   "welcome_dialog.py::show_setup_complete_dialog": {
    "decisions": 19,
-   "lines": 317
+   "lines": 306
   },
   "welcome_dialog.py::show_welcome_and_install": {
    "decisions": 19,
-   "lines": 164
+   "lines": 145
   },
   "x11_hotkeys.py::claim": {
    "decisions": 16

@@ -2720,38 +2720,19 @@ def show_welcome_and_install():
     appimage_installed = False
     launcher_created = False
     try:
+        from tuxtalk import appimage_copy
         from tuxtalk.update_checker import (
             is_running_from_appimage,
             ensure_appimage_in_standard_location,
-            copy_appimage_to_standard_location,
             create_desktop_launcher,
             desktop_launcher_exists,
-            point_at_running_appimage, APPIMAGE_PATH
         )
 
         if is_running_from_appimage():
             already_there, current_path = ensure_appimage_in_standard_location()
 
             if not already_there and current_path:
-                # Kick off the 300MB copy in a background thread — don't block the UI
-                def _bg_install():
-                    try:
-                        success, msg = copy_appimage_to_standard_location()
-                    except Exception as e:
-                        success, msg = False, str(e)
-                    if success:
-                        logger.info(f"AppImage installed to standard location: {APPIMAGE_PATH}")
-                    else:
-                        logger.warning(f"AppImage install failed: {msg}")
-                        GLib.idle_add(point_at_running_appimage, current_path)
-
-                # Not a daemon: quitting TuxTalk waits for the copy to finish
-                # instead of cutting it off, and the Ready screen's Restart
-                # Now waits for it too (_after_appimage_copy).
-                global _appimage_copy_thread
-                _appimage_copy_thread = threading.Thread(
-                    target=_bg_install, name="appimage-copy", daemon=False)
-                _appimage_copy_thread.start()
+                appimage_copy.start(current_path)
                 appimage_installed = True  # Optimistically mark as installed for the Ready screen
             else:
                 appimage_installed = already_there
@@ -2844,31 +2825,6 @@ def _open_preferences():
         launch_preferences()
     except Exception as e:
         logger.warning(f"Could not open Preferences: {e}")
-
-
-# The background copy of the AppImage into ~/AppImages, while it runs.
-_appimage_copy_thread = None
-
-
-def _after_appimage_copy(callback, timeout=120.0):
-    """Call *callback* once the first-run AppImage copy has finished (or none
-    is running), without blocking the GTK thread. A reboot would otherwise
-    cut the copy off and leave the launcher and autostart pointing at a copy
-    that never arrived. After *timeout* seconds it calls back anyway."""
-    thread = _appimage_copy_thread
-    if thread is None or not thread.is_alive():
-        callback()
-        return
-    logger.info("Waiting for the AppImage copy to finish before restarting")
-    deadline = time.monotonic() + timeout
-
-    def poll():
-        if thread.is_alive() and time.monotonic() < deadline:
-            return True
-        callback()
-        return False
-
-    GLib.timeout_add(200, poll)
 
 
 def _saved_hold_key():
@@ -3130,19 +3086,8 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
                              "automatically. Please restart your computer yourself in a "
                              "moment to finish.")
                 return
-            if _appimage_copy_thread is not None and _appimage_copy_thread.is_alive():
-                _widget.set_label("Finishing install…")
-                _widget.set_sensitive(False)
-            _after_appimage_copy(reboot_after_copy)
-
-        def reboot_after_copy():
-            from tuxtalk.uinput_helper import reboot_system
-            if not reboot_system():
-                show_message(dialog,
-                             Gtk.MessageType.WARNING,
-                             "Couldn't restart automatically",
-                             "Please restart your computer yourself to finish setup.")
-            # On success the machine is going down; nothing more to do here.
+            from tuxtalk import appimage_copy
+            appimage_copy.reboot_when_copied(dialog, _widget)
 
         later_button = Gtk.Button(label="I'll restart later")
         later_button.set_size_request(150, 35)
