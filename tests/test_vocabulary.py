@@ -151,6 +151,19 @@ def test_a_fixed_word_is_added_to_your_words(commands_file):
     assert custom_words.load() == ["BambuStudio", "TuxTalk"]
 
 
+
+def test_re_fixing_one_of_two_mishearings_keeps_the_word(commands_file):
+    """"clawed claw" and "cloud claw" both fixed to ClaudeClaw, then the
+    second re-fixed to ClaudeCode: ClaudeClaw left Your Words, and its
+    other fix showed as a snippet."""
+    from tuxtalk import custom_words
+    vocabulary.save_fix("clawed claw", "ClaudeClaw")
+    vocabulary.save_fix("cloud claw", "ClaudeClaw")
+    vocabulary.save_fix("cloud claw", "ClaudeCode")
+    assert custom_words.load() == ["ClaudeClaw", "ClaudeCode"]
+    vocabulary.save_fix("clawed claw", "ClaudeCode")       # the last one gone too
+    assert custom_words.load() == ["ClaudeCode"]
+
 def test_a_word_already_there_is_not_added_twice(commands_file):
     from tuxtalk import custom_words
     custom_words.save(["bambustudio"])

@@ -132,10 +132,13 @@ def save_fix(phrase, replacement):
     commands[phrase] = replacement
     config.save_custom_commands(commands)
     # Also one of Your Words, so Whisper is told about it before it listens.
-    # The fix itself is already saved; this part must never undo that.
+    # The fix itself is already saved; this part must never undo that. The
+    # old word stays while another mishearing still fixes to it: dropped, that
+    # fix shows as a snippet in the Words tab.
+    dropped = None if previous in commands.values() else previous
     try:
         from . import custom_words
-        custom_words.learn_fix(replacement, previous, _COMMON_WORDS)
+        custom_words.learn_fix(replacement, dropped, _COMMON_WORDS)
     except Exception as e:
         from .logger import setup_logger
         setup_logger(__name__).warning(f"Fix saved, but not added to your words: {e}")
