@@ -168,6 +168,24 @@ def test_choosing_an_earlier_one_shows_it(win):
     assert [p.text for p in win.pieces] == ["First."] and win.path == "/videos/first.mov"
 
 
+
+def test_an_earlier_one_asks_first_when_the_text_shown_wasnt_kept(win):
+    """The list couldn't be saved (a full disk), so the text shown is the
+    only copy: choosing an earlier transcript replaced it without a word."""
+    win.path = "/videos/first.mov"
+    done(win, "First.", kept_for_next_time=True)
+    first = ft.recent()[0]
+    win.path = "/videos/second.mov"
+    done(win, "Second, only here.")                 # not kept
+    item = next(i for i in win.earlier_menu.get_children()
+                if i.get_label().startswith("first.mov"))
+    item.activate()
+    assert win.asked and win.asked[0][0] == "Save the text first?"
+    assert [p.text for p in win.pieces] == ["Second, only here."]      # Cancel kept it
+    win.answer = Gtk.ResponseType.REJECT
+    item.activate()
+    assert [p.text for p in win.pieces] == ["First."] and first.path == win.path
+
 def test_only_ten_are_kept_and_a_file_done_again_replaces_its_copy(win):
     for n in range(12):
         ft.remember(f"/videos/{n}.mov", [ft.Piece(0, 1, str(n))], 1.0)

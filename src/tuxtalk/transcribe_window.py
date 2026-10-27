@@ -371,6 +371,12 @@ class TranscribeWindow:
         self._set_busy(False)
         self._show_text()
 
+    def _open_kept(self, entry):
+        """Earlier Transcripts: *entry* in place of the text shown, asking
+        first if that one would be lost (it couldn't be kept in the list)."""
+        if self._may_discard("new"):
+            self.show_kept(entry)
+
     def _refresh_earlier(self):
         """The Earlier Transcripts menu, as the list is now."""
         menu = self.earlier_menu
@@ -379,7 +385,7 @@ class TranscribeWindow:
         entries = ft.recent()
         for entry in entries:
             item = Gtk.MenuItem(label=f"{entry.name}  ·  {_when(entry.when)}")
-            item.connect("activate", lambda _i, e=entry: self.show_kept(e))
+            item.connect("activate", lambda _i, e=entry: self._open_kept(e))
             menu.append(item)
         if entries:
             menu.append(Gtk.SeparatorMenuItem())
