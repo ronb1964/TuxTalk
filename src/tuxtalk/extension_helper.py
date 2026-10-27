@@ -112,6 +112,24 @@ def get_extension_status() -> dict:
     }
 
 
+def _swap_in(source_dir, target_dir):
+    """Put a copy of *source_dir* at *target_dir*, the old one going only
+    once the new one is all there: removed first, a copy that failed
+    partway (a full disk) left GNOME with no TuxTalk menu at all. The copy
+    is made beside the extensions folder, on the same filesystem, where
+    GNOME doesn't look for extensions."""
+    parent = os.path.dirname(os.path.dirname(target_dir))
+    staging = os.path.join(parent, f".{EXTENSION_UUID}.new")
+    old = os.path.join(parent, f".{EXTENSION_UUID}.old")
+    for leftover in (staging, old):
+        shutil.rmtree(leftover, ignore_errors=True)
+    shutil.copytree(source_dir, staging)
+    if os.path.exists(target_dir):
+        os.rename(target_dir, old)
+    os.rename(staging, target_dir)
+    shutil.rmtree(old, ignore_errors=True)
+
+
 def install_extension_from_local(source_dir: str, auto_enable: bool = True) -> bool:
     """
     Install extension from local directory
@@ -127,15 +145,8 @@ def install_extension_from_local(source_dir: str, auto_enable: bool = True) -> b
         ext_dir = desktop_detect.get_extension_dir()
         target_dir = os.path.join(ext_dir, EXTENSION_UUID)
 
-        # Create extensions directory if it doesn't exist
         os.makedirs(ext_dir, exist_ok=True)
-
-        # Remove existing installation
-        if os.path.exists(target_dir):
-            shutil.rmtree(target_dir)
-
-        # Copy extension files
-        shutil.copytree(source_dir, target_dir)
+        _swap_in(source_dir, target_dir)
 
         print(f"Extension installed to {target_dir}")
 
