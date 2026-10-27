@@ -138,3 +138,15 @@ def test_typing_into_electron_records_the_line_break_that_landed(monkeypatch, qu
 
     assert outcome == "partial"
     assert rs.state.last_inserted_text == "first\n"
+
+
+def test_an_unexpected_typing_error_forgets_the_dictation_before(monkeypatch, quiet):
+    """Some of the new text may be in the app: "undo that" counted back over
+    the dictation before it, and deleted that many characters of whatever
+    was there."""
+    rs.state.last_inserted_text = "See you at noon. "
+    monkeypatch.setattr(focused_window, "destination", lambda: ("kwrite", None, False))
+    monkeypatch.setattr(delivery, "deliver_text", lambda *a, **k: 1 / 0)
+    with pytest.raises(ZeroDivisionError):
+        delivery.inject_text("How are you?", "type")
+    assert rs.state.last_inserted_text == "" and rs.state.nav_context is None

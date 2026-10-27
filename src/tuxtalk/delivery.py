@@ -120,6 +120,12 @@ def inject_text(text: str, injection_mode: str, one_block: bool = False, into=No
             keyboard_output.PasswordFieldNow) as stop:
         typed_some = keyboard_output.this_thread.sends != sends_before
         outcome = _delivery_stopped(stop, typed_some=typed_some)
+    except Exception:
+        # Any of it may be in the app: undo mustn't count on the dictation
+        # before, nor a voice move on where the cursor was. The caller
+        # reports it.
+        forget_typed()
+        raise
     finally:
         keyboard_output.this_thread.into = None
     if outcome in ("ok", "partial"):
@@ -205,6 +211,15 @@ def deliver_text(text: str, injection_mode: str, one_block: bool = False, *, whe
     return _remember_delivered(text, inject_ok)
 
 
+def forget_typed() -> None:
+    """Forget what undo, "select that" and the next dictation's capital
+    count on: what's in the app since the last delivery isn't known."""
+    rs.state.last_inserted_text = ""
+    rs.state.continue_mid_sentence = False
+    rs.state.nav_context = None
+    last_dictation.forget_shown()
+
+
 def _delivery_stopped(stop, typed_some: bool) -> str:
     """The outcome of a delivery that *stop* ended early, after forgetting
     what undo, "select that" and the next dictation's capital count on.
@@ -218,10 +233,7 @@ def _delivery_stopped(stop, typed_some: bool) -> str:
     (focused_window.claim_into); typing on any other way (wtype, the clipboard) would
     do what the wait was there to prevent. *typed_some*: earlier lines were
     typed before it gave up."""
-    rs.state.last_inserted_text = ""
-    rs.state.continue_mid_sentence = False
-    rs.state.nav_context = None
-    last_dictation.forget_shown()
+    forget_typed()
     if isinstance(stop, keyboard_output.PasswordFieldNow):
         logger.warning("Stopped typing: a password field has the focus now")
         return "password_field"
