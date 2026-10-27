@@ -342,6 +342,42 @@ def _merge_stats(data, notes):
                      "added to them. Reset Stats on the Stats tab starts them fresh.")
 
 
+def _write_all_or_none(writes):
+    """Write each (path, text) of *writes*; if one fails (a full disk), put
+    back the ones already written, so the settings are never half the
+    backup's and half the old ones, and raise BackupError."""
+    before = []
+    try:
+        for path, text in writes:
+            before.append((path, _read_text_or_none(path)))
+            config.write_text_atomic(path, text)
+    except OSError as e:
+        for path, old in reversed(before[:-1]):
+            _put_back(path, old)
+        raise BackupError("The backup couldn't be loaded, so your settings are as they "
+                          f"were ({e}).") from e
+
+
+def _read_text_or_none(path):
+    """*path*'s text, or None when there's no such file."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        return None
+
+
+def _put_back(path, old):
+    """Undo one write of _write_all_or_none: *old* text, or no file."""
+    try:
+        if old is None:
+            os.remove(path)
+        else:
+            config.write_text_atomic(path, old)
+    except OSError as e:
+        logger.error(f"Couldn't put {path} back after a failed restore: {e}")
+
+
 def restore(backup):
     """Replace the settings and commands with *backup*'s, after saving the
     current ones as an automatic copy (so this can be undone). Stats, when
@@ -355,14 +391,13 @@ def restore(backup):
     except Exception as e:
         raise BackupError("Your current settings couldn't be saved as a copy first, "
                           f"so nothing was changed ({e}).") from e
-    text = _fit_device(backup.files[_SETTINGS].decode("utf-8"), notes)
-    config.write_text_atomic(config.CONFIG_PATH, text)
-    if _COMMANDS in backup.files:
-        config.write_text_atomic(config.CUSTOM_COMMANDS_PATH,
-                                 backup.files[_COMMANDS].decode("utf-8"))
-    if _WORDS in backup.files:
-        from . import custom_words
-        config.write_text_atomic(custom_words.path(), backup.files[_WORDS].decode("utf-8"))
+    from . import custom_words
+    writes = [(config.CONFIG_PATH, _fit_device(backup.files[_SETTINGS].decode("utf-8"), notes))]
+    writes += [(path, backup.files[name].decode("utf-8"))
+               for name, path in ((_COMMANDS, config.CUSTOM_COMMANDS_PATH),
+                                  (_WORDS, custom_words.path()))
+               if name in backup.files]
+    _write_all_or_none(writes)
     if _STATS in backup.files:
         _merge_stats(backup.files[_STATS], notes)
     logger.info(f"Settings restored from a backup made {backup.created} "

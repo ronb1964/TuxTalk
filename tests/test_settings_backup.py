@@ -441,6 +441,28 @@ def test_nothing_is_restored_when_the_undo_copy_cannot_be_saved(home, monkeypatc
     assert sb.snapshot_if_changed() is None             # startup copy still never raises
 
 
+
+def test_a_restore_that_fails_partway_puts_the_settings_back(home, monkeypatch):
+    """A full disk on the second file: the settings were the backup's and the
+    commands the old ones, a mix nobody chose."""
+    dest = home / "b.zip"
+    sb.write_backup(str(dest))
+    backup = sb.read_backup(str(dest))
+    with open(config.CONFIG_PATH, "w") as f:
+        f.write('hotkey = "F9"\n')
+    write = config.write_text_atomic
+
+    def full_on_the_commands(path, text, **kw):
+        if path == config.CUSTOM_COMMANDS_PATH and text != COMMANDS_TEXT:
+            raise OSError(28, "No space left on device")
+        write(path, text, **kw)
+    monkeypatch.setattr(config, "write_text_atomic", full_on_the_commands)
+    backup.files["custom_commands.toml"] = b"# the backup's commands\n"
+    with pytest.raises(sb.BackupError, match="as they were"):
+        sb.restore(backup)
+    assert read(config.CONFIG_PATH) == 'hotkey = "F9"\n'
+    assert read(config.CUSTOM_COMMANDS_PATH) == COMMANDS_TEXT
+
 @pytest.mark.parametrize("problem", [sb.BackupError("This isn't a TuxTalk backup."),
                                      OSError(28, "No space left on device")])
 def test_preferences_shows_a_refused_restore_as_a_message(prefs_window, monkeypatch, problem):
