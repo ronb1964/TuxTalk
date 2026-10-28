@@ -50,7 +50,7 @@ def pause_media_players():
             from .audio_duck import AudioDucker
             _audio_ducker = AudioDucker()
             # Quitting mid-dictation would otherwise leave everything quiet.
-            atexit.register(_audio_ducker.restore_at_exit)
+            atexit.register(_audio_ducker.close)
         _audio_ducker.duck()
     if not live.pause_media:
         return
@@ -58,7 +58,7 @@ def pause_media_players():
         from .media_pause import MediaPauser
         _media_pauser = MediaPauser()
         # Quitting mid-dictation would otherwise leave the music paused.
-        atexit.register(_media_pauser.resume_at_exit)
+        atexit.register(_media_pauser.close)
     _media_pauser.pause()
 
 

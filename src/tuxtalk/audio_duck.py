@@ -15,18 +15,20 @@ does, so streams are matched to their client's pid. Short system sounds
 The desktop remembers each app's volume (by application.name). A sound that
 ends while it's turned down (a beep, a notification, a browser closing its
 stream while its video is paused) would come back that quiet next time, and
-a second dictation would lower it again. On 2026-10-17 the beeps went silent
-in three presses that way, and Brave's videos played quiet for minutes. So
+a second dictation would lower it again: TuxTalk's beeps went silent in
+three presses that way, and a browser's videos played quiet for minutes. So
 the desktop's memory is corrected at once (reset_remembered: a moment of
 silence played under the app's name at its real volume). Where that can't
 be done, the app is owed its volume until TuxTalk next sees it at the
 lowered level and puts it back; it's never lowered from there.
 
-If the service stops mid-dictation, the volumes it lowered are written to a
-small file in the runtime folder, and the next start puts them back
-(restore_left_over), so nothing stays quiet for good.
+Each stream is written to a small file in the runtime folder before it's
+turned down, so a service that stops mid-dictation, however it stops, leaves
+a record the next start puts back (restore_left_over), and nothing stays
+quiet for good.
 
-Like media_pause, all the work runs on one background thread: duck() is
+Like media_pause, all the work runs on one background thread, which alone
+touches what was turned down, the restore at exit included: duck() is
 called while every keyboard is grabbed and must never wait on pactl.
 """
 import json
@@ -39,20 +41,28 @@ from .logger import setup_logger
 
 logger = setup_logger(__name__)
 
-DUCK_TO = 0.5           # half on the volume slider; 0.25 sounded muted (Ron, 2026-10-20)
+DUCK_TO = 0.5           # half on the volume slider; a quarter sounded muted
 # After a dictation, look again this long after (seconds) for an app owed
 # its volume: a browser closes its sound while its video is paused and opens
 # a new one on resume, a moment after TuxTalk restored, at the lowered level.
 FOLLOW_UP_S = (0.5, 1.0, 2.0, 4.0, 8.0)
 PACTL_TIMEOUT_S = 2.0
-# How long exit waits for a turn-down or restore already queued.
+# How long exit waits for the worker's last restore; past it, the next start
+# puts back what the state file says.
 EXIT_WAIT_S = 2.0
 STATE_FILE = "tuxtalk-ducked-audio.json"
 
 
 def _state_path():
-    runtime = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
-    return os.path.join(runtime, STATE_FILE)
+    """The record of what's turned down, in the user's private runtime
+    folder; None when there's none to be had (then nothing is turned down)."""
+    from . import single_instance
+    try:
+        return os.path.join(single_instance.runtime_dir(), STATE_FILE)
+    except OSError as e:
+        logger.warning(f"Audio duck: no private folder for its record, so nothing is "
+                       f"turned down: {e}")
+        return None
 
 
 def _pactl(*args, run=subprocess.run):
@@ -184,7 +194,7 @@ class AudioDucker:
         self._owed = self._load_owed()
         self._jobs = queue.Queue()
         self._worker = None
-        self._closing = False      # exiting: a turn-down still queued mustn't run
+        self._closing = False      # exiting: a turn-down not started yet does nothing
         self._round = 0            # each duck starts a new one; old follow-ups stop
 
     # -- called from the dictation service; never block -------------------
@@ -195,14 +205,25 @@ class AudioDucker:
     def restore(self):
         self._submit(self._restore_now)
 
-    def restore_at_exit(self, timeout=EXIT_WAIT_S):
-        """For exit: let a turn-down still queued run first (quitting right
-        after a dictation started, it ran after this and stayed), then
-        restore on the calling thread, as the worker may not get a turn.
-        A turn-down the worker hasn't got to by then does nothing."""
+    def close(self, timeout=EXIT_WAIT_S):
+        """For exit: put back what was turned down, as the worker's last job.
+        A turn-down already under way finishes first and is undone by it; one
+        not started yet does nothing. Restored on the worker, never here: a
+        volume the worker is setting would otherwise be noted after this
+        restored, and stayed down. Past *timeout* the exit goes on, and the
+        next start restores from the state file."""
         self._closing = True
-        self.wait_idle(timeout)
-        self._restore_now()
+        done = threading.Event()
+
+        def last_job():
+            try:
+                self._restore_now()
+            finally:
+                done.set()
+        self._submit(last_job)
+        if not done.wait(timeout):
+            logger.warning("Audio duck: sounds not put back in time at exit; "
+                           "the next start puts them back")
 
     def wait_idle(self, timeout):
         """Wait for queued jobs to finish. True if they did."""
@@ -237,12 +258,15 @@ class AudioDucker:
             # Paused (corked) already: silent, and likely to close and come
             # back as a new stream, so there's nothing to gain lowering it.
             if (st["pid"] == self._own_pid or st["muted"] or st["role"] == "event"
-                    or st["corked"] or index in self._ducked or not volumes
-                    or self._closing):          # exit began while the streams were listed
+                    or st["corked"] or index in self._ducked or not volumes):
                 continue
             lowered = [max(0, int(v * DUCK_TO)) for v in volumes]
-            if _set_volume(index, lowered, self._run):
-                self._ducked[index] = (volumes, lowered, st["app"])
+            # Saved first: stopped right after the change, the next start
+            # still puts it back. One saved but never lowered is left alone;
+            # one that couldn't be saved isn't lowered.
+            self._ducked[index] = (volumes, lowered, st["app"])
+            if not self._save() or not _set_volume(index, lowered, self._run):
+                del self._ducked[index]
         if self._ducked:
             logger.info(f"Turned {len(self._ducked)} other sound(s) down while dictating")
         self._save()
@@ -259,8 +283,8 @@ class AudioDucker:
             put_back += self._put_back(index, original, lowered, app, now, reset)
         if reset:
             # The memory is right again, but the app may have opened its next
-            # sound before that, at the lowered level: Brave resuming a video
-            # it was paused on (Ron, 2026-10-20). Look again, after the reset.
+            # sound before that, at the lowered level: a browser resuming a
+            # video it was paused on. Look again, after the reset.
             streams = list_streams(self._run)
             for app, entry in reset.items():
                 self._owed.setdefault(app, entry)
@@ -336,18 +360,25 @@ class AudioDucker:
             logger.info(f"Put {fixed} app(s) back to the volume a dictation turned down")
         return fixed
 
-    def _save(self):
+    def _save(self) -> bool:
+        """Write down what's turned down and owed, in one go (a stop halfway
+        through a write would lose the record of the streams before); False
+        when it couldn't be written."""
         if not self._ducked and not self._owed:
             self._clear()
-            return
+            return True
+        if self._state_path is None:
+            return False
+        from .config import write_text_atomic
+        data = {str(i): {"original": o, "lowered": low, "app": app}
+                for i, (o, low, app) in self._ducked.items()}
+        data["owed"] = self._owed
         try:
-            data = {str(i): {"original": o, "lowered": low, "app": app}
-                    for i, (o, low, app) in self._ducked.items()}
-            data["owed"] = self._owed
-            with open(self._state_path, "w", encoding="utf-8") as f:
-                json.dump(data, f)
+            write_text_atomic(self._state_path, json.dumps(data), keep_backup=False)
+            return True
         except OSError as e:
-            logger.debug(f"Audio duck: could not save {self._state_path}: {e}")
+            logger.warning(f"Audio duck: could not save {self._state_path}: {e}")
+            return False
 
     def _load_owed(self):
         try:
@@ -360,6 +391,8 @@ class AudioDucker:
             return {}
 
     def _clear(self):
+        if self._state_path is None:
+            return
         try:
             os.remove(self._state_path)
         except FileNotFoundError:
@@ -371,6 +404,8 @@ class AudioDucker:
 def restore_left_over(run=subprocess.run, state_path=None, reset=None):
     """Put back volumes a service that stopped mid-dictation left lowered."""
     path = state_path or _state_path()
+    if path is None:
+        return 0
     try:
         with open(path, encoding="utf-8") as f:
             data = json.load(f)

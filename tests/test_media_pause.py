@@ -111,15 +111,28 @@ def test_a_failing_bus_is_logged_not_raised():
     run(p, p.pause, p.resume)   # no exception escapes, the worker keeps going
 
 
-def test_resuming_at_exit_runs_on_the_calling_thread():
-    """At exit the worker may not get another turn."""
-    bus = FakeBus(youtube="Playing")
+def test_the_resume_at_exit_runs_on_the_worker_after_a_pause_under_way():
+    """Exit began while the worker was inside a Pause call: the resume ran on
+    the exiting thread first and found nothing, then the pause was noted,
+    and the music stayed paused after TuxTalk was gone."""
+    inside, may_answer, played_on = threading.Event(), threading.Event(), []
+
+    class SlowPause(FakeBus):
+        def call(self, name, method):
+            if method == "Pause":
+                inside.set()
+                assert may_answer.wait(5)
+            else:
+                played_on.append(threading.current_thread().name)
+            super().call(name, method)
+    bus = SlowPause(youtube="Playing")
     p = MediaPauser(bus)
-    run(p, p.pause)
-    p._submit = lambda job: pytest.fail("left to the worker")
-    p.wait_idle = lambda timeout: True
-    p.resume_at_exit()
-    assert bus.calls[-1] == ("youtube", "Play")
+    p.pause()
+    assert inside.wait(5)
+    p.close(timeout=0.05)               # gives up waiting; the exit goes on
+    may_answer.set()
+    assert p.wait_idle(2)
+    assert bus.status == {"youtube": "Playing"} and played_on == ["media-pause"]
 
 
 def test_pause_media_is_on_by_default_and_applies_live():
@@ -229,23 +242,19 @@ def test_quitting_right_after_a_pause_was_asked_for_leaves_nothing_paused():
     p = MediaPauser(bus)
     p.pause()                                # queued, not done yet
     threading.Timer(0.2, gate.set).start()
-    p.resume_at_exit()
+    p.close()
     assert bus.status == {"youtube": "Playing"}     # never paused, or paused and resumed
 
 
-def test_a_pause_still_queued_when_the_exit_wait_runs_out_does_nothing():
+def test_a_pause_not_started_when_exit_begins_does_nothing():
     """The worker busy past the exit's wait: the pause ran after the resume,
     and the music stayed paused after TuxTalk was gone."""
     gate = threading.Event()
-
-    class StuckBus(FakeBus):
-        def players(self):
-            gate.wait(5)
-            return super().players()
-    bus = StuckBus(youtube="Playing")
+    bus = FakeBus(youtube="Playing")
     p = MediaPauser(bus)
+    p._submit(lambda: gate.wait(5))         # the worker is busy elsewhere
     p.pause()
-    p.resume_at_exit(timeout=0.05)          # gives up waiting
+    p.close(timeout=0.05)                   # gives up waiting
     gate.set()
     assert p.wait_idle(2)
     assert bus.status == {"youtube": "Playing"} and ("youtube", "Pause") not in bus.calls

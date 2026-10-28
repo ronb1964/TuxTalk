@@ -12,7 +12,8 @@ VLC and the rest use for media keys.
 pause() is called while every keyboard is grabbed, and a hung player can hold
 a D-Bus call for 25 seconds, so all the D-Bus work happens on one background
 thread with a short timeout per call. The thread also keeps pause and resume
-in order, so a quick tap can never leave the music paused.
+in order, so a quick tap can never leave the music paused, and it alone
+touches the list of paused players, the resume at exit included.
 """
 import queue
 import threading
@@ -59,8 +60,9 @@ class SessionBus:
         self._call(name, MPRIS_PATH, PLAYER_IFACE, method)
 
 
-# How long exit waits for a pause or resume already queued.
-EXIT_WAIT_S = 2.0
+# How long exit waits for the worker's last resume: a pause already under
+# way finishes first, and each call may take CALL_TIMEOUT_MS.
+EXIT_WAIT_S = 3.0
 
 
 class MediaPauser:
@@ -68,11 +70,10 @@ class MediaPauser:
 
     def __init__(self, bus=None):
         self._bus = bus or SessionBus()
-        self._paused = []          # players we paused; touched only under _lock
-        self._lock = threading.Lock()
+        self._paused = []          # players we paused; touched only by the worker
         self._jobs = queue.Queue()
         self._worker = None
-        self._closing = False      # exiting: a pause still queued mustn't run
+        self._closing = False      # exiting: a pause not started yet does nothing
 
     # -- called from the dictation service; never block -------------------
 
@@ -84,14 +85,24 @@ class MediaPauser:
         """Resume the players pause() paused, on the worker thread."""
         self._submit(self._resume_now)
 
-    def resume_at_exit(self, timeout=EXIT_WAIT_S):
-        """For exit: let a pause still queued run first (quitting right after
-        a dictation started, it ran after this and the music stayed paused),
-        then resume on the calling thread, as the worker may not get a turn.
-        A pause the worker hasn't got to by then does nothing."""
+    def close(self, timeout=EXIT_WAIT_S):
+        """For exit: resume what was paused, as the worker's last job. A pause
+        already under way finishes first and is undone by it; one not started
+        yet does nothing. Resumed on the worker, never here: a Pause the worker
+        is inside would otherwise be noted after this resumed, and the music
+        stayed paused after TuxTalk. Past *timeout* the exit goes on without."""
         self._closing = True
-        self.wait_idle(timeout)
-        self._resume_now()
+        done = threading.Event()
+
+        def last_job():
+            try:
+                self._resume_now()
+            finally:
+                done.set()
+        self._submit(last_job)
+        if not done.wait(timeout):
+            logger.warning("Media pause: a player didn't answer in time at exit; "
+                           "it may stay paused")
 
     def wait_idle(self, timeout):
         """Wait for queued jobs to finish. True if they did."""
@@ -124,24 +135,22 @@ class MediaPauser:
 
     def _pause_now(self):
         """Pause every player that's playing, noting each, for _resume_now."""
+        if self._closing:
+            return
         for name in self._bus.players():
-            # Asked again after the status, which can take a while: exit
-            # (resume_at_exit) may have begun meanwhile.
-            if self._status(name) != "Playing" or self._closing:
+            if self._status(name) != "Playing":
                 continue
             try:
                 self._bus.call(name, "Pause")
             except Exception as e:
                 logger.debug(f"Media pause: could not pause {name}: {e}")
                 continue
-            with self._lock:
-                if name not in self._paused:
-                    self._paused.append(name)
+            if name not in self._paused:
+                self._paused.append(name)
             logger.info(f"Paused {name[len(MPRIS_PREFIX):]} while dictating")
 
     def _resume_now(self):
-        with self._lock:
-            names, self._paused = self._paused, []
+        names, self._paused = self._paused, []
         for name in names:
             if self._status(name) != "Paused":
                 continue

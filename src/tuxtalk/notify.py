@@ -4,7 +4,7 @@ Sent straight to the desktop's notification service over D-Bus
 (org.freedesktop.Notifications), not through libnotify: the AppImage's
 Ubuntu-built GObject Introspection can't find a Fedora system's Notify
 typelib, so every notice from the AppImage silently vanished there, the
-silent-microphone warning included (Ron, 2026-10-18). dbus-python is
+silent-microphone warning included. dbus-python is
 bundled already and works the same in every package.
 
 This module has no heavy imports on purpose: the tray shows notices too, and

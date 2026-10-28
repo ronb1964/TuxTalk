@@ -297,3 +297,41 @@ def test_owed_apps_from_before_are_reset_at_the_next_start(tmp_path):
                                  reset=lambda app, v: resets.append(app) or True)
     assert resets == ["Brave"]
     assert not (tmp_path / "ducked.json").exists()
+
+
+def test_the_restore_at_exit_runs_on_the_worker_after_a_turn_down_under_way(tmp_path):
+    """Exit began while the worker was setting a volume: the restore ran on
+    the exiting thread first and found nothing, then the turn-down was
+    noted, and the sound stayed at half after TuxTalk was gone."""
+    import threading
+    inside, may_answer = threading.Event(), threading.Event()
+
+    class SlowSet(FakePactl):
+        def __call__(self, cmd, **kw):
+            if cmd[1] == "set-sink-input-volume" and not inside.is_set():
+                inside.set()
+                assert may_answer.wait(5)
+            return super().__call__(cmd, **kw)
+    pactl = SlowSet({7: {"pid": 100, "volumes": [65536]}})
+    d = _ducker(tmp_path, pactl)
+    d.duck()
+    assert inside.wait(5)
+    d.close(timeout=0.05)               # gives up waiting; the exit goes on
+    may_answer.set()
+    assert d.wait_idle(2)
+    assert pactl.streams[7]["volumes"] == [65536]
+
+
+def test_a_stream_is_on_record_before_it_is_turned_down(tmp_path):
+    """Ended between the change and the record, the next start had nothing
+    to put back, and the sound stayed at half."""
+    seen = []
+
+    class Watching(FakePactl):
+        def __call__(self, cmd, **kw):
+            if cmd[1] == "set-sink-input-volume":
+                seen.append(json.loads((tmp_path / "ducked.json").read_text()))
+            return super().__call__(cmd, **kw)
+    pactl = Watching({7: {"pid": 100, "volumes": [65536]}})
+    _ducker(tmp_path, pactl)._duck_now()
+    assert seen[0]["7"] == {"original": [65536], "lowered": [32768], "app": "app7"}
