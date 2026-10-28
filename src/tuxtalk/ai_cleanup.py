@@ -36,6 +36,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 from . import engine_process
+from .cleanup import LEGIT_DOUBLES
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -193,7 +194,6 @@ _MAX_REPLACED = 6
 # carrying a value: "the red paint for the van. Sorry, the blue paint".
 _LINKING_WORDS = {"the", "a", "an", "of", "for", "to", "in", "on", "at", "and", "or",
                   "with", "my", "your", "our", "his", "her", "their", "its", "this", "that"}
-_LEGIT_DOUBLES = {"that", "had", "is", "do", "very", "so", "bye", "no", "yeah", "ha", "really"}
 
 
 # Numbers whole with their separators, so "2.5" changed to "2,5" is a
@@ -250,7 +250,7 @@ def _deletion_allowed(run, src, start):
     nxt = src[start + len(run)] if start + len(run) < len(src) else None
     one_word_repeated = len(set(core)) == 1 and core[0] in (prev, nxt)
     if (core == before or core == after or one_word_repeated) and not (
-            len(set(core)) == 1 and core[0] in _LEGIT_DOUBLES):
+            len(set(core)) == 1 and core[0] in LEGIT_DOUBLES):
         return True                                   # a stutter
     # A correction drops the wrong part and then the correction phrase, so the
     # removed words must END with the phrase. Removing the phrase and what

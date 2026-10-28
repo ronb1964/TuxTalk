@@ -83,6 +83,9 @@ UNSAFE = [
     ("Order 1,000 bolts, no wait, 2,000 bolts.", "Order 2.000 bolts."),
     # "hmm" carries meaning; the AI isn't told to drop it
     ("Hmm, that sounds about right.", "That sounds about right."),
+    # doubled for emphasis, which the plain filler rule keeps too
+    ("It was far far away.", "It was far away."),
+    ("It took a long long time.", "It took a long time."),
 ]
 
 

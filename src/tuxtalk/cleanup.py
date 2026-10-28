@@ -21,7 +21,9 @@ _FILLER = r"(?:u+m+|u+h+m*|erm)"
 
 # Words that are correctly doubled in ordinary English: "I know that that is
 # true", "she had had enough", "what it is is...", "very very", "so so".
-_LEGIT_DOUBLES = {"that", "had", "is", "do", "very", "so", "bye", "no", "yeah", "ha", "really", "far", "long"}
+# The AI's corrections are held to the same list (ai_cleanup).
+LEGIT_DOUBLES = {"that", "had", "is", "do", "very", "so", "bye", "no", "yeah", "ha", "really",
+                 "far", "long"}
 
 # Numbers are read out digit by digit ("five five five", "4 4 7 1"), so a
 # repeated number is a phone number or PIN, never a stutter.
@@ -91,7 +93,7 @@ def _collapse_repeats(text: str) -> str:
     """Collapse accidental repeats, keeping numbers, names and words meant twice."""
     def repl(m):
         phrase = m.group(1)
-        if phrase.lower() in _LEGIT_DOUBLES:
+        if phrase.lower() in LEGIT_DOUBLES:
             return m.group(0)
         words = phrase.lower().split()
         if any(c.isdigit() for c in phrase) or any(w in _NUMBER_WORDS for w in words):
