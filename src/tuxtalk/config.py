@@ -129,13 +129,16 @@ CLASSIC_CYAN_HEX = "#4db3ff"
 
 def swiss_german_locale(env=None) -> bool:
     """Whether the system is set to Swiss German (de_CH, or gsw for Swiss
-    German itself), where ß is never written. The language the desktop
-    really uses: LANGUAGE's first choice, else the first of LC_ALL,
-    LC_MESSAGES and LANG that is set, as gettext picks it."""
+    German itself), where ß is never written. The locale that counts is the
+    first of LC_ALL, LC_MESSAGES and LANG that is set; LANGUAGE's first
+    choice overrides it only when that is another language, since Plasma
+    sets LANGUAGE to the bare "de" for a Swiss German user."""
     env = os.environ if env is None else env
-    language = (env.get("LANGUAGE") or "").split(":")[0] or next(
-        (env[v] for v in ("LC_ALL", "LC_MESSAGES", "LANG") if env.get(v)), "")
-    return language.replace("-", "_").startswith(("de_CH", "gsw"))
+    locale = next((env[v] for v in ("LC_ALL", "LC_MESSAGES", "LANG") if env.get(v)), "")
+    first = (env.get("LANGUAGE") or "").split(":")[0]
+    if first and first.split("_")[0] != locale.split("_")[0]:
+        locale = first
+    return locale.replace("-", "_").startswith(("de_CH", "gsw"))
 
 
 def has_battery(power_dir="/sys/class/power_supply") -> bool:

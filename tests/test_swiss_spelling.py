@@ -38,6 +38,9 @@ def test_sharp_s_becomes_ss(text, expected):
     ({"LC_ALL": "en_US.UTF-8", "LANG": "de_CH.UTF-8"}, False),
     ({"LC_MESSAGES": "en_GB.UTF-8", "LANG": "de_CH.UTF-8"}, False),
     ({"LANGUAGE": "en_US:de_CH", "LANG": "de_CH.UTF-8"}, False),
+    # Plasma sets LANGUAGE to the bare language: that doesn't undo the Swiss locale.
+    ({"LANGUAGE": "de", "LANG": "de_CH.UTF-8"}, True),
+    ({"LANGUAGE": "de:en_US", "LANG": "de_CH.UTF-8"}, True),
 ])
 def test_on_by_default_only_on_swiss_german_systems(env, expected):
     assert config.swiss_german_locale(env) is expected
