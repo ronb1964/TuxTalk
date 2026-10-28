@@ -61,6 +61,18 @@ def test_a_failure_leaves_it_to_try_again_next_start(tmp_path):
     assert not marker.exists()
 
 
+def test_favourites_gnome_wont_let_change_are_tried_again_next_start(tmp_path):
+    """Locked favourites: Gio's set_strv says False and changes nothing. That
+    was taken as done, so the old TalkType pin stayed for good."""
+    marker = tmp_path / "launchers-renamed"
+    favs = ["talktype.desktop"]
+    lines = rm.repin_launchers(str(marker), run_plasma_script=None,
+                               gnome_favorites=(lambda: favs, lambda v: False),
+                               app_dirs=_apps(tmp_path, "tuxtalk.desktop"))
+    assert not marker.exists()
+    assert any("could not update the favourites" in line for line in lines)
+
+
 def test_tray_repins_on_start(tray_main):
     started = tray_main()
     assert started.index("adopts the old install") < started.index("repins launchers")

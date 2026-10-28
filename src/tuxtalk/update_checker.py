@@ -12,6 +12,7 @@ import logging
 import os
 import re
 import subprocess
+import threading
 import urllib.request
 import urllib.error
 from pathlib import Path
@@ -196,13 +197,14 @@ def get_releases_url() -> str:
     return "https://github.com/ronb1964/TuxTalk/releases"
 
 
-# Why the last fetch_latest_release() failed: ("network" | "http" | "other",
-# HTTP code or None), so the message can say what really happened.
-_last_fetch_error = ("other", None)
+# Why this thread's last fetch_latest_release() failed: ("network" | "http" |
+# "other", HTTP code or None), so the message can say what really happened.
+# One per thread: the tray's daily check and a manual one can overlap.
+_fetch_error = threading.local()
 
 
 def _fetch_failure_message():
-    kind, code = _last_fetch_error
+    kind, code = getattr(_fetch_error, "reason", ("other", None))
     if kind == "network":
         return "Could not connect to GitHub. Check your internet connection."
     if kind == "http" and code in (403, 429):
@@ -226,7 +228,6 @@ def fetch_latest_release() -> Optional[dict]:
             - extension_url: Direct download URL for extension (if found)
         None: If fetch failed
     """
-    global _last_fetch_error
     try:
         # Create request with User-Agent (GitHub requires this)
         request = urllib.request.Request(
@@ -277,18 +278,18 @@ def fetch_latest_release() -> Optional[dict]:
             return result
 
     except urllib.error.HTTPError as e:
-        _last_fetch_error = ("http", e.code)
+        _fetch_error.reason = ("http", e.code)
         if e.code == 403:
             logger.warning("GitHub API rate limit exceeded. Try again later.")
         else:
             logger.warning(f"GitHub API error: {e.code} {e.reason}")
         return None
     except urllib.error.URLError as e:
-        _last_fetch_error = ("network", None)
+        _fetch_error.reason = ("network", None)
         logger.warning(f"Network error checking for updates: {e.reason}")
         return None
     except Exception as e:
-        _last_fetch_error = ("other", None)
+        _fetch_error.reason = ("other", None)
         logger.warning(f"Error fetching latest release: {e}")
         return None
 
@@ -730,7 +731,6 @@ def _finish_in_background(proc, package_path: str) -> None:
     """Wait for an installer that outlived PACKAGE_INSTALL_TIMEOUT_S on a
     background thread, then delete its package. If TuxTalk exits first the
     installer is unaffected, and the next update download sweeps the package."""
-    import threading
 
     def wait():
         try:
@@ -1037,6 +1037,18 @@ def _refresh_desktop_menu_cache():
     logger.warning("Could not refresh desktop menu cache - no suitable command found")
 
 
+def _app_icon_path() -> str:
+    """Where _install_app_icon puts the icon its name stands for."""
+    return os.path.expanduser("~/.local/share/icons/hicolor/256x256/apps/tuxtalk.png")
+
+
+def installed_app_icon() -> Optional[str]:
+    """The icon name ("tuxtalk") once _install_app_icon has put it in place,
+    else None. Only looks: installing refreshes icon caches, which can take
+    seconds, and the caller may be a window's thread."""
+    return "tuxtalk" if os.path.exists(_app_icon_path()) else None
+
+
 def _install_app_icon() -> Optional[str]:
     """
     Install the TuxTalk icon to the user's icon directory.
@@ -1052,7 +1064,7 @@ def _install_app_icon() -> Optional[str]:
     import shutil
 
     icons_base = os.path.expanduser("~/.local/share/icons/hicolor")
-    primary_icon_path = os.path.join(icons_base, "256x256", "apps", "tuxtalk.png")
+    primary_icon_path = _app_icon_path()
 
     # If icon already installed, just return the name
     if os.path.exists(primary_icon_path):
@@ -1237,8 +1249,9 @@ Terminal=false
         # Make it executable (not strictly required but good practice)
         os.chmod(DESKTOP_FILE_PATH, 0o755)
 
-        # Refresh desktop menu cache (especially needed for KDE/Plasma)
-        _refresh_desktop_menu_cache()
+        # The menu cache (KDE's above all) is refreshed in the background, as
+        # add_launcher_actions does: it takes seconds, and Setup Complete waits.
+        threading.Thread(target=_refresh_desktop_menu_cache, daemon=True).start()
 
         logger.info(f"Desktop launcher created at {DESKTOP_FILE_PATH}")
         return (True, "Desktop launcher created!\n\nTuxTalk is now in your Applications menu.")
@@ -1277,7 +1290,6 @@ def add_launcher_actions() -> bool:
         with open(tmp, "w") as f:
             f.write("\n".join(new_lines).rstrip("\n") + "\n" + actions[1])
         os.replace(tmp, DESKTOP_FILE_PATH)
-        import threading
         threading.Thread(target=_refresh_desktop_menu_cache, daemon=True).start()
         logger.info("Added the right-click shortcuts to the menu launcher")
         return True
@@ -1324,7 +1336,6 @@ def create_hidden_desktop_entry() -> bool:
                     f"{_HIDDEN_ENTRY_MARK}\n")
         os.replace(tmp, DESKTOP_FILE_PATH)
         # Plasma 5's menu cache doesn't rebuild by itself; this takes a moment.
-        import threading
         threading.Thread(target=_refresh_desktop_menu_cache, daemon=True).start()
         logger.info("Hidden desktop entry written so setup windows show TuxTalk's icon")
         return True

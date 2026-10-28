@@ -17,6 +17,10 @@ to terminate, so signalling a process that is still starting would kill it.
 import os
 import signal
 
+from .logger import setup_logger
+
+logger = setup_logger(__name__)
+
 FRONT = signal.SIGUSR1
 CLOSE = signal.SIGUSR2
 
@@ -143,12 +147,16 @@ def bring_to_front(pid, tab=None):
     Returns True if the request was sent."""
     try:
         if tab:
-            with open(_tab_request_path(), "w") as f:
-                f.write(tab)
+            # Whole or not at all: the window reads it the moment the signal
+            # comes, and a second request may be writing it just then.
+            from .config import write_text_atomic
+            write_text_atomic(_tab_request_path(), tab, keep_backup=False)
         else:
             os.remove(_tab_request_path())        # don't act on a stale request
-    except OSError:
+    except FileNotFoundError:
         pass
+    except OSError as e:
+        logger.info(f"Couldn't pass Preferences the tab to open: {e}")
     try:
         os.kill(pid, FRONT)
         return True

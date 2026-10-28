@@ -13,6 +13,10 @@ the same settings and models. Nothing is ever deleted, copied or overwritten:
 import errno
 import os
 
+from .logger import setup_logger
+
+logger = setup_logger(__name__)
+
 # Files TuxTalk creates on its own the moment it starts (the logger writes its
 # log before anything else). A new folder holding only these is not "in use".
 _AUTO_CREATED = {"tuxtalk.log", "tuxtalk.log.old"}
@@ -427,6 +431,27 @@ def _marker_waiting_on(marker_path):
     return set(lines[1:])
 
 
+def _repin_gnome(gnome_favorites, renames, done):
+    """repin_launchers' GNOME part: rename the old pins in the favourites,
+    noting what happened in *done*. Returns (failed, waiting)."""
+    get, put = gnome_favorites
+    try:
+        new, changed = renamed_launchers(get(), renames)
+        if changed:
+            # Gio says False, changing nothing, where the key is locked.
+            if put(new) is False:
+                raise OSError("GNOME didn't take the change (locked favourites?)")
+            done.append("GNOME: renamed TuxTalk in the favourites")
+        if waiting_launchers(new, renames):
+            done.append("GNOME: left an old favourite alone; the new entry isn't installed")
+            return False, True
+    except Exception as e:
+        logger.info(f"GNOME favourites not updated yet: {e}")
+        done.append(f"GNOME: could not update the favourites yet: {e}")
+        return True, False
+    return False, False
+
+
 def repin_launchers(marker_path, run_plasma_script=_DEFAULT, gnome_favorites=_DEFAULT,
                     app_dirs=None):
     """Rename pinned TalkType launchers on the KDE dock and in GNOME's
@@ -463,18 +488,8 @@ def repin_launchers(marker_path, run_plasma_script=_DEFAULT, gnome_favorites=_DE
             failed = True
             done.append(f"KDE: could not update pinned launchers yet: {e}")
     if gnome_favorites:
-        get, put = gnome_favorites
-        try:
-            new, changed = renamed_launchers(get(), renames)
-            if changed:
-                put(new)
-                done.append("GNOME: renamed TuxTalk in the favourites")
-            if waiting_launchers(new, renames):
-                waiting = True
-                done.append("GNOME: left an old favourite alone; the new entry isn't installed")
-        except Exception as e:
-            failed = True
-            done.append(f"GNOME: could not update the favourites yet: {e}")
+        gnome_failed, gnome_waiting = _repin_gnome(gnome_favorites, renames, done)
+        failed, waiting = failed or gnome_failed, waiting or gnome_waiting
     if not failed:
         content = "done\n"
         if waiting:

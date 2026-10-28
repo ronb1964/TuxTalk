@@ -23,6 +23,8 @@ import sys
 import warnings
 from .logger import setup_logger
 from . import notes_text, tray_instance, update_offers
+from .tray_items import DictationItem, themed_icon
+from .tray_presets import PresetMenu
 from .tray_service import ServiceLifecycle
 
 # The tray menu's icons need Gtk.ImageMenuItem: AppIndicator sends only its
@@ -130,28 +132,7 @@ def _about_icon():
     return image
 
 
-def _themed_icon(*names):
-    """The first of these icon names the current icon theme has, or None."""
-    theme = Gtk.IconTheme.get_default()
-    if theme is None:
-        return None
-    return next((name for name in names if theme.has_icon(name)), None)
-
-
-def preset_notice(model, device, gpu_offered):
-    """The notification after choosing a Performance preset.
-
-    It says where the model really runs and, if that's the processor on a
-    computer with a usable graphics chip, how to move it there.
-    """
-    from .recommend import engine_line, engine_status
-    text = f"{engine_line(model, device)}."
-    if engine_status(model, device)[1].startswith("CPU") and gpu_offered:
-        text += " To use your graphics card, set the Device to Vulkan in Preferences."
-    return text + "\nRestarting service..."
-
-
-class DictationTray(ServiceLifecycle):
+class DictationTray(ServiceLifecycle, PresetMenu):
     def __init__(self):
         # TuxTalk is a dark-themed app. This is a global Gtk setting, so setting
         # it once here, before any tray dialog is built, makes the tray's own
@@ -525,130 +506,6 @@ class DictationTray(ServiceLifecycle):
         except Exception as e:
             logger.error(f"SetModel failed: {e}", exc_info=True)
 
-    def _current_presets(self):
-        """The Performance presets for this computer and language (recommend.py)."""
-        from . import recommend
-        from .config import load_config
-        cfg = load_config()
-        return recommend.presets(recommend.effective_language(cfg), recommend.detect_hardware(cfg))
-
-    def _get_current_preset(self) -> str:
-        """Id of the preset the settings match, or 'custom'."""
-        try:
-            from . import config, recommend
-            return recommend.match_preset(config.load_config(), self._current_presets())
-        except Exception as e:
-            logger.warning(f"Could not tell which preset is in use: {e}")
-            return "custom"
-
-    def set_performance_preset(self, preset_id: str):
-        """Apply a Performance preset: Recommended, Lightest or Battery saver.
-
-        Recommended on a graphics card runs the same setup as Preferences
-        (confirm and download the Vulkan files, then the speed check) and
-        uses the processor if the chip is slower. Cancelling the download
-        changes nothing. Ids from an older GNOME extension ("balanced",
-        "accurate"...) are ignored."""
-        if getattr(self, "_updating_preset", False):
-            return
-        try:
-            preset = next((p for p in self._current_presets() if p.id == preset_id), None)
-        except Exception as e:
-            logger.error(f"Could not work out the presets: {e}")
-            preset = None
-        if preset is None:
-            logger.info(f"Ignoring unknown performance preset {preset_id!r}")
-            self._revert_preset_radio()
-            return
-        if self._get_current_preset() == preset_id:
-            # Already in effect (the GNOME menu sends clicks on the dotted
-            # item too): no download check, speed check or restart.
-            logger.info(f"Performance preset {preset_id!r} is already in effect")
-            return
-        try:
-            from .config import load_config, save_config
-            from .model_helper import is_model_cached_fast, download_model_with_progress
-            model, device = preset.model, preset.device
-            if device == "vulkan":
-                from .vulkan_setup_dialogs import ensure_files, run_speed_check
-                if not ensure_files(None, model, confirm=True):
-                    self._revert_preset_radio()
-                    return
-                if not run_speed_check(None, model):
-                    # On the processor, use what Recommended means there:
-                    # Large-v3 needs a graphics card, so it becomes Small.
-                    from . import recommend
-                    device = "cpu"
-                    model = recommend.recommend(recommend.effective_language(load_config()),
-                                                recommend.Hardware(None), model=model).model
-            if device == "cpu" and not is_model_cached_fast(model):
-                downloaded = download_model_with_progress(model, device="cpu", show_confirmation=True)
-                if downloaded is None:
-                    self._revert_preset_radio()
-                    return
-                del downloaded
-            cfg = load_config()
-            cfg.model, cfg.device = model, device
-            for key, value in preset.extras:
-                setattr(cfg, key, value)
-            if not preset.extras:
-                # Leaving Battery saver: put back the settings it changed
-                # (2-minute auto-stop) to their defaults, unless the user has
-                # since chosen their own in Preferences.
-                from .config import Settings
-                battery = next((p for p in self._current_presets() if p.id == "battery"), None)
-                if battery and all(getattr(cfg, k, None) == v for k, v in battery.extras):
-                    # An instance, not the class: some defaults are worked out
-                    # for this computer (the timeout is on only with a battery).
-                    defaults = Settings()
-                    for key, _ in battery.extras:
-                        setattr(cfg, key, getattr(defaults, key))
-            save_config(cfg)
-            from .notify import notify as _notify
-            try:
-                from . import whisper_vulkan as _wv
-                _gpu_offered = _wv.is_offered()
-            except Exception:
-                _gpu_offered = False
-            logger.info(f"Applied performance preset: {preset.label} ({model} on {device})")
-            _notify(f"Performance: {preset.label}", preset_notice(cfg.model, cfg.device, _gpu_offered))
-            self.update_menu_display()
-            self._emit_model_changed(cfg.model)
-            self.restart_service(None)
-        except Exception as e:
-            logger.error(f"Failed to apply performance preset: {e}")
-
-    def _sync_preset_radios(self):
-        """Refresh the Performance labels and put the dot on the active preset.
-        The busy flag (which makes set_performance_preset ignore the toggles
-        this causes) is always cleared, or every later click would be ignored."""
-        self._updating_preset = True
-        try:
-            for _p in self._current_presets():
-                if _p.id in self.preset_radios:
-                    self.preset_radios[_p.id].set_label(f"{_p.label} ({_p.description})")
-            current_preset = self._get_current_preset()
-            if current_preset in self.preset_radios:
-                self.preset_radios[current_preset].set_active(True)
-            elif hasattr(self, 'preset_custom'):
-                self.preset_custom.set_active(True)
-        finally:
-            self._updating_preset = False
-
-    def _revert_preset_radio(self):
-        """Put the Performance radio back on the preset that's actually in use."""
-        self._updating_preset = True
-        try:
-            _cur = self._get_current_preset()
-            if _cur in self.preset_radios:
-                self.preset_radios[_cur].set_active(True)
-            elif hasattr(self, 'preset_custom'):
-                self.preset_custom.set_active(True)
-        except Exception as _re:
-            logger.error(f"Failed to revert preset radio: {_re}")
-        finally:
-            self._updating_preset = False
-
     def update_menu_display(self, is_running=None):
         """Update menu display with current service status and model.
 
@@ -696,10 +553,10 @@ class DictationTray(ServiceLifecycle):
             pid = prefs_ipc.running_pid()
             if pid and prefs_ipc.bring_to_front(pid, tab):
                 logger.info("Preferences already open; brought it to the front")
-            else:
-                # No pidfile yet: it is still starting and about to appear.
-                logger.info("Preferences is still opening")
-            return
+                return
+            # Still starting, or closing: a new one brings the starting window
+            # forward on *tab*, or opens once the closing one has gone
+            # (prefs._acquire_prefs_singleton). Doing nothing lost the click.
 
         tab_desc = f" ({tab} tab)" if tab else ""
 
@@ -1205,10 +1062,10 @@ class DictationTray(ServiceLifecycle):
             try:
                 result = update_checker.check_for_updates()
 
-                # Record the timestamp against a fresh read: `config` was loaded
-                # before the network call, which can take ~30 s, and saving it
-                # back would revert anything changed in Preferences meanwhile.
-                record_update_check(update_checker.get_current_timestamp())
+                # Saved against a fresh read (`config` is from before the ~30 s
+                # check) and on GTK's thread, where the tray saves its own
+                # settings: neither undoes a change made meanwhile.
+                GLib.idle_add(record_update_check, update_checker.get_current_timestamp())
 
                 if result and result.get("success"):
                     has_update = result.get("update_available", False)
@@ -1244,53 +1101,6 @@ class DictationTray(ServiceLifecycle):
                "Open Preferences → Updates & Backup to install it.")
         logger.info("Showed extension update notification")
         return False
-
-    def _build_performance_submenu(self):
-        """Build the Performance preset submenu (Recommended, Lightest, Battery saver + Custom).
-
-        Stores radio button references on self for later state updates.
-        Returns the parent MenuItem that contains the submenu.
-        """
-        submenu = Gtk.Menu()
-        self.preset_radios = {}
-        preset_group = None
-        for preset in self._current_presets():
-            label = f"{preset.label} ({preset.description})"
-            radio = (Gtk.RadioMenuItem(label=label) if preset_group is None
-                     else Gtk.RadioMenuItem(label=label, group=preset_group))
-            preset_group = preset_group or radio
-            # GTK fires "activate" on the radio being unselected too; act on the selected one.
-            radio.connect("activate", lambda w, pid=preset.id: w.get_active() and self.set_performance_preset(pid))
-            submenu.append(radio)
-            self.preset_radios[preset.id] = radio
-
-        # Custom has the dot when the settings match no preset; it opens Preferences.
-        submenu.append(Gtk.SeparatorMenuItem())
-        self.preset_custom = Gtk.RadioMenuItem(label="Custom (opens Preferences)", group=preset_group)
-        self.preset_custom.connect("activate", self._on_custom_preset)
-        submenu.append(self.preset_custom)
-
-        item = Gtk.MenuItem(label="Performance")
-        item.set_submenu(submenu)
-        return item
-
-    def _on_custom_preset(self, item):
-        """Performance > Custom: open Preferences, then put the dot back on the
-        setup in use (clicking a radio item moves it)."""
-        # "activate" also comes for the radio being unselected, and for the
-        # tray moving the dot itself.
-        if getattr(self, "_updating_preset", False) or not item.get_active():
-            return
-        self.open_preferences(None)
-
-        def put_dot_back():
-            self._revert_preset_radio()
-            return False    # once
-
-        # Delayed: KDE ticks the clicked item in its own copy of the menu, and
-        # a move there and back in the same main-loop pass reaches it as no
-        # change and leaves two dots.
-        GLib.timeout_add(150, put_dot_back)
 
     def _build_history_submenu(self):
         """Build the Recent Dictations submenu and keep it current.
@@ -1421,12 +1231,7 @@ class DictationTray(ServiceLifecycle):
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         )
 
-        # A real check item, not a checkmark icon: its state goes to the
-        # desktop (dbusmenu's toggle-state), so a screen reader says on or
-        # off. On KDE the checkbox gets a column of its own beside the icons,
-        # which moves the labels right; being heard is worth that.
-        self.service_toggle = Gtk.CheckMenuItem(label="Dictation on/off")
-        self.service_toggle.connect("toggled", self.toggle_service)
+        self.service_toggle = DictationItem(self.toggle_service)
         self.engine_item = Gtk.MenuItem(label="Loading the speech model...")
         self.engine_item.set_sensitive(False)
 
@@ -1489,7 +1294,7 @@ class DictationTray(ServiceLifecycle):
         an icon does. "emblem-system-symbolic" is the round gear in both
         Breeze (KDE) and Adwaita (GNOME, Mint); KDE's "configure" is sliders.
         """
-        name = _themed_icon("emblem-system-symbolic", "preferences-system-symbolic")
+        name = themed_icon("emblem-system-symbolic", "preferences-system-symbolic")
         if name is None:
             return Gtk.MenuItem(label=label)
         item = Gtk.ImageMenuItem(label=label)

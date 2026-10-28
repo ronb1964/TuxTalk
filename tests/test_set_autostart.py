@@ -43,3 +43,56 @@ def test_enable_creates_missing_directory(desktop):
     assert not desktop.parent.exists()
     assert autostart.set_autostart(True) is True
     assert desktop.exists()
+
+
+def test_an_appimage_entry_gets_tuxtalks_icon_not_a_microphone(tmp_path, monkeypatch):
+    """The AppImage's own files vanish when it exits, so an entry naming them
+    (or none, the microphone) has no TuxTalk icon at login; first run puts
+    TuxTalk's icon in the user's icon folder, which the entry can name."""
+    home = tmp_path / "home"
+    icon = home / ".local/share/icons/hicolor/256x256/apps/tuxtalk.png"
+    icon.parent.mkdir(parents=True)
+    icon.write_bytes(b"png")
+    mount = tmp_path / ".mount_TuxTalkAb12"           # the running AppImage's files
+    (mount / "AppDir").mkdir(parents=True)
+    (mount / "AppDir/io.github.ronb1964.TuxTalk.svg").write_text("<svg/>")
+    monkeypatch.setattr(autostart, "_project_root", lambda: str(mount))
+    monkeypatch.setattr(autostart.sys, "executable", str(mount / "usr/bin/python3"))
+    monkeypatch.setattr(autostart.os.path, "expanduser", lambda p: p.replace("~", str(home), 1))
+    real_isfile = autostart.os.path.isfile
+    monkeypatch.setattr(autostart.os.path, "isfile",      # no system-wide icon here
+                        lambda p: not p.startswith("/usr/") and real_isfile(p))
+    assert autostart.get_icon_path() == "tuxtalk"
+
+
+def test_an_extracted_appimage_s_own_icon_isnt_named_either(tmp_path, monkeypatch):
+    """Run with extract-and-run, the AppImage's files are in a folder that's
+    deleted at exit: only /.mount_ was skipped."""
+    home = tmp_path / "home"
+    icon = home / ".local/share/icons/hicolor/256x256/apps/tuxtalk.png"
+    icon.parent.mkdir(parents=True)
+    icon.write_bytes(b"png")
+    extracted = tmp_path / "appimage_extracted_ab12" / "squashfs-root"
+    (extracted / "AppDir").mkdir(parents=True)
+    (extracted / "AppDir/io.github.ronb1964.TuxTalk.svg").write_text("<svg/>")
+    monkeypatch.setenv("APPIMAGE", str(tmp_path / "TuxTalk.AppImage"))
+    monkeypatch.setenv("APPDIR", str(extracted))
+    monkeypatch.setattr(autostart, "_project_root", lambda: str(extracted))
+    monkeypatch.setattr(autostart.sys, "executable", str(extracted / "usr/bin/python3"))
+    monkeypatch.setattr(autostart.os.path, "expanduser", lambda p: p.replace("~", str(home), 1))
+    real_isfile = autostart.os.path.isfile
+    monkeypatch.setattr(autostart.os.path, "isfile",
+                        lambda p: not p.startswith("/usr/") and real_isfile(p))
+    assert autostart.get_icon_path() == "tuxtalk"
+
+
+def test_the_icon_lookup_only_looks(tmp_path, monkeypatch):
+    """Preferences sets start at login on its window's thread; installing the
+    icon there refreshes icon caches, which can freeze it for seconds."""
+    from tuxtalk import update_checker
+    monkeypatch.setattr(update_checker, "_install_app_icon",
+                        lambda: pytest.fail("installed the icon"))
+    monkeypatch.setattr(autostart, "_project_root", lambda: str(tmp_path / "none"))
+    monkeypatch.setattr(autostart.sys, "executable", str(tmp_path / "none/bin/python3"))
+    monkeypatch.setattr(autostart.os.path, "isfile", lambda p: False)
+    assert autostart.get_icon_path() in ("tuxtalk", "audio-input-microphone")

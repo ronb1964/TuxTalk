@@ -2772,6 +2772,29 @@ def _saved_hold_key():
         return "F8"
 
 
+def _ready_tips(is_flatpak):
+    """The dim lines under Setup Complete's three steps, as markup: the
+    keys this user has, where the menu is, and launch at login when on."""
+    from .config import load_config
+    cfg = load_config()
+    tips = ['💡 Say "period", "comma" or "new line" as you talk']
+    if not is_flatpak and getattr(cfg, "toggle_hotkey", ""):
+        tips.append(f"⏯️ Or tap <b>{GLib.markup_escape_text(cfg.toggle_hotkey)}</b> "
+                    "to start, and tap it again to stop")
+    # The portal registers only the two dictation keys, so not on the Flatpak.
+    if not is_flatpak and getattr(cfg, "paste_last_hotkey", ""):
+        tips.append("📋 Typed into the wrong window? Press "
+                    f"<b>{GLib.markup_escape_text(cfg.paste_last_hotkey)}</b> to type it again")
+    tips.append(f"⚙️ Open the TuxTalk menu ({GLib.markup_escape_text(_menu_location())}) "
+                "to change these keys and more")
+    # Onboarding turns on launch at login (appimage_copy._start_at_login) and
+    # records it only once its file is written: say so, and where to turn it off.
+    if getattr(cfg, "launch_at_login", False):
+        tips.append("🔁 TuxTalk will start automatically when you log in "
+                    "(turn this off in Preferences → General)")
+    return tips
+
+
 def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
                                needs_restart=False, extension_installed=False):
     """
@@ -2882,16 +2905,7 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
 
     vbox.pack_start(steps_box, False, False, 0)
 
-    from .config import load_config
-    cfg = load_config()
-    tips = ['💡 Say "period", "comma" or "new line" as you talk']
-    if not is_flatpak and getattr(cfg, "toggle_hotkey", ""):
-        tips.append(f"⏯️ Or tap <b>{GLib.markup_escape_text(cfg.toggle_hotkey)}</b> "
-                    "to start, and tap it again to stop")
-    # The portal registers only the two dictation keys, so not on the Flatpak.
-    if not is_flatpak and getattr(cfg, "paste_last_hotkey", ""):
-        tips.append("📋 Typed into the wrong window? Press "
-                    f"<b>{GLib.markup_escape_text(cfg.paste_last_hotkey)}</b> to type it again")
+    tips = _ready_tips(is_flatpak)
     for i, tip in enumerate(tips):
         tip_label = Gtk.Label()
         tip_label.set_markup(f'<span><i>{tip}</i></span>')
@@ -2900,31 +2914,6 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
         tip_label.set_margin_top(8 if i == 0 else 2)
         tip_label.set_opacity(0.85)
         vbox.pack_start(tip_label, False, False, 0)
-
-    settings_label = Gtk.Label()
-    settings_label.set_markup(
-        '<span><i>⚙️ Open the TuxTalk menu ('
-        f'{GLib.markup_escape_text(_menu_location())}) to change these keys and more</i></span>'
-    )
-    settings_label.set_halign(Gtk.Align.START)
-    settings_label.set_margin_top(2)
-    settings_label.set_opacity(0.85)
-    vbox.pack_start(settings_label, False, False, 0)
-
-    # Onboarding turns on launch-at-login by default (see show_welcome_and_install).
-    # Say so plainly, and point to where it can be turned off — quietly changing a
-    # startup setting without telling the user is exactly the kind of surprise to avoid.
-    autostart_label = Gtk.Label()
-    autostart_label.set_markup(
-        '<span><i>🔁 TuxTalk will start automatically when you log in '
-        '(turn this off in Preferences → General)</i></span>'
-    )
-    autostart_label.set_halign(Gtk.Align.START)
-    autostart_label.set_xalign(0)
-    autostart_label.set_margin_top(2)
-    autostart_label.set_opacity(0.85)
-    autostart_label.set_line_wrap(True)
-    vbox.pack_start(autostart_label, False, False, 0)
 
     # A single, passive feedback invitation. It lives here on purpose: this
     # screen is seen once and dismissed, so the ask never interrupts dictation

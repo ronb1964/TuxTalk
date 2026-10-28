@@ -325,10 +325,9 @@ before 0.15.0, so older entries use that name.
   don't trip over each other.
 - Help, Problems has a new part for letters that come out wrong. Mostly
   that's Caps Lock being on, which TuxTalk can't see.
-- Dictation on/off in the tray menu is a real checkbox now, so a screen
-  reader says whether dictation is on. It used to be a checkmark picture
-  that only showed it to the eye. On KDE the checkbox takes a column of its
-  own, so the menu's labels sit a little further right.
+- The first item in the tray menu says "Dictation on" or "Dictation off"
+  now, with the checkmark when it's on. It used to read "Dictation on/off"
+  with only the checkmark to tell you, which a screen reader couldn't say.
 
 ## [0.18.2] - 2026-10-23
 

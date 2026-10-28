@@ -18,6 +18,10 @@ class FakeTray:
     _current_presets = tray_mod.DictationTray._current_presets
     _get_current_preset = tray_mod.DictationTray._get_current_preset
     set_performance_preset = tray_mod.DictationTray.set_performance_preset
+    _apply_preset = tray_mod.DictationTray._apply_preset
+    _preset_files = tray_mod.DictationTray._preset_files
+    _save_preset = tray_mod.DictationTray._save_preset
+    _put_dot_back_soon = tray_mod.DictationTray._put_dot_back_soon
 
     def __init__(self):
         self.reverted = 0
@@ -236,3 +240,37 @@ def test_leaving_battery_saver_on_a_desktop_turns_the_timeout_off(env, monkeypat
     FakeTray().set_performance_preset("battery")
     FakeTray().set_performance_preset("lightest")
     assert (cfg.auto_timeout_enabled, cfg.auto_timeout_minutes) == (False, 5)
+
+
+def test_a_second_preset_clicked_during_the_first_ones_download_waits(env, monkeypatch):
+    """The download window runs a loop of its own and the menu still takes
+    clicks: a second preset opened a second download window."""
+    t = FakeTray()
+    windows = []
+
+    def ensure_files(parent, model, confirm):
+        windows.append(model)
+        t.set_performance_preset("lightest")   # clicked while this one downloads
+        return True
+    monkeypatch.setattr("tuxtalk.vulkan_setup_dialogs.ensure_files", ensure_files)
+    monkeypatch.setattr("tuxtalk.vulkan_setup_dialogs.run_speed_check", lambda p, m: True)
+    deferred = []                             # the dot goes back on a short timer
+    monkeypatch.setattr(tray_mod.GLib, "timeout_add",
+                        lambda ms, fn: deferred.append(ms) or fn())
+    t.set_performance_preset("recommended")
+    assert len(windows) == 1 and t.reverted == 1 and deferred == [150]
+    t.set_performance_preset("lightest")        # once it's done, a click works again
+    assert t.restarted == 2
+
+
+def test_a_preset_that_fails_puts_the_dot_back(env, monkeypatch):
+    """It failed after the dot had moved, and the dot stayed on the preset
+    that wasn't applied."""
+    t = FakeTray()
+    monkeypatch.setattr(tray_mod.GLib, "timeout_add", lambda ms, fn: fn())
+
+    def broken(*args, **kwargs):
+        raise OSError("disk full")
+    monkeypatch.setattr("tuxtalk.vulkan_setup_dialogs.ensure_files", broken)
+    t.set_performance_preset("recommended")
+    assert t.reverted == 1 and t.restarted == 0

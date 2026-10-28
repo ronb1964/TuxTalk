@@ -103,3 +103,18 @@ def test_a_download_path_with_spaces_still_makes_a_valid_entry(home, monkeypatch
 def test_a_percent_in_the_path_is_not_read_as_a_field_code():
     assert desktop_exec_program("/home/a/100%.AppImage") == "/home/a/100%%.AppImage"
     assert desktop_exec_program("/home/a/TuxTalk.AppImage") == "/home/a/TuxTalk.AppImage"
+
+
+def test_writing_the_launcher_doesnt_wait_for_the_menu_cache(home, monkeypatch):
+    """KDE's cache refresh (a 0.5 s sleep and kbuildsycoca) held Setup Complete
+    back one to three seconds after the downloads."""
+    import threading
+    released = threading.Event()
+    monkeypatch.setattr(uc, "_refresh_desktop_menu_cache", lambda: released.wait(5))
+    finished = threading.Event()
+    threading.Thread(target=lambda: uc.create_desktop_launcher() and finished.set(),
+                     daemon=True).start()
+    try:
+        assert finished.wait(2)
+    finally:
+        released.set()

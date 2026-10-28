@@ -131,9 +131,21 @@ def get_icon_path() -> str:
         '/usr/local/share/icons/hicolor/scalable/apps/io.github.ronb1964.TuxTalk.svg',
     ]
     for path in candidates:
-        if os.path.isfile(path):
+        if os.path.isfile(path) and not _in_running_appimage(os.path.abspath(path)):
             return os.path.abspath(path)
-    return 'audio-input-microphone'
+    # The user's icon folder instead: first run puts it there.
+    from .update_checker import installed_app_icon
+    return installed_app_icon() or 'audio-input-microphone'
+
+
+def _in_running_appimage(path) -> bool:
+    """Whether *path* is one of a running AppImage's own files, mounted or
+    extracted (extract-and-run): gone once it exits, so an autostart entry
+    naming it has no icon at login."""
+    if "/.mount_" in path:
+        return True
+    appdir = os.environ.get("APPDIR", "") if os.environ.get("APPIMAGE") else ""
+    return bool(appdir) and path.startswith(appdir.rstrip("/") + "/")
 
 
 # The description KDE's Autostart page (and other desktops) shows for the entry.

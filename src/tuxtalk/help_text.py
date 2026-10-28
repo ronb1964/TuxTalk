@@ -605,8 +605,8 @@ models are about half that.
 processor, Vulkan and CUDA, and which of those your computer has.
 
 <b>Dictation stopped working</b>
-Choose <b>Restart Service</b> in the TuxTalk menu, or turn Dictation on/off off and
-on. The log is {log_path}.{kde_notice}
+Choose <b>Restart Service</b> in the TuxTalk menu, or turn dictation off and on
+again there. The log is {log_path}.{kde_notice}
 
 <b>A settings change went wrong</b>
 <b>Preferences → Updates &amp; Backup → Earlier settings</b> lists the copies TuxTalk

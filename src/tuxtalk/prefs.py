@@ -42,21 +42,72 @@ def _coerce_config_types(config: dict) -> dict:
     return {**config, **asdict(repaired(settings))}
 
 
+# One Preferences window: the lock is held while it's open, so two quick
+# launches can't both find no pid yet and both open one.
+WINDOW_LOCK = "prefs-window.lock"
+_FRONT_WAIT_S = 2.0         # for a window that holds the lock to write its pid
+_CLOSING_WAIT_S = 10.0      # for one that didn't answer (closing) to let go
+_window_lock = None
+
+
 def _acquire_prefs_singleton(tab=None):
     """Give way to a Preferences window already open, bringing it to the
-    front (on *tab*) and exiting, or claim the pidfile for this one."""
-    old = prefs_ipc.running_pid()
-    if old and old != os.getpid():
-        # Bring the open one forward rather than silently doing nothing,
-        # which looked like Preferences failed to open.
-        prefs_ipc.bring_to_front(old, tab)
+    front (on *tab*) and exiting, or claim the window for this one. One that
+    holds the lock but doesn't answer is closing: this one opens once it's
+    gone, rather than leaving no window at all."""
+    global _window_lock
+    from . import single_instance
+    lock = held = None
+    try:
+        lock = single_instance.open_lock(WINDOW_LOCK)
+        held = not single_instance.claim(lock)
+    except OSError as e:     # no usable folder, or flock refused: open without it
+        logger.warning(f"Could not take Preferences' lock: {e}")
+    if _brought_open_window_forward(tab, wait_s=_FRONT_WAIT_S if held else 0):
         logger.info("Preferences is already open; brought it to the front")
         sys.exit(0)
+    if held and not _claimed_once_closed(lock):
+        logger.warning("Another Preferences window holds on and doesn't answer")
+        sys.exit(0)
+    _window_lock = lock     # until the window closes (_let_go_of_the_window)
     try:
         prefs_ipc.claim_pidfile()
     except OSError as e:
         logger.warning(f"Could not write prefs pidfile: {e}")
     atexit.register(prefs_ipc.release_pidfile)
+
+
+def _claimed_once_closed(lock):
+    """Whether *lock* came free within _CLOSING_WAIT_S (the open window was
+    closing); a lock that fails some other way doesn't stop this window."""
+    from . import single_instance
+    try:
+        return single_instance.claim(lock, wait_s=_CLOSING_WAIT_S)
+    except OSError as e:
+        logger.warning(f"Could not wait for Preferences' lock: {e}")
+        return True
+
+
+def _let_go_of_the_window():
+    """Release the lock _acquire_prefs_singleton took, so the next
+    Preferences window can open."""
+    global _window_lock
+    lock, _window_lock = _window_lock, None
+    if lock is not None:
+        lock.close()
+
+
+def _brought_open_window_forward(tab, wait_s):
+    """Whether an open Preferences window (from its pidfile, waited for up
+    to *wait_s* while one starts) took the request to come to the front."""
+    deadline = time.monotonic() + wait_s
+    while True:
+        old = prefs_ipc.running_pid()
+        if old and old != os.getpid():
+            return prefs_ipc.bring_to_front(old, tab)
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.05)
 
 
 # What can need a download, and so is rolled back when it never finishes:
@@ -523,9 +574,13 @@ class PreferencesWindow:
                      "You may need to manually restart the service.")
 
     def _release(self):
-        """The window closes: stop the microphone tests and let go of the pidfile."""
+        """The window closes: stop the microphone tests and let go of the
+        pidfile and the window's lock. Not at the process's exit: an Apply
+        restart can keep it running after the window is gone, and a new
+        window must open meanwhile."""
         self._stop_tests(closing=True)
         prefs_ipc.release_pidfile()
+        _let_go_of_the_window()
 
     def on_window_close(self, widget, event):
         """The title bar's close: asks first about changes not applied."""

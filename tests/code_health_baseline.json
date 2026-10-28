@@ -1,7 +1,7 @@
 {
  "files": {
-  "tray.py": 1745,
-  "welcome_dialog.py": 3089
+  "tray.py": 1550,
+  "welcome_dialog.py": 3078
  },
  "findings": {
   "ai_cleanup.py::<module>::long_line": 4,
@@ -64,9 +64,7 @@
   "explain.py::start_helper_window::swallowed_error": 1,
   "extension_helper.py::<module>::long_line": 2,
   "extension_helper.py::download_and_install_extension.download_progress_hook::long_line": 1,
-  "extension_helper.py::download_and_install_extension::long_line": 1,
   "extension_helper.py::download_and_install_extension::swallowed_error": 1,
-  "extension_helper.py::install_extension::long_line": 1,
   "extension_helper.py::install_extension_from_local::swallowed_error": 1,
   "extension_helper.py::uninstall_extension::swallowed_error": 1,
   "file_transcribe.py::<module>::long_line": 1,
@@ -160,7 +158,7 @@
   "rename_migration.py::_install_tuxtalk_icon::swallowed_error": 1,
   "rename_migration.py::_plasma_script::long_line": 1,
   "rename_migration.py::adopt_old_install::long_line": 1,
-  "rename_migration.py::repin_launchers::swallowed_error": 2,
+  "rename_migration.py::repin_launchers::swallowed_error": 1,
   "rename_migration.py::run_at_startup::swallowed_error": 1,
   "screen_message.py::_show_now.draw::undocumented": 1,
   "screen_message.py::_show_now.set_text::long_line": 1,
@@ -192,11 +190,8 @@
   "transcribe_window.py::TranscribeWindow::undocumented": 1,
   "tray.py::DictationTray.__init__::swallowed_error": 1,
   "tray.py::DictationTray.__init__::undocumented": 1,
-  "tray.py::DictationTray._build_performance_submenu::long_line": 2,
   "tray.py::DictationTray._check_tray_visibility::swallowed_error": 1,
   "tray.py::DictationTray._stop_kwin_focus_provider::swallowed_error": 1,
-  "tray.py::DictationTray.set_performance_preset::long_line": 2,
-  "tray.py::DictationTray.set_performance_preset::swallowed_error": 1,
   "tray.py::DictationTray.show_about_dialog::long_line": 1,
   "tray.py::DictationTray.show_about_dialog::swallowed_error": 1,
   "tray.py::DictationTray.show_menu_window_if_no_tray::swallowed_error": 1,
@@ -313,10 +308,6 @@
   "custom_words.py::fix_spelling": {
    "decisions": 28
   },
-  "extension_helper.py::download_and_install_extension": {
-   "decisions": 17,
-   "lines": 101
-  },
   "file_transcribe.py::load_engine": {
    "decisions": 20
   },
@@ -379,7 +370,7 @@
    "decisions": 23
   },
   "rename_migration.py::repin_launchers": {
-   "decisions": 20
+   "decisions": 19
   },
   "secure_input.py::_pkexec": {
    "decisions": 16
@@ -392,9 +383,6 @@
   },
   "tray.py::DictationTray._show_update_result_dialog": {
    "lines": 135
-  },
-  "tray.py::DictationTray.set_performance_preset": {
-   "decisions": 23
   },
   "tray.py::DictationTray.show_about_dialog": {
    "lines": 127
@@ -447,8 +435,7 @@
    "lines": 388
   },
   "welcome_dialog.py::show_setup_complete_dialog": {
-   "decisions": 19,
-   "lines": 306
+   "lines": 272
   },
   "x11_hotkeys.py::claim": {
    "decisions": 16

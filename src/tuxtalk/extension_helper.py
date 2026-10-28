@@ -253,18 +253,14 @@ def install_extension(progress_callback: Optional[Callable] = None) -> bool:
     bundled_path = get_bundled_extension_path()
     if bundled_path:
         if progress_callback:
-            progress_callback("Installing bundled extension...", 50)
+            # Low: a failed bundled copy falls back to the download, which
+            # starts at 10%, and the bar mustn't go backwards.
+            progress_callback("Installing bundled extension...", 5)
 
+        # install_extension_from_local enables it too.
         if install_extension_from_local(bundled_path):
             if progress_callback:
                 progress_callback("Extension installed successfully!", 100)
-
-            # Enable the extension
-            if enable_extension():
-                print("Extension enabled - will be active after logout/login")
-            else:
-                print("Failed to auto-enable extension - you can enable it manually from Extensions app")
-
             return True
         else:
             print("Failed to install bundled extension, trying download...")
@@ -348,25 +344,15 @@ def download_and_install_extension(progress_callback: Optional[Callable] = None)
                 extension_source = extract_dir
 
             if progress_callback:
-                progress_callback("Installing extension...", 90)
+                progress_callback("Installing and enabling extension...", 90)
 
-            # Install
+            # Enabling adds it to org.gnome.shell's enabled-extensions, so it
+            # stays on across logout/login; install_extension_from_local does it.
             if not install_extension_from_local(extension_source):
                 return False
 
             if progress_callback:
                 progress_callback("Extension installed successfully!", 100)
-
-            # Enable the extension after installation
-            # This adds it to org.gnome.shell enabled-extensions so it persists across logout/login
-            if progress_callback:
-                progress_callback("Enabling extension...", 95)
-
-            if enable_extension():
-                print("Extension enabled - will be active after logout/login")
-            else:
-                print("Failed to auto-enable extension - you can enable it manually from Extensions app")
-
             return True
 
     except Exception as e:

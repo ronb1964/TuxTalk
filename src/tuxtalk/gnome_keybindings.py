@@ -90,8 +90,11 @@ def disable_for_hotkey_test():
     if not _on_gnome():
         return None
     # A backup left by a run that died holds the real values; reading the
-    # bindings now would only find the cleared ones.
-    restore_left_over()
+    # bindings now would only find the cleared ones, and saving those over
+    # the backup would lose the real ones for good.
+    if not restore_left_over():
+        logger.warning("Not clearing GNOME keybindings: earlier ones aren't back yet")
+        return None
     try:
         saved = {key: subprocess.check_output(["gsettings", "get", SCHEMA, key],
                                               text=True, timeout=5).strip()
@@ -100,10 +103,12 @@ def disable_for_hotkey_test():
         logger.debug(f"Could not read GNOME keybindings: {e}")
         return None
     try:
+        from .config import write_text_atomic
         path = _backup_path()
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(saved, f)
+        # Whole or not at all: a half-written backup can't be read back, and
+        # until it is, no hotkey test clears the bindings.
+        write_text_atomic(path, json.dumps(saved), keep_backup=False)
     except Exception as e:
         # Without the backup a crash would lose them for good; leave them alone.
         logger.warning(f"Not clearing GNOME keybindings: could not save them ({e})")
