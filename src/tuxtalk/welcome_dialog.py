@@ -593,7 +593,7 @@ class WelcomeDialog:
         features_box.set_margin_start(20)
         features_box.set_margin_top(5)
 
-        hold = _saved_hold_key()
+        hold = GLib.markup_escape_text(_saved_hold_key())      # a hand edit may hold "&"
         hotkey_hint = "your desktop assigns the key" if self.is_flatpak else f"default: {hold} key"
         features = [
             f"🎤 <b>Hold-to-talk dictation</b> ({hotkey_hint})",
