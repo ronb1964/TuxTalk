@@ -194,3 +194,17 @@ def test_the_tray_asks_again_when_preferences_is_starting_or_closing(monkeypatch
                         lambda tab: launched.append(tab) or types.SimpleNamespace())
     t._launch_preferences(tab="stats")
     assert launched == ["stats"]
+
+
+def test_a_lock_that_fails_otherwise_doesnt_stop_preferences_opening(one_window,
+                                                                    monkeypatch):
+    """flock can fail for reasons other than "held" (no locks on that disk);
+    Preferences opens without the lock rather than crashing before its window."""
+    prefs, single_instance, pidfile = one_window
+    def no_locks(lockfile, wait_s=0.0):
+        raise OSError(37, "No locks available")
+    monkeypatch.setattr(single_instance, "claim", no_locks)
+    monkeypatch.setattr(prefs.atexit, "register", lambda fn: None)
+    prefs._acquire_prefs_singleton(None)                # opens: no exception, no exit
+    assert pidfile.read_text().split()[0] == str(prefs.os.getpid())
+    prefs._let_go_of_the_window()

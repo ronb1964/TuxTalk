@@ -57,24 +57,35 @@ def _acquire_prefs_singleton(tab=None):
     gone, rather than leaving no window at all."""
     global _window_lock
     from . import single_instance
+    lock = held = None
     try:
         lock = single_instance.open_lock(WINDOW_LOCK)
-    except OSError as e:
+        held = not single_instance.claim(lock)
+    except OSError as e:     # no usable folder, or flock refused: open without it
         logger.warning(f"Could not take Preferences' lock: {e}")
-        lock = None
-    held = lock is not None and not single_instance.claim(lock)
     if _brought_open_window_forward(tab, wait_s=_FRONT_WAIT_S if held else 0):
         logger.info("Preferences is already open; brought it to the front")
         sys.exit(0)
-    if held and not single_instance.claim(lock, wait_s=_CLOSING_WAIT_S):
+    if held and not _claimed_once_closed(lock):
         logger.warning("Another Preferences window holds on and doesn't answer")
         sys.exit(0)
-    _window_lock = lock     # held until this process exits
+    _window_lock = lock     # until the window closes (_let_go_of_the_window)
     try:
         prefs_ipc.claim_pidfile()
     except OSError as e:
         logger.warning(f"Could not write prefs pidfile: {e}")
     atexit.register(prefs_ipc.release_pidfile)
+
+
+def _claimed_once_closed(lock):
+    """Whether *lock* came free within _CLOSING_WAIT_S (the open window was
+    closing); a lock that fails some other way doesn't stop this window."""
+    from . import single_instance
+    try:
+        return single_instance.claim(lock, wait_s=_CLOSING_WAIT_S)
+    except OSError as e:
+        logger.warning(f"Could not wait for Preferences' lock: {e}")
+        return True
 
 
 def _let_go_of_the_window():
