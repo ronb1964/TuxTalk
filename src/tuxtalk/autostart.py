@@ -15,7 +15,6 @@ autostart line dies silently at login with ModuleNotFoundError.
 import os
 import sys
 import glob
-import shlex
 import subprocess
 
 from .logger import setup_logger
@@ -343,16 +342,26 @@ def refresh_autostart_comment() -> bool:
 
 def _exec_program(exec_cmd):
     """(the program an Exec= value runs, whether the desktop can run it as
-    written). A path with a space that isn't quoted (written before 0.19)
-    can't be run: the desktop looks for the part before the space."""
+    written), reading back what desktop_exec_program writes. An AppImage
+    path with a space that isn't quoted (written before 0.19) can't be run,
+    whether or not the file is still there: the desktop looks for the part
+    before the space."""
     whole = exec_cmd.strip()
-    if " " in whole and not whole.startswith('"') and os.path.isfile(whole):
+    if " " in whole and not whole.startswith('"') and whole.lower().endswith(".appimage"):
         return whole, False
-    try:
-        words = shlex.split(whole.replace("%%", "%"))
-    except ValueError:
-        words = whole.split()
-    return (words[0] if words else ""), True
+    # The key file's escaping first (\\ is one backslash), then the
+    # desktop-entry quoting: inside the quotes a backslash takes the next
+    # character as it is.
+    text = whole.replace("\\\\", "\\").replace("%%", "%")
+    if not text.startswith('"'):
+        return (text.split()[0] if text.split() else ""), True
+    program, i = [], 1
+    while i < len(text) and text[i] != '"':
+        if text[i] == "\\" and i + 1 < len(text):
+            i += 1
+        program.append(text[i])
+        i += 1
+    return "".join(program), True
 
 
 def repair_stale_appimage_autostart() -> bool:

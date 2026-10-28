@@ -144,3 +144,22 @@ def test_an_unquoted_path_with_a_space_is_repaired(spaced_env, where):
     assert autostart.repair_stale_appimage_autostart() is True
     assert f'Exec="{installed}"\n' in entry.read_text()
     assert autostart.repair_stale_appimage_autostart() is False      # once
+
+
+@pytest.mark.parametrize("path", ["/home/Jo Ann/AppImages/TuxTalk.AppImage",
+                                  "/home/a$b/AppImages/TuxTalk.AppImage",
+                                  '/home/q"x/AppImages/TuxTalk.AppImage',
+                                  "/home/back\\slash/AppImages/TuxTalk.AppImage",
+                                  "/home/100%/AppImages/TuxTalk.AppImage"])
+def test_the_exec_line_reads_back_what_was_written(path):
+    """Read back wrongly, an entry already right would be rewritten at
+    every start."""
+    assert autostart._exec_program(autostart.desktop_exec_program(path)) == (path, True)
+
+
+def test_an_unquoted_spaced_path_is_repaired_after_its_file_is_gone(spaced_env):
+    """The old download it named was cleaned up: still broken, still fixed."""
+    home, installed, entry = spaced_env
+    _entry(entry, str(home / "Downloads" / "TuxTalk-v0.18.2.AppImage"))
+    assert autostart.repair_stale_appimage_autostart() is True
+    assert f'Exec="{installed}"\n' in entry.read_text()
