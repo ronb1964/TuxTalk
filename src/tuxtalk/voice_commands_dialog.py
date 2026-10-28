@@ -117,7 +117,7 @@ The commands are English words, whatever language you dictate in.
   <b>comma</b> → ,          <b>period</b> / <b>full stop</b> → .
   <b>question mark</b> → ?    <b>exclamation point</b> / <b>exclamation mark</b> → !
   <b>semicolon</b> → ;        <b>colon</b> → :
-  <b>apostrophe</b> → '       <b>quote</b> → "
+  <b>apostrophe</b> → '       <b>quote</b> hi <b>quote</b> → \u201chi\u201d
   <b>open quote</b> → \u201c         <b>close quote</b> → \u201d
   <b>hyphen</b> / <b>dash</b> → -    <b>em dash</b> → \u2014
   <b>ellipsis</b> / <b>dot dot dot</b> → \u2026

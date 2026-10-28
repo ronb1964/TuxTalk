@@ -63,6 +63,15 @@ def test_option_states_grey_out_what_cant_work():
     assert all(o.available for o in r.option_states("en", NVIDIA))
 
 
+def test_large_v3_is_greyed_out_while_the_graphics_card_is_unticked():
+    """Offered with the box unticked, picking it was replaced at once by
+    Whisper Small; it says what it needs instead."""
+    states = {o.model: o for o in r.option_states("ja", NVIDIA, use_gpu=False)}
+    assert not states["large-v3"].available
+    assert states["large-v3"].reason == "Needs the graphics card ticked."
+    assert {o.model: o for o in r.option_states("ja", NVIDIA)}["large-v3"].available
+
+
 @pytest.mark.parametrize("env,code", [
     ({"LANG": "en_US.UTF-8"}, "en"),
     ({"LANG": "uk_UA.UTF-8"}, "uk"),

@@ -28,3 +28,9 @@ def test_lone_close_quote_is_straight_with_smart_quotes_off(monkeypatch):
 def test_lone_quote_stays_curly_with_smart_quotes_on(monkeypatch):
     monkeypatch.setattr(live, "ai_engine", None)
     assert _prep("he said open quote hello", True) == "He said “hello."
+
+
+def test_spoken_quote_pairs_are_straight_with_smart_quotes_off(monkeypatch):
+    monkeypatch.setattr(live, "ai_engine", None)
+    assert _prep("he said quote hello quote", False) == 'He said "hello."'
+    assert _prep("he said open quote hello close quote", False) == 'He said "hello."'

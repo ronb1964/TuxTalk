@@ -10,6 +10,7 @@ import pathlib
 import pytest
 
 from tuxtalk import update_checker as uc
+from tuxtalk.autostart import desktop_exec_program
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -100,5 +101,5 @@ def test_a_download_path_with_spaces_still_makes_a_valid_entry(home, monkeypatch
 
 
 def test_a_percent_in_the_path_is_not_read_as_a_field_code():
-    assert uc._desktop_exec_program("/home/a/100%.AppImage") == "/home/a/100%%.AppImage"
-    assert uc._desktop_exec_program("/home/a/TuxTalk.AppImage") == "/home/a/TuxTalk.AppImage"
+    assert desktop_exec_program("/home/a/100%.AppImage") == "/home/a/100%%.AppImage"
+    assert desktop_exec_program("/home/a/TuxTalk.AppImage") == "/home/a/TuxTalk.AppImage"

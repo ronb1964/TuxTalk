@@ -589,12 +589,12 @@ class WelcomeDialog:
         features_label.set_halign(Gtk.Align.START)
         vbox.pack_start(features_label, False, False, 5)
 
-        # Features list
         features_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         features_box.set_margin_start(20)
         features_box.set_margin_top(5)
 
-        hotkey_hint = "your desktop assigns the key" if self.is_flatpak else "default: F8 key"
+        hold = GLib.markup_escape_text(_saved_hold_key())      # a hand edit may hold "&"
+        hotkey_hint = "your desktop assigns the key" if self.is_flatpak else f"default: {hold} key"
         features = [
             f"🎤 <b>Hold-to-talk dictation</b> ({hotkey_hint})",
             "🗣️ <b>Voice commands:</b> \"period\", \"comma\", \"new paragraph\"",
@@ -625,12 +625,12 @@ class WelcomeDialog:
         quickstart_label.set_halign(Gtk.Align.START)
         vbox.pack_start(quickstart_label, False, False, 5)
 
-        # Quick start tips
         quickstart_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         quickstart_box.set_margin_start(20)
         quickstart_box.set_margin_top(5)
 
-        key = "your Hold-to-talk key" if self.is_flatpak else "<b>F8</b> (or a key you pick next)"
+        key = ("your Hold-to-talk key" if self.is_flatpak
+               else f"<b>{hold}</b> (or a key you pick next)")
         tips = [
             f"1. Hold {key}",
             "2. Talk",

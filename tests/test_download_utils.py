@@ -2,6 +2,9 @@
 import hashlib
 import os
 import threading
+import time
+
+import pytest
 
 from tuxtalk.download_utils import (
     download_file,
@@ -132,3 +135,93 @@ def test_a_temp_file_left_by_a_killed_download_is_swept(tmp_path):
     assert not stale.exists()
     assert live.exists(), "a download still being written was deleted"
     assert other.exists(), "another file's download was touched"
+
+
+# --- an engine's archive and the folder it unpacks into ---------------------------------
+
+def test_two_downloads_of_one_engine_get_names_of_their_own(tmp_path):
+    """The tray and Preferences may fetch the same engine at once; shared
+    names let one unpack into, or delete, the other's archive."""
+    from tuxtalk.download_utils import download_area
+    with download_area(str(tmp_path), "engine") as first, \
+            download_area(str(tmp_path), "engine") as second:
+        assert set(first).isdisjoint(second)
+
+
+def test_a_failed_unpack_leaves_neither_archive_nor_folder(tmp_path):
+    from tuxtalk.download_utils import download_area, unpack_tar
+    try:
+        with download_area(str(tmp_path), "engine") as (archive, folder):
+            open(archive, "wb").write(b"not a tar file")
+            unpack_tar(archive, folder)
+    except Exception:
+        pass
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_what_a_killed_download_left_is_swept_next_time(tmp_path):
+    from tuxtalk.download_utils import STALE_PARTIAL_S, download_area
+    old = time.time() - STALE_PARTIAL_S - 60
+    archive, folder = tmp_path / ".engine.dead.tar", tmp_path / ".engine.dead.d"
+    archive.write_bytes(b"half")
+    folder.mkdir()
+    (folder / "bin").write_bytes(b"x")
+    for path in (archive, folder):
+        os.utime(path, (old, old))
+    with download_area(str(tmp_path), "engine"):
+        pass
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_an_archive_older_versions_left_is_removed(tmp_path):
+    """Before 0.19 a failed unpack left the archive under its own name."""
+    from tuxtalk.download_utils import download_area
+    (tmp_path / "engine-b1.tar.gz").write_bytes(b"22 MB once")
+    with download_area(str(tmp_path), "engine", old_names=("engine-b1.tar.gz",)):
+        pass
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_a_plain_sweep_leaves_folders_alone(tmp_path):
+    """Only download_area's own leftovers are folders; the updater's sweep
+    of its folder mustn't start deleting folders."""
+    from tuxtalk.download_utils import remove_stale_files
+    folder = tmp_path / "keep"
+    folder.mkdir()
+    os.utime(folder, (0, 0))
+    remove_stale_files(str(tmp_path), "*", 60)
+    assert folder.exists()
+
+
+def _tar(path, *members):
+    import io
+    import tarfile
+    with tarfile.open(path, "w") as tar:
+        for name, link in members:
+            info = tarfile.TarInfo(name)
+            if link:
+                info.type, info.linkname = tarfile.SYMTYPE, link
+                tar.addfile(info)
+            else:
+                info.size = 6
+                tar.addfile(info, io.BytesIO(b"engine"))
+
+
+def test_unpacking_keeps_files_inside_the_folder(tmp_path):
+    from tuxtalk.download_utils import unpack_tar
+    _tar(tmp_path / "a.tar", ("engine/bin", None))
+    unpack_tar(str(tmp_path / "a.tar"), str(tmp_path / "out"))
+    assert (tmp_path / "out" / "engine" / "bin").read_bytes() == b"engine"
+
+
+@pytest.mark.parametrize("member", [("../outside", None),
+                                    ("engine/link", "/etc/passwd")])
+def test_unpacking_refuses_what_would_land_outside_the_folder(tmp_path, member):
+    import tarfile
+    from tuxtalk.download_utils import unpack_tar
+    if not hasattr(tarfile, "data_filter"):
+        pytest.skip("this Python has no tar data filter")
+    _tar(tmp_path / "a.tar", member)
+    with pytest.raises(tarfile.FilterError):
+        unpack_tar(str(tmp_path / "a.tar"), str(tmp_path / "out"))
+    assert not (tmp_path / "outside").exists()

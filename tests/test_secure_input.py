@@ -121,6 +121,8 @@ def test_a_running_helper_counts_as_hotkeys_working(monkeypatch):
     from tuxtalk import uinput_helper, hotkey_helper_client
 
     class Connected:
+        sock = object()             # it answered
+
         def close(self):
             pass
     monkeypatch.setattr(hotkey_helper_client, "connect_helper", lambda: Connected())

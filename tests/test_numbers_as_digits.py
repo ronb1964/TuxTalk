@@ -11,6 +11,7 @@ from tuxtalk import config
 from tuxtalk import dictation_text
 from tuxtalk import live_settings as live
 from tuxtalk.spoken_numbers import SUPPORTED_LANGUAGES, to_digits
+from tuxtalk.normalize import LINE_BREAK
 
 
 @pytest.mark.parametrize("text, expected", [
@@ -89,6 +90,14 @@ def test_one_to_nine_stay_words(text, expected):
 ])
 def test_small_digits_the_engine_wrote_become_words(text, expected):
     assert to_digits(text, "en", small_as_words=True) == expected
+
+
+@pytest.mark.parametrize("line_break", ["\n", LINE_BREAK])
+def test_a_small_digit_starting_a_new_line_becomes_a_word(line_break):
+    """A new line starts a sentence too; the line break isn't a name before
+    the digit ("SHIFT_ENTER 3")."""
+    text = f"Shopping list:{line_break}3 apples"
+    assert to_digits(text, "en", small_as_words=True) == f"Shopping list:{line_break}Three apples"
 
 
 def test_as_digits_leaves_the_engines_digits_alone():

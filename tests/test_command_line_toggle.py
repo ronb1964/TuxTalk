@@ -452,12 +452,16 @@ def test_ready_is_said_after_stale_toggles_are_cleared(service_main):
 
 
 @pytest.mark.parametrize("appimage,expected", [
-    ("/home/u/AppImages/TuxTalk.AppImage", "~/AppImages/TuxTalk.AppImage --toggle"),
+    ("/home/u/AppImages/TuxTalk.AppImage", "/home/u/AppImages/TuxTalk.AppImage --toggle"),
+    # Quoted, or the shortcut runs "/home/Jo" (GNOME splits it like a shell);
+    # and never "~": GNOME starts a custom shortcut without a shell to expand it.
+    ("/home/Jo Ann/AppImages/TuxTalk.AppImage",
+     "'/home/Jo Ann/AppImages/TuxTalk.AppImage' --toggle"),
     ("/opt/tuxtalk/TuxTalk.AppImage", "tuxtalk --toggle"),      # AUR: its launcher
     ("", "tuxtalk --toggle"),                                    # .deb / .rpm
 ])
 def test_help_names_the_command_for_this_install(appimage, expected):
-    assert control.shortcut_command(appimage_env=appimage, home="/home/u") == expected
+    assert control.shortcut_command(appimage_env=appimage) == expected
 
 
 def test_help_mentions_the_command(help_pages):

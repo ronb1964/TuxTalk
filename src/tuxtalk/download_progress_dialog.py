@@ -260,7 +260,9 @@ class UnifiedDownloadDialog:
     def _update_task_progress(self, task, message, percent):
         """Update progress for a specific task (thread-safe)."""
         def update_ui():
-            if task not in self.task_widgets:
+            # A download reports once more before it notices Cancel, and a
+            # finished one has its last word already.
+            if task not in self.task_widgets or task.cancelled or task.completed:
                 return False
 
             widgets = self.task_widgets[task]

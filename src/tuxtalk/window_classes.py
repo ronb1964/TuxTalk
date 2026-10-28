@@ -106,13 +106,20 @@ def is_terminal_class(wm_class: str | None) -> bool:
 # broken on Wayland — modifier-key chords are silently dropped and the focused
 # input blurs. These apps are typed into instead (plain character keystrokes
 # still work, per OpenWhispr #240 and others).
-ELECTRON_PASTE_BROKEN_CLASSES = frozenset({
-    "Claude", "claude", "claude-desktop", "Claude Desktop", "anthropic-claude",
+_PASTE_BROKEN_CLASSES_LOWER = frozenset({
+    "claude", "claude-desktop", "claude desktop", "anthropic-claude",
     # Claude Desktop reports this reverse-DNS id or one of the names above,
     # depending on how it was packaged; a missing one means a paste that
     # silently does nothing.
-    "com.anthropic.Claude",
+    "com.anthropic.claude",
 })
+
+
+def pastes_broken(wm_class) -> bool:
+    """Whether a synthetic Ctrl+V does nothing in *wm_class* (Claude
+    Desktop), so text has to be typed there. Compared without case, as the
+    terminal check is: a build that reports "Claude-Desktop" is the same app."""
+    return bool(wm_class) and wm_class.lower() in _PASTE_BROKEN_CLASSES_LOWER
 
 
 # KDE's text editor component takes Shift+Enter as Insert Smart Newline,

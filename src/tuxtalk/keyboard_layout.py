@@ -30,6 +30,7 @@ Anything that fails just means "unknown", and unknown means the US path.
 """
 import ctypes as C
 import ctypes.util
+import functools
 import json
 import os
 import re
@@ -304,7 +305,17 @@ def _cosmic_layout():
     """COSMIC's (layout, variant), from its RON config:
     (rules: "", model: "pc105", layout: "de,us", variant: ",", ...)."""
     fields = dict(re.findall(r'\b(layout|variant):\s*"([^"]*)"', _cosmic_xkb_config()))
+    if "," in fields.get("layout", ""):
+        _note_several_layouts(fields["layout"])
     return _first(fields.get("layout")), _first(fields.get("variant"))
+
+
+@functools.lru_cache(maxsize=None)
+def _note_several_layouts(layouts):
+    """Say once per list that only the first is typed for: COSMIC doesn't
+    tell which one is switched on."""
+    logger.warning(f"COSMIC has several layouts ({layouts}); TuxTalk types for the "
+                   "first, so text typed with another switched on comes out wrong")
 
 
 def _hyprland_devices():

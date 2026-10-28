@@ -36,7 +36,6 @@ import re
 import shutil
 import socket
 import subprocess
-import tarfile
 import threading
 import time
 import urllib.request
@@ -189,41 +188,35 @@ def make_engine_download_func(model_name=None):
     """DownloadTask function: fetch, verify and unpack the engine, unless the
     one already there can run *model_name*."""
     def download(progress_callback, cancel_event):
-        from .download_utils import download_file
+        from .download_utils import download_area, download_file, install_turn, unpack_tar
         if is_engine_installed(model_name):
             progress_callback("Already downloaded", 100)
             return True
         parent = os.path.dirname(_engine_dir())
-        os.makedirs(parent, exist_ok=True)
-        archive = os.path.join(parent, ENGINE_ASSET)
 
         def hook(done, total):
             if total:
                 progress_callback("Downloading graphics engine...", min(95, int(done * 95 / total)))
 
-        if not download_file(ENGINE_URL, archive, timeout=60, cancel_event=cancel_event,
-                             progress_hook=hook, expected_sha256=ENGINE_SHA256):
-            progress_callback("Download failed", 0)
-            return False
-        try:
-            progress_callback("Unpacking...", 97)
-            staging = parent + ".unpacking"
-            shutil.rmtree(staging, ignore_errors=True)
-            with tarfile.open(archive) as tar:
-                if hasattr(tarfile, "data_filter"):
-                    tar.extractall(staging, filter="data")   # refuses unsafe paths
-                else:
-                    tar.extractall(staging)
-            target = _engine_dir()
-            shutil.rmtree(target, ignore_errors=True)
-            os.replace(os.path.join(staging, ENGINE_NAME), target)
-            shutil.rmtree(staging, ignore_errors=True)
-            os.remove(archive)
-            engine_process.remove_other_versions(os.path.dirname(parent), ENGINE_VERSION)
-        except Exception as e:
-            logger.error(f"Could not unpack the graphics engine: {e}")
-            progress_callback("Could not unpack the download", 0)
-            return False
+        # Before 0.19 the archive was ENGINE_ASSET itself, left behind when unpacking failed.
+        with download_area(parent, ENGINE_NAME, old_names=(ENGINE_ASSET,)) as (archive, folder):
+            if not download_file(ENGINE_URL, archive, timeout=60, cancel_event=cancel_event,
+                                 progress_hook=hook, expected_sha256=ENGINE_SHA256):
+                progress_callback("Download failed", 0)
+                return False
+            try:
+                progress_callback("Unpacking...", 97)
+                unpack_tar(archive, folder)
+                with install_turn("vulkan-engine"):
+                    if not is_engine_installed(model_name):     # or another download did it
+                        target = _engine_dir()
+                        shutil.rmtree(target, ignore_errors=True)
+                        os.replace(os.path.join(folder, ENGINE_NAME), target)
+                    engine_process.remove_other_versions(os.path.dirname(parent), ENGINE_VERSION)
+            except Exception as e:
+                logger.error(f"Could not unpack the graphics engine: {e}")
+                progress_callback("Could not unpack the download", 0)
+                return False
         progress_callback("Done", 100)
         return True
     return download

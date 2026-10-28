@@ -206,6 +206,12 @@ def test_removing_the_indent(said):
     assert r.mechanical_edit("    One\n\tTwo", said) == "One\nTwo"
 
 
+def test_removing_the_indent_takes_off_one_level():
+    """Undoes "indent this": nested lines keep their place under the others."""
+    assert r.mechanical_edit("        One\n    Two\n  Three\n\t\tFour", "unindent this") == \
+        "    One\nTwo\nThree\n\tFour"
+
+
 @pytest.mark.parametrize("said, yes", [
     ("Delete this.", True), ("remove it", True), ("Erase all of this", True), ("delete everything", True),
     ("Get rid of this.", True), ("Delete the selection", True),

@@ -12,7 +12,11 @@ from tuxtalk import autostart, config
 
 @pytest.fixture
 def env(tmp_path, monkeypatch):
-    home = tmp_path
+    return _env(tmp_path, monkeypatch)
+
+
+def _env(home, monkeypatch):
+    """An installed AppImage in *home* and the path of its login entry."""
     installed = home / "AppImages" / "TalkType.AppImage"
     installed.parent.mkdir()
     installed.write_text("")
@@ -118,3 +122,54 @@ def test_new_entries_get_the_current_description(tmp_path, monkeypatch):
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     assert autostart.set_autostart(True)
     assert f"Comment={autostart.AUTOSTART_COMMENT}\n" in entry.read_text()
+
+
+@pytest.fixture
+def spaced_env(tmp_path, monkeypatch):
+    """env, with a home folder that has a space in its name."""
+    home = tmp_path / "Jo Ann"
+    home.mkdir()
+    return _env(home, monkeypatch)
+
+
+@pytest.mark.parametrize("where", ["installed", "download"])
+def test_an_unquoted_path_with_a_space_is_repaired(spaced_env, where):
+    """Written unquoted before 0.19, "/home/Jo Ann/..." made the desktop look
+    for "/home/Jo", so TuxTalk never started at login; it's written quoted."""
+    home, installed, entry = spaced_env
+    old = installed if where == "installed" else home / "Downloads" / "TuxTalk-v0.18.2.AppImage"
+    old.parent.mkdir(exist_ok=True)
+    old.write_text("")
+    _entry(entry, str(old))
+    assert autostart.repair_stale_appimage_autostart() is True
+    assert f'Exec="{installed}"\n' in entry.read_text()
+    assert autostart.repair_stale_appimage_autostart() is False      # once
+
+
+@pytest.mark.parametrize("path", ["/home/Jo Ann/AppImages/TuxTalk.AppImage",
+                                  "/home/a$b/AppImages/TuxTalk.AppImage",
+                                  '/home/q"x/AppImages/TuxTalk.AppImage',
+                                  "/home/back\\slash/AppImages/TuxTalk.AppImage",
+                                  "/home/100%/AppImages/TuxTalk.AppImage"])
+def test_the_exec_line_reads_back_what_was_written(path):
+    """Read back wrongly, an entry already right would be rewritten at
+    every start."""
+    assert autostart._exec_program(autostart.desktop_exec_program(path)) == (path, True)
+
+
+def test_an_unquoted_spaced_path_is_repaired_after_its_file_is_gone(spaced_env):
+    """The old download it named was cleaned up: still broken, still fixed."""
+    home, installed, entry = spaced_env
+    _entry(entry, str(home / "Downloads" / "TuxTalk-v0.18.2.AppImage"))
+    assert autostart.repair_stale_appimage_autostart() is True
+    assert f'Exec="{installed}"\n' in entry.read_text()
+
+
+def test_a_hand_made_entry_that_runs_the_appimage_through_env_is_left_alone(env):
+    """It starts with a real program, so it isn't the old broken path; a
+    rewrite would drop the settings it sets."""
+    home, installed, entry = env
+    _entry(entry, f"/usr/bin/env SOME_SETTING=1 {installed}")
+    before = entry.read_text()
+    assert autostart.repair_stale_appimage_autostart() is False
+    assert entry.read_text() == before

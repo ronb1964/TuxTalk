@@ -72,3 +72,15 @@ def test_float_sensitivity_round_trips_as_a_float():
     TOML writer writes it bare and the loader casts it back."""
     assert config._toml_value(1.3) == "1.3"          # bare, not quoted
     assert config._TYPE_CASTERS["float"] is float     # loader casts it back
+
+
+def test_hand_edited_capitals_load_as_the_values_the_app_compares():
+    """Validation accepts "Vulkan" or "Type" in any case, so the rest of the
+    app must see them lowercase too: kept as written, the indicator went
+    blank and "Type" took the paste path's Claude Desktop detour."""
+    s = config.Settings()
+    s.device, s.injection_mode, s.mode = "Vulkan", "Type", "Hold"
+    s.indicator_style, s.indicator_size = "Bars", "Large"
+    s = config.repaired(s)
+    assert (s.device, s.injection_mode, s.mode) == ("vulkan", "type", "hold")
+    assert (s.indicator_style, s.indicator_size) == ("bars", "large")

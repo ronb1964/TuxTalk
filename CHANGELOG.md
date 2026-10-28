@@ -303,6 +303,28 @@ before 0.15.0, so older entries use that name.
 - Installing an AppImage update from the tray froze the "Installing
   Update..." window and the tray menu while the new version was copied
   into place. The copy runs in the background now.
+- If Parakeet's helper on the graphics card froze halfway through an answer,
+  dictation hung until you restarted TuxTalk. Now it gives up after about two
+  minutes, and Parakeet runs on the processor until TuxTalk restarts.
+- "He said quote hello quote" came out as He said " hello ". with spaces
+  inside the quotes. It's He said “hello.” now. And "open quote ... close
+  quote" uses smart quotes like everything else and gets a capital when it
+  starts a sentence.
+- If your home folder has a space in its name, TuxTalk never started at
+  login, and the shortcut command in Help didn't work either. Both are fixed,
+  and a login entry that's already broken gets fixed the next time the
+  AppImage starts.
+- In a terminal or a code editor, spoken quotes are always straight quotes
+  now, so "git commit -m open quote fix the bug close quote" works.
+- With "Restore clipboard" on, something you copied between two quick
+  dictations got replaced by what you'd copied before them. It's kept now.
+- "Unindent" took every bit of indentation off. It takes off one level now,
+  the same step "indent this" adds.
+- A graphics engine download that failed to unpack left its 22 MB file
+  behind. It cleans up after itself now, and two downloads of it at once
+  don't trip over each other.
+- Help, Problems has a new part for letters that come out wrong. Mostly
+  that's Caps Lock being on, which TuxTalk can't see.
 
 ## [0.18.2] - 2026-10-23
 

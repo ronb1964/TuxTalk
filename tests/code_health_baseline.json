@@ -15,7 +15,6 @@
   "audio_duck.py::AudioDucker._run_jobs::swallowed_error": 1,
   "audio_duck.py::_set_volume::long_line": 1,
   "audio_duck.py::reset_remembered::long_line": 1,
-  "cleanup.py::<module>::long_line": 1,
   "cleanup.py::_remove_fillers.repl::undocumented": 1,
   "clipboard.py::ClipboardKeeper._restore::swallowed_error": 1,
   "clipboard.py::ClipboardKeeper._restore::undocumented": 1,
@@ -23,7 +22,6 @@
   "clipboard.py::_sensitive_supported::swallowed_error": 1,
   "clipboard.py::_wl_paste::long_line": 1,
   "clipboard.py::copy_selection.put_back::swallowed_error": 1,
-  "clipboard.py::read_primary::swallowed_error": 1,
   "compositor_focus.py::_CosmicWindows._follow::undocumented": 1,
   "compositor_focus.py::_CosmicWindows._on_event::undocumented": 1,
   "compositor_focus.py::_CosmicWindows.run::swallowed_error": 1,
@@ -370,8 +368,8 @@
    "decisions": 18
   },
   "normalize.py::normalize_text": {
-   "decisions": 18,
-   "lines": 175
+   "decisions": 17,
+   "lines": 170
   },
   "output_backends.py::LibeiOutputBackend._run_handshake": {
    "lines": 106
@@ -429,7 +427,7 @@
    "decisions": 16
   },
   "vocabulary.py::save_word": {
-   "decisions": 21
+   "decisions": 16
   },
   "voice_edit_rules.py::formatting": {
    "decisions": 21

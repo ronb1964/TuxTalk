@@ -1,6 +1,9 @@
 """"fix that word" opens Fix a Word over the app, on the newest dictation
 (2026-10-14): learning from corrections, the way TuxTalk can, since it can't
 see a word retyped by hand."""
+import threading
+import time
+
 import pytest
 
 from tuxtalk import explain, focused_window
@@ -9,10 +12,17 @@ from tuxtalk import keyboard_output
 from tuxtalk import recording_state as rs
 
 
+class _OpenWindow:
+    """Fix a Word's process, still open for the whole test."""
+    def wait(self):
+        threading.Event().wait()
+
+
 @pytest.fixture
 def opened(monkeypatch):
     started = []
-    monkeypatch.setattr(explain, "start_helper_window", lambda module, *a: started.append(module))
+    monkeypatch.setattr(explain, "start_helper_window",
+                        lambda module, *a: started.append(module) or _OpenWindow())
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a: None)
     return started
 
@@ -72,7 +82,8 @@ def typed(monkeypatch, tmp_path):
 
 def test_right_after_a_dictation_it_can_fix_the_text(opened, typed, monkeypatch):
     calls = []
-    monkeypatch.setattr(explain, "start_helper_window", lambda module, *a: calls.append(a))
+    monkeypatch.setattr(explain, "start_helper_window",
+                        lambda module, *a: calls.append(a) or _OpenWindow())
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
     voice_commands.handle_fix_word("fix that word", False)
     flag, path = calls[0]
@@ -84,12 +95,41 @@ def test_right_after_a_dictation_it_can_fix_the_text(opened, typed, monkeypatch)
     assert rs.state.last_inserted_text == ""                     # undo can't trust it now
 
 
+def test_a_window_that_cannot_start_leaves_no_copy_of_the_dictation(typed, monkeypatch):
+    """The dictation was written for the window to read and delete; with no
+    window, it would sit in the runtime folder until logout."""
+    monkeypatch.setattr(explain, "start_helper_window",
+                        lambda *a: (_ for _ in ()).throw(OSError("no python")))
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a: None)
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, msg: None)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
+    assert voice_commands.handle_fix_word("fix that word", False) is True
+    assert list(typed.glob("tuxtalk-fix-word*")) == []
+
+
+def test_a_window_that_dies_before_reading_leaves_no_copy(typed, monkeypatch):
+    """Started, but gone before it read the file (GTK failing to load)."""
+    class Gone:
+        def wait(self):
+            return 1
+    monkeypatch.setattr(explain, "start_helper_window", lambda module, *a: Gone())
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a: None)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
+    voice_commands.handle_fix_word("fix that word", False)
+    for _ in range(100):
+        if not list(typed.glob("tuxtalk-fix-word*")):
+            break
+        time.sleep(0.01)
+    assert list(typed.glob("tuxtalk-fix-word*")) == []
+
+
 def test_fix_a_word_gets_the_window_the_dictation_went_to(opened, typed, monkeypatch):
     import json
     from tuxtalk import fix_word_dialog as fw
     calls, fixed = [], []
     monkeypatch.setattr(rs.state, "last_inserted_where", ("org.kde.kwrite", ("tray", "{first}")))
-    monkeypatch.setattr(explain, "start_helper_window", lambda module, *a: calls.append(a))
+    monkeypatch.setattr(explain, "start_helper_window",
+                        lambda module, *a: calls.append(a) or _OpenWindow())
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
     voice_commands.handle_fix_word("fix that word", False)
     assert json.load(open(calls[0][1]))["where"] == ["tray", "{first}"]
@@ -107,7 +147,8 @@ def test_fix_a_word_gets_the_window_the_dictation_went_to(opened, typed, monkeyp
 
 def test_in_another_window_it_only_saves_the_fix(opened, typed, monkeypatch):
     calls = []
-    monkeypatch.setattr(explain, "start_helper_window", lambda module, *a: calls.append(a))
+    monkeypatch.setattr(explain, "start_helper_window",
+                        lambda module, *a: calls.append(a) or _OpenWindow())
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "libreoffice-writer")
     voice_commands.handle_fix_word("fix that word", False)
     assert calls == [()]

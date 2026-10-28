@@ -244,3 +244,17 @@ def test_retrying_is_offered_at_most_twice(store, monkeypatch):
     monkeypatch.setattr(wd, "_ask_retry_download", lambda m: True)
     wd._apply_first_run_setup({"model": "parakeet-v3", "device": "cpu", "dictation_language": "en"})
     assert calls == ["parakeet-v3"] * 3 + ["small"]
+
+
+@pytest.fixture
+def kept_f10(monkeypatch):
+    """A reinstall that kept a config whose hold key is F10."""
+    from tuxtalk import config
+    monkeypatch.setattr(config, "load_config", lambda: config.Settings(hotkey="F10"))
+
+
+def test_the_welcome_names_a_hold_key_kept_from_before(kept_f10, welcome_window):
+    """Not F8: after a reinstall the settings may already name another key."""
+    from gtk_text import tree_text
+    shown = " ".join(tree_text(welcome_window.dialog))
+    assert "F10" in shown and "F8" not in shown

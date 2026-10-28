@@ -19,6 +19,7 @@ import os
 import re
 import tempfile
 import zipfile
+import zlib
 from dataclasses import dataclass
 
 from . import config, stats
@@ -420,9 +421,14 @@ def list_snapshots():
     copies = []
     for name in names:
         match = _COPY_NAME.match(name)
-        if match:
+        if not match:
+            continue
+        try:
             when = datetime.datetime.strptime(match.group(1), "%Y%m%d-%H%M%S")
-            copies.append(Snapshot(os.path.join(snapshots_dir(), name), when))
+        except ValueError:
+            logger.info(f"Skipped {name}: its name holds no real date")
+            continue
+        copies.append(Snapshot(os.path.join(snapshots_dir(), name), when))
     return sorted(copies, key=lambda c: c.when, reverse=True)
 
 
@@ -432,12 +438,20 @@ def _made_at(path):
     backups lists quickly."""
     try:
         with zipfile.ZipFile(path) as z:
+            if z.getinfo(MANIFEST).file_size > _MAX_MEMBER_BYTES:
+                return None     # read_backup turns it away too
             manifest = json.loads(z.read(MANIFEST))
         if manifest.get("app") not in _OUR_APP_NAMES:
             return None
-        return datetime.datetime.fromisoformat(manifest["created"])
-    except (zipfile.BadZipFile, OSError, KeyError, ValueError, AttributeError, TypeError):
+        when = datetime.datetime.fromisoformat(manifest["created"])
+    except (zipfile.BadZipFile, OSError, KeyError, ValueError, AttributeError, TypeError,
+            zlib.error, EOFError, RuntimeError, NotImplementedError):
+        # Damaged data surfaces as zlib.error or EOFError, an encrypted
+        # member as RuntimeError, an unknown compression as NotImplementedError.
         return None
+    # The copies' times are plain local ones; a zone (a hand-edited
+    # manifest) can't be sorted beside them.
+    return when.astimezone().replace(tzinfo=None) if when.tzinfo else when
 
 
 def restore_points():

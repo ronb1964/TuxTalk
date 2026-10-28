@@ -195,10 +195,34 @@ def adopt_fixes():
             known.add(word.casefold())
             added.append(word)
     old = custom_words.path()
-    if os.path.exists(old):
+    # Kept once: a header taken out by hand runs this again, after which the
+    # file is no longer the one from before the Words tab.
+    if os.path.exists(old) and not os.path.exists(old + ".before-words-tab"):
         shutil.copyfile(old, old + ".before-words-tab")
     custom_words.save(words + added)       # the header marks it done
     return bool(added)
+
+
+def _phrases_for(word, phrases, commands, old):
+    """The mishearings *phrases* to fix to *word*, cleaned and without
+    repeats. Raises WordProblem for an everyday word, or a phrase another
+    word or snippet already types (*old* is the row's previous word)."""
+    wanted = []
+    for phrase in map(_clean_phrase, phrases):
+        if not phrase or phrase in wanted:
+            continue
+        if is_risky(phrase):
+            raise WordProblem(f"\u201c{phrase}\u201d is an everyday word: TuxTalk would "
+                              f"change it every time you say it.")
+        # Every spelling of the phrase a hand edit left, since the word
+        # takes them all over.
+        taken = next((commands[k] for k in _matching_keys(commands, phrase)
+                      if commands[k] not in (old, word)), None)
+        if taken is not None:
+            raise WordProblem(f"\u201c{phrase}\u201d already types \u201c{taken}\u201d. "
+                              "Change or remove that one first.")
+        wanted.append(phrase)
+    return wanted
 
 
 def save_word(word, phrases, old=None):
@@ -220,24 +244,15 @@ def save_word(word, phrases, old=None):
     for other in words:
         if other != old and other.casefold() == word.casefold():
             raise WordProblem(f"{other} is already one of your words.")
-    wanted = []
-    for phrase in map(_clean_phrase, phrases):
-        if not phrase or phrase in wanted:
-            continue
-        if is_risky(phrase):
-            raise WordProblem(f"\u201c{phrase}\u201d is an everyday word: TuxTalk would "
-                              f"change it every time you say it.")
-        taken = commands.get(phrase)
-        if taken is not None and taken not in (old, word):
-            raise WordProblem(f"\u201c{phrase}\u201d already types \u201c{taken}\u201d. "
-                              "Change or remove that one first.")
-        wanted.append(phrase)
+    wanted = _phrases_for(word, phrases, commands, old)
     if old is not None:
         # The row's own list is the whole list: a phrase taken off stops.
         # (A new word keeps any snippet already typing it; it's listed
         # under the word from now on.)
         commands = {p: r for p, r in commands.items() if r not in (old, word) or p in wanted}
     for phrase in wanted:
+        for same in _matching_keys(commands, phrase):
+            del commands[same]          # a hand-edited "Clawed  Claw" becomes this one
         commands[phrase] = word
     config.save_custom_commands(commands)
     if old is not None:

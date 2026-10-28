@@ -29,15 +29,16 @@ message = functools.partial(show_message, keep_above=True)
 def choose_light_or_full(parent, model):
     """NVIDIA without CUDA: Light (Vulkan) or Full (CUDA) for *model*?
     Returns LIGHT, FULL, or None for Cancel."""
-    vulkan_size = wv.MODEL_FILES[model][1]
+    name, vulkan_size = model_title(model), wv.MODEL_FILES[model][1]
     dialog = message_dialog(transient_for=parent, modal=True,
                                message_type=Gtk.MessageType.QUESTION,
                                buttons=Gtk.ButtonsType.NONE,
-                               text=f"{model.title()} needs your graphics card")
+                               text=f"{name} needs your graphics card")
     dialog.format_secondary_text(
         "There are two ways to set it up:\n\n"
-        f"  • Light (Vulkan): a {wv.ENGINE_SIZE_TEXT} graphics engine plus {model.title()} in its\n"
-        f"    format ({vulkan_size}). About as fast as CUDA in our tests.\n\n"
+        f"  • Light (Vulkan): a {wv.ENGINE_SIZE_TEXT} graphics engine plus\n"
+        f"    {name} in its format ({vulkan_size}).\n"
+        "    About as fast as CUDA in our tests.\n\n"
         "  • Full (CUDA): NVIDIA's CUDA libraries (1.4 GB) plus the model.\n"
         "    TuxTalk's long-standing NVIDIA setup.\n\n"
         "Either is a one-time download.")

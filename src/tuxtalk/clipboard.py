@@ -44,22 +44,28 @@ def copy_text_on_gtk_thread(text, timeout=1.0):
     only be touched from its own thread, and the service's typing runs on
     another one, so the copy is queued there and waited for. The service keeps
     the X11 clipboard selection afterwards and its GTK loop answers the
-    target app's paste request. If the loop isn't running, nothing happens
-    within *timeout* and this returns False.
+    target app's paste request. If the loop doesn't get to it within
+    *timeout*, this returns False and the copy is called off: nothing gets
+    pasted, so the dictation mustn't land on the clipboard later.
     """
     import threading
     from gi.repository import GLib
 
-    done = threading.Event()
+    lock, done = threading.Lock(), threading.Event()
     result = []
 
     def _copy():
-        result.append(copy_text(text))
-        done.set()
+        with lock:
+            if not done.is_set():
+                result.append(copy_text(text))
+                done.set()
         return False            # run once
 
     GLib.idle_add(_copy)
-    return done.wait(timeout) and bool(result and result[0])
+    done.wait(timeout)
+    with lock:
+        done.set()              # too late from here on
+        return bool(result and result[0])
 
 
 # --- Paste mode and the user's clipboard (see issue #7) -------------------------------
@@ -80,6 +86,7 @@ _MAX_SAVED_BYTES = 20 * 1024 * 1024
 _TEXT_TYPES = ("text/plain;charset=utf-8", "text/plain", "UTF8_STRING", "STRING", "TEXT")
 _NOTHING = object()             # nothing saved (setting off, or the clipboard couldn't be read)
 _EMPTY = object()               # the clipboard was empty before the paste
+_UNREADABLE = object()          # the primary selection couldn't be read: left as it is
 # KeePassXC and friends mark a copied password with this type; Klipper skips it.
 _PASSWORD_HINT = "x-kde-passwordManagerHint"
 
@@ -214,6 +221,7 @@ class ClipboardKeeper:
         self._lock = threading.Lock()
         self._saved = _NOTHING
         self._primary = _NOTHING    # the user's primary selection: text, or None if empty
+        self._last_text = None      # the dictation the pending restore waits on
         self._cancel = None
         self._generation = 0
 
@@ -225,27 +233,37 @@ class ClipboardKeeper:
         with self._lock:
             self._generation += 1
             if self._cancel is not None:
-                # A restore is still pending, so the clipboard holds the last
-                # dictation; the copy saved before that one is the user's.
+                # A restore is still pending. While the clipboard holds the
+                # last dictation, the copy saved before it is the user's;
+                # something they copied since is newer, and is kept instead.
                 self._cancel()
                 self._cancel = None
+                current = self._read()
+                if current is not _NOTHING and not _holds(current, self._last_text):
+                    self._saved = current
                 return
             self._saved = self._read()
 
     def before_primary(self):
-        """Save the primary selection before the dictation goes on it too. A
-        restore still pending means it holds the last dictation, so the copy
-        already saved is the user's."""
+        """Save the primary selection before the dictation goes on it too.
+        With a restore still pending, the copy already saved is kept while
+        the selection still holds the last dictation (or can't be read);
+        something highlighted since is newer, and is kept instead."""
         with self._lock:
-            if self._primary is _NOTHING:
-                self._primary = read_primary()
+            current = _primary_to_keep()
+            last = self._last_text
+            pending = self._primary is not _NOTHING
+            if (pending and (current is _UNREADABLE
+                             or (last is not None and current in (last, last.rstrip("\n"))))):
+                return
+            self._primary = current
 
     def after_paste(self, text):
         """Schedule the restore, once the app has had time to read *text*."""
         with self._lock:
             if self._saved is _NOTHING and self._primary is _NOTHING:
                 return
-            generation = self._generation
+            generation, self._last_text = self._generation, text
             self._cancel = self._schedule(self._delay, lambda: self._restore(text, generation))
 
     def _restore(self, text, generation):
@@ -258,7 +276,7 @@ class ClipboardKeeper:
                 return          # a newer paste took over; it will restore
             saved, self._saved, self._cancel = self._saved, _NOTHING, None
             primary, self._primary = self._primary, _NOTHING
-            if primary is not _NOTHING:
+            if primary not in (_NOTHING, _UNREADABLE):
                 _restore_primary(primary, text)
             if saved is _NOTHING:
                 return
@@ -271,6 +289,11 @@ class ClipboardKeeper:
                 return
             if _write_back(saved):
                 logger.info("Clipboard restored after paste")
+
+
+def _holds(saved, text):
+    """Whether a _read_clipboard() result is the dictation *text*."""
+    return isinstance(saved, tuple) and text is not None and saved[0] == text.encode("utf-8")
 
 
 def _wl_copy_primary(text):
@@ -301,14 +324,29 @@ COPY_WAIT_S = 0.6               # how long an app may take to put its selection 
 _COPY_POLL_S = 0.05
 
 
-def read_primary():
-    """The primary selection (the highlighted text) as text, or None."""
+def _primary_to_keep():
+    """The primary selection (the highlighted text) as text, None when
+    nothing is highlighted, or _UNREADABLE when wl-paste failed: a selection
+    that couldn't be read mustn't be cleared as if it were empty."""
     try:
         result = subprocess.run(["wl-paste", "--primary", "--no-newline"],
                                 capture_output=True, timeout=1)
-        return result.stdout.decode("utf-8", "replace") if result.returncode == 0 else None
-    except Exception:
+    except (OSError, subprocess.SubprocessError) as e:
+        logger.info(f"Couldn't read the primary selection: {e}")
+        return _UNREADABLE
+    if result.returncode == 0:
+        return result.stdout.decode("utf-8", "replace")
+    # wl-clipboard 2.2 says "Nothing is copied", 2.0 and 2.1 "No selection".
+    if b"Nothing is copied" in result.stderr or b"No selection" in result.stderr:
         return None
+    logger.info(f"Couldn't read the primary selection (wl-paste exit {result.returncode})")
+    return _UNREADABLE
+
+
+def read_primary():
+    """The primary selection (the highlighted text) as text, or None."""
+    text = _primary_to_keep()
+    return None if text is _UNREADABLE else text
 
 
 def _read_text():

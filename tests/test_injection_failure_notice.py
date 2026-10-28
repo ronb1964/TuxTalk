@@ -79,7 +79,7 @@ def test_type_mode_failure_is_failed(monkeypatch, quiet):
 @pytest.fixture
 def electron(monkeypatch, quiet):
     """Claude Desktop focused: typed, not pasted."""
-    cls = next(iter(window_classes.ELECTRON_PASTE_BROKEN_CLASSES))
+    cls = "claude-desktop"
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: cls)
     monkeypatch.setattr(focused_window, "look", lambda: (cls, None))
     _paste_mode(monkeypatch)

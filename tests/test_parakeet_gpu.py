@@ -21,6 +21,8 @@ from tuxtalk import parakeet_gpu_worker as worker
 #   die     becomes ready, then exits on the first request
 #   once    answers the first request, then exits
 #   silent  never answers at all
+#   half    becomes ready, then freezes halfway through its first reply
+#   deaf    becomes ready, then stops reading its requests
 FAKE_WORKER = textwrap.dedent("""
     import json, struct, sys
     mode = sys.argv[1]
@@ -32,6 +34,8 @@ FAKE_WORKER = textwrap.dedent("""
     if mode == "refuse":
         reply({"error": "no graphics chip"}); sys.exit(1)
     reply({"ready": True})
+    if mode == "deaf":
+        import time; time.sleep(60)
     answered = 0
     while True:
         head = inp.read(4)
@@ -44,6 +48,9 @@ FAKE_WORKER = textwrap.dedent("""
             reply({"words": None if mode == "old" else len(words)})
             continue
         inp.read(n * 4)
+        if mode == "half":
+            out.write(b'{"text": "par'); out.flush()
+            import time; time.sleep(60)
         if mode == "die" or (mode == "once" and answered):
             sys.exit(3)
         reply({"text": f" {n} samples "})
@@ -177,6 +184,26 @@ def test_a_helper_that_never_answers_is_stopped(fake, monkeypatch):
     with pytest.raises(RuntimeError):
         parakeet_gpu.ParakeetGpuModel(0, command=fake("silent"))
     assert started and started[0].poll() is not None
+
+
+@pytest.mark.parametrize("mode", ["half", "deaf"])
+def test_a_helper_frozen_mid_request_gives_way_to_the_processor(fake, monkeypatch, mode):
+    """A helper that hangs halfway through a reply, or stops reading the
+    recording, must not hang dictation until a restart: each try ends at
+    its deadline and the recording goes to the processor."""
+    class Cpu:
+        def recognize(self, audio):
+            return "from the processor"
+
+    monkeypatch.setattr(parakeet_gpu, "REPLY_TIMEOUT", 0.5)
+    monkeypatch.setattr(parakeet_gpu, "load_parakeet_model", lambda: Cpu())
+    model = parakeet_gpu.ParakeetGpuModel(0, command=fake(mode))
+    try:
+        # Three seconds of audio is more than a pipe holds, so a helper
+        # that stops reading blocks the write, not only the reply.
+        assert model.recognize(_audio(3)) == "from the processor"
+    finally:
+        model.close()
 
 
 def test_your_words_reach_the_helper_once_per_change(fake, caplog):

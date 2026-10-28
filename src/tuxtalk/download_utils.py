@@ -10,12 +10,15 @@ into place only after size and (when provided) sha256 checks pass — so an
 interrupted download can never be mistaken for a complete file.
 """
 
+import contextlib
 import fnmatch
 import glob
 import hashlib
 import logging
 import os
+import secrets
 import shutil
+import tarfile
 import tempfile
 import time
 import urllib.request
@@ -126,25 +129,84 @@ def _remove_quiet(path: str | None) -> None:
         pass
 
 
-def remove_stale_files(directory: str, pattern: str, max_age_s: float) -> None:
-    """Delete the files in *directory* matching the glob *pattern* that have
-    not been modified for *max_age_s* seconds. Temp names are random, so a
-    copy cut off by a kill or a reboot is never overwritten by the next try;
-    without this sweep each one stays on disk for good."""
+def remove_stale_files(directory: str, pattern: str, max_age_s: float,
+                       folders: bool = False) -> None:
+    """Delete the files (and with *folders*, the folders) in *directory*
+    matching the glob *pattern* that have not been modified for *max_age_s*
+    seconds. Temp names are random, so a copy cut off by a kill or a reboot
+    is never overwritten by the next try; without this sweep each one stays
+    on disk for good."""
     cutoff = time.time() - max_age_s
     try:
         entries = list(os.scandir(directory))
-    except OSError:
+    except FileNotFoundError:
+        return
+    except OSError as e:
+        logger.info(f"Couldn't look for leftover downloads in {directory}: {e}")
         return
     for entry in entries:
         try:
-            if (fnmatch.fnmatchcase(entry.name, pattern)
-                    and entry.is_file(follow_symlinks=False)
-                    and entry.stat(follow_symlinks=False).st_mtime < cutoff):
+            if (not fnmatch.fnmatchcase(entry.name, pattern)
+                    or entry.stat(follow_symlinks=False).st_mtime >= cutoff):
+                continue
+            if entry.is_dir(follow_symlinks=False):
+                if not folders:
+                    continue
+                shutil.rmtree(entry.path)
+            else:
                 os.remove(entry.path)
-                logger.info(f"Removed a leftover partial file: {entry.path}")
-        except OSError:
-            pass
+            logger.info(f"Removed a leftover partial download: {entry.path}")
+        except FileNotFoundError:
+            pass                # another sweep got there first
+        except OSError as e:
+            logger.info(f"Couldn't remove the leftover download {entry.path}: {e}")
+
+
+@contextlib.contextmanager
+def download_area(parent: str, name: str, old_names=()):
+    """(archive path, folder path) in *parent* for one download of an engine
+    to land and unpack in, both removed afterwards whether it worked or not.
+    Names of its own each time: the tray and Preferences may fetch the same
+    engine at once, and shared names let one unpack into, or delete, the
+    other's archive. What a killed process left is swept here next time;
+    neither is touched for long once the download ends. *old_names* are the
+    fixed archive names older versions used, removed once seen."""
+    os.makedirs(parent, exist_ok=True)
+    remove_stale_files(parent, f".{glob.escape(name)}.*", STALE_PARTIAL_S, folders=True)
+    for old in old_names:
+        _remove_quiet(os.path.join(parent, old))
+    stem = os.path.join(parent, f".{name}.{secrets.token_hex(4)}")
+    archive, folder = stem + ".tar", stem + ".d"
+    try:
+        yield archive, folder
+    finally:
+        _remove_quiet(archive)
+        shutil.rmtree(folder, ignore_errors=True)
+
+
+@contextlib.contextmanager
+def install_turn(name: str, wait_s: float = 120.0):
+    """Hold *name*'s install lock while a downloaded engine is put in place:
+    the tray and Preferences may finish the same download together, and one
+    removing the engine folder while the other moved its copy in failed
+    both. Whoever comes second should check whether it is there already.
+    Raises OSError when the turn doesn't come within *wait_s*."""
+    from . import single_instance
+    with single_instance.open_lock(f"{name}-install.lock") as lock:
+        if not single_instance.claim(lock, wait_s=wait_s):
+            raise OSError(f"another {name} install didn't finish")
+        yield
+
+
+def unpack_tar(archive: str, folder: str) -> None:
+    """Unpack the tar *archive* into *folder*. Where Python has the data
+    filter (3.12, and back-ports), it refuses paths that would land outside
+    the folder, links to them and device files."""
+    with tarfile.open(archive) as tar:
+        if hasattr(tarfile, "data_filter"):
+            tar.extractall(folder, filter="data")
+        else:
+            tar.extractall(folder)
 
 
 def parse_sha256sums(text: str) -> dict:

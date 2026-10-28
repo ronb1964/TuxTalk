@@ -127,13 +127,41 @@ VALID_COLOR_MODES = {"system", "custom"}
 CLASSIC_CYAN_HEX = "#4db3ff"
 
 
+def locale_language(value):
+    """"de_DE.UTF-8" -> "de"; None for "C", "POSIX" or anything unreadable."""
+    value = (value or "").strip()
+    if not value or value == "POSIX" or value.split(".")[0] == "C":
+        return None
+    code = value.split(".")[0].split("@")[0].split("_")[0].lower()
+    return code if code.isalpha() and 2 <= len(code) <= 3 else None
+
+
+def display_locale(env=None) -> str:
+    """The locale the desktop's text is in, region and all where it's known
+    ("de_CH.UTF-8"; "de" from LANGUAGE), or "" for the C locale or none.
+
+    The first of LC_ALL, LC_MESSAGES and LANG that is set, unless LANGUAGE's
+    first readable entry names another language or a region of its own, as
+    in gettext (which ignores LANGUAGE when the locale is C). KDE sets
+    LANGUAGE when the display language differs from the formats locale, and
+    sets the bare "de" for a Swiss German user, which mustn't hide the de_CH
+    locale."""
+    env = os.environ if env is None else env
+    locale = next((env[v] for v in ("LC_ALL", "LC_MESSAGES", "LANG") if env.get(v)), "")
+    language = locale_language(locale)
+    if not language:
+        return ""               # C or POSIX wins over everything, LANGUAGE included
+    first = next((e for e in (env.get("LANGUAGE") or "").split(":")
+                  if locale_language(e)), None)
+    if first and (locale_language(first) != language or "_" in first):
+        return first
+    return locale
+
+
 def swiss_german_locale(env=None) -> bool:
     """Whether the system is set to Swiss German (de_CH, or gsw for Swiss
     German itself), where ß is never written."""
-    env = os.environ if env is None else env
-    values = [env.get(v, "") for v in ("LC_ALL", "LC_MESSAGES", "LANG")]
-    values += (env.get("LANGUAGE") or "").split(":")
-    return any(v.replace("-", "_").startswith(("de_CH", "gsw")) for v in values if v)
+    return display_locale(env).replace("-", "_").startswith(("de_CH", "gsw"))
 
 
 def has_battery(power_dir="/sys/class/power_supply") -> bool:
@@ -322,6 +350,10 @@ def validate_config(s: Settings) -> None:
                           fields=[name for name, _ in problems])
 
 
+_CASE_FREE_CHOICES = ("device", "mode", "injection_mode", "indicator_position",
+                      "indicator_size", "indicator_style", "indicator_color_mode")
+
+
 def _migrate_settings(s: Settings) -> Settings:
     """Bring an older config forward to the current schema, in place.
 
@@ -330,7 +362,14 @@ def _migrate_settings(s: Settings) -> Settings:
 
     - indicator_color_mode 'cyan' → 'custom' + CLASSIC_CYAN_HEX, which keeps
       exactly the color these users saw.
+    - The choices validation accepts in any case are lowercased, since the
+      rest of the app compares them as written ("Vulkan" blanked the
+      indicator's device line).
     """
+    for name in _CASE_FREE_CHOICES:
+        value = getattr(s, name)
+        if isinstance(value, str):
+            setattr(s, name, value.lower())
     if s.indicator_color_mode == "cyan":
         s.indicator_color_mode = "custom"
         s.indicator_color = CLASSIC_CYAN_HEX
@@ -1036,7 +1075,7 @@ def load_custom_commands() -> dict[str, str]:
     if os.path.exists(CUSTOM_COMMANDS_PATH):
         try:
             data = _load_toml_file(CUSTOM_COMMANDS_PATH)
-            commands = dict(data.get("commands", {}))
+            commands = _text_snippets(data.get("commands", {}))
         except Exception as e:
             print(f"Warning: Could not load custom commands: {e}")
             # Preferences rebuilds its list from whatever this returns and
@@ -1044,6 +1083,22 @@ def load_custom_commands() -> dict[str, str]:
             # custom command. Mark the failure so the writer refuses.
             _commands_read_failed = True
     return commands
+
+def _text_snippets(table) -> dict[str, str]:
+    """The snippets of a hand-editable table that can be typed: a number
+    as its text (`answer = 42`), anything else (a list, a table) left out,
+    since a dictation with that phrase would fail on it."""
+    snippets = {}
+    for phrase, text in table.items():
+        if isinstance(text, (int, float)) and not isinstance(text, bool):
+            text = str(text)
+        if isinstance(text, str):
+            snippets[phrase] = text
+        else:
+            logger.warning("A snippet in custom_commands.toml isn't text; it's left out, and "
+                           "goes from the file the next time snippets are saved")
+    return snippets
+
 
 def merge_custom_command_edits(loaded: dict[str, str], edited: dict[str, str],
                                on_disk: dict[str, str]) -> dict[str, str]:

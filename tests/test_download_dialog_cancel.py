@@ -86,6 +86,18 @@ def test_a_cancelled_task_is_not_relabelled_failed(monkeypatch):
     assert widgets["cancel_btn"].labels[-1] == "Cancelled"
 
 
+def test_progress_reported_after_cancel_doesnt_bring_back_downloading(monkeypatch):
+    """The download notices Cancel only between chunks, and reports once
+    more meanwhile; the status mustn't flip back to "Downloading..."."""
+    task = _task()
+    dlg = _dialog_with_widgets(monkeypatch, task)
+
+    dlg._cancel_task(task)
+    dlg._update_task_progress(task, "Downloading...", 40)
+
+    assert "Cancelled" in dlg.task_widgets[task]["status"].markup[-1]
+
+
 def test_progress_text_is_escaped(monkeypatch):
     """An error like '<urlopen error ...>' is not valid Pango markup."""
     task = _task()

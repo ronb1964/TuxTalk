@@ -11,11 +11,7 @@ from . import focused_window, keyboard_output, last_dictation, send_countdown, v
 from . import recording_state as rs
 from .logger import setup_logger
 from .normalize import LINE_BREAK
-from .window_classes import (
-    ELECTRON_PASTE_BROKEN_CLASSES,
-    SMART_NEWLINE_CLASSES_LOWER,
-    is_terminal_class,
-)
+from .window_classes import SMART_NEWLINE_CLASSES_LOWER, is_terminal_class, pastes_broken
 
 logger = setup_logger(__name__)
 
@@ -170,7 +166,7 @@ def deliver_text(text: str, injection_mode: str, one_block: bool = False, *, whe
     # Which window this text goes into, so select and move by voice only
     # trusts "what I just said" in that same window.
     rs.state.last_inserted_window = focused_class = where.wm_class
-    if focused_class in ELECTRON_PASTE_BROKEN_CLASSES:
+    if pastes_broken(focused_class):
         # A tab as four spaces, however it's typed: a real Tab moves the
         # focus from Claude Desktop's box to the Send button, and the next
         # space typed sends the message.
@@ -187,7 +183,7 @@ def deliver_text(text: str, injection_mode: str, one_block: bool = False, *, whe
     # Electron-paste-broken override: in an Electron app where a synthetic
     # Ctrl+V silently fails on Wayland, type instead of pasting. Only for
     # auto and paste: "type" types anyway.
-    if (injection_mode != "type" and focused_class in ELECTRON_PASTE_BROKEN_CLASSES
+    if (injection_mode != "type" and pastes_broken(focused_class)
             and not os.environ.get("FLATPAK_ID")):
         outcome = _type_for_electron(text, focused_class, injection_start)
         if outcome is not None:

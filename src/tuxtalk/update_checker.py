@@ -17,6 +17,8 @@ import urllib.error
 from pathlib import Path
 from typing import Optional, Callable, Tuple
 
+from .autostart import desktop_exec_program
+
 logger = logging.getLogger(__name__)
 
 # GitHub API endpoint for latest release
@@ -1173,7 +1175,7 @@ def point_at_running_appimage(running: str) -> None:
         # The running file by name: the installed copy may be the older
         # version the failed copy didn't replace.
         if enabled_entry_exists():
-            if set_autostart(True, command=_desktop_exec_program(running)):
+            if set_autostart(True, command=desktop_exec_program(running)):
                 logger.info("Launch at login points at the running AppImage instead")
             else:
                 logger.warning("Could not repoint launch at login at the running AppImage")
@@ -1215,7 +1217,7 @@ def create_desktop_launcher(appimage_exec_path: Optional[str] = None) -> Tuple[b
         logger.info(f"Desktop launcher Exec path: {appimage_exec_path}")
         # Quoted where it must be: a download named "TuxTalk (1).AppImage"
         # was cut at the space, and the menu entry opened nothing.
-        program = _desktop_exec_program(appimage_exec_path)
+        program = desktop_exec_program(appimage_exec_path)
 
         # Desktop file content
         desktop_content = f"""[Desktop Entry]
@@ -1250,23 +1252,6 @@ Terminal=false
 
 # Marks the hidden entry below, so first run still writes the real launcher.
 _HIDDEN_ENTRY_MARK = "X-TuxTalk-Hidden-Entry=true"
-
-# Characters the desktop-entry spec says an Exec argument must be quoted for.
-_EXEC_RESERVED = set(' \t\n"\'\\><~|&;$*?#()`')
-
-
-def _desktop_exec_program(path: str) -> str:
-    """*path* as the program of an Exec= line. GLib drops an entry whose
-    program it can't find, so a path with a space must be quoted; inside the
-    quotes ", `, $ and \\ are backslash-escaped, then every backslash is
-    escaped again as the key file's string rule requires, which also keeps a
-    newline from ending the line. % is doubled because it starts a field code."""
-    path = path.replace("%", "%%")
-    if not any(c in _EXEC_RESERVED for c in path):
-        return path
-    quoted = "".join("\\" + c if c in '"`$\\' else c for c in path)
-    return '"' + quoted.replace("\\", "\\\\").replace("\n", "\\n") + '"'
-
 
 def add_launcher_actions() -> bool:
     """Give a menu launcher written before 0.16 the right-click shortcuts
@@ -1328,7 +1313,7 @@ def create_hidden_desktop_entry() -> bool:
         icon_name = _install_app_icon() or "audio-input-microphone"
         os.makedirs(os.path.dirname(DESKTOP_FILE_PATH), exist_ok=True)
         # Exec is required for a valid entry; the running AppImage exists now.
-        exec_path = _desktop_exec_program(get_running_appimage_path() or APPIMAGE_PATH)
+        exec_path = desktop_exec_program(get_running_appimage_path() or APPIMAGE_PATH)
         tmp = DESKTOP_FILE_PATH + ".tmp"
         with open(tmp, "w") as f:
             f.write("[Desktop Entry]\n"

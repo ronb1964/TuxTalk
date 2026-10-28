@@ -29,13 +29,13 @@ import secrets
 import shutil
 import socket
 import subprocess
-import tarfile
 import threading
 import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 from . import engine_process
+from .cleanup import LEGIT_DOUBLES
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -193,7 +193,6 @@ _MAX_REPLACED = 6
 # carrying a value: "the red paint for the van. Sorry, the blue paint".
 _LINKING_WORDS = {"the", "a", "an", "of", "for", "to", "in", "on", "at", "and", "or",
                   "with", "my", "your", "our", "his", "her", "their", "its", "this", "that"}
-_LEGIT_DOUBLES = {"that", "had", "is", "do", "very", "so", "bye", "no", "yeah", "ha", "really"}
 
 
 # Numbers whole with their separators, so "2.5" changed to "2,5" is a
@@ -250,7 +249,7 @@ def _deletion_allowed(run, src, start):
     nxt = src[start + len(run)] if start + len(run) < len(src) else None
     one_word_repeated = len(set(core)) == 1 and core[0] in (prev, nxt)
     if (core == before or core == after or one_word_repeated) and not (
-            len(set(core)) == 1 and core[0] in _LEGIT_DOUBLES):
+            len(set(core)) == 1 and core[0] in LEGIT_DOUBLES):
         return True                                   # a stutter
     # A correction drops the wrong part and then the correction phrase, so the
     # removed words must END with the phrase. Removing the phrase and what
@@ -420,42 +419,37 @@ def is_installed() -> bool:
 def make_engine_download_func():
     """DownloadTask function: fetch, verify and unpack the llama.cpp engine."""
     def download(progress_callback, cancel_event):
-        from .download_utils import download_file
+        from .download_utils import download_area, download_file, install_turn, unpack_tar
         if os.access(_server_binary(), os.X_OK):
             progress_callback("Already downloaded", 100)
             return True
         engine_dir = _engine_dir()
-        os.makedirs(engine_dir, exist_ok=True)
-        archive = os.path.join(engine_dir, LLAMA_ASSET)
 
         def hook(done, total):
             if total:
                 progress_callback("Downloading AI engine...", min(95, int(done * 95 / total)))
 
-        if not download_file(LLAMA_URL, archive, timeout=60, cancel_event=cancel_event,
-                             progress_hook=hook, expected_sha256=LLAMA_SHA256):
-            progress_callback("Download failed", 0)
-            return False
-        try:
-            progress_callback("Unpacking...", 97)
-            staging = engine_dir + ".unpacking"
-            shutil.rmtree(staging, ignore_errors=True)
-            with tarfile.open(archive) as tar:
-                if hasattr(tarfile, "data_filter"):
-                    tar.extractall(staging, filter="data")   # refuses unsafe paths
-                else:
-                    tar.extractall(staging)
-            for name in os.listdir(staging):
-                target = os.path.join(engine_dir, name)
-                shutil.rmtree(target, ignore_errors=True)
-                os.replace(os.path.join(staging, name), target)
-            shutil.rmtree(staging, ignore_errors=True)
-            os.remove(archive)
-            engine_process.remove_other_versions(os.path.dirname(engine_dir), LLAMA_TAG)
-        except Exception as e:
-            logger.error(f"Could not unpack the AI engine: {e}")
-            progress_callback("Could not unpack the download", 0)
-            return False
+        # Inside engine_dir: remove_other_versions clears every other folder
+        # beside it, which would take a download under way with it.
+        with download_area(engine_dir, LLAMA_TAG, old_names=(LLAMA_ASSET,)) as (archive, folder):
+            if not download_file(LLAMA_URL, archive, timeout=60, cancel_event=cancel_event,
+                                 progress_hook=hook, expected_sha256=LLAMA_SHA256):
+                progress_callback("Download failed", 0)
+                return False
+            try:
+                progress_callback("Unpacking...", 97)
+                unpack_tar(archive, folder)
+                with install_turn("ai-engine"):
+                    if not os.access(_server_binary(), os.X_OK):    # or another download did it
+                        for name in os.listdir(folder):
+                            target = os.path.join(engine_dir, name)
+                            shutil.rmtree(target, ignore_errors=True)
+                            os.replace(os.path.join(folder, name), target)
+                    engine_process.remove_other_versions(os.path.dirname(engine_dir), LLAMA_TAG)
+            except Exception as e:
+                logger.error(f"Could not unpack the AI engine: {e}")
+                progress_callback("Could not unpack the download", 0)
+                return False
         progress_callback("Done", 100)
         return True
     return download
@@ -524,7 +518,7 @@ class CorrectionEngine:
             # own programs can read either, and are trusted anyway.
             self._key = secrets.token_hex(16)
             binary = _server_binary()
-            self._proc = self._launcher.submit(
+            proc = self._proc = self._launcher.submit(
                 subprocess.Popen,
                 # 4096 tokens: room for a voice edit (MAX_EDIT_CHARS of text and
                 # the rewrite); one slot, so it is all one request's.
@@ -535,14 +529,19 @@ class CorrectionEngine:
                      "LLAMA_API_KEY": self._key},
                 preexec_fn=_set_parent_death_signal,
             ).result()
-            logger.info(f"AI cleanup engine starting (pid {self._proc.pid})")
-        threading.Thread(target=self._wait_until_ready, daemon=True).start()
+            logger.info(f"AI cleanup engine starting (pid {proc.pid})")
+        # The process started here, not self._proc read again: a stop() just
+        # after the lock is let go would hand the waiter None.
+        threading.Thread(target=self._wait_until_ready, args=(proc,), daemon=True).start()
 
-    def _wait_until_ready(self, limit=90):
-        """Wait for the server to answer, warm it up, then mark it ready."""
+    def _wait_until_ready(self, proc, limit=90):
+        """Wait for the server *proc* to answer, warm it up, then mark it
+        ready, unless it was stopped (or replaced) meanwhile."""
         deadline = time.time() + limit
         while time.time() < deadline:
-            if self._proc is None or self._proc.poll() is not None:
+            if self._proc is not proc:
+                return                  # turned off while starting
+            if proc.poll() is not None:
                 logger.error("AI cleanup engine exited during startup")
                 return
             try:
@@ -555,8 +554,14 @@ class CorrectionEngine:
             # prompt cache) of up to several seconds; paying it here keeps it
             # off the user's first corrected dictation.
             started = time.time()
-            self._ask("Order two boxes, no wait, three boxes.", timeout=60)
-            self._ready.set()
+            answered = self._ask("Order two boxes, no wait, three boxes.", timeout=60)
+            with self._lock:
+                if self._proc is not proc:
+                    return              # stopped during the warm-up: no answer was expected
+                self._ready.set()
+            if answered is None:
+                logger.warning("AI cleanup warm-up got no answer; the first correction "
+                               "may be slow")
             logger.info(f"AI cleanup engine ready (warm-up took {time.time() - started:.1f}s)")
             return
         logger.error("AI cleanup engine did not become ready")
