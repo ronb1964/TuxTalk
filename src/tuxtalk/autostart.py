@@ -134,8 +134,8 @@ def get_icon_path() -> str:
         if os.path.isfile(path) and not _in_running_appimage(os.path.abspath(path)):
             return os.path.abspath(path)
     # The user's icon folder instead: first run puts it there.
-    from .update_checker import _install_app_icon
-    return _install_app_icon() or 'audio-input-microphone'
+    from .update_checker import installed_app_icon
+    return installed_app_icon() or 'audio-input-microphone'
 
 
 def _in_running_appimage(path) -> bool:

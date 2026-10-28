@@ -1037,6 +1037,18 @@ def _refresh_desktop_menu_cache():
     logger.warning("Could not refresh desktop menu cache - no suitable command found")
 
 
+def _app_icon_path() -> str:
+    """Where _install_app_icon puts the icon its name stands for."""
+    return os.path.expanduser("~/.local/share/icons/hicolor/256x256/apps/tuxtalk.png")
+
+
+def installed_app_icon() -> Optional[str]:
+    """The icon name ("tuxtalk") once _install_app_icon has put it in place,
+    else None. Only looks: installing refreshes icon caches, which can take
+    seconds, and the caller may be a window's thread."""
+    return "tuxtalk" if os.path.exists(_app_icon_path()) else None
+
+
 def _install_app_icon() -> Optional[str]:
     """
     Install the TuxTalk icon to the user's icon directory.
@@ -1052,7 +1064,7 @@ def _install_app_icon() -> Optional[str]:
     import shutil
 
     icons_base = os.path.expanduser("~/.local/share/icons/hicolor")
-    primary_icon_path = os.path.join(icons_base, "256x256", "apps", "tuxtalk.png")
+    primary_icon_path = _app_icon_path()
 
     # If icon already installed, just return the name
     if os.path.exists(primary_icon_path):

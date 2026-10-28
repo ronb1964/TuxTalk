@@ -84,3 +84,15 @@ def test_an_extracted_appimage_s_own_icon_isnt_named_either(tmp_path, monkeypatc
     monkeypatch.setattr(autostart.os.path, "isfile",
                         lambda p: not p.startswith("/usr/") and real_isfile(p))
     assert autostart.get_icon_path() == "tuxtalk"
+
+
+def test_the_icon_lookup_only_looks(tmp_path, monkeypatch):
+    """Preferences sets start at login on its window's thread; installing the
+    icon there refreshes icon caches, which can freeze it for seconds."""
+    from tuxtalk import update_checker
+    monkeypatch.setattr(update_checker, "_install_app_icon",
+                        lambda: pytest.fail("installed the icon"))
+    monkeypatch.setattr(autostart, "_project_root", lambda: str(tmp_path / "none"))
+    monkeypatch.setattr(autostart.sys, "executable", str(tmp_path / "none/bin/python3"))
+    monkeypatch.setattr(autostart.os.path, "isfile", lambda p: False)
+    assert autostart.get_icon_path() in ("tuxtalk", "audio-input-microphone")
