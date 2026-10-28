@@ -816,17 +816,22 @@ def restart_via_launcher(target: Optional[str] = None) -> Tuple[bool, str]:
         if not os.path.exists(launcher):
             return (False, f"Launcher not found at {launcher}; please restart TuxTalk manually.")
         command = f"{shlex.quote(launcher)} tray"
-    oldpid = os.getpid()
-    # Poll (up to ~10s) until the old PID is gone, then exec the new copy.
     # start_new_session detaches it so it survives this process exiting.
-    script = (f"for _ in $(seq 1 50); do kill -0 {oldpid} 2>/dev/null || break; "
-              f"sleep 0.2; done; exec {command}")
+    script = handover_script(os.getpid(), command)
     try:
         subprocess.Popen(["/bin/sh", "-c", script],
                          start_new_session=True, close_fds=True)
     except Exception as e:
         return (False, f"Could not start the new instance: {e}")
     return (True, "restarting")
+
+
+def handover_script(oldpid: int, command: str) -> str:
+    """The shell script that starts *command* once process *oldpid* (the old
+    tray, waiting for its service to type what it holds, or for the first-run
+    copy) has exited, however long that takes. Never while it runs: the new
+    tray would find its lock, exit, and nothing would be left running."""
+    return f"while kill -0 {oldpid} 2>/dev/null; do sleep 0.5; done; exec {command}"
 
 
 def _not_enough_space(src: str, dest_dir: str) -> Optional[str]:
@@ -1142,12 +1147,17 @@ def point_at_running_appimage(running: str) -> None:
     *running* when first-run setup's copy into ~/AppImages failed, so
     neither starts a file that isn't there. Files only, so any thread."""
     try:
-        from .autostart import autostart_file_exists, set_autostart
+        from .autostart import enabled_entry_exists, set_autostart
         # The file, not the setting: written by first run with the setting
         # left unsaved (a read-only settings folder), it still points here.
-        if autostart_file_exists():
-            set_autostart(True, prefer_installed_appimage=False)
-            logger.info("Launch at login points at the running AppImage instead")
+        # One the user turned off (a Hidden=true stub) stays off.
+        # The running file by name: the installed copy may be the older
+        # version the failed copy didn't replace.
+        if enabled_entry_exists():
+            if set_autostart(True, command=_desktop_exec_program(running)):
+                logger.info("Launch at login points at the running AppImage instead")
+            else:
+                logger.warning("Could not repoint launch at login at the running AppImage")
     except Exception as e:
         logger.warning(f"Could not repoint launch at login: {e}")
     ok, msg = create_desktop_launcher(running)

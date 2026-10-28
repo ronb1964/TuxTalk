@@ -260,20 +260,70 @@ def test_a_failed_copy_points_login_and_the_menu_back_at_the_running_appimage(
     # The setting says off (its save failed after the file was written):
     # the file is what starts TuxTalk at login.
     monkeypatch.setattr(config, "load_config", lambda: SimpleNamespace(launch_at_login=False))
-    monkeypatch.setattr(autostart, "autostart_file_exists", lambda: True)
+    entry = tmp_path / "autostart" / "tuxtalk.desktop"
+    entry.parent.mkdir()
+    entry.write_text("[Desktop Entry]\nType=Application\nExec=/gone/TuxTalk.AppImage\n")
+    monkeypatch.setattr(autostart, "_autostart_desktop_path", lambda: str(entry))
     monkeypatch.setattr(autostart, "set_autostart",
-                        lambda enable, prefer_installed_appimage=False:
-                        calls.append(prefer_installed_appimage) or True)
+                        lambda enable, prefer_installed_appimage=False, command=None:
+                        calls.append(command) or True)
     monkeypatch.setattr(uc, "DESKTOP_FILE_PATH", str(tmp_path / "apps" / "tuxtalk.desktop"))
     monkeypatch.setattr(uc, "_install_app_icon", lambda: "tuxtalk")
     monkeypatch.setattr(uc, "_refresh_desktop_menu_cache", lambda: None)
     running = str(tmp_path / "Downloads" / "TuxTalk-v0.19.0-x86_64.AppImage")
     uc.point_at_running_appimage(running)
-    assert calls == [False]
+    assert calls == [running]           # by name: the installed copy may be an older one
     assert f"Exec={running}\n" in (tmp_path / "apps" / "tuxtalk.desktop").read_text()
 
 
+def _repoint_fixture(monkeypatch, tmp_path, entry_text):
+    """point_at_running_appimage with a real start-at-login file; its path."""
+    from tuxtalk import autostart
+    entry = tmp_path / "autostart" / "tuxtalk.desktop"
+    entry.parent.mkdir()
+    entry.write_text(entry_text)
+    monkeypatch.setattr(autostart, "_autostart_desktop_path", lambda: str(entry))
+    monkeypatch.setattr(uc, "create_desktop_launcher", lambda running: (True, ""))
+    return entry
+
+
+def test_a_failed_copy_leaves_start_at_login_off_when_it_was_turned_off(monkeypatch, tmp_path):
+    """Turned off in Preferences while the first-run copy ran, then the
+    copy failed: the repair saw the file and turned it on again."""
+    stub = "[Desktop Entry]\nType=Application\nName=TuxTalk\nHidden=true\n"
+    entry = _repoint_fixture(monkeypatch, tmp_path, stub)
+    uc.point_at_running_appimage(str(tmp_path / "TuxTalk-v0.19.0-x86_64.AppImage"))
+    assert entry.read_text() == stub
+
+
+def test_a_repair_that_could_not_write_says_so(monkeypatch, tmp_path, caplog):
+    from tuxtalk import autostart
+    _repoint_fixture(monkeypatch, tmp_path, "[Desktop Entry]\nExec=/gone/TuxTalk.AppImage\n")
+    monkeypatch.setattr(autostart, "set_autostart", lambda *a, **k: False)
+    caplog.set_level("INFO")
+    uc.point_at_running_appimage(str(tmp_path / "TuxTalk-v0.19.0-x86_64.AppImage"))
+    assert "Could not repoint launch at login" in caplog.text
+    assert "Launch at login points at" not in caplog.text
+
+
 # ---- restarting ---------------------------------------------------------
+
+def test_the_new_copy_starts_only_once_the_old_tray_has_gone(tmp_path):
+    """The old tray waits for its service to finish typing (up to 40 s); the
+    script started the new copy after 10 s regardless, which found the old
+    lock, exited, and left nothing running. Run for real, against a stand-in
+    old tray."""
+    import subprocess
+    old = subprocess.Popen(["sleep", "1.5"])
+    marker = tmp_path / "new-copy-started"
+    script = subprocess.Popen(["/bin/sh", "-c",
+                               uc.handover_script(old.pid, f"touch {marker}")])
+    with pytest.raises(subprocess.TimeoutExpired):
+        script.wait(timeout=0.8)                # still waiting for the old tray
+    assert not marker.exists() and old.poll() is None
+    old.wait()
+    assert script.wait(timeout=5) == 0 and marker.exists()
+
 
 def test_restart_starts_the_appimage_after_this_process_exits(tmp_path, monkeypatch):
     import subprocess

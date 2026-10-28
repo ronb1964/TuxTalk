@@ -133,9 +133,22 @@ def _autostart_desktop_path() -> str:
     return os.path.join(autostart_dir, filename)
 
 
-def autostart_file_exists() -> bool:
-    """Whether a start-at-login file is in place, whatever the settings say."""
-    return os.path.exists(_autostart_desktop_path())
+def _enabled_entry():
+    """The start-at-login entry's lines when it's in place and on, else None.
+    Turning it off leaves a Hidden=true stub (set_autostart)."""
+    try:
+        with open(_autostart_desktop_path()) as f:
+            lines = [line.strip() for line in f]
+    except OSError:
+        return None
+    if "Hidden=true" in lines or "X-GNOME-Autostart-enabled=false" in lines:
+        return None
+    return lines
+
+
+def enabled_entry_exists() -> bool:
+    """Whether a start-at-login entry is in place and on, whatever the settings say."""
+    return _enabled_entry() is not None
 
 
 def _set_autostart_flatpak(enable: bool) -> bool:
@@ -202,8 +215,11 @@ def _set_autostart_flatpak(enable: bool) -> bool:
         return False
 
 
-def set_autostart(enable: bool, prefer_installed_appimage: bool = False) -> bool:
+def set_autostart(enable: bool, prefer_installed_appimage: bool = False,
+                  command: str | None = None) -> bool:
     """Create or disable the autostart entry. Returns True on success.
+    *command* is the Exec line's command when the caller knows it (a
+    running AppImage), in place of get_launch_command's choice.
 
     On the Flatpak this goes through the Background portal (the sandbox can't
     write the host autostart file). Off Flatpak it writes the XDG autostart
@@ -225,7 +241,7 @@ def set_autostart(enable: bool, prefer_installed_appimage: bool = False) -> bool
         return False
 
     if enable:
-        exec_cmd = get_launch_command(prefer_installed_appimage)
+        exec_cmd = command or get_launch_command(prefer_installed_appimage)
         icon_path = get_icon_path()
         app_name = "TuxTalk (Dev)" if config.DEV_MODE else "TuxTalk"
         comment = AUTOSTART_COMMENT_DEV if config.DEV_MODE else AUTOSTART_COMMENT
@@ -322,12 +338,8 @@ def repair_stale_appimage_autostart() -> bool:
     from . import config
     if config.DEV_MODE or not os.path.isfile(INSTALLED_APPIMAGE):
         return False
-    try:
-        with open(_autostart_desktop_path()) as f:
-            lines = [line.strip() for line in f]
-    except OSError:
-        return False
-    if "Hidden=true" in lines or "X-GNOME-Autostart-enabled=false" in lines:
+    lines = _enabled_entry()
+    if lines is None:
         return False
     exec_cmd = next((line[len("Exec="):] for line in lines if line.startswith("Exec=")), "")
     target = exec_cmd.split()[0] if exec_cmd.split() else ""
