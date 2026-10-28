@@ -32,7 +32,7 @@ from .beeps import CANCEL_BEEP, READY_BEEP
 from .chunking import carry_question, hold_back_boundary
 from .key_commands import auto_send, ends_unfinished, split_key_command
 from .logger import setup_logger
-from .window_classes import ELECTRON_PASTE_BROKEN_CLASSES, app_kind, is_document_window
+from .window_classes import app_kind, is_document_window, pastes_broken
 
 logger = setup_logger(__name__)
 
@@ -58,7 +58,7 @@ def press_said(key: str, chunk_role, after_words: bool = False, message=None) ->
     does. Said alone it goes wherever the focus is: people type a password
     by hand, then say "press enter" to log in."""
     why = f'said "press {key.lower()}"'
-    if (key == "TAB" and focused_window.window_class() in ELECTRON_PASTE_BROKEN_CLASSES
+    if (key == "TAB" and pastes_broken(focused_window.window_class())
             and not focused_window.is_password()):
         outcome = (send_countdown.type_where_sent("    ", key, message, type_onto_dictation)
                    if after_words else type_onto_dictation("    ", "type"))
