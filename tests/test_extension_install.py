@@ -123,3 +123,30 @@ def test_two_installs_at_once_take_turns(extensions, monkeypatch):
         t.join(30)
     assert results == [True, True]
     assert os.listdir(ext_dir) == [eh.EXTENSION_UUID]
+
+
+@pytest.mark.parametrize("bundled", [True, False])
+def test_the_install_enables_once_and_its_progress_only_goes_up(extensions, monkeypatch,
+                                                                bundled):
+    """It enabled the extension twice, and the download's bar showed 100%
+    before "Enabling extension..." at 95%."""
+    import io
+    import zipfile
+    ext_dir, source = extensions
+    enabled, shown = [], []
+    monkeypatch.setattr(eh, "is_extension_available", lambda: True)
+    monkeypatch.setattr(desktop_detect, "enable_extension", lambda uuid: enabled.append(uuid) or True)
+    monkeypatch.setattr(eh, "get_bundled_extension_path", lambda: str(source) if bundled else None)
+
+    def download(url, dest, **kwargs):
+        with zipfile.ZipFile(dest, "w") as z:
+            for name in ("metadata.json", "extension.js"):
+                z.write(source / name, f"{eh.EXTENSION_UUID}/{name}")
+        return True
+    monkeypatch.setattr(eh, "_fetch_extension_sha256", lambda: None, raising=False)
+    monkeypatch.setattr("tuxtalk.download_utils.download_file", download)
+    monkeypatch.setattr(eh, "download_file", download, raising=False)
+    assert eh.install_extension(lambda message, percent: shown.append(percent))
+    assert enabled == [eh.EXTENSION_UUID]
+    assert shown == sorted(shown) and shown[-1] == 100
+    assert (ext_dir / eh.EXTENSION_UUID / "extension.js").read_text() == "// new"

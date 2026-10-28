@@ -64,9 +64,7 @@
   "explain.py::start_helper_window::swallowed_error": 1,
   "extension_helper.py::<module>::long_line": 2,
   "extension_helper.py::download_and_install_extension.download_progress_hook::long_line": 1,
-  "extension_helper.py::download_and_install_extension::long_line": 1,
   "extension_helper.py::download_and_install_extension::swallowed_error": 1,
-  "extension_helper.py::install_extension::long_line": 1,
   "extension_helper.py::install_extension_from_local::swallowed_error": 1,
   "extension_helper.py::uninstall_extension::swallowed_error": 1,
   "file_transcribe.py::<module>::long_line": 1,
@@ -312,10 +310,6 @@
   },
   "custom_words.py::fix_spelling": {
    "decisions": 28
-  },
-  "extension_helper.py::download_and_install_extension": {
-   "decisions": 17,
-   "lines": 101
   },
   "file_transcribe.py::load_engine": {
    "decisions": 20
