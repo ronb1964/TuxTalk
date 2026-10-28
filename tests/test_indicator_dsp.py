@@ -92,3 +92,30 @@ def test_speech_after_silence_still_fills_the_bars():
     voice = _voice(-30, start=300)
     _proc, bars = _bars_over(lambda i: voice(i) + room(i), 1, proc)
     assert np.percentile(bars, 90) > 0.6
+
+
+def test_a_48_khz_microphone_lights_the_same_bar_as_16_khz(monkeypatch):
+    """The bars were built for 16 kHz whatever the microphone recorded at,
+    so on a 48 kHz one a 1 kHz voice lit a bar three times too high. The
+    recording builds them for the rate it opens the stream with."""
+    from tuxtalk import mic_stream, recording
+    from tuxtalk import recording_state as rs
+    monkeypatch.setattr(recording, "spectrum_processor", SpectrumProcessor(bins=20))
+    monkeypatch.setattr(mic_stream, "input_samplerate", lambda idx, default: 48000)
+
+    class Stream:
+        def __init__(self, **kwargs):
+            pass
+
+        def start(self):
+            pass
+    monkeypatch.setattr(recording.sd, "InputStream", Stream)
+    monkeypatch.setattr(rs.state, "stream", None)
+    recording.open_input_stream(None)
+
+    def loudest_bar(sp, rate):
+        t = np.arange(rate) / rate
+        sp.process(np.zeros(rate, dtype=np.float32))            # a quiet baseline first
+        return int(np.argmax(sp.process((0.3 * np.sin(2 * np.pi * 1000 * t)).astype(np.float32))))
+    assert loudest_bar(recording.spectrum_processor, 48000) == \
+        loudest_bar(SpectrumProcessor(bins=20), 16000)

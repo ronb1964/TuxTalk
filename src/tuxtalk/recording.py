@@ -252,7 +252,15 @@ def _sd_callback(indata, frames_count, time_info, status):
 def open_input_stream(device_idx) -> None:
     """Open and start the microphone stream. Raises if the device is unusable."""
     # Use the device's native sample rate (may differ from 16kHz on ALSA hw: devices)
+    global spectrum_processor
     rs.state.recording_samplerate = mic_stream.input_samplerate(device_idx, engine.SAMPLE_RATE)
+    # The bars' bands are worked out for one rate; built before the stream
+    # starts, so its callback never sees one half made.
+    if (spectrum_processor is not None
+            and spectrum_processor.sample_rate != rs.state.recording_samplerate):
+        from .indicator_dsp import SpectrumProcessor
+        spectrum_processor = SpectrumProcessor(sample_rate=rs.state.recording_samplerate,
+                                               bins=spectrum_processor.bins)
     sd.default.channels = CHANNELS
     sd.default.samplerate = rs.state.recording_samplerate
     rs.state.stream = sd.InputStream(callback=_sd_callback, dtype='int16', device=device_idx)

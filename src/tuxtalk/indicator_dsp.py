@@ -22,9 +22,9 @@ _MIN_CEIL = 0.6
 class SpectrumProcessor:
     """Turns the latest audio into one 0..1 level per frequency band."""
 
-    def __init__(self, sample_rate=16000, ring_size=5600, bins=20,
-                 freq_lo=110, freq_hi=4200):
-        self.bins = bins
+    def __init__(self, sample_rate=16000, bins=20, freq_lo=110, freq_hi=4200):
+        self.bins, self.sample_rate = bins, sample_rate
+        ring_size = int(sample_rate * 0.35)     # the last 0.35 s, at any rate
         self._ring = np.zeros(ring_size, dtype=np.float32)
         self._window = np.hanning(ring_size).astype(np.float32)
         freqs = np.fft.rfftfreq(ring_size, 1.0 / sample_rate)
