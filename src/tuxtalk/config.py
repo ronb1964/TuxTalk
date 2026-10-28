@@ -127,18 +127,39 @@ VALID_COLOR_MODES = {"system", "custom"}
 CLASSIC_CYAN_HEX = "#4db3ff"
 
 
-def swiss_german_locale(env=None) -> bool:
-    """Whether the system is set to Swiss German (de_CH, or gsw for Swiss
-    German itself), where ß is never written. The locale that counts is the
-    first of LC_ALL, LC_MESSAGES and LANG that is set; LANGUAGE's first
-    choice overrides it only when that is another language, since Plasma
-    sets LANGUAGE to the bare "de" for a Swiss German user."""
+def locale_language(value):
+    """"de_DE.UTF-8" -> "de"; None for "C", "POSIX" or anything unreadable."""
+    value = (value or "").strip()
+    if not value or value == "POSIX" or value.split(".")[0] == "C":
+        return None
+    code = value.split(".")[0].split("@")[0].split("_")[0].lower()
+    return code if code.isalpha() and 2 <= len(code) <= 3 else None
+
+
+def display_locale(env=None) -> str:
+    """The locale the desktop's text is in, region and all where it's known
+    ("de_CH.UTF-8"; "de" from LANGUAGE), or "" when none can be read.
+
+    The first of LC_ALL, LC_MESSAGES and LANG that is set, unless LANGUAGE's
+    first readable entry names another language, as in gettext (which
+    ignores LANGUAGE when the locale is C). KDE sets LANGUAGE when the
+    display language differs from the formats locale, and sets the bare
+    "de" for a Swiss German user, which mustn't hide the de_CH locale."""
     env = os.environ if env is None else env
     locale = next((env[v] for v in ("LC_ALL", "LC_MESSAGES", "LANG") if env.get(v)), "")
-    first = (env.get("LANGUAGE") or "").split(":")[0]
-    if first and first.split("_")[0] != locale.split("_")[0]:
-        locale = first
-    return locale.replace("-", "_").startswith(("de_CH", "gsw"))
+    language = locale_language(locale)
+    if language:
+        first = next((e for e in (env.get("LANGUAGE") or "").split(":")
+                      if locale_language(e)), None)
+        return first if first and locale_language(first) != language else locale
+    return next((env[v] for v in ("LC_ALL", "LC_MESSAGES", "LANG")
+                 if locale_language(env.get(v))), "")
+
+
+def swiss_german_locale(env=None) -> bool:
+    """Whether the system is set to Swiss German (de_CH, or gsw for Swiss
+    German itself), where ß is never written."""
+    return display_locale(env).replace("-", "_").startswith(("de_CH", "gsw"))
 
 
 def has_battery(power_dir="/sys/class/power_supply") -> bool:
