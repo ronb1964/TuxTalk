@@ -747,17 +747,14 @@ def changed_keys(original: dict, current: dict) -> set:
     }
 
 
-def record_update_check(timestamp: str, _stale=None) -> None:
+def record_update_check(timestamp: str) -> None:
     """Persist the update-check timestamp without dragging other settings back.
 
     The update check spends up to ~30 s on the network, so the settings are
     re-read right before the write: a change made in Preferences meanwhile is
     kept, and only the timestamp is carried across. save_config refuses to
     write when that read failed, so a damaged config is never overwritten with
-    defaults.
-
-    *_stale* is accepted and ignored on purpose: the caller's snapshot must NOT
-    be what gets written.
+    defaults. The caller's own settings are never what gets written.
     """
     try:
         fresh = load_config()

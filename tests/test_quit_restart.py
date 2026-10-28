@@ -729,5 +729,12 @@ def test_quit_waits_for_an_update_going_in_but_not_for_its_download():
         seen["daemon"] = threading.current_thread().daemon
         seen["tracked"] = t._install_thread is threading.current_thread()
         return True, ""
-    assert t._install_not_cut_off(install) == (True, "")
+    # Called, as in use, from the download's worker, which is a daemon: a
+    # thread it starts is one too unless told otherwise.
+    result = []
+    worker = threading.Thread(target=lambda: result.append(t._install_not_cut_off(install)),
+                              daemon=True)
+    worker.start()
+    worker.join(5)
+    assert result == [(True, "")]
     assert seen == {"daemon": False, "tracked": True}

@@ -1,6 +1,6 @@
 {
  "files": {
-  "tray.py": 1782,
+  "tray.py": 1781,
   "welcome_dialog.py": 3089
  },
  "findings": {
@@ -44,7 +44,7 @@
   "cuda_helper.py::download_cuda_libraries::long_line": 3,
   "cuda_helper.py::has_cuda_libraries::long_line": 1,
   "cuda_helper.py::has_cuda_libraries::swallowed_error": 1,
-  "cuda_helper.py::show_cuda_download_dialog::long_line": 3,
+  "cuda_helper.py::show_cuda_download_dialog::long_line": 1,
   "custom_words.py::_joinable::long_line": 1,
   "custom_words.py::fix_spelling::long_line": 1,
   "dbus_service.py::TuxTalkDBusService.CheckForUpdates.do_check::undocumented": 1,
@@ -248,7 +248,6 @@
   "voice_navigation.py::<module>::long_line": 6,
   "voice_navigation.py::chords::dated_comment": 2,
   "voice_navigation.py::plan::long_line": 2,
-  "vulkan_setup_dialogs.py::_remember_speed_result::swallowed_error": 1,
   "vulkan_setup_dialogs.py::run_speed_check.work::swallowed_error": 1,
   "welcome_dialog.py::SplashScreen.__init__::long_line": 11,
   "welcome_dialog.py::WelcomeDialog.__init__::long_line": 1,
@@ -310,9 +309,6 @@
   "cuda_helper.py::download_cuda_libraries": {
    "decisions": 46,
    "lines": 203
-  },
-  "cuda_helper.py::show_cuda_download_dialog": {
-   "lines": 135
   },
   "custom_words.py::fix_spelling": {
    "decisions": 28

@@ -558,7 +558,7 @@ class SpeechSection(Tab):
         """Two ways to run large-v3 on an NVIDIA card: Vulkan (light, about
         the same speed measured on an RTX 4070 Super) or CUDA (TuxTalk's
         long-standing NVIDIA setup). Without Vulkan, CUDA is asked about
-        before its 4.4 GB download."""
+        before its download."""
         from .vulkan_setup_dialogs import FULL, LIGHT, choose_light_or_full
         if self.win.vulkan_offered():
             choice = choose_light_or_full(self.window, "large-v3")
@@ -566,9 +566,9 @@ class SpeechSection(Tab):
             choice = FULL if show_message(
                 self.window, Gtk.MessageType.QUESTION, "Downloads Required",
                 "The 'large-v3' model needs two downloads:\n\n"
-                "  • CUDA GPU Libraries   (~1.4GB)\n"
+                f"  • CUDA GPU Libraries   (~{CUDA_SIZE_TEXT})\n"
                 "  • Large-v3 AI Model    (~3GB)\n\n"
-                "Total: ~4.4GB, a one-time download.\n\n"
+                "Both are one-time downloads.\n\n"
                 "Would you like to download both now?",
                 buttons=Gtk.ButtonsType.YES_NO) == Gtk.ResponseType.YES else None
         if choice == LIGHT:

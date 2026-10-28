@@ -352,8 +352,9 @@ class AdvancedTab(Tab):
                   "say how to change it")
         self.voice_editing_check.set_active(
             bool(self.config.get("voice_editing", False)) and ai_cleanup.is_installed())
+        hold = self.config.get("hotkey") or "F8"      # the key Help names too
         self.voice_editing_check.set_tooltip_text(
-            "Select some text in any app, hold Shift+F8 (Shift with your hold key, or tap\n"
+            f"Select some text in any app, hold Shift+{hold} (Shift with your hold key, or tap\n"
             "Shift with your toggle key), and say what you want: “make this more formal”,\n"
             "“shorten this”, “fix the grammar”, “turn this into a bullet list”.\n"
             "The selection is replaced with the rewrite. Ctrl+Z puts it back.\n"
@@ -384,9 +385,9 @@ class AdvancedTab(Tab):
             "• Moving: “go to the end”, “go to the start of the line”,\n"
             "  “go back 3 words”, “go up 2 lines”\n"
             "• “unselect”\n\n"
-            "With voice editing on, the Shift key understands them too: Shift+F8\n"
-            "“select the last sentence”, then Shift+F8 “make it more formal”.\n"
-            "Not in terminals. The full list is in Help, on the TuxTalk Labs page.")
+            f"With voice editing on, the Shift key understands them too: Shift+{hold}\n"
+            f"“select the last sentence”, then Shift+{hold} “make it more formal”.\n"
+            "Not in terminals. The full list is in Help, on the Writing page.")
         nav_check.connect("toggled", lambda c: self.update_config(
             "voice_navigation", c.get_active()))
         nav_check.set_margin_start(LABS_INDENT)
@@ -431,7 +432,7 @@ class AdvancedTab(Tab):
         grid.attach(follow_check, 0, row, 2, 1)
         row += 1
 
-        # How these work (Help, on its Labs tab) and Send feedback.
+        # How these work (Help, on its Writing tab) and Send feedback.
         from .help_dialog import FEEDBACK_URL, show_help_dialog
         labs_links = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         labs_links.set_margin_top(12)

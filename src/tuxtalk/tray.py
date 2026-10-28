@@ -1244,8 +1244,7 @@ class DictationTray(ServiceLifecycle):
                 # Record the timestamp against a fresh read: `config` was loaded
                 # before the network call, which can take ~30 s, and saving it
                 # back would revert anything changed in Preferences meanwhile.
-                record_update_check(
-                    update_checker.get_current_timestamp(), _stale=config)
+                record_update_check(update_checker.get_current_timestamp())
 
                 if result and result.get("success"):
                     has_update = result.get("update_available", False)

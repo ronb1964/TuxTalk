@@ -161,8 +161,9 @@ def _remember_speed_result(processor_won):
         if cfg.vulkan_slower != processor_won:
             cfg.vulkan_slower = processor_won
             save_config(cfg)
-    except Exception:
-        pass
+    except Exception as e:
+        # Only the advice suffers: the graphics chip may be proposed again.
+        logger.warning(f"Couldn't save the speed check's result: {e}")
 
 
 def run_speed_check(parent, model):

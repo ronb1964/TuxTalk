@@ -31,9 +31,8 @@ class TestRecordingTheUpdateCheck:
         """A setting changed during the network call must not be reverted."""
         saved = {}
 
-        # What the tray held before its ~30s network call.
-        stale = config_module.Settings(model="small", auto_period=True)
-        # What the user changed to in Preferences while it was running.
+        # The tray held model="small" before its ~30s network call; this is
+        # what the user changed to in Preferences while it was running.
         on_disk = config_module.Settings(model="large-v3", auto_period=False)
 
         monkeypatch.setattr(config_module, "load_config", lambda: on_disk)
@@ -42,7 +41,7 @@ class TestRecordingTheUpdateCheck:
                                                    auto_period=s.auto_period,
                                                    last_update_check=s.last_update_check))
 
-        config_module.record_update_check("2026-09-05", _stale=stale)
+        config_module.record_update_check("2026-09-05")
 
         assert saved["model"] == "large-v3", "the user's model choice was reverted"
         assert saved["auto_period"] is False
