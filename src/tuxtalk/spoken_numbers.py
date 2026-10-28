@@ -21,7 +21,7 @@ The English-only fixes run for English alone; the rest is plain digits.
 import logging
 import re
 
-from .normalize import format_times
+from .normalize import LINE_BREAK, format_times
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +104,8 @@ def _small_digits_as_words(text: str) -> str:
             return digit
         if _RE_RANGE_AFTER.match(text, m.end()) or _RE_RANGE_BEFORE.search(before):
             return digit                                    # "2 to 4", "3 out of 10"
-        sentence_start = not before or before[-1] in ".!?"
+        sentence_start = (not before or before[-1] in ".!?"
+                          or text[:m.start()].rstrip(" \t").endswith(("\n", LINE_BREAK)))
         if prev and not sentence_start:
             before_word = prev.group(1)
             # A name: any capital in it ("Python 3", "iPhone 5"), not "I".
