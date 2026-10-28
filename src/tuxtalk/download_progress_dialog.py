@@ -74,7 +74,7 @@ def _install_style():
 class DownloadTask:
     """Represents a single download task with progress tracking."""
 
-    def __init__(self, name, size_text, download_func):
+    def __init__(self, name, size_text, download_func, can_stop=True):
         """
         Initialize a download task.
 
@@ -84,8 +84,12 @@ class DownloadTask:
             download_func: Function that performs the download
                           Should accept (progress_callback, cancel_event) args
                           progress_callback signature: func(message, percent)
+            can_stop: False for work that ignores cancel_event (the GNOME
+                      extension's install, a moment long): it gets no Cancel
+                      button, which would only say "Cancelled" while it went on.
         """
         self.name = name
+        self.can_stop = can_stop
         self.size_text = size_text
         self.download_func = download_func
         self.cancelled = False
@@ -200,6 +204,7 @@ class UnifiedDownloadDialog:
         cancel_btn = Gtk.Button(label="Cancel")
         cancel_btn.set_size_request(80, -1)
         cancel_btn.connect("clicked", lambda w: self._cancel_task(task))
+        cancel_btn.set_sensitive(task.can_stop)
         header_box.pack_end(cancel_btn, False, False, 0)
 
         vbox.pack_start(header_box, False, False, 0)
@@ -252,7 +257,7 @@ class UnifiedDownloadDialog:
         retrospectively marked cancelled.
         """
         for task in self.tasks:
-            if not task.completed:
+            if not task.completed and task.can_stop:
                 task.cancelled = True
                 task.cancel_event.set()
                 logger.info(f"Window closed — cancelling {task.name}")
@@ -441,7 +446,8 @@ def show_unified_download_dialog(cuda=False, extension=False, model=None, parent
         task = DownloadTask(
             name="GNOME Extension",
             size_text="~10KB",
-            download_func=extension_download
+            download_func=extension_download,
+            can_stop=False
         )
         dialog.add_task(task)
 

@@ -136,3 +136,24 @@ def test_the_stylesheet_only_reaches_the_download_dialog():
     assert selectors
     for selector in selectors:
         assert selector.startswith(b"." + dpd._STYLE_CLASS.encode()), selector
+
+
+def test_work_that_cant_stop_offers_no_cancel_and_isnt_called_cancelled():
+    """The GNOME extension's install ignores Cancel and is a moment long:
+    Cancel said "Cancelled" while it went on, and Setup Complete then left
+    out "log out and back in"."""
+    import pytest
+    from gi.repository import Gtk
+    if not Gtk.init_check()[0]:
+        pytest.skip("no display")
+    install = DownloadTask(name="GNOME Extension", size_text="~10KB",
+                           download_func=lambda cb, ev: True, can_stop=False)
+    dlg = UnifiedDownloadDialog(title="t")
+    dlg.add_task(install)
+    frame = dlg._create_task_widget(install)
+    try:
+        assert not dlg.task_widgets[install]["cancel_btn"].get_sensitive()
+        dlg._cancel_unfinished_tasks()            # the window closed meanwhile
+        assert not install.cancelled and not install.cancel_event.is_set()
+    finally:
+        frame.destroy()
