@@ -241,6 +241,19 @@ def test_cosmic_reports_the_layout_set_in_cosmic_settings(monkeypatch, tmp_path)
     assert kl.active_layout() == ("ch", "fr")
 
 
+def test_cosmic_with_several_layouts_says_which_one_it_types_for(monkeypatch, tmp_path, caplog):
+    """COSMIC doesn't say which of its layouts is switched on, so after a
+    switch to the second the text comes out wrong; the log says why, once."""
+    import logging
+    kl._note_several_layouts.cache_clear()
+    _cosmic(monkeypatch, tmp_path, '(rules: "", model: "", layout: "de,ru", variant: ",")')
+    with caplog.at_level(logging.WARNING, logger=kl.logger.name):
+        kl.active_layout()
+        kl.active_layout()
+    said = [r.getMessage() for r in caplog.records if "several layouts" in r.getMessage()]
+    assert len(said) == 1 and "de,ru" in said[0]
+
+
 def test_cosmic_without_a_layout_of_its_own_uses_the_systems(monkeypatch, tmp_path):
     _cosmic(monkeypatch, tmp_path)
     assert kl.active_layout() == ("us", "")
