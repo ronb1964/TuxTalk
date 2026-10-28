@@ -1162,107 +1162,46 @@ class DictationTray(ServiceLifecycle):
         dialog.present()
 
     def _download_update(self, release):
-        """Download the update with progress dialog; nothing once Quit began."""
+        """Download and install the AppImage update behind the progress window
+        Preferences uses too (progress_window), then restart onto it. Nothing
+        once Quit has begun, and nothing installed if Quit began during the
+        download. The install's thread isn't a daemon, and a Quit's fallback
+        exit waits for it (_copying): the update the user asked for goes in."""
         if self._quitting:
             return
         from . import update_checker
-
+        from .progress_window import run_with_progress
         url = release.get("appimage_url")
-        filename = release.get("appimage_name", "TuxTalk-update.AppImage")
-
         if not url:
             show_message(None, Gtk.MessageType.ERROR, "Download Error",
                          "Could not find download URL.", keep_above=True)
             return
 
-        progress_dialog = Gtk.Dialog(title="Downloading Update", flags=Gtk.DialogFlags.MODAL)
-        progress_dialog.set_default_size(400, 120)
-        progress_dialog.set_position(Gtk.WindowPosition.CENTER)
-        progress_dialog.set_keep_above(True)
-
-        content = progress_dialog.get_content_area()
-        content.set_spacing(10)
-        content.set_margin_start(20)
-        content.set_margin_end(20)
-        content.set_margin_top(20)
-        content.set_margin_bottom(10)
-
-        status_label = Gtk.Label(label="Starting download...")
-        status_label.set_halign(Gtk.Align.START)
-        content.pack_start(status_label, False, False, 0)
-
-        progress_bar = Gtk.ProgressBar()
-        progress_bar.set_show_text(True)
-        content.pack_start(progress_bar, False, False, 10)
-
-        progress_dialog.show_all()
-        result_holder = [None]
-
-        def progress_callback(message, percent):
-            """Update progress from background thread."""
-            GLib.idle_add(lambda: status_label.set_text(message))
-            GLib.idle_add(lambda: progress_bar.set_fraction(percent / 100.0))
-            GLib.idle_add(lambda: progress_bar.set_text(f"{percent}%"))
-
-        def do_download():
-            """Background thread to download update."""
-            result_holder[0] = update_checker.download_update(
-                url, filename, progress_callback,
+        def work(progress):
+            """On its own thread: the download, then the install; (installed, why not)."""
+            path = update_checker.download_update(
+                url, release.get("appimage_name", "TuxTalk-update.AppImage"), progress,
                 checksums_url=release.get("checksums_url"))
-            GLib.idle_add(download_complete)
-
-        def download_complete():
-            """Install what was downloaded, behind a status window, off the
-            GTK thread: the copy of the AppImage would freeze the window and
-            the tray menu for its length. Not once Quit has begun."""
-            progress_dialog.destroy()
+            if not path:
+                return False, ("The download could not be completed.\n"
+                               "Please try again or download manually from GitHub.")
             if self._quitting:
-                return False
-            downloaded_path = result_holder[0]
-            if not downloaded_path:
-                show_message(None, Gtk.MessageType.ERROR, "Download Failed",
-                             "The download could not be completed.\n"
-                             "Please try again or download manually from GitHub.",
+                return False, None
+            progress("Installing update...", 90)
+            return update_checker.install_appimage_update(path, progress)
+
+        def finish(result):
+            success, message = result or (False, "Something TuxTalk didn't expect went "
+                                                 "wrong; the log has the details.")
+            logger.info(f"AppImage update: installed={success}, {message}")
+            if success:
+                self.restart_app()
+            elif message and not self._quitting:
+                show_message(None, Gtk.MessageType.ERROR, "Update Failed", message,
                              keep_above=True)
-                return False
-            status_dialog = message_dialog(
-                closable=False,
-                message_type=Gtk.MessageType.INFO,
-                buttons=Gtk.ButtonsType.NONE,
-                text="Installing Update..."
-            )
-            status_dialog.format_secondary_text(
-                "TuxTalk will restart automatically with the new version."
-            )
-            status_dialog.set_position(Gtk.WindowPosition.CENTER)
-            status_dialog.set_keep_above(True)
-            status_dialog.show_all()
 
-            def install():
-                try:
-                    success, message = update_checker.install_appimage_update(downloaded_path)
-                except Exception as install_error:
-                    logger.error(f"Exception during install_appimage_update: {install_error}")
-                    success = False
-                    message = f"Install failed with exception: {install_error}"
-                GLib.idle_add(installed, success, message)
-
-            def installed(success, message):
-                status_dialog.destroy()
-                logger.info(f"install_appimage_update returned: success={success}, "
-                            f"message={message}")
-                if success:
-                    self.restart_app()
-                elif not self._quitting:
-                    show_message(None, Gtk.MessageType.ERROR, "Update Failed", message,
-                                 keep_above=True)
-                return False
-            # Not a daemon; a Quit's fallback exit waits for it too (_copying).
-            self._install_thread = threading.Thread(target=install, name="install-update")
-            self._install_thread.start()
-            return False
-
-        threading.Thread(target=do_download, daemon=True).start()
+        self._install_thread = run_with_progress(None, "Updating TuxTalk", "Starting download...",
+                                                 work, finish, daemon=False)
 
     def _download_and_install_package(self, release, install_type):
         """Download the correct .rpm/.deb and install it as root via pkexec,

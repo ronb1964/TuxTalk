@@ -72,20 +72,28 @@ def test_checking_for_updates_has_no_close_button(Gtk, monkeypatch):
 
 
 def test_installing_an_update_has_no_close_button(Gtk, monkeypatch):
+    """The tray's update window (progress_window's, as Preferences') can't
+    be closed while the update downloads and goes in."""
     import queue
     import types
     from gi.repository import GLib
     from tuxtalk import tray, update_checker
-    waiting = queue.Queue()
+    waiting, may_finish = queue.Queue(), queue.Queue()
     monkeypatch.setattr(GLib, "idle_add", lambda fn, *args: waiting.put(lambda: fn(*args)))
     monkeypatch.setattr(update_checker, "download_update", lambda *a, **k: "/u/TuxTalk.AppImage")
-    monkeypatch.setattr(update_checker, "install_appimage_update", lambda path: (True, ""))
-    tray.DictationTray._download_update(types.SimpleNamespace(restart_app=lambda: None, _quitting=False),
+    monkeypatch.setattr(update_checker, "install_appimage_update",
+                        lambda path, progress: may_finish.get(timeout=5) or (True, ""))
+    tray.DictationTray._download_update(types.SimpleNamespace(restart_app=lambda: None,
+                                                              _quitting=False),
                                         {"appimage_url": "https://x/TuxTalk.AppImage"})
-    waiting.get(timeout=5)()          # downloaded: the box shows, the install starts
-    box = _open_box(Gtk, "Installing Update...")
+    box = next((w for w in Gtk.Window.list_toplevels()
+                if w.get_title() == "Updating TuxTalk" and w.get_visible()), None)
     assert box is not None and not box.get_deletable()
-    waiting.get(timeout=5)()          # installed, back on the GTK thread: the box goes
+    may_finish.put(False)
+    while True:                       # progress updates, then the end, on the GTK thread
+        waiting.get(timeout=5)()
+        if not box.get_visible():
+            break
 
 
 def test_an_explicit_title_is_kept(Gtk):

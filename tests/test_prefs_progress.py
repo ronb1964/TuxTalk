@@ -8,13 +8,13 @@ gi = pytest.importorskip("gi")
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
 
-from tuxtalk import prefs_tab  # noqa: E402
+from tuxtalk import progress_window  # noqa: E402
 
 
 class SameThread:
     """threading.Thread, run at start() on this thread."""
 
-    def __init__(self, target, daemon=None):
+    def __init__(self, target, daemon=None, name=None):
         self.target = target
 
     def start(self):
@@ -28,19 +28,19 @@ def run(monkeypatch):
     if not Gtk.init_check()[0]:
         pytest.skip("no display")
     windows, finished = [], []
-    # Only prefs_tab's threads: the sound thread must stay a real one.
-    monkeypatch.setattr(prefs_tab, "threading", SimpleNamespace(Thread=SameThread))
-    monkeypatch.setattr(prefs_tab.GLib, "idle_add", lambda fn, *a: fn(*a))
-    real = prefs_tab._progress_window
+    # Only progress_window's threads: the sound thread must stay a real one.
+    monkeypatch.setattr(progress_window, "threading", SimpleNamespace(Thread=SameThread))
+    monkeypatch.setattr(progress_window.GLib, "idle_add", lambda fn, *a: fn(*a))
+    real = progress_window._progress_window
 
     def recorded(*args):
         made = real(*args)
         windows.append(made[0])
         return made
-    monkeypatch.setattr(prefs_tab, "_progress_window", recorded)
+    monkeypatch.setattr(progress_window, "_progress_window", recorded)
 
     def go(work):
-        prefs_tab.run_with_progress(None, "Installing", "Starting...", work, finished.append)
+        progress_window.run_with_progress(None, "Installing", "Starting...", work, finished.append)
     return go, windows, finished
 
 

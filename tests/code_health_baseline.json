@@ -1,6 +1,6 @@
 {
  "files": {
-  "tray.py": 1844,
+  "tray.py": 1783,
   "welcome_dialog.py": 3089
  },
  "findings": {
@@ -393,9 +393,6 @@
   },
   "transcribe_window.py::TranscribeWindow.__init__": {
    "lines": 126
-  },
-  "tray.py::DictationTray._download_update": {
-   "lines": 102
   },
   "tray.py::DictationTray._show_update_result_dialog": {
    "lines": 135
