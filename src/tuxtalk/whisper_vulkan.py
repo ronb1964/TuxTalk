@@ -198,7 +198,8 @@ def make_engine_download_func(model_name=None):
             if total:
                 progress_callback("Downloading graphics engine...", min(95, int(done * 95 / total)))
 
-        with download_area(parent, ENGINE_NAME) as (archive, folder):
+        # Before 0.19 the archive was ENGINE_ASSET itself, left behind when unpacking failed.
+        with download_area(parent, ENGINE_NAME, old_names=(ENGINE_ASSET,)) as (archive, folder):
             if not download_file(ENGINE_URL, archive, timeout=60, cancel_event=cancel_event,
                                  progress_hook=hook, expected_sha256=ENGINE_SHA256):
                 progress_callback("Download failed", 0)

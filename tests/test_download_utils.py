@@ -4,6 +4,8 @@ import os
 import threading
 import time
 
+import pytest
+
 from tuxtalk.download_utils import (
     download_file,
     parse_sha256sums,
@@ -171,15 +173,55 @@ def test_what_a_killed_download_left_is_swept_next_time(tmp_path):
     assert list(tmp_path.iterdir()) == []
 
 
-def test_unpacking_keeps_files_inside_the_folder(tmp_path):
+def test_an_archive_older_versions_left_is_removed(tmp_path):
+    """Before 0.19 a failed unpack left the archive under its own name."""
+    from tuxtalk.download_utils import download_area
+    (tmp_path / "engine-b1.tar.gz").write_bytes(b"22 MB once")
+    with download_area(str(tmp_path), "engine", old_names=("engine-b1.tar.gz",)):
+        pass
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_a_plain_sweep_leaves_folders_alone(tmp_path):
+    """Only download_area's own leftovers are folders; the updater's sweep
+    of its folder mustn't start deleting folders."""
+    from tuxtalk.download_utils import remove_stale_files
+    folder = tmp_path / "keep"
+    folder.mkdir()
+    os.utime(folder, (0, 0))
+    remove_stale_files(str(tmp_path), "*", 60)
+    assert folder.exists()
+
+
+def _tar(path, *members):
     import io
     import tarfile
+    with tarfile.open(path, "w") as tar:
+        for name, link in members:
+            info = tarfile.TarInfo(name)
+            if link:
+                info.type, info.linkname = tarfile.SYMTYPE, link
+                tar.addfile(info)
+            else:
+                info.size = 6
+                tar.addfile(info, io.BytesIO(b"engine"))
+
+
+def test_unpacking_keeps_files_inside_the_folder(tmp_path):
     from tuxtalk.download_utils import unpack_tar
-    archive = tmp_path / "a.tar"
-    with tarfile.open(archive, "w") as tar:
-        data = b"engine"
-        info = tarfile.TarInfo("engine/bin")
-        info.size = len(data)
-        tar.addfile(info, io.BytesIO(data))
-    unpack_tar(str(archive), str(tmp_path / "out"))
+    _tar(tmp_path / "a.tar", ("engine/bin", None))
+    unpack_tar(str(tmp_path / "a.tar"), str(tmp_path / "out"))
     assert (tmp_path / "out" / "engine" / "bin").read_bytes() == b"engine"
+
+
+@pytest.mark.parametrize("member", [("../outside", None),
+                                    ("engine/link", "/etc/passwd")])
+def test_unpacking_refuses_what_would_land_outside_the_folder(tmp_path, member):
+    import tarfile
+    from tuxtalk.download_utils import unpack_tar
+    if not hasattr(tarfile, "data_filter"):
+        pytest.skip("this Python has no tar data filter")
+    _tar(tmp_path / "a.tar", member)
+    with pytest.raises(tarfile.FilterError):
+        unpack_tar(str(tmp_path / "a.tar"), str(tmp_path / "out"))
+    assert not (tmp_path / "outside").exists()

@@ -431,7 +431,7 @@ def make_engine_download_func():
 
         # Inside engine_dir: remove_other_versions clears every other folder
         # beside it, which would take a download under way with it.
-        with download_area(engine_dir, LLAMA_TAG) as (archive, folder):
+        with download_area(engine_dir, LLAMA_TAG, old_names=(LLAMA_ASSET,)) as (archive, folder):
             if not download_file(LLAMA_URL, archive, timeout=60, cancel_event=cancel_event,
                                  progress_hook=hook, expected_sha256=LLAMA_SHA256):
                 progress_callback("Download failed", 0)

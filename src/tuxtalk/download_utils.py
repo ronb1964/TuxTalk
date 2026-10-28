@@ -129,40 +129,52 @@ def _remove_quiet(path: str | None) -> None:
         pass
 
 
-def remove_stale_files(directory: str, pattern: str, max_age_s: float) -> None:
-    """Delete the files and folders in *directory* matching the glob
-    *pattern* that have not been modified for *max_age_s* seconds. Temp
-    names are random, so a copy cut off by a kill or a reboot is never
-    overwritten by the next try; without this sweep each one stays on disk
-    for good."""
+def remove_stale_files(directory: str, pattern: str, max_age_s: float,
+                       folders: bool = False) -> None:
+    """Delete the files (and with *folders*, the folders) in *directory*
+    matching the glob *pattern* that have not been modified for *max_age_s*
+    seconds. Temp names are random, so a copy cut off by a kill or a reboot
+    is never overwritten by the next try; without this sweep each one stays
+    on disk for good."""
     cutoff = time.time() - max_age_s
     try:
         entries = list(os.scandir(directory))
-    except OSError:
+    except FileNotFoundError:
+        return
+    except OSError as e:
+        logger.info(f"Couldn't look for leftover downloads in {directory}: {e}")
         return
     for entry in entries:
         try:
-            if (fnmatch.fnmatchcase(entry.name, pattern)
-                    and entry.stat(follow_symlinks=False).st_mtime < cutoff):
-                if entry.is_dir(follow_symlinks=False):
-                    shutil.rmtree(entry.path)
-                else:
-                    os.remove(entry.path)
-                logger.info(f"Removed a leftover partial download: {entry.path}")
-        except OSError:
-            pass
+            if (not fnmatch.fnmatchcase(entry.name, pattern)
+                    or entry.stat(follow_symlinks=False).st_mtime >= cutoff):
+                continue
+            if entry.is_dir(follow_symlinks=False):
+                if not folders:
+                    continue
+                shutil.rmtree(entry.path)
+            else:
+                os.remove(entry.path)
+            logger.info(f"Removed a leftover partial download: {entry.path}")
+        except FileNotFoundError:
+            pass                # another sweep got there first
+        except OSError as e:
+            logger.info(f"Couldn't remove the leftover download {entry.path}: {e}")
 
 
 @contextlib.contextmanager
-def download_area(parent: str, name: str):
+def download_area(parent: str, name: str, old_names=()):
     """(archive path, folder path) in *parent* for one download of an engine
     to land and unpack in, both removed afterwards whether it worked or not.
     Names of its own each time: the tray and Preferences may fetch the same
     engine at once, and shared names let one unpack into, or delete, the
     other's archive. What a killed process left is swept here next time;
-    neither is touched for long once the download ends."""
+    neither is touched for long once the download ends. *old_names* are the
+    fixed archive names older versions used, removed once seen."""
     os.makedirs(parent, exist_ok=True)
-    remove_stale_files(parent, f".{glob.escape(name)}.*", STALE_PARTIAL_S)
+    remove_stale_files(parent, f".{glob.escape(name)}.*", STALE_PARTIAL_S, folders=True)
+    for old in old_names:
+        _remove_quiet(os.path.join(parent, old))
     stem = os.path.join(parent, f".{name}.{secrets.token_hex(4)}")
     archive, folder = stem + ".tar", stem + ".d"
     try:
