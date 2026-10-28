@@ -69,3 +69,14 @@ def test_the_setting_decides(monkeypatch):
     assert live.adapt_to_app is False
     live.apply(config.Settings())
     assert live.adapt_to_app is True
+
+
+@pytest.mark.parametrize("kind", ["terminal", "code"])
+@pytest.mark.parametrize("said, typed", [
+    ("git commit -m open quote fix the bug close quote", 'git commit -m "fix the bug"'),
+    ("echo quote hello world quote", 'echo "hello world"'),
+])
+def test_quotes_are_straight_in_terminals_and_code_editors(monkeypatch, kind, said, typed):
+    """A shell or a compiler doesn't read “curly” quotes as quotes, so a
+    spoken quote there is straight whatever the smart-quotes setting."""
+    assert _prepare(monkeypatch, said, kind).strip().lower() == typed.lower()
