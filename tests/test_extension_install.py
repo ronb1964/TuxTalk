@@ -90,17 +90,36 @@ def test_a_linked_extensions_folder_is_staged_where_it_really_is(tmp_path, exten
     assert all(os.path.dirname(a) == str(real) for a, b in renames)
 
 
-def test_two_installs_at_once_take_turns(extensions):
+def test_two_installs_at_once_take_turns(extensions, monkeypatch):
     """Preferences and first run installing at once: each cleared the
-    other's folders, and one failed with the extension moved aside."""
+    other's folders, and one failed with the extension moved aside. The
+    first is held inside its copy while the second tries to start."""
+    import shutil
     import threading
     ext_dir, source = extensions
+    copying, may_finish, copies = threading.Event(), threading.Event(), []
+    real_copytree = shutil.copytree
+
+    def held_copy(src, dst, **kw):
+        copies.append(dst)
+        if len(copies) == 1:
+            copying.set()
+            assert may_finish.wait(10)
+        return real_copytree(src, dst, **kw)
+    monkeypatch.setattr(eh.shutil, "copytree", held_copy)
     results = []
-    threads = [threading.Thread(target=lambda: results.append(
-        eh.install_extension_from_local(str(source), auto_enable=False))) for _ in range(4)]
-    for t in threads:
-        t.start()
-    for t in threads:
+
+    def install():
+        results.append(eh.install_extension_from_local(str(source), auto_enable=False))
+    first = threading.Thread(target=install)
+    first.start()
+    assert copying.wait(10)
+    second = threading.Thread(target=install)
+    second.start()
+    second.join(0.5)
+    assert len(copies) == 1             # the second waits its turn
+    may_finish.set()
+    for t in (first, second):
         t.join(30)
-    assert results == [True] * 4
+    assert results == [True, True]
     assert os.listdir(ext_dir) == [eh.EXTENSION_UUID]
