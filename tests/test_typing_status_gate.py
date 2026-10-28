@@ -36,10 +36,15 @@ class _FakeButton:
         self.label = v
 
 
-def _prefs_with_perms(monkeypatch, *, all_ok, udev, in_group, hotkey_ok=False):
+def _prefs_with_perms(monkeypatch, *, all_ok, udev, in_group, hotkey_ok=False,
+                      helper_installed=False):
     from types import SimpleNamespace
     from tuxtalk import prefs_system_check as prefs_mod
+    from tuxtalk import secure_input
     from tuxtalk import uinput_helper as uh
+
+    monkeypatch.setattr(secure_input, "is_installed", lambda: helper_installed)
+    monkeypatch.setattr(secure_input, "running_version", lambda: None)
 
     monkeypatch.setattr(uh, "check_all_device_permissions",
                         lambda: (all_ok, "reason"))
@@ -103,4 +108,16 @@ def test_readable_keyboard_without_uinput_says_it_cant_type(monkeypatch):
     markup = prefs.typing_status_label.markup
     assert "can't type" in markup and "restart" in markup
     assert "clipboard" not in markup.lower()
+    assert prefs.fix_typing_button.sensitive is True
+
+
+def test_a_hotkey_helper_that_isnt_answering_offers_to_set_it_up_again(monkeypatch):
+    """Installed but silent: "please restart your computer" was wrong advice,
+    and the helper's own message never showed."""
+    from tuxtalk.prefs_system_check import UPDATE_HELPER_LABEL
+    prefs = _prefs_with_perms(monkeypatch, all_ok=False, udev=True, in_group=True,
+                              helper_installed=True)
+    assert prefs._show_typing_status() is False
+    assert "isn't answering" in prefs.typing_status_label.markup
+    assert prefs.fix_typing_button.label == UPDATE_HELPER_LABEL
     assert prefs.fix_typing_button.sensitive is True
