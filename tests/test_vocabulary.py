@@ -305,6 +305,19 @@ def test_a_hand_edited_phrase_with_capitals_or_spaces_still_clashes(commands_fil
         vocabulary.save_word("ClaudeClaw", ["my email"])
 
 
+def test_every_hand_edited_spelling_of_a_phrase_is_checked(commands_file):
+    """Two spellings of one phrase in the file, the second typing another
+    word: it was deleted without a word, since only the first was checked."""
+    from tuxtalk import custom_words
+    custom_words.save(["ClaudeClaw"])
+    commands_file.write_text('[commands]\n"Clawed  Claw" = "ClaudeClaw"\n'
+                             '"clawed claw" = "OtherWord"\n')
+    before = commands_file.read_text()
+    with pytest.raises(vocabulary.WordProblem, match="OtherWord"):
+        vocabulary.save_word("ClaudeClaw", ["clawed claw"], old="ClaudeClaw")
+    assert commands_file.read_text() == before
+
+
 def test_a_word_takes_over_a_hand_edited_phrase_of_its_own(commands_file):
     """A new word replaces a differently spaced entry already typing it
     rather than adding a second one beside it."""

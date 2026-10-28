@@ -214,9 +214,11 @@ def _phrases_for(word, phrases, commands, old):
         if is_risky(phrase):
             raise WordProblem(f"\u201c{phrase}\u201d is an everyday word: TuxTalk would "
                               f"change it every time you say it.")
-        same = _matching_keys(commands, phrase)
-        taken = commands[same[0]] if same else None
-        if taken is not None and taken not in (old, word):
+        # Every spelling of the phrase a hand edit left, since the word
+        # takes them all over.
+        taken = next((commands[k] for k in _matching_keys(commands, phrase)
+                      if commands[k] not in (old, word)), None)
+        if taken is not None:
             raise WordProblem(f"\u201c{phrase}\u201d already types \u201c{taken}\u201d. "
                               "Change or remove that one first.")
         wanted.append(phrase)
