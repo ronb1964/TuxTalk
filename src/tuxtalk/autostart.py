@@ -15,6 +15,7 @@ autostart line dies silently at login with ModuleNotFoundError.
 import os
 import sys
 import glob
+import shlex
 import subprocess
 
 from .logger import setup_logger
@@ -340,6 +341,20 @@ def refresh_autostart_comment() -> bool:
     return True
 
 
+def _exec_program(exec_cmd):
+    """(the program an Exec= value runs, whether the desktop can run it as
+    written). A path with a space that isn't quoted (written before 0.19)
+    can't be run: the desktop looks for the part before the space."""
+    whole = exec_cmd.strip()
+    if " " in whole and not whole.startswith('"') and os.path.isfile(whole):
+        return whole, False
+    try:
+        words = shlex.split(whole.replace("%%", "%"))
+    except ValueError:
+        words = whole.split()
+    return (words[0] if words else ""), True
+
+
 def repair_stale_appimage_autostart() -> bool:
     """Point an existing launch-at-login entry at the installed AppImage.
 
@@ -362,11 +377,11 @@ def repair_stale_appimage_autostart() -> bool:
     if lines is None:
         return False
     exec_cmd = next((line[len("Exec="):] for line in lines if line.startswith("Exec=")), "")
-    target = exec_cmd.split()[0] if exec_cmd.split() else ""
+    target, runnable = _exec_program(exec_cmd)
     name = os.path.basename(target).lower()
     if not (name.endswith(".appimage") and ("tuxtalk" in name or "talktype" in name)):
         return False
-    if os.path.realpath(target) == os.path.realpath(INSTALLED_APPIMAGE):
+    if runnable and os.path.realpath(target) == os.path.realpath(INSTALLED_APPIMAGE):
         return False
     if set_autostart(True, prefer_installed_appimage=True):
         logger.info(f"Repaired launch at login: it pointed at {target}, "
