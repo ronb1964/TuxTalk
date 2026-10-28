@@ -34,6 +34,11 @@ logger = setup_logger(__name__)
 
 TITLE = "Transcribe a File"
 FRONT = signal.SIGUSR1
+# One window: the lock is held while it's open, so two quick launches can't
+# both find no pid yet and both open one.
+WINDOW_LOCK = "transcribe-window.lock"
+_FRONT_WAIT_S = 2.0         # for a window that holds the lock to write its pid
+_CLOSING_WAIT_S = 10.0      # for one that didn't answer (closing) to let go
 
 
 def pidfile_path():
@@ -52,6 +57,50 @@ def _running_pid():
     except (OSError, ValueError):
         pass
     return None
+
+
+def _claim_window():
+    """(open this window?, the lock it holds while open). A window already
+    open is brought to the front instead; one that holds the lock but hasn't
+    written its pid yet is waited for, and one that is closing is let go
+    first. A lock that can't be used at all doesn't stop the window."""
+    from . import single_instance
+    try:
+        lock = single_instance.open_lock(WINDOW_LOCK)
+        if single_instance.claim(lock):
+            return True, lock
+    except OSError as e:
+        logger.warning(f"Transcribe a File: no window lock ({e})")
+        return not _brought_forward(0), None
+    if _brought_forward(_FRONT_WAIT_S):
+        return False, None
+    try:
+        if single_instance.claim(lock, wait_s=_CLOSING_WAIT_S):
+            return True, lock
+    except OSError as e:
+        logger.warning(f"Transcribe a File: couldn't wait for the window lock ({e})")
+        return True, lock
+    logger.warning("Another Transcribe a File window holds on and doesn't answer")
+    return False, None
+
+
+def _brought_forward(wait_s):
+    """Whether an open window took the signal to come to the front. A window
+    writes its pid only once it handles the signal (until then the signal
+    would end it), so one still starting is waited for, up to *wait_s*
+    seconds."""
+    deadline = time.monotonic() + wait_s
+    while True:
+        other = _running_pid()
+        if other:
+            try:
+                os.kill(other, FRONT)
+                return True
+            except OSError:
+                return False
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.05)
 
 
 def _when(stamp):
@@ -517,13 +566,9 @@ def main(argv=None):
     """Open the window, or bring the open one to the front. A file given on
     the command line starts at once."""
     argv = sys.argv[1:] if argv is None else argv
-    other = _running_pid()
-    if other:
-        try:
-            os.kill(other, FRONT)
-            return 0
-        except OSError:
-            pass
+    go_on, _lock = _claim_window()      # held open until the process ends
+    if not go_on:
+        return 0
     try:
         from . import desktop_identity, ui_style
         desktop_identity.apply()        # TuxTalk's icon on the window

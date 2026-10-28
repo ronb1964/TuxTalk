@@ -258,6 +258,39 @@ def test_an_open_window_is_found_by_its_pidfile(tmp_path, monkeypatch):
     assert tw._running_pid() is None
 
 
+@pytest.fixture
+def window_lock(tmp_path, monkeypatch):
+    """The window lock in a private folder; returns the module and the
+    signals it sent."""
+    from tuxtalk import transcribe_window as tw
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    sent = []
+    monkeypatch.setattr(tw.os, "kill", lambda pid, sig: sent.append((pid, sig)))
+    return tw, sent
+
+
+def test_a_second_quick_launch_brings_the_first_window_forward(window_lock, monkeypatch):
+    """A fast double-click: the first window holds the lock and writes its
+    pid a moment later; the second waits for it rather than opening too."""
+    from tuxtalk import single_instance
+    tw, sent = window_lock
+    first = single_instance.open_lock(tw.WINDOW_LOCK)
+    assert single_instance.claim(first)
+    pids = iter([None, None, 4242])
+    monkeypatch.setattr(tw, "_running_pid", lambda: next(pids))
+
+    assert tw._claim_window() == (False, None)
+    assert sent == [(4242, tw.FRONT)]
+    first.close()
+
+
+def test_the_first_launch_opens_the_window(window_lock):
+    tw, sent = window_lock
+    go_on, lock = tw._claim_window()
+    assert go_on and lock is not None and sent == []
+    lock.close()
+
+
 # --- from the code review, 2026-10-15 ---------------------------------------------------------
 
 def test_a_soft_pause_in_steady_noise_still_wins_over_the_window_edges():
