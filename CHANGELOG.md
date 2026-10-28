@@ -33,13 +33,27 @@ before 0.15.0, so older entries use that name.
   arrow keys first, it used to replace whatever words were at that spot.
   Now it saves the fix to Your Words and leaves your text alone. In a
   terminal it never changes the text, since it can't select words there.
-- Quitting TuxTalk, Restart Service or an update now finishes a dictation
-  that's still being transcribed or typed, instead of throwing it away. It
-  gives it up to 20 seconds; one that takes longer is lost, and a
-  notification says so. A recording still going is stopped and typed, as
-  if you'd let go of the key. Your music starts playing again
-  and other sounds come back up, which a quit in the middle of a dictation
-  used to leave paused or quiet.
+- Quitting TuxTalk, Restart Service, an update or an uninstall now lets a
+  dictation that's still being transcribed or typed finish first. It used
+  to throw it away. A recording that's still going gets stopped and typed,
+  same as letting go of the key. It gets up to 20 seconds, and if it takes
+  longer than that it's lost and a notification tells you. Music that was
+  paused for it plays again and other sounds come back up. If TuxTalk gets
+  cut off before it can turn them back up, it does it the next time it starts.
+- Quit takes the icon away right away and TuxTalk finishes up in the
+  background. Open it again in that time and it starts once the old one is
+  done, instead of telling you it's already running.
+- After an update the new version started about 10 seconds after you
+  clicked Restart, whether the old one had quit or not. If the old one was
+  still typing out a long dictation, you ended up with nothing running. The
+  new one waits for the old one now.
+- With no tray running, turning dictation off from the GNOME extension
+  didn't stop it. It does now.
+- If you turned Start at login off while first-run setup was still copying
+  the AppImage, and the copy failed, TuxTalk turned it back on. Now it
+  stays off.
+- On a desktop started without a login manager, two copies of TuxTalk
+  could run at once and type everything twice. Only one runs now.
 - Saying "tab" in a sentence ("every tab shows", "the tabs in Claude
   Desktop") typed a tab character instead of the word, almost every time.
   Now only "press tab" makes a tab, and "tab" on its own is just the word.
