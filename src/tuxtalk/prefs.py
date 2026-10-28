@@ -18,6 +18,7 @@ from .prefs_updates import UpdatesTab
 from .prefs_words import WordsTab
 import os
 import sys
+import threading
 import time
 import atexit
 from contextlib import contextmanager
@@ -61,6 +62,20 @@ def _acquire_prefs_singleton(tab=None):
 # What can need a download, and so is rolled back when it never finishes:
 # the model, and the device (the processor or Vulkan copy of a model).
 _DOWNLOAD_KEYS = ("model", "device")
+
+
+def _restart_without_tray():
+    """prefs.restart_service with no tray: end the service, start a new one
+    the way the tray does (service_launcher). Preferences runs on native
+    Wayland, and a service spawned with its environment would inherit it:
+    gtk_window_move() would be ignored and the recording indicator always
+    centred."""
+    from .service_launcher import end_dictation_service, launch_dictation_service
+    try:
+        end_dictation_service()
+        launch_dictation_service()
+    except Exception as e:
+        logger.warning(f"Failed to restart service: {e}")
 
 
 class PreferencesWindow:
@@ -581,7 +596,9 @@ class PreferencesWindow:
         """Restart the dictation service; True if it was done or asked for.
         A running tray does it (Restart Service: it waits for the old service
         off its menu's thread, and starts none once Quit or Dictation off came
-        after); with no tray, it's done here."""
+        after); one that doesn't answer is left to it, never worked around.
+        With no tray it's done here, on a thread: the old service types what
+        it holds and quits (or is killed past its time), then a new one starts."""
         from . import single_instance, tray_instance, update_ui
         if single_instance.held_elsewhere(tray_instance.TRAY_LOCK):
             try:
@@ -589,20 +606,10 @@ class PreferencesWindow:
                 return True
             except Exception as e:
                 logger.warning(f"Could not ask the tray to restart dictation: {e}")
-        from .service_launcher import launch_dictation_service, stop_dictation_service
-        try:
-            # Not waited for: the old one types what it holds before it
-            # quits, and the new one waits for its lock meanwhile.
-            stop_dictation_service()
-            # Started the same way the tray does. Preferences runs on native
-            # Wayland, and a service spawned with this process's environment
-            # would inherit it: gtk_window_move() would be ignored and the
-            # recording indicator always centred.
-            launch_dictation_service()
-            return True
-        except Exception as e:
-            logger.warning(f"Failed to restart service: {e}")
-            return False
+                return False
+        # Not a daemon: closing Preferences meanwhile must not drop the start.
+        threading.Thread(target=_restart_without_tray, name="restart-service").start()
+        return True
 
     def on_tab_switched(self, notebook, page, page_num):
         """Scroll the newly shown tab to the top, refresh Stats, which the

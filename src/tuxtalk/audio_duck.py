@@ -23,9 +23,10 @@ be done, the app is owed its volume until TuxTalk next sees it at the
 lowered level and puts it back; it's never lowered from there.
 
 Each stream is written to a small file in the runtime folder before it's
-turned down, so a service that stops mid-dictation, however it stops, leaves
-a record the next start puts back (restore_left_over), and nothing stays
-quiet for good.
+turned down, so a service that stops mid-dictation, however it stops,
+leaves a record the next start puts back (restore_left_over). That's as
+good as the record: a stream the sound server has renumbered since (it
+restarted) isn't found again.
 
 Like media_pause, all the work runs on one background thread, which alone
 touches what was turned down, the restore at exit included: duck() is
@@ -265,11 +266,20 @@ class AudioDucker:
             # still puts it back. One saved but never lowered is left alone;
             # one that couldn't be saved isn't lowered.
             self._ducked[index] = (volumes, lowered, st["app"])
-            if not self._save() or not _set_volume(index, lowered, self._run):
+            if not self._save():
+                del self._ducked[index]
+            elif not _set_volume(index, lowered, self._run) and self._unchanged(index, volumes):
                 del self._ducked[index]
         if self._ducked:
             logger.info(f"Turned {len(self._ducked)} other sound(s) down while dictating")
         self._save()
+
+    def _unchanged(self, index, volumes) -> bool:
+        """Whether stream *index* is still at *volumes* after a change that
+        failed: one that timed out may have gone through all the same, and
+        its record must stay until it's put back."""
+        return any(st["index"] == index and st["volumes"] == volumes
+                   for st in list_streams(self._run))
 
     def _restore_now(self):
         ducked, self._ducked = self._ducked, {}

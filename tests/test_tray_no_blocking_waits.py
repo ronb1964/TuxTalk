@@ -5,7 +5,6 @@ main loop.
 * Quit and Restart Service wait for the service off it (test_quit_restart.py).
 * After onboarding, KDE's menu cache rebuild (kbuildsycoca) can take up to 15 s.
 """
-import types
 
 from tuxtalk import tray as tray_mod
 

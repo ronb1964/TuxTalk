@@ -1999,22 +1999,14 @@ def show_hotkey_test_dialog():
     # already stopped it and keeps it from starting during onboarding; this
     # makes sure, once, just before the dialog appears.
     def kill_dictation_service():
-        """Kill any running dictation service processes."""
+        """Kill a dictation service started since the tray ended the one that
+        ran (gracefully, before setup): none should be."""
         try:
-            # SIGKILL for immediate termination - no chance to respawn.
-            from tuxtalk.service_launcher import stop_dictation_service
+            from tuxtalk.service_launcher import find_service_pids, stop_dictation_service
+            if not find_service_pids():
+                return
+            logger.warning("A dictation service started during setup; stopping it")
             stop_dictation_service(force=True)
-
-            # Give processes time to die
-            time.sleep(0.3)
-
-            # Verify no processes remain
-            from tuxtalk.service_launcher import find_service_pids
-            if find_service_pids():
-                # Still running! Try again
-                print("Service still running, killing again...")
-                stop_dictation_service(force=True)
-                time.sleep(0.2)
         except Exception as e:
             logger.warning(f"Error killing service: {e}")
 

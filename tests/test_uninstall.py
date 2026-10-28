@@ -557,12 +557,15 @@ def test_an_error_partway_still_ends_with_a_message_and_quits(home, monkeypatch)
     monkeypatch.setattr(uninstall, "_working_window", lambda: types.SimpleNamespace(destroy=lambda: None))
     monkeypatch.setattr(uninstall, "_tell", lambda kind, heading, body, **k: told.append((heading, body)))
 
-    def stop(plan, stop_tray_parts):
-        stop_tray_parts()
+    def stop(plan, shut_down):
+        shut_down()
         raise RuntimeError("D-Bus went away")
     monkeypatch.setattr(uninstall, "stop_tuxtalk", stop)
+    monkeypatch.setattr(uninstall, "_wait_for", lambda work: work())
+    monkeypatch.setattr(uninstall, "_end_service", lambda: True)
     stopped = []
-    assert uninstall.run(stop_tray_parts=lambda: stopped.append(1)) is True
+    assert uninstall.run(uninstall.TrayParts(stop=lambda: None, resume=lambda: None,
+                                             shut_down=lambda: stopped.append(1))) is True
     assert stopped == [1]
     heading, body = told[0]
     assert heading == "TuxTalk couldn't remove everything"
@@ -625,11 +628,12 @@ def test_a_second_uninstall_request_while_asking_opens_no_second_question(monkey
     the first one's dialog loop, and neither could close."""
     import types
     from tuxtalk import tray as tray_mod
-    t = types.SimpleNamespace(_uninstalling=False, _quitting=False,
-                              _stop_for_uninstall=lambda: None, _leave_main_loop=lambda: None)
+    t = types.SimpleNamespace(_uninstalling=False, _quitting=False, _hide_for_quit=None,
+                              _resume_after_uninstall=None, _shut_down=None,
+                              _leave_main_loop=lambda: None)
     asked = []
 
-    def run(stop_tray_parts):
+    def run(tray):
         asked.append(1)
         tray_mod.DictationTray.uninstall(t)      # the second request, from inside the first
         return False

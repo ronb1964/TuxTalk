@@ -214,6 +214,7 @@ def tray_ns(monkeypatch):
     app = types.SimpleNamespace(is_recording=False)
     t = types.SimpleNamespace(
         onboarding_in_progress=False,
+        _quitting=False,
         _ready_pid=None,
         _waiting_start=WaitingStart(),
         dbus_service=types.SimpleNamespace(app=app),

@@ -828,8 +828,9 @@ def tray_main(monkeypatch):
                         step("restores GNOME keybindings"))
     monkeypatch.setattr(autostart, "repair_stale_appimage_autostart", lambda: False)
     monkeypatch.setattr(autostart, "refresh_autostart_comment", lambda: False)
-    monkeypatch.setattr(service_launcher, "stop_dictation_service",
-                        step("stops a running service"))
+    # The wait for it runs at once here, not on a thread of its own.
+    monkeypatch.setattr(service_launcher, "end_in_background",
+                        lambda then: done.append("stops a running service") or then(True))
     monkeypatch.setattr(cuda_helper, "mark_first_run_complete", step("marks setup done"))
     monkeypatch.setattr(control, "report", lambda status: None)
     monkeypatch.setattr(tray, "DictationTray", Tray)

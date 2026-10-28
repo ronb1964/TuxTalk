@@ -4,7 +4,6 @@ Dropping it would mean a model change saved in that window never reaches the
 running service, though the menu and config.toml show the new model.
 """
 
-import types
 
 import pytest
 
@@ -24,31 +23,23 @@ class FakeGLib:
         self.timers.append(lambda: fn(*args))
 
 
-class SyncThread:
-    def __init__(self, target, daemon=None, **_):
-        self._target = target
-
-    def start(self):
-        self._target()
-
-
 @pytest.fixture
 def fake_loop(monkeypatch):
     loop = FakeGLib()
     monkeypatch.setattr(tray_mod, "GLib", loop)
-    monkeypatch.setattr(tray_mod.threading, "Thread", SyncThread)
     return loop
 
 
-def make_tray(monkeypatch):
+def make_tray(monkeypatch, loop):
     t = tray_mod.DictationTray.__new__(tray_mod.DictationTray)
     t.__dict__.update(onboarding_in_progress=False, _quitting=False, _service_gen=0,
-                      _restart_pending=False, kills=0, launches=0)
+                      _restarting=False, _restart_pending=False, kills=0, launches=0)
 
-    def end_service():
+    def end_service(then):
+        """The old service ends at once; the tray hears so on its loop."""
         t.kills += 1
-        return True
-    monkeypatch.setattr("tuxtalk.service_launcher.end_dictation_service", end_service)
+        loop.idle_add(then, True)
+    monkeypatch.setattr("tuxtalk.service_launcher.end_in_background", end_service)
     t._launch_service = lambda: setattr(t, "launches", t.launches + 1)
     t.update_status_and_menu = lambda repeat=True: None
     return t
@@ -64,7 +55,7 @@ def run_finish(loop):
 
 
 def test_a_restart_asked_for_during_another_runs_after_it(fake_loop, monkeypatch):
-    t = make_tray(monkeypatch)
+    t = make_tray(monkeypatch, fake_loop)
     t.restart_service(None)
     t.restart_service(None)          # arrives while the first is still running
     assert t.kills == 1
@@ -75,7 +66,7 @@ def test_a_restart_asked_for_during_another_runs_after_it(fake_loop, monkeypatch
 
 
 def test_a_single_restart_does_not_repeat(fake_loop, monkeypatch):
-    t = make_tray(monkeypatch)
+    t = make_tray(monkeypatch, fake_loop)
     t.restart_service(None)
     run_finish(fake_loop)
     assert t.kills == 1 and t.launches == 1 and fake_loop.timers == []

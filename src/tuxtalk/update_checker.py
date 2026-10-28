@@ -849,12 +849,29 @@ def _not_enough_space(src: str, dest_dir: str) -> Optional[str]:
     return None
 
 
+# How long a copy into ~/AppImages waits for another to finish (the
+# first-run copy of a large AppImage on a slow disk).
+INSTALL_WAIT_S = 300
+
+
 def _install_appimage_file(src: str, dest: str = APPIMAGE_PATH) -> None:
     """Copy src onto dest so that dest is always either the old file or the
-    complete new one. The copy goes to a hidden sibling first and is renamed
-    into place: os.replace() unlinks a running AppImage rather than writing
-    into it ("Text file busy"), and a full disk or a quit part-way through
-    leaves dest untouched. Raises on failure, after removing the partial copy."""
+    complete new one. Copies take turns, in the order they began: an update
+    installed while the first-run copy ran was replaced by that older copy
+    when it finished. Raises on failure."""
+    from . import single_instance
+    with single_instance.open_lock("appimage-install.lock") as lock:
+        if not single_instance.claim(lock, wait_s=INSTALL_WAIT_S):
+            raise OSError("another copy into ~/AppImages didn't finish")
+        _copy_into_place(src, dest)
+
+
+def _copy_into_place(src: str, dest: str) -> None:
+    """_install_appimage_file's copy, its lock held. The copy goes to a
+    hidden sibling first and is renamed into place: os.replace() unlinks a
+    running AppImage rather than writing into it ("Text file busy"), and a
+    full disk or a quit part-way through leaves dest untouched; the partial
+    copy is removed."""
     import glob
     import shutil
     import tempfile

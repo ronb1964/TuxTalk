@@ -15,6 +15,16 @@ class TrayAppInstance:
         self.tray = tray
         self.is_recording = False
 
+    def _later(self, action, *args):
+        """*action*(*args) on GTK's thread, unless Quit has begun by then: a
+        call queued just before Quit mustn't open a window or start a
+        service after it."""
+        def run():
+            if not self.tray._quitting:
+                action(*args)
+            return False
+        GLib.idle_add(run)
+
     def get_presets(self):
         """(id, label, description) for the GNOME extension's Performance menu."""
         return [(p.id, p.label, p.description) for p in self.tray._current_presets()]
@@ -29,15 +39,15 @@ class TrayAppInstance:
 
     def start_service(self):
         """Start service via tray."""
-        GLib.idle_add(self.tray.start_service, None)
+        self._later(self.tray.start_service, None)
 
     def stop_service(self):
         """Stop service via tray."""
-        GLib.idle_add(self.tray.stop_service, None)
+        self._later(self.tray.stop_service, None)
 
     def restart_service(self):
         """Restart service via tray."""
-        GLib.idle_add(self.tray.restart_service, None)
+        self._later(self.tray.restart_service, None)
 
     def toggle_recording(self):
         """Toggle recording in the service process via SIGUSR1,
@@ -74,66 +84,66 @@ class TrayAppInstance:
 
     def show_preferences(self):
         """Open preferences via tray."""
-        GLib.idle_add(self.tray.open_preferences, None)
+        self._later(self.tray.open_preferences, None)
 
     def show_update_result(self, result):
         """Show the persistent update-result dialog via the tray (called from
         the GNOME extension's D-Bus CheckForUpdates so the manual check gives a
         real 'click OK' window, not just the fleeting GNOME notification)."""
-        GLib.idle_add(self.tray._show_update_result_dialog, result)
+        self._later(self.tray._show_update_result_dialog, result)
 
     def show_help(self):
         """Show help via tray."""
-        GLib.idle_add(self.tray.show_help, None)
+        self._later(self.tray.show_help, None)
 
     def show_voice_commands(self):
         """Show voice commands quick reference via tray."""
-        GLib.idle_add(self.tray.show_voice_commands, None)
+        self._later(self.tray.show_voice_commands, None)
 
     def show_fix_word(self):
         """Open Fix a Word on the newest dictation (GNOME extension D-Bus)."""
-        GLib.idle_add(self.tray.show_fix_word_dialog, 0)
+        self._later(self.tray.show_fix_word_dialog, 0)
 
     def show_transcribe_file(self):
         """Open Transcribe a File (GNOME extension D-Bus)."""
-        GLib.idle_add(self.tray.open_transcribe_window, None)
+        self._later(self.tray.open_transcribe_window, None)
 
     def show_menu(self):
         """The menu window: TuxTalk opened again (ShowMenu)."""
-        GLib.idle_add(self.tray.show_menu_window)
+        self._later(self.tray.show_menu_window)
 
     def show_about(self):
         """Show about dialog via tray."""
-        GLib.idle_add(self.tray.show_about_dialog, None)
+        self._later(self.tray.show_about_dialog, None)
 
     def show_preferences_stats(self):
         """Open preferences to the Stats tab via tray."""
-        GLib.idle_add(self.tray.open_preferences_stats, None)
+        self._later(self.tray.open_preferences_stats, None)
 
     def show_preferences_updates(self):
         """Open preferences to Updates tab via tray."""
-        GLib.idle_add(self.tray.open_preferences_updates, None)
+        self._later(self.tray.open_preferences_updates, None)
 
     def set_performance_preset(self, preset_id: str):
         """Apply a performance preset via tray (called from GNOME extension D-Bus)."""
-        GLib.idle_add(self.tray.set_performance_preset, preset_id)
+        self._later(self.tray.set_performance_preset, preset_id)
 
     def set_model(self, model_name: str):
         """Change the model via tray (called from GNOME extension D-Bus SetModel)."""
-        GLib.idle_add(self.tray.set_model, model_name)
+        self._later(self.tray.set_model, model_name)
 
     def quit(self):
         """Quit via tray."""
-        GLib.idle_add(self.tray.quit_app, None)
+        self._later(self.tray.quit_app, None)
 
     def uninstall(self):
         """Uninstall TuxTalk (Preferences, tuxtalk --uninstall)."""
-        GLib.idle_add(self.tray.uninstall)
+        self._later(self.tray.uninstall)
 
     def restart_app(self):
         """Restart into a just-installed update (called by
         Preferences, which can't restart the tray itself)."""
-        GLib.idle_add(self.tray.restart_app, None)
+        self._later(self.tray.restart_app, None)
 
     @property
     def config(self):

@@ -38,9 +38,9 @@ def acquire():
 def _give_way_or_exit(lockfile):
     """Another tray holds *lockfile*. A TalkType tray from before the rename
     is stopped, and this returns once its lock is taken. Another TuxTalk
-    shows its menu and this one exits; one that can't may be quitting (it
-    lets go of its D-Bus service first, then waits for its dictation service
-    to finish typing), so its lock is waited for before saying it runs."""
+    shows its menu and this one exits; one that won't may be quitting (it
+    refuses to while it waits for its dictation service to finish typing),
+    so its lock is waited for before saying it runs."""
     from .service_launcher import QUIT_WAIT_S, pre_rename_tray_pids
     old_trays = pre_rename_tray_pids()
     if old_trays:

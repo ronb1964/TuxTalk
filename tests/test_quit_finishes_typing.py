@@ -52,9 +52,10 @@ def test_quitting_types_what_the_worker_still_holds_first(quitting, monkeypatch)
     assert typed == ["See you at noon."]
 
 
-def test_a_recording_under_way_is_stopped_and_kept(quitting, monkeypatch):
-    """Hands-free still listening when Quit was clicked: its words go to
-    Recent Dictations and are typed, as letting go of the key would."""
+def test_a_recording_under_way_is_stopped_as_letting_go_would(quitting, monkeypatch):
+    """Hands-free still listening when Quit was clicked: it goes through the
+    stop letting go of the key takes (pipeline.stop_recording, which types it
+    and adds it to Recent Dictations), not dropped with the process."""
     cfg, svc = quitting
     stopped = []
     monkeypatch.setattr(rs.state, "is_recording", True)

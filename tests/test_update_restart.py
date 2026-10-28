@@ -25,7 +25,8 @@ SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tuxtalk"
 
 @pytest.fixture
 def appimages(tmp_path, monkeypatch):
-    """Point ~/AppImages at a temp folder."""
+    """Point ~/AppImages, and the lock copies into it take turns on, at a temp folder."""
+    monkeypatch.setattr("tuxtalk.single_instance.runtime_dir", lambda: str(tmp_path))
     folder = tmp_path / "AppImages"
     monkeypatch.setattr(uc, "APPIMAGE_DIR", str(folder))
     monkeypatch.setattr(uc, "APPIMAGE_PATH", str(folder / "TuxTalk.AppImage"))
@@ -42,6 +43,37 @@ def _download(tmp_path, data=b"new version"):
 
 
 # ---- installing ---------------------------------------------------------
+
+def test_an_update_waits_for_the_first_run_copy_to_finish(tmp_path, appimages, monkeypatch):
+    """The first-run copy (the version first run started from) finished after
+    the update had gone in and replaced it: the restart started the old
+    version again."""
+    import shutil
+    import threading
+    copying, may_finish = threading.Event(), threading.Event()
+    real_copy = shutil.copy2
+
+    def slow_first_copy(src, dst, **kw):
+        if "first-run" in str(src):
+            copying.set()
+            assert may_finish.wait(10)
+        return real_copy(src, dst, **kw)
+    monkeypatch.setattr(shutil, "copy2", slow_first_copy)
+    first = tmp_path / "first-run.AppImage"
+    first.write_bytes(b"old version")
+    dest = str(appimages / "TuxTalk.AppImage")
+    copy = threading.Thread(target=uc._install_appimage_file, args=(str(first), dest))
+    copy.start()
+    assert copying.wait(10)
+    update = threading.Thread(target=uc._install_appimage_file, args=(_download(tmp_path), dest))
+    update.start()
+    update.join(0.5)
+    assert update.is_alive()                # waits its turn
+    may_finish.set()
+    for t in (copy, update):
+        t.join(10)
+    assert (appimages / "TuxTalk.AppImage").read_bytes() == b"new version"
+
 
 def test_install_puts_the_update_in_place_without_restarting(tmp_path, appimages):
     dest = appimages / "TuxTalk.AppImage"
@@ -314,12 +346,12 @@ def test_the_new_copy_starts_only_once_the_old_tray_has_gone(tmp_path):
     lock, exited, and left nothing running. Run for real, against a stand-in
     old tray."""
     import subprocess
-    old = subprocess.Popen(["sleep", "1.5"])
+    old = subprocess.Popen(["sleep", "11"])     # past the old script's 10 s
     marker = tmp_path / "new-copy-started"
     script = subprocess.Popen(["/bin/sh", "-c",
                                uc.handover_script(old.pid, f"touch {marker}")])
     with pytest.raises(subprocess.TimeoutExpired):
-        script.wait(timeout=0.8)                # still waiting for the old tray
+        script.wait(timeout=10.5)               # still waiting for the old tray
     assert not marker.exists() and old.poll() is None
     old.wait()
     assert script.wait(timeout=5) == 0 and marker.exists()
@@ -450,7 +482,7 @@ def test_the_tray_answers_restart_app(monkeypatch):
     monkeypatch.setattr(tray, "DBUS_AVAILABLE", True)
     monkeypatch.setattr(tray, "TuxTalkDBusService", registered.append)
     monkeypatch.setattr(tray.GLib, "idle_add", lambda fn, *args: fn(*args))
-    stub = types.SimpleNamespace(restart_app=restarted.append,
+    stub = types.SimpleNamespace(restart_app=restarted.append, _quitting=False,
                                  _start_kwin_focus_provider=lambda: None)
     tray.DictationTray._init_dbus_service(stub)
     registered[0].restart_app()

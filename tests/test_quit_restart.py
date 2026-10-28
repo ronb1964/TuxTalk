@@ -22,7 +22,8 @@ from tuxtalk import tray as tray_mod
 
 
 class Processes:
-    """The services find_service_pids sees, on a clock the waits advance."""
+    """The services find_service_pids sees, held as end_processes holds
+    them, on a clock its waits advance."""
 
     def __init__(self, monkeypatch, pids, ignores_sigterm=(), unkillable=()):
         self.pids = list(pids)
@@ -30,9 +31,24 @@ class Processes:
         self.unkillable = set(unkillable)
         self.sent = []
         self.now = 0.0
-        self.appear = {}            # time -> pid started then (a racing restart)
+        self.appear = {}            # time -> pid started then (Dictation on again)
+        procs = self
+
+        class Held:
+            def __init__(self, pid):
+                self.pid = pid
+
+            def send(self, sig):
+                procs.signal(self.pid, sig)
+
+            def running(self):
+                procs.find()
+                return self.pid in procs.pids
+
+            def close(self):
+                pass
         monkeypatch.setattr(service_launcher, "find_service_pids", self.find)
-        monkeypatch.setattr(service_launcher, "_signal", self.signal)
+        monkeypatch.setattr(service_launcher, "_Process", Held)
         monkeypatch.setattr(service_launcher, "release_desktop_hotkeys", lambda: None)
         monkeypatch.setattr(service_launcher.time, "monotonic", lambda: self.now)
         monkeypatch.setattr(service_launcher.time, "sleep", self.sleep)
@@ -81,6 +97,18 @@ def test_a_service_that_survives_sigkill_is_reported(monkeypatch):
     assert service_launcher.end_dictation_service(wait_s=1) is False
 
 
+def test_a_real_process_is_held_until_it_ends():
+    """Signalled through its pidfd, and seen gone once it exits, though as
+    our child it stays a zombie until reaped."""
+    child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    try:
+        assert service_launcher.end_processes([child.pid], wait_s=5) is True
+        assert child.poll() == -signal.SIGTERM
+    finally:
+        child.kill()
+        child.wait()
+
+
 # ---- the tray --------------------------------------------------------------
 
 class Indicator:
@@ -96,6 +124,7 @@ def _bare_tray(**attrs):
     t = tray_mod.DictationTray.__new__(tray_mod.DictationTray)
     t.onboarding_in_progress = False
     t._service_gen = 0
+    t._restarting = False
     t._restart_pending = False
     t._quitting = False
     t._uninstalling = False
@@ -242,6 +271,7 @@ def test_uninstall_waits_for_the_service_while_its_window_draws(slow_service, mo
     """It waited on GTK's thread (the "Uninstalling" window couldn't draw)
     and killed the service after 3 s, mid-dictation."""
     from tuxtalk import uninstall
+    monkeypatch.setattr(uninstall, "_end_service", lambda: service_launcher.end_dictation_service())
     monkeypatch.setattr(uninstall, "_tuxtalk_pids", lambda engines: [])
     monkeypatch.setattr(uninstall.uinput_helper, "stop_ydotoold_we_started", lambda: None)
     plan = types.SimpleNamespace(home=Path("/nonexistent-home"), ydotoold_unit=None)
@@ -258,3 +288,29 @@ def test_uninstall_waits_for_the_service_while_its_window_draws(slow_service, mo
     finally:
         GLib.source_remove(source)
     assert len(ticks) >= 3 and slow_service.waited_on[0] is not threading.main_thread()
+
+
+def test_uninstall_stops_the_tray_and_service_before_the_root_step(monkeypatch):
+    """A restart queued in the tray started a new service while the package
+    was being removed; cancelled at the password prompt, everything is as
+    it was, dictation included."""
+    from tuxtalk import uninstall
+    order = []
+    monkeypatch.setattr(uninstall.update_checker, "get_install_type", lambda: "deb")
+    monkeypatch.setattr(uninstall, "find", lambda *a, **k: types.SimpleNamespace(needs_root=True))
+    monkeypatch.setattr(uninstall, "_ask", lambda plan: (False, False, False))
+    monkeypatch.setattr(uninstall, "_working_window",
+                        lambda: types.SimpleNamespace(destroy=lambda: None))
+    monkeypatch.setattr(uninstall, "_wait_for", lambda work: work())
+    monkeypatch.setattr(uninstall, "_end_service", lambda: order.append("service ends") or True)
+    monkeypatch.setattr(uninstall, "_remove_as_root",
+                        lambda plan, leave_group: order.append("root step") and None)
+    monkeypatch.setattr(service_launcher, "find_service_pids", lambda: [42])
+    monkeypatch.setattr(service_launcher, "launch_dictation_service",
+                        lambda: order.append("dictation back on"))
+    tray = uninstall.TrayParts(stop=lambda: order.append("tray stops"),
+                               resume=lambda: order.append("tray resumes"),
+                               shut_down=lambda: order.append("tray shuts down"))
+    assert uninstall.run(tray) is False
+    assert order == ["tray stops", "service ends", "root step", "tray resumes",
+                     "dictation back on"]

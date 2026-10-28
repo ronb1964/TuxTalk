@@ -1,7 +1,7 @@
 {
  "files": {
-  "tray.py": 2143,
-  "welcome_dialog.py": 3097
+  "tray.py": 2137,
+  "welcome_dialog.py": 3089
  },
  "findings": {
   "ai_cleanup.py::<module>::long_line": 4,
@@ -454,7 +454,7 @@
    "lines": 191
   },
   "welcome_dialog.py::show_hotkey_test_dialog": {
-   "lines": 396
+   "lines": 388
   },
   "welcome_dialog.py::show_setup_complete_dialog": {
    "decisions": 19,

@@ -43,10 +43,11 @@ MESSAGES = {
     "old": "Sent the toggle. This TuxTalk is an older version, so a toggle sent "
            "while it loads its speech model may be lost; restart it to update.",
     "unknown": "TuxTalk didn't understand that command.",
+    "quitting": "TuxTalk is quitting. Open it again, then try again.",
 }
 
 # Statuses where nothing happened that the caller asked for.
-_FAILED = {"setup", "starting", "unknown"}
+_FAILED = {"setup", "starting", "unknown", "quitting"}
 
 
 # tuxtalk --open NAME (and --quit): the running TuxTalk's D-Bus method for

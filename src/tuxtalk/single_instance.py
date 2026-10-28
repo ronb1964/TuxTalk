@@ -10,6 +10,11 @@ import stat
 import time
 
 
+# Where the private fallback folder goes: fixed, not TMPDIR, so every copy
+# started from anywhere (a launcher, a terminal) meets the same locks.
+FALLBACK_ROOT = "/tmp"
+
+
 def runtime_dir() -> str:
     """The user's runtime folder, where the lock files go.
 
@@ -28,27 +33,36 @@ def runtime_dir() -> str:
     fid = os.environ.get("FLATPAK_ID")
     if fid:
         app_dir = os.path.join(base, "app", fid)
-        if os.path.isdir(app_dir):
+        if _private(app_dir):
             return app_dir
-    if os.path.isdir(base):
+    if _private(base):
         return base
     return _private_fallback()
 
 
+def _private(path) -> bool:
+    """Whether *path* is a folder of this user's that no one else can open
+    (as the runtime folder is): a lock there can't be held or swapped by
+    another user."""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return False
+    return (stat.S_ISDIR(st.st_mode) and st.st_uid == os.getuid()
+            and not st.st_mode & (stat.S_IRWXG | stat.S_IRWXO))
+
+
 def _private_fallback() -> str:
-    """tuxtalk-<uid> in the temporary folder, made readable by this user
-    only. Raises OSError when it's a link, someone else's, or open to
-    others: a lock there could be held or swapped by another user. Lock
-    files in it are never deleted (a waiter would lock a deleted file)."""
-    import tempfile
-    path = os.path.join(tempfile.gettempdir(), f"tuxtalk-{os.getuid()}")
+    """/tmp/tuxtalk-<uid>, the same for every copy whatever its TMPDIR, made
+    readable by this user only. Raises OSError when it's a link or not
+    private. Lock files in it are never deleted (a waiter would lock a
+    deleted file)."""
+    path = os.path.join(FALLBACK_ROOT, f"tuxtalk-{os.getuid()}")
     try:
         os.mkdir(path, 0o700)
     except FileExistsError:
         pass
-    st = os.lstat(path)
-    if (not stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid()
-            or st.st_mode & (stat.S_IRWXG | stat.S_IRWXO)):
+    if os.path.islink(path) or not _private(path):
         raise OSError(f"{path} isn't a private folder of this user's own")
     return path
 
@@ -65,6 +79,10 @@ def open_lock(name: str):
     """
     fd = os.open(os.path.join(runtime_dir(), name),
                  os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    st = os.fstat(fd)
+    if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid():
+        os.close(fd)
+        raise OSError(f"{name} isn't a file of this user's own")
     lockfile = os.fdopen(fd, "r+")
     flags = fcntl.fcntl(lockfile.fileno(), fcntl.F_GETFD)
     fcntl.fcntl(lockfile.fileno(), fcntl.F_SETFD, flags | fcntl.FD_CLOEXEC)

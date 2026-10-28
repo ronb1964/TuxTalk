@@ -335,3 +335,18 @@ def test_a_stream_is_on_record_before_it_is_turned_down(tmp_path):
     pactl = Watching({7: {"pid": 100, "volumes": [65536]}})
     _ducker(tmp_path, pactl)._duck_now()
     assert seen[0]["7"] == {"original": [65536], "lowered": [32768], "app": "app7"}
+
+
+def test_a_turn_down_that_timed_out_but_went_through_stays_on_record(tmp_path):
+    """pactl gave up waiting, but the sound server had lowered the stream:
+    the record was dropped, and nothing could put it back."""
+    class LateAnswer(FakePactl):
+        def __call__(self, cmd, **kw):
+            done = super().__call__(cmd, **kw)
+            if cmd[1] == "set-sink-input-volume":
+                return subprocess.CompletedProcess(cmd, 1, "", "Timeout")
+            return done
+    pactl = LateAnswer({7: {"pid": 100, "volumes": [65536]}})
+    d = _ducker(tmp_path, pactl)
+    d._duck_now()
+    assert json.loads((tmp_path / "ducked.json").read_text())["7"]["lowered"] == [32768]

@@ -25,13 +25,12 @@ import os
 import pwd
 import re
 import shutil
-import signal
 import stat
 import subprocess
 import threading
-import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Callable, NamedTuple
 
 import gi
 
@@ -414,8 +413,9 @@ def _tuxtalk_pids(engines):
             exe = os.path.realpath(f"/proc/{pid}/exe")
         except OSError:
             continue
-        module = any(a == "-m" and b.startswith(("tuxtalk.", "talktype."))
-                     for a, b in zip(argv, argv[1:]))
+        target = service_launcher.interpreter_target(argv)
+        module = bool(target) and target[0] == "module" and target[1].startswith(
+            ("tuxtalk.", "talktype."))
         if (module or exe.startswith(engines)) and not _is_dev(pid):
             pids.append(pid)
     return pids
@@ -430,42 +430,44 @@ def _is_dev(pid):
         return False
 
 
-def stop_tuxtalk(plan, stop_tray_parts=None):
+class TrayParts(NamedTuple):
+    """The running tray's part in an uninstall, when it runs inside one."""
+    stop: Callable          # refuse every action and start nothing (before the service goes)
+    resume: Callable        # the uninstall didn't happen: as before
+    shut_down: Callable     # its D-Bus service and KWin script, once the service has gone
+
+
+def _end_service():
+    """End the dictation service (it types what it holds first), but never
+    a development copy's; True when none of ours is left. Off GTK's thread."""
+    pids = [pid for pid in service_launcher.find_service_pids() if not _is_dev(pid)]
+    service_launcher.release_desktop_hotkeys()
+    return service_launcher.end_processes(pids, service_launcher.QUIT_WAIT_S)
+
+
+def stop_tuxtalk(plan, shut_down=None):
     """Stop everything TuxTalk runs, so nothing writes a file back after
-    it's deleted. *stop_tray_parts* is the tray's own shutdown when this runs
-    inside it. The waits run off GTK's thread (_wait_for), so the working
-    window keeps drawing; the service gets its time to type what it holds."""
-    if stop_tray_parts is not None:
-        stop_tray_parts()
+    it's deleted. *shut_down* is the tray's own (TrayParts.shut_down) when
+    this runs inside it. The waits run off GTK's thread (_wait_for), so the
+    working window keeps drawing. Raises when a dictation service won't stop:
+    its files mustn't go from under it."""
+    if not _wait_for(_end_service):
+        raise RuntimeError("TuxTalk's dictation service wouldn't stop")
+    if shut_down is not None:
+        shut_down()
     _wait_for(lambda: _stop_processes(plan))
 
 
 def _stop_processes(plan):
-    """stop_tuxtalk's waiting half: a dictation service (run() ended it
-    before the root step; one started since quits in its own time,
-    service_launcher.end_dictation_service), then every other TuxTalk process
-    and the old ydotoold service."""
-    service_launcher.end_dictation_service()       # also lets KDE have the hotkeys back
+    """stop_tuxtalk's waiting half: every other TuxTalk process and the old
+    ydotoold service."""
     uinput_helper.stop_ydotoold_we_started()
     # Each engine folder, not the whole data folder: that may be a link into
     # a folder where other programs run from.
     data_dir = plan.home / ".local" / "share" / config.DATA_DIR
-    pids = _tuxtalk_pids(tuple(os.path.realpath(data_dir / name) + os.sep
-                               for name in ENGINE_FOLDERS))
-    for pid in pids:
-        try:
-            os.kill(pid, signal.SIGTERM)
-        except OSError:
-            pass
-    deadline = time.monotonic() + 3
-    while pids and time.monotonic() < deadline:
-        time.sleep(0.1)
-        pids = [pid for pid in pids if os.path.exists(f"/proc/{pid}")]
-    for pid in pids:
-        try:
-            os.kill(pid, signal.SIGKILL)
-        except OSError:
-            pass
+    service_launcher.end_processes(
+        _tuxtalk_pids(tuple(os.path.realpath(data_dir / name) + os.sep
+                            for name in ENGINE_FOLDERS)), 3)
     if plan.ydotoold_unit is not None:
         for args in (["disable", "--now", "ydotoold.service"], ["daemon-reload"]):
             subprocess.run(["systemctl", "--user", *args], capture_output=True, timeout=15)
@@ -777,11 +779,11 @@ def _remove_as_root(plan, leave_group):
     return None
 
 
-def _remove_the_rest(plan, delete_personal, delete_shared, stop_tray_parts, result):
+def _remove_the_rest(plan, delete_personal, delete_shared, tray, result):
     """Stop TuxTalk, undo its desktop changes and delete its files, adding
     what's left to *result*."""
     home = plan.home
-    stop_tuxtalk(plan, stop_tray_parts)
+    stop_tuxtalk(plan, tray.shut_down if tray else None)
     result.not_removed += undo_desktop_changes(plan)
     # Looked for again: stopping may have written a file (the stats).
     again = find(home, plan.install_type, appimage=update_checker.get_running_appimage_path())
@@ -794,10 +796,10 @@ def _remove_the_rest(plan, delete_personal, delete_shared, stop_tray_parts, resu
     _wait_for(_refresh_menus)
 
 
-def run(stop_tray_parts=None):
+def run(tray=None):
     """Ask, then uninstall. True when TuxTalk was uninstalled, if not
     always all of it, and the caller should quit; False when nothing
-    changed."""
+    changed. *tray* (TrayParts) when the running tray asks."""
     install_type = update_checker.get_install_type()
     if install_type in ("dev", "flatpak"):
         _tell(Gtk.MessageType.INFO, "Not for this copy of TuxTalk",
@@ -812,26 +814,15 @@ def run(stop_tray_parts=None):
     logger.info(f"Uninstalling TuxTalk ({install_type}); settings "
                 + ("deleted" if delete_personal else "kept") + ", shared models "
                 + ("deleted" if delete_shared else "kept"))
-
+    if tray:
+        tray.stop()
     window = _working_window()
     try:
-        # The dictation service first, before the package and the hotkey
-        # helper it runs on go: it types what it holds, then quits.
-        was_running = bool(service_launcher.find_service_pids())
-        if not _wait_for(service_launcher.end_dictation_service):
-            _tell(Gtk.MessageType.ERROR, "TuxTalk couldn't uninstall",
-                  "Nothing was removed: TuxTalk's dictation service wouldn't stop. "
-                  "Restart the computer, then try Uninstall TuxTalk… again.")
+        result = _remove_root_part(plan, leave_group, tray)
+        if result is None:
             return False
-        result = Result()
-        if plan.needs_root:
-            result = _remove_as_root(plan, leave_group)
-            if result is None:
-                if was_running:
-                    service_launcher.launch_dictation_service()     # dictation back on
-                return False
         try:
-            _remove_the_rest(plan, delete_personal, delete_shared, stop_tray_parts, result)
+            _remove_the_rest(plan, delete_personal, delete_shared, tray, result)
         except Exception as e:
             # The program, the helper or the tray may be gone already: going
             # back to a half-stopped TuxTalk would be worse than saying so.
@@ -846,3 +837,33 @@ def run(stop_tray_parts=None):
           done_heading(result), done_text(plan, delete_personal, delete_shared, result),
           markup=True)
     return True
+
+
+def _remove_root_part(plan, leave_group, tray):
+    """End the dictation service, then run the root step (the package, the
+    hotkey helper) if there is one: the service runs on those, and types
+    what it holds first. Its Result, or None when nothing was removed (the
+    service wouldn't stop, or the root step didn't run), with TuxTalk as it
+    was before."""
+    was_running = bool(service_launcher.find_service_pids())
+    if not _wait_for(_end_service):
+        _tell(Gtk.MessageType.ERROR, "TuxTalk couldn't uninstall",
+              "Nothing was removed: TuxTalk's dictation service wouldn't stop. "
+              "Restart the computer, then try Uninstall TuxTalk… again.")
+        _resume(tray, False)
+        return None
+    if not plan.needs_root:
+        return Result()
+    result = _remove_as_root(plan, leave_group)
+    if result is None:
+        _resume(tray, was_running)
+    return result
+
+
+def _resume(tray, start_dictation):
+    """Back as before an uninstall that didn't happen: the tray takes
+    actions again, and dictation runs again if it ran."""
+    if tray:
+        tray.resume()
+    if start_dictation:
+        service_launcher.launch_dictation_service()

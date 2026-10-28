@@ -12,14 +12,11 @@ from tuxtalk import single_instance
 
 @pytest.fixture
 def no_runtime_folder(tmp_path, monkeypatch):
-    """No XDG_RUNTIME_DIR folder; the temporary folder is the test's."""
-    import tempfile
+    """No XDG_RUNTIME_DIR folder; the fallback's place is the test's."""
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "missing"))
     monkeypatch.delenv("FLATPAK_ID", raising=False)
-    temp = tmp_path / "tmp"
-    temp.mkdir()
-    monkeypatch.setattr(tempfile, "gettempdir", lambda: str(temp))
-    return temp / f"tuxtalk-{os.getuid()}"
+    monkeypatch.setattr(single_instance, "FALLBACK_ROOT", str(tmp_path))
+    return tmp_path / f"tuxtalk-{os.getuid()}"
 
 
 def test_without_a_runtime_folder_locks_go_to_a_private_one(no_runtime_folder):
@@ -62,6 +59,16 @@ def test_a_linked_lock_file_is_refused(tmp_path, monkeypatch):
 
 
 def test_the_runtime_folder_is_used_when_there_is_one(tmp_path, monkeypatch):
+    tmp_path.chmod(0o700)
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     assert single_instance.runtime_dir() == str(tmp_path)
+
+
+def test_a_runtime_folder_others_can_open_is_not_used(no_runtime_folder, tmp_path, monkeypatch):
+    """A misconfigured, shared runtime folder: another user could swap the lock."""
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    shared.chmod(0o777)
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(shared))
+    assert single_instance.runtime_dir() == str(no_runtime_folder)

@@ -91,11 +91,14 @@ def _install_signal_handlers():
     """Handle SIGUSR1 and SIGTERM, and ignore SIGUSR2, from the very start:
     unhandled, the first two end the process, and the tray and Preferences
     can send them while the model is still loading (an older Preferences
-    sent SIGUSR2 for hotkey test mode). SIGALRM gets its default action and
+    sent SIGUSR2 for hotkey test mode). Ctrl+C and a terminal hanging up
+    (SIGINT, SIGHUP: the tray's terminal reaches its service too) quit as
+    SIGTERM does, typing what's held. SIGALRM gets its default action and
     is unblocked, whatever this process inherited: it is the quit's deadline."""
     signal.signal(signal.SIGUSR1, _handle_sigusr1)
     signal.signal(signal.SIGUSR2, signal.SIG_IGN)
-    signal.signal(signal.SIGTERM, _handle_sigterm)
+    for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        signal.signal(sig, _handle_sigterm)
     signal.signal(signal.SIGALRM, signal.SIG_DFL)
     signal.pthread_sigmask(signal.SIG_UNBLOCK, {signal.SIGALRM})
 

@@ -9,9 +9,12 @@ indicator could not be positioned.
 
 import logging
 import os
+import re
+import select
 import signal
 import subprocess
 import sys
+import threading
 import time
 
 logger = logging.getLogger(__name__)
@@ -87,6 +90,34 @@ _DEV_SITE_PACKAGES = (
 )
 
 
+# Python's own flags TuxTalk could be started with, ahead of -m or the
+# script; anything else there (-c, -, --) makes what follows mere data.
+_PYTHON_FLAGS = re.compile(r"-[bBdEiIOPqsSuvx]+")
+
+
+def interpreter_target(argv):
+    """("module", name) for ``<python> -m name``, ("script", file name) for
+    ``<python> path``, else None. Only the interpreter's own flags (and -X's
+    or -W's value) may come first: ``python3 -c '...' -m tuxtalk.app`` runs
+    '...', not TuxTalk."""
+    argv = list(argv)
+    if not argv or not os.path.basename(argv[0]).startswith("python"):
+        return None
+    args = argv[1:]
+    while args and args[0] != "-m":
+        if args[0] in ("-X", "-W"):
+            args = args[2:]
+        elif _PYTHON_FLAGS.fullmatch(args[0]):
+            args = args[1:]
+        else:
+            break
+    if args[:1] == ["-m"]:
+        return ("module", args[1]) if len(args) > 1 else None
+    if args and not args[0].startswith("-"):
+        return ("script", os.path.basename(args[0]))
+    return None
+
+
 def is_service_argv(argv) -> bool:
     """True if *argv* (a process's argument list) is the dictation service.
 
@@ -96,41 +127,25 @@ def is_service_argv(argv) -> bool:
       * the ``dictate`` console script from a pip install, which the kernel
         runs as ``<python> /path/bin/dictate`` (or ``/path/bin/dictate``).
 
-    So this compares whole arguments, never substrings of the command line,
-    and only where a Python interpreter reads them: its own options first,
-    then ``-m`` and the module, or the script. A substring match, or ``-m
-    tuxtalk.app`` anywhere, would accept ``bash -c "pgrep -f tuxtalk.app"``
-    or ``python3 -c '...' -m tuxtalk.app``, and the tray would signal it:
-    SIGUSR1 kills a process that doesn't handle it, and a quit that runs
-    long ends in SIGKILL. Exact arguments also keep the tray safe: "-m
-    tuxtalk.tray" and bin/dictate-tray never match.
+    So this compares whole arguments where an interpreter reads them
+    (interpreter_target), never substrings: ``bash -c "pgrep -f
+    tuxtalk.app"`` or ``python3 -c '...' -m tuxtalk.app`` would be signalled
+    (SIGUSR1 kills a process that doesn't handle it, and a quit that runs long
+    ends in SIGKILL). "-m tuxtalk.tray" and bin/dictate-tray never match.
+    talktype.app: the service from before the 0.15.0 rename, which a 0.14.x
+    in-app update leaves running (it holds the shared lock).
     """
     argv = list(argv)
-    if not argv:
-        return False
-    program = os.path.basename(argv[0])
-    if program == "dictate":
+    if argv and os.path.basename(argv[0]) == "dictate":
         return True
-    if not program.startswith("python"):
-        return False
-    args = argv[1:]
-    while args and args[0].startswith("-") and args[0] != "-m":
-        # The interpreter's own options (-I, -u), and -X's or -W's value.
-        args = args[2:] if args[0] in ("-X", "-W") else args[1:]
-    if args[:1] == ["-m"]:
-        # talktype.app: the service from before the 0.15.0 rename, which a
-        # 0.14.x in-app update leaves running (it holds the shared lock).
-        return args[1:2] in (["tuxtalk.app"], ["talktype.app"])
-    # The script the interpreter runs; anywhere else "dictate" is just a
-    # file another program was handed (`vim .../bin/dictate`).
-    return bool(args) and os.path.basename(args[0]) == "dictate"
+    return interpreter_target(argv) in (("module", "tuxtalk.app"), ("module", "talktype.app"),
+                                        ("script", "dictate"))
 
 
 def is_pre_rename_service_argv(argv) -> bool:
     """True for a dictation service from before the 0.15.0 rename
     (``-m talktype.app``): old code that should give way to the new version."""
-    argv = list(argv)
-    return any(a == "-m" and b == "talktype.app" for a, b in zip(argv, argv[1:]))
+    return interpreter_target(argv) == ("module", "talktype.app")
 
 
 def pre_rename_service_pids():
@@ -142,8 +157,7 @@ def pre_rename_service_pids():
 def is_pre_rename_tray_argv(argv) -> bool:
     """True for a tray from before the 0.15.0 rename (``-m talktype.tray``).
     It shares TuxTalk's single-instance lock, so it keeps TuxTalk from starting."""
-    argv = list(argv)
-    return any(a == "-m" and b == "talktype.tray" for a, b in zip(argv, argv[1:]))
+    return interpreter_target(argv) == ("module", "talktype.tray")
 
 
 def pre_rename_tray_pids():
@@ -270,8 +284,7 @@ def stop_dictation_service(force: bool = False) -> None:
     release_desktop_hotkeys()
 
 
-# A service still running QUIT_WAIT_S after SIGTERM gets SIGKILL, and this
-# long to go.
+# A process still running after its wait gets SIGKILL, and this long to go.
 KILL_WAIT_S = 2.0
 
 
@@ -280,36 +293,127 @@ def end_dictation_service(wait_s=QUIT_WAIT_S) -> bool:
     False when one survives even SIGKILL (stuck in the kernel). SIGTERM
     first, so it types what it holds; SIGKILL to what's left after *wait_s*:
     an older service with no deadline of its own, or one whose deadline was
-    never set (native code held its main thread). A service started after
-    this began isn't touched: Dictation turned on again meanwhile. Each scan
-    reads /proc again, so a PID taken by another program is never signalled.
-    It sleeps: never on a GTK main thread."""
-    ending = set(find_service_pids())
-    stop_dictation_service()
+    never set (native code held its main thread). Only the services found
+    here: one started meanwhile (Dictation turned on again) is left alone.
+    The desktop gets its hotkeys back at once: the service's own exit hooks
+    run only after it has typed. It sleeps: never on a GTK main thread."""
+    pids = find_service_pids()
+    release_desktop_hotkeys()
+    return end_processes(pids, wait_s)
+
+
+def end_in_background(then) -> None:
+    """end_dictation_service on a thread of its own, then *then*(whether
+    the services have gone) on GTK's main loop: the tray's menu mustn't wait."""
+    from gi.repository import GLib
+
+    def run():
+        try:
+            ended = end_dictation_service()
+        except Exception as e:
+            logger.error(f"Could not stop the dictation service: {e}", exc_info=True)
+            ended = False
+        GLib.idle_add(then, ended)
+    threading.Thread(target=run, daemon=True, name="end-service").start()
+
+
+def end_processes(pids, wait_s) -> bool:
+    """SIGTERM *pids*, wait up to *wait_s* for them to exit, then SIGKILL
+    what's left and wait KILL_WAIT_S; False when one is still there. Each is
+    held from the start (_Process), so a PID another program takes meanwhile
+    is never signalled. It sleeps: never on a GTK main thread."""
+    procs = [_Process(pid) for pid in pids]
+    try:
+        for proc in procs:
+            proc.send(signal.SIGTERM)
+        if _wait_for_exit(procs, wait_s):
+            return True
+        logger.warning("A TuxTalk process didn't quit in time; ending it")
+        for proc in procs:
+            proc.send(signal.SIGKILL)
+        if _wait_for_exit(procs, KILL_WAIT_S):
+            return True
+        logger.error("A TuxTalk process is still running after SIGKILL")
+        return False
+    finally:
+        for proc in procs:
+            proc.close()
+
+
+def _wait_for_exit(procs, wait_s) -> bool:
+    """Whether every one of *procs* has exited within *wait_s* seconds."""
     deadline = time.monotonic() + wait_s
-    while ending and time.monotonic() < deadline:
-        time.sleep(0.1)
-        ending &= set(find_service_pids())
-    if not ending:
-        return True
-    logger.warning("The dictation service didn't quit in time; ending it")
-    for pid in ending & set(find_service_pids()):
-        _signal(pid, signal.SIGKILL)
-    deadline = time.monotonic() + KILL_WAIT_S
-    while ending & set(find_service_pids()):
+    while any(proc.running() for proc in procs):
         if time.monotonic() >= deadline:
-            logger.error("A dictation service is still running after SIGKILL")
             return False
         time.sleep(0.1)
     return True
+
+
+class _Process:
+    """A process to end, held by a pidfd where the kernel has them (5.3 on):
+    signals reach that process even if its PID is reused. Where there are
+    none (an old kernel, a sandbox that blocks them), by PID."""
+
+    def __init__(self, pid):
+        self.pid = pid
+        self.fd = None
+        self.gone = False
+        try:
+            self.fd = os.pidfd_open(pid)
+        except ProcessLookupError:
+            self.gone = True
+        except OSError as e:
+            logger.debug(f"No pidfd for {pid}, signalling it by PID: {e}")
+
+    def send(self, sig) -> None:
+        """Send *sig*, unless the process has gone."""
+        if self.gone:
+            return
+        try:
+            if self.fd is None:
+                os.kill(self.pid, sig)
+            else:
+                signal.pidfd_send_signal(self.fd, sig)
+        except ProcessLookupError:
+            self.gone = True
+        except OSError as e:
+            logger.warning(f"Could not signal process {self.pid}: {e}")
+
+    def running(self) -> bool:
+        """Whether it hasn't exited. A child that exited is a zombie until
+        reaped, and still takes signals: the pidfd turns readable at exit."""
+        if self.gone:
+            return False
+        if self.fd is not None:
+            self.gone = bool(select.select([self.fd], [], [], 0)[0])
+        else:
+            self.gone = _exited(self.pid)
+        return not self.gone
+
+    def close(self) -> None:
+        if self.fd is not None:
+            os.close(self.fd)
+            self.fd = None
+
+
+def _exited(pid) -> bool:
+    """Whether *pid* is gone or a zombie, read from /proc."""
+    try:
+        with open(f"/proc/{pid}/stat") as f:
+            return f.read().rsplit(")", 1)[1].split()[0] == "Z"
+    except (OSError, IndexError):
+        return True
 
 
 def _signal(pid, sig) -> None:
     """Send *sig* to *pid*, which may have exited since it was found."""
     try:
         os.kill(pid, sig)
-    except OSError:
+    except ProcessLookupError:
         pass
+    except OSError as e:
+        logger.warning(f"Could not signal process {pid}: {e}")
 
 
 def release_desktop_hotkeys() -> None:
