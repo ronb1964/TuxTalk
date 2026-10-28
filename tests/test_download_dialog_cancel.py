@@ -157,3 +157,34 @@ def test_work_that_cant_stop_offers_no_cancel_and_isnt_called_cancelled():
         assert not install.cancelled and not install.cancel_event.is_set()
     finally:
         frame.destroy()
+
+
+def test_escape_doesnt_close_the_window_on_work_that_cant_stop(monkeypatch):
+    """Escape or the X ended the window while the extension went on
+    installing, and its result came back as not done."""
+    from gi.repository import Gtk
+    install = DownloadTask(name="GNOME Extension", size_text="~10KB",
+                           download_func=lambda cb, ev: True, can_stop=False)
+    dlg = UnifiedDownloadDialog(title="t")
+    dlg.add_task(install)
+    answers = []
+
+    class Window:
+        def show_all(self):
+            pass
+
+        def run(self):
+            if not answers:                      # Escape, mid-install
+                answers.append("escape")
+                return Gtk.ResponseType.DELETE_EVENT
+            install.completed = install.success = True   # it finishes...
+            answers.append("closed when done")           # ...and the timer closes it
+            return Gtk.ResponseType.OK
+
+        def destroy(self):
+            pass
+    monkeypatch.setattr(dlg, "_build_dialog", lambda: setattr(dlg, "dialog", Window()))
+    monkeypatch.setattr(dlg, "_run_task", lambda task: None)
+    results = dlg.run()
+    assert answers == ["escape", "closed when done"]
+    assert results["GNOME Extension"]["success"] is True

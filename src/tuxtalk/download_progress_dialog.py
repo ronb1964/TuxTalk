@@ -354,10 +354,14 @@ class UnifiedDownloadDialog:
         for task in self.tasks:
             self._run_task(task)
 
-        # Run the dialog (blocks until closed)
-        self.dialog.run()
-        # Whatever closed it — the X, Escape, or a button — nothing is left to
-        # show progress in, so no download may outlive it.
+        # Run the dialog until it closes. Work that can't stop (the GNOME
+        # extension's install) keeps it open through the X or Escape: closed
+        # early, its result would be lost while the work went on.
+        while (self.dialog.run() != Gtk.ResponseType.OK
+               and any(not t.completed and not t.can_stop for t in self.tasks)):
+            pass
+        # Whatever closed it — the X, Escape, or the closing timer — nothing is
+        # left to show progress in, so no download may outlive it.
         self._cancel_unfinished_tasks()
         self.dialog.destroy()
         # Cancelled downloads still report back for a moment; with no widgets
