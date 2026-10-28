@@ -432,7 +432,7 @@ class AdvancedTab(Tab):
         grid.attach(follow_check, 0, row, 2, 1)
         row += 1
 
-        # How these work (Help, on its Labs tab) and Send feedback.
+        # How these work (Help, on its Writing tab) and Send feedback.
         from .help_dialog import FEEDBACK_URL, show_help_dialog
         labs_links = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         labs_links.set_margin_top(12)

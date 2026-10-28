@@ -35,6 +35,19 @@ def test_the_device_list_gives_cudas_size_before_its_download(monkeypatch):
     assert f"{CUDA_SIZE} download" in label
 
 
+def test_the_large_v3_question_gives_cudas_size(monkeypatch):
+    """Preferences' question before CUDA and large-v3 download together."""
+    from types import SimpleNamespace
+    asked = []
+    monkeypatch.setattr(prefs_speech, "CUDA_SIZE_TEXT", CUDA_SIZE)
+    monkeypatch.setattr(prefs_speech, "show_message",
+                        lambda *args, **kwargs: asked.append(args[3]) or None)
+    section = SimpleNamespace(window=None, win=SimpleNamespace(vulkan_offered=lambda: False))
+    prefs_speech.SpeechSection._large_v3_on_nvidia(section)
+    assert f"~{CUDA_SIZE}" in asked[0]
+    assert cuda_helper.DOWNLOAD_SIZE_TEXT.replace(" ", "") not in asked[0]
+
+
 def test_reading_a_size_doesnt_load_gtk():
     """recommend.py reads CUDA's size, and the dictation service loads
     recommend: GTK came along with cuda_helper for one string."""

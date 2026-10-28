@@ -80,14 +80,15 @@ def test_the_work_runs_off_the_windows_thread_and_its_updates_come_back_to_it(mo
     here, seen = threading.current_thread(), {}
     real = progress_window._progress_window
 
-    class Line:
-        """The status line, noting the thread each update came on."""
-        def set_text(self, text):
+    class Shown:
+        """The status line or the bar, noting the thread each update came on."""
+        def _noted(self, *args):
             seen.setdefault("updates", []).append(threading.current_thread() is here)
+        set_text = set_fraction = _noted
 
     def window(*args):
-        dialog, _line, bar = real(*args)
-        return dialog, Line(), bar
+        dialog, _line, _bar = real(*args)
+        return dialog, Shown(), Shown()
     monkeypatch.setattr(progress_window, "_progress_window", window)
 
     def work(progress):
@@ -102,4 +103,4 @@ def test_the_work_runs_off_the_windows_thread_and_its_updates_come_back_to_it(mo
     while "finish" not in seen and time.monotonic() < deadline:
         GLib.MainContext.default().iteration(False)
         time.sleep(0.005)
-    assert seen == {"work off it": True, "updates": [True], "finish": (True, "done")}
+    assert seen == {"work off it": True, "updates": [True, True, True], "finish": (True, "done")}
