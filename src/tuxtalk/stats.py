@@ -155,12 +155,17 @@ def record(words, seconds, today=None):
 def reset():
     """Forget all usage stats, including any stats.json.bak an earlier
     development build left behind (it saved through config.write_text_atomic,
-    which keeps a backup)."""
+    which keeps a backup). False when a file couldn't be deleted."""
+    done = True
     for path in (stats_path(), stats_path() + ".bak"):
         try:
             os.remove(path)
         except FileNotFoundError:
             pass
+        except OSError as e:
+            logger.warning(f"Could not reset usage stats: {e}")
+            done = False
+    return done
 
 
 def clamp_typing_wpm(wpm):

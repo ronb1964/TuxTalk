@@ -6,7 +6,7 @@ from gi.repository import Gtk
 
 from . import stats as stats_module
 from .prefs_tab import Tab
-from .ui_style import message_dialog
+from .ui_style import message_dialog, show_message
 
 _PERIODS = [("today", "Today"), ("week", "Last 7 days"), ("all", "All time")]
 _ROWS = [("words", "Words"), ("dictations", "Dictations"),
@@ -234,5 +234,7 @@ class StatsTab(Tab):
         answer = dialog.run()
         dialog.destroy()
         if answer == Gtk.ResponseType.OK:
-            stats_module.reset()
+            if not stats_module.reset():
+                show_message(self.window, Gtk.MessageType.ERROR, "Your stats couldn't be reset",
+                             f"{stats_module.stats_path()} couldn't be deleted. The log says why.")
             self.refresh()
