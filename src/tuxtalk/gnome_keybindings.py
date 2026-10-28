@@ -103,10 +103,12 @@ def disable_for_hotkey_test():
         logger.debug(f"Could not read GNOME keybindings: {e}")
         return None
     try:
+        from .config import write_text_atomic
         path = _backup_path()
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(saved, f)
+        # Whole or not at all: a half-written backup can't be read back, and
+        # until it is, no hotkey test clears the bindings.
+        write_text_atomic(path, json.dumps(saved), keep_backup=False)
     except Exception as e:
         # Without the backup a crash would lose them for good; leave them alone.
         logger.warning(f"Not clearing GNOME keybindings: could not save them ({e})")

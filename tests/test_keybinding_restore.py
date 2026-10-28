@@ -143,3 +143,14 @@ def test_the_hotkey_test_gives_the_keys_back_after_an_error(monkeypatch):
 
 def test_the_tray_repairs_left_over_bindings_at_start(tray_main):
     assert "restores GNOME keybindings" in tray_main()
+
+
+def test_the_backup_is_written_whole_or_not_at_all(gnome, monkeypatch):
+    """Cut off halfway (a full disk), a backup that can't be read back kept
+    every later hotkey test from clearing the bindings."""
+    def full_disk(*args, **kwargs):
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr("tuxtalk.config.write_text_atomic", full_disk)
+    assert G.disable_for_hotkey_test() is None
+    assert not gnome.backup.exists()
+    assert gnome.values == {"begin-resize": "['<Alt>F8']", "begin-move": "['<Alt>F7']"}
