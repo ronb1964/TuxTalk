@@ -219,9 +219,12 @@ def test_a_frozen_kwin_holds_tray_start_and_quit_only_seconds(monkeypatch):
 
     class Bus:
         def get_object(self, *args, **kwargs):
+            # Introspecting is a call of its own, waited for with no timeout.
+            assert kwargs.get("introspect") is False
             return Scripting()
     monkeypatch.setattr(dbus, "SessionBus", Bus)
     bus = K.session_bus()
     bus.call("loadScript", "/x.js", "tuxtalk")
     bus.call("start")
     assert [kwargs.get("timeout") for _method, kwargs in calls] == [3.0, 3.0]
+    assert all("signature" in kwargs for _method, kwargs in calls)

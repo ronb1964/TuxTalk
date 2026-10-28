@@ -145,11 +145,13 @@ def session_bus():
     # an explicit signature dbus-python matches the one-argument overload and
     # rejects the call, so the plugin name (which unloadScript needs later) has
     # to be spelled out here.
-    signatures = {"loadScript": "ss", "unloadScript": "s"}
+    signatures = {"loadScript": "ss", "unloadScript": "s", "start": ""}
 
     class _KWinBus:
         def call(self, method, *args):
-            obj = bus.get_object(KWIN_SERVICE, KWIN_SCRIPTING_PATH)
+            # No introspection: that's a call of its own, with no timeout,
+            # and every signature used here is spelled out above.
+            obj = bus.get_object(KWIN_SERVICE, KWIN_SCRIPTING_PATH, introspect=False)
             # A frozen KWin would hold each call 25 s, dbus-python's default.
             kwargs = {"dbus_interface": KWIN_SCRIPTING_INTERFACE, "timeout": _DBUS_TIMEOUT_S}
             if method in signatures:
