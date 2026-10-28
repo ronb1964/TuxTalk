@@ -691,12 +691,15 @@ class PreferencesWindow:
         # wrote: after that there is nothing left to diff, and it no longer
         # names the setup the service runs.
         changed = self._changed_since_open()
-        previous = {k: self._config_at_open.get(k) for k in _DOWNLOAD_KEYS}
+        # Only what this window changed is undone: a model the tray switched
+        # to meanwhile stays.
+        previous = {k: self._config_at_open.get(k) for k in _DOWNLOAD_KEYS if k in changed}
         saved_at = time.time()      # for KDE's verdict on a changed hotkey
         if not self.save_config():
             self._show_save_error()
             return None
         speech = self.general_tab.speech
+        speech.show_saved()
         if not speech.download_selected_model():
             speech.rollback_download(previous)
             return None

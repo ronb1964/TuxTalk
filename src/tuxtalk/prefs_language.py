@@ -131,6 +131,14 @@ class LanguageRow(Tab):
         finally:
             self.filling = False
 
+    def show_saved(self):
+        """Select the saved settings' entry, when they changed outside this
+        window."""
+        choice = language_choice(self.config)
+        if choice != self.choice:
+            self.choice = choice
+            self.fill(self._selected_model())
+
     def _select(self, choice):
         """Show *choice* in the dropdown without acting on it."""
         self.filling = True

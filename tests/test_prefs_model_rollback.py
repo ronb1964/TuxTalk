@@ -88,6 +88,7 @@ def _speech(win, model, device):
     speech.win = win
     speech._updating_model = False
     speech.download_selected_model = lambda: win.download_result
+    speech.show_saved = lambda: None    # (test_prefs_speech_flows)
 
     def no_dialogs(combo):
         raise AssertionError("the device dialogs ran during a rollback")
@@ -235,3 +236,27 @@ class TestADeviceChangeIsRolledBackToo:
         prefs_cls.on_ok(stub, None)
         stub.config["device"] = "cpu"     # the user picks CPU again
         assert "device" in _changed_since_open(stub)
+
+
+class TrayChangedTheModel(StubPrefs):
+    """The tray switched to Parakeet while Preferences was open: the save
+    merges like the real one, keeping the tray's model."""
+
+    def save_config(self):
+        from tuxtalk.config import merge_changed_keys
+        on_disk = {**self._config_at_open, "model": "parakeet-v3"}
+        self.config = merge_changed_keys(self._config_at_open, self.config, on_disk)
+        return super().save_config()
+
+
+class TestTheTraysChoiceSurvivesTheRollback:
+    def test_a_failed_device_download_leaves_the_trays_model(self, prefs_cls):
+        """Only the device was changed here, so only the device goes back."""
+        stub = TrayChangedTheModel(on_disk_model="small", chosen_model="small",
+                                   on_disk_device="cpu", chosen_device="vulkan")
+        stub.download_result = False
+
+        prefs_cls.on_apply(stub, None)
+
+        assert stub.config == {"model": "parakeet-v3", "device": "cpu", "beeps": True}
+        assert stub.model_on_disk == "parakeet-v3"
