@@ -283,6 +283,27 @@ def test_a_backup_dated_with_a_time_zone_sorts_beside_the_others(home, monkeypat
     assert points[0].when == zoned.astimezone().replace(tzinfo=None)
 
 
+def test_a_damaged_or_huge_zip_in_the_backup_folder_is_left_off_the_list(home, monkeypatch):
+    """Listing reads only each zip's manifest; one that is far too big, or
+    damaged inside, mustn't fill memory or empty the whole list."""
+    import zipfile
+    folder = home / "f"
+    folder.mkdir()
+    sb.set_backup_folder(str(folder))
+    _backup_file(folder, "good.zip", datetime.datetime(2026, 10, 12, 9, 0), monkeypatch)
+    with zipfile.ZipFile(folder / "huge.zip", "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr(sb.MANIFEST, b" " * (sb._MAX_MEMBER_BYTES + 1))
+    damaged = folder / "damaged.zip"
+    with zipfile.ZipFile(damaged, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr(sb.MANIFEST, b'{"app": "TuxTalk", "created": "2026-10-12T09:00"}' * 50)
+    data = bytearray(damaged.read_bytes())
+    start = data.index(b"PK\x03\x04") + 30 + len(sb.MANIFEST)
+    data[start:start + 20] = b"\xff" * 20                 # the compressed bytes
+    damaged.write_bytes(bytes(data))
+    assert [os.path.basename(p.path) for p in sb.restore_points() if p.kind == "file"] == \
+        ["good.zip"]
+
+
 def test_without_a_backup_folder_the_list_is_the_copies(home):
     sb.snapshot_if_changed()
     assert [p.kind for p in sb.restore_points()] == ["auto"]
