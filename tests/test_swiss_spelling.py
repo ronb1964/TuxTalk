@@ -34,6 +34,10 @@ def test_sharp_s_becomes_ss(text, expected):
     ({"LANG": "de_DE.UTF-8"}, False),
     ({"LANG": "en_US.UTF-8"}, False),
     ({}, False),
+    # What the desktop uses wins: LC_ALL over LANG, LANGUAGE's first choice.
+    ({"LC_ALL": "en_US.UTF-8", "LANG": "de_CH.UTF-8"}, False),
+    ({"LC_MESSAGES": "en_GB.UTF-8", "LANG": "de_CH.UTF-8"}, False),
+    ({"LANGUAGE": "en_US:de_CH", "LANG": "de_CH.UTF-8"}, False),
 ])
 def test_on_by_default_only_on_swiss_german_systems(env, expected):
     assert config.swiss_german_locale(env) is expected

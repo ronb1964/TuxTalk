@@ -129,11 +129,13 @@ CLASSIC_CYAN_HEX = "#4db3ff"
 
 def swiss_german_locale(env=None) -> bool:
     """Whether the system is set to Swiss German (de_CH, or gsw for Swiss
-    German itself), where ß is never written."""
+    German itself), where ß is never written. The language the desktop
+    really uses: LANGUAGE's first choice, else the first of LC_ALL,
+    LC_MESSAGES and LANG that is set, as gettext picks it."""
     env = os.environ if env is None else env
-    values = [env.get(v, "") for v in ("LC_ALL", "LC_MESSAGES", "LANG")]
-    values += (env.get("LANGUAGE") or "").split(":")
-    return any(v.replace("-", "_").startswith(("de_CH", "gsw")) for v in values if v)
+    language = (env.get("LANGUAGE") or "").split(":")[0] or next(
+        (env[v] for v in ("LC_ALL", "LC_MESSAGES", "LANG") if env.get(v)), "")
+    return language.replace("-", "_").startswith(("de_CH", "gsw"))
 
 
 def has_battery(power_dir="/sys/class/power_supply") -> bool:
