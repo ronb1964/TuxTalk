@@ -205,3 +205,23 @@ def test_window_drags_are_reported_once_they_end():
     assert "if (w && (w.move || w.resize))" in script
     assert "w.interactiveMoveResizeFinished.connect(tuxtalkGeometry)" in script
     assert "tuxtalkWatched.interactiveMoveResizeFinished.disconnect(tuxtalkGeometry)" in script
+
+
+def test_a_frozen_kwin_holds_tray_start_and_quit_only_seconds(monkeypatch):
+    """Without a timeout each call waits dbus-python's 25 s default, and the
+    tray starts and quits through several."""
+    dbus = pytest.importorskip("dbus")
+    calls = []
+
+    class Scripting:
+        def __getattr__(self, method):
+            return lambda *args, **kwargs: calls.append((method, kwargs))
+
+    class Bus:
+        def get_object(self, *args, **kwargs):
+            return Scripting()
+    monkeypatch.setattr(dbus, "SessionBus", Bus)
+    bus = K.session_bus()
+    bus.call("loadScript", "/x.js", "tuxtalk")
+    bus.call("start")
+    assert [kwargs.get("timeout") for _method, kwargs in calls] == [3.0, 3.0]

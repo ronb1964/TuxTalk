@@ -128,6 +128,9 @@ tuxtalkReport(workspace.activeWindow);
 """
 
 
+_DBUS_TIMEOUT_S = 3.0      # as kwin_hotkeys
+
+
 def session_bus():
     """A .call(method, *args) shim over KWin's Scripting interface.
 
@@ -147,7 +150,8 @@ def session_bus():
     class _KWinBus:
         def call(self, method, *args):
             obj = bus.get_object(KWIN_SERVICE, KWIN_SCRIPTING_PATH)
-            kwargs = {"dbus_interface": KWIN_SCRIPTING_INTERFACE}
+            # A frozen KWin would hold each call 25 s, dbus-python's default.
+            kwargs = {"dbus_interface": KWIN_SCRIPTING_INTERFACE, "timeout": _DBUS_TIMEOUT_S}
             if method in signatures:
                 kwargs["signature"] = signatures[method]
             return getattr(obj, method)(*args, **kwargs)
