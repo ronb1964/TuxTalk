@@ -38,7 +38,9 @@ def _gpu_offered():
 class PresetMenu:
     """DictationTray's Performance menu (a mixin of tray.DictationTray): the
     presets, applying one, and keeping the dot on the one in use. They use its
-    state: preset_radios, preset_custom and _updating_preset."""
+    state (preset_radios, preset_custom, _updating_preset, _applying_preset)
+    and its open_preferences, update_menu_display, _emit_model_changed and
+    restart_service."""
 
     def _current_presets(self):
         """The Performance presets for this computer and language (recommend.py)."""
