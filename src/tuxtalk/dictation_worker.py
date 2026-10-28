@@ -100,6 +100,12 @@ class JobFailed(RuntimeError):
     """A job run with call() raised on the worker."""
 
 
+def drain(timeout) -> bool:
+    """Wait up to *timeout* seconds for everything submitted to finish;
+    False when it didn't."""
+    return _instance is None or _instance.drain(timeout)
+
+
 def idle() -> bool:
     """Whether no dictation is being transcribed or typed, or waiting to be."""
     return _instance is None or _instance.idle()

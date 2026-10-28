@@ -143,6 +143,8 @@ def tick(cfg, svc: "ServiceState") -> "hotkey_keys.Hotkeys | None":
 
     The microphone comes off *svc*, not a parameter: it is re-resolved on a
     live reload, and a caller holding its own copy would keep the startup one."""
+    if recording.quit_requested.is_set():
+        _quit(cfg, svc)
     now = time.time()
     _take_start_request(cfg, svc, now)
     _take_stop_request(cfg, svc, now)
@@ -171,6 +173,27 @@ def _take_start_request(cfg, svc: ServiceState, now: float) -> None:
         recording.start_recording(cfg.beeps, cfg.notify, svc.input_device_idx,
                                   from_toggle=from_toggle)
         svc.last_activity = now
+
+
+# How long quitting waits for the dictation worker; a new service, started by
+# a restart meanwhile, waits this long and a little more for the lock (app.py).
+QUIT_DRAIN_S = 10.0
+
+
+def _quit(cfg, svc: ServiceState) -> None:
+    """Quit (app's SIGTERM handler: Quit, Restart Service, an update): a
+    recording under way stops as letting go of the key would (Recent
+    Dictations gets it), what the dictation worker holds is typed, up to
+    QUIT_DRAIN_S, and the process exits, so its exit hooks run: the music
+    plays again, the other sounds come back up. Killed outright, recordings
+    not transcribed yet were lost without a word."""
+    if rs.state.is_recording:
+        recording.stop_requested.set()
+        _take_stop_request(cfg, svc, time.time())
+    if not dictation_worker.drain(QUIT_DRAIN_S):
+        logger.warning(f"Quitting with dictation work still unfinished after {QUIT_DRAIN_S:g} s")
+    logger.info("Quitting")
+    raise SystemExit(0)
 
 
 def _take_stop_request(cfg, svc: ServiceState, now: float) -> None:

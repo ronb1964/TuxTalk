@@ -23,12 +23,15 @@ from . import recording_state as rs
 from .config import load_config, load_custom_commands
 from .logger import setup_logger
 from .recording_indicator import RecordingIndicator
+from .service_tick import QUIT_DRAIN_S
 
 logger = setup_logger(__name__)
 
 
 # The single-instance lock's file, open while the service runs.
 _lockfile_handle = None
+# How long a new service waits for the old one's lock: its quit, and a little more.
+LOCK_WAIT_S = QUIT_DRAIN_S + 5.0
 
 # The service's own D-Bus service when no tray runs (_start_dbus_stand_in),
 # held here for the life of the process.
@@ -37,11 +40,13 @@ dbus_service = None
 
 def _acquire_single_instance():
     """Take the service's single-instance lock (single_instance.py), or exit
-    if another service holds it."""
+    if another service holds it. A restart starts this one while the old
+    service may still be finishing what it types (service_tick._quit): the
+    lock is waited for that long, and a little more."""
     global _lockfile_handle
     try:
         lockfile = single_instance.open_lock("talktype.lock")
-        claimed = single_instance.claim(lockfile)
+        claimed = single_instance.claim(lockfile, wait_s=LOCK_WAIT_S)
     except OSError as e:        # no runtime folder, or it's full: not "already running"
         logger.warning(f"Could not take the single-instance lock: {e}")
         return
@@ -67,12 +72,24 @@ def _handle_sigusr2(signum, frame):
     logger.info("Ignored SIGUSR2 (hotkey test mode follows Preferences' flag file)")
 
 
+def _handle_sigterm(signum, frame):
+    """SIGTERM (Quit, Restart Service, an update): the input loop's next
+    pass (service_tick._quit) finishes what's being typed, then the process
+    exits. Before the loop runs (the model still loading) there's nothing to
+    finish. No lock here: the main thread may be holding the one wanted."""
+    if not _service_ready:
+        raise SystemExit(0)
+    logger.info("Asked to quit: finishing what's being typed first")
+    recording.quit_requested.set()
+
+
 def _install_signal_handlers():
-    """Handle SIGUSR1 and SIGUSR2 from the very start. Both end a process
-    that doesn't handle them, and the tray and Preferences can send them
-    while the model is still loading."""
+    """Handle SIGUSR1, SIGUSR2 and SIGTERM from the very start. The first
+    two end a process that doesn't handle them, and the tray and Preferences
+    can send them while the model is still loading."""
     signal.signal(signal.SIGUSR1, _handle_sigusr1)
     signal.signal(signal.SIGUSR2, _handle_sigusr2)
+    signal.signal(signal.SIGTERM, _handle_sigterm)
 
 
 # tuxtalk --toggle/--start/--stop (control.py). The tray normally answers

@@ -45,6 +45,8 @@ DUCK_TO = 0.5           # half on the volume slider; 0.25 sounded muted (Ron, 20
 # a new one on resume, a moment after TuxTalk restored, at the lowered level.
 FOLLOW_UP_S = (0.5, 1.0, 2.0, 4.0, 8.0)
 PACTL_TIMEOUT_S = 2.0
+# How long exit waits for a turn-down or restore already queued.
+EXIT_WAIT_S = 2.0
 STATE_FILE = "tuxtalk-ducked-audio.json"
 
 
@@ -192,12 +194,15 @@ class AudioDucker:
     def restore(self):
         self._submit(self._restore_now)
 
-    def restore_now(self):
-        """Restore on the calling thread. For exit, when the worker may not get a turn."""
+    def restore_at_exit(self, timeout=EXIT_WAIT_S):
+        """For exit: let a turn-down still queued run first (quitting right
+        after a dictation started, it ran after this and stayed), then
+        restore on the calling thread, as the worker may not get a turn."""
+        self.wait_idle(timeout)
         self._restore_now()
 
     def wait_idle(self, timeout):
-        """Wait for queued jobs to finish (tests). True if they did."""
+        """Wait for queued jobs to finish. True if they did."""
         done = threading.Event()
         self._submit(done.set)
         return done.wait(timeout)

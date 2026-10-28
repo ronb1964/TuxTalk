@@ -250,8 +250,9 @@ def stop_dictation_service(force: bool = False) -> None:
             os.kill(pid, sig)
         except OSError:
             pass  # exited between the scan and the kill
-    # SIGTERM/SIGKILL skip the service's exit hooks, so hand its hotkeys back
-    # to the desktop from here.
+    # SIGKILL skips the service's exit hooks, and SIGTERM's run only once it
+    # has typed what it holds (service_tick._quit): hand its hotkeys back to
+    # the desktop from here, now.
     release_desktop_hotkeys()
 
 

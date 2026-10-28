@@ -59,6 +59,10 @@ class SessionBus:
         self._call(name, MPRIS_PATH, PLAYER_IFACE, method)
 
 
+# How long exit waits for a pause or resume already queued.
+EXIT_WAIT_S = 2.0
+
+
 class MediaPauser:
     """Pause playing players on pause(); resume the ones we paused on resume()."""
 
@@ -79,12 +83,15 @@ class MediaPauser:
         """Resume the players pause() paused, on the worker thread."""
         self._submit(self._resume_now)
 
-    def resume_now(self):
-        """Resume on the calling thread. For exit, when the worker may not get a turn."""
+    def resume_at_exit(self, timeout=EXIT_WAIT_S):
+        """For exit: let a pause still queued run first (quitting right after
+        a dictation started, it ran after this and the music stayed paused),
+        then resume on the calling thread, as the worker may not get a turn."""
+        self.wait_idle(timeout)
         self._resume_now()
 
     def wait_idle(self, timeout):
-        """Wait for queued jobs to finish (tests). True if they did."""
+        """Wait for queued jobs to finish. True if they did."""
         done = threading.Event()
         self._submit(done.set)
         return done.wait(timeout)

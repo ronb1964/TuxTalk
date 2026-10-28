@@ -111,11 +111,14 @@ def test_a_failing_bus_is_logged_not_raised():
     run(p, p.pause, p.resume)   # no exception escapes, the worker keeps going
 
 
-def test_resume_now_runs_synchronously_for_exit():
+def test_resuming_at_exit_runs_on_the_calling_thread():
+    """At exit the worker may not get another turn."""
     bus = FakeBus(youtube="Playing")
     p = MediaPauser(bus)
     run(p, p.pause)
-    p.resume_now()
+    p._submit = lambda job: pytest.fail("left to the worker")
+    p.wait_idle = lambda timeout: True
+    p.resume_at_exit()
     assert bus.calls[-1] == ("youtube", "Play")
 
 
@@ -210,3 +213,22 @@ def test_a_microphone_failure_pauses_nothing(service, monkeypatch):
     monkeypatch.setattr(keyboard_grab, "release_all", lambda: None)
     assert recording.start_recording(False, False, 0) is False
     assert service.calls == []
+
+
+def test_quitting_right_after_a_pause_was_asked_for_leaves_nothing_paused():
+    """The pause was still waiting for the worker when TuxTalk quit: the
+    exit's resume ran first and found nothing, then the pause went through,
+    and the music stayed paused after TuxTalk was gone."""
+    gate = threading.Event()
+
+    class SlowBus(FakeBus):
+        def players(self):
+            gate.wait(5)                    # the worker is still busy asking
+            return super().players()
+    bus = SlowBus(youtube="Playing")
+    p = MediaPauser(bus)
+    p.pause()                                # queued, not done yet
+    threading.Timer(0.2, gate.set).start()
+    p.resume_at_exit()
+    assert bus.calls == [("youtube", "Pause"), ("youtube", "Play")]
+    assert bus.status == {"youtube": "Playing"}

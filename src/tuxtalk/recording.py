@@ -50,7 +50,7 @@ def pause_media_players():
             from .audio_duck import AudioDucker
             _audio_ducker = AudioDucker()
             # Quitting mid-dictation would otherwise leave everything quiet.
-            atexit.register(_audio_ducker.restore_now)
+            atexit.register(_audio_ducker.restore_at_exit)
         _audio_ducker.duck()
     if not live.pause_media:
         return
@@ -58,7 +58,7 @@ def pause_media_players():
         from .media_pause import MediaPauser
         _media_pauser = MediaPauser()
         # Quitting mid-dictation would otherwise leave the music paused.
-        atexit.register(_media_pauser.resume_now)
+        atexit.register(_media_pauser.resume_at_exit)
     _media_pauser.pause()
 
 
@@ -212,6 +212,9 @@ spectrum_processor = None
 # rather than one flag, so a start and a stop can't overwrite each other.
 start_requested = threading.Event()
 stop_requested = threading.Event()
+# Set by the SIGTERM handler (Quit, Restart Service, an update), taken by the
+# service tick, which finishes what's being typed before the process exits.
+quit_requested = threading.Event()
 
 # Set alongside start_requested when the Flatpak's toggle SHORTCUT (not a
 # menu) started it, so a quick second press can switch it to hands-free.
