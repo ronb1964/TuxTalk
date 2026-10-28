@@ -909,6 +909,19 @@ def test_voice_editing_is_in_labs_not_with_the_cleanup_options(prefs_window):
     assert window.advanced_tab.voice_editing_check in _labs(window)
 
 
+def test_the_labs_tips_name_your_own_key_and_the_writing_page(prefs_window):
+    from gi.repository import Gtk
+    """With F6 as the hold key, "hold Shift+F8" sent people to the wrong key,
+    and Help has no "TuxTalk Labs" page: the list is under Writing."""
+    window = prefs_window(hotkey="F6")
+    tips = [w.get_tooltip_text() or "" for w in _labs(window)
+            if isinstance(w, Gtk.CheckButton)]
+    editing = next(t for t in tips if "Select some text" in t)
+    moving = next(t for t in tips if "select the last sentence" in t)
+    assert "Shift+F6" in editing and "Shift+F8" not in editing
+    assert "Shift+F6" in moving and "on the Writing page" in moving
+
+
 # --- lines the AI must not lose ------------------------------------------------------------
 
 def scripted_engine(engine, monkeypatch, answers):

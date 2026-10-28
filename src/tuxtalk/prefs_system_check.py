@@ -486,8 +486,8 @@ class SystemCheck(Tab):
 
     def _finish_update(self, button, ok, message):
         """Back on the GTK thread after Update Hotkey Helper. Dictation isn't
-        restarted: it would throw away a dictation under way, and the
-        service's helper connection comes back by itself (update_helper)."""
+        restarted: the service's helper connection comes back by itself
+        within a second (update_helper), so a restart would only cost time."""
         if not ok:
             self._finish_fix_typing(button, ok, message, needs_restart=False)
             return
