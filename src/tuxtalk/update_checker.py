@@ -860,13 +860,9 @@ def _install_appimage_file(src: str, dest: str = APPIMAGE_PATH) -> None:
     installed while the first-run copy ran was replaced by that older copy
     when it finished. Raises on failure."""
     from . import single_instance
-    try:
-        lock = single_instance.open_lock("appimage-install.lock")
-    except OSError as e:        # no private folder for it: copy anyway, as before
-        logger.warning(f"Copying into ~/AppImages without taking turns: {e}")
-        _copy_into_place(src, dest)
-        return
-    with lock:
+    # No private folder for the lock (a hostile /tmp) raises: copying anyway
+    # could put the older file last.
+    with single_instance.open_lock("appimage-install.lock") as lock:
         if not single_instance.claim(lock, wait_s=INSTALL_WAIT_S):
             raise OSError("another copy into ~/AppImages didn't finish")
         _copy_into_place(src, dest)

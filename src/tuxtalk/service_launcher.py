@@ -263,9 +263,8 @@ def find_service_pids():
 
 def stop_dictation_service(force: bool = False) -> None:
     """Signal the dictation service, and only the dictation service, without
-    waiting: Preferences' restart (the new service waits for the lock), the
-    pre-0.15.0 service at start. *force* sends SIGKILL instead of SIGTERM:
-    the welcome dialog, for a service started during setup.
+    waiting: the pre-0.15.0 service at start. *force* sends SIGKILL instead
+    of SIGTERM: the welcome dialog, for a service started during setup.
 
     Never raises: every caller is a cleanup path, where a service left
     running is better than an exception. Waiting, and killing past the
@@ -289,27 +288,30 @@ def stop_dictation_service(force: bool = False) -> None:
 KILL_WAIT_S = 2.0
 
 
-def end_dictation_service(wait_s=QUIT_WAIT_S) -> bool:
+def end_dictation_service(wait_s=QUIT_WAIT_S, pids=None) -> bool:
     """Stop the dictation services running now and wait until they've gone;
     False when one survives even SIGKILL (stuck in the kernel). SIGTERM
     first, so it types what it holds; SIGKILL to what's left after *wait_s*:
     an older service with no deadline of its own, or one whose deadline was
-    never set (native code held its main thread). Only the services found
-    here: one started meanwhile (Dictation turned on again) is left alone.
+    never set (native code held its main thread). Only *pids*, the services
+    found when the caller decided (found here if None): one started since
+    (Dictation turned on again) is left alone.
     The desktop gets its hotkeys back at once: the service's own exit hooks
     run only after it has typed. It sleeps: never on a GTK main thread."""
-    return end_processes(find_service_pids(), wait_s, still_ours=is_service_pid,
-                         after_term=release_desktop_hotkeys)
+    return end_processes(find_service_pids() if pids is None else pids, wait_s,
+                         still_ours=is_service_pid, after_term=release_desktop_hotkeys)
 
 
-def end_in_background(then) -> None:
-    """end_dictation_service on a thread of its own, then *then*(whether
-    the services have gone) on GTK's main loop: the tray's menu mustn't wait."""
+def end_in_background(then, pids) -> None:
+    """end_dictation_service for *pids* (found on GTK's thread when the user
+    decided, so a service started after can't be among them) on a thread of
+    its own, then *then*(whether they've gone) on GTK's main loop: the tray's
+    menu mustn't wait."""
     from gi.repository import GLib
 
     def run():
         try:
-            ended = end_dictation_service()
+            ended = end_dictation_service(pids=pids)
         except Exception as e:
             logger.error(f"Could not stop the dictation service: {e}", exc_info=True)
             ended = False
@@ -359,22 +361,27 @@ def _wait_for_exit(procs, wait_s) -> bool:
 class _Process:
     """A process to end, held by a pidfd where the kernel has them (5.3 on):
     signals reach that process even if its PID is reused. Where there are
-    none (an old kernel, a sandbox that blocks them), by PID."""
+    none (an old kernel, a sandbox that blocks them), by PID and its start
+    time, checked before each signal: a PID reused meanwhile is someone
+    else's."""
 
     def __init__(self, pid):
         self.pid = pid
         self.fd = None
         self.gone = False
+        self.started = None
         try:
             self.fd = os.pidfd_open(pid)
         except ProcessLookupError:
             self.gone = True
         except OSError as e:
             logger.debug(f"No pidfd for {pid}, signalling it by PID: {e}")
+            self.started = _start_time(pid)
+            self.gone = self.started is None
 
     def send(self, sig) -> None:
         """Send *sig*, unless the process has gone."""
-        if self.gone:
+        if not self.running():
             return
         try:
             if self.fd is None:
@@ -394,7 +401,7 @@ class _Process:
         if self.fd is not None:
             self.gone = bool(select.select([self.fd], [], [], 0)[0])
         else:
-            self.gone = _exited(self.pid)
+            self.gone = _start_time(self.pid) != self.started
         return not self.gone
 
     def close(self) -> None:
@@ -403,13 +410,15 @@ class _Process:
             self.fd = None
 
 
-def _exited(pid) -> bool:
-    """Whether *pid* is gone or a zombie, read from /proc."""
+def _start_time(pid):
+    """When *pid* started (clock ticks after boot, /proc/<pid>/stat), or None
+    when it's gone or a zombie: with the PID, which process it is."""
     try:
         with open(f"/proc/{pid}/stat") as f:
-            return f.read().rsplit(")", 1)[1].split()[0] == "Z"
+            fields = f.read().rsplit(")", 1)[1].split()
     except (OSError, IndexError):
-        return True
+        return None
+    return None if fields[0] == "Z" else fields[19]
 
 
 def _signal(pid, sig) -> None:

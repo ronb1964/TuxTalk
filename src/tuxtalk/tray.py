@@ -23,6 +23,7 @@ import sys
 import warnings
 from .logger import setup_logger
 from . import tray_instance, update_offers
+from .tray_service import ServiceLifecycle
 
 # The tray menu's icons need Gtk.ImageMenuItem: AppIndicator sends only its
 # image to the desktop. It is deprecated but stays in GTK3, so its warnings
@@ -186,7 +187,7 @@ def preset_notice(model, device, gpu_offered):
     return text + "\nRestarting service..."
 
 
-class DictationTray:
+class DictationTray(ServiceLifecycle):
     def __init__(self):
         # TuxTalk is a dark-themed app. This is a global Gtk setting, so setting
         # it once here, before any tray dialog is built, makes the tray's own
@@ -365,52 +366,6 @@ class DictationTray:
         from .service_launcher import is_service_pid
         return is_service_pid(pid)
 
-    def _auto_start_service(self, delay_ms):
-        """Start the dictation service *delay_ms* from now, from main() and
-        after onboarding, unless one runs (it's adopted) or Dictation is
-        turned off meanwhile."""
-        GLib.timeout_add(delay_ms, self._check_and_start, self._service_gen)
-
-    def _check_and_start(self, gen, waited=0, watched=0):
-        """The start-up check's steps, dropped once *gen* isn't the current
-        decision (Dictation turned off meanwhile). A TalkType service from
-        before the 0.15.0 rename (left by a 0.14.x update; old code holding
-        the shared lock) is stopped and given 3 s (*waited*, 100 ms GLib
-        timeouts, so the menu stays usable). One running already is looked
-        at each second for QUIT_WAIT_S (*watched*): with no tray it may be
-        quitting, and once it's gone one is started."""
-        if gen != self._service_gen:
-            return False
-        try:
-            # NEVER start during onboarding - hotkey test needs to capture keys
-            if self.onboarding_in_progress:
-                logger.info("Onboarding in progress - refusing to auto-start service")
-                return False
-            from .service_launcher import (QUIT_WAIT_S, pre_rename_service_pids,
-                                           stop_dictation_service)
-            if pre_rename_service_pids() and waited < 30:
-                if waited == 0:
-                    logger.info("Stopping the pre-0.15.0 dictation service an update left")
-                    stop_dictation_service()
-                GLib.timeout_add(100, self._check_and_start, gen, waited + 1)
-            elif not self.is_service_running():
-                logger.info("Auto-starting dictation service...")
-                self.start_service(None)
-            elif watched < QUIT_WAIT_S:
-                if not watched:
-                    logger.info("Dictation service already running; looking again for a while")
-                GLib.timeout_add(1000, self._check_and_start, gen, 30, watched + 1)
-        except Exception as e:
-            logger.error(f"Failed to auto-start service: {e}", exc_info=True)
-        return False  # Don't repeat this timer
-
-    def _drop_pending_launches(self):
-        """A decision about the service (Stop, Quit, Restart, uninstall): a
-        launch scheduled before it (start-up, its watch, a restart's relaunch,
-        a queued restart) is dropped."""
-        self._service_gen += 1
-        self._restart_pending = False
-
     def update_icon_status(self, is_running=None):
         """The icon for the service's state, *is_running* if it's known already."""
         if is_running is None:
@@ -443,103 +398,6 @@ class DictationTray:
         return False  # Don't repeat
     
     # ----- Service management helpers -----
-
-    def _launch_service(self):
-        """Launch the dictation service subprocess (see service_launcher)."""
-        # Delegated so the tray and Preferences start the service identically,
-        # including its GDK_BACKEND (see service_launcher for why it matters).
-        from .service_launcher import launch_dictation_service
-
-        proc = launch_dictation_service()
-        if proc is not None:
-            self._service_pid = proc.pid
-
-    def start_service(self, _):
-        """Start the dictation service directly."""
-        # CRITICAL: Never start service during onboarding - hotkeys must not be active
-        if self.onboarding_in_progress:
-            logger.info("Onboarding in progress - refusing to start service")
-            return
-        if self._quitting:
-            return
-
-        try:
-            self._launch_service()
-
-            # Emit D-Bus signal if available
-            if self.dbus_service:
-                GLib.timeout_add_seconds(1, lambda: self._emit_service_state_after_check())
-        except Exception as e:
-            logger.error(f"Failed to start service: {e}", exc_info=True)
-        GLib.timeout_add_seconds(1, lambda: self.update_status_and_menu(repeat=False))
-
-    def stop_service(self, _):
-        """Dictation off: the service types what it holds and quits; waited
-        for (and killed past its time) on a thread of its own."""
-        if self._quitting:
-            return
-        self._drop_pending_launches()
-        from .service_launcher import end_in_background
-        end_in_background(self._after_stop)
-        logger.info("Asked the dictation service to stop")
-
-    def _after_stop(self, ended):
-        """stop_service's second half, on GTK's thread: the icon and the
-        GNOME extension's switch show what's really running now."""
-        if not ended:
-            logger.error("The dictation service is still running after being stopped")
-        self.update_status_and_menu(repeat=False)
-        if self.dbus_service:
-            self._emit_service_state_after_check()
-        return False
-
-    def restart_service(self, _):
-        """Restart the dictation service: it types what it holds and quits,
-        then a new one starts. The wait runs on a thread of its own, so the
-        menu stays usable (this fires on every model and preset change, and
-        after a Parakeet Ultra download)."""
-        # CRITICAL: Never restart service during onboarding
-        if self.onboarding_in_progress:
-            logger.info("Onboarding in progress - refusing to restart service")
-            return
-        if self._quitting:
-            return
-
-        # Re-entrancy guard: a second restart overlapping this one could kill
-        # the freshly-launched service or leave two backends both grabbing the
-        # hotkey (double-typing). A request that arrives meanwhile is queued,
-        # not dropped: the new service may already have read the old settings.
-        # Both this and _relaunch run on the GTK main thread, so no lock is needed.
-        if self._restarting:
-            logger.info("Restart already in progress - will restart again when it finishes")
-            self._restart_pending = True
-            return
-        self._drop_pending_launches()
-        self._restarting = True
-        gen = self._service_gen
-        from .service_launcher import end_in_background
-        end_in_background(lambda ended: self._relaunch(gen, ended))
-
-    def _relaunch(self, gen, ended):
-        """Restart Service's second half, on GTK's thread once the old service
-        is gone (*ended*; if not, the new one waits for its lock). Nothing is
-        started when Dictation was turned off or Quit began meanwhile (*gen*);
-        a restart asked for since runs now."""
-        if not ended:
-            logger.error("Restarting with the old dictation service still running")
-        self._restarting = False
-        if self._quitting:
-            return False
-        pending, self._restart_pending = self._restart_pending, False
-        if gen == self._service_gen:
-            try:
-                self._launch_service()
-            except Exception as e:
-                logger.error(f"Failed to restart service: {e}", exc_info=True)
-            GLib.timeout_add_seconds(1, lambda: self.update_status_and_menu(repeat=False))
-        if pending:         # asked for after this one began (and after any Stop)
-            self.restart_service(None)
-        return False
 
     def update_status_and_menu(self, repeat=True):
         """Update icon and menu display based on service status.
@@ -938,6 +796,8 @@ class DictationTray:
     def open_window(self, name):
         """Open a window by its command-line name (tuxtalk --open NAME, and
         the launcher's right-click shortcuts; see control.OPEN_METHODS)."""
+        if self._quitting:
+            return False
         actions = {
             "menu": self.show_menu_window,
             "preferences": lambda: self.open_preferences(None),
@@ -1161,8 +1021,8 @@ class DictationTray:
                 error_dialog.present()
                 return
 
-            # Show result dialog
-            self._show_update_result_dialog(result)
+            if not self._quitting:      # the check outlasted a Quit
+                self._show_update_result_dialog(result)
 
         # Start background check
         thread = threading.Thread(target=do_check, daemon=True)
@@ -1474,7 +1334,8 @@ class DictationTray:
                         # (Download & Install / View on GitHub) — persistent, and
                         # identical across the GTK tray and the GNOME extension.
                         # No surprise Preferences window.
-                        GLib.idle_add(lambda: self._show_update_result_dialog(result))
+                        GLib.idle_add(lambda: None if self._quitting
+                                      else self._show_update_result_dialog(result))
                     elif has_ext_update:
                         # Extension-only update: a quiet notification, no windows.
                         GLib.idle_add(self._show_update_notification)
@@ -1531,103 +1392,6 @@ class DictationTray:
         logger.info("Restart scheduled; quitting this instance to hand off.")
         self.quit_app(None)
         return False
-
-    def quit_app(self, _):
-        """Quit: the icon goes and nothing new starts at once, then the tray
-        leaves once the service has typed what it holds and gone. Until then
-        it keeps what the service still asks it (which window has the focus)
-        and, from an AppImage, the service's files. The wait runs on a
-        thread of its own."""
-        if self._quitting:
-            return False
-        self._hide_for_quit()
-        from .service_launcher import end_in_background
-        end_in_background(self._finish_quit)
-        return False  # one-shot when scheduled through GLib
-
-    def _finish_quit(self, ended):
-        """Quit's second half, on GTK's thread once the service has gone."""
-        if not ended:
-            logger.error("Quitting with a dictation service still running")
-        self._shut_down()
-        self._leave_main_loop()
-        return False
-
-    def quit_on_sigterm(self):
-        """Quit as Quit does on SIGTERM, SIGHUP and SIGINT (a plain kill, the
-        session or terminal ending, Ctrl+C), so the service finishes from a
-        mounted AppImage; unhandled, the tray ended at once, under it."""
-        def on_signal():
-            self.quit_app(None)
-            return True     # kept: a second one would end the tray mid-quit
-        for sig in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
-            GLib.unix_signal_add(GLib.PRIORITY_HIGH, sig, on_signal)
-
-    def uninstall(self, _=None):
-        """Preferences' Uninstall TuxTalk... and tuxtalk --uninstall: ask,
-        remove everything (uninstall.py), then quit."""
-        # A second request while the question is up would open another one
-        # inside the first's dialog loop, and neither could close properly.
-        if self._uninstalling or self._quitting:
-            logger.info("Uninstall already asked, or quitting; ignoring the request")
-            return False
-        self._uninstalling = True
-        from . import uninstall
-        try:
-            done = uninstall.run(uninstall.TrayParts(
-                stop=self._hide_for_quit, resume=self._resume_after_uninstall,
-                shut_down=self._shut_down))
-        finally:
-            self._uninstalling = False
-        if done:
-            self._leave_main_loop()
-        return False  # one-shot when scheduled through GLib
-
-    def _hide_for_quit(self):
-        """Quit's first half, or uninstall's: refuse every new action (D-Bus
-        included: TuxTalk opened again waits for this one to go), hide the
-        icon and the menu window, close Preferences. The service is asked to
-        quit by the wait for it (end_in_background, off GTK's thread: it
-        hands the desktop its hotkeys back, which can take seconds on KDE)."""
-        self._quitting = True
-        self._drop_pending_launches()
-        self.indicator.set_status(AppIndicator3.IndicatorStatus.PASSIVE)
-        if self._menu_window is not None:
-            self._menu_window.window.destroy()
-        if self.preferences_process and self.preferences_process.poll() is None:
-            # Not waited for: it has no SIGTERM handler and ends at once.
-            self.preferences_process.terminate()
-            logger.info("Closed preferences window")
-
-    def _resume_after_uninstall(self):
-        """An uninstall that didn't happen: the tray takes actions again."""
-        self._quitting = False
-        if self._should_show_tray:
-            self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
-
-    def _shut_down(self):
-        """What the service needed until it went: the KWin focus script and
-        the D-Bus service (the window with the focus, the GNOME extension)."""
-        # Leaving the script loaded means it keeps calling a D-Bus name that
-        # no longer exists.
-        self._stop_kwin_focus_provider()
-        if self.dbus_service:
-            try:
-                # Remove from connection to unregister the service
-                self.dbus_service.remove_from_connection()
-                logger.info("D-Bus service unregistered")
-            except Exception as e:
-                logger.error(f"Error unregistering D-Bus service: {e}")
-            self.dbus_service = None
-
-    def _leave_main_loop(self):
-        # Quit the GTK main loop; main() returns and the process exits.
-        Gtk.main_quit()
-
-        # Only fires when Quit is picked while a dialog.run() or nested
-        # Gtk.main() is open: main_quit() cannot end the outer loop from there,
-        # and the tray and its icon would stay until the dialog is closed.
-        GLib.timeout_add(100, lambda: os._exit(0))
 
     def _build_performance_submenu(self):
         """Build the Performance preset submenu (Recommended, Lightest, Battery saver + Custom).
@@ -2091,14 +1855,7 @@ def main():
                 tray._auto_start_service(500)
                 return False  # Don't repeat
 
-            def setup_once_service_ended(_ended):
-                GLib.timeout_add(1500, show_first_run_setup)
-                return False
-            # The hotkey test needs F8 and F9: a running service (no tray, or
-            # setup's marker gone) types what it holds and quits first, with
-            # GTK answering it which window has the focus.
-            from tuxtalk.service_launcher import end_in_background
-            end_in_background(setup_once_service_ended)
+            tray.onboard_once_service_gone(show_first_run_setup)
         else:
             # Not first run, auto-start immediately
             logger.info("Not first run - auto-starting service")

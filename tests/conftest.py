@@ -831,6 +831,10 @@ def tray_main(monkeypatch):
         _auto_start_service = step("starts the service")
         quit_app = step("quits")
         quit_on_sigterm = step("quits on SIGTERM")
+
+        def onboard_once_service_gone(self, show_setup):
+            done.append("stops a running service")
+            tray.GLib.timeout_add(1500, show_setup)
         refresh_menu = step("refreshes the menu")
         show_menu_window_if_no_tray = step("shows the menu window")
         auto_check_for_updates = step("checks for updates")
@@ -852,7 +856,7 @@ def tray_main(monkeypatch):
     monkeypatch.setattr(autostart, "refresh_autostart_comment", lambda: False)
     # The wait for it runs at once here, not on a thread of its own.
     monkeypatch.setattr(service_launcher, "end_in_background",
-                        lambda then: done.append("stops a running service") or then(True))
+                        lambda then, pids: done.append("stops a running service") or then(True))
     monkeypatch.setattr(cuda_helper, "mark_first_run_complete", step("marks setup done"))
     monkeypatch.setattr(control, "report", lambda status: None)
     monkeypatch.setattr(tray, "DictationTray", Tray)

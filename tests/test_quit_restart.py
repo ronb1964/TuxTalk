@@ -18,7 +18,9 @@ import pytest
 from gi.repository import GLib
 
 from tuxtalk import service_launcher, single_instance, tray_instance
+from tuxtalk.control import WaitingStart
 from tuxtalk import tray as tray_mod
+from tuxtalk import tray_service
 
 
 class Processes:
@@ -37,18 +39,21 @@ class Processes:
         class Held:
             def __init__(self, pid):
                 self.pid = pid
+                self.gone = False
 
             def send(self, sig):
-                procs.signal(self.pid, sig)
+                if not self.gone:
+                    procs.signal(self.pid, sig)
 
             def running(self):
                 procs.find()
-                return self.pid in procs.pids
+                return not self.gone and self.pid in procs.pids
 
             def close(self):
                 pass
         monkeypatch.setattr(service_launcher, "find_service_pids", self.find)
         monkeypatch.setattr(service_launcher, "_Process", Held)
+        monkeypatch.setattr(service_launcher, "is_service_pid", lambda pid: pid in self.pids)
         monkeypatch.setattr(service_launcher, "release_desktop_hotkeys", lambda: None)
         monkeypatch.setattr(service_launcher.time, "monotonic", lambda: self.now)
         monkeypatch.setattr(service_launcher.time, "sleep", self.sleep)
@@ -128,6 +133,7 @@ def _bare_tray(**attrs):
     t._restart_pending = False
     t._quitting = False
     t._uninstalling = False
+    t._waiting_start = WaitingStart()
     t._menu_window = None
     t.preferences_process = None
     t.dbus_service = None
@@ -151,7 +157,7 @@ def slow_service(monkeypatch):
     """A service that takes until gone.set() to quit; where it was waited for."""
     gone, waited_on = threading.Event(), []
 
-    def end(wait_s=None):
+    def end(wait_s=None, pids=None):
         waited_on.append(threading.current_thread())
         assert gone.wait(10)
         return True
@@ -360,5 +366,101 @@ def test_quitting_refuses_the_menu_and_the_command_line(monkeypatch):
     service = TuxTalkDBusService.__new__(TuxTalkDBusService)
     service.app = app
     assert TuxTalkDBusService.ShowMenu(service) is False
-    t = _bare_tray(_quitting=True, _waiting_start=None)
+    t = _bare_tray(_quitting=True)
     assert t.control("toggle") == "quitting"
+
+
+def test_a_reused_pid_is_never_signalled_without_pidfds(monkeypatch):
+    """With no pidfds (an old kernel, a sandbox), the service exited and its
+    PID went to another program, which the escalation then killed."""
+    sent = []
+    starts = {42: "1000"}
+    monkeypatch.setattr(service_launcher.os, "pidfd_open",
+                        lambda pid: (_ for _ in ()).throw(OSError(38, "no pidfds")))
+    monkeypatch.setattr(service_launcher, "_start_time", lambda pid: starts.get(pid))
+    monkeypatch.setattr(service_launcher.os, "kill", lambda pid, sig: sent.append(sig))
+    proc = service_launcher._Process(42)
+    proc.send(signal.SIGTERM)
+    starts[42] = "2000"                     # gone, and the PID taken by another program
+    proc.send(signal.SIGKILL)
+    assert sent == [signal.SIGTERM] and not proc.running()
+
+
+def test_stop_ends_only_the_services_running_when_it_was_chosen(monkeypatch):
+    """Dictation off, then on before the wait began: the new service was
+    found by the wait and stopped with the old one."""
+    chosen = []
+    monkeypatch.setattr(service_launcher, "find_service_pids", lambda: [42])
+    monkeypatch.setattr(service_launcher, "end_in_background",
+                        lambda then, pids: chosen.append(list(pids)))
+    t = _bare_tray()
+    t.stop_service(None)
+    assert chosen == [[42]]
+
+
+def test_dictation_off_drops_a_start_waiting_for_the_model(monkeypatch):
+    """tuxtalk --start while the model loaded, then Dictation off, then on:
+    the new service started recording when it was ready."""
+    monkeypatch.setattr(service_launcher, "end_in_background", lambda then, pids: None)
+    t = _bare_tray()
+    t._waiting_start.apply("start")
+    t.stop_service(None)
+    assert not t._waiting_start.take()
+
+
+def test_a_cancelled_uninstall_keeps_preferences_open(monkeypatch):
+    """Preferences, with edits not applied yet, closed as the uninstall
+    began; the password prompt was cancelled and the edits were gone."""
+    closed = []
+    t = _bare_tray(preferences_process=types.SimpleNamespace(
+        poll=lambda: None, terminate=lambda: closed.append(True)))
+    t._stop_taking_actions()                # TrayParts.stop
+    assert closed == []
+    t._resume_after_uninstall = lambda: None
+    t._stop_kwin_focus_provider = lambda: None
+    t._shut_down_for_uninstall()            # TrayParts.shut_down, once it goes ahead
+    assert closed == [True]
+
+
+def test_setup_isnt_started_when_the_running_service_wont_stop(monkeypatch):
+    shown, quit = [], []
+    monkeypatch.setattr(service_launcher, "find_service_pids", lambda: [42])
+    monkeypatch.setattr(service_launcher, "end_in_background", lambda then, pids: then(False))
+    monkeypatch.setattr(tray_service, "show_message", lambda *a, **k: shown.append(a[2]))
+    t = _bare_tray(quit_app=lambda _: quit.append(True))
+    started = []
+    t.onboard_once_service_gone(lambda: started.append(True))
+    assert started == [] and quit == [True] and shown == ["TuxTalk couldn't start its setup"]
+
+
+def test_quit_inside_a_dialog_waits_for_the_first_run_copy(monkeypatch):
+    """The fallback exit for a Quit made inside a dialog cut the first-run
+    copy into ~/AppImages off."""
+    from tuxtalk import appimage_copy
+    timers, exits = [], []
+    monkeypatch.setattr(tray_service, "GLib", types.SimpleNamespace(
+        timeout_add=lambda ms, fn: timers.append(fn)))
+    monkeypatch.setattr(tray_service, "Gtk", types.SimpleNamespace(main_quit=lambda: None))
+    monkeypatch.setattr(tray_service.os, "_exit", exits.append)
+    copying = {"now": True}
+    monkeypatch.setattr(appimage_copy, "copying", lambda: copying["now"])
+    tray_mod.DictationTray._leave_main_loop(types.SimpleNamespace())
+    assert timers[0]() is True and exits == []      # still copying: looks again
+    copying["now"] = False
+    timers[0]()
+    assert exits == [0]
+
+
+def test_a_standalone_uninstall_holds_the_trays_lock(tmp_path, monkeypatch):
+    """With no tray, Preferences restarting the service on Apply started a
+    new one while the uninstall removed the package. It asks the tray when
+    the lock is held, and none answers."""
+    from tuxtalk import control, uninstall
+    monkeypatch.setattr(single_instance, "runtime_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(control, "open_in_running", lambda *a, **k: None)
+    held = []
+    monkeypatch.setattr(uninstall, "run", lambda: held.append(
+        single_instance.held_elsewhere(tray_instance.TRAY_LOCK)) or True)
+    with pytest.raises(SystemExit):
+        tray_instance.open_from_command_line("uninstall")
+    assert held == [True]       # flock is per open file: this process's other one sees it

@@ -53,6 +53,8 @@ class TrayAppInstance:
         """Toggle recording in the service process via SIGUSR1,
         once it's ready: one still starting (just restarted)
         has no handler yet, and the signal would end it."""
+        if self.tray._quitting:
+            return
         pid = self.tray._ready_service_pid()
         if pid:
             self.tray._signal_toggle(pid)

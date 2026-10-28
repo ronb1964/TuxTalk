@@ -400,25 +400,25 @@ def _tuxtalk_pids(engines):
     """This user's other TuxTalk processes: its Python modules (service,
     Preferences, Transcribe a File, an old TalkType) and the engines it
     downloaded into the *engines* folders."""
-    me, uid = os.getpid(), os.getuid()
-    pids = []
-    for entry in os.listdir("/proc"):
-        if not entry.isdigit() or int(entry) == me:
-            continue
-        pid = int(entry)
-        try:
-            if os.stat(f"/proc/{pid}").st_uid != uid:
-                continue
-            argv = service_launcher._read_argv(pid) or []
-            exe = os.path.realpath(f"/proc/{pid}/exe")
-        except OSError:
-            continue
-        target = service_launcher.interpreter_target(argv)
-        module = bool(target) and target[0] == "module" and target[1].startswith(
-            ("tuxtalk.", "talktype."))
-        if (module or exe.startswith(engines)) and not _is_dev(pid):
-            pids.append(pid)
-    return pids
+    me = os.getpid()
+    return [int(entry) for entry in os.listdir("/proc")
+            if entry.isdigit() and int(entry) != me and _is_tuxtalk(int(entry), engines)]
+
+
+def _is_tuxtalk(pid, engines):
+    """Whether *pid* is one of _tuxtalk_pids' processes (asked again once it's
+    held, as its PID could be another program's by then)."""
+    try:
+        if os.stat(f"/proc/{pid}").st_uid != os.getuid():
+            return False
+        argv = service_launcher._read_argv(pid) or []
+        exe = os.path.realpath(f"/proc/{pid}/exe")
+    except OSError:
+        return False
+    target = service_launcher.interpreter_target(argv)
+    module = bool(target) and target[0] == "module" and target[1].startswith(
+        ("tuxtalk.", "talktype."))
+    return (module or exe.startswith(engines)) and not _is_dev(pid)
 
 
 def _is_dev(pid):
@@ -471,9 +471,9 @@ def _stop_processes(plan):
     # Each engine folder, not the whole data folder: that may be a link into
     # a folder where other programs run from.
     data_dir = plan.home / ".local" / "share" / config.DATA_DIR
-    service_launcher.end_processes(
-        _tuxtalk_pids(tuple(os.path.realpath(data_dir / name) + os.sep
-                            for name in ENGINE_FOLDERS)), 3)
+    engines = tuple(os.path.realpath(data_dir / name) + os.sep for name in ENGINE_FOLDERS)
+    service_launcher.end_processes(_tuxtalk_pids(engines), 3,
+                                   still_ours=lambda pid: _is_tuxtalk(pid, engines))
     if plan.ydotoold_unit is not None:
         for args in (["disable", "--now", "ydotoold.service"], ["daemon-reload"]):
             subprocess.run(["systemctl", "--user", *args], capture_output=True, timeout=15)

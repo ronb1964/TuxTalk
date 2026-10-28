@@ -8,6 +8,7 @@ running service, though the menu and config.toml show the new model.
 import pytest
 
 from tuxtalk import tray as tray_mod
+from tuxtalk import tray_service
 
 
 class FakeGLib:
@@ -26,7 +27,7 @@ class FakeGLib:
 @pytest.fixture
 def fake_loop(monkeypatch):
     loop = FakeGLib()
-    monkeypatch.setattr(tray_mod, "GLib", loop)
+    monkeypatch.setattr(tray_service, "GLib", loop)
     return loop
 
 
@@ -35,7 +36,7 @@ def make_tray(monkeypatch, loop):
     t.__dict__.update(onboarding_in_progress=False, _quitting=False, _service_gen=0,
                       _restarting=False, _restart_pending=False, kills=0, launches=0)
 
-    def end_service(then):
+    def end_service(then, pids):
         """The old service ends at once; the tray hears so on its loop."""
         t.kills += 1
         loop.idle_add(then, True)

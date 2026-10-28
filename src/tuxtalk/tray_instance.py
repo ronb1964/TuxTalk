@@ -114,10 +114,30 @@ def open_from_command_line(name):
         print("TuxTalk isn't running.")
         sys.exit(0)
     if name == "uninstall":
-        # Nothing to start first: this process does it on its own.
+        # Nothing to start first: this process does it on its own. With no
+        # tray it holds the tray's lock meanwhile, so neither a tray nor
+        # Preferences (which asks the tray when the lock is held) starts a
+        # service under it; an older tray that can't uninstall keeps its own.
         from . import uninstall
+        _lock = _uninstall_lock() if status is None else None     # held until exit
         sys.exit(0 if uninstall.run() else 1)
     print("Starting TuxTalk.")
+
+
+def _uninstall_lock():
+    """The tray's lock, held for a command-line uninstall with no tray; None
+    when it can't be opened (said in the log). Exits when a tray took it
+    since (one starting up)."""
+    try:
+        lock = single_instance.open_lock(TRAY_LOCK)
+    except OSError as e:
+        logger.warning(f"Uninstalling without the tray's lock: {e}")
+        return None
+    if not single_instance.claim(lock):
+        print("TuxTalk is starting. Uninstall it from Preferences, Updates & Backup.",
+              file=sys.stderr)
+        sys.exit(1)
+    return lock
 
 
 def already_running_message(older_talktype):

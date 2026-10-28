@@ -1,6 +1,6 @@
 {
  "files": {
-  "tray.py": 2136,
+  "tray.py": 1893,
   "welcome_dialog.py": 3089
  },
  "findings": {
@@ -411,7 +411,7 @@
   },
   "tray.py::main": {
    "decisions": 18,
-   "lines": 203
+   "lines": 196
   },
   "uninstall.py::_empty": {
    "decisions": 20

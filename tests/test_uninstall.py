@@ -628,8 +628,8 @@ def test_a_second_uninstall_request_while_asking_opens_no_second_question(monkey
     the first one's dialog loop, and neither could close."""
     import types
     from tuxtalk import tray as tray_mod
-    t = types.SimpleNamespace(_uninstalling=False, _quitting=False, _hide_for_quit=None,
-                              _resume_after_uninstall=None, _shut_down=None,
+    t = types.SimpleNamespace(_uninstalling=False, _quitting=False, _stop_taking_actions=None,
+                              _resume_after_uninstall=None, _shut_down_for_uninstall=None,
                               _leave_main_loop=lambda: None)
     asked = []
 
@@ -690,8 +690,9 @@ def test_a_tuxtalk_that_cant_uninstall_says_so():
     assert refused.value.get_dbus_name() == "org.freedesktop.DBus.Error.UnknownMethod"
 
 
-def test_the_command_line_uninstalls_itself_when_the_running_one_cant(monkeypatch):
-    from tuxtalk import tray_instance
+def test_the_command_line_uninstalls_itself_when_the_running_one_cant(monkeypatch, tmp_path):
+    from tuxtalk import single_instance, tray_instance
+    monkeypatch.setattr(single_instance, "runtime_dir", lambda: str(tmp_path))
     monkeypatch.setattr(control, "open_in_running", lambda name, tray_starting: False)
     ran = []
     monkeypatch.setattr(uninstall, "run", lambda: ran.append(1) or True)

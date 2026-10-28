@@ -39,7 +39,8 @@ before 0.15.0, so older entries use that name.
   same as letting go of the key. It gets up to 20 seconds, and if it takes
   longer than that it's lost and a notification tells you. Music that was
   paused for it plays again and other sounds come back up. If TuxTalk gets
-  cut off before it can turn them back up, it does it the next time it starts.
+  cut off before it can turn the other sounds back up, it does that the next
+  time it starts.
 - Quit takes the icon away right away and TuxTalk finishes up in the
   background. Open it again in that time and it starts once the old one is
   done, instead of telling you it's already running.

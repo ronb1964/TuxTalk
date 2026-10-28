@@ -48,7 +48,7 @@ def test_every_open_name_has_a_tray_action():
     stub = types.SimpleNamespace(
         show_menu_window=opens("menu"), open_preferences=opens("preferences"),
         open_transcribe_window=opens("transcribe"), show_fix_word_dialog=opens("fix-word"),
-        show_help=opens("help"))
+        show_help=opens("help"), _quitting=False)
     for name in control.OPEN_METHODS:
         if name not in control._OWN_OPTION:
             opened.clear()
