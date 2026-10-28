@@ -303,7 +303,8 @@ def option_states(language, hw, use_gpu=None):
         OptionState("large-v3", "Whisper Large-v3", "about 1.1 GB",
                     "Whisper's most accurate, for languages Parakeet doesn't know. "
                     "Needs a graphics card.",
-                    hw.gpu, "" if hw.gpu else "Needs a graphics card."),
+                    gpu, "" if gpu else ("Needs the graphics card ticked." if hw.gpu
+                                         else "Needs a graphics card.")),
     ]
 
 
