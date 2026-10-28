@@ -116,6 +116,19 @@ def test_engine_download_fetches_again_when_parakeet_is_missing(tmp_path, monkey
     assert fetched == [wv.ENGINE_URL]
 
 
+def test_a_download_that_fails_to_unpack_leaves_nothing_behind(tmp_path, monkeypatch):
+    """Not the 22 MB archive, nor a half-unpacked folder."""
+    engine = tmp_path / "1.9.5" / wv.ENGINE_NAME
+    monkeypatch.setattr(wv, "_engine_dir", lambda: str(engine))
+
+    def download(url, dest, **kwargs):
+        open(dest, "wb").write(b"not a tar file")
+        return True
+    monkeypatch.setattr("tuxtalk.download_utils.download_file", download)
+    assert wv.make_engine_download_func("small")(lambda *a: None, None) is False
+    assert list((tmp_path / "1.9.5").iterdir()) == []
+
+
 def test_each_engine_build_has_its_own_asset():
     """Released versions check their build's SHA256 (0.12.0-0.13.1: 1.9.4 b1,
     0.14.x-0.15.x: 1.9.4 b2), so a new build never reuses a published name.

@@ -2,6 +2,7 @@
 import hashlib
 import os
 import threading
+import time
 
 from tuxtalk.download_utils import (
     download_file,
@@ -132,3 +133,53 @@ def test_a_temp_file_left_by_a_killed_download_is_swept(tmp_path):
     assert not stale.exists()
     assert live.exists(), "a download still being written was deleted"
     assert other.exists(), "another file's download was touched"
+
+
+# --- an engine's archive and the folder it unpacks into ---------------------------------
+
+def test_two_downloads_of_one_engine_get_names_of_their_own(tmp_path):
+    """The tray and Preferences may fetch the same engine at once; shared
+    names let one unpack into, or delete, the other's archive."""
+    from tuxtalk.download_utils import download_area
+    with download_area(str(tmp_path), "engine") as first, \
+            download_area(str(tmp_path), "engine") as second:
+        assert set(first).isdisjoint(second)
+
+
+def test_a_failed_unpack_leaves_neither_archive_nor_folder(tmp_path):
+    from tuxtalk.download_utils import download_area, unpack_tar
+    try:
+        with download_area(str(tmp_path), "engine") as (archive, folder):
+            open(archive, "wb").write(b"not a tar file")
+            unpack_tar(archive, folder)
+    except Exception:
+        pass
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_what_a_killed_download_left_is_swept_next_time(tmp_path):
+    from tuxtalk.download_utils import STALE_PARTIAL_S, download_area
+    old = time.time() - STALE_PARTIAL_S - 60
+    archive, folder = tmp_path / ".engine.dead.tar", tmp_path / ".engine.dead.d"
+    archive.write_bytes(b"half")
+    folder.mkdir()
+    (folder / "bin").write_bytes(b"x")
+    for path in (archive, folder):
+        os.utime(path, (old, old))
+    with download_area(str(tmp_path), "engine"):
+        pass
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_unpacking_keeps_files_inside_the_folder(tmp_path):
+    import io
+    import tarfile
+    from tuxtalk.download_utils import unpack_tar
+    archive = tmp_path / "a.tar"
+    with tarfile.open(archive, "w") as tar:
+        data = b"engine"
+        info = tarfile.TarInfo("engine/bin")
+        info.size = len(data)
+        tar.addfile(info, io.BytesIO(data))
+    unpack_tar(str(archive), str(tmp_path / "out"))
+    assert (tmp_path / "out" / "engine" / "bin").read_bytes() == b"engine"

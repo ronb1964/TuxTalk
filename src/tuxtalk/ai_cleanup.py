@@ -29,7 +29,6 @@ import secrets
 import shutil
 import socket
 import subprocess
-import tarfile
 import threading
 import time
 import urllib.request
@@ -420,42 +419,35 @@ def is_installed() -> bool:
 def make_engine_download_func():
     """DownloadTask function: fetch, verify and unpack the llama.cpp engine."""
     def download(progress_callback, cancel_event):
-        from .download_utils import download_file
+        from .download_utils import download_area, download_file, unpack_tar
         if os.access(_server_binary(), os.X_OK):
             progress_callback("Already downloaded", 100)
             return True
         engine_dir = _engine_dir()
-        os.makedirs(engine_dir, exist_ok=True)
-        archive = os.path.join(engine_dir, LLAMA_ASSET)
 
         def hook(done, total):
             if total:
                 progress_callback("Downloading AI engine...", min(95, int(done * 95 / total)))
 
-        if not download_file(LLAMA_URL, archive, timeout=60, cancel_event=cancel_event,
-                             progress_hook=hook, expected_sha256=LLAMA_SHA256):
-            progress_callback("Download failed", 0)
-            return False
-        try:
-            progress_callback("Unpacking...", 97)
-            staging = engine_dir + ".unpacking"
-            shutil.rmtree(staging, ignore_errors=True)
-            with tarfile.open(archive) as tar:
-                if hasattr(tarfile, "data_filter"):
-                    tar.extractall(staging, filter="data")   # refuses unsafe paths
-                else:
-                    tar.extractall(staging)
-            for name in os.listdir(staging):
-                target = os.path.join(engine_dir, name)
-                shutil.rmtree(target, ignore_errors=True)
-                os.replace(os.path.join(staging, name), target)
-            shutil.rmtree(staging, ignore_errors=True)
-            os.remove(archive)
-            engine_process.remove_other_versions(os.path.dirname(engine_dir), LLAMA_TAG)
-        except Exception as e:
-            logger.error(f"Could not unpack the AI engine: {e}")
-            progress_callback("Could not unpack the download", 0)
-            return False
+        # Inside engine_dir: remove_other_versions clears every other folder
+        # beside it, which would take a download under way with it.
+        with download_area(engine_dir, LLAMA_TAG) as (archive, folder):
+            if not download_file(LLAMA_URL, archive, timeout=60, cancel_event=cancel_event,
+                                 progress_hook=hook, expected_sha256=LLAMA_SHA256):
+                progress_callback("Download failed", 0)
+                return False
+            try:
+                progress_callback("Unpacking...", 97)
+                unpack_tar(archive, folder)
+                for name in os.listdir(folder):
+                    target = os.path.join(engine_dir, name)
+                    shutil.rmtree(target, ignore_errors=True)
+                    os.replace(os.path.join(folder, name), target)
+                engine_process.remove_other_versions(os.path.dirname(engine_dir), LLAMA_TAG)
+            except Exception as e:
+                logger.error(f"Could not unpack the AI engine: {e}")
+                progress_callback("Could not unpack the download", 0)
+                return False
         progress_callback("Done", 100)
         return True
     return download
