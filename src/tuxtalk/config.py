@@ -322,6 +322,10 @@ def validate_config(s: Settings) -> None:
                           fields=[name for name, _ in problems])
 
 
+_CASE_FREE_CHOICES = ("device", "mode", "injection_mode", "indicator_position",
+                      "indicator_size", "indicator_style", "indicator_color_mode")
+
+
 def _migrate_settings(s: Settings) -> Settings:
     """Bring an older config forward to the current schema, in place.
 
@@ -330,7 +334,14 @@ def _migrate_settings(s: Settings) -> Settings:
 
     - indicator_color_mode 'cyan' → 'custom' + CLASSIC_CYAN_HEX, which keeps
       exactly the color these users saw.
+    - The choices validation accepts in any case are lowercased, since the
+      rest of the app compares them as written ("Vulkan" blanked the
+      indicator's device line).
     """
+    for name in _CASE_FREE_CHOICES:
+        value = getattr(s, name)
+        if isinstance(value, str):
+            setattr(s, name, value.lower())
     if s.indicator_color_mode == "cyan":
         s.indicator_color_mode = "custom"
         s.indicator_color = CLASSIC_CYAN_HEX
