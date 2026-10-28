@@ -86,10 +86,13 @@ class StatsTab(Tab):
         # it takes only a whole number between MIN and MAX.
         speed_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         speed_row.set_margin_top(4)
-        speed_row.pack_start(Gtk.Label(label="Your typing speed:"), False, False, 0)
+        speed_label = Gtk.Label(label="Your typing speed:")
+        speed_row.pack_start(speed_label, False, False, 0)
         self.typing_wpm_spin = Gtk.SpinButton.new_with_range(
             stats_module.MIN_TYPING_WPM, stats_module.MAX_TYPING_WPM, 1)
         self.typing_wpm_spin.set_numeric(True)
+        # A screen reader names the box by its label.
+        speed_label.set_mnemonic_widget(self.typing_wpm_spin)
         self.typing_wpm_spin.set_value(
             stats_module.clamp_typing_wpm(self.config.get("typing_wpm", stats_module.TYPING_WPM)))
         self.typing_wpm_spin.set_tooltip_text(
@@ -236,5 +239,5 @@ class StatsTab(Tab):
         if answer == Gtk.ResponseType.OK:
             if not stats_module.reset():
                 show_message(self.window, Gtk.MessageType.ERROR, "Your stats couldn't be reset",
-                             f"{stats_module.stats_path()} couldn't be deleted. The log says why.")
+                             "A stats file couldn't be deleted. The log says which, and why.")
             self.refresh()

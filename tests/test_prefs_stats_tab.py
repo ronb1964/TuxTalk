@@ -78,3 +78,11 @@ def test_a_reset_that_cannot_delete_the_file_says_so(tab, monkeypatch):
                         lambda parent, kind, title, text="": told.append(title))
     t._on_reset(None)
     assert told == ["Your stats couldn't be reset"]
+
+
+def test_the_typing_speed_box_is_named_by_its_label(tab):
+    """A screen reader reads "Your typing speed:" on the number box."""
+    t, _ = tab
+    labels = [w for w in t.typing_wpm_spin.get_parent().get_children()
+              if isinstance(w, Gtk.Label) and w.get_text() == "Your typing speed:"]
+    assert labels and labels[0].get_mnemonic_widget() is t.typing_wpm_spin
