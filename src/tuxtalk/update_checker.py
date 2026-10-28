@@ -566,8 +566,8 @@ def _detect_system_package_manager() -> Optional[str]:
     try:
         with open("/etc/os-release") as f:
             osr = f.read().lower()
-    except OSError as e:
-        logger.info(f"Install type: no /etc/os-release to go by ({e})")
+    except (OSError, UnicodeDecodeError) as e:
+        logger.info(f"Install type: could not read /etc/os-release ({e})")
         return None
     if any(k in osr for k in ("fedora", "rhel", "centos", "suse", "rocky", "alma", "nobara")):
         return "rpm"

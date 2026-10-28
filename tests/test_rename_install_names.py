@@ -72,23 +72,52 @@ def test_package_detection_asks_for_tuxtalk_first(monkeypatch):
         uc._detect_system_package_manager.cache_clear()
 
 
+def _detect_with(monkeypatch, run, os_release):
+    """_detect_system_package_manager with rpm and dpkg-query present,
+    *run* answering their queries and *os_release* (bytes) as the file."""
+    import builtins
+    import io
+    import shutil
+    import subprocess
+    real_open = builtins.open
+    monkeypatch.setattr(shutil, "which", lambda n: "/usr/bin/" + n)
+    monkeypatch.setattr(subprocess, "run", run)
+    monkeypatch.setattr(builtins, "open", lambda path, *a, **k: io.TextIOWrapper(
+        io.BytesIO(os_release), encoding="utf-8") if path == "/etc/os-release"
+        else real_open(path, *a, **k))
+    uc._detect_system_package_manager.cache_clear()
+    try:
+        return uc._detect_system_package_manager()
+    finally:
+        uc._detect_system_package_manager.cache_clear()
+
+
 def test_a_package_query_that_hangs_is_said_and_detection_goes_on(monkeypatch, caplog):
     """A hung rpm query made the install type fall back to the distro family
     without a word, so a log never said why updates were offered the wrong way."""
-    import shutil
     import subprocess
+    asked = []
 
     def hung(cmd, **kw):
+        asked.append(" ".join(cmd))
         raise subprocess.TimeoutExpired(cmd, 5)
-    monkeypatch.setattr(shutil, "which", lambda n: "/usr/bin/" + n if n == "rpm" else None)
-    monkeypatch.setattr(subprocess, "run", hung)
     caplog.set_level("INFO")
-    uc._detect_system_package_manager.cache_clear()
-    try:
-        uc._detect_system_package_manager()
-    finally:
-        uc._detect_system_package_manager.cache_clear()
+    assert _detect_with(monkeypatch, hung, b'ID=ubuntu\n') == "deb"
+    assert asked == ["rpm -q tuxtalk", "dpkg-query -W tuxtalk",
+                     "rpm -q talktype", "dpkg-query -W talktype"]
     assert "rpm -q tuxtalk didn't answer" in caplog.text
+
+
+def test_an_unreadable_os_release_means_no_package_manager(monkeypatch, caplog):
+    """Bytes that aren't text in /etc/os-release: detection says so and
+    answers None, rather than raising into Preferences' Updates tab."""
+    import subprocess
+
+    def not_installed(cmd, **kw):
+        return subprocess.CompletedProcess(cmd, 1)
+    caplog.set_level("INFO")
+    assert _detect_with(monkeypatch, not_installed, b"ID=\xff\xfe\n") is None
+    assert "could not read /etc/os-release" in caplog.text
 
 
 def test_package_restart_uses_the_tuxtalk_launcher(monkeypatch):
