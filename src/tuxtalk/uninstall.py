@@ -820,13 +820,24 @@ def run(tray=None):
     logger.info(f"Uninstalling TuxTalk ({install_type}); settings "
                 + ("deleted" if delete_personal else "kept") + ", shared models "
                 + ("deleted" if delete_shared else "kept"))
-    # With no tray taking part, its lock is held meanwhile, as the tray would:
-    # Preferences' restart takes it too, so none starts a service under this.
-    _lock = None if tray else _hold_tray_lock()     # held until run() returns
     window = _working_window()
-    if tray:
-        tray.stop()
     try:
+        # With no tray taking part, its lock is held meanwhile, as the tray
+        # would: Preferences' restart takes it too, so neither starts or
+        # removes a service under the other.
+        _lock = None if tray else _wait_for(_hold_tray_lock)  # held until run() returns
+        if _lock is False:
+            _tell(Gtk.MessageType.ERROR, "TuxTalk couldn't uninstall",
+                  "Nothing was removed: TuxTalk is busy starting or restarting. Quit it "
+                  "from its menu, then try again.")
+            return False
+        if not _wait_for(_close_preferences):
+            _tell(Gtk.MessageType.INFO, "Uninstall stopped",
+                  "Nothing was removed: Preferences is still open. Close it, then try "
+                  "Uninstall TuxTalk… again.")
+            return False
+        if tray:
+            tray.stop()
         try:
             result = _remove_root_part(plan, leave_group, tray)
         except Exception:
@@ -853,9 +864,11 @@ def run(tray=None):
 
 
 def _hold_tray_lock():
-    """The tray's lock, for an uninstall no tray takes part in; None when it
-    can't be had (an older tray that can't uninstall holds it: its processes
-    are ended anyway). Waits for a restart from Preferences to finish."""
+    """The tray's lock, for an uninstall no tray takes part in; None when no
+    lock can be had at all (said in the log), False when it's held past
+    QUIT_WAIT_S (a running tray that can't uninstall, or a restart from
+    Preferences that won't end): nothing is removed then. Off GTK's thread:
+    it waits."""
     from . import single_instance, tray_instance
     try:
         lock = single_instance.open_lock(tray_instance.TRAY_LOCK)
@@ -864,9 +877,22 @@ def _hold_tray_lock():
         return None
     if single_instance.claim(lock, wait_s=service_launcher.QUIT_WAIT_S):
         return lock
-    logger.info("A tray holds its lock; uninstalling beside it")
     lock.close()
-    return None
+    return False
+
+
+def _close_preferences():
+    """Close an open Preferences window as its title bar's close does (it
+    asks about changes not applied) before anything goes; False when it
+    stays open (Keep Editing). Off GTK's thread: it waits while the user
+    answers."""
+    from . import prefs_ipc
+    return prefs_ipc.ask_to_close(PREFS_CLOSE_WAIT_S)
+
+
+# How long the uninstall waits for Preferences to close while the user
+# answers its question about changes not applied.
+PREFS_CLOSE_WAIT_S = 120
 
 
 def _remove_root_part(plan, leave_group, tray):

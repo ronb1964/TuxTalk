@@ -80,7 +80,7 @@ def test_installing_an_update_has_no_close_button(Gtk, monkeypatch):
     monkeypatch.setattr(GLib, "idle_add", lambda fn, *args: waiting.put(lambda: fn(*args)))
     monkeypatch.setattr(update_checker, "download_update", lambda *a, **k: "/u/TuxTalk.AppImage")
     monkeypatch.setattr(update_checker, "install_appimage_update", lambda path: (True, ""))
-    tray.DictationTray._download_update(types.SimpleNamespace(restart_app=lambda: None),
+    tray.DictationTray._download_update(types.SimpleNamespace(restart_app=lambda: None, _quitting=False),
                                         {"appimage_url": "https://x/TuxTalk.AppImage"})
     waiting.get(timeout=5)()          # downloaded: the box shows, the install starts
     box = _open_box(Gtk, "Installing Update...")

@@ -522,9 +522,67 @@ def test_uninstall_asks_about_changes_not_applied(answer, goes_ahead, saved):
     done = []
     win = types.SimpleNamespace(
         _has_unapplied_changes=lambda: True, _ask_apply_before_closing=lambda: answer,
-        words_tab=types.SimpleNamespace(save=lambda: done.append("snippets") or True),
-        save_config=lambda: done.append("settings") or True)
+        save_before_restart=lambda: done.append("saved") or True)
     tab = UpdatesTab.__new__(UpdatesTab)
     tab.win = win
     assert tab._settle_unapplied_changes() is goes_ahead
-    assert (done == ["snippets", "settings"]) is saved
+    assert (done == ["saved"]) is saved
+
+
+def _uninstall_up_to_the_root_step(monkeypatch, told):
+    """uninstall.run with its question answered and its windows stood in for."""
+    from tuxtalk import uninstall
+    monkeypatch.setattr(uninstall.update_checker, "get_install_type", lambda: "deb")
+    monkeypatch.setattr(uninstall, "find", lambda *a, **k: types.SimpleNamespace(needs_root=True))
+    monkeypatch.setattr(uninstall, "_ask", lambda plan: (False, False, False))
+    monkeypatch.setattr(uninstall, "_working_window",
+                        lambda: types.SimpleNamespace(destroy=lambda: None))
+    monkeypatch.setattr(uninstall, "_wait_for", lambda work: work())
+    monkeypatch.setattr(uninstall, "_tell", lambda kind, heading, body, **k: told.append(heading))
+    monkeypatch.setattr(uninstall, "_remove_root_part",
+                        lambda *a: pytest.fail("went on to remove things"))
+    return uninstall
+
+
+def test_an_uninstall_waits_for_its_turn_or_removes_nothing(monkeypatch):
+    """Behind a restart from Preferences that ran long, the uninstall went
+    ahead without the lock, and the restart started a service under it."""
+    told = []
+    uninstall = _uninstall_up_to_the_root_step(monkeypatch, told)
+    monkeypatch.setattr(uninstall, "_hold_tray_lock", lambda: False)
+    assert uninstall.run() is False and told == ["TuxTalk couldn't uninstall"]
+
+
+def test_an_uninstall_removes_nothing_while_preferences_stays_open(monkeypatch):
+    """Preferences closes as its own close does, asking about changes not
+    applied; Keep Editing stops the uninstall, so nothing is lost."""
+    told = []
+    uninstall = _uninstall_up_to_the_root_step(monkeypatch, told)
+    monkeypatch.setattr(uninstall, "_hold_tray_lock", lambda: None)
+    monkeypatch.setattr("tuxtalk.prefs_ipc.ask_to_close", lambda wait_s: False)
+    assert uninstall.run() is False and told == ["Uninstall stopped"]
+
+
+@pytest.mark.parametrize("closes,expected", [(True, True), (False, False)])
+def test_preferences_is_asked_to_close_and_waited_for(closes, expected, monkeypatch):
+    """A stand-in Preferences that ends on the close request, or one whose
+    user keeps editing (it ignores it)."""
+    from tuxtalk import prefs_ipc
+    code = ("import signal, time\n"
+            + ("" if closes else "signal.signal(signal.SIGUSR2, signal.SIG_IGN)\n")
+            + "print('ready', flush=True)\ntime.sleep(30)\n")
+    window = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, text=True)
+    try:
+        assert window.stdout.readline() == "ready\n"
+        monkeypatch.setattr(prefs_ipc, "running_pid", lambda: window.pid)
+        monkeypatch.setattr(prefs_ipc, "is_prefs_pid", lambda pid: window.poll() is None)
+        assert prefs_ipc.ask_to_close(wait_s=1) is expected
+    finally:
+        window.kill()
+        window.wait()
+        window.stdout.close()
+
+
+def test_no_menu_window_opens_once_quit_has_begun():
+    t = _bare_tray(_quitting=True)
+    assert t.show_menu_window_if_no_tray() is False

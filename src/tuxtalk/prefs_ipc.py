@@ -1,6 +1,7 @@
 """
 The open Preferences window's pidfile, and asking that window to come to the
-front.
+front, or to close the way its title bar's close does (asking about changes
+not applied: CLOSE, before an uninstall).
 
 Preferences runs as its own process and allows one instance (pidfile). A
 second "open" (tray menu, GNOME extension via the tray, or a second launch)
@@ -17,6 +18,7 @@ import os
 import signal
 
 FRONT = signal.SIGUSR1
+CLOSE = signal.SIGUSR2
 
 
 def pidfile_path():
@@ -127,3 +129,24 @@ def bring_to_front(pid, tab=None):
         return True
     except OSError:
         return False
+
+
+def ask_to_close(wait_s) -> bool:
+    """Ask the open Preferences window to close as its title bar's close
+    does (it asks about changes not applied), and wait up to *wait_s* while
+    the user answers; True when none is open by then. Never this process's
+    own window. It sleeps: never on a GTK main thread."""
+    import time
+    pid = running_pid()
+    if pid is None or pid == os.getpid():
+        return True
+    try:
+        os.kill(pid, CLOSE)
+    except OSError:
+        return True         # gone meanwhile
+    deadline = time.monotonic() + wait_s
+    while is_prefs_pid(pid):
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.2)
+    return True

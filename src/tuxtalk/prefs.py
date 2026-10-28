@@ -723,7 +723,8 @@ def main():
 
     # Handlers go in BEFORE the pidfile is written (_acquire_prefs_singleton):
     # anyone who finds our pid there may signal us, and an unhandled SIGUSR1
-    # would terminate this process. Until the window exists they do nothing.
+    # or SIGUSR2 would terminate this process. Until the window exists they
+    # do nothing.
     window_holder = []
 
     def _on_front_request(*_args):
@@ -733,6 +734,14 @@ def main():
         return True  # keep the handler installed
 
     GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, prefs_ipc.FRONT, _on_front_request, None)
+
+    def _on_close_request(*_args):
+        # An uninstall about to go ahead: closed as the title bar's close
+        # does, so changes not applied are asked about, not lost.
+        if window_holder:
+            window_holder[0].on_window_close(None, None)
+        return True
+    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, prefs_ipc.CLOSE, _on_close_request, None)
 
     _acquire_prefs_singleton(args.tab)
     app = PreferencesWindow()

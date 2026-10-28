@@ -817,6 +817,8 @@ class DictationTray(ServiceLifecycle):
     def show_menu_window_if_no_tray(self):
         """After first-run setup: with no tray and no extension running, the
         user would see no menu at all, so show the menu window once."""
+        if self._quitting:
+            return False
         try:
             from . import desktop_detect, extension_helper
             if extension_helper.is_extension_enabled() or desktop_detect.tray_host_available():
@@ -1004,7 +1006,8 @@ class DictationTray(ServiceLifecycle):
         def show_result():
             """Show the result in the main thread."""
             progress_dialog.destroy()
-
+            if self._quitting:              # the check outlasted a Quit
+                return False
             result = result_holder[0]
             if not result or not result.get("success"):
                 # Error checking for updates
@@ -1180,16 +1183,8 @@ class DictationTray(ServiceLifecycle):
         filename = release.get("appimage_name", "TuxTalk-update.AppImage")
 
         if not url:
-            error_dialog = message_dialog(
-                message_type=Gtk.MessageType.ERROR,
-                buttons=Gtk.ButtonsType.OK,
-                text="Download Error"
-            )
-            error_dialog.format_secondary_text("Could not find download URL.")
-            error_dialog.set_position(Gtk.WindowPosition.CENTER)
-            error_dialog.set_keep_above(True)
-            error_dialog.run()
-            error_dialog.destroy()
+            show_message(None, Gtk.MessageType.ERROR, "Download Error",
+                         "Could not find download URL.", keep_above=True)
             return
 
         progress_dialog = Gtk.Dialog(
@@ -1235,8 +1230,10 @@ class DictationTray(ServiceLifecycle):
         def download_complete():
             """Install what was downloaded, behind a status window, off the
             GTK thread: the copy of the AppImage would freeze the window and
-            the tray menu for its length."""
+            the tray menu for its length. Not once Quit has begun."""
             progress_dialog.destroy()
+            if self._quitting:
+                return False
             downloaded_path = result_holder[0]
             if not downloaded_path:
                 show_message(None, Gtk.MessageType.ERROR, "Download Failed",
@@ -1272,7 +1269,7 @@ class DictationTray(ServiceLifecycle):
                             f"message={message}")
                 if success:
                     self.restart_app()
-                else:
+                elif not self._quitting:
                     show_message(None, Gtk.MessageType.ERROR, "Update Failed", message,
                                  keep_above=True)
                 return False
@@ -1281,8 +1278,7 @@ class DictationTray(ServiceLifecycle):
             self._install_thread.start()
             return False
 
-        thread = threading.Thread(target=do_download, daemon=True)
-        thread.start()
+        threading.Thread(target=do_download, daemon=True).start()
 
     def _download_and_install_package(self, release, install_type):
         """Download the correct .rpm/.deb and install it as root via pkexec,

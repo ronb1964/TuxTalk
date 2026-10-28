@@ -432,7 +432,7 @@ class UpdatesTab(Tab):
             return True
         answer = win._ask_apply_before_closing()
         if answer == "apply":
-            return win.words_tab.save() is not None and bool(win.save_config())
+            return win.save_before_restart()
         return answer == "discard"
 
     def _on_check_updates_clicked(self, button):

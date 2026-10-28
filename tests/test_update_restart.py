@@ -473,7 +473,7 @@ def test_tray_download_install_restarts_through_restart_app(monkeypatch, idle_qu
         ("install", path, threading.current_thread() is threading.main_thread()))
         or (installed, "disk full"))
     monkeypatch.setattr(Gtk.Dialog, "run", lambda d: steps.append("error shown"))
-    stub = types.SimpleNamespace(restart_app=lambda: steps.append("restart"))
+    stub = types.SimpleNamespace(restart_app=lambda: steps.append("restart"), _quitting=False)
     tray.DictationTray._download_update(stub, {"appimage_url": "https://x/TuxTalk.AppImage"})
     idle_queue(lambda: len(steps) >= 2)
     install = ("install", "/updates/TuxTalk.AppImage", False)

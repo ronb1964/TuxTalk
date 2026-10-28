@@ -56,8 +56,8 @@ before 0.15.0, so older entries use that name.
 - On a desktop started without a login manager, two copies of TuxTalk
   could run at once and type everything twice. Now they share a lock in
   /tmp, so only one runs.
-- Uninstall in Preferences asks about changes you haven't applied yet, the
-  same as closing the window does. They used to just disappear.
+- Uninstalling with Preferences open asks about changes you haven't applied
+  yet, the same as closing the window does. They used to just disappear.
 - If the first-run copy into ~/AppImages failed and the AppImage you ran
   had a space in its name, like "TuxTalk (1).AppImage", the menu entry
   didn't open anything. It does now.
