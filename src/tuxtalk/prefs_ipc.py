@@ -156,7 +156,7 @@ def bring_to_front(pid, tab=None):
     except FileNotFoundError:
         pass
     except OSError as e:
-        logger.info(f"Couldn't ask Preferences for the {tab} tab: {e}")
+        logger.info(f"Couldn't pass Preferences the tab to open: {e}")
     try:
         os.kill(pid, FRONT)
         return True

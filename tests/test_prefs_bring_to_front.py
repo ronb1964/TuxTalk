@@ -162,7 +162,7 @@ def test_a_tab_request_that_cant_be_written_still_brings_the_window_forward(monk
     monkeypatch.setattr(prefs_ipc.os, "kill", lambda pid, sig: sent.append(pid))
     with caplog.at_level(logging.INFO, logger=prefs_ipc.logger.name):
         assert prefs_ipc.bring_to_front(42, "updates") is True
-    assert sent == [42] and "updates" in caplog.text
+    assert sent == [42] and "tab to open" in caplog.text
 
 
 def test_a_closed_window_lets_the_next_one_open_while_its_process_lingers(one_window,

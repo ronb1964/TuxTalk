@@ -253,7 +253,9 @@ def install_extension(progress_callback: Optional[Callable] = None) -> bool:
     bundled_path = get_bundled_extension_path()
     if bundled_path:
         if progress_callback:
-            progress_callback("Installing bundled extension...", 50)
+            # Low: a failed bundled copy falls back to the download, which
+            # starts at 10%, and the bar mustn't go backwards.
+            progress_callback("Installing bundled extension...", 5)
 
         # install_extension_from_local enables it too.
         if install_extension_from_local(bundled_path):
