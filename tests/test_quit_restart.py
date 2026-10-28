@@ -636,3 +636,35 @@ def test_preferences_that_runs_the_uninstall_takes_no_edits_meanwhile(monkeypatc
 def test_no_menu_window_opens_once_quit_has_begun():
     t = _bare_tray(_quitting=True)
     assert t.show_menu_window_if_no_tray() is False
+
+
+def test_an_uninstall_stops_while_a_preferences_window_it_couldnt_reach_is_open(monkeypatch):
+    """An older Preferences, or one whose pidfile couldn't be written: the
+    close request never reached it, and the sweep after the package was
+    removed ended it with its changes."""
+    from tuxtalk import prefs_ipc, uninstall
+    monkeypatch.setattr(prefs_ipc, "ask_to_close", lambda wait_s: True)   # no pidfile
+    monkeypatch.setattr(prefs_ipc, "open_windows", lambda: [4242])
+    monkeypatch.setattr(uninstall, "_is_dev", lambda pid: False)
+    assert uninstall._close_preferences() is False
+    monkeypatch.setattr(uninstall, "_is_dev", lambda pid: True)             # a dev copy's
+    assert uninstall._close_preferences() is True
+
+
+def test_a_package_update_installs_nothing_after_quit(monkeypatch):
+    """Downloaded while the last dictation was typed after Quit: it started
+    the password prompt and the installer anyway, and showed its result."""
+    from tuxtalk import update_ui
+    installed, shown = [], []
+    monkeypatch.setattr(update_ui.update_checker, "get_package_asset",
+                        lambda release, kind: ("https://x/tuxtalk.deb", "tuxtalk.deb"))
+    monkeypatch.setattr(update_ui.update_checker, "download_update", lambda *a, **k: "/tmp/x.deb")
+    monkeypatch.setattr(update_ui.update_checker, "install_package_update",
+                        lambda path, kind: installed.append(path) or (True, ""))
+    monkeypatch.setattr(update_ui, "_installed_restart_prompt", lambda cb=None: shown.append(1))
+    monkeypatch.setattr(update_ui, "_error", lambda message: shown.append(message))
+    monkeypatch.setattr(update_ui.threading, "Thread",
+                        lambda target, daemon=None: types.SimpleNamespace(start=target))
+    monkeypatch.setattr(update_ui.GLib, "idle_add", lambda fn, *a: fn(*a))
+    update_ui.run_package_update({}, "deb", quitting=lambda: True)
+    assert installed == [] and shown == []

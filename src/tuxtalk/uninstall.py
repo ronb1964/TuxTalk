@@ -892,11 +892,15 @@ def _hold_tray_lock():
 
 def _close_preferences():
     """Close an open Preferences window as its title bar's close does (it
-    asks about changes not applied) before anything goes; False when it
-    stays open (Keep Editing). Off GTK's thread: it waits while the user
-    answers."""
+    asks about changes not applied) before anything goes; False when one is
+    still open: Keep Editing, or one the close request couldn't reach (an
+    older version, a pidfile that couldn't be written), which ending later
+    would lose its changes. A development copy's is never counted. Off GTK's
+    thread: it waits while the user answers."""
     from . import prefs_ipc
-    return prefs_ipc.ask_to_close(PREFS_CLOSE_WAIT_S)
+    if not prefs_ipc.ask_to_close(PREFS_CLOSE_WAIT_S):
+        return False
+    return not [pid for pid in prefs_ipc.open_windows() if not _is_dev(pid)]
 
 
 # How long the uninstall waits for Preferences to close while the user

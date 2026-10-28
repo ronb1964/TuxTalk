@@ -97,6 +97,25 @@ def _read_pidfile():
         return None, False
 
 
+def open_windows():
+    """PIDs of every Preferences window of this user's running now but this
+    process's own, found in /proc whatever the pidfile says (one from an
+    older version, or one whose pidfile couldn't be written)."""
+    me, uid = os.getpid(), os.getuid()
+    pids = []
+    for entry in os.listdir("/proc"):
+        if not entry.isdigit() or int(entry) == me:
+            continue
+        try:
+            if os.stat(f"/proc/{entry}").st_uid != uid:
+                continue
+        except OSError:
+            continue
+        if is_prefs_pid(int(entry)):
+            pids.append(int(entry))
+    return pids
+
+
 def running_pid():
     """Pid of the open Preferences window, or None."""
     pid, _can_close = _read_pidfile()

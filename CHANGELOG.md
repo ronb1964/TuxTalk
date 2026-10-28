@@ -38,9 +38,10 @@ before 0.15.0, so older entries use that name.
   to throw it away. A recording that's still going gets stopped and typed,
   same as letting go of the key. It gets up to 20 seconds, and if it takes
   longer than that it's lost and a notification tells you. Music that was
-  paused for it plays again and other sounds come back up. If TuxTalk gets
-  cut off before it can turn the other sounds back up, it tries again the
-  next time it starts.
+  paused for it plays again and other sounds come back up, unless a player
+  or the sound server doesn't answer in time. If TuxTalk gets cut off before
+  it can turn the other sounds back up, it tries again the next time it
+  starts.
 - Quit takes the icon away right away and TuxTalk finishes up in the
   background. Open it again in that time and it starts once the old one is
   done, instead of telling you it's already running.
@@ -55,7 +56,7 @@ before 0.15.0, so older entries use that name.
   stays off.
 - On a desktop started without a login manager, two copies of TuxTalk
   could run at once and type everything twice. Now they share a lock in
-  /tmp, so only one runs.
+  /tmp, so only one runs, unless /tmp itself can't be used.
 - Uninstalling with Preferences open asks about changes you haven't applied
   yet, the same as closing the window does. They used to just disappear.
 - If the first-run copy into ~/AppImages failed and the AppImage you ran
