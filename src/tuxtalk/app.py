@@ -40,9 +40,9 @@ dbus_service = None
 
 def _acquire_single_instance():
     """Take the service's single-instance lock (single_instance.py), or exit
-    if another service holds it. A restart starts this one while the old
-    service may still be finishing what it types (service_tick._quit): the
-    lock is waited for that long, and a little more."""
+    if another service holds it. One started while the old service still
+    types what it holds (Preferences with no tray, Dictation turned on again
+    at once) waits for the lock as long as that may take."""
     global _lockfile_handle
     try:
         lockfile = single_instance.open_lock("talktype.lock")
@@ -159,6 +159,7 @@ def main():
     recording.start_requested.clear()
     recording.stop_requested.clear()
     recording.started_from_toggle_key.clear()
+    recording.toggles_asked = 0
     _mark_service_ready()
 
     # Run the input backend chosen by FLATPAK_ID: evdev everywhere

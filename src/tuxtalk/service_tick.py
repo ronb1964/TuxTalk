@@ -84,7 +84,7 @@ class ServiceState:
     evdev loop (Backend A) and the portal loop (Backend B) via tick."""
 
     def __init__(self, cfg, input_device_idx=None):
-        """Made once the model is ready: what came before (toggles) is old."""
+        """Made once the model is ready and the input loop starts."""
         # Held, not copied: _reload_live_settings updates cfg IN PLACE, so
         # reading through it keeps the auto-timeout settings live.
         self._cfg = cfg
@@ -96,9 +96,9 @@ class ServiceState:
         # here keeps one copy, which a reload can update.
         self.input_device_idx = input_device_idx
         self._resolved_mic = getattr(cfg, "mic", "")
-        # Toggles sent while the model loaded are dropped: one acted on
-        # seconds later would start a recording out of the blue.
-        self.toggles_seen = recording.toggles_asked
+        # Counted from 0 when the service said it was ready (app.main): one
+        # sent while the model loaded was dropped there, one sent since counts.
+        self.toggles_seen = 0
 
     def refresh_input_device(self) -> None:
         """Re-resolve the mic if its configured name changed.

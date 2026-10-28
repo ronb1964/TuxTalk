@@ -437,12 +437,18 @@ class TrayParts(NamedTuple):
     shut_down: Callable     # its D-Bus service and KWin script, once the service has gone
 
 
+def _our_services():
+    """The dictation services running now, a development copy's left out."""
+    return [pid for pid in service_launcher.find_service_pids() if not _is_dev(pid)]
+
+
 def _end_service():
     """End the dictation service (it types what it holds first), but never
     a development copy's; True when none of ours is left. Off GTK's thread."""
-    pids = [pid for pid in service_launcher.find_service_pids() if not _is_dev(pid)]
-    service_launcher.release_desktop_hotkeys()
-    return service_launcher.end_processes(pids, service_launcher.QUIT_WAIT_S)
+    pids = _our_services()
+    return service_launcher.end_processes(
+        pids, service_launcher.QUIT_WAIT_S, still_ours=service_launcher.is_service_pid,
+        after_term=service_launcher.release_desktop_hotkeys if pids else None)
 
 
 def stop_tuxtalk(plan, shut_down=None):
@@ -814,11 +820,15 @@ def run(tray=None):
     logger.info(f"Uninstalling TuxTalk ({install_type}); settings "
                 + ("deleted" if delete_personal else "kept") + ", shared models "
                 + ("deleted" if delete_shared else "kept"))
+    window = _working_window()
     if tray:
         tray.stop()
-    window = _working_window()
     try:
-        result = _remove_root_part(plan, leave_group, tray)
+        try:
+            result = _remove_root_part(plan, leave_group, tray)
+        except Exception:
+            _resume(tray, False)        # never leave the tray refusing everything
+            raise
         if result is None:
             return False
         try:
@@ -845,7 +855,7 @@ def _remove_root_part(plan, leave_group, tray):
     what it holds first. Its Result, or None when nothing was removed (the
     service wouldn't stop, or the root step didn't run), with TuxTalk as it
     was before."""
-    was_running = bool(service_launcher.find_service_pids())
+    was_running = bool(_our_services())
     if not _wait_for(_end_service):
         _tell(Gtk.MessageType.ERROR, "TuxTalk couldn't uninstall",
               "Nothing was removed: TuxTalk's dictation service wouldn't stop. "

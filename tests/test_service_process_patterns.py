@@ -46,6 +46,10 @@ SERVICE_ARGVS = [
 # Anything here being matched is a bug. The tray is the parent process: killing
 # it takes down the menu, the D-Bus service and the user's only way to quit.
 NOT_THE_SERVICE_ARGVS = [
+    # -m tuxtalk.app as mere data: Quit would SIGTERM, then SIGKILL, these.
+    ["python3", "-c", "import time; time.sleep(600)", "-m", "tuxtalk.app"],
+    ["python3", "-", "-m", "tuxtalk.app"],
+    ["vim", "-m", "tuxtalk.app"],
     ["/home/ron/Projects/TalkType/.venv/bin/python", "-m", "tuxtalk.tray"],
     ["/tmp/.mount_TalkTyabc/usr/bin/python3", "-m", "tuxtalk.tray"],
     ["/tmp/.mount_TalkTyabc/usr/bin/dictate-tray"],

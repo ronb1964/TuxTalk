@@ -19,7 +19,6 @@ from .ui_style import message_dialog, show_message
 from gi.repository import AyatanaAppIndicator3 as AppIndicator3
 import subprocess
 import threading
-import time
 import sys
 import warnings
 from .logger import setup_logger

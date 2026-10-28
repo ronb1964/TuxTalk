@@ -331,18 +331,40 @@ from tuxtalk import service_launcher as _launcher
 _USERS_SERVICES = frozenset(_launcher.find_service_pids())
 
 
+def _users_tuxtalk_processes():
+    """Every TuxTalk process of the user's running now: tray, service,
+    Preferences."""
+    pids = set()
+    for entry in os.listdir("/proc"):
+        target = entry.isdigit() and _launcher.interpreter_target(
+            _launcher._read_argv(int(entry)) or [])
+        if target and target[0] == "module" and target[1].startswith(("tuxtalk.", "talktype.")):
+            pids.add(int(entry))
+    return frozenset(pids - {os.getpid()})
+
+
+_USERS_TUXTALK = _users_tuxtalk_processes() | _USERS_SERVICES
+
+
 @pytest.fixture(autouse=True)
 def _no_real_services(monkeypatch):
     """Quit, Restart Service, Dictation off and uninstall look for every
-    dictation service of the user's and stop it, waiting up to 43 s: from a
-    test that would be the user's running TuxTalk. Tests with their own
-    process table, or their own services, are unaffected."""
-    find, send = _launcher.find_service_pids, _launcher._signal
+    dictation service of the user's (uninstall, every TuxTalk process) and
+    stop it, waiting up to 43 s: from a test that would be the user's running
+    TuxTalk. Tests with their own process table, or their own processes,
+    are unaffected."""
+    find, send, end = _launcher.find_service_pids, _launcher._signal, _launcher.end_processes
 
     def refuse(pid, sig):
         if pid in _USERS_SERVICES:
             raise RuntimeError("tests must not signal the user's dictation service")
         send(pid, sig)
+
+    def end_only_the_tests(pids, *args, **kwargs):
+        if set(pids) & _USERS_TUXTALK:
+            raise RuntimeError("tests must not end the user's TuxTalk")
+        return end(pids, *args, **kwargs)
+    monkeypatch.setattr(_launcher, "end_processes", end_only_the_tests)
     monkeypatch.setattr(_launcher, "find_service_pids",
                         lambda: [pid for pid in find() if pid not in _USERS_SERVICES])
     monkeypatch.setattr(_launcher, "_signal", refuse)
@@ -834,8 +856,6 @@ def tray_main(monkeypatch):
     monkeypatch.setattr(cuda_helper, "mark_first_run_complete", step("marks setup done"))
     monkeypatch.setattr(control, "report", lambda status: None)
     monkeypatch.setattr(tray, "DictationTray", Tray)
-    # Its own name for the time module: time.sleep stays real for other threads.
-    monkeypatch.setattr(tray, "time", types.SimpleNamespace(sleep=lambda s: None))
     monkeypatch.delenv("FLATPAK_ID", raising=False)
 
     def run(*argv, first_run=False, welcome=lambda: {"continue": True}):

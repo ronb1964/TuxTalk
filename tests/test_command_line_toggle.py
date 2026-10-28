@@ -474,3 +474,20 @@ def test_the_ready_file_round_trip(monkeypatch, tmp_path):
     service_launcher.write_ready_pid(4242)
     assert service_launcher.read_ready_pid() == 4242
     assert os.listdir(tmp_path) == ["tuxtalk-service-ready"]
+
+
+def test_a_toggle_sent_right_after_ready_starts_a_recording(monkeypatch):
+    """tuxtalk --toggle with nothing running: the tray sends it the moment
+    the service says it's ready, while the service still connects to the
+    hotkey helper. It was counted into the input loop's starting point and
+    never acted on."""
+    from tuxtalk import app, service_tick
+    monkeypatch.setattr(recording, "toggles_asked", 5)     # sent while the model loaded
+    monkeypatch.setattr(rs.state, "is_recording", False)
+    recording.start_requested.clear()
+    recording.toggles_asked = 0                             # app.main, before "ready"
+    app._handle_sigusr1(None, None)                         # the tray's toggle
+    svc = service_tick.ServiceState(types.SimpleNamespace(mic=""))
+    service_tick._take_toggle(svc)
+    assert recording.start_requested.is_set()
+    recording.start_requested.clear()

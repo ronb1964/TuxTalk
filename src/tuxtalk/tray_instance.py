@@ -17,7 +17,8 @@ TRAY_LOCK = "talktype-tray.lock"
 # How long an older TalkType tray gets to exit after SIGTERM. It has no handler
 # for it, so it is normally gone at once.
 _OLD_TRAY_EXIT_WAIT_S = 3.0
-# A quitting tray outlives its service by up to SIGKILL's wait and its own exit.
+# A quitting tray outlives its service by up to SIGKILL's wait, unloading
+# its KWin focus script and its own exit.
 _TRAY_QUIT_EXTRA_S = 5.0
 
 
@@ -73,7 +74,6 @@ def tray_starting():
     """Whether another tray holds the lock: one still starting up that
     hasn't taken its D-Bus name yet, for control's wait."""
     return single_instance.held_elsewhere(TRAY_LOCK)
-
 
 
 def run_command_line(action):

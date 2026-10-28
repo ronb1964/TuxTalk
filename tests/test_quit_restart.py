@@ -314,3 +314,51 @@ def test_uninstall_stops_the_tray_and_service_before_the_root_step(monkeypatch):
     assert uninstall.run(tray) is False
     assert order == ["tray stops", "service ends", "root step", "tray resumes",
                      "dictation back on"]
+
+
+def test_a_restart_finishing_after_dictation_off_starts_nothing(slow_service):
+    launched = []
+    t = _bare_tray(_launch_service=lambda: launched.append(True),
+                   update_status_and_menu=lambda repeat=True: False)
+    t.restart_service(None)
+    t._drop_pending_launches()              # Dictation off while it waited
+    slow_service.gone.set()
+    assert not _run_main_loop_until(lambda: launched, timeout=0.5)
+    assert t._restarting is False
+
+
+def test_restart_stop_restart_ends_with_dictation_on(slow_service):
+    """The last restart was queued behind the first, which the Stop made
+    obsolete: it was dropped with it, and dictation stayed off."""
+    launched = []
+    t = _bare_tray(_launch_service=lambda: launched.append(True),
+                   update_status_and_menu=lambda repeat=True: False)
+    t.restart_service(None)
+    t._drop_pending_launches()              # Dictation off
+    t.restart_service(None)                 # and Restart again, while the first waits
+    slow_service.gone.set()
+    assert _run_main_loop_until(lambda: launched)
+
+
+def test_an_action_queued_before_quit_does_nothing_after_it(monkeypatch):
+    """Quit and Open Preferences together from the GNOME extension:
+    Preferences opened over a TuxTalk that was going away."""
+    from tuxtalk.tray_dbus_app import TrayAppInstance
+    opened = []
+    t = _bare_tray(open_preferences=lambda _: opened.append(True))
+    TrayAppInstance(t).show_preferences()   # queued
+    t._quitting = True                      # Quit runs first
+    _run_main_loop_until(lambda: False, timeout=0.2)
+    assert opened == []
+
+
+def test_quitting_refuses_the_menu_and_the_command_line(monkeypatch):
+    """TuxTalk opened again while quitting waits for it to go, and
+    tuxtalk --toggle says it's quitting instead of starting a service."""
+    from tuxtalk.dbus_service import TuxTalkDBusService
+    app = types.SimpleNamespace(quitting=True, show_menu=lambda: None)
+    service = TuxTalkDBusService.__new__(TuxTalkDBusService)
+    service.app = app
+    assert TuxTalkDBusService.ShowMenu(service) is False
+    t = _bare_tray(_quitting=True, _waiting_start=None)
+    assert t.control("toggle") == "quitting"

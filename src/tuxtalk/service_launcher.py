@@ -47,9 +47,10 @@ HOTKEY_TEST_REFRESH_S = 2
 
 def ready_file_path() -> str:
     """Where the service writes its PID once its model is loaded, so a tray
-    started after it (one that missed NotifyServiceReady) knows it's ready."""
-    base = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
-    return os.path.join(base, "tuxtalk-service-ready")
+    started after it (one that missed NotifyServiceReady) knows it's ready.
+    Raises OSError when there's no private folder for it (callers catch it)."""
+    from .single_instance import runtime_dir
+    return os.path.join(runtime_dir(), "tuxtalk-service-ready")
 
 
 def read_ready_pid():
@@ -261,14 +262,14 @@ def find_service_pids():
 
 
 def stop_dictation_service(force: bool = False) -> None:
-    """Terminate the dictation service, and only the dictation service.
+    """Signal the dictation service, and only the dictation service, without
+    waiting: Preferences' restart (the new service waits for the lock), the
+    pre-0.15.0 service at start. *force* sends SIGKILL instead of SIGTERM:
+    the welcome dialog, for a service started during setup.
 
-    *force* sends SIGKILL instead of SIGTERM; first-run onboarding uses it to
-    guarantee a stale service is gone before the welcome flow starts.
-
-    Never raises. Both callers are cleanup paths where failing to kill a service
-    is a far better outcome than propagating an exception — one of them is the
-    quit handler, and the other is the first thing a new user ever sees.
+    Never raises: every caller is a cleanup path, where a service left
+    running is better than an exception. Waiting, and killing past the
+    time, is end_dictation_service's.
     """
     sig = signal.SIGKILL if force else signal.SIGTERM
     try:
@@ -297,9 +298,8 @@ def end_dictation_service(wait_s=QUIT_WAIT_S) -> bool:
     here: one started meanwhile (Dictation turned on again) is left alone.
     The desktop gets its hotkeys back at once: the service's own exit hooks
     run only after it has typed. It sleeps: never on a GTK main thread."""
-    pids = find_service_pids()
-    release_desktop_hotkeys()
-    return end_processes(pids, wait_s)
+    return end_processes(find_service_pids(), wait_s, still_ours=is_service_pid,
+                         after_term=release_desktop_hotkeys)
 
 
 def end_in_background(then) -> None:
@@ -317,15 +317,21 @@ def end_in_background(then) -> None:
     threading.Thread(target=run, daemon=True, name="end-service").start()
 
 
-def end_processes(pids, wait_s) -> bool:
+def end_processes(pids, wait_s, still_ours=None, after_term=None) -> bool:
     """SIGTERM *pids*, wait up to *wait_s* for them to exit, then SIGKILL
     what's left and wait KILL_WAIT_S; False when one is still there. Each is
-    held from the start (_Process), so a PID another program takes meanwhile
-    is never signalled. It sleeps: never on a GTK main thread."""
+    held first (_Process) and checked again with *still_ours* once held, so
+    a PID another program took meanwhile is never signalled. *after_term*
+    runs once they've had SIGTERM. It sleeps: never on a GTK main thread."""
     procs = [_Process(pid) for pid in pids]
     try:
         for proc in procs:
+            if still_ours is not None and not still_ours(proc.pid):
+                proc.gone = True        # its PID belongs to another program now
+        for proc in procs:
             proc.send(signal.SIGTERM)
+        if after_term is not None:
+            after_term()
         if _wait_for_exit(procs, wait_s):
             return True
         logger.warning("A TuxTalk process didn't quit in time; ending it")

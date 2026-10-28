@@ -39,7 +39,7 @@ def _tray(**attrs):
 def test_waiting_for_the_old_service_does_not_sleep(monkeypatch):
     loop = FakeGLib()
     monkeypatch.setattr(tray_mod, "GLib", loop)
-    monkeypatch.setattr(tray_mod.time, "sleep", lambda s: (_ for _ in ()).throw(AssertionError("slept")))
+    monkeypatch.setattr("time.sleep", lambda s: (_ for _ in ()).throw(AssertionError("slept")))
     old = [[111], [111], []]          # still there for two checks, then gone
     monkeypatch.setattr("tuxtalk.service_launcher.pre_rename_service_pids",
                         lambda: old[0] if len(old) == 1 else old.pop(0))

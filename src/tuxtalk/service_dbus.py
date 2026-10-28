@@ -58,8 +58,8 @@ class AppInstance:
         return self._control(action)
 
     def stop_service(self):
-        """Dictation off, with no tray: this service is the one to stop.
-        stop_dictation_service skips its own process, so it quit nothing."""
+        """Dictation off, with no tray: this service is the one to stop, the
+        same way as Quit (the service-wide stop skips its own process)."""
         self.quit()
 
     def set_model(self, model_name: str):
