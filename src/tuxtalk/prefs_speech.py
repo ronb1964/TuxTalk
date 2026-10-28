@@ -566,7 +566,7 @@ class SpeechSection(Tab):
             choice = FULL if show_message(
                 self.window, Gtk.MessageType.QUESTION, "Downloads Required",
                 "The 'large-v3' model needs two downloads:\n\n"
-                "  • CUDA GPU Libraries   (~1.4GB)\n"
+                f"  • CUDA GPU Libraries   (~{CUDA_SIZE_TEXT})\n"
                 "  • Large-v3 AI Model    (~3GB)\n\n"
                 "Total: ~4.4GB, a one-time download.\n\n"
                 "Would you like to download both now?",

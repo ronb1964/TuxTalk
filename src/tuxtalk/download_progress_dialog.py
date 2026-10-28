@@ -394,11 +394,12 @@ def show_unified_download_dialog(cuda=False, extension=False, model=None, parent
     if title is None and cuda and model:
         title = f"Downloading {model} and CUDA"
     if description is None and cuda and model:
+        from tuxtalk.cuda_helper import DOWNLOAD_SIZE_TEXT as cuda_size
         from tuxtalk.model_helper import MODEL_DISPLAY_SIZES
         model_size = MODEL_DISPLAY_SIZES.get(model, "~3 GB")
         description = (
             f"To run {model} on your NVIDIA graphics card with CUDA, TuxTalk needs two things:\n\n"
-            f"  • <b>CUDA GPU Libraries</b> (~1.4GB) — unlocks GPU acceleration on your NVIDIA card\n"
+            f"  • <b>CUDA GPU Libraries</b> (~{cuda_size}) — unlocks GPU acceleration on your NVIDIA card\n"
             f"  • <b>{model} AI Model</b> ({model_size}) — the highest-accuracy speech recognition model\n\n"
             f"Both are one-time downloads. This may take several minutes depending on your connection."
         )
@@ -409,7 +410,7 @@ def show_unified_download_dialog(cuda=False, extension=False, model=None, parent
         from tuxtalk import cuda_helper
         task = DownloadTask(
             name="CUDA Libraries",
-            size_text="~1.4GB",
+            size_text=f"~{cuda_helper.DOWNLOAD_SIZE_TEXT}",
             download_func=cuda_helper.download_cuda_libraries
         )
         dialog.add_task(task)

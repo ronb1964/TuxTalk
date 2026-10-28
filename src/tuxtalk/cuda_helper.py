@@ -3,10 +3,6 @@
 
 import os
 import subprocess
-import gi
-gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk
-from .ui_style import message_dialog
 from .logger import setup_logger
 
 # NVIDIA's CUDA libraries, downloaded once when CUDA is picked: the size
@@ -396,8 +392,12 @@ def show_cuda_download_dialog(parent=None, on_success_callback=None):
     refresh Preferences. Returns True on success, False on failure and None
     if the user cancelled.
     """
+    # GTK only here: recommend.py and the dictation service read this
+    # module's sizes and detection without loading it.
     import threading
-    from gi.repository import GLib
+    import gi
+    gi.require_version('Gtk', '3.0')
+    from gi.repository import GLib, Gtk
 
     progress_dialog = Gtk.Dialog(title="Downloading CUDA Libraries")
     progress_dialog.set_default_size(500, 150)
@@ -419,7 +419,7 @@ def show_cuda_download_dialog(parent=None, on_success_callback=None):
     content.pack_start(title_label, False, False, 0)
 
     status_label = Gtk.Label()
-    status_label.set_markup('<span>Initializing download... (~1.4GB)</span>')
+    status_label.set_markup(f'<span>Initializing download... (~{DOWNLOAD_SIZE_TEXT})</span>')
     status_label.set_line_wrap(True)
     content.pack_start(status_label, False, False, 0)
 
@@ -475,52 +475,29 @@ def show_cuda_download_dialog(parent=None, on_success_callback=None):
         return None
 
     download_thread.join()
+    _say_how_it_went(parent, download_success[0], on_success_callback)
+    return download_success[0]
 
-    success = download_success[0]
 
-    if success:
-        msg = message_dialog(
-            parent=parent,
-            message_type=Gtk.MessageType.INFO,
-            buttons=Gtk.ButtonsType.OK,
-            text="CUDA Libraries Downloaded!"
-        )
-
-        settings = Gtk.Settings.get_default()
-        if settings:
-            settings.set_property("gtk-application-prefer-dark-theme", True)
-
-        msg.format_secondary_text("Your NVIDIA graphics card can now run the Whisper models with CUDA.")
-        msg.run()
-        msg.destroy()
-
-        # Switching the device is the caller's job (Preferences applies it, so
-        # the service restarts onto it). It runs after the message so its
-        # question doesn't come before "Downloaded!".
-        if on_success_callback:
-            try:
-                on_success_callback()
-            except Exception as e:
-                logger.warning(f"Error in success callback: {e}")
-        logger.info("CUDA libraries downloaded successfully")
-    else:
-        msg = message_dialog(
-            parent=parent,
-            message_type=Gtk.MessageType.ERROR,
-            buttons=Gtk.ButtonsType.OK,
-            text="Download Failed"
-        )
-
-        settings = Gtk.Settings.get_default()
-        if settings:
-            settings.set_property("gtk-application-prefer-dark-theme", True)
-
-        msg.format_secondary_text(
-            "Could not download CUDA libraries.\n\n"
-            "You can try again later: choose CUDA under Preferences → General → Change model, device or language → Device."
-        )
-        msg.run()
-        msg.destroy()
+def _say_how_it_went(parent, success, on_success_callback):
+    """"CUDA Libraries Downloaded!", then *on_success_callback*, or "Download
+    Failed". Switching the device is the caller's job (Preferences applies
+    it, so the service restarts onto it), after the message so its question
+    doesn't come before "Downloaded!"."""
+    from gi.repository import Gtk
+    from .ui_style import show_message
+    if not success:
+        show_message(parent, Gtk.MessageType.ERROR, "Download Failed",
+                     "Could not download CUDA libraries.\n\nYou can try again later: choose "
+                     "CUDA under Preferences → General → Change model, device or language → "
+                     "Device.")
         logger.error("CUDA libraries download failed")
-
-    return success
+        return
+    show_message(parent, Gtk.MessageType.INFO, "CUDA Libraries Downloaded!",
+                 "Your NVIDIA graphics card can now run the Whisper models with CUDA.")
+    if on_success_callback:
+        try:
+            on_success_callback()
+        except Exception as e:
+            logger.warning(f"Error in success callback: {e}")
+    logger.info("CUDA libraries downloaded successfully")
