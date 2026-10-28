@@ -316,42 +316,6 @@ def preset_notice(model, device, gpu_offered):
     return text + "\nRestarting service..."
 
 
-def recommend_notice_text(setup):
-    """The one-time notice for an existing user whose setup isn't the
-    recommended one. *setup* is recommend.Setup; its title says what and where."""
-    return (f"{setup.title}. Choose Performance → Recommended for this computer in the "
-            "TuxTalk menu to switch.")
-
-
-def maybe_show_recommend_notice():
-    """Once, on the first start after updating: tell existing users when the
-    recommended setup differs from theirs. Never on first run
-    (first run sets recommend_notice_shown) or the Flatpak. Runs as a GLib
-    timeout: True (ask again) until the dictation service is up, then False."""
-    try:
-        from . import recommend
-        from .config import load_config, save_config
-        from .cuda_helper import is_first_run
-        if os.environ.get("FLATPAK_ID") or is_first_run():
-            return False
-        from .service_launcher import find_service_pids
-        if not find_service_pids():
-            return True        # the service isn't up yet: ask again next tick
-        cfg = load_config()
-        if cfg.recommend_notice_shown:
-            return False
-        better = recommend.differs_from_recommendation(cfg, recommend.detect_hardware(cfg))
-        if better is not None:
-            from .notify import notify as _notify
-            _notify("A better setup for this computer", recommend_notice_text(better))
-            logger.info(f"Told the user about the recommended setup: {better.title}")
-        cfg.recommend_notice_shown = True
-        save_config(cfg)
-    except Exception as e:
-        logger.debug(f"Recommended-setup notice skipped: {e}")
-    return False
-
-
 class DictationTray:
     def __init__(self):
         # TuxTalk is a dark-themed app. This is a global Gtk setting, so setting
@@ -418,9 +382,8 @@ class DictationTray:
         # Check service status every second to keep the icon and menu current
         GLib.timeout_add_seconds(1, self.update_status_and_menu)
 
-        # After updating: point existing users at the recommended setup, and
-        # offer the hotkey helper or Parakeet Ultra this TuxTalk brings.
-        GLib.timeout_add_seconds(15, maybe_show_recommend_notice)
+        # After updating: the recommended setup, and the hotkey helper or
+        # Parakeet Ultra this TuxTalk brings.
         update_offers.start(self.restart_service)
 
         # Auto-start will be triggered after welcome dialog on first run
@@ -663,7 +626,8 @@ class DictationTray:
         """Auto-start the dictation service if not already running.
 
         *_waited* counts the 100 ms checks spent waiting for a pre-rename
-        service to exit; they run as GLib timeouts so the menu stays usable.
+        service, or one that's quitting, to exit; they run as GLib timeouts
+        so the menu stays usable.
         """
         try:
             # NEVER start during onboarding - hotkey test needs to capture keys
@@ -684,10 +648,16 @@ class DictationTray:
                 GLib.timeout_add(100, self._auto_start_service, _waited + 1)
                 return False
 
-            # Only start if not already running
+            from .service_launcher import QUIT_WITHIN_S
             if not self.is_service_running():
                 logger.info("Auto-starting dictation service...")
                 self.start_service(None)
+            elif _waited < QUIT_WITHIN_S * 10:
+                # It may be on its way out: an update's restart stops it as
+                # the old tray quits, and it types what it holds first.
+                if _waited == 0:
+                    logger.info("Dictation service already running; watching in case it's quitting")
+                GLib.timeout_add(100, self._auto_start_service, _waited + 1)
             else:
                 logger.info("Dictation service already running, skipping auto-start")
         except Exception as e:

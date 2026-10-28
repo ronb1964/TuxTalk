@@ -23,15 +23,15 @@ from . import recording_state as rs
 from .config import load_config, load_custom_commands
 from .logger import setup_logger
 from .recording_indicator import RecordingIndicator
-from .service_tick import QUIT_DRAIN_S
+from .service_launcher import QUIT_WITHIN_S
 
 logger = setup_logger(__name__)
 
 
 # The single-instance lock's file, open while the service runs.
 _lockfile_handle = None
-# How long a new service waits for the old one's lock: its quit, and a little more.
-LOCK_WAIT_S = QUIT_DRAIN_S + 5.0
+# How long a new service waits for the old one's lock: its quit.
+LOCK_WAIT_S = QUIT_WITHIN_S
 
 # The service's own D-Bus service when no tray runs (_start_dbus_stand_in),
 # held here for the life of the process.
@@ -76,11 +76,11 @@ def _handle_sigterm(signum, frame):
     """SIGTERM (Quit, Restart Service, an update): the input loop's next
     pass (service_tick._quit) finishes what's being typed, then the process
     exits. Before the loop runs (the model still loading) there's nothing to
-    finish. No lock here: the main thread may be holding the one wanted."""
+    finish. A plain flag, not an Event: Event.set takes a lock, which a
+    second SIGTERM arriving inside the first's would wait on forever."""
     if not _service_ready:
         raise SystemExit(0)
-    logger.info("Asked to quit: finishing what's being typed first")
-    recording.quit_requested.set()
+    recording.quit_asked = True
 
 
 def _install_signal_handlers():
@@ -160,8 +160,11 @@ def _load_settings():
     from . import custom_words, desktop_identity, ui_style
     desktop_identity.apply()        # TuxTalk's icon on its windows, not KDE's generic one
     ui_style.prepare_windows()   # emoji that show, buttons clear of panels and docks
-    _acquire_single_instance()
+    # The signals first: a restart's tray signals this service by its PID
+    # (a toggle from the GNOME menu) while it still waits for the lock, and
+    # an unhandled SIGUSR1 ends the process.
     _install_signal_handlers()
+    _acquire_single_instance()
 
     cfg = load_config()
     _log_what_runs(cfg)

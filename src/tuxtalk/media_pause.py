@@ -72,6 +72,7 @@ class MediaPauser:
         self._lock = threading.Lock()
         self._jobs = queue.Queue()
         self._worker = None
+        self._closing = False      # exiting: a pause still queued mustn't run
 
     # -- called from the dictation service; never block -------------------
 
@@ -86,7 +87,9 @@ class MediaPauser:
     def resume_at_exit(self, timeout=EXIT_WAIT_S):
         """For exit: let a pause still queued run first (quitting right after
         a dictation started, it ran after this and the music stayed paused),
-        then resume on the calling thread, as the worker may not get a turn."""
+        then resume on the calling thread, as the worker may not get a turn.
+        A pause the worker hasn't got to by then does nothing."""
+        self._closing = True
         self.wait_idle(timeout)
         self._resume_now()
 
@@ -121,7 +124,7 @@ class MediaPauser:
 
     def _pause_now(self):
         for name in self._bus.players():
-            if self._status(name) != "Playing":
+            if self._closing or self._status(name) != "Playing":
                 continue
             try:
                 self._bus.call(name, "Pause")

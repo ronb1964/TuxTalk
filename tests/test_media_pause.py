@@ -230,5 +230,22 @@ def test_quitting_right_after_a_pause_was_asked_for_leaves_nothing_paused():
     p.pause()                                # queued, not done yet
     threading.Timer(0.2, gate.set).start()
     p.resume_at_exit()
-    assert bus.calls == [("youtube", "Pause"), ("youtube", "Play")]
-    assert bus.status == {"youtube": "Playing"}
+    assert bus.status == {"youtube": "Playing"}     # never paused, or paused and resumed
+
+
+def test_a_pause_still_queued_when_the_exit_wait_runs_out_does_nothing():
+    """The worker busy past the exit's wait: the pause ran after the resume,
+    and the music stayed paused after TuxTalk was gone."""
+    gate = threading.Event()
+
+    class StuckBus(FakeBus):
+        def players(self):
+            gate.wait(5)
+            return super().players()
+    bus = StuckBus(youtube="Playing")
+    p = MediaPauser(bus)
+    p.pause()
+    p.resume_at_exit(timeout=0.05)          # gives up waiting
+    gate.set()
+    assert p.wait_idle(2)
+    assert bus.status == {"youtube": "Playing"} and ("youtube", "Pause") not in bus.calls

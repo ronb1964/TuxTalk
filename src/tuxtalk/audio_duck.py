@@ -184,6 +184,7 @@ class AudioDucker:
         self._owed = self._load_owed()
         self._jobs = queue.Queue()
         self._worker = None
+        self._closing = False      # exiting: a turn-down still queued mustn't run
         self._round = 0            # each duck starts a new one; old follow-ups stop
 
     # -- called from the dictation service; never block -------------------
@@ -197,7 +198,9 @@ class AudioDucker:
     def restore_at_exit(self, timeout=EXIT_WAIT_S):
         """For exit: let a turn-down still queued run first (quitting right
         after a dictation started, it ran after this and stayed), then
-        restore on the calling thread, as the worker may not get a turn."""
+        restore on the calling thread, as the worker may not get a turn.
+        A turn-down the worker hasn't got to by then does nothing."""
+        self._closing = True
         self.wait_idle(timeout)
         self._restore_now()
 
@@ -224,6 +227,8 @@ class AudioDucker:
                 logger.debug(f"Audio duck: {e}")
 
     def _duck_now(self):
+        if self._closing:
+            return
         self._round += 1
         streams = list_streams(self._run)
         self._settle_owed(streams)

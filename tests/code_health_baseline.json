@@ -1,6 +1,6 @@
 {
  "files": {
-  "tray.py": 2393,
+  "tray.py": 2363,
   "welcome_dialog.py": 3153
  },
  "findings": {
@@ -220,7 +220,6 @@
   "tray.py::main.show_first_run_setup::undocumented": 1,
   "tray.py::main::swallowed_error": 2,
   "tray.py::main::undocumented": 1,
-  "tray.py::maybe_show_recommend_notice::swallowed_error": 1,
   "ui_style.py::<module>::dated_comment": 1,
   "ui_style.py::<module>::long_line": 1,
   "ui_style.py::Fold.__init__::undocumented": 1,
@@ -249,6 +248,7 @@
   "update_checker.py::install_appimage_update::swallowed_error": 1,
   "update_checker.py::restart_via_launcher::long_line": 1,
   "update_checker.py::restart_via_launcher::swallowed_error": 1,
+  "update_offers.py::maybe_show_recommend_notice::swallowed_error": 1,
   "virtual_keyboard.py::<module>::dated_comment": 2,
   "virtual_keyboard.py::_keyboard_class::undocumented": 1,
   "virtual_keyboard.py::send::long_line": 1,

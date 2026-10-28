@@ -270,6 +270,12 @@ def release_desktop_hotkeys() -> None:
         logger.debug(f"Could not release the desktop's hotkeys: {e}")
 
 
+# How long a dictation service asked to quit may take: typing what it holds
+# (service_tick.QUIT_DRAIN_S) and its exit hooks (the music resumed, the
+# sounds turned back up). A new service waits this long for its lock, and a
+# new tray for it to go before starting one.
+QUIT_WITHIN_S = 35.0
+
 # The GDK_BACKEND the service's own (SERVICE_GDK_BACKEND) took the place of,
 # "" for none, kept in the service's environment.
 _USERS_GDK_BACKEND = "TUXTALK_USERS_GDK_BACKEND"

@@ -143,7 +143,7 @@ def tick(cfg, svc: "ServiceState") -> "hotkey_keys.Hotkeys | None":
 
     The microphone comes off *svc*, not a parameter: it is re-resolved on a
     live reload, and a caller holding its own copy would keep the startup one."""
-    if recording.quit_requested.is_set():
+    if recording.quit_asked:
         _quit(cfg, svc)
     now = time.time()
     _take_start_request(cfg, svc, now)
@@ -175,23 +175,29 @@ def _take_start_request(cfg, svc: ServiceState, now: float) -> None:
         svc.last_activity = now
 
 
-# How long quitting waits for the dictation worker; a new service, started by
-# a restart meanwhile, waits this long and a little more for the lock (app.py).
-QUIT_DRAIN_S = 10.0
+# How long quitting waits for the dictation worker: a long dictation on the
+# processor, or the model woken from Power Saving, takes a while. Within
+# service_launcher.QUIT_WITHIN_S, with the exit hooks.
+QUIT_DRAIN_S = 20.0
 
 
 def _quit(cfg, svc: ServiceState) -> None:
     """Quit (app's SIGTERM handler: Quit, Restart Service, an update): a
     recording under way stops as letting go of the key would (Recent
     Dictations gets it), what the dictation worker holds is typed, up to
-    QUIT_DRAIN_S, and the process exits, so its exit hooks run: the music
-    plays again, the other sounds come back up. Killed outright, recordings
-    not transcribed yet were lost without a word."""
+    QUIT_DRAIN_S (past that, a notification says one wasn't typed), and the
+    process exits, so its exit hooks run: the music plays again, the other
+    sounds come back up. Killed outright, recordings not transcribed yet
+    were lost without a word."""
     if rs.state.is_recording:
         recording.stop_requested.set()
         _take_stop_request(cfg, svc, time.time())
     if not dictation_worker.drain(QUIT_DRAIN_S):
         logger.warning(f"Quitting with dictation work still unfinished after {QUIT_DRAIN_S:g} s")
+        from .notify import notify
+        notify("A dictation wasn't typed",
+               "TuxTalk was quitting and couldn't finish it in time. Say it again once "
+               "TuxTalk is back.")
     logger.info("Quitting")
     raise SystemExit(0)
 

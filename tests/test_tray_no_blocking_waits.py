@@ -38,7 +38,7 @@ def test_waiting_for_the_old_service_does_not_sleep(monkeypatch):
     assert stops == [1] and started == [1]
 
 
-def test_the_wait_gives_up_after_three_seconds(monkeypatch):
+def test_the_wait_gives_up_once_a_service_could_have_quit(monkeypatch):
     loop = FakeGLib()
     monkeypatch.setattr(tray_mod, "GLib", loop)
     monkeypatch.setattr("tuxtalk.service_launcher.pre_rename_service_pids", lambda: [111])
@@ -53,7 +53,27 @@ def test_the_wait_gives_up_after_three_seconds(monkeypatch):
     while loop.timers:
         loop.timers.pop(0)()
         checks += 1
-    assert checks == 30
+    from tuxtalk.service_launcher import QUIT_WITHIN_S
+    assert checks == QUIT_WITHIN_S * 10 and started == []
+
+
+def test_a_service_that_quits_while_the_tray_starts_is_replaced(monkeypatch):
+    """An update's restart: the old tray stopped the service as it quit,
+    and the service typed what it held first. The new tray saw it running,
+    skipped starting one, and dictation stayed off once it ended."""
+    loop = FakeGLib()
+    monkeypatch.setattr(tray_mod, "GLib", loop)
+    monkeypatch.setattr("tuxtalk.service_launcher.pre_rename_service_pids", lambda: [])
+    running = iter([True, True, True, False])
+    started = []
+    t = types.SimpleNamespace(onboarding_in_progress=False,
+                              is_service_running=lambda: next(running),
+                              start_service=lambda _: started.append(1))
+    t._auto_start_service = lambda w=0: tray_mod.DictationTray._auto_start_service(t, w)
+    t._auto_start_service()
+    while loop.timers:
+        loop.timers.pop(0)()
+    assert started == [1]
 
 
 def test_the_kde_cache_rebuild_falls_back_to_kbuildsycoca5(monkeypatch):

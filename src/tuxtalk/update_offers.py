@@ -1,7 +1,9 @@
-"""The offers TuxTalk makes by itself on starting, when it brings something
-the computer doesn't have yet: a newer hotkey helper (asked at every start
-until it's updated: without it the dictation keys can stop working) and
-Parakeet Ultra (asked once). At most one a start, so two never stack.
+"""What TuxTalk says by itself on starting after an update: a better setup
+for this computer (once, a notification), and the offers of what it brings
+that the computer doesn't have yet: a newer hotkey helper (asked at every
+start until it's updated: without it the dictation keys can stop working)
+and Parakeet Ultra (asked once). At most one offer a start, so two never
+stack.
 
 They come up while people may be typing, so Not Now is the default: an
 Enter meant for their own window must not start a download or a password
@@ -19,11 +21,13 @@ logger = setup_logger(__name__)
 # Seconds after the tray starts: the dictation service is up by then, and
 # the desktop has finished opening what it opens at login.
 OFFER_AFTER_S = 20
+NOTICE_AFTER_S = 15
 
 
 def start(restart) -> None:
-    """Make this start's offer once dictation is running; *restart*(None)
-    restarts dictation onto what was updated."""
+    """Make this start's notice and offer once dictation is running;
+    *restart*(None) restarts dictation onto what was updated."""
+    GLib.timeout_add_seconds(NOTICE_AFTER_S, maybe_show_recommend_notice)
     GLib.timeout_add_seconds(OFFER_AFTER_S, _offer_in_turn, restart)
 
 
@@ -190,3 +194,41 @@ def maybe_offer_parakeet_update(restart) -> None:
             restart(None)
     except Exception as e:
         logger.warning(f"Parakeet update offer skipped: {e}")
+
+
+# --- The recommended setup ------------------------------------------------------
+
+def recommend_notice_text(setup):
+    """The one-time notice for an existing user whose setup isn't the
+    recommended one. *setup* is recommend.Setup; its title says what and where."""
+    return (f"{setup.title}. Choose Performance → Recommended for this computer in the "
+            "TuxTalk menu to switch.")
+
+
+def maybe_show_recommend_notice():
+    """Once, on the first start after updating: tell existing users when the
+    recommended setup differs from theirs. Never on first run
+    (first run sets recommend_notice_shown) or the Flatpak. Runs as a GLib
+    timeout: True (ask again) until the dictation service is up, then False."""
+    try:
+        from . import recommend
+        from .config import load_config, save_config
+        from .cuda_helper import is_first_run
+        if os.environ.get("FLATPAK_ID") or is_first_run():
+            return False
+        from .service_launcher import find_service_pids
+        if not find_service_pids():
+            return True        # the service isn't up yet: ask again next tick
+        cfg = load_config()
+        if cfg.recommend_notice_shown:
+            return False
+        better = recommend.differs_from_recommendation(cfg, recommend.detect_hardware(cfg))
+        if better is not None:
+            from .notify import notify as _notify
+            _notify("A better setup for this computer", recommend_notice_text(better))
+            logger.info(f"Told the user about the recommended setup: {better.title}")
+        cfg.recommend_notice_shown = True
+        save_config(cfg)
+    except Exception as e:
+        logger.debug(f"Recommended-setup notice skipped: {e}")
+    return False
