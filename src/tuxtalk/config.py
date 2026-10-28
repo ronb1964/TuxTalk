@@ -1047,7 +1047,7 @@ def load_custom_commands() -> dict[str, str]:
     if os.path.exists(CUSTOM_COMMANDS_PATH):
         try:
             data = _load_toml_file(CUSTOM_COMMANDS_PATH)
-            commands = dict(data.get("commands", {}))
+            commands = _text_snippets(data.get("commands", {}))
         except Exception as e:
             print(f"Warning: Could not load custom commands: {e}")
             # Preferences rebuilds its list from whatever this returns and
@@ -1055,6 +1055,21 @@ def load_custom_commands() -> dict[str, str]:
             # custom command. Mark the failure so the writer refuses.
             _commands_read_failed = True
     return commands
+
+def _text_snippets(table) -> dict[str, str]:
+    """The snippets of a hand-editable table that can be typed: a number
+    as its text (`answer = 42`), anything else (a list, a table) left out,
+    since a dictation with that phrase would fail on it."""
+    snippets = {}
+    for phrase, text in table.items():
+        if isinstance(text, (int, float)) and not isinstance(text, bool):
+            text = str(text)
+        if isinstance(text, str):
+            snippets[phrase] = text
+        else:
+            logger.warning("A snippet in custom_commands.toml isn't text; it's left out")
+    return snippets
+
 
 def merge_custom_command_edits(loaded: dict[str, str], edited: dict[str, str],
                                on_disk: dict[str, str]) -> dict[str, str]:

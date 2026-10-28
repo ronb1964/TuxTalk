@@ -774,3 +774,14 @@ def test_changing_a_loaded_object_without_saving_changes_nothing_else(config_pat
     first.model = "large-v3"
     assert config.load_config().model == "small"
     assert config.load_config() is not config.load_config()
+
+
+def test_a_snippet_that_is_not_text_does_not_break_dictation(commands_path):
+    """A hand edit like `answer = 42`, or a list, made every dictation with
+    that phrase fail. A number is kept as its text; anything else is left out."""
+    from tuxtalk import custom_commands
+    commands_path.write_text('[commands]\n"talk type" = "TalkType"\nanswer = 42\n'
+                             'shopping = ["eggs", "milk"]\n')
+    loaded = config.load_custom_commands()
+    assert loaded == {"talk type": "TalkType", "answer": "42"}
+    assert custom_commands.apply("the answer", loaded, [])[0] == "the 42"
