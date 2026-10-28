@@ -358,3 +358,15 @@ def test_an_x11_copy_that_timed_out_never_lands_later(monkeypatch):
     while context.iteration(False):
         pass
     assert copied == []
+
+
+@pytest.mark.parametrize("said", [b"No selection\n",            # wl-clipboard 2.0, 2.1
+                                  b"Nothing is copied\n"])      # 2.2 on
+def test_nothing_highlighted_is_empty_in_every_wl_paste(monkeypatch, said):
+    """Ubuntu 22.04 and Debian 12 ship a wl-paste that says it differently;
+    read as "couldn't read", the dictation stayed highlighted after the paste."""
+    import types
+    monkeypatch.setattr(cb.subprocess, "run",
+                        lambda cmd, **kw: types.SimpleNamespace(returncode=1, stdout=b"",
+                                                                stderr=said))
+    assert _REAL_PRIMARY_TO_KEEP() is None

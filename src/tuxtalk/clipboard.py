@@ -330,7 +330,8 @@ def _primary_to_keep():
         return _UNREADABLE
     if result.returncode == 0:
         return result.stdout.decode("utf-8", "replace")
-    if b"Nothing is copied" in result.stderr:
+    # wl-clipboard 2.2 says "Nothing is copied", 2.0 and 2.1 "No selection".
+    if b"Nothing is copied" in result.stderr or b"No selection" in result.stderr:
         return None
     logger.info(f"Couldn't read the primary selection (wl-paste exit {result.returncode})")
     return _UNREADABLE
