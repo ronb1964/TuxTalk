@@ -164,3 +164,30 @@ def test_each_tray_entry_opens_a_hover_view_with_copy():
     assert copied == [text]   # the whole dictation, not the wrapped display
     items["Fix a Word..."].activate()
     assert fixing == [3]      # opens the Fix a Word window on this dictation
+
+
+def test_dictation_on_off_is_a_check_item_a_screen_reader_can_read(monkeypatch):
+    """A checkmark icon showed the state only to the eye; a check item's
+    state goes to the desktop (dbusmenu's toggle-state), so a screen reader
+    says on or off. The tray setting it doesn't start or stop anything;
+    a click does."""
+    from gi.repository import Gtk
+    from tuxtalk import config, tray
+    monkeypatch.setattr(config, "load_config", config.Settings)
+    t = tray.DictationTray.__new__(tray.DictationTray)
+    asked = []
+    monkeypatch.setattr(t, "start_service", lambda w: asked.append("start"), raising=False)
+    monkeypatch.setattr(t, "stop_service", lambda w: asked.append("stop"), raising=False)
+    menu = tray.DictationTray.build_menu(t)
+    try:
+        assert isinstance(t.service_toggle, Gtk.CheckMenuItem)
+        assert t.service_toggle.get_label() == "Dictation on/off"
+        for running in (True, False, True):   # the status poll, as it runs
+            t.update_menu_display(is_running=running)
+            assert t.service_toggle.get_active() is running
+        assert asked == []
+        t.service_toggle.activate()            # the user clicks it: off
+        t.service_toggle.activate()            # and on again
+        assert asked == ["stop", "start"]
+    finally:
+        menu.destroy()
