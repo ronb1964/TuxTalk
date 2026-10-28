@@ -105,3 +105,12 @@ def test_tips_leave_out_what_a_setting_turned_off_or_the_flatpak_lacks(monkeypat
     assert "types your last" not in _tips(monkeypatch, paste_last_hotkey="")
     tips = _tips(monkeypatch, flatpak=True)
     assert "Right Alt" not in tips and "System Settings → Keyboard → Shortcuts" in tips
+
+
+def test_problems_explains_letters_that_come_out_wrong(help_pages):
+    """Caps Lock swaps every case, and TuxTalk can't read its state; COSMIC
+    doesn't say which of several layouts is on. Neither can be fixed from
+    TuxTalk, so Problems says what to do."""
+    problems = next(text for title, text in help_pages.items() if "Problems" in title)
+    assert "Caps Lock is on" in problems
+    assert "COSMIC" in problems and "keyboard layout" in problems

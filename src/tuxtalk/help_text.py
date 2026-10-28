@@ -561,6 +561,12 @@ Microphone</b> and the test beside it.
     fixing; its button fixes it.
   • {typing_para}
 
+<b>Letters come out wrong</b>
+  • Capitals and small letters swapped ("hELLO"): Caps Lock is on. TuxTalk can't
+    see it, so turn it off before dictating.
+  • On COSMIC with more than one keyboard layout, TuxTalk types for the first one
+    in COSMIC's settings; with another switched on, letters come out wrong.
+
 <b>Too slow</b>
   • Use your graphics card: TuxTalk menu → Performance → Recommended for this
     computer, or Use Recommended in Preferences → General.
