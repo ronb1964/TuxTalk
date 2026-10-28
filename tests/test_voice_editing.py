@@ -621,6 +621,40 @@ def test_declining_the_download_unticks_only_this_box(monkeypatch):
     assert box.active is False and saved == [("voice_editing", False)]
 
 
+def test_downloading_the_ai_for_voice_editing_leaves_self_corrections_off(prefs_window,
+                                                                          monkeypatch):
+    """Self-corrections was on before the AI files went missing, so its box
+    shows unticked. Turning on voice editing downloads them again: the box
+    that said off must still mean off."""
+    import gi
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import Gtk
+    from tuxtalk import download_progress_dialog
+    installed = []
+    monkeypatch.setattr(ai_cleanup, "is_installed", lambda: bool(installed))
+    monkeypatch.setattr(Gtk.Dialog, "run", lambda self: Gtk.ResponseType.OK)
+
+    class Download:
+        def __init__(self, **kwargs):
+            pass
+
+        def add_task(self, task):
+            pass
+
+        def run(self):
+            installed.append(True)
+            return {"AI engine": {"success": True}, "AI model": {"success": True}}
+    monkeypatch.setattr(download_progress_dialog, "UnifiedDownloadDialog", Download)
+    window = prefs_window(ai_corrections=True)
+    advanced = window.advanced_tab
+    assert not advanced.ai_corrections_check.get_active()
+
+    advanced.voice_editing_check.set_active(True)
+
+    assert window.config["voice_editing"] is True
+    assert window.config["ai_corrections"] is False
+
+
 def _labs(window):
     """What Preferences shows under its TuxTalk Labs heading."""
     from gi.repository import Gtk

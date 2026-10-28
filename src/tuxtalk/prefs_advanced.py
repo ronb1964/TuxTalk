@@ -598,6 +598,12 @@ class AdvancedTab(Tab):
 
         if all(r.get("success") for r in results.values()) and ai_cleanup.is_installed():
             self.update_config(key, True)
+            # The other option's box showed unticked while the files were
+            # missing; the download mustn't turn it on behind that box.
+            for other_key, other in (("ai_corrections", self.ai_corrections_check),
+                                     ("voice_editing", self.voice_editing_check)):
+                if other_key != key and not other.get_active():
+                    self.update_config(other_key, False)
             return
 
         self._untick_ai_feature(check, key, handler)
