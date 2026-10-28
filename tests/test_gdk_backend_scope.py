@@ -115,18 +115,31 @@ def test_service_falls_back_when_xwayland_is_absent(monkeypatch):
     )
 
 
-def test_preferences_opened_from_the_service_runs_natively(monkeypatch):
+@pytest.mark.parametrize("users", ["", "wayland", "x11,wayland"])
+def test_preferences_opened_from_the_service_gets_the_users_gdk_backend(monkeypatch, users):
     """With no tray, the GNOME extension asks the dictation service to open
     Preferences: it got the service's GDK_BACKEND, and no dropdown opened on
-    a click. A GDK_BACKEND of the user's own is kept."""
+    a click. The user's own comes back, even one the same as the service's."""
     from tuxtalk import service_launcher
     from tuxtalk.service_dbus import AppInstance
     started = []
     monkeypatch.setattr(service_launcher.subprocess, "Popen",
                         lambda cmd, env=None: started.append(env))
-    monkeypatch.setenv("GDK_BACKEND", service_launcher.SERVICE_GDK_BACKEND)
+    base = {"GDK_BACKEND": users} if users else {}
+    service_env = service_launcher.build_service_env(base)
+    for name in ("GDK_BACKEND", service_launcher._USERS_GDK_BACKEND):
+        monkeypatch.setenv(name, service_env[name])
     AppInstance.show_preferences(None)
-    assert "GDK_BACKEND" not in started[0]
+    assert started[0].get("GDK_BACKEND", "") == users
+    assert service_launcher._USERS_GDK_BACKEND not in started[0]
+
+
+def test_preferences_from_the_tray_keeps_the_callers_gdk_backend(monkeypatch):
+    from tuxtalk import service_launcher
+    started = []
+    monkeypatch.setattr(service_launcher.subprocess, "Popen",
+                        lambda cmd, env=None: started.append(env))
+    monkeypatch.delenv(service_launcher._USERS_GDK_BACKEND, raising=False)
     monkeypatch.setenv("GDK_BACKEND", "wayland")
     service_launcher.launch_preferences()
-    assert started[1]["GDK_BACKEND"] == "wayland"
+    assert started[0]["GDK_BACKEND"] == "wayland"

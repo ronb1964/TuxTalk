@@ -270,6 +270,11 @@ def release_desktop_hotkeys() -> None:
         logger.debug(f"Could not release the desktop's hotkeys: {e}")
 
 
+# The GDK_BACKEND the service's own (SERVICE_GDK_BACKEND) took the place of,
+# "" for none, kept in the service's environment.
+_USERS_GDK_BACKEND = "TUXTALK_USERS_GDK_BACKEND"
+
+
 def build_service_env(base_env=None, dev_pythonpath=None):
     """Return the environment the dictation service must be started with.
 
@@ -278,6 +283,8 @@ def build_service_env(base_env=None, dev_pythonpath=None):
     service must not inherit that.
     """
     env = dict(os.environ if base_env is None else base_env)
+    # The user's own, for Preferences the service opens (launch_preferences).
+    env[_USERS_GDK_BACKEND] = env.get("GDK_BACKEND", "")
     env["GDK_BACKEND"] = SERVICE_GDK_BACKEND
     if dev_pythonpath:
         env["PYTHONPATH"] = dev_pythonpath
@@ -324,13 +331,18 @@ def launch_preferences(tab=None):
 
     Shared by the tray, the first-run screens and the dictation service.
     Unlike the service it keeps the caller's GDK_BACKEND: Preferences runs
-    natively, so its dropdowns work on Wayland. But not the service's own
-    (the GNOME extension's Preferences with no tray running): under
-    XWayland a dropdown doesn't open on a click.
+    natively, so its dropdowns work on Wayland. Opened by the service (the
+    GNOME extension's Preferences with no tray running), it gets the user's
+    GDK_BACKEND back in place of the service's: under XWayland a dropdown
+    doesn't open on a click.
     """
     env = os.environ.copy()
-    if env.get("GDK_BACKEND") == SERVICE_GDK_BACKEND:
-        del env["GDK_BACKEND"]
+    if _USERS_GDK_BACKEND in env:
+        users = env.pop(_USERS_GDK_BACKEND)
+        if users:
+            env["GDK_BACKEND"] = users
+        else:
+            env.pop("GDK_BACKEND", None)
     pythonpath = dev_pythonpath()
     if pythonpath:
         env["PYTHONPATH"] = pythonpath

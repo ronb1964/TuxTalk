@@ -154,8 +154,8 @@ class _FixWordDialog:
         self.warning_label.set_no_show_all(True)
         box.pack_start(self.warning_label, False, False, 0)
 
-        # Ron read "copy the fixed text" as the fixed word, and pasted the
-        # whole dictation over one word. Say what it is.
+        # "Copy the fixed text" read as the fixed word, and the whole
+        # dictation was pasted over one word. Say what it is.
         self.copy_check = Gtk.CheckButton(
             label="Also fix it in my text" if in_place
             else "Also copy the whole corrected dictation, to paste over the old one")
@@ -264,7 +264,9 @@ class _FixWordDialog:
         if phrase:
             try:
                 previous = vocabulary.existing_fix(phrase)
-            except Exception:
+            except Exception as e:
+                # Only the warning is missed; saving reads the commands again.
+                logger.warning(f"Fix a Word: couldn't check for an earlier fix: {e}")
                 previous = None
             if previous is not None and previous != replacement:
                 warnings.append(

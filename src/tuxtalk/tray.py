@@ -993,10 +993,10 @@ class DictationTray:
     def _get_current_preset(self) -> str:
         """Id of the preset the settings match, or 'custom'."""
         try:
-            from . import recommend
-            from .config import load_config
-            return recommend.match_preset(load_config(), self._current_presets())
-        except Exception:
+            from . import config, recommend
+            return recommend.match_preset(config.load_config(), self._current_presets())
+        except Exception as e:
+            logger.warning(f"Could not tell which preset is in use: {e}")
             return "custom"
 
     def set_performance_preset(self, preset_id: str):

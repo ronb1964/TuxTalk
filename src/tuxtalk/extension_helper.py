@@ -397,8 +397,10 @@ def uninstall_extension() -> bool:
                     capture_output=True,
                     timeout=10
                 )
-            except Exception:
-                pass  # Ignore errors - extension might not be recognized
+            except (OSError, subprocess.SubprocessError) as e:
+                # A shell that never loaded it doesn't know it; forgetting it
+                # below covers that.
+                logger.info(f"gnome-extensions disable didn't run: {e}")
 
         # Disabling puts it on disabled-extensions, and a failed disable
         # (a shell that never loaded it) leaves it on enabled-extensions:
