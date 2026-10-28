@@ -380,23 +380,23 @@ def test_hotkey_test_uses_the_helper_and_watches_its_keys():
     """With the helper the user isn't in the "input" group, so the test
     can't open the keyboards itself (Silverblue VM, 2026-10-16: it said the
     keys wouldn't work until a restart)."""
-    from tuxtalk import welcome_dialog
+    from tuxtalk import hotkey_test_devices
     ecodes = pytest.importorskip("evdev").ecodes
     watched = []
     helper = types.SimpleNamespace(watch=watched.extend)
-    assert welcome_dialog._hotkey_test_helper(ecodes, connect=lambda: helper) is helper
+    assert hotkey_test_devices.hotkey_test_helper(ecodes, connect=lambda: helper) is helper
     assert str(ecodes.KEY_F8) in watched and str(ecodes.KEY_F9) in watched
     assert str(ecodes.KEY_F24) in watched and str(ecodes.KEY_ESC) in watched
 
 
 def test_hotkey_test_without_the_helper():
-    from tuxtalk import welcome_dialog
+    from tuxtalk import hotkey_test_devices
     ecodes = pytest.importorskip("evdev").ecodes
-    assert welcome_dialog._hotkey_test_helper(ecodes, connect=lambda: None) is None
+    assert hotkey_test_devices.hotkey_test_helper(ecodes, connect=lambda: None) is None
 
     def broken():
         raise OSError("no socket")
-    assert welcome_dialog._hotkey_test_helper(ecodes, connect=broken) is None
+    assert hotkey_test_devices.hotkey_test_helper(ecodes, connect=broken) is None
 
 
 def test_fix_typing_success_updates_the_status_lines(monkeypatch):

@@ -135,7 +135,7 @@ def test_the_hotkey_test_gives_the_keys_back_after_an_error(monkeypatch):
 
     def broken(*a):
         raise OSError("keyboard went away")
-    monkeypatch.setattr(wd, "_open_key_devices", broken)
+    monkeypatch.setattr(wd, "open_key_devices", broken)
     with pytest.raises(OSError):
         wd.show_hotkey_test_dialog()
     assert restored == [{"saved": "Alt+F8"}]

@@ -8,7 +8,7 @@ the monitoring loop below it, so the hotkey test detects nothing.
 """
 
 
-from tuxtalk.welcome_dialog import _flush_pending_events
+from tuxtalk.hotkey_test_devices import flush_pending_events, read_ready
 
 
 class FakeDevice:
@@ -29,7 +29,7 @@ class FakeDevice:
 def test_flush_terminates_on_an_empty_queue():
     dev = FakeDevice([])
 
-    _flush_pending_events([dev])   # must return, not spin
+    flush_pending_events([dev])   # must return, not spin
 
     assert dev.read_calls >= 1
 
@@ -37,7 +37,7 @@ def test_flush_terminates_on_an_empty_queue():
 def test_flush_drains_queued_events():
     dev = FakeDevice([["stale F8 press"], ["another stale event"]])
 
-    _flush_pending_events([dev])
+    flush_pending_events([dev])
 
     assert dev.batches == [], "stale events were left in the queue"
 
@@ -49,7 +49,7 @@ def test_flush_continues_past_a_broken_device():
 
     good = FakeDevice([["stale"]])
 
-    _flush_pending_events([Broken(), good])
+    flush_pending_events([Broken(), good])
 
     assert good.batches == []
 
@@ -58,6 +58,29 @@ def test_flush_returns_rather_than_spinning():
     """The flush must return rather than spin."""
     dev = FakeDevice([["one"], ["two"], ["three"]])
 
-    _flush_pending_events([dev])
+    flush_pending_events([dev])
 
     assert dev.batches == []
+
+
+def test_an_unplugged_keyboard_is_dropped_rather_than_read_forever():
+    """A keyboard unplugged mid-test reads as ready for ever after; kept in
+    the list, the test kept a core at 100 % until it closed."""
+    class Unplugged:
+        name = "USB keyboard"
+        closed = False
+
+        def read(self):
+            raise OSError(19, "No such device")
+            yield
+
+        def close(self):
+            self.closed = True
+
+    gone, good = Unplugged(), FakeDevice([["F8 press"]])
+    devices = [gone, good]
+
+    events = list(read_ready(devices, [gone, good]))
+
+    assert events == ["F8 press"]
+    assert devices == [good] and gone.closed
