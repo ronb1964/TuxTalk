@@ -622,13 +622,11 @@ class DictationTray:
         from .service_launcher import is_service_pid
         return is_service_pid(pid)
 
-    def _auto_start_service(self, _waited=0):
+    def _auto_start_service(self, _waited=0, watching=False):
         """Auto-start the dictation service if not already running.
 
-        *_waited* counts the 100 ms checks spent waiting for a pre-rename
-        service, or one that's quitting, to exit; they run as GLib timeouts
-        so the menu stays usable.
-        """
+        *_waited* counts the 100 ms checks, GLib timeouts, for a pre-rename
+        service or one that's quitting (*watching*) to exit."""
         try:
             # NEVER start during onboarding - hotkey test needs to capture keys
             if self.onboarding_in_progress:
@@ -650,14 +648,17 @@ class DictationTray:
 
             from .service_launcher import QUIT_WITHIN_S
             if not self.is_service_running():
+                if watching and not self._watching_start:
+                    return False            # Dictation turned off meanwhile: leave it off
                 logger.info("Auto-starting dictation service...")
                 self.start_service(None)
             elif _waited < QUIT_WITHIN_S * 10:
                 # It may be on its way out: an update's restart stops it as
                 # the old tray quits, and it types what it holds first.
-                if _waited == 0:
+                if not watching:
                     logger.info("Dictation service already running; watching in case it's quitting")
-                GLib.timeout_add(100, self._auto_start_service, _waited + 1)
+                    self._watching_start = True
+                GLib.timeout_add(100, self._auto_start_service, _waited + 1, True)
             else:
                 logger.info("Dictation service already running, skipping auto-start")
         except Exception as e:
@@ -665,12 +666,7 @@ class DictationTray:
         return False  # Don't repeat this timer
 
     def update_icon_status(self, is_running=None):
-        """Update icon based on service status.
-
-        Args:
-            is_running: Pre-computed service state (avoids redundant checks).
-                        If None, checks service status directly.
-        """
+        """The icon for the service's state, *is_running* if it's known already."""
         if is_running is None:
             is_running = self.is_service_running()
         if is_running:
@@ -715,6 +711,7 @@ class DictationTray:
     def _kill_service(self):
         """Kill all running dictation service processes."""
         from .service_launcher import stop_dictation_service
+        self._watching_start = False        # a stop of the user's ends the watch at start
         stop_dictation_service()
 
     def start_service(self, _):
@@ -1817,7 +1814,9 @@ class DictationTray:
         self._stop_kwin_focus_provider()
 
         try:
+            from .service_launcher import wait_until_stopped
             self._kill_service()
+            wait_until_stopped()
             logger.info("Stopped dictation service")
         except Exception as e:
             logger.error(f"Error stopping dictation service: {e}")

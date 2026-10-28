@@ -133,6 +133,11 @@ def _autostart_desktop_path() -> str:
     return os.path.join(autostart_dir, filename)
 
 
+def autostart_file_exists() -> bool:
+    """Whether a start-at-login file is in place, whatever the settings say."""
+    return os.path.exists(_autostart_desktop_path())
+
+
 def _set_autostart_flatpak(enable: bool) -> bool:
     """Enable/disable launch-at-login on the Flatpak via the Background portal.
 

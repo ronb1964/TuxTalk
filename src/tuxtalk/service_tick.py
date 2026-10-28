@@ -3,6 +3,8 @@ the hotkey loop (hotkeys.run) and the Flatpak's portal loop
 (input_backends). It takes the start and stop requests the tray, D-Bus or
 the portal made, lets the speech model rest when Power Saving is on, and
 picks up settings changed in Preferences without a restart."""
+import os
+import threading
 import time
 
 from . import config as config_module
@@ -189,6 +191,12 @@ def _quit(cfg, svc: ServiceState) -> None:
     process exits, so its exit hooks run: the music plays again, the other
     sounds come back up. Killed outright, recordings not transcribed yet
     were lost without a word."""
+    # Whatever hangs from here (a stuck stream, an exit hook), the process
+    # ends within the time a new service waits for its lock.
+    from .service_launcher import QUIT_WITHIN_S
+    watchdog = threading.Timer(QUIT_WITHIN_S - 1, _exit_now)
+    watchdog.daemon = True                  # a normal exit doesn't wait for it
+    watchdog.start()
     if rs.state.is_recording:
         recording.stop_requested.set()
         _take_stop_request(cfg, svc, time.time())
@@ -200,6 +208,12 @@ def _quit(cfg, svc: ServiceState) -> None:
                "TuxTalk is back.")
     logger.info("Quitting")
     raise SystemExit(0)
+
+
+def _exit_now() -> None:
+    """The last resort of _quit: end the process at once, exit hooks or not."""
+    logger.error("Quitting took too long; ending the process now")
+    os._exit(1)
 
 
 def _take_stop_request(cfg, svc: ServiceState, now: float) -> None:

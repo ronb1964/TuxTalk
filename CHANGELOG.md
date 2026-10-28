@@ -33,11 +33,11 @@ before 0.15.0, so older entries use that name.
   arrow keys first, it used to replace whatever words were at that spot.
   Now it saves the fix to Your Words and leaves your text alone. In a
   terminal it never changes the text, since it can't select words there.
-- Quitting TuxTalk, Restart Service or an update no longer throws away a
-  dictation that's still being transcribed or typed. TuxTalk finishes it
-  first (up to 20 seconds, and if it can't, a notification says a
-  dictation wasn't typed), and a recording still going is stopped and
-  typed, as if you'd let go of the key. Your music starts playing again
+- Quitting TuxTalk, Restart Service or an update now finishes a dictation
+  that's still being transcribed or typed, instead of throwing it away. It
+  gives it up to 20 seconds; one that takes longer is lost, and a
+  notification says so. A recording still going is stopped and typed, as
+  if you'd let go of the key. Your music starts playing again
   and other sounds come back up, which a quit in the middle of a dictation
   used to leave paused or quiet.
 - Saying "tab" in a sentence ("every tab shows", "the tabs in Claude

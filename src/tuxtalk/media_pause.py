@@ -123,8 +123,11 @@ class MediaPauser:
             return None
 
     def _pause_now(self):
+        """Pause every player that's playing, noting each, for _resume_now."""
         for name in self._bus.players():
-            if self._closing or self._status(name) != "Playing":
+            # Asked again after the status, which can take a while: exit
+            # (resume_at_exit) may have begun meanwhile.
+            if self._status(name) != "Playing" or self._closing:
                 continue
             try:
                 self._bus.call(name, "Pause")

@@ -12,6 +12,9 @@ def extensions(tmp_path, monkeypatch):
     """A gnome-shell/extensions folder of its own, and an extension to install."""
     ext_dir = tmp_path / "gnome-shell" / "extensions"
     monkeypatch.setattr(desktop_detect, "get_extension_dir", lambda: str(ext_dir))
+    runtime = tmp_path / "run"                  # the install lock, never the real one
+    runtime.mkdir()
+    monkeypatch.setattr("tuxtalk.single_instance.runtime_dir", lambda: str(runtime))
     source = tmp_path / "source"
     source.mkdir()
     (source / "metadata.json").write_text('{"version": 2}')
@@ -51,7 +54,7 @@ def test_a_failed_swap_puts_the_old_extension_back(extensions, monkeypatch):
     rename = os.rename
 
     def second_rename_fails(src, dst):
-        if ".new-" in str(src):
+        if str(src).endswith(".new"):
             raise OSError(5, "Input/output error")
         rename(src, dst)
     monkeypatch.setattr(eh.os, "rename", second_rename_fails)
@@ -87,14 +90,17 @@ def test_a_linked_extensions_folder_is_staged_where_it_really_is(tmp_path, exten
     assert all(os.path.dirname(a) == str(real) for a, b in renames)
 
 
-def test_another_install_s_staging_folder_is_left_alone(extensions):
-    """Two installs at once (Preferences and first run): each cleared every
-    staging folder, so one removed the other's, which then failed with the
-    extension already moved aside."""
+def test_two_installs_at_once_take_turns(extensions):
+    """Preferences and first run installing at once: each cleared the
+    other's folders, and one failed with the extension moved aside."""
+    import threading
     ext_dir, source = extensions
-    running = ext_dir / f".{eh.EXTENSION_UUID}.new-{os.getppid()}"     # a process still alive
-    gone = ext_dir / f".{eh.EXTENSION_UUID}.new-999999999"
-    for folder in (running, gone):
-        folder.mkdir(parents=True)
-    assert eh.install_extension_from_local(str(source), auto_enable=False)
-    assert running.exists() and not gone.exists()
+    results = []
+    threads = [threading.Thread(target=lambda: results.append(
+        eh.install_extension_from_local(str(source), auto_enable=False))) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(30)
+    assert results == [True] * 4
+    assert os.listdir(ext_dir) == [eh.EXTENSION_UUID]

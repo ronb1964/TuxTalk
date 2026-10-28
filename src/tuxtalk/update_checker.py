@@ -1142,9 +1142,10 @@ def point_at_running_appimage(running: str) -> None:
     *running* when first-run setup's copy into ~/AppImages failed, so
     neither starts a file that isn't there. Files only, so any thread."""
     try:
-        from .autostart import set_autostart
-        from .config import load_config
-        if getattr(load_config(), "launch_at_login", False):
+        from .autostart import autostart_file_exists, set_autostart
+        # The file, not the setting: written by first run with the setting
+        # left unsaved (a read-only settings folder), it still points here.
+        if autostart_file_exists():
             set_autostart(True, prefer_installed_appimage=False)
             logger.info("Launch at login points at the running AppImage instead")
     except Exception as e:

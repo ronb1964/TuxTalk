@@ -14,6 +14,8 @@ from tuxtalk.dictation_worker import DictationWorker
 
 @pytest.fixture
 def quitting(monkeypatch):
+    # _quit's last resort would end the test run itself half a minute on.
+    monkeypatch.setattr(service_tick, "_exit_now", lambda: None)
     monkeypatch.setattr(recording, "quit_asked", True)
     cfg = types.SimpleNamespace(beeps=False, smart_quotes=False, notify=False, language=None,
                                 auto_space=True, auto_period=True, injection_mode="type")

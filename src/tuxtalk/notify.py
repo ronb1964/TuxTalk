@@ -12,6 +12,10 @@ importing app.py for them would load the whole dictation engine (numpy,
 faster_whisper, torch) into the tray for the rest of the session.
 """
 
+from .logger import setup_logger
+
+logger = setup_logger(__name__)
+
 APP_ICON = "io.github.ronb1964.TuxTalk"
 # A notice is never worth stalling the hotkey loop for.
 TIMEOUT_S = 2.0
@@ -32,5 +36,5 @@ def notify(title: str, body: str) -> None:
     notification service."""
     try:
         _send(title, body)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.info(f"Notification not shown ({title}): {e}")

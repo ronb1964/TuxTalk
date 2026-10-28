@@ -237,7 +237,8 @@ class AudioDucker:
             # Paused (corked) already: silent, and likely to close and come
             # back as a new stream, so there's nothing to gain lowering it.
             if (st["pid"] == self._own_pid or st["muted"] or st["role"] == "event"
-                    or st["corked"] or index in self._ducked or not volumes):
+                    or st["corked"] or index in self._ducked or not volumes
+                    or self._closing):          # exit began while the streams were listed
                 continue
             lowered = [max(0, int(v * DUCK_TO)) for v in volumes]
             if _set_volume(index, lowered, self._run):

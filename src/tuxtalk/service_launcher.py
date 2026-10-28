@@ -12,6 +12,7 @@ import os
 import signal
 import subprocess
 import sys
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,12 @@ logger = logging.getLogger(__name__)
 # system without XWayland and the service dies on launch, costing dictation
 # entirely to protect a cosmetic window position.
 SERVICE_GDK_BACKEND = "x11,wayland"
+
+# How long a dictation service asked to quit may take: typing what it holds
+# (service_tick.QUIT_DRAIN_S) and its exit hooks (the music resumed, the
+# sounds turned back up). A new service waits this long for its lock, and a
+# new tray for it to go before starting one.
+QUIT_WITHIN_S = 35.0
 
 # Hotkey test mode (Preferences, Test Hotkeys). While this flag file is fresh,
 # the service reports hotkey presses instead of recording. Preferences touches
@@ -256,6 +263,20 @@ def stop_dictation_service(force: bool = False) -> None:
     release_desktop_hotkeys()
 
 
+def wait_until_stopped(timeout=QUIT_WITHIN_S) -> bool:
+    """Wait for every dictation service to end (stop_dictation_service only
+    asks, and it types what it holds first); False when one is still running
+    after *timeout* seconds. The tray waits so as it quits: from an AppImage
+    the service's files go when the tray ends."""
+    deadline = time.monotonic() + timeout
+    while find_service_pids():
+        if time.monotonic() >= deadline:
+            logger.warning("The dictation service is still running after being asked to stop")
+            return False
+        time.sleep(0.1)
+    return True
+
+
 def release_desktop_hotkeys() -> None:
     """Hand back the hotkeys hotkeys._claim_desktop_hotkeys had the desktop hold,
     or KWin or COSMIC would keep swallowing F8 with dictation off. The X
@@ -269,12 +290,6 @@ def release_desktop_hotkeys() -> None:
     except Exception as e:
         logger.debug(f"Could not release the desktop's hotkeys: {e}")
 
-
-# How long a dictation service asked to quit may take: typing what it holds
-# (service_tick.QUIT_DRAIN_S) and its exit hooks (the music resumed, the
-# sounds turned back up). A new service waits this long for its lock, and a
-# new tray for it to go before starting one.
-QUIT_WITHIN_S = 35.0
 
 # The GDK_BACKEND the service's own (SERVICE_GDK_BACKEND) took the place of,
 # "" for none, kept in the service's environment.

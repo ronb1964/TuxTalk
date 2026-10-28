@@ -257,7 +257,10 @@ def test_a_failed_copy_points_login_and_the_menu_back_at_the_running_appimage(
     from types import SimpleNamespace
     from tuxtalk import autostart, config
     calls = []
-    monkeypatch.setattr(config, "load_config", lambda: SimpleNamespace(launch_at_login=True))
+    # The setting says off (its save failed after the file was written):
+    # the file is what starts TuxTalk at login.
+    monkeypatch.setattr(config, "load_config", lambda: SimpleNamespace(launch_at_login=False))
+    monkeypatch.setattr(autostart, "autostart_file_exists", lambda: True)
     monkeypatch.setattr(autostart, "set_autostart",
                         lambda enable, prefer_installed_appimage=False:
                         calls.append(prefer_installed_appimage) or True)

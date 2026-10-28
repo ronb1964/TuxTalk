@@ -1,6 +1,6 @@
 {
  "files": {
-  "tray.py": 2363,
+  "tray.py": 2362,
   "welcome_dialog.py": 3097
  },
  "findings": {
@@ -140,7 +140,6 @@
   "normalize.py::<module>::long_line": 3,
   "notification_help.py::_install_css_once::swallowed_error": 1,
   "notification_help.py::show_notification_help_window::swallowed_error": 1,
-  "notify.py::notify::swallowed_error": 1,
   "parakeet_bias.py::WordBooster.__init__::undocumented": 1,
   "parakeet_bias.py::boosted_tdt_decoding._decoding::undocumented": 1,
   "parakeet_engine.py::ParakeetModel.set_words::long_line": 2,
