@@ -117,8 +117,8 @@ def test_tray_and_gnome_extension_place_recent_dictations_first(tray_menu):
     Word, Transcribe a File, in both. Restart Service sits at the end, with
     Help and Check for Updates (0.16 simplicity review)."""
     items = [item.get_label() or "---" for item in tray_menu.get_children()]
-    assert items[:5] == ["Dictation on/off", "Recent Dictations", "Fix a Word...",
-                         "Transcribe a File...", "---"]
+    assert items[:5] == ["Dictation off", "Recent Dictations", "Fix a Word...",
+                         "Transcribe a File...", "---"]        # off until the status comes
     assert items[-4:] == ["Check for Updates...", "Restart Service", "---", "Quit TuxTalk"]
 
     js = (ROOT / "gnome-extension/talktype@ronb1964.github.io/extension.js").read_text()
@@ -166,12 +166,11 @@ def test_each_tray_entry_opens_a_hover_view_with_copy():
     assert fixing == [3]      # opens the Fix a Word window on this dictation
 
 
-def test_dictation_on_off_is_a_check_item_a_screen_reader_can_read(monkeypatch):
-    """A checkmark icon showed the state only to the eye; a check item's
-    state goes to the desktop (dbusmenu's toggle-state), so a screen reader
-    says on or off. The tray setting it doesn't start or stop anything;
-    a click does."""
-    from gi.repository import Gtk
+def test_dictation_says_whether_it_is_on_in_its_own_words(monkeypatch):
+    """"Dictation on" with a checkmark, "Dictation off" without: the words say
+    the state, so a screen reader reads it on every desktop (a check item's
+    state is drawn by each panel its own way). The tray's status poll only
+    changes the words; a click starts or stops dictation."""
     from tuxtalk import config, tray
     monkeypatch.setattr(config, "load_config", config.Settings)
     t = tray.DictationTray.__new__(tray.DictationTray)
@@ -180,13 +179,13 @@ def test_dictation_on_off_is_a_check_item_a_screen_reader_can_read(monkeypatch):
     monkeypatch.setattr(t, "stop_service", lambda w: asked.append("stop"), raising=False)
     menu = tray.DictationTray.build_menu(t)
     try:
-        assert isinstance(t.service_toggle, Gtk.CheckMenuItem)
-        assert t.service_toggle.get_label() == "Dictation on/off"
         for running in (True, False, True):   # the status poll, as it runs
             t.update_menu_display(is_running=running)
-            assert t.service_toggle.get_active() is running
+            assert t.service_toggle.get_label() == ("Dictation on" if running
+                                                    else "Dictation off")
         assert asked == []
         t.service_toggle.activate()            # the user clicks it: off
+        assert t.service_toggle.get_label() == "Dictation off"
         t.service_toggle.activate()            # and on again
         assert asked == ["stop", "start"]
     finally:

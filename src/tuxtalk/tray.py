@@ -23,6 +23,7 @@ import sys
 import warnings
 from .logger import setup_logger
 from . import notes_text, tray_instance, update_offers
+from .tray_items import DictationItem, themed_icon
 from .tray_presets import PresetMenu
 from .tray_service import ServiceLifecycle
 
@@ -129,14 +130,6 @@ def _about_icon():
     image = Gtk.Image.new_from_icon_name(value, Gtk.IconSize.DIALOG)
     image.set_pixel_size(64)
     return image
-
-
-def _themed_icon(*names):
-    """The first of these icon names the current icon theme has, or None."""
-    theme = Gtk.IconTheme.get_default()
-    if theme is None:
-        return None
-    return next((name for name in names if theme.has_icon(name)), None)
 
 
 class DictationTray(ServiceLifecycle, PresetMenu):
@@ -1238,12 +1231,7 @@ class DictationTray(ServiceLifecycle, PresetMenu):
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         )
 
-        # A real check item, not a checkmark icon: its state goes to the
-        # desktop (dbusmenu's toggle-state), so a screen reader says on or
-        # off. On KDE the checkbox gets a column of its own beside the icons,
-        # which moves the labels right; being heard is worth that.
-        self.service_toggle = Gtk.CheckMenuItem(label="Dictation on/off")
-        self.service_toggle.connect("toggled", self.toggle_service)
+        self.service_toggle = DictationItem(self.toggle_service)
         self.engine_item = Gtk.MenuItem(label="Loading the speech model...")
         self.engine_item.set_sensitive(False)
 
@@ -1306,7 +1294,7 @@ class DictationTray(ServiceLifecycle, PresetMenu):
         an icon does. "emblem-system-symbolic" is the round gear in both
         Breeze (KDE) and Adwaita (GNOME, Mint); KDE's "configure" is sliders.
         """
-        name = _themed_icon("emblem-system-symbolic", "preferences-system-symbolic")
+        name = themed_icon("emblem-system-symbolic", "preferences-system-symbolic")
         if name is None:
             return Gtk.MenuItem(label=label)
         item = Gtk.ImageMenuItem(label=label)
