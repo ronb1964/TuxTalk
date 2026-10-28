@@ -358,7 +358,9 @@ class ServiceLifecycle:
                 result["value"] = install()
             except Exception as e:
                 logger.error(f"Installing the update failed: {e}", exc_info=True)
-        self._install_thread = threading.Thread(target=run, name="install-update")
+        # daemon=False said outright: a thread takes its starter's, and the
+        # download's worker that starts this one is a daemon.
+        self._install_thread = threading.Thread(target=run, name="install-update", daemon=False)
         self._install_thread.start()
         self._install_thread.join()
         return result.get("value", (False, None))
