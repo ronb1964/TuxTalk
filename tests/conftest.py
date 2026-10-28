@@ -93,12 +93,17 @@ def _not_private(address):
         bus = connect(address)
         names = [n for n in ask(bus, "ListNames")
                  if not n.startswith(":") and n != "org.freedesktop.DBus"]
+        started = [n for n in ask(bus, "ListActivatableNames") if n != "org.freedesktop.DBus"]
         bus_id = ask(bus, "GetId")
         bus.close_sync(None)
     except GLib.Error as e:
         return f"the session bus can't be reached ({e.message})"
     if names:
         return f"other programs are on it ({', '.join(sorted(names)[:3])})"
+    if started:
+        # Asked for by a test, the desktop's would start and outlive the bus.
+        return (f"{len(started)} desktop services start on it when asked for; run "
+                "dbus-run-session with --config-file=tests/dbus-session.conf")
     own = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}", "bus")
     if os.path.exists(own):
         try:

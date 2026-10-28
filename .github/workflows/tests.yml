@@ -46,7 +46,7 @@ jobs:
       # A virtual screen for the GTK windows the tests build, and a private
       # D-Bus session bus so no test reaches anything real.
       - name: Run the tests
-        run: PYTHONPATH=src xvfb-run -a dbus-run-session -- venv/bin/python -m pytest tests/ -q
+        run: PYTHONPATH=src xvfb-run -a dbus-run-session --config-file=tests/dbus-session.conf -- venv/bin/python -m pytest tests/ -q
 
   # Pyflakes catches undefined names and similar mistakes that only crash when
   # that line finally runs; shellcheck does the same for the build and release

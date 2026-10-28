@@ -77,11 +77,14 @@ DRIVER = textwrap.dedent("""
 """)
 
 
+# The tests' own bus configuration: nothing starts on it when asked for.
+CONFIG = os.path.join(os.path.dirname(__file__), "dbus-session.conf")
+
 def test_tray_owns_the_name_and_the_service_never_inherits_it(tmp_path):
     driver = tmp_path / "driver.py"
     driver.write_text(DRIVER)
     out = subprocess.run(
-        ["dbus-run-session", "--", sys.executable, str(driver), ROLE],
+        ["dbus-run-session", f"--config-file={CONFIG}", "--", sys.executable, str(driver), ROLE],
         capture_output=True, text=True, timeout=60, env=os.environ.copy())
     lines = dict(line.split(" ", 1) for line in out.stdout.splitlines() if " " in line)
     assert lines.get("normal") == "tray NameExistsException", out.stdout + out.stderr

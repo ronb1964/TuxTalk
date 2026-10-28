@@ -50,14 +50,18 @@ The single-instance lock is released when the process ends, so there's no lock f
 Swap 3.14 for your Python version (`python3 --version` shows it):
 
 ```bash
-xvfb-run -a dbus-run-session -- env \
+xvfb-run -a dbus-run-session --config-file=tests/dbus-session.conf -- env \
     PYTHONPATH=./src:/usr/lib64/python3.14/site-packages:/usr/lib/python3.14/site-packages \
     .venv/bin/python -m pytest tests -q -p no:cacheprovider
 ```
 
 `xvfb-run` and `dbus-run-session` give the tests a screen and a session bus of
 their own, as CI does: some tests open windows, and on your own desktop they
-would take the keyboard focus from whatever you're typing in.
+would take the keyboard focus from whatever you're typing in. The bus's
+configuration, `tests/dbus-session.conf`, has no services that start when asked
+for: with the desktop's, every run started a portal and a secret service that
+outlived the bus, and on a KDE desktop they piled up into gigabytes. The tests
+refuse to start on a bus that has them.
 
 Plain `.venv/bin/pytest` won't work, for the same PyGObject reason. On Debian and Ubuntu the system folder is `/usr/lib/python3/dist-packages`.
 

@@ -595,7 +595,7 @@ setup's Fix Typing gives it that.
 To run the tests (swap in your Python version, `python3 --version` shows it):
 
 ```bash
-xvfb-run -a dbus-run-session -- env \
+xvfb-run -a dbus-run-session --config-file=tests/dbus-session.conf -- env \
     PYTHONPATH=./src:/usr/lib64/python3.14/site-packages:/usr/lib/python3.14/site-packages \
     .venv/bin/python -m pytest tests -q -p no:cacheprovider
 ```
