@@ -3,6 +3,7 @@
 GNOME Extension installer for TuxTalk
 """
 
+import glob
 import logging
 import os
 import shutil
@@ -114,19 +115,31 @@ def get_extension_status() -> dict:
 
 def _swap_in(source_dir, target_dir):
     """Put a copy of *source_dir* at *target_dir*, the old one going only
-    once the new one is all there: removed first, a copy that failed
-    partway (a full disk) left GNOME with no TuxTalk menu at all. The copy
-    is made beside the extensions folder, on the same filesystem, where
-    GNOME doesn't look for extensions."""
-    parent = os.path.dirname(os.path.dirname(target_dir))
-    staging = os.path.join(parent, f".{EXTENSION_UUID}.new")
-    old = os.path.join(parent, f".{EXTENSION_UUID}.old")
-    for leftover in (staging, old):
+    once the new one is in its place: removed first, a copy that failed
+    partway (a full disk) left GNOME with no TuxTalk menu at all. Both are
+    kept, hidden, in the extensions folder itself (its real place, if it's a
+    link), so the renames never cross filesystems; GNOME skips a folder whose
+    name isn't its extension's id."""
+    ext_dir = os.path.realpath(os.path.dirname(target_dir))
+    target = os.path.join(ext_dir, EXTENSION_UUID)
+    old = os.path.join(ext_dir, f".{EXTENSION_UUID}.old")
+    staging = os.path.join(ext_dir, f".{EXTENSION_UUID}.new-{os.getpid()}")
+    if not os.path.exists(target) and os.path.exists(old):
+        os.rename(old, target)          # an install cut off between the renames
+    for leftover in glob.glob(os.path.join(ext_dir, f".{EXTENSION_UUID}.new-*")) + [old]:
         shutil.rmtree(leftover, ignore_errors=True)
-    shutil.copytree(source_dir, staging)
-    if os.path.exists(target_dir):
-        os.rename(target_dir, old)
-    os.rename(staging, target_dir)
+    try:
+        shutil.copytree(source_dir, staging)
+        if os.path.exists(target):
+            os.rename(target, old)
+        try:
+            os.rename(staging, target)
+        except OSError:
+            if os.path.exists(old):
+                os.rename(old, target)
+            raise
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
     shutil.rmtree(old, ignore_errors=True)
 
 

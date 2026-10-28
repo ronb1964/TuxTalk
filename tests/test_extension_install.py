@@ -24,7 +24,7 @@ def test_an_install_puts_the_extension_in_place(extensions):
     assert eh.install_extension_from_local(str(source), auto_enable=False)
     installed = ext_dir / eh.EXTENSION_UUID
     assert (installed / "extension.js").read_text() == "// new"
-    assert sorted(os.listdir(ext_dir.parent)) == ["extensions"]          # nothing left over
+    assert os.listdir(ext_dir) == [eh.EXTENSION_UUID]                    # nothing left over
 
 
 def test_an_update_that_fails_partway_keeps_the_old_extension(extensions, monkeypatch):
@@ -41,3 +41,47 @@ def test_an_update_that_fails_partway_keeps_the_old_extension(extensions, monkey
     monkeypatch.setattr(eh.shutil, "copytree", full_disk)
     assert eh.install_extension_from_local(str(source), auto_enable=False) is False
     assert (installed / "extension.js").read_text() == "// old"
+
+
+def test_a_failed_swap_puts_the_old_extension_back(extensions, monkeypatch):
+    ext_dir, source = extensions
+    installed = ext_dir / eh.EXTENSION_UUID
+    installed.mkdir(parents=True)
+    (installed / "extension.js").write_text("// old")
+    rename = os.rename
+
+    def second_rename_fails(src, dst):
+        if ".new-" in str(src):
+            raise OSError(5, "Input/output error")
+        rename(src, dst)
+    monkeypatch.setattr(eh.os, "rename", second_rename_fails)
+    assert eh.install_extension_from_local(str(source), auto_enable=False) is False
+    assert (installed / "extension.js").read_text() == "// old"
+
+
+def test_an_install_cut_off_between_the_renames_is_recovered(extensions):
+    """The old copy moved aside, then a crash: the next install deleted it
+    before copying, and if that copy failed there was no extension left."""
+    ext_dir, source = extensions
+    aside = ext_dir / f".{eh.EXTENSION_UUID}.old"
+    aside.mkdir(parents=True)
+    (aside / "extension.js").write_text("// old")
+    assert eh.install_extension_from_local(str(source), auto_enable=False)
+    assert (ext_dir / eh.EXTENSION_UUID / "extension.js").read_text() == "// new"
+    assert os.listdir(ext_dir) == [eh.EXTENSION_UUID]
+
+
+def test_a_linked_extensions_folder_is_staged_where_it_really_is(tmp_path, extensions,
+                                                                  monkeypatch):
+    """Staged beside a linked extensions folder, the rename crossed
+    filesystems and every update failed."""
+    ext_dir, source = extensions
+    real = tmp_path / "elsewhere" / "extensions"
+    real.mkdir(parents=True)
+    ext_dir.parent.mkdir(parents=True, exist_ok=True)
+    ext_dir.symlink_to(real)
+    renames = []
+    rename = os.rename
+    monkeypatch.setattr(eh.os, "rename", lambda a, b: renames.append((a, b)) or rename(a, b))
+    assert eh.install_extension_from_local(str(source), auto_enable=False)
+    assert all(os.path.dirname(a) == str(real) for a, b in renames)
