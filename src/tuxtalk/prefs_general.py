@@ -354,11 +354,14 @@ class GeneralTab(Tab):
         return combo
 
     def _shortcut_combo(self, label, entries, setting):
-        """A More shortcuts dropdown for *setting*: a saved key the list
-        doesn't have shows None."""
-        combo = self._hotkey_combo(label, entries)
+        """A More shortcuts dropdown for *setting*. A saved key the list
+        doesn't have (a hand edit) is added to it: it's the key in use, and
+        shown as None, picking None would change nothing."""
         current = self.config.get(setting, "")
-        combo.set_active_id(current if current in dict(entries) else "")
+        if current not in dict(entries):
+            entries = [*entries, (current, current)]
+        combo = self._hotkey_combo(label, entries)
+        combo.set_active_id(current)
         combo.connect("changed", lambda c: (
             self.update_config(setting, c.get_active_id() or ""),
             self._update_shortcuts_summary()))
