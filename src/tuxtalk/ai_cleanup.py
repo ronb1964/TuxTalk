@@ -528,13 +528,16 @@ class CorrectionEngine:
                 preexec_fn=_set_parent_death_signal,
             ).result()
             logger.info(f"AI cleanup engine starting (pid {self._proc.pid})")
-        threading.Thread(target=self._wait_until_ready, daemon=True).start()
+        threading.Thread(target=self._wait_until_ready, args=(self._proc,), daemon=True).start()
 
-    def _wait_until_ready(self, limit=90):
-        """Wait for the server to answer, warm it up, then mark it ready."""
+    def _wait_until_ready(self, proc, limit=90):
+        """Wait for the server *proc* to answer, warm it up, then mark it
+        ready, unless it was stopped (or replaced) meanwhile."""
         deadline = time.time() + limit
         while time.time() < deadline:
-            if self._proc is None or self._proc.poll() is not None:
+            if self._proc is not proc:
+                return                  # turned off while starting
+            if proc.poll() is not None:
                 logger.error("AI cleanup engine exited during startup")
                 return
             try:
@@ -547,8 +550,13 @@ class CorrectionEngine:
             # prompt cache) of up to several seconds; paying it here keeps it
             # off the user's first corrected dictation.
             started = time.time()
-            self._ask("Order two boxes, no wait, three boxes.", timeout=60)
-            self._ready.set()
+            if self._ask("Order two boxes, no wait, three boxes.", timeout=60) is None:
+                logger.warning("AI cleanup warm-up got no answer; the first correction "
+                               "may be slow")
+            with self._lock:
+                if self._proc is not proc:
+                    return
+                self._ready.set()
             logger.info(f"AI cleanup engine ready (warm-up took {time.time() - started:.1f}s)")
             return
         logger.error("AI cleanup engine did not become ready")

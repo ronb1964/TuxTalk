@@ -391,9 +391,35 @@ def dead_engine(monkeypatch):
     monkeypatch.setattr(ai, "_server_binary", lambda: "/x/llama-server")
     monkeypatch.setattr(ai, "_model_path", lambda: "/x/model.gguf")
     monkeypatch.setattr(ai.subprocess, "Popen", lambda *a, **k: started.append(a) or _Proc())
-    monkeypatch.setattr(e, "_wait_until_ready", lambda: None)
+    monkeypatch.setattr(e, "_wait_until_ready", lambda proc: None)
     e.started = started
     return e
+
+
+def test_turning_the_ai_off_while_it_starts_is_not_an_error(caplog):
+    """stop() during the start-up wait: the engine went because it was told
+    to, not "exited during startup", and it never counts as ready."""
+    import logging
+    e = ai.CorrectionEngine()
+    starting = _Proc()
+    e._proc = None                      # stop() ran
+    with caplog.at_level(logging.INFO, logger=ai.logger.name):
+        e._wait_until_ready(starting, limit=1)
+    assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
+    assert not e._ready.is_set()
+
+
+def test_a_warm_up_without_an_answer_is_logged(monkeypatch, caplog):
+    """Else a slow first correction has nothing in the log to explain it."""
+    import logging
+    e = ai.CorrectionEngine()
+    e._proc, e._port = _Proc(), 1234
+    monkeypatch.setattr(ai.urllib.request, "urlopen", lambda *a, **k: None)   # /health answers
+    monkeypatch.setattr(e, "_ask", lambda sentence, timeout: None)
+    with caplog.at_level(logging.INFO, logger=ai.logger.name):
+        e._wait_until_ready(e._proc, limit=1)
+    assert any("warm-up" in r.getMessage() and r.levelno == logging.WARNING
+               for r in caplog.records)
 
 
 def test_a_server_that_died_is_started_again(dead_engine):
