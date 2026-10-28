@@ -197,13 +197,14 @@ def get_releases_url() -> str:
     return "https://github.com/ronb1964/TuxTalk/releases"
 
 
-# Why the last fetch_latest_release() failed: ("network" | "http" | "other",
-# HTTP code or None), so the message can say what really happened.
-_last_fetch_error = ("other", None)
+# Why this thread's last fetch_latest_release() failed: ("network" | "http" |
+# "other", HTTP code or None), so the message can say what really happened.
+# One per thread: the tray's daily check and a manual one can overlap.
+_fetch_error = threading.local()
 
 
 def _fetch_failure_message():
-    kind, code = _last_fetch_error
+    kind, code = getattr(_fetch_error, "reason", ("other", None))
     if kind == "network":
         return "Could not connect to GitHub. Check your internet connection."
     if kind == "http" and code in (403, 429):
@@ -227,7 +228,6 @@ def fetch_latest_release() -> Optional[dict]:
             - extension_url: Direct download URL for extension (if found)
         None: If fetch failed
     """
-    global _last_fetch_error
     try:
         # Create request with User-Agent (GitHub requires this)
         request = urllib.request.Request(
@@ -278,18 +278,18 @@ def fetch_latest_release() -> Optional[dict]:
             return result
 
     except urllib.error.HTTPError as e:
-        _last_fetch_error = ("http", e.code)
+        _fetch_error.reason = ("http", e.code)
         if e.code == 403:
             logger.warning("GitHub API rate limit exceeded. Try again later.")
         else:
             logger.warning(f"GitHub API error: {e.code} {e.reason}")
         return None
     except urllib.error.URLError as e:
-        _last_fetch_error = ("network", None)
+        _fetch_error.reason = ("network", None)
         logger.warning(f"Network error checking for updates: {e.reason}")
         return None
     except Exception as e:
-        _last_fetch_error = ("other", None)
+        _fetch_error.reason = ("other", None)
         logger.warning(f"Error fetching latest release: {e}")
         return None
 
