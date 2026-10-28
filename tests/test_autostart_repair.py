@@ -163,3 +163,13 @@ def test_an_unquoted_spaced_path_is_repaired_after_its_file_is_gone(spaced_env):
     _entry(entry, str(home / "Downloads" / "TuxTalk-v0.18.2.AppImage"))
     assert autostart.repair_stale_appimage_autostart() is True
     assert f'Exec="{installed}"\n' in entry.read_text()
+
+
+def test_a_hand_made_entry_that_runs_the_appimage_through_env_is_left_alone(env):
+    """It starts with a real program, so it isn't the old broken path; a
+    rewrite would drop the settings it sets."""
+    home, installed, entry = env
+    _entry(entry, f"/usr/bin/env SOME_SETTING=1 {installed}")
+    before = entry.read_text()
+    assert autostart.repair_stale_appimage_autostart() is False
+    assert entry.read_text() == before

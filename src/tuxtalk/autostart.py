@@ -345,9 +345,11 @@ def _exec_program(exec_cmd):
     written), reading back what desktop_exec_program writes. An AppImage
     path with a space that isn't quoted (written before 0.19) can't be run,
     whether or not the file is still there: the desktop looks for the part
-    before the space."""
+    before the space, which is no program ("/home/Jo"). A hand-made
+    "/usr/bin/env A=1 .../TuxTalk.AppImage" starts with one, and runs."""
     whole = exec_cmd.strip()
-    if " " in whole and not whole.startswith('"') and whole.lower().endswith(".appimage"):
+    if (" " in whole and not whole.startswith('"') and whole.lower().endswith(".appimage")
+            and not os.path.isfile(whole.split()[0])):
         return whole, False
     # The key file's escaping first (\\ is one backslash), then the
     # desktop-entry quoting: inside the quotes a backslash takes the next
