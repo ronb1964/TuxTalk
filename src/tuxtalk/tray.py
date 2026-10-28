@@ -22,7 +22,7 @@ import threading
 import sys
 import warnings
 from .logger import setup_logger
-from . import tray_instance, update_offers
+from . import notes_text, tray_instance, update_offers
 from .tray_service import ServiceLifecycle
 
 # The tray menu's icons need Gtk.ImageMenuItem: AppIndicator sends only its
@@ -917,14 +917,8 @@ class DictationTray(ServiceLifecycle):
         scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         scroll.set_min_content_height(150)
 
-        self._about_notes_text = Gtk.TextView()
-        self._about_notes_text.set_editable(False)
-        self._about_notes_text.set_wrap_mode(Gtk.WrapMode.WORD)
-        self._about_notes_text.set_left_margin(10)
-        self._about_notes_text.set_right_margin(10)
-        self._about_notes_text.set_top_margin(10)
-        self._about_notes_text.get_buffer().set_text("Loading release notes...")
-        scroll.add(self._about_notes_text)
+        release_notes = notes_text.NotesView("Loading release notes...")
+        scroll.add(release_notes.view)
         content.pack_start(scroll, True, True, 0)
 
         # Links box
@@ -968,7 +962,7 @@ class DictationTray(ServiceLifecycle):
                 notes = release["body"]
             else:
                 notes = "Release notes not available.\n\nVisit GitHub for the full changelog."
-            GLib.idle_add(lambda: self._about_notes_text.get_buffer().set_text(notes))
+            GLib.idle_add(release_notes.show, notes)
 
         thread = threading.Thread(target=fetch_notes, daemon=True)
         thread.start()
@@ -1125,14 +1119,7 @@ class DictationTray(ServiceLifecycle):
             scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
             scroll.set_min_content_height(150)
 
-            notes_text = Gtk.TextView()
-            notes_text.set_editable(False)
-            notes_text.set_wrap_mode(Gtk.WrapMode.WORD)
-            notes_text.set_left_margin(10)
-            notes_text.set_right_margin(10)
-            notes_text.set_top_margin(10)
-            notes_text.get_buffer().set_text(release.get("body", ""))
-            scroll.add(notes_text)
+            scroll.add(notes_text.NotesView(release.get("body", "")).view)
 
             content.pack_start(scroll, True, True, 0)
 

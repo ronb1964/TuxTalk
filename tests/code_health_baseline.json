@@ -1,6 +1,6 @@
 {
  "files": {
-  "tray.py": 1857,
+  "tray.py": 1844,
   "welcome_dialog.py": 3089
  },
  "findings": {
@@ -401,13 +401,13 @@
    "lines": 102
   },
   "tray.py::DictationTray._show_update_result_dialog": {
-   "lines": 142
+   "lines": 135
   },
   "tray.py::DictationTray.set_performance_preset": {
    "decisions": 23
   },
   "tray.py::DictationTray.show_about_dialog": {
-   "lines": 133
+   "lines": 127
   },
   "tray.py::main": {
    "decisions": 18,

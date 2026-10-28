@@ -61,6 +61,10 @@ before 0.15.0, so older entries use that name.
 - If the first-run copy into ~/AppImages failed and the AppImage you ran
   had a space in its name, like "TuxTalk (1).AppImage", the menu entry
   didn't open anything. It does now.
+- The links in About's "What's New in This Version", and in the Update
+  Available window, work now. They showed as their raw text ("[vote on the
+  AUR page](https://...)") and couldn't be clicked. Click one, or move to it
+  with the arrow keys and press Enter, and it opens in your browser.
 - Saying "tab" in a sentence ("every tab shows", "the tabs in Claude
   Desktop") typed a tab character instead of the word, almost every time.
   Now only "press tab" makes a tab, and "tab" on its own is just the word.
