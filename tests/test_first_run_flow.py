@@ -258,3 +258,14 @@ def test_the_welcome_names_a_hold_key_kept_from_before(kept_f10, welcome_window)
     from gtk_text import tree_text
     shown = " ".join(tree_text(welcome_window.dialog))
     assert "F10" in shown and "F8" not in shown
+
+
+@pytest.mark.parametrize("on", [True, False])
+def test_setup_complete_promises_a_start_at_login_only_when_it_is_on(setup_complete,
+                                                                    monkeypatch, on):
+    """An autostart file that couldn't be written leaves launch_at_login off;
+    the screen said TuxTalk would start at login all the same."""
+    from tuxtalk import config
+    monkeypatch.setattr(config, "load_config", lambda: config.Settings(launch_at_login=on))
+    shown = " ".join(setup_complete())
+    assert ("start automatically when you log in" in shown) is on
