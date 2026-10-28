@@ -139,3 +139,29 @@ class TestWtypeIsBounded:
 
         assert keyboard_output.type_text_raw("hello") is False
         assert killed, "a hung wtype must be killed, not left typing later"
+
+
+def test_the_daily_check_records_its_time_on_gtks_thread(monkeypatch):
+    """Loaded and saved on the check's own thread, a setting the tray saved
+    in the same moment (on GTK's thread) could be lost; on GTK's thread the
+    two take turns."""
+    import threading
+    import time
+    from tuxtalk import config, tray, update_checker
+    queued, recorded = [], []
+    monkeypatch.setattr(config, "load_config",
+                        lambda: config.Settings(auto_check_updates=True, last_update_check=""))
+    monkeypatch.setattr(update_checker, "check_for_updates", lambda: {"success": False})
+    monkeypatch.setattr(config, "record_update_check",
+                        lambda ts: recorded.append(threading.current_thread()))
+    monkeypatch.setattr(tray.GLib, "idle_add", lambda fn, *a: queued.append((fn, a)))
+    t = tray.DictationTray.__new__(tray.DictationTray)
+    t._quitting = False
+    t.auto_check_for_updates()
+    deadline = time.monotonic() + 5
+    while not queued and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert recorded == []                       # not on the check's thread
+    for fn, args in queued:                     # GTK's loop, here
+        fn(*args)
+    assert recorded == [threading.current_thread()]

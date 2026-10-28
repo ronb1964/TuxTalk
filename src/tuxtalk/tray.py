@@ -1205,10 +1205,10 @@ class DictationTray(ServiceLifecycle):
             try:
                 result = update_checker.check_for_updates()
 
-                # Record the timestamp against a fresh read: `config` was loaded
-                # before the network call, which can take ~30 s, and saving it
-                # back would revert anything changed in Preferences meanwhile.
-                record_update_check(update_checker.get_current_timestamp())
+                # Saved against a fresh read (`config` is from before the ~30 s
+                # check) and on GTK's thread, where the tray saves its own
+                # settings: neither undoes a change made meanwhile.
+                GLib.idle_add(record_update_check, update_checker.get_current_timestamp())
 
                 if result and result.get("success"):
                     has_update = result.get("update_available", False)
