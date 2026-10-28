@@ -140,3 +140,11 @@ def test_without_an_installed_copy_the_running_appimage_is_used(monkeypatch):
 
 def test_onboarding_asks_for_the_installed_copy(first_run):
     assert ("starts at login", True) in first_run()
+
+
+def test_an_appimage_in_a_folder_with_a_space_is_quoted_for_the_exec_line(monkeypatch):
+    """An unquoted "/home/Jo Ann/..." makes the desktop look for a program
+    called "/home/Jo", so TuxTalk silently never started at login."""
+    spaced = "/home/Jo Ann/Downloads/TuxTalk-v0.19.0-x86_64.AppImage"
+    mod = _make_prefs(monkeypatch, exists={spaced}, appimage=spaced)
+    assert mod.get_launch_command() == f'"{spaced}"'

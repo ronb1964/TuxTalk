@@ -36,6 +36,23 @@ INSTALLED_APPIMAGE = os.path.expanduser("~/AppImages/TuxTalk.AppImage")
 _PORTAL_TIMEOUT_S = 60
 
 
+# Characters the desktop-entry spec says an Exec argument must be quoted for.
+_EXEC_RESERVED = set(' \t\n"\'\\><~|&;$*?#()`')
+
+
+def desktop_exec_program(path: str) -> str:
+    """*path* as the program of an Exec= line. GLib drops an entry whose
+    program it can't find, so a path with a space must be quoted; inside the
+    quotes ", `, $ and \\ are backslash-escaped, then every backslash is
+    escaped again as the key file's string rule requires, which also keeps a
+    newline from ending the line. % is doubled because it starts a field code."""
+    path = path.replace("%", "%%")
+    if not any(c in _EXEC_RESERVED for c in path):
+        return path
+    quoted = "".join("\\" + c if c in '"`$\\' else c for c in path)
+    return '"' + quoted.replace("\\", "\\\\").replace("\n", "\\n") + '"'
+
+
 def get_launch_command(prefer_installed_appimage: bool = False) -> str:
     """Return the most portable command to launch the tray.
 
@@ -49,13 +66,16 @@ def get_launch_command(prefer_installed_appimage: bool = False) -> str:
     at login. Setup copies the AppImage in
     the background, so it passes *prefer_installed_appimage* rather than
     relying on the copy having finished.
+
+    A path comes back quoted for the Exec line (desktop_exec_program): a
+    home folder with a space would otherwise start nothing at login.
     """
     from . import config
     if config.DEV_MODE:
         root = _project_root()
         run_dev = os.path.join(root, 'run-dev.sh')
         if os.path.isfile(run_dev) and os.access(run_dev, os.X_OK):
-            return run_dev
+            return desktop_exec_program(run_dev)
         return (f'/bin/bash -c "cd {root} && DEV_MODE=1 '
                 f'PYTHONPATH=./src:/usr/lib64/python3.13/site-packages:'
                 f'/usr/lib/python3.13/site-packages {sys.executable} -m tuxtalk.tray"')
@@ -64,8 +84,8 @@ def get_launch_command(prefer_installed_appimage: bool = False) -> str:
     appimage_path = os.environ.get('APPIMAGE')
     if appimage_path and os.path.isfile(appimage_path) and os.access(appimage_path, os.X_OK):
         if prefer_installed_appimage or os.path.isfile(INSTALLED_APPIMAGE):
-            return INSTALLED_APPIMAGE
-        return appimage_path
+            return desktop_exec_program(INSTALLED_APPIMAGE)
+        return desktop_exec_program(appimage_path)
 
     # Inside an AppImage mount but APPIMAGE unset: find the AppImage on disk.
     if '/tmp/.mount_' in sys.executable or 'squashfs-root' in sys.executable:
@@ -77,7 +97,7 @@ def get_launch_command(prefer_installed_appimage: bool = False) -> str:
             if matches:
                 latest = max(matches, key=os.path.getmtime)
                 if os.access(latest, os.X_OK):
-                    return latest
+                    return desktop_exec_program(latest)
 
     # Installed .deb/.rpm: prefer the KNOWN ABSOLUTE launcher, not `which`
     # (a stray ~/.local/bin/tuxtalk must never be written into autostart).
@@ -92,7 +112,7 @@ def get_launch_command(prefer_installed_appimage: bool = False) -> str:
             if result.returncode == 0:
                 path = result.stdout.strip()
                 if os.path.isfile(path) and os.access(path, os.X_OK):
-                    return path
+                    return desktop_exec_program(path)
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
 

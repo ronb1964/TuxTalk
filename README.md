@@ -301,7 +301,7 @@ remapper, for instance). Log out and back in afterwards.
 | **Ctrl+Alt+P** | Types your last dictation again, wherever your cursor is |
 | **Shift+F8** | Voice editing: hold it and say how to change the selected text (turn it on in TuxTalk Labs first) |
 
-Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--stop`). For the AppImage, use the AppImage file, e.g. `~/AppImages/TuxTalk.AppImage --toggle`. It starts TuxTalk if it isn't running and waits for the speech model to load, so the toggle is never lost.
+Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--stop`). For the AppImage, use the AppImage file, by its full path, e.g. `/home/you/AppImages/TuxTalk.AppImage --toggle` (GNOME runs a shortcut without a shell, so `~` doesn't work there; Help shows yours). It starts TuxTalk if it isn't running and waits for the speech model to load, so the toggle is never lost.
 
 ---
 
