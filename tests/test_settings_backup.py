@@ -261,6 +261,28 @@ def test_the_list_holds_copies_and_backup_files_newest_first(home, monkeypatch):
     assert [(p.when.hour, p.kind) for p in points] == [(9, "file"), (8, "auto"), (20, "file")]
 
 
+def test_a_copy_named_with_an_impossible_date_is_skipped(home):
+    """Digits in the right places but no such day: the tab still opens."""
+    sb.snapshot_if_changed()
+    open(os.path.join(sb.snapshots_dir(), "settings-20261399-250000.zip"), "wb").close()
+    assert [p.kind for p in sb.restore_points()] == ["auto"]
+
+
+def test_a_backup_dated_with_a_time_zone_sorts_beside_the_others(home, monkeypatch):
+    """A hand-edited manifest with "+02:00" couldn't be compared with the
+    copies' plain local times, and the Earlier settings list failed."""
+    folder = home / "f"
+    folder.mkdir()
+    sb.set_backup_folder(str(folder))
+    monkeypatch.setattr(sb, "_now", lambda: datetime.datetime(2026, 10, 11, 8, 58))
+    sb.snapshot_if_changed()
+    zoned = datetime.datetime(2026, 10, 12, 9, 0, tzinfo=datetime.timezone.utc)
+    _backup_file(folder, "zoned.zip", zoned, monkeypatch)
+    points = sb.restore_points()
+    assert [p.kind for p in points] == ["file", "auto"]
+    assert points[0].when == zoned.astimezone().replace(tzinfo=None)
+
+
 def test_without_a_backup_folder_the_list_is_the_copies(home):
     sb.snapshot_if_changed()
     assert [p.kind for p in sb.restore_points()] == ["auto"]
