@@ -172,6 +172,20 @@ def download_area(parent: str, name: str):
         shutil.rmtree(folder, ignore_errors=True)
 
 
+@contextlib.contextmanager
+def install_turn(name: str, wait_s: float = 120.0):
+    """Hold *name*'s install lock while a downloaded engine is put in place:
+    the tray and Preferences may finish the same download together, and one
+    removing the engine folder while the other moved its copy in failed
+    both. Whoever comes second should check whether it is there already.
+    Raises OSError when the turn doesn't come within *wait_s*."""
+    from . import single_instance
+    with single_instance.open_lock(f"{name}-install.lock") as lock:
+        if not single_instance.claim(lock, wait_s=wait_s):
+            raise OSError(f"another {name} install didn't finish")
+        yield
+
+
 def unpack_tar(archive: str, folder: str) -> None:
     """Unpack the tar *archive* into *folder*. Where Python has the data
     filter (3.12, and back-ports), it refuses paths that would land outside

@@ -188,7 +188,7 @@ def make_engine_download_func(model_name=None):
     """DownloadTask function: fetch, verify and unpack the engine, unless the
     one already there can run *model_name*."""
     def download(progress_callback, cancel_event):
-        from .download_utils import download_area, download_file, unpack_tar
+        from .download_utils import download_area, download_file, install_turn, unpack_tar
         if is_engine_installed(model_name):
             progress_callback("Already downloaded", 100)
             return True
@@ -206,10 +206,12 @@ def make_engine_download_func(model_name=None):
             try:
                 progress_callback("Unpacking...", 97)
                 unpack_tar(archive, folder)
-                target = _engine_dir()
-                shutil.rmtree(target, ignore_errors=True)
-                os.replace(os.path.join(folder, ENGINE_NAME), target)
-                engine_process.remove_other_versions(os.path.dirname(parent), ENGINE_VERSION)
+                with install_turn("vulkan-engine"):
+                    if not is_engine_installed(model_name):     # or another download did it
+                        target = _engine_dir()
+                        shutil.rmtree(target, ignore_errors=True)
+                        os.replace(os.path.join(folder, ENGINE_NAME), target)
+                    engine_process.remove_other_versions(os.path.dirname(parent), ENGINE_VERSION)
             except Exception as e:
                 logger.error(f"Could not unpack the graphics engine: {e}")
                 progress_callback("Could not unpack the download", 0)

@@ -129,6 +129,53 @@ def test_a_download_that_fails_to_unpack_leaves_nothing_behind(tmp_path, monkeyp
     assert list((tmp_path / "1.9.5").iterdir()) == []
 
 
+def test_two_downloads_of_the_engine_at_once_both_end_installed(tmp_path, monkeypatch):
+    """The tray and Preferences finishing the same download together: one
+    removed the engine folder while the other moved its copy in, and that
+    window said "Could not unpack the download"."""
+    import io
+    import shutil
+    import tarfile
+    import threading
+    import types
+    runtime = tmp_path / "run"
+    runtime.mkdir(mode=0o700)
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(runtime))
+    engine = tmp_path / "1.9.5" / wv.ENGINE_NAME
+    monkeypatch.setattr(wv, "_engine_dir", lambda: str(engine))
+    packed = io.BytesIO()
+    with tarfile.open(fileobj=packed, mode="w:gz") as tar:
+        info = tarfile.TarInfo(f"{wv.ENGINE_NAME}/whisper-server")
+        info.size, info.mode = 2, 0o755
+        tar.addfile(info, io.BytesIO(b"#!"))
+    both_downloaded = threading.Barrier(2)
+
+    def download(url, dest, **kwargs):
+        open(dest, "wb").write(packed.getvalue())
+        both_downloaded.wait(5)
+        return True
+    monkeypatch.setattr("tuxtalk.download_utils.download_file", download)
+    # The bad timing, made certain: both clear the folder before either
+    # moves its copy in, unless the second waits its turn and skips it.
+    both_cleared = threading.Barrier(2)
+
+    def rmtree(path, **kwargs):
+        shutil.rmtree(path, **kwargs)
+        try:
+            both_cleared.wait(0.5)
+        except threading.BrokenBarrierError:
+            pass
+    monkeypatch.setattr(wv, "shutil", types.SimpleNamespace(rmtree=rmtree))
+    results = []
+    runs = [threading.Thread(target=lambda: results.append(
+        wv.make_engine_download_func("small")(lambda *a: None, None))) for _ in range(2)]
+    for run in runs:
+        run.start()
+    for run in runs:
+        run.join(10)
+    assert results == [True, True] and wv.is_engine_installed("small")
+
+
 def test_each_engine_build_has_its_own_asset():
     """Released versions check their build's SHA256 (0.12.0-0.13.1: 1.9.4 b1,
     0.14.x-0.15.x: 1.9.4 b2), so a new build never reuses a published name.

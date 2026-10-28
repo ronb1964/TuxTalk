@@ -419,7 +419,7 @@ def is_installed() -> bool:
 def make_engine_download_func():
     """DownloadTask function: fetch, verify and unpack the llama.cpp engine."""
     def download(progress_callback, cancel_event):
-        from .download_utils import download_area, download_file, unpack_tar
+        from .download_utils import download_area, download_file, install_turn, unpack_tar
         if os.access(_server_binary(), os.X_OK):
             progress_callback("Already downloaded", 100)
             return True
@@ -439,11 +439,13 @@ def make_engine_download_func():
             try:
                 progress_callback("Unpacking...", 97)
                 unpack_tar(archive, folder)
-                for name in os.listdir(folder):
-                    target = os.path.join(engine_dir, name)
-                    shutil.rmtree(target, ignore_errors=True)
-                    os.replace(os.path.join(folder, name), target)
-                engine_process.remove_other_versions(os.path.dirname(engine_dir), LLAMA_TAG)
+                with install_turn("ai-engine"):
+                    if not os.access(_server_binary(), os.X_OK):    # or another download did it
+                        for name in os.listdir(folder):
+                            target = os.path.join(engine_dir, name)
+                            shutil.rmtree(target, ignore_errors=True)
+                            os.replace(os.path.join(folder, name), target)
+                    engine_process.remove_other_versions(os.path.dirname(engine_dir), LLAMA_TAG)
             except Exception as e:
                 logger.error(f"Could not unpack the AI engine: {e}")
                 progress_callback("Could not unpack the download", 0)
