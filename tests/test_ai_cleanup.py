@@ -422,6 +422,25 @@ def test_a_warm_up_without_an_answer_is_logged(monkeypatch, caplog):
                for r in caplog.records)
 
 
+def test_a_stop_during_the_warm_up_logs_no_warning(monkeypatch, caplog):
+    """The warm-up gets no answer because the engine was stopped: nothing
+    for the log to explain."""
+    import logging
+    e = ai.CorrectionEngine()
+    starting = _Proc()
+    e._proc, e._port = starting, 1234
+    monkeypatch.setattr(ai.urllib.request, "urlopen", lambda *a, **k: None)
+
+    def stopped_meanwhile(sentence, timeout):
+        e._proc = None
+        return None
+    monkeypatch.setattr(e, "_ask", stopped_meanwhile)
+    with caplog.at_level(logging.INFO, logger=ai.logger.name):
+        e._wait_until_ready(starting, limit=1)
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert not e._ready.is_set()
+
+
 def test_a_server_that_died_is_started_again(dead_engine):
     """is_ready() notices the dead server, so corrections and edits don't fail all session."""
     assert dead_engine.correct("one, no wait, two") is None

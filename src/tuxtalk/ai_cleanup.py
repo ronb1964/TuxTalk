@@ -518,7 +518,7 @@ class CorrectionEngine:
             # own programs can read either, and are trusted anyway.
             self._key = secrets.token_hex(16)
             binary = _server_binary()
-            self._proc = self._launcher.submit(
+            proc = self._proc = self._launcher.submit(
                 subprocess.Popen,
                 # 4096 tokens: room for a voice edit (MAX_EDIT_CHARS of text and
                 # the rewrite); one slot, so it is all one request's.
@@ -529,8 +529,10 @@ class CorrectionEngine:
                      "LLAMA_API_KEY": self._key},
                 preexec_fn=_set_parent_death_signal,
             ).result()
-            logger.info(f"AI cleanup engine starting (pid {self._proc.pid})")
-        threading.Thread(target=self._wait_until_ready, args=(self._proc,), daemon=True).start()
+            logger.info(f"AI cleanup engine starting (pid {proc.pid})")
+        # The process started here, not self._proc read again: a stop() just
+        # after the lock is let go would hand the waiter None.
+        threading.Thread(target=self._wait_until_ready, args=(proc,), daemon=True).start()
 
     def _wait_until_ready(self, proc, limit=90):
         """Wait for the server *proc* to answer, warm it up, then mark it
@@ -552,13 +554,14 @@ class CorrectionEngine:
             # prompt cache) of up to several seconds; paying it here keeps it
             # off the user's first corrected dictation.
             started = time.time()
-            if self._ask("Order two boxes, no wait, three boxes.", timeout=60) is None:
-                logger.warning("AI cleanup warm-up got no answer; the first correction "
-                               "may be slow")
+            answered = self._ask("Order two boxes, no wait, three boxes.", timeout=60)
             with self._lock:
                 if self._proc is not proc:
-                    return
+                    return              # stopped during the warm-up: no answer was expected
                 self._ready.set()
+            if answered is None:
+                logger.warning("AI cleanup warm-up got no answer; the first correction "
+                               "may be slow")
             logger.info(f"AI cleanup engine ready (warm-up took {time.time() - started:.1f}s)")
             return
         logger.error("AI cleanup engine did not become ready")
