@@ -16,6 +16,7 @@ from .logger import setup_logger
 from .prefs_language import LanguageRow, language_summary
 from .prefs_tab import Tab, dropdown, fold, section_header
 from .ui_style import WARNING_AMBER, message_dialog, show_message
+from .cuda_helper import DOWNLOAD_SIZE_TEXT as CUDA_SIZE_TEXT
 from .whisper_vulkan import ENGINE_SIZE_TEXT
 
 logger = setup_logger(__name__)
@@ -74,8 +75,8 @@ def device_label(device, model, cuda_ready):
     from .parakeet_engine import is_parakeet
     if is_parakeet(model):
         return ("CUDA (Parakeet runs on the processor)" if cuda_ready
-                else "CUDA (1.4 GB download, Parakeet runs on the processor)")
-    return "CUDA (NVIDIA)" if cuda_ready else "CUDA (NVIDIA, 1.4 GB download)"
+                else f"CUDA ({CUDA_SIZE_TEXT} download, Parakeet runs on the processor)")
+    return "CUDA (NVIDIA)" if cuda_ready else f"CUDA (NVIDIA, {CUDA_SIZE_TEXT} download)"
 
 
 def download_model(parent, model):
@@ -607,7 +608,7 @@ class SpeechSection(Tab):
         if self._cuda_ready or self.win.has_nvidia():
             combo.append("cuda", device_label("cuda", self.config.get("model"), self._cuda_ready))
             tooltip += ("\n• CUDA (NVIDIA): much faster for the Whisper models, a one-time "
-                        "1.4 GB download. Parakeet can't use it")
+                        f"{CUDA_SIZE_TEXT} download. Parakeet can't use it")
         # Set to CUDA without its files, the service runs on the processor,
         # so the dropdown shows CPU rather than claim CUDA. Only the display
         # changes: a saved "cuda" stays on disk unless the user picks another
@@ -715,7 +716,7 @@ class SpeechSection(Tab):
         self.set_choice("device", "vulkan")
 
     def _download_cuda(self):
-        """Ask, then download CUDA's 1.4 GB of files with a progress bar.
+        """Ask, then download CUDA's files with a progress bar.
 
         On success the dropdowns are rebuilt and _after_cuda_download()
         switches to CUDA (asking for a Whisper model first on Parakeet).
@@ -727,7 +728,7 @@ class SpeechSection(Tab):
         if show_message(
                 self.window, Gtk.MessageType.QUESTION, "Download CUDA Libraries?",
                 "CUDA runs the Whisper models on your NVIDIA graphics card. It needs "
-                "about 1.4 GB of NVIDIA's files, a one-time download.\n\n"
+                f"about {CUDA_SIZE_TEXT} of NVIDIA's files, a one-time download.\n\n"
                 f"The files will be stored in {cuda_path} and may take several minutes "
                 "to download.\n\nContinue with download?",
                 buttons=Gtk.ButtonsType.YES_NO) != Gtk.ResponseType.YES:

@@ -14,6 +14,7 @@ from dataclasses import dataclass
 
 from .config import display_locale, locale_language
 from .parakeet_engine import PARAKEET_LANGUAGES, effective_device, is_parakeet
+from .cuda_helper import DOWNLOAD_SIZE_TEXT as CUDA_SIZE_TEXT
 from .whisper_vulkan import ENGINE_SIZE_TEXT
 
 PARAKEET = "parakeet-v3"
@@ -352,7 +353,7 @@ COMPATIBILITY_NOTES = (
     "Languages: Parakeet knows English and 24 European languages. "
     "Whisper models know about 99.",
     f"Vulkan is a {ENGINE_SIZE_TEXT} engine, and each model needs its own copy for it the "
-    "first time. CUDA is a one-time 1.4 GB download.",
+    f"first time. CUDA is a one-time {CUDA_SIZE_TEXT} download.",
 )
 
 

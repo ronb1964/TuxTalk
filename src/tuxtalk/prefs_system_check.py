@@ -12,6 +12,7 @@ from .logger import setup_logger
 from .prefs_tab import (Tab, fold, run_with_progress,
                         subheading)
 from .ui_style import WARNING_AMBER, message_dialog, show_message
+from .cuda_helper import DOWNLOAD_SIZE_TEXT as CUDA_SIZE_TEXT
 from .whisper_vulkan import ENGINE_SIZE_TEXT
 
 logger = setup_logger(__name__)
@@ -176,8 +177,9 @@ class SystemCheck(Tab):
             vulkan_hint.set_margin_top(4)
             vulkan_hint.set_text(
                 "Lighter option: choose Vulkan (any GPU) as the Device in General → Change model, "
-                f"device or language. It's a {ENGINE_SIZE_TEXT} download instead of 1.4 GB, works "
-                "on AMD, Intel and NVIDIA, and was about as fast as CUDA in our tests.")
+                f"device or language. It's a {ENGINE_SIZE_TEXT} download instead of "
+                f"{CUDA_SIZE_TEXT}, works on AMD, Intel and NVIDIA, and was about as fast as "
+                "CUDA in our tests.")
             vulkan_hint.get_style_context().add_class("dim-label")
             check.attach(vulkan_hint, 0, crow, 2, 1)
             crow += 1
@@ -333,8 +335,8 @@ class SystemCheck(Tab):
                 else:
                     self.cuda_status_label.set_markup(
                         '<span color="#FF9800">CUDA libraries not installed. To download them '
-                        '(1.4 GB), choose CUDA as the Device in General → Change model, '
-                        'device or language.</span>')
+                        f'({CUDA_SIZE_TEXT}), choose CUDA as the Device in General → Change '
+                        'model, device or language.</span>')
             else:
                 self.gpu_status_label.set_markup(
                     '<span color="#9E9E9E">⊘ No NVIDIA GPU detected</span>')

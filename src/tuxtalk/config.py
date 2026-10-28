@@ -238,7 +238,7 @@ class Settings:
     launch_at_login: bool = False        # start TuxTalk automatically at login (prefs manages the autostart file)
     log_transcripts: bool = False        # write full transcribed text to the log (off = redacted); opt-in for troubleshooting only
     remove_fillers: bool = False         # drop "um"/"uh" and accidental repeated words (cleanup.py; rules, no download)
-    ai_corrections: bool = False         # fix "3, no wait, 4" with a local AI model (ai_cleanup.py; downloads ~1.1 GB)
+    ai_corrections: bool = False         # fix "3, no wait, 4" with a local AI model (ai_cleanup.py downloads it)
     voice_editing: bool = False          # Shift + dictation key rewrites the selected text with the same AI model
     auto_stop_silence: bool = False      # toggle recordings stop by themselves when you stop talking (silence.py)
     auto_stop_seconds: float = 2.0       # seconds of silence before an auto-stop (0.5-10)

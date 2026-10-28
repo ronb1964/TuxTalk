@@ -14,6 +14,7 @@ from gi.repository import Gtk, GLib
 from .ui_style import message_dialog, show_message
 
 from . import whisper_vulkan as wv
+from .cuda_helper import DOWNLOAD_SIZE_TEXT as CUDA_SIZE_TEXT
 from .logger import setup_logger
 from .recommend import model_title
 
@@ -39,7 +40,7 @@ def choose_light_or_full(parent, model):
         f"  • Light (Vulkan): a {wv.ENGINE_SIZE_TEXT} graphics engine plus\n"
         f"    {name} in its format ({vulkan_size}).\n"
         "    About as fast as CUDA in our tests.\n\n"
-        "  • Full (CUDA): NVIDIA's CUDA libraries (1.4 GB) plus the model.\n"
+        f"  • Full (CUDA): NVIDIA's CUDA libraries ({CUDA_SIZE_TEXT}) plus the model.\n"
         "    TuxTalk's long-standing NVIDIA setup.\n\n"
         "Either is a one-time download.")
     dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)

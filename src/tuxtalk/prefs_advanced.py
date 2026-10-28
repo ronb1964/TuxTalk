@@ -121,14 +121,15 @@ class AdvancedTab(Tab):
             "Only sentences with a correction phrase are sent to it, and its answer is\n"
             "checked: if it changed anything besides the correction, your words are\n"
             "typed exactly as spoken instead.\n\n"
-            "Needs a one-time download of about 1.1 GB and roughly 1.5 GB of memory while on.")
+            f"Needs a one-time download of about {ai_cleanup.DOWNLOAD_SIZE_TEXT} and roughly "
+            "1.5 GB of memory while on.")
         self.ai_corrections_check.connect("toggled", self._on_ai_corrections_toggled)
         grid.attach(self.ai_corrections_check, 0, row, 2, 1)
         row += 1
 
         ai_note = Gtk.Label(xalign=0)
         ai_note.set_markup('<span>    Runs on your computer, nothing is sent online. '
-                           'One-time download of about 1.1 GB.</span>')
+                           f'One-time download of about {ai_cleanup.DOWNLOAD_SIZE_TEXT}.</span>')
         ai_note.set_opacity(0.7)
         grid.attach(ai_note, 0, row, 2, 1)
         row += 1
@@ -358,7 +359,8 @@ class AdvancedTab(Tab):
             "The selection is replaced with the rewrite. Ctrl+Z puts it back.\n"
             "Or, right after dictating, say “edit that, make it shorter”: no keys needed,\n"
             "handy with hands-free and Type at pause.\n\n"
-            "Uses the same small AI as self-corrections (one shared 1.1 GB download),\n"
+            "Uses the same small AI as self-corrections (one shared "
+            f"{ai_cleanup.DOWNLOAD_SIZE_TEXT} download),\n"
             "on this computer. Simple, clear changes work best.")
         self.voice_editing_check.connect("toggled", self._on_voice_editing_toggled)
         self.voice_editing_check.set_margin_start(LABS_INDENT)

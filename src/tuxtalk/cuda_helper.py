@@ -9,6 +9,10 @@ from gi.repository import Gtk
 from .ui_style import message_dialog
 from .logger import setup_logger
 
+# NVIDIA's CUDA libraries, downloaded once when CUDA is picked: the size
+# Preferences, System check, the setup choices and Help give.
+DOWNLOAD_SIZE_TEXT = "1.4 GB"
+
 logger = setup_logger(__name__)
 
 # Timeout constants (in seconds)

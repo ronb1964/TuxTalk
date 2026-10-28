@@ -48,11 +48,23 @@ LLAMA_URL = f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMA_TAG
 # From GitHub's own digest of the release asset; the download is refused if
 # it does not match, so a tampered or truncated engine is never run.
 LLAMA_SHA256 = "376b003154a33bf1139302f66865fcd3dd0ce19a9b5b956dcc8b52b0962515ea"
-LLAMA_SIZE_TEXT = "30 MB"
+LLAMA_SIZE_MB = 30
 
 MODEL_REPO = "Qwen/Qwen2.5-1.5B-Instruct-GGUF"
 MODEL_FILE = "qwen2.5-1.5b-instruct-q4_k_m.gguf"
-MODEL_SIZE_TEXT = "1.1 GB"
+MODEL_SIZE_MB = 1117
+
+
+def _size_text(mb):
+    """*mb* megabytes as people read a download's size: "30 MB", "1.1 GB"."""
+    return f"{mb / 1000:.1f} GB" if mb >= 1000 else f"{mb} MB"
+
+
+LLAMA_SIZE_TEXT = _size_text(LLAMA_SIZE_MB)
+MODEL_SIZE_TEXT = _size_text(MODEL_SIZE_MB)
+# What turning the AI on downloads, its engine included: the size every
+# window and Help give.
+DOWNLOAD_SIZE_TEXT = _size_text(MODEL_SIZE_MB + LLAMA_SIZE_MB)
 
 # --- The prompt ------------------------------------------------------------
 # Measured on a 25-sentence test set (fillers, corrections, split corrections,

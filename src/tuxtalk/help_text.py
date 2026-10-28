@@ -19,6 +19,8 @@ import os
 
 from gi.repository import GLib
 
+from .ai_cleanup import DOWNLOAD_SIZE_TEXT as AI_SIZE_TEXT
+from .cuda_helper import DOWNLOAD_SIZE_TEXT as CUDA_SIZE_TEXT
 from .whisper_vulkan import ENGINE_SIZE_TEXT
 
 # Where the Help window's feedback link goes; the Setup Complete screen
@@ -175,7 +177,8 @@ def _values():
             "update_block": update_block, "log_path": f["log_path"],
             "cfg_dir": f["cfg_dir"], "cache_dir": f["cache_dir"],
             "FEEDBACK_URL": FEEDBACK_URL, "ISSUES_URL": ISSUES_URL, "REPORT_LINK": REPORT_LINK,
-            "ENGINE_SIZE_TEXT": ENGINE_SIZE_TEXT}
+            "ENGINE_SIZE_TEXT": ENGINE_SIZE_TEXT, "AI_SIZE_TEXT": AI_SIZE_TEXT,
+            "CUDA_SIZE_TEXT": CUDA_SIZE_TEXT}
 
 
 START_HERE = '''<span size="large"><b>Dictating in Three Steps</b></span>
@@ -312,7 +315,7 @@ One box at a time, each box a dictation of its own:
   • <b>Remove "um", "uh" and accidentally repeated words.</b> Instant, nothing
     to download.
   • <b>Fix self-corrections with AI.</b> "meet at 3, no wait, 4" types "meet at 4".
-    The AI runs on your computer (a one-time 1.1 GB download) and only sees
+    The AI runs on your computer (a one-time {AI_SIZE_TEXT} download) and only sees
     sentences with a correction phrase. If its answer changes anything besides the
     correction, your words are typed exactly as you said them.
   • Smart quotes, the closing period and spacing are under Fine-tuning.
@@ -329,7 +332,7 @@ Change text by saying how you want it changed.
 
 <b>How to use it</b>
 1. Turn it on once: <b>Preferences → Advanced → TuxTalk Labs → Voice editing</b>. The first
-   time, it downloads the AI (1.1 GB), unless self-corrections already did.
+   time, it downloads the AI ({AI_SIZE_TEXT}), unless self-corrections already did.
 2. Select some text in any app: a sentence, a paragraph, a list.
 3. Hold <b>Shift</b> together with your dictation key (<b>Shift+{hold}</b>) and say what you
    want. Let go of the keys when you're done talking.
@@ -392,7 +395,7 @@ can't be changed by voice.
     Dictation types it again.
   • It doesn't work in a terminal: there's no selection there to replace.
   • It uses the same small AI as <b>Fix self-corrections with AI</b>: one download of
-    about 1.1 GB, shared. Everything runs on this computer; nothing is sent online.
+    about {AI_SIZE_TEXT}, shared. Everything runs on this computer; nothing is sent online.
 
 <b>If nothing happens</b>, TuxTalk tells you why in a notification:
   • <i>Select the text to change first</i>: nothing was selected.
@@ -573,7 +576,7 @@ Microphone</b> and the test beside it.
   • <b>Vulkan (any GPU)</b>: AMD, Intel or NVIDIA, a {ENGINE_SIZE_TEXT} download. It's the
     only way to run Parakeet on the graphics card. TuxTalk checks your graphics card is
     really faster than your processor before it switches.
-  • <b>CUDA (NVIDIA)</b>: NVIDIA only, for the Whisper models, a ~1.4 GB download.
+  • <b>CUDA (NVIDIA)</b>: NVIDIA only, for the Whisper models, a ~{CUDA_SIZE_TEXT} download.
     Parakeet can't use it.
   • If the graphics card can't start, TuxTalk uses the processor instead, and the
     menu's line says so, for example "Parakeet on the processor (Vulkan didn't start)".

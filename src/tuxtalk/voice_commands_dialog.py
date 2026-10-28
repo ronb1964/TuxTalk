@@ -110,6 +110,7 @@ def _on_key_press(dialog, event):
 
 def _build_markup():
     """Build the Pango markup for the cheat sheet content."""
+    from .ai_cleanup import DOWNLOAD_SIZE_TEXT as AI_SIZE_TEXT
     return '''<span size="large"><b>Voice Commands</b></span>
 The commands are English words, whatever language you dictate in.
 
@@ -125,7 +126,7 @@ The commands are English words, whatever language you dictate in.
 <b>Brackets</b>
   <b>open parenthesis</b> → (    <b>close parenthesis</b> → )
   <b>open bracket</b> → [       <b>close bracket</b> → ]
-  <b>open brace</b> → {         <b>close brace</b> → }
+  <b>open brace</b> → {{         <b>close brace</b> → }}
 
 <b>Formatting</b>
   <b>new line</b> / <b>newline</b> / <b>return</b> / <b>line break</b> → line break
@@ -167,7 +168,7 @@ Correct yourself mid-sentence with <b>no wait</b>, <b>I mean</b>, <b>make that</
 <b>scratch that</b> or <b>or rather</b>:
   "meet at 3, no wait, 4" → "meet at 4"
 Needs <b>Fix self-corrections with AI</b> turned on in Preferences → Advanced
-(a one-time download of about 1.1 GB).
+(a one-time download of about {ai_size}).
 
 <b>Literal Words</b>
 Say <b>literal</b> or <b>the word</b> before a basic punctuation or line-break word
@@ -178,4 +179,4 @@ Say <b>literal</b> or <b>the word</b> before a basic punctuation or line-break w
 <b>Snippets</b>
 Say a short phrase, get the full text. Add your own in Preferences → Words.
   Wrap the text in <b>"quotes"</b> to type it exactly as written
-  (bypasses auto-capitalization and punctuation).'''
+  (bypasses auto-capitalization and punctuation).'''.format(ai_size=AI_SIZE_TEXT)
