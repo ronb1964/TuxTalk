@@ -220,13 +220,20 @@ def mechanical_edit(text: str, instruction: str):
     if _INDENT.match(said):
         return "\n".join(INDENT + line if line.strip() else line for line in text.split("\n"))
     if _UNINDENT.match(said):
-        return "\n".join(line.lstrip() for line in text.split("\n"))
+        return "\n".join(_one_level_less(line) for line in text.split("\n"))
     if _REMOVE_BULLETS.match(said):
         return _per_line(text, lambda body: _BULLET.sub("", body))
     m = _REMOVE_WORD.match(said)
     if m:
         return _remove_phrase(text, m.group(1))
     return None
+
+
+def _one_level_less(line: str) -> str:
+    """*line* with one indent taken off: a tab, or up to INDENT's spaces."""
+    if line.startswith("\t"):
+        return line[1:]
+    return line[min(len(INDENT), len(line) - len(line.lstrip(" "))):]
 
 
 # Not "cut": people expect a cut to land on the clipboard.
