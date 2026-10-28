@@ -173,6 +173,14 @@ def test_two_quick_dictations_restore_the_original_primary(keeper, board, primar
         "my highlighted words"]
 
 
+def test_a_highlight_between_two_quick_dictations_is_what_comes_back(keeper, board, primary):
+    paste_with_primary(keeper, board, primary, "first")
+    primary["text"] = "highlighted in between"
+    paste_with_primary(keeper, board, primary, "second")
+    run_pending(keeper)
+    assert primary["text"] == "highlighted in between"
+
+
 def test_a_newer_highlight_is_left_alone(keeper, board, primary):
     paste_with_primary(keeper, board, primary, "dictated words")
     primary["text"] = "highlighted right after"

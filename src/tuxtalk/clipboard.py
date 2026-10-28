@@ -245,12 +245,18 @@ class ClipboardKeeper:
             self._saved = self._read()
 
     def before_primary(self):
-        """Save the primary selection before the dictation goes on it too. A
-        restore still pending means it holds the last dictation, so the copy
-        already saved is the user's."""
+        """Save the primary selection before the dictation goes on it too.
+        With a restore still pending, the copy already saved is kept while
+        the selection still holds the last dictation (or can't be read);
+        something highlighted since is newer, and is kept instead."""
         with self._lock:
-            if self._primary is _NOTHING:
-                self._primary = _primary_to_keep()
+            current = _primary_to_keep()
+            last = self._last_text
+            pending = self._primary is not _NOTHING
+            if (pending and (current is _UNREADABLE
+                             or (last is not None and current in (last, last.rstrip("\n"))))):
+                return
+            self._primary = current
 
     def after_paste(self, text):
         """Schedule the restore, once the app has had time to read *text*."""
