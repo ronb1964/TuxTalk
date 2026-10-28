@@ -11,10 +11,30 @@ def test_space_before_bang_removed():
 
 def test_quotes_and_comma():
     # "open quote ... close quote" preserves inner text as literal
-    # (punctuation commands are NOT processed inside quotes).
-    # The exclamation point lands outside the closing quote.
+    # (punctuation commands are NOT processed inside quotes), in smart
+    # quotes, capitalised and punctuated like any other quote.
     s = "open quote hello comma world close quote exclamation point"
-    assert normalize_text(s) == '"hello comma world"!'
+    assert normalize_text(s) == "\u201cHello comma world!\u201d"
+
+
+@pytest.mark.parametrize("said, written", [
+    ("he said open quote hello close quote", "He said \u201chello.\u201d"),
+    ("open quote hello close quote he said", "\u201cHello\u201d he said."),
+    ("she called it open quote the beast close quote and laughed",
+     "She called it \u201cthe beast\u201d and laughed."),
+])
+def test_quoted_words_get_smart_quotes_and_sentence_capitals(said, written):
+    assert normalize_text(said) == written
+
+
+@pytest.mark.parametrize("said, written", [
+    ("he said quote hello quote", "He said \u201chello.\u201d"),
+    ("he said quote hi quote and she said quote bye quote",
+     "He said \u201chi\u201d and she said \u201cbye.\u201d"),
+])
+def test_a_bare_quote_opens_and_then_closes_with_no_spaces_inside(said, written):
+    """Not 'He said " hello ".': each "quote" pairs with the next one."""
+    assert normalize_text(said) == written
 
 def test_ellipsis_and_caps():
     s = "this is fine dot dot dot next sentence"

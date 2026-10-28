@@ -661,7 +661,7 @@ is in the TuxTalk menu → Voice Commands....
 • Say <b>semicolon</b> for ;
 • Say <b>colon</b> for :
 • Say <b>apostrophe</b> for '
-• Say <b>quote</b> for regular "
+• Say <b>quote</b> before and after words for “hello” (a lone one is a plain ")
 • Say <b>open quote</b> or <b>open quotes</b> for “
 • Say <b>close quote</b> or <b>close quotes</b> for ”
 • Say <b>hyphen</b> or <b>dash</b> for -

@@ -22,6 +22,26 @@ _RE_QUOTED_TEXT = re.compile(
     re.IGNORECASE
 )
 
+def _hold_quoted(text: str):
+    """*text* with each "open quote ... close quote" section swapped for a
+    placeholder, so no command inside it applies, and the sections."""
+    sections = []
+
+    def hold(match):
+        sections.append(match.group(1))
+        return f"__QUOTED_{len(sections) - 1}__"
+    return _RE_QUOTED_TEXT.sub(hold, text), sections
+
+
+def _restore_quoted(text: str, sections) -> str:
+    """The held sections back, in smart quotes (prepare_text makes them
+    straight when that's off), to be capitalised and punctuated like any
+    quote: "he said open quote hello close quote" is He said “hello.”"""
+    for i, quoted in enumerate(sections):
+        text = text.replace(f"__QUOTED_{i}__", f"\u201c{quoted}\u201d")
+    return text
+
+
 # --- 0.1) Literal word escapes ---
 # Map of spoken words to placeholder tokens. When the user says
 # "literal period" we preserve the word "period" instead of inserting "."
@@ -179,13 +199,15 @@ _MULTI_WORD_REPLACEMENTS = [
 ]
 
 # --- 2) Single-word spoken punctuation → symbol ---
+# A bare "quote" opens or closes depending on its place: _pair_spoken_quotes.
+_SPOKEN_QUOTE = "\x00QUOTE\x00"
 _SINGLE_WORD_REPLACEMENTS = [
     (re.compile(r"\bcomma\b,?", re.IGNORECASE), ","),
     (re.compile(r"\bsemicolon\b;?", re.IGNORECASE), ";"),
     (re.compile(r"\bcolon\b:?", re.IGNORECASE), ":"),
     (re.compile(r"\bperiod\b\.?", re.IGNORECASE), "."),
     (re.compile(r"\bapostrophe\b", re.IGNORECASE), "'"),
-    (re.compile(r"\bquote\b", re.IGNORECASE), '"'),
+    (re.compile(r"\bquote\b", re.IGNORECASE), _SPOKEN_QUOTE),
     # "em dash" MUST run before the bare hyphen/dash rule — otherwise
     # "em dash" is rewritten to "em -" first and this pattern never matches.
     (re.compile(r"\bem\s*dash\b", re.IGNORECASE), "—"),
@@ -194,6 +216,19 @@ _SINGLE_WORD_REPLACEMENTS = [
     # " - " the engine wrote for a pause is never mistaken for one.
     (re.compile(r" *\b(?:hyphen|dash)\b *", re.IGNORECASE), "-"),
 ]
+
+def _pair_spoken_quotes(text: str) -> str:
+    """Each bare "quote" said, as an opening and then a closing smart quote
+    in turn ("he said quote hello quote"), so step 3 tidies their spaces as
+    it does an "open quote". A last one without a partner is a plain ".
+    """
+    parts = text.split(_SPOKEN_QUOTE)
+    said = len(parts) - 1
+    marks = ["\u201d" if i % 2 else "\u201c" for i in range(said)]
+    if said % 2:
+        marks[-1] = '"'
+    return "".join(part + mark for part, mark in zip(parts, marks + [""]))
+
 
 # --- 3) Quotes/brackets spacing ---
 _RE_OPEN_BRACKET_SPACE = re.compile(r"(\(|\[|\{)\s+")
@@ -551,12 +586,7 @@ def normalize_text(text: str, auto_period: bool = True) -> str:
     # before the space-after-period pass can split it. Spoken dots go first.
     text = _RE_SPOKEN_DOT_DOMAIN.sub(_join_spoken_dots, text)
     text = _RE_EMAIL_JOINED.sub(_join_email, text)
-    quoted_sections = []
-    def save_quoted(match):
-        quoted_sections.append(match.group(1))
-        return f"__QUOTED_{len(quoted_sections)-1}__"
-
-    text = _RE_QUOTED_TEXT.sub(save_quoted, text)
+    text, quoted_sections = _hold_quoted(text)
 
     # --- 0.1) Escape sequences for literal words ---
     for pat, placeholder in _LITERAL_PATTERNS:
@@ -574,6 +604,7 @@ def normalize_text(text: str, auto_period: bool = True) -> str:
     # --- 2) Single-word replacements ---
     for pat, repl in _SINGLE_WORD_REPLACEMENTS:
         text = pat.sub(repl, text)
+    text = _pair_spoken_quotes(text)
 
     # --- 3) Quotes/brackets spacing ---
     text = _RE_OPEN_BRACKET_SPACE.sub(r"\1", text)
@@ -641,6 +672,9 @@ def normalize_text(text: str, auto_period: bool = True) -> str:
     # an already-correct string and doesn't have to special-case the pronoun.
     text = _RE_STANDALONE_I.sub("I", text)
 
+    # --- 9.5) Restore quoted sections, before capitals and step 11 ---
+    text = _restore_quoted(text, quoted_sections)
+
     # --- 10) Capitalization ---
     def cap_first(s: str) -> str:
         """Capitalize the first word of a line, or leave the line alone.
@@ -701,11 +735,7 @@ def normalize_text(text: str, auto_period: bool = True) -> str:
     temp_text = "\n".join(cap_first(line) for line in temp_text.split("\n"))
     text = temp_text.replace("\n", LINE_BREAK)
 
-    # --- 13) Restore quoted sections with actual quote marks ---
-    for i, quoted_text in enumerate(quoted_sections):
-        text = text.replace(f"__QUOTED_{i}__", f'"{quoted_text}"')
-
-    # --- 14) Fix email/URL formatting ---
+    # --- 13) Fix email/URL formatting ---
     text = _RE_EMAIL_AT_WORD.sub(_join_spaced_email, text)
     text = _fix_email_spacing(text)
 
