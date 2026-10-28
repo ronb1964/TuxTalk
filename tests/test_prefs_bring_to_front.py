@@ -179,3 +179,18 @@ def test_a_closed_window_lets_the_next_one_open_while_its_process_lingers(one_wi
     other = single_instance.open_lock(prefs.WINDOW_LOCK)
     assert single_instance.claim(other)                  # the next window can have it
     other.close()
+
+
+def test_the_tray_asks_again_when_preferences_is_starting_or_closing(monkeypatch):
+    """Its Preferences process was alive with no pid to signal: the click
+    (Your Stats, say) was logged as "still opening" and lost."""
+    import types
+    from tuxtalk import service_launcher, tray
+    launched = []
+    t = tray.DictationTray.__new__(tray.DictationTray)
+    t.preferences_process = types.SimpleNamespace(poll=lambda: None)   # alive
+    monkeypatch.setattr(prefs_ipc, "running_pid", lambda: None)        # no pid yet
+    monkeypatch.setattr(service_launcher, "launch_preferences",
+                        lambda tab: launched.append(tab) or types.SimpleNamespace())
+    t._launch_preferences(tab="stats")
+    assert launched == ["stats"]

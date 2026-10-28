@@ -553,10 +553,10 @@ class DictationTray(ServiceLifecycle, PresetMenu):
             pid = prefs_ipc.running_pid()
             if pid and prefs_ipc.bring_to_front(pid, tab):
                 logger.info("Preferences already open; brought it to the front")
-            else:
-                # No pidfile yet: it is still starting and about to appear.
-                logger.info("Preferences is still opening")
-            return
+                return
+            # Still starting, or closing: a new one brings the starting window
+            # forward on *tab*, or opens once the closing one has gone
+            # (prefs._acquire_prefs_singleton). Doing nothing lost the click.
 
         tab_desc = f" ({tab} tab)" if tab else ""
 
