@@ -72,6 +72,25 @@ def test_package_detection_asks_for_tuxtalk_first(monkeypatch):
         uc._detect_system_package_manager.cache_clear()
 
 
+def test_a_package_query_that_hangs_is_said_and_detection_goes_on(monkeypatch, caplog):
+    """A hung rpm query made the install type fall back to the distro family
+    without a word, so a log never said why updates were offered the wrong way."""
+    import shutil
+    import subprocess
+
+    def hung(cmd, **kw):
+        raise subprocess.TimeoutExpired(cmd, 5)
+    monkeypatch.setattr(shutil, "which", lambda n: "/usr/bin/" + n if n == "rpm" else None)
+    monkeypatch.setattr(subprocess, "run", hung)
+    caplog.set_level("INFO")
+    uc._detect_system_package_manager.cache_clear()
+    try:
+        uc._detect_system_package_manager()
+    finally:
+        uc._detect_system_package_manager.cache_clear()
+    assert "rpm -q tuxtalk didn't answer" in caplog.text
+
+
 def test_package_restart_uses_the_tuxtalk_launcher(monkeypatch):
     import subprocess
     started = []

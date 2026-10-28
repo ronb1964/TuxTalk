@@ -559,35 +559,33 @@ def _detect_system_package_manager() -> Optional[str]:
     family from /etc/os-release. Cached: it runs up to four package queries,
     and the answer can't change while TuxTalk runs."""
     import shutil
-    import subprocess
     for pkg in ("tuxtalk", "talktype"):
-        try:
-            if shutil.which("rpm"):
-                r = subprocess.run(["rpm", "-q", pkg],
-                                   capture_output=True, timeout=5)
-                if r.returncode == 0:
-                    return "rpm"
-        except Exception:
-            pass
-        try:
-            if shutil.which("dpkg-query"):
-                r = subprocess.run(["dpkg-query", "-W", pkg],
-                                   capture_output=True, timeout=5)
-                if r.returncode == 0:
-                    return "deb"
-        except Exception:
-            pass
+        for kind, query in (("rpm", ["rpm", "-q", pkg]), ("deb", ["dpkg-query", "-W", pkg])):
+            if shutil.which(query[0]) and _package_query_succeeds(query):
+                return kind
     try:
         with open("/etc/os-release") as f:
             osr = f.read().lower()
-        if any(k in osr for k in ("fedora", "rhel", "centos", "suse",
-                                  "rocky", "alma", "nobara")):
-            return "rpm"
-        if any(k in osr for k in ("debian", "ubuntu", "mint", "pop")):
-            return "deb"
-    except Exception:
-        pass
+    except OSError as e:
+        logger.info(f"Install type: no /etc/os-release to go by ({e})")
+        return None
+    if any(k in osr for k in ("fedora", "rhel", "centos", "suse", "rocky", "alma", "nobara")):
+        return "rpm"
+    if any(k in osr for k in ("debian", "ubuntu", "mint", "pop")):
+        return "deb"
     return None
+
+
+def _package_query_succeeds(query) -> bool:
+    """Whether the package database query *query* found the package. One
+    that hangs or fails to run says so in the log: the install type then
+    falls back to the distro family, which may answer differently."""
+    import subprocess
+    try:
+        return subprocess.run(query, capture_output=True, timeout=5).returncode == 0
+    except (OSError, subprocess.SubprocessError) as e:
+        logger.info(f"Install type: {' '.join(query)} didn't answer ({e})")
+        return False
 
 
 def get_install_type(*, appimage_env=None, flatpak_env=None, appdir_env=None,

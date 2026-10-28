@@ -224,7 +224,6 @@
   "uninstall.py::_package_lines::long_line": 1,
   "uninstall.py::_wait_for.run::swallowed_error": 1,
   "uninstall.py::find::long_line": 2,
-  "update_checker.py::_detect_system_package_manager::swallowed_error": 3,
   "update_checker.py::_fetch_failure_message::long_line": 1,
   "update_checker.py::_install_app_icon::long_line": 1,
   "update_checker.py::_install_app_icon::swallowed_error": 2,
