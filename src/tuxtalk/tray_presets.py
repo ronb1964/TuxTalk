@@ -84,7 +84,7 @@ class PresetMenu:
             # Its download window runs a loop of its own, and the menu still
             # takes clicks: a second one opened a second download.
             logger.info("A Performance preset is still being applied; ignoring the click")
-            self._revert_preset_radio()
+            self._put_dot_back_soon()
             return
         self._applying_preset = True
         try:
@@ -110,7 +110,8 @@ class PresetMenu:
             self._emit_model_changed(cfg.model)
             self.restart_service(None)
         except Exception as e:
-            logger.error(f"Failed to apply performance preset: {e}")
+            logger.error(f"Failed to apply performance preset: {e}", exc_info=True)
+            self._put_dot_back_soon()     # on the setup still in use
 
     def _preset_files(self, preset):
         """(model, device) *preset* runs with once its files are here: the
@@ -226,12 +227,14 @@ class PresetMenu:
         if getattr(self, "_updating_preset", False) or not item.get_active():
             return
         self.open_preferences(None)
+        self._put_dot_back_soon()
 
+    def _put_dot_back_soon(self):
+        """Put the dot back on the preset in use, after a moment: KDE ticks
+        the clicked item in its own copy of the menu, and a move there and
+        back in the same main-loop pass reaches it as no change and leaves
+        two dots."""
         def put_dot_back():
             self._revert_preset_radio()
             return False    # once
-
-        # Delayed: KDE ticks the clicked item in its own copy of the menu, and
-        # a move there and back in the same main-loop pass reaches it as no
-        # change and leaves two dots.
         GLib.timeout_add(150, put_dot_back)

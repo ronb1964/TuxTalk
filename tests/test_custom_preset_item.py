@@ -36,12 +36,14 @@ class Item:
 
 def fake_tray(updating=False):
     calls = []
-    return types.SimpleNamespace(
+    tray = types.SimpleNamespace(
         _updating_preset=updating,
         open_preferences=lambda _: calls.append("prefs"),
         _revert_preset_radio=lambda: calls.append("revert"),
         calls=calls,
     )
+    tray._put_dot_back_soon = lambda: DictationTray._put_dot_back_soon(tray)
+    return tray
 
 
 def test_clicking_custom_opens_preferences_then_puts_the_dot_back(run_timeouts_now):
