@@ -228,8 +228,14 @@ def check_input_read_permission():
     except Exception:
         helper = None
     if helper is not None:
+        answering = helper.sock is not None
         helper.close()
-        return (True, "TuxTalk's hotkey helper reads the hotkeys. Hotkeys should work.")
+        if answering:
+            return (True, "TuxTalk's hotkey helper reads the hotkeys. Hotkeys should work.")
+        # The service waits for an installed helper rather than reading
+        # the keyboards itself, so a silent one means no hotkeys.
+        return (False, "TuxTalk's hotkey helper is installed but isn't answering, so "
+                       "the hotkeys won't work. Fix Typing sets it up again.")
     if _readable_keyboards():
         return (True, "You can read input devices. Hotkeys should work.")
     return (False, "Cannot read any keyboard under /dev/input, so hotkeys "
