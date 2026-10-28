@@ -15,16 +15,18 @@ def themed_icon(*names):
 
 
 class DictationItem(Gtk.ImageMenuItem):
-    """The Dictation on/off item: "Dictation on" with a checkmark, or
-    "Dictation off" without. The words say the state, so a screen reader
-    reads it on every desktop, where a check item's state is drawn by each
-    panel its own way (KDE: a faint box in a column of its own).
+    """The Dictation on/off item, named for what a click does: "Turn
+    Dictation Off" (with a checkmark, as it's on) or "Turn Dictation On".
+    "Dictation off" read as an action as easily as a state. The words carry
+    the state, so a screen reader reads it on every desktop, where a check
+    item's state is drawn by each panel its own way (KDE: a faint box in a
+    column of its own).
 
     Keeps get_active()/set_active() for the tray's status poll: set_active()
     only redraws; a click flips the state and calls on_toggle(item)."""
 
     def __init__(self, on_toggle):
-        super().__init__(label="Dictation off")
+        super().__init__(label="Turn Dictation On")
         self._active = False
         self._on_toggle = on_toggle
         self._check_icon = themed_icon("object-select-symbolic", "emblem-ok-symbolic")
@@ -44,7 +46,7 @@ class DictationItem(Gtk.ImageMenuItem):
         self._on_toggle(self)
 
     def _redraw(self):
-        self.set_label("Dictation on" if self._active else "Dictation off")
+        self.set_label("Turn Dictation Off" if self._active else "Turn Dictation On")
         if self._active and self._check_icon:
             self.set_image(Gtk.Image.new_from_icon_name(self._check_icon, Gtk.IconSize.MENU))
         else:

@@ -117,7 +117,7 @@ def test_tray_and_gnome_extension_place_recent_dictations_first(tray_menu):
     Word, Transcribe a File, in both. Restart Service sits at the end, with
     Help and Check for Updates (0.16 simplicity review)."""
     items = [item.get_label() or "---" for item in tray_menu.get_children()]
-    assert items[:5] == ["Dictation off", "Recent Dictations", "Fix a Word...",
+    assert items[:5] == ["Turn Dictation On", "Recent Dictations", "Fix a Word...",
                          "Transcribe a File...", "---"]        # off until the status comes
     assert items[-4:] == ["Check for Updates...", "Restart Service", "---", "Quit TuxTalk"]
 
@@ -166,11 +166,11 @@ def test_each_tray_entry_opens_a_hover_view_with_copy():
     assert fixing == [3]      # opens the Fix a Word window on this dictation
 
 
-def test_dictation_says_whether_it_is_on_in_its_own_words(monkeypatch):
-    """"Dictation on" with a checkmark, "Dictation off" without: the words say
-    the state, so a screen reader reads it on every desktop (a check item's
-    state is drawn by each panel its own way). The tray's status poll only
-    changes the words; a click starts or stops dictation."""
+def test_dictation_is_named_for_what_a_click_does(monkeypatch):
+    """"Turn Dictation Off" (checkmarked, as it's on) or "Turn Dictation On":
+    "Dictation off" read as an action as easily as a state. The words carry
+    the state, so a screen reader reads it on every desktop. The tray's
+    status poll only changes the words; a click starts or stops dictation."""
     from tuxtalk import config, tray
     monkeypatch.setattr(config, "load_config", config.Settings)
     t = tray.DictationTray.__new__(tray.DictationTray)
@@ -181,11 +181,11 @@ def test_dictation_says_whether_it_is_on_in_its_own_words(monkeypatch):
     try:
         for running in (True, False, True):   # the status poll, as it runs
             t.update_menu_display(is_running=running)
-            assert t.service_toggle.get_label() == ("Dictation on" if running
-                                                    else "Dictation off")
+            assert t.service_toggle.get_label() == ("Turn Dictation Off" if running
+                                                    else "Turn Dictation On")
         assert asked == []
         t.service_toggle.activate()            # the user clicks it: off
-        assert t.service_toggle.get_label() == "Dictation off"
+        assert t.service_toggle.get_label() == "Turn Dictation On"
         t.service_toggle.activate()            # and on again
         assert asked == ["stop", "start"]
     finally:
