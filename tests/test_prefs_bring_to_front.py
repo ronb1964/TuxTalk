@@ -147,3 +147,19 @@ def test_a_window_that_has_just_closed_doesnt_stop_the_next_from_opening(one_win
     prefs._acquire_prefs_singleton(None)              # opens: no SystemExit
     assert pidfile.read_text().split()[0] == str(prefs.os.getpid())
     prefs._window_lock.close()
+
+
+def test_a_tab_request_that_cant_be_written_still_brings_the_window_forward(monkeypatch,
+                                                                            caplog):
+    """The request is written whole or not at all; one that can't be written
+    is logged, and the window still comes to the front, on its own tab."""
+    import logging
+    sent = []
+
+    def refuse(*args, **kwargs):
+        raise PermissionError(13, "Permission denied")
+    monkeypatch.setattr("tuxtalk.config.write_text_atomic", refuse)
+    monkeypatch.setattr(prefs_ipc.os, "kill", lambda pid, sig: sent.append(pid))
+    with caplog.at_level(logging.INFO, logger=prefs_ipc.logger.name):
+        assert prefs_ipc.bring_to_front(42, "updates") is True
+    assert sent == [42] and "updates" in caplog.text
