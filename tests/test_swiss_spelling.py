@@ -43,6 +43,7 @@ def test_sharp_s_becomes_ss(text, expected):
     ({"LANGUAGE": "de:en_US", "LANG": "de_CH.UTF-8"}, True),
     ({"LC_ALL": "C", "LANGUAGE": "de_CH"}, False),   # gettext ignores LANGUAGE under C
     ({"LANGUAGE": "de_CH:de", "LANG": "de_DE.UTF-8"}, True),     # Swiss German put first
+    ({"LC_ALL": "C", "LANG": "de_CH.UTF-8"}, False),             # C over a lower LANG
 ])
 def test_on_by_default_only_on_swiss_german_systems(env, expected):
     assert config.swiss_german_locale(env) is expected

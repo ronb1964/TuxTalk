@@ -138,7 +138,7 @@ def locale_language(value):
 
 def display_locale(env=None) -> str:
     """The locale the desktop's text is in, region and all where it's known
-    ("de_CH.UTF-8"; "de" from LANGUAGE), or "" when none can be read.
+    ("de_CH.UTF-8"; "de" from LANGUAGE), or "" for the C locale or none.
 
     The first of LC_ALL, LC_MESSAGES and LANG that is set, unless LANGUAGE's
     first readable entry names another language or a region of its own, as
@@ -149,14 +149,13 @@ def display_locale(env=None) -> str:
     env = os.environ if env is None else env
     locale = next((env[v] for v in ("LC_ALL", "LC_MESSAGES", "LANG") if env.get(v)), "")
     language = locale_language(locale)
-    if language:
-        first = next((e for e in (env.get("LANGUAGE") or "").split(":")
-                      if locale_language(e)), None)
-        if first and (locale_language(first) != language or "_" in first):
-            return first
-        return locale
-    return next((env[v] for v in ("LC_ALL", "LC_MESSAGES", "LANG")
-                 if locale_language(env.get(v))), "")
+    if not language:
+        return ""               # C or POSIX wins over everything, LANGUAGE included
+    first = next((e for e in (env.get("LANGUAGE") or "").split(":")
+                  if locale_language(e)), None)
+    if first and (locale_language(first) != language or "_" in first):
+        return first
+    return locale
 
 
 def swiss_german_locale(env=None) -> bool:
