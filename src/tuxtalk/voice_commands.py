@@ -155,40 +155,77 @@ def handle_fix_word(raw: str, beeps_on: bool) -> bool:
     typed = rs.state.last_inserted_text
     if typed and rs.state.shown_text and rs.state.shown_text.endswith(typed):
         typed = rs.state.shown_text        # the whole recording, phrases and all
+    handoff = None
     if typed.strip() and not keyboard_output.not_where_typed(focused):
-        try:
-            import json
-            path = os.path.join(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"),
-                                "tuxtalk-fix-word.json")
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-            with os.fdopen(fd, "w") as f:
-                # Which of the app's windows, where the desktop says (two
-                # KWrite documents), for the fix to go only there.
-                json.dump({"text": typed, "window": focused,
-                           "where": rs.state.last_inserted_where[1]}, f)
-            args = ["--in-place", path]
-            # The text is about to change: undo and voice moves can't trust
-            # their counts any more.
-            rs.state.last_inserted_text = ""
-            last_dictation.forget_shown()
-            rs.state.nav_context = None
-        except OSError as e:
-            logger.debug(f"Fix a Word can't fix it in the text: {e}")
+        handoff = _hand_over(typed, focused)
+    if handoff:
+        args = ["--in-place", handoff]
+        # The text is about to change: undo and voice moves can't trust
+        # their counts any more.
+        rs.state.last_inserted_text = ""
+        last_dictation.forget_shown()
+        rs.state.nav_context = None
     try:
         from .explain import start_helper_window
-        start_helper_window("tuxtalk.fix_word_dialog", *args)
+        window = start_helper_window("tuxtalk.fix_word_dialog", *args)
         beeps.beep(beeps_on, *READY_BEEP)
     except Exception as e:
         logger.warning(f"Could not open Fix a Word: {e}")
-        if args:
-            # No window will read the dictation and delete it.
-            try:
-                os.remove(args[1])
-            except OSError as err:
-                logger.info(f"Couldn't remove Fix a Word's copy of the dictation: {err}")
+        if handoff:
+            _remove_handoff(handoff)
         beeps.beep(beeps_on, *CANCEL_BEEP)
         notify_module.notify("Fix a Word didn't open", "Choose it in the TuxTalk menu instead.")
+        return True
+    if handoff:
+        _remove_when_closed(window, handoff)
     return True
+
+
+def _hand_over(typed, focused):
+    """A file holding what was typed, for Fix a Word to fix in the text, or
+    None when it couldn't be written. Only this user can read it (the runtime
+    folder, mode 600); the window deletes it once read, and a name of its own
+    keeps a later request's file apart."""
+    import json
+    import tempfile
+    folder = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+    try:
+        fd, path = tempfile.mkstemp(dir=folder, prefix="tuxtalk-fix-word-", suffix=".json")
+    except OSError as e:
+        logger.info(f"Fix a Word can't fix it in the text: {e}")
+        return None
+    try:
+        with os.fdopen(fd, "w") as f:
+            # Which of the app's windows, where the desktop says (two
+            # KWrite documents), for the fix to go only there.
+            json.dump({"text": typed, "window": focused,
+                       "where": rs.state.last_inserted_where[1]}, f)
+    except (OSError, TypeError, ValueError) as e:
+        logger.info(f"Fix a Word can't fix it in the text: {e}")
+        _remove_handoff(path)
+        return None
+    return path
+
+
+def _remove_handoff(path):
+    try:
+        os.remove(path)
+    except FileNotFoundError:
+        pass                    # the window read it and deleted it
+    except OSError as e:
+        logger.info(f"Couldn't remove Fix a Word's copy of the dictation: {e}")
+
+
+def _remove_when_closed(window, path):
+    """Delete *path* once Fix a Word's process *window* ends, should it end
+    before reading it (GTK failing to load, say): the dictation mustn't stay
+    in the runtime folder until logout."""
+    import threading
+
+    def wait():
+        window.wait()
+        _remove_handoff(path)
+    threading.Thread(target=wait, daemon=True, name="fix-word-handoff").start()
 
 
 _UNKNOWN_WINDOW = object()

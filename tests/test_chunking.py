@@ -989,6 +989,7 @@ def fix_word(recent, monkeypatch):
     """`recent`, with "fix that word" handing its in-place file to a list
     instead of opening the window. Returns (texts, typed, opened)."""
     import json
+    import types
     from tuxtalk import explain
     opened = []
 
@@ -998,6 +999,7 @@ def fix_word(recent, monkeypatch):
             with open(args[1]) as f:
                 data = json.load(f)
         opened.append(data)
+        return types.SimpleNamespace(wait=lambda: 0)     # read it, and closed
 
     monkeypatch.setattr(explain, "start_helper_window", fake_start)
     texts, typed, _ = recent
