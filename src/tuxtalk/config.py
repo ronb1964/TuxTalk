@@ -141,17 +141,20 @@ def display_locale(env=None) -> str:
     ("de_CH.UTF-8"; "de" from LANGUAGE), or "" when none can be read.
 
     The first of LC_ALL, LC_MESSAGES and LANG that is set, unless LANGUAGE's
-    first readable entry names another language, as in gettext (which
-    ignores LANGUAGE when the locale is C). KDE sets LANGUAGE when the
-    display language differs from the formats locale, and sets the bare
-    "de" for a Swiss German user, which mustn't hide the de_CH locale."""
+    first readable entry names another language or a region of its own, as
+    in gettext (which ignores LANGUAGE when the locale is C). KDE sets
+    LANGUAGE when the display language differs from the formats locale, and
+    sets the bare "de" for a Swiss German user, which mustn't hide the de_CH
+    locale."""
     env = os.environ if env is None else env
     locale = next((env[v] for v in ("LC_ALL", "LC_MESSAGES", "LANG") if env.get(v)), "")
     language = locale_language(locale)
     if language:
         first = next((e for e in (env.get("LANGUAGE") or "").split(":")
                       if locale_language(e)), None)
-        return first if first and locale_language(first) != language else locale
+        if first and (locale_language(first) != language or "_" in first):
+            return first
+        return locale
     return next((env[v] for v in ("LC_ALL", "LC_MESSAGES", "LANG")
                  if locale_language(env.get(v))), "")
 
