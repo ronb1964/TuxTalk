@@ -187,6 +187,22 @@ def test_a_copy_still_going_after_the_wait_doesnt_reboot(monkeypatch):
     release.set()
     thread.join(5)
 
+
+def test_a_failed_copy_repoints_the_launchers_before_the_copy_counts_as_done(monkeypatch):
+    """The repair went to GTK's queue and the copy's thread ended: Restart
+    computer now saw it done and could reboot first, and the launchers
+    pointed at an AppImage that wasn't there."""
+    from tuxtalk import appimage_copy, update_checker
+    repaired = []
+    monkeypatch.setattr(update_checker, "copy_appimage_to_standard_location",
+                        lambda: (False, "No space left on device"))
+    monkeypatch.setattr(update_checker, "point_at_running_appimage", repaired.append)
+    monkeypatch.setattr(appimage_copy, "_thread", None)
+    appimage_copy.start("/home/u/Downloads/TuxTalk.AppImage")
+    appimage_copy._thread.join(5)
+    assert not appimage_copy.copying()
+    assert repaired == ["/home/u/Downloads/TuxTalk.AppImage"]
+
 def test_first_run_copy_thread_is_not_a_daemon(first_run):
     """Quitting TuxTalk waits for the copy into ~/AppImages instead of
     cutting it off, and Restart computer now waits for it (below)."""
@@ -241,7 +257,7 @@ def test_a_failed_copy_points_login_and_the_menu_back_at_the_running_appimage(
     monkeypatch.setattr(uc, "_install_app_icon", lambda: "tuxtalk")
     monkeypatch.setattr(uc, "_refresh_desktop_menu_cache", lambda: None)
     running = str(tmp_path / "Downloads" / "TuxTalk-v0.19.0-x86_64.AppImage")
-    assert uc.point_at_running_appimage(running) is False
+    uc.point_at_running_appimage(running)
     assert calls == [False]
     assert f"Exec={running}\n" in (tmp_path / "apps" / "tuxtalk.desktop").read_text()
 

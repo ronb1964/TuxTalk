@@ -1137,10 +1137,10 @@ def desktop_actions(program: str) -> str:
     return out
 
 
-def point_at_running_appimage(running: str) -> bool:
+def point_at_running_appimage(running: str) -> None:
     """Point launch-at-login and the menu launcher back at the AppImage
     *running* when first-run setup's copy into ~/AppImages failed, so
-    neither starts a file that isn't there. False, for GLib.idle_add."""
+    neither starts a file that isn't there. Files only, so any thread."""
     try:
         from .autostart import set_autostart
         from .config import load_config
@@ -1154,7 +1154,6 @@ def point_at_running_appimage(running: str) -> bool:
         logger.info("The menu launcher points at the running AppImage instead")
     else:
         logger.warning(f"Could not repoint the menu launcher: {msg}")
-    return False
 
 
 def create_desktop_launcher(appimage_exec_path: Optional[str] = None) -> Tuple[bool, str]:

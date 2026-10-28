@@ -21,7 +21,9 @@ _thread = None
 def start(current_path) -> None:
     """Copy the running AppImage, at *current_path*, into ~/AppImages. Not a
     daemon thread: quitting TuxTalk waits for the copy instead of cutting it
-    off. A failed copy points the menu launcher back at *current_path*."""
+    off. A failed copy points the menu launcher and autostart back at
+    *current_path*, on the same thread, so a restart that waits for the copy
+    (after) waits for that too."""
     global _thread
     from .update_checker import (APPIMAGE_PATH, copy_appimage_to_standard_location,
                                  point_at_running_appimage)
@@ -31,13 +33,14 @@ def start(current_path) -> None:
             success, msg = copy_appimage_to_standard_location()
         except Exception as e:
             logger.error(f"Copying the AppImage failed: {e}", exc_info=True)
-            GLib.idle_add(point_at_running_appimage, current_path)
-            return
+            success = False
+        else:
+            if not success:
+                logger.warning(f"AppImage install failed: {msg}")
         if success:
             logger.info(f"AppImage installed to standard location: {APPIMAGE_PATH}")
         else:
-            logger.warning(f"AppImage install failed: {msg}")
-            GLib.idle_add(point_at_running_appimage, current_path)
+            point_at_running_appimage(current_path)
     _thread = threading.Thread(target=copy, name="appimage-copy", daemon=False)
     _thread.start()
 
