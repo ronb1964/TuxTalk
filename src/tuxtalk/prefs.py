@@ -77,6 +77,15 @@ def _acquire_prefs_singleton(tab=None):
     atexit.register(prefs_ipc.release_pidfile)
 
 
+def _let_go_of_the_window():
+    """Release the lock _acquire_prefs_singleton took, so the next
+    Preferences window can open."""
+    global _window_lock
+    lock, _window_lock = _window_lock, None
+    if lock is not None:
+        lock.close()
+
+
 def _brought_open_window_forward(tab, wait_s):
     """Whether an open Preferences window (from its pidfile, waited for up
     to *wait_s* while one starts) took the request to come to the front."""
@@ -554,9 +563,13 @@ class PreferencesWindow:
                      "You may need to manually restart the service.")
 
     def _release(self):
-        """The window closes: stop the microphone tests and let go of the pidfile."""
+        """The window closes: stop the microphone tests and let go of the
+        pidfile and the window's lock. Not at the process's exit: an Apply
+        restart can keep it running after the window is gone, and a new
+        window must open meanwhile."""
         self._stop_tests(closing=True)
         prefs_ipc.release_pidfile()
+        _let_go_of_the_window()
 
     def on_window_close(self, widget, event):
         """The title bar's close: asks first about changes not applied."""

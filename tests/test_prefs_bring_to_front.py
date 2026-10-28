@@ -163,3 +163,19 @@ def test_a_tab_request_that_cant_be_written_still_brings_the_window_forward(monk
     with caplog.at_level(logging.INFO, logger=prefs_ipc.logger.name):
         assert prefs_ipc.bring_to_front(42, "updates") is True
     assert sent == [42] and "updates" in caplog.text
+
+
+def test_a_closed_window_lets_the_next_one_open_while_its_process_lingers(one_window,
+                                                                         monkeypatch):
+    """An Apply restart can keep the process running some 40 s after the
+    window closes; holding the lock till then made a new launch wait and
+    exit with no window."""
+    prefs, single_instance, pidfile = one_window
+    monkeypatch.setattr(prefs.atexit, "register", lambda fn: None)
+    prefs._acquire_prefs_singleton(None)                 # this window opens
+    window = prefs.PreferencesWindow.__new__(prefs.PreferencesWindow)
+    monkeypatch.setattr(window, "_stop_tests", lambda closing: None, raising=False)
+    window._release()                                    # ...and closes; the process stays
+    other = single_instance.open_lock(prefs.WINDOW_LOCK)
+    assert single_instance.claim(other)                  # the next window can have it
+    other.close()
