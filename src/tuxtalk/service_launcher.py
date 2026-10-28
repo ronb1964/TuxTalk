@@ -321,11 +321,15 @@ def launch_transcribe_window():
 def launch_preferences(tab=None):
     """Start the Preferences window as its own process; returns the Popen.
 
-    Shared by the tray and the first-run screens. Unlike the service it keeps
-    the caller's GDK_BACKEND: Preferences runs natively, so its dropdowns work
-    on Wayland.
+    Shared by the tray, the first-run screens and the dictation service.
+    Unlike the service it keeps the caller's GDK_BACKEND: Preferences runs
+    natively, so its dropdowns work on Wayland. But not the service's own
+    (the GNOME extension's Preferences with no tray running): under
+    XWayland a dropdown doesn't open on a click.
     """
     env = os.environ.copy()
+    if env.get("GDK_BACKEND") == SERVICE_GDK_BACKEND:
+        del env["GDK_BACKEND"]
     pythonpath = dev_pythonpath()
     if pythonpath:
         env["PYTHONPATH"] = pythonpath

@@ -113,3 +113,20 @@ def test_service_falls_back_when_xwayland_is_absent(monkeypatch):
         f"On a machine without XWayland the dictation service would fail to "
         f"start entirely instead of just centring the indicator."
     )
+
+
+def test_preferences_opened_from_the_service_runs_natively(monkeypatch):
+    """With no tray, the GNOME extension asks the dictation service to open
+    Preferences: it got the service's GDK_BACKEND, and no dropdown opened on
+    a click. A GDK_BACKEND of the user's own is kept."""
+    from tuxtalk import service_launcher
+    from tuxtalk.service_dbus import AppInstance
+    started = []
+    monkeypatch.setattr(service_launcher.subprocess, "Popen",
+                        lambda cmd, env=None: started.append(env))
+    monkeypatch.setenv("GDK_BACKEND", service_launcher.SERVICE_GDK_BACKEND)
+    AppInstance.show_preferences(None)
+    assert "GDK_BACKEND" not in started[0]
+    monkeypatch.setenv("GDK_BACKEND", "wayland")
+    service_launcher.launch_preferences()
+    assert started[1]["GDK_BACKEND"] == "wayland"

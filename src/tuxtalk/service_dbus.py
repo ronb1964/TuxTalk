@@ -3,7 +3,6 @@ running (dbus_service.TuxTalkDBusService, primary=False): the GNOME
 extension's menu can still start and stop recording, open Preferences,
 change the model and quit. With the tray running, the tray answers
 instead and this is never reached."""
-import subprocess
 import sys
 
 from . import recording_state as rs
@@ -32,8 +31,9 @@ class AppInstance:
         return rs.state.is_recording
 
     def show_preferences(self):
-        """Open preferences window"""
-        subprocess.Popen([sys.executable, "-m", "tuxtalk.prefs"])
+        """Open Preferences, as the tray does (service_launcher)."""
+        from .service_launcher import launch_preferences
+        launch_preferences()
 
     def start_recording(self):
         """Signal the input loop to start recording."""
