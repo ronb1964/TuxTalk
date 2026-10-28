@@ -36,17 +36,21 @@ class SyncThread:
 def fake_loop(monkeypatch):
     loop = FakeGLib()
     monkeypatch.setattr(tray_mod, "GLib", loop)
-    monkeypatch.setattr("threading.Thread", SyncThread)
-    monkeypatch.setattr(tray_mod.time, "sleep", lambda s: None)
+    monkeypatch.setattr(tray_mod.threading, "Thread", SyncThread)
     return loop
 
 
-def make_tray():
-    t = types.SimpleNamespace(onboarding_in_progress=False, kills=0, launches=0)
-    t._kill_service = lambda: setattr(t, "kills", t.kills + 1)
+def make_tray(monkeypatch):
+    t = tray_mod.DictationTray.__new__(tray_mod.DictationTray)
+    t.__dict__.update(onboarding_in_progress=False, _quitting=False, _service_gen=0,
+                      _restart_pending=False, kills=0, launches=0)
+
+    def end_service():
+        t.kills += 1
+        return True
+    monkeypatch.setattr("tuxtalk.service_launcher.end_dictation_service", end_service)
     t._launch_service = lambda: setattr(t, "launches", t.launches + 1)
     t.update_status_and_menu = lambda repeat=True: None
-    t.restart_service = lambda _: tray_mod.DictationTray.restart_service(t, _)
     return t
 
 
@@ -59,8 +63,8 @@ def run_finish(loop):
         cb()
 
 
-def test_a_restart_asked_for_during_another_runs_after_it(fake_loop):
-    t = make_tray()
+def test_a_restart_asked_for_during_another_runs_after_it(fake_loop, monkeypatch):
+    t = make_tray(monkeypatch)
     t.restart_service(None)
     t.restart_service(None)          # arrives while the first is still running
     assert t.kills == 1
@@ -70,8 +74,8 @@ def test_a_restart_asked_for_during_another_runs_after_it(fake_loop):
     assert t.launches == 2 and not t._restarting and fake_loop.timers == []
 
 
-def test_a_single_restart_does_not_repeat(fake_loop):
-    t = make_tray()
+def test_a_single_restart_does_not_repeat(fake_loop, monkeypatch):
+    t = make_tray(monkeypatch)
     t.restart_service(None)
     run_finish(fake_loop)
     assert t.kills == 1 and t.launches == 1 and fake_loop.timers == []

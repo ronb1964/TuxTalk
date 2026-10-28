@@ -625,8 +625,8 @@ def test_a_second_uninstall_request_while_asking_opens_no_second_question(monkey
     the first one's dialog loop, and neither could close."""
     import types
     from tuxtalk import tray as tray_mod
-    t = types.SimpleNamespace(_uninstalling=False, _shut_down=lambda: None,
-                              _leave_main_loop=lambda: None)
+    t = types.SimpleNamespace(_uninstalling=False, _quitting=False,
+                              _stop_for_uninstall=lambda: None, _leave_main_loop=lambda: None)
     asked = []
 
     def run(stop_tray_parts):
@@ -687,10 +687,10 @@ def test_a_tuxtalk_that_cant_uninstall_says_so():
 
 
 def test_the_command_line_uninstalls_itself_when_the_running_one_cant(monkeypatch):
-    from tuxtalk import tray
+    from tuxtalk import tray_instance
     monkeypatch.setattr(control, "open_in_running", lambda name, tray_starting: False)
     ran = []
     monkeypatch.setattr(uninstall, "run", lambda: ran.append(1) or True)
     with pytest.raises(SystemExit) as finished:
-        tray._open_from_command_line("uninstall")
+        tray_instance.open_from_command_line("uninstall")
     assert ran == [1] and finished.value.code == 0

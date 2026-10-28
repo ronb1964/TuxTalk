@@ -15,45 +15,47 @@ import textwrap
 
 import pytest
 
-from tuxtalk import service_launcher, single_instance, tray
+from tuxtalk import service_launcher, single_instance, tray_instance
 
 
 @pytest.fixture
 def lock_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(single_instance, "runtime_dir", lambda: str(tmp_path))
-    saved = tray._tray_lockfile_handle
+    saved = tray_instance._lockfile_handle
     yield tmp_path
-    if tray._tray_lockfile_handle is not None and tray._tray_lockfile_handle is not saved:
-        tray._tray_lockfile_handle.close()
-    tray._tray_lockfile_handle = saved
+    if tray_instance._lockfile_handle is not None and tray_instance._lockfile_handle is not saved:
+        tray_instance._lockfile_handle.close()
+    tray_instance._lockfile_handle = saved
 
 
 def test_the_first_tray_takes_the_lock_and_records_its_pid(lock_dir):
-    tray._acquire_tray_singleton()
+    tray_instance.acquire()
     assert (lock_dir / "talktype-tray.lock").read_text() == str(os.getpid())
 
 
 def test_a_second_tray_exits_and_leaves_the_pid_alone(lock_dir, monkeypatch):
     shown = []
-    monkeypatch.setattr(tray, "_show_already_running",
+    monkeypatch.setattr(tray_instance, "_show_already_running",
                         lambda older_talktype: shown.append(older_talktype))
     monkeypatch.setattr(service_launcher, "pre_rename_tray_pids", lambda: [])
-    tray._acquire_tray_singleton()
-    first = tray._tray_lockfile_handle
+    monkeypatch.setattr(service_launcher, "QUIT_WAIT_S", 0.0)      # not a quitting one
+    monkeypatch.setattr(tray_instance, "_TRAY_QUIT_EXTRA_S", 0.2)
+    tray_instance.acquire()
+    first = tray_instance._lockfile_handle
     try:
         with pytest.raises(SystemExit) as exit_info:
-            tray._acquire_tray_singleton()
+            tray_instance.acquire()
         assert exit_info.value.code == 0
         assert (lock_dir / "talktype-tray.lock").read_text() == str(os.getpid())
         # Started from the menu, a silent exit looks like nothing happened.
         assert shown == [False]
     finally:
-        tray._tray_lockfile_handle = first
+        tray_instance._lockfile_handle = first
 
 
 def test_an_unusable_runtime_folder_is_not_reported_as_already_running(monkeypatch, tmp_path):
     monkeypatch.setattr(single_instance, "runtime_dir", lambda: str(tmp_path / "missing"))
-    tray._acquire_tray_singleton()   # must not raise SystemExit
+    tray_instance.acquire()   # must not raise SystemExit
 
 
 
@@ -62,7 +64,7 @@ def test_a_full_runtime_folder_is_not_reported_as_already_running(lock_dir, monk
     def full(lockfile, wait_s=0.0):
         raise OSError(28, "No space left on device")
     monkeypatch.setattr(single_instance, "claim", full)
-    tray._acquire_tray_singleton()   # must not raise
+    tray_instance.acquire()   # must not raise
 
 # A stand-in for a TalkType 0.7.0 tray: run as `python -m talktype.tray`, it
 # opens the shared lock file the way 0.7.0 did and holds it.
@@ -110,11 +112,11 @@ def old_tray(lock_dir, tmp_path_factory):
 def test_an_older_talktype_tray_is_stopped_and_tuxtalk_takes_the_lock(
         lock_dir, old_tray, monkeypatch):
     shown = []
-    monkeypatch.setattr(tray, "_show_already_running",
+    monkeypatch.setattr(tray_instance, "_show_already_running",
                         lambda older_talktype: shown.append(older_talktype))
     proc = old_tray()
 
-    tray._acquire_tray_singleton()          # must not exit
+    tray_instance.acquire()          # must not exit
 
     assert proc.wait(timeout=5) == -signal.SIGTERM
     assert shown == []
@@ -124,13 +126,13 @@ def test_an_older_talktype_tray_is_stopped_and_tuxtalk_takes_the_lock(
 def test_an_older_talktype_tray_that_wont_quit_is_named_in_the_notice(
         lock_dir, old_tray, monkeypatch):
     shown = []
-    monkeypatch.setattr(tray, "_show_already_running",
+    monkeypatch.setattr(tray_instance, "_show_already_running",
                         lambda older_talktype: shown.append(older_talktype))
-    monkeypatch.setattr(tray, "_OLD_TRAY_EXIT_WAIT_S", 0.3)
+    monkeypatch.setattr(tray_instance, "_OLD_TRAY_EXIT_WAIT_S", 0.3)
     proc = old_tray("stubborn")
 
     with pytest.raises(SystemExit) as exit_info:
-        tray._acquire_tray_singleton()
+        tray_instance.acquire()
 
     assert exit_info.value.code == 0
     assert shown == [True]
@@ -138,9 +140,9 @@ def test_an_older_talktype_tray_that_wont_quit_is_named_in_the_notice(
 
 
 def test_the_notice_says_how_to_quit_each_kind_of_tray():
-    heading, body = tray.already_running_message(older_talktype=True)
+    heading, body = tray_instance.already_running_message(older_talktype=True)
     assert "TalkType" in heading and "Quit TalkType" in body
-    heading, body = tray.already_running_message(older_talktype=False)
+    heading, body = tray_instance.already_running_message(older_talktype=False)
     assert heading == "TuxTalk is already running" and "Quit TuxTalk" in body
 
 

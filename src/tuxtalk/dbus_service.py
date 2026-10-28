@@ -120,10 +120,14 @@ class TuxTalkDBusService(dbus.service.Object):
         """Dispatch a D-Bus method call to the app instance via GLib main loop.
 
         Logs the call and schedules the app's method on the main loop; a
-        method the app does not have is ignored.
+        method the app does not have is ignored, and so is every call once
+        the tray is quitting.
         """
         logger.debug(f"D-Bus: {method_name} called" +
                       (f" with {args}" if args else ""))
+        if getattr(self.app, "quitting", False):
+            logger.info(f"D-Bus: {method_name} refused, TuxTalk is quitting")
+            return
         if hasattr(self.app, method_name):
             GLib.idle_add(getattr(self.app, method_name), *args)
 
@@ -352,7 +356,7 @@ class TuxTalkDBusService(dbus.service.Object):
         """Show TuxTalk's menu as a window (menu_window.py). Called when
         TuxTalk is opened again while it runs. False when this process has no
         menu window (the dictation service standing in for a missing tray)."""
-        if not hasattr(self.app, 'show_menu'):
+        if not hasattr(self.app, 'show_menu') or getattr(self.app, "quitting", False):
             return False
         self._dispatch('show_menu')
         return True

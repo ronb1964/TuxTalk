@@ -3,7 +3,8 @@ running (dbus_service.TuxTalkDBusService, primary=False): the GNOME
 extension's menu can still start and stop recording, open Preferences,
 change the model and quit. With the tray running, the tray answers
 instead and this is never reached."""
-import sys
+import os
+import signal
 
 from . import recording_state as rs
 from .logger import setup_logger
@@ -57,16 +58,9 @@ class AppInstance:
         return self._control(action)
 
     def stop_service(self):
-        """Stop the dictation service"""
-        from .service_launcher import stop_dictation_service
-        try:
-            stop_dictation_service()
-            logger.info("Stopped dictation service")
-            self.service_running = False
-            if self.dbus_service:
-                self.dbus_service.emit_service_state(False)
-        except Exception as e:
-            logger.error(f"Failed to stop service: {e}", exc_info=True)
+        """Dictation off, with no tray: this service is the one to stop.
+        stop_dictation_service skips its own process, so it quit nothing."""
+        self.quit()
 
     def set_model(self, model_name: str):
         """Change the speech model (it applies after a service restart),
@@ -87,12 +81,8 @@ class AppInstance:
             logger.error(f"Failed to set model: {e}", exc_info=True)
 
     def quit(self):
-        """Quit the application"""
-        # stop_dictation_service stops only the service; a pkill by name
-        # would also match the tray and Preferences.
-        from .service_launcher import stop_dictation_service
-        try:
-            stop_dictation_service()
-        except Exception as e:
-            logger.warning(f"Could not stop the dictation service cleanly: {e}")
-        sys.exit(0)
+        """Quit with no tray: this service quits as a SIGTERM asks it to
+        (app._handle_sigterm), typing what it holds first. A plain exit here,
+        on GTK's thread, would end only this callback."""
+        logger.info("Quitting (asked over D-Bus with no tray running)")
+        os.kill(os.getpid(), signal.SIGTERM)

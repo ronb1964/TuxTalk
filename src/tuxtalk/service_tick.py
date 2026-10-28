@@ -3,8 +3,6 @@ the hotkey loop (hotkeys.run) and the Flatpak's portal loop
 (input_backends). It takes the start and stop requests the tray, D-Bus or
 the portal made, lets the speech model rest when Power Saving is on, and
 picks up settings changed in Preferences without a restart."""
-import os
-import threading
 import time
 
 from . import config as config_module
@@ -86,6 +84,7 @@ class ServiceState:
     evdev loop (Backend A) and the portal loop (Backend B) via tick."""
 
     def __init__(self, cfg, input_device_idx=None):
+        """Made once the model is ready: what came before (toggles) is old."""
         # Held, not copied: _reload_live_settings updates cfg IN PLACE, so
         # reading through it keeps the auto-timeout settings live.
         self._cfg = cfg
@@ -97,6 +96,9 @@ class ServiceState:
         # here keeps one copy, which a reload can update.
         self.input_device_idx = input_device_idx
         self._resolved_mic = getattr(cfg, "mic", "")
+        # Toggles sent while the model loaded are dropped: one acted on
+        # seconds later would start a recording out of the blue.
+        self.toggles_seen = recording.toggles_asked
 
     def refresh_input_device(self) -> None:
         """Re-resolve the mic if its configured name changed.
@@ -148,6 +150,7 @@ def tick(cfg, svc: "ServiceState") -> "hotkey_keys.Hotkeys | None":
     if recording.quit_asked:
         _quit(cfg, svc)
     now = time.time()
+    _take_toggle(svc)
     _take_start_request(cfg, svc, now)
     _take_stop_request(cfg, svc, now)
     # Not mid-dictation, nor with one waiting to be typed; idle counts from key-up.
@@ -161,6 +164,19 @@ def tick(cfg, svc: "ServiceState") -> "hotkey_keys.Hotkeys | None":
             and now - svc.last_config_check >= CONFIG_RECHECK_SECONDS):
         return _reload_if_changed(cfg, svc, now)
     return None
+
+
+def _take_toggle(svc: ServiceState) -> None:
+    """A toggle (SIGUSR1) since the last pass: a start or a stop request.
+    Several before one pass count as one, as letting the handler set the
+    request itself did."""
+    if recording.toggles_asked == svc.toggles_seen:
+        return
+    svc.toggles_seen = recording.toggles_asked
+    if rs.state.is_recording:
+        recording.stop_requested.set()
+    else:
+        recording.start_requested.set()
 
 
 def _take_start_request(cfg, svc: ServiceState, now: float) -> None:
@@ -179,7 +195,7 @@ def _take_start_request(cfg, svc: ServiceState, now: float) -> None:
 
 # How long quitting waits for the dictation worker: a long dictation on the
 # processor, or the model woken from Power Saving, takes a while. Within
-# service_launcher.QUIT_WITHIN_S, with the exit hooks.
+# service_launcher.QUIT_LIMIT_S, with the exit hooks.
 QUIT_DRAIN_S = 20.0
 
 
@@ -191,12 +207,6 @@ def _quit(cfg, svc: ServiceState) -> None:
     process exits, so its exit hooks run: the music plays again, the other
     sounds come back up. Killed outright, recordings not transcribed yet
     were lost without a word."""
-    # Whatever hangs from here (a stuck stream, an exit hook), the process
-    # ends within the time a new service waits for its lock.
-    from .service_launcher import QUIT_WITHIN_S
-    watchdog = threading.Timer(QUIT_WITHIN_S - 1, _exit_now)
-    watchdog.daemon = True                  # a normal exit doesn't wait for it
-    watchdog.start()
     if rs.state.is_recording:
         recording.stop_requested.set()
         _take_stop_request(cfg, svc, time.time())
@@ -208,12 +218,6 @@ def _quit(cfg, svc: ServiceState) -> None:
                "TuxTalk is back.")
     logger.info("Quitting")
     raise SystemExit(0)
-
-
-def _exit_now() -> None:
-    """The last resort of _quit: end the process at once, exit hooks or not."""
-    logger.error("Quitting took too long; ending the process now")
-    os._exit(1)
 
 
 def _take_stop_request(cfg, svc: ServiceState, now: float) -> None:

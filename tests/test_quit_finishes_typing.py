@@ -2,20 +2,32 @@
 SIGTERM. Unhandled, it ended the process at once: recordings not yet
 transcribed were lost without a word, and its exit hooks (music resumed,
 sounds turned back up) never ran. Now it finishes what it was given first."""
+import os
+import signal
+import subprocess
+import sys
 import threading
+import time
 import types
 
 import pytest
 
-from tuxtalk import app, dictation_worker, pipeline, recording, service_tick
+from tuxtalk import app, dictation_worker, pipeline, recording, service_launcher, service_tick
 from tuxtalk import recording_state as rs
 from tuxtalk.dictation_worker import DictationWorker
 
 
 @pytest.fixture
+def alarms(monkeypatch):
+    """The quit deadlines the handler set; a real one would end the test run."""
+    armed = []
+    monkeypatch.setattr(app.signal, "alarm", armed.append)
+    monkeypatch.setattr(recording, "quit_asked", False)
+    return armed
+
+
+@pytest.fixture
 def quitting(monkeypatch):
-    # _quit's last resort would end the test run itself half a minute on.
-    monkeypatch.setattr(service_tick, "_exit_now", lambda: None)
     monkeypatch.setattr(recording, "quit_asked", True)
     cfg = types.SimpleNamespace(beeps=False, smart_quotes=False, notify=False, language=None,
                                 auto_space=True, auto_period=True, injection_mode="type")
@@ -53,12 +65,33 @@ def test_a_recording_under_way_is_stopped_and_kept(quitting, monkeypatch):
     assert stopped == [True]
 
 
-def test_sigterm_asks_the_loop_to_quit_once_dictation_runs(monkeypatch):
-    monkeypatch.setattr(recording, "quit_asked", False)
+def test_sigterm_asks_the_loop_to_quit_with_a_deadline_set_once(alarms, monkeypatch):
+    """A second SIGTERM (a restart and a quit together) must not push the
+    deadline out, or a stuck service would outlive every wait for it."""
     monkeypatch.setattr(app, "_service_ready", True)
     app._handle_sigterm(15, None)
-    app._handle_sigterm(15, None)               # a second one returns too
-    assert recording.quit_asked is True
+    app._handle_sigterm(15, None)
+    assert recording.quit_asked is True and alarms == [service_launcher.QUIT_LIMIT_S]
+
+
+def test_a_quit_that_hangs_is_ended_by_the_kernel_at_its_deadline(tmp_path):
+    """A hung exit hook (a stuck audio stream, a player that never answers)
+    kept the old service alive, and with it the lock the new one waited
+    for. The real handler, in a process of its own, with a 1 s deadline."""
+    script = (
+        "import atexit, os, signal, sys, time\n"
+        "import tuxtalk.app as app\n"
+        "app.QUIT_LIMIT_S = 1\n"
+        "app._service_ready = True\n"
+        "signal.signal(signal.SIGTERM, app._handle_sigterm)\n"
+        "atexit.register(time.sleep, 60)\n"
+        "os.kill(os.getpid(), signal.SIGTERM)\n"
+        "sys.exit(0)\n")
+    started = time.monotonic()
+    done = subprocess.run([sys.executable, "-c", script], env=dict(os.environ),
+                          capture_output=True, timeout=30)
+    assert done.returncode == -signal.SIGALRM, done.stderr.decode()
+    assert time.monotonic() - started < 15
 
 
 def test_work_still_unfinished_at_the_end_is_said(quitting, monkeypatch):
@@ -86,9 +119,11 @@ def test_the_signals_are_handled_before_the_lock_is_waited_for(monkeypatch):
     assert order == ["signals", "lock"]
 
 
-def test_sigterm_while_the_model_loads_ends_at_once(monkeypatch):
+def test_sigterm_while_the_model_loads_ends_at_once_with_the_deadline_set(alarms, monkeypatch):
     """Nothing to finish yet, and the input loop that would take the
-    request isn't running."""
+    request isn't running. The deadline still holds: a model load in native
+    code can't be interrupted by the exception until it returns."""
     monkeypatch.setattr(app, "_service_ready", False)
     with pytest.raises(SystemExit):
         app._handle_sigterm(15, None)
+    assert alarms == [service_launcher.QUIT_LIMIT_S]

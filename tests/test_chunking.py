@@ -683,8 +683,9 @@ def test_flatpak_stop_queues_the_last_chunk_on_the_worker(recording, monkeypatch
     monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TuxTalk")
     monkeypatch.setattr(keyboard_grab, "release_all", lambda: None)
     feed(np.concatenate([speech(1.0), noise(1.0), speech(0.8)]))
-    svc = SimpleNamespace(input_device_idx=None, last_activity=0.0,
+    svc = SimpleNamespace(input_device_idx=None, last_activity=0.0, toggles_seen=0,
                           timeout_enabled=False, last_config_check=time.time())
+    monkeypatch.setattr(capture, "toggles_asked", 0)
     capture.stop_requested.set()
     service_tick.tick(live.chunk_cfg, svc)
     assert dictation_worker.worker().drain(5)

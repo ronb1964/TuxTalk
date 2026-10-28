@@ -23,11 +23,15 @@ logger = logging.getLogger(__name__)
 # entirely to protect a cosmetic window position.
 SERVICE_GDK_BACKEND = "x11,wayland"
 
-# How long a dictation service asked to quit may take: typing what it holds
-# (service_tick.QUIT_DRAIN_S) and its exit hooks (the music resumed, the
-# sounds turned back up). A new service waits this long for its lock, and a
-# new tray for it to go before starting one.
-QUIT_WITHIN_S = 35.0
+# A dictation service asked to quit (SIGTERM) stops a recording (up to 2 s),
+# types what it holds (service_tick.QUIT_DRAIN_S, 20 s), runs its exit hooks
+# (the music resumed, the sounds turned back up, the desktop's hotkeys
+# released: several seconds when KWin is slow) and is ended by the kernel
+# QUIT_LIMIT_S after its handler runs, whatever it's doing then
+# (app._handle_sigterm). Whoever needs it gone waits QUIT_WAIT_S for that,
+# then kills it; a new service waits as long for its lock.
+QUIT_LIMIT_S = 40
+QUIT_WAIT_S = QUIT_LIMIT_S + 3.0
 
 # Hotkey test mode (Preferences, Test Hotkeys). While this flag file is fresh,
 # the service reports hotkey presses instead of recording. Preferences touches
@@ -92,28 +96,34 @@ def is_service_argv(argv) -> bool:
       * the ``dictate`` console script from a pip install, which the kernel
         runs as ``<python> /path/bin/dictate`` (or ``/path/bin/dictate``).
 
-    So this compares whole arguments, never substrings of the command line.
-    A substring match ("tuxtalk.app" anywhere) would accept a shell running
-    ``bash -c "pgrep -f tuxtalk.app"``, and the tray's toggle_recording would
-    send it SIGUSR1, which kills a process that doesn't handle it. Exact
-    arguments also keep the tray safe: "-m tuxtalk.tray" and bin/dictate-tray
-    never match.
+    So this compares whole arguments, never substrings of the command line,
+    and only where a Python interpreter reads them: its own options first,
+    then ``-m`` and the module, or the script. A substring match, or ``-m
+    tuxtalk.app`` anywhere, would accept ``bash -c "pgrep -f tuxtalk.app"``
+    or ``python3 -c '...' -m tuxtalk.app``, and the tray would signal it:
+    SIGUSR1 kills a process that doesn't handle it, and a quit that runs
+    long ends in SIGKILL. Exact arguments also keep the tray safe: "-m
+    tuxtalk.tray" and bin/dictate-tray never match.
     """
     argv = list(argv)
-    for i, arg in enumerate(argv[:-1]):
-        # talktype.app: the service from before the 0.15.0 rename, which a
-        # 0.14.x in-app update leaves running (it holds the shared lock).
-        if arg == "-m" and argv[i + 1] in ("tuxtalk.app", "talktype.app"):
-            return True
     if not argv:
         return False
-    # The program itself, or the script a Python interpreter is running.
-    # Anywhere else "dictate" is just a file another program was handed
-    # (`vim .../bin/dictate`).
-    if os.path.basename(argv[0]) == "dictate":
+    program = os.path.basename(argv[0])
+    if program == "dictate":
         return True
-    return (len(argv) > 1 and os.path.basename(argv[0]).startswith("python")
-            and os.path.basename(argv[1]) == "dictate")
+    if not program.startswith("python"):
+        return False
+    args = argv[1:]
+    while args and args[0].startswith("-") and args[0] != "-m":
+        # The interpreter's own options (-I, -u), and -X's or -W's value.
+        args = args[2:] if args[0] in ("-X", "-W") else args[1:]
+    if args[:1] == ["-m"]:
+        # talktype.app: the service from before the 0.15.0 rename, which a
+        # 0.14.x in-app update leaves running (it holds the shared lock).
+        return args[1:2] in (["tuxtalk.app"], ["talktype.app"])
+    # The script the interpreter runs; anywhere else "dictate" is just a
+    # file another program was handed (`vim .../bin/dictate`).
+    return bool(args) and os.path.basename(args[0]) == "dictate"
 
 
 def is_pre_rename_service_argv(argv) -> bool:
@@ -253,28 +263,53 @@ def stop_dictation_service(force: bool = False) -> None:
         logger.warning(f"Could not look for the dictation service: {e}")
         return
     for pid in pids:
-        try:
-            os.kill(pid, sig)
-        except OSError:
-            pass  # exited between the scan and the kill
+        _signal(pid, sig)
     # SIGKILL skips the service's exit hooks, and SIGTERM's run only once it
     # has typed what it holds (service_tick._quit): hand its hotkeys back to
     # the desktop from here, now.
     release_desktop_hotkeys()
 
 
-def wait_until_stopped(timeout=QUIT_WITHIN_S) -> bool:
-    """Wait for every dictation service to end (stop_dictation_service only
-    asks, and it types what it holds first); False when one is still running
-    after *timeout* seconds. The tray waits so as it quits: from an AppImage
-    the service's files go when the tray ends."""
-    deadline = time.monotonic() + timeout
-    while find_service_pids():
+# A service still running QUIT_WAIT_S after SIGTERM gets SIGKILL, and this
+# long to go.
+KILL_WAIT_S = 2.0
+
+
+def end_dictation_service(wait_s=QUIT_WAIT_S) -> bool:
+    """Stop the dictation services running now and wait until they've gone;
+    False when one survives even SIGKILL (stuck in the kernel). SIGTERM
+    first, so it types what it holds; SIGKILL to what's left after *wait_s*:
+    an older service with no deadline of its own, or one whose deadline was
+    never set (native code held its main thread). A service started after
+    this began isn't touched: Dictation turned on again meanwhile. Each scan
+    reads /proc again, so a PID taken by another program is never signalled.
+    It sleeps: never on a GTK main thread."""
+    ending = set(find_service_pids())
+    stop_dictation_service()
+    deadline = time.monotonic() + wait_s
+    while ending and time.monotonic() < deadline:
+        time.sleep(0.1)
+        ending &= set(find_service_pids())
+    if not ending:
+        return True
+    logger.warning("The dictation service didn't quit in time; ending it")
+    for pid in ending & set(find_service_pids()):
+        _signal(pid, signal.SIGKILL)
+    deadline = time.monotonic() + KILL_WAIT_S
+    while ending & set(find_service_pids()):
         if time.monotonic() >= deadline:
-            logger.warning("The dictation service is still running after being asked to stop")
+            logger.error("A dictation service is still running after SIGKILL")
             return False
         time.sleep(0.1)
     return True
+
+
+def _signal(pid, sig) -> None:
+    """Send *sig* to *pid*, which may have exited since it was found."""
+    try:
+        os.kill(pid, sig)
+    except OSError:
+        pass
 
 
 def release_desktop_hotkeys() -> None:

@@ -8,7 +8,8 @@ import types
 from tuxtalk import tray as tray_mod
 
 
-def test_quit_queues_a_hard_exit(monkeypatch):
+def test_leaving_the_main_loop_queues_a_hard_exit(monkeypatch):
+    """Quit ends here once the service has gone (test_quit_restart)."""
     timers = []
     monkeypatch.setattr(tray_mod, "GLib", types.SimpleNamespace(
         timeout_add=lambda ms, fn: timers.append((ms, fn))))
@@ -17,13 +18,8 @@ def test_quit_queues_a_hard_exit(monkeypatch):
         main_quit=lambda: quits.append(1)))
     exits = []
     monkeypatch.setattr(tray_mod.os, "_exit", lambda code: exits.append(code))
-    t = types.SimpleNamespace(_stop_kwin_focus_provider=lambda: None,
-                              _kill_service=lambda: None,
-                              preferences_process=None, dbus_service=None)
-    t._shut_down = lambda: tray_mod.DictationTray._shut_down(t)
-    t._leave_main_loop = lambda: tray_mod.DictationTray._leave_main_loop(t)
 
-    tray_mod.DictationTray.quit_app(t, None)
+    tray_mod.DictationTray._leave_main_loop(types.SimpleNamespace())
 
     assert quits == [1]
     assert len(timers) == 1 and timers[0][0] <= 500

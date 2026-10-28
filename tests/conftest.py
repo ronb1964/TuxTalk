@@ -325,6 +325,29 @@ def _no_real_tuxtalk(monkeypatch):
     monkeypatch.setattr(control, "_session_bus", _refuse)
 
 
+# The user's own dictation services, running as the suite starts (Ron's dev
+# TuxTalk runs all day): never found, never signalled.
+from tuxtalk import service_launcher as _launcher
+_USERS_SERVICES = frozenset(_launcher.find_service_pids())
+
+
+@pytest.fixture(autouse=True)
+def _no_real_services(monkeypatch):
+    """Quit, Restart Service, Dictation off and uninstall look for every
+    dictation service of the user's and stop it, waiting up to 43 s: from a
+    test that would be the user's running TuxTalk. Tests with their own
+    process table, or their own services, are unaffected."""
+    find, send = _launcher.find_service_pids, _launcher._signal
+
+    def refuse(pid, sig):
+        if pid in _USERS_SERVICES:
+            raise RuntimeError("tests must not signal the user's dictation service")
+        send(pid, sig)
+    monkeypatch.setattr(_launcher, "find_service_pids",
+                        lambda: [pid for pid in find() if pid not in _USERS_SERVICES])
+    monkeypatch.setattr(_launcher, "_signal", refuse)
+
+
 # Programs that play sound. TuxTalk's audio ducking runs paplay.
 _SOUND_PLAYERS = {"paplay", "aplay", "pw-play", "pw-cat", "canberra-gtk-play", "ffplay", "mpv"}
 
@@ -785,11 +808,12 @@ def tray_main(monkeypatch):
 
         _auto_start_service = step("starts the service")
         quit_app = step("quits")
+        quit_on_sigterm = step("quits on SIGTERM")
         refresh_menu = step("refreshes the menu")
         show_menu_window_if_no_tray = step("shows the menu window")
         auto_check_for_updates = step("checks for updates")
 
-    monkeypatch.setattr(tray, "_acquire_tray_singleton", step("takes the tray lock"))
+    monkeypatch.setattr(tray.tray_instance, "acquire", step("takes the tray lock"))
     monkeypatch.setattr(tray, "_handle_old_talktype_flatpak", lambda: None)
     monkeypatch.setattr(tray, "_refresh_kde_menu_cache", lambda: None)
     monkeypatch.setattr(rename_migration, "adopt_old_install", step("adopts the old install", []))

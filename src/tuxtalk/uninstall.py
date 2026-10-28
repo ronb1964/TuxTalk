@@ -433,10 +433,19 @@ def _is_dev(pid):
 def stop_tuxtalk(plan, stop_tray_parts=None):
     """Stop everything TuxTalk runs, so nothing writes a file back after
     it's deleted. *stop_tray_parts* is the tray's own shutdown when this runs
-    inside it."""
+    inside it. The waits run off GTK's thread (_wait_for), so the working
+    window keeps drawing; the service gets its time to type what it holds."""
     if stop_tray_parts is not None:
         stop_tray_parts()
-    service_launcher.stop_dictation_service()      # also lets KDE have the hotkeys back
+    _wait_for(lambda: _stop_processes(plan))
+
+
+def _stop_processes(plan):
+    """stop_tuxtalk's waiting half: a dictation service (run() ended it
+    before the root step; one started since quits in its own time,
+    service_launcher.end_dictation_service), then every other TuxTalk process
+    and the old ydotoold service."""
+    service_launcher.end_dictation_service()       # also lets KDE have the hotkeys back
     uinput_helper.stop_ydotoold_we_started()
     # Each engine folder, not the whole data folder: that may be a link into
     # a folder where other programs run from.
@@ -806,10 +815,20 @@ def run(stop_tray_parts=None):
 
     window = _working_window()
     try:
+        # The dictation service first, before the package and the hotkey
+        # helper it runs on go: it types what it holds, then quits.
+        was_running = bool(service_launcher.find_service_pids())
+        if not _wait_for(service_launcher.end_dictation_service):
+            _tell(Gtk.MessageType.ERROR, "TuxTalk couldn't uninstall",
+                  "Nothing was removed: TuxTalk's dictation service wouldn't stop. "
+                  "Restart the computer, then try Uninstall TuxTalk… again.")
+            return False
         result = Result()
         if plan.needs_root:
             result = _remove_as_root(plan, leave_group)
             if result is None:
+                if was_running:
+                    service_launcher.launch_dictation_service()     # dictation back on
                 return False
         try:
             _remove_the_rest(plan, delete_personal, delete_shared, stop_tray_parts, result)

@@ -215,6 +215,9 @@ stop_requested = threading.Event()
 # Set by the SIGTERM handler (Quit, Restart Service, an update), taken by the
 # service tick, which finishes what's being typed before the process exits.
 quit_asked = False
+# Counted up by the SIGUSR1 handler (the tray's toggle); the service tick
+# acts on a change (service_tick._take_toggle).
+toggles_asked = 0
 
 # Set alongside start_requested when the Flatpak's toggle SHORTCUT (not a
 # menu) started it, so a quick second press can switch it to hands-free.

@@ -111,7 +111,7 @@ def test_signal_handlers_are_installed_before_anything_slow(monkeypatch):
 
     def first_slow_step():
         assert signal.getsignal(signal.SIGUSR1) == app._handle_sigusr1
-        assert signal.getsignal(signal.SIGUSR2) == app._handle_sigusr2
+        assert signal.getsignal(signal.SIGUSR2) == signal.SIG_IGN
         raise Stop
 
     from tuxtalk import desktop_identity
@@ -124,12 +124,3 @@ def test_signal_handlers_are_installed_before_anything_slow(monkeypatch):
     finally:
         for s, handler in saved.items():
             signal.signal(s, handler)
-
-
-def test_a_stray_sigusr2_does_not_toggle_anything(keys):
-    reported, started = keys
-    app._handle_sigusr2(signal.SIGUSR2, None)
-
-    press(HOLD)
-
-    assert reported == [] and started == [True]

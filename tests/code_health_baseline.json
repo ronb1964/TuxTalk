@@ -1,6 +1,6 @@
 {
  "files": {
-  "tray.py": 2362,
+  "tray.py": 2143,
   "welcome_dialog.py": 3097
  },
  "findings": {
@@ -10,9 +10,7 @@
   "ai_cleanup.py::_model_path::swallowed_error": 1,
   "ai_cleanup.py::fix_self_corrections::long_line": 1,
   "ai_cleanup.py::make_engine_download_func.download::undocumented": 1,
-  "audio_duck.py::<module>::dated_comment": 1,
   "audio_duck.py::AudioDucker._duck_now::undocumented": 1,
-  "audio_duck.py::AudioDucker._restore_now::dated_comment": 1,
   "audio_duck.py::AudioDucker._restore_now::undocumented": 1,
   "audio_duck.py::AudioDucker._run_jobs::swallowed_error": 1,
   "audio_duck.py::_set_volume::long_line": 1,
@@ -196,29 +194,23 @@
   "transcribe_window.py::TranscribeWindow::undocumented": 1,
   "tray.py::DictationTray.__init__::swallowed_error": 1,
   "tray.py::DictationTray.__init__::undocumented": 1,
-  "tray.py::DictationTray._auto_start_service::long_line": 1,
   "tray.py::DictationTray._build_performance_submenu::long_line": 2,
   "tray.py::DictationTray._check_tray_visibility::swallowed_error": 1,
-  "tray.py::DictationTray._init_dbus_service.TrayAppInstance.config::swallowed_error": 1,
-  "tray.py::DictationTray._shut_down::swallowed_error": 1,
   "tray.py::DictationTray._stop_kwin_focus_provider::swallowed_error": 1,
-  "tray.py::DictationTray.restart_service._do_restart::undocumented": 1,
   "tray.py::DictationTray.set_performance_preset::long_line": 2,
   "tray.py::DictationTray.set_performance_preset::swallowed_error": 1,
   "tray.py::DictationTray.show_about_dialog::long_line": 1,
   "tray.py::DictationTray.show_about_dialog::swallowed_error": 1,
   "tray.py::DictationTray.show_menu_window_if_no_tray::swallowed_error": 1,
   "tray.py::DictationTray::undocumented": 1,
-  "tray.py::_open_from_command_line::swallowed_error": 1,
   "tray.py::_refresh_kde_menu_cache::swallowed_error": 1,
-  "tray.py::_run_command_line::swallowed_error": 1,
-  "tray.py::_show_already_running::swallowed_error": 1,
   "tray.py::main.check_and_show_update_notification::swallowed_error": 1,
   "tray.py::main.check_and_show_update_notification::undocumented": 1,
   "tray.py::main.show_first_run_setup::long_line": 1,
   "tray.py::main.show_first_run_setup::undocumented": 1,
   "tray.py::main::swallowed_error": 2,
   "tray.py::main::undocumented": 1,
+  "tray_instance.py::_show_already_running::swallowed_error": 1,
   "ui_style.py::<module>::dated_comment": 1,
   "ui_style.py::<module>::long_line": 1,
   "ui_style.py::Fold.__init__::undocumented": 1,
@@ -307,9 +299,6 @@
   },
   "autostart.py::get_launch_command": {
    "decisions": 22
-  },
-  "autostart.py::repair_stale_appimage_autostart": {
-   "decisions": 17
   },
   "compositor_focus.py::_CosmicWindows._on_event": {
    "decisions": 16
@@ -409,10 +398,7 @@
    "lines": 126
   },
   "tray.py::DictationTray._download_update": {
-   "lines": 112
-  },
-  "tray.py::DictationTray._init_dbus_service": {
-   "lines": 151
+   "lines": 111
   },
   "tray.py::DictationTray._show_update_result_dialog": {
    "lines": 142
@@ -421,11 +407,11 @@
    "decisions": 23
   },
   "tray.py::DictationTray.show_about_dialog": {
-   "lines": 134
+   "lines": 133
   },
   "tray.py::main": {
    "decisions": 18,
-   "lines": 205
+   "lines": 203
   },
   "uninstall.py::_empty": {
    "decisions": 20

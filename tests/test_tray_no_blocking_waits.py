@@ -2,6 +2,7 @@
 main loop.
 
 * Replacing a pre-rename service can wait up to 3 s for it to exit.
+* Quit and Restart Service wait for the service off it (test_quit_restart.py).
 * After onboarding, KDE's menu cache rebuild (kbuildsycoca) can take up to 15 s.
 """
 import types
@@ -17,6 +18,25 @@ class FakeGLib:
         self.timers.append(lambda: fn(*args))
 
 
+def _run_timers(loop):
+    """Every timer, those they add included; how many ran."""
+    ran = 0
+    while loop.timers:
+        loop.timers.pop(0)()
+        ran += 1
+    return ran
+
+
+def _tray(**attrs):
+    """A tray with only what the start-up check uses."""
+    t = tray_mod.DictationTray.__new__(tray_mod.DictationTray)
+    t.onboarding_in_progress = False
+    t._service_gen = 0
+    t._restart_pending = False
+    t.__dict__.update(attrs)
+    return t
+
+
 def test_waiting_for_the_old_service_does_not_sleep(monkeypatch):
     loop = FakeGLib()
     monkeypatch.setattr(tray_mod, "GLib", loop)
@@ -27,56 +47,81 @@ def test_waiting_for_the_old_service_does_not_sleep(monkeypatch):
     stops = []
     monkeypatch.setattr("tuxtalk.service_launcher.stop_dictation_service", lambda: stops.append(1))
     started = []
-    t = types.SimpleNamespace(onboarding_in_progress=False,
-                              is_service_running=lambda: False,
-                              start_service=lambda _: started.append(1))
-    t._auto_start_service = lambda w=0, watching=False: tray_mod.DictationTray._auto_start_service(
-        t, w, watching)
+    t = _tray(is_service_running=lambda: False, start_service=lambda _: started.append(1))
 
-    assert t._auto_start_service() is False
-    while loop.timers:
-        loop.timers.pop(0)()
+    t._auto_start_service(1000)
+    _run_timers(loop)
     assert stops == [1] and started == [1]
 
 
-def test_the_wait_gives_up_once_a_service_could_have_quit(monkeypatch):
+def test_an_old_service_that_wont_go_is_given_three_seconds(monkeypatch):
     loop = FakeGLib()
     monkeypatch.setattr(tray_mod, "GLib", loop)
-    monkeypatch.setattr("tuxtalk.service_launcher.pre_rename_service_pids", lambda: [111])
+    old = {"pids": [111]}
+    monkeypatch.setattr("tuxtalk.service_launcher.pre_rename_service_pids", lambda: old["pids"])
     monkeypatch.setattr("tuxtalk.service_launcher.stop_dictation_service", lambda: None)
     started = []
-    t = types.SimpleNamespace(onboarding_in_progress=False,
-                              is_service_running=lambda: True,
-                              start_service=lambda _: started.append(1))
-    t._auto_start_service = lambda w=0, watching=False: tray_mod.DictationTray._auto_start_service(
-        t, w, watching)
-    t._auto_start_service()
-    checks = 0
-    while loop.timers:
+    t = _tray(is_service_running=lambda: False, start_service=lambda _: started.append(1))
+    t._auto_start_service(1000)
+    for _ in range(31):                             # the first look, then 30 of 100 ms
         loop.timers.pop(0)()
-        checks += 1
-    from tuxtalk.service_launcher import QUIT_WITHIN_S
-    assert checks == QUIT_WITHIN_S * 10 and started == []
+    assert started == [1] and loop.timers == []
 
 
-def test_a_service_that_quits_while_the_tray_starts_is_replaced(monkeypatch):
-    """An update's restart: the old tray stopped the service as it quit,
-    and the service typed what it held first. The new tray saw it running,
-    skipped starting one, and dictation stayed off once it ended."""
+def test_a_service_running_at_start_that_goes_is_replaced(monkeypatch):
+    """A service with no tray, quitting as the tray starts (Dictation off
+    from the GNOME extension): adopted, it went, and dictation stayed off."""
     loop = FakeGLib()
     monkeypatch.setattr(tray_mod, "GLib", loop)
     monkeypatch.setattr("tuxtalk.service_launcher.pre_rename_service_pids", lambda: [])
     running = iter([True, True, True, False])
     started = []
-    t = types.SimpleNamespace(onboarding_in_progress=False,
-                              is_service_running=lambda: next(running),
-                              start_service=lambda _: started.append(1))
-    t._auto_start_service = lambda w=0, watching=False: tray_mod.DictationTray._auto_start_service(
-        t, w, watching)
-    t._auto_start_service()
-    while loop.timers:
-        loop.timers.pop(0)()
+    t = _tray(is_service_running=lambda: next(running), start_service=lambda _: started.append(1))
+    t._auto_start_service(1000)
+    _run_timers(loop)
     assert started == [1]
+
+
+def test_a_running_service_is_adopted_after_a_while(monkeypatch):
+    from tuxtalk.service_launcher import QUIT_WAIT_S
+    loop = FakeGLib()
+    monkeypatch.setattr(tray_mod, "GLib", loop)
+    monkeypatch.setattr("tuxtalk.service_launcher.pre_rename_service_pids", lambda: [])
+    started = []
+    t = _tray(is_service_running=lambda: True, start_service=lambda _: started.append(1))
+    t._auto_start_service(1000)
+    assert _run_timers(loop) == 1 + QUIT_WAIT_S and started == []
+
+
+def test_dictation_turned_off_before_the_start_up_check_stays_off(monkeypatch):
+    loop = FakeGLib()
+    monkeypatch.setattr(tray_mod, "GLib", loop)
+    monkeypatch.setattr("tuxtalk.service_launcher.pre_rename_service_pids", lambda: [])
+    started = []
+    t = _tray(is_service_running=lambda: False, start_service=lambda _: started.append(1))
+    t._auto_start_service(1000)
+    t._drop_pending_launches()                      # Dictation off from the extension
+    _run_timers(loop)
+    assert started == []
+
+
+def test_dictation_turned_off_while_the_old_service_goes_stays_off(monkeypatch):
+    """Turned off while the check waited for the pre-0.15.0 service to go,
+    the next look found no service and started one."""
+    loop = FakeGLib()
+    monkeypatch.setattr(tray_mod, "GLib", loop)
+    old = {"pids": [111]}
+    monkeypatch.setattr("tuxtalk.service_launcher.pre_rename_service_pids", lambda: old["pids"])
+    monkeypatch.setattr("tuxtalk.service_launcher.stop_dictation_service", lambda: None)
+    started = []
+    t = _tray(is_service_running=lambda: False, start_service=lambda _: started.append(1))
+    t._auto_start_service(1000)
+    loop.timers.pop(0)()                            # the first look
+    loop.timers.pop(0)()                            # still waiting for it
+    t._drop_pending_launches()                      # the user turns Dictation off
+    old["pids"] = []
+    _run_timers(loop)
+    assert started == []
 
 
 def test_the_kde_cache_rebuild_falls_back_to_kbuildsycoca5(monkeypatch):
@@ -103,37 +148,3 @@ def test_the_kde_cache_rebuild_runs_off_the_main_loop(tray_main, monkeypatch):
     tray_main(first_run=True).run_timers()
     assert done.wait(5)
     assert ran[0] is not threading.main_thread()
-
-
-def test_dictation_turned_off_while_the_tray_watches_stays_off(monkeypatch):
-    """Turned off during the watch at start, the next look found no service
-    and started one."""
-    loop = FakeGLib()
-    monkeypatch.setattr(tray_mod, "GLib", loop)
-    monkeypatch.setattr("tuxtalk.service_launcher.pre_rename_service_pids", lambda: [])
-    monkeypatch.setattr("tuxtalk.service_launcher.stop_dictation_service", lambda: None)
-    running = {"now": True}
-    started = []
-    t = types.SimpleNamespace(onboarding_in_progress=False,
-                              is_service_running=lambda: running["now"],
-                              start_service=lambda _: started.append(1))
-    t._auto_start_service = lambda w=0, watching=False: tray_mod.DictationTray._auto_start_service(
-        t, w, watching)
-    t._auto_start_service()
-    loop.timers.pop(0)()                            # still watching
-    tray_mod.DictationTray._kill_service(t)         # the user turns Dictation off
-    running["now"] = False
-    while loop.timers:
-        loop.timers.pop(0)()
-    assert started == []
-
-
-def test_quitting_waits_for_the_service_to_end(monkeypatch):
-    """From an AppImage the service's files go when the tray ends."""
-    from tuxtalk import service_launcher
-    pids = iter([[42], [42], []])
-    monkeypatch.setattr(service_launcher, "find_service_pids", lambda: next(pids))
-    monkeypatch.setattr(service_launcher.time, "sleep", lambda s: None)
-    assert service_launcher.wait_until_stopped(5) is True
-    monkeypatch.setattr(service_launcher, "find_service_pids", lambda: [42])
-    assert service_launcher.wait_until_stopped(0) is False

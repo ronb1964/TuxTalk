@@ -311,8 +311,8 @@ def test_the_command_runs_before_the_tray_takes_its_lock(monkeypatch):
     from tuxtalk import desktop_identity
     monkeypatch.setattr(desktop_identity, "apply", lambda: None)
     monkeypatch.setattr(tray.sys, "argv", ["tuxtalk", "--toggle"])
-    monkeypatch.setattr(tray, "_run_command_line", ask)
-    monkeypatch.setattr(tray, "_acquire_tray_singleton",
+    monkeypatch.setattr(tray.tray_instance, "run_command_line", ask)
+    monkeypatch.setattr(tray.tray_instance, "acquire",
                         lambda: pytest.fail("took the lock before asking"))
     with pytest.raises(Asked):
         tray.main()
@@ -324,32 +324,32 @@ def test_the_command_runs_before_the_tray_takes_its_lock(monkeypatch):
     (None, "stop", 0),                  # nothing running: nothing to stop
 ])
 def test_run_command_line_exits_when_it_is_done(monkeypatch, status, action, code):
-    from tuxtalk import tray
+    from tuxtalk import tray_instance
     monkeypatch.setattr(control, "ask_running", lambda a, tray_starting: status)
     with pytest.raises(SystemExit) as e:
-        tray._run_command_line(action)
+        tray_instance.run_command_line(action)
     assert e.value.code == code
 
 
 def test_run_command_line_returns_to_start_tuxtalk(monkeypatch):
-    from tuxtalk import tray
+    from tuxtalk import tray_instance
     monkeypatch.setattr(control, "ask_running", lambda a, tray_starting: None)
-    tray._run_command_line("toggle")        # returns: main() goes on to start TuxTalk
+    tray_instance.run_command_line("toggle")        # returns: main() goes on to start TuxTalk
 
 
 def test_tray_lock_held(monkeypatch, tmp_path):
     """Only a lock someone holds now counts: not a file left by a tray that
     has exited."""
-    from tuxtalk import single_instance, tray
+    from tuxtalk import single_instance, tray_instance
     monkeypatch.setattr(single_instance, "runtime_dir", lambda: str(tmp_path))
-    assert tray._tray_starting() is False          # no tray ever started here
+    assert tray_instance.tray_starting() is False          # no tray ever started here
     path = tmp_path / "talktype-tray.lock"
     path.write_text("123")
-    assert tray._tray_starting() is False
+    assert tray_instance.tray_starting() is False
     with open(path) as holder:
         fcntl.flock(holder.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        assert tray._tray_starting() is True
-    assert tray._tray_starting() is False
+        assert tray_instance.tray_starting() is True
+    assert tray_instance.tray_starting() is False
     assert path.read_text() == "123", "the running tray's PID stays in the file"
 
 

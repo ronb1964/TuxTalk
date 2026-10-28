@@ -23,7 +23,7 @@ from . import recording_state as rs
 from .config import load_config, load_custom_commands
 from .logger import setup_logger
 from .recording_indicator import RecordingIndicator
-from .service_launcher import QUIT_WITHIN_S
+from .service_launcher import QUIT_LIMIT_S, QUIT_WAIT_S
 
 logger = setup_logger(__name__)
 
@@ -31,7 +31,7 @@ logger = setup_logger(__name__)
 # The single-instance lock's file, open while the service runs.
 _lockfile_handle = None
 # How long a new service waits for the old one's lock: its quit.
-LOCK_WAIT_S = QUIT_WITHIN_S
+LOCK_WAIT_S = QUIT_WAIT_S
 
 # The service's own D-Bus service when no tray runs (_start_dbus_stand_in),
 # held here for the life of the process.
@@ -58,38 +58,46 @@ def _acquire_single_instance():
 
 def _handle_sigusr1(signum, frame):
     """SIGUSR1 = toggle recording. Sent by the tray process via os.kill().
-    Sets the matching request; the service tick takes it.
-    """
-    if rs.state.is_recording:
-        recording.stop_requested.set()
-    else:
-        recording.start_requested.set()
-
-
-def _handle_sigusr2(signum, frame):
-    """SIGUSR2 is accepted and ignored: unhandled, it ends the process, and an
-    older Preferences may still send one to switch hotkey test mode."""
-    logger.info("Ignored SIGUSR2 (hotkey test mode follows Preferences' flag file)")
+    Only counted here; the service tick turns it into a start or a stop. An
+    Event set in a handler could wait forever on a lock the interrupted
+    code holds (Event.clear on the same thread)."""
+    recording.toggles_asked += 1
 
 
 def _handle_sigterm(signum, frame):
     """SIGTERM (Quit, Restart Service, an update): the input loop's next
     pass (service_tick._quit) finishes what's being typed, then the process
-    exits. Before the loop runs (the model still loading) there's nothing to
-    finish. A plain flag, not an Event: Event.set takes a lock, which a
-    second SIGTERM arriving inside the first's would wait on forever."""
+    exits. Before the loop runs (waiting for the lock, the model loading)
+    there's nothing to finish.
+
+    The alarm is the quit's deadline: SIGALRM keeps its default action
+    (_install_signal_handlers), so the kernel ends the process QUIT_LIMIT_S
+    after this runs, whatever any thread is doing then (a hung exit hook,
+    native code holding the GIL); a thread of our own couldn't promise that.
+    Python runs this only between bytecodes of the main thread, so native
+    code there delays the deadline's start too: whoever stops the service
+    escalates as well (service_launcher.end_dictation_service). A second
+    SIGTERM leaves the deadline alone. A plain flag, not an Event: Event.set
+    takes a lock the interrupted code may hold."""
+    if recording.quit_asked:
+        return
+    recording.quit_asked = True
+    signal.alarm(QUIT_LIMIT_S)
     if not _service_ready:
         raise SystemExit(0)
-    recording.quit_asked = True
 
 
 def _install_signal_handlers():
-    """Handle SIGUSR1, SIGUSR2 and SIGTERM from the very start. The first
-    two end a process that doesn't handle them, and the tray and Preferences
-    can send them while the model is still loading."""
+    """Handle SIGUSR1 and SIGTERM, and ignore SIGUSR2, from the very start:
+    unhandled, the first two end the process, and the tray and Preferences
+    can send them while the model is still loading (an older Preferences
+    sent SIGUSR2 for hotkey test mode). SIGALRM gets its default action and
+    is unblocked, whatever this process inherited: it is the quit's deadline."""
     signal.signal(signal.SIGUSR1, _handle_sigusr1)
-    signal.signal(signal.SIGUSR2, _handle_sigusr2)
+    signal.signal(signal.SIGUSR2, signal.SIG_IGN)
     signal.signal(signal.SIGTERM, _handle_sigterm)
+    signal.signal(signal.SIGALRM, signal.SIG_DFL)
+    signal.pthread_sigmask(signal.SIG_UNBLOCK, {signal.SIGALRM})
 
 
 # tuxtalk --toggle/--start/--stop (control.py). The tray normally answers
@@ -111,7 +119,10 @@ def _control_in_service(action):
             return _waiting_start.apply(action)
     send, status = control.act_now(action, rs.state.is_recording)
     if send:
-        _handle_sigusr1(None, None)
+        if rs.state.is_recording:
+            recording.stop_requested.set()
+        else:
+            recording.start_requested.set()
     return status
 
 

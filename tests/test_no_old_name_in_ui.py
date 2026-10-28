@@ -31,15 +31,17 @@ ALLOWED_EXACT = {
     "uninstall.py": {"TalkType", "TalkType.AppImage"},
     # The ydotoold unit a TalkType wrote, which 0.18 removes.
     "uinput_helper.py": {"(TalkType keystroke injection)"},
-    # The one-time notice after an old TalkType install is converted.
-    "tray.py": {
-        "TalkType is now TuxTalk",
-        "Why the change: another company owns the name TalkType for dictation software.",
-        # An old TalkType tray that would not quit: its menu still says TalkType.
+    # An old TalkType tray that would not quit: its menu still says TalkType.
+    "tray_instance.py": {
         "An older TalkType is still running",
         "TuxTalk is the new name for TalkType, and only one of them can run at a "
         "time. Click the TalkType microphone icon in the system tray, choose Quit "
         "TalkType, then start TuxTalk again.",
+    },
+    # The one-time notice after an old TalkType install is converted.
+    "tray.py": {
+        "TalkType is now TuxTalk",
+        "Why the change: another company owns the name TalkType for dictation software.",
         # An old TalkType Flatpak was stopped: its uninstall needs its real ID.
         "Stopped the old TalkType Flatpak",
         "It was running next to TuxTalk, its new name, so everything you said "

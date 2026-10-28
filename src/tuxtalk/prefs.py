@@ -578,11 +578,22 @@ class PreferencesWindow:
         return self.restart_service()
 
     def restart_service(self):
-        """Restart the dictation service; True if it started again."""
+        """Restart the dictation service; True if it was done or asked for.
+        A running tray does it (Restart Service: it waits for the old service
+        off its menu's thread, and starts none once Quit or Dictation off came
+        after); with no tray, it's done here."""
+        from . import single_instance, tray_instance, update_ui
+        if single_instance.held_elsewhere(tray_instance.TRAY_LOCK):
+            try:
+                update_ui.tray_interface().RestartService()
+                return True
+            except Exception as e:
+                logger.warning(f"Could not ask the tray to restart dictation: {e}")
         from .service_launcher import launch_dictation_service, stop_dictation_service
         try:
+            # Not waited for: the old one types what it holds before it
+            # quits, and the new one waits for its lock meanwhile.
             stop_dictation_service()
-            time.sleep(1)       # for the old processes to end
             # Started the same way the tray does. Preferences runs on native
             # Wayland, and a service spawned with this process's environment
             # would inherit it: gtk_window_move() would be ignored and the

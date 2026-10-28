@@ -129,7 +129,7 @@ def _installed_restart_prompt(restart_callback=None):
     done.present()
 
 
-def _tray_interface():
+def tray_interface():
     """The running tray's D-Bus interface. Raises when it can't be reached."""
     import dbus
     from .dbus_service import DBUS_NAME, DBUS_PATH, DBUS_INTERFACE
@@ -148,7 +148,7 @@ def restart_via_tray(get_interface=None) -> bool:
     get_interface is injectable for testing. Returns True when the tray took
     the request; otherwise the user is told to reopen TuxTalk."""
     try:
-        (get_interface or _tray_interface)().RestartApp()
+        (get_interface or tray_interface)().RestartApp()
         return True
     except Exception as e:
         logger.warning(f"Could not ask the tray to restart: {e}")

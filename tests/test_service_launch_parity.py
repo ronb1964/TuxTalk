@@ -59,6 +59,7 @@ def test_the_tray_and_preferences_start_the_service_the_same_way(monkeypatch):
     monkeypatch.setattr(service_launcher.subprocess, "Popen", lambda argv, env=None, **k:
                         started.append((argv, (env or {}).get("GDK_BACKEND"))) or types.SimpleNamespace(pid=1))
     monkeypatch.setattr(service_launcher, "stop_dictation_service", lambda: None)
+    monkeypatch.setattr("tuxtalk.single_instance.held_elsewhere", lambda name: False)  # no tray
     tray.DictationTray._launch_service(types.SimpleNamespace())
     assert prefs.PreferencesWindow.restart_service(types.SimpleNamespace()) is True
     assert len(started) == 2 and started[0] == started[1]
