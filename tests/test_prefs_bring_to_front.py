@@ -6,6 +6,8 @@ behind a browser looking like Preferences had failed to open.
 import os
 import signal
 
+import pytest
+
 from tuxtalk import prefs_ipc
 
 
@@ -89,10 +91,59 @@ def test_a_second_launch_forwards_and_exits(tmp_path, monkeypatch):
     monkeypatch.setattr(prefs.prefs_ipc, "pidfile_path", lambda: str(pidfile))
     monkeypatch.setattr(prefs.prefs_ipc, "is_prefs_pid", lambda pid: True)
     sent = []
-    monkeypatch.setattr(prefs.prefs_ipc, "bring_to_front", lambda pid, tab: sent.append((pid, tab)))
-
-    import pytest
+    monkeypatch.setattr(prefs.prefs_ipc, "bring_to_front",
+                        lambda pid, tab: sent.append((pid, tab)) or True)   # it answered
+    monkeypatch.setattr("tuxtalk.single_instance.runtime_dir", lambda: str(tmp_path))
     with pytest.raises(SystemExit):
         prefs._acquire_prefs_singleton("updates")
     assert sent == [(4242, "updates")]
     assert pidfile.read_text() == "4242"                   # the open one keeps it
+
+
+@pytest.fixture
+def one_window(tmp_path, monkeypatch):
+    """Preferences' pidfile and lock in a folder of their own."""
+    from tuxtalk import prefs, single_instance
+    run = tmp_path / "run"
+    run.mkdir(mode=0o700)
+    monkeypatch.setattr(single_instance, "runtime_dir", lambda: str(run))
+    pidfile = tmp_path / "talktype-prefs.pid"
+    monkeypatch.setattr(prefs.prefs_ipc, "pidfile_path", lambda: str(pidfile))
+    monkeypatch.setattr(prefs, "_FRONT_WAIT_S", 0.3)
+    monkeypatch.setattr(prefs, "_CLOSING_WAIT_S", 0.3)
+    return prefs, single_instance, pidfile
+
+
+def test_two_quick_launches_open_one_window(one_window, monkeypatch):
+    """The first had its lock but hadn't written its pid yet: the second saw
+    no window and opened another."""
+    prefs, single_instance, pidfile = one_window
+    first = single_instance.open_lock(prefs.WINDOW_LOCK)
+    assert single_instance.claim(first)               # the first launch, still starting
+    sent = []
+
+    def front(pid, tab):
+        sent.append(pid)
+        return True
+    monkeypatch.setattr(prefs.prefs_ipc, "bring_to_front", front)
+    monkeypatch.setattr(prefs.prefs_ipc, "is_prefs_pid", lambda pid: True)
+    import threading                                  # ...which it writes a moment later
+    threading.Timer(0.1, lambda: pidfile.write_text("4242")).start()
+    with pytest.raises(SystemExit):
+        prefs._acquire_prefs_singleton(None)
+    assert sent == [4242]
+    first.close()
+
+
+def test_a_window_that_has_just_closed_doesnt_stop_the_next_from_opening(one_window,
+                                                                        monkeypatch):
+    """Its pid was still written but it had gone: the new one exited anyway,
+    and no window appeared."""
+    prefs, single_instance, pidfile = one_window
+    pidfile.write_text("4242")
+    monkeypatch.setattr(prefs.prefs_ipc, "is_prefs_pid", lambda pid: True)
+    monkeypatch.setattr(prefs.prefs_ipc, "bring_to_front", lambda pid, tab: False)
+    monkeypatch.setattr(prefs.atexit, "register", lambda fn: None)
+    prefs._acquire_prefs_singleton(None)              # opens: no SystemExit
+    assert pidfile.read_text().split()[0] == str(prefs.os.getpid())
+    prefs._window_lock.close()
