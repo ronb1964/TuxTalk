@@ -73,7 +73,7 @@ def _typing_state(refused_shortcuts):
         return _helper_state(refused_shortcuts)
     if has_access:
         return _input_group_state()
-    if secure_input.is_installed():
+    if secure_input.is_installed() and secure_input.running_version() is None:
         # The service waits for an installed helper, so a silent one means
         # no hotkeys; installing it again starts it, with no restart.
         return (f'<span color="{WARNING_AMBER}">⚠ TuxTalk\'s hotkey helper is installed but '

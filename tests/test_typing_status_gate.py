@@ -37,14 +37,14 @@ class _FakeButton:
 
 
 def _prefs_with_perms(monkeypatch, *, all_ok, udev, in_group, hotkey_ok=False,
-                      helper_installed=False):
+                      helper_installed=False, helper_version=None):
     from types import SimpleNamespace
     from tuxtalk import prefs_system_check as prefs_mod
     from tuxtalk import secure_input
     from tuxtalk import uinput_helper as uh
 
     monkeypatch.setattr(secure_input, "is_installed", lambda: helper_installed)
-    monkeypatch.setattr(secure_input, "running_version", lambda: None)
+    monkeypatch.setattr(secure_input, "running_version", lambda: helper_version)
 
     monkeypatch.setattr(uh, "check_all_device_permissions",
                         lambda: (all_ok, "reason"))
@@ -121,3 +121,13 @@ def test_a_hotkey_helper_that_isnt_answering_offers_to_set_it_up_again(monkeypat
     assert "isn't answering" in prefs.typing_status_label.markup
     assert prefs.fix_typing_button.label == UPDATE_HELPER_LABEL
     assert prefs.fix_typing_button.sensitive is True
+
+
+def test_an_answering_helper_without_uinput_is_not_called_silent(monkeypatch):
+    """The access check covers typing (/dev/uinput) too: a helper that
+    answers while TuxTalk can't type is a typing problem, not a silent helper."""
+    prefs = _prefs_with_perms(monkeypatch, all_ok=False, udev=False, in_group=False,
+                              hotkey_ok=True, helper_installed=True, helper_version="1.6")
+    prefs._show_typing_status()
+    assert "isn't answering" not in prefs.typing_status_label.markup
+    assert "can't type" in prefs.typing_status_label.markup
