@@ -322,10 +322,10 @@ def end_in_background(then, pids) -> None:
 def end_processes(pids, wait_s, still_ours=None, after_term=None) -> bool:
     """SIGTERM *pids*, wait up to *wait_s* for them to exit, then SIGKILL
     what's left and wait KILL_WAIT_S; False when one is still there. Each is
-    held first (_Process) and checked again with *still_ours* once held, so
+    held first (HeldProcess) and checked again with *still_ours* once held, so
     a PID another program took meanwhile is never signalled. *after_term*
     runs once they've had SIGTERM. It sleeps: never on a GTK main thread."""
-    procs = [_Process(pid) for pid in pids]
+    procs = [HeldProcess(pid) for pid in pids]
     try:
         for proc in procs:
             if still_ours is not None and not still_ours(proc.pid):
@@ -358,7 +358,7 @@ def _wait_for_exit(procs, wait_s) -> bool:
     return True
 
 
-class _Process:
+class HeldProcess:
     """A process to end, held by a pidfd where the kernel has them (5.3 on):
     signals reach that process even if its PID is reused. Where there are
     none (an old kernel, a sandbox that blocks them), by PID and its start

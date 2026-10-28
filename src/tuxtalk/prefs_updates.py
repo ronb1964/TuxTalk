@@ -420,7 +420,9 @@ class UpdatesTab(Tab):
         except Exception as e:
             logger.warning(f"Could not ask TuxTalk to uninstall: {e}")
         from . import uninstall
-        if uninstall.run():
+        with self.win.busy():           # no edits made meanwhile, nothing to lose at the end
+            done = uninstall.run()
+        if done:
             self.win.on_cancel(None)
 
     def _settle_unapplied_changes(self):

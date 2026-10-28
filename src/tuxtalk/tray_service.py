@@ -270,7 +270,8 @@ class ServiceLifecycle:
         try:
             done = uninstall.run(uninstall.TrayParts(
                 stop=self._stop_taking_actions, resume=self._resume_after_uninstall,
-                shut_down=self._shut_down_for_uninstall))
+                shut_down=self._shut_down_for_uninstall,
+                preferences_open=self._preferences_open))
         finally:
             self._uninstalling = False
         if done:
@@ -296,10 +297,14 @@ class ServiceLifecycle:
         if self._menu_window is not None:
             self._menu_window.window.destroy()
 
+    def _preferences_open(self) -> bool:
+        """Whether the Preferences window this tray opened is still open."""
+        return bool(self.preferences_process and self.preferences_process.poll() is None)
+
     def _close_preferences(self):
         """Close Preferences. Not waited for: it has no SIGTERM handler and
         ends at once."""
-        if self.preferences_process and self.preferences_process.poll() is None:
+        if self._preferences_open():
             self.preferences_process.terminate()
             logger.info("Closed preferences window")
 

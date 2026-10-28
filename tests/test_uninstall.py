@@ -564,8 +564,10 @@ def test_an_error_partway_still_ends_with_a_message_and_quits(home, monkeypatch)
     monkeypatch.setattr(uninstall, "_wait_for", lambda work: work())
     monkeypatch.setattr(uninstall, "_end_service", lambda: True)
     stopped = []
+    monkeypatch.setattr(uninstall, "_close_preferences", lambda: True)
     assert uninstall.run(uninstall.TrayParts(stop=lambda: None, resume=lambda: None,
-                                             shut_down=lambda: stopped.append(1))) is True
+                                             shut_down=lambda: stopped.append(1),
+                                             preferences_open=lambda: False)) is True
     assert stopped == [1]
     heading, body = told[0]
     assert heading == "TuxTalk couldn't remove everything"
@@ -630,7 +632,7 @@ def test_a_second_uninstall_request_while_asking_opens_no_second_question(monkey
     from tuxtalk import tray as tray_mod
     t = types.SimpleNamespace(_uninstalling=False, _quitting=False, _stop_taking_actions=None,
                               _resume_after_uninstall=None, _shut_down_for_uninstall=None,
-                              _leave_main_loop=lambda: None)
+                              _preferences_open=None, _leave_main_loop=lambda: None)
     asked = []
 
     def run(tray):

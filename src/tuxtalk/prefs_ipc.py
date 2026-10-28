@@ -22,9 +22,11 @@ CLOSE = signal.SIGUSR2
 
 
 def pidfile_path():
-    """Where the open Preferences window keeps its pid."""
-    base = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
-    return os.path.join(base, "talktype-prefs.pid")
+    """Where the open Preferences window keeps its pid: the private runtime
+    folder, or its fallback (single_instance). Raises OSError when there's
+    neither; callers treat that as no pidfile."""
+    from .single_instance import runtime_dir
+    return os.path.join(runtime_dir(), "talktype-prefs.pid")
 
 
 def _tab_request_path():
@@ -43,24 +45,19 @@ def take_tab_request():
 
 
 def is_prefs_argv(argv) -> bool:
-    """True if *argv* (a process's argument list) is a Preferences window.
-
-    Whole arguments are compared, never substrings, the same way as
-    service_launcher.is_service_argv: Preferences runs as ``<python> -m
-    tuxtalk.prefs`` or as the ``dictate-prefs`` console script.
-    """
+    """True if *argv* (a process's argument list) is a Preferences window:
+    ``<python> -m tuxtalk.prefs`` (talktype.prefs before the 0.15.0 rename,
+    which shares this pidfile) or the ``dictate-prefs`` console script, read
+    where an interpreter reads them (service_launcher.interpreter_target):
+    a pidfile left by a crashed Preferences can name a PID another program
+    has since, and FRONT's and CLOSE's default action ends a process."""
+    from .service_launcher import interpreter_target
     argv = list(argv)
-    for flag, module in zip(argv, argv[1:]):
-        # talktype.prefs: Preferences from before the 0.15.0 rename, which
-        # shares this pidfile.
-        if flag == "-m" and module in ("tuxtalk.prefs", "talktype.prefs"):
-            return True
-    if not argv:
-        return False
-    if os.path.basename(argv[0]) == "dictate-prefs":
+    if argv and os.path.basename(argv[0]) == "dictate-prefs":
         return True
-    return (len(argv) > 1 and os.path.basename(argv[0]).startswith("python")
-            and os.path.basename(argv[1]) == "dictate-prefs")
+    return interpreter_target(argv) in (("module", "tuxtalk.prefs"),
+                                        ("module", "talktype.prefs"),
+                                        ("script", "dictate-prefs"))
 
 
 def _process_argv(pid):
@@ -85,32 +82,41 @@ def is_prefs_pid(pid) -> bool:
         return False     # gone (or not ours to inspect): never signal it
 
 
-def running_pid():
-    """Pid of the open Preferences window, or None."""
+# Written after the PID by a Preferences that closes on CLOSE, asking about
+# changes not applied; one from before has no handler, and CLOSE ends it.
+_CAN_CLOSE = "close"
+
+
+def _read_pidfile():
+    """(pid, whether it closes on CLOSE) from the pidfile, or (None, False)."""
     try:
         with open(pidfile_path()) as f:
-            pid = int(f.read().strip() or "0")
-    except (OSError, ValueError):
-        return None
-    return pid if is_prefs_pid(pid) else None
+            words = f.read().split()
+        return int(words[0]), _CAN_CLOSE in words[1:]
+    except (OSError, ValueError, IndexError):
+        return None, False
+
+
+def running_pid():
+    """Pid of the open Preferences window, or None."""
+    pid, _can_close = _read_pidfile()
+    return pid if pid is not None and is_prefs_pid(pid) else None
 
 
 def claim_pidfile():
     """Write this process's pid as the open Preferences window's. Raises
     OSError when it can't be written."""
     with open(pidfile_path(), "w") as f:
-        f.write(str(os.getpid()))
+        f.write(f"{os.getpid()} {_CAN_CLOSE}")
 
 
 def release_pidfile():
     """Remove the pidfile if it names this process."""
-    try:
-        with open(pidfile_path()) as f:
-            pid = int(f.read().strip() or "0")
-        if pid == os.getpid():
+    if _read_pidfile()[0] == os.getpid():
+        try:
             os.remove(pidfile_path())
-    except (OSError, ValueError):
-        pass        # gone already, never written, or not ours to remove
+        except OSError:
+            pass        # gone already
 
 
 def bring_to_front(pid, tab=None):
@@ -134,19 +140,27 @@ def bring_to_front(pid, tab=None):
 def ask_to_close(wait_s) -> bool:
     """Ask the open Preferences window to close as its title bar's close
     does (it asks about changes not applied), and wait up to *wait_s* while
-    the user answers; True when none is open by then. Never this process's
-    own window. It sleeps: never on a GTK main thread."""
+    the user answers; True when none is open by then. False for one from
+    before CLOSE was handled (it would end without asking): the user closes
+    it. Never this process's own window. It sleeps: never on a GTK main
+    thread."""
     import time
-    pid = running_pid()
+    from .service_launcher import HeldProcess
+    pid, can_close = _read_pidfile()
     if pid is None or pid == os.getpid():
         return True
+    window = HeldProcess(pid)
     try:
-        os.kill(pid, CLOSE)
-    except OSError:
-        return True         # gone meanwhile
-    deadline = time.monotonic() + wait_s
-    while is_prefs_pid(pid):
-        if time.monotonic() >= deadline:
+        if not window.running() or not is_prefs_pid(pid):
+            return True
+        if not can_close:
             return False
-        time.sleep(0.2)
-    return True
+        window.send(CLOSE)
+        deadline = time.monotonic() + wait_s
+        while window.running():
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(0.2)
+        return True
+    finally:
+        window.close()

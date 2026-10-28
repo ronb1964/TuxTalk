@@ -435,6 +435,7 @@ class TrayParts(NamedTuple):
     stop: Callable          # refuse every action and start nothing (before the service goes)
     resume: Callable        # the uninstall didn't happen: as before
     shut_down: Callable     # its D-Bus service and KWin script, once the service has gone
+    preferences_open: Callable  # its Preferences still open (none told it to close)
 
 
 def _our_services():
@@ -826,15 +827,7 @@ def run(tray=None):
         # would: Preferences' restart takes it too, so neither starts or
         # removes a service under the other.
         _lock = None if tray else _wait_for(_hold_tray_lock)  # held until run() returns
-        if _lock is False:
-            _tell(Gtk.MessageType.ERROR, "TuxTalk couldn't uninstall",
-                  "Nothing was removed: TuxTalk is busy starting or restarting. Quit it "
-                  "from its menu, then try again.")
-            return False
-        if not _wait_for(_close_preferences):
-            _tell(Gtk.MessageType.INFO, "Uninstall stopped",
-                  "Nothing was removed: Preferences is still open. Close it, then try "
-                  "Uninstall TuxTalk… again.")
+        if not _clear_to_go(_lock, tray):
             return False
         if tray:
             tray.stop()
@@ -860,6 +853,22 @@ def run(tray=None):
     _tell(Gtk.MessageType.INFO if result.complete else Gtk.MessageType.WARNING,
           done_heading(result), done_text(plan, delete_personal, delete_shared, result),
           markup=True)
+    return True
+
+
+def _clear_to_go(lock, tray):
+    """Whether the uninstall may go ahead: the tray's lock had (*lock* not
+    False), and Preferences closed, its changes asked about. Says why not."""
+    if lock is False:
+        _tell(Gtk.MessageType.ERROR, "TuxTalk couldn't uninstall",
+              "Nothing was removed: TuxTalk is busy starting or restarting. Quit it "
+              "from its menu, then try again.")
+        return False
+    if not _wait_for(_close_preferences) or (tray and tray.preferences_open()):
+        _tell(Gtk.MessageType.INFO, "Uninstall stopped",
+              "Nothing was removed: Preferences is still open. Close it, then try "
+              "Uninstall TuxTalk… again.")
+        return False
     return True
 
 

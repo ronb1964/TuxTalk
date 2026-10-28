@@ -52,7 +52,7 @@ class Processes:
             def close(self):
                 pass
         monkeypatch.setattr(service_launcher, "find_service_pids", self.find)
-        monkeypatch.setattr(service_launcher, "_Process", Held)
+        monkeypatch.setattr(service_launcher, "HeldProcess", Held)
         monkeypatch.setattr(service_launcher, "is_service_pid", lambda pid: pid in self.pids)
         monkeypatch.setattr(service_launcher, "release_desktop_hotkeys", lambda: None)
         monkeypatch.setattr(service_launcher.time, "monotonic", lambda: self.now)
@@ -317,7 +317,9 @@ def test_uninstall_stops_the_tray_and_service_before_the_root_step(monkeypatch):
                         lambda: order.append("dictation back on"))
     tray = uninstall.TrayParts(stop=lambda: order.append("tray stops"),
                                resume=lambda: order.append("tray resumes"),
-                               shut_down=lambda: order.append("tray shuts down"))
+                               shut_down=lambda: order.append("tray shuts down"),
+                               preferences_open=lambda: False)
+    monkeypatch.setattr(uninstall, "_close_preferences", lambda: True)
     assert uninstall.run(tray) is False
     assert order == ["tray stops", "service ends", "root step", "tray resumes",
                      "dictation back on"]
@@ -380,7 +382,7 @@ def test_a_reused_pid_is_never_signalled_without_pidfds(monkeypatch):
                         lambda pid: (_ for _ in ()).throw(OSError(38, "no pidfds")))
     monkeypatch.setattr(service_launcher, "_start_time", lambda pid: starts.get(pid))
     monkeypatch.setattr(service_launcher.os, "kill", lambda pid, sig: sent.append(sig))
-    proc = service_launcher._Process(42)
+    proc = service_launcher.HeldProcess(42)
     proc.send(signal.SIGTERM)
     starts[42] = "2000"                     # gone, and the PID taken by another program
     proc.send(signal.SIGKILL)
@@ -559,28 +561,76 @@ def test_an_uninstall_removes_nothing_while_preferences_stays_open(monkeypatch):
     told = []
     uninstall = _uninstall_up_to_the_root_step(monkeypatch, told)
     monkeypatch.setattr(uninstall, "_hold_tray_lock", lambda: None)
-    monkeypatch.setattr("tuxtalk.prefs_ipc.ask_to_close", lambda wait_s: False)
+    monkeypatch.setattr("tuxtalk.prefs_ipc.ask_to_close", lambda wait_s: False)     # Keep Editing
     assert uninstall.run() is False and told == ["Uninstall stopped"]
 
 
-@pytest.mark.parametrize("closes,expected", [(True, True), (False, False)])
-def test_preferences_is_asked_to_close_and_waited_for(closes, expected, monkeypatch):
-    """A stand-in Preferences that ends on the close request, or one whose
-    user keeps editing (it ignores it)."""
-    from tuxtalk import prefs_ipc
-    code = ("import signal, time\n"
-            + ("" if closes else "signal.signal(signal.SIGUSR2, signal.SIG_IGN)\n")
+def _stand_in_preferences(on_close):
+    """A process standing in for a Preferences window: on CLOSE it ends
+    ("asks and closes"), ignores it ("keep editing") or has no handler at
+    all ("older", which CLOSE would end without asking)."""
+    handler = {"asks and closes": "signal.signal(signal.SIGUSR2, lambda *a: sys.exit(0))\n",
+               "keep editing": "signal.signal(signal.SIGUSR2, signal.SIG_IGN)\n",
+               "older": ""}[on_close]
+    code = ("import signal, sys, time\n" + handler
             + "print('ready', flush=True)\ntime.sleep(30)\n")
     window = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, text=True)
+    assert window.stdout.readline() == "ready\n"
+    return window
+
+
+@pytest.mark.parametrize("on_close,advertised,closed", [
+    ("asks and closes", True, True), ("keep editing", True, False), ("older", False, False)])
+def test_preferences_is_asked_to_close_and_waited_for(on_close, advertised, closed,
+                                                      tmp_path, monkeypatch):
+    """An older Preferences (no "close" in its pidfile) is never sent CLOSE,
+    which would end it with its changes: the uninstall stops instead."""
+    from tuxtalk import prefs_ipc
+    monkeypatch.setattr(single_instance, "runtime_dir", lambda: str(tmp_path))
+    window = _stand_in_preferences(on_close)
     try:
-        assert window.stdout.readline() == "ready\n"
-        monkeypatch.setattr(prefs_ipc, "running_pid", lambda: window.pid)
-        monkeypatch.setattr(prefs_ipc, "is_prefs_pid", lambda pid: window.poll() is None)
-        assert prefs_ipc.ask_to_close(wait_s=1) is expected
+        (tmp_path / "talktype-prefs.pid").write_text(
+            f"{window.pid} close" if advertised else str(window.pid))
+        monkeypatch.setattr(prefs_ipc, "is_prefs_pid", lambda pid: pid == window.pid)
+        assert prefs_ipc.ask_to_close(wait_s=1) is closed
+        assert (window.poll() is not None) is closed        # an older one is left running
     finally:
         window.kill()
         window.wait()
         window.stdout.close()
+
+
+def test_preferences_that_runs_the_uninstall_takes_no_edits_meanwhile(monkeypatch):
+    """With no tray, Preferences runs the uninstall itself; an edit made
+    while it waited for the password was thrown away at the end."""
+    from tuxtalk import control, uninstall
+    from tuxtalk.prefs_updates import UpdatesTab
+    states = []
+
+    class Window:
+        _busy = False
+
+        def _has_unapplied_changes(self):
+            return False
+
+        def busy(self):
+            import contextlib
+
+            @contextlib.contextmanager
+            def guard():
+                self._busy = True
+                yield
+                self._busy = False
+            return guard()
+
+        def on_cancel(self, _):
+            states.append("closed")
+    tab = UpdatesTab.__new__(UpdatesTab)
+    tab.win = Window()
+    monkeypatch.setattr(control, "open_in_running", lambda name: None)
+    monkeypatch.setattr(uninstall, "run", lambda: states.append(tab.win._busy) or True)
+    tab._on_uninstall_clicked(None)
+    assert states == [True, "closed"]
 
 
 def test_no_menu_window_opens_once_quit_has_begun():

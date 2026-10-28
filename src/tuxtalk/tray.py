@@ -988,7 +988,6 @@ class DictationTray(ServiceLifecycle):
         progress_dialog.set_position(Gtk.WindowPosition.CENTER)
         progress_dialog.set_keep_above(True)
         progress_dialog.show_all()
-
         result_holder = [None]
 
         def do_check():
@@ -1176,7 +1175,9 @@ class DictationTray(ServiceLifecycle):
         dialog.present()
 
     def _download_update(self, release):
-        """Download the update with progress dialog."""
+        """Download the update with progress dialog; nothing once Quit began."""
+        if self._quitting:
+            return
         from . import update_checker
 
         url = release.get("appimage_url")
@@ -1187,10 +1188,7 @@ class DictationTray(ServiceLifecycle):
                          "Could not find download URL.", keep_above=True)
             return
 
-        progress_dialog = Gtk.Dialog(
-            title="Downloading Update",
-            flags=Gtk.DialogFlags.MODAL
-        )
+        progress_dialog = Gtk.Dialog(title="Downloading Update", flags=Gtk.DialogFlags.MODAL)
         progress_dialog.set_default_size(400, 120)
         progress_dialog.set_position(Gtk.WindowPosition.CENTER)
         progress_dialog.set_keep_above(True)
@@ -1211,7 +1209,6 @@ class DictationTray(ServiceLifecycle):
         content.pack_start(progress_bar, False, False, 10)
 
         progress_dialog.show_all()
-
         result_holder = [None]
 
         def progress_callback(message, percent):
@@ -1283,9 +1280,11 @@ class DictationTray(ServiceLifecycle):
     def _download_and_install_package(self, release, install_type):
         """Download the correct .rpm/.deb and install it as root via pkexec,
         then offer to restart. Delegates to the shared update_ui flow."""
+        if self._quitting:
+            return
         from . import update_ui
-        update_ui.run_package_update(release, install_type,
-                                     restart_callback=self.restart_app)
+        update_ui.run_package_update(release, install_type, restart_callback=self.restart_app,
+                                     quitting=lambda: self._quitting)
 
     def auto_check_for_updates(self):
         """

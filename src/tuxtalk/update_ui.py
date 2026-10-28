@@ -26,14 +26,16 @@ def _set_margins(widget, value):
     widget.set_margin_bottom(value)
 
 
-def run_package_update(release, install_type, restart_callback=None):
+def run_package_update(release, install_type, restart_callback=None, quitting=lambda: False):
     """Download + pkexec-install the .rpm/.deb for `install_type`, then offer to
     restart. Shows its own progress and result dialogs. Call from the GTK thread.
 
     restart_callback: called when the user clicks "Restart Now". The tray passes
     its restart_app (clean detached relaunch + quit_app); Preferences passes
     restart_via_tray, which asks the tray to do the same. If None, the dialog
-    tells the user to reopen TuxTalk instead."""
+    tells the user to reopen TuxTalk instead. *quitting* says when TuxTalk
+    began quitting meanwhile: then nothing is installed after the download,
+    and no result is shown (an install already started finishes)."""
     url, filename = update_checker.get_package_asset(release, install_type)
     if not url:
         _error("This release has no package for your install type.\n"
@@ -72,6 +74,8 @@ def run_package_update(release, install_type, restart_callback=None):
 
     def finish(success, message):
         progress.destroy()
+        if quitting():
+            return
         if success:
             _installed_restart_prompt(restart_callback)
         else:
@@ -88,9 +92,12 @@ def run_package_update(release, install_type, restart_callback=None):
                 GLib.idle_add(lambda: finish(
                     False, f"{reason}.\n\nPlease try again or update from GitHub."))
                 return
-            GLib.idle_add(lambda: status.set_text(
-                "Waiting for your password to install…"))
-            ok, msg = update_checker.install_package_update(path, install_type)
+            if quitting():
+                ok, msg = False, "TuxTalk quit before the update was installed."
+            else:
+                GLib.idle_add(lambda: status.set_text(
+                    "Waiting for your password to install…"))
+                ok, msg = update_checker.install_package_update(path, install_type)
         except Exception as e:
             # The window refuses to close while this runs: without an
             # answer it would stay on screen until TuxTalk quit.
