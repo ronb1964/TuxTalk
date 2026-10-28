@@ -27,4 +27,4 @@ def test_the_light_or_full_question_names_large_v3_as_the_menus_do(monkeypatch):
     monkeypatch.setattr(vsd, "message_dialog", lambda **kw: Dialog(**kw))
     assert vsd.choose_light_or_full(None, "large-v3") is None
     assert said[0] == "Whisper Large-v3 needs your graphics card"
-    assert "Large-V3" not in said[1] and "Whisper Large-v3 in its" in said[1]
+    assert "Large-V3" not in said[1] and "Whisper Large-v3 in its format" in said[1]

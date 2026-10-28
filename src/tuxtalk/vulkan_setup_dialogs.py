@@ -36,8 +36,9 @@ def choose_light_or_full(parent, model):
                                text=f"{name} needs your graphics card")
     dialog.format_secondary_text(
         "There are two ways to set it up:\n\n"
-        f"  • Light (Vulkan): a {wv.ENGINE_SIZE_TEXT} graphics engine plus {name} in its\n"
-        f"    format ({vulkan_size}). About as fast as CUDA in our tests.\n\n"
+        f"  • Light (Vulkan): a {wv.ENGINE_SIZE_TEXT} graphics engine plus\n"
+        f"    {name} in its format ({vulkan_size}).\n"
+        "    About as fast as CUDA in our tests.\n\n"
         "  • Full (CUDA): NVIDIA's CUDA libraries (1.4 GB) plus the model.\n"
         "    TuxTalk's long-standing NVIDIA setup.\n\n"
         "Either is a one-time download.")

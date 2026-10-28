@@ -4,6 +4,8 @@ Per-band background subtraction: each band learns its own quiet baseline and
 shows only energy above it, so a steady tone (AC hum, mic DC offset) fades to
 nothing while speech transients pop. Pure numpy — tested without a display.
 """
+import types
+
 import numpy as np
 
 from tuxtalk.indicator_dsp import SpectrumProcessor
@@ -110,6 +112,7 @@ def test_a_48_khz_microphone_lights_the_same_bar_as_16_khz(monkeypatch):
         def start(self):
             pass
     monkeypatch.setattr(recording.sd, "InputStream", Stream)
+    monkeypatch.setattr(recording.sd, "default", types.SimpleNamespace())   # set by the opening
     monkeypatch.setattr(rs.state, "stream", None)
     recording.open_input_stream(None)
 

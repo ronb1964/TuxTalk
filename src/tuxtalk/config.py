@@ -1093,7 +1093,8 @@ def _text_snippets(table) -> dict[str, str]:
         if isinstance(text, str):
             snippets[phrase] = text
         else:
-            logger.warning("A snippet in custom_commands.toml isn't text; it's left out")
+            logger.warning("A snippet in custom_commands.toml isn't text; it's left out, and "
+                           "goes from the file the next time snippets are saved")
     return snippets
 
 
