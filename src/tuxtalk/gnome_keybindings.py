@@ -90,8 +90,11 @@ def disable_for_hotkey_test():
     if not _on_gnome():
         return None
     # A backup left by a run that died holds the real values; reading the
-    # bindings now would only find the cleared ones.
-    restore_left_over()
+    # bindings now would only find the cleared ones, and saving those over
+    # the backup would lose the real ones for good.
+    if not restore_left_over():
+        logger.warning("Not clearing GNOME keybindings: earlier ones aren't back yet")
+        return None
     try:
         saved = {key: subprocess.check_output(["gsettings", "get", SCHEMA, key],
                                               text=True, timeout=5).strip()

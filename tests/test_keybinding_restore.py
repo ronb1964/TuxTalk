@@ -77,6 +77,20 @@ def test_a_second_test_after_a_crash_keeps_the_real_values(gnome):
     assert saved["begin-resize"] == "['<Alt>F8']"
 
 
+def test_a_restore_that_failed_again_keeps_the_real_values(gnome):
+    """A left-over backup that can't be put back yet: reading the bindings
+    then finds them cleared, and saving that over the backup lost Alt+F8 and
+    Alt+F7 for good. The test leaves them alone instead."""
+    G.disable_for_hotkey_test()                 # a test that never gave them back
+    gnome.fail_keys = {"begin-move"}             # and the next restore fails
+    assert G.disable_for_hotkey_test() is None
+    assert json.loads(gnome.backup.read_text()) == {
+        "begin-resize": "['<Alt>F8']", "begin-move": "['<Alt>F7']"}
+    gnome.fail_keys = set()
+    assert G.restore_left_over()
+    assert gnome.values == {"begin-resize": "['<Alt>F8']", "begin-move": "['<Alt>F7']"}
+
+
 def test_restore_still_tries_the_second_binding_if_the_first_fails(gnome):
     saved = G.disable_for_hotkey_test()
     gnome.fail_keys = {"begin-resize"}
