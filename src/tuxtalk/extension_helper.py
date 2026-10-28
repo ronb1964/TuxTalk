@@ -113,6 +113,17 @@ def get_extension_status() -> dict:
     }
 
 
+def _alive(pid) -> bool:
+    """Whether process *pid* is running."""
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
 def _swap_in(source_dir, target_dir):
     """Put a copy of *source_dir* at *target_dir*, the old one going only
     once the new one is in its place: removed first, a copy that failed
@@ -126,8 +137,12 @@ def _swap_in(source_dir, target_dir):
     staging = os.path.join(ext_dir, f".{EXTENSION_UUID}.new-{os.getpid()}")
     if not os.path.exists(target) and os.path.exists(old):
         os.rename(old, target)          # an install cut off between the renames
-    for leftover in glob.glob(os.path.join(ext_dir, f".{EXTENSION_UUID}.new-*")) + [old]:
-        shutil.rmtree(leftover, ignore_errors=True)
+    # Only what an install that's gone left: another one running now (two
+    # windows installing at once) is still using its folder.
+    for leftover in glob.glob(os.path.join(ext_dir, f".{EXTENSION_UUID}.new-*")):
+        if not _alive(int(leftover.rsplit("-", 1)[1])):
+            shutil.rmtree(leftover, ignore_errors=True)
+    shutil.rmtree(old, ignore_errors=True)
     try:
         shutil.copytree(source_dir, staging)
         if os.path.exists(target):
@@ -392,11 +407,11 @@ def uninstall_extension() -> bool:
         if os.path.exists(target_dir):
             # First, disable the extension (removes from gsettings)
             try:
-                subprocess.run(
+                done = subprocess.run(
                     ['gnome-extensions', 'disable', EXTENSION_UUID],
-                    capture_output=True,
-                    timeout=10
-                )
+                    capture_output=True, text=True, timeout=10)
+                if done.returncode:
+                    logger.info(f"gnome-extensions disable said: {done.stderr.strip()}")
             except (OSError, subprocess.SubprocessError) as e:
                 # A shell that never loaded it doesn't know it; forgetting it
                 # below covers that.

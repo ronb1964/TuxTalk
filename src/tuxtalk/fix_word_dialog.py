@@ -366,9 +366,10 @@ def fix_in_text(typed, fix, window, where=None):
     be at the end of the dictation, steps back to the words and selects
     them; only if the app's selection reads back as those words
     (_selection_now) is the replacement typed and the cursor stepped forward
-    again, nothing else retyped. Every key goes only into *window* (its
-    class) and, where the desktop says, *where* (its id, focused_window.look's),
-    checked right before it goes down. Never in a terminal, where Shift+Left
+    again, nothing else retyped. The keys go only into *window* (its class)
+    and, where the desktop says, *where* (its id, focused_window.look's),
+    checked right before each batch of them goes down (the keys of one
+    word go out in milliseconds). Never in a terminal, where Shift+Left
     selects nothing, nor a password field. True if done."""
     from . import keyboard_output, virtual_keyboard
     start, end, replacement = fix

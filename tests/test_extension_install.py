@@ -85,3 +85,16 @@ def test_a_linked_extensions_folder_is_staged_where_it_really_is(tmp_path, exten
     monkeypatch.setattr(eh.os, "rename", lambda a, b: renames.append((a, b)) or rename(a, b))
     assert eh.install_extension_from_local(str(source), auto_enable=False)
     assert all(os.path.dirname(a) == str(real) for a, b in renames)
+
+
+def test_another_install_s_staging_folder_is_left_alone(extensions):
+    """Two installs at once (Preferences and first run): each cleared every
+    staging folder, so one removed the other's, which then failed with the
+    extension already moved aside."""
+    ext_dir, source = extensions
+    running = ext_dir / f".{eh.EXTENSION_UUID}.new-{os.getppid()}"     # a process still alive
+    gone = ext_dir / f".{eh.EXTENSION_UUID}.new-999999999"
+    for folder in (running, gone):
+        folder.mkdir(parents=True)
+    assert eh.install_extension_from_local(str(source), auto_enable=False)
+    assert running.exists() and not gone.exists()

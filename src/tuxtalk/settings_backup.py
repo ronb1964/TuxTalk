@@ -142,6 +142,7 @@ def is_ours(name):
 
 
 def _read_bytes(path):
+    """*path*'s bytes, or None when there's no such file."""
     try:
         with open(path, "rb") as f:
             return f.read()
@@ -349,7 +350,7 @@ def _write_all_or_none(writes):
     file couldn't be put back either. Every original is read first, as it
     is, so one that can't be read changes nothing."""
     try:
-        before = {path: _read_or_none(path) for path, _ in writes}
+        before = {path: _read_bytes(path) for path, _ in writes}
     except OSError as e:
         raise BackupError("Your current settings couldn't be read, so nothing was "
                           f"changed ({e}).") from e
@@ -367,15 +368,6 @@ def _write_all_or_none(writes):
                 "settings: restore it once there's room.") from e
         raise BackupError("The backup couldn't be loaded, so your settings are as they "
                           f"were ({e}).") from e
-
-
-def _read_or_none(path):
-    """*path*'s bytes, or None when there's no such file."""
-    try:
-        with open(path, "rb") as f:
-            return f.read()
-    except FileNotFoundError:
-        return None
 
 
 def _put_back(path, old) -> bool:

@@ -1,7 +1,7 @@
 {
  "files": {
   "tray.py": 2363,
-  "welcome_dialog.py": 3153
+  "welcome_dialog.py": 3097
  },
  "findings": {
   "ai_cleanup.py::<module>::long_line": 4,
@@ -274,7 +274,6 @@
   "welcome_dialog.py::WelcomeDialog._build_typing_setup_section::long_line": 1,
   "welcome_dialog.py::WelcomeDialog._finish_install_portaudio::long_line": 1,
   "welcome_dialog.py::WelcomeDialog._refresh_recommendation::long_line": 1,
-  "welcome_dialog.py::WelcomeDialog._report_fix_typing::dated_comment": 1,
   "welcome_dialog.py::WelcomeDialog._run_in_background.runner::swallowed_error": 1,
   "welcome_dialog.py::_apply_first_run_setup::long_line": 3,
   "welcome_dialog.py::_download_vulkan_model_first_run::long_line": 1,
@@ -286,7 +285,6 @@
   "welcome_dialog.py::show_hotkey_test_dialog.evdev_key_reader::swallowed_error": 2,
   "welcome_dialog.py::show_hotkey_test_dialog::long_line": 1,
   "welcome_dialog.py::show_setup_complete_dialog.on_restart_now::undocumented": 1,
-  "welcome_dialog.py::show_setup_complete_dialog::dated_comment": 1,
   "welcome_dialog.py::show_setup_complete_dialog::long_line": 1,
   "welcome_dialog.py::show_welcome_dialog.show_dialog_after_splash::swallowed_error": 1,
   "whisper_vulkan.py::VulkanWhisperModel.__init__::undocumented": 1,
@@ -476,10 +474,6 @@
   "welcome_dialog.py::show_setup_complete_dialog": {
    "decisions": 19,
    "lines": 306
-  },
-  "welcome_dialog.py::show_welcome_and_install": {
-   "decisions": 19,
-   "lines": 145
   },
   "x11_hotkeys.py::claim": {
    "decisions": 16

@@ -1,7 +1,8 @@
-"""First run's copy of the AppImage into ~/AppImages, in the background (it's
-300 MB and more, and the Ready screen shows meanwhile), and Setup Complete's
-"Restart computer now", which waits for it: a reboot mid-copy leaves the menu
-launcher and autostart pointing at a copy that never arrived."""
+"""First run putting TuxTalk in place: the AppImage copied into ~/AppImages
+in the background (it's 300 MB and more, and the Ready screen shows
+meanwhile), the menu launcher and start at login; and Setup Complete's
+"Restart computer now", which waits for the copy: a reboot mid-copy leaves
+the menu launcher and autostart pointing at a copy that never arrived."""
 import threading
 import time
 
@@ -16,6 +17,55 @@ logger = setup_logger(__name__)
 WAIT_S = 120.0
 
 _thread = None
+
+
+def put_in_place():
+    """First run, from an AppImage: the menu launcher, start at login (on
+    for new users: a dictation tool is only useful when it's already
+    running), and the copy into ~/AppImages, which both point at. Returns
+    whether TuxTalk is (or will be) in ~/AppImages and whether a launcher
+    was made, for the Ready screen."""
+    from .update_checker import (create_desktop_launcher, desktop_launcher_exists,
+                                 ensure_appimage_in_standard_location, is_running_from_appimage)
+    installed = launcher_created = False
+    copy_from = None
+    try:
+        if is_running_from_appimage():
+            installed, current_path = ensure_appimage_in_standard_location()
+            if not installed and current_path:
+                copy_from, installed = current_path, True       # it will be, once copied
+            if not desktop_launcher_exists():
+                launcher_created, msg = create_desktop_launcher()
+                logger.info("Desktop launcher created" if launcher_created
+                            else f"Could not create the desktop launcher: {msg}")
+    except Exception as e:
+        logger.warning(f"Could not set up AppImage/launcher: {e}")
+    _start_at_login(installed)
+    if copy_from:
+        # Not before: a copy that fails at once (no room) points autostart
+        # back at the running AppImage, and written after that, autostart
+        # pointed at a copy that never arrived.
+        start(copy_from)
+    return installed, launcher_created
+
+
+def _start_at_login(installed) -> None:
+    """Turn on launch at login, pointing at the copy in ~/AppImages when
+    *installed*, not at the file running (usually in Downloads). Recorded
+    as on only if its file was written, or the Ready screen would promise
+    a start that never happens."""
+    from . import autostart
+    from .config import load_config, save_config
+    try:
+        if not autostart.set_autostart(True, prefer_installed_appimage=installed):
+            logger.warning("Autostart file could not be written; leaving launch-at-login off")
+            return
+        cfg = load_config()
+        if not getattr(cfg, "launch_at_login", False):
+            cfg.launch_at_login = True
+            save_config(cfg)
+    except Exception as e:
+        logger.warning(f"Could not enable launch-at-login during onboarding: {e}")
 
 
 def start(current_path) -> None:

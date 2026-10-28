@@ -1404,8 +1404,7 @@ class WelcomeDialog:
         if self.uinput_fixed:
             button.set_label("✅ Fixed!")
             button.set_sensitive(False)  # Disable - no more action needed
-            # The status line above the button still said "needed" after the fix
-            # worked (Silverblue VM, 2026-10-16).
+            # Or the status line above the button still says "needed".
             label = getattr(self, "_uinput_status_label", None)
             if label is not None:
                 label.set_markup("✅ Input device permissions OK")
@@ -2714,39 +2713,8 @@ def show_welcome_and_install():
     if "model" in result:
         _apply_first_run_setup(result)
 
-    # Install AppImage to standard location and create desktop launcher (if running from AppImage).
-    # The AppImage copy is 300MB+ so we run it in a background thread to avoid freezing the UI.
-    # The "Ready!" screen shows immediately — the copy finishes silently in the background.
-    appimage_installed = False
-    launcher_created = False
-    try:
-        from tuxtalk import appimage_copy
-        from tuxtalk.update_checker import (
-            is_running_from_appimage,
-            ensure_appimage_in_standard_location,
-            create_desktop_launcher,
-            desktop_launcher_exists,
-        )
-
-        if is_running_from_appimage():
-            already_there, current_path = ensure_appimage_in_standard_location()
-
-            if not already_there and current_path:
-                appimage_copy.start(current_path)
-                appimage_installed = True  # Optimistically mark as installed for the Ready screen
-            else:
-                appimage_installed = already_there
-
-            # Create desktop launcher synchronously — it's just writing a small text file
-            if not desktop_launcher_exists():
-                success, msg = create_desktop_launcher()
-                if success:
-                    launcher_created = True
-                    logger.info("Desktop launcher created")
-                else:
-                    logger.warning(f"Could not create the desktop launcher: {msg}")
-    except Exception as e:
-        logger.warning(f"Could not set up AppImage/launcher: {e}")
+    from tuxtalk import appimage_copy
+    appimage_installed, launcher_created = appimage_copy.put_in_place()
 
     # Show final "Ready to Go!" screen after successful model download.
     # needs_restart carries the deferred restart reminder here: if the user fixed
@@ -2754,30 +2722,6 @@ def show_welcome_and_install():
     # until a reboot, so the final screen offers "Restart computer now" instead of an
     # interrupting popup earlier in the flow.
     needs_restart = bool(result.get('needs_restart', result.get('uinput_fixed')))
-
-    # Turn on launch-at-login by default for new users. A dictation tool is only
-    # useful when it's already running, and a fresh install almost always reboots
-    # once (for the input-group permission), so this is what makes TuxTalk simply
-    # "be there" afterwards instead of the user hunting for it in the app menu.
-    # The Ready screen tells them it's on and that it's toggleable in Preferences.
-    try:
-        from tuxtalk import autostart
-        from tuxtalk.config import load_config, save_config
-        # Only record autostart as enabled in config if the .desktop file was
-        # actually written — otherwise config and reality disagree, and the Ready
-        # screen would promise a startup that never happens.
-        # Point autostart at the installed copy setup is copying into
-        # ~/AppImages, not at the file that happens to be running (usually the
-        # one in Downloads).
-        if autostart.set_autostart(True, prefer_installed_appimage=appimage_installed):
-            cfg = load_config()
-            if not getattr(cfg, 'launch_at_login', False):
-                cfg.launch_at_login = True
-                save_config(cfg)
-        else:
-            logger.warning("Autostart file could not be written; leaving launch-at-login off")
-    except Exception as e:
-        logger.warning(f"Could not enable launch-at-login during onboarding: {e}")
 
     show_setup_complete_dialog(
         appimage_installed=appimage_installed,
@@ -3136,7 +3080,7 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
     content.pack_start(button_box, False, False, 0)
     # Left to GTK, the focus went to the Discussions link in the scrolling
     # part, and on a short screen the window opened scrolled down to it with
-    # "Setup Complete!" cut off (Pop!_OS VM, 2026-10-21), as Welcome did.
+    # "Setup Complete!" cut off, as Welcome did.
     dialog.set_focus(main_button)
 
     dialog.show_all()

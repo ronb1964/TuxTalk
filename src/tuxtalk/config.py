@@ -626,7 +626,7 @@ def _toml_string(value: str) -> str:
     return '"' + "".join(out) + '"'
 
 
-def write_text_atomic(path: str, text: str, keep_backup: bool = True) -> None:
+def write_text_atomic(path: str, text: str | bytes, keep_backup: bool = True) -> None:
     """Replace *path* with *text* without ever leaving it half-written.
 
     Writing in place would leave an empty file after an interruption (most

@@ -212,6 +212,14 @@ def test_first_run_copy_thread_is_not_a_daemon(first_run):
     assert appimage_copy._thread is copies[0]
 
 
+
+def test_first_run_writes_start_at_login_before_the_copy_begins(first_run):
+    """A copy that failed at once (no room) pointed start-at-login back at
+    the running AppImage, and first run, writing it afterwards, pointed it
+    at the copy that never arrived."""
+    steps = [step if isinstance(step, str) else step[0] for step in first_run()]
+    assert steps.index("starts at login") < steps.index("copies the AppImage")
+
 def test_the_restart_button_waits_for_the_first_run_copy(monkeypatch):
     """Setup Complete's Restart computer now goes through the wait above."""
     import gi
