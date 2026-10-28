@@ -344,3 +344,17 @@ def test_a_paste_waits_for_a_restore_that_is_under_way(keeper, board, monkeypatc
     paste(keeper, board, "dictated words")
     run_pending(keeper)
     assert held == [True] and board.data == b"what I copied"
+
+
+def test_an_x11_copy_that_timed_out_never_lands_later(monkeypatch):
+    """After the wait gives up, nothing was pasted; the copy still queued
+    on a stalled GTK loop must not put that dictation on the clipboard
+    when the loop catches up."""
+    from gi.repository import GLib
+    copied = []
+    monkeypatch.setattr(cb, "copy_text", lambda text: copied.append(text) or True)
+    assert cb.copy_text_on_gtk_thread("never pasted", timeout=0.05) is False
+    context = GLib.MainContext.default()
+    while context.iteration(False):
+        pass
+    assert copied == []
