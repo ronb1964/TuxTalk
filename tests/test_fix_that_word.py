@@ -84,6 +84,18 @@ def test_right_after_a_dictation_it_can_fix_the_text(opened, typed, monkeypatch)
     assert rs.state.last_inserted_text == ""                     # undo can't trust it now
 
 
+def test_a_window_that_cannot_start_leaves_no_copy_of_the_dictation(typed, monkeypatch):
+    """The dictation was written for the window to read and delete; with no
+    window, it would sit in the runtime folder until logout."""
+    monkeypatch.setattr(explain, "start_helper_window",
+                        lambda *a: (_ for _ in ()).throw(OSError("no python")))
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a: None)
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, msg: None)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
+    assert voice_commands.handle_fix_word("fix that word", False) is True
+    assert not (typed / "tuxtalk-fix-word.json").exists()
+
+
 def test_fix_a_word_gets_the_window_the_dictation_went_to(opened, typed, monkeypatch):
     import json
     from tuxtalk import fix_word_dialog as fw

@@ -180,6 +180,12 @@ def handle_fix_word(raw: str, beeps_on: bool) -> bool:
         beeps.beep(beeps_on, *READY_BEEP)
     except Exception as e:
         logger.warning(f"Could not open Fix a Word: {e}")
+        if args:
+            # No window will read the dictation and delete it.
+            try:
+                os.remove(args[1])
+            except OSError as err:
+                logger.info(f"Couldn't remove Fix a Word's copy of the dictation: {err}")
         beeps.beep(beeps_on, *CANCEL_BEEP)
         notify_module.notify("Fix a Word didn't open", "Choose it in the TuxTalk menu instead.")
     return True
