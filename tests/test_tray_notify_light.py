@@ -33,6 +33,8 @@ SCRIPT = textwrap.dedent("""
         _updating_preset=False, _current_presets=lambda: [lightest],
         _get_current_preset=lambda: "recommended", update_menu_display=lambda: None,
         _emit_model_changed=lambda model: None, restart_service=lambda _: None)
+    for name in ("_apply_preset", "_preset_files", "_save_preset"):
+        setattr(t, name, getattr(tray.DictationTray, name).__get__(t))
     tray.DictationTray.set_performance_preset(t, "lightest")
 
     assert shown and shown[0].startswith("Performance: Lightest"), shown

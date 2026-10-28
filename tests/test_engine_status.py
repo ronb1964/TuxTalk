@@ -10,7 +10,7 @@ import pytest
 
 from tuxtalk.dbus_service import TuxTalkDBusService
 from tuxtalk.recommend import engine_status
-from tuxtalk.tray import preset_notice
+from tuxtalk.tray_presets import preset_notice
 from tuxtalk import tray_link
 from tuxtalk import engine
 
