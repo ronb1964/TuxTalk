@@ -4,12 +4,16 @@ Dictations are always marked sensitive, so clipboard managers such as Klipper
 don't save them to their history, and with "Restore clipboard after pasting"
 on, whatever the user had copied comes back after the paste.
 """
+import subprocess
+
 import pytest
 
 from tuxtalk import clipboard as cb
 from tuxtalk import config as C
 from tuxtalk import live_settings as live
 from tuxtalk import keyboard_output
+
+_REAL_PRIMARY_TO_KEEP = cb._primary_to_keep
 
 
 class FakeClipboard:
@@ -89,6 +93,16 @@ def test_two_quick_dictations_restore_the_original_not_the_first(keeper, board):
     assert board.data == b"what I copied" and len(board.restores) == 1
 
 
+def test_something_copied_between_two_quick_dictations_is_what_comes_back(keeper, board):
+    """Copied while the first dictation's restore was pending, it's the
+    user's newest clipboard; the copy saved before the first is older."""
+    paste(keeper, board, "first")
+    board.data = b"copied in between"
+    paste(keeper, board, "second")
+    run_pending(keeper)
+    assert board.data == b"copied in between"
+
+
 def test_an_empty_clipboard_stays_empty(keeper, board):
     board.data = None
     paste(keeper, board, "dictated words")
@@ -127,6 +141,7 @@ def primary(monkeypatch):
         sel["text"] = text
         sel["writes"].append(text)
     monkeypatch.setattr(cb, "read_primary", lambda: sel["text"])
+    monkeypatch.setattr(cb, "_primary_to_keep", lambda: sel["text"])
     monkeypatch.setattr(cb, "_wl_copy_primary", write)
     return sel
 
@@ -170,6 +185,20 @@ def test_an_empty_primary_selection_is_cleared_again(keeper, board, primary):
     paste_with_primary(keeper, board, primary, "dictated words")
     run_pending(keeper)
     assert primary["writes"] == [None]
+
+
+def test_a_highlight_that_could_not_be_read_is_not_cleared(keeper, board, primary,
+                                                            monkeypatch):
+    """A wl-paste that times out isn't an empty selection: clearing it
+    after the paste would lose what the user had highlighted."""
+    def wl_paste_hangs(cmd, **kwargs):
+        raise subprocess.TimeoutExpired(cmd, 1)
+    monkeypatch.setattr(cb, "_primary_to_keep", _REAL_PRIMARY_TO_KEEP)
+    monkeypatch.setattr(cb.subprocess, "run", wl_paste_hangs)
+    paste_with_primary(keeper, board, primary, "dictated words")
+    paste_with_primary(keeper, board, primary, "more words")
+    run_pending(keeper)
+    assert primary["writes"] == []
 
 
 def test_the_primary_comes_back_even_when_the_clipboard_cannot(keeper, board, primary,
