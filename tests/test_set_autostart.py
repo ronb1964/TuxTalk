@@ -43,3 +43,23 @@ def test_enable_creates_missing_directory(desktop):
     assert not desktop.parent.exists()
     assert autostart.set_autostart(True) is True
     assert desktop.exists()
+
+
+def test_an_appimage_entry_gets_tuxtalks_icon_not_a_microphone(tmp_path, monkeypatch):
+    """The AppImage's own files vanish when it exits, so an entry naming them
+    (or none, the microphone) has no TuxTalk icon at login; first run puts
+    TuxTalk's icon in the user's icon folder, which the entry can name."""
+    home = tmp_path / "home"
+    icon = home / ".local/share/icons/hicolor/256x256/apps/tuxtalk.png"
+    icon.parent.mkdir(parents=True)
+    icon.write_bytes(b"png")
+    mount = tmp_path / ".mount_TuxTalkAb12"           # the running AppImage's files
+    (mount / "AppDir").mkdir(parents=True)
+    (mount / "AppDir/io.github.ronb1964.TuxTalk.svg").write_text("<svg/>")
+    monkeypatch.setattr(autostart, "_project_root", lambda: str(mount))
+    monkeypatch.setattr(autostart.sys, "executable", str(mount / "usr/bin/python3"))
+    monkeypatch.setattr(autostart.os.path, "expanduser", lambda p: p.replace("~", str(home), 1))
+    real_isfile = autostart.os.path.isfile
+    monkeypatch.setattr(autostart.os.path, "isfile",      # no system-wide icon here
+                        lambda p: not p.startswith("/usr/") and real_isfile(p))
+    assert autostart.get_icon_path() == "tuxtalk"

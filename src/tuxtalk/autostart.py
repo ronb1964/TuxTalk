@@ -131,8 +131,15 @@ def get_icon_path() -> str:
         '/usr/local/share/icons/hicolor/scalable/apps/io.github.ronb1964.TuxTalk.svg',
     ]
     for path in candidates:
-        if os.path.isfile(path):
+        # Not a running AppImage's mount: it's gone once the AppImage exits,
+        # and the entry would name an icon that isn't there at login.
+        if os.path.isfile(path) and "/.mount_" not in os.path.abspath(path):
             return os.path.abspath(path)
+    # First run puts the icon in the user's icon folder instead
+    # (update_checker._install_app_icon).
+    if os.path.isfile(os.path.expanduser(
+            "~/.local/share/icons/hicolor/256x256/apps/tuxtalk.png")):
+        return "tuxtalk"
     return 'audio-input-microphone'
 
 
