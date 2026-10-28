@@ -463,6 +463,48 @@ def test_a_restore_that_fails_partway_puts_the_settings_back(home, monkeypatch):
     assert read(config.CONFIG_PATH) == 'hotkey = "F9"\n'
     assert read(config.CUSTOM_COMMANDS_PATH) == COMMANDS_TEXT
 
+
+def test_a_file_that_cant_be_put_back_is_said_and_points_at_the_copy(home, monkeypatch):
+    """The disk still full, the first file couldn't be put back either: it
+    said the settings were as they were."""
+    dest = home / "b.zip"
+    sb.write_backup(str(dest))
+    backup = sb.read_backup(str(dest))
+    backup.files["custom_commands.toml"] = b"# the backup's commands\n"
+    write = config.write_text_atomic
+    full = {"on": False}
+
+    def disk(path, text, **kw):
+        if full["on"]:
+            raise OSError(28, "No space left on device")
+        write(path, text, **kw)
+        full["on"] = True                       # full from the second write on
+    monkeypatch.setattr(config, "write_text_atomic", disk)
+    with pytest.raises(sb.BackupError, match="couldn't be put back either.*Earlier settings"):
+        sb.restore(backup)
+
+
+def test_an_original_that_cant_be_read_changes_nothing(home, monkeypatch):
+    """Read one by one between the writes, a file that couldn't be read
+    skipped putting back the one already written."""
+    dest = home / "b.zip"
+    sb.write_backup(str(dest))
+    backup = sb.read_backup(str(dest))
+    with open(config.CONFIG_PATH, "w") as f:
+        f.write('hotkey = "F9"\n')
+    real_open = open
+    monkeypatch.setattr(sb, "_snapshot", lambda: None)     # the copy before is made
+
+    def unreadable_commands(path, mode="r", *a, **k):
+        if path == config.CUSTOM_COMMANDS_PATH and "w" not in mode:
+            raise PermissionError(13, "Permission denied")
+        return real_open(path, mode, *a, **k)
+    monkeypatch.setattr("builtins.open", unreadable_commands)
+    with pytest.raises(sb.BackupError, match="nothing was changed"):
+        sb.restore(backup)
+    monkeypatch.setattr("builtins.open", real_open)
+    assert read(config.CONFIG_PATH) == 'hotkey = "F9"\n'
+
 @pytest.mark.parametrize("problem", [sb.BackupError("This isn't a TuxTalk backup."),
                                      OSError(28, "No space left on device")])
 def test_preferences_shows_a_refused_restore_as_a_message(prefs_window, monkeypatch, problem):

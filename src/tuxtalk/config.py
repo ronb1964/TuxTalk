@@ -648,7 +648,9 @@ def write_text_atomic(path: str, text: str, keep_backup: bool = True) -> None:
     # the rename with FileNotFoundError.
     fd, tmp_path = tempfile.mkstemp(dir=directory, prefix=os.path.basename(path) + ".", suffix=".tmp")
     try:
-        with os.fdopen(fd, "w") as f:
+        # Bytes as they are: a file put back after a failed restore
+        # (settings_backup) needn't be valid UTF-8.
+        with os.fdopen(fd, "wb" if isinstance(text, bytes) else "w") as f:
             f.write(text)
             f.flush()
             os.fsync(f.fileno())

@@ -345,37 +345,51 @@ def _merge_stats(data, notes):
 def _write_all_or_none(writes):
     """Write each (path, text) of *writes*; if one fails (a full disk), put
     back the ones already written, so the settings are never half the
-    backup's and half the old ones, and raise BackupError."""
-    before = []
+    backup's and half the old ones, and raise BackupError, saying so when a
+    file couldn't be put back either. Every original is read first, as it
+    is, so one that can't be read changes nothing."""
+    try:
+        before = {path: _read_or_none(path) for path, _ in writes}
+    except OSError as e:
+        raise BackupError("Your current settings couldn't be read, so nothing was "
+                          f"changed ({e}).") from e
+    written = []
     try:
         for path, text in writes:
-            before.append((path, _read_text_or_none(path)))
             config.write_text_atomic(path, text)
+            written.append(path)
     except OSError as e:
-        for path, old in reversed(before[:-1]):
-            _put_back(path, old)
+        stuck = [path for path in reversed(written) if not _put_back(path, before[path])]
+        if stuck:
+            raise BackupError(
+                f"The backup couldn't be loaded ({e}), and {len(stuck)} of your settings files "
+                "couldn't be put back either. The copy saved just before is under Earlier "
+                "settings: restore it once there's room.") from e
         raise BackupError("The backup couldn't be loaded, so your settings are as they "
                           f"were ({e}).") from e
 
 
-def _read_text_or_none(path):
-    """*path*'s text, or None when there's no such file."""
+def _read_or_none(path):
+    """*path*'s bytes, or None when there's no such file."""
     try:
-        with open(path, encoding="utf-8") as f:
+        with open(path, "rb") as f:
             return f.read()
     except FileNotFoundError:
         return None
 
 
-def _put_back(path, old):
-    """Undo one write of _write_all_or_none: *old* text, or no file."""
+def _put_back(path, old) -> bool:
+    """Undo one write of _write_all_or_none: *old* bytes, or no file. True
+    when it was put back."""
     try:
         if old is None:
             os.remove(path)
         else:
             config.write_text_atomic(path, old)
+        return True
     except OSError as e:
         logger.error(f"Couldn't put {path} back after a failed restore: {e}")
+        return False
 
 
 def restore(backup):
