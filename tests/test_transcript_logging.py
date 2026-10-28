@@ -389,6 +389,7 @@ def _engine(kind, monkeypatch):
         engine = ParakeetGpuModel.__new__(ParakeetGpuModel)
         engine._lock, engine._cpu, engine._proc = threading.Lock(), None, running
         engine._words = engine._sent_words = ()
+        engine._write = lambda data, timeout: None
         engine._read_reply = lambda timeout: {"text": heard}
     elif kind == "whisper on vulkan":
         engine = whisper_vulkan.VulkanWhisperModel.__new__(
