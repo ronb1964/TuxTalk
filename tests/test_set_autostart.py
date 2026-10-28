@@ -63,3 +63,24 @@ def test_an_appimage_entry_gets_tuxtalks_icon_not_a_microphone(tmp_path, monkeyp
     monkeypatch.setattr(autostart.os.path, "isfile",      # no system-wide icon here
                         lambda p: not p.startswith("/usr/") and real_isfile(p))
     assert autostart.get_icon_path() == "tuxtalk"
+
+
+def test_an_extracted_appimage_s_own_icon_isnt_named_either(tmp_path, monkeypatch):
+    """Run with extract-and-run, the AppImage's files are in a folder that's
+    deleted at exit: only /.mount_ was skipped."""
+    home = tmp_path / "home"
+    icon = home / ".local/share/icons/hicolor/256x256/apps/tuxtalk.png"
+    icon.parent.mkdir(parents=True)
+    icon.write_bytes(b"png")
+    extracted = tmp_path / "appimage_extracted_ab12" / "squashfs-root"
+    (extracted / "AppDir").mkdir(parents=True)
+    (extracted / "AppDir/io.github.ronb1964.TuxTalk.svg").write_text("<svg/>")
+    monkeypatch.setenv("APPIMAGE", str(tmp_path / "TuxTalk.AppImage"))
+    monkeypatch.setenv("APPDIR", str(extracted))
+    monkeypatch.setattr(autostart, "_project_root", lambda: str(extracted))
+    monkeypatch.setattr(autostart.sys, "executable", str(extracted / "usr/bin/python3"))
+    monkeypatch.setattr(autostart.os.path, "expanduser", lambda p: p.replace("~", str(home), 1))
+    real_isfile = autostart.os.path.isfile
+    monkeypatch.setattr(autostart.os.path, "isfile",
+                        lambda p: not p.startswith("/usr/") and real_isfile(p))
+    assert autostart.get_icon_path() == "tuxtalk"
