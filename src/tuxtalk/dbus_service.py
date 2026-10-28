@@ -54,6 +54,12 @@ DBUS_PATH = "/io/github/ronb1964/TalkType"
 DBUS_INTERFACE = "io.github.ronb1964.TalkType"
 
 
+def _version_or_unknown(version):
+    """An extension version for the D-Bus signal: -1 when it isn't known
+    (0 is a version, which "or -1" turned into unknown)."""
+    return -1 if version is None else version
+
+
 class TuxTalkDBusService(dbus.service.Object):
     """
     D-Bus service interface for TuxTalk
@@ -493,7 +499,12 @@ class TuxTalkDBusService(dbus.service.Object):
                 # Show a result window the user dismisses, since the extension's
                 # GNOME notification is easy to miss. Only the manual check from
                 # the extension reaches this method; the auto-check does not.
-                if result.get("success") and hasattr(self.app, "show_update_result"):
+                # An extension update alone opens the Updates tab from the
+                # extension, so a window saying "up to date" would contradict it.
+                only_extension = (result.get("extension_update")
+                                  and not result.get("update_available"))
+                if (result.get("success") and not only_extension
+                        and hasattr(self.app, "show_update_result")):
                     self.app.show_update_result(result)
 
                 # Also emit the signal so the extension can update its own state/icon.
@@ -503,8 +514,8 @@ class TuxTalkDBusService(dbus.service.Object):
                     result.get("current_version", "unknown"),
                     result.get("latest_version", "unknown"),
                     result.get("update_available", False),
-                    result.get("extension_current", -1) if result.get("extension_current") else -1,
-                    result.get("extension_latest", -1) if result.get("extension_latest") else -1,
+                    _version_or_unknown(result.get("extension_current")),
+                    _version_or_unknown(result.get("extension_latest")),
                     result.get("extension_update", False),
                     result.get("release", {}).get("html_url", "") if result.get("release") else "",
                     result.get("error", "") if result.get("error") else ""
