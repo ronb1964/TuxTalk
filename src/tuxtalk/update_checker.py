@@ -12,6 +12,7 @@ import logging
 import os
 import re
 import subprocess
+import threading
 import urllib.request
 import urllib.error
 from pathlib import Path
@@ -730,7 +731,6 @@ def _finish_in_background(proc, package_path: str) -> None:
     """Wait for an installer that outlived PACKAGE_INSTALL_TIMEOUT_S on a
     background thread, then delete its package. If TuxTalk exits first the
     installer is unaffected, and the next update download sweeps the package."""
-    import threading
 
     def wait():
         try:
@@ -1237,8 +1237,9 @@ Terminal=false
         # Make it executable (not strictly required but good practice)
         os.chmod(DESKTOP_FILE_PATH, 0o755)
 
-        # Refresh desktop menu cache (especially needed for KDE/Plasma)
-        _refresh_desktop_menu_cache()
+        # The menu cache (KDE's above all) is refreshed in the background, as
+        # add_launcher_actions does: it takes seconds, and Setup Complete waits.
+        threading.Thread(target=_refresh_desktop_menu_cache, daemon=True).start()
 
         logger.info(f"Desktop launcher created at {DESKTOP_FILE_PATH}")
         return (True, "Desktop launcher created!\n\nTuxTalk is now in your Applications menu.")
@@ -1277,7 +1278,6 @@ def add_launcher_actions() -> bool:
         with open(tmp, "w") as f:
             f.write("\n".join(new_lines).rstrip("\n") + "\n" + actions[1])
         os.replace(tmp, DESKTOP_FILE_PATH)
-        import threading
         threading.Thread(target=_refresh_desktop_menu_cache, daemon=True).start()
         logger.info("Added the right-click shortcuts to the menu launcher")
         return True
@@ -1324,7 +1324,6 @@ def create_hidden_desktop_entry() -> bool:
                     f"{_HIDDEN_ENTRY_MARK}\n")
         os.replace(tmp, DESKTOP_FILE_PATH)
         # Plasma 5's menu cache doesn't rebuild by itself; this takes a moment.
-        import threading
         threading.Thread(target=_refresh_desktop_menu_cache, daemon=True).start()
         logger.info("Hidden desktop entry written so setup windows show TuxTalk's icon")
         return True
