@@ -66,3 +66,40 @@ def test_work_that_fails_still_closes_the_window_and_says_so(run):
     go(work)
     assert finished == [None]
     assert not windows[0].get_visible()
+
+
+def test_the_work_runs_off_the_windows_thread_and_its_updates_come_back_to_it(monkeypatch):
+    """With a real worker: GTK may only be touched from its own thread, so
+    the progress line and finish must come back to it, and the work must not
+    run on it (the window would freeze)."""
+    import threading
+    import time
+    from gi.repository import GLib
+    if not Gtk.init_check()[0]:
+        pytest.skip("no display")
+    here, seen = threading.current_thread(), {}
+    real = progress_window._progress_window
+
+    class Line:
+        """The status line, noting the thread each update came on."""
+        def set_text(self, text):
+            seen.setdefault("updates", []).append(threading.current_thread() is here)
+
+    def window(*args):
+        dialog, _line, bar = real(*args)
+        return dialog, Line(), bar
+    monkeypatch.setattr(progress_window, "_progress_window", window)
+
+    def work(progress):
+        seen["work off it"] = threading.current_thread() is not here
+        progress("Halfway", 50)
+        return "done"
+
+    def finish(result):
+        seen["finish"] = (threading.current_thread() is here, result)
+    progress_window.run_with_progress(None, "Testing", "Starting", work, finish)
+    deadline = time.monotonic() + 5
+    while "finish" not in seen and time.monotonic() < deadline:
+        GLib.MainContext.default().iteration(False)
+        time.sleep(0.005)
+    assert seen == {"work off it": True, "updates": [True], "finish": (True, "done")}
