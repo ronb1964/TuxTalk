@@ -21,7 +21,7 @@
   "cleanup.py::_remove_fillers.repl::undocumented": 1,
   "clipboard.py::ClipboardKeeper._restore::swallowed_error": 1,
   "clipboard.py::ClipboardKeeper._restore::undocumented": 1,
-  "clipboard.py::_read_primary::swallowed_error": 1,
+  "clipboard.py::read_primary::swallowed_error": 1,
   "clipboard.py::_read_text::swallowed_error": 1,
   "clipboard.py::_sensitive_supported::swallowed_error": 1,
   "clipboard.py::_wl_paste::long_line": 1,

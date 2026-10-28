@@ -704,7 +704,7 @@ def test_a_copied_whole_line_without_a_selection_is_not_a_selection(monkeypatch)
     """VS Code and JetBrains copy the current line on Ctrl+C with nothing selected."""
     board = FakeBoard(selected="the whole line\n")
     board.install(monkeypatch)
-    monkeypatch.setattr(cb, "_read_primary", lambda: "an older selection")
+    monkeypatch.setattr(cb, "read_primary", lambda: "an older selection")
     text, _ = cb.copy_selection(board.ctrl_c, sleep=lambda s: None)
     assert text is None
     assert board.data == b"what I copied"          # not the editor's line
@@ -713,7 +713,7 @@ def test_a_copied_whole_line_without_a_selection_is_not_a_selection(monkeypatch)
 def test_a_real_selection_ending_in_a_line_break_is_kept(monkeypatch):
     board = FakeBoard(selected="a selected line\n")
     board.install(monkeypatch)
-    monkeypatch.setattr(cb, "_read_primary", lambda: "a selected line\n")
+    monkeypatch.setattr(cb, "read_primary", lambda: "a selected line\n")
     text, _ = cb.copy_selection(board.ctrl_c, sleep=lambda s: None)
     assert text == "a selected line\n"
 
@@ -770,7 +770,7 @@ def test_a_window_change_while_the_ai_works_keeps_the_rewrite_safe(edit_env, mon
 def test_an_app_without_primary_selection_keeps_a_line_selection(monkeypatch):
     board = FakeBoard(selected="a triple-clicked line\n")
     board.install(monkeypatch)
-    monkeypatch.setattr(cb, "_read_primary", lambda: None)
+    monkeypatch.setattr(cb, "read_primary", lambda: None)
     text, _ = cb.copy_selection(board.ctrl_c, sleep=lambda s: None)
     assert text == "a triple-clicked line\n"
 

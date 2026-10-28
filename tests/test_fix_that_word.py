@@ -128,7 +128,9 @@ def test_fix_in_text_swaps_only_the_word(monkeypatch):
             return True
     monkeypatch.setattr(fw, "_REFOCUS_S", 0)
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: Backend())
-    monkeypatch.setattr(focused_window, "window_class", lambda: "org.kde.kwrite")
+    monkeypatch.setattr(focused_window, "look", lambda: ("org.kde.kwrite", None))
+    monkeypatch.setattr(focused_window, "is_password", lambda: False)
+    monkeypatch.setattr(fw, "_read_primary_selection", lambda: "fleas")
     old = " Whose fleas was white. "                  # as typed, outer spaces and all
     core = old.strip()
     start = core.index("fleas")
@@ -143,8 +145,7 @@ def test_fix_in_text_swaps_only_the_word(monkeypatch):
 
 @pytest.fixture
 def selection(monkeypatch):
-    """fix_in_text's keys, and what the app's selection reads back as."""
-    from tuxtalk import clipboard
+    """fix_in_text's keys, and what the app's primary selection reads as."""
     from tuxtalk import fix_word_dialog as fw
     pressed, typed_text, reads = [], [], {"text": "fleas"}
 
@@ -157,13 +158,18 @@ def selection(monkeypatch):
             typed_text.append(text)
             return True
     monkeypatch.setattr(fw, "_REFOCUS_S", 0)
+    monkeypatch.setattr(fw, "SELECTION_WAIT_S", 0)
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: Backend())
-    monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
-    monkeypatch.setattr(focused_window, "window_class", lambda: "org.kde.kwrite")
-    monkeypatch.setattr(clipboard, "copy_selection",
-                        lambda send: (reads["text"], lambda also=(): None))
+    monkeypatch.setattr(focused_window, "look", lambda: ("org.kde.kwrite", None))
+    monkeypatch.setattr(focused_window, "is_password", lambda: False)
+    monkeypatch.setattr(fw, "_read_primary_selection", lambda: reads["text"])
     monkeypatch.setattr("tuxtalk.notify.notify", lambda t, m: reads.setdefault("notice", m))
     return pressed, typed_text, reads
+
+
+OLD = " Whose fleas was white. "
+START = OLD.strip().index("fleas")
+AFTER = len(" was white.") + 1
 
 
 def test_a_cursor_moved_since_the_dictation_changes_nothing(selection):
@@ -172,30 +178,47 @@ def test_a_cursor_moved_since_the_dictation_changes_nothing(selection):
     from tuxtalk import fix_word_dialog as fw
     pressed, typed_text, reads = selection
     reads["text"] = "was w"                            # what those keys selected now
-    old = " Whose fleas was white. "
-    start = old.strip().index("fleas")
-    assert fw.fix_in_text(old, (start, start + 5, "fleece"), "org.kde.kwrite") is False
-    after = len(" was white.") + 1
-    assert typed_text == [] and pressed[1] == [((), "RIGHT")] * (after + 1)   # put back
+    assert fw.fix_in_text(OLD, (START, START + 5, "fleece"), "org.kde.kwrite") is False
+    assert typed_text == [] and pressed[1] == [((), "RIGHT")] * (AFTER + 1)   # put back
     assert "wasn't where the dictation ended" in reads["notice"]
+
+
+def test_a_selection_that_cant_be_read_changes_nothing(selection):
+    """On X11, or without wl-paste, it went ahead unchecked."""
+    from tuxtalk import fix_word_dialog as fw
+    pressed, typed_text, reads = selection
+    reads["text"] = None
+    assert fw.fix_in_text(OLD, (START, START + 5, "fleece"), "org.kde.kwrite") is False
+    assert typed_text == [] and "couldn't check" in reads["notice"]
+
+
+def test_the_focus_moving_while_the_selection_is_read_changes_nothing(selection, monkeypatch):
+    """Checked once before the keys, the replacement went into whatever had
+    the focus by the time it was typed: another window, a password field."""
+    from tuxtalk import fix_word_dialog as fw
+    pressed, typed_text, reads = selection
+    looks = iter([("org.kde.kwrite", None)])
+    monkeypatch.setattr(focused_window, "look", lambda: next(looks, ("firefox", None)))
+    assert fw.fix_in_text(OLD, (START, START + 5, "fleece"), "org.kde.kwrite") is False
+    assert typed_text == [] and "another window" in reads["notice"]
 
 
 def test_the_picked_words_still_selected_are_fixed(selection):
     from tuxtalk import fix_word_dialog as fw
     pressed, typed_text, reads = selection
-    old = " Whose fleas was white. "
-    start = old.strip().index("fleas")
-    assert fw.fix_in_text(old, (start, start + 5, "fleece"), "org.kde.kwrite") is True
+    assert fw.fix_in_text(OLD, (START, START + 5, "fleece"), "org.kde.kwrite") is True
     assert typed_text == ["fleece"]
+    assert keyboard_output.this_thread.into is None        # the window lock let go
 
 
 def test_a_terminal_isnt_changed(selection, monkeypatch):
     """Shift+Left selects nothing there: the replacement went in mid-line."""
     from tuxtalk import fix_word_dialog as fw
     pressed, typed_text, reads = selection
-    monkeypatch.setattr(focused_window, "window_class", lambda: "org.kde.konsole")
+    monkeypatch.setattr(focused_window, "look", lambda: ("org.kde.konsole", None))
     assert fw.fix_in_text(" git stats ", (4, 9, "status"), "org.kde.konsole") is False
     assert pressed == [] and "terminal" in reads["notice"]
+
 
 def test_the_word_span_leaves_its_punctuation_out():
     from tuxtalk import vocabulary
@@ -208,7 +231,7 @@ def test_fix_in_text_leaves_another_window_alone(monkeypatch):
     from tuxtalk import fix_word_dialog as fw
     notices = []
     monkeypatch.setattr(fw, "_REFOCUS_S", 0)
-    monkeypatch.setattr(focused_window, "window_class", lambda: "firefox")
+    monkeypatch.setattr(focused_window, "look", lambda: ("firefox", None))
     monkeypatch.setattr("tuxtalk.notify.notify", lambda t, m: notices.append(f"{t}\n{m}"))
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: pytest.fail("typed into the wrong window"))
     assert fw.fix_in_text(" Hello. ", (0, 5, "Hi"), "org.kde.kwrite") is False

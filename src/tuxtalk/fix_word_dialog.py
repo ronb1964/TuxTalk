@@ -361,75 +361,101 @@ def fix_in_text(typed, fix, window, where=None):
     """Swap just the picked words in what TuxTalk *typed*, in the focused
     app. *fix* is (start, end, replacement), offsets in the typed text
     without its outer spaces, as the window showed it. The cursor, taken to
-    be at the end of the dictation, steps back to the words, selects them,
-    and only if the selection is those words (_selected_is) types the
-    replacement and steps forward again; nothing else is retyped. Not when
-    another window than *window* (its class) has the focus, nor another
-    than *where* (its id, focused_window.look's) of that app; None: unknown,
-    go ahead. Nor in a terminal, where Shift+Left selects nothing. True if
-    done."""
-    from . import focused_window, keyboard_output, notify
-    from .window_classes import is_terminal_class
+    be at the end of the dictation, steps back to the words and selects
+    them; only if the app's selection reads back as those words
+    (_selection_now) is the replacement typed and the cursor stepped forward
+    again, nothing else retyped. Every key goes only into *window* (its
+    class) and, where the desktop says, *where* (its id, focused_window.look's),
+    checked right before it goes down. Never in a terminal, where Shift+Left
+    selects nothing, nor a password field. True if done."""
+    from . import keyboard_output, virtual_keyboard
     start, end, replacement = fix
     time.sleep(_REFOCUS_S)
-    focused = focused_window.window_class()
-    if (window and focused and focused != window) or (
-            where is not None
-            and focused_window.same_window((window, where), focused_window.look()) is False):
-        logger.info(f"Fix a Word: {focused!r} has the focus, not {window!r}; text left as it was")
-        notify.notify("Your text wasn't changed",
-                    "The fix is saved, but another window had the focus.")
-        return False
-    if focused_window.is_password():
-        logger.info("Fix a Word: a password field has the focus; text left as it was")
-        notify.notify("Your text wasn't changed",
-                    "The fix is saved, but the cursor is in a password field.")
-        return False
-    if is_terminal_class(focused or window):
-        logger.info("Fix a Word: a terminal has the focus; text left as it was")
-        notify.notify("Your text wasn't changed",
-                      "The fix is saved. TuxTalk doesn't change text in a terminal.")
-        return False
+    if why := _not_here(window, where):
+        return _left_alone(why)
     core = typed.strip()
     # From the cursor back to the end of the picked words: the spaces after
     # the dictation, then whatever followed the words in it.
     back = (len(typed) - len(typed.rstrip())) + (len(core) - end)
-    from . import virtual_keyboard
     backend = keyboard_output.output_backend()
+    keyboard_output.this_thread.into = (window, where)
     try:
-        selected = backend.press_keys([((), "LEFT")] * back
-                                      + [(("SHIFT",), "LEFT")] * (end - start))
-        if selected and not _selected_is(core[start:end]):
-            # Moved since the dictation (a click, the arrow keys): the same
-            # count of keys selected other words. Put the cursor back.
-            backend.press_keys([((), "RIGHT")] * (back + 1))
-            logger.info("Fix a Word: the cursor had moved; text left as it was")
-            notify.notify("Your text wasn't changed",
-                          "The fix is saved, but the cursor wasn't where the dictation ended.")
-            return False
-        done = (selected and backend.type_text(replacement)
-                and backend.press_keys([((), "RIGHT")] * back))
-    except virtual_keyboard.StoppedPartway:
+        if not backend.press_keys([((), "LEFT")] * back + [(("SHIFT",), "LEFT")] * (end - start)):
+            return _left_alone("keys")
+        selected = _selection_now(core[start:end])
+        # Moved since the dictation (a click, the arrow keys): the same count
+        # of keys selected other words. Or the focus moved while it was read.
+        why = ("unchecked" if selected is None else "moved" if selected != core[start:end]
+               else _not_here(window, where))
+        if why:
+            backend.press_keys([((), "RIGHT")] * (back + 1))      # the cursor back
+            return _left_alone(why)
+        done = backend.type_text(replacement) and backend.press_keys([((), "RIGHT")] * back)
+    except (virtual_keyboard.StoppedPartway, virtual_keyboard.GaveUp):
         done = False
+    finally:
+        keyboard_output.this_thread.into = None
     logger.info("Fix a Word: fixed it in the text" if done else "Fix a Word: couldn't fix the text")
     return bool(done)
 
 
-def _selected_is(words) -> bool:
-    """Whether the app's selection is *words*, read through the clipboard
-    as voice editing reads it (the user's clipboard is put back). Where the
-    selection can't be read (an X11 session has no wl-paste), it's taken
-    to be them, as it always was."""
+# Why fix_in_text left the text alone, for the log and the notice.
+_LEFT_ALONE = {
+    "window": "another window had the focus",
+    "password": "the cursor is in a password field",
+    "terminal": "TuxTalk doesn't change text in a terminal",
+    "moved": "the cursor wasn't where the dictation ended",
+    "unchecked": "TuxTalk couldn't check that the cursor was still where the dictation ended",
+    "keys": "the keys to get to the word couldn't be pressed",
+}
+
+
+def _not_here(window, where):
+    """Why the fix mustn't go into the window that has the focus now (a key
+    of _LEFT_ALONE), or None."""
+    from . import focused_window
+    from .window_classes import is_terminal_class
+    now = focused_window.look()
+    if focused_window.same_window((window, where), now) is False:
+        return "window"
+    if focused_window.is_password():
+        return "password"
+    return "terminal" if is_terminal_class(now[0] or window) else None
+
+
+def _left_alone(why) -> bool:
+    """Say why the text wasn't changed (the fix itself is saved); False."""
+    from . import notify
+    logger.info(f"Fix a Word: text left as it was ({_LEFT_ALONE[why]})")
+    notify.notify("Your text wasn't changed", f"The fix is saved, but {_LEFT_ALONE[why]}."
+                  if why != "terminal" else f"The fix is saved. {_LEFT_ALONE[why]}.")
+    return False
+
+
+# How long the app gets to report the keys' selection as its primary
+# selection (the highlighted text).
+SELECTION_WAIT_S = 0.5
+
+
+def _selection_now(words):
+    """The app's selection, read as the primary selection: no Ctrl+C, so
+    the clipboard isn't touched, and it works on X11 too. *words* is what
+    it should be, waited for a moment while the app catches up. None when
+    it can't be read (the Flatpak has no wl-paste)."""
+    deadline = time.monotonic() + SELECTION_WAIT_S
+    while True:
+        text = _read_primary_selection()
+        if text == words or time.monotonic() >= deadline:
+            return text
+        time.sleep(0.05)
+
+
+def _read_primary_selection():
+    """The primary selection as text, or None."""
     from . import clipboard, keyboard_output
-    if not keyboard_output.is_wayland_session():
-        return True
-    try:
-        selected, put_back = clipboard.copy_selection(keyboard_output.send_copy_keystroke)
-    except clipboard.ClipboardUnavailable:
-        logger.info("Fix a Word: the selection can't be read; fixing it as picked")
-        return True
-    put_back(also=(selected,) if selected else ())
-    return selected == words
+    if keyboard_output.is_wayland_session():
+        return clipboard.read_primary()
+    return Gtk.Clipboard.get(Gdk.SELECTION_PRIMARY).wait_for_text()
 
 
 def main(argv=None):

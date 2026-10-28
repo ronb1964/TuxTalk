@@ -126,7 +126,7 @@ def primary(monkeypatch):
     def write(text):
         sel["text"] = text
         sel["writes"].append(text)
-    monkeypatch.setattr(cb, "_read_primary", lambda: sel["text"])
+    monkeypatch.setattr(cb, "read_primary", lambda: sel["text"])
     monkeypatch.setattr(cb, "_wl_copy_primary", write)
     return sel
 

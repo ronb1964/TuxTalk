@@ -238,7 +238,7 @@ class ClipboardKeeper:
         already saved is the user's."""
         with self._lock:
             if self._primary is _NOTHING:
-                self._primary = _read_primary()
+                self._primary = read_primary()
 
     def after_paste(self, text):
         """Schedule the restore, once the app has had time to read *text*."""
@@ -285,7 +285,7 @@ def _wl_copy_primary(text):
 def _restore_primary(saved, text):
     """Put the user's primary selection back (clear it if *saved* is None),
     unless something other than the dictation *text* is on it now."""
-    if _read_primary() not in (text, text.rstrip("\n")):
+    if read_primary() not in (text, text.rstrip("\n")):
         logger.info("Primary selection changed after the paste; leaving it as it is")
         return
     try:
@@ -301,7 +301,7 @@ COPY_WAIT_S = 0.6               # how long an app may take to put its selection 
 _COPY_POLL_S = 0.05
 
 
-def _read_primary():
+def read_primary():
     """The primary selection (the highlighted text) as text, or None."""
     try:
         result = subprocess.run(["wl-paste", "--primary", "--no-newline"],
@@ -389,7 +389,7 @@ def copy_selection(send_copy, wait=COPY_WAIT_S, sleep=None):
     # newline and all, when nothing is selected. A real selection is also the
     # highlighted text (the primary selection); an app without one gets the
     # benefit of the doubt.
-    primary = _read_primary() if copied and copied.endswith("\n") else None
+    primary = read_primary() if copied and copied.endswith("\n") else None
     rejected = copied
     if primary and primary != copied:
         logger.info("Ctrl+C copied a whole line with nothing selected; not a selection")
