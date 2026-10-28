@@ -158,7 +158,7 @@
   "rename_migration.py::_install_tuxtalk_icon::swallowed_error": 1,
   "rename_migration.py::_plasma_script::long_line": 1,
   "rename_migration.py::adopt_old_install::long_line": 1,
-  "rename_migration.py::repin_launchers::swallowed_error": 2,
+  "rename_migration.py::repin_launchers::swallowed_error": 1,
   "rename_migration.py::run_at_startup::swallowed_error": 1,
   "screen_message.py::_show_now.draw::undocumented": 1,
   "screen_message.py::_show_now.set_text::long_line": 1,
@@ -373,7 +373,7 @@
    "decisions": 23
   },
   "rename_migration.py::repin_launchers": {
-   "decisions": 20
+   "decisions": 19
   },
   "secure_input.py::_pkexec": {
    "decisions": 16
