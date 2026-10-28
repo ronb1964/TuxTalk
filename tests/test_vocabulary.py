@@ -230,6 +230,20 @@ def test_word_fixes_become_your_words_once(commands_file, words_file):
     assert custom_words.load() == ["TuxTalk", "ClaudeClaw", "CachyOS"]
 
 
+def test_the_copy_from_before_the_words_tab_is_never_replaced(commands_file, words_file):
+    """A hand edit that drops the header runs the adoption again; the copy
+    kept beside the file must still be the one from before the first run."""
+    from tuxtalk import custom_words
+    words_file.write_text("# an older header\nTuxTalk\n")
+    config.save_custom_commands({"clawed claw": "ClaudeClaw"})
+    vocabulary.adopt_fixes()
+    words_file.write_text("TuxTalk\nClaudeClaw\n")       # header taken out by hand
+    vocabulary.adopt_fixes()
+    assert (words_file.parent / "custom_words.txt.before-words-tab").read_text() == \
+        "# an older header\nTuxTalk\n"
+    assert custom_words.load() == ["TuxTalk", "ClaudeClaw"]
+
+
 def test_adopting_leaves_an_unreadable_commands_file_alone(commands_file, words_file):
     commands_file.write_text("this is [not valid toml")
     assert vocabulary.adopt_fixes() is False
@@ -279,6 +293,26 @@ def test_a_word_that_clashes_is_refused_and_nothing_written(commands_file, word,
     with pytest.raises(vocabulary.WordProblem, match=says):
         vocabulary.save_word(word, phrases, old=old)
     assert (commands_file.read_text(), (commands_file.parent / "custom_words.txt").read_text()) == before
+
+
+def test_a_hand_edited_phrase_with_capitals_or_spaces_still_clashes(commands_file):
+    """"My  Email" in the file is the phrase "my email": a word fixed from it
+    too would leave two entries competing for one phrase."""
+    from tuxtalk import custom_words
+    custom_words.save([])
+    commands_file.write_text('[commands]\n"My  Email" = "me@example.com"\n')
+    with pytest.raises(vocabulary.WordProblem, match="my email"):
+        vocabulary.save_word("ClaudeClaw", ["my email"])
+
+
+def test_a_word_takes_over_a_hand_edited_phrase_of_its_own(commands_file):
+    """A new word replaces a differently spaced entry already typing it
+    rather than adding a second one beside it."""
+    from tuxtalk import custom_words
+    custom_words.save([])
+    commands_file.write_text('[commands]\n"Clawed  Claw" = "ClaudeClaw"\n')
+    vocabulary.save_word("ClaudeClaw", ["clawed claw"])
+    assert config.load_custom_commands() == {"clawed claw": "ClaudeClaw"}
 
 
 def test_removing_a_word_removes_its_fixes_only(commands_file):

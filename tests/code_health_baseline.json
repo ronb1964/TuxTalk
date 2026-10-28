@@ -427,7 +427,7 @@
    "decisions": 16
   },
   "vocabulary.py::save_word": {
-   "decisions": 21
+   "decisions": 16
   },
   "voice_edit_rules.py::formatting": {
    "decisions": 21
