@@ -15,7 +15,7 @@ from gi.repository import GLib, Gtk  # noqa: E402
 from gi.repository import AyatanaAppIndicator3 as AppIndicator3  # noqa: E402
 
 from .logger import setup_logger  # noqa: E402
-from .ui_style import show_message  # noqa: E402
+from .ui_style import message_dialog, show_message  # noqa: E402
 
 logger = setup_logger(__name__)
 
@@ -191,6 +191,41 @@ class ServiceLifecycle:
             self.restart_service(None)
         return False
 
+    def restart_app(self, _=None):
+        """Cleanly restart the whole app after an update: launch a detached
+        instance that waits for us to exit, then quit this one via quit_app
+        (which stops the dictation service and releases the D-Bus name + lock),
+        so the new instance starts on a clean slate with the new service.
+        Both update paths end here: the tray's own Download & Install, and
+        Preferences (a separate process) asking over D-Bus.
+        Returns False so it can be scheduled with GLib.idle_add."""
+        if self._quitting:
+            return False        # an update that went in after Quit: stay quit
+        from . import update_checker
+        # A self-managed AppImage was just swapped in place at APPIMAGE_PATH;
+        # packages are started through their /usr/bin launcher.
+        target = (update_checker.APPIMAGE_PATH
+                  if update_checker.get_install_type() == "appimage" else None)
+        ok, msg = update_checker.restart_via_launcher(target)
+        if not ok:
+            logger.error(f"Restart failed: {msg}")
+            dlg = message_dialog(
+                message_type=Gtk.MessageType.INFO,
+                buttons=Gtk.ButtonsType.OK,
+                text="Update installed"
+            )
+            dlg.format_secondary_text(
+                "TuxTalk couldn't restart by itself. Quit TuxTalk from the tray "
+                "icon and open it again to start the new version.")
+            dlg.set_position(Gtk.WindowPosition.CENTER)
+            dlg.set_keep_above(True)
+            dlg.connect("response", lambda d, _r: d.destroy())
+            dlg.show_all()
+            return False
+        logger.info("Restart scheduled; quitting this instance to hand off.")
+        self.quit_app(None)
+        return False
+
     def quit_app(self, _):
         """Quit: the icon goes and nothing new starts at once, then the tray
         leaves once the service has typed what it holds and gone. Until then
@@ -302,7 +337,13 @@ class ServiceLifecycle:
         # Only fires when Quit is picked while a dialog.run() or nested
         # Gtk.main() is open: main_quit() cannot end the outer loop from there,
         # and the tray and its icon would stay until the dialog is closed.
-        # Not while the first-run copy into ~/AppImages runs: cut off, the
-        # launchers would point at a file that never arrived.
+        # Not while a copy into ~/AppImages runs (first run's, or an update
+        # going in): cut off, the launchers would point at a file that never
+        # arrived, or the update the user asked for wouldn't go in.
+        GLib.timeout_add(100, lambda: self._copying() or os._exit(0))
+
+    def _copying(self) -> bool:
+        """Whether a copy into ~/AppImages is under way."""
         from . import appimage_copy
-        GLib.timeout_add(100, lambda: appimage_copy.copying() or os._exit(0))
+        install = self._install_thread
+        return appimage_copy.copying() or bool(install and install.is_alive())

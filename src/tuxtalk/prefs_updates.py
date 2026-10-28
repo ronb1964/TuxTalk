@@ -409,7 +409,10 @@ class UpdatesTab(Tab):
     def _on_uninstall_clicked(self, _button):
         """The running TuxTalk asks and does the work (uninstall.py), so it
         can stop itself and close this window. With none running, this
-        window does it."""
+        window does it. Changes not applied are settled first: the window
+        closes once the uninstall goes ahead."""
+        if not self._settle_unapplied_changes():
+            return
         from . import control
         try:
             if control.open_in_running("uninstall"):
@@ -419,6 +422,18 @@ class UpdatesTab(Tab):
         from . import uninstall
         if uninstall.run():
             self.win.on_cancel(None)
+
+    def _settle_unapplied_changes(self):
+        """Ask about changes not applied, as closing the window does: saved
+        (without restarting dictation, which is about to go) or thrown away.
+        False when the user keeps editing, or saving failed."""
+        win = self.win
+        if not win._has_unapplied_changes():
+            return True
+        answer = win._ask_apply_before_closing()
+        if answer == "apply":
+            return win.words_tab.save() is not None and bool(win.save_config())
+        return answer == "discard"
 
     def _on_check_updates_clicked(self, button):
         """Check GitHub for a newer TuxTalk, off the GTK thread."""

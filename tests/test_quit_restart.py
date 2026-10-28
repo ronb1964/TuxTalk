@@ -132,6 +132,7 @@ def _bare_tray(**attrs):
     t._restarting = False
     t._restart_pending = False
     t._quitting = False
+    t._install_thread = None
     t._uninstalling = False
     t._waiting_start = WaitingStart()
     t._menu_window = None
@@ -444,23 +445,86 @@ def test_quit_inside_a_dialog_waits_for_the_first_run_copy(monkeypatch):
     monkeypatch.setattr(tray_service.os, "_exit", exits.append)
     copying = {"now": True}
     monkeypatch.setattr(appimage_copy, "copying", lambda: copying["now"])
-    tray_mod.DictationTray._leave_main_loop(types.SimpleNamespace())
+    t = _bare_tray(_install_thread=None)
+    t._leave_main_loop()
     assert timers[0]() is True and exits == []      # still copying: looks again
     copying["now"] = False
     timers[0]()
     assert exits == [0]
 
 
-def test_a_standalone_uninstall_holds_the_trays_lock(tmp_path, monkeypatch):
-    """With no tray, Preferences restarting the service on Apply started a
-    new one while the uninstall removed the package. It asks the tray when
-    the lock is held, and none answers."""
-    from tuxtalk import control, uninstall
+def test_quit_inside_a_dialog_waits_for_an_update_going_in(monkeypatch):
+    """Download & Install, then Quit inside a dialog: the fallback exit cut
+    the update the user asked for off halfway."""
+    from tuxtalk import appimage_copy
+    timers = []
+    monkeypatch.setattr(tray_service, "GLib", types.SimpleNamespace(
+        timeout_add=lambda ms, fn: timers.append(fn)))
+    monkeypatch.setattr(tray_service, "Gtk", types.SimpleNamespace(main_quit=lambda: None))
+    monkeypatch.setattr(tray_service.os, "_exit", lambda code: None)
+    monkeypatch.setattr(appimage_copy, "copying", lambda: False)
+    t = _bare_tray(_install_thread=types.SimpleNamespace(is_alive=lambda: True))
+    t._leave_main_loop()
+    assert timers[0]() is True
+
+
+def test_an_update_that_goes_in_after_quit_doesnt_start_tuxtalk_again(monkeypatch):
+    from tuxtalk import update_checker
+    started = []
+    monkeypatch.setattr(update_checker, "restart_via_launcher",
+                        lambda target=None: started.append(target) or (True, ""))
+    t = _bare_tray(_quitting=True)
+    t.restart_app()
+    assert started == []
+
+
+def test_an_uninstall_without_the_tray_holds_its_lock(tmp_path, monkeypatch):
+    """With no tray (the command line, or Preferences with none running),
+    Preferences restarting the service on Apply started a new one while the
+    package was removed. Both hold the tray's lock while they work."""
+    from tuxtalk import uninstall
     monkeypatch.setattr(single_instance, "runtime_dir", lambda: str(tmp_path))
-    monkeypatch.setattr(control, "open_in_running", lambda *a, **k: None)
+    monkeypatch.setattr(uninstall.update_checker, "get_install_type", lambda: "deb")
+    monkeypatch.setattr(uninstall, "find", lambda *a, **k: types.SimpleNamespace(needs_root=True))
+    monkeypatch.setattr(uninstall, "_ask", lambda plan: (False, False, False))
+    monkeypatch.setattr(uninstall, "_working_window",
+                        lambda: types.SimpleNamespace(destroy=lambda: None))
     held = []
-    monkeypatch.setattr(uninstall, "run", lambda: held.append(
-        single_instance.held_elsewhere(tray_instance.TRAY_LOCK)) or True)
-    with pytest.raises(SystemExit):
-        tray_instance.open_from_command_line("uninstall")
+    monkeypatch.setattr(uninstall, "_remove_root_part", lambda plan, leave, tray: held.append(
+        single_instance.held_elsewhere(tray_instance.TRAY_LOCK)))
+    uninstall.run()
     assert held == [True]       # flock is per open file: this process's other one sees it
+
+
+def test_preferences_restart_waits_for_an_uninstall(tmp_path, monkeypatch):
+    """The other half: a restart from Preferences with no tray waits for the
+    lock, and starts nothing while an uninstall holds it."""
+    from tuxtalk import prefs
+    monkeypatch.setattr(single_instance, "runtime_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(service_launcher, "QUIT_WAIT_S", 0.2)
+    launched = []
+    monkeypatch.setattr(service_launcher, "end_dictation_service", lambda: True)
+    monkeypatch.setattr(service_launcher, "launch_dictation_service", lambda: launched.append(1))
+    with single_instance.open_lock(tray_instance.TRAY_LOCK) as uninstalling:
+        assert single_instance.claim(uninstalling)
+        prefs._restart_without_tray()
+    assert launched == []
+    prefs._restart_without_tray()
+    assert launched == [1]
+
+
+@pytest.mark.parametrize("answer,goes_ahead,saved", [
+    ("apply", True, True), ("discard", True, False), ("keep", False, False)])
+def test_uninstall_asks_about_changes_not_applied(answer, goes_ahead, saved):
+    """An edited snippet, not applied yet, vanished when the uninstall closed
+    Preferences (settings kept): it asks first, as closing the window does."""
+    from tuxtalk.prefs_updates import UpdatesTab
+    done = []
+    win = types.SimpleNamespace(
+        _has_unapplied_changes=lambda: True, _ask_apply_before_closing=lambda: answer,
+        words_tab=types.SimpleNamespace(save=lambda: done.append("snippets") or True),
+        save_config=lambda: done.append("settings") or True)
+    tab = UpdatesTab.__new__(UpdatesTab)
+    tab.win = win
+    assert tab._settle_unapplied_changes() is goes_ahead
+    assert (done == ["snippets", "settings"]) is saved

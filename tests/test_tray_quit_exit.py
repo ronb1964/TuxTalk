@@ -20,7 +20,10 @@ def test_leaving_the_main_loop_queues_a_hard_exit(monkeypatch):
     exits = []
     monkeypatch.setattr(tray_service.os, "_exit", lambda code: exits.append(code))
 
-    tray_mod.DictationTray._leave_main_loop(types.SimpleNamespace())
+    monkeypatch.setattr("tuxtalk.appimage_copy.copying", lambda: False)
+    tray_mod.DictationTray._leave_main_loop(types.SimpleNamespace(
+        _copying=lambda: tray_mod.DictationTray._copying(
+            types.SimpleNamespace(_install_thread=None))))
 
     assert quits == [1]
     assert len(timers) == 1 and timers[0][0] <= 500

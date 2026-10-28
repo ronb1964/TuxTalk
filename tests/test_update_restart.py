@@ -308,6 +308,19 @@ def test_a_failed_copy_points_login_and_the_menu_back_at_the_running_appimage(
     assert f"Exec={running}\n" in (tmp_path / "apps" / "tuxtalk.desktop").read_text()
 
 
+def test_a_launcher_for_a_path_with_a_space_still_opens(monkeypatch, tmp_path):
+    """A second download is "TuxTalk (1).AppImage": the menu entry and its
+    right-click shortcuts were cut at the space and opened nothing."""
+    monkeypatch.setattr(uc, "DESKTOP_FILE_PATH", str(tmp_path / "apps" / "tuxtalk.desktop"))
+    monkeypatch.setattr(uc, "_install_app_icon", lambda: "tuxtalk")
+    monkeypatch.setattr(uc, "_refresh_desktop_menu_cache", lambda: None)
+    running = str(tmp_path / "Downloads" / "TuxTalk (1).AppImage")
+    assert uc.create_desktop_launcher(running)[0]
+    lines = (tmp_path / "apps" / "tuxtalk.desktop").read_text().splitlines()
+    execs = [line for line in lines if line.startswith("Exec=")]
+    assert execs and all(line.startswith(f'Exec="{running}"') for line in execs)
+
+
 def _repoint_fixture(monkeypatch, tmp_path, entry_text):
     """point_at_running_appimage with a real start-at-login file; its path."""
     from tuxtalk import autostart
@@ -386,6 +399,7 @@ class FakeTray:
 
     def __init__(self):
         self.quit = 0
+        self._quitting = False
 
     def quit_app(self, _):
         self.quit += 1
@@ -413,11 +427,11 @@ def test_tray_restart_uses_the_package_launcher(monkeypatch):
 
 
 def test_tray_keeps_running_when_it_cannot_restart(monkeypatch):
-    from tuxtalk import tray as tray_mod
+    from tuxtalk import tray_service
     shown = []
     monkeypatch.setattr(uc, "get_install_type", lambda: "appimage")
     monkeypatch.setattr(uc, "restart_via_launcher", lambda target=None: (False, "nope"))
-    monkeypatch.setattr(tray_mod, "message_dialog", lambda **k: shown.append(k) or types.SimpleNamespace(
+    monkeypatch.setattr(tray_service, "message_dialog", lambda **k: shown.append(k) or types.SimpleNamespace(
         format_secondary_text=lambda t: None, set_position=lambda p: None,
         set_keep_above=lambda b: None, connect=lambda *a: None, show_all=lambda: None))
     tray = FakeTray()

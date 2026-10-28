@@ -66,14 +66,21 @@ _DOWNLOAD_KEYS = ("model", "device")
 
 def _restart_without_tray():
     """prefs.restart_service with no tray: end the service, start a new one
-    the way the tray does (service_launcher). Preferences runs on native
-    Wayland, and a service spawned with its environment would inherit it:
-    gtk_window_move() would be ignored and the recording indicator always
-    centred."""
-    from .service_launcher import end_dictation_service, launch_dictation_service
+    the way the tray does (service_launcher), holding the tray's lock
+    meanwhile as a tray would: an uninstall, or a tray starting, waits for
+    it, and none of them can start or remove a service under the other.
+    Preferences runs on native Wayland, and a service spawned with its
+    environment would inherit it: gtk_window_move() would be ignored and the
+    recording indicator always centred."""
+    from . import single_instance, tray_instance
+    from .service_launcher import QUIT_WAIT_S, end_dictation_service, launch_dictation_service
     try:
-        end_dictation_service()
-        launch_dictation_service()
+        with single_instance.open_lock(tray_instance.TRAY_LOCK) as lock:
+            if not single_instance.claim(lock, wait_s=QUIT_WAIT_S):
+                logger.warning("Dictation not restarted: TuxTalk is starting or uninstalling")
+                return
+            end_dictation_service()
+            launch_dictation_service()
     except Exception as e:
         logger.warning(f"Failed to restart service: {e}")
 

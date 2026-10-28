@@ -227,6 +227,7 @@ class DictationTray(ServiceLifecycle):
         # Counts the user's decisions about the service (Stop, Quit, Restart,
         # uninstall); a launch scheduled under an older one is dropped.
         self._service_gen = 0
+        self._install_thread = None     # an update going in (Download & Install)
         self._restarting = False    # Restart Service waits for the old service
         self._restart_pending = False   # another restart asked for meanwhile
 
@@ -1191,7 +1192,6 @@ class DictationTray(ServiceLifecycle):
             error_dialog.destroy()
             return
 
-        # Create progress dialog
         progress_dialog = Gtk.Dialog(
             title="Downloading Update",
             flags=Gtk.DialogFlags.MODAL
@@ -1276,10 +1276,11 @@ class DictationTray(ServiceLifecycle):
                     show_message(None, Gtk.MessageType.ERROR, "Update Failed", message,
                                  keep_above=True)
                 return False
-            threading.Thread(target=install, name="install-update").start()
+            # Not a daemon; a Quit's fallback exit waits for it too (_copying).
+            self._install_thread = threading.Thread(target=install, name="install-update")
+            self._install_thread.start()
             return False
 
-        # Start download
         thread = threading.Thread(target=do_download, daemon=True)
         thread.start()
 
@@ -1294,8 +1295,9 @@ class DictationTray(ServiceLifecycle):
         """
         Automatically check for updates on startup (once per day).
 
-        Silently checks in the background. If an update is found,
-        shows a notification that opens the Updates tab when clicked.
+        Silently checks in the background. An app update opens the same
+        result window as a manual check; an extension update only a
+        notification.
         """
         from . import update_checker
         from .config import load_config, record_update_check
@@ -1358,39 +1360,6 @@ class DictationTray(ServiceLifecycle):
         notify("GNOME extension update available",
                "Open Preferences → Updates & Backup to install it.")
         logger.info("Showed extension update notification")
-        return False
-
-    def restart_app(self, _=None):
-        """Cleanly restart the whole app after an update: launch a detached
-        instance that waits for us to exit, then quit this one via quit_app
-        (which stops the dictation service and releases the D-Bus name + lock),
-        so the new instance starts on a clean slate with the new service.
-        Both update paths end here: the tray's own Download & Install, and
-        Preferences (a separate process) asking over D-Bus.
-        Returns False so it can be scheduled with GLib.idle_add."""
-        from . import update_checker
-        # A self-managed AppImage was just swapped in place at APPIMAGE_PATH;
-        # packages are started through their /usr/bin launcher.
-        target = (update_checker.APPIMAGE_PATH
-                  if update_checker.get_install_type() == "appimage" else None)
-        ok, msg = update_checker.restart_via_launcher(target)
-        if not ok:
-            logger.error(f"Restart failed: {msg}")
-            dlg = message_dialog(
-                message_type=Gtk.MessageType.INFO,
-                buttons=Gtk.ButtonsType.OK,
-                text="Update installed"
-            )
-            dlg.format_secondary_text(
-                "TuxTalk couldn't restart by itself. Quit TuxTalk from the tray "
-                "icon and open it again to start the new version.")
-            dlg.set_position(Gtk.WindowPosition.CENTER)
-            dlg.set_keep_above(True)
-            dlg.connect("response", lambda d, _r: d.destroy())
-            dlg.show_all()
-            return False
-        logger.info("Restart scheduled; quitting this instance to hand off.")
-        self.quit_app(None)
         return False
 
     def _build_performance_submenu(self):

@@ -50,7 +50,7 @@ def test_launcher_does_not_inherit_a_stale_backend(monkeypatch):
     )
 
 
-def test_the_tray_and_preferences_start_the_service_the_same_way(monkeypatch):
+def test_the_tray_and_preferences_start_the_service_the_same_way(monkeypatch, tmp_path):
     """A second hand-rolled spawn would let the two paths drift apart."""
     import types
     from tuxtalk import prefs, service_launcher, tray
@@ -59,6 +59,7 @@ def test_the_tray_and_preferences_start_the_service_the_same_way(monkeypatch):
     monkeypatch.setattr(service_launcher.subprocess, "Popen", lambda argv, env=None, **k:
                         started.append((argv, (env or {}).get("GDK_BACKEND"))) or types.SimpleNamespace(pid=1))
     monkeypatch.setattr(service_launcher, "end_dictation_service", lambda: True)
+    monkeypatch.setattr("tuxtalk.single_instance.runtime_dir", lambda: str(tmp_path))
     tray.DictationTray._launch_service(types.SimpleNamespace())
     prefs._restart_without_tray()           # Preferences with no tray running
     assert len(started) == 2 and started[0] == started[1]

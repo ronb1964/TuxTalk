@@ -820,6 +820,9 @@ def run(tray=None):
     logger.info(f"Uninstalling TuxTalk ({install_type}); settings "
                 + ("deleted" if delete_personal else "kept") + ", shared models "
                 + ("deleted" if delete_shared else "kept"))
+    # With no tray taking part, its lock is held meanwhile, as the tray would:
+    # Preferences' restart takes it too, so none starts a service under this.
+    _lock = None if tray else _hold_tray_lock()     # held until run() returns
     window = _working_window()
     if tray:
         tray.stop()
@@ -847,6 +850,23 @@ def run(tray=None):
           done_heading(result), done_text(plan, delete_personal, delete_shared, result),
           markup=True)
     return True
+
+
+def _hold_tray_lock():
+    """The tray's lock, for an uninstall no tray takes part in; None when it
+    can't be had (an older tray that can't uninstall holds it: its processes
+    are ended anyway). Waits for a restart from Preferences to finish."""
+    from . import single_instance, tray_instance
+    try:
+        lock = single_instance.open_lock(tray_instance.TRAY_LOCK)
+    except OSError as e:
+        logger.warning(f"Uninstalling without the tray's lock: {e}")
+        return None
+    if single_instance.claim(lock, wait_s=service_launcher.QUIT_WAIT_S):
+        return lock
+    logger.info("A tray holds its lock; uninstalling beside it")
+    lock.close()
+    return None
 
 
 def _remove_root_part(plan, leave_group, tray):

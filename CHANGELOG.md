@@ -54,7 +54,13 @@ before 0.15.0, so older entries use that name.
   the AppImage, and the copy failed, TuxTalk turned it back on. Now it
   stays off.
 - On a desktop started without a login manager, two copies of TuxTalk
-  could run at once and type everything twice. Only one runs now.
+  could run at once and type everything twice. Now they share a lock in
+  /tmp, so only one runs.
+- Uninstall in Preferences asks about changes you haven't applied yet, the
+  same as closing the window does. They used to just disappear.
+- If the first-run copy into ~/AppImages failed and the AppImage you ran
+  had a space in its name, like "TuxTalk (1).AppImage", the menu entry
+  didn't open anything. It does now.
 - Saying "tab" in a sentence ("every tab shows", "the tabs in Claude
   Desktop") typed a tab character instead of the word, almost every time.
   Now only "press tab" makes a tab, and "tab" on its own is just the word.

@@ -1213,19 +1213,22 @@ def create_desktop_launcher(appimage_exec_path: Optional[str] = None) -> Tuple[b
         # The file first-run setup and the updater install to.
         appimage_exec_path = appimage_exec_path or APPIMAGE_PATH
         logger.info(f"Desktop launcher Exec path: {appimage_exec_path}")
+        # Quoted where it must be: a download named "TuxTalk (1).AppImage"
+        # was cut at the space, and the menu entry opened nothing.
+        program = _desktop_exec_program(appimage_exec_path)
 
         # Desktop file content
         desktop_content = f"""[Desktop Entry]
 Name=TuxTalk
 Comment=Hold a key, talk, and your words are typed for you (v{version})
-Exec={appimage_exec_path}
+Exec={program}
 Icon={icon_name}
 Type=Application
 Categories=Utility;Accessibility;AudioVideo;
 Keywords=dictation;speech;voice;transcription;whisper;
 StartupNotify=true
 Terminal=false
-{desktop_actions(appimage_exec_path)}"""
+{desktop_actions(program)}"""
 
         # Write the desktop file
         with open(DESKTOP_FILE_PATH, "w") as f:
