@@ -138,42 +138,6 @@ def _themed_icon(*names):
     return next((name for name in names if theme.has_icon(name)), None)
 
 
-class _IconToggleItem(Gtk.ImageMenuItem):
-    """An on/off tray menu item showing a checkmark icon instead of a checkbox.
-
-    Keeps Gtk.CheckMenuItem's get_active()/set_active() so callers don't
-    change. set_active() only redraws, like the tray's old _updating_toggle
-    guard; a click flips the state and calls on_toggle(item).
-    """
-
-    def __init__(self, label, on_toggle):
-        super().__init__(label=label)
-        self._active = False
-        self._on_toggle = on_toggle
-        self._check_icon = _themed_icon("object-select-symbolic", "emblem-ok-symbolic")
-        self.set_always_show_image(True)
-        self.connect("activate", self._clicked)
-        self._redraw()
-
-    def get_active(self):
-        return self._active
-
-    def set_active(self, active):
-        self._active = bool(active)
-        self._redraw()
-
-    def _clicked(self, _item):
-        self.set_active(not self._active)
-        self._on_toggle(self)
-
-    def _redraw(self):
-        if self._active and self._check_icon:
-            self.set_image(Gtk.Image.new_from_icon_name(self._check_icon, Gtk.IconSize.MENU))
-        else:
-            # An empty image: the desktop leaves the icon column blank
-            self.set_image(Gtk.Image())
-
-
 def preset_notice(model, device, gpu_offered):
     """The notification after choosing a Performance preset.
 
@@ -1457,12 +1421,12 @@ class DictationTray(ServiceLifecycle):
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         )
 
-        # Service toggle and status displays
-        # A checkmark ICON rather than a Gtk.CheckMenuItem: KDE gives
-        # checkboxes their own column beside the icon column, so a real
-        # checkbox sat to the left of the Preferences gear with every label
-        # pushed further right. With no checkbox the two share one column.
-        self.service_toggle = _IconToggleItem("Dictation on/off", self.toggle_service)
+        # A real check item, not a checkmark icon: its state goes to the
+        # desktop (dbusmenu's toggle-state), so a screen reader says on or
+        # off. On KDE the checkbox gets a column of its own beside the icons,
+        # which moves the labels right; being heard is worth that.
+        self.service_toggle = Gtk.CheckMenuItem(label="Dictation on/off")
+        self.service_toggle.connect("toggled", self.toggle_service)
         self.engine_item = Gtk.MenuItem(label="Loading the speech model...")
         self.engine_item.set_sensitive(False)
 
