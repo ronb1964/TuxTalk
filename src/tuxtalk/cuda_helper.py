@@ -162,6 +162,29 @@ def mark_first_run_complete():
     with open(flag_file, 'w') as f:
         f.write('done')
 
+def _wheel_libraries(names, lib_path):
+    """(member, where it goes) for each shared library under nvidia/ in a
+    wheel's *names*, the nvidia/ prefix dropped; one whose name points
+    outside *lib_path* is skipped and logged."""
+    wanted = []
+    for member in names:
+        if not member.startswith("nvidia/") or ".so" not in member:
+            continue
+        target = _inside(lib_path, member[len("nvidia/"):])
+        if target is None:
+            logger.warning(f"Skipped {member!r}: it points outside {lib_path}")
+        else:
+            wanted.append((member, target))
+    return wanted
+
+
+def _inside(folder, rel_path):
+    """*rel_path* under *folder*, or None when it would land anywhere else
+    (an absolute path, or ".." in it): a wheel's file names are only data."""
+    target = os.path.realpath(os.path.join(folder, rel_path))
+    return target if target.startswith(os.path.realpath(folder) + os.sep) else None
+
+
 def download_cuda_libraries(progress_callback=None, cancel_event=None):
     """
     Download CUDA libraries for GPU acceleration.
@@ -328,12 +351,8 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
                 with zipfile.ZipFile(wheel_path, 'r') as zip_ref:
                     # Only the shared libraries under nvidia/ are needed; the
                     # nvidia/ prefix is dropped so each lands in lib/<package>/lib/.
-                    so_files = [member for member in zip_ref.namelist() 
-                               if member.startswith('nvidia/') and '.so' in member]
-                    
-                    for j, member in enumerate(so_files):
-                        rel_path = member[len('nvidia/'):]
-                        target = os.path.join(lib_path, rel_path)
+                    so_files = _wheel_libraries(zip_ref.namelist(), lib_path)
+                    for j, (member, target) in enumerate(so_files):
                         os.makedirs(os.path.dirname(target), exist_ok=True)
                         with zip_ref.open(member) as source:
                             with open(target, 'wb') as dest:

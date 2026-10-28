@@ -6,6 +6,7 @@ launch number (_service_gen) drops a start scheduled before a later Stop or
 Quit."""
 import os
 import signal
+import threading
 
 import gi
 
@@ -346,6 +347,21 @@ class ServiceLifecycle:
         # going in): cut off, the launchers would point at a file that never
         # arrived, or the update the user asked for wouldn't go in.
         GLib.timeout_add(100, lambda: self._copying() or os._exit(0))
+
+    def _install_not_cut_off(self, install):
+        """install() on a thread that isn't a daemon, waited for here: a Quit's
+        fallback exit waits for it (_copying), and not for the download before."""
+        result = {}
+
+        def run():
+            try:
+                result["value"] = install()
+            except Exception as e:
+                logger.error(f"Installing the update failed: {e}", exc_info=True)
+        self._install_thread = threading.Thread(target=run, name="install-update")
+        self._install_thread.start()
+        self._install_thread.join()
+        return result.get("value", (False, None))
 
     def _copying(self) -> bool:
         """Whether a copy into ~/AppImages is under way."""

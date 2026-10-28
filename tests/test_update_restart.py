@@ -475,8 +475,8 @@ def test_tray_download_install_restarts_through_restart_app(monkeypatch, idle_qu
         or (installed, "disk full"))
     monkeypatch.setattr(Gtk.Dialog, "run", lambda d: steps.append("error shown"))
     stub = types.SimpleNamespace(restart_app=lambda: steps.append("restart"), _quitting=False)
+    stub._install_not_cut_off = lambda install: tray.DictationTray._install_not_cut_off(stub, install)
     tray.DictationTray._download_update(stub, {"appimage_url": "https://x/TuxTalk.AppImage"})
-    assert stub._install_thread.daemon is False
     idle_queue(lambda: len(steps) >= 2)
     install = ("install", "/updates/TuxTalk.AppImage", False)
     assert steps == [install, "restart" if installed else "error shown"]

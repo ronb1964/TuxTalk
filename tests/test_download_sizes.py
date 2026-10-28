@@ -17,3 +17,12 @@ def test_help_and_voice_commands_give_the_ai_and_cuda_sizes():
 def test_the_device_list_gives_cudas_size_before_its_download():
     label = prefs_speech.device_label("cuda", "small", cuda_ready=False)
     assert f"{cuda_helper.DOWNLOAD_SIZE_TEXT} download" in label
+
+
+def test_a_cuda_wheel_file_named_outside_its_folder_is_skipped(tmp_path):
+    """A wheel's file names are data: "nvidia//home/u/x.so" or "../x.so"
+    would have been written wherever they pointed."""
+    assert cuda_helper._inside(str(tmp_path), "cublas/lib/libcublas.so.12") \
+        == str(tmp_path / "cublas/lib/libcublas.so.12")
+    assert cuda_helper._inside(str(tmp_path), "/home/u/.config/autostart/x.so.desktop") is None
+    assert cuda_helper._inside(str(tmp_path), "../../x.so") is None

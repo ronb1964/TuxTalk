@@ -716,3 +716,18 @@ def test_every_preferences_window_of_the_users_is_found_whatever_the_pidfile(mon
     monkeypatch.setattr(prefs_ipc.os, "getpid", lambda: 1)
     monkeypatch.setattr(prefs_ipc, "_process_argv", lambda pid: procs[str(pid)][1])
     assert sorted(prefs_ipc.open_windows()) == [42, 45]
+
+
+def test_quit_waits_for_an_update_going_in_but_not_for_its_download():
+    """Only the install runs on a thread a Quit's fallback exit waits for:
+    with the download on it too, a slow connection kept the old TuxTalk
+    and its lock alive for minutes after Quit."""
+    seen = {}
+    t = _bare_tray()
+
+    def install():
+        seen["daemon"] = threading.current_thread().daemon
+        seen["tracked"] = t._install_thread is threading.current_thread()
+        return True, ""
+    assert t._install_not_cut_off(install) == (True, "")
+    assert seen == {"daemon": False, "tracked": True}

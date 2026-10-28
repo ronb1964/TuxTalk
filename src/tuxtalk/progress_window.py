@@ -37,13 +37,11 @@ def _progress_window(parent, title, first_line):
     return dialog, status_label, progress_bar
 
 
-def run_with_progress(parent, title, first_line, work, finish, daemon=True):
+def run_with_progress(parent, title, first_line, work, finish):
     """Run *work(progress)* on its own thread with a progress window over
     *parent* (None: from the tray), then close the window and call
     *finish(what work returned)* on the GTK thread (None if work raised).
-    work may call progress(message, percent) as often as it likes. Returns
-    the thread; *daemon* False for work the process must not exit during
-    (an update being installed)."""
+    work may call progress(message, percent) as often as it likes."""
     dialog, status_label, progress_bar = _progress_window(parent, title, first_line)
 
     def progress(message, percent):
@@ -67,6 +65,4 @@ def run_with_progress(parent, title, first_line, work, finish, daemon=True):
             result = None
         GLib.idle_add(done, result)
 
-    thread = threading.Thread(target=run, daemon=daemon, name=title)
-    thread.start()
-    return thread
+    threading.Thread(target=run, daemon=True, name=title).start()

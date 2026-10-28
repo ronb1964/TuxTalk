@@ -1,6 +1,6 @@
 {
  "files": {
-  "tray.py": 1783,
+  "tray.py": 1782,
   "welcome_dialog.py": 3089
  },
  "findings": {
@@ -308,8 +308,8 @@
    "lines": 101
   },
   "cuda_helper.py::download_cuda_libraries": {
-   "decisions": 49,
-   "lines": 207
+   "decisions": 46,
+   "lines": 203
   },
   "cuda_helper.py::show_cuda_download_dialog": {
    "lines": 135

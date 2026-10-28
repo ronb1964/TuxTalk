@@ -83,9 +83,9 @@ def test_installing_an_update_has_no_close_button(Gtk, monkeypatch):
     monkeypatch.setattr(update_checker, "download_update", lambda *a, **k: "/u/TuxTalk.AppImage")
     monkeypatch.setattr(update_checker, "install_appimage_update",
                         lambda path, progress: may_finish.get(timeout=5) or (True, ""))
-    tray.DictationTray._download_update(types.SimpleNamespace(restart_app=lambda: None,
-                                                              _quitting=False),
-                                        {"appimage_url": "https://x/TuxTalk.AppImage"})
+    stub = types.SimpleNamespace(restart_app=lambda: None, _quitting=False)
+    stub._install_not_cut_off = lambda install: tray.DictationTray._install_not_cut_off(stub, install)
+    tray.DictationTray._download_update(stub, {"appimage_url": "https://x/TuxTalk.AppImage"})
     box = next((w for w in Gtk.Window.list_toplevels()
                 if w.get_title() == "Updating TuxTalk" and w.get_visible()), None)
     assert box is not None and not box.get_deletable()

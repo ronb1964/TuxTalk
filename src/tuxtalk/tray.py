@@ -1165,8 +1165,7 @@ class DictationTray(ServiceLifecycle):
         """Download and install the AppImage update behind the progress window
         Preferences uses too (progress_window), then restart onto it. Nothing
         once Quit has begun, and nothing installed if Quit began during the
-        download. The install's thread isn't a daemon, and a Quit's fallback
-        exit waits for it (_copying): the update the user asked for goes in."""
+        download; an install under way finishes (_install_not_cut_off)."""
         if self._quitting:
             return
         from . import update_checker
@@ -1188,7 +1187,8 @@ class DictationTray(ServiceLifecycle):
             if self._quitting:
                 return False, None
             progress("Installing update...", 90)
-            return update_checker.install_appimage_update(path, progress)
+            return self._install_not_cut_off(
+                lambda: update_checker.install_appimage_update(path, progress))
 
         def finish(result):
             success, message = result or (False, "Something TuxTalk didn't expect went "
@@ -1200,8 +1200,7 @@ class DictationTray(ServiceLifecycle):
                 show_message(None, Gtk.MessageType.ERROR, "Update Failed", message,
                              keep_above=True)
 
-        self._install_thread = run_with_progress(None, "Updating TuxTalk", "Starting download...",
-                                                 work, finish, daemon=False)
+        run_with_progress(None, "Updating TuxTalk", "Starting download...", work, finish)
 
     def _download_and_install_package(self, release, install_type):
         """Download the correct .rpm/.deb and install it as root via pkexec,
