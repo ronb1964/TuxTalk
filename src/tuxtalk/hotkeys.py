@@ -322,10 +322,11 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
             and _on_toggle_key(event, toggle_key, held_modifiers, devices, cfg, input_device_idx)):
         return   # a voice edit was cancelled
 
-    # ESC cancels in any mode.
+    # ESC cancels in any mode. The keyboard comes back first: stopping the
+    # stream can take seconds with a slow sound server.
     if event.code == ecodes.KEY_ESC and rs.state.is_recording and event.value == 1:
-        recording.cancel_recording(cfg.beeps, cfg.notify, "Cancelled by ESC")
         keyboard_grab.release_all()
+        recording.cancel_recording(cfg.beeps, cfg.notify, "Cancelled by ESC")
 
 
 def _on_test_or_combo(event, hold_key, toggle_key, voice_cmds_combo, paste_last_combo,

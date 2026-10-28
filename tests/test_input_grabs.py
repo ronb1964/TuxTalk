@@ -323,6 +323,23 @@ def test_escape_releases_the_keyboard(key_env):
     assert not kb.is_grabbed
 
 
+def test_escape_gives_the_keyboard_back_before_the_microphone_stops(key_env, monkeypatch):
+    """Stopping the stream can take seconds with a slow sound server; the
+    keyboard mustn't stay grabbed through that wait."""
+    kb = keyboard()
+    press_hold([kb])
+    grabbed_while_cancelling = []
+    real_cancel = recording.cancel_recording
+
+    def slow_cancel(*a, **k):
+        grabbed_while_cancelling.append(kb.is_grabbed)
+        return real_cancel(*a, **k)
+    monkeypatch.setattr(recording, "cancel_recording", slow_cancel)
+    hotkeys._handle_key_event(FakeEvent(ecodes.KEY_ESC, 1), HOLD, TOGGLE,
+                          None, set(), [kb], FakeConfig(), 0)
+    assert grabbed_while_cancelling == [False]
+
+
 def test_microphone_failure_during_hold_leaves_nothing_grabbed(monkeypatch, quiet_recording):
     """End to end: real start_recording, failing mic, keyboard must come back."""
     monkeypatch.setattr(recording.sd, "InputStream",
