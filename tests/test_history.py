@@ -182,12 +182,12 @@ def test_dictation_on_off_is_a_check_item_a_screen_reader_can_read(monkeypatch):
     try:
         assert isinstance(t.service_toggle, Gtk.CheckMenuItem)
         assert t.service_toggle.get_label() == "Dictation on/off"
-        monkeypatch.setattr(t, "is_service_running", lambda: True, raising=False)
-        t._updating_toggle = True              # as the status poll does
-        t.service_toggle.set_active(True)
-        t._updating_toggle = False
-        assert t.service_toggle.get_active() and asked == []
-        t.service_toggle.activate()            # the user clicks it
-        assert not t.service_toggle.get_active() and asked == ["stop"]
+        for running in (True, False, True):   # the status poll, as it runs
+            t.update_menu_display(is_running=running)
+            assert t.service_toggle.get_active() is running
+        assert asked == []
+        t.service_toggle.activate()            # the user clicks it: off
+        t.service_toggle.activate()            # and on again
+        assert asked == ["stop", "start"]
     finally:
         menu.destroy()
