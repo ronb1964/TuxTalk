@@ -22,6 +22,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
@@ -35,6 +36,7 @@ logger = setup_logger(__name__)
 SAMPLE_RATE = 16000
 START_TIMEOUT = 180          # the very first run on a chip compiles shaders (8 s on an RTX 4070 Super)
 MIN_SAMPLES = SAMPLE_RATE    # shorter recordings are padded with silence to one second
+REPLY_TIMEOUT = 60           # for one recording, plus a second per second of audio
 
 
 def _steer(model, words):
@@ -65,6 +67,7 @@ class ParakeetGpuModel:
         self._command = command
         self._proc = None
         self._stderr = None
+        self._unread = b""          # the helper's output past the last full line
         self._cpu = None
         self._words = ()
         self._sent_words = ()       # the list the running helper has (a new one has none)
@@ -86,6 +89,11 @@ class ParakeetGpuModel:
         self._proc = self._launcher.submit(
             subprocess.Popen, self._command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=self._stderr, preexec_fn=engine_process.set_parent_death_signal).result()
+        # The pipes are used through their descriptors, never the buffered
+        # files, so a reply that stops halfway or a helper that stops reading
+        # ends at the deadline instead of blocking the dictation worker.
+        os.set_blocking(self._proc.stdin.fileno(), False)
+        self._unread = b""
         logger.info(f"Parakeet graphics helper starting (pid {self._proc.pid}, "
                     f"device {self.device_index})")
         try:
@@ -112,14 +120,33 @@ class ParakeetGpuModel:
 
     def _read_reply(self, timeout):
         """The helper's next JSON reply, waiting at most *timeout* seconds."""
-        out = self._proc.stdout
-        ready, _, _ = select.select([out], [], [], timeout)
-        if not ready:
-            raise RuntimeError(f"the helper did not answer within {timeout:.0f} s")
-        line = out.readline()
-        if not line:
-            raise RuntimeError(f"the helper stopped ({self._engine_messages() or 'no message'})")
+        deadline = time.monotonic() + timeout
+        fd = self._proc.stdout.fileno()
+        while b"\n" not in self._unread:
+            left = max(0.0, deadline - time.monotonic())
+            if not select.select([fd], [], [], left)[0]:
+                raise RuntimeError(f"the helper did not answer within {timeout:.0f} s")
+            chunk = os.read(fd, 65536)
+            if not chunk:
+                why = self._engine_messages() or "no message"
+                raise RuntimeError(f"the helper stopped ({why})")
+            self._unread += chunk
+        line, _, self._unread = self._unread.partition(b"\n")
         return json.loads(line)
+
+    def _write(self, data, timeout):
+        """Send *data* to the helper, giving up after *timeout* seconds."""
+        deadline = time.monotonic() + timeout
+        fd = self._proc.stdin.fileno()
+        view = memoryview(data)
+        while view:
+            left = max(0.0, deadline - time.monotonic())
+            if not select.select([], [fd], [], left)[1]:
+                raise RuntimeError(f"the helper took no audio for {timeout:.0f} s")
+            try:
+                view = view[os.write(fd, view):]
+            except BlockingIOError:
+                continue
 
     def _stop(self):
         proc, self._proc = self._proc, None
@@ -137,8 +164,7 @@ class ParakeetGpuModel:
             return
         from .parakeet_gpu_worker import encode_words
         try:
-            self._proc.stdin.write(encode_words(self._words))
-            self._proc.stdin.flush()
+            self._write(encode_words(self._words), 30)
             reply = self._read_reply(30)
         except Exception as e:
             logger.warning(f"Couldn't give Parakeet on the graphics chip your words: {e}")
@@ -159,9 +185,9 @@ class ParakeetGpuModel:
             logger.warning("Parakeet graphics helper had stopped; starting it again")
             self._start()
         self._send_words()
-        self._proc.stdin.write(struct.pack("<I", len(audio)) + audio.tobytes())
-        self._proc.stdin.flush()
-        reply = self._read_reply(60 + len(audio) / SAMPLE_RATE)
+        timeout = REPLY_TIMEOUT + len(audio) / SAMPLE_RATE
+        self._write(struct.pack("<I", len(audio)) + audio.tobytes(), timeout)
+        reply = self._read_reply(timeout)
         if "error" in reply:
             raise RuntimeError(reply["error"])
         return reply.get("text", "").strip()
