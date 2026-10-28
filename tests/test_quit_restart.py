@@ -668,3 +668,51 @@ def test_a_package_update_installs_nothing_after_quit(monkeypatch):
     monkeypatch.setattr(update_ui.GLib, "idle_add", lambda fn, *a: fn(*a))
     update_ui.run_package_update({}, "deb", quitting=lambda: True)
     assert installed == [] and shown == []
+
+
+def test_preferences_closes_on_the_uninstalls_request_as_its_own_close_does(monkeypatch):
+    """CLOSE reaches the window's own close (which asks about changes not
+    applied), and is handled before the pidfile tells anyone where to send it."""
+    import dbus.mainloop.glib
+    from tuxtalk import desktop_identity, prefs, prefs_ipc, ui_style
+    handlers, steps = {}, []
+
+    class Window:
+        def on_window_close(self, widget, event):
+            steps.append("asks and closes")
+
+    def handle(priority, sig, fn, *args):
+        handlers[sig] = lambda: fn(*args)
+        steps.append(f"handles {sig.name}")
+    monkeypatch.setattr(prefs.GLib, "unix_signal_add", handle)
+    monkeypatch.setattr(prefs, "_acquire_prefs_singleton", lambda tab: steps.append("pidfile"))
+    monkeypatch.setattr(prefs, "PreferencesWindow", Window)
+    monkeypatch.setattr(prefs.Gtk, "main", lambda: None)
+    monkeypatch.setattr(desktop_identity, "apply", lambda: None)
+    monkeypatch.setattr(ui_style, "prepare_windows", lambda: None)
+    monkeypatch.setattr(dbus.mainloop.glib, "DBusGMainLoop", lambda **k: None)
+    monkeypatch.setattr(sys, "argv", ["tuxtalk-prefs"])
+    prefs.main()
+    assert steps.index(f"handles {prefs_ipc.CLOSE.name}") < steps.index("pidfile")
+    assert handlers[prefs_ipc.CLOSE]() is True          # kept for a second request
+    assert steps[-1] == "asks and closes"
+
+
+def test_every_preferences_window_of_the_users_is_found_whatever_the_pidfile(monkeypatch):
+    """Found in /proc: an older window, or one that couldn't write its
+    pidfile, is never ended by an uninstall without its changes asked about."""
+    from tuxtalk import prefs_ipc
+    procs = {
+        "1": (1000, ["python3", "-m", "tuxtalk.prefs"]),           # this process
+        "42": (1000, ["/usr/bin/python3", "-m", "talktype.prefs"]),  # an older window
+        "43": (1001, ["python3", "-m", "tuxtalk.prefs"]),          # another user's
+        "44": (1000, ["python3", "-c", "job()", "-m", "tuxtalk.prefs"]),
+        "45": (1000, ["/opt/tuxtalk/bin/dictate-prefs"]),
+    }
+    monkeypatch.setattr(prefs_ipc.os, "listdir", lambda path: [*procs, "self"])
+    monkeypatch.setattr(prefs_ipc.os, "stat",
+                        lambda path: types.SimpleNamespace(st_uid=procs[path.split("/")[2]][0]))
+    monkeypatch.setattr(prefs_ipc.os, "getuid", lambda: 1000)
+    monkeypatch.setattr(prefs_ipc.os, "getpid", lambda: 1)
+    monkeypatch.setattr(prefs_ipc, "_process_argv", lambda pid: procs[str(pid)][1])
+    assert sorted(prefs_ipc.open_windows()) == [42, 45]

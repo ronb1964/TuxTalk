@@ -52,18 +52,25 @@ def test_quitting_types_what_the_worker_still_holds_first(quitting, monkeypatch)
     assert typed == ["See you at noon."]
 
 
-def test_a_recording_under_way_is_stopped_as_letting_go_would(quitting, monkeypatch):
-    """Hands-free still listening when Quit was clicked: it goes through the
-    stop letting go of the key takes (pipeline.stop_recording, which types it
-    and adds it to Recent Dictations), not dropped with the process."""
+def test_a_recording_under_way_is_transcribed_before_the_quit_ends(quitting, monkeypatch):
+    """Hands-free still listening when Quit was clicked: what was said goes
+    through the real stop (pipeline.stop_recording) to transcription, typing
+    and Recent Dictations (transcribe_and_inject) before the process ends,
+    as letting go of the key would, instead of dying with it."""
     cfg, svc = quitting
-    stopped = []
+    monkeypatch.setattr(dictation_worker, "_instance", DictationWorker())
     monkeypatch.setattr(rs.state, "is_recording", True)
     monkeypatch.setattr("tuxtalk.keyboard_grab.release_all", lambda: None)
-    monkeypatch.setattr(pipeline, "stop_recording", lambda *a, **k: stopped.append(True))
+    monkeypatch.setattr(recording, "finish_capture", lambda beeps, notify: (["what was said"], 16000))
+    transcribed = []
+
+    def transcribe(frames, rate, *a, **k):
+        time.sleep(0.3)                 # a dictation takes a moment to transcribe
+        transcribed.append((frames, rate))
+    monkeypatch.setattr(pipeline, "transcribe_and_inject", transcribe)
     with pytest.raises(SystemExit):
         service_tick.tick(cfg, svc)
-    assert stopped == [True]
+    assert transcribed == [(["what was said"], 16000)]
 
 
 def test_sigterm_asks_the_loop_to_quit_with_a_deadline_set_once(alarms, monkeypatch):
