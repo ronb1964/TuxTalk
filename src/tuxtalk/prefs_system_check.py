@@ -650,9 +650,12 @@ class SystemCheck(Tab):
                 done.destroy()
             else:
                 button.set_sensitive(True)
+                self._check_extension_status()      # it may be in place, but off
                 show_message(self.window, Gtk.MessageType.ERROR, "Installation Failed",
-                             "Failed to install GNOME extension.\n\n"
-                             "Please check your internet connection and try again.")
+                             "TuxTalk couldn't install the GNOME extension, or GNOME "
+                             "wouldn't turn it on; the log says which.\n\n"
+                             "Check your internet connection and try again. If it's "
+                             "installed but off, log out and back in first.")
 
         run_with_progress(self.window, "Installing Extension", "Preparing installation...",
                           extension_helper.download_and_install_extension, finish)

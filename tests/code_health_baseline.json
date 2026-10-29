@@ -63,8 +63,6 @@
   "explain.py::place_over_active_window::swallowed_error": 1,
   "explain.py::start_helper_window::swallowed_error": 1,
   "extension_helper.py::<module>::long_line": 2,
-  "extension_helper.py::download_and_install_extension::swallowed_error": 1,
-  "extension_helper.py::uninstall_extension::swallowed_error": 1,
   "file_transcribe.py::<module>::long_line": 1,
   "file_transcribe.py::FileEngine.close::swallowed_error": 1,
   "file_transcribe.py::FileEngine.reload_words::swallowed_error": 1,

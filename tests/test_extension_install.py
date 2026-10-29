@@ -181,8 +181,8 @@ def test_a_checkout_copy_that_fails_falls_back_without_the_bar_going_back(extens
 def test_the_dev_version_installs_the_extension_of_its_own_checkout():
     """The AppImage carries no copy: only a source checkout has one."""
     path = eh.checkout_extension_path()
-    assert path is not None
-    assert path.endswith(os.path.join("gnome-extension", eh.EXTENSION_UUID))
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))     # this checkout
+    assert path == os.path.join(here, "gnome-extension", eh.EXTENSION_UUID)
     assert os.path.isfile(os.path.join(path, "extension.js"))
 
 
@@ -200,3 +200,18 @@ def test_an_extension_gnome_wont_turn_on_is_not_reported_installed(extensions, m
     _ext_dir, source = extensions
     monkeypatch.setattr(desktop_detect, "enable_extension", lambda uuid: False)
     assert eh.install_extension_from_local(str(source)) is False
+
+
+def test_a_checkout_copy_gnome_wont_turn_on_isnt_downloaded_again(extensions, monkeypatch):
+    """The download would be refused the same way: only a failed copy is
+    worth one."""
+    _ext_dir, source = extensions
+    monkeypatch.setattr(eh, "is_extension_available", lambda: True)
+    monkeypatch.setattr(eh, "checkout_extension_path", lambda: str(source))
+    monkeypatch.setattr(desktop_detect, "enable_extension", lambda uuid: False)
+    downloaded = []
+    monkeypatch.setattr(eh, "download_and_install_extension",
+                        lambda callback=None: downloaded.append(True))
+    shown = []
+    assert eh.install_extension(lambda message, percent: shown.append(message)) is False
+    assert downloaded == [] and shown[-1] == "GNOME wouldn't turn the extension on"

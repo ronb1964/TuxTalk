@@ -204,22 +204,24 @@ def install_extension(progress_callback: Optional[Callable] = None) -> bool:
     Returns:
         bool: True if successful
     """
+    report = progress_callback or (lambda message, percent: None)
     if not is_extension_available():
-        if progress_callback:
-            progress_callback("GNOME desktop not detected", 0)
+        report("GNOME desktop not detected", 0)
         return False
 
     checkout_path = checkout_extension_path()
     if checkout_path:
-        if progress_callback:
-            # Kept low: a failed copy falls back to the download, which starts at
-            # 10%, and the bar mustn't go backwards.
-            progress_callback("Installing the extension...", 5)
-
-        # install_extension_from_local enables it too.
-        if install_extension_from_local(checkout_path):
-            if progress_callback:
-                progress_callback("Extension installed successfully!", 100)
+        # Kept low: a failed copy falls back to the download, which starts at
+        # 10%, and the bar mustn't go backwards.
+        report("Installing the extension...", 5)
+        # Only a failed copy is worth a download: GNOME refusing to turn it
+        # on would refuse the downloaded one too.
+        if install_extension_from_local(checkout_path, auto_enable=False):
+            if not enable_extension():
+                logger.error("Extension installed, but GNOME wouldn't turn it on")
+                report("GNOME wouldn't turn the extension on", 0)
+                return False
+            report("Extension installed successfully!", 100)
             return True
         logger.warning("Couldn't install the checkout's extension; downloading it")
 
@@ -301,7 +303,7 @@ def download_and_install_extension(progress_callback: Optional[Callable] = None)
             # Enabling adds it to org.gnome.shell's enabled-extensions, so it
             # stays on across logout/login; install_extension_from_local does it.
             if not install_extension_from_local(extension_source):
-                report("GNOME didn't take the extension", 0)
+                report("The extension couldn't be installed or turned on", 0)
                 return False
 
             report("Extension installed successfully!", 100)
@@ -309,7 +311,7 @@ def download_and_install_extension(progress_callback: Optional[Callable] = None)
 
     except Exception as e:
         report(f"Installation failed: {e}", 0)
-        print(f"Failed to download/install extension: {e}")
+        logger.error(f"Failed to download/install extension: {e}")
         return False
 
 
@@ -357,14 +359,14 @@ def uninstall_extension() -> bool:
         if os.path.exists(target_dir):
             # Remove the extension files
             shutil.rmtree(target_dir)
-            print("Extension uninstalled")
+            logger.info("Extension uninstalled")
             return True
         else:
-            print("Extension not installed")
+            logger.info("Extension not installed")
             return False
 
     except Exception as e:
-        print(f"Failed to uninstall extension: {e}")
+        logger.error(f"Failed to uninstall extension: {e}")
         return False
 
 
