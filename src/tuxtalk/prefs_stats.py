@@ -239,5 +239,6 @@ class StatsTab(Tab):
         if answer == Gtk.ResponseType.OK:
             if not stats_module.reset():
                 show_message(self.window, Gtk.MessageType.ERROR, "Your stats couldn't be reset",
-                             "A stats file couldn't be deleted. The log says which, and why.")
+                             "A stats file couldn't be deleted, or a dictation was "
+                             "being counted. Try again; the log says why.")
             self.refresh()

@@ -96,8 +96,8 @@ def _umask():
                 if line.startswith("Umask:"):
                     return int(line.split()[1], 8)
     except (OSError, ValueError) as e:
-        logger.info(f"Couldn't read the umask, assuming 022: {e}")
-    return 0o022
+        logger.info(f"Couldn't read the umask, keeping new files private: {e}")
+    return 0o077
 
 
 def _when(stamp):
