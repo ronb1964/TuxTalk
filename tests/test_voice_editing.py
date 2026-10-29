@@ -660,6 +660,17 @@ def test_downloading_the_ai_for_voice_editing_leaves_self_corrections_off(prefs_
     assert config.load_config().ai_corrections is False
 
 
+def test_an_off_that_cant_be_saved_at_once_is_left_for_apply(prefs_window, monkeypatch):
+    from tuxtalk import config
+    window = prefs_window(ai_corrections=True)
+
+    def read_only(cfg):
+        raise PermissionError(13, "Permission denied")
+    monkeypatch.setattr(config, "save_config", read_only)
+    window.save_now("ai_corrections", False)
+    assert "ai_corrections" in window._changed_since_open()      # Apply saves it
+
+
 def test_the_ai_downloads_in_the_flatpak_without_voice_editing(prefs_window, monkeypatch):
     """The Flatpak has no Labs, so no voice editing box: the download for
     self-corrections finished, then failed on it."""
