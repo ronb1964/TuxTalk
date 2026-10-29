@@ -265,8 +265,22 @@ def test_stop_ends_a_speed_check_run_at_once(monkeypatch):
     threading.Timer(0.2, cancel.set).start()
     started = time.monotonic()
     with pytest.raises(RuntimeError, match="stopped"):
-        wv._run_timed(["sleep", "30"], cancel)
+        wv._run_timed(["/bin/sleep", "30"], cancel)
     assert time.monotonic() - started < 5
+
+
+def test_a_speed_check_run_goes_through_the_engine_launcher(monkeypatch):
+    """So a service killed mid-check takes the run with it."""
+    started = []
+    real_popen = wv.subprocess.Popen
+
+    def recording_popen(command, **k):
+        started.append(command)
+        return real_popen(command, **k)
+    monkeypatch.setattr(wv, "_engine_env", lambda: None)
+    monkeypatch.setattr(wv.subprocess, "Popen", recording_popen)
+    wv._run_timed(["/bin/true"])
+    assert started[0][1] == wv.engine_process.engine_launcher.__file__
 
 
 def test_no_run_starts_after_stop(monkeypatch):
@@ -282,7 +296,7 @@ def test_no_run_starts_after_stop(monkeypatch):
 
 def test_a_finished_run_gives_its_exit_code_and_stderr(monkeypatch):
     monkeypatch.setattr(wv, "_engine_env", lambda: None)
-    assert wv._run_timed(["sh", "-c", "echo timings >&2; exit 3"]) == (3, "timings\n")
+    assert wv._run_timed(["/bin/sh", "-c", "echo timings >&2; exit 3"]) == (3, "timings\n")
 
 
 @pytest.mark.parametrize("text, cleaned", [
