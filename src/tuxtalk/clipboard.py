@@ -48,24 +48,11 @@ def copy_text_on_gtk_thread(text, timeout=1.0):
     *timeout*, this returns False and the copy is called off: nothing gets
     pasted, so the dictation mustn't land on the clipboard later.
     """
-    import threading
-    from gi.repository import GLib
-
-    lock, done = threading.Lock(), threading.Event()
-    result = []
-
-    def _copy():
-        with lock:
-            if not done.is_set():
-                result.append(copy_text(text))
-                done.set()
-        return False            # run once
-
-    GLib.idle_add(_copy)
-    done.wait(timeout)
-    with lock:
-        done.set()              # too late from here on
-        return bool(result and result[0])
+    from . import gtk_loop
+    try:
+        return bool(gtk_loop.call(copy_text, text, timeout=timeout))
+    except TimeoutError:
+        return False
 
 
 # --- Paste mode and the user's clipboard (see issue #7) -------------------------------
