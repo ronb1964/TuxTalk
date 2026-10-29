@@ -1015,6 +1015,9 @@ def test_a_keyboard_that_never_runs_dry_doesnt_hold_the_loop(setup, monkeypatch)
     after DRAIN_READS reads instead of reading for as long as it types."""
     helper, kb, _connect, _say, _heard, _seat = setup
     reads = []
-    monkeypatch.setattr(helper, "read_keyboard", lambda keyboard: reads.append(1) or 1)
+    # Runs dry after ten times the limit, so a drain without one fails here
+    # in a moment instead of looping until the computer runs out of memory.
+    monkeypatch.setattr(helper, "read_keyboard",
+                        lambda keyboard: reads.append(1) or len(reads) < 10 * hh.DRAIN_READS)
     helper.drain(kb)
     assert len(reads) == hh.DRAIN_READS
