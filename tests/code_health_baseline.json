@@ -47,7 +47,6 @@
   "desktop_detect.py::_is_extension_enabled_via_dbus::swallowed_error": 1,
   "desktop_detect.py::tray_host_available::swallowed_error": 1,
   "desktop_identity.py::apply::swallowed_error": 1,
-  "download_progress_dialog.py::UnifiedDownloadDialog._check_all_complete::long_line": 1,
   "download_progress_dialog.py::UnifiedDownloadDialog._mark_task_complete.update_ui::long_line": 1,
   "download_progress_dialog.py::UnifiedDownloadDialog._mark_task_complete.update_ui::undocumented": 1,
   "download_progress_dialog.py::show_unified_download_dialog::long_line": 3,

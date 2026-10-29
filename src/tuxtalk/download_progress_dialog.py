@@ -220,6 +220,9 @@ class UnifiedDownloadDialog:
         status_label = Gtk.Label()
         status_label.set_markup('<span size="small">Waiting to start...</span>')
         status_label.set_halign(Gtk.Align.START)
+        status_label.set_xalign(0)
+        status_label.set_line_wrap(True)          # a failure's reason can be long
+        status_label.set_max_width_chars(60)
         status_label.get_style_context().add_class('task-status')
         vbox.pack_start(status_label, False, False, 0)
 
@@ -252,6 +255,9 @@ class UnifiedDownloadDialog:
         widgets['status'].set_markup('<span size="small" color="#ff6b6b">❌ Cancelled</span>')
         widgets['cancel_btn'].set_sensitive(False)
         widgets['cancel_btn'].set_label("Cancelled")
+        # Not left to the download: it notices the Cancel only once its
+        # request or its wait before a retry returns.
+        self._check_all_complete()
 
     def _cancel_unfinished_tasks(self):
         """Stop any download still running when the window goes away.
@@ -322,13 +328,24 @@ class UnifiedDownloadDialog:
         GLib.idle_add(update_ui)
 
     def _check_all_complete(self):
-        """Check if all tasks are complete and close dialog if so."""
-        all_done = all(task.completed or task.cancelled for task in self.tasks)
-
-        if all_done and not self.all_completed:
-            self.all_completed = True
-            # Close dialog after short delay
-            GLib.timeout_add(1500, lambda: self.dialog.response(Gtk.ResponseType.OK) if self.dialog else False)
+        """Close the window once every task has ended: at once when they were
+        all cancelled, after 1.5 s when they ended well (so "Complete!"
+        shows), and never by itself when one failed. Then its reason stays
+        on screen until the user clicks Close."""
+        if self.all_completed or not all(t.completed or t.cancelled for t in self.tasks):
+            return
+        self.all_completed = True
+        if self.dialog is None:
+            return
+        if any(t.completed and not t.success and not t.cancelled for t in self.tasks):
+            close = self.dialog.add_button("Close", Gtk.ResponseType.OK)
+            close.show()
+            close.grab_focus()
+        elif all(t.cancelled for t in self.tasks):
+            self.dialog.response(Gtk.ResponseType.CANCEL)
+        else:
+            GLib.timeout_add(1500, lambda: self.dialog.response(Gtk.ResponseType.OK)
+                             if self.dialog else False)
 
     def _run_task(self, task):
         """Run a download task in a background thread."""
