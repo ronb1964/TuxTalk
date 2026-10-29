@@ -184,3 +184,19 @@ def test_the_dev_version_installs_the_extension_of_its_own_checkout():
     assert path is not None
     assert path.endswith(os.path.join("gnome-extension", eh.EXTENSION_UUID))
     assert os.path.isfile(os.path.join(path, "extension.js"))
+
+
+def test_installed_programs_have_no_checkout_copy(tmp_path, monkeypatch):
+    """The AppImage, .deb and .rpm run from a folder with no gnome-extension
+    beside it: the extension is downloaded."""
+    monkeypatch.setattr(eh, "__file__", str(tmp_path / "usr" / "lib" / "tuxtalk" /
+                                            "extension_helper.py"))
+    assert eh.checkout_extension_path() is None
+
+
+def test_an_extension_gnome_wont_turn_on_is_not_reported_installed(extensions, monkeypatch):
+    """Without a tray its menu is how TuxTalk is used: "installed" would leave
+    the user with nothing."""
+    _ext_dir, source = extensions
+    monkeypatch.setattr(desktop_detect, "enable_extension", lambda uuid: False)
+    assert eh.install_extension_from_local(str(source)) is False

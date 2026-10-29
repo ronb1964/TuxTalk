@@ -160,7 +160,8 @@ def install_extension_from_local(source_dir: str, auto_enable: bool = True) -> b
         auto_enable: If True, automatically enable the extension after installation
 
     Returns:
-        bool: True if successful
+        bool: True if successful. Installed but not turned on is a failure:
+        without a tray, the extension's menu is how TuxTalk is used.
     """
     try:
         ext_dir = desktop_detect.get_extension_dir()
@@ -168,20 +169,15 @@ def install_extension_from_local(source_dir: str, auto_enable: bool = True) -> b
 
         os.makedirs(ext_dir, exist_ok=True)
         _swap_in(source_dir, target_dir)
+        logger.info(f"Extension installed to {target_dir}")
 
-        print(f"Extension installed to {target_dir}")
-
-        # Auto-enable if requested
-        if auto_enable:
-            if enable_extension():
-                print("Extension enabled - will be active after logout/login")
-            else:
-                print("Failed to auto-enable extension - you can enable it manually")
-
+        if auto_enable and not enable_extension():
+            logger.error("Extension installed, but GNOME wouldn't turn it on")
+            return False
         return True
 
     except Exception as e:
-        print(f"Failed to install extension: {e}")
+        logger.error(f"Failed to install extension: {e}")
         return False
 
 
@@ -192,7 +188,7 @@ def checkout_extension_path() -> Optional[str]:
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     path = os.path.join(root, "gnome-extension", EXTENSION_UUID)
     if os.path.isfile(os.path.join(path, "metadata.json")):
-        logger.info(f"Installing the GNOME extension from the source checkout: {path}")
+        logger.info(f"The GNOME extension comes from the source checkout: {path}")
         return path
     return None
 
@@ -216,7 +212,7 @@ def install_extension(progress_callback: Optional[Callable] = None) -> bool:
     checkout_path = checkout_extension_path()
     if checkout_path:
         if progress_callback:
-            # Low: a failed copy falls back to the download, which starts at
+            # Kept low: a failed copy falls back to the download, which starts at
             # 10%, and the bar mustn't go backwards.
             progress_callback("Installing the extension...", 5)
 
@@ -245,9 +241,9 @@ def download_and_install_extension(progress_callback: Optional[Callable] = None)
     import tempfile
     import zipfile
 
+    report = progress_callback or (lambda message, percent: None)
     if not is_extension_available():
-        if progress_callback:
-            progress_callback("GNOME desktop not detected", 0)
+        report("GNOME desktop not detected", 0)
         return False
 
     try:
@@ -255,14 +251,13 @@ def download_and_install_extension(progress_callback: Optional[Callable] = None)
         with tempfile.TemporaryDirectory() as temp_dir:
             zip_path = os.path.join(temp_dir, 'extension.zip')
 
-            if progress_callback:
-                progress_callback("Downloading extension...", 10)
+            report("Downloading extension...", 10)
 
             # Download hook
             def download_progress_hook(downloaded, total_size):
-                if progress_callback and total_size > 0:
+                if total_size > 0:
                     percent = min(90, 10 + int((downloaded / total_size) * 70))
-                    progress_callback(f"Downloading... {int((downloaded / total_size) * 100)}%", percent)
+                    report(f"Downloading... {int((downloaded / total_size) * 100)}%", percent)
 
             # Download extension zip. The timeout keeps a stalled connection
             # from hanging the install dialog forever. The sha256 (when the
@@ -276,8 +271,7 @@ def download_and_install_extension(progress_callback: Optional[Callable] = None)
                 # GNOME Shell on the strength of "the check didn't work" is
                 # exactly what the check exists to prevent.
                 logger.error(f"Refusing to install an unverified extension: {e}")
-                if progress_callback:
-                    progress_callback("Could not verify the extension download", 0)
+                report("Could not verify the extension download", 0)
                 return False
             if not download_file(
                 EXTENSION_DOWNLOAD_URL,
@@ -286,12 +280,10 @@ def download_and_install_extension(progress_callback: Optional[Callable] = None)
                 progress_hook=download_progress_hook,
                 expected_sha256=expected_sha256,
             ):
-                if progress_callback:
-                    progress_callback("Extension download failed or was corrupted", 0)
+                report("Extension download failed or was corrupted", 0)
                 return False
 
-            if progress_callback:
-                progress_callback("Extracting extension...", 85)
+            report("Extracting extension...", 85)
 
             # Extract zip
             extract_dir = os.path.join(temp_dir, 'extracted')
@@ -304,21 +296,19 @@ def download_and_install_extension(progress_callback: Optional[Callable] = None)
                 # Maybe it's directly in extract_dir
                 extension_source = extract_dir
 
-            if progress_callback:
-                progress_callback("Installing and enabling extension...", 90)
+            report("Installing and enabling extension...", 90)
 
             # Enabling adds it to org.gnome.shell's enabled-extensions, so it
             # stays on across logout/login; install_extension_from_local does it.
             if not install_extension_from_local(extension_source):
+                report("GNOME didn't take the extension", 0)
                 return False
 
-            if progress_callback:
-                progress_callback("Extension installed successfully!", 100)
+            report("Extension installed successfully!", 100)
             return True
 
     except Exception as e:
-        if progress_callback:
-            progress_callback(f"Installation failed: {e}", 0)
+        report(f"Installation failed: {e}", 0)
         print(f"Failed to download/install extension: {e}")
         return False
 
