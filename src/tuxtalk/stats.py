@@ -118,9 +118,10 @@ def _write(days):
 @contextlib.contextmanager
 def _changing():
     """Held around each read-and-rewrite of the file (one at a time, across
-    processes). Without a usable runtime folder, or after LOCK_WAIT_S behind
-    a change that doesn't end, it goes ahead unlocked: the dictation that
-    records it waits for this."""
+    processes). Raises TimeoutError after LOCK_WAIT_S behind a change that
+    doesn't end: going ahead could undo a reset, and the dictation that
+    records a count waits for this. Without a usable runtime folder it goes
+    ahead unlocked."""
     from . import single_instance
     try:
         lock = single_instance.open_lock("stats.lock")
@@ -130,7 +131,7 @@ def _changing():
         return
     with lock:
         if not single_instance.claim(lock, wait_s=LOCK_WAIT_S):
-            logger.warning("Usage stats: another change holds on; changing them anyway")
+            raise TimeoutError("another change to the usage stats doesn't end")
         yield
 
 
@@ -138,7 +139,8 @@ def merge_days(theirs):
     """Add *theirs* (a backup's {day: counts}) to the stored days, keeping the
     higher word count for a day both have. Returns False, and writes nothing,
     when the stored file exists but can't be read: like record(), it leaves
-    what might be recoverable alone."""
+    what might be recoverable alone. Raises TimeoutError (an OSError) when
+    another change holds the file too long."""
     with _changing():
         days = _read()
         if days is None:
@@ -179,17 +181,22 @@ def record(words, seconds, today=None):
 def reset():
     """Forget all usage stats, including any stats.json.bak an earlier
     development build left behind (it saved through config.write_text_atomic,
-    which keeps a backup). False when a file couldn't be deleted."""
+    which keeps a backup). False when a file couldn't be deleted, or another
+    change held the stats too long."""
     done = True
-    with _changing():
-        for path in (stats_path(), stats_path() + ".bak"):
-            try:
-                os.remove(path)
-            except FileNotFoundError:
-                pass
-            except OSError as e:
-                logger.warning(f"Could not reset usage stats: {e}")
-                done = False
+    try:
+        with _changing():
+            for path in (stats_path(), stats_path() + ".bak"):
+                try:
+                    os.remove(path)
+                except FileNotFoundError:
+                    pass
+                except OSError as e:
+                    logger.warning(f"Could not reset usage stats: {e}")
+                    done = False
+    except TimeoutError as e:
+        logger.warning(f"Could not reset usage stats: {e}")
+        return False
     return done
 
 

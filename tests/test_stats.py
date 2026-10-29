@@ -354,9 +354,15 @@ def test_a_reset_or_restore_waits_for_a_count_under_way(stats_file, change):
     assert not changing.is_alive()
 
 
-def test_a_change_that_never_ends_doesnt_hold_the_dictation_up(stats_file, monkeypatch):
+def test_a_change_that_never_ends_holds_nothing_up_and_is_not_undone(stats_file, monkeypatch):
+    """Going ahead after the wait could bring back counts a reset deleted:
+    the dictation's count is skipped, and a reset or restore says it failed."""
     monkeypatch.setattr(stats, "LOCK_WAIT_S", 0.2)
-    held = _change_under_way()
     stats.record(5, 2.0)
+    held = _change_under_way()
+    stats.record(7, 2.0)                                     # skipped, after 0.2 s
     assert stats.load()[datetime.date.today().isoformat()]["words"] == 5
+    assert stats.reset() is False and stats_file.exists()
+    with pytest.raises(OSError):
+        stats.merge_days({"2026-10-01": {"words": 3}})
     held.close()
