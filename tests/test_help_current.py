@@ -46,8 +46,8 @@ def test_fix_a_word_lives_on_the_words_tab(help_text):
 
 def test_quote_lines_show_curly_quotes(help_text):
     assert 'Smart quotes (" " instead of " ")' not in help_text
-    assert "open quotes for “" in help_text
-    assert "close quotes for ”" in help_text
+    assert "open quotes → “" in help_text
+    assert "close quotes → ”" in help_text
 
 
 def test_no_menu_items_or_presets_that_do_not_exist(help_text):
