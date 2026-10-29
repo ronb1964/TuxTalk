@@ -33,8 +33,9 @@ class StubPrefs:
         self.restart_result = True
         self.words_tab = SimpleNamespace(save=lambda: True)     # snippets saved
 
-    def restart_service(self):
+    def restart_service(self, on_failed=None):
         self.restart_calls += 1
+        self.on_failed = on_failed
         return self.restart_result
 
 
@@ -72,6 +73,35 @@ class TestApplyOrRestart:
 
         assert prefs_cls._apply_or_restart(stub, {"model"}) is True
         assert stub.restart_calls == 1
+
+    def test_a_restart_that_fails_after_apply_is_said_and_stays_owed(self, prefs_cls):
+        """With no tray the restart runs on a thread, after Apply has
+        answered: a start that failed there was only logged, and the next
+        Apply found nothing changed to restart for."""
+        stub = StubPrefs({}, {})
+        said = []
+        stub._say_restart_failed = lambda: said.append(1)
+        stub.window = SimpleNamespace(get_visible=lambda: True)
+        assert prefs_cls._apply_or_restart(stub, {"model"}) is True
+        stub.on_failed()
+        assert stub._restart_owed == {"model"} and said == [1]
+
+    def test_the_restart_thread_reports_a_failed_start(self, prefs_cls, monkeypatch):
+        from tuxtalk import prefs, single_instance
+        failed = []
+
+        class InlineThread:
+            def __init__(self, target, name):
+                self.target = target
+
+            def start(self):
+                self.target()
+        monkeypatch.setattr(single_instance, "held_elsewhere", lambda lock: False)
+        monkeypatch.setattr(prefs, "_restart_without_tray", lambda: False)
+        monkeypatch.setattr(prefs.threading, "Thread", InlineThread)
+        monkeypatch.setattr(prefs.GLib, "idle_add", lambda fn: fn())
+        assert prefs_cls.restart_service(None, on_failed=lambda: failed.append(1)) is True
+        assert failed == [1]
 
     def test_mixed_change_restarts(self, prefs_cls):
         stub = StubPrefs({}, {})

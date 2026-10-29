@@ -136,6 +136,19 @@ def held_elsewhere(name: str) -> bool:
         os.close(fd)
 
 
+def wait_for_pid(read_pid, wait_s):
+    """The pid *read_pid()* finds, asked again for up to *wait_s* seconds:
+    a window writes its pid only once it can take the signal to come to the
+    front (until then the signal would end it), so one still starting is
+    waited for. None if none turned up."""
+    deadline = time.monotonic() + wait_s
+    while not (pid := read_pid()):
+        if time.monotonic() >= deadline:
+            return None
+        time.sleep(0.05)
+    return pid
+
+
 def claim_window(name, brought_forward, what):
     """For a program with one window (Preferences, Transcribe a File): (open
     it?, the lock *name* to hold while it's open). The lock is what keeps
