@@ -266,6 +266,38 @@ def test_the_tick_box_cleans_what_is_shown_and_saved(win, monkeypatch, tmp_path)
     assert "uh" in text()                       # as heard again
 
 
+def test_a_save_that_fails_leaves_the_file_it_would_replace(win, monkeypatch, tmp_path):
+    """A full disk: the transcript saved there before is still whole."""
+    import os
+    win.path = str(tmp_path / "clip.mov")
+    done(win, "Meet me at noon.")
+    earlier = tmp_path / "clip.txt"
+    earlier.write_text("the transcript from yesterday\n")
+
+    class Chooser:
+        def __init__(self, *a): pass
+        def set_current_name(self, n): pass
+        def set_current_folder(self, f): pass
+        def set_do_overwrite_confirmation(self, v): pass
+        def run(self): return Gtk.ResponseType.ACCEPT
+        def get_filename(self): return str(earlier)
+        def destroy(self): pass
+
+    monkeypatch.setattr(Gtk.FileChooserNative, "new", lambda *a: Chooser())
+
+    def disk_full(fd):
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr(os, "fsync", disk_full)
+    win._save("txt")
+    assert earlier.read_text() == "the transcript from yesterday\n"
+    assert not win.kept
+    monkeypatch.undo()
+    monkeypatch.setattr(Gtk.FileChooserNative, "new", lambda *a: Chooser())
+    win._save("txt")
+    assert "Meet me at noon." in earlier.read_text()
+    assert earlier.stat().st_mode & 0o777 == 0o644      # not private like the settings
+
+
 # --- dropping a file anywhere, with a hint where ---------------------------------
 
 def test_the_text_area_takes_dropped_files(win):

@@ -460,8 +460,10 @@ class TranscribeWindow:
         if not target:
             return
         try:
-            with open(target, "w", encoding="utf-8") as f:
-                f.write(content)
+            # A full disk mustn't cost the file being replaced, and the new one
+            # is readable as any file people save (a media server's subtitles).
+            from .config import write_text_atomic
+            write_text_atomic(target, content, keep_backup=False, mode=0o644)
             self.kept = True
             self.status.set_text(f"Saved {os.path.basename(target)}.")
         except OSError as e:
