@@ -269,6 +269,17 @@ def test_stop_ends_a_speed_check_run_at_once(monkeypatch):
     assert time.monotonic() - started < 5
 
 
+def test_no_run_starts_after_stop(monkeypatch):
+    import threading
+    started = []
+    monkeypatch.setattr(wv.subprocess, "Popen", lambda *a, **k: started.append(a))
+    cancel = threading.Event()
+    cancel.set()
+    with pytest.raises(RuntimeError, match="stopped"):
+        wv._run_timed(["whisper-cli"], cancel)
+    assert started == []
+
+
 def test_a_finished_run_gives_its_exit_code_and_stderr(monkeypatch):
     monkeypatch.setattr(wv, "_engine_env", lambda: None)
     assert wv._run_timed(["sh", "-c", "echo timings >&2; exit 3"]) == (3, "timings\n")

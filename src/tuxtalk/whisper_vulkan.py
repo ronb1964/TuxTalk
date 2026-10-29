@@ -283,7 +283,10 @@ _LOAD_TIME = re.compile(r"load time =\s+([\d.]+) ms")
 def _run_timed(cmd, cancel=None, timeout=300):
     """(exit code, stderr) of *cmd*, killed when *cancel* is set (Stop in the
     speed check's window) or after *timeout* seconds: a hung graphics driver
-    would otherwise keep the chip and a processor core busy for minutes."""
+    would otherwise keep the chip and a processor core busy for minutes. A
+    run Stop came before isn't started: on a hung driver it may not die."""
+    if cancel is not None and cancel.is_set():
+        raise RuntimeError("speed check stopped")
     deadline = time.monotonic() + timeout
     with subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
                           text=True, env=_engine_env()) as proc:
@@ -297,7 +300,7 @@ def _run_timed(cmd, cancel=None, timeout=300):
                     proc.kill()
                     proc.communicate()
                     raise RuntimeError("speed check stopped" if stopped
-                                       else "speed check run took too long")
+                                       else "speed check run took too long") from None
 
 
 def _time_one(model, extra_args, threads, cli="whisper-cli", cancel=None):
