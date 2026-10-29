@@ -10,7 +10,7 @@
 #
 # Built in Ubuntu 22.04 like the AppImage, so it runs on 22.04 and newer
 # (glibc 2.34). 22.04 has no glslc, so the build uses the LunarG Vulkan SDK,
-# cached in ~/.cache/talktype-vulkan-sdk.
+# pinned in vulkan-engine-container.sh and cached in ~/.cache/talktype-vulkan-sdk.
 #
 # It also builds whisper.cpp's Parakeet library (libparakeet.so), which
 # parakeet_gpu_worker.py loads to run Parakeet on the graphics chip.
