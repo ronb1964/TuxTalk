@@ -256,6 +256,6 @@ def test_the_real_helper_starts_through_the_engine_launcher(monkeypatch):
     with pytest.raises(OSError):
         parakeet_gpu.ParakeetGpuModel(0, threads=1)
     command, kwargs = started[0]
-    assert command[1:3] == ["-m", "tuxtalk.engine_launcher"]
+    assert command[1] == parakeet_gpu.engine_process.engine_launcher.__file__
     assert command[command.index("--") + 1:][1:3] == ["-m", "tuxtalk.parakeet_gpu_worker"]
     assert "preexec_fn" not in kwargs

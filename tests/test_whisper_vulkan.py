@@ -593,7 +593,7 @@ def test_the_graphics_engine_starts_through_the_engine_launcher(fake_server, mon
     model = wv.VulkanWhisperModel("small", 0, threads=1)
     try:
         command, kwargs = started[0]
-        assert command[1:3] == ["-m", "tuxtalk.engine_launcher"]
+        assert command[1] == wv.engine_process.engine_launcher.__file__
         assert "preexec_fn" not in kwargs
     finally:
         model.close()

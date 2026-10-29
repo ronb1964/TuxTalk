@@ -256,7 +256,7 @@ def test_the_engine_starts_through_the_launcher_with_its_own_libraries(dead_engi
                         lambda argv, **k: options.append((argv, k)) or _Proc())
     dead_engine.start(_replacing=dead_engine._proc)
     argv, kwargs = options[0]
-    assert argv[1:3] == ["-m", "tuxtalk.engine_launcher"]
+    assert argv[1] == ai.engine_process.engine_launcher.__file__
     assert argv[argv.index("--") + 1] == ai._server_binary()
     assert kwargs["env"][ai.engine_process.engine_launcher.ENGINE_LIBRARY_PATH] == "/x"
     assert "preexec_fn" not in kwargs

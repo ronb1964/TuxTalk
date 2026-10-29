@@ -39,7 +39,7 @@ def parent_death_command(argv, env=None):
         env[engine_launcher.ENGINE_LIBRARY_PATH] = env.pop("LD_LIBRARY_PATH", "")
         if own_libs is not None:
             env["LD_LIBRARY_PATH"] = own_libs
-    command = [sys.executable, "-m", "tuxtalk.engine_launcher", str(os.getpid()), "--", *argv]
+    command = [sys.executable, engine_launcher.__file__, str(os.getpid()), "--", *argv]
     return command, env
 
 

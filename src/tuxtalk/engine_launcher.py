@@ -1,14 +1,19 @@
 """
 Starts one engine so that it dies with the dictation service.
 
-    python -m tuxtalk.engine_launcher <service pid> -- <engine> [args...]
+    python <this file> <service pid> -- <engine> [args...]
 
 engine_process.parent_death_command builds that line. This process asks the
 kernel to SIGKILL it when the thread that started it exits, checks that the
-service is still its parent, then becomes the engine (exec keeps the
-request). Doing it here, in a process of its own, keeps Python out of the
+service is still its parent, then becomes the engine: the request survives
+the exec. Doing it here, in a process of its own, keeps Python out of the
 moment between fork and exec in the service, which has threads and could
 deadlock there (preexec_fn), and it works with no other program installed.
+
+It runs by its path, not as tuxtalk.engine_launcher, and imports only the
+standard library: the package's own start-up moves old folders and opens the
+log, and an engine must start even where that fails. (Run by its path, this
+folder comes first on sys.path; no module here is named like a standard one.)
 
 The environment is the engine's, except that LD_LIBRARY_PATH is still the
 service's (Python itself may need it, as in the AppImage); the engine's
@@ -44,6 +49,10 @@ def main(argv):
     libs = os.environ.pop(ENGINE_LIBRARY_PATH, None)
     if libs is not None:
         os.environ["LD_LIBRARY_PATH"] = libs
+    # Python ignores these; an engine expects them as any program gets them
+    # (subprocess's restore_signals did this when the service started it).
+    for ignored in (signal.SIGPIPE, signal.SIGXFSZ):
+        signal.signal(ignored, signal.SIG_DFL)
     try:
         os.execv(engine[0], engine)
     except OSError as e:

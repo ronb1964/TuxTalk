@@ -9,6 +9,7 @@ real ones.
 """
 import os
 import subprocess
+import sys
 import threading
 import time
 
@@ -82,3 +83,28 @@ def test_an_engine_that_cant_start_says_why(tmp_path):
     assert engine_process.launch_failure(result.returncode) == (
         ", because its program couldn't be started")
     assert engine_process.launch_failure(-9) == ""
+
+
+def test_an_engine_starts_where_tuxtalks_own_start_up_would_fail(tmp_path):
+    """The launcher imports nothing of TuxTalk: the package's start-up opens
+    the log and moves old folders, and a read-only home mustn't stop an engine."""
+    command, env = engine_process.parent_death_command(["/bin/true"])
+    env["PYTHONPATH"] = str(tmp_path)          # no tuxtalk package to import
+    assert subprocess.run(command, env=env).returncode == 0
+
+
+def test_an_engine_gets_sigpipe_and_sigxfsz_as_any_program_does():
+    """Python ignores both; an engine started as Popen would start it mustn't."""
+    command, env = engine_process.parent_death_command(["/bin/cat", "/proc/self/status"])
+    status = subprocess.run(command, env=env, capture_output=True, text=True).stdout
+    ignored = int(next(line for line in status.splitlines()
+                       if line.startswith("SigIgn:")).split()[1], 16)
+    assert not ignored & (1 << (13 - 1) | 1 << (25 - 1))     # SIGPIPE, SIGXFSZ
+
+
+def test_no_module_beside_the_launcher_hides_a_standard_one():
+    """Run by its path, the launcher's folder comes first on sys.path: a
+    tuxtalk/signal.py would be imported in place of Python's own."""
+    folder = os.path.dirname(engine_launcher.__file__)
+    ours = {name.removesuffix(".py") for name in os.listdir(folder)}
+    assert not ours & set(sys.stdlib_module_names)
