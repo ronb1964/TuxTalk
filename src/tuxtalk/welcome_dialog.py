@@ -21,6 +21,8 @@ gi.require_version('Gdk', '3.0')
 from gi.repository import Gtk, Gdk, GLib
 from .ui_style import Fold, message_dialog, more_below_bar, show_message
 
+from .flatpak_welcome import (build_shortcut_setup_section, build_unsupported_desktop_section,
+                              shortcut_support)
 from .hotkey_labels import layout_label
 from .hotkey_test_devices import (close_devices, flush_pending_events, hotkey_test_helper,
                                   open_key_devices, read_ready)
@@ -42,6 +44,114 @@ logger = setup_logger(__name__)
 detect_uinput_access = check_all_device_permissions
 # A dict with installed, needs_install, message (PortAudio records the audio).
 detect_portaudio_status = get_portaudio_status
+
+
+# The welcome screen's styles. They go on the whole screen (_install_css), so
+# every rule uses a class only the welcome screen's widgets carry.
+_CSS = b"""
+    .welcome-checkbox {
+        padding: 8px;
+        border-radius: 8px;
+        transition: all 300ms ease-in-out;
+    }
+    .welcome-checkbox:hover {
+        background-color: rgba(66, 133, 244, 0.15);
+        box-shadow: 0 0 8px rgba(66, 133, 244, 0.3);
+    }
+    .welcome-checkbox:checked {
+        background-color: rgba(66, 133, 244, 0.25);
+        box-shadow: 0 0 12px rgba(66, 133, 244, 0.5);
+    }
+    /* Pulse effect with multiple states for smooth continuous animation */
+    .welcome-checkbox.pulse-0 {
+        background-color: rgba(66, 133, 244, 0.06);
+        box-shadow: 0 0 8px rgba(66, 133, 244, 0.25);
+    }
+    .welcome-checkbox.pulse-1 {
+        background-color: rgba(66, 133, 244, 0.075);
+        box-shadow: 0 0 9px rgba(66, 133, 244, 0.3);
+    }
+    .welcome-checkbox.pulse-2 {
+        background-color: rgba(66, 133, 244, 0.09);
+        box-shadow: 0 0 11px rgba(66, 133, 244, 0.375);
+    }
+    .welcome-checkbox.pulse-3 {
+        background-color: rgba(66, 133, 244, 0.105);
+        box-shadow: 0 0 12px rgba(66, 133, 244, 0.425);
+    }
+    .welcome-checkbox.pulse-4 {
+        background-color: rgba(66, 133, 244, 0.12);
+        box-shadow: 0 0 14px rgba(66, 133, 244, 0.5);
+    }
+    /* Required-step (Flatpak shortcut setup): the SAME pulse-N levels, but
+       red, so the "will NOT work until you do this" line pulses hard. */
+    .tt-required {
+        padding: 10px;
+        border-radius: 8px;
+    }
+    .tt-required.pulse-0 {
+        background-color: rgba(255, 80, 80, 0.10);
+        box-shadow: 0 0 8px rgba(255, 80, 80, 0.20);
+    }
+    .tt-required.pulse-1 {
+        background-color: rgba(255, 80, 80, 0.14);
+        box-shadow: 0 0 10px rgba(255, 80, 80, 0.28);
+    }
+    .tt-required.pulse-2 {
+        background-color: rgba(255, 80, 80, 0.18);
+        box-shadow: 0 0 12px rgba(255, 80, 80, 0.36);
+    }
+    .tt-required.pulse-3 {
+        background-color: rgba(255, 80, 80, 0.22);
+        box-shadow: 0 0 14px rgba(255, 80, 80, 0.44);
+    }
+    .tt-required.pulse-4 {
+        background-color: rgba(255, 80, 80, 0.28);
+        box-shadow: 0 0 16px rgba(255, 80, 80, 0.55);
+    }
+    /* Neutral secondary button (Quit on the stop screen): a real button,
+       but understated so it complements the red warning and blue primary
+       instead of adding a third loud colour. */
+    .tt-quit {
+        background-image: none;
+        background-color: rgba(255, 255, 255, 0.10);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 6px;
+        padding: 6px 14px;
+    }
+    .tt-quit:hover {
+        background-color: rgba(255, 255, 255, 0.17);
+    }
+    .tt-quit:active {
+        background-color: rgba(255, 255, 255, 0.22);
+    }
+    .tt-rec-card {
+        border: 2px solid #4a90e2;
+        border-radius: 10px;
+        padding: 12px 14px;
+        background-color: rgba(74, 144, 226, 0.10);
+    }
+    .tt-rec-tag {
+        color: #7fb2f0;
+        font-weight: bold;
+        font-size: 9pt;
+    }
+"""
+_css_installed = False
+
+
+def _install_css(screen):
+    """Add the welcome screen's stylesheet to *screen*, once per process.
+    Screen-wide, because a window's own provider never reaches the widgets
+    inside it."""
+    global _css_installed
+    if _css_installed:
+        return
+    provider = Gtk.CssProvider()
+    provider.load_from_data(_CSS)
+    Gtk.StyleContext.add_provider_for_screen(
+        screen, provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+    _css_installed = True
 
 
 def _status_markup(text, color, max_lines=4):
@@ -157,7 +267,7 @@ class WelcomeDialog:
         # can never work — a hard stop. Decide this up front so the dialog can be a
         # lean "use another package" screen instead of the full welcome.
         if self.is_flatpak:
-            _supported, self.unsupported_desktop_name = self._shortcut_support()
+            _supported, self.unsupported_desktop_name = shortcut_support()
             self.hotkey_unsupported = not _supported
         else:
             self.hotkey_unsupported = False
@@ -222,116 +332,18 @@ class WelcomeDialog:
 
         if self.parent:
             self.dialog.set_transient_for(self.parent)
-
-        # Add CSS for checkbox styling with pulsating glow
-        # Note: CSS needs to be applied globally (add_provider_for_screen) for child widgets,
-        # but we use specific class names to avoid affecting other dialogs
-        css_provider = Gtk.CssProvider()
-        css_provider.load_from_data(b"""
-            /* Welcome dialog checkbox styles - using .welcome-checkbox class to avoid conflicts */
-            .welcome-checkbox {
-                padding: 8px;
-                border-radius: 8px;
-                transition: all 300ms ease-in-out;
-            }
-            .welcome-checkbox:hover {
-                background-color: rgba(66, 133, 244, 0.15);
-                box-shadow: 0 0 8px rgba(66, 133, 244, 0.3);
-            }
-            .welcome-checkbox:checked {
-                background-color: rgba(66, 133, 244, 0.25);
-                box-shadow: 0 0 12px rgba(66, 133, 244, 0.5);
-            }
-            /* Pulse effect with multiple states for smooth continuous animation */
-            .welcome-checkbox.pulse-0 {
-                background-color: rgba(66, 133, 244, 0.06);
-                box-shadow: 0 0 8px rgba(66, 133, 244, 0.25);
-            }
-            .welcome-checkbox.pulse-1 {
-                background-color: rgba(66, 133, 244, 0.075);
-                box-shadow: 0 0 9px rgba(66, 133, 244, 0.3);
-            }
-            .welcome-checkbox.pulse-2 {
-                background-color: rgba(66, 133, 244, 0.09);
-                box-shadow: 0 0 11px rgba(66, 133, 244, 0.375);
-            }
-            .welcome-checkbox.pulse-3 {
-                background-color: rgba(66, 133, 244, 0.105);
-                box-shadow: 0 0 12px rgba(66, 133, 244, 0.425);
-            }
-            .welcome-checkbox.pulse-4 {
-                background-color: rgba(66, 133, 244, 0.12);
-                box-shadow: 0 0 14px rgba(66, 133, 244, 0.5);
-            }
-            /* Required-step (Flatpak shortcut setup): the SAME pulse-N levels, but
-               red, so the "will NOT work until you do this" line pulses hard. */
-            .tt-required {
-                padding: 10px;
-                border-radius: 8px;
-            }
-            .tt-required.pulse-0 { background-color: rgba(255, 80, 80, 0.10); box-shadow: 0 0 8px rgba(255, 80, 80, 0.20); }
-            .tt-required.pulse-1 { background-color: rgba(255, 80, 80, 0.14); box-shadow: 0 0 10px rgba(255, 80, 80, 0.28); }
-            .tt-required.pulse-2 { background-color: rgba(255, 80, 80, 0.18); box-shadow: 0 0 12px rgba(255, 80, 80, 0.36); }
-            .tt-required.pulse-3 { background-color: rgba(255, 80, 80, 0.22); box-shadow: 0 0 14px rgba(255, 80, 80, 0.44); }
-            .tt-required.pulse-4 { background-color: rgba(255, 80, 80, 0.28); box-shadow: 0 0 16px rgba(255, 80, 80, 0.55); }
-            /* Neutral secondary button (Quit on the stop screen): a real button,
-               but understated so it complements the red warning and blue primary
-               instead of adding a third loud colour. */
-            .tt-quit {
-                background-image: none;
-                background-color: rgba(255, 255, 255, 0.10);
-                border: 1px solid rgba(255, 255, 255, 0.14);
-                border-radius: 6px;
-                padding: 6px 14px;
-            }
-            .tt-quit:hover {
-                background-color: rgba(255, 255, 255, 0.17);
-            }
-            .tt-quit:active {
-                background-color: rgba(255, 255, 255, 0.22);
-            }
-            .tt-rec-card {
-                border: 2px solid #4a90e2;
-                border-radius: 10px;
-                padding: 12px 14px;
-                background-color: rgba(74, 144, 226, 0.10);
-            }
-            .tt-rec-tag {
-                color: #7fb2f0;
-                font-weight: bold;
-                font-size: 9pt;
-            }
-""")
-        # Apply CSS globally but with specific class names to avoid affecting other dialogs
-        Gtk.StyleContext.add_provider_for_screen(
-            self.dialog.get_screen() if self.dialog.get_screen() else Gdk.Screen.get_default(),
-            css_provider,
-            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
-        )
-
-        # Create scrolled window for content (handles small screens)
-        scrolled = Gtk.ScrolledWindow()
-        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        _install_css(self.dialog.get_screen() or Gdk.Screen.get_default())
 
         content = self.dialog.get_content_area()
-        content.pack_start(scrolled, True, True, 0)
-
-        # VBox inside scrolled window
-        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=15)
-        vbox.set_margin_top(20)
-        vbox.set_margin_bottom(6)
-        vbox.set_margin_start(30)
-        vbox.set_margin_end(30)
-        scrolled.add(vbox)
-
-        # Build content sections
+        scrolled, vbox = self._build_scroller(content)
         self._build_header(vbox)
 
         if self.hotkey_unsupported:
             # Hard stop: skip the welcome blurb, features, quick-start and all the
             # setup sections — the app can't run here. Go straight to the red stop
             # box and "get a package that works on your desktop".
-            self._build_unsupported_desktop_section(vbox, self.unsupported_desktop_name)
+            self.required_pulse_box = build_unsupported_desktop_section(
+                vbox, self.unsupported_desktop_name, self.dialog)
         else:
             self._build_base_content(vbox)
             # Always: it holds the recommended-setup card, which every computer
@@ -339,25 +351,44 @@ class WelcomeDialog:
             # their own conditions.
             self._build_optional_features(vbox)
 
-        # The footer ("Next:" and Set it up / Quit) sits below the scrolling
-        # part so it is always fully visible: inside the scroll, a title bar the
-        # desktop draws (KDE) or a short screen can push the button out of sight.
+        self._build_footer_area(content, scrolled)
+        # Left to GTK, the focus went to the first button in the scrolling
+        # part ("Change language, model or graphics card"), and the window
+        # opened scrolled down to it with its title cut off.
+        if self.continue_button is not None:
+            self.dialog.set_focus(self.continue_button)
+
+    @staticmethod
+    def _build_scroller(content):
+        """(scrolled window, box inside it) for the sections: a short screen
+        scrolls them instead of cutting them off."""
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        content.pack_start(scrolled, True, True, 0)
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=15)
+        vbox.set_margin_top(20)
+        vbox.set_margin_bottom(6)
+        vbox.set_margin_start(30)
+        vbox.set_margin_end(30)
+        scrolled.add(vbox)
+        return scrolled, vbox
+
+    def _build_footer_area(self, content, scrolled):
+        """The footer ("Next:" and Set it up / Quit) below the scrolling part,
+        with a "More below" bar above it. Inside the scroll, a title bar the
+        desktop draws (KDE) or a short screen could push the button out of
+        sight."""
         footer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         footer.set_margin_bottom(20)
         footer.set_margin_start(30)
         footer.set_margin_end(30)
         content.pack_end(footer, False, False, 0)
         self._build_footer(footer)
-        # A "More below" bar just above the footer (packed after it), so the
-        # optional features under the fold don't get missed.
+        # Packed after the footer, so it sits just above it: the optional
+        # features under the fold don't get missed.
         content.pack_end(more_below_bar(
             scrolled, tooltip="There's more on this page, including optional features"),
             False, False, 0)
-        # Left to GTK, the focus went to the first button in the scrolling
-        # part ("Change language, model or graphics card"), and the window
-        # opened scrolled down to it with its title cut off.
-        if self.continue_button is not None:
-            self.dialog.set_focus(self.continue_button)
 
     def _build_header(self, vbox):
         """Build the header section."""
@@ -476,7 +507,7 @@ class WelcomeDialog:
         # Flatpak: typing works out of the box (libei). The only setup is letting
         # the desktop assign the dictation shortcut. Host: the uinput step.
         if self.is_flatpak:
-            self._build_shortcut_setup_section(vbox)
+            self.required_pulse_box = build_shortcut_setup_section(vbox, self.has_gnome)
 
             if self.offer_extension:
                 sep_sc = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
@@ -692,313 +723,6 @@ class WelcomeDialog:
         """The "Set it up" button works only while no background job runs."""
         if self.continue_button is not None:
             self.continue_button.set_sensitive(self._busy == 0)
-
-    # Desktops whose portal backend (xdg-desktop-portal-xapp) does NOT implement
-    # GlobalShortcuts, so the Flatpak dictation hotkey can never register there.
-    _NO_GLOBALSHORTCUTS = {"XFCE", "CINNAMON", "X-CINNAMON", "MATE"}
-    _DESKTOP_NAMES = {
-        "KDE": "KDE Plasma", "GNOME": "GNOME", "HYPRLAND": "Hyprland",
-        "XFCE": "XFCE", "CINNAMON": "Cinnamon", "X-CINNAMON": "Cinnamon",
-        "MATE": "MATE",
-    }
-
-    def _globalshortcuts_available(self):
-        """True/False whether the GlobalShortcuts portal is implemented on this
-        system, or None if the check itself was inconclusive. The Flatpak hotkey
-        needs this portal (KDE/GNOME/Hyprland have it; the xapp backend used by
-        XFCE/Cinnamon/MATE does not)."""
-        try:
-            gi.require_version("Gio", "2.0")
-            from gi.repository import Gio
-            bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
-            res = bus.call_sync(
-                "org.freedesktop.portal.Desktop",
-                "/org/freedesktop/portal/desktop",
-                "org.freedesktop.DBus.Introspectable", "Introspect",
-                None, GLib.VariantType("(s)"),
-                Gio.DBusCallFlags.NONE, 1500, None)
-            return "org.freedesktop.portal.GlobalShortcuts" in res.unpack()[0]
-        except Exception as e:
-            logger.info(f"GlobalShortcuts portal check inconclusive: {e}")
-            return None
-
-    def _shortcut_support(self):
-        """Return (supported: bool, friendly_desktop_name: str) for the hotkey."""
-        raw = os.environ.get("XDG_CURRENT_DESKTOP", "")
-        base = raw.split(":")[0].upper() if raw else ""
-        name = self._DESKTOP_NAMES.get(base, (raw.split(":")[0] or "your desktop"))
-        # Known-unsupported by name (also lets us preview the message via env).
-        if base in self._NO_GLOBALSHORTCUTS:
-            return (False, name)
-        # Otherwise trust a real portal check when it is conclusive.
-        if self._globalshortcuts_available() is False:
-            return (False, name)
-        return (True, name)
-
-    def _build_unsupported_desktop_section(self, vbox, desktop_name):
-        """Shown when the desktop lacks the GlobalShortcuts portal: the Flatpak
-        hotkey cannot work, so point the user to the AppImage (Backend A/evdev)."""
-        esc = GLib.markup_escape_text
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        box.set_margin_start(12)
-        box.set_margin_end(12)
-        box.set_margin_top(10)
-        box.set_margin_bottom(10)
-
-        # This is a hard stop: the app cannot function here, so the warning
-        # pulses red so it can't be skipped.
-        pulse = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        pulse.get_style_context().add_class('tt-required')
-        self.required_pulse_box = pulse  # picked up by the red pulse animation
-
-        header = Gtk.Label()
-        header.set_markup(
-            f'<span size="large" foreground="#ffffff"><b>🛑 The dictation hotkey '
-            f'won’t work on {esc(desktop_name)}</b></span>'
-        )
-        header.set_halign(Gtk.Align.START)
-        header.set_line_wrap(True)
-        header.set_max_width_chars(54)
-        pulse.pack_start(header, False, False, 0)
-
-        msg = Gtk.Label()
-        msg.set_markup(
-            '<span size="medium" foreground="#ffffff">TuxTalk’s hotkey relies on '
-            f'your desktop’s <b>global-shortcut</b> system, and <b>{esc(desktop_name)}'
-            '</b> doesn’t provide it. The Flatpak will open, but the Hold-to-talk and '
-            'Toggle keys can’t be registered — so there is no key to press.</span>'
-        )
-        msg.set_halign(Gtk.Align.START)
-        msg.set_line_wrap(True)
-        msg.set_max_width_chars(54)
-        msg.set_margin_top(6)
-        pulse.pack_start(msg, False, False, 0)
-
-        box.pack_start(pulse, False, False, 0)
-
-        fix = Gtk.Label()
-        fix.set_markup(
-            '<span size="medium" foreground="#ffffff"><b>Good news — another '
-            'TuxTalk package works on your desktop.</b></span> '
-            '<span size="medium">Pick the one for your system; they all use a '
-            'method that works everywhere:</span>'
-        )
-        fix.set_halign(Gtk.Align.START)
-        fix.set_line_wrap(True)
-        fix.set_max_width_chars(56)
-        fix.set_margin_start(10)
-        fix.set_margin_top(12)
-        box.pack_start(fix, False, False, 0)
-
-        pkgs = Gtk.Label()
-        pkgs.set_markup(
-            '<span size="medium">'
-            '• <b>AppImage</b> — runs on any Linux, nothing to install\n'
-            '• <b>.deb</b> — Debian, Ubuntu, Linux Mint\n'
-            '• <b>.rpm</b> — Fedora, openSUSE\n'
-            '• <b>AUR</b> — Arch, CachyOS, EndeavourOS'
-            '</span>'
-        )
-        pkgs.set_halign(Gtk.Align.START)
-        pkgs.set_line_wrap(True)
-        pkgs.set_max_width_chars(56)
-        pkgs.set_margin_start(20)
-        pkgs.set_margin_top(6)
-        box.pack_start(pkgs, False, False, 0)
-
-        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        btn_box.set_margin_start(10)
-        btn_box.set_margin_top(14)
-        download_btn = Gtk.Button(label="⬇  Open the Downloads Page")
-        download_btn.get_style_context().add_class("suggested-action")
-        download_btn.connect("clicked", self._on_download_appimage)
-        btn_box.pack_start(download_btn, False, False, 0)
-        box.pack_start(btn_box, False, False, 0)
-
-        frame = Gtk.Frame()
-        frame.set_shadow_type(Gtk.ShadowType.ETCHED_IN)
-        frame.set_margin_top(6)
-        frame.set_margin_bottom(6)
-        frame.add(box)
-        vbox.pack_start(frame, False, False, 0)
-
-    def _on_download_appimage(self, button):
-        """Open the TuxTalk releases page. Opening a URL from a Flatpak goes
-        through the OpenURI portal — no special sandbox permission needed."""
-        url = "https://github.com/ronb1964/TuxTalk/releases"
-        try:
-            Gtk.show_uri_on_window(self.dialog, url, Gdk.CURRENT_TIME)
-        except Exception as e:
-            logger.warning(f"Could not open releases page ({e}); URL: {url}")
-
-    def _build_shortcut_setup_section(self, vbox):
-        """Flatpak-only setup step: the desktop assigns the dictation shortcut.
-
-        Inside the sandbox typing works via the portal + libei path with no
-        uinput/input-group setup, so the host "Typing Setup Required"
-        step does not apply. The one thing the user must do is let their desktop
-        bind a key to the TuxTalk dictate shortcuts. Desktops without the
-        GlobalShortcuts portal never reach here — _build_dialog shows them the
-        unsupported screen instead.
-        """
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        box.set_margin_start(12)
-        box.set_margin_end(12)
-        box.set_margin_top(10)
-        box.set_margin_bottom(10)
-
-        header = Gtk.Label()
-        header.set_markup('<span size="large"><b>🔴 Required: Set Your Dictation Key</b></span>')
-        header.set_halign(Gtk.Align.START)
-        box.pack_start(header, False, False, 0)
-
-        must_do = Gtk.Label()
-        # The emoji triangle (⚠️, with the VS16 selector) renders in full colour like
-        # the other icons; keep it OUTSIDE the white span or the colour override flattens it.
-        must_do.set_markup(
-            '<span size="x-large">⚠️</span>  '
-            '<span size="medium" foreground="#ffffff"><b>You’ll set your key at '
-            'the end: once you finish these setup screens, TuxTalk starts and '
-            'your desktop pops up a window to bind it (about 30 seconds). It '
-            'won’t dictate until you do.</b></span>'
-        )
-        must_do.set_halign(Gtk.Align.START)
-        must_do.set_line_wrap(True)
-        must_do.set_max_width_chars(56)
-        # Wrap in a box so the red pulse animation has a surface to paint (a bare
-        # GtkLabel does not reliably render background-color in GTK3).
-        self.required_pulse_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        self.required_pulse_box.get_style_context().add_class('tt-required')
-        self.required_pulse_box.pack_start(must_do, False, False, 0)
-        self.required_pulse_box.set_margin_top(4)
-        box.pack_start(self.required_pulse_box, False, False, 0)
-
-        explain = Gtk.Label()
-        explain.set_markup(
-            '<span size="medium">Typing into your apps then works automatically — no '
-            'drivers, groups, or reboot needed. You just pick which key(s) start '
-            'dictation. TuxTalk offers <b>two</b>, and you can set either or both:</span>'
-        )
-        explain.set_halign(Gtk.Align.START)
-        explain.set_line_wrap(True)
-        explain.set_max_width_chars(58)
-        explain.set_margin_start(10)
-        explain.set_margin_top(5)
-        box.pack_start(explain, False, False, 0)
-
-        keys_label = Gtk.Label()
-        keys_label.set_markup(
-            '<span size="medium">'
-            '🎤 <b>“Hold to talk”</b> — hold it while you speak (push-to-talk)\n'
-            '🔁 <b>“Toggle dictation”</b> — tap once to start, tap again to stop'
-            '</span>'
-        )
-        keys_label.set_halign(Gtk.Align.START)
-        keys_label.set_line_wrap(True)
-        keys_label.set_max_width_chars(58)
-        keys_label.set_margin_start(20)
-        keys_label.set_margin_top(8)
-        box.pack_start(keys_label, False, False, 0)
-
-        # Desktop-specific instructions: precise steps for KDE and GNOME, generic
-        # wording for other portal desktops (e.g. Hyprland).
-        desktop = os.environ.get("XDG_CURRENT_DESKTOP", "").upper()
-        if "KDE" in desktop:
-            how_title = "To set your keys on KDE Plasma:"
-            steps = (
-                "When TuxTalk starts, KDE pops up a <b>“Global Shortcuts "
-                "Requested”</b> window for <b>Hold to talk</b> and "
-                "<b>Toggle dictation</b>. Click the button next to each, press "
-                "the key you want (for example F8, then F9), and confirm.\n"
-                "<i>You can change these any time later in "
-                "System Settings → Keyboard → Shortcuts (under Applications).</i>"
-            )
-        elif self.has_gnome or "GNOME" in desktop:
-            how_title = "To set your keys on GNOME:"
-            steps = (
-                "When TuxTalk starts, GNOME pops up an <b>Add Keyboard "
-                "Shortcuts</b> window listing <b>Hold to talk</b> and "
-                "<b>Toggle dictation</b>. For each one you want to use:\n"
-                "1. Click the <b>pencil</b> icon on that row.\n"
-                "2. Click <b>Allow</b> on the “inhibit shortcuts” prompt "
-                "(that’s just GNOME letting it capture your key).\n"
-                "3. Press the key you want (for example F8, then F9).\n"
-                "4. Click <b>Add</b> to save.\n"
-                "<i>You can change these any time later in "
-                "Settings → Keyboard → Keyboard Shortcuts.</i>"
-            )
-        else:
-            how_title = "To set your keys:"
-            steps = (
-                "When TuxTalk starts (after you finish these screens), your "
-                "desktop’s global-shortcuts prompt lets you bind <b>Hold to "
-                "talk</b> and <b>Toggle dictation</b> — press the key you want "
-                "for each when it appears.\n"
-                "<i>If no prompt shows, you can assign them later in your "
-                "desktop’s keyboard-shortcut settings, under <b>TuxTalk</b>.</i>"
-            )
-
-        how_label = Gtk.Label()
-        how_label.set_markup(f'<span size="medium"><b>{how_title}</b></span>')
-        how_label.set_halign(Gtk.Align.START)
-        how_label.set_margin_start(10)
-        how_label.set_margin_top(12)
-        box.pack_start(how_label, False, False, 0)
-
-        steps_label = Gtk.Label()
-        steps_label.set_markup(f'<span size="medium">{steps}</span>')
-        steps_label.set_halign(Gtk.Align.START)
-        steps_label.set_line_wrap(True)
-        steps_label.set_max_width_chars(58)
-        steps_label.set_margin_start(20)
-        steps_label.set_margin_top(4)
-        box.pack_start(steps_label, False, False, 0)
-
-        # The "type into other apps" consent (the RemoteDesktop portal) differs
-        # by desktop, and each has a gotcha worth calling out:
-        #  - GNOME defaults its "Allow Remote Interaction" switch to OFF; click
-        #    Share without it and dictation types nothing while beeps still play.
-        #  - KDE opens a fresh remote-control session per dictation, so it shows a
-        #    "Started Remote Desktop" popup EVERY time. "Allow restoring" only
-        #    stops the APPROVAL dialog re-asking — the popup is a separate KDE
-        #    notification, turned off in System Settings.
-        if "KDE" in desktop:
-            perm_note = (
-                "💡 The first time you dictate, KDE's <b>Remote Control</b> window "
-                "asks to allow controlling input — check <b>Allow restoring on "
-                "future sessions</b>, then <b>Approve</b> (a one-time OK). KDE also "
-                "shows a small notification after each dictation; the <b>last setup "
-                "screen</b> shows how to turn it off."
-            )
-        elif self.has_gnome or "GNOME" in desktop:
-            perm_note = (
-                "💡 The first time you dictate, GNOME asks to allow typing into "
-                "other apps. Turn <b>on</b> the <b>Allow Remote Interaction</b> "
-                "switch, keep <b>Remember This Selection</b> checked, and click "
-                "<b>Share</b> — just once."
-            )
-        else:
-            perm_note = (
-                "💡 The first time you dictate, your desktop will ask permission "
-                "to type into other apps — approve it once."
-            )
-        note = Gtk.Label()
-        note.set_markup(f'<span size="medium"><i>{perm_note}</i></span>')
-        note.set_halign(Gtk.Align.START)
-        note.set_line_wrap(True)
-        note.set_max_width_chars(58)
-        note.set_margin_start(10)
-        note.set_margin_top(10)
-        box.pack_start(note, False, False, 0)
-
-        # A bordered frame makes this read as a distinct, mandatory step rather
-        # than one of the optional sections below it.
-        frame = Gtk.Frame()
-        frame.set_shadow_type(Gtk.ShadowType.ETCHED_IN)
-        frame.set_margin_top(6)
-        frame.set_margin_bottom(6)
-        frame.add(box)
-        vbox.pack_start(frame, False, False, 0)
 
     def _build_typing_setup_section(self, vbox):
         """Build the typing setup section: permission to type and hear hotkeys."""

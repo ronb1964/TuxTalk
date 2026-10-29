@@ -1,7 +1,7 @@
 {
  "files": {
   "tray.py": 1550,
-  "welcome_dialog.py": 2785
+  "welcome_dialog.py": 2509
  },
  "findings": {
   "ai_cleanup.py::<module>::long_line": 4,
@@ -229,7 +229,6 @@
   "welcome_dialog.py::WelcomeDialog.__init__::long_line": 1,
   "welcome_dialog.py::WelcomeDialog.__init__::swallowed_error": 1,
   "welcome_dialog.py::WelcomeDialog._build_base_content::long_line": 1,
-  "welcome_dialog.py::WelcomeDialog._build_dialog::long_line": 5,
   "welcome_dialog.py::WelcomeDialog._build_footer::long_line": 1,
   "welcome_dialog.py::WelcomeDialog._build_gnome_extension_option::long_line": 3,
   "welcome_dialog.py::WelcomeDialog._build_portaudio_setup_section::long_line": 1,
@@ -378,12 +377,6 @@
   },
   "voice_edit_rules.py::mechanical_edit": {
    "decisions": 18
-  },
-  "welcome_dialog.py::WelcomeDialog._build_dialog": {
-   "lines": 151
-  },
-  "welcome_dialog.py::WelcomeDialog._build_shortcut_setup_section": {
-   "lines": 168
   },
   "welcome_dialog.py::WelcomeDialog._build_typing_setup_section": {
    "lines": 127
