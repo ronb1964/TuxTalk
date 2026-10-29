@@ -292,7 +292,7 @@
    "decisions": 20
   },
   "fix_word_dialog.py::_FixWordDialog.__init__": {
-   "lines": 115
+   "lines": 108
   },
   "keyboard_layout.py::KeyPlanner._index": {
    "decisions": 17

@@ -126,8 +126,8 @@ class _FixWordDialog:
         # False: the text box must still get the release itself. idle_add's
         # return value (a source id) read as "handled", so the box never saw
         # the button come up and ignored every click after the first pick.
-        self.view.connect("button-release-event", self._pick_soon)
-        self.view.connect("key-release-event", self._pick_soon)
+        self.view.connect("button-release-event", self._pick_soon, True)
+        self.view.connect("key-release-event", self._pick_soon, False)
         scroller = Gtk.ScrolledWindow()
         scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         scroller.set_shadow_type(Gtk.ShadowType.IN)
@@ -140,14 +140,7 @@ class _FixWordDialog:
         self.heard_label = Gtk.Label(xalign=0)
         box.pack_start(self.heard_label, False, False, 0)
 
-        row = Gtk.Box(spacing=8)
-        row.pack_start(Gtk.Label(label="Should be:"), False, False, 0)
-        self.entry = Gtk.Entry()
-        self.entry.set_placeholder_text("The right spelling, e.g. BambuStudio")
-        self.entry.connect("changed", lambda _e: self._update())
-        self.entry.connect("activate", lambda _e: self._on_save())
-        row.pack_start(self.entry, True, True, 0)
-        box.pack_start(row, False, False, 0)
+        box.pack_start(self._fix_row(), False, False, 0)
 
         self.warning_label = Gtk.Label(xalign=0)
         self.warning_label.set_line_wrap(True)
@@ -206,16 +199,32 @@ class _FixWordDialog:
         self.view.get_buffer().set_text(self.text)
         self._update()
 
+    def _fix_row(self):
+        """"Should be:" and the box for the right spelling (self.entry)."""
+        row = Gtk.Box(spacing=8)
+        should_be = Gtk.Label.new_with_mnemonic("_Should be:")
+        row.pack_start(should_be, False, False, 0)
+        self.entry = Gtk.Entry()
+        should_be.set_mnemonic_widget(self.entry)      # Alt+S, and a screen reader's name
+        self.entry.set_placeholder_text("The right spelling, e.g. BambuStudio")
+        self.entry.connect("changed", lambda _e: self._update())
+        self.entry.connect("activate", lambda _e: self._on_save())
+        row.pack_start(self.entry, True, True, 0)
+        return row
+
     # --- picking words ----------------------------------------------------
 
-    def _pick_soon(self, *_args):
+    def _pick_soon(self, _view, _event, by_mouse):
         """After a click, drag or key in the text box, once GTK has moved the
         cursor: pick the words. Never stops the event."""
-        GLib.idle_add(self._on_pick)
+        GLib.idle_add(self._on_pick, by_mouse)
         return False
 
-    def _on_pick(self):
-        """Snap whatever was clicked or dragged in the text box to whole words."""
+    def _on_pick(self, by_mouse=True):
+        """Snap whatever was clicked or dragged in the text box to whole
+        words. After a click or drag the "Should be" box takes the focus;
+        keys keep it in the text, with the selection as it is, so the arrows
+        (and Shift with them) can move on past the first word."""
         buf = self.view.get_buffer()
         bounds = buf.get_selection_bounds()
         if bounds:
@@ -232,10 +241,11 @@ class _FixWordDialog:
             # not "Goul's?"): that's what gets replaced.
             a, b = vocabulary.core_span(self.text, *picked)
             buf.apply_tag(self.picked_tag, buf.get_iter_at_offset(a), buf.get_iter_at_offset(b))
-            # Drop the native selection so only the snapped words show.
-            end_iter = buf.get_iter_at_offset(b)
-            buf.select_range(end_iter, end_iter)
-            self.entry.grab_focus_without_selecting()
+            if by_mouse:
+                # Drop the native selection so only the snapped words show.
+                end_iter = buf.get_iter_at_offset(b)
+                buf.select_range(end_iter, end_iter)
+                self.entry.grab_focus_without_selecting()
         self._update()
         return False  # one-shot idle callback
 
