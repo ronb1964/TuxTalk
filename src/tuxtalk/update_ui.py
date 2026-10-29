@@ -20,11 +20,18 @@ from .progress_window import run_with_progress  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
-DOWNLOAD_FAILED = "The download could not be completed."
+DOWNLOAD_FAILED = "The download could not be completed"
 UNEXPECTED = "Something TuxTalk didn't expect went wrong; the log has the details."
 
 
-def check_for_updates(show_result, quitting=lambda: False):
+def download_failure(last_said):
+    """Why a download failed, from what download_update said last (a
+    checksum that doesn't match, a lost connection): it says why only
+    through its progress messages."""
+    return f"{last_said.rstrip('.!') or DOWNLOAD_FAILED}."
+
+
+def check_from_menu(show_result, quitting=lambda: False):
     """Check for Updates in the tray's menu: "Checking for Updates..." while
     GitHub is asked on a thread, then *show_result(result)* on GTK's thread,
     or "Update Check Failed". Nothing once *quitting()*: the check can
@@ -231,34 +238,34 @@ def _update_buttons(dialog, method, release):
         suggested.get_style_context().add_class("suggested-action")
 
 
-def run_appimage_update(parent, release, restart, *, failed=None, quitting=lambda: False,
-                        install=None):
+def run_appimage_update(release, restart, *, parent=None, failed=None,
+                        quitting=lambda: False, run_install=None):
     """Download *release*'s AppImage (checked against the release's
     SHA256SUMS.txt when it publishes one) and install it, behind a progress
     window over *parent* (None: from the tray) that can't be closed
     meanwhile; then *restart()* onto it, or say why it didn't go in, also to
     *failed(message)*. Nothing is installed once *quitting()*, and nothing
-    said. *install(put_in)* runs the install: the tray's lets a Quit wait
-    for an install under way."""
-    url = release.get("appimage_url")
-    if not url:
-        logger.warning("This release has no AppImage to download")
-        return
-
+    said. *run_install(install)* runs the install: the tray's lets a Quit
+    wait for an install under way. Only for a release with an AppImage."""
     def work(progress):
         """On its own thread: the download, then the install; (installed, why not)."""
+        said = [""]
+
+        def reporting(message, percent):
+            said[0] = message
+            progress(message, percent)
         path = update_checker.download_update(
-            url, release.get("appimage_name", "TuxTalk-update.AppImage"), progress,
-            checksums_url=release.get("checksums_url"))
+            release["appimage_url"], release.get("appimage_name", "TuxTalk-update.AppImage"),
+            reporting, checksums_url=release.get("checksums_url"))
         if not path:
-            return False, DOWNLOAD_FAILED
+            return False, download_failure(said[0])
         if quitting():
             return False, None
         progress("Installing update...", 90)
 
-        def put_in():
+        def install():
             return update_checker.install_appimage_update(path, progress)
-        return install(put_in) if install else put_in()
+        return run_install(install) if run_install else install()
 
     def finish(result):
         success, message = result or (False, UNEXPECTED)
@@ -282,11 +289,11 @@ def _set_margins(widget, value):
     widget.set_margin_bottom(value)
 
 
-def run_package_update(release, install_type, restart_callback=None, quitting=lambda: False):
+def run_package_update(release, install_type, restart=None, *, quitting=lambda: False):
     """Download + pkexec-install the .rpm/.deb for `install_type`, then offer to
     restart. Shows its own progress and result dialogs. Call from the GTK thread.
 
-    restart_callback: called when the user clicks "Restart Now". The tray passes
+    restart: called when the user clicks "Restart Now". The tray passes
     its restart_app (clean detached relaunch + quit_app); Preferences passes
     restart_via_tray, which asks the tray to do the same. If None, the dialog
     tells the user to reopen TuxTalk instead. *quitting* says when TuxTalk
@@ -318,9 +325,7 @@ def run_package_update(release, install_type, restart_callback=None, quitting=la
     content.pack_start(bar, False, False, 10)
     progress.show_all()
 
-    # download_update reports why it failed (e.g. a checksum that doesn't
-    # match) only through its progress messages.
-    last_message = [""]
+    last_message = [""]     # for download_failure
 
     def progress_cb(message, percent):
         last_message[0] = message
@@ -333,7 +338,7 @@ def run_package_update(release, install_type, restart_callback=None, quitting=la
         if quitting():
             return
         if success:
-            _installed_restart_prompt(restart_callback)
+            _installed_restart_prompt(restart)
         else:
             _error(message)
 
@@ -344,9 +349,9 @@ def run_package_update(release, install_type, restart_callback=None, quitting=la
                 url, filename, progress_cb,
                 checksums_url=release.get("checksums_url"))
             if not path:
-                reason = last_message[0].rstrip(".!") or "The download could not be completed"
+                reason = download_failure(last_message[0])
                 GLib.idle_add(lambda: finish(
-                    False, f"{reason}.\n\nPlease try again or update from GitHub."))
+                    False, f"{reason}\n\nPlease try again or update from GitHub."))
                 return
             if quitting():
                 ok, msg = False, "TuxTalk quit before the update was installed."
@@ -364,7 +369,7 @@ def run_package_update(release, install_type, restart_callback=None, quitting=la
     threading.Thread(target=worker, daemon=True).start()
 
 
-def _installed_restart_prompt(restart_callback=None):
+def _installed_restart_prompt(restart=None):
     """Say the update is installed and offer Restart Now or Later."""
     done = Gtk.Dialog(title="Update Installed")
     done.set_position(Gtk.WindowPosition.CENTER)
@@ -383,8 +388,8 @@ def _installed_restart_prompt(restart_callback=None):
     def _resp(d, r):
         d.destroy()
         if r == Gtk.ResponseType.OK:
-            if restart_callback is not None:
-                restart_callback()
+            if restart is not None:
+                restart()
             else:
                 _reopen_to_finish()
     done.connect("response", _resp)

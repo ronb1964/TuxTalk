@@ -350,7 +350,8 @@ class ServiceLifecycle:
 
     def _install_not_cut_off(self, install):
         """install() on a thread that isn't a daemon, waited for here: a Quit's
-        fallback exit waits for it (_copying), and not for the download before."""
+        fallback exit waits for it (_copying), and not for the download before.
+        What install() returned, or None when it raised (it's logged)."""
         result = {}
 
         def run():
@@ -363,7 +364,7 @@ class ServiceLifecycle:
         self._install_thread = threading.Thread(target=run, name="install-update", daemon=False)
         self._install_thread.start()
         self._install_thread.join()
-        return result.get("value", (False, None))
+        return result.get("value")
 
     def _copying(self) -> bool:
         """Whether a copy into ~/AppImages is under way."""

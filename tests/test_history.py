@@ -143,19 +143,19 @@ def test_full_text_lines_wraps_keeps_breaks_and_caps():
     assert len(many) == 10 and many[-1].endswith("…")
 
 
-def test_each_tray_entry_opens_a_hover_view_with_copy():
+def test_each_tray_entry_opens_a_hover_view_with_copy(monkeypatch):
     """KDE drops tooltips from tray menus, so the full text lives in a submenu."""
     import types
     import gi
     gi.require_version("Gtk", "3.0")
-    from tuxtalk.tray import DictationTray
+    from tuxtalk import tray_menu
 
-    tray = types.SimpleNamespace()
-    tray._copy_history_entry = lambda text: copied.append(text)
-    tray.show_fix_word_dialog = lambda index: fixing.append(index)
     copied, fixing = [], []
+    monkeypatch.setattr(tray_menu, "copy_dictation", copied.append)
+    menu = types.SimpleNamespace(
+        tray=types.SimpleNamespace(show_fix_word_dialog=fixing.append))
     text = "One.\nTwo " + "word " * 30
-    submenu = DictationTray._build_history_entry_submenu(tray, text, 3)
+    submenu = tray_menu.TrayMenu._history_entry_submenu(menu, text, 3)
 
     items = {c.get_label(): c for c in submenu.get_children()}
     labels = [c.get_label() for c in submenu.get_children()]
@@ -171,22 +171,24 @@ def test_dictation_is_named_for_what_a_click_does(monkeypatch):
     "Dictation off" read as an action as easily as a state. The words carry
     the state, so a screen reader reads it on every desktop. The tray's
     status poll only changes the words; a click starts or stops dictation."""
-    from tuxtalk import config, tray
+    from tuxtalk import config, tray, tray_menu
     monkeypatch.setattr(config, "load_config", config.Settings)
     t = tray.DictationTray.__new__(tray.DictationTray)
     asked = []
     monkeypatch.setattr(t, "start_service", lambda w: asked.append("start"), raising=False)
     monkeypatch.setattr(t, "stop_service", lambda w: asked.append("stop"), raising=False)
-    menu = tray.DictationTray.build_menu(t)
+    t.dbus_service = None
+    t.menu = tray_menu.TrayMenu(t)
+    toggle = t.menu.service_toggle
     try:
         for running in (True, False, True):   # the status poll, as it runs
             t.update_menu_display(is_running=running)
-            assert t.service_toggle.get_label() == ("Turn Dictation Off" if running
-                                                    else "Turn Dictation On")
+            assert toggle.get_label() == ("Turn Dictation Off" if running
+                                          else "Turn Dictation On")
         assert asked == []
-        t.service_toggle.activate()            # the user clicks it: off
-        assert t.service_toggle.get_label() == "Turn Dictation On"
-        t.service_toggle.activate()            # and on again
+        toggle.activate()                      # the user clicks it: off
+        assert toggle.get_label() == "Turn Dictation On"
+        toggle.activate()                      # and on again
         assert asked == ["stop", "start"]
     finally:
-        menu.destroy()
+        t.menu.widget.destroy()

@@ -62,7 +62,7 @@ def test_checking_for_updates_has_no_close_button(Gtk, monkeypatch):
     from tuxtalk import update_checker, update_ui
     monkeypatch.setattr(update_checker, "check_for_updates", lambda: {"success": False})
     monkeypatch.setattr(GLib, "idle_add", lambda *a: None)     # the result never comes
-    update_ui.check_for_updates(lambda result: None)
+    update_ui.check_from_menu(lambda result: None)
     box = _open_box(Gtk, "Checking for Updates...")
     try:
         assert box is not None and not box.get_deletable()

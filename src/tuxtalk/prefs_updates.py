@@ -564,7 +564,7 @@ class UpdatesTab(Tab):
         if method == "pkexec_package":
             from . import update_ui
             update_ui.run_package_update(self._current_release, install_type,
-                                         restart_callback=self._restart_after_package_update)
+                                         self._restart_after_package_update)
             return
         url = self._current_release.get("appimage_url")
         if not url:
@@ -584,8 +584,8 @@ class UpdatesTab(Tab):
         if not self.win.save_before_restart():
             return
         from . import update_ui
-        update_ui.run_appimage_update(self.window, self._current_release,
-                                      update_ui.restart_via_tray, failed=self._show_update_failed)
+        update_ui.run_appimage_update(self._current_release, update_ui.restart_via_tray,
+                                      parent=self.window, failed=self._show_update_failed)
 
     def _show_update_failed(self, message):
         """Say in Update Status that the update didn't go in, and why."""

@@ -10,26 +10,33 @@ import pytest
 
 from tuxtalk import recommend as r
 from tuxtalk import tray as tray_mod
+from tuxtalk import tray_menu, tray_presets
 
 NVIDIA = r.Hardware("NVIDIA GeForce RTX 4070 SUPER", has_nvidia=True)
 
 
+class FakeMenu:
+    """The tray's menu, counting the times its dot is put back."""
+    put_dot_back_soon = tray_menu.TrayMenu.put_dot_back_soon
+
+    def __init__(self, tray):
+        self.tray = tray
+
+    def put_dot_back(self):
+        self.tray.reverted += 1
+
+
 class FakeTray:
-    _current_presets = tray_mod.DictationTray._current_presets
-    _get_current_preset = tray_mod.DictationTray._get_current_preset
     set_performance_preset = tray_mod.DictationTray.set_performance_preset
     _apply_preset = tray_mod.DictationTray._apply_preset
     _preset_files = tray_mod.DictationTray._preset_files
     _save_preset = tray_mod.DictationTray._save_preset
-    _put_dot_back_soon = tray_mod.DictationTray._put_dot_back_soon
 
     def __init__(self):
         self.reverted = 0
         self.restarted = 0
-        self.preset_radios = {}
-
-    def _revert_preset_radio(self):
-        self.reverted += 1
+        self._applying_preset = False
+        self.menu = FakeMenu(self)
 
     def update_menu_display(self, is_running=None):
         pass
@@ -57,7 +64,7 @@ def env(monkeypatch):
 
 
 def test_three_presets_in_order(env):
-    assert [p.id for p in FakeTray()._current_presets()] == ["recommended", "lightest", "battery"]
+    assert [p.id for p in tray_presets.current_presets()] == ["recommended", "lightest", "battery"]
 
 
 def test_recommended_runs_the_vulkan_setup_then_saves(env, monkeypatch):
@@ -151,8 +158,7 @@ def test_the_tray_never_loads_a_model_on_its_main_loop(env, monkeypatch):
     monkeypatch.setattr("faster_whisper.WhisperModel", loads)
     monkeypatch.setattr(model_helper, "load_parakeet_model", loads)
     cfg, saved = env
-    menu = tray_mod.DictationTray.build_menu(tray_mod.DictationTray.__new__(tray_mod.DictationTray))
-    menu.destroy()
+    tray_menu.TrayMenu(tray_mod.DictationTray.__new__(tray_mod.DictationTray)).widget.destroy()
     t = FakeTray()
     t.set_performance_preset("lightest")
     assert saved == [("base", "cpu")] and t.restarted == 1
@@ -161,9 +167,9 @@ def test_the_tray_never_loads_a_model_on_its_main_loop(env, monkeypatch):
 def test_current_preset_uses_match_preset(env):
     cfg, _ = env
     cfg.model, cfg.device = "parakeet-v3", "vulkan"
-    assert FakeTray()._get_current_preset() == "recommended"
+    assert tray_presets.preset_in_use() == "recommended"
     cfg.model, cfg.device = "medium", "cuda"
-    assert FakeTray()._get_current_preset() == "custom"
+    assert tray_presets.preset_in_use() == "custom"
 
 
 def test_dbus_exposes_presets_and_the_active_one():
@@ -194,18 +200,38 @@ def test_the_menu_offers_the_presets_of_this_computer(tray_menu):
     assert all(label.startswith(start) for label, start in zip(labels, starts)), labels
 
 
-def test_preset_radio_sync_always_clears_the_busy_flag():
+def test_moving_the_dot_always_clears_the_busy_flag(tray_menu_object, monkeypatch):
     """The flag is cleared in a finally: one failure must not leave every
     later preset click silently ignored."""
-    t = FakeTray()
-    t.preset_radios = {}
+    menu, clicked = tray_menu_object
 
     def broken():
         raise RuntimeError("presets")
-    t._current_presets = broken
+    monkeypatch.setattr(tray_presets, "preset_in_use", broken)
     with pytest.raises(RuntimeError):
-        tray_mod.DictationTray._sync_preset_radios(t)
-    assert t._updating_preset is False
+        menu.put_dot_back()
+    menu.preset_radios["lightest"].activate()
+    assert clicked == ["lightest"]
+
+
+def test_the_menu_moving_its_own_dot_applies_nothing(tray_menu_object, monkeypatch):
+    """Putting the dot on the preset in use makes GTK send "activate" to the
+    radio items; only a click applies a preset."""
+    menu, clicked = tray_menu_object
+    monkeypatch.setattr(tray_presets, "preset_in_use", lambda: "battery")
+    menu.put_dot_back()
+    assert menu.preset_radios["battery"].get_active() and clicked == []
+
+
+@pytest.fixture
+def tray_menu_object(env):
+    """A real TrayMenu, recording the presets its radio items ask the tray for."""
+    clicked = []
+    tray = tray_mod.DictationTray.__new__(tray_mod.DictationTray)
+    tray.set_performance_preset = clicked.append
+    menu = tray_menu.TrayMenu(tray)
+    yield menu, clicked
+    menu.widget.destroy()
 
 
 def test_choosing_the_active_preset_again_changes_nothing(env, monkeypatch):

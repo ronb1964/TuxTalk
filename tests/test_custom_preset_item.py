@@ -8,8 +8,8 @@ import types
 
 import pytest
 
-from tuxtalk import tray as tray_module
-from tuxtalk.tray import DictationTray
+from tuxtalk import tray_menu
+from tuxtalk.tray_menu import TrayMenu
 
 
 @pytest.fixture(autouse=True)
@@ -22,7 +22,7 @@ def run_timeouts_now(monkeypatch):
         deferred.append(ms)
         fn(*args)
         return 1
-    monkeypatch.setattr(tray_module.GLib, "timeout_add", timeout_add)
+    monkeypatch.setattr(tray_menu.GLib, "timeout_add", timeout_add)
     return deferred
 
 
@@ -34,34 +34,36 @@ class Item:
         return self.active
 
 
-def fake_tray(updating=False):
+def fake_menu(moving_dot=False):
+    """The tray's menu with its dot moves recorded, on a tray that records
+    Preferences opening."""
     calls = []
-    tray = types.SimpleNamespace(
-        _updating_preset=updating,
-        open_preferences=lambda _: calls.append("prefs"),
-        _revert_preset_radio=lambda: calls.append("revert"),
+    menu = types.SimpleNamespace(
+        _moving_dot=moving_dot,
+        tray=types.SimpleNamespace(open_preferences=lambda _: calls.append("prefs")),
+        put_dot_back=lambda: calls.append("revert"),
         calls=calls,
     )
-    tray._put_dot_back_soon = lambda: DictationTray._put_dot_back_soon(tray)
-    return tray
+    menu.put_dot_back_soon = lambda: TrayMenu.put_dot_back_soon(menu)
+    return menu
 
 
 def test_clicking_custom_opens_preferences_then_puts_the_dot_back(run_timeouts_now):
-    tray = fake_tray()
-    DictationTray._on_custom_preset(tray, Item(active=True))
-    assert tray.calls == ["prefs", "revert"]
+    menu = fake_menu()
+    TrayMenu._on_custom(menu, Item(active=True))
+    assert menu.calls == ["prefs", "revert"]
     # Deferred: done in the same pass, KDE shows two dots (see the handler).
     assert run_timeouts_now and run_timeouts_now[0] > 0
 
 
 def test_the_dot_leaving_custom_does_not_open_preferences():
     """GTK sends "activate" to the radio being unselected too."""
-    tray = fake_tray()
-    DictationTray._on_custom_preset(tray, Item(active=False))
-    assert tray.calls == []
+    menu = fake_menu()
+    TrayMenu._on_custom(menu, Item(active=False))
+    assert menu.calls == []
 
 
 def test_the_tray_moving_the_dot_itself_does_not_open_preferences():
-    tray = fake_tray(updating=True)
-    DictationTray._on_custom_preset(tray, Item(active=True))
-    assert tray.calls == []
+    menu = fake_menu(moving_dot=True)
+    TrayMenu._on_custom(menu, Item(active=True))
+    assert menu.calls == []
