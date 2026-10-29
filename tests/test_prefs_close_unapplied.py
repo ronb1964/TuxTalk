@@ -53,7 +53,7 @@ def test_keep_editing_leaves_the_window_open():
 
 def _changes(config_at_open, config, commands_same=True):
     w = SimpleNamespace(
-        _config_at_open=config_at_open, config=config,
+        _config_at_open=config_at_open, config=config, _restart_owed=set(),
         words_tab=SimpleNamespace(changed=lambda: not commands_same),
     )
     w._changed_since_open = lambda: prefs.PreferencesWindow._changed_since_open(w)

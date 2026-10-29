@@ -45,6 +45,7 @@ class StubPrefs:
         self.restart_calls = 0
         self.words_tab = SimpleNamespace(save=lambda: True)     # snippets saved
         self.on_disk = {}           # what the tray saved meanwhile
+        self._restart_owed = set()
         self.speech = _speech(self, chosen_model, chosen_device)
         self.general_tab = SimpleNamespace(speech=self.speech, show_saved=lambda: None,
                                            after_hotkey_change=lambda changed, since: False)
@@ -289,14 +290,14 @@ class TestAFailedRestartIsStillOwed:
         monkeypatch.setattr(prefs, "show_message", lambda *a, **k: None)
         stub = StubPrefs(on_disk_model="small", chosen_model="medium")
         stub.download_result = True
-        restarted = iter([False, True])
+        restarted = iter([False, False, True])
         asked = []
         stub._apply_or_restart = lambda changed: asked.append(set(changed)) or next(restarted)
         stub._say_restart_failed = lambda: None
         stub.window = None
 
-        prefs_cls.on_apply(stub, None)
-        prefs_cls.on_apply(stub, None)
+        for _apply in range(3):
+            prefs_cls.on_apply(stub, None)
 
-        assert asked == [{"model"}, {"model"}]
+        assert asked == [{"model"}, {"model"}, {"model"}]
         assert prefs_cls._changed_since_open(stub) == set()     # done now
