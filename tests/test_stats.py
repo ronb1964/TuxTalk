@@ -261,7 +261,7 @@ def test_your_stats_sits_between_voice_commands_and_help_in_both_menus(tray_menu
 
     root = pathlib.Path(__file__).resolve().parent.parent
     js = (root / "gnome-extension/talktype@ronb1964.github.io/extension.js").read_text()
-    order = [js.index(f"new PopupMenu.PopupMenuItem('{label}')")
+    order = [js.index(f"_addRemoteItem('{label}'")
              for label in ("Voice Commands...", "Your Stats...", "Help...")]
     assert order == sorted(order)
     assert '<method name="OpenPreferencesStats"/>' in js

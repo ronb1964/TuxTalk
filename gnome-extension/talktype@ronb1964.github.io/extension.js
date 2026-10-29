@@ -8,7 +8,6 @@ import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
 import Gio from 'gi://Gio';
-import Clutter from 'gi://Clutter';
 import Pango from 'gi://Pango';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
@@ -17,23 +16,11 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
-// D-Bus interface for TuxTalk
+// What the extension calls of TuxTalk's D-Bus interface (the tray has more).
 const TuxTalkIface = `
 <node>
   <interface name="io.github.ronb1964.TalkType">
     <!-- Properties/Status -->
-    <method name="IsRecording">
-      <arg type="b" direction="out" name="recording"/>
-    </method>
-    <method name="IsServiceRunning">
-      <arg type="b" direction="out" name="running"/>
-    </method>
-    <method name="GetCurrentModel">
-      <arg type="s" direction="out" name="model"/>
-    </method>
-    <method name="GetDeviceType">
-      <arg type="s" direction="out" name="device"/>
-    </method>
     <method name="GetStatus">
       <arg type="a{sv}" direction="out" name="status"/>
     </method>
@@ -42,15 +29,9 @@ const TuxTalkIface = `
     </method>
 
     <!-- Actions -->
-    <method name="StartRecording"/>
-    <method name="StopRecording"/>
-    <method name="ToggleRecording"/>
     <method name="StartService"/>
     <method name="StopService"/>
     <method name="RestartService"/>
-    <method name="SetModel">
-      <arg type="s" direction="in" name="model"/>
-    </method>
     <method name="SetFocusedWindow">
       <arg type="s" direction="in" name="wm_class"/>
       <arg type="s" direction="in" name="window_id"/>
@@ -136,6 +117,10 @@ class TuxTalkIndicator extends PanelMenu.Button {
         this._proxy = null;
         this._signalIds = [];
         this._cancellable = new Gio.Cancellable();
+        // Set by destroy(): a D-Bus reply still on its way must not touch the
+        // destroyed button or grab keys again (the screen lock disables us).
+        this._destroyed = false;
+        this._connecting = false;
         // Bumped on each Recent Dictations refresh, so a late reply from an
         // earlier one can't add its list a second time.
         this._historyRequest = 0;
@@ -227,8 +212,6 @@ class TuxTalkIndicator extends PanelMenu.Button {
             this._signalIds.push(this._proxy.connectSignal('UpdateCheckComplete', (proxy, sender, params) => {
                 this._handleUpdateCheckResult(params);
             }));
-
-            console.log('TuxTalk: Connected to D-Bus service');
 
             // Track focused window class so TuxTalk can pick the right
             // paste keystroke (Ctrl+V for normal apps, Ctrl+Shift+V for terminals).
@@ -352,7 +335,6 @@ class TuxTalkIndicator extends PanelMenu.Button {
                 // Re-push current focus so a freshly restarted Python service
                 // doesn't sit at class=None until the user changes windows.
                 this._pushFocusedWindow();
-                console.log('TuxTalk: D-Bus service appeared - showing indicator');
             },
             () => {
                 // Service vanished (TuxTalk quit) - hide the indicator
@@ -361,25 +343,18 @@ class TuxTalkIndicator extends PanelMenu.Button {
                 this._isRecording = false;
                 this._syncHotkeyGrabs();  // TuxTalk quit: give the keys back
                 this.hide();
-                console.log('TuxTalk: D-Bus service vanished (app quit) - hiding indicator');
             }
         );
     }
 
     _buildMenu() {
-        // Service start/stop
+        // The same items, in the same order, as the tray's menu (tray.py).
         this._serviceItem = new PopupMenu.PopupSwitchMenuItem('Dictation on/off', false);
-        this._updatingToggle = false;  // Flag to prevent recursive updates
-        this._serviceItem.connect('toggled', (item) => {
-            // Only respond to user clicks, not programmatic changes
-            if (this._updatingToggle)
-                return;
-
-            if (item.state) {
+        this._serviceItem.connect('toggled', item => {
+            if (item.state)
                 this._proxy?.StartServiceRemote();
-            } else {
+            else
                 this._proxy?.StopServiceRemote();
-            }
         });
         this.menu.addMenuItem(this._serviceItem);
 
@@ -393,97 +368,49 @@ class TuxTalkIndicator extends PanelMenu.Button {
                 this._refreshPresets();
             }
         });
-
-        // Fix a Word, top level right under Recent Dictations as in the tray.
-        // The window has its own dictation picker and opens on the newest.
-        const fixWordItem = new PopupMenu.PopupMenuItem('Fix a Word...');
-        fixWordItem.connect('activate', () => this._proxy?.FixWordInDictationRemote());
-        this.menu.addMenuItem(fixWordItem);
-
-        // Transcribe a File, right under Fix a Word as in the tray.
-        const transcribeItem = new PopupMenu.PopupMenuItem('Transcribe a File...');
-        transcribeItem.connect('activate', () => this._proxy?.TranscribeFileRemote());
-        this.menu.addMenuItem(transcribeItem);
-
+        // Fix a Word's window has its own dictation picker, on the newest.
+        this._addRemoteItem('Fix a Word...', 'FixWordInDictation');
+        this._addRemoteItem('Transcribe a File...', 'TranscribeFile');
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
         // What runs, one read-only line ("Parakeet on the graphics card (Vulkan)")
         this._engineItem = new PopupMenu.PopupMenuItem('Loading the speech model...', {reactive: false});
         this._engineItem.label.style = 'font-weight: bold;';
         this.menu.addMenuItem(this._engineItem);
-
-        // Performance submenu
-        this._performanceSubMenu = new PopupMenu.PopupSubMenuMenuItem('Performance');
         // Filled from the tray's GetPresets each time the menu opens.
+        this._performanceSubMenu = new PopupMenu.PopupSubMenuMenuItem('Performance');
         this._presetItems = {};
         this.menu.addMenuItem(this._performanceSubMenu);
-
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
-        // Preferences, with a gear so it is easy to spot (the GTK tray
-        // shows the same gear in front of it)
-        // ("preferences-system-symbolic" is a wrench and screwdriver in Adwaita)
-        let prefsItem = new PopupMenu.PopupImageMenuItem('Preferences...', 'emblem-system-symbolic');
-        prefsItem.connect('activate', () => {
-            this._proxy?.OpenPreferencesRemote();
-        });
-        this.menu.addMenuItem(prefsItem);
-
-        // Voice Commands quick reference
-        let voiceCmdsItem = new PopupMenu.PopupMenuItem('Voice Commands...');
-        voiceCmdsItem.connect('activate', () => {
-            this._proxy?.ShowVoiceCommandsRemote();
-        });
-        this.menu.addMenuItem(voiceCmdsItem);
-
-        // Usage stats: opens Preferences on its Stats tab
-        let statsItem = new PopupMenu.PopupMenuItem('Your Stats...');
-        statsItem.connect('activate', () => {
-            this._proxy?.OpenPreferencesStatsRemote();
-        });
-        this.menu.addMenuItem(statsItem);
-
-        // Help
-        let helpItem = new PopupMenu.PopupMenuItem('Help...');
-        helpItem.connect('activate', () => {
-            this._proxy?.ShowHelpRemote();
-        });
-        this.menu.addMenuItem(helpItem);
-
-        // About
-        let aboutItem = new PopupMenu.PopupMenuItem('About TuxTalk...');
-        aboutItem.connect('activate', () => {
-            this._proxy?.ShowAboutRemote();
-        });
-        this.menu.addMenuItem(aboutItem);
-
-        // Check for Updates
+        // A gear, easy to spot, as in front of the tray's ("preferences-system-
+        // symbolic" is a wrench and screwdriver in Adwaita).
+        this._addRemoteItem('Preferences...', 'OpenPreferences', 'emblem-system-symbolic');
+        this._addRemoteItem('Voice Commands...', 'ShowVoiceCommands');
+        this._addRemoteItem('Your Stats...', 'OpenPreferencesStats');
+        this._addRemoteItem('Help...', 'ShowHelp');
+        this._addRemoteItem('About TuxTalk...', 'ShowAbout');
         this._updatesItem = new PopupMenu.PopupMenuItem('Check for Updates...');
-        this._updatesItem.connect('activate', () => {
-            this._checkForUpdates();
-        });
+        this._updatesItem.connect('activate', () => this._checkForUpdates());
         this.menu.addMenuItem(this._updatesItem);
-
-        // Restart service: for when something's wrong, so it sits with Help
-        let restartItem = new PopupMenu.PopupMenuItem('Restart Service');
-        restartItem.connect('activate', () => {
-            this._proxy?.RestartServiceRemote();
-        });
-        this.menu.addMenuItem(restartItem);
-
+        // For when something's wrong, so it sits with Help.
+        this._addRemoteItem('Restart Service', 'RestartService');
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        this._addRemoteItem('Quit TuxTalk', 'Quit');
+    }
 
-        // Quit TuxTalk
-        let quitItem = new PopupMenu.PopupMenuItem('Quit TuxTalk');
-        quitItem.connect('activate', () => {
-            this._proxy?.QuitRemote();
-        });
-        this.menu.addMenuItem(quitItem);
+    // A menu item that asks TuxTalk for something: *method* of its D-Bus
+    // interface. Before the proxy is ready a click does nothing.
+    _addRemoteItem(label, method, iconName = null) {
+        const item = iconName
+            ? new PopupMenu.PopupImageMenuItem(label, iconName)
+            : new PopupMenu.PopupMenuItem(label);
+        item.connect('activate', () => this._proxy?.[`${method}Remote`]());
+        this.menu.addMenuItem(item);
     }
 
     _checkForUpdates() {
-        // Show checking notification
-        Main.notify('TuxTalk', 'Checking for updates...');
+        Main.notify('Checking for TuxTalk updates', 'The result shows in a moment.');
         this._updatesItem.label.text = 'Checking...';
         this._updatesItem.setSensitive(false);
 
@@ -526,14 +453,14 @@ class TuxTalkIndicator extends PanelMenu.Button {
         const [success, , , updateAvailable, , , extUpdate, , error] = params;
 
         if (!success) {
-            Main.notify('TuxTalk', `Update check failed: ${error || 'Unknown error'}`);
+            Main.notify('TuxTalk update check failed', error || 'Unknown error');
             return;
         }
 
         // The app shows its own result window for the app itself. Only an
         // extension update, which that window can't offer, needs the Updates tab.
         if (!updateAvailable && extUpdate) {
-            Main.notify('TuxTalk', 'Extension update available — opening Updates…');
+            Main.notify('GNOME extension update available', 'Opening Updates & Backup to install it.');
             this._proxy?.OpenPreferencesUpdatesRemote();
         }
     }
@@ -557,7 +484,7 @@ class TuxTalkIndicator extends PanelMenu.Button {
         this._proxy.GetRecentDictationsRemote((result, error) => {
             // Cleared here, not before the call: a menu reopened before the
             // first reply would otherwise get two full lists.
-            if (request !== this._historyRequest)
+            if (this._destroyed || request !== this._historyRequest)
                 return;
             menu.removeAll();
             // On error `result` is null, so it cannot be destructured.
@@ -574,7 +501,7 @@ class TuxTalkIndicator extends PanelMenu.Button {
             // just leaves it out.
             this._proxy?.GetPasteLastHotkeyRemote((res, err) => {
                 const key = (!err && res) ? res[0] : '';
-                if (key && request === this._historyRequest)
+                if (key && !this._destroyed && request === this._historyRequest)
                     menu.addMenuItem(new PopupMenu.PopupMenuItem(
                         `${key} types the newest one again`, {reactive: false}), 1);
             });
@@ -605,6 +532,8 @@ class TuxTalkIndicator extends PanelMenu.Button {
 
         // Get current status
         this._proxy.GetStatusRemote((result, error) => {
+            if (this._destroyed)
+                return;
             if (error) {
                 console.error('TuxTalk: Failed to get status:', error);
                 return;
@@ -668,6 +597,8 @@ class TuxTalkIndicator extends PanelMenu.Button {
         if (!this._proxy)
             return;
         this._proxy.GetPresetsRemote((result, error) => {
+            if (this._destroyed)
+                return;
             menu.removeAll();
             this._presetItems = {};
             const presets = result ? result[0] : null;
@@ -695,34 +626,24 @@ class TuxTalkIndicator extends PanelMenu.Button {
     }
 
     _updateIcon() {
-        if (!this._dbusAvailable) {
-            // TuxTalk not running: very dimmed with slash
-            this._icon.icon_name = 'microphone-sensitivity-muted-symbolic';
-            this._icon.style_class = 'system-status-icon';
-            this._icon.style = 'opacity: 0.3;';
-        } else if (this._isRecording) {
-            // Recording: bright red icon
-            this._icon.icon_name = 'audio-input-microphone-symbolic';
-            this._icon.style_class = 'system-status-icon';
-            this._icon.style = 'color: #ff4444;';
-        } else if (this._isServiceRunning) {
-            // Service running but not recording: normal brightness
-            this._icon.icon_name = 'audio-input-microphone-symbolic';
-            this._icon.style_class = 'system-status-icon';
-            this._icon.style = '';
-        } else {
-            // Service stopped: dimmed with slash (microphone-disabled or microphone-sensitivity-muted)
-            this._icon.icon_name = 'microphone-sensitivity-muted-symbolic';
-            this._icon.style_class = 'system-status-icon';
-            this._icon.style = 'opacity: 0.5;';
-        }
+        // Off (TuxTalk not running, or dictation off): the crossed-out
+        // microphone, dimmed (stylesheet.css). Recording: red.
+        const on = this._dbusAvailable && this._isServiceRunning;
+        this._icon.icon_name = on ? 'audio-input-microphone-symbolic'
+            : 'microphone-sensitivity-muted-symbolic';
+        let state = '';
+        if (!this._dbusAvailable)
+            state = ' tuxtalk-not-running';
+        else if (this._isRecording)
+            state = ' tuxtalk-recording';
+        else if (!this._isServiceRunning)
+            state = ' tuxtalk-dictation-off';
+        this._icon.style_class = `system-status-icon${state}`;
     }
 
     _updateMenu() {
-        // Update service switch - prevent firing 'toggled' event
-        this._updatingToggle = true;
+        // setToggleState doesn't emit 'toggled': only a click turns it.
         this._serviceItem.setToggleState(this._isServiceRunning);
-        this._updatingToggle = false;
 
         // Disable menu items if D-Bus is unavailable
         this._serviceItem.setSensitive(this._dbusAvailable);
@@ -737,6 +658,7 @@ class TuxTalkIndicator extends PanelMenu.Button {
     }
 
     destroy() {
+        this._destroyed = true;
         // Cancel the update-check fallback timer so it can't fire against a
         // destroyed menu item after the extension is disabled.
         this._clearUpdateTimeout();
@@ -763,7 +685,7 @@ class TuxTalkIndicator extends PanelMenu.Button {
         }
         this._watchFocusedWindow(null);
         if (this._geometryTimeoutId) {
-            GLib.source_remove(this._geometryTimeoutId);
+            GLib.Source.remove(this._geometryTimeoutId);
             this._geometryTimeoutId = null;
         }
 
@@ -799,22 +721,16 @@ class TuxTalkIndicator extends PanelMenu.Button {
 
 export default class TuxTalkExtension extends Extension {
     enable() {
-        console.log('TuxTalk Extension: Enabling...');
-
         this._indicator = new TuxTalkIndicator();
         Main.panel.addToStatusArea('talktype', this._indicator);
 
-        console.log('TuxTalk Extension: Enabled');
     }
 
     disable() {
-        console.log('TuxTalk Extension: Disabling...');
-
         if (this._indicator) {
             this._indicator.destroy();
             this._indicator = null;
         }
 
-        console.log('TuxTalk Extension: Disabled');
     }
 }

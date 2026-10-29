@@ -71,3 +71,19 @@ def test_recent_dictations_clears_inside_the_reply_and_ignores_stale_ones():
 
 def test_unused_signals_are_not_declared():
     assert "TranscriptionComplete" not in JS and "ErrorOccurred" not in JS
+
+
+def test_no_reply_touches_the_extension_after_it_is_disabled():
+    """The screen lock disables the extension: a GetStatus reply arriving
+    after that grabbed F8 again, with nothing listening, and the others drew
+    on the destroyed menu ("already disposed" in the journal)."""
+    assert "this._destroyed = true;" in _method("destroy")
+    for method in ("_updateStatus", "_refreshPresets", "_refreshHistoryMenu"):
+        body = _method(method)
+        reply = body[body.index("Remote("):]
+        assert "this._destroyed" in reply, f"{method}'s reply doesn't check"
+
+
+def test_notifications_say_what_happened():
+    """Not just "TuxTalk", with the news in the body."""
+    assert not re.search(r"Main\.notify\('TuxTalk',", JS)

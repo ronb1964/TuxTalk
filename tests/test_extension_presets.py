@@ -3,7 +3,6 @@
 Asking the tray means the extension keeps no copy of the preset table or the
 matcher that could drift from the tray's and put the dot on the wrong preset.
 """
-import json
 import pathlib
 
 EXT = pathlib.Path(__file__).resolve().parent.parent / "gnome-extension/talktype@ronb1964.github.io"
@@ -23,12 +22,6 @@ def test_no_hard_coded_preset_table():
 def test_menu_is_built_from_the_tray():
     assert "GetPresetsRemote" in JS
     assert "status.preset" in JS
-
-
-def test_version_is_28():
-    """The version is bumped with every extension.js change so the in-app
-    updater offers the new extension."""
-    assert json.loads((EXT / "metadata.json").read_text())["version"] == 28
 
 
 CUSTOM_LABEL = "Custom (opens Preferences)"

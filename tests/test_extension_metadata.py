@@ -43,9 +43,9 @@ def test_extension_version_is_bumped_past_the_last_shipped_build():
     Widening shell-version without bumping "version" means existing users are
     never offered the fixed extension, so the fix reaches nobody.
     """
-    # v0.7.2 shipped version 8. Any metadata change that users must receive
+    # v0.18.2 shipped version 25. Any metadata change that users must receive
     # has to advance this.
-    LAST_SHIPPED_EXTENSION_VERSION = 8
+    LAST_SHIPPED_EXTENSION_VERSION = 25
 
     assert _metadata()["version"] > LAST_SHIPPED_EXTENSION_VERSION
 

@@ -1,33 +1,13 @@
-/* TalkType GNOME Extension Styles */
+/* TuxTalk GNOME extension: the panel icon's states (extension.js _updateIcon). */
 
-/* Recording indicator - red color when active */
-.recording-active {
-    color: #e01b24;
+.tuxtalk-recording {
+    color: #ff4444;
 }
 
-/* Service inactive - dimmed */
-.service-inactive {
+.tuxtalk-dictation-off {
     opacity: 0.5;
 }
 
-/* OSD notification for recording */
-.talktype-osd {
-    background-color: rgba(0, 0, 0, 0.8);
-    border-radius: 12px;
-    padding: 16px;
-    font-size: 14pt;
-    color: white;
-}
-
-.talktype-osd-icon {
-    icon-size: 32px;
-    margin-right: 12px;
-}
-
-.talktype-osd-recording {
-    border: 2px solid #e01b24;
-}
-
-.talktype-osd-label {
-    font-weight: bold;
+.tuxtalk-not-running {
+    opacity: 0.3;
 }
