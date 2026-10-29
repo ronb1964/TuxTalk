@@ -15,6 +15,13 @@ import time
 
 from tuxtalk import engine_launcher, engine_process
 
+# Standard modules of the AppImage's Python 3.10 that later ones dropped
+# (PEP 594 and distutils, imp, asynchat, asyncore, smtpd).
+_STANDARD_IN_THE_APPIMAGES_PYTHON = {
+    "aifc", "asynchat", "asyncore", "audioop", "binhex", "cgi", "cgitb", "chunk", "crypt",
+    "distutils", "imghdr", "imp", "lib2to3", "mailcap", "msilib", "nis", "nntplib",
+    "ossaudiodev", "pipes", "smtpd", "sndhdr", "spwd", "sunau", "telnetlib", "uu", "xdrlib"}
+
 
 def _start_from_a_thread_that_ends(argv, env=None):
     """Start the engine *argv* from a thread that exits once the launcher
@@ -87,10 +94,13 @@ def test_an_engine_that_cant_start_says_why(tmp_path):
 
 def test_an_engine_starts_where_tuxtalks_own_start_up_would_fail(tmp_path):
     """The launcher imports nothing of TuxTalk: the package's start-up opens
-    the log and moves old folders, and a read-only home mustn't stop an engine."""
+    the log and moves old folders, and a log that can't be written mustn't
+    stop an engine. Here the package can be imported; its log can't open."""
+    blocker = tmp_path / "a-file"
+    blocker.write_text("")
     command, env = engine_process.parent_death_command(["/bin/true"])
-    env["PYTHONPATH"] = str(tmp_path)          # no tuxtalk package to import
-    assert subprocess.run(command, env=env).returncode == 0
+    env["TUXTALK_LOG_DIR"] = str(blocker / "logs")
+    assert subprocess.run(command, env=env, timeout=30).returncode == 0
 
 
 def test_an_engine_gets_sigpipe_and_sigxfsz_as_any_program_does():
@@ -107,4 +117,4 @@ def test_no_module_beside_the_launcher_hides_a_standard_one():
     tuxtalk/signal.py would be imported in place of Python's own."""
     folder = os.path.dirname(engine_launcher.__file__)
     ours = {name.removesuffix(".py") for name in os.listdir(folder)}
-    assert not ours & set(sys.stdlib_module_names)
+    assert not ours & (set(sys.stdlib_module_names) | _STANDARD_IN_THE_APPIMAGES_PYTHON)
