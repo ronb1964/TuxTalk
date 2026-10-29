@@ -3,6 +3,7 @@
 The file is cut into pieces at quiet moments, pieces nobody talks in are
 skipped, and the rest come out as paragraphs or as SRT subtitles.
 """
+import os
 import types
 import wave
 
@@ -279,16 +280,21 @@ def test_a_second_quick_launch_brings_the_first_window_forward(window_lock, monk
     pids = iter([None, None, 4242])
     monkeypatch.setattr(tw, "_running_pid", lambda: next(pids))
 
-    assert tw._claim_window() == (False, None)
+    assert single_instance.claim_window(tw.WINDOW_LOCK, tw._brought_forward, tw.TITLE) == (
+        False, None)
     assert sent == [(4242, tw.FRONT)]
     first.close()
 
 
-def test_the_first_launch_opens_the_window(window_lock):
-    tw, sent = window_lock
-    go_on, lock = tw._claim_window()
-    assert go_on and lock is not None and sent == []
-    lock.close()
+def test_the_pid_is_kept_beside_the_lock(window_lock, tmp_path, monkeypatch):
+    """Without logind there's no /run/user/N: the lock goes to the private
+    fallback folder, and the pid must too, or a second launch never finds
+    the open window."""
+    from tuxtalk import single_instance
+    tw, _sent = window_lock
+    fallback = tmp_path / "fallback"
+    monkeypatch.setattr(single_instance, "runtime_dir", lambda: str(fallback))
+    assert os.path.dirname(tw.pidfile_path()) == str(fallback)
 
 
 # --- from the code review, 2026-10-15 ---------------------------------------------------------

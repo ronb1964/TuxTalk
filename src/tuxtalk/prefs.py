@@ -42,32 +42,19 @@ def _coerce_config_types(config: dict) -> dict:
     return {**config, **asdict(repaired(settings))}
 
 
-# One Preferences window: the lock is held while it's open, so two quick
-# launches can't both find no pid yet and both open one.
+# One Preferences window (single_instance.claim_window).
 WINDOW_LOCK = "prefs-window.lock"
-_FRONT_WAIT_S = 2.0         # for a window that holds the lock to write its pid
-_CLOSING_WAIT_S = 10.0      # for one that didn't answer (closing) to let go
 _window_lock = None
 
 
 def _acquire_prefs_singleton(tab=None):
     """Give way to a Preferences window already open, bringing it to the
-    front (on *tab*) and exiting, or claim the window for this one. One that
-    holds the lock but doesn't answer is closing: this one opens once it's
-    gone, rather than leaving no window at all."""
+    front (on *tab*) and exiting, or claim the window for this one."""
     global _window_lock
     from . import single_instance
-    lock = held = None
-    try:
-        lock = single_instance.open_lock(WINDOW_LOCK)
-        held = not single_instance.claim(lock)
-    except OSError as e:     # no usable folder, or flock refused: open without it
-        logger.warning(f"Could not take Preferences' lock: {e}")
-    if _brought_open_window_forward(tab, wait_s=_FRONT_WAIT_S if held else 0):
-        logger.info("Preferences is already open; brought it to the front")
-        sys.exit(0)
-    if held and not _claimed_once_closed(lock):
-        logger.warning("Another Preferences window holds on and doesn't answer")
+    go_on, lock = single_instance.claim_window(
+        WINDOW_LOCK, lambda wait_s: _brought_open_window_forward(tab, wait_s), "Preferences")
+    if not go_on:
         sys.exit(0)
     _window_lock = lock     # until the window closes (_let_go_of_the_window)
     try:
@@ -75,17 +62,6 @@ def _acquire_prefs_singleton(tab=None):
     except OSError as e:
         logger.warning(f"Could not write prefs pidfile: {e}")
     atexit.register(prefs_ipc.release_pidfile)
-
-
-def _claimed_once_closed(lock):
-    """Whether *lock* came free within _CLOSING_WAIT_S (the open window was
-    closing); a lock that fails some other way doesn't stop this window."""
-    from . import single_instance
-    try:
-        return single_instance.claim(lock, wait_s=_CLOSING_WAIT_S)
-    except OSError as e:
-        logger.warning(f"Could not wait for Preferences' lock: {e}")
-        return True
 
 
 def _let_go_of_the_window():

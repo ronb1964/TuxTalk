@@ -109,8 +109,8 @@ def one_window(tmp_path, monkeypatch):
     monkeypatch.setattr(single_instance, "runtime_dir", lambda: str(run))
     pidfile = tmp_path / "talktype-prefs.pid"
     monkeypatch.setattr(prefs.prefs_ipc, "pidfile_path", lambda: str(pidfile))
-    monkeypatch.setattr(prefs, "_FRONT_WAIT_S", 0.3)
-    monkeypatch.setattr(prefs, "_CLOSING_WAIT_S", 0.3)
+    monkeypatch.setattr(single_instance, "FRONT_WAIT_S", 0.3)
+    monkeypatch.setattr(single_instance, "CLOSING_WAIT_S", 0.3)
     return prefs, single_instance, pidfile
 
 
