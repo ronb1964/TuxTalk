@@ -449,9 +449,11 @@ def show_cuda_download_dialog(parent=None, on_success_callback=None):
         last_report[:] = [message, percent]
 
         def update_ui():
+            if cancel_event.is_set():
+                return False       # Cancel closed the window: nothing to draw on
             progress_bar.set_fraction(percent / 100.0)
             progress_bar.set_text(f"{percent}%")
-            status_label.set_markup(f'<span>{GLib.markup_escape_text(message)}</span>')
+            status_label.set_text(message)
             return False
         GLib.idle_add(update_ui)
 
