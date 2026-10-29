@@ -250,16 +250,16 @@ def save_word(word, phrases, old=None):
         # (A new word keeps any snippet already typing it; it's listed
         # under the word from now on.)
         commands = {p: r for p, r in commands.items() if r not in (old, word) or p in wanted}
+    before = dict(commands)
     for phrase in wanted:
         for same in _matching_keys(commands, phrase):
             del commands[same]          # a hand-edited "Clawed  Claw" becomes this one
         commands[phrase] = word
-    config.save_custom_commands(commands)
     if old is not None:
         words[words.index(old)] = word
     elif word not in words:
         words.append(word)
-    custom_words.save(words)
+    _save_both(commands, words, before)
 
 
 def remove_word(word):
@@ -270,5 +270,19 @@ def remove_word(word):
     if config._commands_read_failed:
         raise config.ConfigNotLoadedError("The snippets file couldn't be read.")
     words = custom_words.load(strict=True)
-    config.save_custom_commands({p: r for p, r in commands.items() if r != word})
-    custom_words.save([w for w in words if w != word])
+    _save_both({p: r for p, r in commands.items() if r != word},
+               [w for w in words if w != word], commands)
+
+
+def _save_both(commands, words, before):
+    """Save the snippets file, then the words file. Each write is atomic but
+    the pair isn't: when the words can't be written (a full disk), the
+    snippets go back to *before*, so the Words tab never shows a word half
+    saved. Raises the words file's OSError."""
+    from . import custom_words
+    config.save_custom_commands(commands)
+    try:
+        custom_words.save(words)
+    except OSError:
+        config.save_custom_commands(before)
+        raise

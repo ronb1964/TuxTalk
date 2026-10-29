@@ -359,3 +359,25 @@ def test_saving_a_word_leaves_an_unreadable_words_file_alone(commands_file, word
         vocabulary.save_word("ClaudeClaw", ["clawed claw"])
     assert words_file.read_bytes() == b"caf\xe9\n"
     assert config.load_custom_commands() == {}
+
+
+@pytest.mark.parametrize("change", [
+    lambda: vocabulary.save_word("CachyOS", ["kashi os"]),
+    lambda: vocabulary.remove_word("ClaudeClaw"),
+])
+def test_a_words_file_that_cant_be_written_leaves_the_snippets_as_they_were(
+        commands_file, words_file, monkeypatch, change):
+    """The snippets are written first; with the words file failing after
+    them (a full disk), the two must not disagree."""
+    from tuxtalk import custom_words
+    custom_words.save(["ClaudeClaw"])
+    config.save_custom_commands({"clawed claw": "ClaudeClaw", "my email": "me@example.com"})
+
+    def disk_full(words):
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr(custom_words, "save", disk_full)
+    with pytest.raises(OSError):
+        change()
+
+    assert config.load_custom_commands() == {"clawed claw": "ClaudeClaw",
+                                             "my email": "me@example.com"}
