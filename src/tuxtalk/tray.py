@@ -560,8 +560,8 @@ class DictationTray(ServiceLifecycle, Presets):
         show_about_dialog()
 
     def check_for_updates_clicked(self, _):
-        """Check for Updates in the menu (update_ui.check_for_updates)."""
-        update_ui.check_for_updates(self._show_update_result_dialog, lambda: self._quitting)
+        """Check for Updates in the menu (update_ui.check_from_menu)."""
+        update_ui.check_from_menu(self._show_update_result_dialog, lambda: self._quitting)
 
     def _show_update_result_dialog(self, result):
         """What an update check found, with Download & Install where this
@@ -575,16 +575,16 @@ class DictationTray(ServiceLifecycle, Presets):
         during the download; an install under way finishes (_install_not_cut_off)."""
         if self._quitting:
             return
-        update_ui.run_appimage_update(None, release, self.restart_app,
+        update_ui.run_appimage_update(release, self.restart_app,
                                       quitting=lambda: self._quitting,
-                                      install=self._install_not_cut_off)
+                                      run_install=self._install_not_cut_off)
 
     def _download_and_install_package(self, release, install_type):
         """Download the correct .rpm/.deb and install it as root via pkexec,
         then offer to restart. Delegates to the shared update_ui flow."""
         if self._quitting:
             return
-        update_ui.run_package_update(release, install_type, restart_callback=self.restart_app,
+        update_ui.run_package_update(release, install_type, self.restart_app,
                                      quitting=lambda: self._quitting)
 
     def auto_check_for_updates(self):

@@ -489,29 +489,32 @@ def test_tray_download_install_restarts_through_restart_app(monkeypatch, idle_qu
     assert steps == [install, "restart" if installed else "error shown"]
 
 
-def test_preferences_says_why_its_appimage_update_failed(monkeypatch, idle_queue):
-    """Preferences' Download & Install is the tray's flow too: a download that
-    fails is said in Update Status and in a message, and nothing restarts."""
-    from gi.repository import Gtk
-    from tuxtalk import update_ui
-    from tuxtalk.prefs_updates import UpdatesTab
-    status, told = [], []
-    monkeypatch.setattr(uc, "download_update", lambda *a, **k: None)
+def test_the_tray_says_why_an_appimage_update_didnt_go_in(monkeypatch, idle_queue):
+    """A download that fails says why (download_update tells only its progress
+    line), and an install that raises says something went wrong, where the
+    window used to close with no word."""
+    from tuxtalk import tray, update_ui
+    told = []
     monkeypatch.setattr(update_ui, "show_message",
-                        lambda parent, kind, title, text, **k: told.append((title, text)))
-    tab = UpdatesTab.__new__(UpdatesTab)
-    tab.update_status_label = types.SimpleNamespace(set_markup=status.append)
-    window = Gtk.Window()
-    try:
-        update_ui.run_appimage_update(window, {"appimage_url": "https://x/TuxTalk.AppImage"},
-                                      lambda: pytest.fail("restarted"),
-                                      failed=tab._show_update_failed)
-        idle_queue(lambda: told)
-    finally:
-        window.destroy()
-    (title, text), = told
-    assert title == "Update Failed" and text.startswith(update_ui.DOWNLOAD_FAILED)
-    assert update_ui.DOWNLOAD_FAILED in status[0]
+                        lambda parent, kind, title, text, **k: told.append(text))
+    stub = types.SimpleNamespace(restart_app=lambda: pytest.fail("restarted"), _quitting=False)
+    stub._install_not_cut_off = lambda install: tray.DictationTray._install_not_cut_off(stub, install)
+    release = {"appimage_url": "https://x/TuxTalk.AppImage"}
+
+    def checksum_mismatch(url, name, progress, **k):
+        progress("Could not verify the update's integrity", 0)
+    monkeypatch.setattr(uc, "download_update", checksum_mismatch)
+    tray.DictationTray._download_update(stub, release)
+    idle_queue(lambda: told)
+    assert told.pop().startswith("Could not verify the update's integrity.")
+
+    def raises(path, progress):
+        raise OSError("disk full")
+    monkeypatch.setattr(uc, "download_update", lambda *a, **k: "/updates/TuxTalk.AppImage")
+    monkeypatch.setattr(uc, "install_appimage_update", raises)
+    tray.DictationTray._download_update(stub, release)
+    idle_queue(lambda: told)
+    assert told.pop().startswith(update_ui.UNEXPECTED)
 
 
 # ---- Preferences asks the tray ------------------------------------------
@@ -587,12 +590,32 @@ def test_preferences_restarts_an_installed_appimage_through_the_tray(
     assert prefs_update.asked == ["restart"]
 
 
+def test_preferences_says_why_its_appimage_update_failed(prefs_update, monkeypatch, idle_queue):
+    """Preferences' Download & Install is the tray's flow too: a download that
+    fails says why in Update Status and in a message, and nothing restarts."""
+    from tuxtalk import update_ui
+    told = []
+    monkeypatch.setattr(uc, "get_install_type", lambda: "appimage")
+
+    def checksum_mismatch(url, name, progress, **k):
+        progress("Could not verify the update's integrity", 0)
+    monkeypatch.setattr(uc, "download_update", checksum_mismatch)
+    monkeypatch.setattr(update_ui, "show_message",
+                        lambda parent, kind, title, text, **k: told.append((title, text)))
+    prefs_update._on_download_update_clicked(None)
+    idle_queue(lambda: told)
+    (title, text), = told
+    assert title == "Update Failed" and text.startswith("Could not verify the update's integrity.")
+    assert "Could not verify" in prefs_update.update_status_label.get_label()
+    assert prefs_update.asked == []
+
+
 def test_preferences_package_update_restarts_through_the_tray(prefs_update, monkeypatch):
     from tuxtalk import update_ui
     ran = []
     monkeypatch.setattr(uc, "get_install_type", lambda: "deb")
     monkeypatch.setattr(update_ui, "run_package_update",
-                        lambda release, kind, restart_callback: ran.append((kind, restart_callback)))
+                        lambda release, kind, restart: ran.append((kind, restart)))
     prefs_update._on_download_update_clicked(None)
     kind, restart = ran[0]
     assert kind == "deb"
@@ -610,7 +633,7 @@ def test_a_package_update_saves_what_isnt_saved_before_it_restarts(prefs_update,
     ran = []
     monkeypatch.setattr(uc, "get_install_type", lambda: "rpm")
     monkeypatch.setattr(update_ui, "run_package_update",
-                        lambda release, kind, restart_callback: ran.append(restart_callback))
+                        lambda release, kind, restart: ran.append(restart))
     monkeypatch.setattr(prefs_update.win, "save_before_restart",
                         lambda: prefs_update.asked.append("save") or saved)
     prefs_update._on_download_update_clicked(None)
