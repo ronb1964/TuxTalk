@@ -476,7 +476,6 @@ def make_model_download_func():
 # --- The running engine ------------------------------------------------------
 
 # Shared with the graphics engines; see engine_process.py.
-_set_parent_death_signal = engine_process.set_parent_death_signal
 _is_talktype_process = engine_process.is_talktype_process
 
 
@@ -530,17 +529,16 @@ class CorrectionEngine:
             # own programs can read either, and are trusted anyway.
             self._key = secrets.token_hex(16)
             binary = _server_binary()
-            proc = self._proc = self._launcher.submit(
-                subprocess.Popen,
+            command, env = engine_process.parent_death_command(
                 # 4096 tokens: room for a voice edit (MAX_EDIT_CHARS of text and
                 # the rewrite); one slot, so it is all one request's.
                 [binary, "-m", _model_path(), "--host", "127.0.0.1", "--port", str(self._port),
                  "-c", "4096", "-np", "1", "--jinja", "-ngl", "99", "--no-webui"],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                env={**os.environ, "LD_LIBRARY_PATH": os.path.dirname(binary),
-                     "LLAMA_API_KEY": self._key},
-                preexec_fn=_set_parent_death_signal,
-            ).result()
+                {**os.environ, "LD_LIBRARY_PATH": os.path.dirname(binary),
+                 "LLAMA_API_KEY": self._key})
+            proc = self._proc = self._launcher.submit(
+                subprocess.Popen, command,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env).result()
             logger.info(f"AI cleanup engine starting (pid {proc.pid})")
         # The process started here, not self._proc read again: a stop() just
         # after the lock is let go would hand the waiter None.
@@ -554,10 +552,11 @@ class CorrectionEngine:
             if self._proc is not proc:
                 return                  # turned off while starting
             if proc.poll() is not None:
-                logger.error("AI cleanup engine exited during startup")
+                logger.error("AI cleanup engine exited during startup"
+                             + engine_process.launch_failure(proc.returncode))
                 return
             try:
-                urllib.request.urlopen(f"http://127.0.0.1:{self._port}/health", timeout=1)
+                engine_process.open_local(f"http://127.0.0.1:{self._port}/health", timeout=1)
             except Exception:
                 time.sleep(0.25)
                 continue
@@ -678,7 +677,7 @@ class CorrectionEngine:
             data=json.dumps(body).encode(),
             headers={"Content-Type": "application/json", "Authorization": f"Bearer {self._key}"})
         try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:
+            with engine_process.open_local(request, timeout=timeout) as response:
                 choice = json.load(response)["choices"][0]
             if choice.get("finish_reason") == "length":
                 # Cut off at max_tokens: half a rewrite must never replace the

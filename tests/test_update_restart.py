@@ -134,9 +134,11 @@ def test_install_refuses_when_the_disk_is_too_full(tmp_path, appimages, monkeypa
 
 
 def test_no_update_path_execs_the_appimage():
-    """execv from Preferences or a worker thread breaks the restart."""
+    """execv from Preferences or a worker thread breaks the restart. (The
+    engine launcher execs in a process of its own: it becomes the engine.)"""
     for path in SRC.rglob("*.py"):
-        assert "os.execv(" not in path.read_text(), path.name
+        if path.name != "engine_launcher.py":
+            assert "os.execv(" not in path.read_text(), path.name
     assert not hasattr(uc, "install_update_and_restart")
 
 

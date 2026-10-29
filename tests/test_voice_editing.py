@@ -130,7 +130,7 @@ def engine(monkeypatch):
     def urlopen(request, timeout):
         sent.append((json.loads(request.data), timeout))
         return Reply("  We completed the electrical work today.  ")
-    monkeypatch.setattr(ai_cleanup.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(ai_cleanup.engine_process, "open_local", urlopen)
     e.sent = sent
     return e
 
@@ -826,7 +826,7 @@ def test_a_cut_off_answer_is_not_used(engine, monkeypatch):
         body = json.dumps({"choices": [{"message": {"content": "half a rewr"},
                                         "finish_reason": "length"}]}).encode()
         return type("R", (), {"__enter__": lambda s: io.BytesIO(body), "__exit__": lambda s, *a: False})()
-    monkeypatch.setattr(ai_cleanup.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(ai_cleanup.engine_process, "open_local", urlopen)
     assert engine.edit("some long text", "translate this to Japanese") is None
 
 
@@ -1016,7 +1016,7 @@ def scripted_engine(engine, monkeypatch, answers):
     def urlopen(request, timeout):
         engine.sent.append((json.loads(request.data), timeout))
         return Reply(next(replies))
-    monkeypatch.setattr(ai_cleanup.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(ai_cleanup.engine_process, "open_local", urlopen)
 
 
 def test_merged_lines_are_edited_again_line_by_line(engine, monkeypatch):
@@ -1046,7 +1046,7 @@ def test_a_failed_line_fails_the_whole_edit(engine, monkeypatch):
             return Reply(next(replies))
         except StopIteration:
             raise OSError("server gone")
-    monkeypatch.setattr(ai_cleanup.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(ai_cleanup.engine_process, "open_local", urlopen)
     assert engine.edit("first\nsecond", "add an exclamation point") is None
 
 

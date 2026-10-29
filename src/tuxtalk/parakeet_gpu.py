@@ -17,7 +17,6 @@ keeps both downloads for exactly this.
 import json
 import os
 import select
-import struct
 import subprocess
 import sys
 import tempfile
@@ -30,6 +29,7 @@ import numpy as np
 from . import engine_process
 from .logger import setup_logger
 from .parakeet_engine import PARAKEET_MODEL, load_parakeet_model
+from .parakeet_gpu_worker import encode_request, encode_words
 
 logger = setup_logger(__name__)
 
@@ -64,6 +64,7 @@ class ParakeetGpuModel:
             logger.info(f"Parakeet on the graphics card from {os.path.basename(model)}")
             command = [sys.executable, "-m", "tuxtalk.parakeet_gpu_worker",
                        wv._engine_dir(), model, str(device_index), str(threads)]
+            command = engine_process.parent_death_command(command)[0]   # its own environment
         self._command = command
         self._proc = None
         self._stderr = None
@@ -88,7 +89,7 @@ class ParakeetGpuModel:
         self._stderr = tempfile.TemporaryFile()
         self._proc = self._launcher.submit(
             subprocess.Popen, self._command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=self._stderr, preexec_fn=engine_process.set_parent_death_signal).result()
+            stderr=self._stderr).result()
         # The pipes are used through their descriptors, never the buffered
         # files, so a reply that stops halfway or a helper that stops reading
         # ends at the deadline instead of blocking the dictation worker.
@@ -162,7 +163,6 @@ class ParakeetGpuModel:
         A problem here costs only the steering, never the dictation."""
         if self._sent_words == self._words:
             return
-        from .parakeet_gpu_worker import encode_words
         try:
             self._write(encode_words(self._words), 30)
             reply = self._read_reply(30)
@@ -186,7 +186,7 @@ class ParakeetGpuModel:
             self._start()
         self._send_words()
         timeout = REPLY_TIMEOUT + len(audio) / SAMPLE_RATE
-        self._write(struct.pack("<I", len(audio)) + audio.tobytes(), timeout)
+        self._write(encode_request(audio), timeout)
         reply = self._read_reply(timeout)
         if "error" in reply:
             raise RuntimeError(reply["error"])

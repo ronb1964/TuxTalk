@@ -7,17 +7,23 @@ cleanup engine (llama-server, ai_cleanup.py) and the Vulkan graphics engine
 or more of memory, so none may outlive the dictation service that started it.
 """
 import os
+import shutil
 import signal
+import sys
+import urllib.request
 
+from . import engine_launcher
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
 
 
-def set_parent_death_signal():
-    """Runs in the child before exec: if the dictation service dies, even by
-    SIGKILL, the kernel kills the engine too, so it cannot sit orphaned on a
-    gigabyte of memory.
+def parent_death_command(argv, env=None):
+    """The command line and environment that start the engine *argv*, with
+    the environment *env* (default: the service's), through engine_launcher:
+    the kernel then kills it when the thread that starts it exits, even if
+    the dictation service is killed with SIGKILL, so no engine sits orphaned
+    on a gigabyte of memory.
 
     SIGKILL, not SIGTERM: llama-server sometimes stalls in its graceful
     shutdown and then ignores SIGTERM, and no engine holds state worth saving.
@@ -25,18 +31,41 @@ def set_parent_death_signal():
     The signal fires when the thread that called Popen exits, not the
     process, so spawn from a thread that lives as long as the engine (see
     parakeet_gpu's _launcher)."""
-    try:
-        import ctypes
-        ctypes.CDLL("libc.so.6", use_errno=True).prctl(1, signal.SIGKILL)  # PR_SET_PDEATHSIG
-    except Exception:
-        pass
+    env = dict(os.environ if env is None else env)
+    own_libs = os.environ.get("LD_LIBRARY_PATH")
+    if env.get("LD_LIBRARY_PATH") != own_libs:
+        # The launcher is Python: it starts with the service's libraries
+        # and hands the engine its own.
+        env[engine_launcher.ENGINE_LIBRARY_PATH] = env.pop("LD_LIBRARY_PATH", "")
+        if own_libs is not None:
+            env["LD_LIBRARY_PATH"] = own_libs
+    command = [sys.executable, engine_launcher.__file__, str(os.getpid()), "--", *argv]
+    return command, env
+
+
+def launch_failure(returncode):
+    """", because ..." when the launcher's exit code says why an engine
+    never ran (its own messages go nowhere), else ""."""
+    why = {engine_launcher.NO_SIGNAL: "the parent-death signal couldn't be set",
+           engine_launcher.NO_ENGINE: "its program couldn't be started"}.get(returncode)
+    return f", because {why}" if why else ""
+
+
+# Every engine listens on 127.0.0.1, yet urllib would send even that through
+# a proxy set in http_proxy, handing it dictated text, audio and the AI
+# engine's key. Python's urllib makes no exception for this computer.
+_LOCAL = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
+def open_local(request, timeout):
+    """urlopen for an engine on this computer: never through a proxy."""
+    return _LOCAL.open(request, timeout=timeout)
 
 
 def remove_other_versions(parent, keep):
     """Delete every engine version folder under *parent* except *keep*. Each
     version unpacks into its own folder, so without this an update leaves
     the old one behind for good. Never raises."""
-    import shutil
     try:
         names = os.listdir(parent)
     except OSError:
@@ -45,7 +74,10 @@ def remove_other_versions(parent, keep):
         path = os.path.join(parent, name)
         if name != keep and os.path.isdir(path) and not os.path.islink(path):
             shutil.rmtree(path, ignore_errors=True)
-            logger.info(f"Removed an older engine version: {path}")
+            if os.path.exists(path):
+                logger.warning(f"Couldn't remove an older engine version: {path}")
+            else:
+                logger.info(f"Removed an older engine version: {path}")
 
 
 def processes_of(binary):
@@ -83,7 +115,9 @@ def kill_orphans(processes, is_talktype, label) -> int:
     A self-healing backstop for the parent-death signal. Returns how many."""
     killed = 0
     for pid, ppid in processes:
-        if ppid == os.getpid() or is_talktype(ppid):
+        # Pid 1 never started an engine: it is init, or in the Flatpak the
+        # sandbox's bwrap, whose command line names TuxTalk.
+        if ppid == os.getpid() or (ppid != 1 and is_talktype(ppid)):
             continue
         try:
             os.kill(pid, signal.SIGKILL)
