@@ -20,7 +20,7 @@ def home(tmp_path, monkeypatch):
     monkeypatch.setattr(uc, "DESKTOP_FILE_PATH", str(tmp_path / "apps" / "tuxtalk.desktop"))
     monkeypatch.setattr(uc, "APPIMAGE_PATH", str(tmp_path / "AppImages" / "TuxTalk.AppImage"))
     monkeypatch.setattr(uc, "_install_app_icon", lambda: "tuxtalk")
-    monkeypatch.setattr(uc, "_refresh_desktop_menu_cache", lambda: None)
+    monkeypatch.setattr(uc.menu_cache, "refresh_menu_cache", lambda: None)
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     monkeypatch.setenv("APPIMAGE", str(tmp_path / "Downloads" / "TuxTalk-v0.15.0-x86_64.AppImage"))
     # Running from inside it: APPIMAGE alone may be another app's, inherited.
@@ -110,7 +110,7 @@ def test_writing_the_launcher_doesnt_wait_for_the_menu_cache(home, monkeypatch):
     back one to three seconds after the downloads."""
     import threading
     released = threading.Event()
-    monkeypatch.setattr(uc, "_refresh_desktop_menu_cache", lambda: released.wait(5))
+    monkeypatch.setattr(uc.menu_cache, "refresh_menu_cache", lambda: released.wait(5))
     finished = threading.Event()
     threading.Thread(target=lambda: uc.create_desktop_launcher() and finished.set(),
                      daemon=True).start()

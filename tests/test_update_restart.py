@@ -303,7 +303,7 @@ def test_a_failed_copy_points_login_and_the_menu_back_at_the_running_appimage(
                         calls.append(command) or True)
     monkeypatch.setattr(uc, "DESKTOP_FILE_PATH", str(tmp_path / "apps" / "tuxtalk.desktop"))
     monkeypatch.setattr(uc, "_install_app_icon", lambda: "tuxtalk")
-    monkeypatch.setattr(uc, "_refresh_desktop_menu_cache", lambda: None)
+    monkeypatch.setattr(uc.menu_cache, "refresh_menu_cache", lambda: None)
     running = str(tmp_path / "Downloads" / "TuxTalk-v0.19.0-x86_64.AppImage")
     uc.point_at_running_appimage(running)
     assert calls == [running]           # by name: the installed copy may be an older one
@@ -315,7 +315,7 @@ def test_a_launcher_for_a_path_with_a_space_still_opens(monkeypatch, tmp_path):
     right-click shortcuts were cut at the space and opened nothing."""
     monkeypatch.setattr(uc, "DESKTOP_FILE_PATH", str(tmp_path / "apps" / "tuxtalk.desktop"))
     monkeypatch.setattr(uc, "_install_app_icon", lambda: "tuxtalk")
-    monkeypatch.setattr(uc, "_refresh_desktop_menu_cache", lambda: None)
+    monkeypatch.setattr(uc.menu_cache, "refresh_menu_cache", lambda: None)
     running = str(tmp_path / "Downloads" / "TuxTalk (1).AppImage")
     assert uc.create_desktop_launcher(running)[0]
     lines = (tmp_path / "apps" / "tuxtalk.desktop").read_text().splitlines()

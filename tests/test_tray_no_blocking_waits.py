@@ -125,16 +125,25 @@ def test_dictation_turned_off_while_the_old_service_goes_stays_off(monkeypatch):
 
 
 def test_the_kde_cache_rebuild_falls_back_to_kbuildsycoca5(monkeypatch):
+    """Plasma 5 has only kbuildsycoca5; Plasma 6 gets one rebuild, not two."""
+    import types
+    from tuxtalk import menu_cache
     ran = []
 
     def fake_run(argv, **_):
         ran.append(argv[0])
         if argv[0] == "kbuildsycoca6":
             raise FileNotFoundError(argv[0])
+        return types.SimpleNamespace(returncode=0)
 
-    monkeypatch.setattr(tray_mod.subprocess, "run", fake_run)
-    tray_mod._refresh_kde_menu_cache()
-    assert ran == ["kbuildsycoca6", "kbuildsycoca5"]
+    monkeypatch.setattr(menu_cache.subprocess, "run", fake_run)
+    menu_cache.refresh_menu_cache()
+    assert ran == ["update-desktop-database", "kbuildsycoca6", "kbuildsycoca5"]
+    ran.clear()
+    monkeypatch.setattr(menu_cache.subprocess, "run",
+                        lambda argv, **_: ran.append(argv[0]) or types.SimpleNamespace(returncode=0))
+    menu_cache.refresh_menu_cache()
+    assert ran == ["update-desktop-database", "kbuildsycoca6"]
 
 
 def test_the_kde_cache_rebuild_runs_off_the_main_loop(tray_main, monkeypatch):
@@ -143,7 +152,7 @@ def test_the_kde_cache_rebuild_runs_off_the_main_loop(tray_main, monkeypatch):
     import threading
     ran = []
     done = threading.Event()
-    monkeypatch.setattr(tray_mod, "_refresh_kde_menu_cache",
+    monkeypatch.setattr(tray_mod.menu_cache, "refresh_menu_cache",
                         lambda: ran.append(threading.current_thread()) or done.set())
     tray_main(first_run=True).run_timers()
     assert done.wait(5)

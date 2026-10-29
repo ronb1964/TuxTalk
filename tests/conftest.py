@@ -841,7 +841,7 @@ def tray_main(monkeypatch):
 
     monkeypatch.setattr(tray.tray_instance, "acquire", step("takes the tray lock"))
     monkeypatch.setattr(tray, "_handle_old_talktype_flatpak", lambda: None)
-    monkeypatch.setattr(tray, "_refresh_kde_menu_cache", lambda: None)
+    monkeypatch.setattr(tray.menu_cache, "refresh_menu_cache", lambda: None)
     monkeypatch.setattr(rename_migration, "adopt_old_install", step("adopts the old install", []))
     monkeypatch.setattr(rename_migration, "repin_launchers", step("repins launchers", []))
     monkeypatch.setattr(update_checker, "create_hidden_desktop_entry",

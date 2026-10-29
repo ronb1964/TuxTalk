@@ -17,12 +17,11 @@ gi.require_version("Gdk", "3.0")
 from gi.repository import Gtk, Gdk, GLib
 from .ui_style import message_dialog, show_message
 from gi.repository import AyatanaAppIndicator3 as AppIndicator3
-import subprocess
 import threading
 import sys
 import warnings
 from .logger import setup_logger
-from . import notes_text, tray_instance, update_offers
+from . import menu_cache, notes_text, tray_instance, update_offers
 from .tray_items import DictationItem, themed_icon
 from .tray_presets import PresetMenu
 from .tray_service import ServiceLifecycle
@@ -1307,20 +1306,6 @@ class DictationTray(ServiceLifecycle, PresetMenu):
         self.indicator.set_menu(self.build_menu())
 
 
-def _refresh_kde_menu_cache():
-    """Rebuild KDE's launcher cache so a new TuxTalk menu entry shows at once."""
-    for tool in ("kbuildsycoca6", "kbuildsycoca5"):
-        try:
-            subprocess.run([tool], capture_output=True, timeout=15)
-            logger.info(f"KDE menu cache refreshed ({tool})")
-            return
-        except FileNotFoundError:
-            continue  # not this KDE version, or not KDE at all
-        except Exception as e:
-            logger.debug(f"Could not refresh KDE menu cache: {e}")
-            return
-
-
 def _show_rename_notice_once():
     """'TalkType is now TuxTalk', once, after this start converted an old
     TalkType install (rename_migration leaves a marker for it). It is cleared
@@ -1507,7 +1492,7 @@ def main():
                 # Refresh KDE menu cache so TuxTalk shows in start menu immediately
                 # This must run AFTER the .desktop file is created by the welcome dialog.
                 # On a thread: the rebuild can take seconds and would freeze the menu.
-                threading.Thread(target=_refresh_kde_menu_cache, daemon=True).start()
+                threading.Thread(target=menu_cache.refresh_menu_cache, daemon=True).start()
 
                 tray._auto_start_service(500)
                 return False  # Don't repeat
