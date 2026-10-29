@@ -554,7 +554,7 @@ def started(monkeypatch):
     (True, _Started(ready=True, checks=3), True),       # up once its model loaded
     (True, _Started(ready=False, checks=0), False),     # ended at once: a broken setting
     (True, _Started(ready=False, checks=3), False),     # ended loading its model
-    (True, _Started(checks=None), True),                # still loading: asking to download?
+    (True, _Started(checks=None), None),                # still loading: asking to download?
     (False, _Started(), False)])                        # the old one wouldn't go
 def test_preferences_restart_says_whether_it_worked(tmp_path, monkeypatch, started, ended,
                                                     service, restarted):

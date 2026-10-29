@@ -28,14 +28,20 @@ ESSENTIAL_MODEL_FILES = ("model.bin", "config.json", "tokenizer.json")
 VOCABULARY_FILES = ("vocabulary.txt", "vocabulary.json")
 
 
-def _download_is_usable(failed_files) -> bool:
-    """True if a Whisper model can still be loaded despite *failed_files*.
+def _download_is_usable(failed_files, asked_for) -> bool:
+    """True if a Whisper model can still be loaded despite *failed_files*,
+    of the files *asked_for*: no essential file failed, and of the
+    vocabulary files asked for, one came. A model has only one, so asked
+    for both by name (no file list), the other one always fails.
 
     Paths may be nested (list_repo_tree is recursive), so match on the file
     name rather than the whole path.
     """
-    failed_names = {os.path.basename(p) for p in failed_files}
-    return not (failed_names & set(ESSENTIAL_MODEL_FILES + VOCABULARY_FILES))
+    failed = {os.path.basename(p) for p in failed_files}
+    if failed & set(ESSENTIAL_MODEL_FILES):
+        return False
+    vocabulary = {os.path.basename(p) for p in asked_for} & set(VOCABULARY_FILES)
+    return not vocabulary or bool(vocabulary - failed)
 
 
 def _files_to_download(repo_id):
@@ -246,7 +252,8 @@ def _fetch_files(repo, model_name, files, all_needed, progress_callback, cancel_
             first_error = first_error or e
             downloaded_bytes[0] += file_size
 
-    if failed_files and (all_needed or not _download_is_usable(failed_files)):
+    if failed_files and (all_needed or not _download_is_usable(
+            failed_files, [name for name, _ in files])):
         logger.error(f"Model {model_name} download incomplete: "
                      f"{len(failed_files)} file(s) failed: {failed_files[:3]}")
         # At 0 %, so the window shows the reason (download_utils.failure_reason).

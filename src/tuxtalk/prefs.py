@@ -103,7 +103,8 @@ def _restart_without_tray():
     it, and none of them can start or remove a service under the other.
     Preferences runs on native Wayland, and a service spawned with its
     environment would inherit it: gtk_window_move() would be ignored and the
-    recording indicator always centred. Whether the new service got ready
+    recording indicator always centred. Whether the new service got ready:
+    True, False, or None when it was still loading at the wait's end
     (_came_up)."""
     from . import single_instance, tray_instance
     from .service_launcher import QUIT_WAIT_S, end_dictation_service, launch_dictation_service
@@ -127,9 +128,9 @@ def _restart_without_tray():
 def _came_up(service):
     """Whether *service*, just launched, got ready: it writes its pid to the
     ready file once its model is loaded. One that ends first didn't (a
-    broken setting, a model that won't load); one still loading after
-    _READY_WAIT_S counts as started, since it may be asking to download
-    its model."""
+    broken setting, a model that won't load). None for one still loading
+    after _READY_WAIT_S: it may be asking to download its model, so it
+    isn't called a failure, but the change stays owed."""
     from .service_launcher import read_ready_pid
     deadline = time.monotonic() + _READY_WAIT_S
     while time.monotonic() < deadline:
@@ -142,7 +143,8 @@ def _came_up(service):
         logger.warning("The restarted dictation service ended before it was ready "
                        f"(exit {service.returncode})")
         return False
-    return True
+    logger.info("The restarted dictation service isn't ready yet; the change stays owed")
+    return None
 
 
 class PreferencesWindow:
@@ -686,14 +688,15 @@ class PreferencesWindow:
         self._restarts_asked += 1
         asked = self._restarts_asked
 
-        def failed_later():
-            # Owed again, so the next Apply restarts; said only while open,
-            # and only for the latest restart (an older one's failure,
-            # arriving late, isn't news once a newer one went ahead).
+        def failed_later(failed):
+            # Owed again, so the next Apply restarts; a failure is said
+            # while the window is open (not a start that's only slow), and
+            # only for the latest restart: an older one's, arriving late,
+            # isn't news once a newer one went ahead.
             if asked != self._restarts_asked:
                 return False
             self._restart_owed |= set(changed)
-            if self.window.get_visible():
+            if failed and self.window.get_visible():
                 self._say_restart_failed()
             return False
         return self.restart_service(on_failed=failed_later)
@@ -705,8 +708,8 @@ class PreferencesWindow:
         after); one that doesn't answer is left to it, never worked around.
         With no tray it's done here, on a thread: the old service types what
         it holds and quits (or is killed past its time), then a new one starts.
-        A start that fails there calls *on_failed* on GTK's thread, if the
-        window is still open to say so."""
+        A start that fails there calls *on_failed*(True) on GTK's thread,
+        and one still not ready at the wait's end *on_failed*(False)."""
         from . import single_instance, tray_instance, update_ui
         if single_instance.held_elsewhere(tray_instance.TRAY_LOCK):
             try:
@@ -716,8 +719,9 @@ class PreferencesWindow:
                 logger.warning(f"Could not ask the tray to restart dictation: {e}")
                 return False
         def restart():
-            if not _restart_without_tray() and on_failed is not None:
-                GLib.idle_add(on_failed)
+            came_up = _restart_without_tray()
+            if came_up is not True and on_failed is not None:
+                GLib.idle_add(on_failed, came_up is False)
         # Not a daemon: closing Preferences meanwhile must not drop the start.
         threading.Thread(target=restart, name="restart-service").start()
         return True

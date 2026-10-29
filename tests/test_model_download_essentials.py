@@ -13,34 +13,37 @@ import pytest
 
 from tuxtalk.model_helper import ESSENTIAL_MODEL_FILES, _download_is_usable
 
+# What a listed repo holds: the essentials and its one vocabulary file.
+_LISTED = (*ESSENTIAL_MODEL_FILES, "vocabulary.txt", "README.md", ".gitattributes")
+
 
 def test_a_missing_readme_does_not_fail_the_download():
-    assert _download_is_usable(["README.md"]) is True
+    assert _download_is_usable(["README.md"], _LISTED) is True
 
 
 def test_a_missing_gitattributes_does_not_fail_the_download():
-    assert _download_is_usable([".gitattributes", "README.md"]) is True
+    assert _download_is_usable([".gitattributes", "README.md"], _LISTED) is True
 
 
 def test_a_missing_model_binary_fails():
-    assert _download_is_usable(["model.bin"]) is False
+    assert _download_is_usable(["model.bin"], _LISTED) is False
 
 
 def test_a_missing_config_fails():
-    assert _download_is_usable(["config.json"]) is False
+    assert _download_is_usable(["config.json"], _LISTED) is False
 
 
 def test_a_missing_tokenizer_fails():
-    assert _download_is_usable(["tokenizer.json"]) is False
+    assert _download_is_usable(["tokenizer.json"], _LISTED) is False
 
 
 def test_nothing_failed_is_usable():
-    assert _download_is_usable([]) is True
+    assert _download_is_usable([], _LISTED) is True
 
 
 def test_an_essential_file_in_a_subdirectory_still_counts():
     """list_repo_tree is recursive, so paths can be nested."""
-    assert _download_is_usable(["snapshots/abc/model.bin"]) is False
+    assert _download_is_usable(["snapshots/abc/model.bin"], _LISTED) is False
 
 
 def test_the_essential_list_matches_what_the_cache_check_requires():
@@ -50,8 +53,17 @@ def test_the_essential_list_matches_what_the_cache_check_requires():
 
 def test_a_missing_vocabulary_fails():
     """ctranslate2 can't load a Whisper model without it (.txt or .json)."""
-    assert _download_is_usable(["vocabulary.json"]) is False
-    assert _download_is_usable(["vocabulary.txt"]) is False
+    assert _download_is_usable(["vocabulary.txt"], _LISTED) is False
+    both = (*ESSENTIAL_MODEL_FILES, "vocabulary.txt", "vocabulary.json")
+    assert _download_is_usable(["vocabulary.txt", "vocabulary.json"], both) is False
+
+
+def test_asked_for_both_vocabularies_by_name_one_is_enough():
+    """With no file list both are fetched by name; a model has only one, so
+    the other always fails, and the download is still whole."""
+    both = (*ESSENTIAL_MODEL_FILES, "vocabulary.txt", "vocabulary.json")
+    assert _download_is_usable(["vocabulary.json"], both) is True
+    assert _download_is_usable(["vocabulary.txt"], both) is True
 
 
 def test_a_file_asked_for_by_name_is_never_optional(monkeypatch):
