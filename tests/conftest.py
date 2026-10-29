@@ -840,7 +840,7 @@ def tray_main(monkeypatch):
         auto_check_for_updates = step("checks for updates")
 
     monkeypatch.setattr(tray.tray_instance, "acquire", step("takes the tray lock"))
-    monkeypatch.setattr(tray, "_handle_old_talktype_flatpak", lambda: None)
+    monkeypatch.setattr(tray.startup_notices, "handle_old_talktype_flatpak", lambda: None)
     monkeypatch.setattr(tray.menu_cache, "refresh_menu_cache", lambda: None)
     monkeypatch.setattr(rename_migration, "adopt_old_install", step("adopts the old install", []))
     monkeypatch.setattr(rename_migration, "repin_launchers", step("repins launchers", []))

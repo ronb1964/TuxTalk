@@ -176,8 +176,6 @@
   "tray.py::DictationTray._stop_kwin_focus_provider::swallowed_error": 1,
   "tray.py::DictationTray.show_menu_window_if_no_tray::swallowed_error": 1,
   "tray.py::DictationTray::undocumented": 1,
-  "tray.py::main.check_and_show_update_notification::swallowed_error": 1,
-  "tray.py::main.check_and_show_update_notification::undocumented": 1,
   "tray.py::main.show_first_run_setup::long_line": 1,
   "tray.py::main.show_first_run_setup::undocumented": 1,
   "tray.py::main::swallowed_error": 2,
@@ -343,7 +341,7 @@
   },
   "tray.py::main": {
    "decisions": 18,
-   "lines": 196
+   "lines": 165
   },
   "uninstall.py::_empty": {
    "decisions": 20

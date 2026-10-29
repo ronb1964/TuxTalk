@@ -15,13 +15,12 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("AyatanaAppIndicator3", "0.1")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gtk, Gdk, GLib
-from .ui_style import message_dialog
 from gi.repository import AyatanaAppIndicator3 as AppIndicator3
 import threading
 import sys
 import warnings
 from .logger import setup_logger
-from . import menu_cache, tray_instance, update_offers, update_ui
+from . import menu_cache, startup_notices, tray_instance, update_offers, update_ui
 from .tray_items import DictationItem, themed_icon
 from .tray_presets import PresetMenu
 from .tray_service import ServiceLifecycle
@@ -66,33 +65,6 @@ try:
 except ImportError:
     DBUS_AVAILABLE = False
     logger.warning("D-Bus service not available - GNOME extension integration disabled")
-
-OLD_FLATPAK_NOTICE_TITLE = "Stopped the old TalkType Flatpak"
-OLD_FLATPAK_NOTICE_BODY = (
-    "It was running next to TuxTalk, its new name, so everything you said "
-    "would be typed twice. You can uninstall it from your software center, or "
-    "with: flatpak uninstall io.github.ronb1964.TalkType")
-
-
-def _handle_old_talktype_flatpak(stop=None, notify=None):
-    """Stop an old TalkType Flatpak and say so; runs off the main thread, so
-    the notice is handed to the main loop."""
-    if stop is None:
-        from .service_launcher import stop_old_talktype_flatpak as stop
-    if notify is None:
-        from .notify import notify as _notify
-
-        def notify(title, body):
-            def show():
-                _notify(title, body)
-                return False    # once
-            GLib.idle_add(show)
-    try:
-        if stop():
-            notify(OLD_FLATPAK_NOTICE_TITLE, OLD_FLATPAK_NOTICE_BODY)
-    except Exception as e:      # never stop the tray from starting
-        logger.warning(f"Could not check for the pre-rename Flatpak: {e}")
-
 
 class DictationTray(ServiceLifecycle, PresetMenu):
     def __init__(self):
@@ -865,34 +837,6 @@ class DictationTray(ServiceLifecycle, PresetMenu):
         self.indicator.set_menu(self.build_menu())
 
 
-def _show_rename_notice_once():
-    """'TalkType is now TuxTalk', once, after this start converted an old
-    TalkType install (rename_migration leaves a marker for it). It is cleared
-    only once the message has been seen, so quitting first just shows it on
-    the next start. Never during dictation: only here, at startup."""
-    from . import config, rename_migration
-    folder = os.path.dirname(config.CONFIG_PATH)
-    if not rename_migration.notice_pending(folder):
-        return
-    dialog = message_dialog(
-        message_type=Gtk.MessageType.INFO,
-        buttons=Gtk.ButtonsType.NONE,
-        text="TalkType is now TuxTalk",
-    )
-    dialog.format_secondary_text("\n\n".join((
-        "Same app, new name. Your settings, models, snippets and stats all came "
-        "across. Look for TuxTalk in your app menu from now on.",
-        "Why the change: another company owns the name TalkType for dictation "
-        "software.")))
-    dialog.add_button("Got it", Gtk.ResponseType.OK)
-    dialog.set_position(Gtk.WindowPosition.CENTER)
-    dialog.set_keep_above(True)
-    dialog.run()
-    dialog.destroy()
-    rename_migration.notice_shown(folder)
-    logger.info("Rename to TuxTalk: showed the one-time notice")
-
-
 def main():
     from . import desktop_identity, ui_style
     desktop_identity.apply()        # TuxTalk's icon on its windows, not KDE's generic one
@@ -920,7 +864,7 @@ def main():
 
     # An old TalkType Flatpak can't see the lock above and would type every
     # dictation twice. Checked on a thread so a slow flatpak never delays the tray.
-    threading.Thread(target=_handle_old_talktype_flatpak, daemon=True).start()
+    threading.Thread(target=startup_notices.handle_old_talktype_flatpak, daemon=True).start()
 
     # The TalkType -> TuxTalk folder move ran at package import, before any
     # logger existed; record what it did now (see rename_migration.py).
@@ -955,39 +899,8 @@ def main():
     tray = DictationTray()
     tray.quit_on_sigterm()
 
-    # Check if we just updated and show notification
-    def check_and_show_update_notification():
-        try:
-            from . import update_checker
-            from . import __version__
-            previous_version = update_checker.check_just_updated()
-            if previous_version:
-                # Show a brief notification that update completed
-                dialog = message_dialog(
-                    message_type=Gtk.MessageType.INFO,
-                    buttons=Gtk.ButtonsType.OK,
-                    text="Update Complete!"
-                )
-                dialog.format_secondary_markup(
-                    f"TuxTalk has been updated to <b>v{__version__}</b>\n\n"
-                    f"The update was installed automatically and "
-                    f"TuxTalk has restarted with the new version."
-                )
-                dialog.set_position(Gtk.WindowPosition.CENTER)
-                dialog.set_keep_above(True)
-                dialog.run()
-                dialog.destroy()
-        except Exception as e:
-            logger.debug(f"Error checking for update notification: {e}")
-        # After "Update Complete!", never on top of it.
-        try:
-            _show_rename_notice_once()
-        except Exception as e:
-            logger.warning(f"Could not show the rename notice: {e}")
-        return False  # Don't repeat
-
-    # Schedule update notification check after tray is up
-    GLib.timeout_add(500, check_and_show_update_notification)
+    # "Update Complete!" and the rename notice, once the tray is up.
+    GLib.timeout_add(500, startup_notices.show_after_start)
 
     # A first-run hotkey test that was killed mid-way leaves GNOME's Alt+F8 and
     # Alt+F7 cleared; put them back.

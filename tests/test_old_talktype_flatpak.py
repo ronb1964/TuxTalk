@@ -10,7 +10,7 @@ import subprocess
 
 import pytest
 
-from tuxtalk import service_launcher, tray
+from tuxtalk import service_launcher, startup_notices
 
 OLD = "io.github.ronb1964.TalkType"
 
@@ -94,8 +94,8 @@ def test_inside_a_flatpak_nothing_is_asked(monkeypatch):
 
 def test_the_tray_tells_the_user_once_when_it_stopped_one():
     shown = []
-    tray._handle_old_talktype_flatpak(stop=lambda: True,
-                                      notify=lambda t, b: shown.append((t, b)))
+    startup_notices.handle_old_talktype_flatpak(stop=lambda: True,
+                                                notify=lambda t, b: shown.append((t, b)))
     assert len(shown) == 1
     title, body = shown[0]
     assert "TalkType" in title
@@ -104,12 +104,12 @@ def test_the_tray_tells_the_user_once_when_it_stopped_one():
 
 def test_the_tray_says_nothing_when_none_was_running():
     shown = []
-    tray._handle_old_talktype_flatpak(stop=lambda: False,
-                                      notify=lambda t, b: shown.append((t, b)))
+    startup_notices.handle_old_talktype_flatpak(stop=lambda: False,
+                                                notify=lambda t, b: shown.append((t, b)))
     assert shown == []
 
 
 def test_the_tray_survives_an_unexpected_error():
     def boom():
         raise RuntimeError("broken")
-    tray._handle_old_talktype_flatpak(stop=boom, notify=lambda t, b: None)
+    startup_notices.handle_old_talktype_flatpak(stop=boom, notify=lambda t, b: None)
