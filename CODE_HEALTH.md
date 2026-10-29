@@ -38,7 +38,7 @@ Merge the more-hotkey-choices branch first: it changes the same files.
 | 7 | Error handling and logging: the 235 swallowed errors, 187 print() calls, Preferences writing to the log | M | open (Preferences writes to the log, a0bf5bd; its swallowed errors gone with the split) |
 | 8 | 100 missing docstrings, 27 dated comments, 332 long lines, about 60 dead-code items | M | open |
 | 9 | CI installs from poetry.lock; appimagetool, its runtime and the Vulkan SDK pinned with checksums; more ruff families under the same ratchet | S | open |
-| 10 | GNOME extension fixes in one version (late replies after disable, notification titles, unused stylesheet, menu split) | S | open |
+| 10 | GNOME extension fixes in one version (late replies after disable, notification titles, unused stylesheet, menu split) | S | done 2026-10-28, branch task10-extension: extension version 29 (0.19 ships a new extension anyway) |
 | 11 | Hotkey helper code findings in one version bump (8 small items) | S | open |
 | 12 | Docs: README, ROADMAP, icons/README; delete unused icons and the Flathub manifest (Ron's OK) | S | open |
 | 13 | Try CUDA without cuDNN on an NVIDIA card; if it works, drop cuDNN from the download | S | open |
