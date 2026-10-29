@@ -98,11 +98,12 @@ class DictationTray(ServiceLifecycle, PresetMenu, TrayMenu):
         self.dbus_service = None
         self._init_dbus_service()
 
-        self.update_icon_status()
-        self.indicator.set_menu(self.build_menu())
-
-        # Track service state for change detection
+        # The icon and the poll's change detection start from the same
+        # answer: from two, a service that started in between would leave
+        # the icon on "Stopped" until its next change.
         self._last_service_state = self.is_service_running()
+        self.update_icon_status(self._last_service_state)
+        self.indicator.set_menu(self.build_menu())
         if not self._last_service_state:
             # A service that crashed in an earlier session can leave KWin or
             # COSMIC holding the hotkeys back from every app.
@@ -252,18 +253,18 @@ class DictationTray(ServiceLifecycle, PresetMenu, TrayMenu):
     # ----- Service management helpers -----
 
     def update_status_and_menu(self, repeat=True):
-        """Update icon and menu display based on service status.
+        """The status poll, every second: the icon and the menu follow the
+        service, and a start or stop is announced over D-Bus. Only what
+        changed is touched, since the desktop is sent every change.
 
         Args:
             repeat: If True (default), keeps the GLib timer running.
                     Pass False for a one-shot update.
         """
-        # Store previous state to detect changes
         old_state = getattr(self, '_last_service_state', None)
         new_state = self.is_service_running()
-
-        # Update UI — pass pre-computed state to avoid redundant checks
-        self.update_icon_status(is_running=new_state)
+        if new_state != old_state:
+            self.update_icon_status(is_running=new_state)
         self.update_menu_display(is_running=new_state)
 
         # If state changed, emit D-Bus signal
@@ -353,11 +354,8 @@ class DictationTray(ServiceLifecycle, PresetMenu, TrayMenu):
         release_desktop_hotkeys()
 
     def toggle_service(self, widget):
-        """Toggle dictation service on/off."""
-        # Prevent recursive calls when we programmatically set the toggle
-        if hasattr(self, '_updating_toggle') and self._updating_toggle:
-            return
-
+        """The Dictation item was clicked: start or stop the service. The
+        status poll's set_active() only redraws it, so this is a click."""
         if widget.get_active():
             # Turn service ON
             self.start_service(None)

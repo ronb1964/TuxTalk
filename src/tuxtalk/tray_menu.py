@@ -9,7 +9,7 @@ gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
 from .logger import setup_logger  # noqa: E402
-from .tray_items import DictationItem, themed_icon  # noqa: E402
+from .tray_items import DictationItem, relabel, themed_icon  # noqa: E402
 
 logger = setup_logger(__name__)
 
@@ -114,6 +114,7 @@ class TrayMenu:
             menu.append(item)
         menu.show_all()
 
+        self._presets_shown = None      # new radio items: none is synced yet
         self.update_menu_display()
         return menu
 
@@ -139,37 +140,36 @@ class TrayMenu:
         self.indicator.set_menu(self.build_menu())
 
     def update_menu_display(self, is_running=None):
-        """Update menu display with current service status and model.
+        """Show in the menu whether dictation is on, what runs, and which
+        Performance preset is in use. Only what changed is touched: the
+        status poll calls this every second, and the desktop is sent each
+        widget change (dbusmenu). The presets are worked out again only when
+        the settings changed, or the dot was left on another one.
 
         Args:
             is_running: Pre-computed service state (avoids redundant checks).
                         If None, checks service status directly.
         """
-        if hasattr(self, 'service_toggle'):
-            # Update service toggle state
-            if is_running is None:
-                is_running = self.is_service_running()
-            self._updating_toggle = True
+        if is_running is None:
+            is_running = self.is_service_running()
+        # Against the item itself: a click flips it before the service has
+        # started, and one that fails to start must be shown off again.
+        if self.service_toggle.get_active() != is_running:
             self.service_toggle.set_active(is_running)
-            self._updating_toggle = False
-
-        # What runs, in one line
-        if hasattr(self, 'engine_item'):
-            try:
-                from .config import load_config
-                from .recommend import engine_line
-                cfg = load_config()
-                running = None
-                if is_running and getattr(self, "dbus_service", None):
-                    running = self.dbus_service.running_engine
-                self.engine_item.set_label(engine_line(cfg.model, cfg.device, running))
-
-                # Update performance preset radio buttons
-                if hasattr(self, 'preset_radios'):
-                    self._sync_preset_radios()
-            except Exception as e:
-                logger.error(f"Failed to update the model and device line: {e}")
-                self.engine_item.set_label("Speech model: unknown")
+        try:
+            from .config import load_config
+            from .recommend import engine_line
+            cfg = load_config()
+            running = None
+            if is_running and getattr(self, "dbus_service", None):
+                running = self.dbus_service.running_engine
+            relabel(self.engine_item, engine_line(cfg.model, cfg.device, running))
+            if (cfg, self._dotted_preset()) != self._presets_shown:
+                self._sync_preset_radios()
+                self._presets_shown = (cfg, self._dotted_preset())
+        except Exception as e:
+            logger.error(f"Failed to update the model and device line: {e}")
+            relabel(self.engine_item, "Speech model: unknown")
 
     def _build_history_submenu(self):
         """Build the Recent Dictations submenu and keep it current.

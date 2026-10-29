@@ -7,6 +7,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
 from .logger import setup_logger  # noqa: E402
+from .tray_items import relabel  # noqa: E402
 
 logger = setup_logger(__name__)
 
@@ -167,7 +168,7 @@ class PresetMenu:
         try:
             for _p in self._current_presets():
                 if _p.id in self.preset_radios:
-                    self.preset_radios[_p.id].set_label(f"{_p.label} ({_p.description})")
+                    relabel(self.preset_radios[_p.id], f"{_p.label} ({_p.description})")
             current_preset = self._get_current_preset()
             if current_preset in self.preset_radios:
                 self.preset_radios[current_preset].set_active(True)
@@ -175,6 +176,11 @@ class PresetMenu:
                 self.preset_custom.set_active(True)
         finally:
             self._updating_preset = False
+
+    def _dotted_preset(self):
+        """Id of the preset the menu's dot is on, or 'custom'."""
+        return next((pid for pid, radio in self.preset_radios.items() if radio.get_active()),
+                    "custom")
 
     def _revert_preset_radio(self):
         """Put the Performance radio back on the preset that's actually in use."""
