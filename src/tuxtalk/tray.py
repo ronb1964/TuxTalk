@@ -22,8 +22,8 @@ import sys
 import warnings
 from .logger import setup_logger
 from . import menu_cache, startup_notices, tray_instance, update_offers, update_ui
-from .tray_menu import TrayMenu
-from .tray_presets import PresetMenu
+from .tray_menu import TrayMenu, copy_dictation
+from .tray_presets import Presets
 from .tray_service import ServiceLifecycle
 
 # The tray menu's icons need Gtk.ImageMenuItem: AppIndicator sends only its
@@ -41,7 +41,7 @@ except ImportError:
     logger.warning("D-Bus service not available - GNOME extension integration disabled")
 
 
-class DictationTray(ServiceLifecycle, PresetMenu, TrayMenu):
+class DictationTray(ServiceLifecycle, Presets):
     """TuxTalk's tray: the icon and its menu, the dictation service it starts
     and polls every second, and what the menu, the GNOME extension, the
     command line and the menu window ask of it."""
@@ -112,7 +112,10 @@ class DictationTray(ServiceLifecycle, PresetMenu, TrayMenu):
         # the icon on "Stopped" until its next change.
         self._last_service_state = self.is_service_running()
         self.update_icon_status(self._last_service_state)
-        self.indicator.set_menu(self.build_menu())
+        self._applying_preset = False   # a Performance preset's setup is running
+        self.menu = TrayMenu(self)
+        self.update_menu_display(self._last_service_state)
+        self.indicator.set_menu(self.menu.widget)
         if not self._last_service_state:
             # A service that crashed in an earlier session can leave KWin or
             # COSMIC holding the hotkeys back from every app.
@@ -294,6 +297,20 @@ class DictationTray(ServiceLifecycle, PresetMenu, TrayMenu):
 
         self._last_service_state = new_state
         return repeat
+
+    def update_menu_display(self, is_running=None):
+        """Show in the menu whether dictation is on, what runs and which
+        preset is in use; *is_running* when it's known already."""
+        if is_running is None:
+            is_running = self.is_service_running()
+        running = self.dbus_service.running_engine if is_running and self.dbus_service else None
+        self.menu.show_state(is_running, running)
+
+    def refresh_menu(self):
+        """Rebuild the tray menu (after onboarding has changed the setup)."""
+        menu = self.menu.rebuild()
+        self.update_menu_display()
+        self.indicator.set_menu(menu)
 
     # ----- tuxtalk --toggle / --start / --stop (control.py) -----
 
@@ -582,8 +599,9 @@ class DictationTray(ServiceLifecycle, PresetMenu, TrayMenu):
         The fix is saved as a custom voice command; see vocabulary.py.
         """
         from .fix_word_dialog import show_fix_word_dialog
-        show_fix_word_dialog(index, copy_text=self._copy_history_entry)
+        show_fix_word_dialog(index, copy_text=copy_dictation)
         return False  # one-shot when scheduled through GLib.idle_add
+
 
 def main():
     """The tray process: what comes before the tray (the command line, the

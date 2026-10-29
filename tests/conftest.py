@@ -740,9 +740,9 @@ def help_pages(monkeypatch):
 @pytest.fixture
 def tray_menu(monkeypatch):
     """The tray's menu as built from default settings, without starting a tray."""
-    from tuxtalk import config, tray
+    from tuxtalk import config, tray, tray_menu
     monkeypatch.setattr(config, "load_config", config.Settings)
-    menu = tray.DictationTray.build_menu(tray.DictationTray.__new__(tray.DictationTray))
+    menu = tray_menu.TrayMenu(tray.DictationTray.__new__(tray.DictationTray)).widget
     yield menu
     menu.destroy()
 

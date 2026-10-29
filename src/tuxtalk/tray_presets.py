@@ -1,13 +1,7 @@
-"""The tray's Performance menu (a mixin of tray.DictationTray): Recommended,
-Lightest and Battery saver for this computer, applying one (with the Vulkan
-setup and downloads it needs), and Custom, which opens Preferences."""
-import gi
-
-gi.require_version("Gtk", "3.0")
-from gi.repository import GLib, Gtk  # noqa: E402
-
-from .logger import setup_logger  # noqa: E402
-from .tray_items import relabel  # noqa: E402
+"""Performance presets: Recommended, Lightest and Battery saver for this
+computer, and applying one (with the Vulkan setup and downloads it needs), a
+mixin of tray.DictationTray. The menu's radio items are tray_menu.py's."""
+from .logger import setup_logger
 
 logger = setup_logger(__name__)
 
@@ -36,28 +30,29 @@ def _gpu_offered():
         return False
 
 
-class PresetMenu:
-    """DictationTray's Performance menu (a mixin of tray.DictationTray): the
-    presets, applying one, and keeping the dot on the one in use. They use its
-    state (preset_radios, preset_custom, _updating_preset, _applying_preset)
-    and its open_preferences, update_menu_display, _emit_model_changed and
-    restart_service."""
+def current_presets():
+    """The Performance presets for this computer and language (recommend.py)."""
+    from . import recommend
+    from .config import load_config
+    cfg = load_config()
+    return recommend.presets(recommend.effective_language(cfg), recommend.detect_hardware(cfg))
 
-    def _current_presets(self):
-        """The Performance presets for this computer and language (recommend.py)."""
-        from . import recommend
-        from .config import load_config
-        cfg = load_config()
-        return recommend.presets(recommend.effective_language(cfg), recommend.detect_hardware(cfg))
 
-    def _get_current_preset(self) -> str:
-        """Id of the preset the settings match, or 'custom'."""
-        try:
-            from . import config, recommend
-            return recommend.match_preset(config.load_config(), self._current_presets())
-        except Exception as e:
-            logger.warning(f"Could not tell which preset is in use: {e}")
-            return "custom"
+def preset_in_use() -> str:
+    """Id of the preset the settings match, or 'custom'."""
+    try:
+        from . import config, recommend
+        return recommend.match_preset(config.load_config(), current_presets())
+    except Exception as e:
+        logger.warning(f"Could not tell which preset is in use: {e}")
+        return "custom"
+
+
+class Presets:
+    """Applying a Performance preset, for the tray's menu, the menu window and
+    the GNOME extension (a mixin of tray.DictationTray). It uses the tray's
+    menu (to put the dot back when a preset isn't applied), _applying_preset,
+    update_menu_display, _emit_model_changed and restart_service."""
 
     def set_performance_preset(self, preset_id: str):
         """Apply a Performance preset: Recommended, Lightest or Battery saver.
@@ -67,27 +62,25 @@ class PresetMenu:
         uses the processor if the chip is slower. Cancelling the download
         changes nothing. Ids from an older GNOME extension ("balanced",
         "accurate"...) are ignored."""
-        if getattr(self, "_updating_preset", False):
-            return
         try:
-            preset = next((p for p in self._current_presets() if p.id == preset_id), None)
+            preset = next((p for p in current_presets() if p.id == preset_id), None)
         except Exception as e:
             logger.error(f"Could not work out the presets: {e}")
             preset = None
         if preset is None:
             logger.info(f"Ignoring unknown performance preset {preset_id!r}")
-            self._revert_preset_radio()
+            self.menu.put_dot_back()
             return
-        if self._get_current_preset() == preset_id:
+        if preset_in_use() == preset_id:
             # Already in effect (the GNOME menu sends clicks on the dotted
             # item too): no download check, speed check or restart.
             logger.info(f"Performance preset {preset_id!r} is already in effect")
             return
-        if getattr(self, "_applying_preset", False):
+        if self._applying_preset:
             # Its download window runs a loop of its own, and the menu still
             # takes clicks: a second one opened a second download.
             logger.info("A Performance preset is still being applied; ignoring the click")
-            self._put_dot_back_soon()
+            self.menu.put_dot_back_soon()
             return
         self._applying_preset = True
         try:
@@ -101,7 +94,7 @@ class PresetMenu:
         try:
             setup = self._preset_files(preset)
             if setup is None:
-                self._revert_preset_radio()
+                self.menu.put_dot_back()
                 return
             cfg = self._save_preset(preset, *setup)
             from .notify import notify
@@ -114,7 +107,7 @@ class PresetMenu:
             self.restart_service(None)
         except Exception as e:
             logger.error(f"Failed to apply performance preset: {e}", exc_info=True)
-            self._put_dot_back_soon()     # on the setup still in use
+            self.menu.put_dot_back_soon()     # on the setup still in use
 
     def _preset_files(self, preset):
         """(model, device) *preset* runs with once its files are here: the
@@ -150,7 +143,7 @@ class PresetMenu:
         for key, value in preset.extras:
             setattr(cfg, key, value)
         if not preset.extras:
-            battery = next((p for p in self._current_presets() if p.id == "battery"), None)
+            battery = next((p for p in current_presets() if p.id == "battery"), None)
             if battery and all(getattr(cfg, k, None) == v for k, v in battery.extras):
                 # An instance, not the class: some defaults are worked out
                 # for this computer (the timeout is on only with a battery).
@@ -159,90 +152,3 @@ class PresetMenu:
                     setattr(cfg, key, getattr(defaults, key))
         save_config(cfg)
         return cfg
-
-    def _sync_preset_radios(self):
-        """Refresh the Performance labels and put the dot on the active preset.
-        The busy flag (which makes set_performance_preset ignore the toggles
-        this causes) is always cleared, or every later click would be ignored."""
-        self._updating_preset = True
-        try:
-            for _p in self._current_presets():
-                if _p.id in self.preset_radios:
-                    relabel(self.preset_radios[_p.id], f"{_p.label} ({_p.description})")
-            current_preset = self._get_current_preset()
-            if current_preset in self.preset_radios:
-                self.preset_radios[current_preset].set_active(True)
-            elif hasattr(self, 'preset_custom'):
-                self.preset_custom.set_active(True)
-        finally:
-            self._updating_preset = False
-
-    def _dotted_preset(self):
-        """Id of the preset the menu's dot is on, or 'custom'."""
-        return next((pid for pid, radio in self.preset_radios.items() if radio.get_active()),
-                    "custom")
-
-    def _revert_preset_radio(self):
-        """Put the Performance radio back on the preset that's actually in use."""
-        self._updating_preset = True
-        try:
-            _cur = self._get_current_preset()
-            if _cur in self.preset_radios:
-                self.preset_radios[_cur].set_active(True)
-            elif hasattr(self, 'preset_custom'):
-                self.preset_custom.set_active(True)
-        except Exception as _re:
-            logger.error(f"Failed to revert preset radio: {_re}")
-        finally:
-            self._updating_preset = False
-
-    def _build_performance_submenu(self):
-        """Build the Performance preset submenu (Recommended, Lightest, Battery saver + Custom).
-
-        Stores radio button references on self for later state updates.
-        Returns the parent MenuItem that contains the submenu.
-        """
-        submenu = Gtk.Menu()
-        self.preset_radios = {}
-        preset_group = None
-        for preset in self._current_presets():
-            label = f"{preset.label} ({preset.description})"
-            radio = (Gtk.RadioMenuItem(label=label) if preset_group is None
-                     else Gtk.RadioMenuItem(label=label, group=preset_group))
-            preset_group = preset_group or radio
-            # GTK fires "activate" on the radio being unselected too; act on the selected one.
-            radio.connect("activate", lambda w, pid=preset.id:
-                          w.get_active() and self.set_performance_preset(pid))
-            submenu.append(radio)
-            self.preset_radios[preset.id] = radio
-
-        # Custom has the dot when the settings match no preset; it opens Preferences.
-        submenu.append(Gtk.SeparatorMenuItem())
-        self.preset_custom = Gtk.RadioMenuItem(label="Custom (opens Preferences)",
-                                               group=preset_group)
-        self.preset_custom.connect("activate", self._on_custom_preset)
-        submenu.append(self.preset_custom)
-
-        item = Gtk.MenuItem(label="Performance")
-        item.set_submenu(submenu)
-        return item
-
-    def _on_custom_preset(self, item):
-        """Performance > Custom: open Preferences, then put the dot back on the
-        setup in use (clicking a radio item moves it)."""
-        # "activate" also comes for the radio being unselected, and for the
-        # tray moving the dot itself.
-        if getattr(self, "_updating_preset", False) or not item.get_active():
-            return
-        self.open_preferences(None)
-        self._put_dot_back_soon()
-
-    def _put_dot_back_soon(self):
-        """Put the dot back on the preset in use, after a moment: KDE ticks
-        the clicked item in its own copy of the menu, and a move there and
-        back in the same main-loop pass reaches it as no change and leaves
-        two dots."""
-        def put_dot_back():
-            self._revert_preset_radio()
-            return False    # once
-        GLib.timeout_add(150, put_dot_back)

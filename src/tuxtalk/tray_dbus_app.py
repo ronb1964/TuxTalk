@@ -3,6 +3,7 @@ dictation service, Preferences and the command line can ask the running
 tray to do or tell it (dbus_service.py has the D-Bus methods)."""
 from gi.repository import GLib
 
+from . import tray_presets
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -27,10 +28,10 @@ class TrayAppInstance:
 
     def get_presets(self):
         """(id, label, description) for the GNOME extension's Performance menu."""
-        return [(p.id, p.label, p.description) for p in self.tray._current_presets()]
+        return [(p.id, p.label, p.description) for p in tray_presets.current_presets()]
 
     def current_preset(self):
-        return self.tray._get_current_preset()
+        return tray_presets.preset_in_use()
 
     @property
     def service_running(self):

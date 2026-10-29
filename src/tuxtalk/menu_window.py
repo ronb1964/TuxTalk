@@ -18,6 +18,8 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
+from . import tray_presets  # noqa: E402
+
 logger = logging.getLogger(__name__)
 
 WINDOW_TITLE = "TuxTalk"
@@ -154,14 +156,15 @@ class MenuWindow:
 
     def _popup_history(self, button):
         menu = Gtk.Menu()
-        self.tray._fill_history_menu(menu)
+        self.tray.menu.fill_history(menu)
         self._show_popup(button, menu)
 
     def _popup_performance(self, button):
         menu = Gtk.Menu()
-        current = self.tray._get_current_preset()
+        presets = tray_presets.current_presets()
+        current = tray_presets.preset_in_use()
         group = None
-        for preset in self.tray._current_presets():
+        for preset in presets:
             radio = Gtk.RadioMenuItem(label=f"{preset.label} ({preset.description})",
                                       group=group)
             group = group or radio
@@ -172,7 +175,7 @@ class MenuWindow:
             menu.append(radio)
         menu.append(Gtk.SeparatorMenuItem())
         custom = Gtk.RadioMenuItem(label="Custom (opens Preferences)", group=group)
-        custom.set_active(current not in {p.id for p in self.tray._current_presets()})
+        custom.set_active(current not in {p.id for p in presets})
         custom.connect("activate", lambda w: w.get_active() and self.tray.open_preferences(None))
         menu.append(custom)
         self._show_popup(button, menu)
@@ -188,9 +191,7 @@ class MenuWindow:
             self._updating = False
             self.status_label.set_markup(
                 "<b>Dictation is on</b>" if running else "<b>Dictation is off</b>")
-            engine = getattr(self.tray, "engine_item", None)
-            if engine is not None:
-                self.engine_label.set_text(engine.get_label())
+            self.engine_label.set_text(self.tray.menu.engine_item.get_label())
         except Exception as e:
             self._updating = False
             logger.debug(f"Menu window refresh failed: {e}")
