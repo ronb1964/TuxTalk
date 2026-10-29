@@ -12,6 +12,7 @@ brings the open one to the front.
 """
 import os
 import signal
+import stat
 import sys
 import threading
 import time
@@ -34,11 +35,15 @@ logger = setup_logger(__name__)
 
 TITLE = "Transcribe a File"
 FRONT = signal.SIGUSR1
+WINDOW_LOCK = "transcribe-window.lock"     # one window (single_instance.claim_window)
 
 
 def pidfile_path():
-    base = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
-    return os.path.join(base, "tuxtalk-transcribe.pid")
+    """Where the open window keeps its pid: beside its lock, in the private
+    runtime folder or its fallback (single_instance). Raises OSError when
+    there's neither."""
+    from .single_instance import runtime_dir
+    return os.path.join(runtime_dir(), "tuxtalk-transcribe.pid")
 
 
 def _running_pid():
@@ -52,6 +57,47 @@ def _running_pid():
     except (OSError, ValueError):
         pass
     return None
+
+
+def _brought_forward(wait_s):
+    """Whether an open window took the signal to come to the front. A window
+    writes its pid only once it handles the signal (until then the signal
+    would end it), so one still starting is waited for, up to *wait_s*
+    seconds."""
+    deadline = time.monotonic() + wait_s
+    while True:
+        other = _running_pid()
+        if other:
+            try:
+                os.kill(other, FRONT)
+                return True
+            except OSError:
+                return False
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.05)
+
+
+def _saved_file_mode(path):
+    """The permissions a saved transcript gets: those of the file it
+    replaces, or the user's usual ones for a new file (their umask)."""
+    try:
+        return stat.S_IMODE(os.stat(path).st_mode)
+    except FileNotFoundError:
+        return 0o666 & ~_umask()
+
+
+def _umask():
+    """This process's umask, read without changing it: os.umask sets one,
+    for a moment, for every thread."""
+    try:
+        with open("/proc/self/status", encoding="ascii") as f:
+            for line in f:
+                if line.startswith("Umask:"):
+                    return int(line.split()[1], 8)
+    except (OSError, ValueError) as e:
+        logger.info(f"Couldn't read the umask, keeping new files private: {e}")
+    return 0o077
 
 
 def _when(stamp):
@@ -437,8 +483,9 @@ class TranscribeWindow:
         if not target:
             return
         try:
-            with open(target, "w", encoding="utf-8") as f:
-                f.write(content)
+            # A full disk mustn't cost the file being replaced.
+            from .config import write_text_atomic
+            write_text_atomic(target, content, keep_backup=False, mode=_saved_file_mode(target))
             self.kept = True
             self.status.set_text(f"Saved {os.path.basename(target)}.")
         except OSError as e:
@@ -517,13 +564,10 @@ def main(argv=None):
     """Open the window, or bring the open one to the front. A file given on
     the command line starts at once."""
     argv = sys.argv[1:] if argv is None else argv
-    other = _running_pid()
-    if other:
-        try:
-            os.kill(other, FRONT)
-            return 0
-        except OSError:
-            pass
+    from .single_instance import claim_window
+    go_on, lock = claim_window(WINDOW_LOCK, _brought_forward, TITLE)
+    if not go_on:
+        return 0
     try:
         from . import desktop_identity, ui_style
         desktop_identity.apply()        # TuxTalk's icon on the window
@@ -549,6 +593,9 @@ def main(argv=None):
                 os.remove(pidfile_path())
         except OSError:
             pass
+        # The window has gone: the next can open while the model unloads.
+        if lock is not None:
+            lock.close()
         window.close_engine()
     return 0
 

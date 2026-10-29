@@ -170,6 +170,7 @@ def run_speed_check(parent, model):
     """Time the graphics chip against the processor on a short sample, tell
     the user the result, and return True if the graphics chip should be used."""
     result = {}
+    cancel = threading.Event()
 
     def work():
         try:
@@ -177,11 +178,12 @@ def run_speed_check(parent, model):
             if device is None:
                 result["error"] = "TuxTalk couldn't find a graphics chip it can use."
             else:
-                result["times"] = wv.speed_check(model, device)
+                result["times"] = wv.speed_check(model, device, cancel=cancel)
         except Exception as e:
             result["error"] = f"The speed check didn't work: {e}"
 
     _wait_dialog(parent, work)
+    cancel.set()        # after Stop, ends the run still going in the background
 
     times = result.get("times")
     if times is None:

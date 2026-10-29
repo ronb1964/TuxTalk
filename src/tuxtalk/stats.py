@@ -6,10 +6,12 @@ keeps numbers only. Per day: how many dictations, how many words, and how many
 seconds of speech. Never the words themselves. The file lives in TuxTalk's
 data folder on this computer and nothing sends it anywhere.
 
-The dictation service records each dictation (app.py); Preferences reads the
-file and shows the totals on its Stats tab. Only the service writes, one
-dictation at a time, so a plain atomic rewrite is enough.
+The dictation service records each dictation (pipeline.py); Preferences reads the
+file and shows the totals on its Stats tab, and may reset it or add a
+restored backup's days. Each change holds a lock while it reads and rewrites
+the file, so two at once can't lose a count or bring a reset one back.
 """
+import contextlib
 import datetime
 import json
 import os
@@ -28,6 +30,7 @@ TYPING_WPM = 40
 MIN_TYPING_WPM, MAX_TYPING_WPM = 10, 200
 
 CHART_DAYS = 14
+LOCK_WAIT_S = 5.0       # behind another change to the file, then go ahead
 _VERSION = 1
 
 # A word is a run of letters or digits, apostrophes inside it included, so
@@ -112,23 +115,45 @@ def _write(days):
         raise
 
 
+@contextlib.contextmanager
+def _changing():
+    """Held around each read-and-rewrite of the file (one at a time, across
+    processes). Raises TimeoutError after LOCK_WAIT_S behind a change that
+    doesn't end: going ahead could undo a reset, and the dictation that
+    records a count waits for this. Without a usable runtime folder it goes
+    ahead unlocked."""
+    from . import single_instance
+    try:
+        lock = single_instance.open_lock("stats.lock")
+    except OSError as e:
+        logger.warning(f"Usage stats: no lock, changing them anyway ({e})")
+        yield
+        return
+    with lock:
+        if not single_instance.claim(lock, wait_s=LOCK_WAIT_S):
+            raise TimeoutError("another change to the usage stats doesn't end")
+        yield
+
+
 def merge_days(theirs):
     """Add *theirs* (a backup's {day: counts}) to the stored days, keeping the
     higher word count for a day both have. Returns False, and writes nothing,
     when the stored file exists but can't be read: like record(), it leaves
-    what might be recoverable alone."""
-    days = _read()
-    if days is None:
-        return False
-    for day, value in (theirs.items() if isinstance(theirs, dict) else []):
-        try:
-            datetime.date.fromisoformat(day)
-        except (TypeError, ValueError):
-            continue
-        value = _clean_day(value)
-        if day not in days or value["words"] > days[day]["words"]:
-            days[day] = value
-    _write(days)
+    what might be recoverable alone. Raises TimeoutError (an OSError) when
+    another change holds the file too long."""
+    with _changing():
+        days = _read()
+        if days is None:
+            return False
+        for day, value in (theirs.items() if isinstance(theirs, dict) else []):
+            try:
+                datetime.date.fromisoformat(day)
+            except (TypeError, ValueError):
+                continue
+            value = _clean_day(value)
+            if day not in days or value["words"] > days[day]["words"]:
+                days[day] = value
+        _write(days)
     return True
 
 
@@ -139,15 +164,16 @@ def record(words, seconds, today=None):
     if words <= 0:
         return
     try:
-        days = _read()
-        if days is None:
-            return
-        day = (today or datetime.date.today()).isoformat()
-        counts = days.setdefault(day, _clean_day({}))
-        counts["dictations"] += 1
-        counts["words"] += int(words)
-        counts["seconds"] = round(counts["seconds"] + float(seconds), 1)
-        _write(days)
+        with _changing():
+            days = _read()
+            if days is None:
+                return
+            day = (today or datetime.date.today()).isoformat()
+            counts = days.setdefault(day, _clean_day({}))
+            counts["dictations"] += 1
+            counts["words"] += int(words)
+            counts["seconds"] = round(counts["seconds"] + float(seconds), 1)
+            _write(days)
     except Exception as e:
         logger.warning(f"Could not save usage stats: {e}")
 
@@ -155,16 +181,22 @@ def record(words, seconds, today=None):
 def reset():
     """Forget all usage stats, including any stats.json.bak an earlier
     development build left behind (it saved through config.write_text_atomic,
-    which keeps a backup). False when a file couldn't be deleted."""
+    which keeps a backup). False when a file couldn't be deleted, or another
+    change held the stats too long."""
     done = True
-    for path in (stats_path(), stats_path() + ".bak"):
-        try:
-            os.remove(path)
-        except FileNotFoundError:
-            pass
-        except OSError as e:
-            logger.warning(f"Could not reset usage stats: {e}")
-            done = False
+    try:
+        with _changing():
+            for path in (stats_path(), stats_path() + ".bak"):
+                try:
+                    os.remove(path)
+                except FileNotFoundError:
+                    pass
+                except OSError as e:
+                    logger.warning(f"Could not reset usage stats: {e}")
+                    done = False
+    except TimeoutError as e:
+        logger.warning(f"Could not reset usage stats: {e}")
+        return False
     return done
 
 

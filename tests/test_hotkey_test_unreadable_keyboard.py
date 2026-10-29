@@ -12,7 +12,7 @@ import pytest
 
 pytest.importorskip("gi")
 from gtk_text import widgets  # noqa: E402
-from tuxtalk import uinput_helper  # noqa: E402
+from tuxtalk import hotkey_test_devices, uinput_helper  # noqa: E402
 from tuxtalk import welcome_dialog as wd  # noqa: E402
 
 EV_KEY = 1
@@ -58,7 +58,7 @@ def _input_device(denied=()):
 
 def test_keyboards_are_opened():
     paths = ["/dev/input/kbd", "/dev/input/mouse"]
-    opened = wd._open_key_devices(lambda: paths, _input_device())
+    opened = hotkey_test_devices.open_key_devices(lambda: paths, _input_device())
     assert [d.path for d in opened] == ["/dev/input/kbd"]
 
 
@@ -66,18 +66,18 @@ def test_a_game_controller_is_not_a_keyboard():
     """logind lets any user open a game controller, and it reports key events;
     the service still can't hear F8 through it."""
     paths = ["/dev/input/gamepad"]
-    assert wd._open_key_devices(lambda: paths, _input_device()) == []
+    assert hotkey_test_devices.open_key_devices(lambda: paths, _input_device()) == []
 
 
 def test_no_devices_when_permission_is_denied():
     paths = ["/dev/input/kbd"]
-    assert wd._open_key_devices(lambda: paths, _input_device(denied=paths)) == []
+    assert hotkey_test_devices.open_key_devices(lambda: paths, _input_device(denied=paths)) == []
 
 
 def test_no_devices_when_listing_fails():
     def boom():
         raise OSError("no /dev/input")
-    assert wd._open_key_devices(boom, _input_device()) == []
+    assert hotkey_test_devices.open_key_devices(boom, _input_device()) == []
 
 
 def test_a_key_the_service_can_read_shows_working():

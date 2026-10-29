@@ -280,37 +280,60 @@ _TOTAL_TIME = re.compile(r"total time =\s+([\d.]+) ms")
 _LOAD_TIME = re.compile(r"load time =\s+([\d.]+) ms")
 
 
-def _time_one(model, extra_args, threads, cli="whisper-cli"):
+def _run_timed(cmd, cancel=None, timeout=300):
+    """(exit code, stderr) of *cmd*, killed when *cancel* is set (Stop in the
+    speed check's window) or after *timeout* seconds: a hung graphics driver
+    would otherwise keep the chip and a processor core busy for minutes. A
+    run Stop came before isn't started: on a hung driver it may not die."""
+    if cancel is not None and cancel.is_set():
+        raise RuntimeError("speed check stopped")
+    deadline = time.monotonic() + timeout
+    with subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                          text=True, env=_engine_env()) as proc:
+        while True:
+            try:
+                stderr = proc.communicate(timeout=0.5)[1]
+                return proc.returncode, stderr
+            except subprocess.TimeoutExpired:
+                stopped = cancel is not None and cancel.is_set()
+                if stopped or time.monotonic() > deadline:
+                    proc.kill()
+                    proc.communicate()
+                    raise RuntimeError("speed check stopped" if stopped
+                                       else "speed check run took too long") from None
+
+
+def _time_one(model, extra_args, threads, cli="whisper-cli", cancel=None):
     """Seconds *cli* takes to transcribe the bundled speed-check sample."""
-    out = subprocess.run(
+    returncode, stderr = _run_timed(
         [_binary(cli), "-m", model, "-f", _binary("speed-check.wav"),
-         "-t", str(threads), *extra_args],
-        capture_output=True, text=True, timeout=300, env=_engine_env())
-    found = _TOTAL_TIME.search(out.stderr)
-    if out.returncode != 0 or not found:
-        raise RuntimeError(f"speed check run failed (exit {out.returncode})")
+         "-t", str(threads), *extra_args], cancel)
+    found = _TOTAL_TIME.search(stderr)
+    if returncode != 0 or not found:
+        raise RuntimeError(f"speed check run failed (exit {returncode})")
     seconds = float(found.group(1)) / 1000
     if cli == "parakeet-cli":
         # Parakeet transcribes the sample in a few hundredths of a second on a
         # graphics card, so loading the model (0.2 s there, 0.08 s on the
         # processor) would swamp the comparison. The service loads it once.
-        load = _LOAD_TIME.search(out.stderr)
+        load = _LOAD_TIME.search(stderr)
         if load:
             seconds -= float(load.group(1)) / 1000
     return seconds
 
 
-def speed_check(model_name, device_index, threads=None):
+def speed_check(model_name, device_index, threads=None, cancel=None):
     """Seconds to transcribe the 11-second sample on the graphics chip and on
     the processor, as (graphics, processor). The graphics run is done twice
-    and the second one counted: the first pays one-time shader setup."""
+    and the second one counted: the first pays one-time shader setup.
+    Setting *cancel* (a threading.Event) stops it with a RuntimeError."""
     threads = threads or max(1, (os.cpu_count() or 2) // 2)
     model = model_path(model_name)
     cli = "parakeet-cli" if is_parakeet(model_name) else "whisper-cli"
     gpu_args = ["-dev", str(device_index)]
-    _time_one(model, gpu_args, threads, cli)
-    gpu = _time_one(model, gpu_args, threads, cli)
-    cpu = _time_one(model, ["-ng"], threads, cli)
+    _time_one(model, gpu_args, threads, cli, cancel)
+    gpu = _time_one(model, gpu_args, threads, cli, cancel)
+    cpu = _time_one(model, ["-ng"], threads, cli, cancel)
     logger.info(f"Speed check ({model_name}): graphics {gpu:.2f}s, processor {cpu:.2f}s")
     return gpu, cpu
 

@@ -779,6 +779,24 @@ class SpeechSection(Tab):
             finally:
                 self.device_combo.handler_unblock_by_func(self._on_device_changed)
 
+    def show_saved(self):
+        """Select what was just saved where the dropdowns show something else:
+        the tray may have switched the model or device while this window was
+        open, and the save kept its choice."""
+        if self.selected_model() != self.config.get("model"):
+            self.set_choice("model", self.config.get("model"))
+        if self.device_combo.get_active_id() != self.config.get("device"):
+            # Rebuilt rather than selected: the entry may not be listed yet,
+            # and CUDA without its files is shown as CPU.
+            self.device_combo.handler_block_by_func(self._on_device_changed)
+            try:
+                self.refresh_device_options()
+            finally:
+                self.device_combo.handler_unblock_by_func(self._on_device_changed)
+            self._device_before = self.config["device"]
+        self.language.show_saved()
+        self.update_hint()
+
     # --- Apply and OK -----------------------------------------------------------
 
     def download_selected_model(self):

@@ -412,6 +412,25 @@ def test_a_held_send_stops_counting(countdown, monkeypatch):
     assert relabels == []
 
 
+def test_a_tap_during_a_ticks_focus_check_leaves_no_countdown(countdown, monkeypatch):
+    """The tap holds the send while a tick is checking the focus: the label
+    says it's held, never "Sending in 1 s" again."""
+    from tuxtalk import screen_message
+    relabels = []
+    monkeypatch.setattr(screen_message, "relabel", lambda tag, text: relabels.append(text))
+    monkeypatch.setattr(send_countdown, "_delay", 2.0)
+    start_send("test")
+    where = focused_window.destination()
+
+    def tapped_meanwhile():
+        send_countdown.hold(announce=True)
+        return where
+    monkeypatch.setattr(focused_window, "destination", tapped_meanwhile)
+    tick = next(t for t in FakeTimer.made if t.fn is send_countdown._count_down)
+    tick.fn(*tick.args)
+    assert relabels == []
+
+
 def test_saying_press_enter_never_waits(monkeypatch):
     monkeypatch.setattr(live, "press_enter_after", True)
     monkeypatch.setattr(send_countdown, "_delay", 3.0)

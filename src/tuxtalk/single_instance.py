@@ -9,6 +9,16 @@ import os
 import stat
 import time
 
+from .logger import setup_logger
+
+logger = setup_logger(__name__)
+
+
+# A program with one window (claim_window) waits this long for an open one
+# that holds the lock to write its pid, and for one that didn't answer (it's
+# closing) to let go.
+FRONT_WAIT_S = 2.0
+CLOSING_WAIT_S = 10.0
 
 # Where the private fallback folder goes: fixed, not TMPDIR, so every copy
 # started from anywhere (a launcher, a terminal) meets the same locks.
@@ -124,3 +134,30 @@ def held_elsewhere(name: str) -> bool:
         return False
     finally:
         os.close(fd)
+
+
+def claim_window(name, brought_forward, what):
+    """For a program with one window (Preferences, Transcribe a File): (open
+    it?, the lock *name* to hold while it's open). The lock is what keeps
+    two quick launches from both finding no pid yet and both opening one:
+    this one gives way once *brought_forward(wait_s)* reached the open window
+    (waiting while it starts), and opens once one that is closing has let go.
+    A lock that can't be used at all doesn't stop the window. *what* names
+    it in the log."""
+    lock = held = None
+    try:
+        lock = open_lock(name)
+        held = not claim(lock)
+    except OSError as e:     # no usable folder, or flock refused: open without it
+        logger.warning(f"Could not take {what}'s lock: {e}")
+    if brought_forward(FRONT_WAIT_S if held else 0):
+        logger.info(f"{what} is already open; brought it to the front")
+        return False, None
+    if held:
+        try:
+            if not claim(lock, wait_s=CLOSING_WAIT_S):
+                logger.warning(f"Another {what} window holds on and doesn't answer")
+                return False, None
+        except OSError as e:
+            logger.warning(f"Could not wait for {what}'s lock: {e}")
+    return True, lock

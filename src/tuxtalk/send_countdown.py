@@ -399,7 +399,11 @@ def _count_down(pending: dict, seconds_left: int) -> None:
         _say_not_sent(why, relabel=True)
         _owe_space(pending)
         return
-    screen_message.relabel(LABEL_TAG, _label(seconds_left))
+    # Checked again: a tap during the focus check held the send, and its
+    # notice must not be turned back into a countdown.
+    with _send_lock:
+        if _pending is pending:
+            screen_message.relabel(LABEL_TAG, _label(seconds_left))
 
 
 def _cancel_timers(pending: dict) -> None:

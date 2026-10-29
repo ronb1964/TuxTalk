@@ -44,14 +44,16 @@ class StubPrefs:
         self.download_result = False  # did the download succeed
         self.restart_calls = 0
         self.words_tab = SimpleNamespace(save=lambda: True)     # snippets saved
+        self.on_disk = {}           # what the tray saved meanwhile
         self.speech = _speech(self, chosen_model, chosen_device)
-        self.general_tab = SimpleNamespace(speech=self.speech,
+        self.general_tab = SimpleNamespace(speech=self.speech, show_saved=lambda: None,
                                            after_hotkey_change=lambda changed, since: False)
 
     # --- real collaborators, stubbed ---
 
     def save_config(self):
         self.saved_models.append(self.config["model"])
+        self._saved_before = {**self._config_at_open, **self.on_disk}
         self._config_at_open = dict(self.config)
         return True
 
@@ -235,3 +237,44 @@ class TestADeviceChangeIsRolledBackToo:
         prefs_cls.on_ok(stub, None)
         stub.config["device"] = "cpu"     # the user picks CPU again
         assert "device" in _changed_since_open(stub)
+
+
+class TrayChangedTheModel(StubPrefs):
+    """The tray switched to Parakeet while Preferences was open: the save
+    merges like the real one, keeping the tray's model unless this window
+    changed it too."""
+
+    def save_config(self):
+        from tuxtalk.config import merge_changed_keys
+        self.on_disk = {"model": "parakeet-v3"}
+        base = {**self._config_at_open, **self.on_disk}
+        merged = merge_changed_keys(self._config_at_open, self.config, dict(base))
+        self._saved_before, self._config_at_open = base, dict(merged)
+        self.config = dict(merged)
+        self.saved_models.append(self.config["model"])
+        return True
+
+
+class TestTheTraysChoiceSurvivesTheRollback:
+    def test_a_failed_device_download_leaves_the_trays_model(self, prefs_cls):
+        """Only the device was changed here, so only the device goes back."""
+        stub = TrayChangedTheModel(on_disk_model="small", chosen_model="small",
+                                   on_disk_device="cpu", chosen_device="vulkan")
+        stub.download_result = False
+
+        prefs_cls.on_apply(stub, None)
+
+        assert stub.config == {"model": "parakeet-v3", "device": "cpu", "beeps": True}
+        assert stub.model_on_disk == "parakeet-v3"
+
+    def test_a_failed_model_download_goes_back_to_the_trays_model(self, prefs_cls):
+        """The tray switched to Parakeet, then this window picked Medium: a
+        failed download leaves the model the service runs, not the one at
+        open."""
+        stub = TrayChangedTheModel(on_disk_model="small", chosen_model="medium")
+        stub.download_result = False
+
+        prefs_cls.on_apply(stub, None)
+
+        assert stub.model_on_disk == "parakeet-v3"
+        assert stub.speech.model_combo.active == "parakeet-v3"

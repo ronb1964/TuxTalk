@@ -1,7 +1,7 @@
 {
  "files": {
   "tray.py": 1550,
-  "welcome_dialog.py": 3078
+  "welcome_dialog.py": 2993
  },
  "findings": {
   "ai_cleanup.py::<module>::long_line": 4,
@@ -41,7 +41,7 @@
   "config.py::write_text_atomic::long_line": 1,
   "control.py::_parse::undocumented": 1,
   "cosmic_hotkeys.py::claim.change::undocumented": 1,
-  "cuda_helper.py::download_cuda_libraries::long_line": 3,
+  "cuda_helper.py::download_cuda_libraries::long_line": 1,
   "cuda_helper.py::has_cuda_libraries::long_line": 1,
   "cuda_helper.py::has_cuda_libraries::swallowed_error": 1,
   "cuda_helper.py::show_cuda_download_dialog::long_line": 1,
@@ -260,11 +260,9 @@
   "welcome_dialog.py::_apply_first_run_setup::long_line": 3,
   "welcome_dialog.py::_download_vulkan_model_first_run::long_line": 1,
   "welcome_dialog.py::_extension_already_active::swallowed_error": 1,
-  "welcome_dialog.py::_flush_pending_events::swallowed_error": 1,
   "welcome_dialog.py::_menu_location::swallowed_error": 1,
-  "welcome_dialog.py::_open_key_devices::swallowed_error": 1,
   "welcome_dialog.py::_saved_hold_key::swallowed_error": 1,
-  "welcome_dialog.py::show_hotkey_test_dialog.evdev_key_reader::swallowed_error": 2,
+  "welcome_dialog.py::show_hotkey_test_dialog.evdev_key_reader::swallowed_error": 1,
   "welcome_dialog.py::show_hotkey_test_dialog::long_line": 1,
   "welcome_dialog.py::show_setup_complete_dialog.on_restart_now::undocumented": 1,
   "welcome_dialog.py::show_setup_complete_dialog::long_line": 1,
@@ -302,8 +300,8 @@
    "lines": 101
   },
   "cuda_helper.py::download_cuda_libraries": {
-   "decisions": 46,
-   "lines": 203
+   "decisions": 28,
+   "lines": 126
   },
   "custom_words.py::fix_spelling": {
    "decisions": 28
@@ -432,7 +430,7 @@
    "lines": 191
   },
   "welcome_dialog.py::show_hotkey_test_dialog": {
-   "lines": 388
+   "lines": 384
   },
   "welcome_dialog.py::show_setup_complete_dialog": {
    "lines": 272

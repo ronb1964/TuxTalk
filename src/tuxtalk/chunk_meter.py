@@ -30,39 +30,42 @@ def threshold_fraction(room: float, speech_db: float) -> float:
 class PauseTest:
     """A PauseDetector fed by the live test, rebuilt whenever a setting changes.
 
-    feed() runs on the audio thread and the rest on the GTK thread; each only
-    swaps or reads whole references, so no lock is needed.
+    feed() runs on the audio thread and the rest on the GTK thread; each
+    writes only what the other just reads, so no lock is needed. The cuts are
+    counted here, by feed(), not summed from the detectors: a detector being
+    replaced could still cut once in the feed() that holds it.
     """
 
     def __init__(self, sample_rate: int, pause_seconds: float, speech_db: float):
         self.sample_rate = int(sample_rate)
-        self._earlier_cuts = 0
-        self._cut_pending = False
+        self._cuts = 0
+        self._cuts_flashed = 0
         self._heard_speech = False
         self._detector = PauseDetector(pause_seconds, self.sample_rate, speech_db=speech_db)
 
     def configure(self, pause_seconds: float, speech_db: float) -> None:
         """Apply new settings from now on, keeping the cut count."""
-        old = self._detector
-        self._earlier_cuts += old.cuts
         self._detector = PauseDetector(pause_seconds, self.sample_rate, speech_db=speech_db)
 
     def feed(self, block) -> bool:
         fired = self._detector.feed(block)
         if fired:
-            self._cut_pending = True
+            self._cuts += 1
         if fired or self._detector.speech_time >= MIN_SPEECH_S:
             self._heard_speech = True
         return fired
 
     def take_cut(self) -> bool:
-        """True once after each cut, for the meter's flash."""
-        pending, self._cut_pending = self._cut_pending, False
-        return pending
+        """True once after each cut, for the meter's flash. The audio thread
+        only counts the cuts and this only notes how many it flashed: a flag
+        both set and cleared could lose one in between."""
+        cuts = self._cuts
+        new, self._cuts_flashed = cuts != self._cuts_flashed, cuts
+        return new
 
     def snapshot(self) -> PauseSnapshot:
         snap = self._detector.snapshot()
-        return snap._replace(cuts=self._earlier_cuts + snap.cuts)
+        return snap._replace(cuts=self._cuts)
 
     def status_text(self) -> str:
         """What the test hears right now, in plain words, while it runs. The

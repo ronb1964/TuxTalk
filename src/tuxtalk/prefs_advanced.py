@@ -48,8 +48,9 @@ class AdvancedTab(Tab):
 
     def __init__(self, win):
         super().__init__(win)
-        # Type at pause's Labs entry: built outside the Flatpak only.
+        # Labs' Type at pause and voice editing: built outside the Flatpak only.
         self.type_at_pause = None
+        self.voice_editing_check = None
 
     def stop(self, closing=False):
         """Stop Type at pause's live test, where its Labs entry is built;
@@ -598,6 +599,13 @@ class AdvancedTab(Tab):
 
         if all(r.get("success") for r in results.values()) and ai_cleanup.is_installed():
             self.update_config(key, True)
+            # The other option's box showed unticked while the files were
+            # missing; the download mustn't turn it on behind that box, even
+            # after Cancel (the download stays).
+            for other_key, other in (("ai_corrections", self.ai_corrections_check),
+                                     ("voice_editing", self.voice_editing_check)):
+                if other_key != key and other is not None and not other.get_active():
+                    self.win.save_now(other_key, False)
             return
 
         self._untick_ai_feature(check, key, handler)

@@ -155,6 +155,18 @@ def test_preferences_offers_it(prefs_window):
     assert window.config["paste_last_hotkey"] == ""
 
 
+def test_a_hand_edited_key_shows_and_none_turns_it_off(prefs_window):
+    """A key typed into config.toml that the list doesn't offer is the one
+    in use: shown as itself, and picking None really turns it off."""
+    from gi.repository import Gtk
+    from gtk_text import beside, find
+    window = prefs_window(paste_last_hotkey="Ctrl+Shift+V")
+    keys = beside(find(window.window, Gtk.Label, "Paste Last Dictation:"))
+    assert keys.get_active_id() == "Ctrl+Shift+V"
+    keys.set_active_id("")
+    assert window.config["paste_last_hotkey"] == ""
+
+
 # --- telling people it exists ------------------------------------------------------
 # Where they'd need it: the "couldn't type that" notification, the Recent
 # Dictations menu, and the tips at the end of first-time setup.

@@ -1,5 +1,6 @@
 """Tests for cuda_helper module"""
 import os
+from tuxtalk import cuda_helper
 from unittest.mock import patch, Mock
 from tuxtalk.cuda_helper import (
     detect_nvidia_gpu,
@@ -132,3 +133,64 @@ def test_a_runtime_alone_in_a_system_folder_is_not_enough(monkeypatch, tmp_path)
     monkeypatch.setattr(cuda_helper.os.path, "exists", lambda p: p == "/usr/lib64")
     monkeypatch.setattr(cuda_helper.os, "listdir", lambda p: ["libcudart.so.12", "libc.so.6"])
     assert has_cuda_libraries() is False
+
+
+def _wheel(path, size):
+    """A CUDA wheel holding one library of *size* bytes, which compresses
+    to almost nothing, as the real ones shrink by half or more."""
+    import zipfile
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as wheel:
+        wheel.writestr("nvidia/cublas/lib/libcublas.so.12", b"\0" * size)
+        wheel.writestr("nvidia_cublas_cu12-12.4.dist-info/METADATA", "Name: x")
+    return str(path)
+
+
+def test_too_little_room_for_the_unpacked_libraries_says_so_before_unpacking(tmp_path,
+                                                                            monkeypatch):
+    """The download size passed the check, but unpacked the libraries need
+    more: say how much, rather than fail half-way with a generic error."""
+    from tuxtalk import download_utils
+    wheel = _wheel(tmp_path / "cublas.whl", 300 * 1024 * 1024)
+    lib = tmp_path / "lib"
+    monkeypatch.setattr(download_utils, "free_space_bytes", lambda path: 200 * 1024 * 1024)
+    said = []
+
+    assert not cuda_helper._extract_wheels([wheel], str(lib),
+                                           lambda text, percent: said.append(text), None)
+    assert said == ["Not enough disk space to install: need ~0.4 GB free, "
+                    "only 0.2 GB available"]
+    assert not lib.exists()
+
+
+def test_the_libraries_unpack_into_their_package_folders(tmp_path, monkeypatch):
+    from tuxtalk import download_utils
+    wheel = _wheel(tmp_path / "cublas.whl", 1000)
+    lib = tmp_path / "lib"
+    monkeypatch.setattr(download_utils, "free_space_bytes", lambda path: 10 * 1024 ** 3)
+
+    assert cuda_helper._extract_wheels([wheel], str(lib), None, None)
+    unpacked = lib / "cublas" / "lib" / "libcublas.so.12"
+    assert unpacked.stat().st_size == 1000 and os.access(unpacked, os.X_OK)
+
+
+def test_the_cuda_window_says_why_the_download_failed(monkeypatch):
+    from tuxtalk import ui_style
+    said = []
+    monkeypatch.setattr(ui_style, "show_message",
+                        lambda parent, kind, title, text, **k: said.append(text))
+    cuda_helper._say_how_it_went(None, False, None, "Not enough disk space to install: "
+                                                    "need ~2.9 GB free, only 0.2 GB available")
+    assert said[0].startswith("Not enough disk space to install")
+
+
+def test_no_wheel_on_pypi_is_the_reason_given(tmp_path, monkeypatch):
+    """It ended on "Looking up CUDA packages...", shown as the reason."""
+    from tuxtalk.download_utils import failure_reason
+    monkeypatch.setattr(cuda_helper, "get_appdir_cuda_path", lambda: str(tmp_path / "cuda"))
+
+    def none_for_us(pkg_name):
+        raise LookupError(f"PyPI has no {pkg_name} for this computer")
+    monkeypatch.setattr(cuda_helper, "_pypi_wheel", none_for_us)
+    reports = []
+    assert not cuda_helper.download_cuda_libraries(lambda m, p: reports.append((m, p)))
+    assert failure_reason(*reports[-1]) == "PyPI has no nvidia-cuda-runtime-cu12 for this computer"

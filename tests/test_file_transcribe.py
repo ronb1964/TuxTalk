@@ -3,6 +3,7 @@
 The file is cut into pieces at quiet moments, pieces nobody talks in are
 skipped, and the rest come out as paragraphs or as SRT subtitles.
 """
+import os
 import types
 import wave
 
@@ -256,6 +257,44 @@ def test_an_open_window_is_found_by_its_pidfile(tmp_path, monkeypatch):
     assert tw._running_pid() is None
     (tmp_path / "tuxtalk-transcribe.pid").write_text("1")     # pid 1 is not the window
     assert tw._running_pid() is None
+
+
+@pytest.fixture
+def window_lock(tmp_path, monkeypatch):
+    """The window lock in a private folder; returns the module and the
+    signals it sent."""
+    from tuxtalk import transcribe_window as tw
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    sent = []
+    monkeypatch.setattr(tw.os, "kill", lambda pid, sig: sent.append((pid, sig)))
+    return tw, sent
+
+
+def test_a_second_quick_launch_brings_the_first_window_forward(window_lock, monkeypatch):
+    """A fast double-click: the first window holds the lock and writes its
+    pid a moment later; the second waits for it rather than opening too."""
+    from tuxtalk import single_instance
+    tw, sent = window_lock
+    first = single_instance.open_lock(tw.WINDOW_LOCK)
+    assert single_instance.claim(first)
+    pids = iter([None, None, 4242])
+    monkeypatch.setattr(tw, "_running_pid", lambda: next(pids))
+
+    assert single_instance.claim_window(tw.WINDOW_LOCK, tw._brought_forward, tw.TITLE) == (
+        False, None)
+    assert sent == [(4242, tw.FRONT)]
+    first.close()
+
+
+def test_the_pid_is_kept_beside_the_lock(window_lock, tmp_path, monkeypatch):
+    """Without logind there's no /run/user/N: the lock goes to the private
+    fallback folder, and the pid must too, or a second launch never finds
+    the open window."""
+    from tuxtalk import single_instance
+    tw, _sent = window_lock
+    fallback = tmp_path / "fallback"
+    monkeypatch.setattr(single_instance, "runtime_dir", lambda: str(fallback))
+    assert os.path.dirname(tw.pidfile_path()) == str(fallback)
 
 
 # --- from the code review, 2026-10-15 ---------------------------------------------------------

@@ -132,6 +132,19 @@ def test_left_over_volumes_are_put_back_at_the_next_start(tmp_path):
     assert not (tmp_path / "ducked.json").exists()
 
 
+def test_another_apps_stream_with_the_same_number_is_left_alone(tmp_path):
+    """The sound server restarted while the service was down, and its
+    numbers started again: stream 7 is now another app's, at the same
+    level by chance. It isn't the one turned down, so it isn't raised."""
+    pactl = FakePactl({7: {"pid": 100, "volumes": [65536], "app": "Firefox"}})
+    d = _ducker(tmp_path, pactl)
+    d._duck_now()                                   # ...and the service dies here
+    pactl.streams[7] = {"pid": 300, "volumes": [32768], "app": "Discord"}
+    audio_duck.restore_left_over(run=pactl, state_path=str(tmp_path / "ducked.json"),
+                                 reset=_no_reset)
+    assert pactl.streams[7]["volumes"] == [32768]
+
+
 def test_no_pactl_is_not_an_error(tmp_path):
     def missing(cmd, **kw):
         raise FileNotFoundError("pactl")

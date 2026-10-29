@@ -299,11 +299,25 @@ class GeneralTab(Tab):
         grid.attach(check, 0, row, 2, 1)
         return row + 1
 
+    def show_saved(self):
+        """Show what was just saved: the tray may have changed the model and
+        device, or Power Saving (Battery saver), while this window was open,
+        and the save kept that."""
+        # Without the tickbox's own reaction, which scrolls the tab to show
+        # the minutes: nobody ticked it here.
+        self.timeout_check.handler_block_by_func(self._on_auto_timeout_toggled)
+        self.timeout_check.set_active(self.config.get("auto_timeout_enabled", False))
+        self.timeout_check.handler_unblock_by_func(self._on_auto_timeout_toggled)
+        self.update_timeout_ui_state()
+        self.timeout_spin.set_value(self.config.get("auto_timeout_minutes", 5))
+        self.speech.show_saved()
+
     def _build_power_saving(self, grid, row):
         """Power Saving: the tickbox, and under it the minutes and what
         happens then, hidden with it off (update_timeout_ui_state)."""
         row = section_header(grid, row, "Power Saving")
-        check = Gtk.CheckButton(label="Save power when dictation isn't used for a while")
+        check = self.timeout_check = Gtk.CheckButton(
+            label="Save power when dictation isn't used for a while")
         check.set_active(self.config.get("auto_timeout_enabled", False))
         check.connect("toggled",
                       lambda x: self.update_config("auto_timeout_enabled", x.get_active()))
@@ -354,11 +368,14 @@ class GeneralTab(Tab):
         return combo
 
     def _shortcut_combo(self, label, entries, setting):
-        """A More shortcuts dropdown for *setting*: a saved key the list
-        doesn't have shows None."""
-        combo = self._hotkey_combo(label, entries)
+        """A More shortcuts dropdown for *setting*. A saved key the list
+        doesn't have (a hand edit) is added to it: it's the key in use, and
+        shown as None, picking None would change nothing."""
         current = self.config.get(setting, "")
-        combo.set_active_id(current if current in dict(entries) else "")
+        if current not in dict(entries):
+            entries = [*entries, (current, current)]
+        combo = self._hotkey_combo(label, entries)
+        combo.set_active_id(current)
         combo.connect("changed", lambda c: (
             self.update_config(setting, c.get_active_id() or ""),
             self._update_shortcuts_summary()))

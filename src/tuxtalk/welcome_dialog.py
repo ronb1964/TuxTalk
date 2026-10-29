@@ -23,6 +23,8 @@ from gi.repository import Gtk, Gdk, GLib, GdkPixbuf
 from .ui_style import Fold, message_dialog, more_below_bar, show_message
 
 from .hotkey_labels import layout_label
+from .hotkey_test_devices import (close_devices, flush_pending_events, hotkey_test_helper,
+                                  open_key_devices, read_ready)
 from .hotkey_test_keys import (captured_key_problem, evdev_key_action, evdev_key_name,
                                gtk_key_name, hotkeys_to_save, loggable_key, service_hears)
 from .logger import setup_logger
@@ -1856,89 +1858,6 @@ def show_welcome_dialog(parent=None):
     return result_container[0]
 
 
-def _flush_pending_events(devices):
-    """Drain whatever is already queued on each device, then return.
-
-    evdev's InputDevice.read() is a generator function: calling it reads
-    nothing and never raises BlockingIOError, so a bare `while True:
-    dev.read()` would spin forever. Iterating it performs the read and lets the
-    "queue empty" BlockingIOError arrive.
-    """
-    for dev in devices:
-        try:
-            while True:
-                drained = False
-                for _ in dev.read():
-                    drained = True
-                if not drained:
-                    break  # read() yielded nothing and did not raise
-        except BlockingIOError:
-            pass  # Queue is now empty
-        except Exception as e:
-            logger.debug(f"Could not flush events from {getattr(dev, 'name', dev)}: {e}")
-
-
-def _open_key_devices(list_devices, input_device):
-    """Every keyboard evdev can open, as the service opens them; an empty list
-    when /dev/input can't be read. Game controllers, which any user may open,
-    are left out: the service would not hear the hotkey through them."""
-    from .uinput_helper import is_keyboard_device
-    devices = []
-    try:
-        paths = list_devices()
-    except Exception as e:
-        logger.error(f"Error listing devices: {e}")
-        return devices
-    for path in paths:
-        try:
-            dev = input_device(path)
-        except PermissionError:
-            logger.debug(f"Permission denied for {path}")
-            continue
-        except Exception as e:
-            logger.debug(f"Could not open {path}: {e}")
-            continue
-        if is_keyboard_device(dev):
-            # Already non-blocking: evdev opens with O_NONBLOCK.
-            devices.append(dev)
-            logger.info(f"Opened input device: {dev.name} at {path}")
-        else:
-            _close_devices([dev])
-    return devices
-
-
-def _close_devices(devices):
-    """Close input devices the hotkey test opened; one unplugged meanwhile
-    is closed already."""
-    for dev in devices:
-        try:
-            dev.close()
-        except OSError:
-            pass
-
-
-def _hotkey_test_helper(ecodes, connect=None):
-    """The hotkey helper as a keyboard for the hotkey test, or None when it
-    isn't running. It reports only the keys it's asked to watch, so ask for
-    every key the test accepts on its own: F1 to F24, Esc, Pause, Scroll Lock,
-    Right Ctrl and Right Alt (helper 1.5 and newer)."""
-    try:
-        if connect is None:
-            from .hotkey_helper_client import connect_helper as connect
-        helper = connect()
-        if helper is None:
-            return None
-        codes = [getattr(ecodes, f"KEY_F{n}") for n in range(1, 25)]
-        codes += [ecodes.KEY_ESC, ecodes.KEY_PAUSE, ecodes.KEY_SCROLLLOCK,
-                  ecodes.KEY_RIGHTCTRL, ecodes.KEY_RIGHTALT]
-        helper.watch([str(code) for code in codes])
-        logger.info("Hotkey test: reading the keys through the hotkey helper")
-        return helper
-    except Exception as e:
-        logger.warning(f"Hotkey test: could not use the hotkey helper: {e}")
-        return None
-
-
 def _hotkey_test_row(title, key):
     """(row, label, button, status) for one key in the hotkey test: "Push-to-
     talk: F8", a Change Key button a screen reader names by its key, and how
@@ -2149,15 +2068,15 @@ def show_hotkey_test_dialog():
     # EVDEV key reading thread
     def evdev_key_reader():
         """Background thread that reads keys via evdev (bypasses Wayland)."""
-        if not keyboards:
+        reading = list(keyboards)       # its own: service_hears reads keyboards (GTK's thread)
+        if not reading:
             return
-
-        print(f"Monitoring {len(keyboards)} keyboard(s) via evdev")
+        logger.info(f"Hotkey test: reading {len(reading)} keyboard(s)")
 
         # Flush any stale events buffered in the kernel queue before we start
         # monitoring. Without this, a prior F8 press (e.g. from using TuxTalk
         # just before onboarding) would appear as "Working!" immediately.
-        _flush_pending_events(keyboards)
+        flush_pending_events(reading)
 
         modifier_codes = {ecodes.KEY_LEFTALT, ecodes.KEY_RIGHTALT,
                           ecodes.KEY_LEFTCTRL, ecodes.KEY_RIGHTCTRL,
@@ -2168,31 +2087,27 @@ def show_hotkey_test_dialog():
             try:
                 # The helper can hold events already taken in, with nothing
                 # left on its socket for select() to see.
-                r = [d for d in keyboards
+                r = [d for d in reading
                      if hasattr(d, "needs_service") and d.needs_service()]
                 if not r:
-                    # Use select to wait for events with timeout
-                    r, w, x = select.select(keyboards, [], [], 0.1)
-                for dev in r:
-                    try:
-                        for event in dev.read():
-                            if event.type != ecodes.EV_KEY:
-                                continue
-                            # Releases count too: they are what marks a key
-                            # as working, and GTK never sees a grabbed key.
-                            found = evdev_key_action(event, held_modifiers,
-                                                     modifier_codes, evdev_key_name)
-                            if found:
-                                keyname, action = found
-                                is_capture = capturing_key[0] is not None
-                                GLib.idle_add(update_ui_for_key, keyname, is_capture, action)
-                    except Exception as e:
-                        logger.debug(f"Error reading from {dev.name}: {e}")
+                    r, w, x = select.select(reading, [], [], 0.1)
+                # A keyboard unplugged with Ctrl held must not leave Ctrl held.
+                for event in read_ready(reading, r, on_gone=held_modifiers.clear):
+                    if event.type != ecodes.EV_KEY:
+                        continue
+                    # Releases count too: they are what marks a key as
+                    # working, and GTK never sees a grabbed key.
+                    found = evdev_key_action(event, held_modifiers,
+                                             modifier_codes, evdev_key_name)
+                    if found:
+                        keyname, action = found
+                        is_capture = capturing_key[0] is not None
+                        GLib.idle_add(update_ui_for_key, keyname, is_capture, action)
             except Exception as e:
                 if not stop_evdev.is_set():
                     logger.debug(f"Select error: {e}")
                 time.sleep(0.1)
-        _close_devices(keyboards)
+        close_devices(keyboards)
 
     # GTK key handlers: they cover keys when evdev can't open the keyboards.
     # Modifier mask: reject Alt (MOD1), Ctrl, Super — GNOME delivers Alt+F8
@@ -2311,13 +2226,13 @@ def show_hotkey_test_dialog():
         # Opened here rather than in the reader thread, so the very first key
         # already shows whether the service will hear it.
         if EVDEV_AVAILABLE:
-            keyboards.extend(_open_key_devices(list_devices, InputDevice))
+            keyboards.extend(open_key_devices(list_devices, InputDevice))
             if not keyboards:
                 # With the hotkey helper the user isn't in the "input" group,
                 # so the keyboards can't be opened here: hear the keys through
                 # the helper, as the dictation service does. Without this the
                 # test said the keys wouldn't work until a restart.
-                helper = _hotkey_test_helper(ecodes)
+                helper = hotkey_test_helper(ecodes)
                 if helper is not None:
                     keyboards.append(helper)
         if not keyboards:
@@ -2350,7 +2265,7 @@ def show_hotkey_test_dialog():
         if evdev_thread is not None:
             evdev_thread.join(timeout=1.0)
         else:
-            _close_devices(keyboards)    # the reader thread closes them otherwise
+            close_devices(keyboards)    # the reader thread closes them otherwise
 
         # Whatever closed the dialog, never leave the settings without a
         # hotkey: the service then watches no key at all.

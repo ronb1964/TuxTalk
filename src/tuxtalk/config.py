@@ -665,8 +665,11 @@ def _toml_string(value: str) -> str:
     return '"' + "".join(out) + '"'
 
 
-def write_text_atomic(path: str, text: str | bytes, keep_backup: bool = True) -> None:
-    """Replace *path* with *text* without ever leaving it half-written.
+def write_text_atomic(path: str, text: str | bytes, keep_backup: bool = True,
+                      mode: int | None = None) -> None:
+    """Replace *path* with *text* without ever leaving it half-written. The
+    new file is readable by this user only, unless *mode* says otherwise
+    (set once it's whole, so it's private while being written).
 
     Writing in place would leave an empty file after an interruption (most
     realistically a full disk, which multi-gigabyte model downloads can
@@ -693,6 +696,8 @@ def write_text_atomic(path: str, text: str | bytes, keep_backup: bool = True) ->
             f.write(text)
             f.flush()
             os.fsync(f.fileno())
+            if mode is not None:
+                os.fchmod(f.fileno(), mode)
 
         if keep_backup and os.path.exists(path):
             try:
