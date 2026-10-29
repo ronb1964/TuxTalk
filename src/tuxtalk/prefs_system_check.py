@@ -654,8 +654,9 @@ class SystemCheck(Tab):
                 show_message(self.window, Gtk.MessageType.ERROR, "Installation Failed",
                              "TuxTalk couldn't install the GNOME extension, or GNOME "
                              "wouldn't turn it on; the log says which.\n\n"
-                             "Check your internet connection and try again. If it's "
-                             "installed but off, log out and back in first.")
+                             "If it isn't installed, check your internet connection and "
+                             "try again. If it is, open GNOME's Extensions app and switch "
+                             "TuxTalk on there.")
 
         run_with_progress(self.window, "Installing Extension", "Preparing installation...",
                           extension_helper.download_and_install_extension, finish)
