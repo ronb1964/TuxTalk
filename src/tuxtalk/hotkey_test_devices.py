@@ -2,6 +2,8 @@
 service opens them, drained of old presses, read, and closed, with the
 hotkey helper standing in for them when it runs. Nothing here opens a window.
 """
+import contextlib
+
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -62,10 +64,8 @@ def close_devices(devices):
     """Close input devices the hotkey test opened; one unplugged meanwhile
     is closed already."""
     for dev in devices:
-        try:
+        with contextlib.suppress(OSError):
             dev.close()
-        except OSError:
-            pass
 
 
 def hotkey_test_helper(ecodes, connect=None):
@@ -90,10 +90,11 @@ def hotkey_test_helper(ecodes, connect=None):
         return None
 
 
-def read_ready(devices, ready):
+def read_ready(devices, ready, on_gone=None):
     """The events waiting on each device in *ready* (from select()). One that
     has gone (unplugged mid-test) is closed and taken out of *devices*:
-    select() would report it readable forever and keep a core busy."""
+    select() would report it readable forever and keep a core busy. Then
+    *on_gone* runs: the keys it held down will never come up."""
     for dev in ready:
         try:
             yield from dev.read()
@@ -103,3 +104,5 @@ def read_ready(devices, ready):
             logger.info(f"Hotkey test: stopped reading {getattr(dev, 'name', dev)}: {e}")
             devices.remove(dev)
             close_devices([dev])
+            if on_gone is not None:
+                on_gone()

@@ -80,7 +80,10 @@ def test_an_unplugged_keyboard_is_dropped_rather_than_read_forever():
     gone, good = Unplugged(), FakeDevice([["F8 press"]])
     devices = [gone, good]
 
-    events = list(read_ready(devices, [gone, good]))
+    held = {"Left Ctrl"}
+
+    events = list(read_ready(devices, [gone, good], on_gone=held.clear))
 
     assert events == ["F8 press"]
     assert devices == [good] and gone.closed
+    assert held == set()             # its Ctrl will never come up

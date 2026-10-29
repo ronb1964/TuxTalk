@@ -24,7 +24,7 @@ from .ui_style import Fold, message_dialog, more_below_bar, show_message
 
 from .hotkey_labels import layout_label
 from .hotkey_test_devices import (close_devices, flush_pending_events, hotkey_test_helper,
-                                 open_key_devices, read_ready)
+                                  open_key_devices, read_ready)
 from .hotkey_test_keys import (captured_key_problem, evdev_key_action, evdev_key_name,
                                gtk_key_name, hotkeys_to_save, loggable_key, service_hears)
 from .logger import setup_logger
@@ -2068,15 +2068,15 @@ def show_hotkey_test_dialog():
     # EVDEV key reading thread
     def evdev_key_reader():
         """Background thread that reads keys via evdev (bypasses Wayland)."""
-        if not keyboards:
+        reading = list(keyboards)       # its own: service_hears reads keyboards (GTK's thread)
+        if not reading:
             return
-
-        print(f"Monitoring {len(keyboards)} keyboard(s) via evdev")
+        logger.info(f"Hotkey test: reading {len(reading)} keyboard(s)")
 
         # Flush any stale events buffered in the kernel queue before we start
         # monitoring. Without this, a prior F8 press (e.g. from using TuxTalk
         # just before onboarding) would appear as "Working!" immediately.
-        flush_pending_events(keyboards)
+        flush_pending_events(reading)
 
         modifier_codes = {ecodes.KEY_LEFTALT, ecodes.KEY_RIGHTALT,
                           ecodes.KEY_LEFTCTRL, ecodes.KEY_RIGHTCTRL,
@@ -2087,12 +2087,12 @@ def show_hotkey_test_dialog():
             try:
                 # The helper can hold events already taken in, with nothing
                 # left on its socket for select() to see.
-                r = [d for d in keyboards
+                r = [d for d in reading
                      if hasattr(d, "needs_service") and d.needs_service()]
                 if not r:
-                    # Use select to wait for events with timeout
-                    r, w, x = select.select(keyboards, [], [], 0.1)
-                for event in read_ready(keyboards, r):
+                    r, w, x = select.select(reading, [], [], 0.1)
+                # A keyboard unplugged with Ctrl held must not leave Ctrl held.
+                for event in read_ready(reading, r, on_gone=held_modifiers.clear):
                     if event.type != ecodes.EV_KEY:
                         continue
                     # Releases count too: they are what marks a key as
