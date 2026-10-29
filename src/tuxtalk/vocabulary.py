@@ -25,6 +25,9 @@ import os
 import re
 
 from . import config
+from .logger import setup_logger
+
+logger = setup_logger(__name__)
 
 _WORD_RE = re.compile(r"\S+")
 # Punctuation hugging the ends of a selection: quotes, commas, full stops,
@@ -140,8 +143,7 @@ def save_fix(phrase, replacement):
         from . import custom_words
         custom_words.learn_fix(replacement, dropped, _COMMON_WORDS)
     except Exception as e:
-        from .logger import setup_logger
-        setup_logger(__name__).warning(f"Fix saved, but not added to your words: {e}")
+        logger.warning(f"Fix saved, but not added to your words: {e}")
     return previous
 
 
@@ -184,7 +186,8 @@ def adopt_fixes():
         return False            # try again when the file can be read
     try:
         words = custom_words.load(strict=True)
-    except (OSError, UnicodeDecodeError):
+    except (OSError, UnicodeDecodeError) as e:
+        logger.warning(f"Your Words: the words file couldn't be read: {e}")
         return False
     known = {w.casefold() for w in words}
     added = []
@@ -245,21 +248,21 @@ def save_word(word, phrases, old=None):
         if other != old and other.casefold() == word.casefold():
             raise WordProblem(f"{other} is already one of your words.")
     wanted = _phrases_for(word, phrases, commands, old)
+    before = dict(commands)
     if old is not None:
         # The row's own list is the whole list: a phrase taken off stops.
         # (A new word keeps any snippet already typing it; it's listed
         # under the word from now on.)
-        commands = {p: r for p, r in commands.items() if r not in (old, word) or p in wanted}
+        commands = {p: r for p, r in commands.items() if r != old or p in wanted}
     for phrase in wanted:
         for same in _matching_keys(commands, phrase):
             del commands[same]          # a hand-edited "Clawed  Claw" becomes this one
         commands[phrase] = word
-    config.save_custom_commands(commands)
     if old is not None:
         words[words.index(old)] = word
     elif word not in words:
         words.append(word)
-    custom_words.save(words)
+    _save_both(commands, words, before)
 
 
 def remove_word(word):
@@ -270,5 +273,25 @@ def remove_word(word):
     if config._commands_read_failed:
         raise config.ConfigNotLoadedError("The snippets file couldn't be read.")
     words = custom_words.load(strict=True)
-    config.save_custom_commands({p: r for p, r in commands.items() if r != word})
-    custom_words.save([w for w in words if w != word])
+    _save_both({p: r for p, r in commands.items() if r != word},
+               [w for w in words if w != word], commands)
+
+
+def _save_both(commands, words, before):
+    """Save the snippets file, then the words file. Each write is atomic but
+    the pair isn't: when the words can't be written (a full disk), the
+    snippets go back to *before*, so the Words tab doesn't show a word half
+    saved. Raises the words file's OSError; if the put-back fails as well,
+    one that says the snippets were changed all the same."""
+    from . import custom_words
+    config.save_custom_commands(commands)
+    try:
+        custom_words.save(words)
+    except OSError as words_error:
+        try:
+            config.save_custom_commands(before)
+        except OSError as e:
+            logger.error(f"Your Words: the snippets couldn't be put back: {e}")
+            raise OSError(f"{words_error}. The snippets were changed all the same, and "
+                          "couldn't be put back.") from e
+        raise

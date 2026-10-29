@@ -359,3 +359,61 @@ def test_saving_a_word_leaves_an_unreadable_words_file_alone(commands_file, word
         vocabulary.save_word("ClaudeClaw", ["clawed claw"])
     assert words_file.read_bytes() == b"caf\xe9\n"
     assert config.load_custom_commands() == {}
+
+
+@pytest.mark.parametrize("change", [
+    lambda: vocabulary.save_word("CachyOS", ["kashi os"]),
+    lambda: vocabulary.save_word("ClaudeClaw", [], old="ClaudeClaw"),      # a mishearing taken off
+    lambda: vocabulary.save_word("ClawdClaw", [], old="ClaudeClaw"),   # renamed, its fix taken off
+    lambda: vocabulary.remove_word("ClaudeClaw"),
+], ids=["add", "edit", "rename", "remove"])
+def test_a_words_file_that_cant_be_written_leaves_the_snippets_as_they_were(
+        commands_file, words_file, monkeypatch, change):
+    """The snippets are written first; with the words file failing after
+    them (a full disk), the two must not disagree."""
+    from tuxtalk import custom_words
+    custom_words.save(["ClaudeClaw"])
+    config.save_custom_commands({"clawed claw": "ClaudeClaw", "my email": "me@example.com"})
+
+    def disk_full(words):
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr(custom_words, "save", disk_full)
+    with pytest.raises(OSError):
+        change()
+
+    assert config.load_custom_commands() == {"clawed claw": "ClaudeClaw",
+                                             "my email": "me@example.com"}
+
+
+def test_a_put_back_that_fails_too_is_logged_and_the_words_error_kept(
+        commands_file, words_file, monkeypatch, caplog):
+    import logging
+    from tuxtalk import custom_words
+    custom_words.save(["ClaudeClaw"])
+    config.save_custom_commands({"clawed claw": "ClaudeClaw"})
+    saves = []
+
+    def second_write_fails(commands):
+        saves.append(commands)
+        if len(saves) == 2:
+            raise OSError(28, "No space left on device (snippets)")
+    monkeypatch.setattr(config, "save_custom_commands", second_write_fails)
+
+    def disk_full(words):
+        raise OSError(28, "No space left on device (words)")
+    monkeypatch.setattr(custom_words, "save", disk_full)
+    with caplog.at_level(logging.ERROR, logger=vocabulary.logger.name):
+        with pytest.raises(OSError, match=r"\(words\)\. The snippets were changed all the same"):
+            vocabulary.remove_word("ClaudeClaw")
+    assert "snippets couldn't be put back" in caplog.text
+
+
+def test_renaming_a_word_keeps_a_snippet_that_types_the_new_spelling(commands_file, words_file):
+    """A snippet already typing "Claude Claw" isn't the renamed row's to
+    take: it went, with no word about it, on a save that worked."""
+    from tuxtalk import custom_words
+    custom_words.save(["ClaudeClaw"])
+    config.save_custom_commands({"clawed claw": "ClaudeClaw", "the claw app": "Claude Claw"})
+    vocabulary.save_word("Claude Claw", ["clawed claw"], old="ClaudeClaw")
+    assert config.load_custom_commands() == {"clawed claw": "Claude Claw",
+                                             "the claw app": "Claude Claw"}

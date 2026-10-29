@@ -308,6 +308,25 @@ def test_the_keyboards_come_back_when_tuxtalk_goes_away(setup):
     assert helper.hide is None and kb.calls[-1] == ("grab", False)
 
 
+def test_a_keyboard_kept_too_long_comes_back_though_the_key_is_still_down(setup, monkeypatch):
+    """The last safety net: whatever went wrong (a key the kernel never
+    reported up, a TuxTalk that never said UNHIDE), the keyboard isn't kept
+    past HIDE_MAX_S."""
+    helper, kb, connect, say, heard, _seat = setup
+    sock = _ready(connect, say, heard)
+    kb.press(F8)
+    heard(sock)
+    say(sock, "HIDE 66")
+    assert heard(sock) == ["OK HIDE"]
+    helper.run_once(0)
+    assert helper.hide is not None                  # held, and not for long yet
+    monkeypatch.setattr(hh, "HIDE_MAX_S", 0)
+    time.sleep(0.01)
+    helper.run_once(0)
+    assert helper.hide is None and kb.calls[-1] == ("grab", False)
+    assert kb.down == {F8}
+
+
 def test_someone_else_cant_hide(setup):
     helper, kb, connect, say, heard, seat = setup
     sock = _ready(connect, say, heard)

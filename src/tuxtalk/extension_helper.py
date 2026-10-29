@@ -160,7 +160,8 @@ def install_extension_from_local(source_dir: str, auto_enable: bool = True) -> b
         auto_enable: If True, automatically enable the extension after installation
 
     Returns:
-        bool: True if successful
+        bool: True if successful. Installed but not turned on is a failure:
+        without a tray, the extension's menu is how TuxTalk is used.
     """
     try:
         ext_dir = desktop_detect.get_extension_dir()
@@ -168,75 +169,34 @@ def install_extension_from_local(source_dir: str, auto_enable: bool = True) -> b
 
         os.makedirs(ext_dir, exist_ok=True)
         _swap_in(source_dir, target_dir)
+        logger.info(f"Extension installed to {target_dir}")
 
-        print(f"Extension installed to {target_dir}")
-
-        # Auto-enable if requested
-        if auto_enable:
-            if enable_extension():
-                print("Extension enabled - will be active after logout/login")
-            else:
-                print("Failed to auto-enable extension - you can enable it manually")
-
+        if auto_enable and not enable_extension():
+            logger.error("Extension installed, but GNOME wouldn't turn it on")
+            return False
         return True
 
     except Exception as e:
-        print(f"Failed to install extension: {e}")
+        logger.error(f"Failed to install extension: {e}")
         return False
 
 
-def get_bundled_extension_path() -> Optional[str]:
-    """
-    Find the bundled GNOME extension in the AppImage or dev environment.
-
-    Returns:
-        str: Path to bundled extension directory, or None if not found
-    """
-    import sys
-
-    # Possible locations for bundled extension
-    possible_paths = []
-
-    # Check if running from AppImage
-    appimage_path = os.environ.get('APPIMAGE')
-    if appimage_path:
-        # AppImage mount point - extension should be in usr/share/gnome-extension/
-        appimage_mount = os.path.dirname(sys.executable)
-        possible_paths.append(
-            os.path.join(appimage_mount, '..', 'share', 'gnome-extension', EXTENSION_UUID)
-        )
-
-    # Check squashfs mount point (AppImage internal path)
-    if '/tmp/.mount_' in sys.executable or 'squashfs-root' in sys.executable:
-        base = os.path.dirname(os.path.dirname(sys.executable))
-        possible_paths.append(
-            os.path.join(base, 'share', 'gnome-extension', EXTENSION_UUID)
-        )
-
-    # Development environment - relative to this file
-    this_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(os.path.dirname(this_dir))
-    possible_paths.append(
-        os.path.join(project_root, 'gnome-extension', EXTENSION_UUID)
-    )
-
-    # Check each path
-    for path in possible_paths:
-        normalized = os.path.normpath(path)
-        metadata_file = os.path.join(normalized, 'metadata.json')
-        if os.path.isfile(metadata_file):
-            print(f"Found bundled extension at: {normalized}")
-            return normalized
-
+def checkout_extension_path() -> Optional[str]:
+    """The extension in the source checkout the dev version runs from, or
+    None. The AppImage carries none (container-build.sh): it downloads the
+    extension from the release, so an extension fix needs no new AppImage."""
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    path = os.path.join(root, "gnome-extension", EXTENSION_UUID)
+    if os.path.isfile(os.path.join(path, "metadata.json")):
+        logger.info(f"The GNOME extension comes from the source checkout: {path}")
+        return path
     return None
 
 
 def install_extension(progress_callback: Optional[Callable] = None) -> bool:
     """
-    Install GNOME extension from bundled files or download from GitHub.
-
-    Tries to install from bundled files first (AppImage or dev environment),
-    falls back to downloading from GitHub releases if bundled files not found.
+    Install the GNOME extension: the source checkout's in the dev version,
+    downloaded from the GitHub release otherwise (or if that copy fails).
 
     Args:
         progress_callback: Optional function(message, percent) for progress updates
@@ -244,26 +204,26 @@ def install_extension(progress_callback: Optional[Callable] = None) -> bool:
     Returns:
         bool: True if successful
     """
+    report = progress_callback or (lambda message, percent: None)
     if not is_extension_available():
-        if progress_callback:
-            progress_callback("GNOME desktop not detected", 0)
+        report("GNOME desktop not detected", 0)
         return False
 
-    # First, try to install from bundled files
-    bundled_path = get_bundled_extension_path()
-    if bundled_path:
-        if progress_callback:
-            # Low: a failed bundled copy falls back to the download, which
-            # starts at 10%, and the bar mustn't go backwards.
-            progress_callback("Installing bundled extension...", 5)
-
-        # install_extension_from_local enables it too.
-        if install_extension_from_local(bundled_path):
-            if progress_callback:
-                progress_callback("Extension installed successfully!", 100)
+    checkout_path = checkout_extension_path()
+    if checkout_path:
+        # Kept low: a failed copy falls back to the download, which starts at
+        # 10%, and the bar mustn't go backwards.
+        report("Installing the extension...", 5)
+        # Only a failed copy is worth a download: GNOME refusing to turn it
+        # on would refuse the downloaded one too.
+        if install_extension_from_local(checkout_path, auto_enable=False):
+            if not enable_extension():
+                logger.error("Extension installed, but GNOME wouldn't turn it on")
+                report("GNOME wouldn't turn the extension on", 0)
+                return False
+            report("Extension installed successfully!", 100)
             return True
-        else:
-            print("Failed to install bundled extension, trying download...")
+        logger.warning("Couldn't install the checkout's extension; downloading it")
 
     # Fall back to downloading from GitHub
     return download_and_install_extension(progress_callback)
@@ -271,9 +231,8 @@ def install_extension(progress_callback: Optional[Callable] = None) -> bool:
 
 def download_and_install_extension(progress_callback: Optional[Callable] = None) -> bool:
     """
-    Download and install GNOME extension from GitHub release.
-
-    This is the fallback when bundled extension is not available.
+    Download and install GNOME extension from GitHub release: how the
+    AppImage, .deb and .rpm get it.
 
     Args:
         progress_callback: Optional function(message, percent) for progress updates
@@ -284,9 +243,9 @@ def download_and_install_extension(progress_callback: Optional[Callable] = None)
     import tempfile
     import zipfile
 
+    report = progress_callback or (lambda message, percent: None)
     if not is_extension_available():
-        if progress_callback:
-            progress_callback("GNOME desktop not detected", 0)
+        report("GNOME desktop not detected", 0)
         return False
 
     try:
@@ -294,14 +253,13 @@ def download_and_install_extension(progress_callback: Optional[Callable] = None)
         with tempfile.TemporaryDirectory() as temp_dir:
             zip_path = os.path.join(temp_dir, 'extension.zip')
 
-            if progress_callback:
-                progress_callback("Downloading extension...", 10)
+            report("Downloading extension...", 10)
 
             # Download hook
             def download_progress_hook(downloaded, total_size):
-                if progress_callback and total_size > 0:
+                if total_size > 0:
                     percent = min(90, 10 + int((downloaded / total_size) * 70))
-                    progress_callback(f"Downloading... {int((downloaded / total_size) * 100)}%", percent)
+                    report(f"Downloading... {int((downloaded / total_size) * 100)}%", percent)
 
             # Download extension zip. The timeout keeps a stalled connection
             # from hanging the install dialog forever. The sha256 (when the
@@ -315,8 +273,7 @@ def download_and_install_extension(progress_callback: Optional[Callable] = None)
                 # GNOME Shell on the strength of "the check didn't work" is
                 # exactly what the check exists to prevent.
                 logger.error(f"Refusing to install an unverified extension: {e}")
-                if progress_callback:
-                    progress_callback("Could not verify the extension download", 0)
+                report("Could not verify the extension download", 0)
                 return False
             if not download_file(
                 EXTENSION_DOWNLOAD_URL,
@@ -325,12 +282,10 @@ def download_and_install_extension(progress_callback: Optional[Callable] = None)
                 progress_hook=download_progress_hook,
                 expected_sha256=expected_sha256,
             ):
-                if progress_callback:
-                    progress_callback("Extension download failed or was corrupted", 0)
+                report("Extension download failed or was corrupted", 0)
                 return False
 
-            if progress_callback:
-                progress_callback("Extracting extension...", 85)
+            report("Extracting extension...", 85)
 
             # Extract zip
             extract_dir = os.path.join(temp_dir, 'extracted')
@@ -343,22 +298,20 @@ def download_and_install_extension(progress_callback: Optional[Callable] = None)
                 # Maybe it's directly in extract_dir
                 extension_source = extract_dir
 
-            if progress_callback:
-                progress_callback("Installing and enabling extension...", 90)
+            report("Installing and enabling extension...", 90)
 
             # Enabling adds it to org.gnome.shell's enabled-extensions, so it
             # stays on across logout/login; install_extension_from_local does it.
             if not install_extension_from_local(extension_source):
+                report("The extension couldn't be installed or turned on", 0)
                 return False
 
-            if progress_callback:
-                progress_callback("Extension installed successfully!", 100)
+            report("Extension installed successfully!", 100)
             return True
 
     except Exception as e:
-        if progress_callback:
-            progress_callback(f"Installation failed: {e}", 0)
-        print(f"Failed to download/install extension: {e}")
+        report(f"Installation failed: {e}", 0)
+        logger.error(f"Failed to download/install extension: {e}")
         return False
 
 
@@ -406,14 +359,14 @@ def uninstall_extension() -> bool:
         if os.path.exists(target_dir):
             # Remove the extension files
             shutil.rmtree(target_dir)
-            print("Extension uninstalled")
+            logger.info("Extension uninstalled")
             return True
         else:
-            print("Extension not installed")
+            logger.info("Extension not installed")
             return False
 
     except Exception as e:
-        print(f"Failed to uninstall extension: {e}")
+        logger.error(f"Failed to uninstall extension: {e}")
         return False
 
 
