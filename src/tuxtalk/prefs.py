@@ -90,6 +90,10 @@ def _brought_open_window_forward(tab, wait_s):
 
 # How long a restart waits for the new service to say it's ready.
 _READY_WAIT_S = 180
+# Set once the window is gone: then there's no one to tell how a restart
+# went, and a process left waiting would look to an uninstall like an
+# open Preferences window with changes in it.
+_window_closed = threading.Event()
 
 # What can need a download, and so is rolled back when it never finishes:
 # the model, and the device (the processor or Vulkan copy of a model).
@@ -129,11 +133,12 @@ def _came_up(service):
     """Whether *service*, just launched, got ready: it writes its pid to the
     ready file once its model is loaded. One that ends first didn't (a
     broken setting, a model that won't load). None for one still loading
-    after _READY_WAIT_S: it may be asking to download its model, so it
-    isn't called a failure, but the change stays owed."""
+    after _READY_WAIT_S, or when the window has closed (_window_closed):
+    it may be asking to download its model, so it isn't called a failure,
+    but the change stays owed."""
     from .service_launcher import read_ready_pid
     deadline = time.monotonic() + _READY_WAIT_S
-    while time.monotonic() < deadline:
+    while time.monotonic() < deadline and not _window_closed.is_set():
         if read_ready_pid() == service.pid:
             return True
         try:
@@ -612,6 +617,7 @@ class PreferencesWindow:
         self._stop_tests(closing=True)
         prefs_ipc.release_pidfile()
         _let_go_of_the_window()
+        _window_closed.set()
 
     def on_window_close(self, widget, event):
         """The title bar's close: asks first about changes not applied."""

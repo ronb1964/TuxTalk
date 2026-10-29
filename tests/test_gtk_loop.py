@@ -64,7 +64,7 @@ def test_work_the_loop_doesnt_get_to_in_time_is_called_off(monkeypatch):
 
 @pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
 def test_a_loop_that_dies_before_it_runs_doesnt_hang_the_start(monkeypatch):
-    """No display, say: the service stopped at start, waiting for good."""
+    """GTK failing to start: the service stopped at start, waiting for good."""
     from gi.repository import GLib, Gtk
 
     def no_display():
@@ -84,3 +84,4 @@ def test_a_loop_that_dies_before_it_runs_doesnt_hang_the_start(monkeypatch):
     starter.start()
     starter.join(5)
     assert raised and "ended before it started" in raised[0]
+    assert not gtk_loop.running()           # nor taken for a loop that runs

@@ -543,27 +543,46 @@ class _Started:
 
 @pytest.fixture
 def started(monkeypatch):
-    """What launching the service gives, with the ready file it writes."""
+    """What launching the service gives, with the ready file it writes,
+    and a Preferences window still open (another test may have closed one)."""
+    from tuxtalk import prefs
+    monkeypatch.setattr(prefs, "_window_closed", threading.Event())
     service = {"now": _Started()}
     monkeypatch.setattr(service_launcher, "launch_dictation_service", lambda: service["now"])
     monkeypatch.setattr(service_launcher, "read_ready_pid", lambda: service["now"].ready_pid())
     return service
 
 
-@pytest.mark.parametrize("ended,service,restarted", [
-    (True, _Started(ready=True, checks=3), True),       # up once its model loaded
-    (True, _Started(ready=False, checks=0), False),     # ended at once: a broken setting
-    (True, _Started(ready=False, checks=3), False),     # ended loading its model
-    (True, _Started(checks=None), None),                # still loading: asking to download?
-    (False, _Started(), False)])                        # the old one wouldn't go
+@pytest.mark.parametrize("ended,ready,checks,restarted", [
+    (True, True, 3, True),          # up once its model loaded
+    (True, False, 0, False),        # ended at once: a broken setting
+    (True, False, 3, False),        # ended loading its model
+    (True, True, None, None),       # still loading: asking to download?
+    (False, True, 0, False)])       # the old one wouldn't go
 def test_preferences_restart_says_whether_it_worked(tmp_path, monkeypatch, started, ended,
-                                                    service, restarted):
+                                                    ready, checks, restarted):
     from tuxtalk import prefs
     monkeypatch.setattr(single_instance, "runtime_dir", lambda: str(tmp_path))
     monkeypatch.setattr(prefs, "_READY_WAIT_S", 2)
     monkeypatch.setattr(service_launcher, "end_dictation_service", lambda: ended)
-    started["now"] = service
+    started["now"] = _Started(ready, checks)
     assert prefs._restart_without_tray() is restarted
+
+
+def test_a_closed_preferences_stops_waiting_for_the_service(tmp_path, monkeypatch, started):
+    """No one is left to tell, and a process still waiting looked to an
+    uninstall like an open Preferences window with changes in it."""
+    import threading
+    from tuxtalk import prefs
+    monkeypatch.setattr(single_instance, "runtime_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(service_launcher, "end_dictation_service", lambda: True)
+    closed = threading.Event()
+    closed.set()
+    monkeypatch.setattr(prefs, "_window_closed", closed)
+    started["now"] = _Started(checks=None)        # would load for the whole wait
+    began = time.monotonic()
+    assert prefs._restart_without_tray() is None
+    assert time.monotonic() - began < 5
 
 
 @pytest.mark.parametrize("answer,goes_ahead,saved", [
