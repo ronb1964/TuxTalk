@@ -4,7 +4,10 @@ Dictations are always marked sensitive, so clipboard managers such as Klipper
 don't save them to their history, and with "Restore clipboard after pasting"
 on, whatever the user had copied comes back after the paste.
 """
+import os
 import subprocess
+import sys
+import time
 
 import pytest
 
@@ -383,18 +386,65 @@ def test_nothing_highlighted_is_empty_in_every_wl_paste(monkeypatch, said):
     assert _REAL_PRIMARY_TO_KEEP() is None
 
 
-def test_a_dictation_pasted_on_x11_is_marked_for_clipboard_managers_to_skip(monkeypatch):
-    """On X11 the text went on the clipboard as plain text and was handed to
-    the clipboard manager to store, so Klipper and the like kept every
-    dictation pasted this way; Wayland's copy was already marked sensitive."""
-    from gi.repository import Gdk, Gtk
+# Another process reading the clipboard, as the app a dictation is pasted into.
+_READ_CLIPBOARD = """
+import gi
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+from gi.repository import Gdk, Gtk
+board = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
+hint = board.wait_for_contents(Gdk.Atom.intern("x-kde-passwordManagerHint", False))
+print(repr((board.wait_for_text(), hint and hint.get_data())))
+"""
+
+
+def test_an_app_pastes_an_x11_dictation_marked_for_managers_to_skip(monkeypatch):
+    """A dictation pasted on X11 reaches the app that pastes it, another
+    process, with the hint clipboard managers skip, and is never handed to
+    the clipboard manager to keep."""
+    from gi.repository import Gtk
     if not Gtk.init_check()[0]:
         pytest.skip("no display")
     monkeypatch.setattr(Gtk.Clipboard, "store", lambda self: pytest.fail("handed to the manager"))
+    monkeypatch.setattr(cb, "_x11_owner", None)
     assert cb._offer_sensitive_x11("Привіт, café") is True
-    board = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
-    found, targets = board.wait_for_targets()
-    assert found and cb._PASSWORD_HINT in [t.name() for t in targets]
-    assert board.wait_for_text() == "Привіт, café"
-    hint = board.wait_for_contents(Gdk.Atom.intern(cb._PASSWORD_HINT, False))
-    assert hint.get_data() == b"secret"
+    reader = subprocess.Popen([sys.executable, "-c", _READ_CLIPBOARD], stdout=subprocess.PIPE,
+                              # X11: GTK would otherwise find the user's own
+                              # Wayland desktop (conftest) and read its clipboard.
+                              env={**os.environ, "PYTHONIOENCODING": "utf-8",
+                                   "GDK_BACKEND": "x11"},
+                              encoding="utf-8")
+    try:
+        # The paste request comes through the X server: answer it as the
+        # service's GTK loop would.
+        deadline = time.monotonic() + 10
+        while reader.poll() is None and time.monotonic() < deadline:
+            Gtk.main_iteration_do(False)
+            time.sleep(0.005)
+        said = reader.communicate(timeout=1)[0]
+    finally:
+        cb._x11_owner.destroy()
+    assert said.strip() == repr(("Привіт, café", b"secret"))
+
+
+def test_no_x11_offer_without_the_loop_that_answers_pastes(monkeypatch):
+    """With GTK's loop not running nothing would answer the app's paste:
+    reported as not pasted rather than typed as nothing."""
+    from tuxtalk import gtk_loop
+    monkeypatch.setattr(gtk_loop, "running", lambda: False)
+    monkeypatch.setattr(cb, "_offer_sensitive_x11", lambda text: pytest.fail("offered"))
+    assert cb.offer_dictation_x11("hello") is False
+
+
+def test_quitting_right_after_an_x11_paste_waits_for_the_app_to_read_it(monkeypatch):
+    """Only the service holds an X11 offer: gone at once, the app found
+    nothing to paste."""
+    slept = []
+    monkeypatch.setattr(cb.time, "sleep", slept.append)
+    monkeypatch.setattr(cb, "_x11_offered_at", cb.time.monotonic())
+    cb.wait_for_x11_paste()
+    assert slept and 0.4 < slept[0] <= cb.RESTORE_DELAY_S
+    slept.clear()
+    monkeypatch.setattr(cb, "_x11_offered_at", cb.time.monotonic() - 5)
+    cb.wait_for_x11_paste()
+    assert slept == []
