@@ -484,6 +484,31 @@ def test_tray_download_install_restarts_through_restart_app(monkeypatch, idle_qu
     assert steps == [install, "restart" if installed else "error shown"]
 
 
+def test_preferences_says_why_its_appimage_update_failed(monkeypatch, idle_queue):
+    """Preferences' Download & Install is the tray's flow too: a download that
+    fails is said in Update Status and in a message, and nothing restarts."""
+    from gi.repository import Gtk
+    from tuxtalk import update_ui
+    from tuxtalk.prefs_updates import UpdatesTab
+    status, told = [], []
+    monkeypatch.setattr(uc, "download_update", lambda *a, **k: None)
+    monkeypatch.setattr(update_ui, "show_message",
+                        lambda parent, kind, title, text, **k: told.append((title, text)))
+    tab = UpdatesTab.__new__(UpdatesTab)
+    tab.update_status_label = types.SimpleNamespace(set_markup=status.append)
+    window = Gtk.Window()
+    try:
+        update_ui.run_appimage_update(window, {"appimage_url": "https://x/TuxTalk.AppImage"},
+                                      lambda: pytest.fail("restarted"),
+                                      failed=tab._show_update_failed)
+        idle_queue(lambda: told)
+    finally:
+        window.destroy()
+    (title, text), = told
+    assert title == "Update Failed" and text.startswith(update_ui.DOWNLOAD_FAILED)
+    assert update_ui.DOWNLOAD_FAILED in status[0]
+
+
 # ---- Preferences asks the tray ------------------------------------------
 
 def test_dbus_restart_app_reaches_the_tray():

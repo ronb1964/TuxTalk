@@ -341,9 +341,6 @@
   "transcribe_window.py::TranscribeWindow.__init__": {
    "lines": 126
   },
-  "tray.py::DictationTray._show_update_result_dialog": {
-   "lines": 135
-  },
   "tray.py::main": {
    "decisions": 18,
    "lines": 196

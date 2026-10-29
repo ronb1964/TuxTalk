@@ -58,12 +58,11 @@ def _open_box(Gtk, text):
 
 
 def test_checking_for_updates_has_no_close_button(Gtk, monkeypatch):
-    import types
     from gi.repository import GLib
-    from tuxtalk import tray, update_checker
+    from tuxtalk import update_checker, update_ui
     monkeypatch.setattr(update_checker, "check_for_updates", lambda: {"success": False})
     monkeypatch.setattr(GLib, "idle_add", lambda *a: None)     # the result never comes
-    tray.DictationTray.check_for_updates_clicked(types.SimpleNamespace(), None)
+    update_ui.check_for_updates(lambda result: None)
     box = _open_box(Gtk, "Checking for Updates...")
     try:
         assert box is not None and not box.get_deletable()

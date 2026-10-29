@@ -15,13 +15,13 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("AyatanaAppIndicator3", "0.1")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gtk, Gdk, GLib
-from .ui_style import message_dialog, show_message
+from .ui_style import message_dialog
 from gi.repository import AyatanaAppIndicator3 as AppIndicator3
 import threading
 import sys
 import warnings
 from .logger import setup_logger
-from . import menu_cache, notes_text, tray_instance, update_offers
+from . import menu_cache, tray_instance, update_offers, update_ui
 from .tray_items import DictationItem, themed_icon
 from .tray_presets import PresetMenu
 from .tray_service import ServiceLifecycle
@@ -628,318 +628,37 @@ class DictationTray(ServiceLifecycle, PresetMenu):
         show_about_dialog()
 
     def check_for_updates_clicked(self, _):
-        """Check for updates and show results dialog."""
-        from . import update_checker
-
-        # Create progress dialog
-        progress_dialog = message_dialog(
-            closable=False,
-            message_type=Gtk.MessageType.INFO,
-            buttons=Gtk.ButtonsType.NONE,
-            text="Checking for Updates..."
-        )
-        progress_dialog.format_secondary_text("Connecting to GitHub...")
-        progress_dialog.set_position(Gtk.WindowPosition.CENTER)
-        progress_dialog.set_keep_above(True)
-        progress_dialog.show_all()
-        result_holder = [None]
-
-        def do_check():
-            """Background thread to check for updates."""
-            try:
-                result_holder[0] = update_checker.check_for_updates()
-            except Exception as e:
-                logger.error(f"Update check raised: {e}", exc_info=True)
-                result_holder[0] = {"success": False, "error": str(e)}
-            r = result_holder[0] or {}
-            logger.debug(f"Update check done: success={r.get('success')}, "
-                         f"update_available={r.get('update_available')}, error={r.get('error')}")
-            GLib.idle_add(show_result)
-
-        def show_result():
-            """Show the result in the main thread."""
-            progress_dialog.destroy()
-            if self._quitting:              # the check outlasted a Quit
-                return False
-            result = result_holder[0]
-            if not result or not result.get("success"):
-                # Error checking for updates
-                error_dialog = message_dialog(
-                    message_type=Gtk.MessageType.ERROR,
-                    buttons=Gtk.ButtonsType.OK,
-                    text="Update Check Failed"
-                )
-                error_msg = result.get("error", "Unknown error") if result else "Unknown error"
-                error_dialog.format_secondary_text(error_msg)
-                error_dialog.set_position(Gtk.WindowPosition.CENTER)
-                error_dialog.set_keep_above(True)
-                error_dialog.connect("response", lambda d, _r: d.destroy())
-                error_dialog.show_all()
-                error_dialog.present()
-                return
-
-            if not self._quitting:      # the check outlasted a Quit
-                self._show_update_result_dialog(result)
-
-        # Start background check
-        thread = threading.Thread(target=do_check, daemon=True)
-        thread.start()
+        """Check for Updates in the menu (update_ui.check_for_updates)."""
+        update_ui.check_for_updates(self._show_update_result_dialog, lambda: self._quitting)
 
     def _show_update_result_dialog(self, result):
-        """Show the result of an update check for the app itself.
-
-        GNOME extension updates are installed from Preferences → Updates &
-        Backup instead (see _show_update_notification).
-        """
-        from . import update_checker
-
-        has_update = result.get("update_available", False)
-        current = result.get("current_version", "unknown")
-        latest = result.get("latest_version", "unknown")
-        release = result.get("release", {})
-
-        # How TuxTalk was installed decides HOW to update. Only a self-managed
-        # AppImage can be swapped in place; .deb/.rpm/AUR/Flatpak users must use
-        # their package manager, so we show instructions instead of downloading
-        # and running an AppImage (which fails, e.g. missing libfuse.so.2).
-        install_type = update_checker.get_install_type()
-        guidance = update_checker.get_update_guidance(
-            install_type, latest, release.get("html_url", ""))
-
-        if not has_update:
-            # No AppImage update available
-            dialog = message_dialog(
-                message_type=Gtk.MessageType.INFO,
-                buttons=Gtk.ButtonsType.OK,
-                text="You're Up to Date!"
-            )
-            message = f"<b>TuxTalk {current}</b> is the latest version."
-            dialog.format_secondary_markup(message)
-            dialog.set_position(Gtk.WindowPosition.CENTER)
-            dialog.set_keep_above(True)
-            # Non-blocking (destroy on response) rather than run(), as in About.
-            dialog.connect("response", lambda d, _r: d.destroy())
-            dialog.show_all()
-            dialog.present()
-            return
-
-        # Updates available - show detailed dialog.
-        # NON-modal and NOT keep-above on purpose: the auto-check pops this on
-        # launch, and a modal, always-on-top dialog grabs input and floats over
-        # the About/Help/Voice windows so they open hidden behind it. The
-        # Preferences window works precisely because it is neither.
-        dialog = Gtk.Dialog(title="Update Available")
-        dialog.set_default_size(450, 350)
-        dialog.set_position(Gtk.WindowPosition.CENTER)
-
-        content = dialog.get_content_area()
-        content.set_spacing(10)
-        content.set_margin_start(15)
-        content.set_margin_end(15)
-        content.set_margin_top(15)
-        content.set_margin_bottom(10)
-
-        # Header
-        header = Gtk.Label()
-        header.set_markup("<big><b>Update Available!</b></big>")
-        header.set_halign(Gtk.Align.START)
-        content.pack_start(header, False, False, 0)
-
-        # Version info
-        version_label = Gtk.Label()
-        version_label.set_markup(
-            f"<b>TuxTalk:</b> {current} → <b>{latest}</b>"
-        )
-        version_label.set_halign(Gtk.Align.START)
-        content.pack_start(version_label, False, False, 5)
-
-        # For package/AUR/Flatpak installs, explain how to update and show the
-        # exact command (selectable so the user can copy it). No auto-download.
-        if not guidance["can_auto_update"]:
-            how_label = Gtk.Label()
-            how_label.set_line_wrap(True)
-            how_label.set_halign(Gtk.Align.START)
-            how_label.set_markup(guidance["message"])
-            content.pack_start(how_label, False, False, 5)
-            if guidance.get("command"):
-                cmd_entry = Gtk.Entry()
-                cmd_entry.set_text(guidance["command"])
-                cmd_entry.set_editable(False)
-                cmd_entry.get_style_context().add_class("monospace")
-                content.pack_start(cmd_entry, False, False, 0)
-
-        # Release notes in scrolled window
-        if release.get("body"):
-            notes_label = Gtk.Label(label="Release Notes:")
-            notes_label.set_halign(Gtk.Align.START)
-            notes_label.set_margin_top(10)
-            content.pack_start(notes_label, False, False, 0)
-
-            scroll = Gtk.ScrolledWindow()
-            scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-            scroll.set_min_content_height(150)
-
-            scroll.add(notes_text.NotesView(release.get("body", "")).view)
-
-            content.pack_start(scroll, True, True, 0)
-
-        # Buttons
-        dialog.add_button("Close", Gtk.ResponseType.CLOSE)
-
-        if release.get("html_url"):
-            view_btn = dialog.add_button("View on GitHub", Gtk.ResponseType.ACCEPT)
-
-        # Route each install type to the right update action:
-        #  appimage_swap  -> download the AppImage and swap it in place
-        #  pkexec_package -> download the .rpm/.deb and install it as root
-        #  manual         -> just point to the GitHub release page
-        method = guidance["update_method"]
-        if has_update and method == "appimage_swap" and release.get("appimage_url"):
-            btn = dialog.add_button("Download & Install", Gtk.ResponseType.YES)
-            btn.get_style_context().add_class("suggested-action")
-        elif has_update and method == "pkexec_package":
-            btn = dialog.add_button("Download & Install", Gtk.ResponseType.APPLY)
-            btn.get_style_context().add_class("suggested-action")
-        elif has_update and release.get("html_url"):
-            view_btn.get_style_context().add_class("suggested-action")
-
-        # Non-blocking rather than run(), as in About: the response callback
-        # handles the buttons.
-        def _on_update_response(dlg, response):
-            if response == Gtk.ResponseType.ACCEPT:
-                update_checker.open_release_page(release.get("html_url", ""))
-                dlg.destroy()
-            elif response == Gtk.ResponseType.YES:
-                dlg.destroy()
-                self._download_update(release)
-            elif response == Gtk.ResponseType.APPLY:
-                dlg.destroy()
-                self._download_and_install_package(release, install_type)
-            else:
-                dlg.destroy()
-        dialog.connect("response", _on_update_response)
-        dialog.show_all()
-        dialog.present()
+        """What an update check found, with Download & Install where this
+        install can take the update itself (update_ui.show_update_result)."""
+        update_ui.show_update_result(result, self._download_update,
+                                     self._download_and_install_package)
 
     def _download_update(self, release):
-        """Download and install the AppImage update behind the progress window
-        Preferences uses too (progress_window), then restart onto it. Nothing
-        once Quit has begun, and nothing installed if Quit began during the
-        download; an install under way finishes (_install_not_cut_off)."""
+        """Download & Install for a self-managed AppImage, then restart onto
+        it. Nothing once Quit has begun, and nothing installed if Quit began
+        during the download; an install under way finishes (_install_not_cut_off)."""
         if self._quitting:
             return
-        from . import update_checker
-        from .progress_window import run_with_progress
-        url = release.get("appimage_url")
-        if not url:
-            show_message(None, Gtk.MessageType.ERROR, "Download Error",
-                         "Could not find download URL.", keep_above=True)
-            return
-
-        def work(progress):
-            """On its own thread: the download, then the install; (installed, why not)."""
-            path = update_checker.download_update(
-                url, release.get("appimage_name", "TuxTalk-update.AppImage"), progress,
-                checksums_url=release.get("checksums_url"))
-            if not path:
-                return False, ("The download could not be completed.\n"
-                               "Please try again or download manually from GitHub.")
-            if self._quitting:
-                return False, None
-            progress("Installing update...", 90)
-            return self._install_not_cut_off(
-                lambda: update_checker.install_appimage_update(path, progress))
-
-        def finish(result):
-            success, message = result or (False, "Something TuxTalk didn't expect went "
-                                                 "wrong; the log has the details.")
-            logger.info(f"AppImage update: installed={success}, {message}")
-            if success:
-                self.restart_app()
-            elif message and not self._quitting:
-                show_message(None, Gtk.MessageType.ERROR, "Update Failed", message,
-                             keep_above=True)
-
-        run_with_progress(None, "Updating TuxTalk", "Starting download...", work, finish)
+        update_ui.run_appimage_update(None, release, self.restart_app,
+                                      quitting=lambda: self._quitting,
+                                      install=self._install_not_cut_off)
 
     def _download_and_install_package(self, release, install_type):
         """Download the correct .rpm/.deb and install it as root via pkexec,
         then offer to restart. Delegates to the shared update_ui flow."""
         if self._quitting:
             return
-        from . import update_ui
         update_ui.run_package_update(release, install_type, restart_callback=self.restart_app,
                                      quitting=lambda: self._quitting)
 
     def auto_check_for_updates(self):
-        """
-        Automatically check for updates on startup (once per day).
-
-        Silently checks in the background. An app update opens the same
-        result window as a manual check; an extension update only a
-        notification.
-        """
-        from . import update_checker
-        from .config import load_config, record_update_check
-
-        config = load_config()
-
-        # Check if auto-check is enabled
-        if not config.auto_check_updates:
-            logger.debug("Auto-update check disabled in config")
-            return False
-
-        # Check if we already checked today
-        if not update_checker.should_check_today(config.last_update_check):
-            logger.debug("Already checked for updates today")
-            return False
-
-        logger.info("Auto-checking for updates...")
-
-        def do_check():
-            """Background thread to check for updates."""
-            try:
-                result = update_checker.check_for_updates()
-
-                # Saved against a fresh read (`config` is from before the ~30 s
-                # check) and on GTK's thread, where the tray saves its own
-                # settings: neither undoes a change made meanwhile.
-                GLib.idle_add(record_update_check, update_checker.get_current_timestamp())
-
-                if result and result.get("success"):
-                    has_update = result.get("update_available", False)
-                    has_ext_update = result.get("extension_update", False)
-
-                    if has_update:
-                        # Show the SAME actionable dialog the manual check uses
-                        # (Download & Install / View on GitHub) — persistent, and
-                        # identical across the GTK tray and the GNOME extension.
-                        # No surprise Preferences window.
-                        GLib.idle_add(lambda: None if self._quitting
-                                      else self._show_update_result_dialog(result))
-                    elif has_ext_update:
-                        # Extension-only update: a quiet notification, no windows.
-                        GLib.idle_add(self._show_update_notification)
-                    else:
-                        logger.info("No updates available")
-                else:
-                    logger.debug(f"Update check failed: {result.get('error', 'unknown')}")
-            except Exception as e:
-                logger.error(f"Error in auto-update check: {e}")
-
-        # Run in background thread
-        thread = threading.Thread(target=do_check, daemon=True)
-        thread.start()
-        return False  # Don't repeat GLib timeout
-
-    def _show_update_notification(self):
-        """Tell the user a GNOME extension update is out. Check for Updates
-        covers only the app, so point to the tab that installs it."""
-        from .notify import notify
-        notify("GNOME extension update available",
-               "Open Preferences → Updates & Backup to install it.")
-        logger.info("Showed extension update notification")
-        return False
+        """The once-a-day update check at start-up (update_ui)."""
+        return update_ui.auto_check_for_updates(self._show_update_result_dialog,
+                                                lambda: self._quitting)
 
     def _build_history_submenu(self):
         """Build the Recent Dictations submenu and keep it current.

@@ -583,47 +583,16 @@ class UpdatesTab(Tab):
         # As the question promised: the restart would lose what isn't saved.
         if not self.win.save_before_restart():
             return
-        self._install_appimage(
-            url, self._current_release.get("appimage_name", "TuxTalk-update.AppImage"))
+        from . import update_ui
+        update_ui.run_appimage_update(self.window, self._current_release,
+                                      update_ui.restart_via_tray, failed=self._show_update_failed)
 
-    def _install_appimage(self, url, filename):
-        """Download the AppImage at *url* (checked against the release's
-        SHA256SUMS.txt when it publishes one) and install it, with a progress
-        window; on success the tray restarts TuxTalk, which closes this
-        window too (update_ui.restart_via_tray)."""
-        from . import update_checker
-
-        def work(progress):
-            """On its own thread: the download, then the install; (installed, why not)."""
-            downloaded_path = update_checker.download_update(
-                url, filename, progress,
-                checksums_url=self._current_release.get("checksums_url"))
-            if not downloaded_path:
-                return False, "Download failed"
-            progress("Installing update...", 90)
-            return update_checker.install_appimage_update(downloaded_path, progress)
-
-        def finish(result):
-            """Restart onto the update, or say in Update Status and in a
-            message that it didn't go in."""
-            success, error_msg = result or (False, None)
-            if success:
-                from . import update_ui
-                update_ui.restart_via_tray()
-                return
-            error_msg = error_msg or ("Something TuxTalk didn't expect went wrong; "
-                                      "the log has the details.")
-            self.update_status_label.set_markup(
-                f"<span color='red'>Update failed: "
-                f"{GLib.markup_escape_text(str(error_msg))}</span>\n"
-                f"Please try again or download manually from GitHub.")
-            show_message(self.window,
-                         Gtk.MessageType.ERROR,
-                         "Update Failed",
-                         f"{error_msg}\n\n"
-                         f"You can try again or download the update manually from GitHub.")
-
-        run_with_progress(self.window, "Updating TuxTalk", "Starting download...", work, finish)
+    def _show_update_failed(self, message):
+        """Say in Update Status that the update didn't go in, and why."""
+        self.update_status_label.set_markup(
+            f"<span color='red'>Update failed: "
+            f"{GLib.markup_escape_text(str(message))}</span>\n"
+            f"Please try again or download manually from GitHub.")
 
     def _on_view_release_clicked(self, button):
         """Open the release page on GitHub."""
