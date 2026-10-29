@@ -13,6 +13,7 @@ import types
 
 import pytest
 
+from shell_stubs import recorders, stub
 from tuxtalk import control, secure_input, uinput_helper, uninstall
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -319,8 +320,7 @@ def test_an_appimage_has_no_package_to_remove_and_leaving_the_group_is_asked_for
 def test_a_package_manager_that_refuses_is_reported(home, tmp_path):
     fake = tmp_path / "bin"
     fake.mkdir()
-    (fake / "apt-get").write_text("#!/bin/sh\necho 'E: Could not get lock /var/lib/dpkg/lock'\nexit 100\n")
-    (fake / "apt-get").chmod(0o755)
+    stub(fake, "apt-get", "echo 'E: Could not get lock /var/lib/dpkg/lock'\nexit 100")
     lines = uninstall._package_lines(_find(home, "deb"))
     ran = subprocess.run(["bash", "-c", lines], capture_output=True, text=True,
                          env={"PATH": f"{fake}:/usr/bin:/bin"})
@@ -390,12 +390,10 @@ def test_the_root_script_reports_a_helper_still_there(tmp_path, monkeypatch):
     monkeypatch.setattr(uinput_helper, "UDEV_RULE_PATH", str(tmp_path / "old-rule"))
     fake = tmp_path / "bin"
     fake.mkdir()
-    for name, body in (("systemctl", "exit 3"), ("udevadm", "exit 0"), ("rmdir", "exit 0")):
-        (fake / name).write_text(f"#!/bin/sh\n{body}\n")
-        (fake / name).chmod(0o755)
+    for name, body in (("systemctl", "exit 3"), ("udevadm", "exit 0"), ("rmdir", "exit 0"),
+                       ("rm", "exit 1")):
+        stub(fake, name, body)
     env = {"PATH": f"{fake}:/usr/bin:/bin"}
-    (fake / "rm").write_text("#!/bin/sh\nexit 1\n")
-    (fake / "rm").chmod(0o755)
     ran = subprocess.run(["bash", "-c", secure_input.uninstall_lines()], capture_output=True,
                          text=True, env=env)
     assert ran.stdout.split("\n")[:2] == [f"{secure_input.NOT_REMOVED} helper",
@@ -585,9 +583,7 @@ def _run_before_remove(tmp_path, arg):
     fake = tmp_path / "bin"
     fake.mkdir(exist_ok=True)
     log = tmp_path / "ran.log"
-    for name in ("rm", "rmdir", "systemctl", "udevadm"):
-        (fake / name).write_text(f'#!/bin/sh\necho "{name} $*" >> {log}\n')
-        (fake / name).chmod(0o755)
+    recorders(fake, ("rm", "rmdir", "systemctl", "udevadm"), log)
     subprocess.run(["sh", str(ROOT / "packaging/before-remove.sh"), arg], check=True,
                    env={"PATH": f"{fake}:/usr/bin:/bin"})
     return log.read_text() if log.exists() else ""

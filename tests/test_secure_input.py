@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from shell_stubs import recorders, stub
 from tuxtalk import secure_input as si
 from tuxtalk import hotkey_helper
 
@@ -27,10 +28,7 @@ def test_setup_loads_uinput_before_giving_it_to_the_user(tmp_path):
     script = si.install_script()
     part = script[script.index("modprobe uinput"):script.index("for i in $(seq 50)")]
     calls = tmp_path / "calls"
-    for name, status in (("modprobe", 1), ("udevadm", 0)):
-        stub = tmp_path / name
-        stub.write_text(f'#!/bin/sh\necho "{name} $*" >> {calls}\nexit {status}\n')
-        stub.chmod(0o755)
+    recorders(tmp_path, ("modprobe", "udevadm"), calls, {"modprobe": 1})
     run = subprocess.run(["/bin/bash", "-c", "set -euo pipefail\n" + part],
                          env={"PATH": str(tmp_path)}, capture_output=True, text=True)
     assert run.returncode == 0, run.stderr
@@ -41,23 +39,13 @@ def test_setup_loads_uinput_before_giving_it_to_the_user(tmp_path):
     ]
 
 
-def _stub_commands(folder, names, status=0):
-    """Stand-ins on a PATH of their own for *names*: each writes its name and
-    arguments to calls.txt and exits with *status*. Returns that file."""
-    calls = folder / "calls.txt"
-    for name in names:
-        stub = folder / name
-        stub.write_text(f'#!/bin/sh\necho "{name} $*" >> {calls}\nexit {status}\n')
-        stub.chmod(0o755)
-    return calls
-
-
 def test_the_uninstall_lines_take_everything_away(tmp_path):
     """The helper, its service and both typing rules are what rm is given:
     each path also appears in the checks after it, so finding the names in
     the script proved nothing."""
     from tuxtalk.uinput_helper import UDEV_RULE_PATH
-    calls = _stub_commands(tmp_path, ("systemctl", "rm", "rmdir", "udevadm"), status=1)
+    calls = tmp_path / "calls.txt"
+    recorders(tmp_path, ("systemctl", "rm", "rmdir", "udevadm"), calls, status=1)
     run = subprocess.run(["/bin/bash", "-c", si.uninstall_lines()],
                          env={"PATH": str(tmp_path)}, capture_output=True, text=True)
     assert run.returncode == 0, run.stderr
@@ -322,14 +310,13 @@ def test_still_being_in_the_group_is_reported_not_hidden(monkeypatch):
     ("ron wheel input", True),
     ("input ron", True),
     ("ron input-foo wheel", False),
+    ("ron uinput wheel", False),
     ("ron wheel", False),
 ])
 def test_the_still_in_the_group_check_reads_whole_group_names(tmp_path, groups, still_in):
     """Against the real `id` neither this computer nor CI is in "input", so
     a broken pattern would have passed: here `id` answers for the user."""
-    stub = tmp_path / "id"
-    stub.write_text(f'#!/bin/sh\necho "{groups}"\n')
-    stub.chmod(0o755)
+    stub(tmp_path, "id", f'echo "{groups}"')
     ran = subprocess.run(["/bin/bash", "-c", "user=ron\n" + si._still_in_group_check()],
                          env={"PATH": str(tmp_path)}, capture_output=True, text=True)
     assert (si.STILL_IN_GROUP in ran.stdout) == still_in

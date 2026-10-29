@@ -39,12 +39,8 @@ def test_finish_capture_snapshots_frames_surviving_next_recording(monkeypatch):
     monkeypatch.setattr("tuxtalk.type_at_pause.arm_chunker", lambda *a, **k: None)
     monkeypatch.setattr(recording, "pause_media_players", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
-    try:
-        assert recording.start_recording(False, False, None)
-        recording._sd_callback(np.frombuffer(b"next", dtype=np.int16), 2, None, None)
-    finally:
-        rs.state.is_recording = False
-        rs.state.stream = None
+    assert recording.start_recording(False, False, None)
+    recording._sd_callback(np.frombuffer(b"next", dtype=np.int16), 2, None, None)
     assert rs.state.frames == [b"next"]
     assert frames == [b"hello-audio"], "snapshot must survive a new recording"
 
