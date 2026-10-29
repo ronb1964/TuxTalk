@@ -85,6 +85,17 @@ class NotesView:
         return False
 
 
+def scrolled_notes(text):
+    """A NotesView showing *text* in a scrolled box at least 150 px tall, as
+    About and Update Available show their notes: (box, NotesView)."""
+    notes = NotesView(text)
+    scroll = Gtk.ScrolledWindow()
+    scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+    scroll.set_min_content_height(150)
+    scroll.add(notes.view)
+    return scroll, notes
+
+
 def _open(view, url):
     """Open *url* in the browser."""
     try:

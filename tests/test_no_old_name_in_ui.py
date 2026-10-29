@@ -39,7 +39,7 @@ ALLOWED_EXACT = {
         "TalkType, then start TuxTalk again.",
     },
     # The one-time notice after an old TalkType install is converted.
-    "tray.py": {
+    "startup_notices.py": {
         "TalkType is now TuxTalk",
         "Why the change: another company owns the name TalkType for dictation software.",
         # An old TalkType Flatpak was stopped: its uninstall needs its real ID.

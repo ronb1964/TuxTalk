@@ -1,5 +1,5 @@
-"""Pieces of the tray's menu: the Dictation on/off item and the icon-name
-lookup the menu's icons share."""
+"""Pieces of the tray's menu: the Dictation on/off item, and the icon-name
+lookup and the relabelling the menu's items share."""
 import gi
 
 gi.require_version("Gtk", "3.0")
@@ -12,6 +12,13 @@ def themed_icon(*names):
     if theme is None:
         return None
     return next((name for name in names if theme.has_icon(name)), None)
+
+
+def relabel(item, label):
+    """Give menu *item* *label* unless it has it already: the desktop is
+    sent every change, even to the same words."""
+    if item.get_label() != label:
+        item.set_label(label)
 
 
 class DictationItem(Gtk.ImageMenuItem):

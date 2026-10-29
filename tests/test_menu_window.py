@@ -181,7 +181,7 @@ def _launcher(tmp_path, monkeypatch, text):
     path.write_text(text)
     monkeypatch.setattr(update_checker, "DESKTOP_FILE_PATH", str(path))
     monkeypatch.setattr(update_checker, "get_install_type", lambda **_k: "appimage")
-    monkeypatch.setattr(update_checker, "_refresh_desktop_menu_cache", lambda: None)
+    monkeypatch.setattr(update_checker.menu_cache, "refresh_menu_cache", lambda: None)
     return path
 
 

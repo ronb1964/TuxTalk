@@ -842,8 +842,8 @@ def tray_main(monkeypatch):
         auto_check_for_updates = step("checks for updates")
 
     monkeypatch.setattr(tray.tray_instance, "acquire", step("takes the tray lock"))
-    monkeypatch.setattr(tray, "_handle_old_talktype_flatpak", lambda: None)
-    monkeypatch.setattr(tray, "_refresh_kde_menu_cache", lambda: None)
+    monkeypatch.setattr(tray.startup_notices, "handle_old_talktype_flatpak", lambda: None)
+    monkeypatch.setattr(tray.menu_cache, "refresh_menu_cache", lambda: None)
     monkeypatch.setattr(rename_migration, "adopt_old_install", step("adopts the old install", []))
     monkeypatch.setattr(rename_migration, "repin_launchers", step("repins launchers", []))
     monkeypatch.setattr(update_checker, "create_hidden_desktop_entry",
@@ -963,11 +963,10 @@ def service_main(monkeypatch):
 @pytest.fixture
 def about_window(monkeypatch):
     """The tray's About window, built for real, without fetching release notes."""
-    import types
     from gi.repository import Gtk
-    from tuxtalk import tray, update_checker
+    from tuxtalk import about_dialog, update_checker
     monkeypatch.setattr(update_checker, "fetch_release_by_tag", lambda tag: None)
-    tray.DictationTray.show_about_dialog(types.SimpleNamespace(), None)
+    about_dialog.show_about_dialog()
     window = next(w for w in Gtk.Window.list_toplevels()
                   if w.get_title() == "About TuxTalk" and w.get_visible())
     yield window

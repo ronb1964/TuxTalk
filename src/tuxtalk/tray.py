@@ -1,5 +1,7 @@
-"""The tray process: the tray icon and its menu, starting and watching the
-dictation service, and the D-Bus calls the GNOME extension and Preferences make."""
+"""The tray process: the tray icon, watching the dictation service, the
+windows the menu opens, the D-Bus calls the GNOME extension and Preferences
+make, and the process's start (main). The menu itself is tray_menu.py's,
+starting and stopping the service tray_service.py's."""
 import os
 import signal
 # CRITICAL: Disable HuggingFace XET downloads BEFORE any imports
@@ -13,17 +15,14 @@ gi.require_version("Gtk", "3.0")
 # libappindicator3.so.1, which Fedora does not provide at all. Imported under
 # the old name so the call sites below read the same.
 gi.require_version("AyatanaAppIndicator3", "0.1")
-gi.require_version("Gdk", "3.0")
-from gi.repository import Gtk, Gdk, GLib
-from .ui_style import message_dialog, show_message
+from gi.repository import Gtk, GLib
 from gi.repository import AyatanaAppIndicator3 as AppIndicator3
-import subprocess
 import threading
 import sys
 import warnings
 from .logger import setup_logger
-from . import notes_text, tray_instance, update_offers
-from .tray_items import DictationItem, themed_icon
+from . import menu_cache, startup_notices, tray_instance, update_offers, update_ui
+from .tray_menu import TrayMenu
 from .tray_presets import PresetMenu
 from .tray_service import ServiceLifecycle
 
@@ -33,33 +32,6 @@ from .tray_service import ServiceLifecycle
 warnings.filterwarnings("ignore", message=r"Gtk\.ImageMenuItem\.", category=DeprecationWarning)
 logger = setup_logger(__name__)
 
-# CSS styling for the tray popup menu (solid dark background for readability)
-_MENU_CSS = b"""
-menu {
-    background-color: #2d2d2d;
-    border: 1px solid #1a1a1a;
-    border-radius: 8px;
-    padding: 4px 0;
-}
-menuitem {
-    padding: 6px 12px;
-    color: #ffffff;
-}
-menuitem:hover {
-    background-color: #404040;
-}
-menuitem:disabled {
-    color: #888888;
-}
-menuitem label {
-    color: inherit;
-}
-separator {
-    background-color: #404040;
-    margin: 4px 8px;
-}
-"""
-
 # D-Bus service import (optional - only needed for GNOME extension)
 try:
     from .dbus_service import TuxTalkDBusService
@@ -68,72 +40,15 @@ except ImportError:
     DBUS_AVAILABLE = False
     logger.warning("D-Bus service not available - GNOME extension integration disabled")
 
-OLD_FLATPAK_NOTICE_TITLE = "Stopped the old TalkType Flatpak"
-OLD_FLATPAK_NOTICE_BODY = (
-    "It was running next to TuxTalk, its new name, so everything you said "
-    "would be typed twice. You can uninstall it from your software center, or "
-    "with: flatpak uninstall io.github.ronb1964.TalkType")
 
+class DictationTray(ServiceLifecycle, PresetMenu, TrayMenu):
+    """TuxTalk's tray: the icon and its menu, the dictation service it starts
+    and polls every second, and what the menu, the GNOME extension, the
+    command line and the menu window ask of it."""
 
-def _handle_old_talktype_flatpak(stop=None, notify=None):
-    """Stop an old TalkType Flatpak and say so; runs off the main thread, so
-    the notice is handed to the main loop."""
-    if stop is None:
-        from .service_launcher import stop_old_talktype_flatpak as stop
-    if notify is None:
-        from .notify import notify as _notify
-
-        def notify(title, body):
-            def show():
-                _notify(title, body)
-                return False    # once
-            GLib.idle_add(show)
-    try:
-        if stop():
-            notify(OLD_FLATPAK_NOTICE_TITLE, OLD_FLATPAK_NOTICE_BODY)
-    except Exception as e:      # never stop the tray from starting
-        logger.warning(f"Could not check for the pre-rename Flatpak: {e}")
-
-
-def about_icon_source(theme_has_icon):
-    """Where the About dialog's icon comes from: ("file", path), ("icon",
-    theme name) or None. *theme_has_icon* is the icon theme's has_icon."""
-    from .autostart import get_icon_path
-    from .config import APP_ID
-    path = get_icon_path()
-    if os.path.isfile(path):
-        return ("file", path)
-    appdir = os.environ.get("APPDIR")
-    if appdir:
-        bundled = os.path.join(appdir, f"{APP_ID}.svg")
-        if os.path.isfile(bundled):
-            return ("file", bundled)
-    # deb/rpm install the icon under the app ID; the AppImage's first run
-    # installs it as "tuxtalk".
-    for name in (APP_ID, "tuxtalk"):
-        if theme_has_icon(name):
-            return ("icon", name)
-    return None
-
-
-def _about_icon():
-    """The TuxTalk icon at 64 px for the About dialog, or None."""
-    theme = Gtk.IconTheme.get_default()
-    source = about_icon_source(theme.has_icon if theme else (lambda name: False))
-    if source is None:
-        return None
-    kind, value = source
-    if kind == "file":
-        from gi.repository import GdkPixbuf
-        return Gtk.Image.new_from_pixbuf(
-            GdkPixbuf.Pixbuf.new_from_file_at_scale(value, 64, 64, True))
-    image = Gtk.Image.new_from_icon_name(value, Gtk.IconSize.DIALOG)
-    image.set_pixel_size(64)
-    return image
-
-
-class DictationTray(ServiceLifecycle, PresetMenu):
     def __init__(self):
+        """Make the icon and its menu, offer the D-Bus service and start the
+        status poll; the dictation service is started by main()."""
         # TuxTalk is a dark-themed app. This is a global Gtk setting, so setting
         # it once here, before any tray dialog is built, makes the tray's own
         # windows (About, update results) match Preferences and onboarding.
@@ -192,11 +107,12 @@ class DictationTray(ServiceLifecycle, PresetMenu):
         self.dbus_service = None
         self._init_dbus_service()
 
-        self.update_icon_status()
-        self.indicator.set_menu(self.build_menu())
-
-        # Track service state for change detection
+        # The icon and the poll's change detection start from the same
+        # answer: from two, a service that started in between would leave
+        # the icon on "Stopped" until its next change.
         self._last_service_state = self.is_service_running()
+        self.update_icon_status(self._last_service_state)
+        self.indicator.set_menu(self.build_menu())
         if not self._last_service_state:
             # A service that crashed in an earlier session can leave KWin or
             # COSMIC holding the hotkeys back from every app.
@@ -208,9 +124,6 @@ class DictationTray(ServiceLifecycle, PresetMenu):
         # After updating: the recommended setup, and the hotkey helper or
         # Parakeet Ultra this TuxTalk brings.
         update_offers.start(self.restart_service)
-
-        # Auto-start will be triggered after welcome dialog on first run
-        # or immediately if not first run (handled in main())
 
     def _check_tray_visibility(self) -> bool:
         """
@@ -346,18 +259,18 @@ class DictationTray(ServiceLifecycle, PresetMenu):
     # ----- Service management helpers -----
 
     def update_status_and_menu(self, repeat=True):
-        """Update icon and menu display based on service status.
+        """The status poll, every second: the icon and the menu follow the
+        service, and a start or stop is announced over D-Bus. Only what
+        changed is touched, since the desktop is sent every change.
 
         Args:
             repeat: If True (default), keeps the GLib timer running.
                     Pass False for a one-shot update.
         """
-        # Store previous state to detect changes
         old_state = getattr(self, '_last_service_state', None)
         new_state = self.is_service_running()
-
-        # Update UI — pass pre-computed state to avoid redundant checks
-        self.update_icon_status(is_running=new_state)
+        if new_state != old_state:
+            self.update_icon_status(is_running=new_state)
         self.update_menu_display(is_running=new_state)
 
         # If state changed, emit D-Bus signal
@@ -447,11 +360,8 @@ class DictationTray(ServiceLifecycle, PresetMenu):
         release_desktop_hotkeys()
 
     def toggle_service(self, widget):
-        """Toggle dictation service on/off."""
-        # Prevent recursive calls when we programmatically set the toggle
-        if hasattr(self, '_updating_toggle') and self._updating_toggle:
-            return
-
+        """The Dictation item was clicked: start or stop the service. The
+        status poll's set_active() only redraws it, so this is a click."""
         if widget.get_active():
             # Turn service ON
             self.start_service(None)
@@ -506,39 +416,6 @@ class DictationTray(ServiceLifecycle, PresetMenu):
         except Exception as e:
             logger.error(f"SetModel failed: {e}", exc_info=True)
 
-    def update_menu_display(self, is_running=None):
-        """Update menu display with current service status and model.
-
-        Args:
-            is_running: Pre-computed service state (avoids redundant checks).
-                        If None, checks service status directly.
-        """
-        if hasattr(self, 'service_toggle'):
-            # Update service toggle state
-            if is_running is None:
-                is_running = self.is_service_running()
-            self._updating_toggle = True
-            self.service_toggle.set_active(is_running)
-            self._updating_toggle = False
-
-        # What runs, in one line
-        if hasattr(self, 'engine_item'):
-            try:
-                from .config import load_config
-                from .recommend import engine_line
-                cfg = load_config()
-                running = None
-                if is_running and getattr(self, "dbus_service", None):
-                    running = self.dbus_service.running_engine
-                self.engine_item.set_label(engine_line(cfg.model, cfg.device, running))
-
-                # Update performance preset radio buttons
-                if hasattr(self, 'preset_radios'):
-                    self._sync_preset_radios()
-            except Exception as e:
-                logger.error(f"Failed to update the model and device line: {e}")
-                self.engine_item.set_label("Speech model: unknown")
-    
     def _launch_preferences(self, tab=None):
         """Launch the preferences window subprocess.
 
@@ -661,538 +538,42 @@ class DictationTray(ServiceLifecycle, PresetMenu):
         show_voice_commands_dialog()
 
     def show_about_dialog(self, _):
-        """Show About dialog with app info, version, and changelog."""
-        from . import __version__
-        from . import update_checker
-
-        # Create custom dialog for more flexibility
-        dialog = Gtk.Dialog(
-            title="About TuxTalk",
-            flags=Gtk.DialogFlags.MODAL
-        )
-        dialog.set_default_size(500, 450)
-        dialog.set_position(Gtk.WindowPosition.CENTER)
-        dialog.set_keep_above(True)
-
-        content = dialog.get_content_area()
-        content.set_spacing(10)
-        content.set_margin_start(20)
-        content.set_margin_end(20)
-        content.set_margin_top(20)
-        content.set_margin_bottom(10)
-
-        # App icon
-        try:
-            icon = _about_icon()
-            if icon:
-                content.pack_start(icon, False, False, 0)
-        except Exception as e:
-            logger.debug(f"Could not load icon for About dialog: {e}")
-
-        # App name and version
-        title_label = Gtk.Label()
-        title_label.set_markup('<span size="x-large"><b>TuxTalk</b></span>')
-        content.pack_start(title_label, False, False, 0)
-
-        version_label = Gtk.Label(label=f"Version {__version__}")
-        content.pack_start(version_label, False, False, 0)
-
-        # Renamed in 0.15.0 (TALKTYPE is another company's trademark); this
-        # line lets people who knew the old name know they have the right app.
-        formerly_label = Gtk.Label()
-        formerly_label.set_markup('<span size="small"><i>Formerly TalkType</i></span>')
-        formerly_label.set_opacity(0.75)
-        content.pack_start(formerly_label, False, False, 0)
-
-        desc_label = Gtk.Label(label="Voice dictation for Linux: hold a key, talk, and your words are typed for you.")
-        desc_label.set_line_wrap(True)
-        content.pack_start(desc_label, False, False, 5)
-
-        # Copyright and author
-        copyright_label = Gtk.Label()
-        copyright_label.set_markup('<span size="small">© 2024-2026 Ron Brand • MIT License</span>')
-        content.pack_start(copyright_label, False, False, 0)
-
-        # CC-BY-4.0 requires crediting NVIDIA for the Parakeet model. The AI
-        # cleanup engine and model are downloaded from their own projects, not
-        # shipped, but credit them here too.
-        from .parakeet_engine import PARAKEET_ATTRIBUTION
-        credit_label = Gtk.Label()
-        credit_label.set_markup(
-            f'<span size="small">{PARAKEET_ATTRIBUTION}\n'
-            'AI cleanup uses llama.cpp (MIT) and Qwen2.5 by Alibaba Cloud (Apache 2.0).</span>')
-        credit_label.set_justify(Gtk.Justification.CENTER)
-        credit_label.set_line_wrap(True)
-        credit_label.set_opacity(0.7)
-        content.pack_start(credit_label, False, False, 0)
-
-        # What's New section
-        whats_new_label = Gtk.Label()
-        whats_new_label.set_markup('<b>What\'s New in This Version</b>')
-        whats_new_label.set_xalign(0)
-        whats_new_label.set_margin_top(15)
-        content.pack_start(whats_new_label, False, False, 0)
-
-        # Scrolled text view for release notes
-        scroll = Gtk.ScrolledWindow()
-        scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        scroll.set_min_content_height(150)
-
-        release_notes = notes_text.NotesView("Loading release notes...")
-        scroll.add(release_notes.view)
-        content.pack_start(scroll, True, True, 0)
-
-        # Links box
-        links_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=20)
-        links_box.set_halign(Gtk.Align.CENTER)
-        links_box.set_margin_top(10)
-
-        # The website, then the code on GitHub
-        website_btn = Gtk.LinkButton.new_with_label("https://tuxtalk.app/", "Website")
-        links_box.pack_start(website_btn, False, False, 0)
-
-        github_btn = Gtk.LinkButton.new_with_label(
-            "https://github.com/ronb1964/TuxTalk",
-            "GitHub Repository"
-        )
-        links_box.pack_start(github_btn, False, False, 0)
-
-        # Full changelog link
-        changelog_btn = Gtk.LinkButton.new_with_label(
-            update_checker.get_releases_url(),
-            "View Full Changelog"
-        )
-        links_box.pack_start(changelog_btn, False, False, 0)
-
-        content.pack_start(links_box, False, False, 0)
-
-        # Close button
-        dialog.add_button("Close", Gtk.ResponseType.CLOSE)
-
-        # Shown with a response callback and present() rather than run(): a
-        # nested run() loop started from a tray menu callback can fail to map
-        # the window on Wayland.
-        dialog.connect("response", lambda d, _r: d.destroy())
-        dialog.show_all()
-        dialog.present()
-
-        # Fetch release notes in background
-        def fetch_notes():
-            release = update_checker.fetch_release_by_tag(__version__)
-            if release and release.get("body"):
-                notes = release["body"]
-            else:
-                notes = "Release notes not available.\n\nVisit GitHub for the full changelog."
-            GLib.idle_add(release_notes.show, notes)
-
-        thread = threading.Thread(target=fetch_notes, daemon=True)
-        thread.start()
+        """Open About TuxTalk (about_dialog.py)."""
+        from .about_dialog import show_about_dialog
+        show_about_dialog()
 
     def check_for_updates_clicked(self, _):
-        """Check for updates and show results dialog."""
-        from . import update_checker
-
-        # Create progress dialog
-        progress_dialog = message_dialog(
-            closable=False,
-            message_type=Gtk.MessageType.INFO,
-            buttons=Gtk.ButtonsType.NONE,
-            text="Checking for Updates..."
-        )
-        progress_dialog.format_secondary_text("Connecting to GitHub...")
-        progress_dialog.set_position(Gtk.WindowPosition.CENTER)
-        progress_dialog.set_keep_above(True)
-        progress_dialog.show_all()
-        result_holder = [None]
-
-        def do_check():
-            """Background thread to check for updates."""
-            try:
-                result_holder[0] = update_checker.check_for_updates()
-            except Exception as e:
-                logger.error(f"Update check raised: {e}", exc_info=True)
-                result_holder[0] = {"success": False, "error": str(e)}
-            r = result_holder[0] or {}
-            logger.debug(f"Update check done: success={r.get('success')}, "
-                         f"update_available={r.get('update_available')}, error={r.get('error')}")
-            GLib.idle_add(show_result)
-
-        def show_result():
-            """Show the result in the main thread."""
-            progress_dialog.destroy()
-            if self._quitting:              # the check outlasted a Quit
-                return False
-            result = result_holder[0]
-            if not result or not result.get("success"):
-                # Error checking for updates
-                error_dialog = message_dialog(
-                    message_type=Gtk.MessageType.ERROR,
-                    buttons=Gtk.ButtonsType.OK,
-                    text="Update Check Failed"
-                )
-                error_msg = result.get("error", "Unknown error") if result else "Unknown error"
-                error_dialog.format_secondary_text(error_msg)
-                error_dialog.set_position(Gtk.WindowPosition.CENTER)
-                error_dialog.set_keep_above(True)
-                error_dialog.connect("response", lambda d, _r: d.destroy())
-                error_dialog.show_all()
-                error_dialog.present()
-                return
-
-            if not self._quitting:      # the check outlasted a Quit
-                self._show_update_result_dialog(result)
-
-        # Start background check
-        thread = threading.Thread(target=do_check, daemon=True)
-        thread.start()
+        """Check for Updates in the menu (update_ui.check_for_updates)."""
+        update_ui.check_for_updates(self._show_update_result_dialog, lambda: self._quitting)
 
     def _show_update_result_dialog(self, result):
-        """Show the result of an update check for the app itself.
-
-        GNOME extension updates are installed from Preferences → Updates &
-        Backup instead (see _show_update_notification).
-        """
-        from . import update_checker
-
-        has_update = result.get("update_available", False)
-        current = result.get("current_version", "unknown")
-        latest = result.get("latest_version", "unknown")
-        release = result.get("release", {})
-
-        # How TuxTalk was installed decides HOW to update. Only a self-managed
-        # AppImage can be swapped in place; .deb/.rpm/AUR/Flatpak users must use
-        # their package manager, so we show instructions instead of downloading
-        # and running an AppImage (which fails, e.g. missing libfuse.so.2).
-        install_type = update_checker.get_install_type()
-        guidance = update_checker.get_update_guidance(
-            install_type, latest, release.get("html_url", ""))
-
-        if not has_update:
-            # No AppImage update available
-            dialog = message_dialog(
-                message_type=Gtk.MessageType.INFO,
-                buttons=Gtk.ButtonsType.OK,
-                text="You're Up to Date!"
-            )
-            message = f"<b>TuxTalk {current}</b> is the latest version."
-            dialog.format_secondary_markup(message)
-            dialog.set_position(Gtk.WindowPosition.CENTER)
-            dialog.set_keep_above(True)
-            # Non-blocking (destroy on response) rather than run(), as in About.
-            dialog.connect("response", lambda d, _r: d.destroy())
-            dialog.show_all()
-            dialog.present()
-            return
-
-        # Updates available - show detailed dialog.
-        # NON-modal and NOT keep-above on purpose: the auto-check pops this on
-        # launch, and a modal, always-on-top dialog grabs input and floats over
-        # the About/Help/Voice windows so they open hidden behind it. The
-        # Preferences window works precisely because it is neither.
-        dialog = Gtk.Dialog(title="Update Available")
-        dialog.set_default_size(450, 350)
-        dialog.set_position(Gtk.WindowPosition.CENTER)
-
-        content = dialog.get_content_area()
-        content.set_spacing(10)
-        content.set_margin_start(15)
-        content.set_margin_end(15)
-        content.set_margin_top(15)
-        content.set_margin_bottom(10)
-
-        # Header
-        header = Gtk.Label()
-        header.set_markup("<big><b>Update Available!</b></big>")
-        header.set_halign(Gtk.Align.START)
-        content.pack_start(header, False, False, 0)
-
-        # Version info
-        version_label = Gtk.Label()
-        version_label.set_markup(
-            f"<b>TuxTalk:</b> {current} → <b>{latest}</b>"
-        )
-        version_label.set_halign(Gtk.Align.START)
-        content.pack_start(version_label, False, False, 5)
-
-        # For package/AUR/Flatpak installs, explain how to update and show the
-        # exact command (selectable so the user can copy it). No auto-download.
-        if not guidance["can_auto_update"]:
-            how_label = Gtk.Label()
-            how_label.set_line_wrap(True)
-            how_label.set_halign(Gtk.Align.START)
-            how_label.set_markup(guidance["message"])
-            content.pack_start(how_label, False, False, 5)
-            if guidance.get("command"):
-                cmd_entry = Gtk.Entry()
-                cmd_entry.set_text(guidance["command"])
-                cmd_entry.set_editable(False)
-                cmd_entry.get_style_context().add_class("monospace")
-                content.pack_start(cmd_entry, False, False, 0)
-
-        # Release notes in scrolled window
-        if release.get("body"):
-            notes_label = Gtk.Label(label="Release Notes:")
-            notes_label.set_halign(Gtk.Align.START)
-            notes_label.set_margin_top(10)
-            content.pack_start(notes_label, False, False, 0)
-
-            scroll = Gtk.ScrolledWindow()
-            scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-            scroll.set_min_content_height(150)
-
-            scroll.add(notes_text.NotesView(release.get("body", "")).view)
-
-            content.pack_start(scroll, True, True, 0)
-
-        # Buttons
-        dialog.add_button("Close", Gtk.ResponseType.CLOSE)
-
-        if release.get("html_url"):
-            view_btn = dialog.add_button("View on GitHub", Gtk.ResponseType.ACCEPT)
-
-        # Route each install type to the right update action:
-        #  appimage_swap  -> download the AppImage and swap it in place
-        #  pkexec_package -> download the .rpm/.deb and install it as root
-        #  manual         -> just point to the GitHub release page
-        method = guidance["update_method"]
-        if has_update and method == "appimage_swap" and release.get("appimage_url"):
-            btn = dialog.add_button("Download & Install", Gtk.ResponseType.YES)
-            btn.get_style_context().add_class("suggested-action")
-        elif has_update and method == "pkexec_package":
-            btn = dialog.add_button("Download & Install", Gtk.ResponseType.APPLY)
-            btn.get_style_context().add_class("suggested-action")
-        elif has_update and release.get("html_url"):
-            view_btn.get_style_context().add_class("suggested-action")
-
-        # Non-blocking rather than run(), as in About: the response callback
-        # handles the buttons.
-        def _on_update_response(dlg, response):
-            if response == Gtk.ResponseType.ACCEPT:
-                update_checker.open_release_page(release.get("html_url", ""))
-                dlg.destroy()
-            elif response == Gtk.ResponseType.YES:
-                dlg.destroy()
-                self._download_update(release)
-            elif response == Gtk.ResponseType.APPLY:
-                dlg.destroy()
-                self._download_and_install_package(release, install_type)
-            else:
-                dlg.destroy()
-        dialog.connect("response", _on_update_response)
-        dialog.show_all()
-        dialog.present()
+        """What an update check found, with Download & Install where this
+        install can take the update itself (update_ui.show_update_result)."""
+        update_ui.show_update_result(result, self._download_update,
+                                     self._download_and_install_package)
 
     def _download_update(self, release):
-        """Download and install the AppImage update behind the progress window
-        Preferences uses too (progress_window), then restart onto it. Nothing
-        once Quit has begun, and nothing installed if Quit began during the
-        download; an install under way finishes (_install_not_cut_off)."""
+        """Download & Install for a self-managed AppImage, then restart onto
+        it. Nothing once Quit has begun, and nothing installed if Quit began
+        during the download; an install under way finishes (_install_not_cut_off)."""
         if self._quitting:
             return
-        from . import update_checker
-        from .progress_window import run_with_progress
-        url = release.get("appimage_url")
-        if not url:
-            show_message(None, Gtk.MessageType.ERROR, "Download Error",
-                         "Could not find download URL.", keep_above=True)
-            return
-
-        def work(progress):
-            """On its own thread: the download, then the install; (installed, why not)."""
-            path = update_checker.download_update(
-                url, release.get("appimage_name", "TuxTalk-update.AppImage"), progress,
-                checksums_url=release.get("checksums_url"))
-            if not path:
-                return False, ("The download could not be completed.\n"
-                               "Please try again or download manually from GitHub.")
-            if self._quitting:
-                return False, None
-            progress("Installing update...", 90)
-            return self._install_not_cut_off(
-                lambda: update_checker.install_appimage_update(path, progress))
-
-        def finish(result):
-            success, message = result or (False, "Something TuxTalk didn't expect went "
-                                                 "wrong; the log has the details.")
-            logger.info(f"AppImage update: installed={success}, {message}")
-            if success:
-                self.restart_app()
-            elif message and not self._quitting:
-                show_message(None, Gtk.MessageType.ERROR, "Update Failed", message,
-                             keep_above=True)
-
-        run_with_progress(None, "Updating TuxTalk", "Starting download...", work, finish)
+        update_ui.run_appimage_update(None, release, self.restart_app,
+                                      quitting=lambda: self._quitting,
+                                      install=self._install_not_cut_off)
 
     def _download_and_install_package(self, release, install_type):
         """Download the correct .rpm/.deb and install it as root via pkexec,
         then offer to restart. Delegates to the shared update_ui flow."""
         if self._quitting:
             return
-        from . import update_ui
         update_ui.run_package_update(release, install_type, restart_callback=self.restart_app,
                                      quitting=lambda: self._quitting)
 
     def auto_check_for_updates(self):
-        """
-        Automatically check for updates on startup (once per day).
-
-        Silently checks in the background. An app update opens the same
-        result window as a manual check; an extension update only a
-        notification.
-        """
-        from . import update_checker
-        from .config import load_config, record_update_check
-
-        config = load_config()
-
-        # Check if auto-check is enabled
-        if not config.auto_check_updates:
-            logger.debug("Auto-update check disabled in config")
-            return False
-
-        # Check if we already checked today
-        if not update_checker.should_check_today(config.last_update_check):
-            logger.debug("Already checked for updates today")
-            return False
-
-        logger.info("Auto-checking for updates...")
-
-        def do_check():
-            """Background thread to check for updates."""
-            try:
-                result = update_checker.check_for_updates()
-
-                # Saved against a fresh read (`config` is from before the ~30 s
-                # check) and on GTK's thread, where the tray saves its own
-                # settings: neither undoes a change made meanwhile.
-                GLib.idle_add(record_update_check, update_checker.get_current_timestamp())
-
-                if result and result.get("success"):
-                    has_update = result.get("update_available", False)
-                    has_ext_update = result.get("extension_update", False)
-
-                    if has_update:
-                        # Show the SAME actionable dialog the manual check uses
-                        # (Download & Install / View on GitHub) — persistent, and
-                        # identical across the GTK tray and the GNOME extension.
-                        # No surprise Preferences window.
-                        GLib.idle_add(lambda: None if self._quitting
-                                      else self._show_update_result_dialog(result))
-                    elif has_ext_update:
-                        # Extension-only update: a quiet notification, no windows.
-                        GLib.idle_add(self._show_update_notification)
-                    else:
-                        logger.info("No updates available")
-                else:
-                    logger.debug(f"Update check failed: {result.get('error', 'unknown')}")
-            except Exception as e:
-                logger.error(f"Error in auto-update check: {e}")
-
-        # Run in background thread
-        thread = threading.Thread(target=do_check, daemon=True)
-        thread.start()
-        return False  # Don't repeat GLib timeout
-
-    def _show_update_notification(self):
-        """Tell the user a GNOME extension update is out. Check for Updates
-        covers only the app, so point to the tab that installs it."""
-        from .notify import notify
-        notify("GNOME extension update available",
-               "Open Preferences → Updates & Backup to install it.")
-        logger.info("Showed extension update notification")
-        return False
-
-    def _build_history_submenu(self):
-        """Build the Recent Dictations submenu and keep it current.
-
-        The tray menu is built once, so the submenu is refilled whenever the
-        dictation service updates the history file, watched with a GIO file
-        monitor (inotify; the file lives on tmpfs, see history.py).
-        """
-        from gi.repository import Gio
-        from .history import _history_path
-
-        self.history_menu = Gtk.Menu()
-        item = Gtk.MenuItem(label="Recent Dictations")
-        item.set_submenu(self.history_menu)
-        self._refresh_history_menu()
-
-        if not getattr(self, "_history_monitor", None):
-            try:
-                self._history_monitor = Gio.File.new_for_path(
-                    _history_path()).monitor_file(Gio.FileMonitorFlags.NONE, None)
-                self._history_monitor.connect(
-                    "changed", lambda *_: GLib.idle_add(self._refresh_history_menu))
-            except Exception as e:
-                logger.warning(f"Could not watch dictation history: {e}")
-        return item
-
-    def _refresh_history_menu(self):
-        """Refill the Recent Dictations submenu from history.py."""
-        self._fill_history_menu(self.history_menu)
-        return False  # one-shot when scheduled through GLib.idle_add
-
-    def _fill_history_menu(self, menu):
-        """Fill *menu* with the recent dictations: the tray's submenu, and the
-        menu window's popup (menu_window.py)."""
-        from .history import get_entries, preview
-
-        for child in menu.get_children():
-            menu.remove(child)
-
-        entries = get_entries()
-        if not entries:
-            empty = Gtk.MenuItem(label="No dictations yet")
-            empty.set_sensitive(False)
-            menu.append(empty)
-        else:
-            hint = Gtk.MenuItem(label="Hover to read one, click it to copy, then press Ctrl+V")
-            hint.set_sensitive(False)
-            menu.append(hint)
-            from .config import load_config
-            from .history import paste_last_hint
-            paste_hint = paste_last_hint(getattr(load_config(), "paste_last_hotkey", ""))
-            if paste_hint:
-                hint2 = Gtk.MenuItem(label=paste_hint)
-                hint2.set_sensitive(False)
-                menu.append(hint2)
-            for index, text in enumerate(entries):
-                # Each entry opens a submenu with the full text on hover. A
-                # tooltip would be simpler, but KDE draws this menu itself from
-                # a D-Bus description that has no tooltips, so it would never
-                # show. Submenus work on every desktop.
-                entry = Gtk.MenuItem(label=preview(text))
-                entry.set_submenu(self._build_history_entry_submenu(text, index))
-                menu.append(entry)
-            menu.append(Gtk.SeparatorMenuItem())
-            clear_item = Gtk.MenuItem(label="Clear History")
-            clear_item.connect("activate", lambda _w: self._clear_history())
-            menu.append(clear_item)
-
-        menu.show_all()
-
-    def _build_history_entry_submenu(self, text, index):
-        """The hover view of one recent dictation: its full text, then Copy
-        and Fix a Word (which opens on this dictation, *index* in history).
-
-        The text lines are left clickable (copying too) rather than greyed
-        out, because disabled items are drawn dimmed and are hard to read.
-        """
-        from .history import full_text_lines
-
-        submenu = Gtk.Menu()
-        for line in full_text_lines(text):
-            line_item = Gtk.MenuItem(label=line)
-            line_item.connect("activate", lambda _w, t=text: self._copy_history_entry(t))
-            submenu.append(line_item)
-        submenu.append(Gtk.SeparatorMenuItem())
-        copy_item = Gtk.MenuItem(label="Copy")
-        copy_item.connect("activate", lambda _w, t=text: self._copy_history_entry(t))
-        submenu.append(copy_item)
-        fix_item = Gtk.MenuItem(label="Fix a Word...")
-        fix_item.connect("activate", lambda _w, i=index: self.show_fix_word_dialog(i))
-        submenu.append(fix_item)
-        return submenu
+        """The once-a-day update check at start-up (update_ui)."""
+        return update_ui.auto_check_for_updates(self._show_update_result_dialog,
+                                                lambda: self._quitting)
 
     def show_fix_word_dialog(self, index=0):
         """Open Fix a Word on recent dictation *index* (0 = newest).
@@ -1204,166 +585,14 @@ class DictationTray(ServiceLifecycle, PresetMenu):
         show_fix_word_dialog(index, copy_text=self._copy_history_entry)
         return False  # one-shot when scheduled through GLib.idle_add
 
-    def _copy_history_entry(self, text):
-        """Put a recent dictation on the clipboard (see clipboard.py)."""
-        from .clipboard import copy_text
-        if copy_text(text):
-            logger.info(f"Copied a recent dictation to the clipboard ({len(text)} chars)")
-
-    def _clear_history(self):
-        from .history import clear
-        clear()
-        self._refresh_history_menu()
-
-    def build_menu(self):
-        """Build the complete GTK tray menu.
-
-        Menu order is kept in sync with the GNOME extension (see extension.js).
-        """
-        menu = Gtk.Menu()
-
-        # Apply dark-theme CSS
-        css_provider = Gtk.CssProvider()
-        css_provider.load_from_data(_MENU_CSS)
-        Gtk.StyleContext.add_provider_for_screen(
-            Gdk.Screen.get_default(),
-            css_provider,
-            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
-        )
-
-        self.service_toggle = DictationItem(self.toggle_service)
-        self.engine_item = Gtk.MenuItem(label="Loading the speech model...")
-        self.engine_item.set_sensitive(False)
-
-        # Submenus
-        self.performance_menu_item = self._build_performance_submenu()
-        history_menu_item = self._build_history_submenu()
-        # Top level, right under Recent Dictations, so it is easy to find.
-        fix_word_item = Gtk.MenuItem(label="Fix a Word...")
-        fix_word_item.connect("activate", lambda _w: self.show_fix_word_dialog(0))
-        transcribe_item = Gtk.MenuItem(label="Transcribe a File...")
-        transcribe_item.connect("activate", self.open_transcribe_window)
-
-        # For when something's wrong, so it sits with Help, not at the top.
-        restart_item = Gtk.MenuItem(label="Restart Service")
-        restart_item.connect("activate", self.restart_service)
-
-        # Action items. Preferences alone carries a gear so it is easy to spot.
-        prefs_item = self._gear_menu_item("Preferences...")
-        voice_cmds_item = Gtk.MenuItem(label="Voice Commands...")
-        stats_item = Gtk.MenuItem(label="Your Stats...")
-        help_item = Gtk.MenuItem(label="Help...")
-        about_item = Gtk.MenuItem(label="About TuxTalk...")
-        updates_item = Gtk.MenuItem(label="Check for Updates...")
-        quit_item = Gtk.MenuItem(label="Quit TuxTalk")
-        prefs_item.connect("activate", self.open_preferences)
-        voice_cmds_item.connect("activate", self.show_voice_commands)
-        stats_item.connect("activate", self.open_preferences_stats)
-        help_item.connect("activate", self.show_help)
-        about_item.connect("activate", self.show_about_dialog)
-        updates_item.connect("activate", self.check_for_updates_clicked)
-        quit_item.connect("activate", self.quit_app)
-
-        # Assemble in exact same order as GNOME extension
-        for item in [
-            self.service_toggle,
-            history_menu_item,
-            fix_word_item,
-            transcribe_item,
-            Gtk.SeparatorMenuItem(),
-            self.engine_item,
-            self.performance_menu_item,
-            Gtk.SeparatorMenuItem(),
-            prefs_item, voice_cmds_item, stats_item, help_item, about_item, updates_item,
-            restart_item,
-            Gtk.SeparatorMenuItem(),
-            quit_item,
-        ]:
-            menu.append(item)
-        menu.show_all()
-
-        self.update_menu_display()
-        return menu
-    
-    @staticmethod
-    def _gear_menu_item(label):
-        """A menu item with the desktop's settings gear in front of it.
-
-        The tray menu is drawn by the desktop, not by GTK: AppIndicator sends
-        only the label and an icon NAME, so bold or colour can't survive, but
-        an icon does. "emblem-system-symbolic" is the round gear in both
-        Breeze (KDE) and Adwaita (GNOME, Mint); KDE's "configure" is sliders.
-        """
-        name = themed_icon("emblem-system-symbolic", "preferences-system-symbolic")
-        if name is None:
-            return Gtk.MenuItem(label=label)
-        item = Gtk.ImageMenuItem(label=label)
-        item.set_image(Gtk.Image.new_from_icon_name(name, Gtk.IconSize.MENU))
-        item.set_always_show_image(True)
-        return item
-
-    def refresh_menu(self):
-        """Rebuild the tray menu (after onboarding has changed the setup)."""
-        self.indicator.set_menu(self.build_menu())
-
-
-def _refresh_kde_menu_cache():
-    """Rebuild KDE's launcher cache so a new TuxTalk menu entry shows at once."""
-    for tool in ("kbuildsycoca6", "kbuildsycoca5"):
-        try:
-            subprocess.run([tool], capture_output=True, timeout=15)
-            logger.info(f"KDE menu cache refreshed ({tool})")
-            return
-        except FileNotFoundError:
-            continue  # not this KDE version, or not KDE at all
-        except Exception as e:
-            logger.debug(f"Could not refresh KDE menu cache: {e}")
-            return
-
-
-def _show_rename_notice_once():
-    """'TalkType is now TuxTalk', once, after this start converted an old
-    TalkType install (rename_migration leaves a marker for it). It is cleared
-    only once the message has been seen, so quitting first just shows it on
-    the next start. Never during dictation: only here, at startup."""
-    from . import config, rename_migration
-    folder = os.path.dirname(config.CONFIG_PATH)
-    if not rename_migration.notice_pending(folder):
-        return
-    dialog = message_dialog(
-        message_type=Gtk.MessageType.INFO,
-        buttons=Gtk.ButtonsType.NONE,
-        text="TalkType is now TuxTalk",
-    )
-    dialog.format_secondary_text("\n\n".join((
-        "Same app, new name. Your settings, models, snippets and stats all came "
-        "across. Look for TuxTalk in your app menu from now on.",
-        "Why the change: another company owns the name TalkType for dictation "
-        "software.")))
-    dialog.add_button("Got it", Gtk.ResponseType.OK)
-    dialog.set_position(Gtk.WindowPosition.CENTER)
-    dialog.set_keep_above(True)
-    dialog.run()
-    dialog.destroy()
-    rename_migration.notice_shown(folder)
-    logger.info("Rename to TuxTalk: showed the one-time notice")
-
-
 def main():
+    """The tray process: what comes before the tray (the command line, the
+    single-instance lock, an old install adopted), the tray, then first-run
+    setup or the dictation service, and GTK's main loop."""
     from . import desktop_identity, ui_style
     desktop_identity.apply()        # TuxTalk's icon on its windows, not KDE's generic one
     ui_style.prepare_windows()   # emoji that show, buttons clear of panels and docks
-    # tuxtalk --toggle/--start/--stop (control.py). With TuxTalk running this
-    # asks it and exits; otherwise this process starts TuxTalk and the request
-    # waits for the speech model below.
-    from . import control
-    command = control.parse_action(sys.argv[1:])
-    if command:
-        tray_instance.run_command_line(command)
-    # tuxtalk --open NAME / --quit (the launcher's right-click shortcuts).
-    open_window = control.parse_open(sys.argv[1:])
-    if open_window:
-        tray_instance.open_from_command_line(open_window)
+    command, open_window = _handle_command_line()
 
     # Before anything opens the shared D-Bus connection: one opened without
     # the GLib main loop can't export the tray's D-Bus service later.
@@ -1376,29 +605,8 @@ def main():
 
     # An old TalkType Flatpak can't see the lock above and would type every
     # dictation twice. Checked on a thread so a slow flatpak never delays the tray.
-    threading.Thread(target=_handle_old_talktype_flatpak, daemon=True).start()
-
-    # The TalkType -> TuxTalk folder move ran at package import, before any
-    # logger existed; record what it did now (see rename_migration.py).
-    from . import MIGRATION_LOG
-    for line in MIGRATION_LOG:
-        logger.info(f"Rename to TuxTalk: {line}")
-    if not os.environ.get("FLATPAK_ID"):
-        from . import config, rename_migration
-        try:
-            for line in rename_migration.adopt_old_install(dev=config.DEV_MODE):
-                logger.info(f"Rename to TuxTalk: {line}")
-            # A dock or favourites list that pinned the old menu entry would
-            # show a blank icon; rename those once (a marker file records it).
-            marker = os.path.join(os.path.dirname(config.CONFIG_PATH), ".launchers-renamed")
-            for line in rename_migration.repin_launchers(marker):
-                logger.info(f"Rename to TuxTalk: {line}")
-        except Exception as e:      # never stop the tray from starting
-            logger.warning(f"Rename to TuxTalk: could not move the launchers: {e}")
-        # After the rename, which treats an existing tuxtalk.desktop as done.
-        from .update_checker import add_launcher_actions, create_hidden_desktop_entry
-        create_hidden_desktop_entry()   # TuxTalk's icon on first-run windows
-        add_launcher_actions()          # right-click shortcuts for older launchers
+    threading.Thread(target=startup_notices.handle_old_talktype_flatpak, daemon=True).start()
+    _adopt_old_install()
 
     # A copy of the settings to roll back to (Preferences → Advanced →
     # Restore Earlier Settings), taken before this version touches them.
@@ -1411,39 +619,8 @@ def main():
     tray = DictationTray()
     tray.quit_on_sigterm()
 
-    # Check if we just updated and show notification
-    def check_and_show_update_notification():
-        try:
-            from . import update_checker
-            from . import __version__
-            previous_version = update_checker.check_just_updated()
-            if previous_version:
-                # Show a brief notification that update completed
-                dialog = message_dialog(
-                    message_type=Gtk.MessageType.INFO,
-                    buttons=Gtk.ButtonsType.OK,
-                    text="Update Complete!"
-                )
-                dialog.format_secondary_markup(
-                    f"TuxTalk has been updated to <b>v{__version__}</b>\n\n"
-                    f"The update was installed automatically and "
-                    f"TuxTalk has restarted with the new version."
-                )
-                dialog.set_position(Gtk.WindowPosition.CENTER)
-                dialog.set_keep_above(True)
-                dialog.run()
-                dialog.destroy()
-        except Exception as e:
-            logger.debug(f"Error checking for update notification: {e}")
-        # After "Update Complete!", never on top of it.
-        try:
-            _show_rename_notice_once()
-        except Exception as e:
-            logger.warning(f"Could not show the rename notice: {e}")
-        return False  # Don't repeat
-
-    # Schedule update notification check after tray is up
-    GLib.timeout_add(500, check_and_show_update_notification)
+    # "Update Complete!" and the rename notice, once the tray is up.
+    GLib.timeout_add(500, startup_notices.show_after_start)
 
     # A first-run hotkey test that was killed mid-way leaves GNOME's Alt+F8 and
     # Alt+F7 cleared; put them back.
@@ -1451,93 +628,14 @@ def main():
         from .gnome_keybindings import restore_left_over
         restore_left_over()
     except Exception as e:
-        logger.debug(f"Could not check GNOME keybindings: {e}")
+        logger.info(f"Could not check GNOME keybindings: {e}")
 
-    # Check for first run and show welcome dialog if applicable
     try:
-        import tuxtalk.cuda_helper as cuda_helper
-        from tuxtalk.welcome_dialog import show_welcome_and_install
-
-        # Only show welcome dialog on first tray launch (not for prefs)
+        from . import cuda_helper
         if cuda_helper.is_first_run():
-            logger.info("First run detected - starting onboarding")
-            if command:
-                control.report("setup")     # the welcome screens come first
-            # Set flag BEFORE scheduling to prevent any auto-start during onboarding
-            tray.onboarding_in_progress = True
-
-            def show_first_run_setup():
-                # Show unified welcome dialog with all setup options. An error
-                # in onboarding counts as a cancel, so the service still starts
-                # and the welcome comes back next launch.
-                try:
-                    result = show_welcome_and_install()
-                except Exception:
-                    logger.error("Onboarding failed", exc_info=True)
-                    result = None
-
-                # Unsupported desktop (no GlobalShortcuts portal): the user can only
-                # quit — the app cannot function here, so exit instead of starting a
-                # dead service. First run is left unmarked so a later install on a
-                # supported desktop still onboards.
-                if result and result.get('quit'):
-                    logger.info("Onboarding: dictation hotkey unsupported on this desktop - quitting")
-                    tray.quit_app(None)
-                    return False
-
-                # Only mark first run complete if user completed the wizard
-                if result and result.get('continue'):
-                    try:
-                        cuda_helper.mark_first_run_complete()
-                    except Exception as e:
-                        logger.error(f"Failed to mark first run complete: {e}")
-                    # No tray and no extension running yet: without this
-                    # the user would see no menu at all.
-                    GLib.timeout_add(2500, tray.show_menu_window_if_no_tray)
-                else:
-                    logger.info("User cancelled onboarding - will show again next launch")
-
-                # Refresh menu after installations
-                tray.refresh_menu()
-
-                # Onboarding complete - NOW allow service to start
-                tray.onboarding_in_progress = False
-                logger.info("Onboarding complete - starting service")
-
-                # Refresh KDE menu cache so TuxTalk shows in start menu immediately
-                # This must run AFTER the .desktop file is created by the welcome dialog.
-                # On a thread: the rebuild can take seconds and would freeze the menu.
-                threading.Thread(target=_refresh_kde_menu_cache, daemon=True).start()
-
-                tray._auto_start_service(500)
-                return False  # Don't repeat
-
-            tray.onboard_once_service_gone(show_first_run_setup)
+            _start_first_run(tray, command)
         else:
-            # Not first run, auto-start immediately
-            logger.info("Not first run - auto-starting service")
-            # A login entry from setups before 0.10.1 may still launch an old
-            # AppImage from Downloads; point it at the installed copy.
-            # Older entries also still carry a stale description.
-            try:
-                from .autostart import (repair_stale_appimage_autostart,
-                                        refresh_autostart_comment)
-                repair_stale_appimage_autostart()
-                refresh_autostart_comment()
-            except Exception as e:
-                logger.debug(f"Could not check the login entry: {e}")
-            if command:
-                # The auto-start below starts the service; the recording
-                # waits until its model is loaded.
-                status = tray._waiting_start.apply(command)
-                logger.info(f"Started with --{command}: {status}")
-                control.report(status)
-            tray._auto_start_service(1000)
-            if open_window and open_window != "quit":
-                # Started by --open (a launcher shortcut) with nothing running.
-                GLib.timeout_add(1500, tray.open_window, open_window)
-            # Check for updates after a delay (don't interfere with startup)
-            GLib.timeout_add(5000, tray.auto_check_for_updates)
+            _start_normally(tray, command, open_window)
     except Exception as e:
         # If any error, only auto-start if NOT during onboarding
         logger.error(f"Error in first run setup: {e}")
@@ -1545,6 +643,149 @@ def main():
             tray._auto_start_service(1000)
 
     Gtk.main()
+
+
+def _handle_command_line():
+    """tuxtalk --toggle/--start/--stop and --open NAME/--quit (control.py;
+    the last two are the launcher's right-click shortcuts). With TuxTalk
+    running these ask it and exit; otherwise this process starts TuxTalk and
+    they wait for it. (The recording asked for, the window to open), either
+    None."""
+    from . import control
+    command = control.parse_action(sys.argv[1:])
+    if command:
+        tray_instance.run_command_line(command)
+    open_window = control.parse_open(sys.argv[1:])
+    if open_window:
+        tray_instance.open_from_command_line(open_window)
+    return command, open_window
+
+
+def _adopt_old_install():
+    """What the TalkType -> TuxTalk rename did and still has to do: its log
+    lines, the old launchers moved and repinned, then the menu entries this
+    version needs. Outside a Flatpak, whose launchers its package owns."""
+    # The folder move ran at package import, before any logger existed;
+    # record what it did now (see rename_migration.py).
+    from . import MIGRATION_LOG
+    for line in MIGRATION_LOG:
+        logger.info(f"Rename to TuxTalk: {line}")
+    if os.environ.get("FLATPAK_ID"):
+        return
+    from . import config, rename_migration
+    try:
+        for line in rename_migration.adopt_old_install(dev=config.DEV_MODE):
+            logger.info(f"Rename to TuxTalk: {line}")
+        # A dock or favourites list that pinned the old menu entry would
+        # show a blank icon; rename those once (a marker file records it).
+        marker = os.path.join(os.path.dirname(config.CONFIG_PATH), ".launchers-renamed")
+        for line in rename_migration.repin_launchers(marker):
+            logger.info(f"Rename to TuxTalk: {line}")
+    except Exception as e:      # never stop the tray from starting
+        logger.warning(f"Rename to TuxTalk: could not move the launchers: {e}")
+    # After the rename, which treats an existing tuxtalk.desktop as done.
+    from .update_checker import add_launcher_actions, create_hidden_desktop_entry
+    create_hidden_desktop_entry()   # TuxTalk's icon on first-run windows
+    add_launcher_actions()          # right-click shortcuts for older launchers
+
+
+def _start_first_run(tray, command):
+    """First run: the welcome screens once no dictation service runs, and
+    the service only after them."""
+    logger.info("First run detected - starting onboarding")
+    if command:
+        from . import control
+        control.report("setup")     # the welcome screens come first
+    # Set flag BEFORE scheduling to prevent any auto-start during onboarding
+    tray.onboarding_in_progress = True
+    tray.onboard_once_service_gone(lambda: _show_first_run_setup(tray))
+
+
+def _show_first_run_setup(tray):
+    """The welcome screens with all setup options, then what their answer
+    asks for. An error in onboarding counts as a cancel, so the service
+    still starts and the welcome comes back next launch. False, for its
+    GLib timer."""
+    try:
+        from tuxtalk.welcome_dialog import show_welcome_and_install
+        result = show_welcome_and_install()
+    except Exception:
+        logger.error("Onboarding failed", exc_info=True)
+        result = None
+    _finish_first_run(tray, result)
+    return False
+
+
+def _finish_first_run(tray, result):
+    """After the welcome screens (*result*, None when they failed): setup
+    marked done if it was finished, the menu rebuilt and the service
+    started; or quit, on a desktop TuxTalk's hotkey can't work on."""
+    # Unsupported desktop (no GlobalShortcuts portal): the user can only
+    # quit — the app cannot function here, so exit instead of starting a
+    # dead service. First run is left unmarked so a later install on a
+    # supported desktop still onboards.
+    if result and result.get('quit'):
+        logger.info("Onboarding: dictation hotkey unsupported on this desktop - quitting")
+        tray.quit_app(None)
+        return
+
+    # Only mark first run complete if user completed the wizard
+    if result and result.get('continue'):
+        from . import cuda_helper
+        try:
+            cuda_helper.mark_first_run_complete()
+        except Exception as e:
+            logger.error(f"Failed to mark first run complete: {e}")
+        # No tray and no extension running yet: without this
+        # the user would see no menu at all.
+        GLib.timeout_add(2500, tray.show_menu_window_if_no_tray)
+    else:
+        logger.info("User cancelled onboarding - will show again next launch")
+
+    # Refresh menu after installations
+    tray.refresh_menu()
+
+    # Onboarding complete - NOW allow service to start
+    tray.onboarding_in_progress = False
+    logger.info("Onboarding complete - starting service")
+
+    # Refresh KDE menu cache so TuxTalk shows in start menu immediately
+    # This must run AFTER the .desktop file is created by the welcome dialog.
+    # On a thread: the rebuild can take seconds and would freeze the menu.
+    threading.Thread(target=menu_cache.refresh_menu_cache, daemon=True).start()
+
+    tray._auto_start_service(500)
+
+
+def _start_normally(tray, command, open_window):
+    """Not the first run: the service starts at once, then the recording
+    (*command*) or window (*open_window*) the command line asked for, and
+    the daily update check after a delay."""
+    logger.info("Not first run - auto-starting service")
+    # A login entry from setups before 0.10.1 may still launch an old
+    # AppImage from Downloads; point it at the installed copy.
+    # Older entries also still carry a stale description.
+    try:
+        from .autostart import (repair_stale_appimage_autostart,
+                                refresh_autostart_comment)
+        repair_stale_appimage_autostart()
+        refresh_autostart_comment()
+    except Exception as e:
+        logger.info(f"Could not check the login entry: {e}")
+    if command:
+        # The auto-start below starts the service; the recording
+        # waits until its model is loaded.
+        from . import control
+        status = tray._waiting_start.apply(command)
+        logger.info(f"Started with --{command}: {status}")
+        control.report(status)
+    tray._auto_start_service(1000)
+    if open_window and open_window != "quit":
+        # Started by --open (a launcher shortcut) with nothing running.
+        GLib.timeout_add(1500, tray.open_window, open_window)
+    # Check for updates after a delay (don't interfere with startup)
+    GLib.timeout_add(5000, tray.auto_check_for_updates)
+
 
 if __name__ == "__main__":
     main()

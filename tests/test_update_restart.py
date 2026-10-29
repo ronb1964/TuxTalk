@@ -303,7 +303,7 @@ def test_a_failed_copy_points_login_and_the_menu_back_at_the_running_appimage(
                         calls.append(command) or True)
     monkeypatch.setattr(uc, "DESKTOP_FILE_PATH", str(tmp_path / "apps" / "tuxtalk.desktop"))
     monkeypatch.setattr(uc, "_install_app_icon", lambda: "tuxtalk")
-    monkeypatch.setattr(uc, "_refresh_desktop_menu_cache", lambda: None)
+    monkeypatch.setattr(uc.menu_cache, "refresh_menu_cache", lambda: None)
     running = str(tmp_path / "Downloads" / "TuxTalk-v0.19.0-x86_64.AppImage")
     uc.point_at_running_appimage(running)
     assert calls == [running]           # by name: the installed copy may be an older one
@@ -315,7 +315,7 @@ def test_a_launcher_for_a_path_with_a_space_still_opens(monkeypatch, tmp_path):
     right-click shortcuts were cut at the space and opened nothing."""
     monkeypatch.setattr(uc, "DESKTOP_FILE_PATH", str(tmp_path / "apps" / "tuxtalk.desktop"))
     monkeypatch.setattr(uc, "_install_app_icon", lambda: "tuxtalk")
-    monkeypatch.setattr(uc, "_refresh_desktop_menu_cache", lambda: None)
+    monkeypatch.setattr(uc.menu_cache, "refresh_menu_cache", lambda: None)
     running = str(tmp_path / "Downloads" / "TuxTalk (1).AppImage")
     assert uc.create_desktop_launcher(running)[0]
     lines = (tmp_path / "apps" / "tuxtalk.desktop").read_text().splitlines()
@@ -482,6 +482,31 @@ def test_tray_download_install_restarts_through_restart_app(monkeypatch, idle_qu
     idle_queue(lambda: len(steps) >= 2)
     install = ("install", "/updates/TuxTalk.AppImage", False)
     assert steps == [install, "restart" if installed else "error shown"]
+
+
+def test_preferences_says_why_its_appimage_update_failed(monkeypatch, idle_queue):
+    """Preferences' Download & Install is the tray's flow too: a download that
+    fails is said in Update Status and in a message, and nothing restarts."""
+    from gi.repository import Gtk
+    from tuxtalk import update_ui
+    from tuxtalk.prefs_updates import UpdatesTab
+    status, told = [], []
+    monkeypatch.setattr(uc, "download_update", lambda *a, **k: None)
+    monkeypatch.setattr(update_ui, "show_message",
+                        lambda parent, kind, title, text, **k: told.append((title, text)))
+    tab = UpdatesTab.__new__(UpdatesTab)
+    tab.update_status_label = types.SimpleNamespace(set_markup=status.append)
+    window = Gtk.Window()
+    try:
+        update_ui.run_appimage_update(window, {"appimage_url": "https://x/TuxTalk.AppImage"},
+                                      lambda: pytest.fail("restarted"),
+                                      failed=tab._show_update_failed)
+        idle_queue(lambda: told)
+    finally:
+        window.destroy()
+    (title, text), = told
+    assert title == "Update Failed" and text.startswith(update_ui.DOWNLOAD_FAILED)
+    assert update_ui.DOWNLOAD_FAILED in status[0]
 
 
 # ---- Preferences asks the tray ------------------------------------------

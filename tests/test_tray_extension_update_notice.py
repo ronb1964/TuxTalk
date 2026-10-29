@@ -4,12 +4,12 @@ Extension updates are installed from Preferences → Updates & Backup. "Check
 for Updates" covers only the app, so pointing there would answer "You're up to
 date".
 """
-from tuxtalk import tray
+from tuxtalk import update_ui
 
 
 def test_the_notice_points_to_updates_and_backup(monkeypatch):
     shown = []
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: shown.append((title, body)))
-    assert tray.DictationTray._show_update_notification(object()) is False
+    assert update_ui.extension_update_notice() is False
     (title, body), = shown
     assert "Updates & Backup" in body and "Check for Updates" not in body

@@ -18,6 +18,7 @@ import urllib.error
 from pathlib import Path
 from typing import Optional, Callable, Tuple
 
+from . import menu_cache
 from .autostart import desktop_exec_program
 
 logger = logging.getLogger(__name__)
@@ -955,88 +956,6 @@ def install_appimage_update(
         return (False, f"Failed to install update: {e}")
 
 
-def _refresh_desktop_menu_cache():
-    """
-    Refresh the desktop menu cache after creating/removing a .desktop file.
-
-    This is especially needed for KDE/Plasma which doesn't auto-refresh.
-    Runs silently - failures are logged but don't raise exceptions.
-    """
-    import subprocess
-    import shutil
-    import time
-
-    # Small delay to ensure .desktop file is fully written
-    time.sleep(0.5)
-
-    logger.info("Refreshing desktop menu cache...")
-
-    # Try KDE's cache refresh (kbuildsycoca5 or kbuildsycoca6)
-    # Check both PATH and common absolute locations (AppImage may not have full PATH)
-    kde_commands = [
-        '/usr/bin/kbuildsycoca6', '/usr/bin/kbuildsycoca5',
-        'kbuildsycoca6', 'kbuildsycoca5',
-    ]
-
-    # Plain first, then with --noincremental.
-    for parts in [['kbuildsycoca6'], ['kbuildsycoca5'],
-                  ['kbuildsycoca6', '--noincremental'], ['kbuildsycoca5', '--noincremental']]:
-        cmd = ' '.join(parts)
-        try:
-            print(f"Running: {cmd}")
-            result = subprocess.run(parts, capture_output=True, text=True, timeout=15)
-            if result.returncode == 0:
-                logger.info(f"Desktop menu cache refreshed using: {cmd}")
-                print(f"Desktop menu refreshed with: {cmd}")
-                return
-            else:
-                logger.debug(f"{cmd} returned {result.returncode}: {result.stderr}")
-                print(f"{cmd} returned {result.returncode}")
-        except Exception as e:
-            logger.debug(f"Could not run {cmd}: {e}")
-            print(f"Could not run {cmd}: {e}")
-
-    # Fallback: try direct path execution
-    for cmd in kde_commands:
-        # Check if command exists (either in PATH or as absolute path)
-        if cmd.startswith('/'):
-            cmd_exists = os.path.exists(cmd)
-            actual_cmd = cmd
-        else:
-            actual_cmd = shutil.which(cmd)
-            cmd_exists = actual_cmd is not None
-
-        logger.debug(f"Checking {cmd}: exists={cmd_exists}")
-
-        if cmd_exists:
-            try:
-                result = subprocess.run([actual_cmd, '--noincremental'],
-                             capture_output=True, text=True, timeout=15)
-                if result.returncode == 0:
-                    logger.info(f"Desktop menu cache refreshed using {actual_cmd}")
-                    return
-                else:
-                    logger.warning(f"{actual_cmd} returned {result.returncode}: {result.stderr}")
-            except Exception as e:
-                logger.debug(f"Could not run {cmd}: {e}")
-
-    # Try update-desktop-database for other desktops
-    for cmd in ['update-desktop-database', '/usr/bin/update-desktop-database']:
-        cmd_exists = shutil.which(cmd) if not cmd.startswith('/') else os.path.exists(cmd)
-        if cmd_exists:
-            try:
-                actual_cmd = cmd if cmd.startswith('/') else shutil.which(cmd)
-                apps_dir = os.path.dirname(DESKTOP_FILE_PATH)
-                subprocess.run([actual_cmd, apps_dir],
-                             capture_output=True, timeout=15)
-                logger.info("Desktop menu cache refreshed using update-desktop-database")
-                return
-            except Exception as e:
-                logger.debug(f"Could not run {cmd}: {e}")
-
-    logger.warning("Could not refresh desktop menu cache - no suitable command found")
-
-
 def _app_icon_path() -> str:
     """Where _install_app_icon puts the icon its name stands for."""
     return os.path.expanduser("~/.local/share/icons/hicolor/256x256/apps/tuxtalk.png")
@@ -1251,7 +1170,7 @@ Terminal=false
 
         # The menu cache (KDE's above all) is refreshed in the background, as
         # add_launcher_actions does: it takes seconds, and Setup Complete waits.
-        threading.Thread(target=_refresh_desktop_menu_cache, daemon=True).start()
+        threading.Thread(target=menu_cache.refresh_menu_cache, daemon=True).start()
 
         logger.info(f"Desktop launcher created at {DESKTOP_FILE_PATH}")
         return (True, "Desktop launcher created!\n\nTuxTalk is now in your Applications menu.")
@@ -1290,7 +1209,7 @@ def add_launcher_actions() -> bool:
         with open(tmp, "w") as f:
             f.write("\n".join(new_lines).rstrip("\n") + "\n" + actions[1])
         os.replace(tmp, DESKTOP_FILE_PATH)
-        threading.Thread(target=_refresh_desktop_menu_cache, daemon=True).start()
+        threading.Thread(target=menu_cache.refresh_menu_cache, daemon=True).start()
         logger.info("Added the right-click shortcuts to the menu launcher")
         return True
     except OSError:
@@ -1336,7 +1255,7 @@ def create_hidden_desktop_entry() -> bool:
                     f"{_HIDDEN_ENTRY_MARK}\n")
         os.replace(tmp, DESKTOP_FILE_PATH)
         # Plasma 5's menu cache doesn't rebuild by itself; this takes a moment.
-        threading.Thread(target=_refresh_desktop_menu_cache, daemon=True).start()
+        threading.Thread(target=menu_cache.refresh_menu_cache, daemon=True).start()
         logger.info("Hidden desktop entry written so setup windows show TuxTalk's icon")
         return True
     except Exception as e:
