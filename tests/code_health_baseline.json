@@ -41,7 +41,7 @@
   "config.py::write_text_atomic::long_line": 1,
   "control.py::_parse::undocumented": 1,
   "cosmic_hotkeys.py::claim.change::undocumented": 1,
-  "cuda_helper.py::download_cuda_libraries::long_line": 3,
+  "cuda_helper.py::download_cuda_libraries::long_line": 2,
   "cuda_helper.py::has_cuda_libraries::long_line": 1,
   "cuda_helper.py::has_cuda_libraries::swallowed_error": 1,
   "cuda_helper.py::show_cuda_download_dialog::long_line": 1,
@@ -300,8 +300,8 @@
    "lines": 101
   },
   "cuda_helper.py::download_cuda_libraries": {
-   "decisions": 46,
-   "lines": 203
+   "decisions": 34,
+   "lines": 159
   },
   "custom_words.py::fix_spelling": {
    "decisions": 28

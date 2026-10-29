@@ -181,6 +181,62 @@ def _inside(folder, rel_path):
     return target if target.startswith(os.path.realpath(folder) + os.sep) else None
 
 
+def _unpacked_size(wheel_paths):
+    """Bytes the shared libraries in *wheel_paths* take once unpacked. The
+    wheels are compressed, so their download size understates it."""
+    import zipfile
+    total = 0
+    for path in wheel_paths:
+        with zipfile.ZipFile(path) as wheel:
+            total += sum(info.file_size for info in wheel.infolist()
+                         if info.filename.startswith("nvidia/") and ".so" in info.filename)
+    return total
+
+
+def _extract_wheels(wheel_paths, lib_path, progress_callback, cancel_event):
+    """Unpack the shared libraries of each downloaded wheel into *lib_path*,
+    70 to 95 % of the progress bar. False, having said why, when there isn't
+    room for them (checked first: a full disk mid-way gave only a generic
+    error) or the user cancelled."""
+    import shutil
+    import zipfile
+    from .download_utils import free_space_bytes
+    need = _unpacked_size(wheel_paths) + 100 * 1024 * 1024
+    free = free_space_bytes(lib_path)
+    if free and free < need:
+        msg = (f"Not enough disk space to install: need ~{need / 1024 ** 3:.1f} GB "
+               f"free, only {free / 1024 ** 3:.1f} GB available")
+        logger.error(f"{msg} (path: {lib_path})")
+        if progress_callback:
+            progress_callback(msg, 0)
+        return False
+    if progress_callback:
+        progress_callback("Extracting CUDA libraries...", 70)
+    for i, wheel_path in enumerate(wheel_paths):
+        if cancel_event and cancel_event.is_set():
+            logger.info("Download cancelled by user during extraction")
+            return False
+        wheel_file = os.path.basename(wheel_path)
+        logger.info(f"Extracting {wheel_file}...")
+        with zipfile.ZipFile(wheel_path, 'r') as zip_ref:
+            # Only the shared libraries under nvidia/ are needed; the nvidia/
+            # prefix is dropped so each lands in lib/<package>/lib/.
+            so_files = _wheel_libraries(zip_ref.namelist(), lib_path)
+            for j, (member, target) in enumerate(so_files):
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                with zip_ref.open(member) as source, open(target, 'wb') as dest:
+                    shutil.copyfileobj(source, dest)
+                os.chmod(target, 0o755)
+                if progress_callback:
+                    wheel_progress = (i + (j + 1) / len(so_files)) / len(wheel_paths)
+                    progress_callback(f"Extracting {wheel_file}... ({j+1}/{len(so_files)} files)",
+                                      70 + int(wheel_progress * 25))
+        if progress_callback:
+            progress_callback(f"Extracted {wheel_file} ({i+1}/{len(wheel_paths)})",
+                              70 + int((i + 1) / len(wheel_paths) * 25))
+    return True
+
+
 def download_cuda_libraries(progress_callback=None, cancel_event=None):
     """
     Download CUDA libraries for GPU acceleration.
@@ -194,8 +250,6 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
         bool: True if successful, False otherwise
     """
     import urllib.request
-    import zipfile
-    import shutil
 
     cuda_path = get_appdir_cuda_path()
     lib_path = os.path.join(cuda_path, "lib")
@@ -322,54 +376,12 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
                     return False
                 logger.info(f"Downloaded and verified {wheel_filename}")
 
-            # Check for cancellation before extraction
-            if cancel_event and cancel_event.is_set():
-                logger.info("Download cancelled by user before extraction")
+            wheel_paths = sorted(os.path.join(temp_dir, f)
+                                 for f in os.listdir(temp_dir) if f.endswith('.whl'))
+            if not _extract_wheels(wheel_paths, lib_path, progress_callback, cancel_event):
                 cleanup_cuda_dir()
                 return False
 
-            if progress_callback:
-                progress_callback("Extracting CUDA libraries...", 70)
-
-            # Extract .so files from wheels
-            wheel_files = [f for f in os.listdir(temp_dir) if f.endswith('.whl')]
-            
-            for i, wheel_file in enumerate(wheel_files):
-                # Check for cancellation during extraction
-                if cancel_event and cancel_event.is_set():
-                    logger.info("Download cancelled by user during extraction")
-                    cleanup_cuda_dir()
-                    return False
-
-                wheel_path = os.path.join(temp_dir, wheel_file)
-                logger.info(f"Extracting {wheel_file}...")
-
-                with zipfile.ZipFile(wheel_path, 'r') as zip_ref:
-                    # Only the shared libraries under nvidia/ are needed; the
-                    # nvidia/ prefix is dropped so each lands in lib/<package>/lib/.
-                    so_files = _wheel_libraries(zip_ref.namelist(), lib_path)
-                    for j, (member, target) in enumerate(so_files):
-                        os.makedirs(os.path.dirname(target), exist_ok=True)
-                        with zip_ref.open(member) as source:
-                            with open(target, 'wb') as dest:
-                                shutil.copyfileobj(source, dest)
-
-                        if target.endswith('.so') or '.so.' in target:
-                            try:
-                                os.chmod(target, 0o755)
-                            except (PermissionError, OSError):
-                                pass
-
-                        if progress_callback and len(so_files) > 0:
-                            file_progress = (j + 1) / len(so_files)
-                            wheel_progress = (i + file_progress) / len(wheel_files)
-                            percent = 70 + int(wheel_progress * 25)  # 70-95% for extraction
-                            progress_callback(f"Extracting {wheel_file}... ({j+1}/{len(so_files)} files)", percent)
-                
-                if progress_callback:
-                    percent = 70 + int((i + 1) / len(wheel_files) * 25)
-                    progress_callback(f"Extracted {wheel_file} ({i+1}/{len(wheel_files)})", percent)
-        
         if progress_callback:
             progress_callback("CUDA libraries installed successfully!", 100)
         
