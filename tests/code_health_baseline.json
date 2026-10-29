@@ -131,7 +131,6 @@
   "recommend.py::_nvidia_name::swallowed_error": 1,
   "recommend.py::detect_hardware::swallowed_error": 1,
   "recording_indicator.py::RecordingIndicator.__init__::undocumented": 1,
-  "recording_indicator.py::RecordingIndicator._accent_rgb::swallowed_error": 1,
   "recording_indicator.py::RecordingIndicator.draw_orb::long_line": 1,
   "recording_indicator.py::RecordingIndicator.draw_particles::long_line": 2,
   "recording_indicator.py::RecordingIndicator.draw_pill_background::long_line": 7,

@@ -6,6 +6,7 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, Gtk
 
+from . import ui_style
 from .config import CLASSIC_CYAN_HEX
 from .prefs_tab import Tab, dropdown, fold
 
@@ -33,14 +34,6 @@ def _rgba(hex_color):
     color = Gdk.RGBA()
     color.parse(hex_color)
     return color
-
-
-def _desktop_accent():
-    """The desktop theme's accent color (fallback: green), as
-    recording_indicator._accent_rgb finds it, so the swatch shows what the
-    indicator paints in system-accent mode."""
-    found, rgba = Gtk.Label().get_style_context().lookup_color("theme_selected_bg_color")
-    return rgba if found else _rgba("#4caf50")
 
 
 def _row_label(grid, row, text, control, tooltip=None):
@@ -211,7 +204,7 @@ class IndicatorSettings(Tab):
         """The swatch shows the color the indicator paints: the chosen one,
         or in System mode the desktop's accent."""
         if self._color_mode_combo.get_active_id() == "system":
-            self._color_btn.set_rgba(_desktop_accent())
+            self._color_btn.set_rgba(Gdk.RGBA(*ui_style.desktop_accent_rgb(), 1.0))
         else:
             self._color_btn.set_rgba(
                 _rgba(self.config.get("indicator_color", CLASSIC_CYAN_HEX)))

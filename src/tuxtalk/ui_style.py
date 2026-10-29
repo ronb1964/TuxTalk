@@ -148,6 +148,19 @@ def use_tuxtalk_style(window):
     window.get_style_context().add_class(STYLE_CLASS)
 
 
+# For a theme that names no accent: a plain green, the same in the recording
+# indicator and in Preferences' preview of it.
+FALLBACK_ACCENT = (0x4c / 255, 0xaf / 255, 0x50 / 255)
+
+
+def desktop_accent_rgb():
+    """The desktop theme's accent color as (r, g, b) in 0..1: what the
+    recording indicator paints in "System accent" mode, and what
+    Preferences' swatch shows for it."""
+    found, rgba = Gtk.Label().get_style_context().lookup_color("theme_selected_bg_color")
+    return (rgba.red, rgba.green, rgba.blue) if found else FALLBACK_ACCENT
+
+
 def apply_dropdown_list_style():
     """Install shared screen-wide GTK styling: ComboBox popups drop down below
     the button (not over it), through list mode on X11 and the wrap path on
