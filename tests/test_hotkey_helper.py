@@ -25,7 +25,7 @@ class FakeKeyboard(hh.Keyboard):
     def __init__(self, path="/dev/input/event-fake"):
         r, w = os.pipe()
         os.set_blocking(r, False)
-        super().__init__(path, r, "Fake keyboard", set())
+        super().__init__(path, r, "Fake keyboard", set(), False, f"own:{path}")
         self.w = w
         self.kernel = set()
         self.calls = []
@@ -996,3 +996,25 @@ def test_a_failed_release_on_a_second_keyboard_gives_the_first_back(setup, monke
     assert heard(sock) == ["ERR couldn't hide the keys"]
     assert ("grab", True) in kb.calls and not kb.grabbed
     assert helper.hide is None
+
+
+# --- helper 1.7: the code review's small findings ---------------------------------------
+
+def test_a_line_longer_than_max_line_is_refused_even_with_its_newline(setup):
+    """Only a line still unterminated was measured: a 4 KB line that ended
+    in a newline was parsed."""
+    helper, _kb, connect, say, heard, _seat = setup
+    sock = _ready(connect, say, heard)
+    sock.sendall(b"WATCH " + b"66 " * 300 + b"\n")
+    assert heard(sock) == []
+    assert helper.clients == {}
+
+
+def test_a_keyboard_that_never_runs_dry_doesnt_hold_the_loop(setup, monkeypatch):
+    """A program flooding its own virtual keyboard: settle's drain stops
+    after DRAIN_READS reads instead of reading for as long as it types."""
+    helper, kb, _connect, _say, _heard, _seat = setup
+    reads = []
+    monkeypatch.setattr(helper, "read_keyboard", lambda keyboard: reads.append(1) or 1)
+    helper.drain(kb)
+    assert len(reads) == hh.DRAIN_READS

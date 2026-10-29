@@ -16,8 +16,9 @@ before 0.15.0, so older entries use that name.
   down, so nothing it types while you hold it turns into a Ctrl shortcut.
 - Pause isn't on the list. Most keyboards send it as let go the moment it's
   pressed, so you can't hold it.
-- The hotkey helper is version 1.6, because it has to report Right Ctrl and
-  Right Alt on their own now. TuxTalk asks about the update by itself a few
+- The hotkey helper is version 1.7, because it has to report Right Ctrl and
+  Right Alt on their own now (1.7 also tidies its code after a review, with no
+  change in what it does). TuxTalk asks about the update by itself a few
   seconds after it starts, and keeps asking each start until it's done. It
   takes your password once and no restart. Until then Right Ctrl and Right
   Alt do nothing, and if you pick one in Preferences it says so and offers

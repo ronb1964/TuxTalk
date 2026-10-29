@@ -5,7 +5,7 @@ import types
 
 import pytest
 
-from tuxtalk import secure_input
+from tuxtalk import hotkey_helper, secure_input
 from tuxtalk import update_offers as offers
 
 
@@ -71,7 +71,7 @@ def test_one_offer_a_start(helper):
 
 
 @pytest.mark.parametrize("running, installed, flatpak", [
-    ("1.6", True, False),           # up to date
+    (hotkey_helper.VERSION, True, False),     # up to date
     (None, True, False),            # not running: System check says why
     ("1.4", False, False),          # the input group, no helper
     ("1.4", True, True),            # the Flatpak can't install one
