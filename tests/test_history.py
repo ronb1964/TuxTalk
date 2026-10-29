@@ -124,12 +124,12 @@ def test_tray_and_gnome_extension_place_recent_dictations_first(tray_menu):
     js = (ROOT / "gnome-extension/talktype@ronb1964.github.io/extension.js").read_text()
     switch = js.index("new PopupMenu.PopupSwitchMenuItem('Dictation on/off'")
     recent = js.index("new PopupMenu.PopupSubMenuMenuItem('Recent Dictations')")
-    fix_word = js.index("new PopupMenu.PopupMenuItem('Fix a Word...')")
-    transcribe = js.index("new PopupMenu.PopupMenuItem('Transcribe a File...')")
+    fix_word = js.index("_addRemoteItem('Fix a Word...'")
+    transcribe = js.index("_addRemoteItem('Transcribe a File...'")
     separator = js.index("new PopupMenu.PopupSeparatorMenuItem()", recent)
     updates = js.index("new PopupMenu.PopupMenuItem('Check for Updates...')")
-    restart = js.index("new PopupMenu.PopupMenuItem('Restart Service')")
-    quit_item = js.index("new PopupMenu.PopupMenuItem('Quit TuxTalk')")
+    restart = js.index("_addRemoteItem('Restart Service'")
+    quit_item = js.index("_addRemoteItem('Quit TuxTalk'")
     assert switch < recent < fix_word < transcribe < separator < updates < restart < quit_item
 
 

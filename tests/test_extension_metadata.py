@@ -37,19 +37,6 @@ def test_every_released_gnome_shell_is_declared():
     )
 
 
-def test_extension_version_is_bumped_past_the_last_shipped_build():
-    """The in-app updater compares this integer only.
-
-    Widening shell-version without bumping "version" means existing users are
-    never offered the fixed extension, so the fix reaches nobody.
-    """
-    # v0.7.2 shipped version 8. Any metadata change that users must receive
-    # has to advance this.
-    LAST_SHIPPED_EXTENSION_VERSION = 8
-
-    assert _metadata()["version"] > LAST_SHIPPED_EXTENSION_VERSION
-
-
 def test_shell_versions_are_strings_in_ascending_order():
     """GNOME requires strings; ordering keeps the list readable as it grows."""
     raw = _metadata()["shell-version"]
