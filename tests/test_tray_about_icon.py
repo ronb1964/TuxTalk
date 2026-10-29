@@ -25,7 +25,8 @@ def test_the_icon_theme_is_the_fallback(monkeypatch):
     monkeypatch.setattr("tuxtalk.autostart.get_icon_path", lambda: "audio-input-microphone")
     monkeypatch.delenv("APPDIR", raising=False)
     assert about_dialog.about_icon_source(lambda name: name == "tuxtalk") == ("icon", "tuxtalk")
-    assert about_dialog.about_icon_source(lambda name: True) == ("icon", "io.github.ronb1964.TuxTalk")
+    assert about_dialog.about_icon_source(lambda name: True) == (
+        "icon", "io.github.ronb1964.TuxTalk")
     assert about_dialog.about_icon_source(lambda name: False) is None
 
 

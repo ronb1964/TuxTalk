@@ -130,9 +130,11 @@ def test_the_kde_cache_rebuild_falls_back_to_kbuildsycoca5(monkeypatch):
     from tuxtalk import menu_cache
     ran = []
 
+    missing = {"kbuildsycoca6"}
+
     def fake_run(argv, **_):
         ran.append(argv[0])
-        if argv[0] == "kbuildsycoca6":
+        if argv[0] in missing:
             raise FileNotFoundError(argv[0])
         return types.SimpleNamespace(returncode=0)
 
@@ -140,8 +142,7 @@ def test_the_kde_cache_rebuild_falls_back_to_kbuildsycoca5(monkeypatch):
     menu_cache.refresh_menu_cache()
     assert ran == ["update-desktop-database", "kbuildsycoca6", "kbuildsycoca5"]
     ran.clear()
-    monkeypatch.setattr(menu_cache.subprocess, "run",
-                        lambda argv, **_: ran.append(argv[0]) or types.SimpleNamespace(returncode=0))
+    missing.clear()
     menu_cache.refresh_menu_cache()
     assert ran == ["update-desktop-database", "kbuildsycoca6"]
 
