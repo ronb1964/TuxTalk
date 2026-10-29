@@ -582,20 +582,13 @@ class DictationTray(ServiceLifecycle, PresetMenu, TrayMenu):
         return False  # one-shot when scheduled through GLib.idle_add
 
 def main():
+    """The tray process: what comes before the tray (the command line, the
+    single-instance lock, an old install adopted), the tray, then first-run
+    setup or the dictation service, and GTK's main loop."""
     from . import desktop_identity, ui_style
     desktop_identity.apply()        # TuxTalk's icon on its windows, not KDE's generic one
     ui_style.prepare_windows()   # emoji that show, buttons clear of panels and docks
-    # tuxtalk --toggle/--start/--stop (control.py). With TuxTalk running this
-    # asks it and exits; otherwise this process starts TuxTalk and the request
-    # waits for the speech model below.
-    from . import control
-    command = control.parse_action(sys.argv[1:])
-    if command:
-        tray_instance.run_command_line(command)
-    # tuxtalk --open NAME / --quit (the launcher's right-click shortcuts).
-    open_window = control.parse_open(sys.argv[1:])
-    if open_window:
-        tray_instance.open_from_command_line(open_window)
+    command, open_window = _handle_command_line()
 
     # Before anything opens the shared D-Bus connection: one opened without
     # the GLib main loop can't export the tray's D-Bus service later.
@@ -609,28 +602,7 @@ def main():
     # An old TalkType Flatpak can't see the lock above and would type every
     # dictation twice. Checked on a thread so a slow flatpak never delays the tray.
     threading.Thread(target=startup_notices.handle_old_talktype_flatpak, daemon=True).start()
-
-    # The TalkType -> TuxTalk folder move ran at package import, before any
-    # logger existed; record what it did now (see rename_migration.py).
-    from . import MIGRATION_LOG
-    for line in MIGRATION_LOG:
-        logger.info(f"Rename to TuxTalk: {line}")
-    if not os.environ.get("FLATPAK_ID"):
-        from . import config, rename_migration
-        try:
-            for line in rename_migration.adopt_old_install(dev=config.DEV_MODE):
-                logger.info(f"Rename to TuxTalk: {line}")
-            # A dock or favourites list that pinned the old menu entry would
-            # show a blank icon; rename those once (a marker file records it).
-            marker = os.path.join(os.path.dirname(config.CONFIG_PATH), ".launchers-renamed")
-            for line in rename_migration.repin_launchers(marker):
-                logger.info(f"Rename to TuxTalk: {line}")
-        except Exception as e:      # never stop the tray from starting
-            logger.warning(f"Rename to TuxTalk: could not move the launchers: {e}")
-        # After the rename, which treats an existing tuxtalk.desktop as done.
-        from .update_checker import add_launcher_actions, create_hidden_desktop_entry
-        create_hidden_desktop_entry()   # TuxTalk's icon on first-run windows
-        add_launcher_actions()          # right-click shortcuts for older launchers
+    _adopt_old_install()
 
     # A copy of the settings to roll back to (Preferences → Advanced →
     # Restore Earlier Settings), taken before this version touches them.
@@ -652,93 +624,14 @@ def main():
         from .gnome_keybindings import restore_left_over
         restore_left_over()
     except Exception as e:
-        logger.debug(f"Could not check GNOME keybindings: {e}")
+        logger.info(f"Could not check GNOME keybindings: {e}")
 
-    # Check for first run and show welcome dialog if applicable
     try:
-        import tuxtalk.cuda_helper as cuda_helper
-        from tuxtalk.welcome_dialog import show_welcome_and_install
-
-        # Only show welcome dialog on first tray launch (not for prefs)
+        from . import cuda_helper
         if cuda_helper.is_first_run():
-            logger.info("First run detected - starting onboarding")
-            if command:
-                control.report("setup")     # the welcome screens come first
-            # Set flag BEFORE scheduling to prevent any auto-start during onboarding
-            tray.onboarding_in_progress = True
-
-            def show_first_run_setup():
-                # Show unified welcome dialog with all setup options. An error
-                # in onboarding counts as a cancel, so the service still starts
-                # and the welcome comes back next launch.
-                try:
-                    result = show_welcome_and_install()
-                except Exception:
-                    logger.error("Onboarding failed", exc_info=True)
-                    result = None
-
-                # Unsupported desktop (no GlobalShortcuts portal): the user can only
-                # quit — the app cannot function here, so exit instead of starting a
-                # dead service. First run is left unmarked so a later install on a
-                # supported desktop still onboards.
-                if result and result.get('quit'):
-                    logger.info("Onboarding: dictation hotkey unsupported on this desktop - quitting")
-                    tray.quit_app(None)
-                    return False
-
-                # Only mark first run complete if user completed the wizard
-                if result and result.get('continue'):
-                    try:
-                        cuda_helper.mark_first_run_complete()
-                    except Exception as e:
-                        logger.error(f"Failed to mark first run complete: {e}")
-                    # No tray and no extension running yet: without this
-                    # the user would see no menu at all.
-                    GLib.timeout_add(2500, tray.show_menu_window_if_no_tray)
-                else:
-                    logger.info("User cancelled onboarding - will show again next launch")
-
-                # Refresh menu after installations
-                tray.refresh_menu()
-
-                # Onboarding complete - NOW allow service to start
-                tray.onboarding_in_progress = False
-                logger.info("Onboarding complete - starting service")
-
-                # Refresh KDE menu cache so TuxTalk shows in start menu immediately
-                # This must run AFTER the .desktop file is created by the welcome dialog.
-                # On a thread: the rebuild can take seconds and would freeze the menu.
-                threading.Thread(target=menu_cache.refresh_menu_cache, daemon=True).start()
-
-                tray._auto_start_service(500)
-                return False  # Don't repeat
-
-            tray.onboard_once_service_gone(show_first_run_setup)
+            _start_first_run(tray, command)
         else:
-            # Not first run, auto-start immediately
-            logger.info("Not first run - auto-starting service")
-            # A login entry from setups before 0.10.1 may still launch an old
-            # AppImage from Downloads; point it at the installed copy.
-            # Older entries also still carry a stale description.
-            try:
-                from .autostart import (repair_stale_appimage_autostart,
-                                        refresh_autostart_comment)
-                repair_stale_appimage_autostart()
-                refresh_autostart_comment()
-            except Exception as e:
-                logger.debug(f"Could not check the login entry: {e}")
-            if command:
-                # The auto-start below starts the service; the recording
-                # waits until its model is loaded.
-                status = tray._waiting_start.apply(command)
-                logger.info(f"Started with --{command}: {status}")
-                control.report(status)
-            tray._auto_start_service(1000)
-            if open_window and open_window != "quit":
-                # Started by --open (a launcher shortcut) with nothing running.
-                GLib.timeout_add(1500, tray.open_window, open_window)
-            # Check for updates after a delay (don't interfere with startup)
-            GLib.timeout_add(5000, tray.auto_check_for_updates)
+            _start_normally(tray, command, open_window)
     except Exception as e:
         # If any error, only auto-start if NOT during onboarding
         logger.error(f"Error in first run setup: {e}")
@@ -746,6 +639,149 @@ def main():
             tray._auto_start_service(1000)
 
     Gtk.main()
+
+
+def _handle_command_line():
+    """tuxtalk --toggle/--start/--stop and --open NAME/--quit (control.py;
+    the last two are the launcher's right-click shortcuts). With TuxTalk
+    running these ask it and exit; otherwise this process starts TuxTalk and
+    they wait for it. (The recording asked for, the window to open), either
+    None."""
+    from . import control
+    command = control.parse_action(sys.argv[1:])
+    if command:
+        tray_instance.run_command_line(command)
+    open_window = control.parse_open(sys.argv[1:])
+    if open_window:
+        tray_instance.open_from_command_line(open_window)
+    return command, open_window
+
+
+def _adopt_old_install():
+    """What the TalkType -> TuxTalk rename did and still has to do: its log
+    lines, the old launchers moved and repinned, then the menu entries this
+    version needs. Outside a Flatpak, whose launchers its package owns."""
+    # The folder move ran at package import, before any logger existed;
+    # record what it did now (see rename_migration.py).
+    from . import MIGRATION_LOG
+    for line in MIGRATION_LOG:
+        logger.info(f"Rename to TuxTalk: {line}")
+    if os.environ.get("FLATPAK_ID"):
+        return
+    from . import config, rename_migration
+    try:
+        for line in rename_migration.adopt_old_install(dev=config.DEV_MODE):
+            logger.info(f"Rename to TuxTalk: {line}")
+        # A dock or favourites list that pinned the old menu entry would
+        # show a blank icon; rename those once (a marker file records it).
+        marker = os.path.join(os.path.dirname(config.CONFIG_PATH), ".launchers-renamed")
+        for line in rename_migration.repin_launchers(marker):
+            logger.info(f"Rename to TuxTalk: {line}")
+    except Exception as e:      # never stop the tray from starting
+        logger.warning(f"Rename to TuxTalk: could not move the launchers: {e}")
+    # After the rename, which treats an existing tuxtalk.desktop as done.
+    from .update_checker import add_launcher_actions, create_hidden_desktop_entry
+    create_hidden_desktop_entry()   # TuxTalk's icon on first-run windows
+    add_launcher_actions()          # right-click shortcuts for older launchers
+
+
+def _start_first_run(tray, command):
+    """First run: the welcome screens once no dictation service runs, and
+    the service only after them."""
+    logger.info("First run detected - starting onboarding")
+    if command:
+        from . import control
+        control.report("setup")     # the welcome screens come first
+    # Set flag BEFORE scheduling to prevent any auto-start during onboarding
+    tray.onboarding_in_progress = True
+    tray.onboard_once_service_gone(lambda: _show_first_run_setup(tray))
+
+
+def _show_first_run_setup(tray):
+    """The welcome screens with all setup options, then what their answer
+    asks for. An error in onboarding counts as a cancel, so the service
+    still starts and the welcome comes back next launch. False, for its
+    GLib timer."""
+    try:
+        from tuxtalk.welcome_dialog import show_welcome_and_install
+        result = show_welcome_and_install()
+    except Exception:
+        logger.error("Onboarding failed", exc_info=True)
+        result = None
+    _finish_first_run(tray, result)
+    return False
+
+
+def _finish_first_run(tray, result):
+    """After the welcome screens (*result*, None when they failed): setup
+    marked done if it was finished, the menu rebuilt and the service
+    started; or quit, on a desktop TuxTalk's hotkey can't work on."""
+    # Unsupported desktop (no GlobalShortcuts portal): the user can only
+    # quit — the app cannot function here, so exit instead of starting a
+    # dead service. First run is left unmarked so a later install on a
+    # supported desktop still onboards.
+    if result and result.get('quit'):
+        logger.info("Onboarding: dictation hotkey unsupported on this desktop - quitting")
+        tray.quit_app(None)
+        return
+
+    # Only mark first run complete if user completed the wizard
+    if result and result.get('continue'):
+        from . import cuda_helper
+        try:
+            cuda_helper.mark_first_run_complete()
+        except Exception as e:
+            logger.error(f"Failed to mark first run complete: {e}")
+        # No tray and no extension running yet: without this
+        # the user would see no menu at all.
+        GLib.timeout_add(2500, tray.show_menu_window_if_no_tray)
+    else:
+        logger.info("User cancelled onboarding - will show again next launch")
+
+    # Refresh menu after installations
+    tray.refresh_menu()
+
+    # Onboarding complete - NOW allow service to start
+    tray.onboarding_in_progress = False
+    logger.info("Onboarding complete - starting service")
+
+    # Refresh KDE menu cache so TuxTalk shows in start menu immediately
+    # This must run AFTER the .desktop file is created by the welcome dialog.
+    # On a thread: the rebuild can take seconds and would freeze the menu.
+    threading.Thread(target=menu_cache.refresh_menu_cache, daemon=True).start()
+
+    tray._auto_start_service(500)
+
+
+def _start_normally(tray, command, open_window):
+    """Not the first run: the service starts at once, then the recording
+    (*command*) or window (*open_window*) the command line asked for, and
+    the daily update check after a delay."""
+    logger.info("Not first run - auto-starting service")
+    # A login entry from setups before 0.10.1 may still launch an old
+    # AppImage from Downloads; point it at the installed copy.
+    # Older entries also still carry a stale description.
+    try:
+        from .autostart import (repair_stale_appimage_autostart,
+                                refresh_autostart_comment)
+        repair_stale_appimage_autostart()
+        refresh_autostart_comment()
+    except Exception as e:
+        logger.info(f"Could not check the login entry: {e}")
+    if command:
+        # The auto-start below starts the service; the recording
+        # waits until its model is loaded.
+        from . import control
+        status = tray._waiting_start.apply(command)
+        logger.info(f"Started with --{command}: {status}")
+        control.report(status)
+    tray._auto_start_service(1000)
+    if open_window and open_window != "quit":
+        # Started by --open (a launcher shortcut) with nothing running.
+        GLib.timeout_add(1500, tray.open_window, open_window)
+    # Check for updates after a delay (don't interfere with startup)
+    GLib.timeout_add(5000, tray.auto_check_for_updates)
+
 
 if __name__ == "__main__":
     main()

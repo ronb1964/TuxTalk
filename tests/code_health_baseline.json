@@ -176,10 +176,6 @@
   "tray.py::DictationTray._stop_kwin_focus_provider::swallowed_error": 1,
   "tray.py::DictationTray.show_menu_window_if_no_tray::swallowed_error": 1,
   "tray.py::DictationTray::undocumented": 1,
-  "tray.py::main.show_first_run_setup::long_line": 1,
-  "tray.py::main.show_first_run_setup::undocumented": 1,
-  "tray.py::main::swallowed_error": 2,
-  "tray.py::main::undocumented": 1,
   "tray_instance.py::_show_already_running::swallowed_error": 1,
   "ui_style.py::<module>::dated_comment": 1,
   "ui_style.py::<module>::long_line": 1,
@@ -338,10 +334,6 @@
   },
   "transcribe_window.py::TranscribeWindow.__init__": {
    "lines": 126
-  },
-  "tray.py::main": {
-   "decisions": 18,
-   "lines": 165
   },
   "uninstall.py::_empty": {
    "decisions": 20
