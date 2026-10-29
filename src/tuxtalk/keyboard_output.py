@@ -374,7 +374,7 @@ def paste_text_x11(text: str) -> bool:
     still typed. True only if the text reached the app.
     """
     from . import clipboard
-    if not clipboard.copy_text_on_gtk_thread(text):
+    if not clipboard.offer_dictation_x11(text):
         logger.error("X11 paste: couldn't put the text on the clipboard; nothing was inserted")
         return False
     time.sleep(0.08)    # let the selection settle before the app asks for it

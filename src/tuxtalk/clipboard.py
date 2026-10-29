@@ -37,22 +37,55 @@ def copy_text(text):
         return False
 
 
-def copy_text_on_gtk_thread(text, timeout=1.0):
-    """copy_text, run on the thread that runs Gtk.main(). True on success.
+def offer_dictation_x11(text, timeout=1.0):
+    """Put a dictation on the X11 clipboard for pasting, from the thread that
+    runs Gtk.main(); True on success.
 
     For the dictation service on X11, which has no wl-copy to lean on. GTK may
     only be touched from its own thread, and the service's typing runs on
-    another one, so the copy is queued there and waited for. The service keeps
+    another one, so the offer is queued there and waited for. The service keeps
     the X11 clipboard selection afterwards and its GTK loop answers the
     target app's paste request. If the loop doesn't get to it within
-    *timeout*, this returns False and the copy is called off: nothing gets
+    *timeout*, this returns False and the offer is called off: nothing gets
     pasted, so the dictation mustn't land on the clipboard later.
     """
     from . import gtk_loop
     try:
-        return bool(gtk_loop.call(copy_text, text, timeout=timeout))
+        return bool(gtk_loop.call(_offer_sensitive_x11, text, timeout=timeout))
     except TimeoutError:
         return False
+
+
+_x11_owner = None           # the invisible window owning the X11 clipboard, made once
+_x11_offered = ""           # what it hands an app that pastes
+
+
+def _offer_sensitive_x11(text):
+    """On GTK's thread: own the X11 clipboard, offering *text* as text and
+    marked with _PASSWORD_HINT, as wl-copy --sensitive does on Wayland, so
+    clipboard managers (Klipper and the like) don't keep the dictation. Not
+    copy_text: its store() hands the text to the clipboard manager to keep.
+    GTK's selection API, since PyGObject can't reach set_with_data."""
+    global _x11_owner, _x11_offered
+    from gi.repository import Gdk, Gtk
+    if _x11_owner is None:
+        _x11_owner = Gtk.Invisible()
+        _x11_owner.connect("selection-get", _answer_x11_paste)
+    _x11_offered = text
+    Gtk.selection_clear_targets(_x11_owner, Gdk.SELECTION_CLIPBOARD)
+    for info, name in enumerate((*_TEXT_TYPES, _PASSWORD_HINT)):
+        Gtk.selection_add_target(_x11_owner, Gdk.SELECTION_CLIPBOARD,
+                                 Gdk.Atom.intern(name, False), info)
+    return Gtk.selection_owner_set(_x11_owner, Gdk.SELECTION_CLIPBOARD, Gdk.CURRENT_TIME)
+
+
+def _answer_x11_paste(_owner, selection_data, _info, _time):
+    """An app (or a clipboard manager) asks for the offered dictation."""
+    target = selection_data.get_target()
+    if target.name() == _PASSWORD_HINT:
+        selection_data.set(target, 8, b"secret")
+    else:
+        selection_data.set_text(_x11_offered, -1)
 
 
 # --- Paste mode and the user's clipboard (see issue #7) -------------------------------

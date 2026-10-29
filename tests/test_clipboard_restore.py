@@ -362,9 +362,9 @@ def test_an_x11_copy_that_timed_out_never_lands_later(monkeypatch):
     from gi.repository import GLib
     from tuxtalk import gtk_loop
     copied = []
-    monkeypatch.setattr(cb, "copy_text", lambda text: copied.append(text) or True)
+    monkeypatch.setattr(cb, "_offer_sensitive_x11", lambda text: copied.append(text) or True)
     monkeypatch.setattr(gtk_loop, "_thread", threading.Thread())   # running, stalled
-    assert cb.copy_text_on_gtk_thread("never pasted", timeout=0.05) is False
+    assert cb.offer_dictation_x11("never pasted", timeout=0.05) is False
     context = GLib.MainContext.default()
     while context.iteration(False):
         pass
@@ -381,3 +381,20 @@ def test_nothing_highlighted_is_empty_in_every_wl_paste(monkeypatch, said):
                         lambda cmd, **kw: types.SimpleNamespace(returncode=1, stdout=b"",
                                                                 stderr=said))
     assert _REAL_PRIMARY_TO_KEEP() is None
+
+
+def test_a_dictation_pasted_on_x11_is_marked_for_clipboard_managers_to_skip(monkeypatch):
+    """On X11 the text went on the clipboard as plain text and was handed to
+    the clipboard manager to store, so Klipper and the like kept every
+    dictation pasted this way; Wayland's copy was already marked sensitive."""
+    from gi.repository import Gdk, Gtk
+    if not Gtk.init_check()[0]:
+        pytest.skip("no display")
+    monkeypatch.setattr(Gtk.Clipboard, "store", lambda self: pytest.fail("handed to the manager"))
+    assert cb._offer_sensitive_x11("Привіт, café") is True
+    board = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
+    found, targets = board.wait_for_targets()
+    assert found and cb._PASSWORD_HINT in [t.name() for t in targets]
+    assert board.wait_for_text() == "Привіт, café"
+    hint = board.wait_for_contents(Gdk.Atom.intern(cb._PASSWORD_HINT, False))
+    assert hint.get_data() == b"secret"
