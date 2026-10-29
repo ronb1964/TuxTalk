@@ -66,6 +66,29 @@ def test_configure_mid_test_keeps_the_count_and_applies():
     assert test.snapshot().cuts == 1
 
 
+def test_a_cut_while_a_slider_moves_is_still_counted():
+    """The audio thread is already feeding the old detector when a slider
+    rebuilds it; the cut that feed makes counts like any other."""
+    from tuxtalk.chunk_meter import PauseTest
+    audio = two_pauses()
+    blocks = [audio[i:i + BLOCK].tobytes() for i in range(0, len(audio), BLOCK)]
+    first_cut = next(n for n, fired in enumerate(map(PauseTest(SR, 0.8, 6.0).feed, blocks))
+                     if fired)
+    test = PauseTest(SR, 0.8, 6.0)
+    for block in blocks[:first_cut]:
+        test.feed(block)
+    old = test._detector
+    feed_old = old.feed
+
+    def slider_moved_meanwhile(block):
+        test.configure(0.8, 6.0)            # the GTK thread
+        return feed_old(block)
+    old.feed = slider_moved_meanwhile
+
+    assert test.feed(blocks[first_cut]) is True
+    assert test.snapshot().cuts == 1
+
+
 def test_take_cut_reports_each_cut_once():
     from tuxtalk.chunk_meter import PauseTest
     test = PauseTest(SR, 0.8, 6.0)
