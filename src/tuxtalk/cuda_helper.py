@@ -109,8 +109,8 @@ def has_cuda_libraries():
         names = [line.split()[0] for line in result.stdout.splitlines()[1:] if line.strip()]
         if _has_required_libs(names):
             return True
-    except (subprocess.TimeoutExpired, Exception):
-        pass
+    except (OSError, subprocess.SubprocessError) as e:
+        logger.info(f"Couldn't ask ldconfig for CUDA's libraries: {e}")
 
     lib_dirs = [
         '/usr/local/cuda/lib64',
@@ -463,10 +463,8 @@ def show_cuda_download_dialog(parent=None, on_success_callback=None):
             progress_callback=update_progress,
             cancel_event=cancel_event
         )
-        def close_dialog():
-            progress_dialog.response(Gtk.ResponseType.OK)
-            return False
-        GLib.idle_add(close_dialog)
+        GLib.idle_add(lambda: None if cancel_event.is_set()     # Cancel closed it already
+                      else progress_dialog.response(Gtk.ResponseType.OK))
 
     download_thread = threading.Thread(target=do_download)
     download_thread.daemon = True
