@@ -1,6 +1,5 @@
 {
  "files": {
-  "tray.py": 1535,
   "welcome_dialog.py": 2993
  },
  "findings": {
@@ -175,8 +174,6 @@
   "tray.py::DictationTray.__init__::undocumented": 1,
   "tray.py::DictationTray._check_tray_visibility::swallowed_error": 1,
   "tray.py::DictationTray._stop_kwin_focus_provider::swallowed_error": 1,
-  "tray.py::DictationTray.show_about_dialog::long_line": 1,
-  "tray.py::DictationTray.show_about_dialog::swallowed_error": 1,
   "tray.py::DictationTray.show_menu_window_if_no_tray::swallowed_error": 1,
   "tray.py::DictationTray::undocumented": 1,
   "tray.py::main.check_and_show_update_notification::swallowed_error": 1,
@@ -346,9 +343,6 @@
   },
   "tray.py::DictationTray._show_update_result_dialog": {
    "lines": 135
-  },
-  "tray.py::DictationTray.show_about_dialog": {
-   "lines": 127
   },
   "tray.py::main": {
    "decisions": 18,
