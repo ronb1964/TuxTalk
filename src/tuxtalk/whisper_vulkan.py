@@ -268,9 +268,9 @@ def find_device():
     try:
         result = subprocess.run(command, capture_output=True, text=True, timeout=30, env=env)
         out = result.stderr
-        if engine_process.launch_failure(result.returncode):
-            logger.warning("Could not list graphics devices"
-                           + engine_process.launch_failure(result.returncode))
+        why = engine_process.launch_failure(result.returncode)
+        if why:
+            logger.warning(f"Could not list graphics devices{why}")
     except Exception as e:
         logger.warning(f"Could not list graphics devices: {e}")
         return None

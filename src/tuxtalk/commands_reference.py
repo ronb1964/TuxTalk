@@ -71,7 +71,7 @@ SECTIONS = (
         Command(("press tab", "press the tab key"),
                 "at the end: presses the Tab key, to the next box in a form (in Claude "
                 "Desktop, four spaces)", "key",
-                "Filling in a form, in the Writing section, has the steps"),
+                "Help → Writing → Filling in a form has the steps"),
         _inline("soft break", "soft line", result="three spaces"),
         Command(("press enter", "hit enter"), "at the end: types it, then presses Enter",
                 "key", "It sends a chat message or runs a command. <b>literal press enter</b> "

@@ -173,16 +173,15 @@ def _disk_space_problem(repo, files):
             f"only {free / 1024 ** 3:.1f} GB available")
 
 
-def _fetch_unlisted(repo, progress_callback):
-    """Without a file list, fetch the files faster-whisper loads in one go,
-    without byte progress. Never through WhisperModel(), which would load
-    the model as well: its caller loads it when it needs it."""
-    from huggingface_hub import snapshot_download
+def _fetch_unlisted(repo, model_name, progress_callback, cancel_event):
+    """Without a file list, fetch the files faster-whisper loads by name,
+    one at a time like the listed ones, so Cancel stops it; without byte
+    progress, since their sizes aren't known. Never through WhisperModel(),
+    which would load the model as well: its caller loads it when it needs it."""
     progress_callback("Downloading model files...", 5)
-    snapshot_download(repo, allow_patterns=[*ESSENTIAL_MODEL_FILES, *VOCABULARY_FILES,
-                                            "preprocessor_config.json"])
-    progress_callback("Download complete!", 100)
-    return True
+    names = (*ESSENTIAL_MODEL_FILES, *VOCABULARY_FILES, "preprocessor_config.json")
+    return _fetch_files(repo, model_name, [(name, 0) for name in names], False,
+                        progress_callback, cancel_event)
 
 
 def _fetch_files(repo, model_name, files, all_needed, progress_callback, cancel_event):
@@ -297,7 +296,7 @@ def make_model_download_func(model_name, repo_id=None, only_files=None):
             progress_callback("Getting file list...", 1)
             files = _listed_files(repo, model_name, only_files)
             if not files:
-                return _fetch_unlisted(repo, progress_callback)
+                return _fetch_unlisted(repo, model_name, progress_callback, cancel_event)
             problem = _disk_space_problem(repo, files)
             if problem:
                 logger.error(problem)
@@ -413,12 +412,13 @@ def _fetch_with_retry(fetch, filename, sleep=None):
     fails: a single slow moment shouldn't sink a 670 MB download. A cancel
     is never retried; after the last try its error is raised."""
     import time
+    from huggingface_hub.utils import EntryNotFoundError
     sleep = sleep or time.sleep
     for attempt, wait in enumerate((*_RETRY_WAITS, None), start=1):
         try:
             return fetch()
-        except InterruptedError:
-            raise
+        except (InterruptedError, EntryNotFoundError):
+            raise                       # a cancel, or a file the model hasn't
         except Exception as e:
             if wait is None:
                 raise

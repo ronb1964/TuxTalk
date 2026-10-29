@@ -498,7 +498,7 @@ def test_an_uninstall_without_the_tray_holds_its_lock(tmp_path, monkeypatch):
     assert held == [True]       # flock is per open file: this process's other one sees it
 
 
-def test_preferences_restart_waits_for_an_uninstall(tmp_path, monkeypatch):
+def test_preferences_restart_waits_for_an_uninstall(tmp_path, monkeypatch, started):
     """The other half: a restart from Preferences with no tray waits for the
     lock, and starts nothing while an uninstall holds it."""
     from tuxtalk import prefs
@@ -507,42 +507,63 @@ def test_preferences_restart_waits_for_an_uninstall(tmp_path, monkeypatch):
     launched = []
     monkeypatch.setattr(service_launcher, "end_dictation_service", lambda: True)
     monkeypatch.setattr(service_launcher, "launch_dictation_service",
-                        lambda: launched.append(1) or _Started(running=True))
+                        lambda: launched.append(1) or started["now"])
     with single_instance.open_lock(tray_instance.TRAY_LOCK) as uninstalling:
         assert single_instance.claim(uninstalling)
-        assert prefs._restart_without_tray() is True     # left to it, not a failure
+        assert prefs._restart_without_tray() is False    # owed: a tray keeps the old one
     assert launched == []
     assert prefs._restart_without_tray() is True
     assert launched == [1]
 
 
 class _Started:
-    """A launched service, still running after the grace time or not."""
+    """A launched service: it gets ready after *checks* looks, or ends
+    after that many (ready=False), or neither (checks=None)."""
 
-    def __init__(self, running):
-        self.running, self.returncode = running, None if running else 1
+    pid = 4242
+
+    def __init__(self, ready=True, checks=0):
+        self.ready, self.checks, self.returncode = ready, checks, None
 
     def wait(self, timeout):
-        if self.running:
-            raise subprocess.TimeoutExpired("tuxtalk.app", timeout)
-        return self.returncode
+        if self.checks is not None and not self.ready:
+            if self.checks == 0:
+                self.returncode = 1
+                return 1
+            self.checks -= 1
+        raise subprocess.TimeoutExpired("tuxtalk.app", timeout)
+
+    def ready_pid(self):
+        if self.ready and self.checks is not None:
+            if self.checks == 0:
+                return self.pid
+            self.checks -= 1
+        return None
 
 
-@pytest.mark.parametrize("ended,running,restarted", [
-    (True, True, True),         # the new service is up
-    (True, False, False),       # it ended at once: a broken setting, say
-    (False, True, False)])      # the old one wouldn't go: no second one started
-def test_preferences_restart_says_whether_it_worked(tmp_path, monkeypatch, ended, running,
-                                                    restarted):
+@pytest.fixture
+def started(monkeypatch):
+    """What launching the service gives, with the ready file it writes."""
+    service = {"now": _Started()}
+    monkeypatch.setattr(service_launcher, "launch_dictation_service", lambda: service["now"])
+    monkeypatch.setattr(service_launcher, "read_ready_pid", lambda: service["now"].ready_pid())
+    return service
+
+
+@pytest.mark.parametrize("ended,service,restarted", [
+    (True, _Started(ready=True, checks=3), True),       # up once its model loaded
+    (True, _Started(ready=False, checks=0), False),     # ended at once: a broken setting
+    (True, _Started(ready=False, checks=3), False),     # ended loading its model
+    (True, _Started(checks=None), True),                # still loading: asking to download?
+    (False, _Started(), False)])                        # the old one wouldn't go
+def test_preferences_restart_says_whether_it_worked(tmp_path, monkeypatch, started, ended,
+                                                    service, restarted):
     from tuxtalk import prefs
     monkeypatch.setattr(single_instance, "runtime_dir", lambda: str(tmp_path))
-    monkeypatch.setattr(prefs, "_START_GRACE_S", 0.01)
-    launched = []
+    monkeypatch.setattr(prefs, "_READY_WAIT_S", 2)
     monkeypatch.setattr(service_launcher, "end_dictation_service", lambda: ended)
-    monkeypatch.setattr(service_launcher, "launch_dictation_service",
-                        lambda: launched.append(1) or _Started(running))
+    started["now"] = service
     assert prefs._restart_without_tray() is restarted
-    assert launched == ([1] if ended else [])
 
 
 @pytest.mark.parametrize("answer,goes_ahead,saved", [

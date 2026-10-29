@@ -68,7 +68,7 @@ def test_formatting_comes_out_as_listed():
                 if result == "line break":
                     assert normalize.LINE_BREAK * 2 not in typed, phrase
                 checked += 1
-    assert checked == 9
+    assert checked == 9, "a formatting command was added: give it a line in *made*"
 
 
 def test_both_screens_show_every_phrase():

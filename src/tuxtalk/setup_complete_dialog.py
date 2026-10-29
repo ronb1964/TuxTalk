@@ -212,7 +212,7 @@ def _button(label, width, on_click, main=False):
     return button
 
 
-def _buttons(dialog, needs_restart):
+def _buttons(dialog, needs_restart, model_ready=True):
     """(box, main button). When a restart is owed, the choice IS restart now
     or later: dictation won't work until the reboot, so "Start Using
     TuxTalk!" would mislead. Otherwise start dictating, or adjust settings."""
@@ -238,7 +238,9 @@ def _buttons(dialog, needs_restart):
         left = _button("Open Preferences", 150, open_preferences)
         left.set_tooltip_text(
             "Adjust models, hotkeys, punctuation, the recording indicator and more")
-        main = _button("Start Using TuxTalk!", 180, close, main=True)
+        # Without a model there's nothing to start using yet.
+        main = _button("Start Using TuxTalk!" if model_ready else "Continue", 180, close,
+                       main=True)
     button_box.pack_start(left, False, False, 0)
     button_box.pack_start(main, False, False, 0)
     return button_box, main
@@ -286,7 +288,7 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
             "ready to use".
     """
     from .ui_style import fit_dialog_to_screen
-    dialog = Gtk.Dialog(title="TuxTalk - Ready!")
+    dialog = Gtk.Dialog(title="TuxTalk - Ready!" if model_ready else "TuxTalk - Setup Complete")
     dialog.set_border_width(0)
     fit_dialog_to_screen(dialog, _WIDTH, -1)  # auto-height, resizable; capped when realized
     dialog.set_position(Gtk.WindowPosition.CENTER)
@@ -312,7 +314,7 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
     _notes(vbox, extension_installed)
     if needs_restart:
         _restart_reminder(vbox)
-    button_box, main_button = _buttons(dialog, needs_restart)
+    button_box, main_button = _buttons(dialog, needs_restart, model_ready)
 
     # GTK sizes the scroller at its narrowest width, where the wrapped lines
     # are taller, and comes up short: ask for their height at the window's

@@ -88,9 +88,8 @@ def _brought_open_window_forward(tab, wait_s):
     return pid is not None and prefs_ipc.bring_to_front(pid, tab)
 
 
-# A restarted service that ends within this long didn't start (a broken
-# setting, a missing library): said, rather than called a restart.
-_START_GRACE_S = 1.0
+# How long a restart waits for the new service to say it's ready.
+_READY_WAIT_S = 180
 
 # What can need a download, and so is rolled back when it never finishes:
 # the model, and the device (the processor or Vulkan copy of a model).
@@ -104,16 +103,17 @@ def _restart_without_tray():
     it, and none of them can start or remove a service under the other.
     Preferences runs on native Wayland, and a service spawned with its
     environment would inherit it: gtk_window_move() would be ignored and the
-    recording indicator always centred."""
+    recording indicator always centred. Whether the new service got ready
+    (_came_up)."""
     from . import single_instance, tray_instance
     from .service_launcher import QUIT_WAIT_S, end_dictation_service, launch_dictation_service
     try:
         with single_instance.open_lock(tray_instance.TRAY_LOCK) as lock:
             if not single_instance.claim(lock, wait_s=QUIT_WAIT_S):
-                # Not a failure: a tray starting starts dictation with the
-                # saved settings, and an uninstall wants none.
+                # A failure, so the change stays owed: a tray starting keeps
+                # the service already running, with the old settings.
                 logger.warning("Dictation not restarted: TuxTalk is starting or uninstalling")
-                return True
+                return False
             if not end_dictation_service():
                 logger.warning("Dictation not restarted: the old service wouldn't end")
                 return False
@@ -121,12 +121,28 @@ def _restart_without_tray():
     except Exception as e:
         logger.warning(f"Failed to restart service: {e}")
         return False
-    try:
-        service.wait(timeout=_START_GRACE_S)
-    except subprocess.TimeoutExpired:
-        return True                         # still running: it started
-    logger.warning(f"The restarted dictation service ended at once (exit {service.returncode})")
-    return False
+    return _came_up(service)
+
+
+def _came_up(service):
+    """Whether *service*, just launched, got ready: it writes its pid to the
+    ready file once its model is loaded. One that ends first didn't (a
+    broken setting, a model that won't load); one still loading after
+    _READY_WAIT_S counts as started, since it may be asking to download
+    its model."""
+    from .service_launcher import read_ready_pid
+    deadline = time.monotonic() + _READY_WAIT_S
+    while time.monotonic() < deadline:
+        if read_ready_pid() == service.pid:
+            return True
+        try:
+            service.wait(timeout=0.25)
+        except subprocess.TimeoutExpired:
+            continue
+        logger.warning("The restarted dictation service ended before it was ready "
+                       f"(exit {service.returncode})")
+        return False
+    return True
 
 
 class PreferencesWindow:

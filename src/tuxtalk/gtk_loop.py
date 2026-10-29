@@ -31,6 +31,7 @@ def start() -> None:
     # this waiting for good, and the service hung at start.
     while not running.wait(0.1):
         if not _thread.is_alive():
+            _thread = None          # not running: running() and here() say so
             raise RuntimeError("GTK's main loop ended before it started")
 
 

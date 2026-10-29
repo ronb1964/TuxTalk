@@ -257,8 +257,25 @@ def test_without_hugging_faces_file_list_the_model_is_still_not_loaded(settings,
     monkeypatch.setattr(model_helper, "_files_to_download", no_list)
     assert fr._apply_first_run_setup({"model": "small", "device": "cpu",
                                       "dictation_language": "en"})
-    assert set(hugging_face) == {"model.bin", "config.json", "tokenizer.json",
-                                 "vocabulary.txt"}
+    # By name, the optional ones too (a model has only one vocabulary file).
+    assert set(hugging_face) == {"model.bin", "config.json", "tokenizer.json", "vocabulary.txt",
+                                 "vocabulary.json", "preprocessor_config.json"}
+
+
+def test_cancel_stops_a_download_without_the_file_list(hugging_face, monkeypatch):
+    """The window closes at once on Cancel; the download fetched by name
+    behind it must stop too, not run on unseen for gigabytes."""
+    import threading
+    from tuxtalk import model_helper
+
+    def no_list(repo):
+        raise OSError("rate limited")
+    monkeypatch.setattr(model_helper, "_files_to_download", no_list)
+    cancel = threading.Event()
+    cancel.set()
+    download = model_helper.make_model_download_func("small")
+    assert download(lambda text, percent: None, cancel) is False
+    assert hugging_face == []
 
 
 def test_a_cancelled_processor_download_says_so(hugging_face, monkeypatch):
@@ -290,7 +307,9 @@ def test_without_a_model_setup_complete_does_not_say_ready(setup_complete):
     shown = setup_complete(model_ready=False)
     assert "TuxTalk is ready to use." not in shown
     assert any("The speech model isn't downloaded yet." in text for text in shown)
-    assert "TuxTalk is ready to use." in setup_complete()
+    assert "Start Using TuxTalk!" not in shown and "Continue" in shown
+    ready = setup_complete()
+    assert "TuxTalk is ready to use." in ready and "Start Using TuxTalk!" in ready
 
 
 def test_the_ready_screen_names_the_key_the_user_chose(setup_complete, monkeypatch):
