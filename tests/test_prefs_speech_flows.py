@@ -186,13 +186,14 @@ def test_a_failed_download_on_apply_says_so(monkeypatch):
 
 
 def test_apply_shows_the_setup_the_tray_switched_to(speech, monkeypatch, tmp_path):
-    """The tray switched to Parakeet on the graphics chip while Preferences
-    was open. Apply keeps that, and the dropdowns say so, Device included
-    though this window never listed Vulkan."""
+    """The tray switched to Parakeet on the graphics chip (and Battery saver)
+    while Preferences was open. Apply keeps that, and the window says so,
+    Device included though this window never listed Vulkan."""
     section = speech(None)
     saved = tmp_path / "config.toml"
     saved.write_text('model = "parakeet-v3"\ndevice = "vulkan"\n'
-                     'language_mode = "manual"\nlanguage = "de"\n')
+                     'language_mode = "manual"\nlanguage = "de"\n'
+                     'auto_timeout_enabled = true\nauto_timeout_minutes = 2\n')
     monkeypatch.setattr(prefs, "CONFIG_PATH", str(saved))
     monkeypatch.setattr(section, "download_selected_model", lambda: True)
 
@@ -201,3 +202,5 @@ def test_apply_shows_the_setup_the_tray_switched_to(speech, monkeypatch, tmp_pat
     assert section.model_combo.get_active_id() == "parakeet-v3"
     assert section.device_combo.get_active_id() == "vulkan"
     assert section.language.combo.get_active_id() == "de"
+    general = section.win.general_tab
+    assert general.timeout_check.get_active() and general.timeout_spin.get_value() == 2

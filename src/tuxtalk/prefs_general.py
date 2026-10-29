@@ -299,11 +299,20 @@ class GeneralTab(Tab):
         grid.attach(check, 0, row, 2, 1)
         return row + 1
 
+    def show_saved(self):
+        """Show what was just saved: the tray may have changed the model and
+        device, or Power Saving (Battery saver), while this window was open,
+        and the save kept that."""
+        self.timeout_check.set_active(self.config.get("auto_timeout_enabled", False))
+        self.timeout_spin.set_value(self.config.get("auto_timeout_minutes", 5))
+        self.speech.show_saved()
+
     def _build_power_saving(self, grid, row):
         """Power Saving: the tickbox, and under it the minutes and what
         happens then, hidden with it off (update_timeout_ui_state)."""
         row = section_header(grid, row, "Power Saving")
-        check = Gtk.CheckButton(label="Save power when dictation isn't used for a while")
+        check = self.timeout_check = Gtk.CheckButton(
+            label="Save power when dictation isn't used for a while")
         check.set_active(self.config.get("auto_timeout_enabled", False))
         check.connect("toggled",
                       lambda x: self.update_config("auto_timeout_enabled", x.get_active()))

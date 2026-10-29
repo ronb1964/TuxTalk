@@ -253,6 +253,7 @@ class PreferencesWindow:
             # updated with whatever is currently on disk.
             base = dict(self._config_at_open)
             base.update(on_disk)
+            saved_before = dict(base)       # merge_changed_keys fills in base
             # Only a change made in this window may touch the autostart entry:
             # rewriting it on every save would undo the user turning TuxTalk
             # off in their desktop's own Autostart settings.
@@ -276,7 +277,9 @@ class PreferencesWindow:
                     # just saved — the file is already written at this point.
                     logger.warning(f"Could not update autostart entry: {e}")
 
-            # Future saves in this window diff against what we just wrote
+            # Future saves in this window diff against what we just wrote;
+            # what it replaced is what a failed download goes back to.
+            self._saved_before = saved_before
             self.config = dict(merged)
             self._config_at_open = dict(merged)
             return True
@@ -679,15 +682,15 @@ class PreferencesWindow:
         # wrote: after that there is nothing left to diff, and it no longer
         # names the setup the service runs.
         changed = self._changed_since_open()
-        # Only what this window changed is undone: a model the tray switched
-        # to meanwhile stays.
-        previous = {k: self._config_at_open.get(k) for k in _DOWNLOAD_KEYS if k in changed}
         saved_at = time.time()      # for KDE's verdict on a changed hotkey
         if not self.save_config():
             self._show_save_error()
             return None
+        # Only what this window changed is undone, and to what was saved
+        # until now: a model the tray switched to meanwhile stays.
+        previous = {k: self._saved_before.get(k) for k in _DOWNLOAD_KEYS if k in changed}
+        self.general_tab.show_saved()
         speech = self.general_tab.speech
-        speech.show_saved()
         if not speech.download_selected_model():
             speech.rollback_download(previous)
             return None

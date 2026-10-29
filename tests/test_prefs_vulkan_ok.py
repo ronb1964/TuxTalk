@@ -42,11 +42,13 @@ def test_ok_closes_after_a_model_download(prefs_cls, monkeypatch):
     stub = SimpleNamespace(
         _config_at_open={"model": "parakeet-v3"},
         config={"model": "small"},
+        _saved_before={"model": "parakeet-v3"},     # what the save replaced
         save_config=lambda: True,
         _changed_since_open=lambda: {"model"},
         _apply_or_restart=lambda changed: True,
         general_tab=SimpleNamespace(
             speech=SimpleNamespace(download_selected_model=lambda: True),  # downloaded fine
+            show_saved=lambda: None,
             after_hotkey_change=lambda changed, since: False),
         _release=lambda: None,
         words_tab=SimpleNamespace(save=lambda: True),
