@@ -223,17 +223,12 @@ def test_graphics_is_used_only_when_clearly_faster(gpu, cpu, worth_it):
 def test_speed_check_reads_whisper_cli_timings(monkeypatch):
     runs = []
 
-    class Done:
-        returncode = 0
-
-        def __init__(self, seconds):
-            self.stderr = f"whisper_print_timings:    total time =  {seconds * 1000:.2f} ms\n"
-
-    def fake_run(cmd, **kw):
+    def fake_run(cmd, cancel=None):
         runs.append(cmd)
-        return Done(6.2 if "-ng" in cmd else 0.4)
+        seconds = 6.2 if "-ng" in cmd else 0.4
+        return 0, f"whisper_print_timings:    total time =  {seconds * 1000:.2f} ms\n"
 
-    monkeypatch.setattr(wv.subprocess, "run", fake_run)
+    monkeypatch.setattr(wv, "_run_timed", fake_run)
     monkeypatch.setattr(wv, "model_path", lambda m: "/models/x.bin")
     assert wv.speed_check("large-v3", 1, threads=8) == (0.4, 6.2)
     assert [("-dev" in r, "-ng" in r) for r in runs] == [(True, False), (True, False), (False, True)]
@@ -246,22 +241,37 @@ def test_parakeet_speed_check_uses_parakeet_cli_without_its_load_time(monkeypatc
     from tuxtalk.parakeet_engine import PARAKEET_MODEL
     runs = []
 
-    class Done:
-        returncode = 0
+    def timings(load, total):
+        return 0, (f"parakeet_print_timings:     load time =   {load * 1000:.2f} ms\n"
+                   f"parakeet_print_timings:    total time =   {total * 1000:.2f} ms\n")
 
-        def __init__(self, load, total):
-            self.stderr = (f"parakeet_print_timings:     load time =   {load * 1000:.2f} ms\n"
-                           f"parakeet_print_timings:    total time =   {total * 1000:.2f} ms\n")
-
-    def fake_run(cmd, **kw):
+    def fake_run(cmd, cancel=None):
         runs.append(cmd)
-        return Done(0.08, 0.84) if "-ng" in cmd else Done(0.20, 0.26)
+        return timings(0.08, 0.84) if "-ng" in cmd else timings(0.20, 0.26)
 
-    monkeypatch.setattr(wv.subprocess, "run", fake_run)
+    monkeypatch.setattr(wv, "_run_timed", fake_run)
     monkeypatch.setattr(wv, "model_path", lambda m: "/models/p.bin")
     gpu, cpu = wv.speed_check(PARAKEET_MODEL, 0, threads=4)
     assert (round(gpu, 2), round(cpu, 2)) == (0.06, 0.76)
     assert all(r[0].endswith("parakeet-cli") for r in runs)
+
+
+def test_stop_ends_a_speed_check_run_at_once(monkeypatch):
+    """Stop on a hung graphics driver: the run is killed, not left to keep
+    the chip and a core busy for minutes in the background."""
+    import threading
+    monkeypatch.setattr(wv, "_engine_env", lambda: None)
+    cancel = threading.Event()
+    threading.Timer(0.2, cancel.set).start()
+    started = time.monotonic()
+    with pytest.raises(RuntimeError, match="stopped"):
+        wv._run_timed(["sleep", "30"], cancel)
+    assert time.monotonic() - started < 5
+
+
+def test_a_finished_run_gives_its_exit_code_and_stderr(monkeypatch):
+    monkeypatch.setattr(wv, "_engine_env", lambda: None)
+    assert wv._run_timed(["sh", "-c", "echo timings >&2; exit 3"]) == (3, "timings\n")
 
 
 @pytest.mark.parametrize("text, cleaned", [
@@ -491,7 +501,7 @@ def test_speed_check_remembers_which_won(monkeypatch, times, slower):
     saved = {}
     cfg = types.SimpleNamespace(vulkan_slower=not slower)
     monkeypatch.setattr(vsd.wv, "find_device", lambda: 0)
-    monkeypatch.setattr(vsd.wv, "speed_check", lambda model, dev: times)
+    monkeypatch.setattr(vsd.wv, "speed_check", lambda model, dev, cancel: times)
     monkeypatch.setattr(vsd, "message", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.config.load_config", lambda: cfg)
     monkeypatch.setattr("tuxtalk.config.save_config", lambda c: saved.update(slower=c.vulkan_slower))

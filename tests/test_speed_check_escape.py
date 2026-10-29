@@ -5,6 +5,7 @@ hidden. If run() returned then, while the worker is still timing,
 run_speed_check() would raise KeyError on the missing result.
 """
 import threading
+import types
 
 import pytest
 
@@ -51,7 +52,9 @@ def test_escape_is_refused_while_the_check_runs(monkeypatch):
     for name in ("Box", "Spinner", "Label"):
         monkeypatch.setattr(vsd.Gtk, name, _Anything)
     monkeypatch.setattr(vsd.GLib, "timeout_add", lambda *a, **k: 0)
-    monkeypatch.setattr(vsd.threading, "Thread", make_thread)
+    # Only this module's threads: replacing threading.Thread itself broke
+    # every other thread started meanwhile (the beeps' among them).
+    monkeypatch.setattr(vsd, "threading", types.SimpleNamespace(Thread=make_thread))
 
     vsd._wait_dialog(None, lambda: release.wait(2))
 
@@ -105,3 +108,26 @@ def test_a_long_check_can_be_stopped(monkeypatch):
     assert seen["after_offer"] is False      # now it closes
     assert seen["buttons"] == ["Stop"]
     assert timers[200]() is False            # the poll stops once the window is gone
+
+
+def test_stop_ends_the_check_still_running_behind_it(monkeypatch):
+    """Stop closes the window while the check runs on: it's told to end, so
+    a hung driver doesn't keep the graphics chip busy for minutes."""
+    ran = {}
+
+    def speed_check(model, device, cancel):
+        ran["stopped"] = cancel.wait(2)
+        raise RuntimeError("speed check stopped")
+
+    def stopped_at_once(parent, work):
+        ran["thread"] = threading.Thread(target=work)
+        ran["thread"].start()           # Stop: the window closes, the work goes on
+
+    monkeypatch.setattr(vsd.wv, "find_device", lambda: 0)
+    monkeypatch.setattr(vsd.wv, "speed_check", speed_check)
+    monkeypatch.setattr(vsd, "_wait_dialog", stopped_at_once)
+    monkeypatch.setattr(vsd, "message", lambda *a, **k: None)
+
+    assert vsd.run_speed_check(None, "small") is False
+    ran["thread"].join(3)
+    assert ran["stopped"] is True
