@@ -41,12 +41,28 @@ def test_setup_loads_uinput_before_giving_it_to_the_user(tmp_path):
     ]
 
 
-def test_the_uninstall_lines_are_valid_bash_and_take_everything_away():
+def _stub_commands(folder, names, status=0):
+    """Stand-ins on a PATH of their own for *names*: each writes its name and
+    arguments to calls.txt and exits with *status*. Returns that file."""
+    calls = folder / "calls.txt"
+    for name in names:
+        stub = folder / name
+        stub.write_text(f'#!/bin/sh\necho "{name} $*" >> {calls}\nexit {status}\n')
+        stub.chmod(0o755)
+    return calls
+
+
+def test_the_uninstall_lines_take_everything_away(tmp_path):
+    """The helper, its service and both typing rules are what rm is given:
+    each path also appears in the checks after it, so finding the names in
+    the script proved nothing."""
     from tuxtalk.uinput_helper import UDEV_RULE_PATH
-    script = si.uninstall_lines()
-    assert subprocess.run(["bash", "-n"], input=script, text=True).returncode == 0
-    for path in (si.UNIT_PATH, si.HELPER_PATH, si.UINPUT_RULE_PATH, UDEV_RULE_PATH):
-        assert path in script
+    calls = _stub_commands(tmp_path, ("systemctl", "rm", "rmdir", "udevadm"), status=1)
+    run = subprocess.run(["/bin/bash", "-c", si.uninstall_lines()],
+                         env={"PATH": str(tmp_path)}, capture_output=True, text=True)
+    assert run.returncode == 0, run.stderr
+    assert (f"rm -f {si.UNIT_PATH} {si.HELPER_PATH} {si.UINPUT_RULE_PATH} {UDEV_RULE_PATH}"
+            in calls.read_text().splitlines())
 
 
 @pytest.mark.parametrize("line", [
@@ -294,13 +310,26 @@ def test_still_being_in_the_group_is_reported_not_hidden(monkeypatch):
     for script in (si.install_script(leave_group=True), si.leave_input_group_script()):
         assert f"echo {si.STILL_IN_GROUP}" in script
         assert subprocess.run(["bash", "-n"], input=script, text=True).returncode == 0
-    ran = subprocess.run(["bash", "-s"], text=True, capture_output=True,
-                         input='user=$(id -nu)\n' + si._still_in_group_check())
-    groups = subprocess.run(["id", "-nG"], text=True, capture_output=True).stdout.split()
-    assert (si.STILL_IN_GROUP in ran.stdout) == ("input" in groups)
 
     class Done:
         returncode, stdout, stderr = 0, si.STILL_IN_GROUP + "\n", ""
 
     monkeypatch.setattr(si.subprocess, "run", lambda *a, **k: Done())
     assert si._pkexec("true", "tested") == (True, si.STILL_IN_GROUP)
+
+
+@pytest.mark.parametrize("groups, still_in", [
+    ("ron wheel input", True),
+    ("input ron", True),
+    ("ron input-foo wheel", False),
+    ("ron wheel", False),
+])
+def test_the_still_in_the_group_check_reads_whole_group_names(tmp_path, groups, still_in):
+    """Against the real `id` neither this computer nor CI is in "input", so
+    a broken pattern would have passed: here `id` answers for the user."""
+    stub = tmp_path / "id"
+    stub.write_text(f'#!/bin/sh\necho "{groups}"\n')
+    stub.chmod(0o755)
+    ran = subprocess.run(["/bin/bash", "-c", "user=ron\n" + si._still_in_group_check()],
+                         env={"PATH": str(tmp_path)}, capture_output=True, text=True)
+    assert (si.STILL_IN_GROUP in ran.stdout) == still_in
