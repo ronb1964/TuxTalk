@@ -19,6 +19,7 @@ import os
 
 from gi.repository import GLib
 
+from . import commands_reference
 from .ai_cleanup import DOWNLOAD_SIZE_TEXT as AI_SIZE_TEXT
 from .cuda_helper import DOWNLOAD_SIZE_TEXT as CUDA_SIZE_TEXT
 from .whisper_vulkan import ENGINE_SIZE_TEXT
@@ -93,8 +94,14 @@ def _no_hotkey_tips(is_flatpak, keys_where):
 def tabs():
     """[(title, Pango markup)] for each of Help's sections, in order."""
     values = _values()
-    return [(title, text.format(**values) if formatted else text)
-            for title, text, formatted in _TABS]
+    pages = []
+    for title, text, formatted in _TABS:
+        if callable(text):
+            text = text()
+        elif formatted:
+            text = text.format(**values)
+        pages.append((title, text))
+    return pages
 
 
 def _values():
@@ -651,7 +658,7 @@ Saying only <b>press enter</b> or <b>press tab</b> there still works, to log in 
   • <b>Log file:</b> {log_path}'''
 
 # Plain text, never formatted: the brace commands below contain { and }.
-COMMANDS = '''<span size="large"><b>Voice Commands Reference</b></span>
+_COMMANDS_INTRO = '''<span size="large"><b>Voice Commands Reference</b></span>
 
 There are two kinds:
 • <b>Inside what you say</b>: punctuation and formatting, said as you talk. Hold your
@@ -660,43 +667,9 @@ There are two kinds:
   them right after the dictation they're about, as a dictation by themselves: hold
   your dictation key, say only the command, let go.
 The commands are English words, whatever language you dictate in. A shorter list
-is in the TuxTalk menu → Voice Commands....
+is in the TuxTalk menu → Voice Commands....'''
 
-<b>Punctuation:</b>
-• Say <b>comma</b> for ,
-• Say <b>period</b> or <b>full stop</b> for .
-• Say <b>question mark</b> for ?
-• Say <b>exclamation point</b> or <b>exclamation mark</b> for !
-• Say <b>semicolon</b> for ;
-• Say <b>colon</b> for :
-• Say <b>apostrophe</b> for '
-• Say <b>quote</b> before and after words for “hello” (a lone one is a plain ")
-• Say <b>open quote</b> or <b>open quotes</b> for “
-• Say <b>close quote</b> or <b>close quotes</b> for ”
-• Say <b>hyphen</b> or <b>dash</b> for -
-• Say <b>em dash</b> for —
-• Say <b>dot dot dot</b> or <b>ellipsis</b> for …
-
-<b>Brackets &amp; Parentheses:</b>
-• Say <b>open parenthesis</b> for (
-• Say <b>close parenthesis</b> for )
-• Say <b>open bracket</b> for [
-• Say <b>close bracket</b> for ]
-• Say <b>open brace</b> for {
-• Say <b>close brace</b> for }
-
-<b>Formatting:</b>
-• Say <b>new line</b>, <b>newline</b>, <b>return</b>, or <b>line break</b> for a line break
-• Say <b>new paragraph</b> or <b>paragraph break</b> for a double line break
-• Say <b>press tab</b> for a tab; <b>tab</b> alone is the word. At the end of a dictation it
-  presses the Tab key (so does <b>press the tab key</b>): in a form you go to the next box.
-  In Claude Desktop it types four spaces. Filling in a form, in the Writing section,
-  has the steps
-• Say <b>soft break</b> or <b>soft line</b> for three spaces
-• End with <b>press enter</b> or <b>hit enter</b> to type the dictation and press Enter: it
-  sends a chat message or runs a command. <b>literal press enter</b> types the words.
-
-<b>Literal Words:</b>
+_COMMANDS_LITERAL = '''<b>Literal Words:</b>
 To output the word instead of executing the command, say <b>literal</b> or
 <b>the word</b> before it:
 
@@ -715,33 +688,14 @@ Result: Hello world, how are you?
 
 Say: <i>First sentence period new line Second sentence exclamation point</i>
 Result: First sentence.
-Second sentence!
+Second sentence!'''
 
-<b>Undo Commands:</b>
-• Say <b>undo last word</b> to delete the last word you dictated
-• Say <b>undo last sentence</b> to delete back to the previous sentence
-• Say <b>undo last paragraph</b> to delete back to the last line break
-• Also works: <b>delete last word</b>, <b>remove last word</b>, <b>delete last 3 words</b>
 
-<b>Clearing the Whole Box:</b>
-• Say <b>delete everything</b>, <b>delete all</b>, <b>clear everything</b>, <b>clear all</b>,
-  <b>undo everything</b> or <b>undo all</b>
-• It empties the whole box, including text TuxTalk didn't type. In a terminal it
-  clears the line you're typing
+def _commands():
+    """The Commands tab: the shared table (commands_reference) between the
+    explanation of the two kinds and the literal words with examples."""
+    return "\n\n".join((_COMMANDS_INTRO, commands_reference.help_markup(), _COMMANDS_LITERAL))
 
-<b>Fixing a Word:</b>
-• Say <b>fix that word</b> right after a dictation to open Fix a Word on it
-
-<b>Editing by Voice</b> (🧪 Labs, see the Writing section):
-• Select text, hold Shift with your dictation key, and say the change:
-  <b>make this more formal</b>, <b>fix the grammar</b>, <b>make this all caps</b>
-• Right after dictating: <b>edit that, make it shorter</b>
-• With Select and move on: <b>select the last sentence</b>, <b>go to the end</b>, <b>unselect</b>
-
-<b>Changing Your Mind:</b>
-• Say <b>no wait</b>, <b>I mean</b>, <b>make that</b>, <b>scratch that</b> or <b>or rather</b>
-  to correct yourself: "meet at 3, no wait, 4" → "meet at 4"
-• Needs <b>Fix self-corrections with AI</b> in Preferences → Advanced'''
 
 TIPS = '''<span size="large"><b>Tips</b></span>
 
@@ -781,5 +735,5 @@ _TABS = [
     ("Mistakes", MISTAKES, True),
     ("Tips", TIPS, True),
     (PROBLEMS_TITLE, PROBLEMS, True),
-    ("Commands", COMMANDS, False),
+    ("Commands", _commands, False),
 ]

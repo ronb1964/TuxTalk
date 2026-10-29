@@ -9,6 +9,8 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk
 
+from . import commands_reference
+
 # Singleton guard — prevents multiple stacked dialogs
 _active_dialog = None
 
@@ -109,66 +111,12 @@ def _on_key_press(dialog, event):
 
 
 def _build_markup():
-    """Build the Pango markup for the cheat sheet content."""
-    from .ai_cleanup import DOWNLOAD_SIZE_TEXT as AI_SIZE_TEXT
-    return '''<span size="large"><b>Voice Commands</b></span>
+    """The cheat sheet: the shared command table (commands_reference) in its
+    short layout, then literal words and snippets."""
+    return f'''<span size="large"><b>Voice Commands</b></span>
 The commands are English words, whatever language you dictate in.
 
-<b>Punctuation</b>
-  <b>comma</b> → ,          <b>period</b> / <b>full stop</b> → .
-  <b>question mark</b> → ?    <b>exclamation point</b> / <b>exclamation mark</b> → !
-  <b>semicolon</b> → ;        <b>colon</b> → :
-  <b>apostrophe</b> → '       <b>quote</b> hi <b>quote</b> → \u201chi\u201d
-  <b>open quote</b> → \u201c         <b>close quote</b> → \u201d
-  <b>hyphen</b> / <b>dash</b> → -    <b>em dash</b> → \u2014
-  <b>ellipsis</b> / <b>dot dot dot</b> → \u2026
-
-<b>Brackets</b>
-  <b>open parenthesis</b> → (    <b>close parenthesis</b> → )
-  <b>open bracket</b> → [       <b>close bracket</b> → ]
-  <b>open brace</b> → {{         <b>close brace</b> → }}
-
-<b>Formatting</b>
-  <b>new line</b> / <b>newline</b> / <b>return</b> / <b>line break</b> → line break
-  <b>new paragraph</b> / <b>paragraph break</b> → double line break
-  <b>press tab</b> → tab character (just <b>tab</b> is the word)
-  <b>press tab</b> at the end → presses Tab (the next box in a form; Help → Writing has the steps).
-    In Claude Desktop, four spaces
-  <b>soft break</b> → three spaces
-  <b>press enter</b> / <b>hit enter</b> at the end → types it, then presses Enter (sends a message, runs a command)
-
-<b>Undo</b>
-  <b>delete last word</b> / <b>undo last word</b> / <b>remove last word</b> → delete last dictated word
-  <b>delete last sentence</b> → delete back to previous sentence
-  <b>delete last paragraph</b> → delete back to last line break
-  <b>delete last 3 words</b> / <b>undo last two sentences</b> → counted undo (1–10 or digits)
-
-<b>Clear the Whole Box</b>
-  <b>delete everything</b> / <b>delete all</b> / <b>clear everything</b> / <b>clear all</b> /
-  <b>undo everything</b> / <b>undo all</b> → empties the whole box, including text TuxTalk
-  didn't type (Ctrl+A, Backspace); in a terminal, the line you're typing (Ctrl+E, Ctrl+U)
-
-<b>Fixing a Word</b>
-  <b>fix that word</b> / <b>fix that</b> → open Fix a Word on what you just said, to teach TuxTalk
-  the right spelling for next time
-
-<b>Editing by Voice</b> (TuxTalk Labs: turn on in Preferences → Advanced)
-  Select text, hold <b>Shift</b> with your dictation key, and say the change:
-  <b>make this more formal</b> / <b>fix the grammar</b> / <b>make this all caps</b> / <b>remove the commas</b>
-  Right after dictating, no keys: <b>edit that, make it shorter</b>
-
-<b>Select and Move</b> (TuxTalk Labs: turn on in Preferences → Advanced)
-  <b>select that</b> / <b>select the last sentence</b> / <b>select the last 3 words</b> → select what you just said
-  <b>select all</b> / <b>select the line</b> / <b>select the next word</b> / <b>select to the end of the line</b>
-  <b>go to the end</b> / <b>go to the start of the line</b> / <b>go back 3 words</b> / <b>go up 2 lines</b>
-  <b>unselect</b> → drop the selection
-
-<b>Changing Your Mind</b>
-Correct yourself mid-sentence with <b>no wait</b>, <b>I mean</b>, <b>make that</b>,
-<b>scratch that</b> or <b>or rather</b>:
-  "meet at 3, no wait, 4" → "meet at 4"
-Needs <b>Fix self-corrections with AI</b> turned on in Preferences → Advanced
-(a one-time download of about {ai_size}).
+{commands_reference.short_markup()}
 
 <b>Literal Words</b>
 Say <b>literal</b> or <b>the word</b> before a basic punctuation or line-break word
@@ -179,4 +127,4 @@ Say <b>literal</b> or <b>the word</b> before a basic punctuation or line-break w
 <b>Snippets</b>
 Say a short phrase, get the full text. Add your own in Preferences → Words.
   Wrap the text in <b>"quotes"</b> to type it exactly as written
-  (bypasses auto-capitalization and punctuation).'''.format(ai_size=AI_SIZE_TEXT)
+  (bypasses auto-capitalization and punctuation).'''

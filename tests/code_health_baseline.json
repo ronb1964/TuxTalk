@@ -218,7 +218,6 @@
   "virtual_keyboard.py::<module>::dated_comment": 2,
   "virtual_keyboard.py::_keyboard_class::undocumented": 1,
   "virtual_keyboard.py::send::long_line": 1,
-  "voice_commands_dialog.py::_build_markup::long_line": 6,
   "voice_commands_dialog.py::show_voice_commands_dialog::swallowed_error": 1,
   "voice_edit_rules.py::<module>::long_line": 7,
   "voice_edit_rules.py::_remove_phrase.change::undocumented": 1,
