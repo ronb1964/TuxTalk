@@ -236,18 +236,29 @@ def test_orphaned_engines_are_killed_but_live_ones_are_left_alone(monkeypatch):
     assert killed == [(100, _signal.SIGKILL)]
 
 
-def test_the_engine_starts_through_setpriv_and_dies_with_the_service(dead_engine, monkeypatch):
-    """llama-server can stall in a graceful shutdown and ignore SIGTERM, so
-    the kernel kills it with SIGKILL; set by setpriv, never by Python code
-    run between fork and exec."""
+def test_an_engine_left_to_the_flatpak_sandbox_is_killed(monkeypatch):
+    """In the Flatpak an orphan's new parent is the sandbox's pid 1, bwrap,
+    whose command line names TuxTalk: it isn't TuxTalk all the same."""
+    import signal as _signal
+    killed = []
+    monkeypatch.setattr(ai, "_engine_processes", lambda: [(100, 1)])
+    monkeypatch.setattr(ai, "_is_talktype_process", lambda pid: True)
+    monkeypatch.setattr(ai.os, "kill", lambda pid, sig: killed.append((pid, sig)))
+    assert ai.kill_orphaned_engines() == 1
+    assert killed == [(100, _signal.SIGKILL)]
+
+
+def test_the_engine_starts_through_the_launcher_with_its_own_libraries(dead_engine, monkeypatch):
+    """The launcher makes it die with the service (test_engine_parent_death),
+    never Python code run between fork and exec."""
     options = []
-    monkeypatch.setattr(ai.engine_process, "_setpriv", lambda: "/usr/bin/setpriv")
     monkeypatch.setattr(ai.subprocess, "Popen",
                         lambda argv, **k: options.append((argv, k)) or _Proc())
     dead_engine.start(_replacing=dead_engine._proc)
     argv, kwargs = options[0]
-    assert argv[:4] == ["/usr/bin/setpriv", "--pdeathsig", "KILL", "--"]
-    assert argv[4] == ai._server_binary()
+    assert argv[1:3] == ["-m", "tuxtalk.engine_launcher"]
+    assert argv[argv.index("--") + 1] == ai._server_binary()
+    assert kwargs["env"][ai.engine_process.engine_launcher.ENGINE_LIBRARY_PATH] == "/x"
     assert "preexec_fn" not in kwargs
 
 
@@ -387,7 +398,6 @@ def dead_engine(monkeypatch):
     monkeypatch.setattr(ai, "_server_binary", lambda: "/x/llama-server")
     monkeypatch.setattr(ai, "_model_path", lambda: "/x/model.gguf")
     monkeypatch.setattr(ai.subprocess, "Popen", lambda *a, **k: started.append(a) or _Proc())
-    monkeypatch.setattr(ai.engine_process, "_setpriv", lambda: None)   # it'd run a process
     monkeypatch.setattr(e, "_wait_until_ready", lambda proc: None)
     e.started = started
     return e
@@ -411,7 +421,7 @@ def test_a_warm_up_without_an_answer_is_logged(monkeypatch, caplog):
     import logging
     e = ai.CorrectionEngine()
     e._proc, e._port = _Proc(), 1234
-    monkeypatch.setattr(ai.urllib.request, "urlopen", lambda *a, **k: None)   # /health answers
+    monkeypatch.setattr(ai.engine_process, "open_local", lambda *a, **k: None)   # /health answers
     monkeypatch.setattr(e, "_ask", lambda sentence, timeout: None)
     with caplog.at_level(logging.INFO, logger=ai.logger.name):
         e._wait_until_ready(e._proc, limit=1)
@@ -426,7 +436,7 @@ def test_a_stop_during_the_warm_up_logs_no_warning(monkeypatch, caplog):
     e = ai.CorrectionEngine()
     starting = _Proc()
     e._proc, e._port = starting, 1234
-    monkeypatch.setattr(ai.urllib.request, "urlopen", lambda *a, **k: None)
+    monkeypatch.setattr(ai.engine_process, "open_local", lambda *a, **k: None)
 
     def stopped_meanwhile(sentence, timeout):
         e._proc = None
@@ -499,6 +509,19 @@ def test_only_folders_other_than_the_current_version_go(tmp_path):
     engine_process.remove_other_versions(str(tmp_path), "1.9.4")
     assert sorted(p.name for p in tmp_path.iterdir()) == ["1.9.4", "notes.txt"]
     engine_process.remove_other_versions(str(tmp_path / "missing"), "1.9.4")    # never raises
+
+
+def test_an_old_engine_version_that_couldnt_be_removed_isnt_logged_as_removed(
+        tmp_path, monkeypatch):
+    from tuxtalk import engine_process
+    (tmp_path / "1.9.3").mkdir()
+    (tmp_path / "1.9.4").mkdir()
+    said = []
+    monkeypatch.setattr(engine_process, "logger", types.SimpleNamespace(
+        info=lambda m: said.append(("info", m)), warning=lambda m: said.append(("warning", m))))
+    monkeypatch.setattr(engine_process.shutil, "rmtree", lambda path, ignore_errors: None)
+    engine_process.remove_other_versions(str(tmp_path), "1.9.4")
+    assert said == [("warning", f"Couldn't remove an older engine version: {tmp_path / '1.9.3'}")]
 
 
 def test_a_filler_like_may_still_go_with_a_correction():

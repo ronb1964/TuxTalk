@@ -25,14 +25,12 @@ Once the model is loaded and warmed up the helper sends {"ready": true}, or
 import ctypes as C
 import json
 import os
-import signal
 import struct
 import sys
 
 SAMPLE_RATE = 16000
 WORDS_REQUEST = 0xFFFFFFFF        # in the count's place: a word list follows
 WARM_UP_SECONDS = (1, 30, 90)     # silence, covering short, long and very long dictations
-PR_SET_PDEATHSIG = 1
 
 
 # --- The protocol ------------------------------------------------------------------
@@ -184,20 +182,8 @@ def load_engine(engine_dir, model, device, threads):
     return Engine(transcribe, set_words)
 
 
-def die_with_parent():
-    """Have the kernel kill this helper when the thread that started it
-    exits, even if the dictation service is killed with SIGKILL, so it can't
-    sit orphaned on the graphics chip's memory. Set here rather than between
-    fork and exec in the service (see engine_process.with_parent_death). Had
-    the service died before this, stdin is already closed and main() ends."""
-    if C.CDLL(None, use_errno=True).prctl(PR_SET_PDEATHSIG, signal.SIGKILL) != 0:
-        print(f"couldn't set the parent-death signal: {os.strerror(C.get_errno())}",
-              file=sys.stderr)
-
-
 def main(argv):
     """Load the model, report ready, then answer requests until stdin closes."""
-    die_with_parent()
     engine_dir, model, device, threads = argv[0], argv[1], int(argv[2]), int(argv[3])
     # Replies go out on a private copy of stdout. The real stdout is pointed
     # at stderr, so nothing the engine prints can get mixed into a reply.

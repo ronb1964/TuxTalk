@@ -6,45 +6,24 @@ cleanup engine (llama-server, ai_cleanup.py) and the Vulkan graphics engine
 (whisper_vulkan.py, and parakeet_gpu.py for Parakeet). Each can hold a gigabyte
 or more of memory, so none may outlive the dictation service that started it.
 """
-import functools
 import os
 import shutil
 import signal
-import subprocess
+import sys
+import urllib.request
 
+from . import engine_launcher
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
 
 
-@functools.lru_cache(maxsize=None)
-def _setpriv():
-    """util-linux's setpriv, when it can set the parent-death signal
-    (--pdeathsig, util-linux 2.33 from 2018), else None. Asked once: it runs
-    itself through the option, which an older one refuses."""
-    path = shutil.which("setpriv")
-    if path:
-        try:
-            subprocess.run([path, "--pdeathsig", "KILL", path, "--version"], check=True,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
-            return path
-        except (OSError, subprocess.SubprocessError) as e:
-            logger.info(f"setpriv can't set the parent-death signal here: {e}")
-    logger.info("No setpriv with --pdeathsig: an engine left behind by a crash "
-                "is cleaned up at the next start instead")
-    return None
-
-
-def with_parent_death(argv):
-    """*argv*, started so that the kernel kills the engine when the thread
-    that starts it exits, even if the dictation service is killed with
-    SIGKILL: no engine may sit orphaned on a gigabyte of memory.
-
-    setpriv sets the signal and then becomes the engine. Setting it from
-    Python between fork and exec (preexec_fn) can deadlock in a process with
-    threads, as the dictation service is, and makes subprocess copy the
-    whole process instead of spawning. Without setpriv, kill_orphans at the
-    next start is the backstop.
+def parent_death_command(argv, env=None):
+    """The command line and environment that start the engine *argv*, with
+    the environment *env* (default: the service's), through engine_launcher:
+    the kernel then kills it when the thread that starts it exits, even if
+    the dictation service is killed with SIGKILL, so no engine sits orphaned
+    on a gigabyte of memory.
 
     SIGKILL, not SIGTERM: llama-server sometimes stalls in its graceful
     shutdown and then ignores SIGTERM, and no engine holds state worth saving.
@@ -52,15 +31,41 @@ def with_parent_death(argv):
     The signal fires when the thread that called Popen exits, not the
     process, so spawn from a thread that lives as long as the engine (see
     parakeet_gpu's _launcher)."""
-    setpriv = _setpriv()
-    return [setpriv, "--pdeathsig", "KILL", "--", *argv] if setpriv else list(argv)
+    env = dict(os.environ if env is None else env)
+    own_libs = os.environ.get("LD_LIBRARY_PATH")
+    if env.get("LD_LIBRARY_PATH") != own_libs:
+        # The launcher is Python: it starts with the service's libraries
+        # and hands the engine its own.
+        env[engine_launcher.ENGINE_LIBRARY_PATH] = env.pop("LD_LIBRARY_PATH", "")
+        if own_libs is not None:
+            env["LD_LIBRARY_PATH"] = own_libs
+    command = [sys.executable, "-m", "tuxtalk.engine_launcher", str(os.getpid()), "--", *argv]
+    return command, env
+
+
+def launch_failure(returncode):
+    """", because ..." when the launcher's exit code says why an engine
+    never ran (its own messages go nowhere), else ""."""
+    why = {engine_launcher.NO_SIGNAL: "the parent-death signal couldn't be set",
+           engine_launcher.NO_ENGINE: "its program couldn't be started"}.get(returncode)
+    return f", because {why}" if why else ""
+
+
+# Every engine listens on 127.0.0.1, yet urllib would send even that through
+# a proxy set in http_proxy, handing it dictated text, audio and the AI
+# engine's key. Python's urllib makes no exception for this computer.
+_LOCAL = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
+def open_local(request, timeout):
+    """urlopen for an engine on this computer: never through a proxy."""
+    return _LOCAL.open(request, timeout=timeout)
 
 
 def remove_other_versions(parent, keep):
     """Delete every engine version folder under *parent* except *keep*. Each
     version unpacks into its own folder, so without this an update leaves
     the old one behind for good. Never raises."""
-    import shutil
     try:
         names = os.listdir(parent)
     except OSError:
@@ -69,7 +74,10 @@ def remove_other_versions(parent, keep):
         path = os.path.join(parent, name)
         if name != keep and os.path.isdir(path) and not os.path.islink(path):
             shutil.rmtree(path, ignore_errors=True)
-            logger.info(f"Removed an older engine version: {path}")
+            if os.path.exists(path):
+                logger.warning(f"Couldn't remove an older engine version: {path}")
+            else:
+                logger.info(f"Removed an older engine version: {path}")
 
 
 def processes_of(binary):
@@ -107,7 +115,9 @@ def kill_orphans(processes, is_talktype, label) -> int:
     A self-healing backstop for the parent-death signal. Returns how many."""
     killed = 0
     for pid, ppid in processes:
-        if ppid == os.getpid() or is_talktype(ppid):
+        # Pid 1 never started an engine: it is init, or in the Flatpak the
+        # sandbox's bwrap, whose command line names TuxTalk.
+        if ppid == os.getpid() or (ppid != 1 and is_talktype(ppid)):
             continue
         try:
             os.kill(pid, signal.SIGKILL)

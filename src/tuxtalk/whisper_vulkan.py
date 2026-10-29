@@ -449,21 +449,22 @@ class VulkanWhisperModel:
         # Unlike llama-server (ai_cleanup.py), whisper-server has no API key
         # option. It listens on 127.0.0.1 only and sends nothing of the user's
         # back, so another local program could at most borrow the graphics chip.
+        command, env = engine_process.parent_death_command(
+            [_binary("whisper-server"), "-m", model_path(self.model_name),
+             "--host", "127.0.0.1", "--port", str(self._port),
+             "-t", str(self.threads), "-dev", str(self.device_index)], _engine_env())
         self._proc = self._launcher.submit(
-            subprocess.Popen,
-            engine_process.with_parent_death(
-                [_binary("whisper-server"), "-m", model_path(self.model_name),
-                 "--host", "127.0.0.1", "--port", str(self._port),
-                 "-t", str(self.threads), "-dev", str(self.device_index)]),
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=_engine_env()).result()
+            subprocess.Popen, command,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env).result()
         logger.info(f"Graphics engine starting (pid {self._proc.pid}, device {self.device_index})")
         try:
             deadline = time.time() + 120
             while time.time() < deadline:
                 if self._proc.poll() is not None:
-                    raise RuntimeError("the graphics engine stopped while starting")
+                    raise RuntimeError("the graphics engine stopped while starting"
+                                       + engine_process.launch_failure(self._proc.returncode))
                 try:
-                    urllib.request.urlopen(f"http://127.0.0.1:{self._port}/health", timeout=1)
+                    engine_process.open_local(f"http://127.0.0.1:{self._port}/health", timeout=1)
                     break
                 except Exception:
                     time.sleep(0.25)
@@ -510,7 +511,7 @@ class VulkanWhisperModel:
             request = urllib.request.Request(
                 f"http://127.0.0.1:{self._port}/inference", data=body,
                 headers={"Content-Type": content_type})
-            with urllib.request.urlopen(request, timeout=timeout) as response:
+            with engine_process.open_local(request, timeout=timeout) as response:
                 return json.load(response)
 
     def _stop(self):

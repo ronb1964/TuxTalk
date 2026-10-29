@@ -581,6 +581,24 @@ def test_a_restarted_server_outlives_the_short_lived_thread_that_restarted_it(fa
         model.close()
 
 
+def test_the_graphics_engine_starts_through_the_engine_launcher(fake_server, monkeypatch):
+    """So it dies with the service (test_engine_parent_death)."""
+    started = []
+    real_popen = wv.subprocess.Popen
+
+    def recording_popen(command, **k):
+        started.append((command, k))
+        return real_popen(command, **k)
+    monkeypatch.setattr(wv.subprocess, "Popen", recording_popen)
+    model = wv.VulkanWhisperModel("small", 0, threads=1)
+    try:
+        command, kwargs = started[0]
+        assert command[1:3] == ["-m", "tuxtalk.engine_launcher"]
+        assert "preexec_fn" not in kwargs
+    finally:
+        model.close()
+
+
 def test_a_failed_warm_up_stops_the_server(fake_server, monkeypatch):
     """A failed warm-up must not leave whisper-server holding the model in
     graphics memory for the whole session."""

@@ -3,44 +3,38 @@ Python between fork and exec.
 
 The engines hold a gigabyte or more each. If the dictation service is
 killed, the kernel must kill them too; and setting that up from preexec_fn,
-in a service full of threads, could hang an engine's start.
+in a service full of threads, could hang an engine's start. Every engine
+starts through engine_launcher, a process of its own; these tests start
+real ones.
 """
 import os
-import shutil
 import subprocess
-import sys
 import threading
 import time
 
-import pytest
-
-from tuxtalk import engine_process
+from tuxtalk import engine_launcher, engine_process
 
 
-def _start_from_a_thread_that_ends(argv, signal_is_set):
-    """Start *argv* from a thread that exits once *signal_is_set(proc)*, as
-    the service's launcher thread does when the service dies. (A thread that
-    ended before the signal was set would leave the process to the main
-    thread, which lives on; the launcher thread lives as long as its engine.)"""
+def _start_from_a_thread_that_ends(argv, env=None):
+    """Start the engine *argv* from a thread that exits once the launcher
+    has become it, as the service's launcher thread does when the service
+    dies. (The launcher thread lives as long as its engine.)"""
+    command, env = engine_process.parent_death_command(argv, env)
     started = []
 
     def launch():
-        proc = subprocess.Popen(argv, stdout=subprocess.PIPE)
+        proc = subprocess.Popen(command, env=env, stdout=subprocess.PIPE)
         started.append(proc)
-        signal_is_set(proc)
+        name = os.path.basename(argv[0])[:15]
+        for _ in range(500):
+            with open(f"/proc/{proc.pid}/comm") as f:
+                if f.read().strip() == name:
+                    return
+            time.sleep(0.01)
     thread = threading.Thread(target=launch)
     thread.start()
     thread.join()
     return started[0]
-
-
-def _became_sleep(proc):
-    """setpriv sets the signal, then becomes the program it starts."""
-    for _ in range(500):
-        with open(f"/proc/{proc.pid}/comm") as f:
-            if f.read().strip() == "sleep":
-                return
-        time.sleep(0.01)
 
 
 def _killed_within(proc, seconds=5):
@@ -54,51 +48,37 @@ def _killed_within(proc, seconds=5):
     return proc.returncode == -9 and time.monotonic() < deadline
 
 
-@pytest.fixture(autouse=True)
-def _ask_setpriv_afresh():
-    engine_process._setpriv.cache_clear()
-    yield
-    engine_process._setpriv.cache_clear()
-
-
-@pytest.mark.skipif(not shutil.which("setpriv"), reason="no setpriv on this computer")
 def test_an_engine_is_killed_when_the_thread_that_started_it_ends():
-    proc = _start_from_a_thread_that_ends(engine_process.with_parent_death(["sleep", "30"]),
-                                          _became_sleep)
-    assert _killed_within(proc)
+    assert _killed_within(_start_from_a_thread_that_ends(["/bin/sleep", "30"]))
 
 
-def test_the_parakeet_helper_sets_its_own_parent_death_signal():
-    proc = _start_from_a_thread_that_ends(
-        [sys.executable, "-c", "from tuxtalk.parakeet_gpu_worker import die_with_parent; "
-                               "die_with_parent(); print('set', flush=True); "
-                               "import time; time.sleep(30)"],
-        lambda proc: proc.stdout.readline())
-    assert _killed_within(proc)
+def test_a_launcher_whose_service_died_first_starts_nothing(tmp_path):
+    """Had the service died before the signal was set, it would never fire:
+    the launcher sees it has another parent and stops there."""
+    marker = tmp_path / "ran"
+    command, env = engine_process.parent_death_command(["/bin/touch", str(marker)])
+    command[command.index(str(os.getpid()))] = "1"
+    assert subprocess.run(command, env=env).returncode == engine_launcher.PARENT_GONE
+    assert not marker.exists()
 
 
-def test_without_setpriv_the_engine_starts_as_it_is(monkeypatch):
-    """The next start's kill_orphans is the backstop then."""
-    monkeypatch.setattr(engine_process.shutil, "which", lambda name: None)
-    assert engine_process.with_parent_death(["llama-server", "-m", "m.gguf"]) == [
-        "llama-server", "-m", "m.gguf"]
+def test_the_engine_gets_its_own_libraries_and_the_launcher_the_services(monkeypatch):
+    """The launcher is Python, which may need the service's LD_LIBRARY_PATH
+    (the AppImage's); the engine needs its own folder's."""
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/service/libs")
+    command, env = engine_process.parent_death_command(
+        ["/bin/sh", "-c", 'echo "$LD_LIBRARY_PATH"'],
+        {**os.environ, "LD_LIBRARY_PATH": "/engine/libs", "LLAMA_API_KEY": "k"})
+    assert env["LD_LIBRARY_PATH"] == "/service/libs" and env["LLAMA_API_KEY"] == "k"
+    out = subprocess.run(command, env=env, capture_output=True, text=True).stdout
+    assert out.strip() == "/engine/libs"
 
 
-def test_a_setpriv_too_old_for_pdeathsig_isnt_used(monkeypatch, tmp_path):
-    """util-linux before 2.33 has setpriv but refuses --pdeathsig: using it
-    would stop every engine from starting."""
-    old = tmp_path / "setpriv"
-    old.write_text("#!/bin/sh\necho 'setpriv: unrecognized option' >&2\nexit 1\n")
-    old.chmod(0o755)
-    monkeypatch.setattr(engine_process.shutil, "which", lambda name: str(old))
-    assert engine_process.with_parent_death(["whisper-server"]) == ["whisper-server"]
-
-
-def test_setpriv_is_asked_once(monkeypatch):
-    runs = []
-    monkeypatch.setattr(engine_process.shutil, "which", lambda name: "/usr/bin/setpriv")
-    monkeypatch.setattr(engine_process.subprocess, "run", lambda *a, **k: runs.append(a))
-    engine_process.with_parent_death(["a"])
-    engine_process.with_parent_death(["b"])
-    assert len(runs) == 1
-    assert os.path.basename(engine_process.with_parent_death(["c"])[0]) == "setpriv"
+def test_an_engine_that_cant_start_says_why(tmp_path):
+    command, env = engine_process.parent_death_command([str(tmp_path / "missing-server")])
+    result = subprocess.run(command, env=env, capture_output=True, text=True)
+    assert result.returncode == engine_launcher.NO_ENGINE
+    assert "missing-server" in result.stderr
+    assert engine_process.launch_failure(result.returncode) == (
+        ", because its program couldn't be started")
+    assert engine_process.launch_failure(-9) == ""

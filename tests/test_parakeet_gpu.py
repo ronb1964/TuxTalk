@@ -240,3 +240,22 @@ def test_worker_reads_a_word_list_between_recordings():
     assert worker.read_request(stream) == ["TuxTalk", "Ärger"]
     assert len(worker.read_request(stream)) == 12
     assert worker.read_request(stream) is None
+
+
+def test_the_real_helper_starts_through_the_engine_launcher(monkeypatch):
+    """So it dies with the service (test_engine_parent_death)."""
+    started = []
+
+    def popen(command, **kwargs):
+        started.append((command, kwargs))
+        raise OSError("not starting anything in a test")
+    from tuxtalk import whisper_vulkan
+    monkeypatch.setattr(whisper_vulkan, "model_path", lambda name: "/x/parakeet.bin")
+    monkeypatch.setattr(whisper_vulkan, "_engine_dir", lambda: "/x")
+    monkeypatch.setattr(parakeet_gpu.subprocess, "Popen", popen)
+    with pytest.raises(OSError):
+        parakeet_gpu.ParakeetGpuModel(0, threads=1)
+    command, kwargs = started[0]
+    assert command[1:3] == ["-m", "tuxtalk.engine_launcher"]
+    assert command[command.index("--") + 1:][1:3] == ["-m", "tuxtalk.parakeet_gpu_worker"]
+    assert "preexec_fn" not in kwargs
