@@ -308,3 +308,23 @@ def test_the_tray_still_finds_updates_after_the_tab_became_updates_and_backup():
         notebook.set_current_page(0)
         assert PreferencesWindow.select_tab(window, asked) is True
         assert notebook.get_current_page() == 2
+
+
+def test_a_dictation_counted_during_a_reset_waits_for_it(stats_file, tmp_path, monkeypatch):
+    """The service counts a dictation while Preferences resets the stats (or
+    restores a backup's): one waits for the other, so the count is neither
+    lost nor brought back after the reset."""
+    import fcntl
+    import threading
+    from tuxtalk import single_instance
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    held = single_instance.open_lock("stats.lock")
+    fcntl.flock(held.fileno(), fcntl.LOCK_EX)       # a reset under way elsewhere
+    counting = threading.Thread(target=stats.record, args=(5, 2.0))
+    counting.start()
+    counting.join(0.3)
+    assert counting.is_alive() and not stats_file.exists()
+
+    held.close()
+    counting.join(2)
+    assert stats.load()[datetime.date.today().isoformat()]["words"] == 5
