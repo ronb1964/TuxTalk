@@ -203,7 +203,11 @@ class UnifiedDownloadDialog:
         header_box.pack_start(title_label, True, True, 0)
 
         # Cancel button
-        cancel_btn = Gtk.Button(label="Cancel")
+        # Work that can't stop says so, rather than a grey Cancel with no
+        # reason ("Cancel, dimmed" to a screen reader).
+        cancel_btn = Gtk.Button(label="Cancel" if task.can_stop else "Can't stop")
+        if not task.can_stop:
+            cancel_btn.set_tooltip_text("This takes a moment and can't be stopped partway")
         cancel_btn.set_size_request(80, -1)
         cancel_btn.connect("clicked", lambda w: self._cancel_task(task))
         cancel_btn.set_sensitive(task.can_stop)

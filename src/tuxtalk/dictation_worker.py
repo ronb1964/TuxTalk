@@ -80,7 +80,7 @@ def call(job):
     within what it's doing; from any other thread, after what the worker
     has been given (submit), waiting for it. A job that fails there is
     logged by the worker, and raises JobFailed here."""
-    if _instance is not None and threading.current_thread() is getattr(_instance, "thread", None):
+    if _instance is not None and threading.current_thread() is _instance.thread:
         return job()
     done, answer = threading.Event(), {}
 

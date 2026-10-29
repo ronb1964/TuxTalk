@@ -43,8 +43,8 @@ def _click(d, offset):
 
 
 def test_the_release_is_never_swallowed(dialog, monkeypatch):
-    monkeypatch.setattr(F.GLib, "idle_add", lambda fn: 4321)
-    assert dialog._pick_soon(None, None) is False
+    monkeypatch.setattr(F.GLib, "idle_add", lambda fn, *a: 4321)
+    assert dialog._pick_soon(None, None, True) is False
 
 
 def test_the_highlight_leaves_out_punctuation(dialog):
@@ -57,3 +57,22 @@ def test_a_second_click_picks_another_word(dialog):
     _click(dialog, TEXT.index("Goul's") + 2)
     _click(dialog, TEXT.index("reply") + 1)
     assert dialog._phrase() == "reply" and _highlighted(dialog) == "reply"
+
+
+def test_the_arrow_keys_can_move_past_the_first_word(dialog):
+    """A pick by key keeps the focus and the cursor in the text: moving to
+    the "Should be" box after each key stopped a keyboard user at the first
+    word."""
+    dialog.window.show_all()
+    dialog.view.grab_focus()
+    buf = dialog.view.get_buffer()
+    buf.place_cursor(buf.get_iter_at_offset(TEXT.index("reply") + 1))
+    dialog._on_pick(by_mouse=False)
+    assert dialog._phrase() == "reply"
+    assert dialog.window.get_focus() is dialog.view
+    assert buf.get_iter_at_mark(buf.get_insert()).get_offset() == TEXT.index("reply") + 1
+
+
+def test_should_be_names_its_box(dialog):
+    label = next(w for w in dialog.entry.get_parent().get_children() if isinstance(w, Gtk.Label))
+    assert label.get_mnemonic_widget() is dialog.entry

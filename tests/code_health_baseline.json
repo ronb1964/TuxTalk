@@ -70,7 +70,6 @@
   "fix_word_dialog.py::_FixWordDialog.__init__::undocumented": 1,
   "fix_word_dialog.py::_FixWordDialog._on_save::undocumented": 1,
   "fix_word_dialog.py::_FixWordDialog::undocumented": 1,
-  "gnome_keybindings.py::_set::swallowed_error": 1,
   "gnome_keybindings.py::disable_for_hotkey_test::swallowed_error": 1,
   "gnome_keybindings.py::restore::swallowed_error": 1,
   "help_text.py::<module>::long_line": 8,
@@ -290,7 +289,7 @@
    "decisions": 20
   },
   "fix_word_dialog.py::_FixWordDialog.__init__": {
-   "lines": 115
+   "lines": 108
   },
   "keyboard_layout.py::KeyPlanner._index": {
    "decisions": 17

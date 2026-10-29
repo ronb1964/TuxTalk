@@ -47,3 +47,30 @@ def test_before_the_loop_runs_gtk_may_be_used_anywhere(monkeypatch):
     monkeypatch.setattr(gtk_loop, "_thread", None)
     assert gtk_loop.here() and not gtk_loop.running()
     assert gtk_loop.call(lambda: "ran") == "ran"
+
+
+def test_work_the_loop_doesnt_get_to_in_time_is_called_off(monkeypatch):
+    """A stalled loop: the caller stops waiting, and the work, still queued,
+    never runs when the loop catches up (a dictation copied too late)."""
+    from gi.repository import GLib
+    queued, ran = [], []
+    monkeypatch.setattr(GLib, "idle_add", lambda fn, *a: queued.append(fn))
+    monkeypatch.setattr(gtk_loop, "_thread", threading.Thread())
+    with pytest.raises(TimeoutError):
+        gtk_loop.call(lambda: ran.append(1), timeout=0.05)
+    queued[0]()
+    assert ran == []
+
+
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
+def test_a_loop_that_dies_before_it_runs_doesnt_hang_the_start(monkeypatch):
+    """No display, say: the service stopped at start, waiting for good."""
+    from gi.repository import GLib, Gtk
+
+    def no_display():
+        raise RuntimeError("cannot open display")
+    monkeypatch.setattr(Gtk, "main", no_display)
+    monkeypatch.setattr(GLib, "idle_add", lambda fn, *a: None)
+    monkeypatch.setattr(gtk_loop, "_thread", None)
+    with pytest.raises(RuntimeError, match="ended before it started"):
+        gtk_loop.start()

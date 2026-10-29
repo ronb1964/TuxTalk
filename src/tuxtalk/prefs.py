@@ -73,17 +73,18 @@ def _let_go_of_the_window():
         lock.close()
 
 
+def _other_window_pid():
+    """The open Preferences window's pid, if it isn't this process."""
+    pid = prefs_ipc.running_pid()
+    return pid if pid != os.getpid() else None
+
+
 def _brought_open_window_forward(tab, wait_s):
     """Whether an open Preferences window (from its pidfile, waited for up
     to *wait_s* while one starts) took the request to come to the front."""
-    deadline = time.monotonic() + wait_s
-    while True:
-        old = prefs_ipc.running_pid()
-        if old and old != os.getpid():
-            return prefs_ipc.bring_to_front(old, tab)
-        if time.monotonic() >= deadline:
-            return False
-        time.sleep(0.05)
+    from .single_instance import wait_for_pid
+    pid = wait_for_pid(_other_window_pid, wait_s)
+    return pid is not None and prefs_ipc.bring_to_front(pid, tab)
 
 
 # What can need a download, and so is rolled back when it never finishes:
@@ -105,11 +106,13 @@ def _restart_without_tray():
         with single_instance.open_lock(tray_instance.TRAY_LOCK) as lock:
             if not single_instance.claim(lock, wait_s=QUIT_WAIT_S):
                 logger.warning("Dictation not restarted: TuxTalk is starting or uninstalling")
-                return
+                return False
             end_dictation_service()
             launch_dictation_service()
+            return True
     except Exception as e:
         logger.warning(f"Failed to restart service: {e}")
+        return False
 
 
 class PreferencesWindow:
@@ -649,15 +652,23 @@ class PreferencesWindow:
             logger.info(f"Applied without restart: {sorted(changed) or 'no changes'}")
             return True
 
-        return self.restart_service()
+        def failed_later():
+            # Owed again, so the next Apply restarts; said only while open.
+            self._restart_owed |= set(changed)
+            if self.window.get_visible():
+                self._say_restart_failed()
+            return False
+        return self.restart_service(on_failed=failed_later)
 
-    def restart_service(self):
+    def restart_service(self, on_failed=None):
         """Restart the dictation service; True if it was done or asked for.
         A running tray does it (Restart Service: it waits for the old service
         off its menu's thread, and starts none once Quit or Dictation off came
         after); one that doesn't answer is left to it, never worked around.
         With no tray it's done here, on a thread: the old service types what
-        it holds and quits (or is killed past its time), then a new one starts."""
+        it holds and quits (or is killed past its time), then a new one starts.
+        A start that fails there calls *on_failed* on GTK's thread, if the
+        window is still open to say so."""
         from . import single_instance, tray_instance, update_ui
         if single_instance.held_elsewhere(tray_instance.TRAY_LOCK):
             try:
@@ -666,8 +677,11 @@ class PreferencesWindow:
             except Exception as e:
                 logger.warning(f"Could not ask the tray to restart dictation: {e}")
                 return False
+        def restart():
+            if not _restart_without_tray() and on_failed is not None:
+                GLib.idle_add(on_failed)
         # Not a daemon: closing Preferences meanwhile must not drop the start.
-        threading.Thread(target=_restart_without_tray, name="restart-service").start()
+        threading.Thread(target=restart, name="restart-service").start()
         return True
 
     def on_tab_switched(self, notebook, page, page_num):
@@ -724,7 +738,7 @@ class PreferencesWindow:
             # really restarted, not just that the change applied.
             from .config import needs_service_restart
             show_message(self.window, Gtk.MessageType.INFO, "Settings applied successfully!",
-                         "Dictation service has been restarted with new settings."
+                         "Dictation is restarting with the new settings."
                          if needs_service_restart(changed)
                          else "Your changes are already in effect.")
 

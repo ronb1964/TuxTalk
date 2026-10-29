@@ -263,9 +263,11 @@ def _engine_env():
 
 def find_device():
     """Index of the graphics chip the engine should use, or None."""
+    command, env = engine_process.parent_death_command(
+        [_binary("whisper-server"), "--help"], _engine_env())
     try:
-        out = subprocess.run([_binary("whisper-server"), "--help"], capture_output=True,
-                             text=True, timeout=30, env=_engine_env()).stderr
+        out = subprocess.run(command, capture_output=True, text=True, timeout=30,
+                             env=env).stderr
     except Exception as e:
         logger.warning(f"Could not list graphics devices: {e}")
         return None
@@ -288,8 +290,11 @@ def _run_timed(cmd, cancel=None, timeout=300):
     if cancel is not None and cancel.is_set():
         raise RuntimeError("speed check stopped")
     deadline = time.monotonic() + timeout
-    with subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
-                          text=True, env=_engine_env()) as proc:
+    # Through the launcher like the engine itself: a service killed mid-run
+    # takes the run (a graphics chip and a core) with it.
+    command, env = engine_process.parent_death_command(cmd, _engine_env())
+    with subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                          text=True, env=env) as proc:
         while True:
             try:
                 stderr = proc.communicate(timeout=0.5)[1]
