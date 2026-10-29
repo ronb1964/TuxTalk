@@ -286,7 +286,7 @@ class AudioDucker:
         if not ducked and not self._owed:
             return
         streams = list_streams(self._run)
-        now = {st["index"]: st["volumes"] for st in streams}
+        now = {st["index"]: (st["app"], st["volumes"]) for st in streams}
         put_back = 0
         reset = {}
         for index, (original, lowered, app) in ducked.items():
@@ -309,19 +309,21 @@ class AudioDucker:
 
     def _put_back(self, index, original, lowered, app, now, reset) -> int:
         """Stream *index*, turned down from *original* to *lowered*, back at
-        its volume: 1 when that's done now. *now* is each stream's volume;
-        *reset* gets an ended stream whose app's memory was put right."""
+        its volume: 1 when that's done now. *now* is each stream's app and
+        volume; *reset* gets an ended stream whose app's memory was put right."""
         entry = {"original": original, "lowered": lowered}
-        if index not in now:
-            # Ended while turned down: the desktop would keep it that quiet
-            # for the app's next sound. Put that right now, or else owe it
-            # until the app is seen again.
+        playing = now.get(index)
+        if playing is None or playing[0] != app:
+            # Ended while turned down (another app's stream with its number
+            # is a sound server restarted since): the desktop would keep it
+            # that quiet for the app's next sound. Put that right now, or
+            # else owe it until the app is seen again.
             if app and self._reset(app, original):
                 reset[app] = entry
             elif app:
                 self._owed[app] = entry
             return 0
-        if now[index] != lowered:
+        if playing[1] != lowered:
             return 0        # the user set its volume themselves meanwhile
         if _set_volume(index, original, self._run):
             return 1
