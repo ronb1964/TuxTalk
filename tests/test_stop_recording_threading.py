@@ -8,6 +8,8 @@ can't clobber the audio being transcribed.
 """
 import time
 
+import numpy as np
+
 from tuxtalk import recording_state as rs
 from tuxtalk import tray_link
 from tuxtalk import recording
@@ -30,9 +32,20 @@ def test_finish_capture_snapshots_frames_surviving_next_recording(monkeypatch):
     assert frames == [b"hello-audio"]
     assert rs.state.is_recording is False
 
-    # A new recording reassigns state.frames to a fresh list — the snapshot the
-    # worker will transcribe must NOT be affected.
-    rs.state.frames = []
+    # The next recording starts at once and its microphone delivers audio:
+    # the snapshot the worker will transcribe must not take it in.
+    monkeypatch.setattr(recording, "follow_system_default", lambda idx: idx)
+    monkeypatch.setattr(recording, "open_input_stream", lambda idx: None)
+    monkeypatch.setattr("tuxtalk.type_at_pause.arm_chunker", lambda *a, **k: None)
+    monkeypatch.setattr(recording, "pause_media_players", lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
+    try:
+        assert recording.start_recording(False, False, None)
+        recording._sd_callback(np.frombuffer(b"next", dtype=np.int16), 2, None, None)
+    finally:
+        rs.state.is_recording = False
+        rs.state.stream = None
+    assert rs.state.frames == [b"next"]
     assert frames == [b"hello-audio"], "snapshot must survive a new recording"
 
 
