@@ -228,15 +228,12 @@ class DictationTray(ServiceLifecycle, Presets):
         from .service_launcher import is_service_pid
         return is_service_pid(pid)
 
-    def update_icon_status(self, is_running=None):
-        """The icon for the service's state, *is_running* if it's known already."""
-        if is_running is None:
-            is_running = self.is_service_running()
+    def update_icon_status(self, is_running):
+        """The icon for the service's state: running or stopped."""
         if is_running:
             self.indicator.set_icon_full("microphone-sensitivity-high", "TuxTalk: Active")
         else:
             self.indicator.set_icon_full("microphone-sensitivity-muted", "TuxTalk: Stopped")
-        return True  # Continue the timer
 
     def _emit_service_state_after_check(self):
         """Send the service's real state to the GNOME extension.
@@ -258,7 +255,7 @@ class DictationTray(ServiceLifecycle, Presets):
             logger.error(f"Failed to emit D-Bus service state: {e}")
 
         return False  # Don't repeat
-    
+
     # ----- Service management helpers -----
 
     def update_status_and_menu(self, repeat=True):
@@ -270,15 +267,12 @@ class DictationTray(ServiceLifecycle, Presets):
             repeat: If True (default), keeps the GLib timer running.
                     Pass False for a one-shot update.
         """
-        old_state = getattr(self, '_last_service_state', None)
+        old_state = self._last_service_state
         new_state = self.is_service_running()
-        if new_state != old_state:
-            self.update_icon_status(is_running=new_state)
         self.update_menu_display(is_running=new_state)
-
-        # If state changed, emit D-Bus signal
-        if old_state is not None and old_state != new_state:
+        if new_state != old_state:
             logger.info(f"Service state changed: {old_state} -> {new_state}")
+            self.update_icon_status(is_running=new_state)
             if not new_state:
                 self._ready_pid = None
                 # Normal stops release the hotkeys themselves; a crash or a
