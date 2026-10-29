@@ -645,14 +645,54 @@ def test_downloading_the_ai_for_voice_editing_leaves_self_corrections_off(prefs_
             installed.append(True)
             return {"AI engine": {"success": True}, "AI model": {"success": True}}
     monkeypatch.setattr(download_progress_dialog, "UnifiedDownloadDialog", Download)
+    from tuxtalk import config
+    saved = config.load_config()
+    saved.ai_corrections = True
+    config.save_config(saved)
     window = prefs_window(ai_corrections=True)
     advanced = window.advanced_tab
     assert not advanced.ai_corrections_check.get_active()
 
     advanced.voice_editing_check.set_active(True)
+    window.on_cancel(None)          # the download stays
 
     assert window.config["voice_editing"] is True
-    assert window.config["ai_corrections"] is False
+    assert config.load_config().ai_corrections is False
+
+
+def test_the_ai_downloads_in_the_flatpak_without_voice_editing(prefs_window, monkeypatch):
+    """The Flatpak has no Labs, so no voice editing box: the download for
+    self-corrections finished, then failed on it."""
+    import gi
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import Gtk
+    from tuxtalk import download_progress_dialog
+    monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TuxTalk")
+    installed = []
+    monkeypatch.setattr(ai_cleanup, "is_installed", lambda: bool(installed))
+    monkeypatch.setattr(Gtk.Dialog, "run", lambda self: Gtk.ResponseType.OK)
+
+    class Download:
+        def __init__(self, **kwargs):
+            pass
+
+        def add_task(self, task):
+            pass
+
+        def run(self):
+            installed.append(True)
+            return {"AI engine": {"success": True}, "AI model": {"success": True}}
+    monkeypatch.setattr(download_progress_dialog, "UnifiedDownloadDialog", Download)
+    window = prefs_window()
+    advanced = window.advanced_tab
+    box = advanced.ai_corrections_check
+    box.handler_block_by_func(advanced._on_ai_corrections_toggled)
+    box.set_active(True)
+    box.handler_unblock_by_func(advanced._on_ai_corrections_toggled)
+
+    advanced._on_ai_corrections_toggled(box)    # directly: GTK swallows a handler's error
+
+    assert window.config["ai_corrections"] is True
 
 
 def _labs(window):
