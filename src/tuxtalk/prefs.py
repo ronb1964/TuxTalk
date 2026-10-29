@@ -597,8 +597,9 @@ class PreferencesWindow:
 
     def _has_unapplied_changes(self):
         """True when closing now would lose something: a setting changed since
-        the last Apply, or an edited snippet."""
-        return bool(self._changed_since_open()) or self.words_tab.changed()
+        the last Apply, or an edited snippet. One saved whose restart failed
+        isn't lost."""
+        return bool(changed_keys(self._config_at_open, self.config)) or self.words_tab.changed()
 
     def _ask_apply_before_closing(self):
         """"apply", "discard", or "keep" (also when the question is closed)."""
