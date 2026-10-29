@@ -10,6 +10,7 @@ on GNOME. A Flatpak on a desktop without the GlobalShortcuts portal gets a
 stop screen instead.
 """
 
+import collections
 import math
 import os
 import threading
@@ -214,6 +215,75 @@ def saved_hold_key():
         return "F8"
 
 
+# A setup step built by _required_step: its box, the box of what the button
+# does, the status line, the button, and the label for the button's result.
+_RequiredStep = collections.namedtuple("_RequiredStep", "box details status button result")
+
+
+def _required_step(title, explain, status, action, details, button_label, tooltip,
+                   on_click):
+    """A setup step dictation can't work without: *title*, why (*explain*),
+    a *status* line, what the *action* button does (*details*), and the
+    button with the label for its result beside it. All of the text is
+    markup."""
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+    box.set_margin_start(10)
+    box.set_margin_top(5)
+    header = Gtk.Label()
+    header.set_markup(f'<span size="large"><b>{title}</b></span>')
+    header.set_halign(Gtk.Align.START)
+    box.pack_start(header, False, False, 0)
+
+    explain_label = Gtk.Label()
+    explain_label.set_markup(explain)
+    explain_label.set_halign(Gtk.Align.START)
+    explain_label.set_line_wrap(True)
+    explain_label.set_max_width_chars(60)
+    explain_label.set_margin_start(10)
+    explain_label.set_margin_top(5)
+    box.pack_start(explain_label, False, False, 0)
+
+    status_label = Gtk.Label()
+    status_label.set_markup(status)
+    status_label.set_halign(Gtk.Align.START)
+    status_label.set_margin_start(15)
+    status_label.set_margin_top(8)
+    box.pack_start(status_label, False, False, 0)
+
+    what_label = Gtk.Label()
+    what_label.set_markup(f'<b>What "{action}" does:</b>')
+    what_label.set_halign(Gtk.Align.START)
+    what_label.set_margin_start(10)
+    what_label.set_margin_top(10)
+    box.pack_start(what_label, False, False, 0)
+    details_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+    details_box.set_margin_start(25)
+    for detail in details:
+        label = Gtk.Label()
+        label.set_markup(detail)
+        label.set_halign(Gtk.Align.START)
+        label.set_opacity(0.9)
+        details_box.pack_start(label, False, False, 0)
+    box.pack_start(details_box, False, False, 0)
+
+    button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+    button_box.set_margin_start(10)
+    button_box.set_margin_top(12)
+    button = Gtk.Button(label=button_label)
+    button.get_style_context().add_class("suggested-action")
+    button.connect("clicked", on_click)
+    button.set_tooltip_text(tooltip)
+    button_box.pack_start(button, False, False, 0)
+    result = Gtk.Label()      # shown after the button has run
+    result.set_halign(Gtk.Align.START)
+    result.set_xalign(0)
+    result.set_line_wrap(True)
+    result.set_max_width_chars(40)
+    button_box.pack_start(result, False, False, 10)
+    box.pack_start(button_box, False, False, 0)
+    return _RequiredStep(box, details_box, status_label, button, result)
+
+
 class WelcomeDialog:
     """
     Adaptive welcome dialog that shows appropriate content based on system detection.
@@ -232,34 +302,68 @@ class WelcomeDialog:
             force_gnome: Override GNOME detection for testing (None/True/False)
         """
         self.parent = parent
+        self._detect(force_gnome)
+        self.height = self._height()
+        logger.info(f"Welcome dialog: GNOME={self.has_gnome}, "
+                    f"NVIDIA={self.hardware.has_nvidia} "
+                    f"(graphics: {self.hardware.gpu_name or 'none found'}), "
+                    f"needs_uinput_fix={self.needs_uinput_fix}, "
+                    f"needs_portaudio={self.needs_portaudio_install}")
 
-        # Detect system capabilities (or use forced values for testing)
+        self.dialog = None
+        self.extension_check = None
+        self.rec_title = None  # the recommendation card's title, absent on the stop screen
+        self._chosen_model = None  # set when the user picks a model in Other options
+        self.gpu_check = None  # "Use my graphics card" under Other options
+        self.required_pulse_box = None  # Flatpak: the red pulsing "Required" warning box
+        self._pulse_phase = 0  # where the pulse is on its sine wave
+        self.fix_typing_button = None
+        self.typing_status_label = None
+        self._uinput_status_label = None  # the typing step's "permissions needed" line
+        self.uinput_fixed = False  # Track if user fixed uinput during this dialog
+        # Only the "input" group needs a restart; the hotkey helper doesn't.
+        self.restart_needed = False
+        self._continue_after_fix = False  # "Set it up" started Fix Typing: go on after it
+        self.install_portaudio_button = None
+        self.portaudio_status_label = None
+        self.portaudio_fixed = False  # Track if user installed PortAudio during this dialog
+        self._syncing = False  # True while _refresh_recommendation sets the model radios
+        self._busy = 0  # installs running in the background (_run_in_background)
+        self._job_lock = threading.Lock()  # one background install at a time
+        self._closed = False  # set once the dialog has closed
+        self.continue_button = None  # "Set it up"
+        self._build_dialog()
+
+    def _detect(self, force_gnome):
+        """What this computer has and needs: GNOME and its extension, the
+        graphics card and language to recommend a setup for, typing and
+        PortAudio, and in the Flatpak, the desktop's shortcut portal.
+        *force_gnome* overrides the GNOME check (None/True/False)."""
         from .desktop_detect import is_gnome
         self.has_gnome = is_gnome() if force_gnome is None else force_gnome
         # The extension is offered only when it isn't already running;
         # updating an installed one is Preferences' job.
         self.offer_extension = self.has_gnome and not _extension_already_active()
         # What to recommend (recommend.py): the graphics chip and the language.
-        from . import recommend as _rec
+        from . import recommend
         try:
             from .config import load_config
-            _cfg = load_config()
-        except Exception:
-            _cfg = None
-        self.hardware = _rec.detect_hardware(_cfg)
-        self.initial_language = _rec.system_language()
-        self._chosen_model = None      # set when the user picks a model in Other options
-        
-        # Detect uinput access (for keystroke injection)
+            cfg = load_config()
+        except Exception as e:
+            logger.warning(f"Could not read the settings for the recommendation: {e}")
+            cfg = None
+        self.hardware = recommend.detect_hardware(cfg)
+        self.initial_language = recommend.system_language()
+
+        # Writing keystrokes and reading hotkeys (detect_uinput_access).
         has_uinput, _ = detect_uinput_access()
         self.needs_uinput_fix = not has_uinput
 
-        # Detect PortAudio status (required for audio recording)
+        # PortAudio records the audio.
         self.portaudio_status = detect_portaudio_status()
         self.needs_portaudio_install = self.portaudio_status.get('needs_install', False)
-
         logger.info(f"PortAudio status: installed={self.portaudio_status.get('installed')}, "
-                   f"needs_install={self.needs_portaudio_install}")
+                    f"needs_install={self.needs_portaudio_install}")
 
         # Inside a Flatpak, typing uses the portal + libei path (Backend B): there
         # is no uinput/input-group setup and no reboot. Showing the host
@@ -272,55 +376,28 @@ class WelcomeDialog:
         # can never work — a hard stop. Decide this up front so the dialog can be a
         # lean "use another package" screen instead of the full welcome.
         if self.is_flatpak:
-            _supported, self.unsupported_desktop_name = shortcut_support()
-            self.hotkey_unsupported = not _supported
+            supported, self.unsupported_desktop_name = shortcut_support()
+            self.hotkey_unsupported = not supported
         else:
             self.hotkey_unsupported = False
             self.unsupported_desktop_name = ""
 
-        # Calculate height based on what sections we'll show
+    def _height(self):
+        """The window's height for the sections it shows."""
         if self.hotkey_unsupported:
             # Lean stop screen: header, the red stop box and Quit, since the app
             # can't run here. Sized so Quit is visible without dead space below.
-            self.height = 700
-        else:
-            base_height = 700
-            additional_height = 0
-            if self.offer_extension:
-                additional_height += 160  # GNOME extension section
-            additional_height += 225  # recommendation card + its options button
-            if self.is_flatpak:
-                additional_height += 190  # Shortcut setup section (Flatpak)
-            elif self.needs_uinput_fix:
-                additional_height += 250  # Typing setup section
-            # PortAudio setup section
-            if self.needs_portaudio_install:
-                additional_height += 180  # PortAudio section
-            self.height = base_height + additional_height
-
-        logger.info(f"Welcome dialog: GNOME={self.has_gnome}, NVIDIA={self.hardware.has_nvidia} "
-                   f"(graphics: {self.hardware.gpu_name or 'none found'}), "
-                   f"needs_uinput_fix={self.needs_uinput_fix}, needs_portaudio={self.needs_portaudio_install}")
-
-        # Build the dialog
-        self.dialog = None
-        self.extension_check = None
-        self.gpu_check = None  # "Use my graphics card" under Other options
-        self.required_pulse_box = None  # Flatpak: the red pulsing "Required" warning box
-        self.fix_typing_button = None
-        self.typing_status_label = None
-        self.uinput_fixed = False  # Track if user fixed uinput during this dialog
-        # Only the "input" group needs a restart; the hotkey helper doesn't.
-        self.restart_needed = False
-        self.install_portaudio_button = None
-        self.portaudio_status_label = None
-        self.portaudio_fixed = False  # Track if user installed PortAudio during this dialog
-        self._syncing = False  # True while _refresh_recommendation sets the model radios
-        self._busy = 0  # installs running in the background (_run_in_background)
-        self._job_lock = threading.Lock()  # one background install at a time
-        self._closed = False  # set once the dialog has closed
-        self.continue_button = None  # "Set it up"
-        self._build_dialog()
+            return 700
+        height = 700 + 225  # with the recommendation card and its options button
+        if self.offer_extension:
+            height += 160  # GNOME extension section
+        if self.is_flatpak:
+            height += 190  # Shortcut setup section (Flatpak)
+        elif self.needs_uinput_fix:
+            height += 250  # Typing setup section
+        if self.needs_portaudio_install:
+            height += 180  # PortAudio section
+        return height
 
     def _build_dialog(self):
         """Build the GTK dialog with appropriate content."""
@@ -416,7 +493,8 @@ class WelcomeDialog:
         """Build the base content (shown in all scenarios)."""
         # Main description
         main_desc = Gtk.Label()
-        main_desc.set_markup('<span size="medium">Private dictation that runs entirely on your computer.</span>')
+        main_desc.set_markup(
+            '<span size="medium">Private dictation that runs entirely on your computer.</span>')
         main_desc.set_line_wrap(False)
         main_desc.set_justify(Gtk.Justification.CENTER)
         vbox.pack_start(main_desc, False, False, 10)
@@ -549,93 +627,22 @@ class WelcomeDialog:
 
     def _build_portaudio_setup_section(self, vbox):
         """Build the PortAudio setup section (required for audio recording)."""
-        portaudio_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        portaudio_box.set_margin_start(10)
-        portaudio_box.set_margin_top(5)
-
-        # Header with warning icon
-        header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        header_label = Gtk.Label()
-        header_label.set_markup('<span size="large"><b>⚠️ Audio Library Required</b></span>')
-        header_label.set_halign(Gtk.Align.START)
-        header_box.pack_start(header_label, False, False, 0)
-        portaudio_box.pack_start(header_box, False, False, 0)
-
-        # Explanation
-        explain_label = Gtk.Label()
-        explain_label.set_markup(
+        step = _required_step(
+            '⚠️ Audio Library Required',
             '<span>TuxTalk needs PortAudio to record audio from your microphone.\n'
-            'This library is not installed on your system.</span>'
-        )
-        explain_label.set_halign(Gtk.Align.START)
-        explain_label.set_line_wrap(True)
-        explain_label.set_max_width_chars(60)
-        explain_label.set_margin_start(10)
-        explain_label.set_margin_top(5)
-        portaudio_box.pack_start(explain_label, False, False, 0)
-
-        # Status display (initial "not found" message - will be updated after install)
-        status_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        status_box.set_margin_start(15)
-        status_box.set_margin_top(8)
-
-        self.portaudio_initial_status = Gtk.Label()
-        self.portaudio_initial_status.set_markup('❌ <span color="#f44336">PortAudio library not found</span>')
-        self.portaudio_initial_status.set_halign(Gtk.Align.START)
-        status_box.pack_start(self.portaudio_initial_status, False, False, 0)
-
-        portaudio_box.pack_start(status_box, False, False, 0)
-
-        # What the install does
-        what_label = Gtk.Label()
-        what_label.set_markup('<b>What "Install PortAudio" does:</b>')
-        what_label.set_halign(Gtk.Align.START)
-        what_label.set_margin_start(10)
-        what_label.set_margin_top(10)
-        portaudio_box.pack_start(what_label, False, False, 0)
-
-        details = [
-            "📦 Installs the PortAudio library using your package manager",
-            "🎤 Enables microphone recording for speech recognition"
-        ]
-
-        details_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        details_box.set_margin_start(25)
-
-        for detail in details:
-            label = Gtk.Label()
-            label.set_markup(detail)
-            label.set_halign(Gtk.Align.START)
-            label.set_opacity(0.9)
-            details_box.pack_start(label, False, False, 0)
-
-        portaudio_box.pack_start(details_box, False, False, 0)
-
-        # Install button
-        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        button_box.set_margin_start(10)
-        button_box.set_margin_top(12)
-
-        self.install_portaudio_button = Gtk.Button(label="📦 Install PortAudio (Recommended)")
-        self.install_portaudio_button.get_style_context().add_class("suggested-action")
-        self.install_portaudio_button.connect("clicked", self._on_install_portaudio_clicked)
-        self.install_portaudio_button.set_tooltip_text(
+            'This library is not installed on your system.</span>',
+            '❌ <span color="#f44336">PortAudio library not found</span>',
+            'Install PortAudio',
+            ["📦 Installs the PortAudio library using your package manager",
+             "🎤 Enables microphone recording for speech recognition"],
+            "📦 Install PortAudio (Recommended)",
             "Install PortAudio library using your system's package manager.\n"
-            "This will prompt for your admin password."
-        )
-        button_box.pack_start(self.install_portaudio_button, False, False, 0)
-
-        # Status label (shown after install attempt)
-        self.portaudio_status_label = Gtk.Label()
-        self.portaudio_status_label.set_halign(Gtk.Align.START)
-        self.portaudio_status_label.set_xalign(0)
-        self.portaudio_status_label.set_line_wrap(True)
-        self.portaudio_status_label.set_max_width_chars(40)
-        button_box.pack_start(self.portaudio_status_label, False, False, 10)
-
-        portaudio_box.pack_start(button_box, False, False, 0)
-
-        vbox.pack_start(portaudio_box, False, False, 0)
+            "This will prompt for your admin password.",
+            self._on_install_portaudio_clicked)
+        self.portaudio_initial_status = step.status
+        self.install_portaudio_button = step.button
+        self.portaudio_status_label = step.result
+        vbox.pack_start(step.box, False, False, 0)
 
     def _on_install_portaudio_clicked(self, button):
         """Handle the Install PortAudio button click."""
@@ -665,7 +672,8 @@ class WelcomeDialog:
                 '✅ <span color="#4CAF50">PortAudio library installed</span>'
             )
             self.portaudio_status_label.set_markup(
-                '<span color="#4CAF50"><b>PortAudio installed!</b> Audio recording is now available.</span>'
+                '<span color="#4CAF50"><b>PortAudio installed!</b> '
+                'Audio recording is now available.</span>'
             )
 
             # Update internal state
@@ -731,80 +739,32 @@ class WelcomeDialog:
 
     def _build_typing_setup_section(self, vbox):
         """Build the typing setup section: permission to type and hear hotkeys."""
-        typing_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        typing_box.set_margin_start(10)
-        typing_box.set_margin_top(5)
-
-        # Header: this step is required, not optional.
-        header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        header_label = Gtk.Label()
-        header_label.set_markup('<span size="large"><b>🔴 Typing Setup Required</b></span>')
-        header_label.set_halign(Gtk.Align.START)
-        header_box.pack_start(header_label, False, False, 0)
-        typing_box.pack_start(header_box, False, False, 0)
-
-        # What Fix Typing will do, worked out first so the line below only
+        # What Fix Typing will do, worked out first so the explanation only
         # asks for a restart when the fix really needs one (the hotkey
         # helper doesn't; the "input" group does).
-        from tuxtalk.secure_input import fix_description
+        from tuxtalk.secure_input import fallback_note, fix_description
         lines, needs_restart = fix_description()
         details = [f"🔧 {GLib.markup_escape_text(line)}" for line in lines]
-        if needs_restart:
-            details.append("🔄 Restart your computer to apply (logging out is often not enough)")
-        else:
-            details.append("✓ No restart needed")
-
-        explain_text = (
+        details.append("🔄 Restart your computer to apply (logging out is often not enough)"
+                       if needs_restart else "✓ No restart needed")
+        step = _required_step(
+            '🔴 Typing Setup Required',
             '<span><b>This step is required for TuxTalk to work.</b>\n'
             'Without this setup, dictated text cannot be typed into your applications.\n'
             + ('Click "Fix Typing" below, then restart your computer.' if needs_restart
                else 'Click "Fix Typing" below.')
-            + '</span>'
-        )
-        explain_label = Gtk.Label()
-        explain_label.set_markup(explain_text)
-        explain_label.set_halign(Gtk.Align.START)
-        explain_label.set_line_wrap(True)
-        explain_label.set_max_width_chars(60)
-        explain_label.set_margin_start(10)
-        explain_label.set_margin_top(5)
-        typing_box.pack_start(explain_label, False, False, 0)
-
-        # Status display - show what needs to be fixed
-        status_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        status_box.set_margin_start(15)
-        status_box.set_margin_top(8)
-
-        # Only built while typing needs fixing; Fix Typing updates it.
-        uinput_label = Gtk.Label()
-        uinput_label.set_markup("❌ Input device permissions needed")
-        uinput_label.set_halign(Gtk.Align.START)
-        status_box.pack_start(uinput_label, False, False, 0)
-        self._uinput_status_label = uinput_label
-
-        typing_box.pack_start(status_box, False, False, 0)
-
-        # What the fix does section
-        what_label = Gtk.Label()
-        what_label.set_markup('<b>What "Fix Typing" does:</b>')
-        what_label.set_halign(Gtk.Align.START)
-        what_label.set_margin_start(10)
-        what_label.set_margin_top(10)
-        typing_box.pack_start(what_label, False, False, 0)
-
-        # Details (worked out above) - show relevant items based on what's needed
-        details_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        details_box.set_margin_start(25)
-
-        for detail in details:
-            label = Gtk.Label()
-            label.set_markup(detail)
-            label.set_halign(Gtk.Align.START)
-            label.set_opacity(0.9)
-            details_box.pack_start(label, False, False, 0)
+            + '</span>',
+            "❌ Input device permissions needed",   # Fix Typing updates it
+            'Fix Typing', details,
+            "🔧 Fix Typing (Recommended)",
+            "Lets TuxTalk type into your apps and hear its hotkeys.\n"
+            "This will prompt for your admin password.",
+            self._on_fix_typing_clicked)
+        self._uinput_status_label = step.status
+        self.fix_typing_button = step.button
+        self.typing_status_label = step.result
 
         # On the "input" group path, why and what it means (secure_input).
-        from tuxtalk.secure_input import fallback_note
         note = fallback_note()
         if note:
             label = Gtk.Label(label=f"🔒 {note}", xalign=0)
@@ -812,50 +772,23 @@ class WelcomeDialog:
             label.set_max_width_chars(70)
             label.set_opacity(0.9)
             label.set_margin_top(4)
-            details_box.pack_start(label, False, False, 0)
+            step.details.pack_start(label, False, False, 0)
 
-        typing_box.pack_start(details_box, False, False, 0)
-
-        # Buttons
-        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        button_box.set_margin_start(10)
-        button_box.set_margin_top(12)
-
-        self.fix_typing_button = Gtk.Button(label="🔧 Fix Typing (Recommended)")
-        self.fix_typing_button.get_style_context().add_class("suggested-action")
-        self.fix_typing_button.connect("clicked", self._on_fix_typing_clicked)
-        self.fix_typing_button.set_tooltip_text(
-            "Lets TuxTalk type into your apps and hear its hotkeys.\n"
-            "This will prompt for your admin password.")
-        button_box.pack_start(self.fix_typing_button, False, False, 0)
-
-        # Status label (shown after fix attempt)
-        self.typing_status_label = Gtk.Label()
-        self.typing_status_label.set_halign(Gtk.Align.START)
-        self.typing_status_label.set_xalign(0)
-        self.typing_status_label.set_line_wrap(True)
-        self.typing_status_label.set_max_width_chars(40)
-        button_box.pack_start(self.typing_status_label, False, False, 10)
-
-        typing_box.pack_start(button_box, False, False, 0)
-
-        # Alternative note
         # Not "use Clipboard Paste instead": paste presses Ctrl+V on the same
         # virtual keyboard, so it needs these permissions too.
         alt_note = Gtk.Label()
         alt_note.set_markup(
             '<span><i>💡 If you skip this, TuxTalk can\'t type into other apps, but every\n'
-            '   dictation is kept in Recent Dictations in the TuxTalk menu to copy and paste.</i></span>'
-        )
+            '   dictation is kept in Recent Dictations in the TuxTalk menu to copy and '
+            'paste.</i></span>')
         alt_note.set_halign(Gtk.Align.START)
         alt_note.set_margin_start(10)
         alt_note.set_margin_top(8)
         alt_note.set_opacity(0.85)
         alt_note.set_line_wrap(True)
         alt_note.set_max_width_chars(65)
-        typing_box.pack_start(alt_note, False, False, 0)
-
-        vbox.pack_start(typing_box, False, False, 0)
+        step.box.pack_start(alt_note, False, False, 0)
+        vbox.pack_start(step.box, False, False, 0)
 
     def _typing_fix_pending(self):
         """Whether the typing setup this computer needs hasn't been done."""
@@ -910,7 +843,7 @@ class WelcomeDialog:
         """Show the result of Fix Typing (GTK thread), then carry on with
         "Set it up" if that is what started it."""
         self._report_fix_typing(button, outcome)
-        if getattr(self, "_continue_after_fix", False):
+        if self._continue_after_fix:
             self._continue_after_fix = False
             if self._typing_fix_pending():
                 self._continue_without_typing()
@@ -936,9 +869,8 @@ class WelcomeDialog:
             button.set_label("✅ Fixed!")
             button.set_sensitive(False)  # Disable - no more action needed
             # Or the status line above the button still says "needed".
-            label = getattr(self, "_uinput_status_label", None)
-            if label is not None:
-                label.set_markup("✅ Input device permissions OK")
+            if self._uinput_status_label is not None:
+                self._uinput_status_label.set_markup("✅ Input device permissions OK")
 
             restart_note = " Restart your computer to complete." if needs_restart else ""
             self.typing_status_label.set_markup(
@@ -975,7 +907,8 @@ class WelcomeDialog:
         self.extension_check.add(ext_label)
         self.extension_check.set_tooltip_text(
             "Install native GNOME Shell extension for enhanced integration.\n"
-            "Adds TuxTalk's menu to the top bar, and keeps the dictation keys from reaching other apps.\n"
+            "Adds TuxTalk's menu to the top bar, and keeps the dictation keys from "
+            "reaching other apps.\n"
             "Lightweight (~10KB) and requires logging out/in after installation."
         )
         ext_box.pack_start(self.extension_check, False, False, 0)
@@ -988,7 +921,8 @@ class WelcomeDialog:
             self.extension_check.set_active(True)
             no_tray = Gtk.Label(xalign=0)
             no_tray.set_markup(
-                '<span color="#e6aa3c"><b>⚠️ Recommended here: this desktop has no system tray.</b>\n'
+                '<span color="#e6aa3c"><b>⚠️ Recommended here: this desktop has no '
+                'system tray.</b>\n'
                 'Without the extension, TuxTalk has no menu on screen. Its menu '
                 '(Preferences, Transcribe a File and more) then opens only when you '
                 'start TuxTalk again from your apps.</span>')
@@ -1037,7 +971,8 @@ class WelcomeDialog:
 
         # Requires log out note
         logout_note = Gtk.Label()
-        logout_note.set_markup('<span style="italic">(Requires logging out and back in after installation)</span>')
+        logout_note.set_markup(
+            '<span style="italic">(Requires logging out and back in after installation)</span>')
         logout_note.set_halign(Gtk.Align.START)
         logout_note.set_margin_start(30)
         logout_note.set_margin_top(3)
@@ -1114,14 +1049,16 @@ class WelcomeDialog:
         where.set_markup("<b>Where it runs</b>")
         other.pack_start(where, False, False, 4)
         if self.hardware.gpu:
-            self.gpu_check = Gtk.CheckButton(label=f"Use my graphics card ({self.hardware.gpu_name})")
+            self.gpu_check = Gtk.CheckButton(
+                label=f"Use my graphics card ({self.hardware.gpu_name})")
             self.gpu_check.set_active(True)
             self.gpu_check.set_tooltip_text("Several times faster. TuxTalk checks it really is "
                                             "faster than your processor before using it.")
             self.gpu_check.connect("toggled", lambda *_: self._refresh_recommendation())
             other.pack_start(self.gpu_check, False, False, 0)
         else:
-            other.pack_start(Gtk.Label(label="On this computer's processor", xalign=0), False, False, 0)
+            other.pack_start(Gtk.Label(label="On this computer's processor", xalign=0),
+                             False, False, 0)
 
         fold.content.attach(other, 0, 0, 1, 1)
         vbox.pack_start(fold, False, False, 0)
@@ -1170,7 +1107,8 @@ class WelcomeDialog:
         name = rec.language_name(self._language())
         self.rec_title.set_markup(f"<b>{GLib.markup_escape_text(setup.title)}</b>")
         self.rec_explanation.set_markup(
-            f"{GLib.markup_escape_text(setup.explanation)} For <b>{GLib.markup_escape_text(name)}</b>.")
+            f"{GLib.markup_escape_text(setup.explanation)} "
+            f"For <b>{GLib.markup_escape_text(name)}</b>.")
         self.rec_download.set_text(setup.download_text)
         self._syncing = True
         try:
@@ -1225,7 +1163,8 @@ class WelcomeDialog:
                 '<span><b>Next:</b> TuxTalk downloads your speech model, then starts '
                 'and prompts you to set your dictation key.</span>')
         else:
-            next_label.set_markup('<span><b>Next:</b> You\'ll test your hotkeys to ensure they work correctly</span>')
+            next_label.set_markup('<span><b>Next:</b> You\'ll test your hotkeys to ensure '
+                                  'they work correctly</span>')
         next_label.set_halign(Gtk.Align.START)
         next_label.set_line_wrap(True)
         next_label.set_margin_top(10)
@@ -1253,7 +1192,7 @@ class WelcomeDialog:
         targets = self._pulse_targets()
 
         # A sine wave from dim (0) to bright (4) and back.
-        phase = getattr(self, '_pulse_phase', 0)
+        phase = self._pulse_phase
         self._pulse_phase = phase + 0.15
         intensity = 2 + 2 * math.sin(phase)
 
@@ -1312,7 +1251,7 @@ class WelcomeDialog:
         if self.extension_check:
             result['install_extension'] = self.extension_check.get_active()
 
-        if hasattr(self, "rec_title"):
+        if self.rec_title is not None:
             setup = self._current_setup()
             result['model'] = setup.model
             result['device'] = setup.device

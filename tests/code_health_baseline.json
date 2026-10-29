@@ -225,16 +225,6 @@
   "voice_navigation.py::chords::dated_comment": 2,
   "voice_navigation.py::plan::long_line": 2,
   "vulkan_setup_dialogs.py::run_speed_check.work::swallowed_error": 1,
-  "welcome_dialog.py::WelcomeDialog.__init__::long_line": 1,
-  "welcome_dialog.py::WelcomeDialog.__init__::swallowed_error": 1,
-  "welcome_dialog.py::WelcomeDialog._build_base_content::long_line": 1,
-  "welcome_dialog.py::WelcomeDialog._build_footer::long_line": 1,
-  "welcome_dialog.py::WelcomeDialog._build_gnome_extension_option::long_line": 3,
-  "welcome_dialog.py::WelcomeDialog._build_portaudio_setup_section::long_line": 1,
-  "welcome_dialog.py::WelcomeDialog._build_recommendation::long_line": 2,
-  "welcome_dialog.py::WelcomeDialog._build_typing_setup_section::long_line": 1,
-  "welcome_dialog.py::WelcomeDialog._finish_install_portaudio::long_line": 1,
-  "welcome_dialog.py::WelcomeDialog._refresh_recommendation::long_line": 1,
   "welcome_dialog.py::WelcomeDialog._run_in_background.runner::swallowed_error": 1,
   "welcome_dialog.py::_extension_already_active::swallowed_error": 1,
   "welcome_dialog.py::show_welcome_dialog.show_dialog_after_splash::swallowed_error": 1,
@@ -368,9 +358,6 @@
   },
   "voice_edit_rules.py::mechanical_edit": {
    "decisions": 18
-  },
-  "welcome_dialog.py::WelcomeDialog._build_typing_setup_section": {
-   "lines": 127
   },
   "x11_hotkeys.py::claim": {
    "decisions": 16
