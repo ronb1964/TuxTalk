@@ -281,15 +281,17 @@ def _save_both(commands, words, before):
     """Save the snippets file, then the words file. Each write is atomic but
     the pair isn't: when the words can't be written (a full disk), the
     snippets go back to *before*, so the Words tab doesn't show a word half
-    saved. Raises the words file's OSError; a put-back that fails as well
-    is logged."""
+    saved. Raises the words file's OSError; if the put-back fails as well,
+    one that says the snippets were changed all the same."""
     from . import custom_words
     config.save_custom_commands(commands)
     try:
         custom_words.save(words)
-    except OSError:
+    except OSError as words_error:
         try:
             config.save_custom_commands(before)
         except OSError as e:
             logger.error(f"Your Words: the snippets couldn't be put back: {e}")
+            raise OSError(f"{words_error}. The snippets were changed all the same, and "
+                          "couldn't be put back.") from e
         raise

@@ -364,7 +364,7 @@ def test_saving_a_word_leaves_an_unreadable_words_file_alone(commands_file, word
 @pytest.mark.parametrize("change", [
     lambda: vocabulary.save_word("CachyOS", ["kashi os"]),
     lambda: vocabulary.save_word("ClaudeClaw", [], old="ClaudeClaw"),      # a mishearing taken off
-    lambda: vocabulary.save_word("ClawdClaw", ["clawed claw"], old="ClaudeClaw"),   # renamed
+    lambda: vocabulary.save_word("ClawdClaw", [], old="ClaudeClaw"),   # renamed, its fix taken off
     lambda: vocabulary.remove_word("ClaudeClaw"),
 ], ids=["add", "edit", "rename", "remove"])
 def test_a_words_file_that_cant_be_written_leaves_the_snippets_as_they_were(
@@ -403,7 +403,7 @@ def test_a_put_back_that_fails_too_is_logged_and_the_words_error_kept(
         raise OSError(28, "No space left on device (words)")
     monkeypatch.setattr(custom_words, "save", disk_full)
     with caplog.at_level(logging.ERROR, logger=vocabulary.logger.name):
-        with pytest.raises(OSError, match="words"):
+        with pytest.raises(OSError, match=r"\(words\)\. The snippets were changed all the same"):
             vocabulary.remove_word("ClaudeClaw")
     assert "snippets couldn't be put back" in caplog.text
 
