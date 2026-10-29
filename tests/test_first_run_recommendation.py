@@ -40,7 +40,7 @@ def test_unticking_the_graphics_card_uses_the_processor(dialog):
 
 def test_run_result_carries_the_setup(dialog, monkeypatch):
     monkeypatch.setattr(dialog.dialog, "run", lambda: Gtk.ResponseType.OK)
-    monkeypatch.setattr(dialog, "_fade_in_dialog", lambda o: None)
+    monkeypatch.setattr(wd, "fade_in", lambda window: None)
     result = dialog.run()
     assert (result["model"], result["device"], result["dictation_language"]) == \
         ("parakeet-v3", "vulkan", "en")
@@ -92,7 +92,7 @@ def test_no_pulse_timer_without_anything_to_pulse(dialog, monkeypatch):
     monkeypatch.setattr(wd.GLib, "timeout_add", lambda *a: started.append(a) or 7)
     monkeypatch.setattr(wd.GLib, "source_remove", lambda sid: removed.append(sid))
     monkeypatch.setattr(dialog.dialog, "run", lambda: Gtk.ResponseType.OK)
-    monkeypatch.setattr(dialog, "_fade_in_dialog", lambda o: None)
+    monkeypatch.setattr(wd, "fade_in", lambda window: None)
     assert dialog._pulse_targets() == []
     dialog.run()
     assert not any(a[1] == dialog._pulse_checkboxes for a in started)
@@ -117,3 +117,14 @@ def test_the_card_shows_on_a_computer_with_nothing_to_fix(monkeypatch):
         assert d._current_setup().model
     finally:
         d.destroy()
+
+
+def test_the_language_dropdown_is_named_by_its_label(dialog):
+    """A screen reader read it as an unnamed dropdown: "I dictate in" sat
+    beside it untied."""
+    gi.require_version("Atk", "1.0")
+    from gi.repository import Atk
+    relations = dialog.lang_combo.get_accessible().ref_relation_set()
+    labelled_by = relations.get_relation_by_type(Atk.RelationType.LABELLED_BY)
+    assert labelled_by is not None
+    assert [label.get_name() for label in labelled_by.get_target()] == ["I dictate in"]

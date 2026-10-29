@@ -34,10 +34,12 @@ def _set(key, value):
     try:
         result = subprocess.run(["gsettings", "set", SCHEMA, key, value],
                                 capture_output=True, text=True, timeout=5)
-        return result.returncode == 0
-    except Exception as e:
-        logger.debug(f"Could not set {key}: {e}")
+    except (OSError, subprocess.SubprocessError) as e:
+        logger.warning(f"Couldn't set GNOME's {key}: {e}")
         return False
+    if result.returncode != 0:
+        logger.warning(f"GNOME didn't take {key}: {result.stderr.strip()}")
+    return result.returncode == 0
 
 
 def restore(saved):

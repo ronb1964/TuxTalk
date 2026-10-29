@@ -52,45 +52,65 @@ def choose_light_or_full(parent, model):
     return {Gtk.ResponseType.APPLY: LIGHT, Gtk.ResponseType.YES: FULL}.get(response)
 
 
-def ensure_files(parent, model, confirm):
-    """Make sure the engine and *model*'s whisper.cpp file are downloaded.
-    True when both are there."""
-    from .download_progress_dialog import DownloadTask, UnifiedDownloadDialog
-    name = model_title(model)
-    tasks, needed = [], []
+def _missing_files(model):
+    """[(DownloadTask, what it is, for the question)] for the engine and
+    *model*'s whisper.cpp file, those not downloaded yet."""
+    from .download_progress_dialog import DownloadTask
+    missing = []
     # Engine build 1 (0.12.0 to 0.13.1) can't run Parakeet, so it's fetched
     # again, as a superset, the first time someone sets Parakeet up.
     if not wv.is_engine_installed(model):
-        tasks.append(DownloadTask("Graphics engine", wv.ENGINE_SIZE_TEXT,
-                                  wv.make_engine_download_func(model)))
-        needed.append(f"the graphics engine ({wv.ENGINE_SIZE_TEXT})")
+        missing.append((DownloadTask("Graphics engine", wv.ENGINE_SIZE_TEXT,
+                                     wv.make_engine_download_func(model)),
+                        f"the graphics engine ({wv.ENGINE_SIZE_TEXT})"))
     if wv.model_path(model) is None:
-        tasks.append(DownloadTask("Speech model", wv.MODEL_FILES[model][1],
-                                  wv.make_model_download_func(model)))
-        needed.append(f"the {name} model in the format it uses ({wv.MODEL_FILES[model][1]})")
-    if not tasks:
-        return True
-    if confirm:
-        answer = message(
-            parent, Gtk.MessageType.QUESTION, "Set up your graphics card with Vulkan?",
-            f"TuxTalk needs a one-time download: {' and '.join(needed)}.\n\n"
-            "Afterwards TuxTalk checks whether your graphics chip is really faster than "
-            "your processor, and only uses it if it is. Everything runs on this computer.",
-            buttons=Gtk.ButtonsType.OK_CANCEL)
-        if answer != Gtk.ResponseType.OK:
-            return False
+        missing.append((DownloadTask("Speech model", wv.MODEL_FILES[model][1],
+                                     wv.make_model_download_func(model)),
+                        f"the {model_title(model)} model in the format it uses "
+                        f"({wv.MODEL_FILES[model][1]})"))
+    return missing
+
+
+def _download(parent, tasks, model):
+    """Run *tasks* in one download window: (engine and model here now, cancelled)."""
+    from .download_progress_dialog import UnifiedDownloadDialog
     dialog = UnifiedDownloadDialog(
         parent=parent, title="Setting Up Vulkan",
         description="One-time download. Everything runs on this computer.")
     for task in tasks:
         dialog.add_task(task)
     results = dialog.run()
-    if all(r.get("success") for r in results.values()) and wv.is_installed(model):
+    ok = all(r.get("success") for r in results.values()) and wv.is_installed(model)
+    return ok, not ok and any(r.get("cancelled") for r in results.values())
+
+
+def fetch_files(parent, model):
+    """Download the engine and *model*'s whisper.cpp file that aren't here
+    yet, without asking: (both here now, cancelled)."""
+    tasks = [task for task, _what in _missing_files(model)]
+    return _download(parent, tasks, model) if tasks else (True, False)
+
+
+def ensure_files(parent, model, confirm):
+    """Make sure the engine and *model*'s whisper.cpp file are downloaded.
+    True when both are there."""
+    missing = _missing_files(model)
+    if not missing:
         return True
-    if not any(r.get("cancelled") for r in results.values()):
+    if confirm:
+        answer = message(
+            parent, Gtk.MessageType.QUESTION, "Set up your graphics card with Vulkan?",
+            f"TuxTalk needs a one-time download: {' and '.join(w for _t, w in missing)}.\n\n"
+            "Afterwards TuxTalk checks whether your graphics chip is really faster than "
+            "your processor, and only uses it if it is. Everything runs on this computer.",
+            buttons=Gtk.ButtonsType.OK_CANCEL)
+        if answer != Gtk.ResponseType.OK:
+            return False
+    ok, cancelled = _download(parent, [task for task, _what in missing], model)
+    if not ok and not cancelled:
         message(parent, Gtk.MessageType.ERROR, "The download did not finish",
                 "Check your internet connection and try again.")
-    return False
+    return ok
 
 
 # How long the speed check runs before the spinner offers a way out. A hung

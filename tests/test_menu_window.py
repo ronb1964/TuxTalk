@@ -181,7 +181,7 @@ def _launcher(tmp_path, monkeypatch, text):
     path.write_text(text)
     monkeypatch.setattr(update_checker, "DESKTOP_FILE_PATH", str(path))
     monkeypatch.setattr(update_checker, "get_install_type", lambda **_k: "appimage")
-    monkeypatch.setattr(update_checker, "_refresh_desktop_menu_cache", lambda: None)
+    monkeypatch.setattr(update_checker.menu_cache, "refresh_menu_cache", lambda: None)
     return path
 
 
@@ -256,7 +256,7 @@ def _fake_tray(running=True):
         show_help=rec("help"), show_about_dialog=rec("about"),
         check_for_updates_clicked=rec("updates"), quit_app=rec("quit"),
         _launch_preferences=lambda tab=None: calls.append(f"prefs:{tab}"),
-        engine_item=Gtk.MenuItem(label="Parakeet on the processor"))
+        menu=types.SimpleNamespace(engine_item=Gtk.MenuItem(label="Parakeet on the processor")))
     return tray
 
 

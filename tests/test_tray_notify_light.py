@@ -18,7 +18,7 @@ SCRIPT = textwrap.dedent("""
     import tuxtalk.config as config
     import tuxtalk.model_helper as model_helper
     import tuxtalk.notify as notify
-    from tuxtalk import tray
+    from tuxtalk import tray, tray_presets
     from tuxtalk.recommend import Preset
 
     cfg = types.SimpleNamespace(model="small", device="cpu", notify=True)
@@ -29,9 +29,10 @@ SCRIPT = textwrap.dedent("""
     notify.notify = lambda title, body: shown.append(title + " | " + body)
 
     lightest = Preset("lightest", "Lightest", "", "base", "cpu")
+    tray_presets.current_presets = lambda: [lightest]
+    tray_presets.preset_in_use = lambda: "recommended"
     t = types.SimpleNamespace(
-        _updating_preset=False, _current_presets=lambda: [lightest],
-        _get_current_preset=lambda: "recommended", update_menu_display=lambda: None,
+        _applying_preset=False, update_menu_display=lambda: None,
         _emit_model_changed=lambda model: None, restart_service=lambda _: None)
     for name in ("_apply_preset", "_preset_files", "_save_preset"):
         setattr(t, name, getattr(tray.DictationTray, name).__get__(t))

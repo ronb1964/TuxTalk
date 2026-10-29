@@ -208,3 +208,29 @@ def test_a_lock_that_fails_otherwise_doesnt_stop_preferences_opening(one_window,
     prefs._acquire_prefs_singleton(None)                # opens: no exception, no exit
     assert pidfile.read_text().split()[0] == str(prefs.os.getpid())
     prefs._let_go_of_the_window()
+
+
+def test_a_request_written_while_the_last_is_read_isnt_lost(tmp_path, monkeypatch):
+    """The window read the request, then deleted the file: one written in
+    between was deleted unread, and its tab never opened."""
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    monkeypatch.setattr(prefs_ipc.os, "kill", lambda pid, sig: None)
+    prefs_ipc.bring_to_front(42, "stats")
+    real_open = open
+
+    def open_and_get_another_request(path, *args, **kwargs):
+        f = real_open(path, *args, **kwargs)
+        prefs_ipc.bring_to_front(42, "updates")       # the next click, meanwhile
+        return f
+    monkeypatch.setattr("builtins.open", open_and_get_another_request)
+    assert prefs_ipc.take_tab_request() == "stats"
+    monkeypatch.setattr("builtins.open", real_open)
+    assert prefs_ipc.take_tab_request() == "updates"
+
+
+def test_a_request_that_cant_be_read_is_skipped_not_raised(tmp_path, monkeypatch):
+    """It runs in Preferences' signal handler, which an error would end."""
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    (tmp_path / "talktype-prefs.tab").mkdir()            # not a file at all
+    monkeypatch.setattr(prefs_ipc, "_tab_request_path", lambda: str(tmp_path / "talktype-prefs.tab"))
+    assert prefs_ipc.take_tab_request() is None

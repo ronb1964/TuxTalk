@@ -56,8 +56,14 @@ def test_the_tray_and_preferences_start_the_service_the_same_way(monkeypatch, tm
     from tuxtalk import prefs, service_launcher, tray
     started = []
     monkeypatch.delenv("GDK_BACKEND", raising=False)
+    class StillRunning:
+        pid = 1
+
+        def wait(self, timeout):
+            raise service_launcher.subprocess.TimeoutExpired("tuxtalk.app", timeout)
     monkeypatch.setattr(service_launcher.subprocess, "Popen", lambda argv, env=None, **k:
-                        started.append((argv, (env or {}).get("GDK_BACKEND"))) or types.SimpleNamespace(pid=1))
+                        started.append((argv, (env or {}).get("GDK_BACKEND"))) or StillRunning())
+    monkeypatch.setattr(service_launcher, "read_ready_pid", lambda: StillRunning.pid)  # ready
     monkeypatch.setattr(service_launcher, "end_dictation_service", lambda: True)
     monkeypatch.setattr("tuxtalk.single_instance.runtime_dir", lambda: str(tmp_path))
     tray.DictationTray._launch_service(types.SimpleNamespace())

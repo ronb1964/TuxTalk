@@ -263,9 +263,14 @@ def _engine_env():
 
 def find_device():
     """Index of the graphics chip the engine should use, or None."""
+    command, env = engine_process.parent_death_command(
+        [_binary("whisper-server"), "--help"], _engine_env())
     try:
-        out = subprocess.run([_binary("whisper-server"), "--help"], capture_output=True,
-                             text=True, timeout=30, env=_engine_env()).stderr
+        result = subprocess.run(command, capture_output=True, text=True, timeout=30, env=env)
+        out = result.stderr
+        why = engine_process.launch_failure(result.returncode)
+        if why:
+            logger.warning(f"Could not list graphics devices{why}")
     except Exception as e:
         logger.warning(f"Could not list graphics devices: {e}")
         return None
@@ -288,8 +293,11 @@ def _run_timed(cmd, cancel=None, timeout=300):
     if cancel is not None and cancel.is_set():
         raise RuntimeError("speed check stopped")
     deadline = time.monotonic() + timeout
-    with subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
-                          text=True, env=_engine_env()) as proc:
+    # Through the launcher like the engine itself: the window running the
+    # check, killed mid-run, takes the run (a graphics chip and a core) with it.
+    command, env = engine_process.parent_death_command(cmd, _engine_env())
+    with subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                          text=True, env=env) as proc:
         while True:
             try:
                 stderr = proc.communicate(timeout=0.5)[1]
@@ -310,7 +318,8 @@ def _time_one(model, extra_args, threads, cli="whisper-cli", cancel=None):
          "-t", str(threads), *extra_args], cancel)
     found = _TOTAL_TIME.search(stderr)
     if returncode != 0 or not found:
-        raise RuntimeError(f"speed check run failed (exit {returncode})")
+        raise RuntimeError(f"speed check run failed (exit {returncode})"
+                           + engine_process.launch_failure(returncode))
     seconds = float(found.group(1)) / 1000
     if cli == "parakeet-cli":
         # Parakeet transcribes the sample in a few hundredths of a second on a

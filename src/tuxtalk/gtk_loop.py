@@ -27,7 +27,12 @@ def start() -> None:
 
     _thread = threading.Thread(target=run, daemon=True, name="tt-gtk")
     _thread.start()
-    running.wait()
+    # A loop that dies before it runs (GTK failing to start) would leave
+    # this waiting for good, and the service hung at start.
+    while not running.wait(0.1):
+        if not _thread.is_alive():
+            _thread = None          # not running: running() and here() say so
+            raise RuntimeError("GTK's main loop ended before it started")
 
 
 def running() -> bool:
@@ -40,16 +45,21 @@ def here() -> bool:
     return _thread is None or threading.current_thread() is _thread
 
 
-def call(fn, *args):
+def call(fn, *args, timeout=None):
     """fn(*args) on the loop's thread, waited for: what it returns, or what
     it raises (SystemExit too, so a download that gives up still ends the
-    service)."""
+    service). With *timeout*, a call the loop hasn't started within that
+    many seconds is called off, never to run, and raises TimeoutError."""
     if here():
         return fn(*args)
     from gi.repository import GLib
-    done, result = threading.Event(), {}
+    done, result, lock = threading.Event(), {}, threading.Lock()
 
     def run():
+        with lock:
+            if result.get("called_off"):
+                return False
+            result["started"] = True
         try:
             result["value"] = fn(*args)
         except BaseException as e:
@@ -60,7 +70,12 @@ def call(fn, *args):
         return False
 
     GLib.idle_add(run)
-    done.wait()
+    if not done.wait(timeout):
+        with lock:
+            if not result.get("started"):
+                result["called_off"] = True
+                raise TimeoutError(f"GTK's thread didn't get to {fn.__name__}")
+        done.wait()
     if "error" in result:
         raise result["error"]
     return result.get("value")

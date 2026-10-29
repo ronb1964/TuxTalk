@@ -147,14 +147,14 @@ def test_the_daily_check_records_its_time_on_gtks_thread(monkeypatch):
     two take turns."""
     import threading
     import time
-    from tuxtalk import config, tray, update_checker
+    from tuxtalk import config, tray, update_checker, update_ui
     queued, recorded = [], []
     monkeypatch.setattr(config, "load_config",
                         lambda: config.Settings(auto_check_updates=True, last_update_check=""))
     monkeypatch.setattr(update_checker, "check_for_updates", lambda: {"success": False})
     monkeypatch.setattr(config, "record_update_check",
                         lambda ts: recorded.append(threading.current_thread()))
-    monkeypatch.setattr(tray.GLib, "idle_add", lambda fn, *a: queued.append((fn, a)))
+    monkeypatch.setattr(update_ui.GLib, "idle_add", lambda fn, *a: queued.append((fn, a)))
     t = tray.DictationTray.__new__(tray.DictationTray)
     t._quitting = False
     t.auto_check_for_updates()

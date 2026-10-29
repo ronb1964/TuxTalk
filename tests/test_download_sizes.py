@@ -25,8 +25,8 @@ def test_voice_commands_give_the_ai_size_and_keep_the_braces(monkeypatch):
     monkeypatch.setattr(ai_cleanup, "DOWNLOAD_SIZE_TEXT", AI_SIZE)
     markup = _build_markup()
     assert f"about {AI_SIZE})" in markup
-    # The f-string that puts the size in must still show each brace once.
-    assert "  <b>open brace</b> → {         <b>close brace</b> → }" in markup.splitlines()
+    # The formatting that puts the size in must still show each brace once.
+    assert "  <b>open brace</b> → {    <b>close brace</b> → }" in markup.splitlines()
 
 
 def test_the_device_list_gives_cudas_size_before_its_download(monkeypatch):

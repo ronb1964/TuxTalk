@@ -17,6 +17,7 @@ from .prefs_stats import StatsTab
 from .prefs_updates import UpdatesTab
 from .prefs_words import WordsTab
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -73,18 +74,26 @@ def _let_go_of_the_window():
         lock.close()
 
 
+def _other_window_pid():
+    """The open Preferences window's pid, if it isn't this process."""
+    pid = prefs_ipc.running_pid()
+    return pid if pid != os.getpid() else None
+
+
 def _brought_open_window_forward(tab, wait_s):
     """Whether an open Preferences window (from its pidfile, waited for up
     to *wait_s* while one starts) took the request to come to the front."""
-    deadline = time.monotonic() + wait_s
-    while True:
-        old = prefs_ipc.running_pid()
-        if old and old != os.getpid():
-            return prefs_ipc.bring_to_front(old, tab)
-        if time.monotonic() >= deadline:
-            return False
-        time.sleep(0.05)
+    from .single_instance import wait_for_pid
+    pid = wait_for_pid(_other_window_pid, wait_s)
+    return pid is not None and prefs_ipc.bring_to_front(pid, tab)
 
+
+# How long a restart waits for the new service to say it's ready.
+_READY_WAIT_S = 180
+# Set once the window is gone: then there's no one to tell how a restart
+# went, and a process left waiting would look to an uninstall like an
+# open Preferences window with changes in it.
+_window_closed = threading.Event()
 
 # What can need a download, and so is rolled back when it never finishes:
 # the model, and the device (the processor or Vulkan copy of a model).
@@ -98,18 +107,49 @@ def _restart_without_tray():
     it, and none of them can start or remove a service under the other.
     Preferences runs on native Wayland, and a service spawned with its
     environment would inherit it: gtk_window_move() would be ignored and the
-    recording indicator always centred."""
+    recording indicator always centred. Whether the new service got ready:
+    True, False, or None when it was still loading at the wait's end
+    (_came_up)."""
     from . import single_instance, tray_instance
     from .service_launcher import QUIT_WAIT_S, end_dictation_service, launch_dictation_service
     try:
         with single_instance.open_lock(tray_instance.TRAY_LOCK) as lock:
             if not single_instance.claim(lock, wait_s=QUIT_WAIT_S):
+                # A failure, so the change stays owed: a tray starting keeps
+                # the service already running, with the old settings.
                 logger.warning("Dictation not restarted: TuxTalk is starting or uninstalling")
-                return
-            end_dictation_service()
-            launch_dictation_service()
+                return False
+            if not end_dictation_service():
+                logger.warning("Dictation not restarted: the old service wouldn't end")
+                return False
+            service = launch_dictation_service()
     except Exception as e:
         logger.warning(f"Failed to restart service: {e}")
+        return False
+    return _came_up(service)
+
+
+def _came_up(service):
+    """Whether *service*, just launched, got ready: it writes its pid to the
+    ready file once its model is loaded. One that ends first didn't (a
+    broken setting, a model that won't load). None for one still loading
+    after _READY_WAIT_S, or when the window has closed (_window_closed):
+    it may be asking to download its model, so it isn't called a failure,
+    but the change stays owed."""
+    from .service_launcher import read_ready_pid
+    deadline = time.monotonic() + _READY_WAIT_S
+    while time.monotonic() < deadline and not _window_closed.is_set():
+        if read_ready_pid() == service.pid:
+            return True
+        try:
+            service.wait(timeout=0.25)
+        except subprocess.TimeoutExpired:
+            continue
+        logger.warning("The restarted dictation service ended before it was ready "
+                       f"(exit {service.returncode})")
+        return False
+    logger.info("The restarted dictation service isn't ready yet; the change stays owed")
+    return None
 
 
 class PreferencesWindow:
@@ -137,6 +177,7 @@ class PreferencesWindow:
         self.config = self.load_config()
         self._config_at_open = dict(self.config)
         self._restart_owed = set()      # keys saved whose restart failed
+        self._restarts_asked = 0        # the latest restart's number (_apply_or_restart)
         # Set while busy() (Apply waiting for KDE's verdict on a new hotkey).
         self._busy = False
         self._save_error = ""
@@ -576,6 +617,7 @@ class PreferencesWindow:
         self._stop_tests(closing=True)
         prefs_ipc.release_pidfile()
         _let_go_of_the_window()
+        _window_closed.set()
 
     def on_window_close(self, widget, event):
         """The title bar's close: asks first about changes not applied."""
@@ -649,15 +691,31 @@ class PreferencesWindow:
             logger.info(f"Applied without restart: {sorted(changed) or 'no changes'}")
             return True
 
-        return self.restart_service()
+        self._restarts_asked += 1
+        asked = self._restarts_asked
 
-    def restart_service(self):
+        def failed_later(failed):
+            # Owed again, so the next Apply restarts; a failure is said
+            # while the window is open (not a start that's only slow), and
+            # only for the latest restart: an older one's, arriving late,
+            # isn't news once a newer one went ahead.
+            if asked != self._restarts_asked:
+                return False
+            self._restart_owed |= set(changed)
+            if failed and self.window.get_visible():
+                self._say_restart_failed()
+            return False
+        return self.restart_service(on_failed=failed_later)
+
+    def restart_service(self, on_failed=None):
         """Restart the dictation service; True if it was done or asked for.
         A running tray does it (Restart Service: it waits for the old service
         off its menu's thread, and starts none once Quit or Dictation off came
         after); one that doesn't answer is left to it, never worked around.
         With no tray it's done here, on a thread: the old service types what
-        it holds and quits (or is killed past its time), then a new one starts."""
+        it holds and quits (or is killed past its time), then a new one starts.
+        A start that fails there calls *on_failed*(True) on GTK's thread,
+        and one still not ready at the wait's end *on_failed*(False)."""
         from . import single_instance, tray_instance, update_ui
         if single_instance.held_elsewhere(tray_instance.TRAY_LOCK):
             try:
@@ -666,8 +724,12 @@ class PreferencesWindow:
             except Exception as e:
                 logger.warning(f"Could not ask the tray to restart dictation: {e}")
                 return False
+        def restart():
+            came_up = _restart_without_tray()
+            if came_up is not True and on_failed is not None:
+                GLib.idle_add(on_failed, came_up is False)
         # Not a daemon: closing Preferences meanwhile must not drop the start.
-        threading.Thread(target=_restart_without_tray, name="restart-service").start()
+        threading.Thread(target=restart, name="restart-service").start()
         return True
 
     def on_tab_switched(self, notebook, page, page_num):
@@ -724,7 +786,7 @@ class PreferencesWindow:
             # really restarted, not just that the change applied.
             from .config import needs_service_restart
             show_message(self.window, Gtk.MessageType.INFO, "Settings applied successfully!",
-                         "Dictation service has been restarted with new settings."
+                         "Dictation is restarting with the new settings."
                          if needs_service_restart(changed)
                          else "Your changes are already in effect.")
 

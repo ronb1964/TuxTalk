@@ -61,16 +61,21 @@ def test_a_failure_leaves_it_to_try_again_next_start(tmp_path):
     assert not marker.exists()
 
 
-def test_favourites_gnome_wont_let_change_are_tried_again_next_start(tmp_path):
+def test_favourites_gnome_wont_let_change_are_tried_again_next_start(tmp_path, monkeypatch):
     """Locked favourites: Gio's set_strv says False and changes nothing. That
-    was taken as done, so the old TalkType pin stayed for good."""
+    was taken as done, so the old TalkType pin stayed for good. Said once a
+    start, not twice (the log and the lines the tray logs)."""
+    said = []
+    monkeypatch.setattr(rm.logger, "info", said.append)
     marker = tmp_path / "launchers-renamed"
     favs = ["talktype.desktop"]
     lines = rm.repin_launchers(str(marker), run_plasma_script=None,
                                gnome_favorites=(lambda: favs, lambda v: False),
                                app_dirs=_apps(tmp_path, "tuxtalk.desktop"))
     assert not marker.exists()
-    assert any("could not update the favourites" in line for line in lines)
+    assert [m for m in said if "favourites" in m] == [
+        "GNOME favourites not updated yet: GNOME didn't take the change (locked favourites?)"]
+    assert not any("favourites" in line for line in lines)
 
 
 def test_tray_repins_on_start(tray_main):

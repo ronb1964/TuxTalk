@@ -152,7 +152,7 @@ def is_pre_rename_service_argv(argv) -> bool:
 def pre_rename_service_pids():
     """PIDs of running pre-rename (TalkType) dictation services."""
     return [pid for pid in find_service_pids()
-            if is_pre_rename_service_argv(_read_argv(pid) or [])]
+            if is_pre_rename_service_argv(read_argv(pid) or [])]
 
 
 def is_pre_rename_tray_argv(argv) -> bool:
@@ -181,7 +181,7 @@ def pre_rename_tray_pids():
                 continue
         except OSError:
             continue
-        if is_pre_rename_tray_argv(_read_argv(pid) or []):
+        if is_pre_rename_tray_argv(read_argv(pid) or []):
             pids.append(pid)
     return pids
 
@@ -221,7 +221,7 @@ def stop_old_talktype_flatpak(run=subprocess.run) -> bool:
     return True
 
 
-def _read_argv(pid):
+def read_argv(pid):
     """A process's argument list from /proc, or None if it can't be read."""
     try:
         with open(f"/proc/{pid}/cmdline", "rb") as f:
@@ -239,7 +239,7 @@ def is_service_pid(pid) -> bool:
             return False
     except OSError:
         return False
-    argv = _read_argv(pid)
+    argv = read_argv(pid)
     return bool(argv) and is_service_argv(argv)
 
 
@@ -476,7 +476,8 @@ def dev_pythonpath():
 
 
 def launch_dictation_service():
-    """Start the dictation service. Returns the Popen object, or None on failure.
+    """Start the dictation service: its Popen object. Raises OSError when it
+    can't be started.
 
     Callers must not spawn it themselves, so every path starts it the same way
     (tests/test_service_launch_parity.py checks this).

@@ -80,7 +80,8 @@ def _capture_service_env(monkeypatch):
     # _launch_service itself.
     monkeypatch.delenv("GDK_BACKEND", raising=False)
 
-    monkeypatch.setattr(tray.subprocess, "Popen", fake_popen)
+    from tuxtalk import service_launcher
+    monkeypatch.setattr(service_launcher.subprocess, "Popen", fake_popen)
 
     stub = types.SimpleNamespace(_service_pid=None)
     tray.DictationTray._launch_service(stub)

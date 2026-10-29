@@ -7,6 +7,8 @@ disk, invisible, uncancellable, and reported to the caller as failures.
 """
 
 
+import pytest
+
 from tuxtalk.download_progress_dialog import DownloadTask, UnifiedDownloadDialog
 
 
@@ -54,10 +56,19 @@ class _Widget:
     def set_sensitive(self, value):
         pass
 
+    def set_tooltip_text(self, text):
+        pass
+
     def set_fraction(self, value):
         pass
 
     def set_text(self, value):
+        pass
+
+    def show(self):
+        pass
+
+    def grab_focus(self):
         pass
 
 
@@ -174,7 +185,9 @@ def test_work_that_cant_stop_offers_no_cancel_and_isnt_called_cancelled():
     dlg.add_task(install)
     frame = dlg._create_task_widget(install)
     try:
-        assert not dlg.task_widgets[install]["cancel_btn"].get_sensitive()
+        button = dlg.task_widgets[install]["cancel_btn"]
+        assert not button.get_sensitive() and button.get_label() == "Can't stop"
+        assert button.get_tooltip_text()
         dlg._cancel_unfinished_tasks()            # the window closed meanwhile
         assert not install.cancelled and not install.cancel_event.is_set()
     finally:
@@ -210,3 +223,54 @@ def test_escape_doesnt_close_the_window_on_work_that_cant_stop(monkeypatch):
     results = dlg.run()
     assert answers == ["escape", "closed when done"]
     assert results["GNOME Extension"]["success"] is True
+
+
+class _Window:
+    """The Gtk.Dialog under a download window: its answers and buttons."""
+
+    def __init__(self):
+        self.responses, self.buttons = [], []
+
+    def response(self, value):
+        self.responses.append(value)
+
+    def add_button(self, label, response):
+        self.buttons.append((label, response))
+        return _Widget()
+
+
+@pytest.fixture
+def window(monkeypatch):
+    """A one-task download window: (dialog, its task, the timers it set)."""
+    timers = []
+    task = _task()
+    dlg = _dialog_with_widgets(monkeypatch, task)
+    monkeypatch.setattr("tuxtalk.download_progress_dialog.GLib.timeout_add",
+                        lambda ms, fn, *a: timers.append(ms))
+    dlg.dialog = _Window()
+    return dlg, task, timers
+
+
+def test_cancel_closes_the_window_at_once(window):
+    """Not once the download notices: a request or a wait before a retry
+    kept the window up after Cancel."""
+    from gi.repository import Gtk
+    dlg, task, timers = window
+    dlg._cancel_task(task)
+    assert dlg.dialog.responses == [Gtk.ResponseType.CANCEL]
+
+
+def test_a_failed_download_keeps_its_window_open_with_a_close_button(window):
+    """It closed by itself after 1.5 s, before its reason could be read."""
+    from gi.repository import Gtk
+    dlg, task, timers = window
+    dlg._update_task_progress(task, "Download failed: Connection refused", 0)
+    dlg._mark_task_complete(task, False)
+    assert timers == [] and dlg.dialog.responses == []
+    assert dlg.dialog.buttons == [("Close", Gtk.ResponseType.OK)]
+
+
+def test_a_finished_download_closes_once_complete_has_shown(window):
+    dlg, task, timers = window
+    dlg._mark_task_complete(task, True)
+    assert timers == [1500] and dlg.dialog.buttons == []

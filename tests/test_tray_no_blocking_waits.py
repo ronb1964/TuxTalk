@@ -124,26 +124,13 @@ def test_dictation_turned_off_while_the_old_service_goes_stays_off(monkeypatch):
     assert started == []
 
 
-def test_the_kde_cache_rebuild_falls_back_to_kbuildsycoca5(monkeypatch):
-    ran = []
-
-    def fake_run(argv, **_):
-        ran.append(argv[0])
-        if argv[0] == "kbuildsycoca6":
-            raise FileNotFoundError(argv[0])
-
-    monkeypatch.setattr(tray_mod.subprocess, "run", fake_run)
-    tray_mod._refresh_kde_menu_cache()
-    assert ran == ["kbuildsycoca6", "kbuildsycoca5"]
-
-
 def test_the_kde_cache_rebuild_runs_off_the_main_loop(tray_main, monkeypatch):
     """After first-run setup the rebuild runs on its own thread, so the menu
     never waits for it."""
     import threading
     ran = []
     done = threading.Event()
-    monkeypatch.setattr(tray_mod, "_refresh_kde_menu_cache",
+    monkeypatch.setattr(tray_mod.menu_cache, "refresh_menu_cache",
                         lambda: ran.append(threading.current_thread()) or done.set())
     tray_main(first_run=True).run_timers()
     assert done.wait(5)

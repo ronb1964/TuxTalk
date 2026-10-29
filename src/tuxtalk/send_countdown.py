@@ -395,6 +395,7 @@ def _count_down(pending: dict, seconds_left: int) -> None:
             if _pending is not pending:
                 return
             _pending = None
+            pending["stopped"] = True       # as _take_pending: said once, here
         _cancel_timers(pending)
         _say_not_sent(why, relabel=True)
         _owe_space(pending)
@@ -493,12 +494,16 @@ def hold(announce: bool) -> bool:
 
 
 def _take_pending():
-    """The send counting down, no longer pending, its space owed; None if
-    there was none. With _send_lock held."""
+    """The send counting down, no longer pending and marked stopped, its
+    space owed; None if there was none. With _send_lock held: marked under
+    the lock, its own thread can't find it neither claimed nor stopped and
+    say "Not sent" for a press that only meant to dictate more."""
     global _pending, _owed
     pending, _pending = _pending, None
-    if pending is not None and pending.get("space"):
-        _owed = pending
+    if pending is not None:
+        pending["stopped"] = True
+        if pending.get("space"):
+            _owed = pending
     return pending
 
 
@@ -507,7 +512,6 @@ def _stop_held(pending, announce: bool) -> bool:
     False when there was none."""
     if pending is None:
         return False
-    pending["stopped"] = True       # its press, if under way, says nothing more
     _cancel_timers(pending)
     logger.info("Held the send: the dictation stays unsent")
     if announce:

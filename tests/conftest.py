@@ -206,6 +206,8 @@ class InlineWorker:
     the test's own thread, so a test sees the text typed when the key is let
     go. Tests of the real worker's order and timing use DictationWorker."""
 
+    thread = None               # no thread of its own: a job never runs "on" it
+
     def submit(self, job):
         job()
 
@@ -337,7 +339,7 @@ def _users_tuxtalk_processes():
     pids = set()
     for entry in os.listdir("/proc"):
         target = entry.isdigit() and _launcher.interpreter_target(
-            _launcher._read_argv(int(entry)) or [])
+            _launcher.read_argv(int(entry)) or [])
         if target and target[0] == "module" and target[1].startswith(("tuxtalk.", "talktype.")):
             pids.add(int(entry))
     return frozenset(pids - {os.getpid()})
@@ -738,9 +740,9 @@ def help_pages(monkeypatch):
 @pytest.fixture
 def tray_menu(monkeypatch):
     """The tray's menu as built from default settings, without starting a tray."""
-    from tuxtalk import config, tray
+    from tuxtalk import config, tray, tray_menu
     monkeypatch.setattr(config, "load_config", config.Settings)
-    menu = tray.DictationTray.build_menu(tray.DictationTray.__new__(tray.DictationTray))
+    menu = tray_menu.TrayMenu(tray.DictationTray.__new__(tray.DictationTray)).widget
     yield menu
     menu.destroy()
 
@@ -815,9 +817,9 @@ def tray_main(monkeypatch):
     import types
     import dbus.mainloop.glib
     from tuxtalk import (autostart, control, cuda_helper, desktop_identity,
-                         gnome_keybindings, rename_migration, service_launcher,
-                         settings_backup, tray, ui_style, uinput_helper, update_checker,
-                         welcome_dialog)
+                         first_run_setup, gnome_keybindings, rename_migration,
+                         service_launcher, settings_backup, tray, ui_style, uinput_helper,
+                         update_checker)
     done = _Steps()
 
     def step(name, result=None):
@@ -840,8 +842,8 @@ def tray_main(monkeypatch):
         auto_check_for_updates = step("checks for updates")
 
     monkeypatch.setattr(tray.tray_instance, "acquire", step("takes the tray lock"))
-    monkeypatch.setattr(tray, "_handle_old_talktype_flatpak", lambda: None)
-    monkeypatch.setattr(tray, "_refresh_kde_menu_cache", lambda: None)
+    monkeypatch.setattr(tray.startup_notices, "handle_old_talktype_flatpak", lambda: None)
+    monkeypatch.setattr(tray.menu_cache, "refresh_menu_cache", lambda: None)
     monkeypatch.setattr(rename_migration, "adopt_old_install", step("adopts the old install", []))
     monkeypatch.setattr(rename_migration, "repin_launchers", step("repins launchers", []))
     monkeypatch.setattr(update_checker, "create_hidden_desktop_entry",
@@ -872,7 +874,7 @@ def tray_main(monkeypatch):
         monkeypatch.setattr(tray.Gtk, "main", step("runs"))
         monkeypatch.setattr(sys, "argv", ["tuxtalk", *argv])
         monkeypatch.setattr(cuda_helper, "is_first_run", lambda: first_run)
-        monkeypatch.setattr(welcome_dialog, "show_welcome_and_install", welcome)
+        monkeypatch.setattr(first_run_setup, "show_welcome_and_install", welcome)
         tray.main()
         return done
     return run
@@ -961,11 +963,10 @@ def service_main(monkeypatch):
 @pytest.fixture
 def about_window(monkeypatch):
     """The tray's About window, built for real, without fetching release notes."""
-    import types
     from gi.repository import Gtk
-    from tuxtalk import tray, update_checker
+    from tuxtalk import about_dialog, update_checker
     monkeypatch.setattr(update_checker, "fetch_release_by_tag", lambda tag: None)
-    tray.DictationTray.show_about_dialog(types.SimpleNamespace(), None)
+    about_dialog.show_about_dialog()
     window = next(w for w in Gtk.Window.list_toplevels()
                   if w.get_title() == "About TuxTalk" and w.get_visible())
     yield window
@@ -996,7 +997,7 @@ def setup_complete(monkeypatch):
     showed; *click* names a button to press while it is open."""
     from gi.repository import Gtk
     from gtk_text import find, shown_text
-    from tuxtalk import config, welcome_dialog
+    from tuxtalk import config, setup_complete_dialog
     monkeypatch.setattr(config, "load_config", config.Settings)
 
     def show(click=None, **options):
@@ -1008,18 +1009,19 @@ def setup_complete(monkeypatch):
                 find(dialog, Gtk.Button, click).clicked()
             return Gtk.ResponseType.OK
         monkeypatch.setattr(Gtk.Dialog, "run", run)
-        welcome_dialog.show_setup_complete_dialog(**options)
+        setup_complete_dialog.show_setup_complete_dialog(**options)
         return seen
     return show
 
 
 @pytest.fixture
 def first_run(monkeypatch):
-    """First-run setup after the welcome screen (show_welcome_and_install),
-    from an AppImage in Downloads, with each screen and download faked.
-    Returns the steps it took, in order."""
+    """First-run setup after the welcome screen
+    (first_run_setup.show_welcome_and_install), from an AppImage in
+    Downloads, with each screen and download faked. Returns the steps it
+    took, in order."""
     import types
-    from tuxtalk import appimage_copy, autostart, update_checker, welcome_dialog
+    from tuxtalk import appimage_copy, autostart, first_run_setup, update_checker
     done = _Steps()
 
     class Thread:
@@ -1031,13 +1033,13 @@ def first_run(monkeypatch):
 
     monkeypatch.setattr(appimage_copy, "threading", types.SimpleNamespace(Thread=Thread))
     monkeypatch.setattr(appimage_copy, "_thread", None)
-    monkeypatch.setattr(welcome_dialog, "show_welcome_dialog", lambda: done.append("welcome") or
+    monkeypatch.setattr(first_run_setup, "show_welcome_dialog", lambda: done.append("welcome") or
                         {"continue": True, "model": "parakeet-v3", "device": "cpu"})
-    monkeypatch.setattr(welcome_dialog, "show_hotkey_test_dialog",
+    monkeypatch.setattr(first_run_setup, "show_hotkey_test_dialog",
                         lambda: done.append("tests the hotkeys"))
-    monkeypatch.setattr(welcome_dialog, "_apply_first_run_setup",
-                        lambda result: done.append("downloads the speech model"))
-    monkeypatch.setattr(welcome_dialog, "show_setup_complete_dialog",
+    monkeypatch.setattr(first_run_setup, "_apply_first_run_setup",
+                        lambda result: done.append("downloads the speech model") or True)
+    monkeypatch.setattr(first_run_setup, "show_setup_complete_dialog",
                         lambda **k: done.append("setup complete"))
     monkeypatch.setattr(update_checker, "is_running_from_appimage", lambda: True)
     monkeypatch.setattr(update_checker, "ensure_appimage_in_standard_location",
@@ -1049,6 +1051,6 @@ def first_run(monkeypatch):
     monkeypatch.delenv("FLATPAK_ID", raising=False)
 
     def run():
-        welcome_dialog.show_welcome_and_install()
+        first_run_setup.show_welcome_and_install()
         return done
     return run

@@ -166,7 +166,7 @@ def downloads(run):
     deadline = time.monotonic() + 900
     while time.monotonic() < deadline:
         titles = [w["title"] for w in run.vm.ui("windows") or [] if w["app"] == "tuxtalk"]
-        # The processor's copy: "Downloading Model: Parakeet"; the graphics
+        # The processor's copy: "Downloading the speech model"; the graphics
         # card's: "Setting Up Vulkan".
         downloading = [t for t in titles if t.startswith("Downloading") or t == "Setting Up Vulkan"]
         if downloading and not seen_window:

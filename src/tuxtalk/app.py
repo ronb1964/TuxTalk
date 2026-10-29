@@ -235,7 +235,11 @@ def _start_gtk(cfg) -> bool:
     except Exception as e:
         logger.error(f"GTK initialization failed: {e}", exc_info=True)
         return False
-    gtk_loop.start()
+    try:
+        gtk_loop.start()
+    except RuntimeError as e:
+        logger.error(f"GTK's main loop wouldn't run: {e}")
+        return False
     gtk_loop.call(_make_gtk_parts, cfg)
     return True
 

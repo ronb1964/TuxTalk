@@ -265,8 +265,22 @@ def test_stop_ends_a_speed_check_run_at_once(monkeypatch):
     threading.Timer(0.2, cancel.set).start()
     started = time.monotonic()
     with pytest.raises(RuntimeError, match="stopped"):
-        wv._run_timed(["sleep", "30"], cancel)
+        wv._run_timed(["/bin/sleep", "30"], cancel)
     assert time.monotonic() - started < 5
+
+
+def test_a_speed_check_run_goes_through_the_engine_launcher(monkeypatch):
+    """So a service killed mid-check takes the run with it."""
+    started = []
+    real_popen = wv.subprocess.Popen
+
+    def recording_popen(command, **k):
+        started.append(command)
+        return real_popen(command, **k)
+    monkeypatch.setattr(wv, "_engine_env", lambda: None)
+    monkeypatch.setattr(wv.subprocess, "Popen", recording_popen)
+    wv._run_timed(["/bin/true"])
+    assert started[0][1] == wv.engine_process.engine_launcher.__file__
 
 
 def test_no_run_starts_after_stop(monkeypatch):
@@ -282,7 +296,7 @@ def test_no_run_starts_after_stop(monkeypatch):
 
 def test_a_finished_run_gives_its_exit_code_and_stderr(monkeypatch):
     monkeypatch.setattr(wv, "_engine_env", lambda: None)
-    assert wv._run_timed(["sh", "-c", "echo timings >&2; exit 3"]) == (3, "timings\n")
+    assert wv._run_timed(["/bin/sh", "-c", "echo timings >&2; exit 3"]) == (3, "timings\n")
 
 
 @pytest.mark.parametrize("text, cleaned", [
@@ -440,15 +454,15 @@ def test_transcription_ignores_the_engines_no_speech_score(monkeypatch):
 # --- first-run setup: the light choice for NVIDIA ---------------------------------
 
 def test_first_run_model_download_is_skipped_when_already_there(monkeypatch):
-    from tuxtalk import welcome_dialog as wd
+    from tuxtalk import first_run_setup as fr
     monkeypatch.setattr(wv, "is_engine_installed", lambda *a: True)
     monkeypatch.setattr(wv, "model_path", lambda m: "/models/x.bin")
-    assert wd._download_vulkan_model_first_run("small") is True
+    assert fr._download_vulkan_model_first_run("small") == (True, False)
 
 
 def test_first_run_parakeet_on_vulkan_fetches_an_engine_that_can_run_it(monkeypatch):
     """Engine build 1 can't run Parakeet, so it's fetched again with the model."""
-    from tuxtalk import welcome_dialog as wd
+    from tuxtalk import first_run_setup as fr
     import tuxtalk.download_progress_dialog as dpd
     added = []
 
@@ -460,14 +474,12 @@ def test_first_run_parakeet_on_vulkan_fetches_an_engine_that_can_run_it(monkeypa
     monkeypatch.setattr(wv, "is_engine_installed", lambda *a: not a or a[0] != "parakeet-v3")
     monkeypatch.setattr(wv, "model_path", lambda m: None)
     monkeypatch.setattr(dpd, "UnifiedDownloadDialog", Dialog)
-    info = {}
-    assert wd._download_vulkan_model_first_run("parakeet-v3", result_info=info) is False
+    assert fr._download_vulkan_model_first_run("parakeet-v3") == (False, False)  # not cancelled
     assert added == ["Graphics engine", "Speech model"]
-    assert info == {}          # it failed; nobody cancelled
 
 
 def test_first_run_vulkan_download_reports_a_cancel(monkeypatch):
-    from tuxtalk import welcome_dialog as wd
+    from tuxtalk import first_run_setup as fr
     import tuxtalk.download_progress_dialog as dpd
 
     class Dialog:
@@ -479,30 +491,28 @@ def test_first_run_vulkan_download_reports_a_cancel(monkeypatch):
     monkeypatch.setattr(wv, "is_engine_installed", lambda *a: True)
     monkeypatch.setattr(wv, "model_path", lambda m: None)
     monkeypatch.setattr(dpd, "UnifiedDownloadDialog", Dialog)
-    info = {}
-    assert wd._download_vulkan_model_first_run("small", result_info=info) is False
-    assert info == {"cancelled": True}
+    assert fr._download_vulkan_model_first_run("small") == (False, True)
 
 
 def test_first_run_vulkan_uses_the_preferences_speed_check(monkeypatch):
     """First run times Vulkan before switching to it, so weak built-in
     graphics can't end up slower than the processor."""
-    from tuxtalk import welcome_dialog as wd
+    from tuxtalk import first_run_setup as fr
     seen = []
     monkeypatch.setattr("tuxtalk.vulkan_setup_dialogs.run_speed_check",
                         lambda parent, model: seen.append(model) or False)
-    assert wd._vulkan_speed_check_first_run("parakeet-v3") is False
+    assert fr._vulkan_speed_check_first_run("parakeet-v3") is False
     assert seen == ["parakeet-v3"]
 
 
 def test_first_run_speed_check_error_keeps_the_processor(monkeypatch):
-    from tuxtalk import welcome_dialog as wd
+    from tuxtalk import first_run_setup as fr
 
     def boom(parent, model):
         raise RuntimeError("no Vulkan device")
 
     monkeypatch.setattr("tuxtalk.vulkan_setup_dialogs.run_speed_check", boom)
-    assert wd._vulkan_speed_check_first_run("small") is False
+    assert fr._vulkan_speed_check_first_run("small") is False
 
 
 @pytest.mark.parametrize("times,slower", [((1.0, 5.0), False), ((5.0, 1.0), True)])

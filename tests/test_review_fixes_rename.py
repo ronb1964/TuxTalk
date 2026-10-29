@@ -11,7 +11,7 @@ def test_menu_launcher_points_at_the_installed_appimage(tmp_path, monkeypatch):
     monkeypatch.setattr(uc, "DESKTOP_FILE_PATH", str(tmp_path / "apps" / "tuxtalk.desktop"))
     monkeypatch.setattr(uc, "APPIMAGE_PATH", str(tmp_path / "AppImages" / "TuxTalk.AppImage"))
     monkeypatch.setattr(uc, "_install_app_icon", lambda: "tuxtalk")
-    monkeypatch.setattr(uc, "_refresh_desktop_menu_cache", lambda: None)
+    monkeypatch.setattr(uc.menu_cache, "refresh_menu_cache", lambda: None)
     ok, _ = uc.create_desktop_launcher()
     assert ok
     text = (tmp_path / "apps" / "tuxtalk.desktop").read_text()

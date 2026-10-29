@@ -9,7 +9,7 @@ user cannot act on.
 The distinction that matters is guarded vs unguarded:
 
     gi.require_version('GdkPixbuf', '2.0')   # module level → MUST be bundled
-    from gi.repository import GdkPixbuf      # welcome_dialog.py, first run
+    from gi.repository import GdkPixbuf      # splash_screen.py, first run
 
     try:                                      # optional → must NOT be required
         gi.require_version('Notify', '0.7')   # notify.py, sets _ready

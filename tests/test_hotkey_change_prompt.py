@@ -132,7 +132,8 @@ def right_ctrl_question(prefs_window, monkeypatch):
     monkeypatch.setattr(tab, "_kde_refused", lambda since: None)
     monkeypatch.setattr(tab, "_ask_hotkey_question", lambda *question, update=False:
                         steps.append((question[0], update)) or Gtk.ResponseType.OK)
-    monkeypatch.setattr(win, "restart_service", lambda: steps.append("restarted") or True)
+    monkeypatch.setattr(win, "restart_service",
+                        lambda on_failed=None: steps.append("restarted") or True)
     monkeypatch.setattr(prefs_general, "run_hotkey_test", lambda parent, cfg: steps.append("test"))
     monkeypatch.setattr(prefs_general, "show_message",
                         lambda parent, kind, title, text: warnings.append((title, text)))

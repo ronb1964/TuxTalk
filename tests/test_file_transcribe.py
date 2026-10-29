@@ -259,6 +259,21 @@ def test_an_open_window_is_found_by_its_pidfile(tmp_path, monkeypatch):
     assert tw._running_pid() is None
 
 
+@pytest.mark.parametrize("argv,found", [
+    (["/usr/bin/python3", "-m", "tuxtalk.transcribe_window"], True),
+    # A program that only mentions it (an editor with the file open, say):
+    # the signal to come to the front would end it.
+    (["/usr/bin/vim", "tuxtalk.transcribe_window"], False),
+    (["/usr/bin/python3", "-c", "pass", "tuxtalk.transcribe_window"], False)])
+def test_only_the_window_itself_is_taken_for_the_open_window(tmp_path, monkeypatch, argv, found):
+    from tuxtalk import service_launcher
+    from tuxtalk import transcribe_window as tw
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    (tmp_path / "tuxtalk-transcribe.pid").write_text("4242")
+    monkeypatch.setattr(service_launcher, "read_argv", lambda pid: argv)
+    assert tw._running_pid() == (4242 if found else None)
+
+
 @pytest.fixture
 def window_lock(tmp_path, monkeypatch):
     """The window lock in a private folder; returns the module and the

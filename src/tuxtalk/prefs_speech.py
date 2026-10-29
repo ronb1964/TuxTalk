@@ -80,32 +80,20 @@ def device_label(device, model, cuda_ready):
 
 
 def download_model(parent, model):
-    """Download *model*'s files for the processor or CUDA, with a progress
-    bar, unless they're here already: (here now, cancelled). Success is told
-    only once every file is there."""
-    from .download_progress_dialog import DownloadTask, UnifiedDownloadDialog
-    from .model_helper import MODEL_DISPLAY_SIZES, is_model_cached_fast, make_model_download_func
+    """Download *model*'s files for the processor or CUDA, unless they're
+    here already, and say so when they came: (here now, cancelled)."""
+    from .model_helper import download_model_files, is_model_cached_fast
     from .recommend import model_title
     # A file check, no model loading: this runs on every Apply and OK. A
     # partial cache left by a cancelled download reports "not cached".
     if is_model_cached_fast(model):
         logger.info(f"Model {model} already cached")
         return True, False
-    logger.info(f"Model {model} not found, downloading...")
-    dialog = UnifiedDownloadDialog(
-        parent=parent, title="Downloading the speech model",
-        description="This may take a few minutes depending on your connection.")
-    task = DownloadTask(model_title(model), MODEL_DISPLAY_SIZES.get(model, "unknown size"),
-                        make_model_download_func(model))
-    dialog.add_task(task)
-    dialog.run()
-    # The downloader's word is trusted only once the cache holds every file.
-    ok = task.success and not task.cancelled and is_model_cached_fast(model)
-    if ok:
-        logger.info(f"Model {model} downloaded successfully")
+    ok, cancelled = download_model_files(parent, model)
+    if ok and not cancelled:
         show_message(parent, Gtk.MessageType.INFO, "Model Downloaded Successfully!",
                      f"The {model_title(model)} model has been downloaded and is ready to use.")
-    return ok, task.cancelled
+    return ok, cancelled
 
 
 def ask_whisper_model_for_cuda(parent):

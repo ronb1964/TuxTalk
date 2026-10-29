@@ -47,35 +47,34 @@ def pidfile_path():
 
 
 def _running_pid():
-    """The pid of an open Transcribe a File window, or None."""
+    """The pid of an open Transcribe a File window, or None. Its command line
+    must run the window (service_launcher.interpreter_target, as for
+    Preferences): a pidfile left by a crash can name a pid another program
+    has since, and FRONT would end it."""
+    from .service_launcher import interpreter_target, read_argv
     try:
         with open(pidfile_path()) as f:
             pid = int(f.read().strip())
-        with open(f"/proc/{pid}/cmdline", "rb") as f:
-            if b"tuxtalk.transcribe_window" in f.read() and pid != os.getpid():
-                return pid
     except (OSError, ValueError):
-        pass
+        return None
+    argv = read_argv(pid) or []
+    if pid != os.getpid() and interpreter_target(argv) == ("module", "tuxtalk.transcribe_window"):
+        return pid
     return None
 
 
 def _brought_forward(wait_s):
-    """Whether an open window took the signal to come to the front. A window
-    writes its pid only once it handles the signal (until then the signal
-    would end it), so one still starting is waited for, up to *wait_s*
-    seconds."""
-    deadline = time.monotonic() + wait_s
-    while True:
-        other = _running_pid()
-        if other:
-            try:
-                os.kill(other, FRONT)
-                return True
-            except OSError:
-                return False
-        if time.monotonic() >= deadline:
-            return False
-        time.sleep(0.05)
+    """Whether an open window took the signal to come to the front, waiting
+    up to *wait_s* seconds for one still starting (single_instance.wait_for_pid)."""
+    from .single_instance import wait_for_pid
+    other = wait_for_pid(_running_pid, wait_s)
+    if other is None:
+        return False
+    try:
+        os.kill(other, FRONT)
+        return True
+    except OSError:
+        return False
 
 
 def _saved_file_mode(path):

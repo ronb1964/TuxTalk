@@ -120,7 +120,7 @@ class TestFindingTheServiceInProc:
 
         monkeypatch.setattr(service_launcher.os, "listdir", listdir)
         monkeypatch.setattr(service_launcher.os, "stat", stat)
-        monkeypatch.setattr(service_launcher, "_read_argv", read_argv)
+        monkeypatch.setattr(service_launcher, "read_argv", read_argv)
         monkeypatch.setattr(service_launcher.os, "getuid", lambda: 1000)
         monkeypatch.setattr(service_launcher.os, "getpid", lambda: 1)
         return procs
@@ -147,11 +147,11 @@ class TestFindingTheServiceInProc:
 
 class TestReadArgv:
     def test_reads_this_process(self):
-        argv = service_launcher._read_argv(os.getpid())
+        argv = service_launcher.read_argv(os.getpid())
         assert argv and all(isinstance(a, str) and a for a in argv)
 
     def test_missing_pid_is_none(self):
-        assert service_launcher._read_argv(2 ** 30) is None
+        assert service_launcher.read_argv(2 ** 30) is None
 
 
 class TestStopDictationService:

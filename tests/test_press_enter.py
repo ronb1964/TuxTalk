@@ -746,3 +746,14 @@ def test_a_pause_at_the_end_after_switching_windows_sends_nothing(monkeypatch, k
     for timer in FakeTimer.made:
         timer.fire()
     assert keyboard.events == []
+
+
+def test_a_send_taken_from_its_countdown_is_stopped_before_its_thread_can_look(monkeypatch):
+    """Its thread checks "claimed or stopped?" under the same lock: found
+    neither, it said "Not sent: a dictation key stayed down" when the user
+    had only pressed F8 to dictate more."""
+    pending = {"space": False}
+    monkeypatch.setattr(send_countdown, "_pending", pending)
+    with send_countdown._send_lock:
+        assert send_countdown._take_pending() is pending
+        assert pending["stopped"]

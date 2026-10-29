@@ -498,7 +498,7 @@ def test_an_uninstall_without_the_tray_holds_its_lock(tmp_path, monkeypatch):
     assert held == [True]       # flock is per open file: this process's other one sees it
 
 
-def test_preferences_restart_waits_for_an_uninstall(tmp_path, monkeypatch):
+def test_preferences_restart_waits_for_an_uninstall(tmp_path, monkeypatch, started):
     """The other half: a restart from Preferences with no tray waits for the
     lock, and starts nothing while an uninstall holds it."""
     from tuxtalk import prefs
@@ -506,13 +506,83 @@ def test_preferences_restart_waits_for_an_uninstall(tmp_path, monkeypatch):
     monkeypatch.setattr(service_launcher, "QUIT_WAIT_S", 0.2)
     launched = []
     monkeypatch.setattr(service_launcher, "end_dictation_service", lambda: True)
-    monkeypatch.setattr(service_launcher, "launch_dictation_service", lambda: launched.append(1))
+    monkeypatch.setattr(service_launcher, "launch_dictation_service",
+                        lambda: launched.append(1) or started["now"])
     with single_instance.open_lock(tray_instance.TRAY_LOCK) as uninstalling:
         assert single_instance.claim(uninstalling)
-        prefs._restart_without_tray()
+        assert prefs._restart_without_tray() is False    # owed: a tray keeps the old one
     assert launched == []
-    prefs._restart_without_tray()
+    assert prefs._restart_without_tray() is True
     assert launched == [1]
+
+
+class _Started:
+    """A launched service: it gets ready after *checks* looks, or ends
+    after that many (ready=False), or neither (checks=None)."""
+
+    pid = 4242
+
+    def __init__(self, ready=True, checks=0):
+        self.ready, self.checks, self.returncode = ready, checks, None
+
+    def wait(self, timeout):
+        if self.checks is not None and not self.ready:
+            if self.checks == 0:
+                self.returncode = 1
+                return 1
+            self.checks -= 1
+        raise subprocess.TimeoutExpired("tuxtalk.app", timeout)
+
+    def ready_pid(self):
+        if self.ready and self.checks is not None:
+            if self.checks == 0:
+                return self.pid
+            self.checks -= 1
+        return None
+
+
+@pytest.fixture
+def started(monkeypatch):
+    """What launching the service gives, with the ready file it writes,
+    and a Preferences window still open (another test may have closed one)."""
+    from tuxtalk import prefs
+    monkeypatch.setattr(prefs, "_window_closed", threading.Event())
+    service = {"now": _Started()}
+    monkeypatch.setattr(service_launcher, "launch_dictation_service", lambda: service["now"])
+    monkeypatch.setattr(service_launcher, "read_ready_pid", lambda: service["now"].ready_pid())
+    return service
+
+
+@pytest.mark.parametrize("ended,ready,checks,restarted", [
+    (True, True, 3, True),          # up once its model loaded
+    (True, False, 0, False),        # ended at once: a broken setting
+    (True, False, 3, False),        # ended loading its model
+    (True, True, None, None),       # still loading: asking to download?
+    (False, True, 0, False)])       # the old one wouldn't go
+def test_preferences_restart_says_whether_it_worked(tmp_path, monkeypatch, started, ended,
+                                                    ready, checks, restarted):
+    from tuxtalk import prefs
+    monkeypatch.setattr(single_instance, "runtime_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(prefs, "_READY_WAIT_S", 2)
+    monkeypatch.setattr(service_launcher, "end_dictation_service", lambda: ended)
+    started["now"] = _Started(ready, checks)
+    assert prefs._restart_without_tray() is restarted
+
+
+def test_a_closed_preferences_stops_waiting_for_the_service(tmp_path, monkeypatch, started):
+    """No one is left to tell, and a process still waiting looked to an
+    uninstall like an open Preferences window with changes in it."""
+    import threading
+    from tuxtalk import prefs
+    monkeypatch.setattr(single_instance, "runtime_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(service_launcher, "end_dictation_service", lambda: True)
+    closed = threading.Event()
+    closed.set()
+    monkeypatch.setattr(prefs, "_window_closed", closed)
+    started["now"] = _Started(checks=None)        # would load for the whole wait
+    began = time.monotonic()
+    assert prefs._restart_without_tray() is None
+    assert time.monotonic() - began < 5
 
 
 @pytest.mark.parametrize("answer,goes_ahead,saved", [

@@ -222,21 +222,21 @@ def test_the_tray_menu_line_really_appears(monkeypatch):
     import gi
     gi.require_version("Gtk", "3.0")
     from gi.repository import Gtk
-    from tuxtalk import tray
+    from tuxtalk import tray_menu
     monkeypatch.setattr(config, "load_config", lambda: config.Settings(paste_last_hotkey="Ctrl+Alt+P"))
     monkeypatch.setattr(history, "get_entries", lambda: ["Hello there."])
-    fake = types.SimpleNamespace(history_menu=Gtk.Menu(),
-                                 _build_history_entry_submenu=lambda text, i: Gtk.Menu(),
+    fake = types.SimpleNamespace(_history_entry_submenu=lambda text, i: Gtk.Menu(),
                                  _clear_history=lambda: None)
-    tray.DictationTray._fill_history_menu(fake, fake.history_menu)
-    assert "Ctrl+Alt+P types the newest one again" in tree_text(fake.history_menu)
+    menu = Gtk.Menu()
+    tray_menu.TrayMenu.fill_history(fake, menu)
+    assert "Ctrl+Alt+P types the newest one again" in tree_text(menu)
 
 
 def test_the_setup_tip_really_appears(monkeypatch):
     import gi
     gi.require_version("Gtk", "3.0")
     from gi.repository import Gtk
-    from tuxtalk import welcome_dialog
+    from tuxtalk import setup_complete_dialog
     monkeypatch.setattr(config, "load_config", lambda: config.Settings(paste_last_hotkey="Ctrl+Alt+P"))
     seen = []
 
@@ -244,7 +244,7 @@ def test_the_setup_tip_really_appears(monkeypatch):
         seen.extend(tree_text(dialog))
         return Gtk.ResponseType.OK
     monkeypatch.setattr(Gtk.Dialog, "run", fake_run)
-    welcome_dialog.show_setup_complete_dialog()
+    setup_complete_dialog.show_setup_complete_dialog()
     assert any("Press Ctrl+Alt+P to type it again" in text for text in seen)
 
 

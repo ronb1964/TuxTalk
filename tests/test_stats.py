@@ -155,7 +155,7 @@ def test_format_duration(seconds, text):
 
 # --- the dictation service counts each dictation -----------------------------
 
-def _dictate(monkeypatch, app, seconds=2.0):
+def _dictate(monkeypatch, seconds=2.0):
     import numpy as np
     monkeypatch.setattr(engine, "transcribe", lambda audio, language: "hello there friend")
     monkeypatch.setattr(dictation_text, "prepare_text", lambda raw, *a, **k: "Hello there, friend. ")
@@ -168,9 +168,8 @@ def _dictate(monkeypatch, app, seconds=2.0):
 
 
 def test_a_dictation_is_counted_with_its_words_and_speaking_time(stats_file, monkeypatch):
-    from tuxtalk import app
     monkeypatch.setattr(live, "usage_stats", True)
-    _dictate(monkeypatch, app, seconds=2.0)
+    _dictate(monkeypatch, seconds=2.0)
 
     today = stats.load()[datetime.date.today().isoformat()]
     assert today == {"dictations": 1, "words": 3, "seconds": 2.0}
@@ -178,9 +177,8 @@ def test_a_dictation_is_counted_with_its_words_and_speaking_time(stats_file, mon
 
 
 def test_turning_stats_off_stops_counting(stats_file, monkeypatch):
-    from tuxtalk import app
     monkeypatch.setattr(live, "usage_stats", False)
-    _dictate(monkeypatch, app)
+    _dictate(monkeypatch)
     assert not stats_file.exists()
 
 
