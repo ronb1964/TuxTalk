@@ -20,8 +20,12 @@ D = datetime.date
 
 @pytest.fixture
 def stats_file(tmp_path, monkeypatch):
-    path = tmp_path / "stats.json"
+    path = tmp_path / "data" / "stats.json"
+    path.parent.mkdir()
     monkeypatch.setattr(stats, "stats_path", lambda: str(path))
+    run = tmp_path / "run"                  # its lock, not the live service's
+    run.mkdir(mode=0o700)
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(run))
     return path
 
 
@@ -310,16 +314,20 @@ def test_the_tray_still_finds_updates_after_the_tab_became_updates_and_backup():
         assert notebook.get_current_page() == 2
 
 
-def test_a_dictation_counted_during_a_reset_waits_for_it(stats_file, tmp_path, monkeypatch):
+def _change_under_way():
+    """The stats lock, held as by a change in another process."""
+    from tuxtalk import single_instance
+    held = single_instance.open_lock("stats.lock")
+    assert single_instance.claim(held)
+    return held
+
+
+def test_a_dictation_counted_during_a_reset_waits_for_it(stats_file):
     """The service counts a dictation while Preferences resets the stats (or
     restores a backup's): one waits for the other, so the count is neither
     lost nor brought back after the reset."""
-    import fcntl
     import threading
-    from tuxtalk import single_instance
-    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
-    held = single_instance.open_lock("stats.lock")
-    fcntl.flock(held.fileno(), fcntl.LOCK_EX)       # a reset under way elsewhere
+    held = _change_under_way()
     counting = threading.Thread(target=stats.record, args=(5, 2.0))
     counting.start()
     counting.join(0.3)
@@ -328,3 +336,27 @@ def test_a_dictation_counted_during_a_reset_waits_for_it(stats_file, tmp_path, m
     held.close()
     counting.join(2)
     assert stats.load()[datetime.date.today().isoformat()]["words"] == 5
+
+
+@pytest.mark.parametrize("change", [stats.reset, lambda: stats.merge_days({"2026-10-01": {}})],
+                         ids=["reset", "restore"])
+def test_a_reset_or_restore_waits_for_a_count_under_way(stats_file, change):
+    import threading
+    stats.record(5, 2.0)
+    held = _change_under_way()
+    changing = threading.Thread(target=change)
+    changing.start()
+    changing.join(0.3)
+    assert changing.is_alive()
+
+    held.close()
+    changing.join(2)
+    assert not changing.is_alive()
+
+
+def test_a_change_that_never_ends_doesnt_hold_the_dictation_up(stats_file, monkeypatch):
+    monkeypatch.setattr(stats, "LOCK_WAIT_S", 0.2)
+    held = _change_under_way()
+    stats.record(5, 2.0)
+    assert stats.load()[datetime.date.today().isoformat()]["words"] == 5
+    held.close()

@@ -6,14 +6,13 @@ keeps numbers only. Per day: how many dictations, how many words, and how many
 seconds of speech. Never the words themselves. The file lives in TuxTalk's
 data folder on this computer and nothing sends it anywhere.
 
-The dictation service records each dictation (app.py); Preferences reads the
+The dictation service records each dictation (pipeline.py); Preferences reads the
 file and shows the totals on its Stats tab, and may reset it or add a
 restored backup's days. Each change holds a lock while it reads and rewrites
 the file, so two at once can't lose a count or bring a reset one back.
 """
 import contextlib
 import datetime
-import fcntl
 import json
 import os
 import re
@@ -31,6 +30,7 @@ TYPING_WPM = 40
 MIN_TYPING_WPM, MAX_TYPING_WPM = 10, 200
 
 CHART_DAYS = 14
+LOCK_WAIT_S = 5.0       # behind another change to the file, then go ahead
 _VERSION = 1
 
 # A word is a run of letters or digits, apostrophes inside it included, so
@@ -118,8 +118,9 @@ def _write(days):
 @contextlib.contextmanager
 def _changing():
     """Held around each read-and-rewrite of the file (one at a time, across
-    processes). Without a usable runtime folder the change goes ahead
-    unlocked, as it always did."""
+    processes). Without a usable runtime folder, or after LOCK_WAIT_S behind
+    a change that doesn't end, it goes ahead unlocked: the dictation that
+    records it waits for this."""
     from . import single_instance
     try:
         lock = single_instance.open_lock("stats.lock")
@@ -128,7 +129,8 @@ def _changing():
         yield
         return
     with lock:
-        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        if not single_instance.claim(lock, wait_s=LOCK_WAIT_S):
+            logger.warning("Usage stats: another change holds on; changing them anyway")
         yield
 
 
