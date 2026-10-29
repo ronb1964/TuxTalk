@@ -76,14 +76,37 @@ def test_unused_signals_are_not_declared():
 def test_no_reply_touches_the_extension_after_it_is_disabled():
     """The screen lock disables the extension: a GetStatus reply arriving
     after that grabbed F8 again, with nothing listening, and the others drew
-    on the destroyed menu ("already disposed" in the journal)."""
+    on the destroyed menu ("already disposed" in the journal). Each reply's
+    first check is that it isn't destroyed."""
     assert "this._destroyed = true;" in _method("destroy")
-    for method in ("_updateStatus", "_refreshPresets", "_refreshHistoryMenu"):
-        body = _method(method)
-        reply = body[body.index("Remote("):]
-        assert "this._destroyed" in reply, f"{method}'s reply doesn't check"
+    replies = re.findall(r"(\w+)Remote\((?:[^()]*?, )?\((?:result|res), (?:error|err)\) => \{\n"
+                         r"(.*?)\n", JS)
+    names = {name for name, _first in replies}
+    assert {"GetStatus", "GetPresets", "GetRecentDictations", "GetPasteLastHotkey"} <= names
+    for name, _first in replies:
+        body = JS[JS.index(f"{name}Remote("):]
+        first_if = body[body.index("if ("):body.index("\n", body.index("if ("))]
+        assert "this._destroyed" in first_if, f"{name}'s reply doesn't check first"
 
 
 def test_notifications_say_what_happened():
     """Not just "TuxTalk", with the news in the body."""
-    assert not re.search(r"Main\.notify\('TuxTalk',", JS)
+    assert not re.search(r"Main\.notify\(['\"`]TuxTalk['\"`],", JS)
+
+
+def test_a_status_update_never_turns_dictation_on_or_off():
+    """From GNOME 47, setToggleState emits 'toggled' as a click does: without
+    the guard, every status update started or stopped the service."""
+    switch = JS[JS.index("connect('toggled'"):]
+    assert "if (this._updatingToggle)" in switch[:switch.index("StartServiceRemote")]
+    update = _method("_updateMenu")
+    set_at = update.index("setToggleState")
+    assert update.rindex("this._updatingToggle = true", 0, set_at) < set_at
+    assert "this._updatingToggle = false" in update[set_at:]
+
+
+def test_every_menu_item_calls_a_method_the_interface_declares():
+    """_addRemoteItem builds the method's name at run time, so grep can't
+    find a mistyped one."""
+    for method in re.findall(r"_addRemoteItem\('[^']*', '(\w+)'", JS):
+        assert f'<method name="{method}"' in JS, method

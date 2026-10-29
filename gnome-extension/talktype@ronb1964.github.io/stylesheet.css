@@ -1,13 +1,5 @@
-/* TuxTalk GNOME extension: the panel icon's states (extension.js _updateIcon). */
+/* TuxTalk GNOME extension: the panel icon while recording (extension.js _updateIcon). */
 
 .tuxtalk-recording {
     color: #ff4444;
-}
-
-.tuxtalk-dictation-off {
-    opacity: 0.5;
-}
-
-.tuxtalk-not-running {
-    opacity: 0.3;
 }

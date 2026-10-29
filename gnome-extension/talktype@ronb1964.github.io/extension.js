@@ -269,7 +269,11 @@ class TuxTalkIndicator extends PanelMenu.Button {
     _watchFocusedWindow(win) {
         if (this._geometryWindow && this._geometrySignalIds) {
             for (const id of this._geometrySignalIds) {
-                try { this._geometryWindow.disconnect(id); } catch (e) {}
+                try {
+                    this._geometryWindow.disconnect(id);
+                } catch (e) {
+                    // The window closed: its signals went with it.
+                }
             }
         }
         this._geometryWindow = win || null;
@@ -342,6 +346,8 @@ class TuxTalkIndicator extends PanelMenu.Button {
                 this._isServiceRunning = false;
                 this._isRecording = false;
                 this._syncHotkeyGrabs();  // TuxTalk quit: give the keys back
+                this._updateIcon();         // shown off, not as it was, when it comes back
+                this._updateMenu();
                 this.hide();
             }
         );
@@ -350,7 +356,12 @@ class TuxTalkIndicator extends PanelMenu.Button {
     _buildMenu() {
         // The same items, in the same order, as the tray's menu (tray.py).
         this._serviceItem = new PopupMenu.PopupSwitchMenuItem('Dictation on/off', false);
+        this._updatingToggle = false;
         this._serviceItem.connect('toggled', item => {
+            // Only a click: from GNOME 47, setToggleState emits 'toggled' too,
+            // and a status update would start or stop dictation.
+            if (this._updatingToggle)
+                return;
             if (item.state)
                 this._proxy?.StartServiceRemote();
             else
@@ -383,8 +394,8 @@ class TuxTalkIndicator extends PanelMenu.Button {
         this.menu.addMenuItem(this._performanceSubMenu);
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
-        // A gear, easy to spot, as in front of the tray's ("preferences-system-
-        // symbolic" is a wrench and screwdriver in Adwaita).
+        // A gear, easy to spot, as in front of the tray's (Adwaita's
+        // preferences-system-symbolic is a wrench and screwdriver).
         this._addRemoteItem('Preferences...', 'OpenPreferences', 'emblem-system-symbolic');
         this._addRemoteItem('Voice Commands...', 'ShowVoiceCommands');
         this._addRemoteItem('Your Stats...', 'OpenPreferencesStats');
@@ -410,6 +421,8 @@ class TuxTalkIndicator extends PanelMenu.Button {
     }
 
     _checkForUpdates() {
+        if (!this._proxy)
+            return;     // nothing would answer
         Main.notify('Checking for TuxTalk updates', 'The result shows in a moment.');
         this._updatesItem.label.text = 'Checking...';
         this._updatesItem.setSensitive(false);
@@ -460,7 +473,7 @@ class TuxTalkIndicator extends PanelMenu.Button {
         // The app shows its own result window for the app itself. Only an
         // extension update, which that window can't offer, needs the Updates tab.
         if (!updateAvailable && extUpdate) {
-            Main.notify('GNOME extension update available', 'Opening Updates & Backup to install it.');
+            Main.notify('TuxTalk extension update available', 'Opening Updates & Backup to install it.');
             this._proxy?.OpenPreferencesUpdatesRemote();
         }
     }
@@ -626,24 +639,21 @@ class TuxTalkIndicator extends PanelMenu.Button {
     }
 
     _updateIcon() {
-        // Off (TuxTalk not running, or dictation off): the crossed-out
-        // microphone, dimmed (stylesheet.css). Recording: red.
-        const on = this._dbusAvailable && this._isServiceRunning;
-        this._icon.icon_name = on ? 'audio-input-microphone-symbolic'
-            : 'microphone-sensitivity-muted-symbolic';
-        let state = '';
-        if (!this._dbusAvailable)
-            state = ' tuxtalk-not-running';
-        else if (this._isRecording)
-            state = ' tuxtalk-recording';
-        else if (!this._isServiceRunning)
-            state = ' tuxtalk-dictation-off';
-        this._icon.style_class = `system-status-icon${state}`;
+        // Dictation off: the crossed-out microphone, dimmed (St's CSS has no
+        // opacity). Recording: red (stylesheet.css). With TuxTalk not running
+        // the button is hidden.
+        const off = !this._isServiceRunning;
+        this._icon.icon_name = off ? 'microphone-sensitivity-muted-symbolic'
+            : 'audio-input-microphone-symbolic';
+        this._icon.opacity = off ? 128 : 255;
+        this._icon.style_class = this._isRecording
+            ? 'system-status-icon tuxtalk-recording' : 'system-status-icon';
     }
 
     _updateMenu() {
-        // setToggleState doesn't emit 'toggled': only a click turns it.
+        this._updatingToggle = true;      // not a click (the 'toggled' handler)
         this._serviceItem.setToggleState(this._isServiceRunning);
+        this._updatingToggle = false;
 
         // Disable menu items if D-Bus is unavailable
         this._serviceItem.setSensitive(this._dbusAvailable);
@@ -723,7 +733,6 @@ export default class TuxTalkExtension extends Extension {
     enable() {
         this._indicator = new TuxTalkIndicator();
         Main.panel.addToStatusArea('talktype', this._indicator);
-
     }
 
     disable() {
@@ -731,6 +740,5 @@ export default class TuxTalkExtension extends Extension {
             this._indicator.destroy();
             this._indicator = null;
         }
-
     }
 }
