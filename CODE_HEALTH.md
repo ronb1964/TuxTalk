@@ -39,7 +39,7 @@ Merge the more-hotkey-choices branch first: it changes the same files.
 | 8 | 100 missing docstrings, 27 dated comments, 332 long lines, about 60 dead-code items | M | open |
 | 9 | CI installs from poetry.lock; appimagetool, its runtime and the Vulkan SDK pinned with checksums; more ruff families under the same ratchet | S | open |
 | 10 | GNOME extension fixes in one version (late replies after disable, notification titles, unused stylesheet, menu split) | S | done 2026-10-28, 0de1223 and daa6025: extension version 29 (0.19 ships a new extension anyway) |
-| 11 | Hotkey helper code findings in one version bump (8 small items) | S | open |
+| 11 | Hotkey helper code findings in one version bump (8 small items) | S | done 2026-10-29, 71901bf: helper 1.7 (INP-41 to 48, INP-51, the helper's lines of INP-114/126), Ron's OK |
 | 12 | Docs: README, ROADMAP, icons/README; delete unused icons and the Flathub manifest (Ron's OK) | S | open |
 | 13 | Try CUDA without cuDNN on an NVIDIA card; if it works, drop cuDNN from the download | S | open |
 | 14 | Tests get a throwaway home folder before anything is imported: importing app.py runs the CUDA setup against the real data folder, and child processes the tests start see the real home | S | done (42301ce) |
