@@ -13,7 +13,7 @@ import pytest
 pytest.importorskip("gi")
 from gtk_text import widgets  # noqa: E402
 from tuxtalk import hotkey_test_devices, uinput_helper  # noqa: E402
-from tuxtalk import welcome_dialog as wd  # noqa: E402
+from tuxtalk import hotkey_test_dialog as hkd  # noqa: E402
 
 EV_KEY = 1
 KEYBOARD_KEYS = [30, 48, 46, 32, 66]        # KEY_A, KEY_B, KEY_C, KEY_D, KEY_F8
@@ -81,26 +81,26 @@ def test_no_devices_when_listing_fails():
 
 
 def test_a_key_the_service_can_read_shows_working():
-    assert "Working!" in wd._key_seen_markup(True)
-    assert wd._hotkey_test_notice(True) is None
+    assert "Working!" in hkd._key_seen_markup(True)
+    assert hkd._hotkey_test_notice(True) is None
 
 
 def test_a_key_only_gtk_saw_does_not_claim_working():
-    markup = wd._key_seen_markup(False)
+    markup = hkd._key_seen_markup(False)
     assert "Working" not in markup
     assert "not active yet" in markup
 
 
 def test_the_notice_asks_for_a_restart_when_setup_is_done(monkeypatch):
     monkeypatch.setattr(uinput_helper, "_input_group_pending_restart", lambda: True)
-    notice = wd._hotkey_test_notice(False)
+    notice = hkd._hotkey_test_notice(False)
     assert "restart your computer" in notice
     assert "Fix Typing" not in notice
 
 
 def test_the_notice_points_to_fix_typing_when_setup_is_not_done(monkeypatch):
     monkeypatch.setattr(uinput_helper, "_input_group_pending_restart", lambda: False)
-    notice = wd._hotkey_test_notice(False)
+    notice = hkd._hotkey_test_notice(False)
     assert "Fix Typing Permissions" in notice
     assert "restart" in notice
 
@@ -122,13 +122,13 @@ def _run_dialog(monkeypatch, evdev_paths, during, denied=(), hotkeys=("F8", "F9"
     monkeypatch.setattr(gnome_keybindings, "restore", lambda saved: None)
     monkeypatch.setattr(service_launcher, "stop_dictation_service", lambda force=False: None)
     monkeypatch.setattr(service_launcher, "find_service_pids", lambda: [])
-    monkeypatch.setattr(wd.time, "sleep", lambda s: None)
+    monkeypatch.setattr(hkd.time, "sleep", lambda s: None)
     monkeypatch.setattr(evdev, "list_devices", lambda: evdev_paths)
     monkeypatch.setattr(evdev, "InputDevice", _input_device(denied=denied))
     monkeypatch.setattr(uinput_helper, "_input_group_pending_restart", lambda: True)
 
     monkeypatch.setattr(Gtk.Dialog, "run", lambda dialog: during(dialog) or Gtk.ResponseType.OK)
-    wd.show_hotkey_test_dialog()
+    hkd.show_hotkey_test_dialog()
 
 
 def _key(dialog, keyval, signal="key-press-event"):

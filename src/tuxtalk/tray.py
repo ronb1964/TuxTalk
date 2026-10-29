@@ -707,7 +707,7 @@ def _show_first_run_setup(tray):
     still starts and the welcome comes back next launch. False, for its
     GLib timer."""
     try:
-        from tuxtalk.welcome_dialog import show_welcome_and_install
+        from tuxtalk.first_run_setup import show_welcome_and_install
         result = show_welcome_and_install()
     except Exception:
         logger.error("Onboarding failed", exc_info=True)

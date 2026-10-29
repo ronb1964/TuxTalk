@@ -236,7 +236,7 @@ def test_the_setup_tip_really_appears(monkeypatch):
     import gi
     gi.require_version("Gtk", "3.0")
     from gi.repository import Gtk
-    from tuxtalk import welcome_dialog
+    from tuxtalk import setup_complete_dialog
     monkeypatch.setattr(config, "load_config", lambda: config.Settings(paste_last_hotkey="Ctrl+Alt+P"))
     seen = []
 
@@ -244,7 +244,7 @@ def test_the_setup_tip_really_appears(monkeypatch):
         seen.extend(tree_text(dialog))
         return Gtk.ResponseType.OK
     monkeypatch.setattr(Gtk.Dialog, "run", fake_run)
-    welcome_dialog.show_setup_complete_dialog()
+    setup_complete_dialog.show_setup_complete_dialog()
     assert any("Press Ctrl+Alt+P to type it again" in text for text in seen)
 
 

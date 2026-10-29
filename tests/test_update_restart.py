@@ -262,7 +262,7 @@ def test_the_restart_button_waits_for_the_first_run_copy(monkeypatch):
     from gtk_text import find
     from tuxtalk import cuda_helper, uinput_helper
     from tuxtalk import appimage_copy
-    from tuxtalk import welcome_dialog as wd
+    from tuxtalk import setup_complete_dialog
     copying = types.SimpleNamespace(alive=True)
     copying.is_alive = lambda: copying.alive
     monkeypatch.setattr(appimage_copy, "_thread", copying)
@@ -276,7 +276,7 @@ def test_the_restart_button_waits_for_the_first_run_copy(monkeypatch):
             find(dialog, Gtk.Button, "Restart computer now").clicked()
         return Gtk.ResponseType.OK                          # and "Restart now?"
     monkeypatch.setattr(Gtk.Dialog, "run", run)
-    wd.show_setup_complete_dialog(needs_restart=True)
+    setup_complete_dialog.show_setup_complete_dialog(needs_restart=True)
     assert rebooted == []
     copying.alive = False
     while polls and polls[0]():

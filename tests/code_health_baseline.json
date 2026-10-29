@@ -1,7 +1,5 @@
 {
- "files": {
-  "welcome_dialog.py": 2993
- },
+ "files": {},
  "findings": {
   "ai_cleanup.py::<module>::long_line": 4,
   "ai_cleanup.py::CorrectionEngine._edit_once::undocumented": 1,
@@ -210,29 +208,7 @@
   "voice_navigation.py::chords::dated_comment": 2,
   "voice_navigation.py::plan::long_line": 2,
   "vulkan_setup_dialogs.py::run_speed_check.work::swallowed_error": 1,
-  "welcome_dialog.py::SplashScreen.__init__::long_line": 11,
-  "welcome_dialog.py::WelcomeDialog.__init__::long_line": 1,
-  "welcome_dialog.py::WelcomeDialog.__init__::swallowed_error": 1,
-  "welcome_dialog.py::WelcomeDialog._build_base_content::long_line": 1,
-  "welcome_dialog.py::WelcomeDialog._build_dialog::long_line": 5,
-  "welcome_dialog.py::WelcomeDialog._build_footer::long_line": 1,
-  "welcome_dialog.py::WelcomeDialog._build_gnome_extension_option::long_line": 3,
-  "welcome_dialog.py::WelcomeDialog._build_portaudio_setup_section::long_line": 1,
-  "welcome_dialog.py::WelcomeDialog._build_recommendation::long_line": 2,
-  "welcome_dialog.py::WelcomeDialog._build_typing_setup_section::long_line": 1,
-  "welcome_dialog.py::WelcomeDialog._finish_install_portaudio::long_line": 1,
-  "welcome_dialog.py::WelcomeDialog._refresh_recommendation::long_line": 1,
   "welcome_dialog.py::WelcomeDialog._run_in_background.runner::swallowed_error": 1,
-  "welcome_dialog.py::_apply_first_run_setup::long_line": 3,
-  "welcome_dialog.py::_download_vulkan_model_first_run::long_line": 1,
-  "welcome_dialog.py::_extension_already_active::swallowed_error": 1,
-  "welcome_dialog.py::_menu_location::swallowed_error": 1,
-  "welcome_dialog.py::_saved_hold_key::swallowed_error": 1,
-  "welcome_dialog.py::show_hotkey_test_dialog.evdev_key_reader::swallowed_error": 1,
-  "welcome_dialog.py::show_hotkey_test_dialog::long_line": 1,
-  "welcome_dialog.py::show_setup_complete_dialog.on_restart_now::undocumented": 1,
-  "welcome_dialog.py::show_setup_complete_dialog::long_line": 1,
-  "welcome_dialog.py::show_welcome_dialog.show_dialog_after_splash::swallowed_error": 1,
   "whisper_vulkan.py::VulkanWhisperModel.__init__::undocumented": 1,
   "whisper_vulkan.py::VulkanWhisperModel._start::swallowed_error": 1,
   "whisper_vulkan.py::VulkanWhisperModel._start::undocumented": 1,
@@ -285,8 +261,8 @@
    "decisions": 19
   },
   "model_helper.py::download_model_with_progress": {
-   "decisions": 18,
-   "lines": 333
+   "decisions": 16,
+   "lines": 326
   },
   "model_helper.py::download_model_with_progress.do_download": {
    "decisions": 22,
@@ -353,28 +329,6 @@
   },
   "voice_edit_rules.py::mechanical_edit": {
    "decisions": 18
-  },
-  "welcome_dialog.py::SplashScreen.__init__": {
-   "lines": 128
-  },
-  "welcome_dialog.py::WelcomeDialog._build_dialog": {
-   "lines": 151
-  },
-  "welcome_dialog.py::WelcomeDialog._build_shortcut_setup_section": {
-   "lines": 168
-  },
-  "welcome_dialog.py::WelcomeDialog._build_typing_setup_section": {
-   "lines": 127
-  },
-  "welcome_dialog.py::_apply_first_run_setup": {
-   "decisions": 30,
-   "lines": 191
-  },
-  "welcome_dialog.py::show_hotkey_test_dialog": {
-   "lines": 384
-  },
-  "welcome_dialog.py::show_setup_complete_dialog": {
-   "lines": 272
   },
   "x11_hotkeys.py::claim": {
    "decisions": 16

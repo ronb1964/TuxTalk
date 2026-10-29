@@ -235,3 +235,40 @@ def test_the_welcome_screen_opens_at_the_top_with_set_it_up_focused(dialog):
     """Ron, 2026-10-20: focus on "Change language, model or graphics card"
     scrolled the window down on open and cut its title off."""
     assert dialog.dialog.get_focus() is dialog.continue_button
+
+
+# --- the PortAudio step ---------------------------------------------------------
+
+@pytest.fixture
+def needs_portaudio(monkeypatch):
+    if not Gtk.init_check()[0]:
+        pytest.skip("no display")
+    monkeypatch.setattr(r, "detect_hardware", lambda cfg=None: r.Hardware(None, False))
+    monkeypatch.setattr(r, "system_language", lambda env=None: "en")
+    monkeypatch.setattr(wd, "detect_uinput_access", lambda: (True, ""))
+    monkeypatch.setattr(wd, "detect_portaudio_status",
+                        lambda: {"installed": False, "needs_install": True})
+    monkeypatch.setattr(wd, "show_message", lambda *a, **k: None)
+    d = wd.WelcomeDialog(force_gnome=False)
+    yield d
+    d.destroy()
+
+
+def test_without_portaudio_the_step_says_what_its_button_does(needs_portaudio):
+    from gtk_text import tree_text
+    shown = tree_text(needs_portaudio.dialog)
+    assert "⚠️ Audio Library Required" in shown
+    assert "❌ PortAudio library not found" in shown
+    assert 'What "Install PortAudio" does:' in shown
+    assert "🎤 Enables microphone recording for speech recognition" in shown
+    assert needs_portaudio.install_portaudio_button.get_label() == \
+        "📦 Install PortAudio (Recommended)"
+
+
+def test_an_installed_portaudio_updates_the_step(needs_portaudio):
+    d = needs_portaudio
+    d._finish_install_portaudio(d.install_portaudio_button, (True, "installed"))
+    assert d.portaudio_initial_status.get_text() == "✅ PortAudio library installed"
+    assert "PortAudio installed!" in d.portaudio_status_label.get_text()
+    assert d.install_portaudio_button.get_label() == "✅ Installed!"
+    assert d.portaudio_fixed and not d.needs_portaudio_install   # what run() reports
