@@ -5,10 +5,13 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
-- With a key remapper running (kanata, keyd, input-remapper), F8 and F9
-  did nothing, and the hotkey test didn't see them either. A remapper takes
-  your keyboards for itself and passes every key on through a virtual
-  keyboard of its own, and TuxTalk wasn't listening to that one. It is now.
+- With the key remapper kanata running, F8 and F9 did nothing, and the
+  hotkey test didn't see them either. kanata takes your keyboards for itself
+  and passes every key on through a virtual keyboard of its own, which is a
+  mouse as well, and TuxTalk skipped it as a mouse. It listens to it now.
+  TuxTalk never holds that keyboard back from your apps, since your mouse
+  and the text TuxTalk types come through it too, so on some desktops a
+  terminal may show a stray character for F8 while kanata runs.
   Thanks to Viktor for tracking it down (issue #23).
 - You can pick Right Ctrl, Right Alt or Scroll Lock as a dictation key now,
   in Preferences, General, next to F1 to F12. On a lot of laptops and small
@@ -21,8 +24,9 @@ before 0.15.0, so older entries use that name.
   down, so nothing it types while you hold it turns into a Ctrl shortcut.
 - Pause isn't on the list. Most keyboards send it as let go the moment it's
   pressed, so you can't hold it.
-- The hotkey helper is version 1.7, because it has to report Right Ctrl and
-  Right Alt on their own now (1.7 also tidies its code after a review, and
+- The hotkey helper is version 1.8, because it has to report Right Ctrl and
+  Right Alt on their own now and hear keys through a key remapper (1.8 also
+  tidies its code after a review, and
   limits how much another program can make it read, which you won't notice).
   TuxTalk asks about the update by itself a few seconds after it starts, and
   keeps asking each start until it's done. It takes your password once and no

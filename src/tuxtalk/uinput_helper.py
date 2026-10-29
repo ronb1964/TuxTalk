@@ -60,12 +60,12 @@ LETTER_KEYS = frozenset(
 
 
 def is_keyboard_device(dev) -> bool:
-    """True if *dev* can deliver the hotkey and is therefore worth grabbing.
+    """True if *dev* can deliver the hotkey and is therefore worth reading.
 
-    Grabbing everything under /dev/input also captures mice, touchpads, audio
-    jacks and the power button, freezing the pointer for the whole recording.
-    And logind lets any user open a game controller, which reports key events
-    too, so "some device with keys opened" does not mean the keyboard did.
+    Reading everything under /dev/input would also take in mice, touchpads,
+    audio jacks and the power button. And logind lets any user open a game
+    controller, which reports key events too, so "some device with keys
+    opened" does not mean the keyboard did.
 
     Two capability checks, in this order:
 
@@ -76,43 +76,62 @@ def is_keyboard_device(dev) -> bool:
        receivers advertise a superset HID descriptor, so a wireless mouse
        claims all 26 letter keys and all 12 F-keys just like a keyboard does.
        What separates them is real pointer motion (REL_X) combined with mouse
-       buttons, the same test libinput uses. A program's virtual keyboard is
-       read even shaped like a mouse: key remappers (kanata, keyd,
-       input-remapper) take the real keyboards for themselves and pass every
-       key on through one, so skipping it left TuxTalk hearing no key at all
-       (issue #23).
+       buttons, the same test libinput uses. A uinput keyboard of that shape
+       is read all the same (is_remapper_keyboard): kanata takes the real
+       keyboards for itself and passes every key on through one, so skipping
+       it left TuxTalk hearing no key at all (issue #23).
 
-    TuxTalk's own virtual keyboard, which it types with, is never read or
-    grabbed: it is told by its name.
+    TuxTalk's own virtual keyboard, which it types with, is never read: it is
+    told by its name.
 
     Note the check is REL_X specifically, not the EV_REL event type: the K800
     keyboard declares EV_REL while exposing no motion axis, so testing the type
     alone would throw out a real keyboard and let the hotkey leak through.
     """
-    if _ecodes is None:
+    caps = _keyboard_capabilities(dev)
+    if caps is None:
         return False
+    return not _is_pointer(caps) or is_uinput_device(getattr(dev, "path", ""))
+
+
+def is_remapper_keyboard(dev) -> bool:
+    """Whether *dev* is a keyboard read only because a program made it,
+    shaped like a mouse too: a key remapper's (kanata's), which carries
+    the real keyboards' keys and the mouse's motion, and the text TuxTalk
+    types when the remapper has taken its virtual keyboard as well. Never
+    grabbed or written to: held, it would freeze the mouse and swallow the
+    dictation being typed."""
+    caps = _keyboard_capabilities(dev)
+    return (caps is not None and _is_pointer(caps)
+            and is_uinput_device(getattr(dev, "path", "")))
+
+
+def _keyboard_capabilities(dev):
+    """*dev*'s capabilities when it reports letter keys and isn't TuxTalk's
+    own keyboard, else None."""
+    if _ecodes is None or getattr(dev, "name", None) == VIRTUAL_KEYBOARD_NAME:
+        return None
     try:
         caps = dev.capabilities()
-    except Exception:
-        return False
-    if getattr(dev, "name", None) == VIRTUAL_KEYBOARD_NAME:
-        return False
-
+    except Exception as e:      # unplugged, or a node evdev can't describe
+        logger.info(f"Could not read what {getattr(dev, 'name', dev)} reports: {e}")
+        return None
     keys = set(caps.get(_ecodes.EV_KEY) or [])
-    if sum(1 for k in keys if k in LETTER_KEYS) < 3:
-        return False
-
-    rel_axes = set(caps.get(_ecodes.EV_REL) or [])
-    is_pointer = _ecodes.REL_X in rel_axes and _ecodes.BTN_LEFT in keys
-    return not is_pointer or made_by_a_program(getattr(dev, "path", ""))
+    return caps if len(keys & LETTER_KEYS) >= 3 else None
 
 
-def made_by_a_program(path) -> bool:
-    """Whether the input device at *path* (/dev/input/eventN) is a virtual one
-    a program made through uinput rather than hardware: its sysfs node is
-    under /sys/devices/virtual. False when that can't be told."""
+def _is_pointer(caps) -> bool:
+    return (_ecodes.REL_X in (caps.get(_ecodes.EV_REL) or [])
+            and _ecodes.BTN_LEFT in (caps.get(_ecodes.EV_KEY) or []))
+
+
+def is_uinput_device(path) -> bool:
+    """Whether the input device at *path* (/dev/input/eventN) is one a program
+    made through uinput: its sysfs node is under /sys/devices/virtual/input.
+    A Bluetooth LE keyboard or mouse (uhid) is elsewhere under
+    /sys/devices/virtual and counts as hardware. False when it can't be told."""
     node = os.path.realpath(f"/sys/class/input/{os.path.basename(path)}/device")
-    return node.startswith("/sys/devices/virtual/")
+    return node.startswith("/sys/devices/virtual/input/")
 
 
 def check_uinput_exists():

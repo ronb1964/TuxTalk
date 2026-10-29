@@ -89,10 +89,9 @@ def _write(device, code: int, value: int) -> None:
 
 def _capabilities():
     """Every key a layout can put a character on, and a mouse's motion, wheel
-    and three buttons. TuxTalk's hotkey readers (the service's own, and the hotkey
-    helper already installed on users' computers) skip any device that is a
-    pointer too, which is how they always ignored ydotoold's keyboard and
-    mouse; shaped like it, ours is never grabbed or listened to for hotkeys.
+    and three buttons. Hotkey helpers before 1.8 skip any device that is a
+    pointer too; shaped like one, ours is never grabbed or listened to for
+    hotkeys by them, and the service and newer helpers skip it by its name.
     No joystick buttons: those would make it a game controller to udev."""
     from evdev import ecodes as e
     keys = [code for code in range(1, e.KEY_MAX + 1)

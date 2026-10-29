@@ -576,6 +576,10 @@ Microphone</b> and the test beside it.
     see it, so turn it off before dictating.
   • On COSMIC with more than one keyboard layout, TuxTalk types for the first one
     in COSMIC's settings; with another switched on, letters come out wrong.
+  • With the key remapper kanata, TuxTalk's typing goes through kanata's rules too
+    (home-row keys can turn letters into Ctrl or Shift). Add
+    <tt>linux-dev-names-exclude ("TuxTalk virtual keyboard")</tt> to the defcfg
+    of your kanata config and restart kanata.
 
 <b>Too slow</b>
   • Use your graphics card: TuxTalk menu → Performance → Recommended for this

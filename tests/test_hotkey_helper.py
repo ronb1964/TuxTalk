@@ -1127,3 +1127,20 @@ def test_the_helper_knows_the_name_tuxtalk_types_with():
     """The helper runs as root on its own and can't import TuxTalk."""
     from tuxtalk import virtual_keyboard
     assert hh.OWN_KEYBOARD_NAME == virtual_keyboard.NAME
+
+
+def test_a_remappers_keyboard_is_listened_to_but_never_held(setup):
+    """kanata's keyboard carries the mouse's motion and the text TuxTalk
+    types: held while the hotkey is down, the mouse froze and the dictation
+    typed meanwhile was lost. Its keys reach the desktop as they are, and
+    the service is told the keyboard couldn't be held."""
+    helper, kb, connect, say, heard, _seat = setup
+    kb.listen_only = True
+    sock = _ready(connect, say, heard)
+    kb.press(F8)
+    assert heard(sock) == ["DOWN 66 -"]
+    say(sock, "HIDE 66")
+    assert heard(sock) == ["ERR couldn't hold the keyboard"]
+    assert kb.calls == [] and helper.hide is None
+    kb.press(F8, 0)
+    assert heard(sock) == ["UP 66"]
