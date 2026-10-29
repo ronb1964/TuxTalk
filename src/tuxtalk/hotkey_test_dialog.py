@@ -230,14 +230,16 @@ class HotkeyTestDialog:
         for _label, button, _status in self.rows.values():
             button.set_sensitive(True)
 
-    def _on_key(self, keyname, is_capture, action="press"):
-        """A key pressed or released, on GTK's thread. While Change Key waits,
-        a press picks the key; otherwise a release marks it as working, since
-        phantom events from a released keyboard grab are presses only."""
+    def _on_key(self, keyname, action="press"):
+        """A key pressed or released, on GTK's thread, where Change Key's
+        state is kept too. While Change Key waits, a press picks the key;
+        otherwise a release marks it as working, since phantom events from a
+        released keyboard grab are presses only."""
         if not self.ready:
             return False
+        is_capture = self.capturing is not None
         logger.info(f"Hotkey test: {action} {loggable_key(keyname)}, capture={is_capture}")
-        if is_capture and self.capturing:
+        if is_capture:
             if action == "press":
                 self._capture(keyname)
         elif action == "release":
@@ -286,7 +288,7 @@ class HotkeyTestDialog:
         if event.hardware_keycode in self._held_keycodes:
             return True
         self._held_keycodes.add(event.hardware_keycode)
-        self._on_key(keyname, is_capture, action="press")
+        self._on_key(keyname, action="press")
         return True
 
     def _on_gtk_release(self, _widget, event):
@@ -297,7 +299,7 @@ class HotkeyTestDialog:
         keyname = gtk_key_name(Gtk.accelerator_name(event.keyval, 0), event.hardware_keycode)
         if event.state & _NO_MODIFIER_MASK & ~_OWN_MODIFIER.get(keyname, 0):
             return False
-        self._on_key(keyname, self.capturing is not None, action="release")
+        self._on_key(keyname, action="release")
         return False
 
     def _open_keyboards(self):
@@ -356,7 +358,7 @@ class HotkeyTestDialog:
                                              modifier_codes, evdev_key_name)
                     if found:
                         keyname, action = found
-                        GLib.idle_add(self._on_key, keyname, self.capturing is not None, action)
+                        GLib.idle_add(self._on_key, keyname, action)
             except Exception as e:
                 # Logged once: the loop tries again every 0.1 s.
                 if not self._stop.is_set() and str(e) != last_error:
@@ -415,6 +417,7 @@ class HotkeyTestDialog:
             response = self.dialog.run()
             self.dialog.destroy()
         finally:
+            self.ready = False      # keys the reader still has queued change nothing
             # Always: gsettings persists across reboots, so a skipped restore
             # would leave Alt+F8/Alt+F7 dead.
             gnome_keybindings.restore(gnome_saved)

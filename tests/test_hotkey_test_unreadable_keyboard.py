@@ -206,3 +206,21 @@ def test_the_hotkey_test_can_be_used_without_a_mouse(monkeypatch):
     assert seen["dialog got"] == ["Tab", "ISO_Left_Tab", "Return", "space"]
     assert seen["capturing"]
     assert seen["names"] == ["Change the push-to-talk key", "Change the toggle mode key"]
+
+
+def test_keys_still_queued_when_the_test_closes_change_nothing(monkeypatch):
+    """The keyboard reader hands its keys to GTK's thread; one still waiting
+    there when the window has closed must not mark a key on it."""
+    made = []
+
+    class Recorded(hkd.HotkeyTestDialog):
+        def __init__(self, config):
+            super().__init__(config)
+            made.append(self)
+    monkeypatch.setattr(hkd, "HotkeyTestDialog", Recorded)
+    _run_dialog(monkeypatch, ["/dev/input/event3"], lambda dialog: None)
+    from gi.repository import Gdk
+    release = Gdk.Event.new(Gdk.EventType.KEY_RELEASE)
+    release.key.keyval = Gdk.KEY_F8
+    made[0]._on_gtk_release(None, release.key)
+    assert made[0].rows["hold"][2].get_text() == "Not tested"
