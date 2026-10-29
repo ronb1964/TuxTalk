@@ -79,16 +79,23 @@ def _download_vulkan_model_first_run(model, result_info=None):
 
 
 def _download_processor_model(model, result_info=None):
-    """Download *model* for the processor. True when it is there.
+    """Download *model* for the processor, without loading it: the dictation
+    service loads it when it starts. A load here as well only kept the tray
+    at "Loading model..." for seconds and holding 0.7 to 3 GB for nothing.
+    True when its files are on disk.
 
-    result_info: optional dict; "cancelled" is set True in it when the user
-    cancelled the download.
+    result_info: optional dict, see _run_downloads.
     """
-    from tuxtalk.model_helper import download_model_with_progress
-    loaded = download_model_with_progress(model, device="cpu", compute_type="int8",
-                                          parent=None, show_confirmation=False,
-                                          result_info=result_info)
-    return bool(loaded)
+    from tuxtalk.download_progress_dialog import DownloadTask, UnifiedDownloadDialog
+    from tuxtalk.model_helper import (MODEL_DISPLAY_SIZES, is_model_cached_fast,
+                                      make_model_download_func)
+    from .recommend import model_title
+    dialog = UnifiedDownloadDialog(
+        parent=None, title=f"Downloading {model_title(model)}",
+        description="The speech model TuxTalk dictates with. One-time download.")
+    dialog.add_task(DownloadTask("Speech model", MODEL_DISPLAY_SIZES.get(model, "unknown size"),
+                                 make_model_download_func(model)))
+    return _run_downloads(dialog, lambda: is_model_cached_fast(model), result_info)
 
 
 def _processor_model(model, result):
@@ -206,7 +213,7 @@ def _try_again(model):
 
 
 def _after_failed_download(model):
-    """The download failed and its error was already shown. The user may try
+    """The download failed, and its window said why. The user may try
     it again; otherwise use a smaller model that is already downloaded, or
     try ONE smaller download, and say so."""
     from tuxtalk.model_helper import is_model_cached_fast

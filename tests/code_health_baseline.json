@@ -290,8 +290,8 @@
    "decisions": 19
   },
   "model_helper.py::download_model_with_progress": {
-   "decisions": 18,
-   "lines": 333
+   "decisions": 16,
+   "lines": 326
   },
   "model_helper.py::download_model_with_progress.do_download": {
    "decisions": 22,

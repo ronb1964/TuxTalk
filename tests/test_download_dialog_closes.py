@@ -60,3 +60,47 @@ def test_fallback_download_closes_the_window(monkeypatch):
     result = mh.download_model_with_progress("small", show_confirmation=False)
 
     assert result is loaded
+
+
+def test_a_cancel_just_after_the_download_keeps_the_model(monkeypatch):
+    """The window closes by itself 200 ms after the download ends. A Cancel
+    in that moment threw the finished model away, and the closing timer
+    then answered the window that was already gone."""
+    loaded, timers, windows, late = object(), [], [], []
+    closing = threading.Event()
+
+    class Window(_FakeDialog):
+        def __init__(self, *args, **kwargs):
+            super().__init__()
+            self.destroyed = False
+            windows.append(self)
+
+        def run(self):
+            closing.wait(5)                 # the download is done; Cancel now
+            return mh.Gtk.ResponseType.CANCEL
+
+        def destroy(self):
+            self.destroyed = True
+
+        def response(self, value):
+            if self.destroyed:
+                late.append(value)
+
+    monkeypatch.setattr(mh, "is_model_cached_fast", lambda name: False)
+    monkeypatch.setattr(mh, "_files_to_download", lambda repo: [("model.bin", 10)])
+    monkeypatch.setattr(mh, "_fetch_with_retry", lambda fetch, filename: None)
+    monkeypatch.setattr(mh, "load_model", lambda *a, **k: loaded)
+    monkeypatch.setattr(mh.Gtk, "Dialog", Window)
+    for name in ("Label", "ProgressBar", "Button"):
+        monkeypatch.setattr(mh.Gtk, name, _Anything)
+    monkeypatch.setattr(mh.GLib, "idle_add", lambda fn, *a: fn(*a))
+    monkeypatch.setattr(mh.GLib, "timeout_add",
+                        lambda ms, fn, *a: timers.append(fn) or closing.set())
+
+    info = {}
+    assert mh.download_model_with_progress("small", show_confirmation=False,
+                                           result_info=info) is loaded
+    assert info == {}
+    for timer in timers:                    # the closing timer fires after all
+        assert not timer()
+    assert late == [] and windows[0].destroyed

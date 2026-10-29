@@ -1,4 +1,5 @@
 """After the welcome card, setup downloads exactly what it showed."""
+import threading
 import types
 
 import pytest
@@ -18,8 +19,8 @@ def env(monkeypatch):
     monkeypatch.setattr(fr, "_download_vulkan_model_first_run", lambda m, **k: calls.append(("vk", m)) or True)
     monkeypatch.setattr(fr, "_vulkan_speed_check_first_run", lambda m: calls.append(("speed", m)) or True)
     monkeypatch.setattr("tuxtalk.model_helper.is_model_cached_fast", lambda m: False)
-    monkeypatch.setattr("tuxtalk.model_helper.download_model_with_progress",
-                        lambda m, **k: calls.append(("cpu", m)) or object())
+    monkeypatch.setattr(fr, "_download_processor_model",
+                        lambda m, **k: calls.append(("cpu", m)) or True)
     monkeypatch.setattr(fr, "_ask_retry_download", lambda m: False)
     monkeypatch.setattr(fr, "_tell_using_smaller_model", lambda chosen, used: None)
     return cfg, calls
@@ -59,19 +60,26 @@ def test_no_first_run_screen_picks_a_model_after_the_welcome(welcome_window, set
 
 
 @pytest.fixture
-def store(monkeypatch):
+def settings(monkeypatch):
     """Like the real config: every load is a fresh copy and every save writes
     all of it back, so a lost write shows (the shared-object fixture above
     would hide one)."""
     saved = {"model": "parakeet-v3", "device": "cpu", "dictation_language": "",
              "recommend_notice_shown": False, "vulkan_slower": False}
-    calls = []
     monkeypatch.setattr("tuxtalk.config.load_config", lambda: types.SimpleNamespace(**saved))
     monkeypatch.setattr("tuxtalk.config.save_config", lambda c: saved.update(vars(c)))
+    return saved
+
+
+@pytest.fixture
+def store(settings, monkeypatch):
+    """The settings, and the processor downloads asked for, with every
+    download and question faked."""
+    saved, calls = settings, []
     monkeypatch.setattr(fr, "_download_vulkan_model_first_run", lambda m, **k: True)
     monkeypatch.setattr("tuxtalk.model_helper.is_model_cached_fast", lambda m: False)
-    monkeypatch.setattr("tuxtalk.model_helper.download_model_with_progress",
-                        lambda m, **k: calls.append(m) or object())
+    monkeypatch.setattr(fr, "_download_processor_model",
+                        lambda m, **k: calls.append(m) or True)
     monkeypatch.setattr(fr, "_ask_retry_download", lambda m: False)
     notes = []
     monkeypatch.setattr(fr, "_tell_using_smaller_model", lambda chosen, used: notes.append((chosen, used)))
@@ -122,12 +130,12 @@ def test_a_cancelled_first_run_download_starts_no_other(store, monkeypatch):
     """One Cancel is enough: it must not go on to Whisper Small, then Tiny."""
     saved, calls = store
 
-    def cancelled(m, result_info=None, **k):
+    def cancelled(m, result_info=None):
         calls.append(m)
         result_info["cancelled"] = True
-        return None
+        return False
 
-    monkeypatch.setattr("tuxtalk.model_helper.download_model_with_progress", cancelled)
+    monkeypatch.setattr(fr, "_download_processor_model", cancelled)
     fr._apply_first_run_setup({"model": "parakeet-v3", "device": "cpu", "dictation_language": "en"})
     assert calls == ["parakeet-v3"]
     assert saved["model"] == "parakeet-v3"     # offered again when the service starts
@@ -152,8 +160,8 @@ def test_a_cancelled_graphics_download_starts_no_processor_download(store, monke
 
 def test_a_failed_first_run_download_tries_one_smaller_model(store, monkeypatch):
     saved, calls = store
-    monkeypatch.setattr("tuxtalk.model_helper.download_model_with_progress",
-                        lambda m, **k: calls.append(m) or None)
+    monkeypatch.setattr(fr, "_download_processor_model",
+                        lambda m, **k: calls.append(m) or False)
     fr._apply_first_run_setup({"model": "parakeet-v3", "device": "cpu", "dictation_language": "en"})
     assert calls == ["parakeet-v3", "small"]   # not a third error box for tiny
 
@@ -161,8 +169,8 @@ def test_a_failed_first_run_download_tries_one_smaller_model(store, monkeypatch)
 def test_a_failed_download_uses_an_already_downloaded_smaller_model(store, monkeypatch):
     saved, calls = store
     monkeypatch.setattr("tuxtalk.model_helper.is_model_cached_fast", lambda m: m == "tiny")
-    monkeypatch.setattr("tuxtalk.model_helper.download_model_with_progress",
-                        lambda m, **k: calls.append(m) or None)
+    monkeypatch.setattr(fr, "_download_processor_model",
+                        lambda m, **k: calls.append(m) or False)
     fr._apply_first_run_setup({"model": "parakeet-v3", "device": "cpu", "dictation_language": "en"})
     assert calls == ["parakeet-v3"] and saved["model"] == "tiny"
 
@@ -178,6 +186,62 @@ def test_the_emergency_fallback_also_moves_to_the_processor(store, monkeypatch):
     monkeypatch.setattr("tuxtalk.model_helper.is_model_cached_fast", lambda m: m == "tiny")
     fr._apply_first_run_setup({"model": "parakeet-v3", "device": "vulkan", "dictation_language": "en"})
     assert (saved["model"], saved["device"]) == ("tiny", "cpu")
+
+
+class _DownloadWindow:
+    """UnifiedDownloadDialog without a window: run() runs each download
+    at once, or reports *cancelled* ones without running them."""
+    cancelled = ()
+
+    def __init__(self, **kwargs):
+        self.tasks = []
+
+    def add_task(self, task):
+        self.tasks.append(task)
+
+    def run(self):
+        return {t.name: {"success": t.name not in self.cancelled
+                         and t.download_func(lambda *a: None, threading.Event()),
+                         "cancelled": t.name in self.cancelled, "completed": True}
+                for t in self.tasks}
+
+
+@pytest.fixture
+def downloads(monkeypatch):
+    """The models first run fetched; nothing may load one."""
+    from tuxtalk import download_progress_dialog, model_helper
+    on_disk = []
+
+    def fetch(model):
+        return lambda progress, cancel_event: on_disk.append(model) or True
+
+    def loaded(*args, **kwargs):
+        pytest.fail("first run loaded the speech model")
+
+    monkeypatch.setattr(download_progress_dialog, "UnifiedDownloadDialog", _DownloadWindow)
+    monkeypatch.setattr(model_helper, "make_model_download_func", fetch)
+    monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda m: m in on_disk)
+    monkeypatch.setattr(model_helper, "load_model", loaded)
+    monkeypatch.setattr(model_helper, "download_model_with_progress", loaded)
+    return on_disk
+
+
+def test_first_run_on_the_processor_downloads_the_model_without_loading_it(settings, downloads):
+    """The dictation service loads the model when it starts. Loaded at first
+    run too, it kept the window at "Loading model..." for seconds and the
+    tray holding 0.7 to 3 GB, only to drop it."""
+    saved = settings
+    fr._apply_first_run_setup({"model": "parakeet-v3", "device": "cpu", "dictation_language": "en"})
+    assert downloads == ["parakeet-v3"]
+    assert (saved["model"], saved["device"]) == ("parakeet-v3", "cpu")
+
+
+def test_a_cancelled_processor_download_says_so(downloads, monkeypatch):
+    """So that one Cancel starts no smaller download after it."""
+    monkeypatch.setattr(_DownloadWindow, "cancelled", ("Speech model",))
+    info = {}
+    assert fr._download_processor_model("small", result_info=info) is False
+    assert info == {"cancelled": True} and downloads == []
 
 
 def test_model_download_reports_a_cancel(monkeypatch):
@@ -220,8 +284,8 @@ def test_the_ready_screen_names_the_key_the_user_chose(setup_complete, monkeypat
 
 def test_a_failed_download_can_be_tried_again(store, monkeypatch):
     saved, calls = store
-    results = iter([None, object()])               # fails, then works
-    monkeypatch.setattr("tuxtalk.model_helper.download_model_with_progress",
+    results = iter([False, True])                  # fails, then works
+    monkeypatch.setattr(fr, "_download_processor_model",
                         lambda m, **k: calls.append(m) or next(results))
     monkeypatch.setattr(fr, "_ask_retry_download", lambda m: True)
     fr._apply_first_run_setup({"model": "parakeet-v3", "device": "cpu", "dictation_language": "en"})
@@ -231,8 +295,8 @@ def test_a_failed_download_can_be_tried_again(store, monkeypatch):
 
 def test_a_smaller_model_is_announced(store, monkeypatch):
     saved, calls = store
-    monkeypatch.setattr("tuxtalk.model_helper.download_model_with_progress",
-                        lambda m, **k: calls.append(m) or (object() if m == "small" else None))
+    monkeypatch.setattr(fr, "_download_processor_model",
+                        lambda m, **k: calls.append(m) or m == "small")
     fr._apply_first_run_setup({"model": "parakeet-v3", "device": "cpu", "dictation_language": "en"})
     assert saved["model"] == "small"
     assert saved["_notes"] == [("parakeet-v3", "small")]
@@ -240,8 +304,8 @@ def test_a_smaller_model_is_announced(store, monkeypatch):
 
 def test_retrying_is_offered_at_most_twice(store, monkeypatch):
     saved, calls = store
-    monkeypatch.setattr("tuxtalk.model_helper.download_model_with_progress",
-                        lambda m, **k: calls.append(m) or None)
+    monkeypatch.setattr(fr, "_download_processor_model",
+                        lambda m, **k: calls.append(m) or False)
     monkeypatch.setattr(fr, "_ask_retry_download", lambda m: True)
     fr._apply_first_run_setup({"model": "parakeet-v3", "device": "cpu", "dictation_language": "en"})
     assert calls == ["parakeet-v3"] * 3 + ["small"]

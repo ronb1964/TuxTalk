@@ -411,6 +411,9 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
 
     logger.info(f"Model {model_name} NOT cached - showing download progress dialog")
     print(f"Model {model_name} NOT cached - will download and show progress")
+    settings = Gtk.Settings.get_default()
+    if settings:        # for this window and the ones after it
+        settings.set_property("gtk-application-prefer-dark-theme", True)
 
     size_str = MODEL_DISPLAY_SIZES.get(model_name, "unknown size")
 
@@ -421,11 +424,6 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
             buttons=Gtk.ButtonsType.OK_CANCEL,
             text=f"Download {model_title(model_name)} Model?"
         )
-
-        settings = Gtk.Settings.get_default()
-        if settings:
-            settings.set_property("gtk-application-prefer-dark-theme", True)
-
         confirm_dialog.format_secondary_text(
             f"TuxTalk needs to download the {model_title(model_name)} AI model ({size_str}) for speech recognition.\n\n"
             f"This is a one-time download that will be cached for future use.\n\n"
@@ -445,11 +443,6 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
     progress_dialog.set_default_size(500, 150)
     progress_dialog.set_modal(True)
     progress_dialog.set_position(Gtk.WindowPosition.CENTER)
-
-    settings = Gtk.Settings.get_default()
-    if settings:
-        settings.set_property("gtk-application-prefer-dark-theme", True)
-
     if parent:
         progress_dialog.set_transient_for(parent)
 
@@ -517,7 +510,9 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
             return False       # the dialog is already gone
         progress_bar.set_fraction(1.0)
         progress_bar.set_text("100%")
-        GLib.timeout_add(200, lambda: progress_dialog.response(Gtk.ResponseType.OK) or False)
+        # Unless a Cancel in these 200 ms closed the window already.
+        GLib.timeout_add(200, lambda: not cancel_event.is_set()
+                         and progress_dialog.response(Gtk.ResponseType.OK))
         return False
 
     def do_download():
@@ -662,10 +657,13 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
 
     response = progress_dialog.run()
     progress_dialog.destroy()
+    cancel_event.set()      # the window is gone: nothing may update it any more
 
-    if response == Gtk.ResponseType.CANCEL or response == Gtk.ResponseType.DELETE_EVENT:
+    # A Cancel after the download finished, in the 200 ms before the window
+    # closes by itself, keeps the model.
+    if (response in (Gtk.ResponseType.CANCEL, Gtk.ResponseType.DELETE_EVENT)
+            and download_result[0] is None):
         logger.info(f"User cancelled model download: {model_name}")
-        cancel_event.set()
         if result_info is not None:
             result_info["cancelled"] = True
         return None
@@ -679,11 +677,6 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
             buttons=Gtk.ButtonsType.OK,
             text="Model Download Failed"
         )
-
-        settings = Gtk.Settings.get_default()
-        if settings:
-            settings.set_property("gtk-application-prefer-dark-theme", True)
-
         msg.format_secondary_text(
             f"Could not download {model_title(model_name)} model.\n\n"
             f"Error: {str(download_error[0])}\n\n"
