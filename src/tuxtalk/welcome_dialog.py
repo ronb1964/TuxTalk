@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-First-run onboarding for TuxTalk: splash, welcome screen, hotkey test, tips,
+First-run onboarding for TuxTalk: welcome screen, hotkey test, tips,
 model download and the final Ready screen.
 
 The welcome screen adapts to the computer: every one gets the
@@ -18,8 +18,7 @@ import time
 import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
-gi.require_version('GdkPixbuf', '2.0')
-from gi.repository import Gtk, Gdk, GLib, GdkPixbuf
+from gi.repository import Gtk, Gdk, GLib
 from .ui_style import Fold, message_dialog, more_below_bar, show_message
 
 from .hotkey_labels import layout_label
@@ -28,6 +27,7 @@ from .hotkey_test_devices import (close_devices, flush_pending_events, hotkey_te
 from .hotkey_test_keys import (captured_key_problem, evdev_key_action, evdev_key_name,
                                gtk_key_name, hotkeys_to_save, loggable_key, service_hears)
 from .logger import setup_logger
+from .splash_screen import SplashScreen, fade_in
 from .uinput_helper import (
     check_all_device_permissions,
     get_portaudio_status,
@@ -74,206 +74,6 @@ def _fix_typing_steps():
                    else [f"❌ Permissions: {message}"])
     return {"results": results, "uinput_fixed": fixed,
             "needs_restart": needs_restart if fixed else False}
-
-
-class SplashScreen:
-    """
-    Simple splash screen showing TuxTalk icon.
-    Fades in, shows briefly, then fades out before showing welcome dialog.
-    """
-
-    def __init__(self):
-        """Create the splash screen window."""
-        self.window = Gtk.Window(type=Gtk.WindowType.TOPLEVEL)
-        self.window.set_title("TuxTalk")
-        self.window.set_default_size(400, 400)
-        self.window.set_position(Gtk.WindowPosition.CENTER)
-        self.window.set_decorated(False)  # No title bar
-        self.window.set_keep_above(True)  # Stay on top
-        self.window.set_type_hint(Gdk.WindowTypeHint.SPLASHSCREEN)
-        self.window.get_style_context().add_class('tt-splash')
-
-        # Enable transparency
-        screen = self.window.get_screen()
-        visual = screen.get_rgba_visual()
-        if visual:
-            self.window.set_visual(visual)
-        self.window.set_app_paintable(True)
-
-        # Transparent window with rounded dark box - glow will be animated via CSS classes
-        self.css_provider = Gtk.CssProvider()
-        self.css_provider.load_from_data(b"""
-            window.tt-splash {
-                background-color: transparent;
-            }
-            .tt-splash .splash-box {
-                background-color: #262626;
-                border-radius: 16px;
-                padding: 80px;
-            }
-            .tt-splash image {
-                padding: 0px;
-                margin: 0px;
-            }
-            /* Glow steps 0-15; -gtk-icon-shadow follows the icon's shape. */
-            .tt-splash image.glow-0  { -gtk-icon-shadow: 0 0 10px rgba(66, 133, 244, 0.4); }
-            .tt-splash image.glow-1  { -gtk-icon-shadow: 0 0 15px rgba(66, 133, 244, 0.45); }
-            .tt-splash image.glow-2  { -gtk-icon-shadow: 0 0 20px rgba(66, 133, 244, 0.5); }
-            .tt-splash image.glow-3  { -gtk-icon-shadow: 0 0 25px rgba(66, 133, 244, 0.55); }
-            .tt-splash image.glow-4  { -gtk-icon-shadow: 0 0 30px rgba(66, 133, 244, 0.6); }
-            .tt-splash image.glow-5  { -gtk-icon-shadow: 0 0 35px rgba(66, 133, 244, 0.65); }
-            .tt-splash image.glow-6  { -gtk-icon-shadow: 0 0 40px rgba(66, 133, 244, 0.7); }
-            .tt-splash image.glow-7  { -gtk-icon-shadow: 0 0 45px rgba(66, 133, 244, 0.75); }
-            .tt-splash image.glow-8  { -gtk-icon-shadow: 0 0 50px rgba(66, 133, 244, 0.8); }
-            .tt-splash image.glow-9  { -gtk-icon-shadow: 0 0 55px rgba(66, 133, 244, 0.82), 0 0 90px rgba(66, 133, 244, 0.4); }
-            .tt-splash image.glow-10 { -gtk-icon-shadow: 0 0 60px rgba(66, 133, 244, 0.84), 0 0 100px rgba(66, 133, 244, 0.5); }
-            .tt-splash image.glow-11 { -gtk-icon-shadow: 0 0 65px rgba(66, 133, 244, 0.86), 0 0 110px rgba(66, 133, 244, 0.55); }
-            .tt-splash image.glow-12 { -gtk-icon-shadow: 0 0 70px rgba(66, 133, 244, 0.88), 0 0 120px rgba(66, 133, 244, 0.6); }
-            .tt-splash image.glow-13 { -gtk-icon-shadow: 0 0 75px rgba(66, 133, 244, 0.9), 0 0 130px rgba(66, 133, 244, 0.65); }
-            .tt-splash image.glow-14 { -gtk-icon-shadow: 0 0 80px rgba(66, 133, 244, 0.95), 0 0 140px rgba(66, 133, 244, 0.7); }
-            .tt-splash image.glow-15 { -gtk-icon-shadow: 0 0 90px rgba(66, 133, 244, 1.0), 0 0 160px rgba(66, 133, 244, 0.8); }
-        """)
-        # Screen-wide, because a provider on the window's own style context never
-        # reaches the child image. Every rule is scoped to .tt-splash, and the
-        # provider is removed with the splash, so other windows in the tray
-        # process keep their normal background.
-        self._screen = self.window.get_screen() or Gdk.Screen.get_default()
-        Gtk.StyleContext.add_provider_for_screen(
-            self._screen,
-            self.css_provider,
-            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
-        )
-        self.glow_level = 0
-        self.image_widget = None
-        self._stop_glow = False
-
-        # Try to load icon from standard paths
-        icon_path = None
-        icon_paths = []
-
-        # Check AppImage mount point first (has PNG in root)
-        appimage_mount = os.environ.get('APPDIR')
-        if appimage_mount:
-            icon_paths.append(os.path.join(appimage_mount, "io.github.ronb1964.TuxTalk.png"))
-            icon_paths.append(os.path.join(appimage_mount, "io.github.ronb1964.TuxTalk.svg"))
-            icon_paths.append(os.path.join(appimage_mount, "usr", "share", "icons", "hicolor", "scalable", "apps", "io.github.ronb1964.TuxTalk.svg"))
-
-        # Development/system paths - prioritize SVG for splash (cleaner rendering)
-        icon_paths.extend([
-            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icons", "OFFICIAL_ICON_DO_NOT_CHANGE.svg"),
-            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icons", "TT_retro_square_light_transparent.png"),
-            "/app/share/icons/hicolor/scalable/apps/io.github.ronb1964.TuxTalk.svg",
-            # System install locations (.deb / .rpm): the hicolor SVG, then the
-            # pixmaps PNG. A packaged install has no $APPDIR and no project
-            # icons/ folder, so without these the splash shows plain text.
-            "/usr/share/icons/hicolor/scalable/apps/io.github.ronb1964.TuxTalk.svg",
-            "/usr/share/icons/hicolor/256x256/apps/io.github.ronb1964.TuxTalk.png",
-            "/usr/share/pixmaps/io.github.ronb1964.TuxTalk.png",
-            "../icons/OFFICIAL_ICON_DO_NOT_CHANGE.svg",
-            "../icons/TT_retro_square_light_transparent.png",
-            "icons/OFFICIAL_ICON_DO_NOT_CHANGE.svg",
-            os.path.expanduser("~/.local/share/icons/hicolor/scalable/apps/io.github.ronb1964.TuxTalk.svg"),
-        ])
-
-        for path in icon_paths:
-            if os.path.exists(path):
-                icon_path = path
-                logger.debug(f"Found splash icon at: {path}")
-                break
-
-        # Create centered icon image with rounded dark background
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        box.set_valign(Gtk.Align.CENTER)
-        box.set_halign(Gtk.Align.CENTER)
-        box.get_style_context().add_class('splash-box')
-
-        if icon_path:
-            try:
-                # Load icon from file (works with both SVG and PNG)
-                pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_size(icon_path, 256, 256)
-                self.image_widget = Gtk.Image.new_from_pixbuf(pixbuf)
-                box.pack_start(self.image_widget, False, False, 0)
-                logger.info(f"Splash screen loaded icon from: {icon_path}")
-            except Exception as e:
-                logger.warning(f"Could not load splash icon from {icon_path}: {e}")
-                # Fallback to text
-                label = Gtk.Label(label="TuxTalk")
-                label.set_markup('<span size="xx-large" weight="bold">TuxTalk</span>')
-                box.pack_start(label, False, False, 0)
-                self.image_widget = None
-        else:
-            # No icon found, use text
-            logger.warning("No icon path found for splash screen")
-            label = Gtk.Label(label="TuxTalk")
-            label.set_markup('<span size="xx-large" weight="bold">TuxTalk</span>')
-            box.pack_start(label, False, False, 0)
-            self.image_widget = None
-
-        self.window.add(box)
-
-    def _animate_glow(self):
-        """Animate the glow effect by expanding once to maximum, then staying there."""
-        if not self.image_widget or self._stop_glow:
-            return False  # Stop animation if widget gone or stop flag set
-
-        style_context = self.image_widget.get_style_context()
-
-        # Remove old glow class
-        style_context.remove_class(f'glow-{self.glow_level}')
-
-        # Increment glow level (0-15), but stop at maximum
-        if self.glow_level < 15:
-            self.glow_level += 1
-            # Add new glow class
-            style_context.add_class(f'glow-{self.glow_level}')
-            return True  # Continue animation
-        else:
-            # Stay at maximum glow
-            style_context.add_class(f'glow-{self.glow_level}')
-            return False  # Stop animation (GLib will auto-remove timer)
-
-    def show_and_fade(self, callback):
-        """
-        Show splash screen, wait briefly, then fade out and call callback.
-
-        Args:
-            callback: Function to call after splash finishes (no arguments)
-        """
-        self.window.set_opacity(0.0)
-        self.window.show_all()
-
-        # The glow grows one step every 100 ms.
-        GLib.timeout_add(100, self._animate_glow)
-
-        # Fade in over about half a second (20 steps of 25 ms).
-        self._fade_in(0.0, callback)
-
-    def _fade_in(self, opacity, callback):
-        """Gradually increase opacity."""
-        opacity += 0.05
-        self.window.set_opacity(opacity)
-
-        if opacity < 1.0:
-            GLib.timeout_add(25, lambda: self._fade_in(opacity, callback))
-        else:
-            # Hold for 2.5 s while the glow grows to full, then fade out.
-            GLib.timeout_add(2500, lambda: self._fade_out(1.0, callback))
-
-    def _fade_out(self, opacity, callback):
-        """Gradually decrease opacity."""
-        opacity -= 0.05  # same pace as the fade-in
-        self.window.set_opacity(opacity)
-
-        if opacity > 0.0:
-            GLib.timeout_add(25, lambda: self._fade_out(opacity, callback))
-        else:
-            # Stop glow animation by setting flag (timer will auto-remove)
-            self._stop_glow = True
-
-            # Close splash and show welcome dialog
-            Gtk.StyleContext.remove_provider_for_screen(self._screen, self.css_provider)
-            self.window.destroy()
-            callback()
 
 
 def _extension_already_active():
@@ -1746,14 +1546,6 @@ class WelcomeDialog:
 
         return True  # Continue animation
 
-    def _fade_in_dialog(self, opacity):
-        """Fade in the dialog gradually."""
-        opacity += 0.05
-        self.dialog.set_opacity(opacity)
-
-        if opacity < 1.0:
-            GLib.timeout_add(25, lambda: self._fade_in_dialog(opacity))
-
     def run(self):
         """
         Show the dialog and return user selections.
@@ -1768,7 +1560,7 @@ class WelcomeDialog:
         # Show dialog and fade in
         self.dialog.set_opacity(0.0)
         self.dialog.show_all()
-        self._fade_in_dialog(0.0)
+        fade_in(self.dialog)
 
         # Pulse the checkbox/warning every 50 ms, only when there is one:
         # source_remove below warns "Source ID not found" for a timer that has

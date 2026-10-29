@@ -13,14 +13,14 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, Gtk  # noqa: E402
 
-from tuxtalk import welcome_dialog as wd  # noqa: E402
+from tuxtalk import splash_screen as ss  # noqa: E402
 
 
 @pytest.fixture
 def splash():
     if not Gtk.init_check()[0]:
         pytest.skip("no display")
-    s = wd.SplashScreen()
+    s = ss.SplashScreen()
     yield s
     Gtk.StyleContext.remove_provider_for_screen(s._screen, s.css_provider)
     s.window.destroy()
@@ -41,7 +41,7 @@ def test_the_splash_window_carries_its_class_and_hint(splash):
 
 def test_the_stylesheet_goes_with_the_splash(splash, monkeypatch):
     removed = []
-    monkeypatch.setattr(wd.Gtk.StyleContext, "remove_provider_for_screen",
+    monkeypatch.setattr(ss.Gtk.StyleContext, "remove_provider_for_screen",
                         lambda screen, provider: removed.append(provider))
     monkeypatch.setattr(splash.window, "set_opacity", lambda o: None)
     done = []

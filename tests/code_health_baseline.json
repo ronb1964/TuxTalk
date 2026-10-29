@@ -1,7 +1,7 @@
 {
  "files": {
   "tray.py": 1550,
-  "welcome_dialog.py": 2993
+  "welcome_dialog.py": 2785
  },
  "findings": {
   "ai_cleanup.py::<module>::long_line": 4,
@@ -226,7 +226,6 @@
   "voice_navigation.py::chords::dated_comment": 2,
   "voice_navigation.py::plan::long_line": 2,
   "vulkan_setup_dialogs.py::run_speed_check.work::swallowed_error": 1,
-  "welcome_dialog.py::SplashScreen.__init__::long_line": 11,
   "welcome_dialog.py::WelcomeDialog.__init__::long_line": 1,
   "welcome_dialog.py::WelcomeDialog.__init__::swallowed_error": 1,
   "welcome_dialog.py::WelcomeDialog._build_base_content::long_line": 1,
@@ -379,9 +378,6 @@
   },
   "voice_edit_rules.py::mechanical_edit": {
    "decisions": 18
-  },
-  "welcome_dialog.py::SplashScreen.__init__": {
-   "lines": 128
   },
   "welcome_dialog.py::WelcomeDialog._build_dialog": {
    "lines": 151
