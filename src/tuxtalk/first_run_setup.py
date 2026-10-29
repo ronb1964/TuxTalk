@@ -38,64 +38,24 @@ def _vulkan_speed_check_first_run(model):
         return False
 
 
-def _run_downloads(dialog, is_done, result_info):
-    """Run *dialog*'s downloads; True when is_done() then says the files are
-    on disk. When they aren't and the user cancelled one (or closed the
-    window), "cancelled" is set True in *result_info*, if given: False alone
-    can't tell that apart from a failed download."""
-    results = dialog.run() or {}
-    done = is_done()
-    if (not done and result_info is not None
-            and any(r.get("cancelled") for r in results.values())):
-        result_info["cancelled"] = True
-    return done
-
-
-def _download_vulkan_model_first_run(model, result_info=None):
-    """Download *model* in whisper.cpp's format (and an engine that can run
-    it, if the one there can't). True when both are on disk.
-
-    result_info: optional dict, see _run_downloads.
-    """
+def _download_vulkan_model_first_run(model):
+    """Download the graphics engine and *model* in whisper.cpp's format, as
+    Preferences does: (both here now, cancelled). An error counts as a
+    failed download, so setup goes on on the processor."""
     try:
-        from tuxtalk import whisper_vulkan as wv
-        from tuxtalk.download_progress_dialog import DownloadTask, UnifiedDownloadDialog
-        if wv.is_installed(model):
-            return True
-        dialog = UnifiedDownloadDialog(
-            parent=None, title="Downloading Your Model",
-            description="The speech model in the format your graphics engine uses. "
-                        "One-time download.")
-        if not wv.is_engine_installed(model):
-            dialog.add_task(DownloadTask("Graphics engine", wv.ENGINE_SIZE_TEXT,
-                                         wv.make_engine_download_func(model)))
-        if wv.model_path(model) is None:
-            dialog.add_task(DownloadTask("Speech model", wv.MODEL_FILES[model][1],
-                                         wv.make_model_download_func(model)))
-        return _run_downloads(dialog, lambda: wv.is_installed(model), result_info)
+        from tuxtalk import vulkan_setup_dialogs
+        return vulkan_setup_dialogs.fetch_files(None, model)
     except Exception as e:
         logger.warning(f"Vulkan model download failed: {e}")
-        return False
+        return False, False
 
 
-def _download_processor_model(model, result_info=None):
-    """Download *model* for the processor, without loading it: the dictation
-    service loads it when it starts. A load here as well only kept the tray
-    at "Loading model..." for seconds and holding 0.7 to 3 GB for nothing.
-    True when its files are on disk.
-
-    result_info: optional dict, see _run_downloads.
-    """
-    from tuxtalk.download_progress_dialog import DownloadTask, UnifiedDownloadDialog
-    from tuxtalk.model_helper import (MODEL_DISPLAY_SIZES, is_model_cached_fast,
-                                      make_model_download_func)
-    from .recommend import model_title
-    dialog = UnifiedDownloadDialog(
-        parent=None, title=f"Downloading {model_title(model)}",
-        description="The speech model TuxTalk dictates with. One-time download.")
-    dialog.add_task(DownloadTask("Speech model", MODEL_DISPLAY_SIZES.get(model, "unknown size"),
-                                 make_model_download_func(model)))
-    return _run_downloads(dialog, lambda: is_model_cached_fast(model), result_info)
+def _download_processor_model(model):
+    """Download *model* for the processor, as Preferences does, without
+    loading it: the dictation service loads it when it starts. (Here now,
+    cancelled.)"""
+    from tuxtalk.model_helper import download_model_files
+    return download_model_files(None, model)
 
 
 def _processor_model(model, result):
@@ -181,9 +141,8 @@ def _set_up_graphics(model, result):
         _use(model, "cpu")
         return model, False, False
     # One download window: it fetches the engine too when it's missing.
-    info = {}
-    if (_download_vulkan_model_first_run(model, result_info=info)
-            and _vulkan_speed_check_first_run(model)):
+    downloaded, cancelled = _download_vulkan_model_first_run(model)
+    if downloaded and _vulkan_speed_check_first_run(model):
         _use(model)
         logger.info(f"{model} ready for Vulkan")
         return model, True, False
@@ -192,70 +151,79 @@ def _set_up_graphics(model, result):
     model = _processor_model(model, result)
     _use(model, "cpu")
     logger.warning(f"Not using Vulkan after first-run setup; {model} on the processor")
-    return model, False, bool(info.get("cancelled"))
+    return model, False, cancelled
 
 
-def _try_again(model):
-    """Offer *model*'s download again, at most _FIRST_RUN_RETRIES times.
-    True once that settles it: downloaded, or cancelled for now."""
+def _retry(model):
+    """Offer *model*'s download again, at most _FIRST_RUN_RETRIES times:
+    (downloaded, cancelled). Both False when the user would rather have a
+    smaller model, or every retry failed."""
     for _ in range(_FIRST_RUN_RETRIES):
         if not _ask_retry_download(model):
-            return False
-        info = {}
-        if _download_processor_model(model, result_info=info):
+            break
+        downloaded, cancelled = _download_processor_model(model)
+        if downloaded:
             _use(model)
             logger.info(f"{model} downloaded on a retry")
-            return True
-        if info.get("cancelled"):
+            return True, False
+        if cancelled:
             logger.info(f"Retry of {model} cancelled; leaving it for later")
-            return True
-    return False
+            return False, True
+    return False, False
 
 
 def _after_failed_download(model):
-    """The download failed, and its window said why. The user may try
-    it again; otherwise use a smaller model that is already downloaded, or
-    try ONE smaller download, and say so."""
+    """The download failed, and its window said why. The user may try it
+    again; otherwise use a smaller model that is already downloaded, or try
+    ONE smaller download, and say so. True when a model is ready."""
     from tuxtalk.model_helper import is_model_cached_fast
     logger.warning(f"Model download failed for {model}")
-    if _try_again(model):
-        return
+    downloaded, cancelled = _retry(model)
+    if downloaded or cancelled:
+        return downloaded
     fallback_models = ["small", "tiny"] if model not in ("small", "tiny") else ["tiny"]
     cached = next((m for m in fallback_models if is_model_cached_fast(m)), None)
     if cached:
         logger.info(f"Using cached {cached} model as fallback")
         _use(cached)
         _tell_using_smaller_model(model, cached)
-        return
+        return True
     fallback = fallback_models[0]
     logger.info(f"Attempting fallback to {fallback} model...")
     try:
-        if _download_processor_model(fallback):
+        if _download_processor_model(fallback)[0]:
             logger.info(f"Fallback to {fallback} model successful")
             _use(fallback)
             _tell_using_smaller_model(model, fallback)
-        else:
-            logger.warning(f"Fallback to {fallback} did not download either")
+            return True
+        logger.warning(f"Fallback to {fallback} did not download either")
     except Exception as e:
         logger.warning(f"Error downloading fallback {fallback}: {e}")
+    return False
 
 
 def _emergency_tiny():
     """After an unexpected error, make sure SOME model works: Tiny on the
-    processor (whisper.cpp has no copy of Tiny, so the device goes too)."""
+    processor (whisper.cpp has no copy of Tiny, so the device goes too).
+    True when it is there."""
     from tuxtalk.model_helper import is_model_cached_fast
     try:
         if not is_model_cached_fast("tiny"):
             logger.info("Downloading tiny model as emergency fallback...")
-            if not _download_processor_model("tiny"):
-                return
+            if not _download_processor_model("tiny")[0]:
+                return False
         _use("tiny", "cpu")
+        return True
     except Exception:
         logger.warning("Emergency Tiny fallback failed", exc_info=True)
+        return False
 
 
 def _apply_first_run_setup(result):
-    """Save the setup the welcome card showed, then download it.
+    """Save the setup the welcome card showed, then download it. True when
+    a model is ready to dictate with; False when none was downloaded (a
+    Cancel, or no download worked), which the dictation service then offers
+    again when it starts.
 
     *result* is WelcomeDialog.run()'s: model, device ("vulkan" or "cpu") and
     dictation_language. On the graphics card this fetches the Vulkan engine
@@ -270,30 +238,32 @@ def _apply_first_run_setup(result):
     try:
         model, ready, cancelled = _set_up_graphics(model, result)
         if ready:
-            return
+            return True
         if is_model_cached_fast(model):
             # Already on disk: save the choice and leave loading to the
             # dictation service.
             logger.info(f"{model} already downloaded, saving config")
             _use(model)
-        elif cancelled:
+            return True
+        if cancelled:
             # Cancel in the graphics download window: no processor download
             # straight after it. The service offers that one when it starts.
             logger.info(f"First-run download cancelled; leaving {model} for later")
-        else:
-            info = {}
-            if _download_processor_model(model, result_info=info):
-                _use(model)
-                logger.info(f"{model} model ready")
-            elif info.get("cancelled"):
-                # "Not now": no surprise downloads after a Cancel. The setting
-                # stays, and the service offers the download when it starts.
-                logger.info(f"First-run download cancelled; leaving {model} for later")
-            else:
-                _after_failed_download(model)
+            return False
+        downloaded, cancelled = _download_processor_model(model)
+        if downloaded:
+            _use(model)
+            logger.info(f"{model} model ready")
+            return True
+        if cancelled:
+            # "Not now": no surprise downloads after a Cancel. The setting
+            # stays, and the service offers the download when it starts.
+            logger.info(f"First-run download cancelled; leaving {model} for later")
+            return False
+        return _after_failed_download(model)
     except Exception:
         logger.warning(f"First-run setup of {model} failed", exc_info=True)
-        _emergency_tiny()
+        return _emergency_tiny()
 
 
 def _install_extension(result):
@@ -341,11 +311,12 @@ def _offer_kde_notification_help():
 
 def show_welcome_and_install():
     """
-    Show welcome dialog and handle optional installations.
-    This is the main entry point for first-run experience.
+    Run first-run setup from start to end: the welcome screen, the GNOME
+    extension if ticked, the hotkey test, the speech model, the AppImage put
+    in place and Setup Complete. The tray's entry point for a first run.
 
     Returns:
-        dict: Result dictionary with installation status
+        dict: WelcomeDialog.run()'s result, or None when it failed
     """
     result = show_welcome_dialog()
     if not result or not result.get('continue'):
@@ -367,8 +338,7 @@ def show_welcome_and_install():
         show_hotkey_test_dialog()
 
     # Then download exactly what the welcome card showed.
-    if "model" in result:
-        _apply_first_run_setup(result)
+    model_ready = _apply_first_run_setup(result) if "model" in result else True
 
     from tuxtalk import appimage_copy
     appimage_installed, launcher_created = appimage_copy.put_in_place()
@@ -382,6 +352,7 @@ def show_welcome_and_install():
         launcher_created=launcher_created,
         needs_restart=bool(result.get('needs_restart', result.get('uinput_fixed'))),
         extension_installed=extension_installed,
+        model_ready=model_ready,
     )
     _offer_kde_notification_help()
     logger.info("First-run setup completed")

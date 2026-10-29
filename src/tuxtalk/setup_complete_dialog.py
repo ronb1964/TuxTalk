@@ -101,7 +101,7 @@ def _how_it_works(vbox, is_flatpak):
 
 
 def _tips(vbox, is_flatpak):
-    """The two things worth knowing on day one, dim, under the steps."""
+    """What is worth knowing on day one (_ready_tips), dim, under the steps."""
     for i, tip in enumerate(_ready_tips(is_flatpak)):
         tip_label = Gtk.Label()
         tip_label.set_markup(f'<span><i>{tip}</i></span>')
@@ -267,7 +267,8 @@ def _text_area(content):
 
 
 def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
-                               needs_restart=False, extension_installed=False):
+                               needs_restart=False, extension_installed=False,
+                               model_ready=True):
     """
     Show the final setup complete dialog after model download.
     Tells the user they're ready to start dictating.
@@ -280,6 +281,9 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
             reminder and "Restart computer now" button shown.
         extension_installed: True if the GNOME extension was installed, which
             starts working after logging out and back in.
+        model_ready: False when no speech model was downloaded (cancelled,
+            or no download worked). The screen then says so instead of
+            "ready to use".
     """
     from .ui_style import fit_dialog_to_screen
     dialog = Gtk.Dialog(title="TuxTalk - Ready!")
@@ -293,7 +297,10 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
 
     vbox.pack_start(_centered('<span size="x-large"><b>Setup Complete!</b></span>'),
                     False, False, 0)
-    vbox.pack_start(_centered('TuxTalk is ready to use.', top=4), False, False, 0)
+    vbox.pack_start(_centered('TuxTalk is ready to use.' if model_ready else
+                              '<span color="#FF9800"><b>The speech model isn\'t downloaded '
+                              'yet.</b>\nTuxTalk asks to download it when it starts.</span>',
+                              top=4), False, False, 0)
     _install_summary(vbox, appimage_installed, launcher_created)
     sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
     sep.set_margin_top(10)

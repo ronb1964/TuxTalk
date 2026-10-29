@@ -119,9 +119,9 @@ class PresetMenu:
     def _preset_files(self, preset):
         """(model, device) *preset* runs with once its files are here: the
         processor's when the graphics chip lost the speed check. None when the
-        Vulkan setup or a download was cancelled."""
+        Vulkan setup or a download was cancelled or failed."""
         from .config import load_config
-        from .model_helper import download_model_with_progress, is_model_cached_fast
+        from .model_helper import download_model_files, is_model_cached_fast
         model, device = preset.model, preset.device
         if device == "vulkan":
             from .vulkan_setup_dialogs import ensure_files, run_speed_check
@@ -134,9 +134,11 @@ class PresetMenu:
                 device = "cpu"
                 model = recommend.recommend(recommend.effective_language(load_config()),
                                             recommend.Hardware(None), model=model).model
-        if device == "cpu" and not is_model_cached_fast(model):
-            if download_model_with_progress(model, device="cpu", show_confirmation=True) is None:
-                return None
+        # Downloaded only: the dictation service loads the model when it
+        # restarts, and loading it here would hold 0.7 to 3 GB in the tray.
+        if (device == "cpu" and not is_model_cached_fast(model)
+                and not download_model_files(None, model, confirm=True)[0]):
+            return None
         return model, device
 
     def _save_preset(self, preset, model, device):

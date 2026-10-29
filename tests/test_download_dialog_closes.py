@@ -97,10 +97,7 @@ def test_a_cancel_just_after_the_download_keeps_the_model(monkeypatch):
     monkeypatch.setattr(mh.GLib, "timeout_add",
                         lambda ms, fn, *a: timers.append(fn) or closing.set())
 
-    info = {}
-    assert mh.download_model_with_progress("small", show_confirmation=False,
-                                           result_info=info) is loaded
-    assert info == {}
+    assert mh.download_model_with_progress("small", show_confirmation=False) is loaded
     for timer in timers:                    # the closing timer fires after all
         assert not timer()
     assert late == [] and windows[0].destroyed

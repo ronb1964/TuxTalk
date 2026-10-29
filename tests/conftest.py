@@ -1038,7 +1038,7 @@ def first_run(monkeypatch):
     monkeypatch.setattr(first_run_setup, "show_hotkey_test_dialog",
                         lambda: done.append("tests the hotkeys"))
     monkeypatch.setattr(first_run_setup, "_apply_first_run_setup",
-                        lambda result: done.append("downloads the speech model"))
+                        lambda result: done.append("downloads the speech model") or True)
     monkeypatch.setattr(first_run_setup, "show_setup_complete_dialog",
                         lambda **k: done.append("setup complete"))
     monkeypatch.setattr(update_checker, "is_running_from_appimage", lambda: True)
