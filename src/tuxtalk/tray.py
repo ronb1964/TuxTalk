@@ -1,5 +1,7 @@
-"""The tray process: the tray icon and its menu, starting and watching the
-dictation service, and the D-Bus calls the GNOME extension and Preferences make."""
+"""The tray process: the tray icon, watching the dictation service, the
+windows the menu opens, the D-Bus calls the GNOME extension and Preferences
+make, and the process's start (main). The menu itself is tray_menu.py's,
+starting and stopping the service tray_service.py's."""
 import os
 import signal
 # CRITICAL: Disable HuggingFace XET downloads BEFORE any imports
@@ -38,8 +40,15 @@ except ImportError:
     DBUS_AVAILABLE = False
     logger.warning("D-Bus service not available - GNOME extension integration disabled")
 
+
 class DictationTray(ServiceLifecycle, PresetMenu, TrayMenu):
+    """TuxTalk's tray: the icon and its menu, the dictation service it starts
+    and polls every second, and what the menu, the GNOME extension, the
+    command line and the menu window ask of it."""
+
     def __init__(self):
+        """Make the icon and its menu, offer the D-Bus service and start the
+        status poll; the dictation service is started by main()."""
         # TuxTalk is a dark-themed app. This is a global Gtk setting, so setting
         # it once here, before any tray dialog is built, makes the tray's own
         # windows (About, update results) match Preferences and onboarding.
@@ -115,9 +124,6 @@ class DictationTray(ServiceLifecycle, PresetMenu, TrayMenu):
         # After updating: the recommended setup, and the hotkey helper or
         # Parakeet Ultra this TuxTalk brings.
         update_offers.start(self.restart_service)
-
-        # Auto-start will be triggered after welcome dialog on first run
-        # or immediately if not first run (handled in main())
 
     def _check_tray_visibility(self) -> bool:
         """
