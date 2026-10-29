@@ -125,9 +125,9 @@ def test_two_installs_at_once_take_turns(extensions, monkeypatch):
     assert os.listdir(ext_dir) == [eh.EXTENSION_UUID]
 
 
-@pytest.mark.parametrize("bundled", [True, False])
+@pytest.mark.parametrize("from_checkout", [True, False])
 def test_the_install_enables_once_and_its_progress_only_goes_up(extensions, monkeypatch,
-                                                                bundled):
+                                                                from_checkout):
     """It enabled the extension twice, and the download's bar showed 100%
     before "Enabling extension..." at 95%."""
     import zipfile
@@ -135,7 +135,7 @@ def test_the_install_enables_once_and_its_progress_only_goes_up(extensions, monk
     enabled, shown = [], []
     monkeypatch.setattr(eh, "is_extension_available", lambda: True)
     monkeypatch.setattr(desktop_detect, "enable_extension", lambda uuid: enabled.append(uuid) or True)
-    monkeypatch.setattr(eh, "get_bundled_extension_path", lambda: str(source) if bundled else None)
+    monkeypatch.setattr(eh, "checkout_extension_path", lambda: str(source) if from_checkout else None)
 
     def download(url, dest, **kwargs):
         with zipfile.ZipFile(dest, "w") as z:
@@ -150,15 +150,15 @@ def test_the_install_enables_once_and_its_progress_only_goes_up(extensions, monk
     assert (ext_dir / eh.EXTENSION_UUID / "extension.js").read_text() == "// new"
 
 
-def test_a_bundled_copy_that_fails_falls_back_without_the_bar_going_back(extensions,
+def test_a_checkout_copy_that_fails_falls_back_without_the_bar_going_back(extensions,
                                                                        monkeypatch):
-    """It showed 50% for the bundled copy, then 10% for the download."""
+    """It showed 50% for the checkout's copy, then 10% for the download."""
     import zipfile
     ext_dir, source = extensions
     shown = []
     monkeypatch.setattr(eh, "is_extension_available", lambda: True)
     monkeypatch.setattr(desktop_detect, "enable_extension", lambda uuid: True)
-    monkeypatch.setattr(eh, "get_bundled_extension_path", lambda: str(source))
+    monkeypatch.setattr(eh, "checkout_extension_path", lambda: str(source))
     real_local = eh.install_extension_from_local
     tries = []
 
@@ -176,3 +176,11 @@ def test_a_bundled_copy_that_fails_falls_back_without_the_bar_going_back(extensi
     monkeypatch.setattr("tuxtalk.download_utils.download_file", download)
     assert eh.install_extension(lambda message, percent: shown.append(percent))
     assert shown == sorted(shown) and shown[-1] == 100
+
+
+def test_the_dev_version_installs_the_extension_of_its_own_checkout():
+    """The AppImage carries no copy: only a source checkout has one."""
+    path = eh.checkout_extension_path()
+    assert path is not None
+    assert path.endswith(os.path.join("gnome-extension", eh.EXTENSION_UUID))
+    assert os.path.isfile(os.path.join(path, "extension.js"))

@@ -185,58 +185,22 @@ def install_extension_from_local(source_dir: str, auto_enable: bool = True) -> b
         return False
 
 
-def get_bundled_extension_path() -> Optional[str]:
-    """
-    Find the bundled GNOME extension in the AppImage or dev environment.
-
-    Returns:
-        str: Path to bundled extension directory, or None if not found
-    """
-    import sys
-
-    # Possible locations for bundled extension
-    possible_paths = []
-
-    # Check if running from AppImage
-    appimage_path = os.environ.get('APPIMAGE')
-    if appimage_path:
-        # AppImage mount point - extension should be in usr/share/gnome-extension/
-        appimage_mount = os.path.dirname(sys.executable)
-        possible_paths.append(
-            os.path.join(appimage_mount, '..', 'share', 'gnome-extension', EXTENSION_UUID)
-        )
-
-    # Check squashfs mount point (AppImage internal path)
-    if '/tmp/.mount_' in sys.executable or 'squashfs-root' in sys.executable:
-        base = os.path.dirname(os.path.dirname(sys.executable))
-        possible_paths.append(
-            os.path.join(base, 'share', 'gnome-extension', EXTENSION_UUID)
-        )
-
-    # Development environment - relative to this file
-    this_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(os.path.dirname(this_dir))
-    possible_paths.append(
-        os.path.join(project_root, 'gnome-extension', EXTENSION_UUID)
-    )
-
-    # Check each path
-    for path in possible_paths:
-        normalized = os.path.normpath(path)
-        metadata_file = os.path.join(normalized, 'metadata.json')
-        if os.path.isfile(metadata_file):
-            print(f"Found bundled extension at: {normalized}")
-            return normalized
-
+def checkout_extension_path() -> Optional[str]:
+    """The extension in the source checkout the dev version runs from, or
+    None. The AppImage carries none (container-build.sh): it downloads the
+    extension from the release, so an extension fix needs no new AppImage."""
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    path = os.path.join(root, "gnome-extension", EXTENSION_UUID)
+    if os.path.isfile(os.path.join(path, "metadata.json")):
+        logger.info(f"Installing the GNOME extension from the source checkout: {path}")
+        return path
     return None
 
 
 def install_extension(progress_callback: Optional[Callable] = None) -> bool:
     """
-    Install GNOME extension from bundled files or download from GitHub.
-
-    Tries to install from bundled files first (AppImage or dev environment),
-    falls back to downloading from GitHub releases if bundled files not found.
+    Install the GNOME extension: the source checkout's in the dev version,
+    downloaded from the GitHub release otherwise (or if that copy fails).
 
     Args:
         progress_callback: Optional function(message, percent) for progress updates
@@ -249,21 +213,19 @@ def install_extension(progress_callback: Optional[Callable] = None) -> bool:
             progress_callback("GNOME desktop not detected", 0)
         return False
 
-    # First, try to install from bundled files
-    bundled_path = get_bundled_extension_path()
-    if bundled_path:
+    checkout_path = checkout_extension_path()
+    if checkout_path:
         if progress_callback:
-            # Low: a failed bundled copy falls back to the download, which
-            # starts at 10%, and the bar mustn't go backwards.
-            progress_callback("Installing bundled extension...", 5)
+            # Low: a failed copy falls back to the download, which starts at
+            # 10%, and the bar mustn't go backwards.
+            progress_callback("Installing the extension...", 5)
 
         # install_extension_from_local enables it too.
-        if install_extension_from_local(bundled_path):
+        if install_extension_from_local(checkout_path):
             if progress_callback:
                 progress_callback("Extension installed successfully!", 100)
             return True
-        else:
-            print("Failed to install bundled extension, trying download...")
+        logger.warning("Couldn't install the checkout's extension; downloading it")
 
     # Fall back to downloading from GitHub
     return download_and_install_extension(progress_callback)
@@ -271,9 +233,8 @@ def install_extension(progress_callback: Optional[Callable] = None) -> bool:
 
 def download_and_install_extension(progress_callback: Optional[Callable] = None) -> bool:
     """
-    Download and install GNOME extension from GitHub release.
-
-    This is the fallback when bundled extension is not available.
+    Download and install GNOME extension from GitHub release: how the
+    AppImage, .deb and .rpm get it.
 
     Args:
         progress_callback: Optional function(message, percent) for progress updates
