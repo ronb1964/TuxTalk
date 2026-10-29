@@ -1456,7 +1456,7 @@ def main():
     # Check for first run and show welcome dialog if applicable
     try:
         import tuxtalk.cuda_helper as cuda_helper
-        from tuxtalk.welcome_dialog import show_welcome_and_install
+        from tuxtalk.first_run_setup import show_welcome_and_install
 
         # Only show welcome dialog on first tray launch (not for prefs)
         if cuda_helper.is_first_run():

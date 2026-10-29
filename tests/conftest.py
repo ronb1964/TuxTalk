@@ -815,9 +815,9 @@ def tray_main(monkeypatch):
     import types
     import dbus.mainloop.glib
     from tuxtalk import (autostart, control, cuda_helper, desktop_identity,
-                         gnome_keybindings, rename_migration, service_launcher,
-                         settings_backup, tray, ui_style, uinput_helper, update_checker,
-                         welcome_dialog)
+                         first_run_setup, gnome_keybindings, rename_migration,
+                         service_launcher, settings_backup, tray, ui_style, uinput_helper,
+                         update_checker)
     done = _Steps()
 
     def step(name, result=None):
@@ -872,7 +872,7 @@ def tray_main(monkeypatch):
         monkeypatch.setattr(tray.Gtk, "main", step("runs"))
         monkeypatch.setattr(sys, "argv", ["tuxtalk", *argv])
         monkeypatch.setattr(cuda_helper, "is_first_run", lambda: first_run)
-        monkeypatch.setattr(welcome_dialog, "show_welcome_and_install", welcome)
+        monkeypatch.setattr(first_run_setup, "show_welcome_and_install", welcome)
         tray.main()
         return done
     return run
@@ -1015,12 +1015,12 @@ def setup_complete(monkeypatch):
 
 @pytest.fixture
 def first_run(monkeypatch):
-    """First-run setup after the welcome screen (show_welcome_and_install),
-    from an AppImage in Downloads, with each screen and download faked.
-    Returns the steps it took, in order."""
+    """First-run setup after the welcome screen
+    (first_run_setup.show_welcome_and_install), from an AppImage in
+    Downloads, with each screen and download faked. Returns the steps it
+    took, in order."""
     import types
-    from tuxtalk import (appimage_copy, autostart, setup_complete_dialog, update_checker,
-                         welcome_dialog)
+    from tuxtalk import appimage_copy, autostart, first_run_setup, update_checker
     done = _Steps()
 
     class Thread:
@@ -1032,13 +1032,13 @@ def first_run(monkeypatch):
 
     monkeypatch.setattr(appimage_copy, "threading", types.SimpleNamespace(Thread=Thread))
     monkeypatch.setattr(appimage_copy, "_thread", None)
-    monkeypatch.setattr(welcome_dialog, "show_welcome_dialog", lambda: done.append("welcome") or
+    monkeypatch.setattr(first_run_setup, "show_welcome_dialog", lambda: done.append("welcome") or
                         {"continue": True, "model": "parakeet-v3", "device": "cpu"})
-    monkeypatch.setattr(welcome_dialog, "show_hotkey_test_dialog",
+    monkeypatch.setattr(first_run_setup, "show_hotkey_test_dialog",
                         lambda: done.append("tests the hotkeys"))
-    monkeypatch.setattr(welcome_dialog, "_apply_first_run_setup",
+    monkeypatch.setattr(first_run_setup, "_apply_first_run_setup",
                         lambda result: done.append("downloads the speech model"))
-    monkeypatch.setattr(setup_complete_dialog, "show_setup_complete_dialog",
+    monkeypatch.setattr(first_run_setup, "show_setup_complete_dialog",
                         lambda **k: done.append("setup complete"))
     monkeypatch.setattr(update_checker, "is_running_from_appimage", lambda: True)
     monkeypatch.setattr(update_checker, "ensure_appimage_in_standard_location",
@@ -1050,6 +1050,6 @@ def first_run(monkeypatch):
     monkeypatch.delenv("FLATPAK_ID", raising=False)
 
     def run():
-        welcome_dialog.show_welcome_and_install()
+        first_run_setup.show_welcome_and_install()
         return done
     return run
