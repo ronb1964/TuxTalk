@@ -1009,7 +1009,10 @@ class WelcomeDialog:
         other = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
 
         lang_row = Gtk.Box(spacing=8)
-        lang_row.pack_start(Gtk.Label(label="I dictate in", xalign=0), False, False, 0)
+        # Tied to the dropdown: a screen reader names it by this, and Alt+D opens it.
+        lang_label = Gtk.Label.new_with_mnemonic("I _dictate in")
+        lang_label.set_xalign(0)
+        lang_row.pack_start(lang_label, False, False, 0)
         # Not the desktop's language: the one spoken into the microphone.
         speak_hint = Gtk.Label(xalign=0)
         speak_hint.set_markup('<span alpha="70%">(the language you speak)</span>')
@@ -1024,6 +1027,7 @@ class WelcomeDialog:
         if self.initial_language not in codes:
             self.lang_combo.append(self.initial_language, rec.language_label(self.initial_language))
         self.lang_combo.set_active_id(self.initial_language)
+        lang_label.set_mnemonic_widget(self.lang_combo)
         lang_row.pack_start(self.lang_combo, False, False, 0)
         lang_row.pack_start(speak_hint, False, False, 0)
         other.pack_start(lang_row, False, False, 0)
