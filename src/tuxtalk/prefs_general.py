@@ -303,7 +303,12 @@ class GeneralTab(Tab):
         """Show what was just saved: the tray may have changed the model and
         device, or Power Saving (Battery saver), while this window was open,
         and the save kept that."""
+        # Without the tickbox's own reaction, which scrolls the tab to show
+        # the minutes: nobody ticked it here.
+        self.timeout_check.handler_block_by_func(self._on_auto_timeout_toggled)
         self.timeout_check.set_active(self.config.get("auto_timeout_enabled", False))
+        self.timeout_check.handler_unblock_by_func(self._on_auto_timeout_toggled)
+        self.update_timeout_ui_state()
         self.timeout_spin.set_value(self.config.get("auto_timeout_minutes", 5))
         self.speech.show_saved()
 

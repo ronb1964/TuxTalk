@@ -489,13 +489,13 @@ class PreferencesWindow:
     def save_now(self, key, value):
         """Save *key* at once, not on Apply: a setting that follows from
         something done already (a download), which Cancel can't undo."""
-        from .config import load_config, save_config
+        from .config import ConfigNotLoadedError, load_config, save_config
         self.config[key] = self._config_at_open[key] = value
         try:
             cfg = load_config()
             setattr(cfg, key, value)
             save_config(cfg)
-        except OSError as e:
+        except (OSError, ConfigNotLoadedError) as e:
             logger.warning(f"Could not save {key}: {e}")
 
     def save_before_restart(self):
