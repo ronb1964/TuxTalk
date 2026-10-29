@@ -474,6 +474,42 @@ def test_the_apps_own_virtual_keyboard_is_not_grabbed():
     assert uinput_helper.is_keyboard_device(ours) is False
 
 
+def _kanata():
+    """kanata's virtual keyboard, from its source (src/oskbd/linux.rs): every
+    key code below 560 and mouse motion, so mouse keys pass through too."""
+    return FakeDevice("kanata", {ecodes.EV_KEY: list(range(560)),
+                                 ecodes.EV_REL: [ecodes.REL_X, ecodes.REL_Y, ecodes.REL_WHEEL]})
+
+
+def test_a_key_remappers_virtual_keyboard_is_read(monkeypatch):
+    """kanata (keyd and input-remapper alike) takes the real keyboards and
+    passes every key on through its own, shaped like a mouse too: skipped,
+    TuxTalk heard no key at all with it running (issue #23)."""
+    monkeypatch.setattr(uinput_helper, "made_by_a_program", lambda path: True)
+    assert uinput_helper.is_keyboard_device(_kanata()) is True
+
+
+def test_a_real_keyboard_and_mouse_in_one_is_still_skipped(monkeypatch):
+    """The same shape from hardware is a Logitech receiver's mouse."""
+    monkeypatch.setattr(uinput_helper, "made_by_a_program", lambda path: False)
+    assert uinput_helper.is_keyboard_device(_kanata()) is False
+
+
+def test_the_apps_own_keyboard_is_skipped_though_a_program_made_it(monkeypatch):
+    from tuxtalk import virtual_keyboard
+    monkeypatch.setattr(uinput_helper, "made_by_a_program", lambda path: True)
+    ours = FakeDevice(virtual_keyboard.NAME, virtual_keyboard._capabilities())
+    assert uinput_helper.is_keyboard_device(ours) is False
+
+
+@pytest.mark.parametrize("node,made", [
+    ("/sys/devices/virtual/input/input42", True),               # uinput: kanata, keyd
+    ("/sys/devices/pci0000:00/0000:00:14.0/usb1/1-2/input/input7", False)])
+def test_a_program_made_device_is_told_by_where_sysfs_keeps_it(monkeypatch, node, made):
+    monkeypatch.setattr(uinput_helper.os.path, "realpath", lambda path: node)
+    assert uinput_helper.made_by_a_program("/dev/input/event18") is made
+
+
 # --- the Voice Commands hotkey is a grab path too ---------------------------
 
 def _press_voice_combo(devices, monkeypatch, dbus=None):

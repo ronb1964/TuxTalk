@@ -1101,3 +1101,29 @@ def test_a_keyboard_that_fails_to_read_is_let_go_not_spun_on(setup, monkeypatch)
     monkeypatch.setattr(hh.os, "read", failing_read)
     assert helper.read_keyboard(kb) == 0
     assert kb.path not in helper.keyboards
+
+
+# --- which devices are keyboards -----------------------------------------------------------
+
+_LETTERS = set(range(16, 26)) | set(range(30, 39))      # Q..P, A..L
+
+
+@pytest.mark.parametrize("pointer,group,name,read", [
+    (False, "real", "USB Keyboard", True),
+    (True, "real", "Logitech MX Master", False),        # a mouse claiming letter keys
+    (True, "virtual:13:82", "kanata", True),             # a remapper's keyboard (issue #23)
+    (False, "virtual:13:83", "keyd virtual keyboard", True),
+    (True, "virtual:13:84", hh.OWN_KEYBOARD_NAME, False),   # the one TuxTalk types with
+    (True, "own:13:85", "a mouse others can write to", False)])
+def test_which_devices_are_read_as_keyboards(pointer, group, name, read):
+    assert hh.counts_as_keyboard(_LETTERS | {hh.BTN_LEFT}, pointer, group, name) is read
+
+
+def test_a_device_without_letter_keys_is_no_keyboard():
+    assert hh.counts_as_keyboard({hh.BTN_LEFT, 66}, False, "real", "Power Button") is False
+
+
+def test_the_helper_knows_the_name_tuxtalk_types_with():
+    """The helper runs as root on its own and can't import TuxTalk."""
+    from tuxtalk import virtual_keyboard
+    assert hh.OWN_KEYBOARD_NAME == virtual_keyboard.NAME

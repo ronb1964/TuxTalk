@@ -127,6 +127,8 @@ EV_SYN, EV_KEY, EV_REL = 0, 1, 2
 SYN_REPORT, SYN_DROPPED = 0, 3
 REL_X = 0
 BTN_LEFT = 0x110
+# The keyboard TuxTalk types with (virtual_keyboard.NAME): never read.
+OWN_KEYBOARD_NAME = "TuxTalk virtual keyboard"
 KEY_MAX = 0x2FF
 KEY_ESC, KEY_SCROLLLOCK, KEY_PAUSE = 1, 70, 119
 KEY_RIGHTCTRL, KEY_RIGHTALT = 97, 100
@@ -315,6 +317,17 @@ def device_group(rdev, sys_dir=SYS_CHAR_DIR, writable=False, uhid_private=True):
     return f"own:{number}" if writable else "real"
 
 
+def counts_as_keyboard(keys, pointer, group, name) -> bool:
+    """Whether a device with the key codes *keys*, mouse motion (*pointer*),
+    in *group* (device_group) and called *name*, is a keyboard to read: it
+    has letter keys, and it isn't a real mouse claiming them (a Logitech
+    receiver) nor the keyboard TuxTalk types with. A program's virtual one
+    shaped like a mouse is read: key remappers (kanata, keyd) take the real
+    keyboards and pass every key on through one (issue #23)."""
+    real_mouse = pointer and not group.startswith("virtual:")
+    return len(keys & LETTER_KEYS) >= 3 and not real_mouse and name != OWN_KEYBOARD_NAME
+
+
 # --- keyboards --------------------------------------------------------------------------
 
 class Keyboard:
@@ -354,20 +367,21 @@ class Keyboard:
             fcntl.ioctl(fd, EVIOCGBIT(EV_REL, len(rel)), rel, True)
             pointer = REL_X in bits(rel) and BTN_LEFT in keys
             st = os.fstat(fd)
-            if len(keys & LETTER_KEYS) < 3 or pointer or udev_seat(st.st_rdev) != "seat0":
+            group = device_group(st.st_rdev, writable=others_can_write(st),
+                                 uhid_private=uhid_is_private())
+            name = bytearray(256)
+            fcntl.ioctl(fd, EVIOCGNAME(len(name)), name, True)
+            name = name.split(b"\0", 1)[0].decode("utf-8", "replace")
+            seat = udev_seat(st.st_rdev)
+            if not counts_as_keyboard(keys, pointer, group, name) or seat != "seat0":
                 os.close(fd)
                 return None
             ident = bytearray(8)
             fcntl.ioctl(fd, EVIOCGID, ident, True)
-            group = device_group(st.st_rdev, writable=others_can_write(st),
-                                 uhid_private=uhid_is_private())
             virtual = struct.unpack("HHHH", ident)[0] == BUS_VIRTUAL or group.startswith("virtual:")
-            name = bytearray(256)
-            fcntl.ioctl(fd, EVIOCGNAME(len(name)), name, True)
             state = bytearray(KEY_BYTES)
             fcntl.ioctl(fd, EVIOCGKEY(len(state)), state, True)
-            keyboard = cls(path, fd, name.split(b"\0", 1)[0].decode("utf-8", "replace"),
-                           bits(state), virtual, group)
+            keyboard = cls(path, fd, name, bits(state), virtual, group)
         except OSError:
             os.close(fd)
             return None

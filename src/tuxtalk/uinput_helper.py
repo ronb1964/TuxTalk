@@ -29,6 +29,7 @@ import grp
 import pwd
 import shlex
 from .logger import setup_logger
+from .virtual_keyboard import NAME as VIRTUAL_KEYBOARD_NAME
 
 logger = setup_logger(__name__)
 
@@ -71,13 +72,18 @@ def is_keyboard_device(dev) -> bool:
     1. It must report letter keys. Power buttons, lid switches, audio jacks,
        game controllers and consumer-control nodes report none, so this drops
        them immediately.
-    2. It must not be a pointing device. Logitech Unifying receivers advertise a
-       superset HID descriptor, so a wireless mouse claims all 26 letter keys
-       and all 12 F-keys just like a keyboard does. What separates them is real
-       pointer motion (REL_X) combined with mouse buttons — the same test
-       libinput uses. This also excludes TuxTalk's own virtual keyboard, which
-       is shaped like a pointer for exactly this reason (virtual_keyboard.py)
-       and must never be grabbed.
+    2. A real device must not be a pointing device. Logitech Unifying
+       receivers advertise a superset HID descriptor, so a wireless mouse
+       claims all 26 letter keys and all 12 F-keys just like a keyboard does.
+       What separates them is real pointer motion (REL_X) combined with mouse
+       buttons, the same test libinput uses. A program's virtual keyboard is
+       read even shaped like a mouse: key remappers (kanata, keyd,
+       input-remapper) take the real keyboards for themselves and pass every
+       key on through one, so skipping it left TuxTalk hearing no key at all
+       (issue #23).
+
+    TuxTalk's own virtual keyboard, which it types with, is never read or
+    grabbed: it is told by its name.
 
     Note the check is REL_X specifically, not the EV_REL event type: the K800
     keyboard declares EV_REL while exposing no motion axis, so testing the type
@@ -89,6 +95,8 @@ def is_keyboard_device(dev) -> bool:
         caps = dev.capabilities()
     except Exception:
         return False
+    if getattr(dev, "name", None) == VIRTUAL_KEYBOARD_NAME:
+        return False
 
     keys = set(caps.get(_ecodes.EV_KEY) or [])
     if sum(1 for k in keys if k in LETTER_KEYS) < 3:
@@ -96,7 +104,15 @@ def is_keyboard_device(dev) -> bool:
 
     rel_axes = set(caps.get(_ecodes.EV_REL) or [])
     is_pointer = _ecodes.REL_X in rel_axes and _ecodes.BTN_LEFT in keys
-    return not is_pointer
+    return not is_pointer or made_by_a_program(getattr(dev, "path", ""))
+
+
+def made_by_a_program(path) -> bool:
+    """Whether the input device at *path* (/dev/input/eventN) is a virtual one
+    a program made through uinput rather than hardware: its sysfs node is
+    under /sys/devices/virtual. False when that can't be told."""
+    node = os.path.realpath(f"/sys/class/input/{os.path.basename(path)}/device")
+    return node.startswith("/sys/devices/virtual/")
 
 
 def check_uinput_exists():

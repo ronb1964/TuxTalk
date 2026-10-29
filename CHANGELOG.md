@@ -5,6 +5,11 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- With a key remapper running (kanata, keyd, input-remapper), F8 and F9
+  did nothing, and the hotkey test didn't see them either. A remapper takes
+  your keyboards for itself and passes every key on through a virtual
+  keyboard of its own, and TuxTalk wasn't listening to that one. It is now.
+  Thanks to Viktor for tracking it down (issue #23).
 - You can pick Right Ctrl, Right Alt or Scroll Lock as a dictation key now,
   in Preferences, General, next to F1 to F12. On a lot of laptops and small
   keyboards the F-keys only work with Fn held, and these three never need it.
