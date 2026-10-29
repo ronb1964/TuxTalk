@@ -53,10 +53,34 @@ line-length = 100
 [tool.ruff]
 line-length = 100
 
-# What CI enforces. Length, line length, error handling and docstrings are
-# measured by tests/test_code_health.py, which lets old code only improve.
+# What CI enforces: pyflakes, bugbear and simplify. Length, line length, error
+# handling and docstrings are measured by tests/test_code_health.py.
 [tool.ruff.lint]
-select = ["F"]
+select = ["F", "B", "SIM"]
+# contextlib.suppress would take a swallowed error out of sight of
+# test_code_health.py's except check, so try/except/pass stays as it is.
+ignore = ["SIM105"]
+
+# Findings already there when bugbear and simplify were turned on. The list
+# may only shrink: tests/test_ruff_ratchet.py fails when an entry is no longer
+# needed, so it is struck and the rule holds for that file from then on.
+[tool.ruff.lint.per-file-ignores]
+"src/tuxtalk/ai_cleanup.py" = ["B905", "SIM109"]
+"src/tuxtalk/audio_duck.py" = ["SIM114"]
+"src/tuxtalk/config.py" = ["B023"]
+"src/tuxtalk/custom_words.py" = ["B905"]
+"src/tuxtalk/extension_helper.py" = ["B904"]
+"src/tuxtalk/file_transcribe.py" = ["B905"]
+"src/tuxtalk/keyboard_layout.py" = ["B905"]
+"src/tuxtalk/normalize.py" = ["B905", "SIM905"]
+"src/tuxtalk/notes_text.py" = ["SIM102"]
+"src/tuxtalk/parakeet_gpu.py" = ["SIM115"]
+"src/tuxtalk/pipeline.py" = ["SIM102"]
+"src/tuxtalk/recording_indicator.py" = ["SIM108"]
+"src/tuxtalk/settings_backup.py" = ["B904", "SIM905"]
+"src/tuxtalk/virtual_keyboard.py" = ["B904", "SIM300"]
+"src/tuxtalk/vocabulary.py" = ["SIM905"]
+"src/tuxtalk/voice_edit_rules.py" = ["SIM905"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

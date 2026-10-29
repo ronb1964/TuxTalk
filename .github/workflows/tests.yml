@@ -57,9 +57,10 @@ jobs:
       - name: Run the tests
         run: PYTHONPATH=src xvfb-run -a dbus-run-session --config-file=tests/dbus-session.conf -- venv/bin/python -m pytest tests/ -q
 
-  # Pyflakes catches undefined names and similar mistakes that only crash when
-  # that line finally runs; shellcheck does the same for the build and release
-  # scripts. Neither needs GTK, so this runs separately from the tests.
+  # Ruff catches undefined names and similar mistakes that only crash when
+  # that line finally runs, and likely bugs and needless complication (the
+  # rules pyproject.toml selects); shellcheck does the same for the build and
+  # release scripts. Neither needs GTK, so this runs separately from the tests.
   lint:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -77,7 +78,7 @@ jobs:
       - name: poetry.lock matches pyproject.toml
         run: lint-venv/bin/poetry check --lock
 
-      - name: Python (pyflakes rules)
+      - name: Python (pyflakes, bugbear and simplify rules)
         run: lint-venv/bin/ruff check src/tuxtalk
 
       # Only tracked scripts, so DEV_SETUP.md's copy of this command gives the
