@@ -75,17 +75,6 @@
   "gnome_keybindings.py::disable_for_hotkey_test::swallowed_error": 1,
   "gnome_keybindings.py::restore::swallowed_error": 1,
   "help_text.py::<module>::long_line": 8,
-  "hotkey_helper.py::Helper.__init__::long_line": 1,
-  "hotkey_helper.py::Helper.__init__::undocumented": 1,
-  "hotkey_helper.py::Helper.admit::undocumented": 1,
-  "hotkey_helper.py::Helper.deliver_down::undocumented": 1,
-  "hotkey_helper.py::Helper.handle::undocumented": 1,
-  "hotkey_helper.py::Helper.on_client_data::undocumented": 1,
-  "hotkey_helper.py::Helper.on_key::undocumented": 1,
-  "hotkey_helper.py::Helper.run_once::undocumented": 1,
-  "hotkey_helper.py::Helper.start_hide::undocumented": 1,
-  "hotkey_helper.py::Helper::undocumented": 1,
-  "hotkey_helper.py::main::undocumented": 1,
   "hotkey_helper_client.py::HelperKeyboard._handle::long_line": 1,
   "hotkey_helper_client.py::HelperKeyboard._handle::undocumented": 1,
   "hotkeys.py::_rediscover_devices::swallowed_error": 1,
@@ -305,21 +294,6 @@
   },
   "fix_word_dialog.py::_FixWordDialog.__init__": {
    "lines": 115
-  },
-  "hotkey_helper.py::Helper.deliver_down": {
-   "decisions": 23
-  },
-  "hotkey_helper.py::Helper.handle": {
-   "decisions": 18
-  },
-  "hotkey_helper.py::Helper.run_once": {
-   "decisions": 19
-  },
-  "hotkey_helper.py::Helper.scan": {
-   "decisions": 16
-  },
-  "hotkey_helper.py::Helper.start_hide": {
-   "decisions": 31
   },
   "keyboard_layout.py::KeyPlanner._index": {
    "decisions": 17

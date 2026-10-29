@@ -5,6 +5,7 @@ hotkeys, never about typing.
 Keyboards here are pipes that events are written into, so no real device or
 privilege is needed; the grab and inject calls are recorded instead.
 """
+import errno
 import os
 import socket
 import time
@@ -22,10 +23,13 @@ class FakeKeyboard(hh.Keyboard):
     kept too: an injected event comes back only if it changes that, as with a
     real evdev device."""
 
+    made = []                       # every one, so the fixture closes their pipes
+
     def __init__(self, path="/dev/input/event-fake"):
         r, w = os.pipe()
+        FakeKeyboard.made.append(self)
         os.set_blocking(r, False)
-        super().__init__(path, r, "Fake keyboard", set())
+        super().__init__(path, r, "Fake keyboard", set(), False, f"own:{path}")
         self.w = w
         self.kernel = set()
         self.calls = []
@@ -45,6 +49,13 @@ class FakeKeyboard(hh.Keyboard):
 
     def kernel_down(self):
         return set(self.kernel)
+
+    def close(self):
+        """Once only: the fixture closes what the helper hasn't, and the
+        number of a closed descriptor may already belong to another file."""
+        if self.fd >= 0:
+            super().close()
+            self.fd = -1
 
     def grab(self, on):
         self.calls.append(("grab", on))
@@ -104,6 +115,10 @@ def setup(tmp_path, monkeypatch):
     for sock in clients:
         sock.close()
     helper.listener.close()
+    for kb in FakeKeyboard.made:
+        kb.close()
+        os.close(kb.w)
+    FakeKeyboard.made.clear()
 
 
 def _ready(connect, say, heard, specs="66 67 1 CA:25"):
@@ -373,7 +388,7 @@ def test_the_helper_needs_nothing_but_the_standard_library():
     assert imported <= {"errno", "fcntl", "os", "select", "signal", "socket", "struct", "sys", "time"}
 
 
-# --- from the security review, 2026-10-15 -------------------------------------------------
+# --- whose keys count, and who is told ------------------------------------------------
 
 RALT, LMETA = 100, 125
 
@@ -484,14 +499,35 @@ def test_the_keyboard_comes_back_when_someone_else_is_at_the_screen(setup):
 
 
 def test_only_the_keyboard_the_hotkey_is_held_on_is_grabbed(setup):
+    """A laptop's own keyboard stays free while F8 is held on a USB one,
+    though the desktop counts both as one keyboard."""
     helper, kb, connect, say, heard, _seat = setup
     other = FakeKeyboard("/dev/input/event-other")
+    kb.group = other.group = "real"
     helper.keyboards[other.path] = other
     sock = _ready(connect, say, heard)
     kb.press(F8)
     heard(sock)
     say(sock, "HIDE 66")
     assert ("grab", True) in kb.calls and other.calls == []
+
+
+def test_a_shift_held_on_the_other_half_of_a_split_keyboard_is_hidden_too(setup):
+    """Shift+F8 with Shift on one half and F8 on the other: the Shift is
+    hidden and held as well, so TuxTalk's typing doesn't come out shifted."""
+    helper, kb, connect, say, heard, _seat = setup
+    other = FakeKeyboard("/dev/input/event-other")
+    kb.group = other.group = "real"
+    helper.keyboards[other.path] = other
+    sock = _ready(connect, say, heard, "66 S:66")
+    other.press(LSHIFT)
+    heard(sock)
+    kb.press(F8)
+    assert heard(sock) == ["DOWN 66 42"]
+    say(sock, "HIDE 66 42")
+    assert heard(sock) == ["OK HIDE"]
+    assert other.calls == [("inject", LSHIFT, 0), ("grab", True), ("inject", LSHIFT, 1)]
+    assert {kb, other} <= set(helper.hide["keyboards"])
 
 
 def test_someone_not_at_the_screen_cant_connect(setup):
@@ -549,6 +585,11 @@ def test_virtual_keyboards_cant_crowd_out_real_ones(setup, monkeypatch, tmp_path
     monkeypatch.setattr(hh.Keyboard, "open", staticmethod(fake_open))
     helper.scan()
     assert sum(1 for k in helper.keyboards.values() if k.virtual) == hh.MAX_VIRTUAL_KEYBOARDS
+    real = str(folder / "event-usb")
+    (folder / "event-usb").write_text("")
+    monkeypatch.setattr(hh.Keyboard, "open", staticmethod(FakeKeyboard))
+    helper.scan()
+    assert real in helper.keyboards
 
 
 def test_other_seats_keyboards_are_not_read(tmp_path):
@@ -560,7 +601,7 @@ def test_other_seats_keyboards_are_not_read(tmp_path):
     assert hh.udev_seat(os.makedev(13, 71), str(data)) == "seat0"
 
 
-# --- from the second security review, 2026-10-15 -------------------------------------------
+# --- keyboards made by programs --------------------------------------------------------
 
 def test_a_real_keyboard_split_over_two_devices_still_makes_combos(setup):
     """Some keyboards send Ctrl and Alt from one device and letters from
@@ -631,7 +672,7 @@ def test_only_real_devices_share_modifiers(tmp_path):
     assert hh.device_group(os.makedev(13, 72), str(chars)).startswith("virtual:")
 
 
-# --- fixes from the Codex review (helper 1.3) ----------------------------------------
+# --- one press, one keyboard ------------------------------------------------------------
 
 def test_a_virtual_keyboard_holding_the_hotkey_cant_swallow_the_real_one(setup):
     """A program holds F8 on its own virtual keyboard first: the real F8 is
@@ -720,7 +761,7 @@ def test_a_keyboard_that_cant_be_let_go_is_closed(setup, monkeypatch):
     assert heard(tuxtalk) == ["UP 66"]          # its key can't come up any more
 
 
-# --- fixes from guelz's review (helper 1.4) -------------------------------------------
+# --- shortcuts, Esc, Bluetooth and a full house --------------------------------------
 
 def test_a_client_gets_four_shortcuts_at_most(setup):
     _helper, _kb, connect, say, heard, _seat = setup
@@ -996,3 +1037,67 @@ def test_a_failed_release_on_a_second_keyboard_gives_the_first_back(setup, monke
     assert heard(sock) == ["ERR couldn't hide the keys"]
     assert ("grab", True) in kb.calls and not kb.grabbed
     assert helper.hide is None
+
+
+# --- what a client or a flooding keyboard can make it do --------------------------------
+
+def test_a_line_longer_than_max_line_is_refused_even_with_its_newline(setup):
+    """A whole line is measured too, not only one still waiting for its
+    newline: a client gets no more than MAX_LINE bytes parsed."""
+    helper, _kb, connect, say, heard, _seat = setup
+    sock = _ready(connect, say, heard)
+    sock.sendall(b"WATCH " + b"66 " * 300 + b"\n")
+    assert heard(sock) == []
+    assert helper.clients == {}
+
+
+def test_a_line_of_exactly_max_line_is_answered(setup):
+    _helper, _kb, connect, say, heard, _seat = setup
+    sock = _ready(connect, say, heard)
+    sock.sendall(b"WATCH 66".ljust(hh.MAX_LINE) + b"\n")
+    assert heard(sock) == ["OK WATCH"]
+
+
+def test_a_keyboard_that_never_runs_dry_doesnt_hold_the_loop(setup, monkeypatch):
+    """A program flooding its own virtual keyboard: settle's drain stops
+    after DRAIN_READS reads instead of reading for as long as it types."""
+    helper, kb, _connect, _say, _heard, _seat = setup
+    reads = []
+    # Runs dry after ten times the limit, so a drain without one fails here
+    # in a moment instead of looping until the computer runs out of memory.
+    monkeypatch.setattr(helper, "read_keyboard",
+                        lambda keyboard: reads.append(1) or len(reads) < 10 * hh.DRAIN_READS)
+    assert helper.drain(kb) is False
+    assert len(reads) == hh.DRAIN_READS
+
+
+def test_a_flood_that_outlasts_the_drain_keeps_the_injected_records(setup, monkeypatch):
+    """Our own events still queued behind a flood mustn't be read later as
+    the user's: their records stay until they expire."""
+    helper, kb, _connect, _say, _heard, _seat = setup
+    helper.inject(kb, F8, 0)
+    monkeypatch.setattr(helper, "read_keyboard", lambda keyboard: 1)
+    helper.settle(kb, ())
+    assert [i[:3] for i in helper.injected] == [(kb.path, F8, 0)]
+
+
+def test_hiding_is_refused_when_the_kernel_cant_say_which_keys_are_down(setup, monkeypatch):
+    """Otherwise the desktop would never be told F8 went up and would
+    repeat it for as long as it's held."""
+    helper, kb, connect, say, heard, _seat = setup
+    sock = _ready(connect, say, heard)
+    kb.press(F8)
+    heard(sock)
+    monkeypatch.setattr(kb, "kernel_down", lambda: None)
+    say(sock, "HIDE 66")
+    assert heard(sock) == ["ERR couldn't hide the keys"]
+    assert ("grab", True) not in kb.calls and helper.hide is None
+
+
+def test_a_keyboard_that_fails_to_read_is_let_go_not_spun_on(setup, monkeypatch):
+    helper, kb, _connect, _say, _heard, _seat = setup
+    def failing_read(fd, size):
+        raise OSError(errno.EPERM, "Operation not permitted")
+    monkeypatch.setattr(hh.os, "read", failing_read)
+    assert helper.read_keyboard(kb) == 0
+    assert kb.path not in helper.keyboards
