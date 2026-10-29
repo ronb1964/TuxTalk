@@ -236,23 +236,19 @@ def test_orphaned_engines_are_killed_but_live_ones_are_left_alone(monkeypatch):
     assert killed == [(100, _signal.SIGKILL)]
 
 
-def test_parent_death_uses_sigkill(monkeypatch):
-    """The engine dies with the service: llama-server can stall in graceful
-    shutdown and ignore SIGTERM, so it is SIGKILL."""
-    import ctypes
-    import signal as _signal
-    asked = []
-    monkeypatch.setattr(ctypes, "CDLL", lambda name, **k: types.SimpleNamespace(
-        prctl=lambda option, sig: asked.append((option, sig))))
-    ai._set_parent_death_signal()
-    assert asked == [(1, _signal.SIGKILL)]          # PR_SET_PDEATHSIG
-
-
-def test_the_engine_starts_with_the_parent_death_signal(dead_engine, monkeypatch):
+def test_the_engine_starts_through_setpriv_and_dies_with_the_service(dead_engine, monkeypatch):
+    """llama-server can stall in a graceful shutdown and ignore SIGTERM, so
+    the kernel kills it with SIGKILL; set by setpriv, never by Python code
+    run between fork and exec."""
     options = []
-    monkeypatch.setattr(ai.subprocess, "Popen", lambda *a, **k: options.append(k) or _Proc())
+    monkeypatch.setattr(ai.engine_process, "_setpriv", lambda: "/usr/bin/setpriv")
+    monkeypatch.setattr(ai.subprocess, "Popen",
+                        lambda argv, **k: options.append((argv, k)) or _Proc())
     dead_engine.start(_replacing=dead_engine._proc)
-    assert options[0]["preexec_fn"] is ai._set_parent_death_signal
+    argv, kwargs = options[0]
+    assert argv[:4] == ["/usr/bin/setpriv", "--pdeathsig", "KILL", "--"]
+    assert argv[4] == ai._server_binary()
+    assert "preexec_fn" not in kwargs
 
 
 def test_the_engine_key_is_not_on_its_command_line(dead_engine, monkeypatch):
@@ -391,6 +387,7 @@ def dead_engine(monkeypatch):
     monkeypatch.setattr(ai, "_server_binary", lambda: "/x/llama-server")
     monkeypatch.setattr(ai, "_model_path", lambda: "/x/model.gguf")
     monkeypatch.setattr(ai.subprocess, "Popen", lambda *a, **k: started.append(a) or _Proc())
+    monkeypatch.setattr(ai.engine_process, "_setpriv", lambda: None)   # it'd run a process
     monkeypatch.setattr(e, "_wait_until_ready", lambda proc: None)
     e.started = started
     return e

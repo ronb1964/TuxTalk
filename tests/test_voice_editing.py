@@ -171,6 +171,7 @@ def test_the_engine_has_room_for_a_selection(monkeypatch):
     monkeypatch.setattr(ai_cleanup, "_model_path", lambda: "/x/model.gguf")
     monkeypatch.setattr(ai_cleanup.subprocess, "Popen",
                         lambda argv, **k: started.append(argv) or types.SimpleNamespace(pid=42))
+    monkeypatch.setattr(ai_cleanup.engine_process, "_setpriv", lambda: None)  # it'd run a process
     monkeypatch.setattr(engine, "_wait_until_ready", lambda proc: None)
     engine.start()
     argv = started[0]

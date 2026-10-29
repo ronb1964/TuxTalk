@@ -451,11 +451,11 @@ class VulkanWhisperModel:
         # back, so another local program could at most borrow the graphics chip.
         self._proc = self._launcher.submit(
             subprocess.Popen,
-            [_binary("whisper-server"), "-m", model_path(self.model_name),
-             "--host", "127.0.0.1", "--port", str(self._port),
-             "-t", str(self.threads), "-dev", str(self.device_index)],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=_engine_env(),
-            preexec_fn=engine_process.set_parent_death_signal).result()
+            engine_process.with_parent_death(
+                [_binary("whisper-server"), "-m", model_path(self.model_name),
+                 "--host", "127.0.0.1", "--port", str(self._port),
+                 "-t", str(self.threads), "-dev", str(self.device_index)]),
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=_engine_env()).result()
         logger.info(f"Graphics engine starting (pid {self._proc.pid}, device {self.device_index})")
         try:
             deadline = time.time() + 120

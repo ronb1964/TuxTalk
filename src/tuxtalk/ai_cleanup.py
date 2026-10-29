@@ -476,7 +476,6 @@ def make_model_download_func():
 # --- The running engine ------------------------------------------------------
 
 # Shared with the graphics engines; see engine_process.py.
-_set_parent_death_signal = engine_process.set_parent_death_signal
 _is_talktype_process = engine_process.is_talktype_process
 
 
@@ -534,12 +533,13 @@ class CorrectionEngine:
                 subprocess.Popen,
                 # 4096 tokens: room for a voice edit (MAX_EDIT_CHARS of text and
                 # the rewrite); one slot, so it is all one request's.
-                [binary, "-m", _model_path(), "--host", "127.0.0.1", "--port", str(self._port),
-                 "-c", "4096", "-np", "1", "--jinja", "-ngl", "99", "--no-webui"],
+                engine_process.with_parent_death(
+                    [binary, "-m", _model_path(), "--host", "127.0.0.1",
+                     "--port", str(self._port), "-c", "4096", "-np", "1", "--jinja",
+                     "-ngl", "99", "--no-webui"]),
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 env={**os.environ, "LD_LIBRARY_PATH": os.path.dirname(binary),
                      "LLAMA_API_KEY": self._key},
-                preexec_fn=_set_parent_death_signal,
             ).result()
             logger.info(f"AI cleanup engine starting (pid {proc.pid})")
         # The process started here, not self._proc read again: a stop() just

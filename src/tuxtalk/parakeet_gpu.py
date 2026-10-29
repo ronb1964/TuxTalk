@@ -27,7 +27,6 @@ from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 
-from . import engine_process
 from .logger import setup_logger
 from .parakeet_engine import PARAKEET_MODEL, load_parakeet_model
 
@@ -88,7 +87,7 @@ class ParakeetGpuModel:
         self._stderr = tempfile.TemporaryFile()
         self._proc = self._launcher.submit(
             subprocess.Popen, self._command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=self._stderr, preexec_fn=engine_process.set_parent_death_signal).result()
+            stderr=self._stderr).result()
         # The pipes are used through their descriptors, never the buffered
         # files, so a reply that stops halfway or a helper that stops reading
         # ends at the deadline instead of blocking the dictation worker.

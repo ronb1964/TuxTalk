@@ -6,18 +6,45 @@ cleanup engine (llama-server, ai_cleanup.py) and the Vulkan graphics engine
 (whisper_vulkan.py, and parakeet_gpu.py for Parakeet). Each can hold a gigabyte
 or more of memory, so none may outlive the dictation service that started it.
 """
+import functools
 import os
+import shutil
 import signal
+import subprocess
 
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
 
 
-def set_parent_death_signal():
-    """Runs in the child before exec: if the dictation service dies, even by
-    SIGKILL, the kernel kills the engine too, so it cannot sit orphaned on a
-    gigabyte of memory.
+@functools.lru_cache(maxsize=None)
+def _setpriv():
+    """util-linux's setpriv, when it can set the parent-death signal
+    (--pdeathsig, util-linux 2.33 from 2018), else None. Asked once: it runs
+    itself through the option, which an older one refuses."""
+    path = shutil.which("setpriv")
+    if path:
+        try:
+            subprocess.run([path, "--pdeathsig", "KILL", path, "--version"], check=True,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+            return path
+        except (OSError, subprocess.SubprocessError) as e:
+            logger.info(f"setpriv can't set the parent-death signal here: {e}")
+    logger.info("No setpriv with --pdeathsig: an engine left behind by a crash "
+                "is cleaned up at the next start instead")
+    return None
+
+
+def with_parent_death(argv):
+    """*argv*, started so that the kernel kills the engine when the thread
+    that starts it exits, even if the dictation service is killed with
+    SIGKILL: no engine may sit orphaned on a gigabyte of memory.
+
+    setpriv sets the signal and then becomes the engine. Setting it from
+    Python between fork and exec (preexec_fn) can deadlock in a process with
+    threads, as the dictation service is, and makes subprocess copy the
+    whole process instead of spawning. Without setpriv, kill_orphans at the
+    next start is the backstop.
 
     SIGKILL, not SIGTERM: llama-server sometimes stalls in its graceful
     shutdown and then ignores SIGTERM, and no engine holds state worth saving.
@@ -25,11 +52,8 @@ def set_parent_death_signal():
     The signal fires when the thread that called Popen exits, not the
     process, so spawn from a thread that lives as long as the engine (see
     parakeet_gpu's _launcher)."""
-    try:
-        import ctypes
-        ctypes.CDLL("libc.so.6", use_errno=True).prctl(1, signal.SIGKILL)  # PR_SET_PDEATHSIG
-    except Exception:
-        pass
+    setpriv = _setpriv()
+    return [setpriv, "--pdeathsig", "KILL", "--", *argv] if setpriv else list(argv)
 
 
 def remove_other_versions(parent, keep):
