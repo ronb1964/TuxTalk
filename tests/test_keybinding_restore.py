@@ -124,20 +124,20 @@ def test_the_hotkey_test_gives_the_keys_back_after_an_error(monkeypatch):
     after a reboot (gsettings persists)."""
     import types
     from tuxtalk import config, service_launcher
-    from tuxtalk import welcome_dialog as wd
+    from tuxtalk import hotkey_test_dialog as hkd
     restored = []
     monkeypatch.setattr(config, "load_config", config.Settings)
     monkeypatch.setattr(G, "disable_for_hotkey_test", lambda: {"saved": "Alt+F8"})
     monkeypatch.setattr(G, "restore", restored.append)
     monkeypatch.setattr(service_launcher, "stop_dictation_service", lambda **k: None)
     monkeypatch.setattr(service_launcher, "find_service_pids", lambda: [])
-    monkeypatch.setattr(wd, "time", types.SimpleNamespace(sleep=lambda s: None))
+    monkeypatch.setattr(hkd, "time", types.SimpleNamespace(sleep=lambda s: None))
 
     def broken(*a):
         raise OSError("keyboard went away")
-    monkeypatch.setattr(wd, "open_key_devices", broken)
+    monkeypatch.setattr(hkd, "open_key_devices", broken)
     with pytest.raises(OSError):
-        wd.show_hotkey_test_dialog()
+        hkd.show_hotkey_test_dialog()
     assert restored == [{"saved": "Alt+F8"}]
 
 

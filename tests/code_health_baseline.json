@@ -1,7 +1,7 @@
 {
  "files": {
   "tray.py": 1550,
-  "welcome_dialog.py": 2509
+  "welcome_dialog.py": 2075
  },
  "findings": {
   "ai_cleanup.py::<module>::long_line": 4,
@@ -242,8 +242,6 @@
   "welcome_dialog.py::_extension_already_active::swallowed_error": 1,
   "welcome_dialog.py::_menu_location::swallowed_error": 1,
   "welcome_dialog.py::_saved_hold_key::swallowed_error": 1,
-  "welcome_dialog.py::show_hotkey_test_dialog.evdev_key_reader::swallowed_error": 1,
-  "welcome_dialog.py::show_hotkey_test_dialog::long_line": 1,
   "welcome_dialog.py::show_setup_complete_dialog.on_restart_now::undocumented": 1,
   "welcome_dialog.py::show_setup_complete_dialog::long_line": 1,
   "welcome_dialog.py::show_welcome_dialog.show_dialog_after_splash::swallowed_error": 1,
@@ -384,9 +382,6 @@
   "welcome_dialog.py::_apply_first_run_setup": {
    "decisions": 30,
    "lines": 191
-  },
-  "welcome_dialog.py::show_hotkey_test_dialog": {
-   "lines": 384
   },
   "welcome_dialog.py::show_setup_complete_dialog": {
    "lines": 272
