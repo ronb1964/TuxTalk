@@ -711,6 +711,10 @@ class PreferencesWindow:
         # a ~10 s rebuild of the speech model during which the hotkey does
         # nothing at all.
         if not self._apply_or_restart(changed):
+            # Still owed: the save moved the baseline on, and the next Apply
+            # would find nothing changed and say it's already in effect.
+            for key in changed:
+                self._config_at_open[key] = self._saved_before.get(key)
             self._say_restart_failed()
         elif not self.general_tab.after_hotkey_change(changed, saved_at):
             # (A hotkey question stands in for this.) Whether the service

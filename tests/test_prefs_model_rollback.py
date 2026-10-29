@@ -278,3 +278,25 @@ class TestTheTraysChoiceSurvivesTheRollback:
 
         assert stub.model_on_disk == "parakeet-v3"
         assert stub.speech.model_combo.active == "parakeet-v3"
+
+
+class TestAFailedRestartIsStillOwed:
+    def test_the_next_apply_restarts_rather_than_say_its_in_effect(self, prefs_cls,
+                                                                    monkeypatch):
+        """The save moved the baseline on, so the second Apply found nothing
+        changed and said "already in effect" though nothing had restarted."""
+        from tuxtalk import prefs
+        monkeypatch.setattr(prefs, "show_message", lambda *a, **k: None)
+        stub = StubPrefs(on_disk_model="small", chosen_model="medium")
+        stub.download_result = True
+        restarted = iter([False, True])
+        asked = []
+        stub._apply_or_restart = lambda changed: asked.append(set(changed)) or next(restarted)
+        stub._say_restart_failed = lambda: None
+        stub.window = None
+
+        prefs_cls.on_apply(stub, None)
+        prefs_cls.on_apply(stub, None)
+
+        assert asked == [{"model"}, {"model"}]
+        assert prefs_cls._changed_since_open(stub) == set()     # done now
