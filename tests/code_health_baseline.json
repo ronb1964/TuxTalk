@@ -300,8 +300,8 @@
    "lines": 101
   },
   "cuda_helper.py::download_cuda_libraries": {
-   "decisions": 34,
-   "lines": 159
+   "decisions": 32,
+   "lines": 156
   },
   "custom_words.py::fix_spelling": {
    "decisions": 28

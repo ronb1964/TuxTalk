@@ -181,59 +181,55 @@ def _inside(folder, rel_path):
     return target if target.startswith(os.path.realpath(folder) + os.sep) else None
 
 
-def _unpacked_size(wheel_paths):
-    """Bytes the shared libraries in *wheel_paths* take once unpacked. The
-    wheels are compressed, so their download size understates it."""
-    import zipfile
-    total = 0
-    for path in wheel_paths:
-        with zipfile.ZipFile(path) as wheel:
-            total += sum(info.file_size for info in wheel.infolist()
-                         if info.filename.startswith("nvidia/") and ".so" in info.filename)
-    return total
-
-
 def _extract_wheels(wheel_paths, lib_path, progress_callback, cancel_event):
     """Unpack the shared libraries of each downloaded wheel into *lib_path*,
     70 to 95 % of the progress bar. False, having said why, when there isn't
-    room for them (checked first: a full disk mid-way gave only a generic
+    room for them (checked first: the wheels are compressed, so the check on
+    their download size passed and a full disk mid-way gave only a generic
     error) or the user cancelled."""
+    import contextlib
     import shutil
     import zipfile
     from .download_utils import free_space_bytes
-    need = _unpacked_size(wheel_paths) + 100 * 1024 * 1024
-    free = free_space_bytes(lib_path)
-    if free and free < need:
-        msg = (f"Not enough disk space to install: need ~{need / 1024 ** 3:.1f} GB "
-               f"free, only {free / 1024 ** 3:.1f} GB available")
-        logger.error(f"{msg} (path: {lib_path})")
-        if progress_callback:
-            progress_callback(msg, 0)
-        return False
-    if progress_callback:
-        progress_callback("Extracting CUDA libraries...", 70)
-    for i, wheel_path in enumerate(wheel_paths):
-        if cancel_event and cancel_event.is_set():
-            logger.info("Download cancelled by user during extraction")
+    with contextlib.ExitStack() as stack:
+        wheels = []
+        for path in wheel_paths:
+            wheel = stack.enter_context(zipfile.ZipFile(path))
+            wheels.append((path, wheel, _wheel_libraries(wheel.namelist(), lib_path)))
+        need = sum(wheel.getinfo(member).file_size
+                   for _path, wheel, so_files in wheels for member, _target in so_files)
+        need += 100 * 1024 * 1024
+        free = free_space_bytes(lib_path)
+        if free and free < need:
+            msg = (f"Not enough disk space to install: need ~{need / 1024 ** 3:.1f} GB "
+                   f"free, only {free / 1024 ** 3:.1f} GB available")
+            logger.error(f"{msg} (path: {lib_path})")
+            if progress_callback:
+                progress_callback(msg, 0)
             return False
-        wheel_file = os.path.basename(wheel_path)
-        logger.info(f"Extracting {wheel_file}...")
-        with zipfile.ZipFile(wheel_path, 'r') as zip_ref:
-            # Only the shared libraries under nvidia/ are needed; the nvidia/
-            # prefix is dropped so each lands in lib/<package>/lib/.
-            so_files = _wheel_libraries(zip_ref.namelist(), lib_path)
+        if progress_callback:
+            progress_callback("Extracting CUDA libraries...", 70)
+        for i, (path, wheel, so_files) in enumerate(wheels):
+            if cancel_event and cancel_event.is_set():
+                logger.info("Download cancelled by user during extraction")
+                return False
+            wheel_file = os.path.basename(path)
+            logger.info(f"Extracting {wheel_file}...")
+            # The nvidia/ prefix is dropped: each lands in lib/<package>/lib/.
             for j, (member, target) in enumerate(so_files):
                 os.makedirs(os.path.dirname(target), exist_ok=True)
-                with zip_ref.open(member) as source, open(target, 'wb') as dest:
+                with wheel.open(member) as source, open(target, 'wb') as dest:
                     shutil.copyfileobj(source, dest)
                 os.chmod(target, 0o755)
                 if progress_callback:
-                    wheel_progress = (i + (j + 1) / len(so_files)) / len(wheel_paths)
+                    wheel_progress = (i + (j + 1) / len(so_files)) / len(wheels)
                     progress_callback(f"Extracting {wheel_file}... ({j+1}/{len(so_files)} files)",
                                       70 + int(wheel_progress * 25))
-        if progress_callback:
-            progress_callback(f"Extracted {wheel_file} ({i+1}/{len(wheel_paths)})",
-                              70 + int((i + 1) / len(wheel_paths) * 25))
+            if progress_callback:
+                progress_callback(f"Extracted {wheel_file} ({i+1}/{len(wheels)})",
+                                  70 + int((i + 1) / len(wheels) * 25))
+    logger.info(f"CUDA libraries installed: {sum(len(f) for _p, _w, f in wheels)} "
+                f"library files in {lib_path}")
     return True
 
 
@@ -319,8 +315,9 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
             # The wheels download into temp_dir (often /tmp, which is tmpfs =
             # RAM on Fedora/Nobara) and the .so files extract into lib_path
             # (under ~/.local/share). These can be different filesystems, so
-            # BOTH must be checked: temp_dir needs room for the wheels,
-            # lib_path needs room for the extracted libraries.
+            # BOTH must be checked: temp_dir needs room for the wheels, and
+            # lib_path at least as much (a first look: the unpacked size is
+            # known, and checked, once the wheels are here, _extract_wheels).
             total_wheel_bytes = sum(w[4] for w in wheels)
             checks = [
                 (temp_dir, total_wheel_bytes + 100 * 1024 * 1024, "download (temp)"),
@@ -384,16 +381,12 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
 
         if progress_callback:
             progress_callback("CUDA libraries installed successfully!", 100)
-        
-        logger.info(f"CUDA libraries installed to {cuda_path}")
-        logger.info(f"Libraries extracted to {lib_path}")
-        
-        so_count = sum(1 for _r, _d, files in os.walk(lib_path) for f in files if '.so' in f)
-        logger.info(f"Installed {so_count} library files")
         return True
 
     except Exception as e:
         logger.error(f"Error downloading CUDA libraries: {e}", exc_info=True)
+        if progress_callback:
+            progress_callback(f"Couldn't install CUDA's libraries: {e}", 0)
         cleanup_cuda_dir()
         return False
 
@@ -453,8 +446,12 @@ def show_cuda_download_dialog(parent=None, on_success_callback=None):
     cancel_event = threading.Event()
     download_success = [False]
 
+    last_report = ["", None]
+
     def update_progress(message, percent):
         """Update progress bar and status from callback"""
+        last_report[:] = [message, percent]
+
         def update_ui():
             progress_bar.set_fraction(percent / 100.0)
             progress_bar.set_text(f"{percent}%")
@@ -487,20 +484,24 @@ def show_cuda_download_dialog(parent=None, on_success_callback=None):
         return None
 
     download_thread.join()
-    _say_how_it_went(parent, download_success[0], on_success_callback)
+    from .download_utils import failure_reason
+    _say_how_it_went(parent, download_success[0], on_success_callback,
+                     failure_reason(*last_report))
     return download_success[0]
 
 
-def _say_how_it_went(parent, success, on_success_callback):
+def _say_how_it_went(parent, success, on_success_callback, reason=None):
     """"CUDA Libraries Downloaded!", then *on_success_callback*, or "Download
-    Failed". Switching the device is the caller's job (Preferences applies
-    it, so the service restarts onto it), after the message so its question
-    doesn't come before "Downloaded!"."""
+    Failed" with *reason* when the download gave one. Switching the device
+    is the caller's job (Preferences applies it, so the service restarts
+    onto it), after the message so its question doesn't come before
+    "Downloaded!"."""
     from gi.repository import Gtk
     from .ui_style import show_message
     if not success:
         show_message(parent, Gtk.MessageType.ERROR, "Download Failed",
-                     "Could not download CUDA libraries.\n\nYou can try again later: choose "
+                     f"{reason or 'Could not download CUDA libraries.'}"
+                     "\n\nYou can try again later: choose "
                      "CUDA under Preferences → General → Change model, device or language → "
                      "Device.")
         logger.error("CUDA libraries download failed")

@@ -171,3 +171,13 @@ def test_the_libraries_unpack_into_their_package_folders(tmp_path, monkeypatch):
     assert cuda_helper._extract_wheels([wheel], str(lib), None, None)
     unpacked = lib / "cublas" / "lib" / "libcublas.so.12"
     assert unpacked.stat().st_size == 1000 and os.access(unpacked, os.X_OK)
+
+
+def test_the_cuda_window_says_why_the_download_failed(monkeypatch):
+    from tuxtalk import ui_style
+    said = []
+    monkeypatch.setattr(ui_style, "show_message",
+                        lambda parent, kind, title, text, **k: said.append(text))
+    cuda_helper._say_how_it_went(None, False, None, "Not enough disk space to install: "
+                                                    "need ~2.9 GB free, only 0.2 GB available")
+    assert said[0].startswith("Not enough disk space to install")

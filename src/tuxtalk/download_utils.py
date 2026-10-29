@@ -228,6 +228,13 @@ def parse_sha256sums(text: str) -> dict:
     return sums
 
 
+def failure_reason(message, percent):
+    """What a download that failed said went wrong, from the last report it
+    gave its progress callback: each reports its reason last, at 0 %. None
+    when that last word was only progress."""
+    return message if percent == 0 and message else None
+
+
 def free_space_bytes(path: str) -> int:
     """Free disk space (bytes) on the filesystem holding *path*.
 

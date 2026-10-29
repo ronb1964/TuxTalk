@@ -108,6 +108,28 @@ def test_progress_text_is_escaped(monkeypatch):
     assert "&lt;urlopen error&gt; &amp; more" in dlg.task_widgets[task]["status"].markup[-1]
 
 
+def test_a_failed_download_shows_why(monkeypatch):
+    """CUDA's "Not enough disk space" was replaced at once by "Failed"."""
+    task = _task()
+    dlg = _dialog_with_widgets(monkeypatch, task)
+    dlg._update_task_progress(task, "Downloading cublas... 40%", 40)
+    dlg._update_task_progress(task, "Not enough disk space to install: need ~2.9 GB", 0)
+
+    dlg._mark_task_complete(task, False)
+
+    assert "❌ Not enough disk space to install" in dlg.task_widgets[task]["status"].markup[-1]
+
+
+def test_a_failure_with_no_reason_just_says_failed(monkeypatch):
+    task = _task()
+    dlg = _dialog_with_widgets(monkeypatch, task)
+    dlg._update_task_progress(task, "Downloading cublas... 40%", 40)
+
+    dlg._mark_task_complete(task, False)
+
+    assert "❌ Failed" in dlg.task_widgets[task]["status"].markup[-1]
+
+
 def test_closing_the_window_drops_its_widgets(monkeypatch):
     """Downloads that finish after the window is gone must not touch it."""
     class FakeGtkDialog:

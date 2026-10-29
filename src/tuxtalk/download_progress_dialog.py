@@ -10,6 +10,7 @@ import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
 from gi.repository import Gtk, Gdk, GLib
+from tuxtalk.download_utils import failure_reason
 
 try:
     from tuxtalk.logger import setup_logger
@@ -96,6 +97,7 @@ class DownloadTask:
         self.completed = False
         self.success = False
         self.cancel_event = threading.Event()
+        self.last_report = ("", None)   # (message, percent): a failure's reason is its last
 
 
 class UnifiedDownloadDialog:
@@ -264,6 +266,8 @@ class UnifiedDownloadDialog:
 
     def _update_task_progress(self, task, message, percent):
         """Update progress for a specific task (thread-safe)."""
+        task.last_report = (message, percent)
+
         def update_ui():
             # A download reports once more before it notices Cancel, and a
             # finished one has its last word already.
@@ -300,7 +304,9 @@ class UnifiedDownloadDialog:
                 widgets['progress'].set_text("100%")
                 widgets['cancel_btn'].set_label("Done")
             else:
-                widgets['status'].set_markup('<span size="small" color="#ff6b6b">❌ Failed</span>')
+                why = failure_reason(*task.last_report) or "Failed"
+                widgets['status'].set_markup('<span size="small" color="#ff6b6b">❌ '
+                                             f'{GLib.markup_escape_text(why)}</span>')
                 widgets['cancel_btn'].set_label("Failed")
 
             # Check if all tasks are done
