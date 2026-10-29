@@ -154,3 +154,12 @@ def test_the_backup_is_written_whole_or_not_at_all(gnome, monkeypatch):
     assert G.disable_for_hotkey_test() is None
     assert not gnome.backup.exists()
     assert gnome.values == {"begin-resize": "['<Alt>F8']", "begin-move": "['<Alt>F7']"}
+
+
+def test_a_key_gnome_refuses_is_logged_with_its_reason(monkeypatch):
+    said = []
+    monkeypatch.setattr(G.logger, "warning", said.append)
+    monkeypatch.setattr(G.subprocess, "run", lambda cmd, **k: type(
+        "R", (), {"returncode": 1, "stderr": "No such key “begin-resize”\n"})())
+    assert G._set("begin-resize", "[]") is False
+    assert said == ["GNOME didn't take begin-resize: No such key “begin-resize”"]

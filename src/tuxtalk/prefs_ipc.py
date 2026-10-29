@@ -38,14 +38,24 @@ def _tab_request_path():
 
 
 def take_tab_request():
-    """The tab the last front request asked for (then forgotten), or None."""
+    """The tab the last front request asked for (then forgotten), or None.
+    Moved aside before it's read: a newer request written meanwhile lands
+    as a new file and waits for its own signal, instead of being deleted
+    unread."""
+    path = _tab_request_path()
+    taken = f"{path}.{os.getpid()}"
     try:
-        with open(_tab_request_path()) as f:
-            tab = f.read().strip()
-        os.remove(_tab_request_path())
-        return tab or None
-    except OSError:
+        os.rename(path, taken)
+    except FileNotFoundError:
         return None
+    except OSError as e:
+        logger.info(f"Couldn't read the tab Preferences was asked for: {e}")
+        return None
+    try:
+        with open(taken) as f:
+            return f.read().strip() or None
+    finally:
+        os.remove(taken)
 
 
 def is_prefs_argv(argv) -> bool:

@@ -174,7 +174,8 @@ def test_work_that_cant_stop_offers_no_cancel_and_isnt_called_cancelled():
     dlg.add_task(install)
     frame = dlg._create_task_widget(install)
     try:
-        assert not dlg.task_widgets[install]["cancel_btn"].get_sensitive()
+        button = dlg.task_widgets[install]["cancel_btn"]
+        assert not button.get_sensitive() and button.get_label() == "Can't stop"
         dlg._cancel_unfinished_tasks()            # the window closed meanwhile
         assert not install.cancelled and not install.cancel_event.is_set()
     finally:

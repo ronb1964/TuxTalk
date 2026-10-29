@@ -36,7 +36,7 @@ import os
 import time
 
 from . import desktop_detect
-from .kwin_focus import (KWIN_SCRIPTING_INTERFACE, KWIN_SCRIPTING_PATH,
+from .kwin_focus import (DBUS_TIMEOUT_S, KWIN_SCRIPTING_INTERFACE, KWIN_SCRIPTING_PATH,
                          KWIN_SERVICE, load_and_start)
 from .logger import setup_logger
 
@@ -58,9 +58,6 @@ KGLOBALACCEL_PATH = "/kglobalaccel"
 KGLOBALACCEL_INTERFACE = "org.kde.KGlobalAccel"
 KWIN_COMPONENT_PATH = "/component/kwin"
 KGLOBALACCEL_COMPONENT_INTERFACE = "org.kde.kglobalaccel.Component"
-
-# KWin answers in milliseconds; this only bounds a wedged compositor.
-_DBUS_TIMEOUT_S = 3.0
 
 # TuxTalk's modifier names -> Qt's.
 _QT_MODIFIERS = {"CTRL": "Ctrl", "SHIFT": "Shift", "ALT": "Alt", "SUPER": "Meta"}
@@ -184,7 +181,7 @@ def session_bus():
 
     class _Bus:
         def call(self, method, *args):
-            t = {"timeout": _DBUS_TIMEOUT_S}
+            t = {"timeout": DBUS_TIMEOUT_S}
             if method in ("loadScript", "unloadScript", "start"):
                 obj = bus.get_object(KWIN_SERVICE, KWIN_SCRIPTING_PATH)
                 # loadScript is overloaded; see kwin_focus.session_bus.

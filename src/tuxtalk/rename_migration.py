@@ -446,8 +446,9 @@ def _repin_gnome(gnome_favorites, renames, done):
             done.append("GNOME: left an old favourite alone; the new entry isn't installed")
             return False, True
     except Exception as e:
+        # Logged here, not also in *done*: it's tried at every start, and
+        # one line a start is enough.
         logger.info(f"GNOME favourites not updated yet: {e}")
-        done.append(f"GNOME: could not update the favourites yet: {e}")
         return True, False
     return False, False
 
