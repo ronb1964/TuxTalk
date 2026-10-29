@@ -19,7 +19,7 @@ import math
 import os
 import time
 
-from . import desktop_detect, indicator_styles
+from . import desktop_detect, indicator_styles, ui_style
 from .indicator_styles import RadialGain
 from .logger import setup_logger
 
@@ -416,23 +416,13 @@ class RecordingIndicator(Gtk.Window):
         """Latest band magnitudes (0..1), for the bars style."""
         self.spectrum = bands
 
-    def _accent_rgb(self):
-        """The desktop theme's accent color, or a green fallback."""
-        try:
-            ok, rgba = Gtk.Label().get_style_context().lookup_color("theme_selected_bg_color")
-            if ok:
-                return (rgba.red, rgba.green, rgba.blue)
-        except Exception:
-            pass
-        return (0.30, 0.72, 0.42)
-
     def _resolved_colors(self):
         """(rgb, orb palette) for the current color settings, cached: the
         accent lookup builds a widget, and this runs on every frame."""
         key = (self.color_mode, self.custom_color)
         cache = self._color_cache
         if cache is None or cache[0] != key:
-            accent = self._accent_rgb() if self.color_mode == "system" else None
+            accent = ui_style.desktop_accent_rgb() if self.color_mode == "system" else None
             rgb = indicator_styles.resolve_color(self.color_mode, self.custom_color, accent)
             cache = (key, rgb, indicator_styles.orb_palette_for(rgb))
             self._color_cache = cache

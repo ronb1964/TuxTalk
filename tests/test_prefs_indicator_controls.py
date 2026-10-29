@@ -101,6 +101,18 @@ def test_swatch_mirrors_the_desktop_accent_in_system_mode(window):
     assert _hex(swatch.get_rgba()) == _hex(accent)
 
 
+def test_preview_and_indicator_agree_when_the_theme_names_no_accent(window, monkeypatch):
+    """Preferences promised to show what the indicator paints, but each had
+    its own fallback green (#4caf50 and 0.30, 0.72, 0.42)."""
+    from tuxtalk import recording_indicator, ui_style
+    monkeypatch.setattr(Gtk.StyleContext, "lookup_color", lambda self, name: (False, Gdk.RGBA()))
+    _combo(window, "system").set_active_id("system")
+    swatch = find(window.audio_tab.indicator.grid, Gtk.ColorButton).get_rgba()
+    painted = recording_indicator.indicator_styles.resolve_color(
+        "system", None, recording_indicator.ui_style.desktop_accent_rgb())
+    assert (swatch.red, swatch.green, swatch.blue) == painted == ui_style.FALLBACK_ACCENT
+
+
 def test_color_picker_seeds_a_preset_palette_with_classic_cyan_first(prefs_window, monkeypatch):
     """The picker offers preset swatches so the classic cyan is one click away
     without knowing a hex code; it must be the first preset."""
