@@ -996,7 +996,7 @@ def setup_complete(monkeypatch):
     showed; *click* names a button to press while it is open."""
     from gi.repository import Gtk
     from gtk_text import find, shown_text
-    from tuxtalk import config, welcome_dialog
+    from tuxtalk import config, setup_complete_dialog
     monkeypatch.setattr(config, "load_config", config.Settings)
 
     def show(click=None, **options):
@@ -1008,7 +1008,7 @@ def setup_complete(monkeypatch):
                 find(dialog, Gtk.Button, click).clicked()
             return Gtk.ResponseType.OK
         monkeypatch.setattr(Gtk.Dialog, "run", run)
-        welcome_dialog.show_setup_complete_dialog(**options)
+        setup_complete_dialog.show_setup_complete_dialog(**options)
         return seen
     return show
 
@@ -1019,7 +1019,8 @@ def first_run(monkeypatch):
     from an AppImage in Downloads, with each screen and download faked.
     Returns the steps it took, in order."""
     import types
-    from tuxtalk import appimage_copy, autostart, update_checker, welcome_dialog
+    from tuxtalk import (appimage_copy, autostart, setup_complete_dialog, update_checker,
+                         welcome_dialog)
     done = _Steps()
 
     class Thread:
@@ -1037,7 +1038,7 @@ def first_run(monkeypatch):
                         lambda: done.append("tests the hotkeys"))
     monkeypatch.setattr(welcome_dialog, "_apply_first_run_setup",
                         lambda result: done.append("downloads the speech model"))
-    monkeypatch.setattr(welcome_dialog, "show_setup_complete_dialog",
+    monkeypatch.setattr(setup_complete_dialog, "show_setup_complete_dialog",
                         lambda **k: done.append("setup complete"))
     monkeypatch.setattr(update_checker, "is_running_from_appimage", lambda: True)
     monkeypatch.setattr(update_checker, "ensure_appimage_in_standard_location",

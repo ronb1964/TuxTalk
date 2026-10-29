@@ -189,18 +189,30 @@ def _extension_already_active():
         return False
 
 
-def _menu_location():
-    """Where this desktop shows TuxTalk's menu, for the tips: plain GNOME has
-    no tray, so "the tray icon" sent people looking for nothing."""
+def menu_location():
+    """Where this desktop shows TuxTalk's menu, for the welcome screen's and
+    Setup Complete's tips: plain GNOME has no tray, so "the tray icon" sent
+    people looking for nothing."""
     try:
         if _extension_already_active():
             return "its icon in the top bar"
         from .desktop_detect import tray_host_available
         if tray_host_available():
             return "its tray icon"
-    except Exception:
+    except Exception as e:
+        logger.info(f"Could not tell where TuxTalk's menu shows: {e}")
         return "its tray icon"
     return "open TuxTalk again from your apps"
+
+
+def saved_hold_key():
+    """The push-to-talk key in the settings, F8 when there is none yet."""
+    try:
+        from tuxtalk.config import load_config
+        return load_config().hotkey or "F8"
+    except Exception as e:
+        logger.warning(f"Could not read the hold key from the settings: {e}")
+        return "F8"
 
 
 class WelcomeDialog:
@@ -420,7 +432,7 @@ class WelcomeDialog:
         features_box.set_margin_start(20)
         features_box.set_margin_top(5)
 
-        hold = GLib.markup_escape_text(_saved_hold_key())      # a hand edit may hold "&"
+        hold = GLib.markup_escape_text(saved_hold_key())      # a hand edit may hold "&"
         hotkey_hint = "your desktop assigns the key" if self.is_flatpak else f"default: {hold} key"
         features = [
             f"🎤 <b>Hold-to-talk dictation</b> ({hotkey_hint})",
@@ -462,7 +474,7 @@ class WelcomeDialog:
             f"1. Hold {key}",
             "2. Talk",
             "3. Let go: your words are typed where your cursor is",
-            f"Settings and Help are in the TuxTalk menu ({_menu_location()})",
+            f"Settings and Help are in the TuxTalk menu ({menu_location()})",
         ]
 
         for tip in tips:
@@ -1712,6 +1724,7 @@ def show_welcome_and_install():
     # interrupting popup earlier in the flow.
     needs_restart = bool(result.get('needs_restart', result.get('uinput_fixed')))
 
+    from .setup_complete_dialog import show_setup_complete_dialog
     show_setup_complete_dialog(
         appimage_installed=appimage_installed,
         launcher_created=launcher_created,
@@ -1744,326 +1757,6 @@ def show_welcome_and_install():
     logger.info("First-run setup completed")
 
     return result
-
-
-def _open_preferences():
-    """Launch the Preferences window as its own process, the same way the
-    tray does (service_launcher.launch_preferences).
-
-    Never raises: failing to open Preferences must not prevent the user from
-    dismissing the final screen and getting on with dictating.
-    """
-    try:
-        from .service_launcher import launch_preferences
-        launch_preferences()
-    except Exception as e:
-        logger.warning(f"Could not open Preferences: {e}")
-
-
-def _saved_hold_key():
-    """The push-to-talk key in the settings, F8 when there is none yet."""
-    try:
-        from tuxtalk.config import load_config
-        return load_config().hotkey or "F8"
-    except Exception:
-        return "F8"
-
-
-def _ready_tips(is_flatpak):
-    """The dim lines under Setup Complete's three steps, as markup: the
-    keys this user has, where the menu is, and launch at login when on."""
-    from .config import load_config
-    cfg = load_config()
-    tips = ['💡 Say "period", "comma" or "new line" as you talk']
-    if not is_flatpak and getattr(cfg, "toggle_hotkey", ""):
-        tips.append(f"⏯️ Or tap <b>{GLib.markup_escape_text(cfg.toggle_hotkey)}</b> "
-                    "to start, and tap it again to stop")
-    # The portal registers only the two dictation keys, so not on the Flatpak.
-    if not is_flatpak and getattr(cfg, "paste_last_hotkey", ""):
-        tips.append("📋 Typed into the wrong window? Press "
-                    f"<b>{GLib.markup_escape_text(cfg.paste_last_hotkey)}</b> to type it again")
-    tips.append(f"⚙️ Open the TuxTalk menu ({GLib.markup_escape_text(_menu_location())}) "
-                "to change these keys and more")
-    # Onboarding turns on launch at login (appimage_copy._start_at_login) and
-    # records it only once its file is written: say so, and where to turn it off.
-    if getattr(cfg, "launch_at_login", False):
-        tips.append("🔁 TuxTalk will start automatically when you log in "
-                    "(turn this off in Preferences → General)")
-    return tips
-
-
-def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
-                               needs_restart=False, extension_installed=False):
-    """
-    Show the final setup complete dialog after model download.
-    Tells the user they're ready to start dictating.
-
-    Args:
-        appimage_installed: True if AppImage was copied to ~/AppImages/
-        launcher_created: True if desktop launcher was created
-        needs_restart: True if permissions were changed this run and a restart
-            is required before typing/hotkeys work. Only then are the restart
-            reminder and "Restart computer now" button shown.
-        extension_installed: True if the GNOME extension was installed, which
-            starts working after logging out and back in.
-    """
-    dialog = Gtk.Dialog(title="TuxTalk - Ready!")
-    dialog.set_border_width(0)
-    from .ui_style import fit_dialog_to_screen
-    from .ui_style import workarea_height
-    fit_dialog_to_screen(dialog, 480, -1)  # auto-height, resizable; capped when realized
-    dialog.set_position(Gtk.WindowPosition.CENTER)
-    dialog.set_keep_above(True)
-
-    content = dialog.get_content_area()
-    content.set_spacing(0)
-
-    # Scrolls only on a screen too short for it; the buttons stay below.
-    scrolled = Gtk.ScrolledWindow()
-    scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-    scrolled.set_propagate_natural_height(True)
-    avail = workarea_height()
-    text_cap = max(240, avail - 96 - 80) if avail else None
-    if text_cap:
-        scrolled.set_max_content_height(text_cap)
-    content.pack_start(scrolled, True, True, 0)
-
-    vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-    vbox.set_margin_start(25)
-    vbox.set_margin_end(25)
-    vbox.set_margin_top(20)
-    vbox.set_margin_bottom(6)
-    scrolled.add(vbox)
-
-    # Header
-    header_label = Gtk.Label()
-    header_label.set_markup('<span size="x-large"><b>Setup Complete!</b></span>')
-    header_label.set_halign(Gtk.Align.CENTER)
-    header_label.set_justify(Gtk.Justification.CENTER)
-    vbox.pack_start(header_label, False, False, 0)
-
-    subtitle_label = Gtk.Label()
-    subtitle_label.set_markup('TuxTalk is ready to use.')
-    subtitle_label.set_halign(Gtk.Align.CENTER)
-    subtitle_label.set_justify(Gtk.Justification.CENTER)
-    subtitle_label.set_margin_top(4)
-    vbox.pack_start(subtitle_label, False, False, 0)
-
-    # Show installation info if AppImage was installed (compact)
-    if appimage_installed or launcher_created:
-        install_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        install_box.set_margin_top(10)
-
-        if appimage_installed:
-            path_label = Gtk.Label()
-            path_label.set_markup('<span>📁 Installed to: <b>~/AppImages/TuxTalk.AppImage</b></span>')
-            path_label.set_halign(Gtk.Align.CENTER)
-            install_box.pack_start(path_label, False, False, 0)
-
-        if launcher_created:
-            launcher_label = Gtk.Label()
-            launcher_label.set_markup('<span>✅ Added to Applications menu</span>')
-            launcher_label.set_halign(Gtk.Align.CENTER)
-            install_box.pack_start(launcher_label, False, False, 0)
-
-        vbox.pack_start(install_box, False, False, 0)
-
-    # Separator
-    sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-    sep.set_margin_top(10)
-    sep.set_margin_bottom(8)
-    vbox.pack_start(sep, False, False, 0)
-
-    # The three steps, then the two things worth knowing on day one.
-    instructions_label = Gtk.Label()
-    instructions_label.set_markup('<b>🚀 How It Works</b>')
-    instructions_label.set_halign(Gtk.Align.START)
-    vbox.pack_start(instructions_label, False, False, 0)
-
-    steps_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-    steps_box.set_margin_start(5)
-    steps_box.set_margin_top(5)
-
-    is_flatpak = bool(os.environ.get("FLATPAK_ID"))
-    _hold_step = ("1. Hold your <b>Hold-to-talk</b> key"
-                  if is_flatpak
-                  else f"1. Hold <b>{GLib.markup_escape_text(_saved_hold_key())}</b>")
-    steps = [
-        _hold_step,
-        "2. Talk",
-        "3. Let go: your words are typed where your cursor is",
-    ]
-
-    for step in steps:
-        step_label = Gtk.Label()
-        step_label.set_markup(f'<span>{step}</span>')
-        step_label.set_halign(Gtk.Align.START)
-        steps_box.pack_start(step_label, False, False, 0)
-
-    vbox.pack_start(steps_box, False, False, 0)
-
-    tips = _ready_tips(is_flatpak)
-    for i, tip in enumerate(tips):
-        tip_label = Gtk.Label()
-        tip_label.set_markup(f'<span><i>{tip}</i></span>')
-        tip_label.set_halign(Gtk.Align.START)
-        tip_label.set_line_wrap(True)
-        tip_label.set_margin_top(8 if i == 0 else 2)
-        tip_label.set_opacity(0.85)
-        vbox.pack_start(tip_label, False, False, 0)
-
-    # A single, passive feedback invitation. It lives here on purpose: this
-    # screen is seen once and dismissed, so the ask never interrupts dictation
-    # later. GTK opens the link in the user's default browser when clicked.
-    feedback_label = Gtk.Label()
-    feedback_label.set_markup(
-        '<span>Once you\'ve tried it out, I\'d love to hear how it\'s '
-        'working for you, good or bad. Leave a note on the '
-        '<a href="https://github.com/ronb1964/TuxTalk/discussions">'
-        'TuxTalk Discussions page</a>.</span>'
-    )
-    feedback_label.set_halign(Gtk.Align.START)
-    feedback_label.set_xalign(0)
-    feedback_label.set_margin_top(10)
-    feedback_label.set_line_wrap(True)
-    feedback_label.set_max_width_chars(55)
-    vbox.pack_start(feedback_label, False, False, 0)
-
-    if extension_installed:
-        logout_label = Gtk.Label()
-        logout_label.set_markup(
-            '<span color="#FF9800"><b>Log out and back in</b> to start the '
-            'GNOME extension (TuxTalk in the top bar).</span>')
-        logout_label.set_halign(Gtk.Align.START)
-        logout_label.set_xalign(0)
-        logout_label.set_line_wrap(True)
-        logout_label.set_margin_top(10)
-        vbox.pack_start(logout_label, False, False, 0)
-
-    # Restart reminder — only when permissions were changed this run and won't
-    # take effect until a reboot. This is the deferred reminder: it appears here,
-    # at the true end of setup (model downloaded, everything installed), instead
-    # of interrupting mid-onboarding where the user might reboot too early.
-    if needs_restart:
-        restart_sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-        restart_sep.set_margin_top(12)
-        restart_sep.set_margin_bottom(8)
-        vbox.pack_start(restart_sep, False, False, 0)
-
-        restart_reminder = Gtk.Label()
-        restart_reminder.set_markup(
-            '<span size="medium"><b>⚠️ One last step: restart your computer</b></span>\n'
-            '<span>Typing and hotkeys need a restart to activate. '
-            'Logging out is often not enough.</span>'
-        )
-        restart_reminder.set_line_wrap(True)
-        restart_reminder.set_justify(Gtk.Justification.CENTER)
-        restart_reminder.set_halign(Gtk.Align.CENTER)
-        restart_reminder.set_max_width_chars(50)
-        vbox.pack_start(restart_reminder, False, False, 0)
-
-    # Bottom actions. When a restart is owed, the choice IS restart-now vs later
-    # (dictation won't work until the reboot, so "Start Using TuxTalk!" would
-    # mislead). Otherwise, the normal start/settings choice.
-    button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-    button_box.set_halign(Gtk.Align.CENTER)
-    button_box.set_margin_top(12)
-
-    if needs_restart:
-        def on_restart_now(_widget):
-            # A reboot closes everything, so confirm first.
-            confirm = message_dialog(
-                transient_for=dialog, modal=True,
-                message_type=Gtk.MessageType.QUESTION,
-                buttons=Gtk.ButtonsType.NONE,
-                text="Restart now?",
-            )
-            confirm.format_secondary_text(
-                "Save any work in your other apps first — this will close everything."
-            )
-            confirm.add_button("Cancel", Gtk.ResponseType.CANCEL)
-            go = confirm.add_button("Restart computer now", Gtk.ResponseType.OK)
-            go.get_style_context().add_class("destructive-action")
-            resp = confirm.run()
-            confirm.destroy()
-            if resp != Gtk.ResponseType.OK:
-                return
-            # Mark onboarding complete BEFORE rebooting. The reboot happens here,
-            # inside the dialog, so the normal completion path in tray.py (which
-            # calls mark_first_run_complete after this dialog returns) never runs
-            # — without this the machine reboots mid-completion and the next
-            # launch starts onboarding all over again.
-            try:
-                from tuxtalk.cuda_helper import mark_first_run_complete
-                mark_first_run_complete()
-            except Exception as e:
-                # If we can't mark completion, DON'T reboot — a reboot now would
-                # re-run the whole wizard on next launch. Keep the working session
-                # and let the user restart manually once things are healthy.
-                logger.error(f"Could not mark first run complete; aborting reboot: {e}")
-                show_message(dialog,
-                             Gtk.MessageType.WARNING,
-                             "Couldn't finish setup",
-                             "TuxTalk couldn't save its setup state, so it won't restart "
-                             "automatically. Please restart your computer yourself in a "
-                             "moment to finish.")
-                return
-            from tuxtalk import appimage_copy
-            appimage_copy.reboot_when_copied(dialog, _widget)
-
-        later_button = Gtk.Button(label="I'll restart later")
-        later_button.set_size_request(150, 35)
-        later_button.connect("clicked", lambda w: dialog.response(Gtk.ResponseType.OK))
-        button_box.pack_start(later_button, False, False, 0)
-
-        restart_button = Gtk.Button(label="Restart computer now")
-        restart_button.set_size_request(150, 35)
-        restart_button.get_style_context().add_class("suggested-action")
-        restart_button.connect("clicked", on_restart_now)
-        button_box.pack_start(restart_button, False, False, 0)
-        main_button = restart_button
-    else:
-        # Two ways out: start dictating, or adjust settings. Setup is finished
-        # here, so it is safe to send the user to Preferences.
-        prefs_button = Gtk.Button(label="Open Preferences")
-        prefs_button.set_size_request(150, 35)
-        prefs_button.set_tooltip_text(
-            "Adjust models, hotkeys, punctuation, the recording indicator and more")
-
-        def on_open_prefs_clicked(_widget):
-            # Close this dialog too — leaving it floating above Preferences would
-            # sit on top of the window the user just asked for.
-            _open_preferences()
-            dialog.response(Gtk.ResponseType.OK)
-
-        prefs_button.connect("clicked", on_open_prefs_clicked)
-        button_box.pack_start(prefs_button, False, False, 0)
-
-        start_button = Gtk.Button(label="Start Using TuxTalk!")
-        start_button.set_size_request(180, 35)
-        start_button.get_style_context().add_class("suggested-action")
-        start_button.connect("clicked", lambda w: dialog.response(Gtk.ResponseType.OK))
-        button_box.pack_start(start_button, False, False, 0)
-        main_button = start_button
-
-    # GTK sizes the scroller at its narrowest width, where the wrapped lines
-    # are taller, and comes up short: ask for their height at the window's
-    # width (less the side margins). Hidden widgets measure 0, so show first.
-    vbox.show_all()
-    _minimum, natural = vbox.get_preferred_height_for_width(480 - 50)
-    scrolled.set_min_content_height(min(natural, text_cap) if text_cap else natural)
-
-    button_box.set_margin_bottom(16)
-    content.pack_start(more_below_bar(scrolled), False, False, 0)
-    content.pack_start(button_box, False, False, 0)
-    # Left to GTK, the focus went to the Discussions link in the scrolling
-    # part, and on a short screen the window opened scrolled down to it with
-    # "Setup Complete!" cut off, as Welcome did.
-    dialog.set_focus(main_button)
-
-    dialog.show_all()
-    dialog.run()
-    dialog.destroy()
 
 
 if __name__ == '__main__':

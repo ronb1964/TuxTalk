@@ -1,6 +1,6 @@
 """The Open Preferences button belongs on the FINAL screen, not mid-onboarding.
 
-Onboarding order (show_welcome_and_install):
+Onboarding order (first_run_setup.show_welcome_and_install):
 
     welcome (chooses the setup) → optional downloads → hotkey test
         → the model actually downloads
@@ -45,12 +45,12 @@ def test_setup_complete_opens_at_the_top_with_its_main_button_focused(
     from gi.repository import Gtk
     if not Gtk.init_check()[0]:
         pytest.skip("no display")
-    from tuxtalk import welcome_dialog
+    from tuxtalk import setup_complete_dialog
 
     focused = []
     # Built in full, but never shown on the real screen.
     monkeypatch.setattr(Gtk.Dialog, "show_all", lambda self: None)
     monkeypatch.setattr(Gtk.Dialog, "run",
                         lambda self: focused.append(self.get_focus()) or Gtk.ResponseType.OK)
-    welcome_dialog.show_setup_complete_dialog(needs_restart=needs_restart)
+    setup_complete_dialog.show_setup_complete_dialog(needs_restart=needs_restart)
     assert [w.get_label() for w in focused] == [label]
