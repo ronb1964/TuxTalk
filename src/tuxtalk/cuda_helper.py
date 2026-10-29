@@ -233,6 +233,32 @@ def _extract_wheels(wheel_paths, lib_path, progress_callback, cancel_event):
     return True
 
 
+# The wheels come straight from PyPI's JSON API; no pip is needed.
+CUDA_PACKAGES = ('nvidia-cuda-runtime-cu12', 'nvidia-cublas-cu12', 'nvidia-cudnn-cu12')
+
+
+def _pypi_wheel(pkg_name):
+    """(pkg_name, url, filename, sha256, size) of *pkg_name*'s Linux x86_64
+    wheel on PyPI. Raises LookupError when PyPI has none, and OSError or
+    ValueError when it can't be read."""
+    import json
+    import urllib.request
+    request = urllib.request.Request(f"https://pypi.org/pypi/{pkg_name}/json",
+                                     headers={"User-Agent": "TuxTalk"})
+    # Without a timeout a stalled PyPI connection hangs this thread.
+    with urllib.request.urlopen(request, timeout=30) as response:
+        data = json.loads(response.read())
+    for file_info in data['urls']:
+        if (file_info['packagetype'] == 'bdist_wheel' and 'x86_64' in file_info['filename']
+                and 'manylinux' in file_info['filename']):
+            # PyPI's published sha256, so a corrupted or tampered download is
+            # never installed.
+            return (pkg_name, file_info['url'], file_info['filename'],
+                    file_info.get('digests', {}).get('sha256'),
+                    int(file_info.get('size', 0) or 0))
+    raise LookupError(f"PyPI has no {pkg_name} for this computer")
+
+
 def download_cuda_libraries(progress_callback=None, cancel_event=None):
     """
     Download CUDA libraries for GPU acceleration.
@@ -245,8 +271,6 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
     Returns:
         bool: True if successful, False otherwise
     """
-    import urllib.request
-
     cuda_path = get_appdir_cuda_path()
     lib_path = os.path.join(cuda_path, "lib")
 
@@ -254,9 +278,6 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
 
     # Clean up on failure/cancellation — but only what this run created.
     cleanup_cuda_dir = _make_cuda_cleanup(cuda_path)
-    
-    # The wheels come straight from PyPI's JSON API; no pip is needed.
-    cuda_packages = ['nvidia-cuda-runtime-cu12', 'nvidia-cublas-cu12', 'nvidia-cudnn-cu12']
     
     try:
         import tempfile
@@ -269,45 +290,20 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
                 # per-package download reports 0%.
                 progress_callback("Looking up CUDA packages...", 0)
 
-            import json
-
             wheels = []  # (pkg_name, url, filename, sha256, size_bytes)
-            for pkg_name in cuda_packages:
+            for pkg_name in CUDA_PACKAGES:
                 if cancel_event and cancel_event.is_set():
                     logger.info("Download cancelled by user")
                     cleanup_cuda_dir()
                     return False
                 try:
-                    api_url = f"https://pypi.org/pypi/{pkg_name}/json"
-                    request = urllib.request.Request(
-                        api_url, headers={"User-Agent": "TuxTalk"})
-                    # Without a timeout a stalled PyPI connection hangs this thread.
-                    with urllib.request.urlopen(request, timeout=30) as response:
-                        data = json.loads(response.read())
-
-                    # Find the wheel file for linux x86_64
-                    for file_info in data['urls']:
-                        if (file_info['packagetype'] == 'bdist_wheel' and
-                                'x86_64' in file_info['filename'] and
-                                'manylinux' in file_info['filename']):
-                            wheels.append((
-                                pkg_name,
-                                file_info['url'],
-                                file_info['filename'],
-                                # PyPI's published sha256, so a corrupted or
-                                # tampered download is never installed.
-                                file_info.get('digests', {}).get('sha256'),
-                                int(file_info.get('size', 0) or 0),
-                            ))
-                            break
-                    else:
-                        logger.error(f"No suitable wheel found for {pkg_name}")
-                        cleanup_cuda_dir()
-                        return False
+                    wheels.append(_pypi_wheel(pkg_name))
                 except Exception as e:
                     logger.error(f"Failed to look up {pkg_name} on PyPI: {e}")
                     if progress_callback:
-                        progress_callback("Could not reach PyPI — check your internet connection", 0)
+                        progress_callback(str(e) if isinstance(e, LookupError) else
+                                          "Could not reach PyPI — check your internet connection",
+                                          0)
                     cleanup_cuda_dir()
                     return False
 
@@ -455,7 +451,7 @@ def show_cuda_download_dialog(parent=None, on_success_callback=None):
         def update_ui():
             progress_bar.set_fraction(percent / 100.0)
             progress_bar.set_text(f"{percent}%")
-            status_label.set_markup(f'<span>{message}</span>')
+            status_label.set_markup(f'<span>{GLib.markup_escape_text(message)}</span>')
             return False
         GLib.idle_add(update_ui)
 

@@ -181,3 +181,16 @@ def test_the_cuda_window_says_why_the_download_failed(monkeypatch):
     cuda_helper._say_how_it_went(None, False, None, "Not enough disk space to install: "
                                                     "need ~2.9 GB free, only 0.2 GB available")
     assert said[0].startswith("Not enough disk space to install")
+
+
+def test_no_wheel_on_pypi_is_the_reason_given(tmp_path, monkeypatch):
+    """It ended on "Looking up CUDA packages...", shown as the reason."""
+    from tuxtalk.download_utils import failure_reason
+    monkeypatch.setattr(cuda_helper, "get_appdir_cuda_path", lambda: str(tmp_path / "cuda"))
+
+    def none_for_us(pkg_name):
+        raise LookupError(f"PyPI has no {pkg_name} for this computer")
+    monkeypatch.setattr(cuda_helper, "_pypi_wheel", none_for_us)
+    reports = []
+    assert not cuda_helper.download_cuda_libraries(lambda m, p: reports.append((m, p)))
+    assert failure_reason(*reports[-1]) == "PyPI has no nvidia-cuda-runtime-cu12 for this computer"
