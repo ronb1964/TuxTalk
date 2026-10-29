@@ -12,13 +12,18 @@ logger = setup_logger(__name__)
 
 
 def refresh_menu_cache():
-    """Rebuild the app menus' caches: update-desktop-database's, then KDE's
-    (kbuildsycoca6, or kbuildsycoca5 on Plasma 5). It takes seconds on KDE,
-    so callers run it off GTK's thread. A tool that isn't installed is
-    skipped."""
-    _run(["update-desktop-database", "-q", os.path.expanduser("~/.local/share/applications")])
-    for tool in ("kbuildsycoca6", "kbuildsycoca5"):
-        if _run([tool]) is not None:
+    """Rebuild the app menus' caches: update-desktop-database's, where there
+    is one to keep current, then KDE's (kbuildsycoca6, or kbuildsycoca5 on
+    Plasma 5), until one works; a quick rebuild that fails is tried once more
+    in full (--noincremental). It takes seconds on KDE, so callers run it off
+    GTK's thread. A tool that isn't installed is skipped."""
+    apps = os.path.expanduser("~/.local/share/applications")
+    # Only one already there: a new mimeinfo.cache would then go stale.
+    if os.path.exists(os.path.join(apps, "mimeinfo.cache")):
+        _run(["update-desktop-database", "-q", apps])
+    for argv in (["kbuildsycoca6"], ["kbuildsycoca5"],
+                 ["kbuildsycoca6", "--noincremental"], ["kbuildsycoca5", "--noincremental"]):
+        if _run(argv) == 0:
             return
 
 
@@ -31,5 +36,8 @@ def _run(argv):
     except (OSError, subprocess.SubprocessError) as e:
         logger.info(f"Could not refresh the menu cache with {argv[0]}: {e}")
         return -1
-    logger.info(f"Menu cache refreshed ({argv[0]}, exit code {code})")
+    if code == 0:
+        logger.info(f"Menu cache refreshed ({' '.join(argv[:2])})")
+    else:
+        logger.info(f"{' '.join(argv[:2])} didn't refresh the menu cache (exit code {code})")
     return code

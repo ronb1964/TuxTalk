@@ -80,7 +80,11 @@ def test_install_puts_the_update_in_place_without_restarting(tmp_path, appimages
     appimages.mkdir()
     dest.write_bytes(b"old version")
 
-    ok, _ = uc.install_appimage_update(_download(tmp_path))
+    downloaded = _download(tmp_path)
+    other = tmp_path / "updates" / "TuxTalk-v9.9.9-x86_64.AppImage.part"
+    other.write_bytes(b"the other window's download, still going")
+
+    ok, _ = uc.install_appimage_update(downloaded)
 
     assert ok
     assert dest.read_bytes() == b"new version"
@@ -88,7 +92,8 @@ def test_install_puts_the_update_in_place_without_restarting(tmp_path, appimages
     assert (appimages / ".tuxtalk_just_updated").exists()
     assert sorted(p.name for p in appimages.iterdir()) == [
         ".tuxtalk_just_updated", "TuxTalk.AppImage"]
-    assert not (tmp_path / "updates").exists(), "the download was left behind"
+    assert not os.path.exists(downloaded), "the download was left behind"
+    assert other.exists(), "a download going on in the same folder was deleted"
 
 
 def test_a_failed_copy_keeps_the_working_appimage(tmp_path, appimages, monkeypatch):

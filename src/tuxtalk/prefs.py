@@ -17,6 +17,7 @@ from .prefs_stats import StatsTab
 from .prefs_updates import UpdatesTab
 from .prefs_words import WordsTab
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -87,6 +88,10 @@ def _brought_open_window_forward(tab, wait_s):
     return pid is not None and prefs_ipc.bring_to_front(pid, tab)
 
 
+# A restarted service that ends within this long didn't start (a broken
+# setting, a missing library): said, rather than called a restart.
+_START_GRACE_S = 1.0
+
 # What can need a download, and so is rolled back when it never finishes:
 # the model, and the device (the processor or Vulkan copy of a model).
 _DOWNLOAD_KEYS = ("model", "device")
@@ -105,14 +110,23 @@ def _restart_without_tray():
     try:
         with single_instance.open_lock(tray_instance.TRAY_LOCK) as lock:
             if not single_instance.claim(lock, wait_s=QUIT_WAIT_S):
+                # Not a failure: a tray starting starts dictation with the
+                # saved settings, and an uninstall wants none.
                 logger.warning("Dictation not restarted: TuxTalk is starting or uninstalling")
+                return True
+            if not end_dictation_service():
+                logger.warning("Dictation not restarted: the old service wouldn't end")
                 return False
-            end_dictation_service()
-            launch_dictation_service()
-            return True
+            service = launch_dictation_service()
     except Exception as e:
         logger.warning(f"Failed to restart service: {e}")
         return False
+    try:
+        service.wait(timeout=_START_GRACE_S)
+    except subprocess.TimeoutExpired:
+        return True                         # still running: it started
+    logger.warning(f"The restarted dictation service ended at once (exit {service.returncode})")
+    return False
 
 
 class PreferencesWindow:
@@ -140,6 +154,7 @@ class PreferencesWindow:
         self.config = self.load_config()
         self._config_at_open = dict(self.config)
         self._restart_owed = set()      # keys saved whose restart failed
+        self._restarts_asked = 0        # the latest restart's number (_apply_or_restart)
         # Set while busy() (Apply waiting for KDE's verdict on a new hotkey).
         self._busy = False
         self._save_error = ""
@@ -652,8 +667,15 @@ class PreferencesWindow:
             logger.info(f"Applied without restart: {sorted(changed) or 'no changes'}")
             return True
 
+        self._restarts_asked += 1
+        asked = self._restarts_asked
+
         def failed_later():
-            # Owed again, so the next Apply restarts; said only while open.
+            # Owed again, so the next Apply restarts; said only while open,
+            # and only for the latest restart (an older one's failure,
+            # arriving late, isn't news once a newer one went ahead).
+            if asked != self._restarts_asked:
+                return False
             self._restart_owed |= set(changed)
             if self.window.get_visible():
                 self._say_restart_failed()

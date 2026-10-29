@@ -914,8 +914,6 @@ def install_appimage_update(
     Returns:
         Tuple[bool, str]: (success, message)
     """
-    import shutil
-
     try:
         if progress_callback:
             progress_callback("Installing update...", 50)
@@ -933,10 +931,12 @@ def install_appimage_update(
         if progress_callback:
             progress_callback("Update installed!", 90)
 
-        # The download folder only ever holds this update.
-        update_dir = os.path.dirname(downloaded_path)
-        if update_dir and os.path.isdir(update_dir):
-            shutil.rmtree(update_dir, ignore_errors=True)
+        # Only this download: the folder is shared, and the tray and
+        # Preferences may each be downloading an update into it.
+        try:
+            os.remove(downloaded_path)
+        except OSError as e:
+            logger.info(f"Couldn't remove the downloaded update: {e}")
 
         logger.info(f"Update installed to {APPIMAGE_PATH}")
 

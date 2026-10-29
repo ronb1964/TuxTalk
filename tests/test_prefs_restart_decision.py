@@ -29,6 +29,7 @@ class StubPrefs:
         self._config_at_open = dict(at_open)
         self.config = dict(current)
         self._restart_owed = set()
+        self._restarts_asked = 0
         self.restart_calls = 0
         self.restart_result = True
         self.words_tab = SimpleNamespace(save=lambda: True)     # snippets saved

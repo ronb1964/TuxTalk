@@ -54,8 +54,15 @@ def take_tab_request():
     try:
         with open(taken) as f:
             return f.read().strip() or None
+    except (OSError, UnicodeDecodeError) as e:
+        # Raised here it would end the signal handler that called this.
+        logger.info(f"Couldn't read the tab Preferences was asked for: {e}")
+        return None
     finally:
-        os.remove(taken)
+        try:
+            os.remove(taken)
+        except OSError as e:
+            logger.info(f"Couldn't remove the tab request: {e}")
 
 
 def is_prefs_argv(argv) -> bool:

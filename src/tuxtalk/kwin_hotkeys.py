@@ -181,27 +181,29 @@ def session_bus():
 
     class _Bus:
         def call(self, method, *args):
+            # introspect=False: dbus-python's look at the object would wait
+            # its own 25 s on a frozen KWin, before the 3 s limit applies.
             t = {"timeout": DBUS_TIMEOUT_S}
             if method in ("loadScript", "unloadScript", "start"):
-                obj = bus.get_object(KWIN_SERVICE, KWIN_SCRIPTING_PATH)
+                obj = bus.get_object(KWIN_SERVICE, KWIN_SCRIPTING_PATH, introspect=False)
                 # loadScript is overloaded; see kwin_focus.session_bus.
                 sig = {"loadScript": "ss", "unloadScript": "s", "start": ""}[method]
                 return getattr(obj, method)(*args, dbus_interface=KWIN_SCRIPTING_INTERFACE,
                                             signature=sig, **t)
             if method == "unregister":
-                obj = bus.get_object(KGLOBALACCEL_SERVICE, KGLOBALACCEL_PATH)
+                obj = bus.get_object(KGLOBALACCEL_SERVICE, KGLOBALACCEL_PATH, introspect=False)
                 return obj.unregister(*args, dbus_interface=KGLOBALACCEL_INTERFACE, **t)
             if method == "allComponents":
-                obj = bus.get_object(KGLOBALACCEL_SERVICE, KGLOBALACCEL_PATH)
+                obj = bus.get_object(KGLOBALACCEL_SERVICE, KGLOBALACCEL_PATH, introspect=False)
                 return obj.allComponents(dbus_interface=KGLOBALACCEL_INTERFACE, **t)
             if method in ("componentShortcuts", "componentIsActive", "componentCleanUp"):
-                obj = bus.get_object(KGLOBALACCEL_SERVICE, args[0])
+                obj = bus.get_object(KGLOBALACCEL_SERVICE, args[0], introspect=False)
                 name = {"componentShortcuts": "allShortcutInfos",
                         "componentIsActive": "isActive",
                         "componentCleanUp": "cleanUp"}[method]
                 return getattr(obj, name)(dbus_interface=KGLOBALACCEL_COMPONENT_INTERFACE, **t)
             if method in ("shortcutNames", "allShortcutInfos"):
-                obj = bus.get_object(KGLOBALACCEL_SERVICE, KWIN_COMPONENT_PATH)
+                obj = bus.get_object(KGLOBALACCEL_SERVICE, KWIN_COMPONENT_PATH, introspect=False)
                 return getattr(obj, method)(dbus_interface=KGLOBALACCEL_COMPONENT_INTERFACE, **t)
             raise ValueError(method)
 

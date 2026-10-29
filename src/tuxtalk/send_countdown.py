@@ -395,6 +395,7 @@ def _count_down(pending: dict, seconds_left: int) -> None:
             if _pending is not pending:
                 return
             _pending = None
+            pending["stopped"] = True       # as _take_pending: said once, here
         _cancel_timers(pending)
         _say_not_sent(why, relabel=True)
         _owe_space(pending)

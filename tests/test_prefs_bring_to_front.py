@@ -226,3 +226,11 @@ def test_a_request_written_while_the_last_is_read_isnt_lost(tmp_path, monkeypatc
     assert prefs_ipc.take_tab_request() == "stats"
     monkeypatch.setattr("builtins.open", real_open)
     assert prefs_ipc.take_tab_request() == "updates"
+
+
+def test_a_request_that_cant_be_read_is_skipped_not_raised(tmp_path, monkeypatch):
+    """It runs in Preferences' signal handler, which an error would end."""
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    (tmp_path / "talktype-prefs.tab").mkdir()            # not a file at all
+    monkeypatch.setattr(prefs_ipc, "_tab_request_path", lambda: str(tmp_path / "talktype-prefs.tab"))
+    assert prefs_ipc.take_tab_request() is None

@@ -76,3 +76,17 @@ def test_the_arrow_keys_can_move_past_the_first_word(dialog):
 def test_should_be_names_its_box(dialog):
     label = next(w for w in dialog.entry.get_parent().get_children() if isinstance(w, Gtk.Label))
     assert label.get_mnemonic_widget() is dialog.entry
+
+
+def test_the_arrow_keys_move_the_cursor_word_by_word(dialog):
+    """Hidden, GTK's cursor doesn't move on the arrows: the box scrolls."""
+    buf = dialog.view.get_buffer()
+    buf.place_cursor(buf.get_start_iter())
+    dialog.view.emit("move-cursor", Gtk.MovementStep.WORDS, 2, False)
+    cursor = buf.get_iter_at_mark(buf.get_insert())
+    assert cursor.get_offset() > 0 and cursor.ends_word()
+
+
+def test_the_dictation_dropdown_is_named_too(dialog):
+    label = next(w for w in dialog.combo_row.get_children() if isinstance(w, Gtk.Label))
+    assert label.get_mnemonic_widget() is dialog.combo

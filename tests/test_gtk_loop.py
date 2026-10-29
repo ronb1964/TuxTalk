@@ -72,5 +72,15 @@ def test_a_loop_that_dies_before_it_runs_doesnt_hang_the_start(monkeypatch):
     monkeypatch.setattr(Gtk, "main", no_display)
     monkeypatch.setattr(GLib, "idle_add", lambda fn, *a: None)
     monkeypatch.setattr(gtk_loop, "_thread", None)
-    with pytest.raises(RuntimeError, match="ended before it started"):
-        gtk_loop.start()
+    raised = []
+
+    def start():
+        try:
+            gtk_loop.start()
+        except RuntimeError as e:
+            raised.append(str(e))
+    # On a thread with a limit: without the fix this would hang the test run.
+    starter = threading.Thread(target=start, daemon=True)
+    starter.start()
+    starter.join(5)
+    assert raised and "ended before it started" in raised[0]

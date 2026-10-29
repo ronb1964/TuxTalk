@@ -86,8 +86,9 @@ class DownloadTask:
                           Should accept (progress_callback, cancel_event) args
                           progress_callback signature: func(message, percent)
             can_stop: False for work that ignores cancel_event (the GNOME
-                      extension's install, a moment long): it gets no Cancel
-                      button, which would only say "Cancelled" while it went on.
+                      extension's install, a moment long): its button reads
+                      "Can't stop", greyed, rather than a Cancel that would
+                      only say "Cancelled" while it went on.
         """
         self.name = name
         self.can_stop = can_stop
@@ -298,6 +299,7 @@ class UnifiedDownloadDialog:
 
             widgets = self.task_widgets[task]
             widgets['cancel_btn'].set_sensitive(False)
+            widgets['cancel_btn'].set_tooltip_text(None)    # "can't be stopped": done now
 
             if task.cancelled:
                 # The download returns False when cancelled; it didn't fail.

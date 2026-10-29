@@ -283,6 +283,7 @@ class IndicatorSettings(Tab):
         spin = Gtk.SpinButton(adjustment=Gtk.Adjustment(
             value=value, lower=-1000, upper=1000, step_increment=10))
         spin.set_value(value)
+        name.set_mnemonic_widget(spin)         # what a screen reader calls the box
         spin.connect("value-changed", lambda w: (
             self.update_config(key, sign * int(w.get_value())),
             self._update_position_summary()))

@@ -61,6 +61,14 @@ def show_fix_word_dialog(index=0, copy_text=None):
     _active_dialog = _FixWordDialog(entries, index, copy_text)
 
 
+
+def _named(text, widget):
+    """A label for *widget*: Alt and the underlined letter go to it, and a
+    screen reader names it by the label."""
+    label = Gtk.Label.new_with_mnemonic(text)
+    label.set_mnemonic_widget(widget)
+    return label
+
 class _FixWordDialog:
     def __init__(self, entries, index, copy_text, before_show=None, in_place=False):
         self.entries = entries
@@ -91,7 +99,7 @@ class _FixWordDialog:
             self.combo.append_text(preview(text, 70))
         self.combo.connect("changed", lambda c: self._load(c.get_active()))
         self.combo_row = Gtk.Box(spacing=8)
-        self.combo_row.pack_start(Gtk.Label(label="Dictation:"), False, False, 0)
+        self.combo_row.pack_start(_named("_Dictation:", self.combo), False, False, 0)
         self.combo_row.pack_start(self.combo, True, True, 0)
         box.pack_start(self.combo_row, False, False, 0)
 
@@ -115,7 +123,7 @@ class _FixWordDialog:
         # everywhere else. The selection is snapped to whole words.
         self.view = Gtk.TextView()
         self.view.set_editable(False)
-        self.view.set_cursor_visible(False)
+        # Its cursor stays visible: hidden, the arrow keys scroll instead of moving.
         self.view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
         for side in ("left", "right", "top", "bottom"):
             getattr(self.view, f"set_{side}_margin")(8)
@@ -202,10 +210,8 @@ class _FixWordDialog:
     def _fix_row(self):
         """"Should be:" and the box for the right spelling (self.entry)."""
         row = Gtk.Box(spacing=8)
-        should_be = Gtk.Label.new_with_mnemonic("_Should be:")
-        row.pack_start(should_be, False, False, 0)
         self.entry = Gtk.Entry()
-        should_be.set_mnemonic_widget(self.entry)      # Alt+S, and a screen reader's name
+        row.pack_start(_named("_Should be:", self.entry), False, False, 0)
         self.entry.set_placeholder_text("The right spelling, e.g. BambuStudio")
         self.entry.connect("changed", lambda _e: self._update())
         self.entry.connect("activate", lambda _e: self._on_save())

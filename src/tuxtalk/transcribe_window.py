@@ -47,15 +47,19 @@ def pidfile_path():
 
 
 def _running_pid():
-    """The pid of an open Transcribe a File window, or None."""
+    """The pid of an open Transcribe a File window, or None. Its command line
+    must run the window (service_launcher.interpreter_target, as for
+    Preferences): a pidfile left by a crash can name a pid another program
+    has since, and FRONT would end it."""
+    from .service_launcher import interpreter_target, read_argv
     try:
         with open(pidfile_path()) as f:
             pid = int(f.read().strip())
-        with open(f"/proc/{pid}/cmdline", "rb") as f:
-            if b"tuxtalk.transcribe_window" in f.read() and pid != os.getpid():
-                return pid
     except (OSError, ValueError):
-        pass
+        return None
+    argv = read_argv(pid) or []
+    if pid != os.getpid() and interpreter_target(argv) == ("module", "tuxtalk.transcribe_window"):
+        return pid
     return None
 
 

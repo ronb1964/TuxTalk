@@ -67,11 +67,11 @@ SECTIONS = (
     Section("Formatting", commands=(
         _inline("new line", "newline", "return", "line break", result="line break"),
         _inline("new paragraph", "paragraph break", result="double line break"),
-        _inline("press tab", result="tab character (just <b>tab</b> is the word)",
-                note="At the end of a dictation it presses the Tab key (so does <b>press the "
-                     "tab key</b>): in a form you go to the next box. In Claude Desktop it "
-                     "types four spaces. Filling in a form, in the Writing section, has the "
-                     "steps"),
+        _inline("press tab", result="tab character (just <b>tab</b> is the word)"),
+        Command(("press tab", "press the tab key"),
+                "at the end: presses the Tab key, to the next box in a form (in Claude "
+                "Desktop, four spaces)", "key",
+                "Filling in a form, in the Writing section, has the steps"),
         _inline("soft break", "soft line", result="three spaces"),
         Command(("press enter", "hit enter"), "at the end: types it, then presses Enter",
                 "key", "It sends a chat message or runs a command. <b>literal press enter</b> "
@@ -91,7 +91,8 @@ SECTIONS = (
         Command(("delete everything", "delete all", "clear everything", "clear all",
                  "undo everything", "undo all"),
                 "empty the whole box, including text TuxTalk didn't type; in a terminal, "
-                "the line you're typing", "undo"),
+                "the line you're typing", "undo",
+                "It presses Ctrl+A then Backspace; in a terminal, Ctrl+E then Ctrl+U"),
     )),
     Section("Fixing a Word", commands=(
         Command(("fix that word", "fix that"),
@@ -156,12 +157,19 @@ def help_markup():
 
 def short_markup():
     """The Voice Commands window's layout: an indented line per command, two
-    to a line where they're short."""
+    to a line where they're short (without their notes, for the room), and
+    each other note under its command."""
     blocks = []
     for section in SECTIONS:
-        entries = [f"{_said(c)} → {c.result}" for c in section.commands]
-        step = 2 if section.pairs else 1
-        lines = ["    ".join(entries[i:i + step]) for i in range(0, len(entries), step)]
+        if section.pairs:
+            entries = [f"{_said(c)} → {c.result}" for c in section.commands]
+            lines = ["    ".join(entries[i:i + 2]) for i in range(0, len(entries), 2)]
+        else:
+            lines = []
+            for command in section.commands:
+                lines.append(f"{_said(command)} → {command.result}")
+                if command.note:
+                    lines.append(f"  {command.note}")
         lines = [_title(section)] + [f"  {line}" for line in lines]
         if section.note:
             lines.append(_note(section))

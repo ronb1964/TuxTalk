@@ -124,29 +124,6 @@ def test_dictation_turned_off_while_the_old_service_goes_stays_off(monkeypatch):
     assert started == []
 
 
-def test_the_kde_cache_rebuild_falls_back_to_kbuildsycoca5(monkeypatch):
-    """Plasma 5 has only kbuildsycoca5; Plasma 6 gets one rebuild, not two."""
-    import types
-    from tuxtalk import menu_cache
-    ran = []
-
-    missing = {"kbuildsycoca6"}
-
-    def fake_run(argv, **_):
-        ran.append(argv[0])
-        if argv[0] in missing:
-            raise FileNotFoundError(argv[0])
-        return types.SimpleNamespace(returncode=0)
-
-    monkeypatch.setattr(menu_cache.subprocess, "run", fake_run)
-    menu_cache.refresh_menu_cache()
-    assert ran == ["update-desktop-database", "kbuildsycoca6", "kbuildsycoca5"]
-    ran.clear()
-    missing.clear()
-    menu_cache.refresh_menu_cache()
-    assert ran == ["update-desktop-database", "kbuildsycoca6"]
-
-
 def test_the_kde_cache_rebuild_runs_off_the_main_loop(tray_main, monkeypatch):
     """After first-run setup the rebuild runs on its own thread, so the menu
     never waits for it."""

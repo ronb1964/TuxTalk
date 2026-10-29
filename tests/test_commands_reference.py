@@ -27,7 +27,8 @@ def test_each_listed_phrase_is_recognised(kind, phrase):
         typed = normalize.normalize_text(f"apple {phrase} banana {phrase} cherry")
         assert phrase not in typed.lower()
     elif kind == "key":
-        assert key_commands.split_key_command(f"see you at noon, {phrase}")[1] == "ENTER"
+        key = "TAB" if "tab" in phrase else "ENTER"
+        assert key_commands.split_key_command(f"see you at noon, {phrase}")[1] == key
     elif kind == "undo":
         assert undo.detect_undo_command(phrase) is not None
     elif kind == "fix":
@@ -50,11 +51,41 @@ def test_a_symbol_comes_out_as_the_symbol_listed():
                     assert command.result in normalize.normalize_text(f"apple {phrase} banana")
 
 
+def test_formatting_comes_out_as_listed():
+    """Not only gone from the text: each makes what the table says."""
+    made = {"line break": normalize.LINE_BREAK, "double line break": normalize.LINE_BREAK * 2,
+            "three spaces": "apple   banana", "tab character": "apple\tbanana"}
+    checked = 0
+    for section in commands_reference.SECTIONS:
+        for command in section.commands:
+            result = command.result.split(" (")[0]
+            if command.kind != "inline" or result not in made:
+                continue
+            for phrase in command.said:
+                typed = normalize.normalize_text(f"apple {phrase} banana")
+                assert made[result].lower() in typed.lower(), phrase
+                assert normalize.LINE_BREAK * 3 not in typed, phrase
+                if result == "line break":
+                    assert normalize.LINE_BREAK * 2 not in typed, phrase
+                checked += 1
+    assert checked == 9
+
+
 def test_both_screens_show_every_phrase():
     help_page = _plain(help_text._commands())
     short = _plain(_build_markup())
     for _kind, phrase in PHRASES:
         assert phrase in help_page and phrase in short, phrase
+
+
+def test_the_short_list_keeps_each_note():
+    """It said that "press tab" at the end presses Tab, and which keys
+    clearing the box presses; a note only Help showed was lost there."""
+    short = _plain(_build_markup())
+    for section in commands_reference.SECTIONS:
+        for command in section.commands:
+            if command.note and not section.pairs:
+                assert _plain(command.note) in short, command.note
 
 
 def test_every_way_to_clear_and_to_fix_a_word_is_listed():

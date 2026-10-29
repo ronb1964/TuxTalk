@@ -27,8 +27,8 @@ def start() -> None:
 
     _thread = threading.Thread(target=run, daemon=True, name="tt-gtk")
     _thread.start()
-    # A loop that dies before it runs (no display, say) would leave this
-    # waiting for good, and the service hung at start.
+    # A loop that dies before it runs (GTK failing to start) would leave
+    # this waiting for good, and the service hung at start.
     while not running.wait(0.1):
         if not _thread.is_alive():
             raise RuntimeError("GTK's main loop ended before it started")

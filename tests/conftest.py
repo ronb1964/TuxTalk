@@ -339,7 +339,7 @@ def _users_tuxtalk_processes():
     pids = set()
     for entry in os.listdir("/proc"):
         target = entry.isdigit() and _launcher.interpreter_target(
-            _launcher._read_argv(int(entry)) or [])
+            _launcher.read_argv(int(entry)) or [])
         if target and target[0] == "module" and target[1].startswith(("tuxtalk.", "talktype.")):
             pids.add(int(entry))
     return frozenset(pids - {os.getpid()})

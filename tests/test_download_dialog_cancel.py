@@ -54,6 +54,9 @@ class _Widget:
     def set_sensitive(self, value):
         pass
 
+    def set_tooltip_text(self, text):
+        pass
+
     def set_fraction(self, value):
         pass
 
@@ -176,6 +179,7 @@ def test_work_that_cant_stop_offers_no_cancel_and_isnt_called_cancelled():
     try:
         button = dlg.task_widgets[install]["cancel_btn"]
         assert not button.get_sensitive() and button.get_label() == "Can't stop"
+        assert button.get_tooltip_text()
         dlg._cancel_unfinished_tasks()            # the window closed meanwhile
         assert not install.cancelled and not install.cancel_event.is_set()
     finally:

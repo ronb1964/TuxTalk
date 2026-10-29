@@ -506,13 +506,43 @@ def test_preferences_restart_waits_for_an_uninstall(tmp_path, monkeypatch):
     monkeypatch.setattr(service_launcher, "QUIT_WAIT_S", 0.2)
     launched = []
     monkeypatch.setattr(service_launcher, "end_dictation_service", lambda: True)
-    monkeypatch.setattr(service_launcher, "launch_dictation_service", lambda: launched.append(1))
+    monkeypatch.setattr(service_launcher, "launch_dictation_service",
+                        lambda: launched.append(1) or _Started(running=True))
     with single_instance.open_lock(tray_instance.TRAY_LOCK) as uninstalling:
         assert single_instance.claim(uninstalling)
-        prefs._restart_without_tray()
+        assert prefs._restart_without_tray() is True     # left to it, not a failure
     assert launched == []
-    prefs._restart_without_tray()
+    assert prefs._restart_without_tray() is True
     assert launched == [1]
+
+
+class _Started:
+    """A launched service, still running after the grace time or not."""
+
+    def __init__(self, running):
+        self.running, self.returncode = running, None if running else 1
+
+    def wait(self, timeout):
+        if self.running:
+            raise subprocess.TimeoutExpired("tuxtalk.app", timeout)
+        return self.returncode
+
+
+@pytest.mark.parametrize("ended,running,restarted", [
+    (True, True, True),         # the new service is up
+    (True, False, False),       # it ended at once: a broken setting, say
+    (False, True, False)])      # the old one wouldn't go: no second one started
+def test_preferences_restart_says_whether_it_worked(tmp_path, monkeypatch, ended, running,
+                                                    restarted):
+    from tuxtalk import prefs
+    monkeypatch.setattr(single_instance, "runtime_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(prefs, "_START_GRACE_S", 0.01)
+    launched = []
+    monkeypatch.setattr(service_launcher, "end_dictation_service", lambda: ended)
+    monkeypatch.setattr(service_launcher, "launch_dictation_service",
+                        lambda: launched.append(1) or _Started(running))
+    assert prefs._restart_without_tray() is restarted
+    assert launched == ([1] if ended else [])
 
 
 @pytest.mark.parametrize("answer,goes_ahead,saved", [

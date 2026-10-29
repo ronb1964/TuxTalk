@@ -411,7 +411,7 @@ def _is_tuxtalk(pid, engines):
     try:
         if os.stat(f"/proc/{pid}").st_uid != os.getuid():
             return False
-        argv = service_launcher._read_argv(pid) or []
+        argv = service_launcher.read_argv(pid) or []
         exe = os.path.realpath(f"/proc/{pid}/exe")
     except OSError:
         return False

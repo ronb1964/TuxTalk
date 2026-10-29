@@ -266,8 +266,11 @@ def find_device():
     command, env = engine_process.parent_death_command(
         [_binary("whisper-server"), "--help"], _engine_env())
     try:
-        out = subprocess.run(command, capture_output=True, text=True, timeout=30,
-                             env=env).stderr
+        result = subprocess.run(command, capture_output=True, text=True, timeout=30, env=env)
+        out = result.stderr
+        if engine_process.launch_failure(result.returncode):
+            logger.warning("Could not list graphics devices"
+                           + engine_process.launch_failure(result.returncode))
     except Exception as e:
         logger.warning(f"Could not list graphics devices: {e}")
         return None
@@ -290,8 +293,8 @@ def _run_timed(cmd, cancel=None, timeout=300):
     if cancel is not None and cancel.is_set():
         raise RuntimeError("speed check stopped")
     deadline = time.monotonic() + timeout
-    # Through the launcher like the engine itself: a service killed mid-run
-    # takes the run (a graphics chip and a core) with it.
+    # Through the launcher like the engine itself: the window running the
+    # check, killed mid-run, takes the run (a graphics chip and a core) with it.
     command, env = engine_process.parent_death_command(cmd, _engine_env())
     with subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
                           text=True, env=env) as proc:
@@ -315,7 +318,8 @@ def _time_one(model, extra_args, threads, cli="whisper-cli", cancel=None):
          "-t", str(threads), *extra_args], cancel)
     found = _TOTAL_TIME.search(stderr)
     if returncode != 0 or not found:
-        raise RuntimeError(f"speed check run failed (exit {returncode})")
+        raise RuntimeError(f"speed check run failed (exit {returncode})"
+                           + engine_process.launch_failure(returncode))
     seconds = float(found.group(1)) / 1000
     if cli == "parakeet-cli":
         # Parakeet transcribes the sample in a few hundredths of a second on a
