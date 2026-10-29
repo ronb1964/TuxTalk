@@ -45,6 +45,7 @@ class StubPrefs:
         self.restart_calls = 0
         self.words_tab = SimpleNamespace(save=lambda: True)     # snippets saved
         self.on_disk = {}           # what the tray saved meanwhile
+        self._restart_owed = set()
         self.speech = _speech(self, chosen_model, chosen_device)
         self.general_tab = SimpleNamespace(speech=self.speech, show_saved=lambda: None,
                                            after_hotkey_change=lambda changed, since: False)
@@ -278,3 +279,25 @@ class TestTheTraysChoiceSurvivesTheRollback:
 
         assert stub.model_on_disk == "parakeet-v3"
         assert stub.speech.model_combo.active == "parakeet-v3"
+
+
+class TestAFailedRestartIsStillOwed:
+    def test_the_next_apply_restarts_rather_than_say_its_in_effect(self, prefs_cls,
+                                                                    monkeypatch):
+        """The save moved the baseline on, so the second Apply found nothing
+        changed and said "already in effect" though nothing had restarted."""
+        from tuxtalk import prefs
+        monkeypatch.setattr(prefs, "show_message", lambda *a, **k: None)
+        stub = StubPrefs(on_disk_model="small", chosen_model="medium")
+        stub.download_result = True
+        restarted = iter([False, False, True])
+        asked = []
+        stub._apply_or_restart = lambda changed: asked.append(set(changed)) or next(restarted)
+        stub._say_restart_failed = lambda: None
+        stub.window = None
+
+        for _apply in range(3):
+            prefs_cls.on_apply(stub, None)
+
+        assert asked == [{"model"}, {"model"}, {"model"}]
+        assert prefs_cls._changed_since_open(stub) == set()     # done now

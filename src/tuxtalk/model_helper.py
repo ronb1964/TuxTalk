@@ -504,17 +504,17 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
         progress_state['last_percent'] = int(percent)
 
         def do_update():
-            progress_bar.set_fraction(percent / 100.0)
-            progress_bar.set_text(f"{int(percent)}%")
-            if file_info:
-                status_label.set_markup(f'<span>{file_info}</span>')
+            if not cancel_event.is_set():       # else the dialog is already gone
+                progress_bar.set_fraction(percent / 100.0)
+                progress_bar.set_text(f"{int(percent)}%")
+                if file_info:
+                    status_label.set_text(file_info)    # a file name can hold & or <
             return False
         GLib.idle_add(do_update)
 
     def close_dialog():
         if cancel_event.is_set():
             return False       # the dialog is already gone
-        # Show 100% briefly before closing.
         progress_bar.set_fraction(1.0)
         progress_bar.set_text("100%")
         GLib.timeout_add(200, lambda: progress_dialog.response(Gtk.ResponseType.OK) or False)

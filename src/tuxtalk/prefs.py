@@ -136,6 +136,7 @@ class PreferencesWindow:
         # tray made meanwhile survives.
         self.config = self.load_config()
         self._config_at_open = dict(self.config)
+        self._restart_owed = set()      # keys saved whose restart failed
         # Set while busy() (Apply waiting for KDE's verdict on a new hotkey).
         self._busy = False
         self._save_error = ""
@@ -596,8 +597,9 @@ class PreferencesWindow:
 
     def _has_unapplied_changes(self):
         """True when closing now would lose something: a setting changed since
-        the last Apply, or an edited snippet."""
-        return bool(self._changed_since_open()) or self.words_tab.changed()
+        the last Apply, or an edited snippet. One saved whose restart failed
+        isn't lost."""
+        return bool(changed_keys(self._config_at_open, self.config)) or self.words_tab.changed()
 
     def _ask_apply_before_closing(self):
         """"apply", "discard", or "keep" (also when the question is closed)."""
@@ -626,8 +628,9 @@ class PreferencesWindow:
         drag a restart along with an unrelated Apply.
 
         Must be called before save_config(), which resets the baseline.
+        Keys whose restart failed count until one works.
         """
-        return changed_keys(self._config_at_open, self.config)
+        return changed_keys(self._config_at_open, self.config) | self._restart_owed
 
     def _apply_or_restart(self, changed):
         """Restart the service only if the change requires it.
@@ -710,7 +713,11 @@ class PreferencesWindow:
         # everything else from the config file within a second, which avoids
         # a ~10 s rebuild of the speech model during which the hotkey does
         # nothing at all.
-        if not self._apply_or_restart(changed):
+        restarted = self._apply_or_restart(changed)
+        # A restart that failed stays owed until one works: the save moved the
+        # baseline on, so later Applies would find nothing changed.
+        self._restart_owed = set() if restarted else set(changed)
+        if not restarted:
             self._say_restart_failed()
         elif not self.general_tab.after_hotkey_change(changed, saved_at):
             # (A hotkey question stands in for this.) Whether the service

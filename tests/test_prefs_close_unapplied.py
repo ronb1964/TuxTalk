@@ -51,9 +51,9 @@ def test_keep_editing_leaves_the_window_open():
     assert calls == ["asked"]
 
 
-def _changes(config_at_open, config, commands_same=True):
+def _changes(config_at_open, config, commands_same=True, owed=()):
     w = SimpleNamespace(
-        _config_at_open=config_at_open, config=config,
+        _config_at_open=config_at_open, config=config, _restart_owed=set(owed),
         words_tab=SimpleNamespace(changed=lambda: not commands_same),
     )
     w._changed_since_open = lambda: prefs.PreferencesWindow._changed_since_open(w)
@@ -67,3 +67,8 @@ def test_unapplied_changes_are_settings_commands_and_a_language_pick():
     assert _changes(opened, dict(opened), commands_same=False)
     # The Language dropdown writes its pick into the settings straight away.
     assert _changes(opened, dict(opened, language_mode="manual", language="de"))
+
+
+def test_a_saved_change_whose_restart_failed_isnt_called_lost():
+    """Apply saved it; only the restart failed. Closing doesn't lose it."""
+    assert _changes({"model": "medium"}, {"model": "medium"}, owed={"model"}) is False
