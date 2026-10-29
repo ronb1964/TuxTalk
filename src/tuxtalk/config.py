@@ -668,7 +668,8 @@ def _toml_string(value: str) -> str:
 def write_text_atomic(path: str, text: str | bytes, keep_backup: bool = True,
                       mode: int | None = None) -> None:
     """Replace *path* with *text* without ever leaving it half-written. The
-    new file is readable by this user only, unless *mode* says otherwise.
+    new file is readable by this user only, unless *mode* says otherwise
+    (set once it's whole, so it's private while being written).
 
     Writing in place would leave an empty file after an interruption (most
     realistically a full disk, which multi-gigabyte model downloads can
@@ -689,14 +690,14 @@ def write_text_atomic(path: str, text: str | bytes, keep_backup: bool = True,
     # the rename with FileNotFoundError.
     fd, tmp_path = tempfile.mkstemp(dir=directory, prefix=os.path.basename(path) + ".", suffix=".tmp")
     try:
-        if mode is not None:
-            os.fchmod(fd, mode)
         # Bytes as they are: a file put back after a failed restore
         # (settings_backup) needn't be valid UTF-8.
         with os.fdopen(fd, "wb" if isinstance(text, bytes) else "w") as f:
             f.write(text)
             f.flush()
             os.fsync(f.fileno())
+            if mode is not None:
+                os.fchmod(f.fileno(), mode)
 
         if keep_backup and os.path.exists(path):
             try:

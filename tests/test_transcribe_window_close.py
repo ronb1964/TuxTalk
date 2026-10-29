@@ -1,5 +1,7 @@
 """Transcribe a File: closing the window or opening another file never loses
 a transcript without asking (Ron closed one with no question, 2026-10-15)."""
+import os
+
 import pytest
 
 gi = pytest.importorskip("gi")
@@ -293,9 +295,19 @@ def test_a_save_that_fails_leaves_the_file_it_would_replace(win, monkeypatch, tm
     assert not win.kept
     monkeypatch.undo()
     monkeypatch.setattr(Gtk.FileChooserNative, "new", lambda *a: Chooser())
+    earlier.chmod(0o600)                                  # kept private by its owner
     win._save("txt")
     assert "Meet me at noon." in earlier.read_text()
-    assert earlier.stat().st_mode & 0o777 == 0o644      # not private like the settings
+    assert earlier.stat().st_mode & 0o777 == 0o600
+
+
+def test_a_new_transcript_gets_the_users_usual_permissions(tmp_path):
+    from tuxtalk import transcribe_window as tw
+    old = os.umask(0o027)
+    try:
+        assert tw._saved_file_mode(str(tmp_path / "new.srt")) == 0o640
+    finally:
+        os.umask(old)
 
 
 # --- dropping a file anywhere, with a hint where ---------------------------------

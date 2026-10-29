@@ -12,6 +12,7 @@ brings the open one to the front.
 """
 import os
 import signal
+import stat
 import sys
 import threading
 import time
@@ -75,6 +76,28 @@ def _brought_forward(wait_s):
         if time.monotonic() >= deadline:
             return False
         time.sleep(0.05)
+
+
+def _saved_file_mode(path):
+    """The permissions a saved transcript gets: those of the file it
+    replaces, or the user's usual ones for a new file (their umask)."""
+    try:
+        return stat.S_IMODE(os.stat(path).st_mode)
+    except FileNotFoundError:
+        return 0o666 & ~_umask()
+
+
+def _umask():
+    """This process's umask, read without changing it: os.umask sets one,
+    for a moment, for every thread."""
+    try:
+        with open("/proc/self/status", encoding="ascii") as f:
+            for line in f:
+                if line.startswith("Umask:"):
+                    return int(line.split()[1], 8)
+    except (OSError, ValueError) as e:
+        logger.info(f"Couldn't read the umask, assuming 022: {e}")
+    return 0o022
 
 
 def _when(stamp):
@@ -460,10 +483,9 @@ class TranscribeWindow:
         if not target:
             return
         try:
-            # A full disk mustn't cost the file being replaced, and the new one
-            # is readable as any file people save (a media server's subtitles).
+            # A full disk mustn't cost the file being replaced.
             from .config import write_text_atomic
-            write_text_atomic(target, content, keep_backup=False, mode=0o644)
+            write_text_atomic(target, content, keep_backup=False, mode=_saved_file_mode(target))
             self.kept = True
             self.status.set_text(f"Saved {os.path.basename(target)}.")
         except OSError as e:
