@@ -185,7 +185,8 @@ def _extension_already_active():
     try:
         from .extension_helper import is_extension_enabled
         return bool(is_extension_enabled())
-    except Exception:
+    except Exception as e:
+        logger.info(f"Could not tell whether the GNOME extension is on: {e}")
         return False
 
 
@@ -1305,7 +1306,7 @@ def show_welcome_dialog(parent=None):
                 try:
                     dialog.destroy()
                 except Exception:
-                    pass
+                    logger.warning("Could not close the welcome dialog", exc_info=True)
             Gtk.main_quit()
 
     # Show splash screen first

@@ -226,8 +226,6 @@
   "voice_navigation.py::plan::long_line": 2,
   "vulkan_setup_dialogs.py::run_speed_check.work::swallowed_error": 1,
   "welcome_dialog.py::WelcomeDialog._run_in_background.runner::swallowed_error": 1,
-  "welcome_dialog.py::_extension_already_active::swallowed_error": 1,
-  "welcome_dialog.py::show_welcome_dialog.show_dialog_after_splash::swallowed_error": 1,
   "whisper_vulkan.py::VulkanWhisperModel.__init__::undocumented": 1,
   "whisper_vulkan.py::VulkanWhisperModel._start::swallowed_error": 1,
   "whisper_vulkan.py::VulkanWhisperModel._start::undocumented": 1,
