@@ -411,6 +411,10 @@ def _on_hold_key(event, hold_key, held_modifiers, devices, cfg, input_device_idx
         # reach the app again
         keyboard_grab.release_all()
         _stop_recording(cfg)
+    elif event.value == 0 and send_countdown.owes_space():
+        # A send this press held, its recording over before the key came
+        # up (the microphone didn't open): the space can go in now.
+        dictation_worker.submit(send_countdown.type_owed_space)
 
 
 def _on_toggle_key(event, toggle_key, held_modifiers, devices, cfg, input_device_idx) -> bool:

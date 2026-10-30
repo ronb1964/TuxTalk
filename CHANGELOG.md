@@ -349,6 +349,13 @@ before 0.15.0, so older entries use that name.
   switches dictation over as soon as the downloads are done, the same as
   picking CUDA under Device always did. Before, it waited for you to click
   Apply or OK first.
+- With "Send each dictation automatically" on, if you pressed your hold key
+  to add more and the microphone wouldn't open, the message stayed unsent
+  and the space after it was left for your next dictation, so a message you
+  then sent yourself could start the next one with a space. Now TuxTalk says
+  "Not sent" and puts the space in once you let go of the key. It also said
+  nothing at all when the last dictation finished typing while the
+  microphone was still failing to open.
 
 ## [0.18.2] - 2026-10-23
 

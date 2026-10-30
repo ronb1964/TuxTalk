@@ -330,8 +330,12 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
             if notify_on:
                 notify_module.notify("Microphone unavailable",
                                      "Check that no other app is using it.")
-            if rs.state.held_send:
-                send_countdown.say_held()   # nothing to dictate onto it: it stays unsent
+            # Nothing to dictate onto a send it held, when it began or set
+            # up for it meanwhile: it stays unsent, and its space goes in
+            # once the key is up (hotkeys).
+            if (not send_countdown.say_held_for(rs.state.recording_serial)
+                    and rs.state.held_send):
+                send_countdown.say_held()
             return False
 
     type_at_pause.arm_chunker(rs.state.recording_samplerate, edit_mode)

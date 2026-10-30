@@ -87,6 +87,9 @@ _owed = None
 # Recordings begun so far (recording_begins). A recording's Message carries
 # its number (serial); a send for one with an older number waits for the newer.
 _begun = 0
+# The recording a send was held for when it was set up (send_automatically),
+# until "Not sent" is said for it (say_held_for): its number, else 0.
+_held_for = 0
 # Whether this session's notifications have said why an automatic send
 # can't go where the focus can't be told: on such a desktop it's every
 # dictation, so after once only the floating notice says so.
@@ -301,7 +304,7 @@ def send_automatically(why: str, message: Message, press, type_more, space: str 
     True when a newer recording had begun (recording_begins), its key read
     while these words were still being typed: the send is held for it, as a
     press during the countdown holds it, and its space owed."""
-    global _pending, _owed
+    global _pending, _owed, _held_for
     pending = {"to": message.to, "why": why, "press": press, "type": type_more,
                "space": space, "mode": injection_mode, "timer": None, "ticks": []}
     # Nothing to count down to when no Enter could go: part of the message
@@ -328,6 +331,7 @@ def send_automatically(why: str, message: Message, press, type_more, space: str 
     with _send_lock:
         newer = message.serial != _begun
         if newer:
+            _held_for = _begun
             if space and message.to is not None:
                 _owed = pending
         else:
@@ -448,6 +452,21 @@ def say_held() -> None:
     show_notice(HELD_NOTICE)
     _notify_in_background("Not sent: you held it",
                           "The text is still in the box. Press Enter when you're ready.")
+
+
+def say_held_for(serial: int) -> bool:
+    """Say "Not sent" for the send held for recording *serial* when it was
+    set up (send_automatically), once: that recording ended without adding
+    to it. The recording's end and the send come in either order (a
+    microphone that fails to open takes a moment to give up), and whichever
+    is second says it. False when no send was held for it, or it was said."""
+    global _held_for
+    with _send_lock:
+        if serial != _held_for:
+            return False
+        _held_for = 0
+    say_held()
+    return True
 
 
 def say_held_back(word: str, message: Message) -> None:
