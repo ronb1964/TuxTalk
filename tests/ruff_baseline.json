@@ -11,9 +11,6 @@
  "src/tuxtalk/custom_words.py": {
   "B905": 1
  },
- "src/tuxtalk/delivery.py": {
-  "SIM102": 1
- },
  "src/tuxtalk/extension_helper.py": {
   "B904": 2
  },
