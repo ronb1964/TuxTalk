@@ -186,8 +186,8 @@ def _install_tuxtalk_icon():
     """TuxTalk's icon installed for the menu ("tuxtalk"), or None if it
     couldn't be: then an entry keeps the old icon rather than a blank one."""
     try:
-        from .update_checker import _install_app_icon
-        return _install_app_icon()
+        from .desktop_launcher import install_app_icon
+        return install_app_icon()
     except Exception:
         return None
 

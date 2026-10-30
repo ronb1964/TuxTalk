@@ -201,8 +201,8 @@ def make_engine_download_func(model_name=None):
         # Before 0.19 the archive was ENGINE_ASSET itself, left behind when unpacking failed.
         with download_area(parent, ENGINE_NAME, old_names=(ENGINE_ASSET,)) as (archive, folder):
             if not download_file(ENGINE_URL, archive, timeout=60, cancel_event=cancel_event,
-                                 progress_hook=hook, expected_sha256=ENGINE_SHA256):
-                progress_callback("Download failed", 0)
+                                 progress_hook=hook, expected_sha256=ENGINE_SHA256,
+                                 report=progress_callback):
                 return False
             try:
                 progress_callback("Unpacking...", 97)

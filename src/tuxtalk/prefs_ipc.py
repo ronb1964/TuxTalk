@@ -81,13 +81,6 @@ def is_prefs_argv(argv) -> bool:
                                         ("script", "dictate-prefs"))
 
 
-def _process_argv(pid):
-    """The argument list of process *pid*; raises OSError if it is gone."""
-    with open(f"/proc/{pid}/cmdline", "rb") as f:
-        raw = f.read()
-    return [arg.decode(errors="ignore") for arg in raw.split(b"\0") if arg]
-
-
 def is_prefs_pid(pid) -> bool:
     """Whether *pid* is a running Preferences window.
 
@@ -97,10 +90,9 @@ def is_prefs_pid(pid) -> bool:
     """
     if pid <= 0:
         return False
-    try:
-        return is_prefs_argv(_process_argv(pid))
-    except OSError:
-        return False     # gone (or not ours to inspect): never signal it
+    from .service_launcher import read_argv
+    argv = read_argv(pid)       # None: gone (or not ours to inspect): never signal it
+    return bool(argv) and is_prefs_argv(argv)
 
 
 # Written after the PID by a Preferences that closes on CLOSE, asking about

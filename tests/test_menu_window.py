@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from tuxtalk import control, desktop_detect, update_checker
+from tuxtalk import control, desktop_detect, desktop_launcher, update_checker
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -150,7 +150,7 @@ def _actions(text):
 
 def _expected(program):
     return {aid: (name, f"{program} {args}")
-            for aid, name, args in update_checker.DESKTOP_ACTIONS}
+            for aid, name, args in desktop_launcher.DESKTOP_ACTIONS}
 
 
 @pytest.mark.parametrize("path, program", [
@@ -179,9 +179,9 @@ def test_package_scripts_keep_the_shortcuts(script):
 def _launcher(tmp_path, monkeypatch, text):
     path = tmp_path / "tuxtalk.desktop"
     path.write_text(text)
-    monkeypatch.setattr(update_checker, "DESKTOP_FILE_PATH", str(path))
+    monkeypatch.setattr(desktop_launcher, "DESKTOP_FILE_PATH", str(path))
     monkeypatch.setattr(update_checker, "get_install_type", lambda **_k: "appimage")
-    monkeypatch.setattr(update_checker.menu_cache, "refresh_menu_cache", lambda: None)
+    monkeypatch.setattr(desktop_launcher.menu_cache, "refresh_menu_cache", lambda: None)
     return path
 
 
@@ -198,33 +198,33 @@ Terminal=false
 
 def test_older_launcher_gets_the_shortcuts_once(tmp_path, monkeypatch):
     path = _launcher(tmp_path, monkeypatch, OLD_LAUNCHER)
-    assert update_checker.add_launcher_actions() is True
+    assert desktop_launcher.add_launcher_actions() is True
     text = path.read_text()
     assert _actions(text) == _expected("/home/someone/AppImages/TuxTalk.AppImage")
     main = text.split("\n[Desktop Action", 1)[0]
     assert "Actions=" in main and "Exec=/home/someone/AppImages/TuxTalk.AppImage" in main
-    assert update_checker.add_launcher_actions() is False      # once
+    assert desktop_launcher.add_launcher_actions() is False      # once
     assert path.read_text() == text
 
 
 def test_hidden_entry_and_packages_left_alone(tmp_path, monkeypatch):
-    hidden = OLD_LAUNCHER + update_checker._HIDDEN_ENTRY_MARK + "\n"
+    hidden = OLD_LAUNCHER + desktop_launcher._HIDDEN_ENTRY_MARK + "\n"
     path = _launcher(tmp_path, monkeypatch, hidden)
-    assert update_checker.add_launcher_actions() is False
+    assert desktop_launcher.add_launcher_actions() is False
     assert path.read_text() == hidden
     path.write_text(OLD_LAUNCHER)
     monkeypatch.setattr(update_checker, "get_install_type", lambda **_k: "deb")
-    assert update_checker.add_launcher_actions() is False
+    assert desktop_launcher.add_launcher_actions() is False
 
 
 def test_no_launcher_is_fine(tmp_path, monkeypatch):
-    monkeypatch.setattr(update_checker, "DESKTOP_FILE_PATH", str(tmp_path / "none.desktop"))
+    monkeypatch.setattr(desktop_launcher, "DESKTOP_FILE_PATH", str(tmp_path / "none.desktop"))
     monkeypatch.setattr(update_checker, "get_install_type", lambda **_k: "appimage")
-    assert update_checker.add_launcher_actions() is False
+    assert desktop_launcher.add_launcher_actions() is False
 
 
 def test_new_appimage_launcher_has_the_shortcuts():
-    text = update_checker.desktop_actions("/x/TuxTalk.AppImage")
+    text = desktop_launcher.desktop_actions("/x/TuxTalk.AppImage")
     assert _actions("[Desktop Entry]\n" + text) == _expected("/x/TuxTalk.AppImage")
 
 
@@ -405,7 +405,7 @@ def test_setup_ticks_the_extension_only_without_a_tray(monkeypatch, has_tray):
         pytest.skip("no display")
     from tuxtalk import welcome_dialog
     monkeypatch.setattr(desktop_detect, "tray_host_available", lambda bus=None: has_tray)
-    monkeypatch.setattr(welcome_dialog, "_extension_already_active", lambda: False)
+    monkeypatch.setattr(desktop_detect, "tuxtalk_extension_active", lambda: False)
     dialog = welcome_dialog.WelcomeDialog(force_gnome=True)
     try:
         assert dialog.extension_check is not None

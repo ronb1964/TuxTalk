@@ -521,6 +521,20 @@ def test_unpacking_a_new_engine_removes_older_versions(tmp_path, monkeypatch):
     assert os.access(ai._server_binary(), os.X_OK)
 
 
+def test_a_failed_engine_download_says_why(tmp_path, monkeypatch):
+    """Its window said only "Download failed"."""
+    from tuxtalk import download_utils
+    monkeypatch.setattr("tuxtalk.config.get_data_dir", lambda: str(tmp_path))
+
+    def offline(url, dest, **kwargs):
+        raise download_utils.DownloadError("HTTP 503 Service Unavailable")
+    monkeypatch.setattr(download_utils, "fetch_file", offline)
+    reports = []
+    assert ai.make_engine_download_func()(lambda *r: reports.append(r), None) is False
+    assert download_utils.failure_reason(*reports[-1]) == (
+        "Download failed: HTTP 503 Service Unavailable")
+
+
 def test_only_folders_other_than_the_current_version_go(tmp_path):
     from tuxtalk import engine_process
     for name in ("1.9.3", "1.9.4"):

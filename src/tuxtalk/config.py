@@ -626,6 +626,15 @@ def load_config() -> Settings:
     return dataclasses.replace(s)
 
 
+def saved_hold_key() -> str:
+    """The push-to-talk key in the settings, F8 when there is none yet."""
+    try:
+        return load_config().hotkey or "F8"
+    except Exception as e:
+        logger.warning(f"Could not read the hold key from the settings: {e}")
+        return "F8"
+
+
 def _toml_value(val) -> str:
     """Format a Python value as a TOML literal.
 

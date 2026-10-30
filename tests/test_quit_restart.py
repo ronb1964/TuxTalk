@@ -784,7 +784,7 @@ def test_every_preferences_window_of_the_users_is_found_whatever_the_pidfile(mon
                         lambda path: types.SimpleNamespace(st_uid=procs[path.split("/")[2]][0]))
     monkeypatch.setattr(prefs_ipc.os, "getuid", lambda: 1000)
     monkeypatch.setattr(prefs_ipc.os, "getpid", lambda: 1)
-    monkeypatch.setattr(prefs_ipc, "_process_argv", lambda pid: procs[str(pid)][1])
+    monkeypatch.setattr("tuxtalk.service_launcher.read_argv", lambda pid: procs[str(pid)][1])
     assert sorted(prefs_ipc.open_windows()) == [42, 45]
 
 

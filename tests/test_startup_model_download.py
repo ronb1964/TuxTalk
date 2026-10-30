@@ -110,6 +110,18 @@ def test_the_indicator_and_the_d_bus_stand_in_are_made_on_gtk_s_thread(service_m
     assert [fn.__name__ for fn in started.on_gtk] == ["_make_gtk_parts"]
 
 
+def test_a_gtk_loop_that_wont_run_leaves_the_service_dictating_without_it(
+        service_main, monkeypatch):
+    """GTK's loop dying at start ended the service at start: it now goes on
+    without the indicator and the D-Bus stand-in, as with no GTK at all."""
+    def dies():
+        raise RuntimeError("GTK's main loop ended before it started")
+    monkeypatch.setattr(gtk_loop, "start", dies)
+    started = service_main(cached=False)
+    assert started.on_gtk == [] and "offers its D-Bus service" not in started
+    assert "loads the speech model" in started and "listens for hotkeys" in started
+
+
 @pytest.mark.parametrize("wanted,downloaded,cuda,expected", [
     ("parakeet-v3", ["small", "large-v3"], True, "large-v3"),   # nearest in quality
     ("parakeet-v3", ["small", "large-v3"], False, "small"),     # large-v3 needs CUDA
