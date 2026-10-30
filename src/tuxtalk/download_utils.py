@@ -16,6 +16,7 @@ import glob
 import hashlib
 import logging
 import os
+import re
 import secrets
 import shutil
 import tarfile
@@ -284,15 +285,18 @@ def _cached(lookup, what):
     """*lookup*()'s answer from the Hugging Face cache, or None when *what*
     isn't downloaded or its cache entry is damaged."""
     try:
-        return lookup()
+        found = lookup()
     except OSError:     # not downloaded: LocalEntryNotFoundError is a FileNotFoundError
-        return None
+        found = None
     except ValueError as e:
         # A damaged entry: refs/main that isn't text (UnicodeDecodeError) or
         # names a folder outside the snapshots ("Invalid pointer path").
         if _damaged.failed(what, e):
             logger.warning(f"The download of {what} is damaged; counted as missing: {e}")
         return None
+    if _damaged.worked(what):
+        logger.info(f"The download of {what} is no longer damaged")
+    return found
 
 
 def cached_hub_file(repo: str, filename: str):
@@ -308,6 +312,37 @@ def cached_hub_snapshot(repo: str):
     none. It may hold only some of the files (see is_model_cached_fast)."""
     from huggingface_hub import snapshot_download
     return _cached(lambda: snapshot_download(repo, local_files_only=True), repo)
+
+
+# What Hugging Face writes in refs/<branch>: the commit the snapshot is of.
+_COMMIT = re.compile(rb"[0-9a-f]{40,64}")
+
+
+def set_aside_damaged_refs(repo: str) -> None:
+    """Rename aside each record of *repo*'s current snapshot (refs/...) that
+    holds no commit, before a download. huggingface_hub reads it before
+    replacing it, so a record a crash left as garbage would fail every
+    download; renamed, it is kept for a look and the download writes a new
+    one."""
+    from huggingface_hub import constants
+    from huggingface_hub.file_download import repo_folder_name
+    refs = os.path.join(constants.HF_HUB_CACHE,
+                        repo_folder_name(repo_id=repo, repo_type="model"), "refs")
+    for folder, _dirs, names in os.walk(refs):
+        for name in names:
+            path = os.path.join(folder, name)
+            if ".damaged-" in name:
+                continue
+            try:
+                with open(path, "rb") as f:
+                    if _COMMIT.fullmatch(f.read().strip()):
+                        continue
+                aside = f"{path}.damaged-{time.strftime('%Y%m%d-%H%M%S')}"
+                os.replace(path, aside)
+            except OSError as e:
+                logger.warning(f"Could not set aside the damaged record {path}: {e}")
+                continue
+            logger.warning(f"Set aside a damaged Hugging Face record as {aside}")
 
 
 def free_space_bytes(path: str) -> int:
