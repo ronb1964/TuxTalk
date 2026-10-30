@@ -47,6 +47,9 @@ ruff = "0.17.0"  # the version CI lints with
 # Builds the bundled emoji font (packaging/build-emoji-font.py) and reads it
 # in tests/test_emoji_font.py.
 fonttools = "^4.60"
+# The VM harness's screenshots (tests/vm/vmlib.py), which test_vm_beep_detector.py
+# imports with the beep detector it tests.
+pillow = ">=12.0"
 
 [tool.black]
 line-length = 100

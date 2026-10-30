@@ -12,6 +12,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+# The VM harness the detector lives in reads its settings with tomllib, new in
+# Python 3.11; the AppImage's 3.10 (CI's Ubuntu 22.04) never runs the harness.
+pytest.importorskip("tomllib", reason="the VM harness needs Python 3.11 or newer")
 sys.path.insert(0, str(Path(__file__).parent / "vm"))
 import checks_dictation as check  # noqa: E402  (the VM checks' own folder, added above)
 
