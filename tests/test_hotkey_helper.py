@@ -377,15 +377,19 @@ def test_the_active_user_is_read_from_logind(tmp_path):
     assert hh.read_active_uid(str(tmp_path / "missing")) is None
 
 
-def test_the_helper_needs_nothing_but_the_standard_library():
-    """It runs with the system's python3 in isolated mode, outside TuxTalk."""
-    import ast
-    tree = ast.parse(open(hh.__file__).read())
-    imported = {alias.name.split(".")[0] for node in ast.walk(tree)
-                if isinstance(node, ast.Import) for alias in node.names}
-    imported |= {node.module.split(".")[0] for node in ast.walk(tree)
-                 if isinstance(node, ast.ImportFrom) and node.module}
-    assert imported <= {"errno", "fcntl", "os", "select", "signal", "socket", "struct", "sys", "time"}
+def test_the_helper_starts_with_nothing_but_the_standard_library():
+    """The service runs it with the system's python3, isolated and without
+    site-packages (secure_input's unit), outside TuxTalk: with one import
+    from anywhere else it never starts, and F8 is dead. Asked for an option
+    it doesn't know, it gets past its imports to its usage line."""
+    import subprocess
+    from tuxtalk import secure_input
+    if not os.path.exists(secure_input.PYTHON):
+        pytest.skip(f"no {secure_input.PYTHON} here")
+    result = subprocess.run([secure_input.PYTHON, "-I", "-S", hh.__file__, "--unknown"],
+                            capture_output=True, text=True, timeout=30, check=False)
+    assert result.returncode == 2, result.stderr
+    assert result.stderr.startswith("usage: tuxtalk-hotkeys")
 
 
 # --- whose keys count, and who is told ------------------------------------------------

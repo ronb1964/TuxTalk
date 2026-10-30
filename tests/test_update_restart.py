@@ -21,7 +21,12 @@ import pytest
 from tuxtalk import desktop_launcher
 from tuxtalk import update_checker as uc
 
-SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tuxtalk"
+
+@pytest.fixture(autouse=True)
+def _never_exec(monkeypatch):
+    """Every install and restart here, from the tray, Preferences or D-Bus,
+    fails the test if it ends in os.execv (the module docstring says why)."""
+    monkeypatch.setattr(os, "execv", lambda *a: pytest.fail("must not exec"))
 
 
 @pytest.fixture
@@ -31,7 +36,6 @@ def appimages(tmp_path, monkeypatch):
     folder = tmp_path / "AppImages"
     monkeypatch.setattr(uc, "APPIMAGE_DIR", str(folder))
     monkeypatch.setattr(uc, "APPIMAGE_PATH", str(folder / "TuxTalk.AppImage"))
-    monkeypatch.setattr(os, "execv", lambda *a: pytest.fail("must not exec"))
     return folder
 
 
@@ -137,15 +141,6 @@ def test_install_refuses_when_the_disk_is_too_full(tmp_path, appimages, monkeypa
     monkeypatch.setattr("tuxtalk.download_utils.free_space_bytes", lambda p: 1024)
     ok, message = uc.install_appimage_update(_download(tmp_path))
     assert not ok and "disk space" in message
-
-
-def test_no_update_path_execs_the_appimage():
-    """execv from Preferences or a worker thread breaks the restart. (The
-    engine launcher execs in a process of its own: it becomes the engine.)"""
-    for path in SRC.rglob("*.py"):
-        if path.name != "engine_launcher.py":
-            assert "os.execv(" not in path.read_text(), path.name
-    assert not hasattr(uc, "install_update_and_restart")
 
 
 # ---- first-run copy -----------------------------------------------------
