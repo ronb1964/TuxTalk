@@ -350,6 +350,14 @@ before 0.15.0, so older entries use that name.
   Dictation Off" (with the checkmark, since it's on) or "Turn Dictation On".
   It used to read "Dictation on/off" with only the checkmark to tell you,
   which a screen reader couldn't say.
+- On GNOME, the TuxTalk button in the top bar tells a screen reader whether
+  dictation is on now: "TuxTalk, dictation on", "dictation off" or
+  "recording". Before, it only ever said "TuxTalk", so you had to open the
+  menu to find out.
+- The hotkey test on the welcome screen now listens to a keyboard you plug
+  in while it's open, within a few seconds, the way dictation itself does.
+  It only read the keyboards that were there when it opened, so on the new
+  one a key your desktop keeps for itself could look like it didn't work.
 - Picking large-v3 on an NVIDIA card and downloading CUDA with it now
   switches dictation over as soon as the downloads are done, the same as
   picking CUDA under Device always did. Before, it waited for you to click
