@@ -383,7 +383,7 @@ def test_saving_an_unrelated_change_leaves_autostart_alone(tmp_path, monkeypatch
         d = _saveable(tmp_path, monkeypatch,
                       {"launch_at_login": launch, "beeps": False, "language_mode": "auto"},
                       {"launch_at_login": launch, "beeps": True, "language_mode": "auto"})
-        d._handle_autostart = lambda v: applied.append(v)
+        d._handle_autostart = applied.append
 
         assert PreferencesWindow.save_config(d) is True
         assert PreferencesWindow.save_config(d) is True    # a second Apply

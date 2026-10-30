@@ -198,7 +198,8 @@ def test_engine_tables_flatten_every_spelling():
     pos, spelled = 0, ""
     while pos < len(text):
         p = targets[0] + pos
-        options = list(zip(pids[positions[p]:positions[p + 1]], nexts[positions[p]:positions[p + 1]]))
+        options = list(zip(pids[positions[p]:positions[p + 1]],
+                           nexts[positions[p]:positions[p + 1]], strict=True))
         pid, nxt = max(options, key=lambda o: o[1])        # the longest piece
         spelled += VOCAB[pid]
         pos = nxt

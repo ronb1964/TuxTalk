@@ -10,6 +10,7 @@ and Preferences says what each key gives up.
 import pytest
 from evdev import ecodes
 
+from conftest import KeyEvent
 from tuxtalk import (cosmic_hotkeys, delivery_notices, focused_window, gnome_hotkeys,
                      keyboard_layout, modifier_hotkeys, send_countdown, virtual_keyboard,
                      x11_hotkeys)
@@ -39,13 +40,6 @@ def named(wm_class):
 
 KWRITE = named("kwrite")
 F8 = ecodes.KEY_F8
-
-
-class Event:
-    type = ecodes.EV_KEY
-
-    def __init__(self, code, value):
-        self.code, self.value = code, value
 
 
 class Cfg:
@@ -86,8 +80,8 @@ def service(monkeypatch):
 
 def key(code, value, held, hold=F8, toggle=None):
     """One key event as the main loop delivers it: modifier state first."""
-    track_modifier(held, Event(code, value))
-    hotkeys._handle_key_event(Event(code, value), hold, toggle,
+    track_modifier(held, KeyEvent(code, value))
+    hotkeys._handle_key_event(KeyEvent(code, value), hold, toggle,
                           None, held, [], Cfg(), 0)
 
 
@@ -351,7 +345,7 @@ def test_a_stuck_key_let_go_and_pressed_again_is_waited_for(keyboard, stuck_righ
     board = stuck_right_ctrl()
     keyboard_output.send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
     monkeypatch.setattr(hotkeys, "_hotkey_test_active", lambda: False)
-    hotkeys._handle_key_event(Event(RCTRL, 0), F8, RCTRL, None, set(), [board], Cfg(), 0)
+    hotkeys._handle_key_event(KeyEvent(RCTRL, 0), F8, RCTRL, None, set(), [board], Cfg(), 0)
     looked = board.looks
     board.pressed = lambda look: look <= looked + 3     # down again, for a moment
     assert keyboard_output.send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a")
@@ -767,7 +761,7 @@ def holding(real_grabs, monkeypatch):
     def hold(code, grabs=True):
         board = Grabbable(lambda look: True, code, grabs)
         modifier_hotkeys.note([board], code, ecodes.KEY_F9)
-        hotkeys._handle_key_event(Event(code, 1), code, ecodes.KEY_F9, None, {code},
+        hotkeys._handle_key_event(KeyEvent(code, 1), code, ecodes.KEY_F9, None, {code},
                               [board], Cfg(), 0)
         assert rs.state.is_recording
     return hold
@@ -814,8 +808,8 @@ def test_a_double_tap_of_a_right_ctrl_or_alt_toggle_goes_hands_free(keyboard, re
     modifier_hotkeys.note([board], F8, code)
     held = set()
     for value in (1, 0, 1, 0):
-        track_modifier(held, Event(code, value))
-        hotkeys._handle_key_event(Event(code, value), F8, code, None, held, [board],
+        track_modifier(held, KeyEvent(code, value))
+        hotkeys._handle_key_event(KeyEvent(code, value), F8, code, None, held, [board],
                               Cfg(), 0)
         assert rs.state.is_recording
     assert rs.state.silence is not None and stopped == []

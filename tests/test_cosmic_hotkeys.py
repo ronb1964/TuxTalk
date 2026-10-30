@@ -250,14 +250,28 @@ def test_stopping_the_service_gives_the_keys_back_on_cosmic(cosmic, monkeypatch)
     assert _custom() == USERS_OWN
 
 
-def test_every_path_that_gives_the_keys_back_releases_cosmic_too():
-    """The launcher, the tray (after a crash) and the service's exit hook all
-    go through service_launcher.release_desktop_hotkeys, so none of them can
-    miss a desktop. Uninstalling checks each desktop's result itself."""
-    import pathlib
-    import re
-    src = pathlib.Path(ch.__file__).parent
-    direct = [path.name for path in sorted(src.rglob("*.py"))
-              if path.name not in ("service_launcher.py", "uninstall.py")
-              and re.search(r"\b(kwin|cosmic)_hotkeys\.release\b", path.read_text())]
-    assert direct == []
+def _tray_noticing(service_running):
+    """The tray's check after it saw the service stop (a crash or a SIGKILL
+    skips the service's own exit hook), with the service *service_running*
+    again by then or not."""
+    from tuxtalk import tray
+    stub = types.SimpleNamespace(is_service_running=lambda: service_running)
+    tray.DictationTray._release_desktop_hotkeys(stub)
+
+
+def test_a_crashed_service_gives_the_keys_back_on_cosmic(cosmic):
+    """The service's exit hook never ran, so the tray hands the keys back,
+    or F8 stays swallowed with dictation off."""
+    _write_custom(USERS_OWN)
+    ch.claim(_cfg())
+    _tray_noticing(service_running=False)
+    assert _custom() == USERS_OWN
+
+
+def test_a_service_started_meanwhile_keeps_its_keys_on_cosmic(cosmic):
+    """Dictation turned on again before the tray looked: the new service
+    holds the keys, and releasing them would let F8 through to the app."""
+    _write_custom(USERS_OWN)
+    ch.claim(_cfg())
+    _tray_noticing(service_running=True)
+    assert _held(_custom()) == [((), "f8"), ((), "f9"), (("Alt", "Ctrl"), "v")]

@@ -402,9 +402,9 @@ def test_a_put_back_that_fails_too_is_logged_and_the_words_error_kept(
     def disk_full(words):
         raise OSError(28, "No space left on device (words)")
     monkeypatch.setattr(custom_words, "save", disk_full)
-    with caplog.at_level(logging.ERROR, logger=vocabulary.logger.name):
-        with pytest.raises(OSError, match=r"\(words\)\. The snippets were changed all the same"):
-            vocabulary.remove_word("ClaudeClaw")
+    with caplog.at_level(logging.ERROR, logger=vocabulary.logger.name), \
+            pytest.raises(OSError, match=r"\(words\)\. The snippets were changed all the same"):
+        vocabulary.remove_word("ClaudeClaw")
     assert "snippets couldn't be put back" in caplog.text
 
 

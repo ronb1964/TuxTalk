@@ -1,6 +1,7 @@
 """"fix that word" opens Fix a Word over the app, on the newest dictation
 (2026-10-14): learning from corrections, the way TuxTalk can, since it can't
 see a word retyped by hand."""
+import pathlib
 import threading
 import time
 
@@ -89,8 +90,9 @@ def test_right_after_a_dictation_it_can_fix_the_text(opened, typed, monkeypatch)
     flag, path = calls[0]
     import json, os, stat
     assert flag == "--in-place"
-    assert json.load(open(path)) == {"text": " Mary had a lamb whose fleece was white. ",
-                                     "window": "org.kde.kwrite", "where": None}
+    assert json.loads(pathlib.Path(path).read_text()) == {
+        "text": " Mary had a lamb whose fleece was white. ",
+        "window": "org.kde.kwrite", "where": None}
     assert stat.S_IMODE(os.stat(path).st_mode) == 0o600          # only this user
     assert rs.state.last_inserted_text == ""                     # undo can't trust it now
 
@@ -132,7 +134,7 @@ def test_fix_a_word_gets_the_window_the_dictation_went_to(opened, typed, monkeyp
                         lambda module, *a: calls.append(a) or _OpenWindow())
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
     voice_commands.handle_fix_word("fix that word", False)
-    assert json.load(open(calls[0][1]))["where"] == ["tray", "{first}"]
+    assert json.loads(pathlib.Path(calls[0][1]).read_text())["where"] == ["tray", "{first}"]
 
     class Dialog:
         def __init__(self, *a, **k):

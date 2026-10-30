@@ -10,18 +10,11 @@ import threading
 import pytest
 
 pytest.importorskip("gi")
+from conftest import AnyWidget  # noqa: E402
 from tuxtalk import model_helper as mh  # noqa: E402
 
 
-class _Anything:
-    def __init__(self, *args, **kwargs):
-        pass
-
-    def __getattr__(self, name):
-        return lambda *a, **k: _Anything()
-
-
-class _FakeDialog(_Anything):
+class _FakeDialog(AnyWidget):
     """run() waits for response(), like Gtk.Dialog; gives up as a Cancel."""
 
     def __init__(self, *args, **kwargs):
@@ -38,7 +31,7 @@ class _FakeDialog(_Anything):
         return self._response
 
 
-class _Text(_Anything):
+class _Text(AnyWidget):
     """A label or progress bar that remembers the texts it was given."""
 
     shown = []
@@ -51,7 +44,7 @@ def _quiet_window(monkeypatch, dialog=_FakeDialog):
     monkeypatch.setattr(mh.Gtk, "Dialog", dialog)
     for name in ("Label", "ProgressBar"):
         monkeypatch.setattr(mh.Gtk, name, _Text)
-    monkeypatch.setattr(mh.Gtk, "Button", _Anything)
+    monkeypatch.setattr(mh.Gtk, "Button", AnyWidget)
     # Run GLib callbacks straight away, from whichever thread asks.
     monkeypatch.setattr(mh.GLib, "idle_add", lambda fn, *a: fn(*a))
     _Text.shown = []

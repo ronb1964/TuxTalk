@@ -101,11 +101,11 @@ def find(wanted_role, name, window=None):
         if not matches(window, win.get_name()):
             continue
         for _depth, obj in walk(win):
-            if role(obj) == wanted_role and matches(name, obj.get_name()):
-                # "visible", not "showing": GTK says showing only for widgets
-                # scrolled into view, and buttons below the fold still work.
-                if HIDDEN_TOO or "visible" in states(obj):
-                    return obj
+            # "visible", not "showing": GTK says showing only for widgets
+            # scrolled into view, and buttons below the fold still work.
+            if role(obj) == wanted_role and matches(name, obj.get_name()) \
+                    and (HIDDEN_TOO or "visible" in states(obj)):
+                return obj
     return None
 
 
@@ -147,7 +147,7 @@ def main(argv):
                for app, win in windows()]
     elif command == "dump":
         out = []
-        for app, win in windows():
+        for _app, win in windows():
             if args and not matches(args[0], win.get_name()):
                 continue
             for depth, obj in walk(win):

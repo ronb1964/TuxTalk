@@ -14,7 +14,7 @@ is saved before injection is even attempted.
 import numpy as np
 import pytest
 
-from tuxtalk import focused_window, window_classes
+from tuxtalk import focused_window
 from tuxtalk import pipeline
 from tuxtalk import delivery
 from tuxtalk import engine

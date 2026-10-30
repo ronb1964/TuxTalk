@@ -5,6 +5,7 @@ hand on an RTX 4070 Super and a Ryzen 7800X3D's built-in Radeon; these cover
 everything around them.
 """
 import io
+import pathlib
 import time
 import types
 import wave
@@ -136,7 +137,7 @@ def test_a_download_that_fails_to_unpack_leaves_nothing_behind(tmp_path, monkeyp
     monkeypatch.setattr(wv, "_engine_dir", lambda: str(engine))
 
     def download(url, dest, **kwargs):
-        open(dest, "wb").write(b"not a tar file")
+        pathlib.Path(dest).write_bytes(b"not a tar file")
         return True
     monkeypatch.setattr("tuxtalk.download_utils.download_file", download)
     assert wv.make_engine_download_func("small")(lambda *a: None, None) is False
@@ -165,7 +166,7 @@ def test_two_downloads_of_the_engine_at_once_both_end_installed(tmp_path, monkey
     both_downloaded = threading.Barrier(2)
 
     def download(url, dest, **kwargs):
-        open(dest, "wb").write(packed.getvalue())
+        pathlib.Path(dest).write_bytes(packed.getvalue())
         both_downloaded.wait(5)
         return True
     monkeypatch.setattr("tuxtalk.download_utils.download_file", download)
@@ -644,6 +645,6 @@ def test_a_failed_warm_up_stops_the_server(fake_server, monkeypatch):
         started.append(real_popen(*a, **k))
         return started[-1]
     monkeypatch.setattr(wv.subprocess, "Popen", recording_popen)
-    with pytest.raises(Exception):
+    with pytest.raises(OSError):           # the server's error reply (HTTPError)
         wv.VulkanWhisperModel("small", 0, threads=1)
     assert started and started[0].poll() is not None

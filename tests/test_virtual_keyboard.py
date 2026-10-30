@@ -3,6 +3,8 @@
 Every test here runs on the recording keyboard from conftest.py; a real one
 would type into whatever window has the focus on the computer running them.
 """
+import itertools
+
 import pytest
 
 from tuxtalk import virtual_keyboard
@@ -152,7 +154,7 @@ def test_after_this_process_was_held_up_keys_never_go_out_in_a_burst(settled, mo
         write(*a)
     monkeypatch.setattr(settled, "write", held_up_once)
     virtual_keyboard.send([(30, 1), (30, 0)] * 50, delay_ms=2)
-    gaps = [b - a for a, b in zip(sent_at, sent_at[1:])]
+    gaps = [b - a for a, b in itertools.pairwise(sent_at)]
     assert sum(1 for g in gaps if g < 0.002 * 0.99) <= 1
 
 
@@ -228,6 +230,9 @@ def test_a_paste_shortcut_cut_off_is_partial_and_not_typed_after(breaks_once, mo
 
         def poll(self):
             return 0
+    # wl-copy --help is asked once and remembered: whether this Popen gets that
+    # question too depended on the tests run before this one.
+    monkeypatch.setattr("tuxtalk.clipboard.wl_copy_command", lambda: ["wl-copy"])
     monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda *a, **k: Copied())
     assert delivery.inject_text("hello world", "paste") == "partial"
     keys = {code for code, _value in breaks_once.events[4:]}

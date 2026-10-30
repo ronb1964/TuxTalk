@@ -17,6 +17,7 @@ import time
 import pytest
 from evdev import ecodes
 
+from conftest import KeyEvent
 from tuxtalk import hotkeys
 from tuxtalk import keyboard_grab
 from tuxtalk import recording_state as rs
@@ -25,11 +26,6 @@ from tuxtalk import recording
 from tuxtalk import pipeline
 
 F8 = ecodes.KEY_F8
-
-
-class Event:
-    def __init__(self, code, value):
-        self.type, self.code, self.value = ecodes.EV_KEY, code, value
 
 
 class KernelKeyboard:
@@ -47,7 +43,7 @@ class KernelKeyboard:
         if (value == 1) == (code in self.down):
             return                    # no state change: the kernel drops it
         (self.down.add if value == 1 else self.down.discard)(code)
-        self.talktype_queue.append(Event(code, value))
+        self.talktype_queue.append(KeyEvent(code, value))
         if not self.grabbed:
             self.desktop_count[code] = self.desktop_count.get(code, 0) + (1 if value == 1 else -1)
 
@@ -152,7 +148,7 @@ def test_without_the_fix_the_desktop_is_left_holding_f8(kb, monkeypatch):
 
 def test_stale_injections_expire_and_never_swallow_real_keys(kb, monkeypatch):
     keyboard_grab._injected_pending.append((kb.path, F8, 0, time.time() - 1))   # already expired
-    assert keyboard_grab.is_own_injected_event(kb, Event(F8, 0)) is False
+    assert keyboard_grab.is_own_injected_event(kb, KeyEvent(F8, 0)) is False
 
 
 def test_a_failed_write_falls_back_to_the_old_behaviour(kb, monkeypatch):

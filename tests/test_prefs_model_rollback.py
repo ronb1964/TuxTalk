@@ -17,16 +17,6 @@ returns before any dialog is built, so no display is needed.
 """
 
 from types import SimpleNamespace
-import pytest
-
-
-@pytest.fixture
-def prefs_cls():
-    gi = pytest.importorskip("gi")
-    gi.require_version("Gtk", "3.0")
-    from tuxtalk.prefs import PreferencesWindow
-
-    return PreferencesWindow
 
 
 class StubPrefs:

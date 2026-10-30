@@ -65,9 +65,8 @@ class Processes:
 
     def signal(self, pid, sig):
         self.sent.append((pid, sig))
-        if sig == signal.SIGKILL and pid not in self.unkillable:
-            self.pids.remove(pid)
-        elif sig == signal.SIGTERM and pid not in self.ignores_sigterm:
+        if ((sig == signal.SIGKILL and pid not in self.unkillable)
+                or (sig == signal.SIGTERM and pid not in self.ignores_sigterm)):
             self.pids.remove(pid)
 
     def sleep(self, s):

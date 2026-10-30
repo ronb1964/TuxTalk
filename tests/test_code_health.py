@@ -260,6 +260,14 @@ def test_the_baseline_keeps_up_with_every_improvement():
         "this file's docstring and commit code_health_baseline.json")
 
 
+def test_no_test_file_is_longer_than_a_source_file_may_be():
+    """tests/ keeps to the file limit too. Its other measures (about 290
+    long lines and 240 missing docstrings) aren't held to yet: CODE_HEALTH.md,
+    task 1."""
+    files = measure(ROOT / "tests")["files"]
+    assert {path: n for path, n in files.items() if n > FILE_LINES} == {}
+
+
 # --- the measuring itself ------------------------------------------------------------
 
 def _findings(source):

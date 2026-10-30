@@ -8,6 +8,7 @@ import pytest
 from evdev import ecodes
 
 from gtk_text import tree_text
+from conftest import KeyEvent
 from tuxtalk import config, history, kwin_hotkeys
 from tuxtalk import hotkeys
 from tuxtalk import notices
@@ -22,11 +23,6 @@ from tuxtalk import pipeline
 P = ecodes.KEY_P
 CTRL, ALT = ecodes.KEY_LEFTCTRL, ecodes.KEY_LEFTALT
 COMBO = ({"CTRL", "ALT"}, P)
-
-
-class Event:
-    def __init__(self, code, value):
-        self.type, self.code, self.value = ecodes.EV_KEY, code, value
 
 
 class Cfg:
@@ -54,7 +50,7 @@ def send(code, value, held, combo=COMBO):
     """Deliver one key event the way the main loop does: modifier state first."""
     if code in (CTRL, ALT):
         (held.add if value else held.discard)(code)
-    hotkeys._handle_key_event(Event(code, value), ecodes.KEY_F8, None,
+    hotkeys._handle_key_event(KeyEvent(code, value), ecodes.KEY_F8, None,
                           None, held, [], Cfg(), 0, paste_last_combo=combo)
 
 

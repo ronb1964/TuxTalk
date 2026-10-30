@@ -10,24 +10,15 @@ import types
 import pytest
 
 pytest.importorskip("gi")
+from conftest import AnyWidget  # noqa: E402
 from tuxtalk import vulkan_setup_dialogs as vsd  # noqa: E402
-
-
-class _Anything:
-    """Accepts any widget call and returns another _Anything."""
-
-    def __init__(self, *args, **kwargs):
-        pass
-
-    def __getattr__(self, name):
-        return lambda *a, **k: _Anything()
 
 
 def test_escape_is_refused_while_the_check_runs(monkeypatch):
     release = threading.Event()
     seen = {}
 
-    class FakeDialog(_Anything):
+    class FakeDialog(AnyWidget):
         def __init__(self, *args, **kwargs):
             self.handlers = {}
 
@@ -50,7 +41,7 @@ def test_escape_is_refused_while_the_check_runs(monkeypatch):
 
     monkeypatch.setattr(vsd.Gtk, "Dialog", FakeDialog)
     for name in ("Box", "Spinner", "Label"):
-        monkeypatch.setattr(vsd.Gtk, name, _Anything)
+        monkeypatch.setattr(vsd.Gtk, name, AnyWidget)
     monkeypatch.setattr(vsd.GLib, "timeout_add", lambda *a, **k: 0)
     # Only this module's threads: replacing threading.Thread itself broke
     # every other thread started meanwhile (the beeps' among them).
@@ -78,7 +69,7 @@ def test_a_long_check_can_be_stopped(monkeypatch):
     timers = {}
     seen = {"buttons": []}
 
-    class FakeDialog(_Anything):
+    class FakeDialog(AnyWidget):
         def __init__(self, *args, **kwargs):
             self.handlers = {}
 
@@ -87,7 +78,7 @@ def test_a_long_check_can_be_stopped(monkeypatch):
 
         def add_button(self, text, response):
             seen["buttons"].append(text)
-            return _Anything()
+            return AnyWidget()
 
         def run(self):
             handler = self.handlers["delete-event"]
@@ -98,7 +89,7 @@ def test_a_long_check_can_be_stopped(monkeypatch):
 
     monkeypatch.setattr(vsd.Gtk, "Dialog", FakeDialog)
     for name in ("Box", "Spinner", "Label"):
-        monkeypatch.setattr(vsd.Gtk, name, _Anything)
+        monkeypatch.setattr(vsd.Gtk, name, AnyWidget)
     monkeypatch.setattr(vsd.GLib, "timeout_add",
                         lambda ms, fn, *a: timers.__setitem__(ms, fn) or 0)
 

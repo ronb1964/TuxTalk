@@ -7,17 +7,8 @@ Preferences at all.
 """
 from types import SimpleNamespace
 
-import pytest
 
 from tuxtalk import whisper_vulkan as wv
-
-
-@pytest.fixture
-def prefs_cls():
-    gi = pytest.importorskip("gi")
-    gi.require_version("Gtk", "3.0")
-    from tuxtalk.prefs import PreferencesWindow
-    return PreferencesWindow
 
 
 def test_a_vulkan_model_download_reports_success(prefs_cls, monkeypatch):
