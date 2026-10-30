@@ -3,6 +3,7 @@ import dataclasses
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 try:
@@ -462,7 +463,7 @@ _config_mtime = 0.0
 # written over a file whose contents may be perfectly good.
 _config_read_failed = False
 
-def _recover_damaged_config(error: Exception) -> Settings:
+def _recover_damaged_config() -> Settings:
     """Set a damaged config aside, recover the last known good settings, and
     write them back so the file is actually repaired.
 
@@ -494,6 +495,11 @@ def _recover_damaged_config(error: Exception) -> Settings:
 
     if not restored_from_backup:
         logger.warning("Settings have been reset to defaults")
+    # Also on stderr: started from a terminal, that's where the user looks.
+    print("TuxTalk's settings file was damaged"
+          + (f"; a copy was kept at {quarantine}" if quarantined else "")
+          + (". Your previous settings were restored from the backup." if restored_from_backup
+             else ". Settings have been reset to defaults."), file=sys.stderr)
 
     # Only replace the file when its previous contents are safely stored
     # elsewhere. If the quarantine copy failed — an unreadable file, a full
@@ -602,7 +608,7 @@ def load_config() -> Settings:
             # defaults would look like a fresh install, and the next save would
             # overwrite the user's real settings for good.
             logger.error(f"Settings file is damaged: {e}")
-            s = _recover_damaged_config(e)
+            s = _recover_damaged_config()
 
     s = repaired(s)
     _config_cache = s

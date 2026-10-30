@@ -54,11 +54,13 @@ def test_cancel_is_respected_on_an_nvidia_setup(monkeypatch):
     assert len(calls) == 1   # asked once; no silent CPU retry
 
 
-def test_cancel_stops_the_service_when_no_other_model_is_downloaded(monkeypatch):
+def test_cancel_stops_the_service_when_no_other_model_is_downloaded(monkeypatch, capsys):
+    """Started from a terminal (the dictate command), it says why there."""
     monkeypatch.setattr(model_helper, "download_model_with_progress", lambda *a, **k: None)
     monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda m: False)
     with pytest.raises(SystemExit):
         engine.build_or_exit(_settings())
+    assert "Choose a model in Preferences" in capsys.readouterr().err
 
 
 def test_parakeet_never_takes_the_cuda_fallback(monkeypatch):

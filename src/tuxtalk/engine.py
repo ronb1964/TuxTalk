@@ -313,6 +313,7 @@ def build_or_exit(settings: Settings):
         fallback = _pick_fallback_model(wanted, downloaded, has_cuda)
         if fallback is None:
             logger.warning(f"Dictation service stopping: {e}, and no other model is downloaded")
+            print(f"{e}. Choose a model in Preferences to start dictating.", file=sys.stderr)
             sys.exit(1)
 
         logger.warning(f"{e}; falling back to the downloaded {fallback} model")

@@ -116,11 +116,13 @@ cd /home/ron/Projects/TalkType
 ```bash
 cd ~/AppImages && env -u GDK_BACKEND ./TuxTalk-vX.X.X-x86_64.AppImage > /tmp/tuxtalk-output.log 2>&1 &
 ```
-- Then tail the log to confirm startup:
+- Then read both logs to confirm startup. The terminal output holds only
+  crashes and command-line messages; TuxTalk's own progress (the engine
+  loading, each dictation) is in its log file:
 ```bash
-sleep 3 && cat /tmp/tuxtalk-output.log
+sleep 3 && cat /tmp/tuxtalk-output.log && tail -n 40 ~/.config/tuxtalk/tuxtalk.log
 ```
-- Continue monitoring output as Ron tests — check the log after each reported issue
+- Continue monitoring both as Ron tests — check them after each reported issue
 
 ### Step 8: Ron Tests — WAIT for Results
 Ron tests against this checklist. Do NOT proceed until he reports back.

@@ -594,7 +594,9 @@ def shared_text(plan, size):
 
 def _wait_for(work):
     """Run *work* on a thread while the window keeps drawing; its result,
-    or the error it raised."""
+    or the error it raised. Ctrl+C in `tuxtalk --uninstall` lets the step
+    under way finish first: Python joins a pool's threads at exit anyway,
+    and a step stopped halfway would leave half an uninstall."""
     loop = GLib.MainLoop()
     with ThreadPoolExecutor(max_workers=1) as pool:
         done = pool.submit(work)

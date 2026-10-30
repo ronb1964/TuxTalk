@@ -33,7 +33,7 @@ def test_the_first_tray_takes_the_lock_and_records_its_pid(lock_dir):
     assert (lock_dir / "talktype-tray.lock").read_text() == str(os.getpid())
 
 
-def test_a_second_tray_exits_and_leaves_the_pid_alone(lock_dir, monkeypatch):
+def test_a_second_tray_exits_and_leaves_the_pid_alone(lock_dir, monkeypatch, capsys):
     shown = []
     monkeypatch.setattr(tray_instance, "_show_already_running",
                         lambda older_talktype: shown.append(older_talktype))
@@ -49,6 +49,7 @@ def test_a_second_tray_exits_and_leaves_the_pid_alone(lock_dir, monkeypatch):
         assert (lock_dir / "talktype-tray.lock").read_text() == str(os.getpid())
         # Started from the menu, a silent exit looks like nothing happened.
         assert shown == [False]
+        assert "already running" in capsys.readouterr().err      # and in a terminal
     finally:
         tray_instance._lockfile_handle = first
 

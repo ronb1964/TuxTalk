@@ -782,3 +782,16 @@ def test_a_snippet_that_is_not_text_does_not_break_dictation(commands_path):
     loaded = config.load_custom_commands()
     assert loaded == {"talk type": "TalkType", "answer": "42"}
     assert custom_commands.apply("the answer", loaded, [])[0] == "the 42"
+
+
+def test_a_terminal_user_is_told_their_settings_were_replaced(config_path, capsys):
+    """Started from a terminal, TuxTalk says there that it set a damaged
+    settings file aside and what it uses instead; the log isn't where a
+    terminal user looks."""
+    config.save_config(config.Settings())
+    config.save_config(config.Settings())           # the first save becomes the backup
+    config_path.write_text("garbage {{{")
+    config._config_cache, config._config_mtime = None, 0.0
+    config.load_config()
+    told = capsys.readouterr().err
+    assert "config.toml.corrupt-" in told and "restored from the backup" in told

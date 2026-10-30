@@ -52,6 +52,7 @@ def _acquire_single_instance():
         return
     if not claimed:
         logger.info("Another TuxTalk instance is already running. Exiting.")
+        print("Another TuxTalk instance is already running. Exiting.", file=sys.stderr)
         sys.exit(0)
     _lockfile_handle = lockfile     # closing it, even by garbage collection, lets go
 

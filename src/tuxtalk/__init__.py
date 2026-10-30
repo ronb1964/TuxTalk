@@ -1,8 +1,9 @@
 """TuxTalk - voice dictation for Linux"""
 
 # First of all: move a TalkType install's folders to TuxTalk's names, before
-# any module (the logger above all) creates the new ones. The lines are logged
-# by the tray once its logger exists. See rename_migration.py.
+# any module (the logger above all) creates the new ones. What was moved is
+# logged by the tray; a move that failed is logged here, by each process that
+# tried it. See rename_migration.py.
 from . import rename_migration as _rename_migration
 MIGRATION_LOG = _rename_migration.run_at_startup()
 
