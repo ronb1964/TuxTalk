@@ -1036,29 +1036,3 @@ def check_just_updated() -> Optional[str]:
         except OSError:
             pass        # it can't be read or removed: nothing more to do about a note
         return None
-
-
-# Print what the checker sees, for checking it by hand.
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-
-    print("Testing update checker...")
-    print(f"Current version: {get_current_version()}")
-    print(f"Extension version: {get_extension_version()}")
-    print(f"Running from AppImage: {is_running_from_appimage()}")
-    print(f"AppImage path: {get_running_appimage_path()}")
-    print(f"Standard location: {APPIMAGE_PATH}")
-    from .desktop_launcher import desktop_launcher_exists
-    print(f"Desktop launcher exists: {desktop_launcher_exists()}")
-
-    print("\nChecking for updates...")
-    result = check_for_updates()
-
-    if result["success"]:
-        print(f"Latest version: {result['latest_version']}")
-        print(f"Update available: {result['update_available']}")
-        if result["release"]:
-            print(f"Release URL: {result['release'].get('html_url')}")
-            print(f"AppImage URL: {result['release'].get('appimage_url')}")
-    else:
-        print(f"Error: {result['error']}")
