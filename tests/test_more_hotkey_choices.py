@@ -383,6 +383,7 @@ def test_a_stuck_key_types_nothing_another_way(keyboard, stuck_right_ctrl, monke
 
     import pyperclip
     stuck_right_ctrl()
+    monkeypatch.setenv("XDG_SESSION_TYPE", "wayland")   # KWrite on KDE, as below
     ran = []
     monkeypatch.setattr(keyboard_output, "which", lambda name: f"/usr/bin/{name}")
     monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: ran.append(a) or 1 / 0)

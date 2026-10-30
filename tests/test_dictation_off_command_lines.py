@@ -57,6 +57,7 @@ def recorder(monkeypatch):
 
 
 def test_wtype_gets_the_dictation_on_stdin(recorder, monkeypatch):
+    monkeypatch.setenv("XDG_SESSION_TYPE", "wayland")   # wtype is Wayland's
     monkeypatch.setattr(keyboard_output, "which", lambda name: name == "wtype")
     # No access to /dev/uinput: wtype is the way left to type.
     monkeypatch.setattr(virtual_keyboard, "_open", lambda: None)

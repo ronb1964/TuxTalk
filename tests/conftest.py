@@ -41,6 +41,15 @@ os.environ.update({
     "JACK_DEFAULT_SERVER": "no-sound-server",
 })
 
+# The desktop and session a test runs under are the test's choice, not the
+# computer's: left to the developer's KDE Wayland session, code that reads
+# the keyboard layout from X11 never runs here while it does on CI's bare X
+# display. A test that needs a desktop names it itself.
+for _name in ("XDG_SESSION_TYPE", "XDG_CURRENT_DESKTOP", "XDG_SESSION_DESKTOP",
+              "DESKTOP_SESSION", "KDE_FULL_SESSION", "KDE_SESSION_VERSION",
+              "KDE_SESSION_UID", "GNOME_DESKTOP_SESSION_ID", "GNOME_SHELL_SESSION_MODE"):
+    os.environ.pop(_name, None)
+
 # Every window a test builds must open on xvfb-run's hidden display, never on
 # the user's desktop, where it would take the focus from what they're typing
 # in. GTK prefers Wayland, and libwayland connects to wayland-0 in the runtime
