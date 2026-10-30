@@ -191,7 +191,7 @@ def _answers(monkeypatch, outputs):
         if cmd[0] not in outputs:
             raise FileNotFoundError(cmd[0])
         code, out = outputs[cmd[0]]
-        return SimpleNamespace(returncode=code, stdout=out)
+        return SimpleNamespace(returncode=code, stdout=out, stderr="")
     monkeypatch.setattr(V.subprocess, "run", run)
     return ran
 

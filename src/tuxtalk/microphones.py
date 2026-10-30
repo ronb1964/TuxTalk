@@ -3,9 +3,10 @@ desktop's default as PipeWire (or PulseAudio) reports it. PortAudio's own
 "default" can't be trusted for that: on PipeWire it is a virtual
 128-channel device that can record clipped noise instead of the microphone.
 """
-import subprocess
+import re
 
 from .logger import setup_logger
+from .mic_volume import list_sources, run_sound_tool
 
 logger = setup_logger(__name__)
 
@@ -17,26 +18,10 @@ _MAX_MIC_CHANNELS = 10
 _NOT_HARDWARE = ("monitor", "default", "pipewire", "sysdefault", "spdif")
 
 
-def _ask(command, server):
-    """*command*'s output, or None when it isn't installed (that sound
-    server isn't running here), fails, or takes over two seconds. *server*
-    names it in the log."""
-    try:
-        # errors="replace": a device name in another encoding is still a name.
-        result = subprocess.run(command, capture_output=True, text=True, errors="replace",
-                                timeout=2)
-    except FileNotFoundError:
-        return None
-    except (OSError, subprocess.SubprocessError) as e:
-        logger.warning(f"{server} didn't say which microphone is the default: {e}")
-        return None
-    return result.stdout if result.returncode == 0 else None
-
-
 def _default_source_properties() -> list[tuple[str, str]] | None:
     """The default source's properties as `wpctl inspect` lists them, in its
     order, or None without PipeWire (no wpctl) or when it doesn't answer."""
-    output = _ask(["wpctl", "inspect", "@DEFAULT_SOURCE@"], "PipeWire")
+    output = run_sound_tool(["wpctl", "inspect", "@DEFAULT_SOURCE@"])
     if output is None:
         return None
     properties = []
@@ -105,19 +90,22 @@ def _pulseaudio_default_device(devices) -> int | None:
     device numbers pactl gives it, which PortAudio's name carries ("(hw:0,0)").
     The hardware device itself, never PortAudio's "pulse" device: PortAudio
     through the ALSA pulse plugin broke the beeps on real PulseAudio. None
-    when pactl can't say, or the default is no sound card's (a virtual one)."""
-    name = (_ask(["pactl", "get-default-source"], "PulseAudio") or "").strip()
-    if not name:
+    when pactl can't say, or the default is no sound card's input (a virtual
+    source, or the monitor of an output, which shares its card's numbers)."""
+    name = (run_sound_tool(["pactl", "get-default-source"]) or "").strip()
+    if not name or name.endswith(".monitor"):
         return None
-    from .mic_volume import list_sources
     source = next((s for s in list_sources() if s.get("name") == name), {})
     properties = source.get("properties", {})
     card = properties.get("alsa.card")
-    if card is None:
+    if card is None or properties.get("device.class") == "monitor":
         return None
-    tag = f"(hw:{card},{properties.get('alsa.device', '')}"
+    device = properties.get("alsa.device")
+    # The whole "(hw:3,1)": "(hw:3,1" alone is also the start of "(hw:3,10)".
+    number = re.escape(str(device)) if device is not None else r"\d+"
+    tag = re.compile(rf"\(hw:{re.escape(str(card))},{number}\)")
     for i, d in _inputs(devices):
-        if tag in d.get("name", ""):
+        if tag.search(d.get("name", "")):
             logger.info(f"Auto-detected mic: [{i}] {d['name']} (PulseAudio's default source)")
             return i
     return None

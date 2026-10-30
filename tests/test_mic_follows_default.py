@@ -13,7 +13,7 @@ import types
 
 import pytest
 
-from tuxtalk import microphones
+from tuxtalk import mic_volume, microphones
 from tuxtalk import recording_state as rs
 from tuxtalk import recording
 
@@ -110,9 +110,9 @@ def test_start_recording_opens_the_new_default(desktop, monkeypatch):
 
 class TestDefaultSourceName:
     def _wpctl(self, monkeypatch, stdout, returncode=0):
-        monkeypatch.setattr(microphones.subprocess, "run",
+        monkeypatch.setattr(mic_volume.subprocess, "run",
                             lambda cmd, **kw: types.SimpleNamespace(
-                                returncode=returncode, stdout=stdout))
+                                returncode=returncode, stdout=stdout, stderr=""))
 
     def test_reads_node_name(self, monkeypatch):
         self._wpctl(monkeypatch, 'id 57, type PipeWire:Interface:Node\n'
@@ -127,7 +127,7 @@ class TestDefaultSourceName:
     def test_none_without_wpctl(self, monkeypatch):
         def missing(cmd, **kw):
             raise FileNotFoundError("wpctl")
-        monkeypatch.setattr(microphones.subprocess, "run", missing)
+        monkeypatch.setattr(mic_volume.subprocess, "run", missing)
         assert microphones.default_source_name() is None
 
 
