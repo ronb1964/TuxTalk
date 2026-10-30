@@ -14,8 +14,11 @@ before 0.15.0, so older entries use that name.
 - With Type at pause, pressing Esc while the AI was still fixing a "no wait"
   in a phrase didn't stop that phrase: it was typed anyway. Now nothing more
   is typed once you press Esc.
-- "Edit that" said right after a Type at pause dictation changes all of it,
-  the same text "fix that word" works on, instead of only its last phrase.
+- "Edit that" said right after a Type at pause dictation changes all of it
+  since its last Enter or Tab, the same text "fix that word" works on,
+  instead of only its last phrase. If you tapped to hold an automatic send,
+  it still changes only the last phrase. If you've typed or moved the cursor
+  since, it leaves the text alone and says so.
 - The CUDA download for NVIDIA cards is 580 MB now instead of 1.4 GB. It
   included NVIDIA's cuDNN, which the speech engine hasn't needed since 0.16,
   and dictation on CUDA types exactly the same without it. If you downloaded
