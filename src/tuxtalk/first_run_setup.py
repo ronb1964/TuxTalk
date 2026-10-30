@@ -272,11 +272,13 @@ def _install_extension(result):
     if not result.get('install_extension', False):
         return False
     try:
-        from tuxtalk.download_progress_dialog import show_unified_download_dialog
+        from tuxtalk.download_progress_dialog import (EXTENSION_TASK,
+                                                      show_unified_download_dialog,
+                                                      succeeded)
         download_results = show_unified_download_dialog(cuda=False, extension=True,
                                                         parent=None)
         logger.info(f"Download results: {download_results}")
-        return download_results.get('GNOME Extension', {}).get('success')
+        return succeeded(download_results, EXTENSION_TASK)
     except Exception as e:
         logger.error(f"Error during installations: {e}", exc_info=True)
         return False

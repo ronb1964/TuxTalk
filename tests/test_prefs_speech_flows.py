@@ -8,8 +8,8 @@ gi = pytest.importorskip("gi")
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
 
-from tuxtalk import (download_progress_dialog, model_helper, prefs,  # noqa: E402
-                     prefs_speech, recommend, vulkan_setup_dialogs)
+from tuxtalk import (model_helper, prefs, prefs_speech, recommend,  # noqa: E402
+                     vulkan_setup_dialogs)
 
 
 @pytest.fixture
@@ -58,36 +58,6 @@ def test_large_v3_on_nvidia_through_vulkan_picks_both(speech, monkeypatch):
     monkeypatch.setattr(vulkan_setup_dialogs, "set_up", lambda parent, model, confirm: True)
     section.model_combo.set_active_id("large-v3")
     assert _shown(section) == ("large-v3", "large-v3", "vulkan")
-
-
-def test_cuda_downloaded_but_large_v3_not_keeps_the_old_model(speech, monkeypatch):
-    """CUDA's files are there now, so large-v3 loses its download note; the
-    model itself didn't arrive, so it isn't selected."""
-    section = speech("nvidia")
-    monkeypatch.setattr(vulkan_setup_dialogs, "choose_light_or_full",
-                        lambda parent, model: vulkan_setup_dialogs.FULL)
-    monkeypatch.setattr(download_progress_dialog, "show_unified_download_dialog",
-                        lambda **k: {"CUDA Libraries": {"success": True},
-                                     "large-v3 AI Model": {"success": False}})
-    section.model_combo.set_active_id("large-v3")
-    assert _shown(section) == ("small", "small", "cpu")
-    labels = {row[0]: row[1] for row in section.model_store}
-    assert labels["large-v3"] == prefs_speech.MODEL_TEXT["large-v3"]
-
-
-def test_cuda_and_large_v3_downloaded_pick_both(speech, monkeypatch):
-    section = speech("nvidia")
-    installed = []
-    monkeypatch.setattr(prefs.PreferencesWindow, "cuda_files_present",
-                        lambda self: bool(installed))
-    monkeypatch.setattr(vulkan_setup_dialogs, "choose_light_or_full",
-                        lambda parent, model: vulkan_setup_dialogs.FULL)
-    monkeypatch.setattr(download_progress_dialog, "show_unified_download_dialog",
-                        lambda **k: installed.append(1) or {
-                            "CUDA Libraries": {"success": True},
-                            "large-v3 AI Model": {"success": True}})
-    section.model_combo.set_active_id("large-v3")
-    assert _shown(section) == ("large-v3", "large-v3", "cuda")
 
 
 @pytest.mark.parametrize("response, kept", [(Gtk.ResponseType.OK, True),

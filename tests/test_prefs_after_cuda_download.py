@@ -1,10 +1,13 @@
-"""After the CUDA download: switch for real, and never slow Parakeet down.
+"""After CUDA's download: switch for real, and never slow Parakeet down.
 
-The download must not save device = "cuda" by itself: that also moves the
-baseline Preferences diffs against, so OK finds no change and never restarts
-the service. And Parakeet can't use CUDA, so switching it there would move it
-from the graphics card to the processor. Parakeet users are asked which Whisper
-model to use on CUDA instead, and any switch goes through Apply.
+CUDA's files come two ways: picking CUDA in the Device dropdown, or large-v3
+in the Model dropdown (CUDA's files and the model in one window). Both end
+the same way: the switch to CUDA is applied at once and dictation restarts
+onto it. It goes through Apply: a download that saved device = "cuda" itself
+moved the baseline Preferences diffs against, so nothing restarted. And
+Parakeet can't use CUDA, so switching it there would move it from the
+graphics card to the processor: Parakeet users are asked which Whisper model
+to use on CUDA instead. Every question, download and restart is a stand-in.
 """
 from types import SimpleNamespace
 
@@ -28,42 +31,172 @@ def _asks(monkeypatch, stub, answer):
                         lambda parent: stub.asked.append(True) or answer)
 
 
-def _stub(monkeypatch, model, answer):
-    stub = SimpleNamespace(config={"model": model, "device": "vulkan"}, window=None,
-                           applied=[], asked=[])
-    _asks(monkeypatch, stub, answer)
-    stub.win = SimpleNamespace(on_apply=lambda button: stub.applied.append(dict(stub.config)))
-    stub.set_choice = lambda key, value: stub.config.__setitem__(key, value)
-    return stub
-
-
 def _speech():
     from tuxtalk.prefs_speech import SpeechSection
     return SpeechSection
 
 
-def test_a_whisper_model_switches_to_cuda_through_apply(prefs, monkeypatch):
-    stub = _stub(monkeypatch, "small", "unused")
-    _speech()._after_cuda_download(stub)
-    assert stub.asked == []
-    assert stub.applied == [{"model": "small", "device": "cuda"}]
+@pytest.fixture
+def nvidia(prefs_window, monkeypatch):
+    """Preferences on an NVIDIA computer without CUDA's files, the speech
+    models already downloaded. build(model) returns its Speech section;
+    build.happened lists the questions, downloads and restarts in order,
+    build.answer() sets what the Whisper-model question answers, and
+    build.download_both() fakes large-v3's window of two downloads."""
+    from gi.repository import Gtk
+    from tuxtalk import (cuda_helper, download_progress_dialog, model_helper, prefs,
+                         prefs_speech, recommend)
+    from tuxtalk.download_progress_dialog import CUDA_TASK, model_task
+    happened, installed = [], []
+
+    def download_cuda(parent=None, on_success_callback=None):
+        installed.append(True)
+        happened.append("CUDA downloaded")
+        on_success_callback()
+        return True
+
+    def download_both(model_arrives=True):
+        def download(cuda, model, parent):
+            installed.append(True)
+            happened.append(f"CUDA and {model} downloaded")
+            return {CUDA_TASK: {"success": True},
+                    model_task(model): {"success": model_arrives}}
+        monkeypatch.setattr(download_progress_dialog, "show_unified_download_dialog", download)
+
+    def answer(model):
+        monkeypatch.setattr(prefs_speech, "ask_whisper_model_for_cuda",
+                            lambda parent: happened.append("which Whisper model?") or model)
+
+    def build(model):
+        win_cls = prefs.PreferencesWindow
+        monkeypatch.setattr(win_cls, "nvidia_gpu", lambda self: "NVIDIA RTX")
+        monkeypatch.setattr(win_cls, "cuda_files_present", lambda self: bool(installed))
+        monkeypatch.setattr(win_cls, "vulkan_offered", lambda self: False)
+        monkeypatch.setattr(recommend, "detect_hardware",
+                            lambda cfg=None: recommend.Hardware("NVIDIA RTX", True))
+        monkeypatch.setattr(win_cls, "restart_service",
+                            lambda self, on_failed=None: happened.append("restart") or True)
+        monkeypatch.setattr(prefs, "show_message", lambda *a, **k: happened.append(a[2]))
+        monkeypatch.setattr(prefs_speech, "show_message",
+                            lambda *a, **k: happened.append(a[2]) or Gtk.ResponseType.YES)
+        monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda model: True)
+        monkeypatch.setattr(cuda_helper, "show_cuda_download_dialog", download_cuda)
+        answer(None)
+        # The keys Preferences would show anyway: unset, they'd count as a
+        # change, and Apply would offer the hotkey test.
+        return prefs_window(model=model, device="cpu", hotkey="F8",
+                            toggle_hotkey="F9").general_tab.speech
+
+    build.happened, build.answer, build.download_both = happened, answer, download_both
+    return build
+
+
+def _pick_cuda_device(section, monkeypatch):
+    """Pick CUDA in the Device dropdown, and run the setup it leaves for
+    the dropdown's closing (an idle callback) at once."""
+    from tuxtalk import prefs_speech
+    queued = []
+    monkeypatch.setattr(prefs_speech.GLib, "idle_add", lambda fn, *a: queued.append((fn, a)))
+    section.device_combo.set_active_id("cuda")
+    fn, args = queued.pop()
+    fn(*args)
+    assert queued == []
+
+
+def _end_state(section):
+    """What the user sees and what was saved: (Model dropdown, Device
+    dropdown, the model and device on disk)."""
+    import tomllib
+    from tuxtalk import prefs
+    try:
+        with open(prefs.CONFIG_PATH, "rb") as f:
+            saved = tomllib.load(f)
+    except FileNotFoundError:
+        saved = {}
+    return (section.model_combo.get_active_id(), section.device_combo.get_active_id(),
+            saved.get("model"), saved.get("device"))
+
+
+def _device_labels(section):
+    return {row[1]: row[0] for row in section.device_combo.get_model()}
+
+
+def _large_v3_label(section):
+    return next(row[1] for row in section.model_store if row[0] == "large-v3")
+
+
+def test_cuda_from_the_device_dropdown_switches_a_whisper_model_at_once(nvidia, monkeypatch):
+    section = nvidia("small")
+    _pick_cuda_device(section, monkeypatch)
+    assert nvidia.happened == ["Download CUDA Libraries?", "CUDA downloaded", "restart",
+                               "Settings applied successfully!"]
+    assert _end_state(section) == ("small", "cuda", "small", "cuda")
+    assert _device_labels(section)["cuda"] == "CUDA (NVIDIA)"     # no download size now
 
 
 @pytest.mark.parametrize("picked", ["small", "large-v3", "tiny"])
-def test_parakeet_is_asked_and_moves_to_the_model_picked(prefs, monkeypatch, picked):
+def test_cuda_from_the_device_dropdown_moves_parakeet_to_the_model_picked(
+        nvidia, monkeypatch, picked):
     """Any Whisper model can be picked, not only Small, so wanting another
     one doesn't mean downloading Small first."""
-    stub = _stub(monkeypatch, "parakeet-v3", picked)
-    _speech()._after_cuda_download(stub)
-    assert len(stub.asked) == 1
-    assert stub.applied == [{"model": picked, "device": "cuda"}]
+    section = nvidia("parakeet-v3")
+    nvidia.answer(picked)
+    _pick_cuda_device(section, monkeypatch)
+    assert nvidia.happened == ["Download CUDA Libraries?", "CUDA downloaded",
+                               "which Whisper model?", "restart",
+                               "Settings applied successfully!"]
+    assert _end_state(section) == (picked, "cuda", picked, "cuda")
 
 
-def test_parakeet_can_stay_put(prefs, monkeypatch):
-    stub = _stub(monkeypatch, "parakeet-v3", None)
-    _speech()._after_cuda_download(stub)
-    assert stub.applied == []
-    assert stub.config == {"model": "parakeet-v3", "device": "vulkan"}
+def test_keep_parakeet_after_the_download_changes_nothing(nvidia, monkeypatch):
+    """The Device dropdown goes back, nothing is saved or restarted, and
+    the CUDA entry stops naming a download that's done."""
+    section = nvidia("parakeet-v3")
+    _pick_cuda_device(section, monkeypatch)
+    assert "restart" not in nvidia.happened
+    assert _end_state(section) == ("parakeet-v3", "cpu", None, None)
+    assert section.config["device"] == "cpu"
+    assert _device_labels(section)["cuda"] == "CUDA (Parakeet runs on the processor)"
+
+
+def test_a_refused_cuda_download_puts_the_device_back(nvidia, monkeypatch):
+    from gi.repository import Gtk
+    from tuxtalk import prefs_speech
+    section = nvidia("small")
+    monkeypatch.setattr(prefs_speech, "show_message",
+                        lambda *a, **k: nvidia.happened.append(a[2]) or Gtk.ResponseType.NO)
+    _pick_cuda_device(section, monkeypatch)
+    assert nvidia.happened == ["Download CUDA Libraries?"]
+    assert _end_state(section) == ("small", "cpu", None, None)
+    assert section.config["device"] == "cpu"
+
+
+def test_large_v3_with_cuda_switches_at_once_like_the_device_dropdown(nvidia):
+    """Picking large-v3 downloads CUDA's files and the model in one window,
+    then ends as CUDA from the Device dropdown does: applied, restarted."""
+    from tuxtalk.prefs_speech import MODEL_TEXT
+    section = nvidia("small")
+    nvidia.download_both()
+    section.model_combo.set_active_id("large-v3")
+    assert nvidia.happened == ["Downloads Required", "CUDA and large-v3 downloaded",
+                               "restart", "Settings applied successfully!"]
+    assert _end_state(section) == ("large-v3", "cuda", "large-v3", "cuda")
+    assert _device_labels(section)["cuda"] == "CUDA (NVIDIA)"
+    assert _large_v3_label(section) == MODEL_TEXT["large-v3"]
+
+
+def test_cuda_downloaded_but_large_v3_not_keeps_the_old_model(nvidia):
+    """CUDA's files are there now, so large-v3 and the CUDA entry lose their
+    download notes; the model itself didn't arrive, so nothing switches."""
+    from tuxtalk.prefs_speech import MODEL_TEXT
+    section = nvidia("small")
+    nvidia.download_both(model_arrives=False)
+    section.model_combo.set_active_id("large-v3")
+    assert "restart" not in nvidia.happened
+    assert _end_state(section) == ("small", "cpu", None, None)
+    assert (section.config["model"], section.config["device"]) == ("small", "cpu")
+    assert _large_v3_label(section) == MODEL_TEXT["large-v3"]
+    assert _device_labels(section)["cuda"] == "CUDA (NVIDIA)"
 
 
 def test_the_download_no_longer_writes_the_config_itself(prefs, monkeypatch):

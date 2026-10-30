@@ -20,6 +20,23 @@ except ImportError:
     logger = logging.getLogger(__name__)
 
 
+# The names the downloads are shown and reported under: run()'s results are
+# keyed by them, so a caller looks a result up with these, never a retyped
+# string that would quietly stop matching when a label changes.
+CUDA_TASK = "CUDA Libraries"
+EXTENSION_TASK = "GNOME Extension"
+
+
+def model_task(model):
+    """The name *model*'s download is shown and reported under."""
+    return f"{model} AI Model"
+
+
+def succeeded(results, name):
+    """Whether the download called *name* finished, in run()'s *results*."""
+    return results.get(name, {}).get("success", False)
+
+
 # Every rule is scoped to this class on the dialog, because a screen-wide
 # provider otherwise restyles every window in the process (Preferences too).
 _STYLE_CLASS = "tuxtalk-download-dialog"
@@ -447,7 +464,7 @@ def show_unified_download_dialog(cuda=False, extension=False, model=None, parent
     if cuda:
         from tuxtalk import cuda_helper
         task = DownloadTask(
-            name="CUDA Libraries",
+            name=CUDA_TASK,
             size_text=f"~{cuda_helper.DOWNLOAD_SIZE_TEXT}",
             download_func=cuda_helper.download_cuda_libraries
         )
@@ -457,7 +474,7 @@ def show_unified_download_dialog(cuda=False, extension=False, model=None, parent
         from tuxtalk.model_helper import make_model_download_func, MODEL_DISPLAY_SIZES
         model_size = MODEL_DISPLAY_SIZES.get(model, "unknown size")
         task = DownloadTask(
-            name=f"{model} AI Model",
+            name=model_task(model),
             size_text=model_size,
             download_func=make_model_download_func(model)
         )
@@ -477,7 +494,7 @@ def show_unified_download_dialog(cuda=False, extension=False, model=None, parent
             return success
 
         task = DownloadTask(
-            name="GNOME Extension",
+            name=EXTENSION_TASK,
             size_text="~10KB",
             download_func=extension_download,
             can_stop=False
@@ -506,14 +523,14 @@ if __name__ == '__main__':
     dialog = UnifiedDownloadDialog()
 
     task1 = DownloadTask(
-        name="CUDA Libraries",
+        name=CUDA_TASK,
         size_text="~1.4GB",
         download_func=dummy_download
     )
     dialog.add_task(task1)
 
     task2 = DownloadTask(
-        name="GNOME Extension",
+        name=EXTENSION_TASK,
         size_text="~10KB",
         download_func=dummy_download
     )
