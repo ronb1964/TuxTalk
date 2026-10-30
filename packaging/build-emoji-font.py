@@ -37,7 +37,7 @@ NOTO_SHA256 = "15671215ab769fdc7162a045d56fd7d7e477c51b04e6b3c761d914d8fdd6cc44"
 # Symbols in TuxTalk's strings that every text font draws (DejaVu Sans,
 # Noto Sans), and the CJK punctuation TuxTalk types rather than shows. The
 # emoji font isn't needed for these, and Noto Color Emoji doesn't have them.
-TEXT_SYMBOLS = frozenset("–—‘’“”•…€←→−⊘▁■▸▼●✓✗、。！，；？")
+TEXT_SYMBOLS = frozenset("–—‘’‚“”„′″•…€←→−⊘▁■▸▼●✓✗、。！，；？")
 
 # Joining marks that go with emoji, kept in the font with them.
 _JOINERS = "‍️"

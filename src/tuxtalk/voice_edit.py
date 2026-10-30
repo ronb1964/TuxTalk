@@ -179,6 +179,21 @@ def _put_clipboard_back(put_back, result):
         put_back(also=also)
 
 
+# Marks an app's autocorrect (LibreOffice Writer's, say) or TuxTalk's own
+# smart quotes may put in place of the plain ones typed.
+_PLAIN_MARKS = str.maketrans({"\u2018": "'", "\u2019": "'", "\u201a": "'", "\u2032": "'",
+                              "\u201c": '"', "\u201d": '"', "\u201e": '"', "\u2033": '"',
+                              "\u2013": "-", "\u2014": "-", "\u2026": "..."})
+
+
+def _comparable(text: str) -> list:
+    """*text*'s words as "edit that" compares a selection with what was
+    dictated: an app may have changed how they look, not what they say
+    (Writer turns ' into a curly one and capitalises a sentence start, and
+    keeps its own line ends and spaces)."""
+    return text.translate(_PLAIN_MARKS).casefold().split()
+
+
 def _refused_selection(selected, expected, put_back, get_instruction, focused_class,
                        beeps_on) -> bool:
     """True, with the user told, when *selected* isn't text to change:
@@ -189,7 +204,7 @@ def _refused_selection(selected, expected, put_back, get_instruction, focused_cl
     if not selected:
         _nothing_selected(get_instruction, expected is not None, focused_class, beeps_on)
         return True
-    if expected is not None and selected.split() != expected.split():
+    if expected is not None and _comparable(selected) != _comparable(expected):
         logger.info("Voice edit: the selection isn't the dictation any more")
         _put_clipboard_back(put_back, None)
         notices.edit_problem("not_the_dictation", beeps_on)

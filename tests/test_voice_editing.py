@@ -415,6 +415,16 @@ def test_edit_that_rewrites_what_it_selected_however_the_lines_are_spaced(edit_e
     assert done and edit_env["typed"] == ["We completed the electrical work today."]
 
 
+def test_edit_that_accepts_what_the_apps_autocorrect_did_to_it(edit_env):
+    """LibreOffice Writer curls the apostrophe and capitalises the sentence
+    TuxTalk typed: still the dictation, so it's rewritten."""
+    edit_env["selection"]["text"] = "It\u2019s a test \u2013 \u201cdone\u201d\u2026"
+    done = voice_edit.edit_selection(lambda: "make it more professional", False, "type",
+                                     "org.kde.kwrite", 0.0, rs.state.current.message,
+                                     expected='it\'s a test - "done"...')
+    assert done and edit_env["typed"] == ["We completed the electrical work today."]
+
+
 def test_edit_that_leaves_text_changed_by_hand_alone(edit_env, monkeypatch):
     """"edit that" counts back the last dictation's length from the cursor.
     Typed into by hand since, or with the cursor moved, that selects other
