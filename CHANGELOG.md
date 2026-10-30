@@ -354,10 +354,12 @@ before 0.15.0, so older entries use that name.
   dictation is on now: "TuxTalk, dictation on", "dictation off" or
   "recording". Before, it only ever said "TuxTalk", so you had to open the
   menu to find out.
-- The hotkey test on the welcome screen now listens to a keyboard you plug
-  in while it's open, within a few seconds, the way dictation itself does.
-  It only read the keyboards that were there when it opened, so on the new
-  one a key your desktop keeps for itself could look like it didn't work.
+- Without the hotkey helper, the hotkey test on the welcome screen now
+  notices a keyboard you plug in while it's open, within a few seconds,
+  even if no keyboard was there when it opened. It only read the keyboards
+  that were there at the start, so on a new one a key your desktop keeps
+  for itself could look like it didn't work. And if you unplug the keyboard
+  it reads, it stops calling a key Working when only the window saw it.
 - Picking large-v3 on an NVIDIA card and downloading CUDA with it now
   switches dictation over as soon as the downloads are done, the same as
   picking CUDA under Device always did. Before, it waited for you to click
