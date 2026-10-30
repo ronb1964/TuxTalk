@@ -136,7 +136,7 @@ class MenuWindow:
         button.set_relief(Gtk.ReliefStyle.NONE)
         # Like a menu item, a click doesn't take keyboard focus: with focus,
         # Breeze kept a box around the last clicked item after its popup
-        # closed (Ron, 2026-10-16). Tab still reaches every button.
+        # closed. Tab still reaches every button.
         button.set_focus_on_click(False)
         child = button.get_child()
         if isinstance(child, Gtk.Label):

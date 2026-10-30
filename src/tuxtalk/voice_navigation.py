@@ -194,8 +194,8 @@ def chords(command: Command, last_text: str):
     core = span.rstrip()
     if command.said_unit == "word":
         # A word without the sentence's mark after it: "select the last word"
-        # is for replacing or fixing the word, and the period stays (Ron,
-        # 2026-10-18). A sentence keeps its mark, it's part of the sentence.
+        # is for replacing or fixing the word, and the period stays. A
+        # sentence keeps its mark, it's part of the sentence.
         core = core.rstrip(_WORD_END_MARKS)
     trailing = len(span) - len(core)
     words = len(core.strip())

@@ -24,7 +24,7 @@ logger = setup_logger(__name__)
 
 NAME = "TuxTalk virtual keyboard"
 
-# Per key event. Measured in the test VMs (2026-10-20): at 1 ms GTK 3 and 4,
+# Per key event. Measured in the test VMs: at 1 ms GTK 3 and 4,
 # Qt, Xwayland, gnome-terminal, Konsole, Firefox and Brave (Chromium, the
 # engine of Electron apps) all got every character of a 200-character text
 # right, also with every processor busy; with no wait the kernel's buffer
@@ -39,7 +39,7 @@ KEY_DELAY_MS = 2
 
 # The desktop opens a new keyboard a moment after it appears, and presses sent
 # before that are lost: the first letters were missing at once, never after
-# 20 ms on GNOME or 50 ms on KDE (VMs, 2026-10-20). The service makes the
+# 20 ms on GNOME or 50 ms on KDE (in the VMs). The service makes the
 # keyboard when it starts, so by the first dictation this has long passed.
 SETTLE_S = 0.2
 

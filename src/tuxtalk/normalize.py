@@ -146,7 +146,8 @@ _CONTEXT_PROTECT_PATTERNS = [
 
     # "ended with a question mark", "add a comma": with an article the mark
     # is being talked about, not dictated. Nobody dictates "a question mark"
-    # to end a sentence (Ron, 2026-10-18: typed "ended with a?").
+    # to end a sentence (without this, "ended with a question mark" typed
+    # "ended with a?").
     (re.compile(r"\b(a|an|the|this|that|another|no|one)\s+question\s+mark\b",
                 re.IGNORECASE), r"\1 __LIT_QMARK__"),
     (re.compile(r"\b(a|an|the|this|that|another|no|one)\s+exclamation\s+point\b",
@@ -447,10 +448,10 @@ _RE_TIME_FORMAT = re.compile(
 # "F eight" -> "F8", "B five A seven" -> "B5 A7": a capital letter and a
 # number name one thing (a key, a grid square, a seat, vitamin B12), so the
 # number stays a digit whatever "Write numbers as digits" does with eight on
-# its own. Parakeet writes "F8" one time and "F eight" the next (Ron,
-# 2026-10-18). "A" and "I" are words too ("A five minute walk"), so they are
-# joined only beside another pair ("B five A seven"). A lowercase "f" counts
-# because Whisper writes "f eight".
+# its own. Parakeet writes "F8" one time and "F eight" the next. "A" and "I"
+# are words too ("A five minute walk"), so they are joined only beside
+# another pair ("B five A seven"). A lowercase "f" counts because Whisper
+# writes "f eight".
 _LETTER_NUMBERS = {"zero": "0", "one": "1", "two": "2", "three": "3", "four": "4",
                    "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9",
                    "ten": "10", "eleven": "11", "twelve": "12"}

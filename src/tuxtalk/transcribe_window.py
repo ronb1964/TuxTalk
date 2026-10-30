@@ -518,8 +518,8 @@ class TranscribeWindow:
                 "The file isn't finished yet. Closing now loses what's been done so far.",
                 [("Keep Going", Gtk.ResponseType.CANCEL),
                  ("Stop and Close", Gtk.ResponseType.ACCEPT)]) == Gtk.ResponseType.ACCEPT
-        # Closing asks even when the text is kept (Ron: "a little bit of
-        # insurance"), and says it's kept, so it isn't a scare. Another file
+        # Closing asks even when the text is kept, as insurance against a
+        # slip, and says it's kept, so it isn't a scare. Another file
         # loses nothing then: the text stays under Earlier Transcripts.
         if not self.pieces or self.kept or (why == "new" and self.remembered):
             return True

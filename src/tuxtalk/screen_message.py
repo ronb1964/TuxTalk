@@ -136,8 +136,8 @@ def _show_now(text, center, seconds=None, warning=True, tag=None):
         # only on X11 (XWayland). The service falls back to native Wayland
         # when there's no X display, and there GTK 3 makes the label an
         # ordinary window that takes the focus, so everything typed while it
-        # shows is lost ("Press Enter when you're ready" included; VM test,
-        # 2026-10-20).
+        # shows is lost ("Press Enter when you're ready" included, as the VM
+        # tests showed).
         if not is_x11(display):
             logger.info(f"Not showing {text!r} over the window: no X display, so it would "
                         "take the keyboard")

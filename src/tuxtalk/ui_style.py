@@ -234,7 +234,7 @@ WARNING_AMBER = "#e6aa3c"
 # The share of the screen's height a window may count on, whatever the work
 # area says. Under Wayland GTK 3 isn't told about panels and docks, so the work
 # area is the whole screen: on Pop!_OS at 1280x800, Setup Complete filled it
-# and its buttons sat behind COSMIC's dock (VM, 2026-10-21). Three quarters is
+# and its buttons sat behind COSMIC's dock (in the VM). Three quarters is
 # also as tall as COSMIC opens a window, title bar included; asked for more,
 # it cut the bottom off.
 USABLE_SHARE = 0.75
