@@ -69,7 +69,7 @@ SHA256SUMS.txt
 appimage-builder
 appimagetool
 appimagetool-extracted/
-appimagetool-*-extracted/
+appimagetool-type2-extracted/
 type2-runtime-*
 AppDir/
 squashfs-root/

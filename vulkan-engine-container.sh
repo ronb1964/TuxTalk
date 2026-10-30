@@ -8,21 +8,18 @@ apt-get install -y -qq build-essential cmake git wget xz-utils libvulkan-dev ca-
 # Vulkan SDK for glslc and current Vulkan headers (22.04 has neither).
 # A pinned version, checked against the SHA256 LunarG publishes at
 # https://sdk.lunarg.com/sdk/sha/<version>/linux/vulkansdk-linux-x86_64-<version>.tar.xz.txt,
-# so two builds of one engine compile its shaders with the same glslc.
+# so two builds of one engine compile its shaders with the same glslc. The
+# archive is kept in /cache; each build checks and unpacks its own copy (a few
+# seconds), so nothing changed in the cache since is ever run.
 VULKAN_SDK_VERSION=1.4.363.0
 VULKAN_SDK_SHA256=197962f5cbf80baf2775a03336a01cee7c8745686c65aaa70d3f751ade4d7e43
-SDK_DIR="/cache/sdk-$VULKAN_SDK_VERSION"
-cd /cache
-# Unpacked beside its folder and moved in only when complete, so a failed
-# unpack is not cached and reused by the next build.
-if [ ! -d "$SDK_DIR" ]; then
-    wget -q -O sdk.tar.xz \
-        "https://sdk.lunarg.com/sdk/download/${VULKAN_SDK_VERSION}/linux/vulkansdk-linux-x86_64-${VULKAN_SDK_VERSION}.tar.xz"
-    echo "${VULKAN_SDK_SHA256}  sdk.tar.xz" | sha256sum -c --quiet \
-        || { echo "❌ Vulkan SDK download doesn't match its pinned SHA256"; rm -f sdk.tar.xz; exit 1; }
-    rm -rf "$SDK_DIR.partial" && mkdir "$SDK_DIR.partial"
-    tar xf sdk.tar.xz -C "$SDK_DIR.partial" && rm sdk.tar.xz && mv "$SDK_DIR.partial" "$SDK_DIR"
-fi
+source /build/packaging/pinned-download.sh
+SDK_DIR=$(mktemp -d)
+pinned_download \
+    "https://sdk.lunarg.com/sdk/download/${VULKAN_SDK_VERSION}/linux/vulkansdk-linux-x86_64-${VULKAN_SDK_VERSION}.tar.xz" \
+    "$VULKAN_SDK_SHA256" "/cache/vulkansdk-${VULKAN_SDK_VERSION}.tar.xz" "$SDK_DIR/sdk.tar.xz"
+tar xf "$SDK_DIR/sdk.tar.xz" -C "$SDK_DIR"
+rm "$SDK_DIR/sdk.tar.xz"
 export VULKAN_SDK="$SDK_DIR/$VULKAN_SDK_VERSION/x86_64"
 export PATH="$VULKAN_SDK/bin:$PATH"
 

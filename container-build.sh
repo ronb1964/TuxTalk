@@ -429,34 +429,26 @@ done
 # The type2 runtime it is given below is static and needs no libfuse2.
 # Both are tagged releases checked by SHA256, never "continuous": the runtime
 # is the first thing a user's computer runs, and an unpinned one would change
-# the AppImage between two builds of the same source. The cache folders carry
-# the version, so a tool extracted by an older script is never picked up.
+# the AppImage between two builds of the same source. The downloads are kept
+# in the project folder, but each build checks and extracts its own copy, so
+# nothing left there from before (an older tool, a changed file) is run.
 APPIMAGETOOL_VERSION=1.9.1
 APPIMAGETOOL_SHA256=ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0
 TYPE2_RUNTIME_VERSION=20251108
 TYPE2_RUNTIME_SHA256=2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d
-APPIMAGETOOL_DIR="appimagetool-${APPIMAGETOOL_VERSION}-extracted"
-RUNTIME_FILE="type2-runtime-${TYPE2_RUNTIME_VERSION}-x86_64"
 echo "   Getting appimagetool $APPIMAGETOOL_VERSION and type2 runtime $TYPE2_RUNTIME_VERSION..."
-if [ ! -d "$APPIMAGETOOL_DIR" ]; then
-    rm -rf squashfs-root
-    wget -q -O appimagetool-x86_64.AppImage \
-        "https://github.com/AppImage/appimagetool/releases/download/${APPIMAGETOOL_VERSION}/appimagetool-x86_64.AppImage"
-    echo "${APPIMAGETOOL_SHA256}  appimagetool-x86_64.AppImage" | sha256sum -c --quiet \
-        || { echo "❌ appimagetool download doesn't match its pinned SHA256"
-             rm -f appimagetool-x86_64.AppImage; exit 1; }
-    chmod +x appimagetool-x86_64.AppImage
-    ./appimagetool-x86_64.AppImage --appimage-extract > /dev/null 2>&1
-    mv squashfs-root "$APPIMAGETOOL_DIR"
-    rm -f appimagetool-x86_64.AppImage
-fi
-if [ ! -f "$RUNTIME_FILE" ]; then
-    wget -q -O "$RUNTIME_FILE" \
-        "https://github.com/AppImage/type2-runtime/releases/download/${TYPE2_RUNTIME_VERSION}/runtime-x86_64"
-fi
-# Checked on every build, cached or not: it is small, and it goes into the AppImage.
-echo "${TYPE2_RUNTIME_SHA256}  $RUNTIME_FILE" | sha256sum -c --quiet \
-    || { echo "❌ $RUNTIME_FILE doesn't match its pinned SHA256"; rm -f "$RUNTIME_FILE"; exit 1; }
+source packaging/pinned-download.sh
+TOOLS_DIR=$(mktemp -d)
+pinned_download \
+    "https://github.com/AppImage/appimagetool/releases/download/${APPIMAGETOOL_VERSION}/appimagetool-x86_64.AppImage" \
+    "$APPIMAGETOOL_SHA256" "appimagetool-${APPIMAGETOOL_VERSION}-x86_64.AppImage" \
+    "$TOOLS_DIR/appimagetool.AppImage"
+pinned_download \
+    "https://github.com/AppImage/type2-runtime/releases/download/${TYPE2_RUNTIME_VERSION}/runtime-x86_64" \
+    "$TYPE2_RUNTIME_SHA256" "type2-runtime-${TYPE2_RUNTIME_VERSION}-x86_64" "$TOOLS_DIR/runtime"
+chmod +x "$TOOLS_DIR/appimagetool.AppImage"
+(cd "$TOOLS_DIR" && ./appimagetool.AppImage --appimage-extract > /dev/null 2>&1)
+APPIMAGETOOL="$TOOLS_DIR/squashfs-root/AppRun"
 
 # Update information, so AppImageUpdate and similar tools can update TuxTalk
 # by downloading only the changed parts. It points at the .zsync file in the
@@ -469,7 +461,7 @@ ZSYNC_FILE="TuxTalk-v${VERSION}-x86_64.AppImage.zsync"
 rm -f "$ZSYNC_FILE"
 
 echo "   Creating AppImage..."
-ARCH=x86_64 "./$APPIMAGETOOL_DIR/AppRun" --no-appstream --runtime-file "$RUNTIME_FILE" \
+ARCH=x86_64 "$APPIMAGETOOL" --no-appstream --runtime-file "$TOOLS_DIR/runtime" \
     -u "$UPDATE_INFO" \
     AppDir "TuxTalk-v${VERSION}-x86_64.AppImage" > /tmp/appimagetool.log 2>&1 \
     || { echo "❌ ERROR: appimagetool failed:"; cat /tmp/appimagetool.log; exit 1; }
