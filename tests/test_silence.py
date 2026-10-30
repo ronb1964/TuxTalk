@@ -963,6 +963,18 @@ def test_too_little_talking_in_a_mic_test_gives_no_verdict_on_the_room(talk_s):
     assert silence.speech_over_room_db(take, SR) is None
 
 
+def test_talking_from_start_to_stop_in_a_quiet_room_gives_no_verdict():
+    """With hardly any of the take outside the talking, there is no room to
+    judge against: measured on the pauses between words instead, quiet
+    words made a quiet room look noisy."""
+    t = np.arange(SR // 2) / SR
+    quiet_words = np.sin(2 * np.pi * 220 * t) * 300.0 + rng.normal(0, 20.0, t.size)
+    talking = np.concatenate([speech(0.5, noise_level=20.0), quiet_words] * 3
+                             + [speech(0.5, noise_level=20.0)])
+    take = np.concatenate([noise(0.1, 20.0), talking, noise(0.1, 20.0)])
+    assert silence.speech_over_room_db(take.astype(np.float32) / 32768, SR) is None
+
+
 def _mic_test_take(room):
     """A microphone test: a second of *room* (a function of seconds giving
     int16-scale audio), 2.5 s of talking over it, then 1.5 s more; the
@@ -971,7 +983,7 @@ def _mic_test_take(room):
     return ((voice + room(len(voice) / SR)) / 32768).astype(np.float32)
 
 
-def _clattering(seconds, quiet=40.0, loud=400.0):
+def _clattering(seconds, quiet=40.0, loud=250.0):
     """A kitchen or a cafe: dishes and voices 0.4 s of every 0.6 s, the room
     quiet in between."""
     t = np.arange(int(seconds * SR)) / SR
@@ -980,16 +992,18 @@ def _clattering(seconds, quiet=40.0, loud=400.0):
 
 def test_a_room_that_clatters_most_of_the_time_is_noisy_despite_its_quiet_moments():
     """Measured over the room's quietest moments, the voice stood 35 dB over
-    this room and the test said nothing, while hands-free never stops by
-    itself in such a room. Over its median it is 15 dB."""
+    this room and the test said nothing; in recorded kitchens and offices
+    that loud, hands-free hardly ever stops by itself. Over the room's
+    median it is 15 dB."""
     over_room = silence.speech_over_room_db(_mic_test_take(_clattering), SR)
     assert over_room < silence.NOISY_ROOM_DB
 
 
 @pytest.mark.parametrize("under_db, noisy", [(40, False), (30, False), (20, True)])
-def test_a_steady_room_is_noisy_only_within_20_db_of_the_voice(under_db, noisy):
-    """Hands-free stops by itself in rooms 30 dB under the voice and hardly
-    ever in rooms 20 dB under; the test warns in the second only."""
+def test_a_steady_hum_20_db_under_the_voice_is_noisy_and_30_db_under_is_not(under_db, noisy):
+    """In steady noise 20 dB under the voice hands-free still stops by
+    itself, but cuts the speaker off mid-sentence in about half the runs,
+    against about one in seven at 30 dB; the test warns at 20 dB only."""
     take = _mic_test_take(lambda seconds: noise(seconds, 2121 / 10 ** (under_db / 20)))
     assert (silence.speech_over_room_db(take, SR) < silence.NOISY_ROOM_DB) is noisy
 

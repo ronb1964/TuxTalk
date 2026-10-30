@@ -597,14 +597,15 @@ def has_no_speech(audio_f32, sample_rate) -> bool:
 # voice stood well over a room in which hands-free never stopped by itself.
 # Measured with 125 recorded readers in six recorded rooms (DEMAND: kitchen,
 # living room, laundry, office, cafeteria, traffic) and five made ones, at
-# three voice levels; hands-free in those rooms stops by itself with the
-# room 30 dB under the voice, and hardly ever with it 20 dB under. With 2.5 s
-# of talking at a normal level in the recorded rooms it warns in none of 150
-# takes at 40 or 30 dB, 144 at 20 dB and 148 at 10 dB; over the quietest
-# moments (the 10th percentile, at 16 dB) it warned in 0 at 20 dB and 4 at
-# 10. With a second or more of talking, at any level, it warns in 7 of 1,800
-# at 40 dB (one reader's soft first second at the loudest voice), 64 at 30
-# dB, 1,496 at 20 dB.
+# three voice levels. In the recorded rooms hands-free (1 to 3 s waits, 702
+# runs at each level) stops by itself in 96% with the room 30 dB under the
+# voice, 81% at 25 dB, 45% at 22 and 31% at 20; in steady noise it does stop,
+# but cuts the speaker off mid-sentence more often as it nears the voice
+# (white noise: 15% of runs at 30 dB, 27% at 25, 38% at 22, 45% at 20).
+# With a second or more of talking, of 1,800 takes in the recorded rooms at
+# each level, it warns in 8 at 40 dB (a reader whose first second is a soft
+# start), 59 at 30, 214 at 25, 1,196 at 22 and 1,416 at 20; over the
+# quietest moments, at 16 dB, it warned in 0, 25, 47, 77 and 86.
 NOISY_ROOM_DB = 28.0
 # Blocks this much louder than the room's quietest moments (+8 dB), and never
 # quieter than speech's minimum, are clearly talking when they last
@@ -615,18 +616,23 @@ _TALKING_RUN_S = 0.1
 # little to tell how far over the room it stands: a take's first fraction of
 # a second is often a word's soft start, and a quiet room was called noisy.
 _TALKING_TO_JUDGE_S = 1.0
-# With less of the room than this outside the talking (talking from Start to
-# Stop), the room is the quietest quarter of the take instead, which the
-# pauses between words reach.
-_ROOM_TO_JUDGE_S = 0.5
+# With less than this outside the talking (talking from Start to Stop), what
+# is outside is mostly the soft start and end of the words, not the room: a
+# quiet room was called noisy in 33 of 41 such takes, and half a second still
+# left 7. With a second, 1 (as the quietest moments did).
+_ROOM_TO_JUDGE_S = 1.0
+# A shorter take can't hold both.
+_SHORTEST_TAKE_S = _TALKING_TO_JUDGE_S + _ROOM_TO_JUDGE_S
 
 
 def speech_over_room_db(audio_f32, sample_rate):
     """How much louder a recording's speech is than its room, in dB, or None
-    with too little clear talking to tell. Under NOISY_ROOM_DB the room is
-    noisy for that voice: hands-free can't tell the end of talking from it."""
+    without a second of clear talking and a second of the room around it.
+    Under NOISY_ROOM_DB the room is noisy for that voice: in recorded rooms
+    like it hands-free stops by itself about half the time or less, and in
+    steady noise it cuts the speaker off mid-sentence more often."""
     rms = _blocks_rms(audio_f32, sample_rate)
-    if len(rms) * _TAP_BLOCK_S < _TALKING_TO_JUDGE_S:
+    if len(rms) * _TAP_BLOCK_S < _SHORTEST_TAKE_S:
         return None
     loud = rms >= max(_MIN_SPEECH_RMS, np.percentile(rms, 10) * _TALKING_OVER_ROOM)
     run = max(1, round(_TALKING_RUN_S / _TAP_BLOCK_S))
@@ -634,12 +640,9 @@ def speech_over_room_db(audio_f32, sample_rate):
     if starts.size == 0:
         return None
     first, last = starts[0], starts[-1] + run
-    if (last - first) * _TAP_BLOCK_S < _TALKING_TO_JUDGE_S:
-        return None
     outside = np.concatenate([rms[:first], rms[last:]])
-    if len(outside) * _TAP_BLOCK_S >= _ROOM_TO_JUDGE_S:
-        room = np.median(outside)
-    else:
-        room = np.percentile(rms, 25)
+    if ((last - first) * _TAP_BLOCK_S < _TALKING_TO_JUDGE_S
+            or len(outside) * _TAP_BLOCK_S < _ROOM_TO_JUDGE_S):
+        return None
     speech = np.percentile(rms[first:last], 90)
-    return float(20 * np.log10(max(speech, 1.0) / max(room, 1.0)))
+    return float(20 * np.log10(max(speech, 1.0) / max(np.median(outside), 1.0)))
