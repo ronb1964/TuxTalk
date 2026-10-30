@@ -70,6 +70,22 @@ def test_the_window_says_it_loads_the_model_once_the_files_are_in(monkeypatch, w
     assert window.reports == [("Downloading model.bin...", 95), ("Loading model...", 95)]
 
 
+def test_a_cancel_the_window_missed_still_gives_no_model(monkeypatch):
+    """Cancel pressed as the load ended: the download counted as finished,
+    but the model it loaded isn't kept."""
+    class Window(_Window):
+        def run(self):
+            [task] = self.tasks
+            task.download_func(lambda text, percent: text == "Loading model..."
+                               and task.cancel_event.set(), task.cancel_event)
+            return {task.name: {"success": True, "cancelled": False}}
+    monkeypatch.setattr(download_progress_dialog, "UnifiedDownloadDialog", Window)
+    monkeypatch.setattr(mh, "make_model_download_func", lambda *a, **k: (
+        lambda report, cancel: True))
+    monkeypatch.setattr(mh, "load_model", lambda *a, **k: "model")
+    assert mh.download_model_with_progress("small", show_confirmation=False) is None
+
+
 def test_a_cancel_while_the_model_loads_gives_no_model(monkeypatch, window):
     monkeypatch.setattr(mh, "make_model_download_func", lambda *a, **k: (
         lambda report, cancel: True))
@@ -78,45 +94,51 @@ def test_a_cancel_while_the_model_loads_gives_no_model(monkeypatch, window):
     assert mh.download_model_with_progress("small", show_confirmation=False) is None
 
 
-def _failed_startup_download(monkeypatch, reason):
-    """The start-up download of Whisper Small failing with *reason* (its
-    last report, at 0 %): what its error window says."""
-    errors = []
-    monkeypatch.setattr(mh, "make_model_download_func", lambda *a, **k: (
-        lambda report, cancel: report(reason, 0)))
-    monkeypatch.setattr(mh, "load_model", lambda *a, **k: pytest.fail("loaded"))
-    monkeypatch.setattr(mh, "_show_download_failed", lambda parent, name, error: errors.append(
-        mh._download_failed_text(name, error)))
+def _failed_startup_download(monkeypatch, download):
+    """The start-up download of Whisper Small failing in *download*: the
+    error boxes shown after its window closed."""
+    boxes = []
+    monkeypatch.setattr(mh, "make_model_download_func", lambda *a, **k: download)
+    monkeypatch.setattr(mh, "show_message", lambda parent, kind, title, text, **k:
+                        boxes.append((title, text)))
     assert mh.download_model_with_progress("small", show_confirmation=False) is None
-    return errors
+    return boxes
 
 
-def test_a_failed_download_says_why(monkeypatch):
-    [text] = _failed_startup_download(monkeypatch, "Download failed: Name or service not known")
-    assert "Error: Download failed: Name or service not known" in text
-    assert text.endswith("Check your internet connection and try again.")
+@pytest.mark.parametrize("reason", [
+    "Download failed: Name or service not known",
+    "Not enough disk space: model needs ~0.5 GB free, only 0.1 GB available"])
+def test_a_failure_is_explained_once_in_the_window(monkeypatch, window, reason):
+    """The window shows why and waits for Close; a box saying it again
+    after that was the same news twice."""
+    def download(report, cancel):
+        report(reason, 0)
+        return False
+    monkeypatch.setattr(mh, "load_model", lambda *a, **k: pytest.fail("loaded"))
+    assert _failed_startup_download(monkeypatch, download) == []
+    assert window.reports[-1] == (reason, 0)
 
 
-def test_a_disk_space_refusal_asks_for_room_not_a_connection(monkeypatch):
-    """It said to check the internet connection for a full disk too."""
-    [text] = _failed_startup_download(
-        monkeypatch, "Not enough disk space: model needs ~0.5 GB free, only 0.1 GB available")
-    assert "Not enough disk space" in text
-    assert text.endswith("Free up some disk space and try again.")
-
-
-def test_a_model_that_wont_load_says_why(monkeypatch):
-    errors = []
-    monkeypatch.setattr(mh, "make_model_download_func", lambda *a, **k: (
-        lambda report, cancel: True))
-
+def test_a_model_that_wont_load_is_explained_in_the_window(monkeypatch, window):
     def broken(*a, **k):
         raise RuntimeError("unsupported model file")
     monkeypatch.setattr(mh, "load_model", broken)
-    monkeypatch.setattr(mh, "_show_download_failed",
-                        lambda parent, name, error: errors.append(str(error)))
-    assert mh.download_model_with_progress("small", show_confirmation=False) is None
-    assert errors == ["unsupported model file"]
+    assert _failed_startup_download(monkeypatch, lambda report, cancel: True) == []
+    assert window.reports[-1] == ("Couldn't load the model: unsupported model file", 0)
+
+
+@pytest.mark.parametrize("percent", [40, 1])
+def test_a_failure_the_window_couldnt_explain_gets_a_box(monkeypatch, window, percent):
+    """At 1 %, scaled to the window's 95 %, progress turned into 0 %, which
+    reads as a failure's reason: "Downloading model.bin..." was shown as one."""
+    def download(report, cancel):
+        report("Downloading model.bin...", percent)
+        return False
+    [(title, text)] = _failed_startup_download(monkeypatch, download)
+    assert window.reports[-1][1] > 0
+    assert title == "Model Download Failed"
+    assert text == ("Could not download the Whisper Small model.\n\n"
+                    "Check your internet connection and try again.")
 
 
 def test_parakeet_not_yet_downloaded_is_fetched_then_loaded(monkeypatch, window):

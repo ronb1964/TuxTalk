@@ -305,14 +305,15 @@ def test_run_downloads_tells_done_cancelled_and_failed_apart(monkeypatch, outcom
                              arrived=lambda: arrived) is answer
 
 
-def test_the_cuda_download_is_cancelled_quietly_and_a_failure_says_why(monkeypatch):
-    """It had a progress window of its own; now the shared one. A Cancel
-    shows nothing more, a failure its reason."""
+def test_the_cuda_download_says_why_it_failed_once(monkeypatch):
+    """The shared window shows a failure's reason and waits for Close; the
+    same reason in a box after it was said twice. A Cancel shows nothing
+    more; a failure with no reason in the window gets the box."""
     pytest.importorskip("gi")
     from tuxtalk import cuda_helper, download_progress_dialog as dpd
     said = []
     monkeypatch.setattr(cuda_helper, "_say_how_it_went",
-                        lambda parent, ok, then, reason: said.append((ok, reason)))
+                        lambda parent, ok, then: said.append(ok))
 
     def window(answer, last_report):
         def run(parent, title, text, tasks):
@@ -322,5 +323,6 @@ def test_the_cuda_download_is_cancelled_quietly_and_a_failure_says_why(monkeypat
     window(False, ("Downloading...", 40))
     assert cuda_helper.show_cuda_download_dialog() is None and said == []
     window(None, ("Not enough disk space: 1.4 GB needed", 0))
-    assert cuda_helper.show_cuda_download_dialog() is False
-    assert said == [(False, "Not enough disk space: 1.4 GB needed")]
+    assert cuda_helper.show_cuda_download_dialog() is False and said == []
+    window(None, ("Downloading...", 40))
+    assert cuda_helper.show_cuda_download_dialog() is False and said == [False]

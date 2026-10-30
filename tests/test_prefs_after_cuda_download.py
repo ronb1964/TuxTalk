@@ -290,7 +290,7 @@ def test_the_download_no_longer_writes_the_config_itself(prefs, monkeypatch):
                         tasks: all(t.download_func(lambda *a: None, threading.Event())
                                               for t in tasks))
     monkeypatch.setattr(cuda_helper, "_say_how_it_went",
-                        lambda parent, ok, then, reason: ok and then())
+                        lambda parent, ok, then: ok and then())
     assert cuda_helper.show_cuda_download_dialog(on_success_callback=lambda: switched.append(1))
     assert switched == [1]
 

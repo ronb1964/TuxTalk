@@ -440,14 +440,17 @@ def show_cuda_download_dialog(parent=None, on_success_callback=None):
         # The download notices the Cancel and cleans up by itself.
         logger.info("User cancelled CUDA download")
         return None
-    _say_how_it_went(parent, bool(result), on_success_callback,
-                     failure_reason(*task.last_report))
+    if result is None and failure_reason(*task.last_report):
+        # The window showed why and waited for Close: not twice.
+        logger.error("CUDA libraries download failed")
+        return False
+    _say_how_it_went(parent, bool(result), on_success_callback)
     return bool(result)
 
 
-def _say_how_it_went(parent, success, on_success_callback, reason=None):
+def _say_how_it_went(parent, success, on_success_callback):
     """"CUDA Libraries Downloaded!", then *on_success_callback*, or "Download
-    Failed" with *reason* when the download gave one. Switching the device
+    Failed" for a failure the download window couldn't explain. Switching the device
     is the caller's job (Preferences applies it, so the service restarts
     onto it), after the message so its question doesn't come before
     "Downloaded!"."""
@@ -455,8 +458,7 @@ def _say_how_it_went(parent, success, on_success_callback, reason=None):
     from .ui_style import show_message
     if not success:
         show_message(parent, Gtk.MessageType.ERROR, "Download Failed",
-                     f"{reason or 'Could not download CUDA libraries.'}"
-                     "\n\nYou can try again later: choose "
+                     "Could not download CUDA libraries.\n\nYou can try again later: choose "
                      "CUDA under Preferences → General → Change model, device or language → "
                      "Device.")
         logger.error("CUDA libraries download failed")

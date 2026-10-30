@@ -522,21 +522,25 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
         return None
     from .download_progress_dialog import DownloadTask, run_downloads
     from .download_utils import failure_reason
-    loaded, error = [], []
+    loaded = []
+
+    def scaled(report):
+        """*report* with the download's percent scaled to 95 %; a reason
+        keeps its 0 % and progress never reaches it (failure_reason)."""
+        return lambda text, percent: report(text, max(1, int(percent * 0.95)) if percent else 0)
 
     def download_and_load(report, cancel_event):
         """Fetch the files (afresh when the cached copy won't load), then load
         the model in the same window: the download's progress to 95 %, the
         load for the rest."""
         if not make_model_download_func(model_name, force=cached)(
-                lambda text, percent: report(text, int(percent * 0.95)), cancel_event):
+                scaled(report), cancel_event):
             return False
         report("Loading model...", 95)
         try:
             model = load_model(model_name, device=device, compute_type=compute_type)
         except Exception as e:
             logger.error(f"Model download failed: {e}")
-            error.append(e)
             report(f"Couldn't load the model: {e}", 0)
             return False
         if not cancel_event.is_set():
@@ -552,21 +556,13 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
         logger.info(f"User cancelled model download: {model_name}")
         return None
     if result is None:
-        _show_download_failed(parent, model_name, error[0] if error else RuntimeError(
-            failure_reason(*task.last_report) or "the files could not be downloaded"))
+        # The window shows a failure's reason and waits for Close: a box only
+        # when all it could say was "Failed".
+        if failure_reason(*task.last_report) is None:
+            show_message(parent, Gtk.MessageType.ERROR, "Model Download Failed",
+                         f"Could not download the {model_title(model_name)} model.\n\n"
+                         "Check your internet connection and try again.")
         return None
-    return loaded[0]
-
-
-def _download_failed_text(model_name, error):
-    """What the start-up download's error window says: the reason, and what
-    to do about it."""
-    advice = ("Free up some disk space and try again." if "disk space" in str(error)
-              else "Check your internet connection and try again.")
-    return f"Could not download {model_title(model_name)} model.\n\nError: {error}\n\n{advice}"
-
-
-def _show_download_failed(parent, model_name, error):
-    """Tell the user the start-up download of *model_name* failed, and why."""
-    show_message(parent, Gtk.MessageType.ERROR, "Model Download Failed",
-                 _download_failed_text(model_name, error))
+    # A Cancel during the load leaves nothing, even if the window counted
+    # the download as finished.
+    return loaded[0] if loaded else None
