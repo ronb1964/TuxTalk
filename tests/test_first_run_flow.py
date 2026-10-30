@@ -6,7 +6,6 @@ import pytest
 
 from tuxtalk import config
 from tuxtalk import first_run_setup as fr
-from tuxtalk import welcome_dialog as wd
 
 
 @pytest.fixture

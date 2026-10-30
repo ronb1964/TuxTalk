@@ -7,10 +7,6 @@ import os
 import subprocess
 from typing import Optional
 
-from .logger import setup_logger
-
-logger = setup_logger(__name__)
-
 
 def config_home() -> str:
     """The user's config folder, where the desktops keep their settings.
@@ -90,25 +86,17 @@ def is_gnome() -> bool:
 
 def tuxtalk_extension_active() -> bool:
     """Whether TuxTalk's GNOME extension is installed and enabled."""
-    try:
-        from .extension_helper import is_extension_enabled
-        return bool(is_extension_enabled())
-    except Exception as e:
-        logger.info(f"Could not tell whether the GNOME extension is on: {e}")
-        return False
+    from .extension_helper import EXTENSION_UUID
+    return is_extension_enabled(EXTENSION_UUID)
 
 
 def menu_location() -> str:
     """Where this desktop shows TuxTalk's menu, for the welcome screen's and
     Setup Complete's tips: plain GNOME has no tray, so "the tray icon" sent
     people looking for nothing."""
-    try:
-        if tuxtalk_extension_active():
-            return "its icon in the top bar"
-        if tray_host_available():
-            return "its tray icon"
-    except Exception as e:
-        logger.info(f"Could not tell where TuxTalk's menu shows: {e}")
+    if tuxtalk_extension_active():
+        return "its icon in the top bar"
+    if tray_host_available():
         return "its tray icon"
     return "open TuxTalk again from your apps"
 
@@ -216,8 +204,8 @@ def is_extension_enabled(uuid: str) -> bool:
         if result.returncode == 0:
             # Look for "State: ENABLED" in output
             return 'State: ENABLED' in result.stdout or 'State: ACTIVE' in result.stdout
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        pass
+    except (subprocess.TimeoutExpired, OSError):
+        pass        # no gnome-extensions here (or not runnable): ask the shell instead
 
     # Inside a Flatpak the gnome-extensions CLI isn't on PATH and the
     # org.gnome.shell gsettings schema isn't in the runtime, so both the CLI and
