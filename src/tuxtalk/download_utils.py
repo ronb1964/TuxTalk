@@ -14,11 +14,13 @@ import contextlib
 import fnmatch
 import glob
 import hashlib
+import itertools
 import logging
 import os
 import re
 import secrets
 import shutil
+import stat
 import tarfile
 import tempfile
 import time
@@ -281,18 +283,19 @@ def failure_reason(message, percent):
     return message if percent == 0 and message else None
 
 
-def _cached(lookup, what):
+def _cached(lookup, repo, what):
     """*lookup*()'s answer from the Hugging Face cache, or None when *what*
-    isn't downloaded or its cache entry is damaged."""
+    (from *repo*) isn't downloaded or its cache entry is damaged. A damaged
+    record of the snapshot is set aside, so the next download mends it."""
     try:
         found = lookup()
     except OSError:     # not downloaded: LocalEntryNotFoundError is a FileNotFoundError
         found = None
     except ValueError as e:
-        # A damaged entry: refs/main that isn't text (UnicodeDecodeError) or
-        # names a folder outside the snapshots ("Invalid pointer path").
         if _damaged.failed(what, e):
             logger.warning(f"The download of {what} is damaged; counted as missing: {e}")
+        if _damaged_record(e):
+            _set_aside_ref(repo, "main", e)
         return None
     if _damaged.worked(what):
         logger.info(f"The download of {what} is no longer damaged")
@@ -304,45 +307,96 @@ def cached_hub_file(repo: str, filename: str):
     isn't fully downloaded. Asks only the cache, never the network."""
     from huggingface_hub import hf_hub_download
     return _cached(lambda: hf_hub_download(repo, filename, local_files_only=True),
-                   f"{repo}/{filename}")
+                   repo, f"{repo}/{filename}")
 
 
 def cached_hub_snapshot(repo: str):
     """The local snapshot folder of Hugging Face *repo*, or None when there is
     none. It may hold only some of the files (see is_model_cached_fast)."""
     from huggingface_hub import snapshot_download
-    return _cached(lambda: snapshot_download(repo, local_files_only=True), repo)
+    return _cached(lambda: snapshot_download(repo, local_files_only=True), repo, repo)
 
 
-# What Hugging Face writes in refs/<branch>: the commit the snapshot is of.
-_COMMIT = re.compile(rb"[0-9a-f]{40,64}")
+# What Hugging Face writes in refs/<revision>: the commit the snapshot is of.
+_COMMIT = re.compile(rb"[0-9a-fA-F]{40,64}")
+_KEEP_DAMAGED = 3               # set-aside records kept per repo, newest first
+_set_asides = itertools.count()     # with the time and pid, a name of its own
 
 
-def set_aside_damaged_refs(repo: str) -> None:
-    """Rename aside each record of *repo*'s current snapshot (refs/...) that
-    holds no commit, before a download. huggingface_hub reads it before
-    replacing it, so a record a crash left as garbage would fail every
-    download; renamed, it is kept for a look and the download writes a new
-    one."""
+def _damaged_record(error) -> bool:
+    """Whether *error*, from huggingface_hub reading the cache, means its
+    record of the revision is damaged: not text, or a pointer outside the
+    snapshots."""
+    return isinstance(error, UnicodeDecodeError) or "Invalid pointer path" in str(error)
+
+
+def mend_damaged_ref(repo: str, revision: str = "main") -> None:
+    """Before a download from *repo*: when huggingface_hub can't read its
+    record of *revision* (refs/<revision>), set that record aside so the
+    download writes a fresh one. It reads the old record before replacing
+    it, as does the disk-space check, so otherwise every download fails.
+    Only after its own read failed, and only that record: another process
+    may be writing a healthy one at this moment."""
+    from huggingface_hub import try_to_load_from_cache
+    try:
+        # Any file name: the record is read first, whichever file is asked for.
+        try_to_load_from_cache(repo, "config.json")
+    except ValueError as e:
+        if _damaged_record(e):
+            _set_aside_ref(repo, revision, e)
+
+
+def _set_aside_ref(repo, revision, problem):
+    """_set_aside() for *repo*'s record of *revision*."""
     from huggingface_hub import constants
     from huggingface_hub.file_download import repo_folder_name
-    refs = os.path.join(constants.HF_HUB_CACHE,
-                        repo_folder_name(repo_id=repo, repo_type="model"), "refs")
-    for folder, _dirs, names in os.walk(refs):
-        for name in names:
-            path = os.path.join(folder, name)
-            if ".damaged-" in name:
-                continue
-            try:
-                with open(path, "rb") as f:
-                    if _COMMIT.fullmatch(f.read().strip()):
-                        continue
-                aside = f"{path}.damaged-{time.strftime('%Y%m%d-%H%M%S')}"
-                os.replace(path, aside)
-            except OSError as e:
-                logger.warning(f"Could not set aside the damaged record {path}: {e}")
-                continue
-            logger.warning(f"Set aside a damaged Hugging Face record as {aside}")
+    folder = os.path.join(constants.HF_HUB_CACHE, repo_folder_name(repo_id=repo,
+                                                                   repo_type="model"))
+    _set_aside(os.path.join(folder, "refs", revision), folder, revision, problem)
+
+
+def _set_aside(path, folder, revision, problem):
+    """Rename the damaged record *path* into *folder*/damaged-refs, unless it
+    is a link, holds a commit by now or changed while it was looked at."""
+    aside_dir = os.path.join(folder, "damaged-refs")
+    try:
+        before = os.lstat(path)
+    except FileNotFoundError:
+        return          # gone already: set aside by another process, or never written
+    except OSError as e:
+        logger.warning(f"Could not look at the damaged record {path}: {e}")
+        return
+    try:
+        if not stat.S_ISREG(before.st_mode):
+            logger.warning(f"Not setting aside {path}: it isn't a plain file")
+            return
+        with open(path, "rb") as f:
+            data = f.read()
+        now = os.lstat(path)
+        if _COMMIT.fullmatch(data.strip()) or (now.st_mtime_ns, now.st_size, now.st_ino) != (
+                before.st_mtime_ns, before.st_size, before.st_ino):
+            return      # rewritten since huggingface_hub read it
+        os.makedirs(aside_dir, exist_ok=True)
+        name = (f"{revision.replace('/', '_')}-{time.strftime('%Y%m%d-%H%M%S')}"
+                f"-{os.getpid()}-{next(_set_asides)}")
+        aside = os.path.join(aside_dir, name)
+        os.replace(path, aside)
+    except OSError as e:
+        logger.warning(f"Could not set aside the damaged record {path}: {e}")
+        return
+    logger.warning(f"Set aside a damaged Hugging Face record ({problem}) as {aside}")
+    _keep_newest(aside_dir, _KEEP_DAMAGED)
+
+
+def _keep_newest(folder, keep):
+    """Delete all but the *keep* newest files in *folder*."""
+    try:
+        entries = sorted(os.scandir(folder),
+                         key=lambda e: (e.stat(follow_symlinks=False).st_mtime_ns, e.name))
+        for entry in entries[:-keep]:
+            os.remove(entry.path)
+    except OSError as e:
+        logger.info(f"Could not trim the set-aside records in {folder}: {e}")
 
 
 def free_space_bytes(path: str) -> int:

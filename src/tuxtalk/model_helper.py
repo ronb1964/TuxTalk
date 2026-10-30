@@ -373,9 +373,10 @@ def make_model_download_func(model_name, repo_id=None, only_files=None, force=Fa
             return False
         try:
             from huggingface_hub.utils import disable_progress_bars
-            from .download_utils import set_aside_damaged_refs
+            from .download_utils import mend_damaged_ref
             disable_progress_bars()
-            set_aside_damaged_refs(repo)    # before the disk-space check reads it too
+            # Before the disk-space check, which reads the record too.
+            mend_damaged_ref(repo)
             progress_callback("Getting file list...", 1)
             files = _listed_files(repo, model_name, only_files)
             if not files:

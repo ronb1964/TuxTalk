@@ -157,7 +157,7 @@ def test_a_damaged_download_record_is_set_aside_so_the_download_mends_it(
                                                    threading.Event())
     assert done is True
     assert M.is_model_cached_fast("small") is True
-    assert list((folder / "refs").glob("main.damaged-*")), "the damaged record wasn't kept"
+    assert list((folder / "damaged-refs").glob("main-*")), "the damaged record wasn't kept"
     assert "Set aside a damaged" in caplog.text
 
 
@@ -181,3 +181,69 @@ def test_damage_that_comes_back_after_a_mended_download_is_logged_again(
         for _ in range(3):
             download_utils.cached_hub_file("org/again", "model.gguf")
     assert sum("damaged" in r.getMessage() for r in caplog.records) == 2
+
+
+@pytest.fixture
+def hub_cache(monkeypatch, tmp_path):
+    """An empty Hugging Face cache; .ref(text) writes refs/main of org/model."""
+    import types
+
+    import huggingface_hub.constants
+    monkeypatch.setattr(huggingface_hub.constants, "HF_HUB_CACHE", str(tmp_path))
+    folder = tmp_path / "models--org--model"
+    (folder / "refs" / "pr").mkdir(parents=True)
+    (folder / "snapshots").mkdir()
+
+    def ref(data, name="main"):
+        (folder / "refs" / name).write_bytes(data)
+    return types.SimpleNamespace(folder=folder, ref=ref, aside=folder / "damaged-refs")
+
+
+def test_only_the_damaged_record_asked_for_is_set_aside(hub_cache):
+    """A pull request's record, damaged too, is no business of a download
+    of main; a record that reads fine is never touched."""
+    from tuxtalk import download_utils
+    hub_cache.ref(b"\xff\xfe garbage")
+    hub_cache.ref(b"\xff\xfe", name="pr/1")
+    download_utils.mend_damaged_ref("org/model")
+    assert not (hub_cache.folder / "refs" / "main").exists()
+    assert (hub_cache.folder / "refs" / "pr" / "1").read_bytes() == b"\xff\xfe"
+    hub_cache.ref(b"A" * 40)                    # upper-case hex is a commit too
+    download_utils.mend_damaged_ref("org/model")
+    assert (hub_cache.folder / "refs" / "main").read_bytes() == b"A" * 40
+
+
+def test_a_record_rewritten_since_it_failed_is_left_alone(hub_cache, monkeypatch):
+    """Another TuxTalk downloading at the same time writes a fresh record
+    between huggingface_hub's failed read and the set-aside: it is kept."""
+    import huggingface_hub
+    from tuxtalk import download_utils
+
+    def read_fails_then_another_download_writes(repo, filename):
+        hub_cache.ref(b"0123456789ABCDEF" * 2 + b"01234567")
+        raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
+    monkeypatch.setattr(huggingface_hub, "try_to_load_from_cache",
+                        read_fails_then_another_download_writes)
+    download_utils.mend_damaged_ref("org/model")
+    assert (hub_cache.folder / "refs" / "main").exists()
+    assert not hub_cache.aside.exists()
+
+
+def test_a_record_that_is_a_link_is_not_renamed_through(hub_cache, tmp_path):
+    from tuxtalk import download_utils
+    target = tmp_path / "elsewhere"
+    target.write_bytes(b"\xff\xfe garbage")
+    (hub_cache.folder / "refs" / "main").symlink_to(target)
+    download_utils.mend_damaged_ref("org/model")
+    assert (hub_cache.folder / "refs" / "main").is_symlink()
+    assert target.read_bytes() == b"\xff\xfe garbage"
+
+
+def test_set_aside_records_each_keep_their_own_copy_and_only_the_last_few(hub_cache):
+    """Several in one second don't overwrite each other, and they don't pile up."""
+    from tuxtalk import download_utils
+    for n in range(5):
+        hub_cache.ref(b"\xff garbage %d" % n)
+        download_utils.mend_damaged_ref("org/model")
+    kept = sorted(p.read_bytes() for p in hub_cache.aside.iterdir())
+    assert kept == [b"\xff garbage 2", b"\xff garbage 3", b"\xff garbage 4"]
