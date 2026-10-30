@@ -251,15 +251,14 @@ def send_automatically(space: str, injection_mode: str, message) -> None:
                                          press_key, type_onto_dictation, space,
                                          injection_mode):
         if (rs.state.message.cancelled and not rs.state.is_recording
-                and send_countdown.say_held_for(rs.state.message.serial)
-                and not send_countdown.key_is_down()):
-            send_countdown.type_owed_space()
+                and send_countdown.say_held_for(rs.state.message.serial)):
+            send_countdown.give_back_space()
 
 
 # inject_text's outcomes that are sure nothing was typed: it gave up before the
 # first key (_delivery_stopped). "failed" may follow some of it (wtype timing
 # out), and "password_field" earlier lines.
-_GAVE_UP_UNTYPED = frozenset({"moved", "key_held"})
+_GAVE_UP_UNTYPED = frozenset({"moved", "key_held", "shortcut_keys"})
 
 
 def type_onto_dictation(text: str, injection_mode: str, into=None) -> str:

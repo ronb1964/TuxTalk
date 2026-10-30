@@ -388,9 +388,9 @@ def _leave_held_send_unsent() -> None:
     if not said and rs.state.held_send:
         send_countdown.say_held()
         said = True
-    if said and not send_countdown.key_is_down():
+    if said:
         # After what's still being typed, not into the middle of it.
-        dictation_worker.submit(send_countdown.type_owed_space)
+        dictation_worker.submit(send_countdown.give_back_space)
 
 
 def toggle_pressed_while_recording(beeps_on: bool) -> bool:
@@ -471,7 +471,7 @@ def _dropped_as_a_tap(beeps_on: bool, notify_on: bool) -> bool:
         # The hotkey that held the send is up now; a tap leaves the text as
         # it is, a dictation goes after this space. On the dictation worker,
         # after what's still being typed.
-        dictation_worker.submit(send_countdown.type_owed_space)
+        dictation_worker.submit(send_countdown.give_back_space)
     if held_ms >= MIN_HOLD_MS and not (rs.state.held_send and rs.state.released_while_starting):
         return False
     # A tap that held a send is told as "Not sent" alone (cancel_recording).

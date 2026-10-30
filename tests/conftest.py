@@ -261,7 +261,7 @@ def _no_real_send_countdown(monkeypatch, request):
     monkeypatch.setattr(send_countdown, "_owed", None)
     monkeypatch.setattr(send_countdown, "_begun", 0)        # no recording begun since
     monkeypatch.setattr(send_countdown, "_held_for", 0)
-    monkeypatch.setattr(send_countdown, "_key_down", None)
+    monkeypatch.setattr(send_countdown, "_keys_down", set())
     monkeypatch.setattr(rs.state, "sent", None)
     # Where an earlier test's text "landed" must not stop this test's send,
     # nor its held-back mark. A test that fakes the typing has its words

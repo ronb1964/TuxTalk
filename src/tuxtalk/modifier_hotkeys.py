@@ -36,6 +36,9 @@ HELD_LIMIT_S = 30.0
 # Keys found stuck: the next keys give up at once while they stay down,
 # rather than each fallback (paste, then typing) waiting all over again.
 _stuck = set()
+# Alt, Ctrl and Super: a key TuxTalk presses while one is down is a shortcut
+# (Alt+Space opens KRunner). Not Shift: Shift+Space is still a space.
+SHORTCUT_MODIFIERS = frozenset(MODIFIER_CODES - {ecodes.KEY_LEFTSHIFT, ecodes.KEY_RIGHTSHIFT})
 # Key codes to the names Preferences shows ("Right Ctrl"), for the log.
 _NAMES = {ecodes.ecodes[key]: name for name, key in HOTKEY_CHOICES.items()}
 
@@ -77,6 +80,23 @@ def note_released(code) -> None:
 def stuck() -> bool:
     """Whether typing gave up on a key that's still down (HELD_LIMIT_S)."""
     return bool(_stuck)
+
+
+def shortcut_keys_down() -> bool:
+    """Whether Alt, Ctrl or Super is down on the hotkey loop's keyboards,
+    one a grab hides from the desktop aside. Through the hotkey helper, a
+    modifier is known only as held with a dictation key."""
+    devices, _ = _noted
+    keyboards = [d for d in list(devices) if is_keyboard_device(d)]
+    return bool(keys_down(keyboards) & (SHORTCUT_MODIFIERS - _hidden_now()))
+
+
+def refuse_shortcut_keys() -> None:
+    """For keys that must go out alone (keyboard_output.this_thread.alone):
+    GaveUp("shortcut_keys") while Alt, Ctrl or Super is down."""
+    if shortcut_keys_down():
+        logger.info("Not typed yet: Alt, Ctrl or Super is down")
+        raise virtual_keyboard.GaveUp("shortcut_keys")
 
 
 def wait_while_held(destination=None):

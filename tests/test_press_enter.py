@@ -463,7 +463,7 @@ def test_a_held_send_types_its_space_once_the_key_is_up(countdown, monkeypatch):
     start_send("test", " ", "type")
     send_countdown.hold(announce=True)
     assert TYPED == []                     # the key is still down
-    send_countdown.type_owed_space()                 # ...and now it's up
+    send_countdown.give_back_space()       # ...and now it's up
     assert TYPED == [" "]
     # Undo still sees the whole dictation, space included.
     assert rs.state.last_inserted_text == "Testing the delay. "
@@ -629,7 +629,7 @@ def test_no_space_into_another_window(countdown, monkeypatch):
     send_countdown.hold(announce=True)
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "konsole")
     monkeypatch.setattr(focused_window, "look", lambda: ("konsole", None))
-    send_countdown.type_owed_space()
+    send_countdown.give_back_space()
     assert TYPED == []
 
 
@@ -648,7 +648,7 @@ def test_the_owed_space_keeps_to_the_window_after_the_last_look(countdown, monke
         TYPED.append(text)
         return "ok"
     monkeypatch.setattr(delivery, "inject_text", inject)
-    send_countdown.type_owed_space()
+    send_countdown.give_back_space()
     assert TYPED == []
 
 def test_the_dictation_hands_its_left_off_space_to_the_send(monkeypatch):

@@ -406,7 +406,7 @@ def _on_voice_commands_combo(event, combo, held_modifiers, devices) -> bool:
 def _on_hold_key(event, hold_key, held_modifiers, devices, cfg, input_device_idx) -> None:
     """Hold-to-talk: the hold key down records, let go stops and types."""
     if event.value == 0:
-        _dictation_key_up(hold_key, held_modifiers)
+        _dictation_key_up(hold_key)
     if (event.value == 1 and not rs.state.is_recording
             and not _someone_elses_shortcut(held_modifiers - {hold_key})):
         _start_hold_recording(hold_key, held_modifiers, devices, cfg, input_device_idx)
@@ -417,18 +417,16 @@ def _on_hold_key(event, hold_key, held_modifiers, devices, cfg, input_device_idx
         _stop_recording(cfg)
 
 
-def _dictation_key_up(key, held_modifiers) -> None:
+def _dictation_key_up(key) -> None:
     """Dictation key *key* came up. When its press was TuxTalk's
     (send_countdown.key_pressed) and its recording is over already (a tap
     that only held a send, Esc, a microphone that didn't open), the space a
-    held send left off goes in now. Never while Alt, Ctrl or Super is still
-    down: with it the space makes a shortcut (Alt+Space opens KRunner).
-    Shift is fine (Shift+Space is a space), and is still down after a voice
-    edit's Shift+F8. A recording still running gives it back when it ends."""
-    if (send_countdown.key_released(key) and send_countdown.owes_space()
-            and not rs.state.is_recording and not held_modifiers - {key} - _SHIFT_CODES):
+    held send left off may go in (send_countdown.give_back_space, which
+    looks at the keys again when it runs). A recording still running gives
+    it back when it ends."""
+    if send_countdown.key_released(key) and not rs.state.is_recording:
         # After what's still being typed.
-        dictation_worker.submit(send_countdown.type_owed_space)
+        dictation_worker.submit(send_countdown.give_back_space)
 
 
 def _on_toggle_key(event, toggle_key, held_modifiers, devices, cfg, input_device_idx) -> bool:
@@ -436,7 +434,7 @@ def _on_toggle_key(event, toggle_key, held_modifiers, devices, cfg, input_device
     quick second tap makes it hands-free. With Shift (voice editing on) it
     is a voice edit. True when a voice edit was cancelled."""
     if event.value == 0:
-        _dictation_key_up(toggle_key, held_modifiers)
+        _dictation_key_up(toggle_key)
     if event.value != 1 or _someone_elses_shortcut(held_modifiers - {toggle_key}):
         return False
     send_countdown.key_pressed(toggle_key)

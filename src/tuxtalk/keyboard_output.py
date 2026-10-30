@@ -89,6 +89,8 @@ def send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY_
     """
     if claim is None and this_thread.into is not None:
         claim = functools.partial(focused_window.claim_into, this_thread.into)
+    if this_thread.alone:
+        claim = _alone(claim)
     before_press = modifier_hotkeys.wait_while_held(focused_window.destination)
     try:
         sent = virtual_keyboard.send(events, delay_ms, before_press, claim)
@@ -109,13 +111,25 @@ def send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY_
     return sent
 
 
+def _alone(claim):
+    """*claim* (None for none), made only while no Alt, Ctrl or Super is
+    down, right before the first key (modifier_hotkeys.refuse_shortcut_keys)."""
+    def checked():
+        modifier_hotkeys.refuse_shortcut_keys()
+        return claim() if claim is not None else (lambda: None)
+    return checked
+
+
 class _ThisThread(threading.local):
     """What send_keys knows of the delivery on this thread (delivery.inject_text):
     how many sends went out whole, so a wait that gives up after earlier
-    lines were typed stopped it partway, not before it began; and the only
-    window it may go into, else None."""
+    lines were typed stopped it partway, not before it began; the only
+    window it may go into, else None; and whether its keys must go out
+    alone, with no Alt, Ctrl or Super down (a held send's space on its own:
+    send_countdown.give_back_space)."""
     sends = 0
     into = None
+    alone = False
 
 
 this_thread = _ThisThread()

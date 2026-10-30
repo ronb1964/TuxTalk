@@ -80,7 +80,7 @@ _hold_key_name = "F8"       # named in the "Sending in 2 s" label
 _pending = None
 # The send a tap held, or one refused once its countdown began, while the
 # space it left off waits for the hotkey that held it to come up
-# or the next dictation (type_owed_space), else None.
+# or the next dictation (give_back_space, type_owed_space), else None.
 # Typed while the key is down, GNOME without the extension sees the key
 # too and the space is lost.
 _owed = None
@@ -91,12 +91,12 @@ _begun = 0
 # until "Not sent" is said for it (say_held_for) or the next recording
 # begins: its number, else 0.
 _held_for = 0
-# The dictation key whose press, TuxTalk's, is still down, else None. The
-# space a held send owes waits for it to come up: typed while it's down,
-# GNOME without the extension sees the key too and the space is lost. A
-# press turned away as another app's shortcut (Alt+F8) never counts, so its
-# release, Alt still down, can't turn the space into Alt+Space.
-_key_down = None
+# The dictation keys whose presses, TuxTalk's, are still down (F8 and F9
+# can overlap), guarded by _send_lock. The space a held send owes waits for
+# all of them to come up: typed while one is down, GNOME without the
+# extension sees the key too and the space is lost. A press turned away as
+# another app's shortcut (Alt+F8) never counts.
+_keys_down = set()
 # Whether this session's notifications have said why an automatic send
 # can't go where the focus can't be told: on such a desktop it's every
 # dictation, so after once only the floating notice says so.
@@ -486,24 +486,19 @@ def held_for(serial: int) -> bool:
 
 def key_pressed(code: int) -> None:
     """A press of dictation key *code* that is TuxTalk's: until it comes up,
-    an owed space waits (key_is_down)."""
-    global _key_down
-    _key_down = code
+    an owed space waits (give_back_space)."""
+    with _send_lock:
+        _keys_down.add(code)
 
 
 def key_released(code: int) -> bool:
-    """Dictation key *code* came up: True when its press was the one an
-    owed space waited for (key_pressed), which it no longer does."""
-    global _key_down
-    if code != _key_down:
-        return False
-    _key_down = None
-    return True
-
-
-def key_is_down() -> bool:
-    """Whether an owed space waits for a dictation key to come up."""
-    return _key_down is not None
+    """Dictation key *code* came up: True when its press was TuxTalk's
+    (key_pressed)."""
+    with _send_lock:
+        if code not in _keys_down:
+            return False
+        _keys_down.discard(code)
+        return True
 
 
 def say_held_back(word: str, message: Message) -> None:
@@ -610,17 +605,44 @@ def _take_owed():
     return pending
 
 
-def type_owed_space(before: str | None = None) -> None:
-    """Type the space a held or refused send left off, in the window its
-    text went to: once the hotkey that held it is up, or ahead of the next
-    dictation, whose text is *before*. On its own and held to that window,
-    never as part of the next dictation's text: a dictation goes wherever
-    the focus is, and a space in it would go along. Dropped when that
-    dictation is empty or brings its own space."""
+def type_owed_space(before: str) -> None:
+    """Type the space a held or refused send left off ahead of the next
+    dictation, whose text is *before*, in the window the send's text went
+    to. On its own and held to that window, never as part of the next
+    dictation's text: a dictation goes wherever the focus is, and a space
+    in it would go along. Dropped when that dictation is empty or brings
+    its own space."""
     pending = _take_owed()
-    if pending is None or _focus_left(pending):
-        return
-    if before is not None and (not before or before[0].isspace()):
+    if pending is None or _focus_left(pending) or not before or before[0].isspace():
         return
     # Held to that window up to the key: the focus can move after this look.
     pending["type"](pending["space"], pending["mode"], into=pending["to"])
+
+
+def give_back_space() -> None:
+    """Type the space a held or refused send left off, on its own, in the
+    window its text went to, on the dictation worker: once the dictation
+    key that held the send is up, or its recording ended with nothing to
+    add. Looked at when it runs, not when it was queued: while a dictation
+    key of TuxTalk's is down (pressed again meanwhile), or Alt, Ctrl or
+    Super is, then or as the key goes out (keyboard_output.this_thread.alone),
+    the space stays owed, for the key's release or the next dictation."""
+    global _owed
+    from . import keyboard_output, modifier_hotkeys
+    if modifier_hotkeys.shortcut_keys_down():       # asks the keyboards: not under the lock
+        return
+    with _send_lock:
+        if _keys_down:
+            return
+        pending, _owed = _owed, None
+    if pending is None or _focus_left(pending):
+        return
+    keyboard_output.this_thread.alone = True
+    try:
+        outcome = pending["type"](pending["space"], pending["mode"], into=pending["to"])
+    finally:
+        keyboard_output.this_thread.alone = False
+    if outcome == "shortcut_keys":      # Alt or Ctrl went down as it was typed
+        with _send_lock:
+            if _owed is None:
+                _owed = pending
