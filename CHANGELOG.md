@@ -22,6 +22,11 @@ before 0.15.0, so older entries use that name.
   (German, French and most of Europe) the list says which characters you'd
   lose, like @ and €. TuxTalk hides the key from your apps the moment it goes
   down, so nothing it types while you hold it turns into a Ctrl shortcut.
+- TuxTalk reads your desktop's keyboard options now, not just the layout.
+  If you've set Right Alt to be AltGr on a US keyboard, or Compose or plain
+  Alt on a German one, the Right Alt choice in the hotkey list says so
+  correctly, and characters like @ on a German keyboard with Right Alt as
+  Compose are typed right instead of coming out as a Compose sequence.
 - Pause isn't on the list. Most keyboards send it as let go the moment it's
   pressed, so you can't hold it.
 - The hotkey helper is version 1.9, because it has to report Right Ctrl and

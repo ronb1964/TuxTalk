@@ -79,7 +79,6 @@
   "keyboard_layout.py::KeyPlanner._index::long_line": 2,
   "keyboard_layout.py::_lib::long_line": 1,
   "keyboard_layout.py::_x11_layout::swallowed_error": 1,
-  "keyboard_layout.py::_x11_layout::undocumented": 1,
   "keyboard_layout.py::active_layout::swallowed_error": 2,
   "keyboard_layout.py::shortcut_keycode::swallowed_error": 1,
   "kwin_focus.py::build_script::long_line": 2,
@@ -251,9 +250,6 @@
   },
   "fix_word_dialog.py::_FixWordDialog.__init__": {
    "lines": 108
-  },
-  "keyboard_layout.py::KeyPlanner._index": {
-   "decisions": 17
   },
   "kwin_hotkeys.py::_app_shortcut_clashes": {
    "decisions": 19

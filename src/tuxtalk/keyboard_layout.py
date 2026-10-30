@@ -16,16 +16,31 @@ A layout that can't be read is taken to be US. If some character can't be
 typed on the active layout at all (an emoji, Latin text on a Ukrainian
 layout), the caller pastes that dictation instead, which works on any layout.
 
-Finding the active layout depends on the desktop:
-  KDE        org.kde.keyboard over D-Bus (the active one of the configured list)
-  GNOME      gsettings org.gnome.desktop.input-sources (mru-sources first)
-  COSMIC     the layout COSMIC Settings saves for cosmic-comp (the first of
-             the list: which one is on isn't published)
-  Hyprland   `j/devices` on its socket (the main keyboard)
+The keymap is built from the layout, its variant and the desktop's XKB
+options, which can turn Right Alt into AltGr on a US layout
+(lv3:ralt_switch), into Compose (compose:ralt) or leave it plain Alt
+(lv3:ralt_alt). Without them, AltGr characters would be typed with a Right
+Alt that types none, and the hotkey dropdown would misjudge Right Alt.
+
+Finding the active layout and its options depends on the desktop:
+  KDE        org.kde.keyboard over D-Bus (the active one of the configured
+             list); options from the X server on X11, and on Wayland from
+             kxkbrc through kreadconfig, as KWin applies them: only with
+             ResetOldOptions on
+  GNOME      gsettings org.gnome.desktop.input-sources (mru-sources first,
+             options in xkb-options)
+  COSMIC     the layout and options COSMIC Settings saves for cosmic-comp
+             (the first layout of the list: which one is on isn't published)
+  Hyprland   `j/devices` on its socket (the main keyboard, with its options)
   Sway       GET_INPUTS on its socket; names are descriptions, mapped to codes
-             with libxkbregistry
-  X11        setxkbmap -query for the list, XkbGetState for which one is on
+             with libxkbregistry. It reports no options: libxkbcommon's
+             defaults are used, as Sway does when its config sets none
+  X11        setxkbmap -query for the list and options, XkbGetState for which
+             layout is on
   otherwise  the system default (xorg.conf.d / /etc/default/keyboard)
+Options None means "the desktop passes none": libxkbcommon then takes
+XKB_DEFAULT_OPTIONS. "" means no options. Options that can't be read are
+None, and the layout found stays.
 Anything that fails just means "unknown", and unknown means the US path.
 """
 import ctypes as C
@@ -34,6 +49,7 @@ import functools
 import json
 import os
 import re
+import shutil
 import subprocess
 import unicodedata
 
@@ -58,6 +74,7 @@ def _lib():
         P, U32 = C.c_void_p, C.c_uint32
         x.xkb_context_new.restype = P
         x.xkb_context_new.argtypes = [C.c_int]
+        x.xkb_context_unref.argtypes = [P]
         x.xkb_keymap_new_from_names.restype = P
         x.xkb_keymap_new_from_names.argtypes = [P, C.POINTER(_RuleNames), C.c_int]
         x.xkb_keymap_min_keycode.argtypes = [P]
@@ -79,6 +96,7 @@ def _lib():
 _EVDEV_OFFSET = 8               # xkb keycode = evdev keycode + 8
 _KEY_LEFTSHIFT = 42             # evdev
 _KEY_RIGHTALT = 100             # evdev; AltGr on almost every layout
+_KEY_LVL3 = 84                  # evdev; the keymaps' virtual AltGr key (<LVL3>)
 _KEY_102ND = 86                 # evdev; the <> key of ISO keyboards
 _KEY_F12 = 88                   # evdev; past it: the keypad's and extra keys
 _X11_MAX_KEYCODE = 255          # xkb; X11 and XWayland carry no key past it
@@ -123,19 +141,37 @@ def _cost(entry):
     return shift + altgr + rare
 
 
-class KeyPlanner:
-    """The keys that type text on one layout (layout + variant, e.g. "ch", "")."""
+def _altgr_key(keys):
+    """Which of *keys* (evdev codes typing AltGr) to hold for it, or None.
+    Right Alt if it is AltGr, as it is on real keyboards. Layouts also map
+    the virtual <LVL3> key to it, which works in the keymap but not on every
+    compositor, so a real key an option made AltGr (lv3:switch puts it on
+    Right Ctrl) comes before that."""
+    if _KEY_RIGHTALT in keys:
+        return _KEY_RIGHTALT
+    real = [k for k in keys if k != _KEY_LVL3]
+    return (real or keys or [None])[0]
 
-    def __init__(self, layout, variant=""):
-        """Load the layout's keymap from libxkbcommon and index its keys;
-        ValueError for a layout libxkbcommon doesn't know."""
+
+class KeyPlanner:
+    """The keys that type text on one keymap: a layout, its variant and the
+    XKB options ("ch", "", "compose:ralt")."""
+
+    def __init__(self, layout, variant="", options=None):
+        """Load the keymap from libxkbcommon and index its keys; ValueError
+        for a keymap libxkbcommon can't build. Options None leaves them to
+        libxkbcommon's default (XKB_DEFAULT_OPTIONS), as a compositor does
+        that is given none; "" is no options, whatever the environment says."""
         x = _lib()
-        self.layout, self.variant = layout, variant or ""
+        self.layout, self.variant, self.options = layout, variant or "", options
         self.ctx = x.xkb_context_new(0)
-        names = _RuleNames(b"evdev", b"pc105", layout.encode(), self.variant.encode(), None)
+        names = _RuleNames(b"evdev", b"pc105", layout.encode(), self.variant.encode(),
+                           None if options is None else options.encode())
         self.keymap = x.xkb_keymap_new_from_names(self.ctx, C.byref(names), 0)
         if not self.keymap:
-            raise ValueError(f"unknown keyboard layout {layout}({variant})")
+            x.xkb_context_unref(self.ctx)
+            raise ValueError(f"unknown keyboard layout {layout}({variant})"
+                             + (f" with options {options}" if options else ""))
         self._keys = {}         # keysym -> (evdev keycode, shift, altgr)
         self._by_char = {}      # character -> the same, for _keysym misses
         # Keysyms a key of an ordinary keyboard types without AltGr. Layouts
@@ -181,10 +217,7 @@ class KeyPlanner:
             if (char and sym not in _KEYPAD_KEYSYMS
                     and (char not in self._by_char or _cost(entry) < _cost(self._by_char[char]))):
                 self._by_char[char] = entry
-        # Right Alt if it is AltGr, as it is on real keyboards; layouts also map a
-        # virtual key to it, which works in the keymap but not on every compositor.
-        if altgr_keys:
-            self._altgr = _KEY_RIGHTALT if _KEY_RIGHTALT in altgr_keys else altgr_keys[0]
+        self._altgr = _altgr_key(altgr_keys)
 
     def _add(self, sym, entry):
         """Note that key *entry* types keysym *sym*: kept when it's the
@@ -243,11 +276,23 @@ class KeyPlanner:
 _planners = {}
 
 
-def planner_for(layout_variant):
-    """A cached KeyPlanner for (layout, variant); building one takes ~20 ms."""
-    if layout_variant not in _planners:
-        _planners[layout_variant] = KeyPlanner(*layout_variant)
-    return _planners[layout_variant]
+def planner_for(names):
+    """A cached KeyPlanner for (layout, variant, options); building one
+    takes ~20 ms. The options are part of the key: they change the keymap.
+    Options libxkbcommon can't build (a custom one whose file is missing)
+    are left out rather than losing the layout too."""
+    if names not in _planners:
+        layout, variant, options = names
+        try:
+            _planners[names] = KeyPlanner(layout, variant, options)
+        except ValueError as e:
+            if options == "":
+                raise
+            # "", not None: None would bring back XKB_DEFAULT_OPTIONS, which
+            # may hold the broken option itself.
+            logger.warning(f"{e}; typing for {layout}({variant}) without options")
+            _planners[names] = KeyPlanner(layout, variant, "")
+    return _planners[names]
 
 
 # --- the active layout ---------------------------------------------------------------
@@ -276,13 +321,60 @@ def _kde_layouts():
     return layouts, int(iface.getLayout())
 
 
+def _kde_options():
+    """The XKB options KDE uses; its keyboard daemon's D-Bus interface
+    doesn't list them. On X11 the X server holds whatever KDE applied. On
+    Wayland they are kxkbrc's, read as KWin reads them (src/xkb.cpp):
+    Options only when ResetOldOptions is on, and None (libxkbcommon's
+    defaults) when it isn't, since KWin then passes none."""
+    if (os.environ.get("XDG_SESSION_TYPE") or "").lower() == "x11":
+        return _setxkbmap_fields().get("options", "")
+    # kreadconfig answers a bool by its exit code, 0 for true and 1 for false.
+    reset = _kreadconfig("--key", "ResetOldOptions", "--type", "bool")
+    if reset.returncode not in (0, 1):
+        reset.check_returncode()
+    if reset.returncode == 1:
+        return None
+    options = _kreadconfig("--key", "Options")
+    options.check_returncode()
+    return options.stdout.strip()
+
+
+def _kreadconfig(*args):
+    """kreadconfig run on kxkbrc's Layout group: KConfig's own reading, so
+    the admin's /etc/xdg/kxkbrc and entries marked [$i] count as they do for
+    KWin. It ships with KDE's config library (Plasma 6 and 5)."""
+    tool = shutil.which("kreadconfig6") or shutil.which("kreadconfig5")
+    if not tool:
+        raise FileNotFoundError("neither kreadconfig6 nor kreadconfig5 is installed")
+    return subprocess.run([tool, "--file", "kxkbrc", "--group", "Layout", *args],
+                          capture_output=True, text=True, timeout=2)
+
+
+def _options_or_defaults(read):
+    """The XKB options *read* returns, or None (libxkbcommon's defaults)
+    when they can't be read: the layout already found is still right, and
+    typing for it beats the system's layout."""
+    try:
+        return read()
+    except (OSError, subprocess.SubprocessError, ValueError) as e:
+        _note_unreadable_options(f"{type(e).__name__}: {e}")
+        return None
+
+
+@functools.lru_cache(maxsize=None)
+def _note_unreadable_options(problem):
+    """Say once per problem: the options are read before every typed chunk."""
+    logger.warning(f"Could not read the keyboard options ({problem}); using the defaults")
+
+
 def _gsettings(key):
     return subprocess.run(["gsettings", "get", "org.gnome.desktop.input-sources", key],
-                          capture_output=True, text=True, timeout=2).stdout
+                          capture_output=True, text=True, timeout=2, check=True).stdout
 
 
 def _gnome_layout():
-    """GNOME's current (layout, variant), or None for an input method."""
+    """GNOME's current (layout, variant, options), or None for an input method."""
     for key in ("mru-sources", "sources"):
         found = re.findall(r"\('(\w+)',\s*'([^']*)'\)", _gsettings(key))
         if found:
@@ -290,24 +382,33 @@ def _gnome_layout():
             if kind != "xkb":
                 return None     # an input method (IBus); its layout isn't knowable here
             layout, _, variant = name.partition("+")
-            return layout, variant
+            # A list like "['lv3:ralt_switch', 'compose:rctrl']", or "@as []",
+            # which GNOME Shell passes on as "" (keyboardManager.js).
+            options = _options_or_defaults(lambda: ",".join(
+                re.findall(r"'([^']*)'", _gsettings("xkb-options"))))
+            return layout, variant, options
     return None
 
 
 def _cosmic_xkb_config():
-    config = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
-    with open(os.path.join(config, "cosmic", "com.system76.CosmicComp", "v1", "xkb_config"),
-              encoding="utf-8") as f:
+    from .desktop_detect import config_home
+    path = os.path.join(config_home(), "cosmic", "com.system76.CosmicComp", "v1", "xkb_config")
+    with open(path, encoding="utf-8") as f:
         return f.read()
 
 
 def _cosmic_layout():
-    """COSMIC's (layout, variant), from its RON config:
-    (rules: "", model: "pc105", layout: "de,us", variant: ",", ...)."""
-    fields = dict(re.findall(r'\b(layout|variant):\s*"([^"]*)"', _cosmic_xkb_config()))
+    """COSMIC's (layout, variant, options), from its RON config:
+    (rules: "", model: "pc105", layout: "de,us", variant: ",",
+    options: Some("compose:ralt"), ...). Its options: None is None here too,
+    since cosmic-comp passes it to libxkbcommon as none (its defaults)."""
+    config = _cosmic_xkb_config()
+    fields = dict(re.findall(r'\b(layout|variant):\s*"([^"]*)"', config))
     if "," in fields.get("layout", ""):
         _note_several_layouts(fields["layout"])
-    return _first(fields.get("layout")), _first(fields.get("variant"))
+    options = re.search(r'\boptions:\s*Some\("([^"]*)"\)', config)
+    return (_first(fields.get("layout")), _first(fields.get("variant")),
+            options.group(1) if options else None)
 
 
 @functools.lru_cache(maxsize=None)
@@ -331,7 +432,9 @@ def _hyprland_layout():
     if not board:
         return None
     index = int(board.get("active_layout_index") or 0)
-    return _first(board.get("layout"), index), _first(board.get("variant"), index)
+    # Hyprland always passes its kb_options string, "" included.
+    return (_first(board.get("layout"), index), _first(board.get("variant"), index),
+            board.get("options") or "")
 
 
 def _sway_inputs():
@@ -401,11 +504,21 @@ def _sway_layout():
     index = board.get("xkb_active_layout_index") or 0
     if not names:
         return None
-    return _layout_from_description(names[index if index < len(names) else 0])
+    found = _layout_from_description(names[index if index < len(names) else 0])
+    # GET_INPUTS has no options; they are only in Sway's own config, and
+    # Sway passes none when it sets none: libxkbcommon's defaults.
+    return (*found, None) if found else None
 
 
 def _setxkbmap_query():
-    return subprocess.run(["setxkbmap", "-query"], capture_output=True, text=True, timeout=2).stdout
+    return subprocess.run(["setxkbmap", "-query"], capture_output=True, text=True, timeout=2,
+                          check=True).stdout
+
+
+def _setxkbmap_fields():
+    """{"layout": "us,ua", "options": "compose:ralt", ...}; a field the X
+    server has no value for is left out."""
+    return dict(re.findall(r"^(\w+):\s*(.*)$", _setxkbmap_query(), re.M))
 
 
 _XKB_USE_CORE_KBD = 0x0100
@@ -437,7 +550,9 @@ def _x11_active_group():
 
 
 def _x11_layout():
-    fields = dict(re.findall(r"^(\w+):\s*(.*)$", _setxkbmap_query(), re.M))
+    """The X server's (layout, variant, options): the layout and variant of
+    the group that is on, out of setxkbmap's lists; the options apply to all."""
+    fields = _setxkbmap_fields()
     if not fields.get("layout"):
         return None
     try:
@@ -450,32 +565,36 @@ def _x11_layout():
     # ("us(dvorak),ua" lists just "dvorak") must not be applied to it.
     variant = variants[group] if group < len(variants) else ""
     # _first falls back to the first layout if the group is out of range.
-    return _first(fields["layout"], group), variant
+    return _first(fields["layout"], group), variant, fields.get("options", "")
 
 
 def _system_layout():
-    """The system-wide default layout, as set at install time."""
+    """The system-wide default (layout, variant, options), as set at install
+    time or by localectl."""
     try:
         with open(_XORG_KEYBOARD_CONF) as f:
             conf = f.read()
         layout = re.search(r'Option\s+"XkbLayout"\s+"([^"]+)"', conf)
         if layout:
             variant = re.search(r'Option\s+"XkbVariant"\s+"([^"]*)"', conf)
-            return _first(layout.group(1)), _first(variant.group(1) if variant else "")
+            options = re.search(r'Option\s+"XkbOptions"\s+"([^"]*)"', conf)
+            return (_first(layout.group(1)), _first(variant.group(1) if variant else ""),
+                    options.group(1) if options else "")
     except OSError:
         pass
     try:
         with open(_DEBIAN_KEYBOARD) as f:
             values = dict(re.findall(r'^(\w+)="?([^"\n]*)"?', f.read(), re.M))
         if values.get("XKBLAYOUT"):
-            return _first(values["XKBLAYOUT"]), _first(values.get("XKBVARIANT", ""))
+            return (_first(values["XKBLAYOUT"]), _first(values.get("XKBVARIANT", "")),
+                    values.get("XKBOPTIONS", ""))
     except OSError:
         pass
     return None
 
 
 def active_layout():
-    """(layout, variant) of the keyboard layout in use, or None if unknown."""
+    """(layout, variant, XKB options) of the keyboard in use, or None if unknown."""
     try:
         found = None
         if os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"):
@@ -486,7 +605,8 @@ def active_layout():
             desktop = _desktop()
             if desktop == "kde":
                 layouts, index = _kde_layouts()
-                found = layouts[index] if 0 <= index < len(layouts) else None
+                if 0 <= index < len(layouts):
+                    found = (*layouts[index], _options_or_defaults(_kde_options))
             elif desktop == "gnome":
                 found = _gnome_layout()
             elif desktop == "cosmic":
@@ -503,7 +623,7 @@ def active_layout():
         return None
 
 
-US = ("us", "")
+US = ("us", "", None)
 
 
 def layout_key_events(text):
@@ -525,12 +645,11 @@ def layout_key_events(text):
 
 
 def altgr_characters():
-    """When the active layout's Right Alt is AltGr, up to two common
+    """When the active keyboard's Right Alt is AltGr, up to two common
     characters it types only with AltGr ("@", "€"), which picking Right Alt
-    as a dictation key takes away; None when it isn't AltGr (US). From the
-    layout and variant alone: XKB options that move AltGr (lv3:ralt_switch
-    gives US one, lv3:ralt_alt takes Germany's away) aren't read, here or
-    when typing (CODE_HEALTH.md)."""
+    as a dictation key takes away; None when it isn't AltGr (US, or Germany
+    with lv3:ralt_alt or compose:ralt). An empty tuple when it is AltGr but
+    types nothing listed here (US with lv3:ralt_switch)."""
     try:
         planner = planner_for(active_layout() or US)
     except (OSError, ValueError) as e:
@@ -567,4 +686,4 @@ def shortcut_keycode(letter):
 
 class UntypableText(Exception):
     """Some character can't be typed on the active layout.
-    args: ((layout, variant), the first character that can't be typed)."""
+    args: ((layout, variant, options), the first character that can't be typed)."""

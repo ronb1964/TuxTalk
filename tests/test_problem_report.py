@@ -28,7 +28,7 @@ def report(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_CURRENT_DESKTOP", "LXQt")
     monkeypatch.setattr(problem_report, "os_name", lambda: "Fedora Linux 44 (LXQt)")
     monkeypatch.setattr(desktop_detect, "get_desktop_environment", lambda: "unknown")
-    monkeypatch.setattr(keyboard_layout, "active_layout", lambda: ("us", ""))
+    monkeypatch.setattr(keyboard_layout, "active_layout", lambda: ("us", "", ""))
     monkeypatch.setattr(recommend, "detect_hardware", lambda cfg: recommend.Hardware("Intel graphics"))
     monkeypatch.setattr(secure_input, "is_installed", lambda: True)
     monkeypatch.setattr(secure_input, "running_version", lambda: "1.4")
@@ -46,6 +46,14 @@ def test_the_report_says_what_helps_find_a_problem(report):
                    "Typing: can type", "System: Fedora Linux 44 (LXQt)", "LXQt", "x11",
                    "Keyboard layout: us", "Graphics: Intel graphics", "model = 'parakeet-v3'"):
         assert wanted in text
+
+
+def test_the_report_names_the_keyboard_options(report, monkeypatch):
+    """They decide what Right Alt does, so a typing problem can hang on them."""
+    from tuxtalk import keyboard_layout
+    monkeypatch.setattr(keyboard_layout, "active_layout",
+                        lambda: ("de", "nodeadkeys", "compose:ralt"))
+    assert "Keyboard layout: de (nodeadkeys), options compose:ralt" in report()
 
 
 def test_it_ends_with_the_last_lines_of_the_log(report):
