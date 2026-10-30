@@ -1,5 +1,8 @@
 """Tests for cuda_helper module"""
 import os
+
+import pytest
+
 from tuxtalk import cuda_helper
 from unittest.mock import patch, Mock
 from tuxtalk.cuda_helper import (
@@ -112,17 +115,18 @@ def _no_other_cuda(monkeypatch):
 
 def test_system_cuda_without_cublas_is_not_enough(monkeypatch):
     """With a distro CUDA runtime but no cuBLAS, the model would load on CUDA
-    and the first dictation would crash."""
+    and every dictation would fail."""
     _no_other_cuda(monkeypatch)
     monkeypatch.setattr("subprocess.run", lambda *a, **k: _ldconfig("libcudart.so.12"))
     assert has_cuda_libraries() is False
 
 
-def test_system_cuda_11_is_not_enough(monkeypatch):
+@pytest.mark.parametrize("major", ["11", "13"])
+def test_system_cuda_of_another_major_version_is_not_enough(monkeypatch, major):
     """The speech engine opens CUDA 12's libraries by name."""
     _no_other_cuda(monkeypatch)
     monkeypatch.setattr("subprocess.run", lambda *a, **k: _ldconfig(
-        "libcudart.so.11.0", "libcublas.so.11", "libcublasLt.so.11"))
+        f"libcudart.so.{major}", f"libcublas.so.{major}", f"libcublasLt.so.{major}"))
     assert has_cuda_libraries() is False
 
 

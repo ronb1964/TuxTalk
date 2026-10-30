@@ -69,7 +69,7 @@ def test_an_install_without_cublas_is_not_complete(cuda_dir):
 
 
 def test_the_cudnn_earlier_versions_downloaded_is_removed(cuda_dir):
-    """About 900 MB nothing uses any more; the rest of CUDA stays."""
+    """Nearly 1 GB nothing uses any more; the rest of CUDA stays."""
     kept = _install_complete_cuda(cuda_dir)
     (cuda_dir / "lib" / "cudnn" / "lib").mkdir(parents=True)
     (cuda_dir / "lib" / "cudnn" / "lib" / "libcudnn.so.9").write_text("x")
@@ -78,5 +78,11 @@ def test_the_cudnn_earlier_versions_downloaded_is_removed(cuda_dir):
     assert cuda_helper._cuda_install_looks_complete(str(cuda_dir))
 
 
-def test_cuda_without_cudnn_is_not_downloaded_with_it():
+def test_no_cudnn_folder_is_nothing_to_do(cuda_dir):
+    kept = _install_complete_cuda(cuda_dir)
+    cuda_helper.remove_unused_cudnn()
+    assert sorted(os.listdir(cuda_dir / "lib")) == kept
+
+
+def test_cudnn_is_not_downloaded():
     assert not any("cudnn" in name for name in cuda_helper.CUDA_PACKAGES)

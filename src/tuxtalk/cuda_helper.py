@@ -15,11 +15,12 @@ logger = setup_logger(__name__)
 NVIDIA_SMI_TIMEOUT = 5
 SUBPROCESS_TIMEOUT = 2
 
-# The libraries CTranslate2 needs to run on CUDA: CUDA 12's runtime and
-# cuBLAS (with cuBLASLt), by these names, which is how it opens them; a
-# CUDA 11 install doesn't do. Without them the model loads "on cuda" and the
-# first dictation crashes. cuDNN isn't among them: CTranslate2's Linux
-# wheels are built without it since 4.7, and Whisper on CUDA types the same.
+# The libraries a CUDA install needs here: CTranslate2 opens CUDA 12's cuBLAS
+# and cuBLASLt by these names, so another major version (11, 13) doesn't do;
+# the runtime comes with the same download and stays a sign of a whole one.
+# Without them the model loads "on cuda" and every dictation fails inside the
+# speech library (libcublas.so.12 not found). cuDNN isn't among them:
+# CTranslate2's Linux wheels are built without it since 4.7 (TuxTalk 0.16).
 _REQUIRED_CUDA_LIBS = ("libcudart.so.12", "libcublas.so.12", "libcublasLt.so.12")
 
 def detect_nvidia_gpu():
@@ -89,6 +90,22 @@ def _make_cuda_cleanup(cuda_path: str):
             logger.warning(f"Could not clean up CUDA directory: {e}")
 
     return cleanup_cuda_dir
+
+
+def remove_unused_cudnn():
+    """Delete the cuDNN an earlier TuxTalk downloaded with CUDA (lib/cudnn):
+    nothing uses it, and it takes nearly 1 GB. Never raises."""
+    import shutil
+    cudnn = os.path.join(get_appdir_cuda_path(), "lib", "cudnn")
+    # A link there isn't TuxTalk's download: leave it and what it points at.
+    if not os.path.isdir(cudnn) or os.path.islink(cudnn):
+        return
+    try:
+        shutil.rmtree(cudnn)
+    except OSError as e:
+        logger.warning(f"Couldn't remove the unused cuDNN in {cudnn}: {e}")
+        return
+    logger.info("Removed the cuDNN earlier versions downloaded with CUDA; nothing uses it")
 
 
 def has_cuda_libraries():
@@ -238,20 +255,6 @@ def _extract_wheels(wheel_paths, lib_path, progress_callback, cancel_event):
 
 # The wheels come straight from PyPI's JSON API; no pip is needed.
 CUDA_PACKAGES = ('nvidia-cuda-runtime-cu12', 'nvidia-cublas-cu12')
-
-
-def remove_unused_cudnn():
-    """Delete the cuDNN an earlier TuxTalk downloaded with CUDA (lib/cudnn):
-    nothing uses it, and it takes about 900 MB. Never raises."""
-    import shutil
-    cudnn = os.path.join(get_appdir_cuda_path(), "lib", "cudnn")
-    if not os.path.isdir(cudnn) or os.path.islink(cudnn):
-        return
-    shutil.rmtree(cudnn, ignore_errors=True)
-    if os.path.exists(cudnn):
-        logger.warning(f"Couldn't remove the unused cuDNN in {cudnn}")
-    else:
-        logger.info("Removed the cuDNN earlier versions downloaded with CUDA; nothing uses it")
 
 
 def _pypi_wheel(pkg_name):
