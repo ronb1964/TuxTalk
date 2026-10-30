@@ -411,15 +411,13 @@ def _window(**parts):
     return win
 
 
-def test_an_update_doesnt_start_when_the_changes_couldnt_be_saved(monkeypatch):
+def test_an_update_doesnt_start_when_the_changes_couldnt_be_saved(monkeypatch, message_boxes):
     """"Any unsaved preferences changes will be saved first": with the disk
     full or the file unreadable the save failed, the update went ahead, and
     its restart lost the changes."""
     from tuxtalk import update_checker
     shown = []
-    answer = SimpleNamespace(run=lambda: P.Gtk.ResponseType.YES, destroy=lambda: None,
-                             format_secondary_text=lambda text: None)
-    monkeypatch.setattr("tuxtalk.ui_style.message_dialog", lambda **kw: answer)
+    message_boxes.answer = P.Gtk.ResponseType.YES
     monkeypatch.setattr(update_checker, "get_install_type", lambda: "appimage")
     monkeypatch.setattr(update_checker, "get_update_guidance",
                         lambda kind, version: {"update_method": "appimage"})
@@ -433,15 +431,13 @@ def test_an_update_doesnt_start_when_the_changes_couldnt_be_saved(monkeypatch):
     assert shown == ["save error"]
 
 
-def test_an_update_saves_the_snippets_first(monkeypatch):
+def test_an_update_saves_the_snippets_first(monkeypatch, message_boxes):
     """Snippets are saved apart from the settings: an update after an edited
     snippet, with no Apply, restarted TuxTalk and lost the edit. A failed
     snippet save stops the update, as a failed settings save does."""
     from tuxtalk import update_checker
     saved = []
-    answer = SimpleNamespace(run=lambda: P.Gtk.ResponseType.YES, destroy=lambda: None,
-                             format_secondary_text=lambda text: None)
-    monkeypatch.setattr("tuxtalk.ui_style.message_dialog", lambda **kw: answer)
+    message_boxes.answer = P.Gtk.ResponseType.YES
     monkeypatch.setattr(update_checker, "get_install_type", lambda: "appimage")
     monkeypatch.setattr(update_checker, "get_update_guidance",
                         lambda kind, version: {"update_method": "appimage"})

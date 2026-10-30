@@ -3,18 +3,8 @@
 # ==========================
 # Repackages the release AppImage into a Debian/Ubuntu .deb.
 #
-# WHY this reuses the AppImage instead of building from scratch:
-#   ./build-release.sh already assembles a fully self-contained runtime (its own
-#   Python, GTK bindings, faster-whisper/CTranslate2, wl-clipboard) inside
-#   an Ubuntu 22.04 container for wide glibc compatibility. That same tree is exactly
-#   what a .deb needs — so we extract the finished AppImage and wrap it as a .deb
-#   rather than maintaining a second, divergent build. Run build-release.sh FIRST.
-#
-# Layout produced:
-#   /opt/talktype/            <- the whole extracted AppImage tree (AppRun + usr/)
-#   /usr/bin/tuxtalk         <- tiny launcher: exec /opt/talktype/AppRun "$@"
-#   /usr/share/applications/  <- desktop entry (Exec=tuxtalk tray)
-#   /usr/share/pixmaps/       <- icon
+# It reuses the finished AppImage (packaging/stage-from-appimage.sh says why
+# and what it installs), so run ./build-release.sh FIRST.
 #
 # System deps are DECLARED (not bundled): the bundle relies on the host's GTK stack.
 #   libgtk-3-0, libayatana-appindicator3-1 (tray), libportaudio2 (mic),
@@ -30,25 +20,11 @@ set -e
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$PROJECT_DIR"
 
-# fpm is commonly installed to ~/bin or the user gem bin dir — make sure it's found.
-export PATH="$HOME/bin:$PATH"
-if ! command -v fpm >/dev/null 2>&1; then
-    echo "❌ fpm not found. Install it with:  gem install --user-install fpm"
-    exit 1
-fi
-
-# Version comes from pyproject.toml (single source of truth, same as build-release.sh).
-VERSION=$(grep -E "^version = " "$PROJECT_DIR/pyproject.toml" | sed 's/version = "\(.*\)"/\1/')
-if [ -z "$VERSION" ]; then
-    echo "❌ Could not read version from pyproject.toml"
-    exit 1
-fi
-APPIMAGE="$PROJECT_DIR/TuxTalk-v${VERSION}-x86_64.AppImage"
-if [ ! -f "$APPIMAGE" ]; then
-    echo "❌ AppImage not found: $APPIMAGE"
-    echo "   Run ./build-release.sh first to produce it."
-    exit 1
-fi
+# shellcheck source=packaging/stage-from-appimage.sh
+source "$PROJECT_DIR/packaging/stage-from-appimage.sh"
+require_fpm
+VERSION=$(project_version "$PROJECT_DIR")
+APPIMAGE=$(release_appimage "$PROJECT_DIR" "$VERSION")
 
 echo "📦 Building TuxTalk .deb from $(basename "$APPIMAGE")"
 echo "========================================"
@@ -56,30 +32,11 @@ echo "========================================"
 # Work in a temp dir so nothing litters the project tree.
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
-
-echo "📂 Extracting the AppImage..."
-( cd "$WORK" && "$APPIMAGE" --appimage-extract >/dev/null 2>&1 )
-TREE="$WORK/squashfs-root"
-[ -d "$TREE" ] || { echo "❌ extraction failed"; exit 1; }
-
-echo "🏗️  Staging the .deb filesystem..."
+stage_tree "$APPIMAGE" "$WORK" "$PROJECT_DIR"
 STAGE="$WORK/stage"
-mkdir -p "$STAGE/opt" "$STAGE/usr/bin" "$STAGE/usr/share/applications" "$STAGE/usr/share/pixmaps"
 
-# The whole tree goes to /opt/talktype. AppRun sits at /opt/talktype/AppRun and derives
-# its paths relative to itself (${HERE}/usr/...), so it works unchanged at this location.
-# The folder keeps its name from before the 0.15.0 rename (nobody sees it):
-# upgrades then replace files in place, like every earlier one, instead of
-# deleting the folder a running 0.14.x tray still imports from.
-mv "$TREE" "$STAGE/opt/talktype"
-
-# Third-party licenses ride inside the AppImage's tree (packaging/collect-licenses.sh).
-# Refuse to package an AppImage built without them.
-LIC_SRC="$STAGE/opt/talktype/usr/share/licenses"
-for f in tuxtalk/LICENSE tuxtalk/THIRD_PARTY_LICENSES.md wl-clipboard/COPYING; do
-    [ -f "$LIC_SRC/$f" ] || { echo "❌ The AppImage has no $f: rebuild it with ./build-release.sh"; exit 1; }
-done
 # Debian keeps a package's license in /usr/share/doc/<package>/copyright.
+LIC_SRC="$STAGE/opt/talktype/usr/share/licenses"
 mkdir -p "$STAGE/usr/share/doc/tuxtalk"
 { cat "$LIC_SRC/tuxtalk/LICENSE"; echo
   echo "TuxTalk bundles third-party software under /opt/talktype. Its licenses are in"
@@ -87,43 +44,8 @@ mkdir -p "$STAGE/usr/share/doc/tuxtalk"
 } > "$STAGE/usr/share/doc/tuxtalk/copyright"
 cp "$LIC_SRC/tuxtalk/THIRD_PARTY_LICENSES.md" "$STAGE/usr/share/doc/tuxtalk/"
 
-# System launcher — reuses the tested AppRun rather than duplicating its env setup.
-cat > "$STAGE/usr/bin/tuxtalk" <<'LAUNCHER'
-#!/bin/sh
-# TuxTalk system launcher — hands off to the bundled AppRun, which sets
-# PYTHONHOME/PYTHONPATH/LD_LIBRARY_PATH/GI_TYPELIB_PATH relative to itself.
-exec /opt/talktype/AppRun "$@"
-LAUNCHER
-chmod +x "$STAGE/usr/bin/tuxtalk"
-# The command before the 0.15.0 rename: old shortcuts, scripts and a 0.14.x
-# updater (which restarts /usr/bin/talktype after installing this) still use it.
-ln -s tuxtalk "$STAGE/usr/bin/talktype"
-
-# Desktop entry — same as the AppImage's, but Exec points at the system launcher.
-sed 's/^Exec=AppRun/Exec=tuxtalk/' "$PROJECT_DIR/io.github.ronb1964.TuxTalk.desktop" \
-    > "$STAGE/usr/share/applications/io.github.ronb1964.TuxTalk.desktop"
-cp "$PROJECT_DIR/io.github.ronb1964.TuxTalk.png" "$STAGE/usr/share/pixmaps/"
-# Crisp scalable icon in the hicolor theme — used by the app menu AND the first-run
-# splash screen (which prefers SVG). Without it, a packaged install has no icon the
-# splash can find and shows plain "TuxTalk" text instead of the glowing logo.
-install -Dm644 "$PROJECT_DIR/icons/OFFICIAL_ICON_DO_NOT_CHANGE.svg" \
-    "$STAGE/usr/share/icons/hicolor/scalable/apps/io.github.ronb1964.TuxTalk.svg"
-
-# Post-install: refresh the icon + desktop caches (best-effort, never fail the install).
 POSTINST="$WORK/postinst.sh"
-cat > "$POSTINST" <<'POST'
-#!/bin/sh
-set -e
-command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache -q -f /usr/share/icons/hicolor 2>/dev/null || true
-command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database -q /usr/share/applications 2>/dev/null || true
-exit 0
-POST
-
-# Normalize permissions so nothing installs unreadable. A stray owner-only file
-# (a 0600 .py) would otherwise land as root:root 0600 and break imports for the user
-# — update_checker.py did exactly this, killing Preferences/About/Check-for-Updates.
-# a+rX = readable everywhere; execute preserved only where already set (launchers, python).
-chmod -R a+rX "$STAGE"
+finish_stage "$STAGE" "$POSTINST"
 
 echo "🔧 Packaging with fpm..."
 rm -f "$PROJECT_DIR/tuxtalk_${VERSION}_amd64.deb"

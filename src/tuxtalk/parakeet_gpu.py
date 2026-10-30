@@ -21,7 +21,6 @@ import subprocess
 import sys
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 
@@ -76,11 +75,7 @@ class ParakeetGpuModel:
         self._words = ()
         self._sent_words = ()       # the list the running helper has (a new one has none)
         self._lock = threading.Lock()
-        # The helper dies with the thread that started it (PR_SET_PDEATHSIG
-        # is per thread), and a restart can happen on a short-lived dictation
-        # thread (the Flatpak build makes one per dictation). So every start
-        # goes through this one thread, which lives as long as the model.
-        self._launcher = ThreadPoolExecutor(max_workers=1, thread_name_prefix="parakeet-gpu")
+        self._launcher = engine_process.Launcher("parakeet-gpu")
         self._start()
 
     # --- the helper process ---------------------------------------------------
@@ -90,9 +85,8 @@ class ParakeetGpuModel:
         RuntimeError with the helper's reason when it doesn't, with the
         helper stopped."""
         self._stop()
-        self._proc = self._launcher.submit(
-            subprocess.Popen, self._command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE).result()
+        self._proc = self._launcher.popen(self._command, stdin=subprocess.PIPE,
+                                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         # Kept to explain a helper that dies while starting, and dropped once
         # it's ready: after a dictation they could hold its words.
         self._output = engine_process.OutputTail(self._proc.stderr)
@@ -232,4 +226,4 @@ class ParakeetGpuModel:
         """Stop the helper for good."""
         with self._lock:
             self._stop()
-        self._launcher.shutdown(wait=False)
+        self._launcher.close()

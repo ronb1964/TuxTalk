@@ -74,6 +74,7 @@ def _failing_fetch(monkeypatch, reason, tries):
         tries.append(url)
         raise DownloadError(reason)
     monkeypatch.setattr("tuxtalk.download_utils.fetch_file", fetch_file)
+    monkeypatch.setattr("tuxtalk.download_utils.RETRY_WAITS", (0.0, 0.0))
 
 
 def test_a_failed_file_is_tried_three_times_then_reported_with_its_reason(

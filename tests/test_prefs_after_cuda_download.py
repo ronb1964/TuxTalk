@@ -281,13 +281,16 @@ def test_the_download_no_longer_writes_the_config_itself(prefs, monkeypatch):
     """Switching to CUDA is Preferences' job, so the service restarts onto
     it: a download that saved device = "cuda" itself moved the baseline
     Apply compares against, and nothing restarted."""
-    from gi.repository import GLib
-    from tuxtalk import config, cuda_helper
+    import threading
+    from tuxtalk import config, cuda_helper, download_progress_dialog
     switched = []
-    monkeypatch.setattr(cuda_helper, "download_cuda_libraries", lambda **k: True)
+    monkeypatch.setattr(cuda_helper, "download_cuda_libraries", lambda progress, cancel: True)
     monkeypatch.setattr(config, "save_config", lambda cfg: pytest.fail("the download saved settings"))
-    monkeypatch.setattr(GLib, "idle_add", lambda *a: None)
-    monkeypatch.setattr(prefs.Gtk.Dialog, "run", lambda d: prefs.Gtk.ResponseType.OK)
+    monkeypatch.setattr(download_progress_dialog, "run_downloads", lambda parent, title, text,
+                        tasks: all(t.download_func(lambda *a: None, threading.Event())
+                                              for t in tasks))
+    monkeypatch.setattr(cuda_helper, "_say_how_it_went",
+                        lambda parent, ok, then: ok and then())
     assert cuda_helper.show_cuda_download_dialog(on_success_callback=lambda: switched.append(1))
     assert switched == [1]
 

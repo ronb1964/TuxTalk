@@ -15,7 +15,7 @@ import time
 import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, GLib
-from .ui_style import message_dialog, show_message
+from .ui_style import show_message
 
 from . import vocabulary
 from .config import ConfigNotLoadedError
@@ -351,17 +351,12 @@ class _FixWordDialog:
 
     def _confirm_risky(self, phrase, replacement):
         """Ask before fixing a common word everywhere; True to go ahead."""
-        msg = message_dialog(
-            transient_for=self.window, modal=True,
-            message_type=Gtk.MessageType.WARNING, buttons=Gtk.ButtonsType.NONE,
-            text=f"Always change “{phrase}” to “{replacement}”?")
-        msg.format_secondary_text(
+        answer = show_message(
+            self.window, Gtk.MessageType.WARNING,
+            f"Always change “{phrase}” to “{replacement}”?",
             f"“{phrase}” is a common word, so this will change it in every "
-            "dictation, even when TuxTalk heard you right.")
-        msg.add_button("Cancel", Gtk.ResponseType.CANCEL)
-        msg.add_button("Fix it anyway", Gtk.ResponseType.OK)
-        answer = msg.run()
-        msg.destroy()
+            "dictation, even when TuxTalk heard you right.",
+            [("Cancel", Gtk.ResponseType.CANCEL), ("Fix it anyway", Gtk.ResponseType.OK)])
         return answer == Gtk.ResponseType.OK
 
     # --- closing ------------------------------------------------------------

@@ -25,6 +25,7 @@ class FinishedDownloads:
         for task in self.tasks:
             task.success = task.download_func(lambda *a: None, task.cancel_event)
             task.completed = True
+        return {t.name: {"success": t.success, "cancelled": False} for t in self.tasks}
 
 
 @pytest.fixture

@@ -98,49 +98,18 @@ def test_offered_only_to_parakeet_users_on_the_original(disk):
     assert parakeet_update_needed(cfg) is None          # dictates with Whisper
 
 
-def test_the_offer_names_its_real_size(disk, monkeypatch):
-    shown = []
-
-    class Dialog:
-        def __init__(self, **kwargs):
-            shown.append(kwargs["text"])
-
-        def format_secondary_text(self, text):
-            shown.append(text)
-
-        def add_button(self, label, response):
-            shown.append(label)
-
-        def set_default_response(self, r): pass
-        def set_keep_above(self, on): pass
-        def destroy(self): pass
-
-        def run(self):
-            return offers.Gtk.ResponseType.CANCEL
-
-    monkeypatch.setattr("tuxtalk.ui_style.message_dialog", lambda **k: Dialog(**k))
+def test_the_offer_names_its_real_size(disk, message_boxes):
+    message_boxes.answer = offers.Gtk.ResponseType.CANCEL
     assert offers._offer_parakeet_update("vulkan") is False
-    assert shown[0] == "Parakeet got more accurate"
-    assert "Download (669 MB)" in shown and "Not Now" in shown
+    [box] = message_boxes.shown
+    assert box.title == "Parakeet got more accurate"
+    assert "Download (669 MB)" in box.buttons and "Not Now" in box.buttons
 
 
-def test_enter_on_the_offer_means_not_now(disk, monkeypatch):
+def test_enter_on_the_offer_means_not_now(disk, monkeypatch, message_boxes):
     """The offer opens by itself about 20 s after start; someone typing
     elsewhere who presses Enter as it comes up must not start a download."""
-    class Dialog:
-        def __init__(self, **kwargs): pass
-        def format_secondary_text(self, text): pass
-        def add_button(self, label, response): pass
-        def set_keep_above(self, on): pass
-        def destroy(self): pass
-
-        def set_default_response(self, response):
-            self.default = response
-
-        def run(self):
-            return self.default         # what Enter picks
-
-    monkeypatch.setattr("tuxtalk.ui_style.message_dialog", lambda **k: Dialog())
+    message_boxes.answer = lambda box: box.default         # what Enter picks
     monkeypatch.setattr("tuxtalk.model_helper.download_parakeet_update",
                         lambda device: pytest.fail("Enter started the download"))
     assert offers._offer_parakeet_update("vulkan") is False

@@ -6,7 +6,7 @@ from gi.repository import Gtk
 
 from . import stats as stats_module
 from .prefs_tab import Tab
-from .ui_style import message_dialog, show_message
+from .ui_style import show_message
 
 _PERIODS = [("today", "Today"), ("week", "Last 7 days"), ("all", "All time")]
 _ROWS = [("words", "Words"), ("dictations", "Dictations"),
@@ -226,16 +226,10 @@ class StatsTab(Tab):
 
     def _on_reset(self, _button):
         """Reset Stats..., after asking: every count goes."""
-        dialog = message_dialog(
-            transient_for=self.window, modal=True,
-            message_type=Gtk.MessageType.WARNING, buttons=Gtk.ButtonsType.NONE,
-            text="Reset your usage stats?")
-        dialog.format_secondary_text(
-            "This deletes every count so far and starts again from zero. It can't be undone.")
-        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
-        dialog.add_button("Reset Stats", Gtk.ResponseType.OK)
-        answer = dialog.run()
-        dialog.destroy()
+        answer = show_message(
+            self.window, Gtk.MessageType.WARNING, "Reset your usage stats?",
+            "This deletes every count so far and starts again from zero. It can't be undone.",
+            [("Cancel", Gtk.ResponseType.CANCEL), ("Reset Stats", Gtk.ResponseType.OK)])
         if answer == Gtk.ResponseType.OK:
             if not stats_module.reset():
                 show_message(self.window, Gtk.MessageType.ERROR, "Your stats couldn't be reset",

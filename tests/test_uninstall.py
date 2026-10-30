@@ -473,7 +473,7 @@ def test_a_time_out_after_the_password_carries_on_unsure(monkeypatch):
     def run(*a, **k):
         raise PermissionError(1, "Operation not permitted")
     monkeypatch.setattr(secure_input.subprocess, "run", run)
-    monkeypatch.setattr(secure_input, "PKEXEC_TIMEOUT", 0)
+    monkeypatch.setattr(secure_input.pkexec_runner, "SCRIPT_TIMEOUT_S", 0)
     ok, report = secure_input._pkexec("true", "tested")
     assert (ok, report) == (True, secure_input.RAN_TOO_LONG)
     result = uninstall.root_result(report, leave_group=False, package=True)
@@ -709,3 +709,22 @@ def test_work_done_while_the_window_waits_gives_back_its_result_or_its_error():
         raise PermissionError("not allowed")
     with pytest.raises(PermissionError):
         uninstall._wait_for(fails)
+
+
+def test_dictated_text_in_the_runtime_folder_goes_and_the_locks_stay(home, monkeypatch):
+    """Fix a Word's hand-over file has a name of its own each time
+    (tuxtalk-fix-word-<random>.json): the uninstall looked for one fixed
+    name and left it. A lock file is shared with a copy still running."""
+    from tuxtalk import voice_commands
+    run = home.parent / "run"
+    run.mkdir(mode=0o700)
+    (run / "talktype-history.json").write_text("[]")
+    (run / "talktype.lock").write_text("")
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(run))
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    hand_over = voice_commands._hand_over(" some words ", ("org.kde.kwrite", None))
+    plan = _find(home)
+    assert sorted(p.name for p in plan.runtime) == sorted(
+        ["talktype-history.json", os.path.basename(hand_over)])
+    uninstall.remove_files(plan, delete_personal=False, delete_shared=False)
+    assert sorted(p.name for p in run.iterdir()) == ["talktype.lock"]

@@ -79,25 +79,14 @@ def test_parakeet_silence_returns_none(monkeypatch):
     assert engine.transcribe(np.zeros(8000, dtype=np.float32), language=None) is None
 
 
-def test_the_download_question_names_the_model_as_the_menus_do(monkeypatch):
+def test_the_download_question_names_the_model_as_the_menus_do(monkeypatch, message_boxes):
     """It said "Download Small Model?" where the menus said "Whisper Small"
     (review of 0.17)."""
     from tuxtalk import model_helper
-    asked = []
-
-    class Question:
-        def __init__(self, **kwargs):
-            asked.append(kwargs["text"])
-        def format_secondary_text(self, text): pass
-        def set_position(self, position): pass
-        def destroy(self): pass
-        def run(self):
-            return model_helper.Gtk.ResponseType.CANCEL
-
+    message_boxes.answer = model_helper.Gtk.ResponseType.CANCEL
     monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda m: False)
-    monkeypatch.setattr(model_helper, "message_dialog", lambda **k: Question(**k))
     assert model_helper.download_model_with_progress("small") is None
-    assert asked == ["Download Whisper Small Model?"]
+    assert [box.title for box in message_boxes.shown] == ["Download Whisper Small Model?"]
 
 
 def test_menus_show_the_device_parakeet_really_uses():

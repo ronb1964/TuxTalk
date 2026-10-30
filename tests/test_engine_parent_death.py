@@ -185,3 +185,40 @@ def test_no_module_beside_the_launcher_hides_a_standard_one():
     folder = os.path.dirname(engine_launcher.__file__)
     ours = {name.removesuffix(".py") for name in os.listdir(folder)}
     assert not ours & (set(sys.stdlib_module_names) | _STANDARD_IN_THE_APPIMAGES_PYTHON)
+
+
+def test_an_engine_started_from_a_short_lived_thread_outlives_it():
+    """Every engine (Whisper on Vulkan, Parakeet on the graphics card, the
+    AI) starts through an engine_process.Launcher: a restart asked for on a
+    dictation's own thread must not die when that dictation ends."""
+    launcher = engine_process.Launcher("test-engine")
+    command, env = engine_process.parent_death_command(["/bin/sleep", "30"])
+    started = []
+    dictation = threading.Thread(target=lambda: started.append(
+        launcher.popen(command, env=env, stdout=subprocess.DEVNULL)))
+    dictation.start()
+    dictation.join()
+    proc = started[0]
+    try:
+        time.sleep(0.3)
+        assert proc.poll() is None
+    finally:
+        assert engine_process.stop(proc) is True
+        launcher.close()
+    assert proc.poll() is not None
+
+
+def test_a_server_that_ignores_being_asked_to_stop_is_killed():
+    """llama-server sometimes stalls in its shutdown: it mustn't keep its
+    gigabyte after TuxTalk turned it off."""
+    proc = subprocess.Popen([sys.executable, "-c",
+                             "import signal, time\n"
+                             "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+                             "print('ready', flush=True)\n"
+                             "time.sleep(30)"], stdout=subprocess.PIPE)
+    proc.stdout.readline()
+    started = time.monotonic()
+    assert engine_process.stop(proc, grace_s=0.3) is True
+    assert proc.returncode == -signal.SIGKILL
+    assert time.monotonic() - started < 5
+    assert engine_process.stop(proc) is False       # already gone: nothing to do

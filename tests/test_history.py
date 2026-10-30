@@ -75,6 +75,31 @@ def test_file_lives_in_the_runtime_dir_and_is_private(runtime_dir):
     assert stat.S_IMODE(os.stat(path).st_mode) == 0o600
 
 
+def test_without_a_private_runtime_folder_nothing_is_kept(runtime_dir, monkeypatch):
+    """A misconfigured, shared runtime folder, or none: the locks fall back to
+    /tmp, which may be on disk, so dictated text would outlive the session
+    there. Recent Dictations keeps nothing instead, never written anywhere."""
+    from tuxtalk import single_instance
+    shared = runtime_dir / "shared"
+    shared.mkdir()
+    shared.chmod(0o777)
+    monkeypatch.setattr(single_instance, "FALLBACK_ROOT", str(runtime_dir))
+    for session in (str(shared), str(runtime_dir / "missing")):
+        monkeypatch.setenv("XDG_RUNTIME_DIR", session)
+        history.add_entry("secret-ish")
+        assert history.get_entries() == []
+        history.clear()
+    written = [p for p in runtime_dir.rglob("*") if p.is_file()]
+    assert written == []
+
+
+def test_a_private_runtime_folder_keeps_them(runtime_dir):
+    history.add_entry("first")
+    history.add_entry("second")
+    assert history.get_entries() == ["second", "first"]
+    assert (runtime_dir / "talktype-history.json").exists()
+
+
 def test_clear_and_missing_or_corrupt_file(runtime_dir):
     assert history.get_entries() == []          # no file yet
     history.add_entry("x")

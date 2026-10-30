@@ -72,3 +72,78 @@ def test_a_runtime_folder_others_can_open_is_not_used(no_runtime_folder, tmp_pat
     shared.chmod(0o777)
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(shared))
     assert single_instance.runtime_dir() == str(no_runtime_folder)
+
+
+def test_an_empty_runtime_folder_setting_counts_as_none(monkeypatch):
+    """The desktop's sockets (Hyprland's, a Wayland display) are looked for
+    in /run/user/<uid>, not in the current folder."""
+    monkeypatch.setenv("XDG_RUNTIME_DIR", "")
+    assert single_instance.session_runtime_dir() == f"/run/user/{os.getuid()}"
+    assert single_instance.session_runtime_dir({"XDG_RUNTIME_DIR": "/run/x"}) == "/run/x"
+
+
+def _private_folder(path):
+    path.mkdir(mode=0o700)
+    path.chmod(0o700)
+    return path
+
+
+def test_a_linked_runtime_folder_is_not_used_for_dictated_text(tmp_path, monkeypatch):
+    """A link can lead through a folder another user may change, and be
+    pointed elsewhere after the check."""
+    real = _private_folder(tmp_path / "real")
+    link = tmp_path / "run"
+    link.symlink_to(real)
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(link))
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    assert single_instance.private_session_dir() is None
+
+
+def test_a_runtime_folder_in_a_folder_anyone_can_change_is_not_used(tmp_path, monkeypatch):
+    """Anyone could rename it away and put their own in its place."""
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    shared.chmod(0o777)
+    run = _private_folder(shared / "run")
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(run))
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    assert single_instance.private_session_dir() is None
+    shared.chmod(0o1777)        # sticky, as /tmp: only its owner may rename it
+    assert single_instance.private_session_dir() == str(run)
+
+
+def test_a_private_folder_in_the_users_own_folder_is_used(tmp_path, monkeypatch):
+    parent = _private_folder(tmp_path / "user")
+    run = _private_folder(parent / "1000")
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(run))
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    assert single_instance.private_session_dir() == str(run)
+
+
+@pytest.mark.skipif(not os.path.isdir(f"/run/user/{os.getuid()}"),
+                    reason="no /run/user/<uid> on this computer")
+def test_the_usual_runtime_folder_is_used(monkeypatch):
+    """/run/user/<uid>, in root's /run/user, as logind makes it."""
+    monkeypatch.setenv("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    assert single_instance.private_session_dir() == f"/run/user/{os.getuid()}"
+
+
+@pytest.mark.parametrize("layout", ["open parent", "link"])
+def test_the_locks_stay_where_they_were_when_the_strict_check_refuses(tmp_path, monkeypatch,
+                                                                      layout):
+    """Moved by the stricter check, a new copy's lock would miss the one an
+    older copy still holds in the old folder, and both would run."""
+    if layout == "open parent":
+        shared = tmp_path / "shared"
+        shared.mkdir()
+        shared.chmod(0o777)
+        run = _private_folder(shared / "run")
+    else:
+        run = tmp_path / "run"
+        run.symlink_to(_private_folder(tmp_path / "real"))
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(run))
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    monkeypatch.setattr(single_instance, "FALLBACK_ROOT", str(tmp_path / "fallback"))
+    assert single_instance.private_session_dir() is None
+    assert single_instance.runtime_dir() == str(run)

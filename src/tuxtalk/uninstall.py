@@ -40,10 +40,10 @@ from gi.repository import GLib, Gtk  # noqa: E402
 from . import (ai_cleanup, config, cosmic_hotkeys, custom_words,  # noqa: E402
                desktop_detect, extension_helper, file_transcribe, gnome_keybindings,
                kwin_hotkeys, menu_cache, model_helper, parakeet_engine, rename_migration,
-               secure_input, service_launcher, settings_backup, uinput_helper,
+               secure_input, service_launcher, settings_backup, single_instance, uinput_helper,
                update_checker, whisper_vulkan)
 from .logger import LOG_FILE_NAME, setup_logger, stop_file_logging  # noqa: E402
-from .ui_style import message_dialog  # noqa: E402
+from .ui_style import message_dialog, show_message  # noqa: E402
 
 logger = setup_logger(__name__)
 
@@ -89,11 +89,12 @@ HF_REPOS = tuple(sorted({_hub_folder(repo) for repo in (
     parakeet_engine.V3_REPO, whisper_vulkan.MODEL_REPO,
     *whisper_vulkan.MODEL_REPOS.values(), ai_cleanup.MODEL_REPO)}))
 
-# The runtime folder's files that hold dictated text: Recent Dictations and
-# Fix a Word's last dictation. Logging out empties the folder anyway; its
-# lock files stay, since a development copy running beside this one uses
-# the same names.
-RUNTIME_FILES = ("talktype-history.json", "tuxtalk-fix-word.json")
+# The runtime folder's files that hold dictated text, as glob patterns:
+# Recent Dictations and Fix a Word's hand-overs (voice_commands._hand_over,
+# a name of its own each). Logging out empties the folder anyway; its lock
+# files stay, since a development copy running beside this one uses the
+# same names.
+RUNTIME_FILES = ("talktype-history.json", "tuxtalk-fix-word-*.json")
 
 ICON_SIZES = ("256x256", "128x128", "64x64", "48x48", "32x32")
 
@@ -248,8 +249,8 @@ def find(home, install_type, environ=os.environ, appimage=None):
         if exists(folder):
             plan.folders.append((folder, names))
 
-    runtime = Path(environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}")
-    plan.runtime = [runtime / name for name in RUNTIME_FILES if exists(runtime / name)]
+    runtime = Path(single_instance.session_runtime_dir(environ))
+    plan.runtime = sorted(path for pattern in RUNTIME_FILES for path in runtime.glob(pattern))
 
     unit = uinput_helper.our_ydotoold_unit(home)
     if unit is not None:
@@ -684,15 +685,7 @@ def _working_window():
 
 
 def _tell(kind, heading, body, markup=False):
-    dialog = message_dialog(message_type=kind, buttons=Gtk.ButtonsType.OK, text=heading)
-    if markup:
-        dialog.format_secondary_markup(body)
-    else:
-        dialog.format_secondary_text(body)
-    dialog.set_position(Gtk.WindowPosition.CENTER)
-    dialog.set_keep_above(True)
-    dialog.run()
-    dialog.destroy()
+    show_message(None, kind, heading, body, keep_above=True, markup=markup)
 
 
 # What the root script's NOT_REMOVED lines name, in words.

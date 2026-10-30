@@ -182,7 +182,6 @@ def _install_fake_dialog(monkeypatch, response):
         def destroy(self):
             pass
 
-    monkeypatch.setattr("tuxtalk.prefs_advanced.message_dialog", _FakeDialog)
     monkeypatch.setattr("tuxtalk.ui_style.message_dialog", _FakeDialog)
     return seen
 
@@ -229,8 +228,6 @@ def test_unchecking_needs_no_dialog_and_disables(monkeypatch):
     import types
     from tuxtalk.prefs_advanced import AdvancedTab
     # If a dialog were constructed while unchecking, this would blow up.
-    monkeypatch.setattr("tuxtalk.prefs_advanced.message_dialog",
-                        lambda **k: (_ for _ in ()).throw(AssertionError("no dialog on uncheck")))
     monkeypatch.setattr("tuxtalk.ui_style.message_dialog",
                         lambda **k: (_ for _ in ()).throw(AssertionError("no dialog on uncheck")))
     saved = []

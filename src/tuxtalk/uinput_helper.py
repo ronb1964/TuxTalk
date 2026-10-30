@@ -28,6 +28,7 @@ import subprocess
 import grp
 import pwd
 import shlex
+from . import pkexec_runner
 from .logger import setup_logger
 from .virtual_keyboard import NAME as VIRTUAL_KEYBOARD_NAME
 
@@ -413,8 +414,8 @@ def retire_ydotoold():
 
 def _our_ydotoold_pidfile():
     """Where an older TuxTalk noted the ydotoold it started itself."""
-    runtime = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
-    return os.path.join(runtime, "tuxtalk-ydotoold.pid")
+    from .single_instance import session_runtime_dir
+    return os.path.join(session_runtime_dir(), "tuxtalk-ydotoold.pid")
 
 
 def stop_ydotoold_we_started():
@@ -549,19 +550,6 @@ def get_portaudio_install_command():
     return (None, None)
 
 
-def pkexec_was_declined(result):
-    """True when pkexec never ran the command because the password prompt was
-    cancelled or the password wasn't accepted.
-
-    pkexec exits 126 when the polkit agent reports the prompt as dismissed, but
-    several agents report a cancel as a refusal instead: exit 127 with "Not
-    authorized ... This incident has been reported." Both mean the user said no.
-    """
-    if result.returncode == 126:
-        return True
-    return result.returncode == 127 and "Not authorized" in (result.stderr or "")
-
-
 def install_portaudio_with_pkexec():
     """
     Install PortAudio using the system package manager with pkexec for privilege escalation.
@@ -584,42 +572,32 @@ def install_portaudio_with_pkexec():
                       "  Fedora: sudo dnf install portaudio\n"
                       "  Arch: sudo pacman -S portaudio")
 
-    logger.info(f"Installing PortAudio using {pm_name}...")
-
+    logger.info(f"Installing PortAudio using {pm_name}: pkexec {' '.join(install_cmd)}")
     try:
-        # Run the install command with pkexec
-        full_cmd = ['pkexec'] + install_cmd
-        logger.info(f"Running: {' '.join(full_cmd)}")
-
-        result = subprocess.run(full_cmd, capture_output=True, text=True, errors="replace",
-                                timeout=PKEXEC_INSTALL_TIMEOUT)
-
-        if result.returncode == 0:
-            # Verify installation
-            installed, _ = check_portaudio_installed()
-            if installed:
-                logger.info("PortAudio installed successfully")
-                return (True, "PortAudio installed successfully!")
-            else:
-                return (False, "Installation appeared to succeed but PortAudio not found. "
-                              "You may need to restart TuxTalk.")
-        elif pkexec_was_declined(result):
-            logger.info("User cancelled pkexec authentication for PortAudio install")
-            return (False, "Installation was cancelled.")
-        else:
-            error_msg = result.stderr or result.stdout or "Unknown error"
-            logger.error(f"Failed to install PortAudio: {error_msg}")
-            return (False, f"Installation failed:\n{error_msg}")
-
-    except subprocess.TimeoutExpired:
-        logger.error("PortAudio installation timed out")
-        return (False, "Installation timed out. Please try again or install manually.")
-    except FileNotFoundError:
-        logger.error("pkexec not found")
-        return (False, "pkexec not found. Please install polkit or install PortAudio manually.")
-    except Exception as e:
+        outcome = pkexec_runner.run(install_cmd, pkexec_runner.INSTALL_TIMEOUT_S)
+    except OSError as e:
         logger.error(f"Error installing PortAudio: {e}")
         return (False, f"Error: {e}")
+    if outcome.status in (pkexec_runner.DONE, pkexec_runner.UNKNOWN):
+        # Past the time limit the install ran on as root: whether it's there
+        # now says how it went.
+        if check_portaudio_installed()[0]:
+            logger.info("PortAudio installed successfully")
+            return (True, "PortAudio installed successfully!")
+        return (False, "Installation appeared to succeed but PortAudio not found. "
+                       "You may need to restart TuxTalk.")
+    if outcome.status == pkexec_runner.DECLINED:
+        logger.info("User cancelled pkexec authentication for PortAudio install")
+        return (False, "Installation was cancelled.")
+    if outcome.status == pkexec_runner.TIMED_OUT:
+        logger.error("PortAudio installation timed out")
+        return (False, "Installation timed out. Please try again or install manually.")
+    if outcome.status == pkexec_runner.MISSING:
+        logger.error("pkexec not found")
+        return (False, "pkexec not found. Please install polkit or install PortAudio manually.")
+    error_msg = outcome.detail or "Unknown error"
+    logger.error(f"Failed to install PortAudio: {error_msg}")
+    return (False, f"Installation failed:\n{error_msg}")
 
 
 def get_portaudio_status():
@@ -702,12 +680,6 @@ echo " session keeps the old group list alive.)"
 '''
 
 
-# How long a pkexec step may take. It includes the time the user spends at
-# the password dialog, and for an install the package download too.
-PKEXEC_SCRIPT_TIMEOUT = 300
-PKEXEC_INSTALL_TIMEOUT = 900
-
-
 def install_udev_rule_with_pkexec():
     """Set up the "input" group and its udev rule through pkexec, for
     systems where the hotkey helper can't run. Returns (success, message).
@@ -716,23 +688,26 @@ def install_udev_rule_with_pkexec():
     a file first, any program running as this user could have rewritten it
     while the password prompt was open, and it would then have run as root."""
     logger.info("Running the input group setup with pkexec")
-    try:
-        result = subprocess.run(['pkexec', '/bin/bash', '-s'], input=get_fix_script_content(),
-                                capture_output=True, text=True, errors="replace",
-                                timeout=PKEXEC_SCRIPT_TIMEOUT)
-    except subprocess.TimeoutExpired:
-        logger.error("pkexec timed out")
-        return (False, "The operation timed out. Please try again.")
-    except FileNotFoundError:
-        logger.error("pkexec not found")
-        return (False, "pkexec not found. Please install polkit to use this feature.")
-    if result.returncode == 0:
+    outcome = pkexec_runner.run(["/bin/bash", "-s"], pkexec_runner.SCRIPT_TIMEOUT_S,
+                                script=get_fix_script_content())
+    if outcome.status == pkexec_runner.DONE:
         logger.info("Udev rule installed successfully")
         return (True, "Permissions configured successfully!\n\n"
                       "Restart your computer to apply (logging out is often not enough).")
-    if pkexec_was_declined(result):
+    if outcome.status == pkexec_runner.DECLINED:
         logger.info("User cancelled pkexec authentication")
         return (False, "Authentication was cancelled.")
-    error_msg = result.stderr or result.stdout or "Unknown error"
+    if outcome.status == pkexec_runner.TIMED_OUT:
+        logger.error("pkexec timed out")
+        return (False, "The operation timed out. Please try again.")
+    if outcome.status == pkexec_runner.UNKNOWN:
+        logger.warning("The input group setup ran past the time-out as root; "
+                       "its result is unknown")
+        return (False, "That took too long to tell whether it worked. Restart your "
+                       "computer; if typing still doesn't work, try again.")
+    if outcome.status == pkexec_runner.MISSING:
+        logger.error("pkexec not found")
+        return (False, "pkexec not found. Please install polkit to use this feature.")
+    error_msg = outcome.detail or "Unknown error"
     logger.error(f"Failed to install udev rule: {error_msg}")
     return (False, f"Failed to configure permissions:\n{error_msg}")

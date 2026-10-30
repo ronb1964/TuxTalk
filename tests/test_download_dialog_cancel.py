@@ -274,3 +274,55 @@ def test_a_finished_download_closes_once_complete_has_shown(window):
     dlg, task, timers = window
     dlg._mark_task_complete(task, True)
     assert timers == [1500] and dlg.dialog.buttons == []
+
+
+# --- run_downloads: every download window's caller reads the same answer --------
+
+@pytest.mark.parametrize("outcomes, arrived, answer", [
+    ({"a": (True, False), "b": (True, False)}, True, True),
+    ({"a": (True, False), "b": (True, False)}, False, None),   # says done, files not there
+    ({"a": (True, False), "b": (False, True)}, True, False),   # one cancelled
+    ({"a": (False, False), "b": (True, False)}, True, None),   # one failed
+])
+def test_run_downloads_tells_done_cancelled_and_failed_apart(monkeypatch, outcomes, arrived,
+                                                             answer):
+    """True only when the files are really there; a cancel is never told as
+    a failure (no error box after the user's own Cancel)."""
+    from tuxtalk import download_progress_dialog as dpd
+
+    class Window:
+        def __init__(self, parent=None, title=None, description=None):
+            self.names = []
+
+        def add_task(self, task):
+            self.names.append(task.name)
+
+        def run(self):
+            return {n: {"success": outcomes[n][0], "cancelled": outcomes[n][1]}
+                    for n in self.names}
+    monkeypatch.setattr(dpd, "UnifiedDownloadDialog", Window)
+    assert dpd.run_downloads(None, "t", "d", [_task("a"), _task("b")],
+                             arrived=lambda: arrived) is answer
+
+
+def test_the_cuda_download_says_why_it_failed_once(monkeypatch):
+    """The shared window shows a failure's reason and waits for Close; the
+    same reason in a box after it was said twice. A Cancel shows nothing
+    more; a failure with no reason in the window gets the box."""
+    pytest.importorskip("gi")
+    from tuxtalk import cuda_helper, download_progress_dialog as dpd
+    said = []
+    monkeypatch.setattr(cuda_helper, "_say_how_it_went",
+                        lambda parent, ok, then: said.append(ok))
+
+    def window(answer, last_report):
+        def run(parent, title, text, tasks):
+            tasks[0].last_report = last_report
+            return answer
+        monkeypatch.setattr(dpd, "run_downloads", run)
+    window(False, ("Downloading...", 40))
+    assert cuda_helper.show_cuda_download_dialog() is None and said == []
+    window(None, ("Not enough disk space: 1.4 GB needed", 0))
+    assert cuda_helper.show_cuda_download_dialog() is False and said == []
+    window(None, ("Downloading...", 40))
+    assert cuda_helper.show_cuda_download_dialog() is False and said == [False]

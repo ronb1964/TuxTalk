@@ -129,7 +129,9 @@ def show_update_result(result, install_appimage, install_package):
     *install_package(release, install_type)*. GNOME extension updates are
     installed from Preferences → Updates & Backup instead."""
     if not result.get("update_available", False):
-        _up_to_date(result.get("current_version", "unknown"))
+        show_message(None, Gtk.MessageType.INFO, "You're Up to Date!",
+                     f"<b>TuxTalk {result.get('current_version', 'unknown')}</b> is the "
+                     "latest version.", keep_above=True, markup=True, wait=False)
         return
     release = result.get("release", {})
     # How TuxTalk was installed decides HOW to update. Only a self-managed
@@ -176,18 +178,6 @@ def show_update_result(result, install_appimage, install_package):
         elif response == Gtk.ResponseType.APPLY:
             install_package(release, install_type)
     dialog.connect("response", on_response)
-    dialog.show_all()
-    dialog.present()
-
-
-def _up_to_date(current):
-    """"You're Up to Date!" for TuxTalk *current*."""
-    dialog = message_dialog(message_type=Gtk.MessageType.INFO, buttons=Gtk.ButtonsType.OK,
-                            text="You're Up to Date!")
-    dialog.format_secondary_markup(f"<b>TuxTalk {current}</b> is the latest version.")
-    dialog.set_position(Gtk.WindowPosition.CENTER)
-    dialog.set_keep_above(True)
-    dialog.connect("response", lambda d, _r: d.destroy())
     dialog.show_all()
     dialog.present()
 
@@ -305,68 +295,40 @@ def run_package_update(release, install_type, restart=None, *, quitting=lambda: 
                "Please update from the GitHub release page.")
         return
 
-    progress = Gtk.Dialog(title="Updating TuxTalk", flags=Gtk.DialogFlags.MODAL)
-    # The download and the password prompt carry on whatever happens to this
-    # window, so it stays until they finish rather than vanishing and leaving
-    # a password prompt to appear later with no context.
-    progress.set_deletable(False)
-    progress.connect("delete-event", lambda *_a: True)
-    progress.set_default_size(440, 130)
-    progress.set_position(Gtk.WindowPosition.CENTER)
-    progress.set_keep_above(True)
-    content = progress.get_content_area()
-    content.set_spacing(10)
-    _set_margins(content, 20)
-    status = Gtk.Label(label="Starting download…")
-    status.set_halign(Gtk.Align.START)
-    content.pack_start(status, False, False, 0)
-    bar = Gtk.ProgressBar()
-    bar.set_show_text(True)
-    content.pack_start(bar, False, False, 10)
-    progress.show_all()
+    def work(progress):
+        """On its own thread: the download, then the install as root;
+        (installed, what to say)."""
+        said = ["", 0]      # the download's last words, for download_failure
 
-    last_message = [""]     # for download_failure
+        def reporting(message, percent):
+            said[:] = [message, percent]
+            progress(message, percent)
+        try:
+            path = update_checker.download_update(url, filename, reporting,
+                                                  checksums_url=release.get("checksums_url"))
+            if not path:
+                return False, (f"{download_failure(said[0])}\n\n"
+                               "Please try again or update from GitHub.")
+            if quitting():
+                return False, "TuxTalk quit before the update was installed."
+            progress("Waiting for your password to install…", said[1])
+            return update_checker.install_package_update(path, install_type)
+        except Exception as e:
+            # Caught here to name the error in the box; run_with_progress
+            # would hand finish only None.
+            logger.exception("Package update failed")
+            return False, f"The update failed: {e}\n\nPlease try again or update from GitHub."
 
-    def progress_cb(message, percent):
-        last_message[0] = message
-        GLib.idle_add(lambda: status.set_text(message))
-        GLib.idle_add(lambda: bar.set_fraction(percent / 100.0))
-        GLib.idle_add(lambda: bar.set_text(f"{percent}%"))
-
-    def finish(success, message):
-        progress.destroy()
+    def finish(result):
         if quitting():
             return
+        success, message = result
         if success:
             _installed_restart_prompt(restart)
         else:
             _error(message)
 
-    def worker():
-        """Download, then install with pkexec; always ends in finish()."""
-        try:
-            path = update_checker.download_update(
-                url, filename, progress_cb,
-                checksums_url=release.get("checksums_url"))
-            if not path:
-                reason = download_failure(last_message[0])
-                GLib.idle_add(lambda: finish(
-                    False, f"{reason}\n\nPlease try again or update from GitHub."))
-                return
-            if quitting():
-                ok, msg = False, "TuxTalk quit before the update was installed."
-            else:
-                GLib.idle_add(lambda: status.set_text(
-                    "Waiting for your password to install…"))
-                ok, msg = update_checker.install_package_update(path, install_type)
-        except Exception as e:
-            # The window refuses to close while this runs: without an
-            # answer it would stay on screen until TuxTalk quit.
-            logger.exception("Package update failed")
-            ok, msg = False, f"The update failed: {e}\n\nPlease try again or update from GitHub."
-        GLib.idle_add(lambda: finish(ok, msg))
-
-    threading.Thread(target=worker, daemon=True).start()
+    run_with_progress(None, "Updating TuxTalk", "Starting download…", work, finish)
 
 
 def _installed_restart_prompt(restart=None):
@@ -426,28 +388,11 @@ def restart_via_tray(get_interface=None) -> bool:
 
 def _reopen_to_finish():
     """Tell the user to quit and reopen TuxTalk, when it can't restart itself."""
-    _info("Update installed",
-          "Please quit TuxTalk from the tray icon and open it "
-          "again to finish updating.")
-
-
-def _info(title, message):
-    dlg = message_dialog(message_type=Gtk.MessageType.INFO,
-                            buttons=Gtk.ButtonsType.OK, text=title)
-    dlg.format_secondary_text(message)
-    dlg.set_position(Gtk.WindowPosition.CENTER)
-    dlg.connect("response", lambda d, _r: d.destroy())
-    dlg.show_all()
-    dlg.present()
+    show_message(None, Gtk.MessageType.INFO, "Update installed",
+                 "Please quit TuxTalk from the tray icon and open it "
+                 "again to finish updating.", wait=False)
 
 
 def _error(message, title="Update Failed"):
     """*title* and *message* in an error box over the other windows."""
-    err = message_dialog(message_type=Gtk.MessageType.ERROR,
-                         buttons=Gtk.ButtonsType.OK, text=title)
-    err.format_secondary_text(message)
-    err.set_position(Gtk.WindowPosition.CENTER)
-    err.set_keep_above(True)
-    err.connect("response", lambda d, _r: d.destroy())
-    err.show_all()
-    err.present()
+    show_message(None, Gtk.MessageType.ERROR, title, message, keep_above=True, wait=False)

@@ -84,16 +84,12 @@ def helper_update_text(running) -> str:
 
 def _ask_helper_update(running) -> bool:
     """The question; True for Update Helper."""
-    from .ui_style import message_dialog
-    dialog = message_dialog(message_type=Gtk.MessageType.QUESTION, buttons=Gtk.ButtonsType.NONE,
-                            text="TuxTalk's hotkey helper needs an update")
-    dialog.format_secondary_text(helper_update_text(running))
-    dialog.add_button("Not Now", Gtk.ResponseType.CANCEL)
-    dialog.add_button("Update Helper", Gtk.ResponseType.OK)
-    dialog.set_default_response(Gtk.ResponseType.CANCEL)
-    dialog.set_keep_above(True)
-    answer = dialog.run()
-    dialog.destroy()
+    from .ui_style import show_message
+    answer = show_message(
+        None, Gtk.MessageType.QUESTION, "TuxTalk's hotkey helper needs an update",
+        helper_update_text(running),
+        [("Not Now", Gtk.ResponseType.CANCEL), ("Update Helper", Gtk.ResponseType.OK)],
+        keep_above=True, default=Gtk.ResponseType.CANCEL)
     return answer == Gtk.ResponseType.OK
 
 
@@ -143,22 +139,17 @@ def _offer_parakeet_update(device):
     user said no or cancelled, None when the download failed (ask again on
     the next start)."""
     from .model_helper import download_parakeet_update, parakeet_update_size
-    from .ui_style import message_dialog
+    from .ui_style import show_message
     size_text = parakeet_update_size(device)
-    dialog = message_dialog(message_type=Gtk.MessageType.QUESTION, buttons=Gtk.ButtonsType.NONE,
-                            text="Parakeet got more accurate")
-    dialog.format_secondary_text(
-        "TuxTalk now uses Parakeet Ultra, a retrained Parakeet that makes fewer mistakes "
-        f"at the same speed. It's a one-time {size_text} download, and your Parakeet "
-        "keeps working while it downloads.")
-    dialog.add_button("Not Now", Gtk.ResponseType.CANCEL)
-    dialog.add_button(f"Download ({size_text})", Gtk.ResponseType.OK)
     # It comes up by itself while people may be typing: an Enter meant for
     # their own window must not start a 670 MB download.
-    dialog.set_default_response(Gtk.ResponseType.CANCEL)
-    dialog.set_keep_above(True)
-    answer = dialog.run()
-    dialog.destroy()
+    answer = show_message(
+        None, Gtk.MessageType.QUESTION, "Parakeet got more accurate",
+        "TuxTalk now uses Parakeet Ultra, a retrained Parakeet that makes fewer mistakes "
+        f"at the same speed. It's a one-time {size_text} download, and your Parakeet "
+        "keeps working while it downloads.",
+        [("Not Now", Gtk.ResponseType.CANCEL), (f"Download ({size_text})", Gtk.ResponseType.OK)],
+        keep_above=True, default=Gtk.ResponseType.CANCEL)
     if answer != Gtk.ResponseType.OK:
         logger.info("Parakeet Ultra offer: not now")
         return False

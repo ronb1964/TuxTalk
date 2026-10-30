@@ -11,7 +11,7 @@ import threading
 import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, GLib
-from .ui_style import message_dialog, show_message
+from .ui_style import show_message
 
 from . import whisper_vulkan as wv
 from .cuda_helper import DOWNLOAD_SIZE_TEXT as CUDA_SIZE_TEXT
@@ -31,24 +31,17 @@ def choose_light_or_full(parent, model):
     """NVIDIA without CUDA: Light (Vulkan) or Full (CUDA) for *model*?
     Returns LIGHT, FULL, or None for Cancel."""
     name, vulkan_size = model_title(model), wv.MODEL_FILES[model][1]
-    dialog = message_dialog(transient_for=parent, modal=True,
-                               message_type=Gtk.MessageType.QUESTION,
-                               buttons=Gtk.ButtonsType.NONE,
-                               text=f"{name} needs your graphics card")
-    dialog.format_secondary_text(
+    response = message(
+        parent, Gtk.MessageType.QUESTION, f"{name} needs your graphics card",
         "There are two ways to set it up:\n\n"
         f"  • Light (Vulkan): a {wv.ENGINE_SIZE_TEXT} graphics engine plus\n"
         f"    {name} in its format ({vulkan_size}).\n"
         "    About as fast as CUDA in our tests.\n\n"
         f"  • Full (CUDA): NVIDIA's CUDA libraries ({CUDA_SIZE_TEXT}) plus the model.\n"
         "    TuxTalk's long-standing NVIDIA setup.\n\n"
-        "Either is a one-time download.")
-    dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
-    dialog.add_button("Light (Vulkan)", Gtk.ResponseType.APPLY)
-    dialog.add_button("Full (CUDA)", Gtk.ResponseType.YES)
-    dialog.set_keep_above(True)
-    response = dialog.run()
-    dialog.destroy()
+        "Either is a one-time download.",
+        [("Cancel", Gtk.ResponseType.CANCEL), ("Light (Vulkan)", Gtk.ResponseType.APPLY),
+         ("Full (CUDA)", Gtk.ResponseType.YES)])
     return {Gtk.ResponseType.APPLY: LIGHT, Gtk.ResponseType.YES: FULL}.get(response)
 
 
@@ -73,15 +66,11 @@ def _missing_files(model):
 
 def _download(parent, tasks, model):
     """Run *tasks* in one download window: (engine and model here now, cancelled)."""
-    from .download_progress_dialog import UnifiedDownloadDialog
-    dialog = UnifiedDownloadDialog(
-        parent=parent, title="Setting Up Vulkan",
-        description="One-time download. Everything runs on this computer.")
-    for task in tasks:
-        dialog.add_task(task)
-    results = dialog.run()
-    ok = all(r.get("success") for r in results.values()) and wv.is_installed(model)
-    return ok, not ok and any(r.get("cancelled") for r in results.values())
+    from .download_progress_dialog import run_downloads
+    result = run_downloads(parent, "Setting Up Vulkan",
+                           "One-time download. Everything runs on this computer.", tasks,
+                           arrived=lambda: wv.is_installed(model))
+    return bool(result), result is False
 
 
 def fetch_files(parent, model):

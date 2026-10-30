@@ -35,7 +35,7 @@ def hub(monkeypatch):
         return f"/cache/{filename}"
     monkeypatch.setattr(model_helper, "_files_to_download", no_list)
     monkeypatch.setattr(huggingface_hub, "hf_hub_download", hf_hub_download)
-    monkeypatch.setattr(model_helper, "_RETRY_WAITS", (0.0, 0.0))
+    monkeypatch.setattr("tuxtalk.download_utils.RETRY_WAITS", (0.0, 0.0))
     return raises, fetched, tries
 
 

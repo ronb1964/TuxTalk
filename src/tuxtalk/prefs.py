@@ -8,7 +8,8 @@ import gi
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gtk, Gdk, GLib
-from .ui_style import message_dialog, show_message
+from . import ui_style
+from .ui_style import show_message
 from .logger import setup_logger
 from .prefs_audio import AudioTab
 from .prefs_advanced import AdvancedTab
@@ -158,9 +159,7 @@ class PreferencesWindow:
 
     def __init__(self):
         """Read the settings, build the window and show it."""
-        settings = Gtk.Settings.get_default()
-        if settings:
-            settings.set_property("gtk-application-prefer-dark-theme", True)
+        ui_style.prefer_dark_theme()
 
         self.window = Gtk.Window(title="TuxTalk Preferences")
         self.window.set_name("preferences_window")
@@ -645,19 +644,13 @@ class PreferencesWindow:
 
     def _ask_apply_before_closing(self):
         """"apply", "discard", or "keep" (also when the question is closed)."""
-        dialog = message_dialog(transient_for=self.window, modal=True,
-                                message_type=Gtk.MessageType.QUESTION,
-                                buttons=Gtk.ButtonsType.NONE,
-                                text="Apply your changes before closing?")
-        dialog.format_secondary_text(
+        response = show_message(
+            self.window, Gtk.MessageType.QUESTION, "Apply your changes before closing?",
             "You changed some settings but haven't applied them. "
-            "If you close without applying, they're lost.")
-        dialog.add_button("Keep Editing", Gtk.ResponseType.CANCEL)
-        dialog.add_button("Discard", Gtk.ResponseType.REJECT)
-        dialog.add_button("Apply", Gtk.ResponseType.OK)
-        dialog.set_default_response(Gtk.ResponseType.OK)
-        response = dialog.run()
-        dialog.destroy()
+            "If you close without applying, they're lost.",
+            [("Keep Editing", Gtk.ResponseType.CANCEL), ("Discard", Gtk.ResponseType.REJECT),
+             ("Apply", Gtk.ResponseType.OK)],
+            default=Gtk.ResponseType.OK)
         return {Gtk.ResponseType.OK: "apply",
                 Gtk.ResponseType.REJECT: "discard"}.get(response, "keep")
 
@@ -831,7 +824,7 @@ class PreferencesWindow:
 def main():
     """Open Preferences (python -m tuxtalk.prefs [--tab TAB]), or bring the
     one already open to the front."""
-    from . import desktop_identity, ui_style
+    from . import desktop_identity
     desktop_identity.apply()        # TuxTalk's icon on its windows, not KDE's generic one
     ui_style.prepare_windows()   # emoji that show, buttons clear of panels and docks
     # Before anything opens the shared D-Bus connection, as in the tray: one

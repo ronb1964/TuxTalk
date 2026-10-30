@@ -137,19 +137,10 @@ def _show_already_running(older_talktype):
     """Tell the user why no second tray appears; started from a menu, nothing
     else would show."""
     from gi.repository import Gtk
-    from .ui_style import message_dialog
+    from .ui_style import show_message
     heading, body = already_running_message(older_talktype)
     logger.info(f"Not starting: {heading}")
     try:
-        dialog = message_dialog(
-            message_type=Gtk.MessageType.INFO,
-            buttons=Gtk.ButtonsType.OK,
-            text=heading,
-        )
-        dialog.format_secondary_text(body)
-        dialog.set_position(Gtk.WindowPosition.CENTER)
-        dialog.set_keep_above(True)
-        dialog.run()
-        dialog.destroy()
+        show_message(None, Gtk.MessageType.INFO, heading, body, keep_above=True)
     except Exception as e:      # no display: the stderr line is all there is
         logger.info(f"Could not show the already-running notice: {e}")

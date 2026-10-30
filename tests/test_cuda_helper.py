@@ -198,14 +198,15 @@ def test_the_libraries_unpack_into_their_package_folders(tmp_path, monkeypatch):
     assert unpacked.stat().st_size == 1000 and os.access(unpacked, os.X_OK)
 
 
-def test_the_cuda_window_says_why_the_download_failed(monkeypatch):
+def test_a_failure_the_window_couldnt_explain_says_where_to_try_again(monkeypatch):
     from tuxtalk import ui_style
     said = []
     monkeypatch.setattr(ui_style, "show_message",
-                        lambda parent, kind, title, text, **k: said.append(text))
-    cuda_helper._say_how_it_went(None, False, None, "Not enough disk space to install: "
-                                                    "need ~2.9 GB free, only 0.2 GB available")
-    assert said[0].startswith("Not enough disk space to install")
+                        lambda parent, kind, title, text, **k: said.append((title, text)))
+    cuda_helper._say_how_it_went(None, False, None)
+    assert said[0][0] == "Download Failed"
+    assert said[0][1].startswith("Could not download CUDA libraries.")
+    assert "Preferences → General" in said[0][1]
 
 
 def test_no_wheel_on_pypi_is_the_reason_given(tmp_path, monkeypatch):

@@ -47,6 +47,39 @@ class DownloadError(Exception):
     """Why a download failed, short enough for a download window's status line."""
 
 
+# Pauses before the second and third try of a file.
+RETRY_WAITS = (2.0, 5.0)
+
+
+def with_retries(fetch, what, cancel_event=None, give_up_on=(), pause=None):
+    """fetch() (one file's download), tried again after a short wait if it
+    fails: a single slow moment shouldn't sink a 670 MB download. A cancel
+    (InterruptedError, or any failure once *cancel_event* is set, during
+    the wait too) is never retried, nor an error of the types *give_up_on*;
+    after the last try its error is raised. *what* names the file in the
+    log. *pause(seconds)* waits, True when cancelled meanwhile; by default
+    on *cancel_event*, so a Cancel stops the wait at once."""
+    if pause is None:
+        pause = cancel_event.wait if cancel_event is not None else time.sleep
+    for attempt, wait in enumerate((*RETRY_WAITS, None), start=1):
+        try:
+            return fetch()
+        except InterruptedError:
+            raise
+        except Exception as e:
+            if cancel_event is not None and cancel_event.is_set():
+                raise InterruptedError("Download cancelled") from e
+            if isinstance(e, give_up_on):
+                raise
+            tries = len(RETRY_WAITS) + 1
+            logger.warning(f"Download of {what} failed (try {attempt} of {tries}): {e}"
+                           + ("" if wait is None else "; trying again"))
+            if wait is None:
+                raise
+            if pause(wait):
+                raise InterruptedError("Download cancelled") from e
+
+
 def download_file(
     url: str,
     dest_path: str,

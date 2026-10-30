@@ -164,11 +164,12 @@ def test_shipped_launchers_have_the_shortcuts(path, program):
     assert "Actions=Preferences;TranscribeFile;Help;Quit;" in main
 
 
-@pytest.mark.parametrize("script", ["build-deb.sh", "build-rpm.sh"])
-def test_package_scripts_keep_the_shortcuts(script):
-    """The .deb/.rpm rewrite Exec for /usr/bin/tuxtalk. Rewriting every Exec
-    line to "tuxtalk tray" would turn each shortcut into a plain start."""
-    sed = re.search(r"sed '(s/\^Exec=[^']*)'", (ROOT / script).read_text()).group(1)
+def test_package_scripts_keep_the_shortcuts():
+    """The .deb/.rpm rewrite Exec for /usr/bin/tuxtalk (in their shared
+    staging). Rewriting every Exec line to "tuxtalk tray" would turn each
+    shortcut into a plain start."""
+    staging = (ROOT / "packaging/stage-from-appimage.sh").read_text()
+    sed = re.search(r"sed '(s/\^Exec=[^']*)'", staging).group(1)
     _s, pattern, replacement, _flags = sed.split("/")
     text = re.sub(pattern.replace("^", "(?m)^", 1), replacement,
                   (ROOT / "io.github.ronb1964.TuxTalk.desktop").read_text())
@@ -458,6 +459,7 @@ def test_fix_typing_success_updates_the_status_lines(monkeypatch):
         pytest.skip("no display")
     from tuxtalk import welcome_dialog
     fake_msg = types.SimpleNamespace(format_secondary_text=lambda t: None,
+                                     set_position=lambda p: None,
                                      run=lambda: None, destroy=lambda: None)
     monkeypatch.setattr("tuxtalk.ui_style.message_dialog", lambda **k: fake_msg)
     uinput = Gtk.Label()

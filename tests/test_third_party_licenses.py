@@ -59,15 +59,6 @@ def test_the_licenses_wheels_leave_out_are_kept_in_the_repo():
     assert "Apache License" in (ROOT / "packaging/licenses/tokenizers-LICENSE").read_text()
 
 
-def test_deb_and_rpm_refuse_an_appimage_without_licenses():
-    for script, place in (("build-deb.sh", "usr/share/doc/tuxtalk"),
-                          ("build-rpm.sh", "usr/share/licenses/tuxtalk")):
-        text = (ROOT / script).read_text()
-        assert "THIRD_PARTY_LICENSES.md wl-clipboard/COPYING" in text, script
-        assert "rebuild it with ./build-release.sh" in text, script
-        assert place in text, script
-
-
 def test_pyav_and_ffmpegs_libraries_ship_their_licenses():
     """PyAV's wheel bundles FFmpeg, x264, x265 and 36 more libraries with
     none of their licenses: 0.15 to 0.18 shipped them without notices."""

@@ -523,17 +523,9 @@ class TranscribeWindow:
     def _ask(self, title, text, buttons):
         """A question over the window; the response of the button clicked.
         *buttons*: (label, response) pairs, the last one the default."""
-        from .ui_style import message_dialog
-        dialog = message_dialog(transient_for=self.window, modal=True,
-                                message_type=Gtk.MessageType.QUESTION,
-                                buttons=Gtk.ButtonsType.NONE, text=title)
-        dialog.format_secondary_text(text)
-        for label, response in buttons:
-            dialog.add_button(label, response)
-        dialog.set_default_response(buttons[-1][1])
-        answer = dialog.run()
-        dialog.destroy()
-        return answer
+        from .ui_style import show_message
+        return show_message(self.window, Gtk.MessageType.QUESTION, title, text, buttons,
+                            default=buttons[-1][1])
 
     def _may_discard(self, why):
         """Whether the text shown may go, asking first when it would be lost:

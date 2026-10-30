@@ -3,10 +3,12 @@ Recent dictations: the last few things the user dictated, so text that went
 to the wrong window (focus stolen by a notification, a form that reloaded,
 nothing focused at all) can be copied again instead of being spoken twice.
 
-Privacy: the list lives in the user's runtime directory (XDG_RUNTIME_DIR,
-normally /run/user/<uid>). That is RAM-backed tmpfs, readable only by the
-user, and wiped at logout, so dictated text is never written to disk. This
-matches TuxTalk's promise that dictated text stays out of the log.
+Privacy: the list lives in the user's private runtime directory
+(single_instance.runtime_dir: XDG_RUNTIME_DIR, normally /run/user/<uid>).
+That is RAM-backed tmpfs, readable only by the user, and wiped at logout,
+so dictated text is never written to disk. A session without one keeps no
+list at all, rather than use /tmp, which may be on disk. This matches
+TuxTalk's promise that dictated text stays out of the log.
 
 The dictation service writes the list; the tray and the GNOME extension (via
 D-Bus) read it. A small file is the simplest way to share it between those
@@ -16,32 +18,40 @@ import json
 import os
 import tempfile
 
-from .logger import setup_logger
+from .logger import FailureNotes, setup_logger
 from .normalize import LINE_BREAK
 
 logger = setup_logger(__name__)
+# Said once: the path is looked up on every dictation.
+_no_folder = FailureNotes()
 
 MAX_ENTRIES = 20
 PREVIEW_CHARS = 50
 
 
 def _history_path():
-    """The history file, in the user's (or the Flatpak's) runtime directory."""
-    base = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
-    # Inside a Flatpak, use its private runtime dir (same rule as app/tray
-    # _runtime_dir) so a host install and the Flatpak keep separate lists.
-    fid = os.environ.get("FLATPAK_ID")
-    if fid:
-        app_dir = os.path.join(base, "app", fid)
-        if os.path.isdir(app_dir):
-            base = app_dir
+    """The history file, in the user's (or the Flatpak's) private runtime
+    folder, so a host install and the Flatpak keep separate lists. None when
+    the session has no private runtime folder: the locks' /tmp fallback may
+    be on disk, where dictated text would outlive the session, so then
+    nothing is kept."""
+    from .single_instance import private_session_dir
+    base = private_session_dir()
+    if base is None:
+        if _no_folder.failed("history", "no private runtime folder"):
+            logger.info("Recent Dictations keeps nothing: this session has no private "
+                        "runtime folder")
+        return None
     return os.path.join(base, "talktype-history.json")
 
 
 def get_entries():
     """Recent dictations, newest first. Never raises."""
+    path = _history_path()
+    if path is None:
+        return []
     try:
-        with open(_history_path(), encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             entries = json.load(f)
         return [e for e in entries if isinstance(e, str)][:MAX_ENTRIES]
     except (OSError, ValueError):
@@ -76,8 +86,12 @@ def forget(text):
 
 
 def _save(entries):
+    """Write *entries* (newest first, cut to MAX_ENTRIES) as the list, whole
+    or not at all; nothing without a private runtime folder. Never raises."""
+    path = _history_path()
+    if path is None:
+        return
     try:
-        path = _history_path()
         # Write to a temp file and rename, so a reader never sees half a file.
         fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".talktype-history-")
         try:
@@ -93,8 +107,11 @@ def _save(entries):
 
 def clear():
     """Forget every recent dictation."""
+    path = _history_path()
+    if path is None:
+        return
     try:
-        os.remove(_history_path())
+        os.remove(path)
     except FileNotFoundError:
         pass
     except OSError as e:

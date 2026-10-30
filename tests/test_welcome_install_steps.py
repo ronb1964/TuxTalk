@@ -34,7 +34,6 @@ def dialog(monkeypatch):
 
 def test_a_failed_fix_is_reported_and_can_be_retried(dialog, monkeypatch):
     dialogs = []
-    monkeypatch.setattr(wd, "message_dialog", lambda **k: dialogs.append(k) or None)
     monkeypatch.setattr("tuxtalk.ui_style.message_dialog", lambda **k: dialogs.append(k) or None)
     button = dialog.fix_typing_button
     outcome = {"results": ["❌ Permissions: udevadm not found"], "uinput_fixed": False,
@@ -141,7 +140,6 @@ def needs_uinput(monkeypatch):
     d = wd.WelcomeDialog(force_gnome=False)
     responses = []
     monkeypatch.setattr(d.dialog, "response", lambda r: responses.append(r))
-    monkeypatch.setattr(wd, "message_dialog", lambda **k: _Answer(k, d.answer))
     monkeypatch.setattr("tuxtalk.ui_style.message_dialog", lambda **k: _Answer(k, d.answer))
     d.answer = Gtk.ResponseType.OK
     d.responses = responses

@@ -35,10 +35,7 @@ def test_name_matches_the_launcher_of_each_install(install_type, expected):
 
 
 def test_the_launchers_really_have_those_names():
-    deb = (ROOT / "build-deb.sh").read_text()
-    rpm = (ROOT / "build-rpm.sh").read_text()
-    assert "applications/io.github.ronb1964.TuxTalk.desktop" in deb
-    assert "applications/io.github.ronb1964.TuxTalk.desktop" in rpm
+    # The .deb's and the .rpm's: test_native_packages builds them and looks.
     assert 'install -Dm644 tuxtalk.desktop "${pkgdir}/usr/share/applications/tuxtalk.desktop"' \
         in (ROOT / "aur" / "PKGBUILD").read_text()
     from tuxtalk.desktop_launcher import DESKTOP_FILE_PATH
