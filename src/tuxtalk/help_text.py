@@ -352,7 +352,8 @@ without touching the keyboard.
 
 <b>What to say</b>
 Say it in your own words; there's no fixed list. Some that work well:
-  • <b>make this more formal</b>  •  <b>make it friendlier</b>  •  <b>make it sound more professional</b>
+  • <b>make this more formal</b>  •  <b>make it friendlier</b>
+  • <b>make it sound more professional</b>
   • <b>shorten this</b>  •  <b>fix the grammar</b>  •  <b>fix the spelling</b>
   • <b>turn this into a bullet list</b>  •  <b>make this a complete sentence</b>
   • <b>translate this to Spanish</b> (or another language)
@@ -401,7 +402,8 @@ can't be changed by voice.
 <b>If nothing happens</b>, TuxTalk tells you why in a notification:
   • <i>Select the text to change first</i>: nothing was selected.
   • <i>I didn't catch what to change</i>: it heard no instruction. Hold the keys while you talk.
-  • <i>The AI is still starting</i>: right after turning it on or starting TuxTalk, wait a few seconds.
+  • <i>The AI is still starting</i>: right after turning it on or starting TuxTalk, wait
+    a few seconds.
   • <i>No change</i>: the text may already read that way ("make it formal" on a
     sentence that's formal already). Try other words.
   • <i>You switched windows</i>: the rewrite wasn't typed; it's in Recent Dictations.
@@ -413,24 +415,28 @@ Counts go up to 10 ("three" or "3").
 
 <b>What you just said</b>: these work <b>right after you dictate</b>, on what you just said.
   • <b>select that</b>  •  <b>select what I said</b>
-  • <b>select the last sentence</b>  •  <b>select the last word</b>  •  <b>select the last 3 words</b>
+  • <b>select the last sentence</b>  •  <b>select the last word</b>
+  • <b>select the last 3 words</b>
   For any other text, use the commands below (<b>select the previous 3 words</b>,
   <b>select the line</b>) or the mouse.
 <b>Around the cursor</b>
   • <b>select all</b>  •  <b>select the line</b>
-  • <b>select the next word</b>  •  <b>select the previous 2 words</b>  •  <b>select the next line</b>
+  • <b>select the next word</b>  •  <b>select the previous 2 words</b>
+  • <b>select the next line</b>
   • <b>select to the end of the line</b>  •  <b>select to the start of the line</b>
   • <b>select to the end</b>  •  <b>select to the top</b>
 <b>Moving</b>
   • <b>go to the end</b>  •  <b>go to the top</b>  •  <b>go to the end of the line</b>
   • <b>go to the start of the line</b>
-  • <b>go back 3 words</b>  •  <b>go forward a word</b>  •  <b>next word</b>  •  <b>previous word</b>
+  • <b>go back 3 words</b>  •  <b>go forward a word</b>
+  • <b>next word</b>  •  <b>previous word</b>
   • <b>go back 5 letters</b>  •  <b>go up 2 lines</b>  •  <b>go down a line</b>
   • <b>unselect</b>
 
 <b>Good to know</b>
   • With voice editing on, Shift+{hold} understands these too, so you can do it all on one
-    key: Shift+{hold} <i>"select the last sentence"</i>, then Shift+{hold} <i>"make it more formal"</i>.
+    key: Shift+{hold} <i>"select the last sentence"</i>, then
+    Shift+{hold} <i>"make it more formal"</i>.
   • The commands around the cursor press the usual keys (Home, End, Ctrl+arrows), so
     they do what those keys do in each app.
   • It doesn't work in a terminal, where those keys mean other things.
@@ -653,7 +659,8 @@ Saying only <b>press enter</b> or <b>press tab</b> there still works, to log in 
     what helps find it: your system, your settings and the end of TuxTalk's log.
     You see all of it first, then copy it, save it, or open a GitHub issue with it.
   • <b>Report bugs:</b> <a href="{ISSUES_URL}">TuxTalk issues on GitHub</a>
-  • <b>Questions, ideas, or just how it's working for you:</b> <a href="{FEEDBACK_URL}">TuxTalk Discussions</a>
+  • <b>Questions, ideas, or just how it's working for you:</b>
+    <a href="{FEEDBACK_URL}">TuxTalk Discussions</a>
   • <b>Log file:</b> {log_path}'''
 
 _COMMANDS_INTRO = '''<span size="large"><b>Voice Commands Reference</b></span>
