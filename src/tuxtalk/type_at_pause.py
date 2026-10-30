@@ -6,6 +6,7 @@ hear both together and judge it (a comma, a period, a question going on);
 a phrase that corrects the one before ("no wait, four") is fixed with it
 by the AI."""
 import threading
+from collections.abc import Callable
 
 import numpy as np
 
@@ -39,9 +40,18 @@ logger = setup_logger(__name__)
 chunk_lock = threading.Lock()
 
 # Transcribes and types a phrase: pipeline.transcribe_and_inject, handed over
-# by the pipeline as it loads. The pipeline calls this module for what goes
-# between two phrases, so importing it here would make each need the other.
-transcribe_phrase = None
+# by the pipeline as it loads (use_transcriber). The pipeline calls this module
+# for what goes between two phrases, so importing it here would make each need
+# the other. hotkeys and service_tick, the only modules that start a
+# recording, import the pipeline first, so it's set before a phrase is cut.
+# A test patching pipeline.transcribe_and_inject doesn't reach the phrases.
+transcribe_phrase: Callable[..., None] | None = None
+
+
+def use_transcriber(step: Callable[..., None]) -> None:
+    """Have *step* transcribe and type each phrase cut at a pause."""
+    global transcribe_phrase
+    transcribe_phrase = step
 
 
 def cut_chunk(chunker):
@@ -73,8 +83,8 @@ def cut_chunk(chunker):
 
 def _transcribe_chunk(frames, rec_sr, number, pause, message, detector):
     """Transcribe and type chunk *number*, cut during the recording after a
-    *pause* (seconds), with the settings as they are now, into *message*
-    (transcribe_phrase's). *detector* is that recording's hands-free silence
+    *pause* (seconds), with the settings as they are now, into *message*,
+    as transcribe_phrase's *message*. *detector* is that recording's hands-free silence
     detector, held since the cut (cut_chunk), or None."""
     # Logged here, on the worker, to keep file writes off the audio thread.
     seconds = sum(len(f) for f in frames) / 2 / rec_sr

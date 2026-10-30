@@ -462,4 +462,4 @@ def stop_recording(
 
 # Type at pause's phrases, cut while the recording goes on, are transcribed and
 # typed here too. Handed over, so type_at_pause never imports this module back.
-type_at_pause.transcribe_phrase = transcribe_and_inject
+type_at_pause.use_transcriber(transcribe_and_inject)

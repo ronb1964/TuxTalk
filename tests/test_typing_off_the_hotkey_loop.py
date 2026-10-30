@@ -11,7 +11,7 @@ import types
 import pytest
 from evdev import ecodes
 
-from tuxtalk import (dictation_worker, delivery, hotkeys, keyboard_output, pipeline, recording,
+from tuxtalk import (delivery, dictation_worker, hotkeys, keyboard_output, pipeline, recording,
                      send_countdown)
 from tuxtalk import recording_state as rs
 from tuxtalk.dictation_worker import DictationWorker
