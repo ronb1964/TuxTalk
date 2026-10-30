@@ -5,7 +5,6 @@ and their buttons sat behind COSMIC's dock (VM, 2026-10-21). One rule in
 ui_style fits every window as it's created, so none has to remember to.
 These build real windows without showing them.
 """
-import pathlib
 from types import SimpleNamespace
 
 import pytest
@@ -16,7 +15,6 @@ from gi.repository import GObject, Gtk  # noqa: E402
 
 from tuxtalk import ui_style  # noqa: E402
 
-SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tuxtalk"
 USABLE = 600                   # three quarters of an 800 px screen
 CAP = USABLE - ui_style._TITLE_BAR
 MEASURE_THE_MONITOR = ui_style.workarea_height    # short_screen stands in for it
@@ -257,14 +255,47 @@ def test_popups_are_never_touched():
         popup.destroy()
 
 
-def test_every_process_that_opens_windows_fits_them():
-    """Each TuxTalk process sets its icon with desktop_identity.apply() before
-    its first window; each must prepare its windows there too (prepare_windows:
-    the fitting and the emoji font)."""
-    missing = [path.name for path in sorted(SRC.rglob("*.py"))
-               if "desktop_identity.apply()" in path.read_text()
-               and "ui_style.prepare_windows()" not in path.read_text()]
-    assert missing == []
+@pytest.mark.parametrize("program", ["tray_main", "prefs_main", "service_main"])
+def test_each_program_prepares_its_windows_before_it_opens_one(program, request):
+    """The tray (and its dialogs), Preferences and the dictation service (the
+    recording indicator) each run as their own process: each names itself
+    (TuxTalk's icon, not a generic one), then prepares its windows (the
+    fitting and the emoji font), before it opens anything."""
+    assert request.getfixturevalue(program)()[:2] == ["names itself", "prepares windows"]
+
+
+class _Opening(BaseException):
+    """Stops a program's main() once its windows are prepared, or when one
+    shows before that; a BaseException, so its own `except Exception` lets
+    it through."""
+
+
+def _shown(done):
+    done.append("shows a window")
+    raise _Opening
+
+
+@pytest.mark.parametrize("program, argv", [("explain", ["nothing_said"]),
+                                           ("fix_word_dialog", []),
+                                           ("transcribe_window", [])])
+def test_each_small_window_program_prepares_its_windows(program, argv, monkeypatch):
+    """Fix a Word, Transcribe a File and the explanation windows run as
+    processes of their own too."""
+    import importlib
+    from tuxtalk import desktop_identity, single_instance
+    done = []
+    monkeypatch.setattr(desktop_identity, "apply", lambda: done.append("names itself"))
+
+    def prepare():
+        done.append("prepares windows")
+        raise _Opening
+    monkeypatch.setattr(ui_style, "prepare_windows", prepare)
+    monkeypatch.setattr(single_instance, "claim_window", lambda *a: (True, None))
+    for name in ("show", "show_all"):
+        monkeypatch.setattr(Gtk.Widget, name, lambda widget: _shown(done))
+    with pytest.raises(_Opening):
+        importlib.import_module(f"tuxtalk.{program}").main(argv)
+    assert done == ["names itself", "prepares windows"]
 
 
 def test_a_title_bar_gtk_draws_is_counted_once(monkeypatch):
