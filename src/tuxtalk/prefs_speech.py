@@ -776,6 +776,10 @@ class SpeechSection(Tab):
         self._select_on_cuda(model)
         if self.win.save_now({"model": model, "device": "cuda"}):
             self.win.put_in_force({"model", "device"})
+        else:
+            show_message(self.window, Gtk.MessageType.ERROR, "Couldn't switch to CUDA",
+                         "CUDA is downloaded, but the setting couldn't be saved. "
+                         "Click Apply to try again.")
 
     def _select_on_cuda(self, model):
         """Show *model* on CUDA in the dropdowns, chosen."""

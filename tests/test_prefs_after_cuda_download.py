@@ -201,6 +201,18 @@ def test_the_switch_saves_only_the_model_and_device(nvidia, monkeypatch):
     assert (win.config["hotkey"], win.config["auto_period"]) == ("F6", not period)
 
 
+def test_a_switch_that_cant_be_saved_says_so(nvidia, monkeypatch):
+    """A read-only settings file: nothing restarts, the user is told, and
+    the model and device stay chosen for Apply to try again."""
+    section = nvidia("small")
+    win = section.win
+    monkeypatch.setattr(win, "save_now", lambda settings: False)
+    _pick_cuda_device(section, monkeypatch)
+    assert nvidia.happened == ["Download CUDA Libraries?", "CUDA downloaded",
+                               "Couldn't switch to CUDA"]
+    assert win._changed_since_open() >= {"device"}
+
+
 def test_rebuilding_the_device_dropdown_is_no_pick(nvidia, monkeypatch):
     """With CUDA chosen on Parakeet, a live "changed" would ask which
     Whisper model to use; the rebuild after a download must not."""
