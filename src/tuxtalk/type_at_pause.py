@@ -67,7 +67,7 @@ def cut_chunk(rec, chunker):
         frames, rec.frames = rec.frames, []
         chunking.drop_tail_samples(frames, chunker.tail_samples())
         rec.chunks_submitted += 1
-        number = rec.chunks_submitted
+        number, rec_sr, message = rec.chunks_submitted, rec.samplerate, rec.message
         pause = chunker.last_pause
         # Hands-free's "stop when quiet" waits from now until the phrase is
         # typed: it can wait its turn behind the last dictation, and an AI
@@ -79,7 +79,7 @@ def cut_chunk(rec, chunker):
         # between counting this chunk and queuing it, and queue the last chunk
         # ahead of it. put() on the unbounded queue never blocks.
         dictation_worker.submit(lambda: _transcribe_chunk(
-            frames, rec.samplerate, number, pause, rec.message, detector))
+            frames, rec_sr, number, pause, message, detector))
 
 
 def _transcribe_chunk(frames, rec_sr, number, pause, message, detector):

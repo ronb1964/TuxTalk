@@ -51,7 +51,8 @@ def test_a_transcription_error_sounds_like_a_failure_and_says_so(monkeypatch):
     monkeypatch.setattr("tuxtalk.silence.is_speechless_tap", lambda *a: False)
 
     frames = [b"\xe8\x03" * 16000]   # speaking level; pure silence is a dead mic
-    pipeline.transcribe_and_inject(frames, engine.SAMPLE_RATE, True, False, notify_on=False)
+    pipeline.transcribe_and_inject(frames, engine.SAMPLE_RATE, True, False, notify_on=False,
+                                   message=rs.state.current.message)
 
     assert beeps == [CANCEL_BEEP], "the 'done' beep played for a failure"
     assert notes and "Transcription failed" in notes[0]
@@ -69,7 +70,7 @@ def test_the_mic_stream_is_closed_even_when_stopping_it_fails(monkeypatch):
 
     monkeypatch.setattr(rs.state.current, "stream", Stream())
 
-    recording.stop_stream_safely()
+    recording.stop_stream_safely(rs.state.current)
 
     assert Stream.closed
     assert rs.state.current.stream is None

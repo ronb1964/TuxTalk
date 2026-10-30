@@ -89,7 +89,7 @@ def test_a_failed_re_resolve_keeps_the_device_in_use(desktop, monkeypatch):
 
 def test_start_recording_opens_the_new_default(desktop, monkeypatch):
     opened = []
-    monkeypatch.setattr(recording, "open_input_stream", lambda idx: opened.append(idx))
+    monkeypatch.setattr(recording, "open_input_stream", lambda rec, idx: opened.append(idx))
     monkeypatch.setattr("tuxtalk.type_at_pause.arm_chunker", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.recording.pause_media_players", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
@@ -100,7 +100,7 @@ def test_start_recording_opens_the_new_default(desktop, monkeypatch):
     recording.pick_input_device("")
     desktop.source = "alsa_input.usb-TONOR_TD520S"
     try:
-        assert recording.start_recording(False, False, 4) is True
+        assert recording.start_recording(False, False, 4) is not None
     finally:
         rs.state.is_recording = False
         rs.state.current.stream = None

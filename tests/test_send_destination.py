@@ -50,7 +50,8 @@ def send_automatically(sent_to):
 def dictate(chunk_role=None, audio=True):
     frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()] if audio else []
     pipeline.transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False, smart_quotes=False,
-                               notify_on=False, chunk_role=chunk_role)
+                               notify_on=False, chunk_role=chunk_role,
+                               message=rs.state.current.message)
 
 
 def test_a_dictation_sends_into_the_window_it_went_to(chat, keyboard):
@@ -381,7 +382,7 @@ def test_the_hold_key_holds_the_send_before_it_hides_itself(chat, keyboard, monk
         modifier_hotkeys.note_hidden(set(codes), devices)
         send_countdown._send(waiting)                 # its thread got there first
     monkeypatch.setattr(keyboard_grab, "grab_keyboards_hiding", grab_then_the_send_runs)
-    monkeypatch.setattr(recording, "open_input_stream", lambda idx: None)
+    monkeypatch.setattr(recording, "open_input_stream", lambda rec, idx: None)
     monkeypatch.setattr("tuxtalk.type_at_pause.arm_chunker", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.recording.pause_media_players", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.tray_link.notify_recording_state", lambda *a, **k: None)
@@ -429,7 +430,7 @@ def test_a_short_tap_of_the_hold_key_that_holds_the_send_says_so_aloud_once(
     monkeypatch.setattr(rs.state.current, "held_send", True)
     monkeypatch.setattr(rs.state.current, "silence", None)
     monkeypatch.setattr(rs.state.current, "press_t0", time.time())
-    assert recording.finish_capture(False, notify_on) is None
+    assert recording.finish_capture(rs.state.current, False, notify_on) is None
     assert notices == [send_countdown.HELD_NOTICE] and notifications() == [HELD_TITLE]
 
 
@@ -440,7 +441,7 @@ def test_a_hold_key_press_whose_recording_cant_start_says_the_send_is_held(
     focus, heard, typed, notices = chat
     counting_down(monkeypatch)
 
-    def no_microphone(idx):
+    def no_microphone(rec, idx):
         raise OSError("Device unavailable")
     monkeypatch.setattr(recording, "open_input_stream", no_microphone)
     monkeypatch.setattr(recording, "pick_input_device", lambda mic: 0)
@@ -1352,7 +1353,8 @@ def test_a_phrase_cut_at_a_pause_takes_its_recordings_message_to_the_queue(chat,
     monkeypatch.setattr(rs.state.current, "chunker", pause)
     monkeypatch.setattr(rs.state.current, "frames",
                         [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()])
-    type_at_pause.cut_chunk(rs.state.current, pause)                           # "see you at noon", then a pause
+    type_at_pause.cut_chunk(rs.state.current,
+                            pause)                           # "see you at noon", then a pause
     next_recording(engine.SAMPLE_RATE)               # recording B starts
     heard.append("See you at noon.")
     jobs[0]()

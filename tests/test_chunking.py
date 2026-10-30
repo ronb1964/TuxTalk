@@ -420,7 +420,7 @@ def frames_of(audio):
 
 def call(frames, role, auto_period=False):
     dictation_pipeline.transcribe_and_inject(frames, SR, True, True, False, None, True, auto_period,
-                               "type", chunk_role=role)
+                               "type", chunk_role=role, message=rs.state.current.message)
 
 
 def test_middle_chunk_types_without_the_ready_beep(pipeline):
@@ -581,7 +581,7 @@ def recording(monkeypatch, pipeline):
         beeps=True, smart_quotes=True, notify=False, language=None,
         auto_space=True, auto_period=False, injection_mode="type"))
     monkeypatch.setattr(capture, "indicator", None)
-    monkeypatch.setattr(capture, "stop_stream_safely", lambda: None)
+    monkeypatch.setattr(capture, "stop_stream_safely", lambda rec: None)
     monkeypatch.setattr(capture, "resume_media_players", lambda: None)
     monkeypatch.setattr(tray_link, "notify_recording_state", lambda *a: None)
     rs.state.is_recording = True
@@ -657,7 +657,7 @@ def test_cut_after_stop_snapshot_hands_nothing_on(recording):
     not cut a chunk from frames the stop already owns."""
     feed(speech(1.0))
     chunker = rs.state.current.chunker
-    cap = capture.finish_capture(beeps_on=False, notify_on=False)
+    cap = capture.finish_capture(rs.state.current, beeps_on=False, notify_on=False)
     assert cap is not None
     type_at_pause.cut_chunk(rs.state.current, chunker)
     assert rs.state.current.chunks_submitted == 0
@@ -713,7 +713,7 @@ def test_a_recording_without_a_pause_says_why(recording, caplog):
     import logging
     caplog.set_level(logging.INFO)
     feed(speech(2.0))
-    capture.finish_capture(beeps_on=False, notify_on=False)
+    capture.finish_capture(rs.state.current, beeps_on=False, notify_on=False)
     assert any("no pause found" in r.getMessage() and "room" in r.getMessage()
                for r in caplog.records)
 

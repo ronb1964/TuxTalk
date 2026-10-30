@@ -77,7 +77,7 @@ def rig(tmp_path, monkeypatch):
     monkeypatch.setattr(live, "voice_editing", False)
     monkeypatch.setattr(hotkeys, "_hotkey_test_active", lambda: False)
     monkeypatch.setattr(rs.state, "is_recording", False)
-    monkeypatch.setattr(rs.state.current, "edit_mode", False, raising=False)
+    monkeypatch.setattr(rs.state.current, "edit_mode", False)
 
     def start(*_a, edit_mode=False, **_k):
         calls.append(("start", edit_mode))

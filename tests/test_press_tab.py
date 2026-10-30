@@ -52,7 +52,8 @@ def _dictate(monkeypatch, raw, window="brave-browser"):
                         lambda key, why, claim=None: events.append((key, why)) or True)
     frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
     pipeline.transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False,
-                               smart_quotes=False, notify_on=False)
+                               smart_quotes=False, notify_on=False,
+                               message=rs.state.current.message)
     return events
 
 

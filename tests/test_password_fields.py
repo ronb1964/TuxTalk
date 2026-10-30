@@ -76,7 +76,8 @@ def dictate(monkeypatch, said="my secret is swordfish", beeps_on=True, chunk_rol
     monkeypatch.setattr(engine, "transcribe", lambda audio, language: said)
     frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
     pipeline.transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=beeps_on,
-                               smart_quotes=False, notify_on=True, chunk_role=chunk_role)
+                               smart_quotes=False, notify_on=True, chunk_role=chunk_role,
+                               message=rs.state.current.message)
 
 
 def test_a_dictation_in_a_password_field_is_not_typed_or_kept(desktop, monkeypatch, caplog):

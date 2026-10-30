@@ -157,10 +157,10 @@ def resample(audio, orig_sr, target_sr):
     return resampled.astype(audio.dtype)
 
 
-def stop_stream_safely():
-    """Stop and close the microphone stream. An audio system that stops
-    answering costs mic_stream.STOP_TIMEOUT_S, not the whole service."""
-    rec = rs.state.current
+def stop_stream_safely(rec):
+    """Stop and close recording *rec*'s microphone stream. An audio system
+    that stops answering costs mic_stream.STOP_TIMEOUT_S, not the whole
+    service."""
     stream, rec.stream = rec.stream, None
     if stream is not None:
         mic_stream.close(stream)
@@ -262,12 +262,11 @@ def _sd_callback(rec, indata, frames_count, time_info, status):
         feed_indicator(indicator, indata, spectrum_processor)
 
 
-def open_input_stream(device_idx) -> None:
-    """Open and start the microphone stream of the recording starting.
-    Raises if the device is unusable."""
+def open_input_stream(rec, device_idx) -> None:
+    """Open and start recording *rec*'s microphone stream. Raises if the
+    device is unusable."""
     # Use the device's native sample rate (may differ from 16kHz on ALSA hw: devices)
     global spectrum_processor
-    rec = rs.state.current
     rec.samplerate = mic_stream.input_samplerate(device_idx, engine.SAMPLE_RATE)
     # The bars' bands are worked out for one rate; built before the stream
     # starts, so its callback never sees one half made.
@@ -284,8 +283,9 @@ def open_input_stream(device_idx) -> None:
 
 def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
                     from_toggle: bool = False, edit_mode: bool = False,
-                    held_send: bool = False) -> bool:
-    """Begin capturing audio. Returns True only if recording actually started.
+                    held_send: bool = False):
+    """Begin capturing audio: the new Recording, or None when no microphone
+    would open.
 
     *from_toggle* marks a start by the toggle key, so a quick second tap can
     switch it to hands-free (see toggle_pressed_while_recording).
@@ -310,16 +310,16 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
                          name="tt-wake-model").start()
     input_device_idx = follow_system_default(input_device_idx)
     try:
-        open_input_stream(input_device_idx)
+        open_input_stream(rec, input_device_idx)
     except Exception as first_error:
         # The mic is stored as a device NUMBER, resolved once at startup. Unplug
         # a USB device and the numbering shifts, leaving that number pointing at
         # nothing. Re-resolve by name and try once more before giving up.
         logger.warning(f"Microphone {input_device_idx} failed ({first_error}); re-resolving")
-        stop_stream_safely()
+        stop_stream_safely(rec)
         try:
             fresh_idx = pick_input_device(load_config().mic)
-            open_input_stream(fresh_idx)
+            open_input_stream(rec, fresh_idx)
             logger.info(f"Microphone re-resolved to device {fresh_idx}")
             if fresh_idx != input_device_idx:
                 notices.warn_mic_switched(input_device_idx, fresh_idx)
@@ -332,14 +332,14 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
             # Counted already (recording_begins), so a send set up meanwhile
             # was held for it: this one ended, cancelled, and that's said.
             rec.message.cancelled = True
-            stop_stream_safely()
+            stop_stream_safely(rec)
             keyboard_grab.release_all()
             beeps.beep(beeps_on, *CANCEL_BEEP)
             if notify_on:
                 notify_module.notify("Microphone unavailable",
                                      "Check that no other app is using it.")
             _leave_held_send_unsent(rec)
-            return False
+            return None
 
     type_at_pause.arm_chunker(rec)
     pause_media_players()
@@ -360,7 +360,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
         beeps.wait_until_played(over=rec.start_beep)
     rec.toggle_started_at = time.time() if from_toggle else None
     logger.info(f"Recording started in {time.time() - rec.press_t0:.2f}s")
-    return True
+    return rec
 
 
 def cancel_recording(beeps_on: bool, notify_on: bool, reason="Cancelled"):
@@ -370,7 +370,7 @@ def cancel_recording(beeps_on: bool, notify_on: bool, reason="Cancelled"):
     rec = rs.state.current
     rs.state.is_recording = False
     rec.message.cancelled = True
-    stop_stream_safely()
+    stop_stream_safely(rec)
     resume_media_players()
     beeps.beep(beeps_on, *CANCEL_BEEP)
     logger.info(f"Recording cancelled: {reason}")
@@ -423,8 +423,8 @@ def toggle_pressed_while_recording(beeps_on: bool) -> bool:
     return True
 
 
-def finish_capture(beeps_on: bool, notify_on: bool):
-    """End a recording quickly and hand back its audio (the fast half of stop).
+def finish_capture(rec, beeps_on: bool, notify_on: bool):
+    """End recording *rec* quickly and hand back its audio (the fast half of stop).
 
     Validates the hold time, stops the stream, hides the indicator, and takes
     the captured frames, marking the recording captured under chunk_lock so
@@ -434,7 +434,6 @@ def finish_capture(beeps_on: bool, notify_on: bool):
     begins at once, which is what lets the dictation worker transcribe and
     type them while the next recording records, without dropping or mixing
     audio."""
-    rec = rs.state.current
     if _dropped_as_silent(rec, beeps_on, notify_on) or _dropped_as_a_tap(rec, beeps_on, notify_on):
         return None
     with type_at_pause.chunk_lock:
@@ -447,7 +446,7 @@ def finish_capture(beeps_on: bool, notify_on: bool):
     if chunker is not None and not rec.chunks_submitted:
         logger.info(f"Chunked dictation: no pause found ({chunker.describe()})")
     rs.state.is_recording = False
-    stop_stream_safely()
+    stop_stream_safely(rec)
     resume_media_players()
     tray_link.notify_recording_state(False)  # the tray icon shows recording stopped
     trim_auto_stop_tail(rec, frames)

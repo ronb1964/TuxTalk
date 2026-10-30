@@ -277,13 +277,15 @@ def _no_real_send_countdown(monkeypatch, request):
     monkeypatch.setattr(send_countdown, "_held_for", 0)
     monkeypatch.setattr(send_countdown, "_keys_down", set())
     monkeypatch.setattr(rs.state, "sent", None)
-    # A recording of its own for each test. Where an earlier test's text
-    # "landed" must not stop this test's send, nor its held-back mark. A test that fakes the typing has its words
-    # in a window the desktop named, where an automatic Enter may go.
+    # A recording of its own for each test, and no last dictation. Where an
+    # earlier test's text "landed" must not stop this test's send, nor its
+    # held-back mark. A test that fakes the typing has its words in a window
+    # the desktop named, where an automatic Enter may go.
     from tuxtalk import focused_window
     monkeypatch.setattr(rs.state, "last_inserted_where", (None, None))
     monkeypatch.setattr(rs.state, "current", rs.Recording(rs.Message(
         focused_window.Destination(None, ("tray", "{test window}")))))
+    monkeypatch.setattr(rs.state, "last_message", rs.Message())
 
 
 @pytest.fixture(autouse=True)

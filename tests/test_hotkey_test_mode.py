@@ -42,7 +42,8 @@ def keys(monkeypatch):
     reported, started = [], []
     monkeypatch.setattr(tray_link, "notify_hotkey_pressed", reported.append)
     monkeypatch.setattr(keyboard_grab, "grab_keyboards_hiding", lambda *a, **k: None)
-    monkeypatch.setattr(recording, "start_recording", lambda *a, **k: started.append(True) or True)
+    monkeypatch.setattr(recording, "start_recording", lambda *a,
+                        **k: started.append(True) or rs.state.current)
     rs.state.is_recording = False
     yield reported, started
     rs.state.is_recording = False

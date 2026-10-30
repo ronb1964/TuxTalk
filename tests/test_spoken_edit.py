@@ -185,7 +185,8 @@ def test_it_is_never_typed_as_text(editing, monkeypatch):
     monkeypatch.setattr(live, "usage_stats", False)
     speech = (np.sin(np.linspace(0, 2000, 16000)) * 8000).astype(np.int16)
     pipeline.transcribe_and_inject([speech.tobytes()], 16000, True, True, False, None,
-                               True, True, "type", chunk_role="middle")
+                               True, True, "type", chunk_role="middle",
+                               message=rs.state.current.message)
     assert typed == []
     _pressed, edits, _ = editing
     assert edits and edits[0][0] == "make it shorter."

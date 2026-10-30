@@ -301,16 +301,17 @@ def _start_hold_recording(hold_key, held_modifiers, devices, cfg, input_device_i
     held = send_countdown.hold(announce=False)
     shift = _held_shift(held_modifiers) if live.voice_editing else set()
     keyboard_grab.grab_keyboards_hiding(devices, {hold_key, *shift})
-    if (recording.start_recording(cfg.beeps, cfg.notify, input_device_idx, edit_mode=bool(shift),
-                                  held_send=held) and rs.state.current.held_send):
+    rec = recording.start_recording(cfg.beeps, cfg.notify, input_device_idx,
+                                    edit_mode=bool(shift), held_send=held)
+    if rec is not None and rec.held_send:
         # The hold time counts from the press to when its release is read,
         # which waits for the start: 0.15 to 0.2 s in the test VMs, so a
         # quick tap to hold the send came to over MIN_HOLD_MS on Pop!_OS and
         # recorded instead. A key already up after a start that quick was a
         # tap; after a slower one it could have been a short word, so the
         # hold time decides.
-        rs.state.current.released_while_starting = (
-            time.time() - rs.state.current.press_t0 < 2 * recording.MIN_HOLD_MS / 1000
+        rec.released_while_starting = (
+            time.time() - rec.press_t0 < 2 * recording.MIN_HOLD_MS / 1000
             and keyboard_grab.wait_for_keys_up(devices, {hold_key}, 0))
 
 

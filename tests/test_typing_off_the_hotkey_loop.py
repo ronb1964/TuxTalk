@@ -38,7 +38,7 @@ def test_stopping_returns_while_the_text_is_still_typing(real_worker, monkeypatc
         typing.set()
         assert may_finish.wait(5)
         typed.append(frames)
-    monkeypatch.setattr(recording, "finish_capture", lambda b, n: (["first"], 16000))
+    monkeypatch.setattr(recording, "finish_capture", lambda rec, b, n: (["first"], 16000))
     monkeypatch.setattr(pipeline, "transcribe_and_inject", long_dictation)
     _stop()
     assert typing.wait(5)
@@ -56,10 +56,10 @@ def test_dictations_are_typed_in_the_order_they_were_recorded(real_worker, monke
             assert may_finish.wait(5)
         typed.append(frames[0])
     monkeypatch.setattr(pipeline, "transcribe_and_inject", dictation)
-    monkeypatch.setattr(recording, "finish_capture", lambda b, n: (["first"], 16000))
+    monkeypatch.setattr(recording, "finish_capture", lambda rec, b, n: (["first"], 16000))
     _stop()
     assert first_typing.wait(5)
-    monkeypatch.setattr(recording, "finish_capture", lambda b, n: (["second"], 16000))
+    monkeypatch.setattr(recording, "finish_capture", lambda rec, b, n: (["second"], 16000))
     _stop()                                     # recorded while the first was typing
     may_finish.set()
     assert real_worker.drain(5) and typed == ["first", "second"]
@@ -82,9 +82,9 @@ def test_the_hotkey_is_read_while_the_last_dictation_is_still_typing(real_worker
     def start(beeps_on, notify_on, device, from_toggle=False, edit_mode=False, held_send=False):
         rs.state.is_recording = True
         starts.append(device)
-        return True
+        return rs.state.current
 
-    def stop(beeps_on, notify_on):
+    def stop(rec, beeps_on, notify_on):
         rs.state.is_recording = False
         return ["audio"], 16000
 

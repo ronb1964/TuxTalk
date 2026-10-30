@@ -119,7 +119,7 @@ class _Words(NamedTuple):
 
 def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                           language=None, auto_space=True, auto_period=True,
-                          injection_mode="type", chunk_role=None, message=None):
+                          injection_mode="type", chunk_role=None, *, message):
     """The slow half of stopping, on the dictation worker: transcribe the
     captured audio and type the text. It touches no GTK (the indicator was
     already hidden in recording.finish_capture), so it can run off the
@@ -132,10 +132,9 @@ def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
 
     *message* is the recording's (recording_state.Message), taken when its
     work was queued, so a recording started meanwhile can't change where
-    this one's Enter may go. By default the current recording's."""
+    this one's Enter may go."""
     job = _Job(beeps_on, smart_quotes, notify_on, language, auto_space, auto_period,
-               injection_mode, chunk_role,
-               rs.state.current.message if message is None else message)
+               injection_mode, chunk_role, message)
     t0 = time.time()
     logger.info("Recording stopped, starting transcription")
     try:
@@ -444,7 +443,7 @@ def stop_recording(
     reading keys at once: a dictation key pressed while text is still being
     typed starts the next recording."""
     rec = rs.state.current
-    cap = recording.finish_capture(beeps_on, notify_on)
+    cap = recording.finish_capture(rec, beeps_on, notify_on)
     if cap is None:
         return
     frames, rec_sr = cap

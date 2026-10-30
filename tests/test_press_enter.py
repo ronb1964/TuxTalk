@@ -66,7 +66,8 @@ def _dictate(monkeypatch, raw, prepared=None, outcome="ok", window="brave-browse
                         lambda key, why, claim=None: events.append((key.lower(), why)))
     frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
     pipeline.transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False,
-                               smart_quotes=False, notify_on=False)
+                               smart_quotes=False, notify_on=False,
+                               message=rs.state.current.message)
     return events
 
 
@@ -336,7 +337,7 @@ def test_pressing_the_hold_key_holds_the_send_and_records(countdown, monkeypatch
     """Holding the key dictates more onto the unsent message."""
     pressed, _ = countdown
     start_send("test")
-    monkeypatch.setattr(recording, "open_input_stream", lambda idx: None)
+    monkeypatch.setattr(recording, "open_input_stream", lambda rec, idx: None)
     monkeypatch.setattr("tuxtalk.type_at_pause.arm_chunker", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.recording.pause_media_players", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
@@ -344,7 +345,7 @@ def test_pressing_the_hold_key_holds_the_send_and_records(countdown, monkeypatch
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
     monkeypatch.setattr(recording, "indicator", None)
     try:
-        assert recording.start_recording(False, False, 0) is True
+        assert recording.start_recording(False, False, 0) is not None
         assert rs.state.current.held_send is True
         sends()[0].fire()
         assert pressed == []
@@ -359,14 +360,14 @@ def test_a_tap_too_short_to_dictate_says_not_sent(countdown, monkeypatch):
     monkeypatch.setattr(recording, "cancel_recording",
                         lambda beeps, notify, reason="": reasons.append(reason)
                         or cancel(beeps, notify, reason))
-    for name in ("stop_stream_safely", "resume_media_players"):
-        monkeypatch.setattr(recording, name, lambda: None)
+    monkeypatch.setattr(recording, "stop_stream_safely", lambda rec: None)
+    monkeypatch.setattr(recording, "resume_media_players", lambda: None)
     monkeypatch.setattr(recording, "indicator", None)
     monkeypatch.setattr("tuxtalk.tray_link.notify_recording_state", lambda *a, **k: None)
     monkeypatch.setattr(rs.state.current, "held_send", True)
     monkeypatch.setattr(rs.state.current, "silence", None)
     monkeypatch.setattr(rs.state.current, "press_t0", time.time())
-    assert recording.finish_capture(False, False) is None
+    assert recording.finish_capture(rs.state.current, False, False) is None
     assert reasons == [send_countdown.HELD_NOTICE]
     assert labels == [send_countdown.HELD_NOTICE]
 
@@ -497,7 +498,7 @@ def test_a_short_tap_types_the_space_when_released(countdown, monkeypatch):
     monkeypatch.setattr(rs.state.current, "silence", None)
     monkeypatch.setattr(rs.state.current, "chunks_submitted", 0)
     monkeypatch.setattr(rs.state.current, "press_t0", time.time())
-    assert recording.finish_capture(False, False) is None
+    assert recording.finish_capture(rs.state.current, False, False) is None
     assert TYPED == [" "] and reasons == [send_countdown.HELD_NOTICE]
 
 
@@ -516,7 +517,7 @@ def test_typing_the_space_doesnt_turn_a_tap_into_a_dictation(countdown, monkeypa
     monkeypatch.setattr(rs.state.current, "silence", None)
     monkeypatch.setattr(rs.state.current, "chunks_submitted", 0)
     monkeypatch.setattr(rs.state.current, "press_t0", time.time() - 0.15)
-    assert recording.finish_capture(False, False) is None
+    assert recording.finish_capture(rs.state.current, False, False) is None
     assert TYPED == [" "] and reasons == [send_countdown.HELD_NOTICE]
 
 
@@ -585,7 +586,7 @@ def test_a_quick_tap_holds_the_send_even_when_recording_starts_slowly(
     monkeypatch.setattr(recording, "cancel_recording",
                         lambda beeps, notify, reason="": reasons.append(reason))
     monkeypatch.setattr(pipeline, "transcribe_and_inject", lambda *a, **k: dictated.append(1))
-    monkeypatch.setattr(recording, "open_input_stream", lambda idx: clock.sleep(start_s))
+    monkeypatch.setattr(recording, "open_input_stream", lambda rec, idx: clock.sleep(start_s))
     monkeypatch.setattr("tuxtalk.type_at_pause.arm_chunker", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.recording.pause_media_players", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.recording.resume_media_players", lambda *a, **k: None)
@@ -744,10 +745,11 @@ def test_a_pause_at_the_end_after_switching_windows_sends_nothing(monkeypatch, k
     monkeypatch.setattr(send_countdown.threading, "Timer", FakeTimer)
     frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
     pipeline.transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False, smart_quotes=False,
-                               notify_on=False, chunk_role="middle")
+                               notify_on=False, chunk_role="middle",
+                               message=rs.state.current.message)
     focus[:] = ["org.kde.konsole", ("compositor", 0x3400004)]     # the click into Konsole
     pipeline.transcribe_and_inject([], engine.SAMPLE_RATE, beeps_on=False, smart_quotes=False,
-                               notify_on=False, chunk_role="last")
+                               notify_on=False, chunk_role="last", message=rs.state.current.message)
     for timer in FakeTimer.made:
         timer.fire()
     assert keyboard.events == []

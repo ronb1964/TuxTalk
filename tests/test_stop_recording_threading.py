@@ -21,7 +21,7 @@ from tuxtalk import pipeline
 
 
 def test_finish_capture_snapshots_frames_surviving_next_recording(monkeypatch):
-    monkeypatch.setattr(recording, "stop_stream_safely", lambda: None)
+    monkeypatch.setattr(recording, "stop_stream_safely", lambda rec: None)
     monkeypatch.setattr(tray_link, "notify_recording_state", lambda *_a: None)
     monkeypatch.setattr(recording, "indicator", None)
 
@@ -30,7 +30,7 @@ def test_finish_capture_snapshots_frames_surviving_next_recording(monkeypatch):
     rs.state.is_recording = True
     rs.state.current.message.cancelled = False
 
-    cap = recording.finish_capture(beeps_on=False, notify_on=False)
+    cap = recording.finish_capture(rs.state.current, beeps_on=False, notify_on=False)
     assert cap is not None
     frames, _rec_sr = cap
     assert frames == [b"hello-audio"]
@@ -39,7 +39,7 @@ def test_finish_capture_snapshots_frames_surviving_next_recording(monkeypatch):
     # The next recording starts at once and its microphone delivers audio:
     # the snapshot the worker will transcribe must not take it in.
     monkeypatch.setattr(recording, "follow_system_default", lambda idx: idx)
-    monkeypatch.setattr(recording, "open_input_stream", lambda idx: None)
+    monkeypatch.setattr(recording, "open_input_stream", lambda rec, idx: None)
     monkeypatch.setattr("tuxtalk.type_at_pause.arm_chunker", lambda *a, **k: None)
     monkeypatch.setattr(recording, "pause_media_players", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
@@ -92,7 +92,8 @@ def test_a_stream_that_didnt_stop_never_feeds_the_next_recording(streams):
     first = rs.state.current
     _held_long_enough()
     streams[0](_block(b"last"), 2, None, None)
-    assert recording.finish_capture(beeps_on=False, notify_on=False) == ([b"last"], 16000)
+    assert recording.finish_capture(rs.state.current, beeps_on=False,
+                                    notify_on=False) == ([b"last"], 16000)
     assert recording.start_recording(False, False, None)
     streams[0](_block(b"late"), 2, None, None)
     streams[1](_block(b"next"), 2, None, None)
@@ -117,7 +118,7 @@ def test_a_block_still_arriving_at_the_stop_never_changes_the_audio_handed_on(st
     late = threading.Thread(target=streams[0], args=(SlowBlock(), 2, None, None))
     late.start()
     assert inside.wait(5)
-    frames, _rate = recording.finish_capture(beeps_on=False, notify_on=False)
+    frames, _rate = recording.finish_capture(rs.state.current, beeps_on=False, notify_on=False)
     handed_on = list(frames)
     go.set()
     late.join(5)
@@ -152,7 +153,7 @@ def test_hands_free_finishing_a_recording_never_stops_the_next_one(streams, monk
     quiet = threading.Thread(target=streams[0], args=(_block(b"hush"), 2, None, None))
     quiet.start()
     assert inside.wait(5)
-    assert recording.finish_capture(beeps_on=False, notify_on=False) is not None
+    assert recording.finish_capture(rs.state.current, beeps_on=False, notify_on=False) is not None
     assert recording.start_recording(False, False, None)
     go.set()
     quiet.join(5)
@@ -167,13 +168,13 @@ def test_finish_capture_returns_none_when_too_short(monkeypatch):
     monkeypatch.setattr(recording, "cancel_recording", lambda *a, **k: None)
     rs.state.current.press_t0 = time.time()  # ~0 ms held -> below MIN_HOLD_MS
     rs.state.is_recording = True
-    assert recording.finish_capture(beeps_on=False, notify_on=False) is None
+    assert recording.finish_capture(rs.state.current, beeps_on=False, notify_on=False) is None
 
 
 def test_stop_recording_composes_finish_then_inject(monkeypatch):
     # stop_recording = finish_capture, then transcribe_and_inject on the worker.
     got = []
-    monkeypatch.setattr(recording, "finish_capture", lambda b, n: ([b"aud"], 16000))
+    monkeypatch.setattr(recording, "finish_capture", lambda rec, b, n: ([b"aud"], 16000))
     monkeypatch.setattr(pipeline, "transcribe_and_inject",
                         lambda frames, rec_sr, *a, **k: got.append((frames, rec_sr)))
     pipeline.stop_recording(beeps_on=False, smart_quotes=True, notify_on=False)
@@ -183,7 +184,7 @@ def test_stop_recording_composes_finish_then_inject(monkeypatch):
 def test_stop_recording_skips_inject_when_capture_none(monkeypatch):
     # Cancelled / too-short recording: no transcription or injection at all.
     got = []
-    monkeypatch.setattr(recording, "finish_capture", lambda b, n: None)
+    monkeypatch.setattr(recording, "finish_capture", lambda rec, b, n: None)
     monkeypatch.setattr(pipeline, "transcribe_and_inject", lambda *a, **k: got.append(1))
     pipeline.stop_recording(beeps_on=False, smart_quotes=True, notify_on=False)
     assert got == []

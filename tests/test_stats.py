@@ -8,6 +8,7 @@ import json
 
 import pytest
 
+from tuxtalk import recording_state as rs
 from tuxtalk import stats
 from tuxtalk import live_settings as live
 from tuxtalk import engine
@@ -164,7 +165,8 @@ def _dictate(monkeypatch, seconds=2.0):
     monkeypatch.setattr("tuxtalk.history.add_entry", lambda text: None)
     frames = [(np.ones(int(engine.SAMPLE_RATE * seconds), dtype=np.int16) * 1000).tobytes()]
     pipeline.transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False,
-                               smart_quotes=False, notify_on=False)
+                               smart_quotes=False, notify_on=False,
+                               message=rs.state.current.message)
 
 
 def test_a_dictation_is_counted_with_its_words_and_speaking_time(stats_file, monkeypatch):
@@ -246,7 +248,8 @@ def test_stats_are_saved_after_the_text_is_typed(stats_file, monkeypatch):
     # (silence.is_speechless_tap) before reaching the engine.
     frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
     pipeline.transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False,
-                               smart_quotes=False, notify_on=False)
+                               smart_quotes=False, notify_on=False,
+                               message=rs.state.current.message)
     assert order == ["typed", "counted"]
 
 

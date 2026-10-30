@@ -11,6 +11,7 @@ from types import SimpleNamespace
 import numpy as np
 from tuxtalk import engine
 from tuxtalk import pipeline
+from tuxtalk import recording_state as rs
 from tuxtalk.beeps import CANCEL_BEEP
 
 
@@ -145,7 +146,8 @@ def test_nothing_recognized_plays_the_cancel_beep(monkeypatch):
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda on, *tone: beeps.append(tone))
     monkeypatch.setattr(silence, "is_speechless_tap", lambda a, sr: False)
     monkeypatch.setattr(engine, "transcribe", lambda *a: None)
-    pipeline.transcribe_and_inject([np.ones(16000, dtype=np.int16).tobytes()], 16000, True, False, False)
+    pipeline.transcribe_and_inject([np.ones(16000, dtype=np.int16).tobytes()], 16000, True, False,
+                                   False, message=rs.state.current.message)
     assert beeps == [CANCEL_BEEP]
 
 

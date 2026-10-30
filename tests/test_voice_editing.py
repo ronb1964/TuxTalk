@@ -277,7 +277,7 @@ def keyloop(monkeypatch):
     seen = {"starts": [], "stops": 0, "grab_codes": []}
     monkeypatch.setattr(live, "voice_editing", True)
     monkeypatch.setattr(rs.state, "is_recording", False)
-    monkeypatch.setattr(rs.state.current, "edit_mode", False, raising=False)
+    monkeypatch.setattr(rs.state.current, "edit_mode", False)
     monkeypatch.setattr(keyboard_grab, "grab_keyboards_hiding", lambda devs, codes: seen["grab_codes"].append(set(codes)))
     monkeypatch.setattr(keyboard_grab, "release_all", lambda: None)
 
@@ -285,7 +285,7 @@ def keyloop(monkeypatch):
         seen["starts"].append({"from_toggle": from_toggle, "edit_mode": edit_mode})
         rs.state.is_recording = True
         rs.state.current.edit_mode = edit_mode
-        return True
+        return rs.state.current
 
     def stop(*a, **k):
         seen["stops"] += 1
@@ -388,7 +388,8 @@ def edit_env(monkeypatch):
 
 def run_edit(where=None):
     frames = [np.full(16000, 1000, dtype=np.int16).tobytes()]
-    voice_edit.transcribe_and_edit(frames, 16000, False, "", "type", rs.state.current.message, where)
+    voice_edit.transcribe_and_edit(frames, 16000, False, "", "type", rs.state.current.message,
+                                   where)
 
 
 def test_esc_while_the_ai_rewrites_leaves_the_selection_alone(edit_env, monkeypatch):
