@@ -32,8 +32,9 @@ ways (_why_not's *spoken*).
 The send waiting is _pending, and the space a held or refused one owes,
 _owed, both guarded by _send_lock. The owed space follows a gentler rule than the
 Enter: it goes in unless another window is known to have the focus, since
-typing still refuses a password field. The typing is the pipeline's: the
-dictation hands over what presses a key and what types more onto it.
+typing still refuses a password field. The typing is delivery.py's, which
+imports this module: it hands over what presses a key and what types more
+onto the dictation.
 """
 import threading
 from dataclasses import dataclass
@@ -292,7 +293,7 @@ def send_automatically(why: str, message: Message, press, type_more, space: str 
                        injection_mode: str = "type") -> bool:
     """Press Enter for *message*, just delivered, after the wait (hold),
     through the one claim. *press*(key, why, claim=None) presses it, as
-    pipeline.press_key; *type_more*(text, mode) types onto the dictation.
+    delivery.press_key; *type_more*(text, mode) types onto the dictation.
 
     *space* is the auto-space left off so it wouldn't be sent; a held send
     types it, or what's said next sticks to the last word ("delay.All").
@@ -370,7 +371,7 @@ def _send_right_away(pending: dict) -> None:
     """"Right away": the Enter on a thread of its own, as after a countdown,
     so the dictation worker, which typed the words, goes on to what's
     queued after them first; the Enter waits its turn there
-    (pipeline.press_key), and a recording begun meanwhile holds it."""
+    (delivery.press_key), and a recording begun meanwhile holds it."""
     threading.Thread(target=_send, args=(pending,), name="send-right-away", daemon=True).start()
 
 

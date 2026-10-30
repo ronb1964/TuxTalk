@@ -70,7 +70,7 @@ def chat(monkeypatch, keyboard):
 def send_automatically(sent_to):
     """An automatic send of words delivered to *sent_to* (a destination)."""
     send_countdown.send_automatically("test", send_countdown.Message(sent_to), keyboard_output.press_key,
-                                      pipeline.type_onto_dictation)
+                                      delivery.type_onto_dictation)
 
 
 def dictate(chunk_role=None, audio=True):
@@ -1297,7 +1297,7 @@ def test_a_countdown_called_off_partway_still_gives_back_its_space(chat, keyboar
             pass
     monkeypatch.setattr(send_countdown.threading, "Timer", Timer)
     send_countdown.send_automatically("test", send_countdown.Message(focused_window.destination()),
-                                      keyboard_output.press_key, pipeline.type_onto_dictation, " ")
+                                      keyboard_output.press_key, delivery.type_onto_dictation, " ")
     focus[:] = SECOND
     timers[1].run(*timers[1].args)                  # "Sending in 2 s": another window
     focus[:] = FIRST
@@ -1317,7 +1317,7 @@ def test_an_owed_space_never_goes_into_the_window_the_next_dictation_went_to(
     monkeypatch.setattr(send_countdown, "_delay", 0.0)
     monkeypatch.setattr(live, "press_enter_after", False)
     send_countdown._owe_space({"to": focused_window.destination(), "space": " ", "mode": "type",
-                               "type": pipeline.type_onto_dictation})
+                               "type": delivery.type_onto_dictation})
     monkeypatch.setattr(send_countdown, "_focus_left", lambda pending: False)   # looked: FIRST
     focus[:] = SECOND                                                           # then a click
     heard.append("how are you")
@@ -1357,7 +1357,7 @@ def test_a_failed_space_may_have_gone_in_so_the_record_isnt_brought_back(monkeyp
         rs.state.last_inserted_text = ""
         return "failed"
     monkeypatch.setattr(delivery, "inject_text", inject)
-    pipeline.type_onto_dictation(" ", "type")
+    delivery.type_onto_dictation(" ", "type")
     assert rs.state.last_inserted_text == ""
 
 
@@ -1373,7 +1373,7 @@ def test_a_space_that_went_nowhere_leaves_undo_on_the_dictations_window(monkeypa
         rs.state.last_inserted_window = "claude"
         return "key_held"
     monkeypatch.setattr(delivery, "inject_text", inject)
-    pipeline.type_onto_dictation("    ", "type")
+    delivery.type_onto_dictation("    ", "type")
     assert rs.state.last_inserted_text == "See you at noon."
     assert rs.state.last_inserted_window == "brave-browser"
 
