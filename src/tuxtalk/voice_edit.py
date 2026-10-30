@@ -326,6 +326,11 @@ def edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0,
         if keys is not _NOT_A_KEY_EDIT:
             return keys
         result = _rewritten(selected, instruction, beeps_on)
+        if result is not None and message.cancelled:
+            # Esc while the AI rewrote it ("edit that" in a phrase of a
+            # recording still going): the selection stays as it is.
+            logger.info("Voice edit not typed: the recording was cancelled")
+            return
         if result is None or notices.refuse_password_field(beeps_on):
             return
         logger.info(f"Voice edit result: {live.loggable(result)} "

@@ -833,6 +833,36 @@ def test_correction_after_a_pause_fixes_the_phrase_before(ai_on):
     assert rs.state.current.message.held_mark["mark"] == "."
 
 
+def test_esc_while_the_ai_corrects_a_phrase_types_none_of_it(ai_on, monkeypatch):
+    """Type at pause: Esc while the AI looked at a phrase's self-correction.
+    Cancelled was checked only before, so the phrase was still typed."""
+    texts, typed, erased, ai = ai_on
+    texts.append("meet at three, no wait, four")
+
+    def esc_meanwhile(text):
+        rs.state.current.message.cancelled = True
+        return FakeAI.correct(ai, text)
+    monkeypatch.setattr(ai, "correct", esc_meanwhile)
+    call(frames_of(speech(1.0)), "middle")
+    assert typed == [] and erased == []
+
+
+def test_esc_while_the_ai_corrects_across_a_pause_takes_nothing_back(ai_on, monkeypatch):
+    """"meet at three" ... "no wait, four", and Esc while the AI heard both:
+    the phrase before was backspaced and the correction typed all the same."""
+    texts, typed, erased, ai = ai_on
+    texts.extend(["meet at three.", "no wait, four.", "meet at three. No wait, four."])
+    call(frames_of(speech(1.0)), "middle")
+
+    def esc_meanwhile(text):
+        rs.state.current.message.cancelled = True
+        return FakeAI.correct(ai, text)
+    monkeypatch.setattr(ai, "correct", esc_meanwhile)
+    call(frames_of(speech(1.0)), "middle")
+    assert typed[0] == "Meet at three" and erased == []
+    assert not any("four" in text for text in typed)
+
+
 def test_correction_on_the_last_phrase(ai_on):
     texts, typed, erased, _ = ai_on
     texts.extend(["meet at three.", "no wait, four.", "meet at three. No wait, four."])

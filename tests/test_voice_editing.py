@@ -391,6 +391,20 @@ def run_edit(where=None):
     voice_edit.transcribe_and_edit(frames, 16000, False, "", "type", rs.state.current.message, where)
 
 
+def test_esc_while_the_ai_rewrites_leaves_the_selection_alone(edit_env, monkeypatch):
+    """"edit that" said in a phrase of a recording still going, then Esc
+    while the AI rewrote it: the rewrite was typed over the selection."""
+    message = rs.state.current.message
+    answer = edit_env["engine"].edit
+
+    def esc_meanwhile(text, instruction):
+        message.cancelled = True
+        return answer(text, instruction)
+    monkeypatch.setattr(edit_env["engine"], "edit", esc_meanwhile)
+    run_edit()
+    assert edit_env["typed"] == [] and edit_env["history"] == []
+
+
 def test_an_edit_waiting_its_turn_leaves_another_windows_selection_alone(edit_env, monkeypatch):
     """Shift+F8 let go in one KWrite document while a dictation was still
     typing; a click into a second one and a selection there before the

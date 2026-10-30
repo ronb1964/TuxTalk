@@ -192,6 +192,10 @@ def correct_across_pause(text: str, message):
     fixed = ai_cleanup.fix_self_corrections(joined, live.ai_engine)
     if fixed == joined or not fixed.strip():
         return said, ""
+    if message.cancelled:
+        # Esc while the AI worked: the phrase before stays as it is.
+        logger.info("Correction across a pause skipped: the recording was cancelled")
+        return said, ""
     if not _erase_typed(prev):
         return said, ""
     logger.info("AI cleanup fixed a self-correction across a pause")

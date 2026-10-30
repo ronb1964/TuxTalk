@@ -154,9 +154,7 @@ def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             _press_alone(said, in_password, job)
             return
         words = _shape_text(raw, said, key, job)
-        # Again before the beep and the "Transcribed" notification, which
-        # shows the words: the focus may have moved while the AI cleaned them.
-        if words is None or (words.text and notices.refuse_password_field(beeps_on)):
+        if words is None or not _still_wanted(words, job):
             return
         _tell_done(words.text, job)
         if words.text:
@@ -175,6 +173,15 @@ def _cancelled(job: _Job) -> bool:
     if job.message.cancelled:
         logger.info("Not typed: the recording was cancelled")
     return job.message.cancelled
+
+
+def _still_wanted(words, job: _Job) -> bool:
+    """Whether *words*, shaped for typing, may still be announced and typed.
+    The AI can take seconds over them: Esc meanwhile cancels them too, and
+    the focus may have moved into a password field (asked again before the
+    beep and the "Transcribed" notification, which shows the words)."""
+    return not (_cancelled(job)
+                or (words.text and notices.refuse_password_field(job.beeps_on)))
 
 
 def _nothing_in_chunk(what: str, job: _Job) -> bool:
