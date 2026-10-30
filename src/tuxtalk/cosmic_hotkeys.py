@@ -40,7 +40,7 @@ import re
 import tempfile
 
 from . import desktop_detect
-from .kwin_hotkeys import QT_KEYSYMS, wanted_shortcuts
+from .hotkey_claims import QT_KEYSYMS, keys_to_claim
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -87,7 +87,7 @@ def _default_paths():
 
 
 def binding(qt_sequence):
-    """(modifiers, key) for a key from wanted_shortcuts ("Shift+F8") as COSMIC
+    """(modifiers, key) for a key from keys_to_claim ("Shift+F8") as COSMIC
     names them: (("Shift",), "F8"). Keys are keysyms: letters in lower case,
     Scroll Lock as "Scroll_Lock".
     cosmic-comp matches a binding by keysym alone (it ignores a binding's
@@ -203,7 +203,7 @@ def claim(cfg) -> bool:
             taken |= _taken(_read(default) or "")
         entries = []
         held.clear()
-        for _name, _text, key in wanted_shortcuts(cfg):
+        for _role, _what, key in keys_to_claim(cfg):
             mods, sym = binding(key)
             if (frozenset(mods), sym.lower()) in taken:
                 logger.warning(f"COSMIC already has a shortcut on {key}, so it will still "

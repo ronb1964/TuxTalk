@@ -31,9 +31,6 @@
  "src/tuxtalk/notes_text.py": {
   "SIM102": 1
  },
- "src/tuxtalk/parakeet_gpu.py": {
-  "SIM115": 1
- },
  "src/tuxtalk/recording_indicator.py": {
   "SIM108": 1
  },

@@ -14,7 +14,7 @@ from conftest import KeyEvent
 from tuxtalk import (cosmic_hotkeys, delivery_notices, focused_window, gnome_hotkeys,
                      keyboard_layout, modifier_hotkeys, send_countdown, virtual_keyboard,
                      x11_hotkeys)
-from tuxtalk import kwin_hotkeys as kh
+from tuxtalk import hotkey_claims
 from tuxtalk.config import HOTKEY_CHOICES
 from tuxtalk.hotkey_keys import keycode_from_name, track_modifier
 from tuxtalk.hotkey_labels import hotkey_label, layout_label
@@ -870,9 +870,9 @@ def test_typing_waits_for_right_alt_without_a_guard_when_ctrl_is_held_too(keyboa
 # --- the desktops hold Scroll Lock back from the focused app ------------------------
 
 def test_scroll_lock_is_claimed_on_every_desktop():
-    assert kh.qt_key_sequence("Scroll Lock") == "ScrollLock"
-    assert kh.qt_key_sequence("Shift+Scroll Lock") == "Shift+ScrollLock"
-    assert kh.qt_key_code("ScrollLock") == 0x01000026         # Qt::Key_ScrollLock
+    assert hotkey_claims.qt_key_sequence("Scroll Lock") == "ScrollLock"
+    assert hotkey_claims.qt_key_sequence("Shift+Scroll Lock") == "Shift+ScrollLock"
+    assert hotkey_claims.qt_key_code("ScrollLock") == 0x01000026         # Qt::Key_ScrollLock
     assert gnome_hotkeys.accelerator("Shift+ScrollLock") == "<Shift>Scroll_Lock"
     assert cosmic_hotkeys.binding("ScrollLock") == ((), "Scroll_Lock")
     assert x11_hotkeys.x_grab("ScrollLock") == (ecodes.KEY_SCROLLLOCK + 8, 0)
@@ -881,7 +881,7 @@ def test_scroll_lock_is_claimed_on_every_desktop():
 @pytest.mark.parametrize("name", ["Right Ctrl", "Right Alt", "Shift+Right Ctrl"])
 def test_right_ctrl_and_alt_are_left_to_the_desktop(name):
     """A modifier on its own can't be a desktop shortcut, and types nothing."""
-    assert kh.qt_key_sequence(name) is None
+    assert hotkey_claims.qt_key_sequence(name) is None
 
 
 # --- Preferences says what each key gives up ----------------------------------------

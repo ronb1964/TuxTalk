@@ -279,7 +279,7 @@ def test_uninstall_waits_for_the_service_while_its_window_draws(slow_service, mo
     from tuxtalk import uninstall
     monkeypatch.setattr(uninstall, "_end_service", lambda: service_launcher.end_dictation_service())
     monkeypatch.setattr(uninstall, "_tuxtalk_pids", lambda engines: [])
-    monkeypatch.setattr(uninstall.uinput_helper, "stop_ydotoold_we_started", lambda: None)
+    monkeypatch.setattr(uninstall.ydotoold_leftovers, "stop_ydotoold_we_started", lambda: None)
     plan = types.SimpleNamespace(home=Path("/nonexistent-home"), ydotoold_unit=None)
     ticks = []
 

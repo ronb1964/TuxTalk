@@ -8,7 +8,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk
 
 from .cuda_helper import DOWNLOAD_SIZE_TEXT as CUDA_SIZE_TEXT
-from .desktop_detect import is_gnome
+from .desktop_detect import is_gnome, is_x11_session
 from .logger import setup_logger
 from .prefs_tab import Tab, fold, subheading
 from .progress_window import run_with_progress
@@ -39,7 +39,7 @@ def extension_reload_steps():
     no shell restart, and GNOME 50 has no X11 session at all.
     """
     steps = "Log out and log back in."
-    if os.environ.get("XDG_SESSION_TYPE") == "x11":
+    if is_x11_session(os.environ):
         steps += "\nOn X11 you can instead press Alt+F2, type r and press Enter."
     return steps
 

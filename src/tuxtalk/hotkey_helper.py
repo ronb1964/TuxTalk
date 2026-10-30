@@ -152,7 +152,7 @@ UNLOCKERS = {
 SHORTCUT_LETTERS = frozenset("CAM")
 
 # Letter keys tell a keyboard from a power button, a lid switch or a game
-# controller; TuxTalk's own test (uinput_helper.is_keyboard_device) is the same.
+# controller; TuxTalk's own test (keyboard_devices.is_keyboard_device) is the same.
 LETTER_KEYS = frozenset(list(range(16, 26)) + list(range(30, 39)) + list(range(44, 51)))
 
 # struct input_event: a timeval (two longs), then type, code and value.

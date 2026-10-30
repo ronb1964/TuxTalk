@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from tuxtalk import uinput_helper
+from tuxtalk import pkexec_runner, uinput_helper
 
 NOT_AUTHORIZED = ("Error executing command as another user: Not authorized\n\n"
                   "This incident has been reported.\n")
@@ -25,7 +25,7 @@ def _fake_run(returncode, stderr=""):
     (127, NOT_AUTHORIZED),
 ])
 def test_a_declined_prompt_reports_cancelled(monkeypatch, returncode, stderr):
-    monkeypatch.setattr(uinput_helper.subprocess, "run", _fake_run(returncode, stderr))
+    monkeypatch.setattr(pkexec_runner.subprocess, "run", _fake_run(returncode, stderr))
     ok, message = uinput_helper.install_udev_rule_with_pkexec()
     assert not ok
     assert "cancelled" in message.lower()
@@ -33,7 +33,7 @@ def test_a_declined_prompt_reports_cancelled(monkeypatch, returncode, stderr):
 
 
 def test_a_real_failure_still_reports_the_error(monkeypatch):
-    monkeypatch.setattr(uinput_helper.subprocess, "run",
+    monkeypatch.setattr(pkexec_runner.subprocess, "run",
                         _fake_run(1, "usermod: group 'input' does not exist"))
     ok, message = uinput_helper.install_udev_rule_with_pkexec()
     assert not ok
@@ -64,7 +64,7 @@ def test_prefs_says_cancelled_instead_of_setup_failed(monkeypatch):
 
     dialogs = []
     monkeypatch.setattr("tuxtalk.ui_style.message_dialog", lambda **k: dialogs.append(k))
-    monkeypatch.setattr(uinput_helper.subprocess, "run", _fake_run(127, NOT_AUTHORIZED))
+    monkeypatch.setattr(pkexec_runner.subprocess, "run", _fake_run(127, NOT_AUTHORIZED))
     _, message = uinput_helper.install_udev_rule_with_pkexec()
 
     d, button = _system_check_offering(P.FIX_TYPING_LABEL)

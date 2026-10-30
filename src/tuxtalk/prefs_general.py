@@ -55,7 +55,7 @@ def hotkey_change_message(cfg, changed, refused, apps=None, unheard=()):
     only the top of the window must still learn that the key does two things.
     """
     # KDE reports keys in Qt's spelling (Super is "Meta"): map back to ours.
-    from .kwin_hotkeys import qt_key_sequence
+    from .hotkey_claims import qt_key_sequence
     all_keys = ("hotkey", "toggle_hotkey", "voice_commands_hotkey", "paste_last_hotkey")
     ours = {qt_key_sequence(cfg.get(k)): cfg.get(k) for k in all_keys if cfg.get(k)}
     clashes = []        # (our name for the key, the app or None)
