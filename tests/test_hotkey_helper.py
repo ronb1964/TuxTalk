@@ -932,30 +932,37 @@ def test_a_keyboard_turned_away_as_one_too_many_gets_in_later(setup, monkeypatch
     assert waiting in helper.keyboards
 
 
-def test_a_program_making_keyboards_over_and_over_doesnt_grow_the_helper(
+def test_a_program_making_devices_over_and_over_doesnt_grow_the_helper(
         setup, monkeypatch, tmp_path):
-    """With the virtual keyboards full, each keyboard a program makes and
-    destroys was remembered for good as one too many: the helper, which runs
-    for days, grew a little with each. Now one goes when its node does."""
+    """With the virtual keyboards full, each keyboard a program made and
+    destroyed was remembered for good as one too many, and each node that
+    isn't a keyboard as not one: the helper, which runs for days, grew a
+    little with each. Now an entry goes when its node does."""
     helper, _kb, _connect, _say, _heard, _seat = setup
     folder = tmp_path / "input"
     for i in range(hh.MAX_VIRTUAL_KEYBOARDS):
         (folder / f"event{i}").write_text("")
 
     def fake_open(path):
+        if path.endswith("mouse"):
+            return None                 # not a keyboard
         keyboard = FakeKeyboard(path)
         keyboard.virtual = True
         return keyboard
     monkeypatch.setattr(hh.Keyboard, "open", staticmethod(fake_open))
     helper.scan()
     extra = folder / f"event{hh.MAX_VIRTUAL_KEYBOARDS}"
+    mouse = folder / "event-mouse"
     for _ in range(5):
         extra.write_text("")
+        mouse.write_text("")
         helper.scan()
         assert str(extra) not in helper.keyboards
+        assert str(extra) in helper.too_many and str(mouse) in helper.not_keyboards
         extra.unlink()
+        mouse.unlink()
         helper.scan()
-    assert not helper.too_many
+    assert not helper.too_many and not helper.not_keyboards
 
 
 # --- Right Ctrl and Right Alt as dictation keys ---------------------------------------

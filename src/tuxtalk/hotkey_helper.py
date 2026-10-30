@@ -539,10 +539,11 @@ class Helper:
         except OSError:
             return
         paths = [os.path.join(self.input_dir, name) for name in names]
+        present = set(paths)
         # Gone: nothing left to wait for, and the tables stay as small as
         # /dev/input however often a program makes and destroys a keyboard.
         for table in (self.not_keyboards, self.unreadable, self.too_many):
-            for path in table.keys() - set(paths):
+            for path in table.keys() - present:
                 del table[path]
         for path in paths:
             if path not in self.keyboards:
