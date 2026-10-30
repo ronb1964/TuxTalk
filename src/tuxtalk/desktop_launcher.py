@@ -43,8 +43,7 @@ def _icon_source() -> Optional[str]:
                        os.path.join(appdir, "usr", "share", "icons", "hicolor", "256x256",
                                     "apps", "tuxtalk.png")]
     project_root = Path(__file__).parent.parent.parent
-    candidates += [str(project_root / "io.github.ronb1964.TuxTalk.png"),
-                   str(project_root / "icons" / "TT_square_light.png")]
+    candidates.append(str(project_root / "io.github.ronb1964.TuxTalk.png"))
     return next((path for path in candidates if os.path.exists(path)), None)
 
 
