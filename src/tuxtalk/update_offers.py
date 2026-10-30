@@ -34,7 +34,7 @@ def start(restart) -> None:
 def _offer_in_turn(restart) -> bool:
     """A GLib timeout: True (ask again next tick) until the dictation service
     is up, then the hotkey helper's offer or, without one, Parakeet Ultra's."""
-    from .first_run_setup import is_first_run
+    from .first_run_marker import is_first_run
     from .service_launcher import find_service_pids
     if is_first_run():
         return False
@@ -204,7 +204,7 @@ def maybe_show_recommend_notice():
     try:
         from . import recommend
         from .config import load_config, save_config
-        from .first_run_setup import is_first_run
+        from .first_run_marker import is_first_run
         if os.environ.get("FLATPAK_ID") or is_first_run():
             return False
         from .service_launcher import find_service_pids
