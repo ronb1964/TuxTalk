@@ -102,7 +102,7 @@ class _Job(NamedTuple):
     auto_period: bool
     injection_mode: str
     chunk_role: str | None
-    message: send_countdown.Message
+    message: rs.Message
 
 
 class _Words(NamedTuple):
@@ -119,7 +119,7 @@ class _Words(NamedTuple):
 
 def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                           language=None, auto_space=True, auto_period=True,
-                          injection_mode="type", chunk_role=None, message=None):
+                          injection_mode="type", chunk_role=None, *, message):
     """The slow half of stopping, on the dictation worker: transcribe the
     captured audio and type the text. It touches no GTK (the indicator was
     already hidden in recording.finish_capture), so it can run off the
@@ -130,11 +130,11 @@ def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
     dropped quietly), "last" for the rest after the stop (the usual READY beep,
     even when it holds no speech, since earlier chunks were typed).
 
-    *message* is the recording's (send_countdown.Message), taken when its
+    *message* is the recording's (recording_state.Message), taken when its
     work was queued, so a recording started meanwhile can't change where
-    this one's Enter may go. By default the current recording's."""
+    this one's Enter may go."""
     job = _Job(beeps_on, smart_quotes, notify_on, language, auto_space, auto_period,
-               injection_mode, chunk_role, rs.state.message if message is None else message)
+               injection_mode, chunk_role, message)
     t0 = time.time()
     logger.info("Recording stopped, starting transcription")
     try:
@@ -153,9 +153,7 @@ def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             _press_alone(said, in_password, job)
             return
         words = _shape_text(raw, said, key, job)
-        # Again before the beep and the "Transcribed" notification, which
-        # shows the words: the focus may have moved while the AI cleaned them.
-        if words is None or (words.text and notices.refuse_password_field(beeps_on)):
+        if words is None or not _still_wanted(words, job):
             return
         _tell_done(words.text, job)
         if words.text:
@@ -174,6 +172,26 @@ def _cancelled(job: _Job) -> bool:
     if job.message.cancelled:
         logger.info("Not typed: the recording was cancelled")
     return job.message.cancelled
+
+
+def _still_wanted(words, job: _Job) -> bool:
+    """Whether *words*, shaped for typing, may still be announced and typed.
+    The AI can take seconds over them: Esc meanwhile cancels them too, and
+    the focus may have moved into a password field (asked again before the
+    beep and the "Transcribed" notification, which shows the words).
+
+    A correction across a pause that has already taken the phrase before
+    back (words.taken_back) goes in whatever Esc says: the phrase would
+    vanish with nothing in its place. A password field still stops it, and
+    then says the phrase before is gone."""
+    if not words.taken_back and _cancelled(job):
+        return False
+    if words.text and notices.refuse_password_field(job.beeps_on):
+        if words.taken_back:
+            notify_module.notify("A correction wasn't typed",
+                                 "The phrase before it was taken back. Check the text.")
+        return False
+    return True
 
 
 def _nothing_in_chunk(what: str, job: _Job) -> bool:
@@ -378,8 +396,7 @@ def _deliver(words: _Words, audio_f32, job: _Job) -> None:
     send_countdown.type_owed_space(before=words.text)
     text = words.text
     chunked = job.chunk_role is not None
-    said_before = last_dictation.remember_said(text, chunked, job.message.serial,
-                                               words.taken_back)
+    said_before = last_dictation.remember_said(text, chunked, job.message, words.taken_back)
     try:
         outcome = delivery.inject_text(text, job.injection_mode, message=job.message)
     except Exception as e:
@@ -390,9 +407,9 @@ def _deliver(words: _Words, audio_f32, job: _Job) -> None:
         outcome = "failed"
         job.message.add(outcome, None)
     if outcome == "password_field":
-        last_dictation.unsay(said_before)
+        last_dictation.unsay(job.message, said_before)
     last_dictation.remember_shown(rs.state.last_inserted_text, chunked, outcome == "ok",
-                                  job.message.serial)
+                                  job.message)
     job.message.ends_on = ends_unfinished(words.raw)
     _after_the_words(outcome, words.said, words.press, words.space_left_off, job.chunk_role,
                      job.beeps_on, job.injection_mode, job.message)
@@ -436,22 +453,22 @@ def stop_recording(
     itself (finish_capture) runs here, so the hotkey loop goes back to
     reading keys at once: a dictation key pressed while text is still being
     typed starts the next recording."""
-    edit_mode, rs.state.edit_mode = rs.state.edit_mode, False
-    cap = recording.finish_capture(beeps_on, notify_on)
+    rec = rs.state.current
+    cap = recording.finish_capture(rec, beeps_on, notify_on)
     if cap is None:
         return
     frames, rec_sr = cap
-    message = rs.state.message
-    if edit_mode:
+    message = rec.message
+    if rec.edit_mode:
         where = focused_window.look()       # the window the edit is for
         dictation_worker.submit(lambda: voice_edit.transcribe_and_edit(
             frames, rec_sr, beeps_on, language, injection_mode, message, where))
         return
     # Type at pause: the rest is the recording's last phrase, typed after
     # those already queued.
-    chunk_role = "last" if rs.state.chunks_submitted else None
+    chunk_role = "last" if rec.chunks_submitted else None
     if chunk_role:
-        frames = recording.drop_speechless_rest(frames)
+        frames = recording.drop_speechless_rest(rec, frames)
     dictation_worker.submit(lambda: transcribe_and_inject(
         frames, rec_sr, beeps_on, smart_quotes, notify_on, language, auto_space,
         auto_period, injection_mode, chunk_role=chunk_role, message=message))

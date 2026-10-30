@@ -277,15 +277,15 @@ def keyloop(monkeypatch):
     seen = {"starts": [], "stops": 0, "grab_codes": []}
     monkeypatch.setattr(live, "voice_editing", True)
     monkeypatch.setattr(rs.state, "is_recording", False)
-    monkeypatch.setattr(rs.state, "edit_mode", False, raising=False)
+    monkeypatch.setattr(rs.state.current, "edit_mode", False)
     monkeypatch.setattr(keyboard_grab, "grab_keyboards_hiding", lambda devs, codes: seen["grab_codes"].append(set(codes)))
     monkeypatch.setattr(keyboard_grab, "release_all", lambda: None)
 
     def start(beeps, notify, idx, from_toggle=False, edit_mode=False, held_send=False):
         seen["starts"].append({"from_toggle": from_toggle, "edit_mode": edit_mode})
         rs.state.is_recording = True
-        rs.state.edit_mode = edit_mode
-        return True
+        rs.state.current.edit_mode = edit_mode
+        return rs.state.current
 
     def stop(*a, **k):
         seen["stops"] += 1
@@ -388,7 +388,55 @@ def edit_env(monkeypatch):
 
 def run_edit(where=None):
     frames = [np.full(16000, 1000, dtype=np.int16).tobytes()]
-    voice_edit.transcribe_and_edit(frames, 16000, False, "", "type", rs.state.message, where)
+    voice_edit.transcribe_and_edit(frames, 16000, False, "", "type", rs.state.current.message,
+                                   where)
+
+
+def test_esc_while_the_ai_rewrites_leaves_the_selection_alone(edit_env, monkeypatch):
+    """"edit that" said in a phrase of a recording still going, then Esc
+    while the AI rewrote it: the rewrite was typed over the selection."""
+    message = rs.state.current.message
+    answer = edit_env["engine"].edit
+
+    def esc_meanwhile(text, instruction):
+        message.cancelled = True
+        return answer(text, instruction)
+    monkeypatch.setattr(edit_env["engine"], "edit", esc_meanwhile)
+    run_edit()
+    assert edit_env["typed"] == [] and edit_env["history"] == []
+
+
+def test_edit_that_rewrites_what_it_selected_however_the_lines_are_spaced(edit_env):
+    """The selection holds the dictation, with the app's own line ends and
+    spaces: that is the text "edit that" counted back over."""
+    done = voice_edit.edit_selection(lambda: "make it more professional", False, "type",
+                                     "org.kde.kwrite", 0.0, rs.state.current.message,
+                                     expected="We finished  the\nelectrical today. ")
+    assert done and edit_env["typed"] == ["We completed the electrical work today."]
+
+
+def test_edit_that_accepts_what_the_apps_autocorrect_did_to_it(edit_env):
+    """LibreOffice Writer curls the apostrophe and capitalises the sentence
+    TuxTalk typed: still the dictation, so it's rewritten."""
+    edit_env["selection"]["text"] = "It\u2019s a test \u2013 \u201cdone\u201d\u2026"
+    done = voice_edit.edit_selection(lambda: "make it more professional", False, "type",
+                                     "org.kde.kwrite", 0.0, rs.state.current.message,
+                                     expected='it\'s a test - "done"...')
+    assert done and edit_env["typed"] == ["We completed the electrical work today."]
+
+
+def test_edit_that_leaves_text_changed_by_hand_alone(edit_env, monkeypatch):
+    """"edit that" counts back the last dictation's length from the cursor.
+    Typed into by hand since, or with the cursor moved, that selects other
+    text, which the AI then rewrote."""
+    problems = []
+    monkeypatch.setattr(notices, "edit_problem", lambda kind, beeps: problems.append(kind))
+    edit_env["selection"]["text"] = "the electrical today. Then lunch."
+    done = voice_edit.edit_selection(lambda: "make it more professional", False, "type",
+                                     "org.kde.kwrite", 0.0, rs.state.current.message,
+                                     expected="We finished the electrical today.")
+    assert not done and edit_env["typed"] == [] and problems == ["not_the_dictation"]
+    assert edit_env["put_back"] == 1                # the clipboard is put back
 
 
 def test_an_edit_waiting_its_turn_leaves_another_windows_selection_alone(edit_env, monkeypatch):
@@ -1338,5 +1386,6 @@ def test_an_edit_says_whether_the_change_went_in(edit_env, monkeypatch, answer, 
     edit_env["engine"].answer = answer
     monkeypatch.setattr(delivery, "inject_text", lambda text, mode, **kw: typing)
     done = voice_edit.edit_selection(lambda: "make it more professional", False, "type",
-                               "org.kde.kwrite", 0.0, rs.state.message, spoken=True)
+                               "org.kde.kwrite", 0.0, rs.state.current.message,
+                               expected="We finished the electrical today.")
     assert bool(done) is went_in

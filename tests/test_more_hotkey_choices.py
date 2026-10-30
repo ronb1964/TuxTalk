@@ -62,7 +62,7 @@ def service(monkeypatch):
     def start(*a, **k):
         done.append("start")
         rs.state.is_recording = True
-        return True
+        return rs.state.current
 
     def stop(*a, **k):
         done.append("stop")
@@ -369,7 +369,7 @@ def test_a_dictation_stopped_by_a_stuck_key_stays_in_recent_dictations(
     monkeypatch.setattr(history, "add_entry", lambda text, replaces=None: kept.append(text))
     frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
     pipeline.transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False, smart_quotes=False,
-                               notify_on=False)
+                               notify_on=False, message=rs.state.current.message)
     assert keyboard.events == []
     assert kept == ["Hello there. "]
     assert any("Recent Dictations" in note for note in notes)
@@ -416,7 +416,7 @@ def test_a_stuck_key_that_keeps_back_the_enter_says_so(keyboard, stuck_right_ctr
         assert notes[0][0] == "Enter not pressed: a dictation key stayed down"
     else:
         monkeypatch.setattr(send_countdown, "_delay", 0.0)
-        message = send_countdown.Message(focused_window.Destination(*KWRITE))
+        message = rs.Message(focused_window.Destination(*KWRITE))
         send_countdown.send_automatically("test", message, keyboard_output.press_key, None)
         assert notices == [send_countdown.HELD_NOTICE]
     assert keyboard.events == []
@@ -756,7 +756,7 @@ def holding(real_grabs, monkeypatch):
     """Hold *code* as the hold key, through the real key handler and grab,
     on one keyboard; recording itself is left out."""
     monkeypatch.setattr(recording, "start_recording",
-                        lambda *a, **k: setattr(rs.state, "is_recording", True) or True)
+                        lambda *a, **k: setattr(rs.state, "is_recording", True) or rs.state.current)
 
     def hold(code, grabs=True):
         board = Grabbable(lambda look: True, code, grabs)
@@ -798,7 +798,7 @@ def test_a_double_tap_of_a_right_ctrl_or_alt_toggle_goes_hands_free(keyboard, re
     two quick taps start a recording that stops by itself when you go quiet,
     and the second tap's release doesn't stop it."""
     monkeypatch.setattr(live, "auto_stop_seconds", 2.0)
-    monkeypatch.setattr(recording, "open_input_stream", lambda idx: None)
+    monkeypatch.setattr(recording, "open_input_stream", lambda rec, idx: None)
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr(tray_link, "notify_recording_state", lambda *a: None)
     monkeypatch.setattr(recording, "indicator", None, raising=False)
@@ -812,9 +812,9 @@ def test_a_double_tap_of_a_right_ctrl_or_alt_toggle_goes_hands_free(keyboard, re
         hotkeys._handle_key_event(KeyEvent(code, value), F8, code, None, held, [board],
                               Cfg(), 0)
         assert rs.state.is_recording
-    assert rs.state.silence is not None and stopped == []
+    assert rs.state.current.silence is not None and stopped == []
     assert keyboard_grab.grabbed_devices == []
-    rs.state.silence = None
+    rs.state.current.silence = None
 
 
 def test_the_right_alt_guard_goes_while_right_alt_is_held(keyboard, no_hotkeys_noted):

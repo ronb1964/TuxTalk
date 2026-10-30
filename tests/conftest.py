@@ -12,6 +12,7 @@ import os
 import shutil
 import tempfile
 import threading
+import time
 import types
 
 import gi
@@ -227,6 +228,19 @@ def _no_real_speech_model(monkeypatch):
     monkeypatch.setattr(engine, "_wake_failed", False)
 
 
+def next_recording(samplerate=16000):
+    """A recording begins, as recording.start_recording begins one but
+    without a microphone: numbered, a Recording of its own, and a pause
+    detector when Type at pause is on. The one before keeps its own. Its
+    key went down long enough ago to be a dictation, not a tap."""
+    from tuxtalk import send_countdown, type_at_pause
+    serial, _ = send_countdown.recording_begins()
+    rec = rs.state.current = rs.Recording(rs.Message(serial=serial),
+                                          press_t0=time.time() - 10, samplerate=samplerate)
+    type_at_pause.arm_chunker(rec)
+    return rec
+
+
 class InlineWorker:
     """Stands in for the dictation worker: a job runs as it's submitted, on
     the test's own thread, so a test sees the text typed when the key is let
@@ -275,19 +289,20 @@ def _no_real_send_countdown(monkeypatch, request):
     monkeypatch.setattr(send_countdown, "_send_right_away", send_countdown._send)
     monkeypatch.setattr(send_countdown, "_pending", None)
     monkeypatch.setattr(send_countdown, "_told_unknown_window", False)
-    monkeypatch.setattr(rs.state, "held_send", False)
     monkeypatch.setattr(send_countdown, "_owed", None)
     monkeypatch.setattr(send_countdown, "_begun", 0)        # no recording begun since
     monkeypatch.setattr(send_countdown, "_held_for", 0)
     monkeypatch.setattr(send_countdown, "_keys_down", set())
     monkeypatch.setattr(rs.state, "sent", None)
-    # Where an earlier test's text "landed" must not stop this test's send,
-    # nor its held-back mark. A test that fakes the typing has its words
-    # in a window the desktop named, where an automatic Enter may go.
+    # A recording of its own for each test, and no last dictation. Where an
+    # earlier test's text "landed" must not stop this test's send, nor its
+    # held-back mark. A test that fakes the typing has its words in a window
+    # the desktop named, where an automatic Enter may go.
     from tuxtalk import focused_window
     monkeypatch.setattr(rs.state, "last_inserted_where", (None, None))
-    monkeypatch.setattr(rs.state, "message", send_countdown.Message(
-        focused_window.Destination(None, ("tray", "{test window}"))))
+    monkeypatch.setattr(rs.state, "current", rs.Recording(rs.Message(
+        focused_window.Destination(None, ("tray", "{test window}")))))
+    monkeypatch.setattr(rs.state, "last_message", rs.Message())
 
 
 @pytest.fixture(autouse=True)
@@ -1186,7 +1201,7 @@ def chat(monkeypatch, keyboard):
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr(live, "press_enter_after", True)
     monkeypatch.setattr(live, "usage_stats", False)
-    monkeypatch.setattr(rs.state.message, "held_mark", None)
+    monkeypatch.setattr(rs.state.current.message, "held_mark", None)
     monkeypatch.setattr(history, "add_entry", lambda text, replaces=None: None)
     monkeypatch.setattr(send_countdown, "show_notice", notices.append)
     return focus, heard, typed, notices

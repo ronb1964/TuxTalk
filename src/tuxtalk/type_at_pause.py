@@ -35,8 +35,9 @@ from .window_classes import app_kind, is_document_window
 
 logger = setup_logger(__name__)
 
-# Chunked dictation (chunking.py). The audio callback cuts chunks and the stop
-# path takes the rest; this lock keeps the two from both taking the same frames.
+# Chunked dictation (chunking.py). The audio callback adds blocks and cuts
+# chunks, and the stop takes the rest; this lock keeps a block or a cut from
+# landing in frames the stop has already taken.
 chunk_lock = threading.Lock()
 
 # Transcribes and types a phrase: pipeline.transcribe_and_inject, handed over
@@ -54,30 +55,30 @@ def use_transcriber(step: Callable[..., None]) -> None:
     transcribe_phrase = step
 
 
-def cut_chunk(chunker):
-    """The speaker paused: hand the audio so far to the dictation worker.
+def cut_chunk(rec, chunker):
+    """The speaker paused: hand the audio of recording *rec* so far to the
+    dictation worker.
 
     Runs on the audio thread, so it only swaps a list and queues a job; the
     transcription happens on the worker."""
     with chunk_lock:
-        if rs.state.chunker is not chunker:
+        if rec.chunker is not chunker:
             return  # the recording ended while this block was arriving
-        frames, rs.state.frames = rs.state.frames, []
+        frames, rec.frames = rec.frames, []
         chunking.drop_tail_samples(frames, chunker.tail_samples())
-        rs.state.chunks_submitted += 1
-        number = rs.state.chunks_submitted
-        rec_sr = rs.state.recording_samplerate
+        rec.chunks_submitted += 1
+        number, rec_sr, message = rec.chunks_submitted, rec.samplerate, rec.message
         pause = chunker.last_pause
         # Hands-free's "stop when quiet" waits from now until the phrase is
         # typed: it can wait its turn behind the last dictation, and an AI
         # rewrite can take seconds, while the user reads rather than talks.
-        detector = rs.state.silence
+        detector = rec.silence
         if detector is not None:
             detector.hold()
         # Queued before the lock is let go: otherwise the stop could slip in
         # between counting this chunk and queuing it, and queue the last chunk
         # ahead of it. put() on the unbounded queue never blocks.
-        dictation_worker.submit(lambda message=rs.state.message: _transcribe_chunk(
+        dictation_worker.submit(lambda: _transcribe_chunk(
             frames, rec_sr, number, pause, message, detector))
 
 
@@ -99,19 +100,15 @@ def _transcribe_chunk(frames, rec_sr, number, pause, message, detector):
             detector.release()
 
 
-def arm_chunker(rec_sr, edit_mode=False):
-    """Give this recording a pause detector when chunked dictation is on.
+def arm_chunker(rec):
+    """Give recording *rec* a pause detector when chunked dictation is on.
     Never for a voice edit: its instruction needs the whole recording."""
-    chunker = None
-    if live.chunk_pause_seconds > 0 and not edit_mode:
+    if live.chunk_pause_seconds > 0 and not rec.edit_mode:
         from .chunking import PauseDetector
-        chunker = PauseDetector(live.chunk_pause_seconds, rec_sr, speech_db=live.chunk_speech_db)
+        rec.chunker = PauseDetector(live.chunk_pause_seconds, rec.samplerate,
+                                    speech_db=live.chunk_speech_db)
     # Started here, so the audio callback never has to start it.
     dictation_worker.worker()
-    with chunk_lock:
-        rs.state.chunks_submitted = 0
-        rs.state.message = send_countdown.Message(serial=rs.state.recording_serial)
-        rs.state.chunker = chunker
 
 
 # Silence put between two chunks when the engine hears them together, so the
@@ -133,7 +130,9 @@ def context_samples() -> int:
 def corrects_across_pause(raw: str, chunk_role, message) -> bool:
     """True when this phrase corrects the one typed before the pause ("no
     wait, four" after "meet at three"), so the AI should hear both together.
-    Needs AI self-corrections on and a phrase of this recording typed."""
+    Needs AI self-corrections on and a phrase of this recording typed:
+    the dictation worker types the recordings in order, so the undo record
+    it takes back is that phrase."""
     if chunk_role is None or not (message.has_words and message.complete):
         return False
     if not (live.ai_corrections and live.ai_engine is not None
@@ -193,6 +192,10 @@ def correct_across_pause(text: str, message):
     fixed = ai_cleanup.fix_self_corrections(joined, live.ai_engine)
     if fixed == joined or not fixed.strip():
         return said, ""
+    if message.cancelled:
+        # Esc while the AI worked: the phrase before stays as it is.
+        logger.info("Correction across a pause skipped: the recording was cancelled")
+        return said, ""
     if not _erase_typed(prev):
         return said, ""
     logger.info("AI cleanup fixed a self-correction across a pause")
@@ -204,11 +207,11 @@ def _type_boundary(message, pending: dict, tail: str, injection_mode: str) -> No
     of *message*, the one the chunk is in."""
     if not tail:
         return
-    last_dictation.remember_said(tail, True, message.serial)
+    last_dictation.remember_said(tail, True, message)
     # Only into the phrase's window: the context pass before this can take a while.
     ok = delivery.inject_text(tail, injection_mode, into=pending["where"],
                               message=message) == "ok"
-    last_dictation.remember_shown(tail, True, ok, message.serial)
+    last_dictation.remember_shown(tail, True, ok, message)
     if ok:
         # Undo and "delete last sentence" then see the whole chunk.
         rs.state.last_inserted_text = pending["typed"] + tail
@@ -315,14 +318,16 @@ def start_afresh(message, ended=True) -> None:
     """Type at pause pressed Enter or Tab mid-recording, or "edit that"
     rewrote what was typed: what's said next in *message*'s recording reaches
     back across nothing (no held-back mark, correction, lowercase start or
-    screen copy). After Enter or Tab (*ended*) the message starts over; a
+    screen copy). After Enter or Tab (*ended*) the message starts over,
+    and its screen copy starts in whichever window it's typed into next; a
     rewrite stays in the unsent one."""
     if ended:
         message.start_over()
+        message.shown_window = None
     message.held_mark, message.question_open, message.held_cue = None, False, ""
     rs.state.continue_mid_sentence = False
-    if rs.state.shown_text is not None and rs.state.shown_serial == message.serial:
-        rs.state.shown_text = ""
+    if message.shown is not None:
+        message.shown = ""
 
 
 def end_in_a_pause(message, beeps_on, auto_space, auto_period, injection_mode) -> None:

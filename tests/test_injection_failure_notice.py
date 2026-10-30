@@ -16,6 +16,7 @@ import pytest
 
 from tuxtalk import focused_window
 from tuxtalk import pipeline
+from tuxtalk import recording_state as rs
 from tuxtalk import delivery
 from tuxtalk import engine
 from tuxtalk import live_settings as live
@@ -118,7 +119,8 @@ def dictation(monkeypatch):
             monkeypatch.setattr(delivery, "inject_text", lambda text, mode, **kw: outcome)
         frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
         pipeline.transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=beeps_on,
-                                   smart_quotes=False, notify_on=notify_on)
+                                   smart_quotes=False, notify_on=notify_on,
+                                   message=rs.state.current.message)
         return notes, beeps
 
     return run

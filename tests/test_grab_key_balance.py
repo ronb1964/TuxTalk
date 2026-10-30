@@ -76,7 +76,7 @@ def kb(monkeypatch):
     keyboard_grab.grabbed_devices.clear()
     monkeypatch.setattr(keyboard_devices, "is_keyboard_device", lambda d: True)
     monkeypatch.setattr(recording, "start_recording",
-                        lambda *a, **k: setattr(rs.state, "is_recording", True) or True)
+                        lambda *a, **k: setattr(rs.state, "is_recording", True) or rs.state.current)
     stops = []
     monkeypatch.setattr(pipeline, "stop_recording",
                         lambda *a, **k: (stops.append(1), setattr(rs.state, "is_recording", False)))

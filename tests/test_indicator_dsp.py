@@ -113,8 +113,8 @@ def test_a_48_khz_microphone_lights_the_same_bar_as_16_khz(monkeypatch):
             pass
     monkeypatch.setattr(recording.sd, "InputStream", Stream)
     monkeypatch.setattr(recording.sd, "default", types.SimpleNamespace())   # set by the opening
-    monkeypatch.setattr(rs.state, "stream", None)
-    recording.open_input_stream(None)
+    monkeypatch.setattr(rs.state.current, "stream", None)
+    recording.open_input_stream(rs.state.current, None)
 
     def loudest_bar(sp, rate):
         t = np.arange(rate) / rate

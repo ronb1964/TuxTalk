@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 
 from tuxtalk import history
+from tuxtalk import recording_state as rs
 from tuxtalk import engine
 from tuxtalk import dictation_text
 from tuxtalk import delivery
@@ -129,7 +130,8 @@ def test_dictation_is_recorded_before_it_is_typed(monkeypatch):
     # (silence.is_speechless_tap) before reaching the engine.
     frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
     pipeline.transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False,
-                               smart_quotes=False, notify_on=False)
+                               smart_quotes=False, notify_on=False,
+                               message=rs.state.current.message)
 
     assert order == [("typed", ["Hello there."])]
 

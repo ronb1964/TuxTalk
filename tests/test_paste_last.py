@@ -241,7 +241,7 @@ def test_a_hold_started_while_the_combo_is_pending_still_stops(keys, monkeypatch
     running after F8 is let go."""
     stopped = []
     monkeypatch.setattr(recording, "start_recording",
-                        lambda *a, **k: setattr(rs.state, "is_recording", True) or True)
+                        lambda *a, **k: setattr(rs.state, "is_recording", True) or rs.state.current)
     monkeypatch.setattr(pipeline, "stop_recording",
                         lambda *a, **k: stopped.append(True) or setattr(rs.state, "is_recording", False))
     monkeypatch.setattr(Cfg, "smart_quotes", False, raising=False)

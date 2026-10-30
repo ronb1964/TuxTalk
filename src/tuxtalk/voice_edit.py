@@ -155,7 +155,7 @@ def _format_selection(fmt, focused_class, window, beeps_on) -> bool:
     return True
 
 
-def _nothing_selected(get_instruction, spoken, focused_class, beeps_on):
+def _nothing_selected(get_instruction, spoken: bool, focused_class, beeps_on):
     """Nothing is selected. "select the last sentence" needs nothing
     selected: it makes the selection the next edit works on. Anything else
     says to select some text first. The clipboard is already back
@@ -177,6 +177,39 @@ def _put_clipboard_back(put_back, result):
         threading.Timer(EDIT_RESTORE_DELAY_S, put_back, kwargs={"also": also}).start()
     else:
         put_back(also=also)
+
+
+# Marks an app's autocorrect (LibreOffice Writer's, say) or TuxTalk's own
+# smart quotes may put in place of the plain ones typed.
+_PLAIN_MARKS = str.maketrans({"\u2018": "'", "\u2019": "'", "\u201a": "'", "\u2032": "'",
+                              "\u201c": '"', "\u201d": '"', "\u201e": '"', "\u2033": '"',
+                              "\u2013": "-", "\u2014": "-", "\u2026": "..."})
+
+
+def _comparable(text: str) -> list:
+    """*text*'s words as "edit that" compares a selection with what was
+    dictated: an app may have changed how they look, not what they say
+    (Writer turns ' into a curly one and capitalises a sentence start, and
+    keeps its own line ends and spaces)."""
+    return text.translate(_PLAIN_MARKS).casefold().split()
+
+
+def _refused_selection(selected, expected, put_back, get_instruction, focused_class,
+                       beeps_on) -> bool:
+    """True, with the user told, when *selected* isn't text to change:
+    nothing is selected, or "edit that" counted back over other words than
+    *expected* (typed into by hand, or the cursor moved, since it was
+    dictated). Then the clipboard the selection was copied through is put
+    back."""
+    if not selected:
+        _nothing_selected(get_instruction, expected is not None, focused_class, beeps_on)
+        return True
+    if expected is not None and _comparable(selected) != _comparable(expected):
+        logger.info("Voice edit: the selection isn't the dictation any more")
+        _put_clipboard_back(put_back, None)
+        notices.edit_problem("not_the_dictation", beeps_on)
+        return True
+    return False
 
 
 # _edit_with_keys's answer for an instruction that needs the text rewritten.
@@ -282,13 +315,15 @@ def _type_rewrite(result, injection_mode, message, beeps_on, into):
 
 
 def edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0, message,
-                   spoken=False, window=None):
+                   expected=None, window=None):
     """Change the text selected in *focused_class* as the instruction
     *get_instruction()* says (called only once a selection is found), and
-    type the result over it, as part of *message*. *spoken*: the instruction
-    came after "edit that" in a dictation, which selected the text itself.
-    *window* says which of the app's windows it is, where the desktop says
-    (focus_moved). True when the change went in."""
+    type the result over it, as part of *message*. *expected*: the
+    instruction came after "edit that" in a dictation, which selected the
+    text itself, counting back this text (the last dictation on screen); a
+    selection that holds other words isn't changed. *window* says which of
+    the app's windows it is, where the desktop says (focus_moved). True
+    when the change went in."""
     from . import clipboard, history
     # Before copying the selection or hearing the instruction; checked
     # again before the rewrite replaces it.
@@ -310,8 +345,8 @@ def edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0,
     if copy_sent == [False]:
         _not_pressed(focused_class, window, beeps_on)
         return
-    if not selected:
-        _nothing_selected(get_instruction, spoken, focused_class, beeps_on)
+    if _refused_selection(selected, expected, put_back, get_instruction, focused_class,
+                          beeps_on):
         return
     result = None
     try:
@@ -326,6 +361,11 @@ def edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0,
         if keys is not _NOT_A_KEY_EDIT:
             return keys
         result = _rewritten(selected, instruction, beeps_on)
+        if result is not None and message.cancelled:
+            # Esc while the AI rewrote it ("edit that" in a phrase of a
+            # recording still going): the selection stays as it is.
+            logger.info("Voice edit not typed: the recording was cancelled")
+            return
         if result is None or notices.refuse_password_field(beeps_on):
             return
         logger.info(f"Voice edit result: {live.loggable(result)} "
@@ -363,7 +403,7 @@ def handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: str
         instruction = voice_edit_rules.spoken_edit(raw)
         if instruction is None:
             return False
-        target = voice_commands.spoken_edit_target(message.serial)
+        target = voice_commands.spoken_edit_target()
         if not target:
             return voice_commands.refused_as_sent(beeps_on)
     logger.info(f"Voice command: edit that ({len(target)} characters)")
@@ -406,7 +446,7 @@ def handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: str
     if not selected:
         notices.edit_problem("shortcut_failed", beeps_on)
     elif edit_selection(lambda: instruction, beeps_on, injection_mode, focused_class,
-                        time.time(), message, spoken=True, window=where[1]):
+                        time.time(), message, expected=target, window=where[1]):
         return True
     # Not changed as asked: no automatic Enter sends it as it was.
     message.add("failed", None)

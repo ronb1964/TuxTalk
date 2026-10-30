@@ -29,7 +29,7 @@ def mic(monkeypatch):
     for name in ("pick_input_device", "stop_stream_safely", "pause_media_players",
                  "resume_media_players"):
         monkeypatch.setattr(recording, name, lambda *a, **k: 0)
-    monkeypatch.setattr(recording, "open_input_stream", lambda idx: None)
+    monkeypatch.setattr(recording, "open_input_stream", lambda rec, idx: None)
     monkeypatch.setattr(recording, "indicator", None)
     monkeypatch.setattr("tuxtalk.type_at_pause.arm_chunker", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.tray_link.notify_recording_state", lambda *a, **k: None)
@@ -39,7 +39,7 @@ def mic(monkeypatch):
     def fails(meanwhile=lambda: None):
         pending = [meanwhile]
 
-        def no_microphone(idx):
+        def no_microphone(rec, idx):
             if pending:
                 pending.pop()()
             raise OSError("Device unavailable")
@@ -108,7 +108,7 @@ def key(code, value, held=(), cfg=CFG):
 
 def words_done(space=" "):
     """The last dictation's words went in: its automatic send is set up."""
-    delivery.send_automatically(space, "type", send_countdown.Message(
+    delivery.send_automatically(space, "type", rs.Message(
         focused_window.destination(), has_words=True))
 
 
@@ -171,7 +171,7 @@ def test_a_start_without_a_key_gives_the_space_back_when_the_microphone_fails(
     focus, heard, typed, notices = chat
     counting_down(monkeypatch)
     mic.fails()
-    assert recording.start_recording(False, False, 0) is False
+    assert recording.start_recording(False, False, 0) is None
     assert notices == [send_countdown.HELD_NOTICE] and typed == [(" ", FIRST[1])]
 
 
@@ -266,9 +266,9 @@ def test_hands_free_hearing_nothing_leaves_a_send_held_meanwhile_unsent(
     focus, heard, typed, notices = chat
     assert recording.start_recording(False, False, 0, from_toggle=True)
     words_done()
-    monkeypatch.setattr(rs.state, "silence", types.SimpleNamespace(nothing_said=True))
+    monkeypatch.setattr(rs.state.current, "silence", types.SimpleNamespace(nothing_said=True))
     monkeypatch.setattr(recording, "frames_are_dead_mic", lambda frames, rate: False)
-    assert recording.finish_capture(False, False) is None
+    assert recording.finish_capture(rs.state.current, False, False) is None
     assert notices == [send_countdown.HELD_NOTICE] and notifications() == [HELD_TITLE]
     assert typed == [(" ", FIRST[1])]
 

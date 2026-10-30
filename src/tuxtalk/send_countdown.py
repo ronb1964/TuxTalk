@@ -14,7 +14,8 @@ of TuxTalk's own windows it presses the default button.
   1. Where the words go is noted before they're delivered and looked at
      again once they're in (landed). A window that changed meanwhile means
      they may be in two places, and no send is set up. The recording's
-     Message keeps where its words went, and whether all of them did.
+     Message (recording_state) keeps where its words went, and whether
+     all of them did.
   2. Right before the Enter goes down, after every wait (the countdown, a
      Right Ctrl or Right Alt dictation key held, the keyboard taken back
      from other typing, the Flatpak's portal getting ready), one claim
@@ -37,10 +38,10 @@ imports this module: it hands over what presses a key and what types more
 onto the dictation.
 """
 import threading
-from dataclasses import dataclass
 
 from . import focused_window, virtual_keyboard
 from .logger import setup_logger
+from .recording_state import Message
 
 logger = setup_logger(__name__)
 
@@ -111,61 +112,6 @@ def configure(cfg) -> None:
 
 
 # --- Where the Enter may go ---------------------------------------------------
-
-@dataclass
-class Message:
-    """What a recording has typed since it began, or since Enter or Tab
-    ended the message before it (type_at_pause.start_afresh): one dictation, or Type
-    at pause's phrases, rewritten by "edit that" or not; each recording has
-    its own. An automatic Enter and a key said after its words go only where
-    they went, and only while all of them went in: a phrase that stopped
-    partway leaves a hole a send would let out, and the phrases after it
-    don't fill it."""
-    # Where its words went (landed()), None once the focus moved while any
-    # of them went in: they may be in two places.
-    to: focused_window.Destination | None = None
-    # Words of it were delivered, or tried: a key said now isn't said alone.
-    has_words: bool = False
-    # Every delivery of it went in whole.
-    complete: bool = True
-    # The word its last words were cut off on ("and"), or "": at the end of
-    # a Type at pause recording, half a sentence isn't sent.
-    ends_on: str = ""
-    # Which recording it is (rs.state.recording_serial when that began):
-    # Recent Dictations and the screen copy keep a recording's phrases together.
-    serial: int = 0
-    # What Type at pause's next phrase of this recording picks up: the last
-    # phrase's final mark, held back for it to decide
-    # (chunking.hold_back_boundary: {"mark", "audio", "raw", "typed",
-    # "where"}); a "No wait." said alone, whose corrected value comes next; a
-    # "?" heard as mid-sentence, so the question ends with the next phrase
-    # (chunking.carry_question); and the text "edit that" said alone is to
-    # change. Each recording's own, so a recording started before the last
-    # one's phrases are typed can't take them over.
-    held_mark: dict | None = None
-    held_cue: str = ""
-    question_open: bool = False
-    edit_waiting: str | None = None
-    # Its recording was cancelled (Esc): a phrase of it still waiting to be
-    # typed is dropped.
-    cancelled: bool = False
-
-    def add(self, outcome: str, landed) -> None:
-        """Words of it were delivered: delivery.inject_text's *outcome*, and
-        where they went (*landed*, None when not all of them did). Words
-        known to be in another window move it there (the user switched
-        windows between two phrases); a look that can't tell (a held-back
-        mark typed where only the app is known) keeps where it was."""
-        if not self.has_words or (self.to is not None and (
-                landed is None or focused_window.changed(self.to, landed))):
-            self.to = landed
-        self.has_words = True
-        self.complete = self.complete and outcome == "ok"
-
-    def start_over(self) -> None:
-        """Enter or Tab ended it: what's typed next is a new message."""
-        self.to, self.has_words, self.complete, self.ends_on = None, False, True, ""
-
 
 def _incomplete(message: Message) -> str | None:
     """"incomplete" when part of *message* didn't go in, else None."""

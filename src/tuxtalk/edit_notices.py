@@ -39,6 +39,9 @@ NOTICES = {
     "edit_that_what": "Say what to change after \u201cedit that\u201d, for example "
                       "\u201cedit that, make it shorter\u201d.",
     "already_sent": "That dictation was already sent, so there's nothing to edit.",
+    "not_the_dictation": "The text has changed since you dictated it, so \u201cedit "
+                         "that\u201d left it alone. Select what to change and hold Shift "
+                         "with your dictation key instead.",
     "already_sent_auto": "That dictation was already sent, so there's nothing to edit. "
                          "With Send each dictation automatically on, tap the dictation "
                          "hotkey during the countdown to keep it, then say \u201cedit "
@@ -70,5 +73,6 @@ LABELS = {
     "undo_other_window": "Works only right after dictating",
     "edit_that_what": "Say what to change",
     "already_sent": "Already sent, nothing to edit",
+    "not_the_dictation": "Text changed since, nothing done",
     "already_sent_auto": "Already sent. Tap the hotkey sooner",
 }

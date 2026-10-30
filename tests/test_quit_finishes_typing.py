@@ -61,7 +61,8 @@ def test_a_recording_under_way_is_transcribed_before_the_quit_ends(quitting, mon
     monkeypatch.setattr(dictation_worker, "_instance", DictationWorker())
     monkeypatch.setattr(rs.state, "is_recording", True)
     monkeypatch.setattr("tuxtalk.keyboard_grab.release_all", lambda: None)
-    monkeypatch.setattr(recording, "finish_capture", lambda beeps, notify: (["what was said"], 16000))
+    monkeypatch.setattr(recording, "finish_capture", lambda rec, beeps,
+                        notify: (["what was said"], 16000))
     transcribed = []
 
     def transcribe(frames, rate, *a, **k):

@@ -333,7 +333,8 @@ def test_a_dictation_never_writes_the_words(monkeypatch, caplog, capsys, keyboar
     frames = [(np.ones(speech_engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
     _hear_every_level(caplog)
     pipeline.transcribe_and_inject(frames, speech_engine.SAMPLE_RATE, beeps_on=False,
-                               smart_quotes=False, notify_on=False)
+                               smart_quotes=False, notify_on=False,
+                               message=rs.state.current.message)
     assert keyboard.typed_keys(), "the dictation was not typed"
     assert "[hidden" in caplog.text                     # it did log, redacted
     assert _leaks(caplog, capsys) == []
@@ -360,7 +361,7 @@ def test_a_voice_edit_never_writes_the_words(monkeypatch, caplog, capsys):
     monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
     frames = [np.full(16000, 1000, dtype=np.int16).tobytes()]
     _hear_every_level(caplog)
-    voice_edit.transcribe_and_edit(frames, 16000, False, "", "type", rs.state.message, None)
+    voice_edit.transcribe_and_edit(frames, 16000, False, "", "type", rs.state.current.message, None)
     assert typed == ["Quokka hunter, formally."]
     assert _leaks(caplog, capsys) == []
 

@@ -76,7 +76,8 @@ def dictate(monkeypatch, said="my secret is swordfish", beeps_on=True, chunk_rol
     monkeypatch.setattr(engine, "transcribe", lambda audio, language: said)
     frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
     pipeline.transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=beeps_on,
-                               smart_quotes=False, notify_on=True, chunk_role=chunk_role)
+                               smart_quotes=False, notify_on=True, chunk_role=chunk_role,
+                               message=rs.state.current.message)
 
 
 def test_a_dictation_in_a_password_field_is_not_typed_or_kept(desktop, monkeypatch, caplog):
@@ -123,12 +124,12 @@ def test_type_at_pause_types_nothing_of_its_own_into_a_password_field(desktop, m
     monkeypatch.setattr(type_at_pause, "resolve_boundary", lambda *a, **k: ran.append("mark"))
     monkeypatch.setattr(type_at_pause, "flush_boundary", lambda *a, **k: ran.append("mark"))
     monkeypatch.setattr(dictation_text, "prepare_text", lambda *a, **k: ran.append("cleanup") or "x")
-    monkeypatch.setattr(rs.state.message, "held_mark", {"mark": "."})
-    monkeypatch.setattr(rs.state.message, "held_cue", "No wait.")
+    monkeypatch.setattr(rs.state.current.message, "held_mark", {"mark": "."})
+    monkeypatch.setattr(rs.state.current.message, "held_cue", "No wait.")
     desktop["password"] = True
     dictate(monkeypatch, chunk_role="middle")
     assert desktop["typed"] == [] and ran == []
-    assert rs.state.message.held_mark is None and rs.state.message.held_cue == ""
+    assert rs.state.current.message.held_mark is None and rs.state.current.message.held_cue == ""
     assert desktop["labels"] == [delivery_notices.PASSWORD_FIELD_LABEL]
 
 
@@ -211,7 +212,6 @@ def test_a_dictation_refused_at_the_last_moment_leaves_recent_dictations(desktop
     """It goes into Recent Dictations before it's typed; refused then, it comes back out."""
     forgotten = []
     monkeypatch.setattr(history, "forget", lambda text: forgotten.append(text))
-    monkeypatch.setattr(rs.state, "said_text", "")
     desktop["answers"] = [False, False, True]    # before the AI, before the beep, at delivery
     dictate(monkeypatch)
     assert desktop["typed"] == []

@@ -174,7 +174,7 @@ def service(monkeypatch):
     rs.state.is_recording = False
     yield spy
     rs.state.is_recording = False
-    rs.state.stream = None
+    rs.state.current.stream = None
 
 
 def test_the_service_never_pauses_real_players_until_config_says_so():
@@ -194,21 +194,21 @@ def test_the_suite_cannot_reach_real_media_players():
 
 
 def test_recording_start_pauses_and_cancel_resumes(service):
-    assert recording.start_recording(False, False, 0) is True
+    assert recording.start_recording(False, False, 0) is not None
     recording.cancel_recording(False, False)
     assert service.calls == ["pause", "resume"]
 
 
 def test_a_finished_recording_resumes(service):
     recording.start_recording(False, False, 0)
-    rs.state.press_t0 -= 5           # held long enough to count
-    assert recording.finish_capture(False, False) is not None
+    rs.state.current.press_t0 -= 5           # held long enough to count
+    assert recording.finish_capture(rs.state.current, False, False) is not None
     assert service.calls == ["pause", "resume"]
 
 
 def test_too_short_a_tap_still_resumes(service):
     recording.start_recording(False, False, 0)
-    assert recording.finish_capture(False, False) is None
+    assert recording.finish_capture(rs.state.current, False, False) is None
     assert service.calls == ["pause", "resume"]
 
 
@@ -224,7 +224,7 @@ def test_a_microphone_failure_pauses_nothing(service, monkeypatch):
                         lambda *a, **k: (_ for _ in ()).throw(Exception("no mic")))
     monkeypatch.setattr(recording, "pick_input_device", lambda mic: 0)
     monkeypatch.setattr(keyboard_grab, "release_all", lambda: None)
-    assert recording.start_recording(False, False, 0) is False
+    assert recording.start_recording(False, False, 0) is None
     assert service.calls == []
 
 
