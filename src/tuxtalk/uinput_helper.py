@@ -206,33 +206,20 @@ def check_all_device_permissions():
 
 
 def check_user_in_input_group():
-    """
-    Check if current user is in the 'input' group.
-    
-    Returns:
-        bool: True if user is in 'input' group, False otherwise
-    """
-    try:
-        username = os.getlogin()
-    except OSError:
-        # Fallback for some environments
-        username = os.environ.get('USER', '')
-    
+    """Whether this user is a member of the 'input' group in the group
+    database (not yet in this session's groups, maybe: see
+    input_group_pending_restart). The user is the passwd entry the fix
+    script adds, so System check answers for the same one; a login name
+    from the terminal (os.getlogin) is another user's under su."""
+    username = _username()
     if not username:
         return False
-    
     try:
-        input_group = grp.getgrnam('input')
-        in_group = username in input_group.gr_mem
-        logger.debug(f"User '{username}' in 'input' group: {in_group}")
-        return in_group
-    except KeyError:
-        # 'input' group doesn't exist
-        logger.debug("'input' group does not exist")
+        in_group = username in grp.getgrnam('input').gr_mem
+    except KeyError:        # no 'input' group on this system
         return False
-    except Exception as e:
-        logger.warning(f"Error checking input group membership: {e}")
-        return False
+    logger.debug(f"User '{username}' in 'input' group: {in_group}")
+    return in_group
 
 
 def check_udev_rule_exists():
@@ -293,10 +280,9 @@ def get_fix_script_content():
     Returns:
         str: Shell script content
     """
-    # The username comes from the passwd database (canonical: it can't be
-    # spoofed through the USER variable) and is shell-quoted. This script runs
-    # as ROOT via pkexec, so an unquoted username would be a root
-    # shell-injection vector.
+    # This script runs as ROOT via pkexec. The name comes from the passwd
+    # database (or $USER when this uid has no entry), so shlex.quote is what
+    # keeps any name from turning into shell commands.
     quoted_user = shlex.quote(_username())
 
     return f'''#!/bin/bash

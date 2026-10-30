@@ -133,3 +133,15 @@ def test_the_root_script_goes_to_pkexec_on_stdin_never_through_a_file(monkeypatc
     assert ok is False
     assert seen["cmd"] == ["pkexec", "/bin/bash", "-s"]
     assert seen["input"] == U.get_fix_script_content()
+
+
+def test_system_check_asks_about_the_user_the_fix_script_adds(host, monkeypatch):
+    """Under su the terminal's login is another user: System check said "not
+    in the input group" for the user the script had just added."""
+    monkeypatch.setattr(U.os, "getlogin", lambda: "someone-else")
+    host.in_system = True
+    host.apply()
+    assert U.check_user_in_input_group() is True
+    host.in_system = False
+    host.apply()
+    assert U.check_user_in_input_group() is False
