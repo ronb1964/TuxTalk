@@ -25,8 +25,8 @@ def put_in_place():
     running), and the copy into ~/AppImages, which both point at. Returns
     whether TuxTalk is (or will be) in ~/AppImages and whether a launcher
     was made, for the Ready screen."""
-    from .update_checker import (create_desktop_launcher, desktop_launcher_exists,
-                                 ensure_appimage_in_standard_location, is_running_from_appimage)
+    from .desktop_launcher import create_desktop_launcher, desktop_launcher_exists
+    from .update_checker import ensure_appimage_in_standard_location, is_running_from_appimage
     installed = launcher_created = False
     copy_from = None
     try:
@@ -75,8 +75,8 @@ def start(current_path) -> None:
     *current_path*, on the same thread, so a restart that waits for the copy
     (after) waits for that too."""
     global _thread
-    from .update_checker import (APPIMAGE_PATH, copy_appimage_to_standard_location,
-                                 point_at_running_appimage)
+    from .desktop_launcher import point_at_running_appimage
+    from .update_checker import APPIMAGE_PATH, copy_appimage_to_standard_location
 
     def copy():
         try:

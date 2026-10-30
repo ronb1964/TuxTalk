@@ -826,7 +826,7 @@ def tray_main(monkeypatch):
     import sys
     import types
     import dbus.mainloop.glib
-    from tuxtalk import (autostart, control, cuda_helper, desktop_identity,
+    from tuxtalk import (autostart, control, cuda_helper, desktop_identity, desktop_launcher,
                          first_run_setup, gnome_keybindings, rename_migration,
                          service_launcher, settings_backup, tray, ui_style, uinput_helper,
                          update_checker)
@@ -856,9 +856,9 @@ def tray_main(monkeypatch):
     monkeypatch.setattr(tray.menu_cache, "refresh_menu_cache", lambda: None)
     monkeypatch.setattr(rename_migration, "adopt_old_install", step("adopts the old install", []))
     monkeypatch.setattr(rename_migration, "repin_launchers", step("repins launchers", []))
-    monkeypatch.setattr(update_checker, "create_hidden_desktop_entry",
+    monkeypatch.setattr(desktop_launcher, "create_hidden_desktop_entry",
                         step("writes the hidden menu entry"))
-    monkeypatch.setattr(update_checker, "add_launcher_actions", step("adds launcher actions"))
+    monkeypatch.setattr(desktop_launcher, "add_launcher_actions", step("adds launcher actions"))
     monkeypatch.setattr(update_checker, "check_just_updated", lambda: None)
     monkeypatch.setattr(settings_backup, "snapshot_if_changed", step("snapshots the settings"))
     monkeypatch.setattr(uinput_helper, "retire_ydotoold", step("retires ydotoold"))
@@ -1031,7 +1031,7 @@ def first_run(monkeypatch):
     Downloads, with each screen and download faked. Returns the steps it
     took, in order."""
     import types
-    from tuxtalk import appimage_copy, autostart, first_run_setup, update_checker
+    from tuxtalk import appimage_copy, autostart, desktop_launcher, first_run_setup, update_checker
     done = _Steps()
 
     class Thread:
@@ -1054,7 +1054,7 @@ def first_run(monkeypatch):
     monkeypatch.setattr(update_checker, "is_running_from_appimage", lambda: True)
     monkeypatch.setattr(update_checker, "ensure_appimage_in_standard_location",
                         lambda: (False, "/home/u/Downloads/TuxTalk.AppImage"))
-    monkeypatch.setattr(update_checker, "desktop_launcher_exists", lambda: True)
+    monkeypatch.setattr(desktop_launcher, "desktop_launcher_exists", lambda: True)
     monkeypatch.setattr(autostart, "set_autostart",
                         lambda enable, prefer_installed_appimage=False:
                         done.append(("starts at login", prefer_installed_appimage)) and False)

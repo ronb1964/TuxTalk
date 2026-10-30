@@ -181,8 +181,6 @@
   "uninstall.py::_wait_for.run::swallowed_error": 1,
   "uninstall.py::find::long_line": 2,
   "update_checker.py::_fetch_failure_message::long_line": 1,
-  "update_checker.py::_install_app_icon::long_line": 1,
-  "update_checker.py::_install_app_icon::swallowed_error": 2,
   "update_checker.py::check_just_updated::swallowed_error": 2,
   "update_checker.py::compare_versions::swallowed_error": 1,
   "update_checker.py::fetch_extension_version_from_release::swallowed_error": 1,
@@ -292,9 +290,6 @@
   },
   "uninstall.py::find": {
    "decisions": 23
-  },
-  "update_checker.py::_install_app_icon": {
-   "lines": 104
   },
   "update_checker.py::get_install_type": {
    "decisions": 16

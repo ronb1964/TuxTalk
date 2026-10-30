@@ -41,7 +41,7 @@ def test_the_launchers_really_have_those_names():
     assert "applications/io.github.ronb1964.TuxTalk.desktop" in rpm
     assert 'install -Dm644 tuxtalk.desktop "${pkgdir}/usr/share/applications/tuxtalk.desktop"' \
         in (ROOT / "aur" / "PKGBUILD").read_text()
-    from tuxtalk.update_checker import DESKTOP_FILE_PATH
+    from tuxtalk.desktop_launcher import DESKTOP_FILE_PATH
     assert DESKTOP_FILE_PATH.endswith("/tuxtalk.desktop")
 
 

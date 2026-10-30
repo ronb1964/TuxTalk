@@ -18,6 +18,7 @@ import types
 
 import pytest
 
+from tuxtalk import desktop_launcher
 from tuxtalk import update_checker as uc
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tuxtalk"
@@ -235,7 +236,7 @@ def test_a_failed_copy_repoints_the_launchers_before_the_copy_counts_as_done(mon
     repaired = []
     monkeypatch.setattr(update_checker, "copy_appimage_to_standard_location",
                         lambda: (False, "No space left on device"))
-    monkeypatch.setattr(update_checker, "point_at_running_appimage", repaired.append)
+    monkeypatch.setattr(desktop_launcher, "point_at_running_appimage", repaired.append)
     monkeypatch.setattr(appimage_copy, "_thread", None)
     appimage_copy.start("/home/u/Downloads/TuxTalk.AppImage")
     appimage_copy._thread.join(5)
@@ -306,11 +307,11 @@ def test_a_failed_copy_points_login_and_the_menu_back_at_the_running_appimage(
     monkeypatch.setattr(autostart, "set_autostart",
                         lambda enable, prefer_installed_appimage=False, command=None:
                         calls.append(command) or True)
-    monkeypatch.setattr(uc, "DESKTOP_FILE_PATH", str(tmp_path / "apps" / "tuxtalk.desktop"))
-    monkeypatch.setattr(uc, "_install_app_icon", lambda: "tuxtalk")
-    monkeypatch.setattr(uc.menu_cache, "refresh_menu_cache", lambda: None)
+    monkeypatch.setattr(desktop_launcher, "DESKTOP_FILE_PATH", str(tmp_path / "apps" / "tuxtalk.desktop"))
+    monkeypatch.setattr(desktop_launcher, "install_app_icon", lambda: "tuxtalk")
+    monkeypatch.setattr(desktop_launcher.menu_cache, "refresh_menu_cache", lambda: None)
     running = str(tmp_path / "Downloads" / "TuxTalk-v0.19.0-x86_64.AppImage")
-    uc.point_at_running_appimage(running)
+    desktop_launcher.point_at_running_appimage(running)
     assert calls == [running]           # by name: the installed copy may be an older one
     assert f"Exec={running}\n" in (tmp_path / "apps" / "tuxtalk.desktop").read_text()
 
@@ -318,11 +319,11 @@ def test_a_failed_copy_points_login_and_the_menu_back_at_the_running_appimage(
 def test_a_launcher_for_a_path_with_a_space_still_opens(monkeypatch, tmp_path):
     """A second download is "TuxTalk (1).AppImage": the menu entry and its
     right-click shortcuts were cut at the space and opened nothing."""
-    monkeypatch.setattr(uc, "DESKTOP_FILE_PATH", str(tmp_path / "apps" / "tuxtalk.desktop"))
-    monkeypatch.setattr(uc, "_install_app_icon", lambda: "tuxtalk")
-    monkeypatch.setattr(uc.menu_cache, "refresh_menu_cache", lambda: None)
+    monkeypatch.setattr(desktop_launcher, "DESKTOP_FILE_PATH", str(tmp_path / "apps" / "tuxtalk.desktop"))
+    monkeypatch.setattr(desktop_launcher, "install_app_icon", lambda: "tuxtalk")
+    monkeypatch.setattr(desktop_launcher.menu_cache, "refresh_menu_cache", lambda: None)
     running = str(tmp_path / "Downloads" / "TuxTalk (1).AppImage")
-    assert uc.create_desktop_launcher(running)[0]
+    assert desktop_launcher.create_desktop_launcher(running)[0]
     lines = (tmp_path / "apps" / "tuxtalk.desktop").read_text().splitlines()
     execs = [line for line in lines if line.startswith("Exec=")]
     assert execs and all(line.startswith(f'Exec="{running}"') for line in execs)
@@ -335,7 +336,7 @@ def _repoint_fixture(monkeypatch, tmp_path, entry_text):
     entry.parent.mkdir()
     entry.write_text(entry_text)
     monkeypatch.setattr(autostart, "_autostart_desktop_path", lambda: str(entry))
-    monkeypatch.setattr(uc, "create_desktop_launcher", lambda running: (True, ""))
+    monkeypatch.setattr(desktop_launcher, "create_desktop_launcher", lambda running: (True, ""))
     return entry
 
 
@@ -344,7 +345,7 @@ def test_a_failed_copy_leaves_start_at_login_off_when_it_was_turned_off(monkeypa
     copy failed: the repair saw the file and turned it on again."""
     stub = "[Desktop Entry]\nType=Application\nName=TuxTalk\nHidden=true\n"
     entry = _repoint_fixture(monkeypatch, tmp_path, stub)
-    uc.point_at_running_appimage(str(tmp_path / "TuxTalk-v0.19.0-x86_64.AppImage"))
+    desktop_launcher.point_at_running_appimage(str(tmp_path / "TuxTalk-v0.19.0-x86_64.AppImage"))
     assert entry.read_text() == stub
 
 
@@ -353,7 +354,7 @@ def test_a_repair_that_could_not_write_says_so(monkeypatch, tmp_path, caplog):
     _repoint_fixture(monkeypatch, tmp_path, "[Desktop Entry]\nExec=/gone/TuxTalk.AppImage\n")
     monkeypatch.setattr(autostart, "set_autostart", lambda *a, **k: False)
     caplog.set_level("INFO")
-    uc.point_at_running_appimage(str(tmp_path / "TuxTalk-v0.19.0-x86_64.AppImage"))
+    desktop_launcher.point_at_running_appimage(str(tmp_path / "TuxTalk-v0.19.0-x86_64.AppImage"))
     assert "Could not repoint launch at login" in caplog.text
     assert "Launch at login points at" not in caplog.text
 
