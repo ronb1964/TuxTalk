@@ -148,6 +148,8 @@ class MenuWindow:
             logger.error(f"Menu window action failed: {e}", exc_info=True)
 
     def _show_popup(self, button, menu):
+        if self._popup is not None:
+            self._popup.destroy()       # each opening builds a new one
         menu.show_all()
         menu.attach_to_widget(button, None)
         self._popup = menu

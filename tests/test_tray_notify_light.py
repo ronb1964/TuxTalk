@@ -18,7 +18,7 @@ SCRIPT = textwrap.dedent("""
     import tuxtalk.config as config
     import tuxtalk.model_helper as model_helper
     import tuxtalk.notify as notify
-    from tuxtalk import tray, tray_presets
+    from tuxtalk import tray, tray_presets   # tray: its imports count in the weight
     from tuxtalk.recommend import Preset
 
     cfg = types.SimpleNamespace(model="small", device="cpu", notify=True)

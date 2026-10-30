@@ -266,7 +266,7 @@ def test_leaving_battery_saver_on_a_desktop_turns_the_timeout_off(env, monkeypat
     assert (cfg.auto_timeout_enabled, cfg.auto_timeout_minutes) == (False, 5)
 
 
-def test_a_second_preset_clicked_during_the_first_ones_download_waits(env, monkeypatch):
+def test_a_second_preset_clicked_during_the_first_ones_download_is_turned_away(env, monkeypatch):
     """The download window runs a loop of its own and the menu still takes
     clicks: a second preset opened a second download window."""
     t = FakeTray()
