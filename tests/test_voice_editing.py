@@ -107,7 +107,7 @@ def test_a_failed_keystroke_means_no_selection(monkeypatch):
 import io
 import json
 
-from tuxtalk import ai_cleanup
+from tuxtalk import ai_cleanup, ai_download, ai_server, engine_process
 
 
 class Reply:
@@ -131,7 +131,7 @@ def engine(monkeypatch):
     def urlopen(request, timeout):
         sent.append((json.loads(request.data), timeout))
         return Reply("  We completed the electrical work today.  ")
-    monkeypatch.setattr(ai_cleanup.engine_process, "open_local", urlopen)
+    monkeypatch.setattr(engine_process, "open_local", urlopen)
     e.sent = sent
     return e
 
@@ -166,11 +166,11 @@ def test_the_engine_has_room_for_a_selection(monkeypatch):
     import types
     started = []
     engine = ai_cleanup.CorrectionEngine()
-    monkeypatch.setattr(ai_cleanup, "is_installed", lambda: True)
-    monkeypatch.setattr(ai_cleanup, "kill_orphaned_engines", lambda: 0)
-    monkeypatch.setattr(ai_cleanup, "_server_binary", lambda: "/x/llama-server")
-    monkeypatch.setattr(ai_cleanup, "_model_path", lambda: "/x/model.gguf")
-    monkeypatch.setattr(ai_cleanup.subprocess, "Popen",
+    monkeypatch.setattr(ai_download, "is_installed", lambda: True)
+    monkeypatch.setattr(ai_server, "kill_orphaned_engines", lambda: 0)
+    monkeypatch.setattr(ai_download, "server_binary", lambda: "/x/llama-server")
+    monkeypatch.setattr(ai_download, "model_path", lambda: "/x/model.gguf")
+    monkeypatch.setattr(ai_server.subprocess, "Popen",
                         lambda argv, **k: started.append(argv)
                         or types.SimpleNamespace(pid=42, stderr=io.BytesIO()))
     monkeypatch.setattr(engine, "_wait_until_ready", lambda proc, output: None)
@@ -209,7 +209,7 @@ class FakeEngine:
 @pytest.fixture
 def no_engine(monkeypatch):
     monkeypatch.setattr(ai_cleanup, "CorrectionEngine", FakeEngine)
-    monkeypatch.setattr(ai_cleanup, "is_installed", lambda: True)
+    monkeypatch.setattr(ai_download, "is_installed", lambda: True)
     monkeypatch.setattr(live, "ai_engine", None)
     monkeypatch.setattr(live, "ai_corrections", False)
     monkeypatch.setattr(live, "voice_editing", False)
@@ -591,7 +591,7 @@ class Box:
 
 
 def test_switching_on_with_the_ai_present_just_saves_it(monkeypatch):
-    monkeypatch.setattr(ai_cleanup, "is_installed", lambda: True)
+    monkeypatch.setattr(ai_download, "is_installed", lambda: True)
     saved = []
     stub, P = _prefs_stub(saved)
     P._toggle_ai_feature(stub, Box(True), "voice_editing", None, "?")
@@ -609,7 +609,7 @@ def test_declining_the_download_unticks_only_this_box(monkeypatch):
     import gi
     gi.require_version("Gtk", "3.0")
     from gi.repository import Gtk
-    monkeypatch.setattr(ai_cleanup, "is_installed", lambda: False)
+    monkeypatch.setattr(ai_download, "is_installed", lambda: False)
     monkeypatch.setattr(Gtk.Dialog, "run", lambda self: Gtk.ResponseType.CANCEL)
     saved = []
     stub, P = _prefs_stub(saved)
@@ -628,7 +628,7 @@ def test_downloading_the_ai_for_voice_editing_leaves_self_corrections_off(prefs_
     from gi.repository import Gtk
     from tuxtalk import download_progress_dialog
     installed = []
-    monkeypatch.setattr(ai_cleanup, "is_installed", lambda: bool(installed))
+    monkeypatch.setattr(ai_download, "is_installed", lambda: bool(installed))
     monkeypatch.setattr(Gtk.Dialog, "run", lambda self: Gtk.ResponseType.OK)
 
     class Download:
@@ -677,7 +677,7 @@ def test_the_ai_downloads_in_the_flatpak_without_voice_editing(prefs_window, mon
     from tuxtalk import download_progress_dialog
     monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TuxTalk")
     installed = []
-    monkeypatch.setattr(ai_cleanup, "is_installed", lambda: bool(installed))
+    monkeypatch.setattr(ai_download, "is_installed", lambda: bool(installed))
     monkeypatch.setattr(Gtk.Dialog, "run", lambda self: Gtk.ResponseType.OK)
 
     class Download:
@@ -712,7 +712,7 @@ def _labs(window):
 
 def test_the_advanced_tab_has_the_switch(prefs_window, monkeypatch):
     from gi.repository import Gtk
-    monkeypatch.setattr(ai_cleanup, "is_installed", lambda: True)
+    monkeypatch.setattr(ai_download, "is_installed", lambda: True)
     window = prefs_window()
     switch = next(w for w in _labs(window) if isinstance(w, Gtk.CheckButton)
                   and w.get_label().startswith("Voice editing"))
@@ -824,7 +824,7 @@ def test_a_cut_off_answer_is_not_used(engine, monkeypatch):
         body = json.dumps({"choices": [{"message": {"content": "half a rewr"},
                                         "finish_reason": "length"}]}).encode()
         return type("R", (), {"__enter__": lambda s: io.BytesIO(body), "__exit__": lambda s, *a: False})()
-    monkeypatch.setattr(ai_cleanup.engine_process, "open_local", urlopen)
+    monkeypatch.setattr(engine_process, "open_local", urlopen)
     assert engine.edit("some long text", "translate this to Japanese") is None
 
 
@@ -1014,7 +1014,7 @@ def scripted_engine(engine, monkeypatch, answers):
     def urlopen(request, timeout):
         engine.sent.append((json.loads(request.data), timeout))
         return Reply(next(replies))
-    monkeypatch.setattr(ai_cleanup.engine_process, "open_local", urlopen)
+    monkeypatch.setattr(engine_process, "open_local", urlopen)
 
 
 def test_merged_lines_are_edited_again_line_by_line(engine, monkeypatch):
@@ -1044,7 +1044,7 @@ def test_a_failed_line_fails_the_whole_edit(engine, monkeypatch):
             return Reply(next(replies))
         except StopIteration:
             raise OSError("server gone") from None
-    monkeypatch.setattr(ai_cleanup.engine_process, "open_local", urlopen)
+    monkeypatch.setattr(engine_process, "open_local", urlopen)
     assert engine.edit("first\nsecond", "add an exclamation point") is None
 
 

@@ -573,9 +573,9 @@ class PreferencesWindow:
 
     def get_selected_device_idx(self):
         """The sound device of the microphone picked in the Audio tab
-        (config.find_input_device: with none picked, the PipeWire default
+        (microphones.find_input_device: with none picked, the PipeWire default
         rather than ALSA's "default", which records noise)."""
-        from .config import find_input_device
+        from .microphones import find_input_device
         return find_input_device(self.config.get("mic", ""))
 
     def _stop_tests(self, closing=False, shown=None):

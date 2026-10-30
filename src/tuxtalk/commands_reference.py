@@ -158,7 +158,7 @@ def _title(section, colon=""):
 
 
 def _note(section):
-    from .ai_cleanup import DOWNLOAD_SIZE_TEXT
+    from .ai_download import DOWNLOAD_SIZE_TEXT
     return section.note.format(ai_size=DOWNLOAD_SIZE_TEXT)
 
 

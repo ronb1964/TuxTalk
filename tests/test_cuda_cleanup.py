@@ -1,17 +1,13 @@
-"""A failed CUDA re-download must not delete the CUDA the user already has.
-
-download_cuda_libraries() cleans up on failure by rmtree'ing the whole CUDA
-directory. That is right when the directory is a half-finished download this
-run created. It is wrong when a complete installation was already
-there: an early failure (no network, pip missing, a cancelled dialog) would
-destroy a working GPU setup the user has to download all over again.
-"""
+"""What is in TuxTalk's CUDA folder: when an install counts as complete, and
+what earlier versions left there (the unused cuDNN, PyTorch's link) going
+at start. A failed or cut-off download leaving the CUDA you had is
+test_cuda_download's."""
 
 import os
 
 import pytest
 
-from tuxtalk import cuda_helper
+from tuxtalk import cuda_download, cuda_helper
 
 
 @pytest.fixture
@@ -32,40 +28,18 @@ def _install_complete_cuda(path):
     return sorted(os.listdir(lib))
 
 
-def test_a_pre_existing_install_survives_a_failed_download(cuda_dir):
-    before = _install_complete_cuda(cuda_dir)
-
-    cleanup = cuda_helper._make_cuda_cleanup(str(cuda_dir))
-    cleanup()
-
-    assert cuda_dir.exists(), "deleted the user's working CUDA installation"
-    assert sorted(os.listdir(cuda_dir / "lib")) == before
-
-
-def test_a_partial_download_is_cleaned_up(cuda_dir):
-    """Nothing usable was there before, so removing the debris is correct."""
-    lib = cuda_dir / "lib"
-    lib.mkdir(parents=True)
-    (lib / "libcudart.so.partial").write_text("half a file")
-
-    cleanup = cuda_helper._make_cuda_cleanup(str(cuda_dir))
-    cleanup()
-
-    assert not cuda_dir.exists(), "left a broken half-download in place"
-
-
 def test_the_real_nested_layout_counts_as_complete(cuda_dir):
     """lib/ itself holds only folders, so the check must look inside them, or
     a real install never counts and a failed re-download deletes it."""
     _install_complete_cuda(cuda_dir)
-    assert cuda_helper._cuda_install_looks_complete(str(cuda_dir))
+    assert cuda_helper.cuda_install_looks_complete(str(cuda_dir))
     assert cuda_helper.has_talktype_cuda_libraries()
 
 
 def test_an_install_without_cublas_is_not_complete(cuda_dir):
     _install_complete_cuda(cuda_dir)
     (cuda_dir / "lib" / "cublas" / "lib" / "libcublas.so.12").unlink()
-    assert not cuda_helper._cuda_install_looks_complete(str(cuda_dir))
+    assert not cuda_helper.cuda_install_looks_complete(str(cuda_dir))
 
 
 def test_the_cudnn_earlier_versions_downloaded_is_removed(cuda_dir):
@@ -75,7 +49,7 @@ def test_the_cudnn_earlier_versions_downloaded_is_removed(cuda_dir):
     (cuda_dir / "lib" / "cudnn" / "lib" / "libcudnn.so.9").write_text("x")
     cuda_helper.remove_unused_cudnn()
     assert sorted(os.listdir(cuda_dir / "lib")) == kept
-    assert cuda_helper._cuda_install_looks_complete(str(cuda_dir))
+    assert cuda_helper.cuda_install_looks_complete(str(cuda_dir))
 
 
 def test_no_cudnn_folder_is_nothing_to_do(cuda_dir):
@@ -100,4 +74,4 @@ def test_a_real_nvidia_folder_is_left_alone(cuda_dir):
 
 
 def test_cudnn_is_not_downloaded():
-    assert not any("cudnn" in name for name in cuda_helper.CUDA_PACKAGES)
+    assert not any("cudnn" in name for name in cuda_download.CUDA_PACKAGES)

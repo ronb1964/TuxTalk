@@ -26,8 +26,8 @@ from . import (
     tray_link,
     type_at_pause,
 )
-from . import config as config_module
 from . import live_settings as live
+from . import microphones
 from . import notify as notify_module
 from . import recording_state as rs
 from .beeps import CANCEL_BEEP, HANDS_FREE_BEEP, START_BEEP
@@ -96,17 +96,17 @@ def feed_indicator(indicator, indata, spectrum_processor):
 def pick_input_device(mic_substring: str | None):
     """Return device index for the best matching input device.
 
-    Delegates to config.find_input_device() which handles PipeWire
+    Delegates to microphones.find_input_device() which handles PipeWire
     auto-detection when no mic name is configured. This avoids the
     broken ALSA "default" virtual device that returns garbage audio
     on PipeWire systems.
     """
     global _system_default_mic
-    from .config import find_input_device
+    from .microphones import find_input_device
     if mic_substring:
         _system_default_mic = None      # a mic chosen by name stays put
         return find_input_device(mic_substring)
-    source = config_module.default_source_name()
+    source = microphones.default_source_name()
     idx = find_input_device(mic_substring)
     _system_default_mic = (source, idx)
     return idx
@@ -129,7 +129,7 @@ def follow_system_default(input_device_idx):
     tracked = _system_default_mic
     if tracked is None:
         return input_device_idx
-    source = config_module.default_source_name()
+    source = microphones.default_source_name()
     if source is None or source == tracked[0]:
         return tracked[1]
     try:

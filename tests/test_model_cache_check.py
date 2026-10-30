@@ -85,9 +85,9 @@ def test_a_device_problem_is_not_mistaken_for_a_broken_download(monkeypatch):
 def test_models_never_downloaded_are_reported_missing_not_raised():
     """The test home's Hugging Face cache is empty: every lookup that asks
     it only for local files says "not downloaded" instead of failing."""
-    from tuxtalk import ai_cleanup, parakeet_engine, parakeet_ultra, whisper_vulkan
+    from tuxtalk import ai_download, parakeet_engine, parakeet_ultra, whisper_vulkan
     assert M.is_model_cached_fast("small") is False
-    assert ai_cleanup._model_path() is None
+    assert ai_download.model_path() is None
     assert whisper_vulkan.model_path("small") is None
     if parakeet_ultra.cpu_dir() is None:
         assert parakeet_engine.cached_model_dir() is None
@@ -101,9 +101,9 @@ def test_a_damaged_download_record_counts_as_not_downloaded_and_is_logged(
     import logging
 
     import huggingface_hub.constants
-    from tuxtalk import ai_cleanup, parakeet_engine, parakeet_ultra, whisper_vulkan
+    from tuxtalk import ai_download, parakeet_engine, parakeet_ultra, whisper_vulkan
     monkeypatch.setattr(huggingface_hub.constants, "HF_HUB_CACHE", str(tmp_path))
-    repos = {ai_cleanup.MODEL_REPO, whisper_vulkan.model_repo("small"),
+    repos = {ai_download.MODEL_REPO, whisper_vulkan.model_repo("small"),
              parakeet_engine.V3_REPO, M.MODEL_REPOS["small"]}
     for repo in repos:
         folder = tmp_path / ("models--" + repo.replace("/", "--"))
@@ -112,7 +112,7 @@ def test_a_damaged_download_record_counts_as_not_downloaded_and_is_logged(
         (folder / "refs" / "main").write_bytes(b"\xff\xfe garbage")
     with caplog.at_level(logging.WARNING):
         assert M.is_model_cached_fast("small") is False
-        assert ai_cleanup._model_path() is None
+        assert ai_download.model_path() is None
         assert whisper_vulkan.model_path("small") is None
         if parakeet_ultra.cpu_dir() is None:
             assert parakeet_engine.cached_model_dir() is None

@@ -277,7 +277,8 @@ def test_uninstall_waits_for_the_service_while_its_window_draws(slow_service, mo
     """It waited on GTK's thread (the "Uninstalling" window couldn't draw)
     and killed the service after 3 s, mid-dictation."""
     from tuxtalk import uninstall
-    monkeypatch.setattr(uninstall, "_end_service", lambda: service_launcher.end_dictation_service())
+    monkeypatch.setattr(uninstall, "_end_service",
+                        lambda: service_launcher.end_dictation_service())
     monkeypatch.setattr(uninstall, "_tuxtalk_pids", lambda engines: [])
     monkeypatch.setattr(uninstall.ydotoold_leftovers, "stop_ydotoold_we_started", lambda: None)
     plan = types.SimpleNamespace(home=Path("/nonexistent-home"), ydotoold_unit=None)
@@ -302,7 +303,7 @@ def test_uninstall_stops_the_tray_and_service_before_the_root_step(monkeypatch):
     it was, dictation included."""
     from tuxtalk import uninstall
     order = []
-    monkeypatch.setattr(uninstall.update_checker, "get_install_type", lambda: "deb")
+    monkeypatch.setattr(uninstall.installation, "get_install_type", lambda: "deb")
     monkeypatch.setattr(uninstall, "find", lambda *a, **k: types.SimpleNamespace(needs_root=True))
     monkeypatch.setattr(uninstall, "_ask", lambda plan: (False, False, False))
     monkeypatch.setattr(uninstall, "_working_window",
@@ -470,9 +471,9 @@ def test_quit_inside_a_dialog_waits_for_an_update_going_in(monkeypatch):
 
 
 def test_an_update_that_goes_in_after_quit_doesnt_start_tuxtalk_again(monkeypatch):
-    from tuxtalk import update_checker
+    from tuxtalk import update_install
     started = []
-    monkeypatch.setattr(update_checker, "restart_via_launcher",
+    monkeypatch.setattr(update_install, "restart_via_launcher",
                         lambda target=None: started.append(target) or (True, ""))
     t = _bare_tray(_quitting=True)
     t.restart_app()
@@ -485,7 +486,7 @@ def test_an_uninstall_without_the_tray_holds_its_lock(tmp_path, monkeypatch):
     package was removed. Both hold the tray's lock while they work."""
     from tuxtalk import uninstall
     monkeypatch.setattr(single_instance, "runtime_dir", lambda: str(tmp_path))
-    monkeypatch.setattr(uninstall.update_checker, "get_install_type", lambda: "deb")
+    monkeypatch.setattr(uninstall.installation, "get_install_type", lambda: "deb")
     monkeypatch.setattr(uninstall, "find", lambda *a, **k: types.SimpleNamespace(needs_root=True))
     monkeypatch.setattr(uninstall, "_ask", lambda plan: (False, False, False))
     monkeypatch.setattr(uninstall, "_working_window",
@@ -603,7 +604,7 @@ def test_uninstall_asks_about_changes_not_applied(answer, goes_ahead, saved):
 def _uninstall_up_to_the_root_step(monkeypatch, told):
     """uninstall.run with its question answered and its windows stood in for."""
     from tuxtalk import uninstall
-    monkeypatch.setattr(uninstall.update_checker, "get_install_type", lambda: "deb")
+    monkeypatch.setattr(uninstall.installation, "get_install_type", lambda: "deb")
     monkeypatch.setattr(uninstall, "find", lambda *a, **k: types.SimpleNamespace(needs_root=True))
     monkeypatch.setattr(uninstall, "_ask", lambda plan: (False, False, False))
     monkeypatch.setattr(uninstall, "_working_window",
@@ -725,10 +726,10 @@ def test_a_package_update_installs_nothing_after_quit(monkeypatch):
     the password prompt and the installer anyway, and showed its result."""
     from tuxtalk import update_ui
     installed, shown = [], []
-    monkeypatch.setattr(update_ui.update_checker, "get_package_asset",
+    monkeypatch.setattr(update_ui.update_install, "get_package_asset",
                         lambda release, kind: ("https://x/tuxtalk.deb", "tuxtalk.deb"))
-    monkeypatch.setattr(update_ui.update_checker, "download_update", lambda *a, **k: "/tmp/x.deb")
-    monkeypatch.setattr(update_ui.update_checker, "install_package_update",
+    monkeypatch.setattr(update_ui.update_install, "download_update", lambda *a, **k: "/tmp/x.deb")
+    monkeypatch.setattr(update_ui.update_install, "install_package_update",
                         lambda path, kind: installed.append(path) or (True, ""))
     monkeypatch.setattr(update_ui, "_installed_restart_prompt", lambda cb=None: shown.append(1))
     monkeypatch.setattr(update_ui, "_error", lambda message: shown.append(message))

@@ -21,7 +21,7 @@ def report(monkeypatch, tmp_path):
     """build() on a made-up computer: settings, a log, and facts that answer
     without asking the real system."""
     from tuxtalk import config, desktop_detect, keyboard_layout, recommend, secure_input
-    from tuxtalk import uinput_helper, update_checker
+    from tuxtalk import installation, uinput_helper
     monkeypatch.setattr(config, "load_config", lambda: Settings(model="parakeet-v3"))
     monkeypatch.setenv("TUXTALK_LOG_DIR", str(tmp_path))
     monkeypatch.setenv("XDG_SESSION_TYPE", "x11")
@@ -29,11 +29,12 @@ def report(monkeypatch, tmp_path):
     monkeypatch.setattr(problem_report, "os_name", lambda: "Fedora Linux 44 (LXQt)")
     monkeypatch.setattr(desktop_detect, "get_desktop_environment", lambda: "unknown")
     monkeypatch.setattr(keyboard_layout, "active_layout", lambda: ("us", "", ""))
-    monkeypatch.setattr(recommend, "detect_hardware", lambda cfg: recommend.Hardware("Intel graphics"))
+    monkeypatch.setattr(recommend, "detect_hardware",
+                        lambda cfg: recommend.Hardware("Intel graphics"))
     monkeypatch.setattr(secure_input, "is_installed", lambda: True)
     monkeypatch.setattr(secure_input, "running_version", lambda: "1.4")
     monkeypatch.setattr(uinput_helper, "typing_blocked_reason", lambda: None)
-    monkeypatch.setattr(update_checker, "get_install_type", lambda: "appimage")
+    monkeypatch.setattr(installation, "get_install_type", lambda: "appimage")
     log = tmp_path / "tuxtalk.log"
     log.write_text("".join(f"line {n} {HOME}/AppImages/TuxTalk.AppImage\n" for n in range(400)))
     return lambda: problem_report.build(problem_report.fact(problem_report.layout_text),

@@ -10,7 +10,7 @@ import threading
 from pathlib import Path
 from typing import Optional, Tuple
 
-from . import menu_cache, update_checker
+from . import installation, menu_cache, update_checker
 from .autostart import desktop_exec_program
 from .logger import setup_logger
 
@@ -125,7 +125,7 @@ def create_desktop_launcher(appimage_exec_path: Optional[str] = None) -> Tuple[b
         os.makedirs(os.path.dirname(DESKTOP_FILE_PATH), exist_ok=True)
         icon_name = install_app_icon() or "audio-input-microphone"
         version = update_checker.get_current_version()
-        appimage_exec_path = appimage_exec_path or update_checker.APPIMAGE_PATH
+        appimage_exec_path = appimage_exec_path or installation.APPIMAGE_PATH
         logger.info(f"Desktop launcher Exec path: {appimage_exec_path}")
         # Quoted where it must be: a download named "TuxTalk (1).AppImage"
         # was cut at the space, and the menu entry opened nothing.
@@ -162,7 +162,7 @@ def add_launcher_actions() -> bool:
     (desktop_actions). Only a self-managed AppImage's own launcher is
     touched, and only once (it then has an Actions= line). True if changed."""
     try:
-        if update_checker.get_install_type(pkg_query=lambda: "package") != "appimage":
+        if installation.get_install_type(pkg_query=lambda: "package") != "appimage":
             return False        # packages ship their launcher with the shortcuts
         with open(DESKTOP_FILE_PATH) as f:
             text = f.read()
@@ -209,15 +209,15 @@ def create_hidden_desktop_entry() -> bool:
     desktop's generic icon. NoDisplay keeps it out of the app menu, and the
     Ready screen replaces it with the real launcher. Returns True if written."""
     try:
-        if update_checker.get_install_type(pkg_query=lambda: "package") != "appimage":
+        if installation.get_install_type(pkg_query=lambda: "package") != "appimage":
             return False        # other installs ship their own launcher
         if os.path.lexists(DESKTOP_FILE_PATH):
             return False
         icon_name = install_app_icon() or "audio-input-microphone"
         os.makedirs(os.path.dirname(DESKTOP_FILE_PATH), exist_ok=True)
         # Exec is required for a valid entry; the running AppImage exists now.
-        exec_path = desktop_exec_program(update_checker.get_running_appimage_path()
-                                         or update_checker.APPIMAGE_PATH)
+        exec_path = desktop_exec_program(installation.get_running_appimage_path()
+                                         or installation.APPIMAGE_PATH)
         tmp = DESKTOP_FILE_PATH + ".tmp"
         with open(tmp, "w") as f:
             f.write("[Desktop Entry]\n"

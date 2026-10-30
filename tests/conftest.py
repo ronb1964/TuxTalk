@@ -66,6 +66,15 @@ for _var, _sub in (("XDG_CONFIG_HOME", ".config"), ("XDG_DATA_HOME", ".local/sha
     os.environ[_var] = os.path.join(_TEST_HOME, _sub)
 atexit.register(shutil.rmtree, _TEST_HOME, ignore_errors=True)
 
+# The same for the runtime folder: TuxTalk's locks (the tray's, the service's,
+# CUDA's install turn) are files there, and a test holding the user's real
+# cuda-install.lock could block a live TuxTalk's install, or be blocked by it.
+# Each test gets its own (_private_runtime_folder); this one covers imports.
+_REAL_RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+_TEST_RUNTIME = tempfile.mkdtemp(prefix="tuxtalk-test-run-")
+os.environ["XDG_RUNTIME_DIR"] = _TEST_RUNTIME
+atexit.register(shutil.rmtree, _TEST_RUNTIME, ignore_errors=True)
+
 _LOG_DIR = tempfile.mkdtemp(prefix="talktype-test-logs-")
 os.environ["TUXTALK_LOG_DIR"] = _LOG_DIR
 # Never move the real ~/.config/talktype or ~/.local/share/TalkType while the
@@ -113,7 +122,7 @@ def _not_private(address):
         # Asked for by a test, the desktop's would start and outlive the bus.
         return (f"{len(started)} desktop services start on it when asked for; run "
                 "dbus-run-session with --config-file=tests/dbus-session.conf")
-    own = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}", "bus")
+    own = os.path.join(_REAL_RUNTIME_DIR, "bus")
     if os.path.exists(own):
         try:
             users = connect(f"unix:path={own}")
@@ -164,6 +173,14 @@ def _hold_back_notifications():
 
 
 _hold_back_notifications()
+
+
+@pytest.fixture(autouse=True)
+def _private_runtime_folder(tmp_path_factory, monkeypatch):
+    """Each test's runtime folder is a new one of its own (private, as
+    logind makes them), so no lock a test takes is the user's, or one an
+    earlier test left held."""
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path_factory.mktemp("run")))
 
 
 @pytest.fixture(autouse=True)
@@ -844,9 +861,9 @@ def tray_main(monkeypatch):
     run(first_run=True); *welcome* stands in for the welcome screens."""
     import sys
     import dbus.mainloop.glib
-    from tuxtalk import (autostart, control, cuda_helper, desktop_identity, desktop_launcher,
-                         first_run_setup, gnome_keybindings, rename_migration,
-                         service_launcher, settings_backup, tray, ui_style, update_checker,
+    from tuxtalk import (autostart, control, cuda_download, cuda_helper, desktop_identity,
+                         desktop_launcher, first_run_setup, gnome_keybindings, rename_migration,
+                         service_launcher, settings_backup, tray, ui_style, update_install,
                          ydotoold_leftovers)
     done = _Steps()
 
@@ -877,9 +894,11 @@ def tray_main(monkeypatch):
     monkeypatch.setattr(desktop_launcher, "create_hidden_desktop_entry",
                         step("writes the hidden menu entry"))
     monkeypatch.setattr(desktop_launcher, "add_launcher_actions", step("adds launcher actions"))
-    monkeypatch.setattr(update_checker, "check_just_updated", lambda: None)
+    monkeypatch.setattr(update_install, "check_just_updated", lambda: None)
     monkeypatch.setattr(settings_backup, "snapshot_if_changed", step("snapshots the settings"))
     monkeypatch.setattr(ydotoold_leftovers, "retire_ydotoold", step("retires ydotoold"))
+    monkeypatch.setattr(cuda_download, "recover_cut_off_install",
+                        step("puts back a cut-off CUDA install"))
     monkeypatch.setattr(cuda_helper, "remove_unused_cudnn", step("removes the unused cuDNN"))
     monkeypatch.setattr(cuda_helper, "remove_pytorch_link", step("removes the PyTorch link"))
     monkeypatch.setattr(gnome_keybindings, "restore_left_over",
@@ -1051,7 +1070,7 @@ def first_run(monkeypatch):
     Downloads, with each screen and download faked. Returns the steps it
     took, in order."""
     import types
-    from tuxtalk import appimage_copy, autostart, desktop_launcher, first_run_setup, update_checker
+    from tuxtalk import appimage_copy, autostart, desktop_launcher, first_run_setup, installation
     done = _Steps()
 
     class Thread:
@@ -1071,8 +1090,8 @@ def first_run(monkeypatch):
                         lambda result: done.append("downloads the speech model") or True)
     monkeypatch.setattr(first_run_setup, "show_setup_complete_dialog",
                         lambda **k: done.append("setup complete"))
-    monkeypatch.setattr(update_checker, "is_running_from_appimage", lambda: True)
-    monkeypatch.setattr(update_checker, "ensure_appimage_in_standard_location",
+    monkeypatch.setattr(installation, "is_running_from_appimage", lambda: True)
+    monkeypatch.setattr(installation, "running_appimage_location",
                         lambda: (False, "/home/u/Downloads/TuxTalk.AppImage"))
     monkeypatch.setattr(desktop_launcher, "desktop_launcher_exists", lambda: True)
     monkeypatch.setattr(autostart, "set_autostart",

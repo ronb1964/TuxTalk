@@ -20,7 +20,7 @@ import os
 from gi.repository import GLib
 
 from . import commands_reference
-from .ai_cleanup import DOWNLOAD_SIZE_TEXT as AI_SIZE_TEXT
+from .ai_download import DOWNLOAD_SIZE_TEXT as AI_SIZE_TEXT
 from .cuda_helper import DOWNLOAD_SIZE_TEXT as CUDA_SIZE_TEXT
 from .whisper_vulkan import ENGINE_SIZE_TEXT
 

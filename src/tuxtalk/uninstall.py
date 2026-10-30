@@ -37,11 +37,11 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
-from . import (ai_cleanup, config, cosmic_hotkeys, custom_words,  # noqa: E402
+from . import (ai_download, config, cosmic_hotkeys, custom_words,  # noqa: E402
                desktop_detect, extension_helper, file_transcribe, gnome_extensions,
-               gnome_keybindings, kwin_hotkeys, menu_cache, model_helper, parakeet_engine,
-               rename_migration, secure_input, service_launcher, settings_backup,
-               single_instance, uinput_helper, update_checker, whisper_vulkan,
+               gnome_keybindings, installation, kwin_hotkeys, menu_cache, model_helper,
+               parakeet_engine, rename_migration, secure_input, service_launcher,
+               settings_backup, single_instance, uinput_helper, whisper_vulkan,
                ydotoold_leftovers)
 from .logger import LOG_FILE_NAME, setup_logger, stop_file_logging  # noqa: E402
 from .ui_style import message_dialog, show_message  # noqa: E402
@@ -88,7 +88,7 @@ HF_REPOS = tuple(sorted({_hub_folder(repo) for repo in (
     *(model_helper.MODEL_REPOS.get(m, f"Systran/faster-whisper-{m}")
       for m in config.VALID_MODELS - {"large"} if not parakeet_engine.is_parakeet(m)),
     parakeet_engine.V3_REPO, whisper_vulkan.MODEL_REPO,
-    *whisper_vulkan.MODEL_REPOS.values(), ai_cleanup.MODEL_REPO)}))
+    *whisper_vulkan.MODEL_REPOS.values(), ai_download.MODEL_REPO)}))
 
 # The runtime folder's files that hold dictated text, as glob patterns:
 # Recent Dictations and Fix a Word's hand-overs (voice_commands._hand_over,
@@ -570,7 +570,7 @@ def _shown(path, home):
 def _shared_what(plan):
     """What the shared cache holds of TuxTalk's, in words, and whether that's
     more than one thing."""
-    ai = _hub_folder(ai_cleanup.MODEL_REPO)
+    ai = _hub_folder(ai_download.MODEL_REPO)
     names = {path.name for path in plan.shared}
     if names == {ai}:
         return "the AI model", False
@@ -781,7 +781,7 @@ def _remove_the_rest(plan, delete_personal, delete_shared, tray, result):
     stop_tuxtalk(plan, tray.shut_down if tray else None)
     result.not_removed += undo_desktop_changes(plan)
     # Looked for again: stopping may have written a file (the stats).
-    again = find(home, plan.install_type, appimage=update_checker.get_running_appimage_path())
+    again = find(home, plan.install_type, appimage=installation.get_running_appimage_path())
     again.kept = plan.kept
     if delete_personal:
         logger.info("Uninstalled TuxTalk; deleting the settings and this log")
@@ -795,13 +795,13 @@ def run(tray=None):
     """Ask, then uninstall. True when TuxTalk was uninstalled, if not
     always all of it, and the caller should quit; False when nothing
     changed. *tray* (TrayParts) when the running tray asks."""
-    install_type = update_checker.get_install_type()
+    install_type = installation.get_install_type()
     if install_type in ("dev", "flatpak"):
         _tell(Gtk.MessageType.INFO, "Not for this copy of TuxTalk",
               "The development version runs from its source folder, and a Flatpak "
               "is removed with: flatpak uninstall --delete-data io.github.ronb1964.TuxTalk")
         return False
-    plan = find(Path.home(), install_type, appimage=update_checker.get_running_appimage_path())
+    plan = find(Path.home(), install_type, appimage=installation.get_running_appimage_path())
     choice = _ask(plan)
     if choice is None:
         return False

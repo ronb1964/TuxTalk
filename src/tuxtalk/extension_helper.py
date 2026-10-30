@@ -125,7 +125,7 @@ def _swap_in(source_dir, target_dir):
     link), so the renames never cross filesystems; GNOME skips a folder whose
     name isn't its extension's id. Installs take turns (Preferences and
     first run at once used each other's folders)."""
-    from . import single_instance
+    from . import download_utils, single_instance
     ext_dir = os.path.realpath(os.path.dirname(target_dir))
     target = os.path.join(ext_dir, EXTENSION_UUID)
     old = os.path.join(ext_dir, f".{EXTENSION_UUID}.old")
@@ -133,23 +133,14 @@ def _swap_in(source_dir, target_dir):
     with single_instance.open_lock("extension-install.lock") as lock:
         if not single_instance.claim(lock, wait_s=INSTALL_WAIT_S):
             raise OSError("another install of the GNOME extension didn't finish")
-        if not os.path.exists(target) and os.path.exists(old):
-            os.rename(old, target)          # an install cut off between the renames
-        for leftover in (staging, old):
-            shutil.rmtree(leftover, ignore_errors=True)
+        # GNOME keeps its menu even if this copy fails.
+        download_utils.restore_cut_off_swap(target, old)
+        download_utils.remove_tree(staging)
         try:
             shutil.copytree(source_dir, staging)
-            if os.path.exists(target):
-                os.rename(target, old)
-            try:
-                os.rename(staging, target)
-            except OSError:
-                if os.path.exists(old):
-                    os.rename(old, target)
-                raise
+            download_utils.replace_folder(staging, target, old)
         finally:
-            shutil.rmtree(staging, ignore_errors=True)
-        shutil.rmtree(old, ignore_errors=True)
+            download_utils.remove_tree(staging)
 
 
 def install_extension_from_local(source_dir: str, auto_enable: bool = True) -> bool:

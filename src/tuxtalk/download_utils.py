@@ -210,6 +210,46 @@ def _remove_quiet(path: str | None) -> None:
         pass
 
 
+def remove_tree(path: str) -> None:
+    """Delete the folder *path* if it is there. A failure is logged, not
+    raised: the folder is only taking space."""
+    try:
+        shutil.rmtree(path)
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        logger.warning(f"Couldn't remove {path}: {e}")
+
+
+def restore_cut_off_swap(target: str, old: str) -> None:
+    """Put *old* back as *target* when a replace_folder was cut off between
+    its two renames (killed, a power cut): *target* gone, the only complete
+    copy still at *old*. Hold the install's lock."""
+    if not os.path.lexists(target) and os.path.lexists(old):
+        os.rename(old, target)
+        logger.info(f"Put back {target}: replacing it was cut off part-way")
+
+
+def replace_folder(staging: str, target: str, old: str) -> None:
+    """*staging* becomes *target*. The copy there waits as *old* until the
+    new one is in place, and comes back if it can't be (the rename failed),
+    so there is a complete copy at *target* or *old* at every moment. All
+    three sit in one folder, so the renames never cross filesystems. Hold
+    the install's lock; an earlier replace cut off part-way is the caller's
+    to put back first (restore_cut_off_swap), and an *old* left without a
+    *target* is removed only once the new copy is in place."""
+    if os.path.lexists(target):
+        remove_tree(old)        # an earlier replace that couldn't remove it
+        os.rename(target, old)
+    try:
+        os.rename(staging, target)
+    except OSError:
+        if os.path.lexists(old):
+            os.rename(old, target)
+        raise
+    remove_tree(old)
+
+
 def remove_stale_files(directory: str, pattern: str, max_age_s: float,
                        folders: bool = False) -> None:
     """Delete the files (and with *folders*, the folders) in *directory*
@@ -262,20 +302,21 @@ def download_area(parent: str, name: str, old_names=()):
         yield archive, folder
     finally:
         _remove_quiet(archive)
-        shutil.rmtree(folder, ignore_errors=True)
+        remove_tree(folder)
 
 
 @contextlib.contextmanager
-def install_turn(name: str, wait_s: float = 120.0):
+def install_turn(name: str, what: str, wait_s: float = 120.0):
     """Hold *name*'s install lock while a downloaded engine is put in place:
     the tray and Preferences may finish the same download together, and one
     removing the engine folder while the other moved its copy in failed
     both. Whoever comes second should check whether it is there already.
-    Raises OSError when the turn doesn't come within *wait_s*."""
+    Raises OSError, naming *what* for the window that shows it, when the
+    turn doesn't come within *wait_s*."""
     from . import single_instance
     with single_instance.open_lock(f"{name}-install.lock") as lock:
         if not single_instance.claim(lock, wait_s=wait_s):
-            raise OSError(f"another {name} install didn't finish")
+            raise OSError(f"another install of {what} didn't finish")
         yield
 
 

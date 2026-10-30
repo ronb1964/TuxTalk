@@ -12,11 +12,10 @@ LINE_BREAK = "\xa7SHIFT_ENTER\xa7"
 _SOFT_BREAK = "\xa7SOFT_BREAK\xa7"
 
 # =====================================================================
-# Precompiled regex patterns — compiled once at import time.
-# This avoids recompiling 40+ patterns on every dictation call.
+# The patterns, each under the step of normalize_text that uses it.
 # =====================================================================
 
-# --- 0) Quoted text protection ---
+# --- _hold_quoted: "open quote ... close quote" kept as said ---
 _RE_QUOTED_TEXT = re.compile(
     r'\b(?:open\s+quotes?)[,.\s]+(.*?)[,.\s]+(?:close\s+quotes?)\b',
     re.IGNORECASE
@@ -42,7 +41,7 @@ def _restore_quoted(text: str, sections) -> str:
     return text
 
 
-# --- 0.1) Literal word escapes ---
+# --- _protect_command_words: "literal <word>" ---
 # Map of spoken words to placeholder tokens. When the user says
 # "literal period" we preserve the word "period" instead of inserting "."
 LITERAL_REPLACEMENTS = {
@@ -77,7 +76,7 @@ _LITERAL_PATTERNS = [
     for word, placeholder in LITERAL_REPLACEMENTS.items()
 ]
 
-# --- 0.2) Context-aware protection for command words used as English nouns ---
+# --- _protect_command_words: command words used as English nouns ---
 # Words like "period", "comma", "return", "dash", "quote" are command triggers
 # in dictation, but they are also normal English nouns in phrases like "period
 # of time", "in return", "a dash of salt", "the comma operator". Without this
@@ -85,7 +84,7 @@ _LITERAL_PATTERNS = [
 #
 # Each pattern captures surrounding context and substitutes a placeholder for
 # just the protected word. Same mechanism as _LITERAL_PATTERNS — placeholders
-# are restored to their original words by the pass at step 12.
+# are restored to their original words by _restore_protected_words.
 _CONTEXT_PROTECT_PATTERNS = [
     # "[article/adj/possessive] period" — strong noun signal
     (re.compile(
@@ -169,7 +168,7 @@ _CONTEXT_PROTECT_PATTERNS = [
 # space after it (see "question mark" below).
 _ENGINE_PERIOD = r"(?:(?<=[^\W\d_])(?<!\.[^\W\d_])\.\s+)?"
 
-# --- 1) Multi-word spoken punctuation → symbol ---
+# --- _spoken_marks_to_symbols: phrases, first ---
 _MULTI_WORD_REPLACEMENTS = [
     # A spoken "comma" is still a word here, so a comma written just before
     # the command is the engine's pause and goes, as it does for paragraphs.
@@ -201,7 +200,7 @@ _MULTI_WORD_REPLACEMENTS = [
     (re.compile(r"\bclose\s+quote\b|\bclose\s+quotes\b", re.IGNORECASE), "\u201d"),
 ]
 
-# --- 2) Single-word spoken punctuation → symbol ---
+# --- _spoken_marks_to_symbols: single words ---
 # A bare "quote" opens or closes depending on its place: _pair_spoken_quotes.
 _SPOKEN_QUOTE = "\x00QUOTE\x00"
 _SINGLE_WORD_REPLACEMENTS = [
@@ -222,7 +221,7 @@ _SINGLE_WORD_REPLACEMENTS = [
 
 def _pair_spoken_quotes(text: str) -> str:
     """Each bare "quote" said, as an opening and then a closing smart quote
-    in turn ("he said quote hello quote"), so step 3 tidies their spaces as
+    in turn ("he said quote hello quote"), so _tidy_punctuation tidies their spaces as
     it does an "open quote". A last one without a partner is a plain ".
     """
     parts = text.split(_SPOKEN_QUOTE)
@@ -233,52 +232,55 @@ def _pair_spoken_quotes(text: str) -> str:
     return "".join(part + mark for part, mark in zip(parts, marks + [""]))
 
 
-# --- 3) Quotes/brackets spacing ---
-_RE_OPEN_BRACKET_SPACE = re.compile(r"(\(|\[|\{)\s+")
-_RE_SPACE_CLOSE_BRACKET = re.compile(r"\s+(\)|\]|\})")
-_RE_OPEN_SMART_QUOTE_SPACE = re.compile(r"(\u201c)\s+")
-_RE_SPACE_CLOSE_SMART_QUOTE = re.compile(r"\s+(\u201d)")
-_RE_OPEN_QUOTE_COMMA = re.compile(r"\u201c\s*,+")
-_RE_COMMA_CLOSE_QUOTE = re.compile(r",+\s*\u201d")
+# --- _tidy_punctuation: spaces inside brackets and quotes, before marks,
+#     and runs of marks, in this order ---
+def _colon_after_dash(m: re.Match) -> str:
+    """The spoken dash took the space after it, so a colon gets one back."""
+    return ": " if m.string[m.end():m.end() + 1].isalnum() else ":"
 
-# --- 4) Space before punctuation ---
-_RE_SPACE_BEFORE_PUNCT = re.compile(r"\s+([,;:.?!…—])")
 
-# --- 5) Normalize punctuation combos ---
-_RE_WEAK_BEFORE_STRONG = re.compile(r"[,;:]\s*([.?!…])")
-_RE_PERIOD_AFTER_BANG_Q = re.compile(r"([!?])\s*\.")
-_RE_COMMA_AFTER_BANG_Q = re.compile(r"([!?])\s*,")
-_RE_COMMAS_BEFORE_BANG_Q = re.compile(r",+\s*([!?])")
-_RE_COMMA_BEFORE_PERIOD = re.compile(r",\s*\.")
-_RE_MULTIPLE_COMMAS = re.compile(r",\s*,+")
-_RE_DASH_COLON = re.compile(r"-\s*:")
-_RE_COLON_DASH = re.compile(r":\s*-")
+_PUNCTUATION_TIDY = [
+    (re.compile(r"(\(|\[|\{)\s+"), r"\1"),
+    (re.compile(r"\s+(\)|\]|\})"), r"\1"),
+    (re.compile(r"(\u201c)\s+"), r"\1"),
+    (re.compile(r"\s+(\u201d)"), r"\1"),
+    (re.compile(r"\u201c\s*,+"), "\u201c"),
+    (re.compile(r",+\s*\u201d"), "\u201d"),
+    # No space before a mark.
+    (re.compile(r"\s+([,;:.?!…—])"), r"\1"),
+    # One mark where the engine and the speaker each wrote one.
+    (re.compile(r"[,;:]\s*([.?!…])"), r"\1"),
+    (re.compile(r"([!?])\s*\."), r"\1"),
+    (re.compile(r"([!?])\s*,"), r"\1"),
+    (re.compile(r",+\s*([!?])"), r"\1"),
+    (re.compile(r",\s*\."), "."),
+    (re.compile(r",\s*,+"), ","),
+    (re.compile(r"-\s*:"), ":"),
+    (re.compile(r":\s*-"), _colon_after_dash),
+    # Runs of marks: four dots or more are an ellipsis, two are one dot.
+    (re.compile(r"\.{4,}"), "…"),
+    (re.compile(r"(?<!\.)\.\.(?!\.)"), "."),
+    (re.compile(r"([!?])\1+"), r"\1"),
+]
 
-# --- 6) Collapse punctuation runs ---
-_RE_MANY_DOTS = re.compile(r"\.{4,}")
-_RE_DOUBLE_DOT = re.compile(r"(?<!\.)\.\.(?!\.)")
-_RE_REPEATED_BANG_Q = re.compile(r"([!?])\1+")
-
-# --- 7) Space after sentence enders ---
+# --- _space_sentences ---
 _RE_SPACE_AFTER_ENDER = re.compile(r"([.?!…])(?!\s|$|[\u201d\)\]\}])")
-
-# --- 8) Em dash spacing ---
 _RE_EM_DASH_SPACE = re.compile(r"\s*—\s*")
 
-# --- 9) Tidy spaces around newlines ---
+# --- _tidy_line_spaces ---
 _RE_SPACE_BEFORE_NEWLINE = re.compile(r"[ \t]+\n")
 _RE_SPACE_AFTER_NEWLINE = re.compile(r"\n[ ]+")
 _RE_LEADING_PUNCT = re.compile(r"^[\s]*[\.,;:!?]+(?!…)")
 _RE_MULTI_SPACE = re.compile(r"[ ]{2,}")
 
-# --- 10) Capitalization ---
+# --- _capitalize_and_end_lines ---
 _RE_TRAILING_COMMA = re.compile(r",$")
 # What counts as "this line is already punctuated". Colon and semicolon are
 # included: a dictated "colon" is deliberate punctuation and must not get a
-# full stop straight after it ("the plan:."). Closing
-# quotes and brackets after the mark are stepped over, since step 11 moves
-# the full stop inside a closing quote ("Hello.”" is finished, not "Hello.”.").
-_RE_NO_END_PUNCT = re.compile(r"[.?!…:;][\"'”’)\]}]*$")
+# full stop straight after it ("the plan:."). Closing quotes and brackets
+# after the mark are stepped over, since the full stop is later moved inside
+# a closing quote ("Hello.”" is finished, not "Hello.”.").
+_RE_ENDS_PUNCTUATED = re.compile(r"[.?!…:;][\"'”’)\]}]*$")
 # Negative lookbehind: don't capitalize after single-letter abbreviations
 # ("e.g. that" / "U.S. economy" must not become "e.g. That" / "U.S. Economy").
 _RE_CAP_AFTER_ENDER = re.compile(r"(?<![A-Za-z]\.[A-Za-z])([.?!…]\s+)([a-z])")
@@ -290,10 +292,10 @@ _RE_CAP_AFTER_ENDER = re.compile(r"(?<![A-Za-z]\.[A-Za-z])([.?!…]\s+)([a-z])")
 # \bi\b alone would match its first letter and write "I.e." mid-sentence.
 _RE_STANDALONE_I = re.compile(r"\bi\b(?!\.\s*e\.)")
 
-# --- 11) Smart quote punctuation placement ---
+# --- Sentence punctuation moved inside a closing smart quote ---
 _RE_PUNCT_OUTSIDE_QUOTE = re.compile(r"\u201d( ?)([!?,;:.])")
 
-# --- 14) Email/URL formatting ---
+# --- _join_spoken_addresses and _finish_addresses ---
 # Country endings (.no .it .my .in .us ...) are also words that start
 # sentences, so they only count written joined to the domain ("example.de");
 # with spaces around the dot ("gmail. com") only endings that can't be words
@@ -402,7 +404,7 @@ def _fix_email_spacing(text: str) -> str:
         text = fixed
 
 
-# --- Guards for the spacing (7) and capitalization (10) passes ---
+# --- Guards for _space_sentences and _cap_first ---
 # Characters that can precede the first word of a line without being the word:
 # straight and smart quotes, and opening brackets.
 _LINE_OPENERS = "\"'“‘([{"
@@ -433,7 +435,7 @@ _FILE_EXTENSIONS = (
 )
 _RE_FILE_EXT = re.compile(rf"\.(?:{_FILE_EXTENSIONS})\b", re.IGNORECASE)
 
-# --- 6.5) Time formatting ---
+# --- format_times and _join_letter_numbers ---
 # Fix the engines' mangled times: "11. 30 p. m." → "11:30 PM", "11 p. m." → "11 PM".
 # Minutes are optional, and AM/PM may be written "p. m.", "p. M.", "p.m.", "PM",
 # "a. m.", "a.m." or "AM" (any case or spacing). The trailing (?![A-Za-z]) stops
@@ -538,8 +540,9 @@ _RE_TRAILING_BREAKS = re.compile(r"(?:\s*(?:" + re.escape(LINE_BREAK) + r"))+\s*
 
 
 def _ends_punctuated(text: str) -> bool:
-    """Same rule as the per-line pass in normalize_text, so the two agree."""
-    return bool(_RE_NO_END_PUNCT.search(text.rstrip()))
+    """True when *text* already ends a sentence (or a "colon"), the one rule
+    for normalize_text and append_auto_punct."""
+    return bool(_RE_ENDS_PUNCTUATED.search(text.rstrip()))
 
 
 def append_auto_punct(text: str, auto_period: bool, auto_space: bool) -> str:
@@ -570,9 +573,121 @@ def append_auto_punct(text: str, auto_period: bool, auto_space: bool) -> str:
     return text
 
 
-# =====================================================================
-# Main normalization function
-# =====================================================================
+def _join_spoken_addresses(text: str) -> str:
+    """A spoken address joined ("gmail dot com", "ron at example.de"), before
+    the space-after-period pass can split it. Spoken dots go first."""
+    text = _RE_SPOKEN_DOT_DOMAIN.sub(_join_spoken_dots, text)
+    return _RE_EMAIL_JOINED.sub(_join_email, text)
+
+
+def _protect_command_words(text: str) -> str:
+    """Placeholders for command words that are meant as words: "literal
+    period", and nouns such as "period of time" or "a dash of salt"."""
+    for pat, placeholder in (*_LITERAL_PATTERNS, *_CONTEXT_PROTECT_PATTERNS):
+        text = pat.sub(placeholder, text)
+    return text
+
+
+def _spoken_marks_to_symbols(text: str) -> str:
+    """Spoken punctuation and breaks as symbols: "comma" is ",", "new line"
+    LINE_BREAK. The phrases go before single words ("question mark" before
+    "mark"), and bare quotes are paired last."""
+    for pat, repl in (*_MULTI_WORD_REPLACEMENTS, *_SINGLE_WORD_REPLACEMENTS):
+        text = pat.sub(repl, text)
+    return _pair_spoken_quotes(text)
+
+
+def _tidy_punctuation(text: str) -> str:
+    """Spaces around brackets, quotes and marks, and doubled marks:
+    "( hi )" is "(hi)", "yes ,." is "yes.", "wait!!" is "wait!"."""
+    for pat, repl in _PUNCTUATION_TIDY:
+        text = pat.sub(repl, text)
+    return text.replace("...", "…")
+
+
+def _space_sentences(text: str) -> str:
+    """One space after a sentence ender (not inside "3.5", "U.S." or
+    "report.pdf"), and one each side of an em dash."""
+    text = _RE_SPACE_AFTER_ENDER.sub(_space_after_ender_repl, text)
+    return _RE_EM_DASH_SPACE.sub(" — ", text)
+
+
+def _tidy_line(line: str) -> str:
+    """One line without stray punctuation at its start, runs of spaces, or
+    trailing space. Leading tabs stay; a soft break at the end goes, since
+    nothing follows it."""
+    line = _RE_LEADING_PUNCT.sub("", line)
+    leading_tabs = len(line) - len(line.lstrip("\t"))
+    core = _RE_MULTI_SPACE.sub(" ", line.lstrip("\t").lstrip(" "))
+    return ("\t" * leading_tabs + core).rstrip().removesuffix(_SOFT_BREAK).rstrip()
+
+
+def _tidy_line_spaces(text: str) -> str:
+    """No spaces at either side of a newline, and each line tidied."""
+    text = _RE_SPACE_BEFORE_NEWLINE.sub("\n", text)
+    text = _RE_SPACE_AFTER_NEWLINE.sub("\n", text)
+    return "\n".join(_tidy_line(line) for line in text.split("\n"))
+
+
+def _cap_first(line: str) -> str:
+    """Capitalize the first word of a line, or leave the line alone.
+
+    Only the *first* thing on the line is a candidate, so a line opening
+    with a number or symbol is left as it is: "2024 was a good year", not
+    "2024 Was a good year".
+    """
+    i = 0
+    # Opening quotes and brackets aren't the word — step over them.
+    while i < len(line) and (line[i].isspace() or line[i] in _LINE_OPENERS):
+        i += 1
+    if i >= len(line) or not line[i].isalpha():
+        return line
+    # An address or URL is written the way the user said it, not sentence-cased.
+    if _RE_ADDRESSY.match(line[i:]):
+        return line
+    return line[:i] + line[i].upper() + line[i + 1:]
+
+
+def _lines(text: str) -> list:
+    """The lines of *text*, a dictated line break ending one as a newline does."""
+    return text.replace(LINE_BREAK, "\n").split("\n")
+
+
+def _finish_line(line: str, auto_period: bool, last: bool) -> str:
+    """One line with a capital at its start and after each sentence ender,
+    and, with *auto_period*, a full stop at its end."""
+    line = _cap_first(line)
+    if auto_period:
+        # A comma before a line break was said on purpose ("Dear John,"), so
+        # only a comma that ends the whole utterance becomes the full stop.
+        if last:
+            line = _RE_TRAILING_COMMA.sub(".", line)
+        if line.strip() and not _ends_punctuated(line) and not line.rstrip().endswith(","):
+            line = line.rstrip() + "."
+    return _RE_CAP_AFTER_ENDER.sub(lambda m: m.group(1) + m.group(2).upper(), line)
+
+
+def _capitalize_and_end_lines(text: str, auto_period: bool) -> str:
+    """Every line finished by _finish_line. Newlines come back as dictated
+    line breaks."""
+    lines = _lines(text)
+    return LINE_BREAK.join(_finish_line(line, auto_period, i == len(lines) - 1)
+                           for i, line in enumerate(lines))
+
+
+def _restore_protected_words(text: str) -> str:
+    """The words _protect_command_words held, and a soft break's three spaces."""
+    for placeholder, word in (*LITERAL_RESTORE.items(), (_SOFT_BREAK, "   ")):
+        text = text.replace(placeholder, word)
+    return text
+
+
+def _finish_addresses(text: str) -> str:
+    """Spoken addresses the earlier passes left apart, joined: "ron at
+    gmail. com" and "john@gmail. Com" are both john's address."""
+    text = _RE_EMAIL_AT_WORD.sub(_join_spaced_email, text)
+    return _fix_email_spacing(text)
+
 
 def normalize_text(text: str, auto_period: bool = True) -> str:
     """Spoken punctuation -> symbols; tidy punctuation; auto-capitalize; keep newlines/tabs.
@@ -581,169 +696,33 @@ def normalize_text(text: str, auto_period: bool = True) -> str:
     It is honoured *here* as well as in append_auto_punct: this pass ends every
     line with a full stop and runs first, so otherwise unchecking the
     preference would do nothing.
+
+    The steps run in this order, each relying on the one before.
     """
     if not text:
         return text
-
-    # --- 0) Handle quoted text - preserve everything inside quotes as literal ---
-    # A spoken address written joined ("ron at example.de") is joined first,
-    # before the space-after-period pass can split it. Spoken dots go first.
-    text = _RE_SPOKEN_DOT_DOMAIN.sub(_join_spoken_dots, text)
-    text = _RE_EMAIL_JOINED.sub(_join_email, text)
+    text = _join_spoken_addresses(text)
+    # Everything inside "open quote ... close quote" is kept as said.
     text, quoted_sections = _hold_quoted(text)
-
-    # --- 0.1) Escape sequences for literal words ---
-    for pat, placeholder in _LITERAL_PATTERNS:
-        text = pat.sub(placeholder, text)
-
-    # --- 0.2) Protect command words used as English nouns ("period of time",
-    #          "in return", "a dash of salt", "comma operator", etc.) ---
-    for pat, repl in _CONTEXT_PROTECT_PATTERNS:
-        text = pat.sub(repl, text)
-
-    # --- 1) Multi-word replacements first (order matters) ---
-    for pat, repl in _MULTI_WORD_REPLACEMENTS:
-        text = pat.sub(repl, text)
-
-    # --- 2) Single-word replacements ---
-    for pat, repl in _SINGLE_WORD_REPLACEMENTS:
-        text = pat.sub(repl, text)
-    text = _pair_spoken_quotes(text)
-
-    # --- 3) Quotes/brackets spacing ---
-    text = _RE_OPEN_BRACKET_SPACE.sub(r"\1", text)
-    text = _RE_SPACE_CLOSE_BRACKET.sub(r"\1", text)
-    text = _RE_OPEN_SMART_QUOTE_SPACE.sub(r"\1", text)
-    text = _RE_SPACE_CLOSE_SMART_QUOTE.sub(r"\1", text)
-    text = _RE_OPEN_QUOTE_COMMA.sub("\u201c", text)
-    text = _RE_COMMA_CLOSE_QUOTE.sub("\u201d", text)
-
-    # --- 4) Remove spaces before punctuation ---
-    text = _RE_SPACE_BEFORE_PUNCT.sub(r"\1", text)
-
-    # --- 5) Normalize punctuation combos ---
-    text = _RE_WEAK_BEFORE_STRONG.sub(r"\1", text)
-    text = _RE_PERIOD_AFTER_BANG_Q.sub(r"\1", text)
-    text = _RE_COMMA_AFTER_BANG_Q.sub(r"\1", text)
-    text = _RE_COMMAS_BEFORE_BANG_Q.sub(r"\1", text)
-    text = _RE_COMMA_BEFORE_PERIOD.sub(".", text)
-    text = _RE_MULTIPLE_COMMAS.sub(",", text)
-    text = _RE_DASH_COLON.sub(":", text)
-    # The spoken dash took the space after it, so give the colon one back.
-    text = _RE_COLON_DASH.sub(
-        lambda m: ": " if m.string[m.end():m.end() + 1].isalnum() else ":", text)
-
-    # --- 6) Collapse punctuation runs; handle ellipsis ---
-    text = _RE_MANY_DOTS.sub("…", text)
-    text = _RE_DOUBLE_DOT.sub(".", text)
-    text = _RE_REPEATED_BANG_Q.sub(r"\1", text)
-    text = text.replace("...", "…")
-
-    # --- 6.5) Fix time formatting ---
-    # "11. 30 p. m." → "11:30 PM", "3:15 a. m." → "3:15 AM", etc.
-    # Before the spacing and capitalization passes, which would otherwise read
-    # the "m." of "a. m." as a sentence end and capitalize the next word
-    # ("meet at 9 a. m. tomorrow" → "9 AM Tomorrow").
-    text = _RE_TIME_FORMAT.sub(_fix_time_ampm, text)
-    text = _join_letter_numbers(text)
-
-    # --- 7) Ensure one space after sentence enders ---
-    # (callable repl skips decimals like 3.5 and abbreviations like U.S.)
-    text = _RE_SPACE_AFTER_ENDER.sub(_space_after_ender_repl, text)
-
-    # --- 8) Em dash spacing (spoken hyphens were joined in step 2) ---
-    text = _RE_EM_DASH_SPACE.sub(" — ", text)
-
-    # --- 9) Tidy spaces around newlines ---
-    text = _RE_SPACE_BEFORE_NEWLINE.sub("\n", text)
-    text = _RE_SPACE_AFTER_NEWLINE.sub("\n", text)
-
-    lines = []
-    for raw_line in text.split("\n"):
-        # Strip leading stray punctuation (keep ellipsis and quotes/parens)
-        line = _RE_LEADING_PUNCT.sub("", raw_line)
-
-        leading_tabs = len(line) - len(line.lstrip("\t"))
-        core = line.lstrip("\t")
-        core = core.lstrip(" ")
-        core = _RE_MULTI_SPACE.sub(" ", core)
-        line = ("\t" * leading_tabs) + core
-        lines.append(line.rstrip().removesuffix(_SOFT_BREAK).rstrip())   # nothing after it
-    text = "\n".join(lines)
-
-    # Capitalize standalone lowercase "i" (and "i'll", "i'm", "i've", "i'd")
-    # to "I". Done before the per-line capitalization pass so cap_first sees
-    # an already-correct string and doesn't have to special-case the pronoun.
+    text = _protect_command_words(text)
+    text = _spoken_marks_to_symbols(text)
+    text = _tidy_punctuation(text)
+    # Times before the spacing and capitals, which would otherwise read the
+    # "m." of "a. m." as a sentence end ("meet at 9 a. m. Tomorrow").
+    text = _join_letter_numbers(format_times(text))
+    text = _space_sentences(text)
+    text = _tidy_line_spaces(text)
+    # Before the capitals, so they see "I'm" already right.
     text = _RE_STANDALONE_I.sub("I", text)
-
-    # --- 9.5) Restore quoted sections, before capitals and step 11 ---
     text = _restore_quoted(text, quoted_sections)
-
-    # --- 10) Capitalization ---
-    def cap_first(s: str) -> str:
-        """Capitalize the first word of a line, or leave the line alone.
-
-        Only the *first* thing on the line is a candidate, so a line opening
-        with a number or symbol is left as it is: "2024 was a good year", not
-        "2024 Was a good year".
-        """
-        i = 0
-        # Opening quotes and brackets aren't the word — step over them.
-        while i < len(s) and (s[i].isspace() or s[i] in _LINE_OPENERS):
-            i += 1
-        if i >= len(s) or not s[i].isalpha():
-            return s
-        # An address or URL is written the way the user said it, not sentence-cased.
-        if _RE_ADDRESSY.match(s[i:]):
-            return s
-        return s[:i] + s[i].upper() + s[i+1:]
-
-    # Temporarily convert §SHIFT_ENTER§ to newlines for capitalization processing
-    temp_text = text.replace(LINE_BREAK, "\n")
-
-    lines = []
-    split_lines = temp_text.split("\n")
-    last = len(split_lines) - 1
-    for idx, line in enumerate(split_lines):
-        line = cap_first(line)
-        # A comma before a line break was said on purpose ("Dear John,"), so
-        # only a comma that ends the whole utterance becomes the full stop.
-        if auto_period and idx == last:
-            line = _RE_TRAILING_COMMA.sub(".", line)
-        # Add period at end of line if no punctuation exists
-        if (auto_period and line and line.strip()
-                and not _RE_NO_END_PUNCT.search(line.rstrip())
-                and not line.rstrip().endswith(",")):
-            line = line.rstrip() + "."
-        # Capitalize after sentence enders
-        line = _RE_CAP_AFTER_ENDER.sub(lambda m: m.group(1) + m.group(2).upper(), line)
-        lines.append(line)
-    temp_text = "\n".join(lines)
-
-    # Convert newlines back to §SHIFT_ENTER§ markers
-    text = temp_text.replace("\n", LINE_BREAK)
-
-    # --- 11) Place sentence punctuation inside closing smart quote ---
+    text = _capitalize_and_end_lines(text, auto_period)
     text = _RE_PUNCT_OUTSIDE_QUOTE.sub(r"\2" + "\u201d", text)
-
-    # --- 12) Restore literal tokens, and a soft break's three spaces ---
-    for placeholder, word in (*LITERAL_RESTORE.items(), (_SOFT_BREAK, "   ")):
-        text = text.replace(placeholder, word)
-
-    # --- 12.5) Re-capitalize line starts after literal restore ---
-    # cap_first() ran while protected words were placeholders like
-    # "__LIT_RETURN__" (whose first letter is already uppercase), so a line
-    # STARTING with a protected word would stay lowercase ("return to sender
-    # was..."). Idempotent: lines already capitalized are left untouched.
-    temp_text = text.replace(LINE_BREAK, "\n")
-    temp_text = "\n".join(cap_first(line) for line in temp_text.split("\n"))
-    text = temp_text.replace("\n", LINE_BREAK)
-
-    # --- 13) Fix email/URL formatting ---
-    text = _RE_EMAIL_AT_WORD.sub(_join_spaced_email, text)
-    text = _fix_email_spacing(text)
-
-    return text
+    text = _restore_protected_words(text)
+    # The capitals ran while a protected word was a placeholder (already a
+    # capital), so a line that starts with one ("return to sender") gets
+    # its capital now.
+    text = LINE_BREAK.join(_cap_first(line) for line in _lines(text))
+    return _finish_addresses(text)
 
 
 def plain_for_app(text: str, kind: str) -> str:

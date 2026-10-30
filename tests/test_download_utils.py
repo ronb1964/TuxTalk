@@ -271,3 +271,45 @@ def test_a_download_window_is_told_why_and_a_cancel_says_nothing(tmp_path):
     assert download_file(src.as_uri(), str(tmp_path / "b"), cancel_event=cancel,
                          report=lambda *r: reports.append(r)) is False
     assert reports == []
+
+
+def test_a_folder_that_couldnt_be_removed_is_logged(tmp_path, monkeypatch, caplog):
+    """A 1.5 GB folder left behind said nothing at all."""
+    import logging
+    import shutil
+    from tuxtalk import download_utils
+
+    def refused(path):
+        raise PermissionError(13, "Permission denied", path)
+    monkeypatch.setattr(shutil, "rmtree", refused)
+    caplog.set_level(logging.INFO)
+    download_utils.remove_tree(str(tmp_path / "lib.old"))
+    assert any("Couldn't remove" in r.getMessage() for r in caplog.records)
+
+
+def test_a_replace_whose_rename_fails_puts_the_old_folder_back(tmp_path, monkeypatch):
+    import os
+    from tuxtalk import download_utils
+    target, old, staging = (str(tmp_path / n) for n in ("lib", "lib.old", ".lib.new"))
+    os.mkdir(target)
+    os.mkdir(staging)
+    rename = os.rename
+
+    def staging_wont_move(src, dst):
+        if src == staging:
+            raise OSError(18, "Invalid cross-device link")
+        rename(src, dst)
+    monkeypatch.setattr(download_utils.os, "rename", staging_wont_move)
+    with pytest.raises(OSError):
+        download_utils.replace_folder(staging, target, old)
+    assert os.path.isdir(target) and not os.path.exists(old)
+
+
+def test_a_turn_that_doesnt_come_says_what_was_installing():
+    """It reached the CUDA window as "another cuda install didn't finish"."""
+    from tuxtalk import download_utils, single_instance
+    with single_instance.open_lock("cuda-install.lock") as held:
+        assert single_instance.claim(held)
+        with (pytest.raises(OSError, match="^another install of CUDA didn't finish$"),
+              download_utils.install_turn("cuda", "CUDA", wait_s=0)):
+            pass

@@ -5,12 +5,6 @@
   "welcome_dialog.py::WelcomeDialog._run_in_background.runner::swallowed_error": 1
  },
  "functions": {
-  "ai_cleanup.py::_deletion_allowed": {
-   "decisions": 17
-  },
-  "ai_cleanup.py::_is_restated_correction": {
-   "decisions": 18
-  },
   "ai_cleanup.py::fix_self_corrections": {
    "decisions": 24
   },
@@ -23,28 +17,23 @@
   "config.py::_validation_problems": {
    "decisions": 16
   },
-  "config.py::find_input_device": {
-   "decisions": 31
+  "correction_safety.py::_deletion_allowed": {
+   "decisions": 16
   },
-  "cuda_helper.py::download_cuda_libraries": {
-   "decisions": 28,
-   "lines": 122
+  "correction_safety.py::_is_restated_correction": {
+   "decisions": 18
   },
   "custom_words.py::fix_spelling": {
    "decisions": 28
   },
-  "file_transcribe.py::load_engine": {
-   "decisions": 19
+  "installation.py::get_install_type": {
+   "decisions": 16
   },
   "kwin_hotkeys.py::_app_shortcut_clashes": {
    "decisions": 19
   },
   "normalize.py::_space_after_ender_repl": {
    "decisions": 18
-  },
-  "normalize.py::normalize_text": {
-   "decisions": 17,
-   "lines": 170
   },
   "output_backends.py::LibeiOutputBackend._run_handshake": {
    "lines": 106
@@ -72,9 +61,6 @@
   },
   "uninstall.py::find": {
    "decisions": 22
-  },
-  "update_checker.py::get_install_type": {
-   "decisions": 16
   },
   "vocabulary.py::save_word": {
    "decisions": 16

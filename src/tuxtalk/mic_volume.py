@@ -24,7 +24,7 @@ DEFAULT_MIC_NAMES = ("", "default", "pipewire", "pulse")
 
 def recorded_mic(mic, device_names):
     """The input device the service records from for the mic setting *mic*,
-    or "" for the system default. Same rule as config.find_input_device: the
+    or "" for the system default. Same rule as microphones.find_input_device: the
     first name containing *mic*, and the default when none does (a mic that
     was unplugged, say)."""
     if mic:
@@ -114,10 +114,10 @@ def get_volume(source=DEFAULT_SOURCE):
     can tell. wpctl knows only the default, by name; a named source goes
     to pactl."""
     if source == DEFAULT_SOURCE:
-        out = _run(["wpctl", "get-volume", "@DEFAULT_AUDIO_SOURCE@"])
+        out = run_sound_tool(["wpctl", "get-volume", "@DEFAULT_AUDIO_SOURCE@"])
         if out and (found := _WPCTL_VOLUME.search(out)):
             return round(float(found.group(1)) * 100)
-    out = _run(["pactl", "get-source-volume", source])
+    out = run_sound_tool(["pactl", "get-source-volume", source])
     if out and (found := _PACTL_PERCENT.search(out)):
         return int(found.group(1))
     return None
@@ -125,20 +125,27 @@ def get_volume(source=DEFAULT_SOURCE):
 
 def set_volume(percent, source=DEFAULT_SOURCE) -> bool:
     """Set *source*'s volume to *percent*; False when neither tool did."""
-    if source == DEFAULT_SOURCE and _run(
+    if source == DEFAULT_SOURCE and run_sound_tool(
             ["wpctl", "set-volume", "@DEFAULT_AUDIO_SOURCE@", f"{percent / 100}"]) is not None:
         return True
-    return _run(["pactl", "set-source-volume", source, f"{percent}%"]) is not None
+    return run_sound_tool(["pactl", "set-source-volume", source, f"{percent}%"]) is not None
 
 
-def _run(cmd):
-    """*cmd*'s output, or None when it isn't installed, fails or takes over
-    two seconds."""
+def run_sound_tool(cmd):
+    """*cmd*'s (wpctl's or pactl's) output, or None when it isn't installed,
+    fails or takes over two seconds. A failure is logged with why, so a mic
+    chosen by a fallback leaves a reason in the log; a tool that isn't
+    installed (that sound server isn't running here) isn't."""
     try:
+        # errors="replace": a device name in another encoding is still a name.
         result = subprocess.run(cmd, capture_output=True, text=True, errors="replace", timeout=2)
     except FileNotFoundError:
         return None             # not installed here; the other tool may be
     except (OSError, subprocess.SubprocessError) as e:
-        logger.warning(f"{cmd[0]} failed: {e}")
+        logger.warning(f"{' '.join(cmd)} failed: {e}")
         return None
-    return result.stdout if result.returncode == 0 else None
+    if result.returncode != 0:
+        logger.warning(f"{' '.join(cmd)} failed with exit code {result.returncode}: "
+                       f"{result.stderr.strip()[:200]}")
+        return None
+    return result.stdout

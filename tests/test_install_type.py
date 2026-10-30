@@ -1,14 +1,13 @@
-"""Tests for install-type detection in update_checker.
+"""Tests for install-type detection (installation) and the update path it picks.
 
 The updater must know HOW TuxTalk was installed so it never tries to download
 and run an AppImage on a .deb/.rpm/AUR/Flatpak install (that fails, e.g. missing
 libfuse.so.2 on Fedora). get_install_type() is fully injectable so these tests
 never touch the real environment.
 """
-from tuxtalk.update_checker import (
-    get_install_type, get_update_guidance, get_package_asset,
-    package_install_argv,
-)
+from tuxtalk.installation import get_install_type
+from tuxtalk.update_install import get_package_asset, package_install_argv
+from tuxtalk.update_ui import get_update_guidance
 
 
 def test_flatpak_detected_from_env():
@@ -33,7 +32,7 @@ def test_an_appimage_variable_inherited_from_another_app_is_ignored():
     Uninstall delete the other app's file (review of 0.17)."""
     assert get_install_type(appimage_env="/home/ron/Apps/VSCodium.AppImage",
                             appdir_env="/tmp/.mount_VSCodiXYZ", flatpak_env="",
-                            module_path="/opt/talktype/usr/src/tuxtalk/update_checker.py",
+                            module_path="/opt/talktype/usr/src/tuxtalk/installation.py",
                             pkg_query=lambda: "deb") == "deb"
 
 
@@ -48,25 +47,25 @@ def test_an_extracted_appimage_counts_by_its_appdir():
 def test_rpm_package_from_opt_tree():
     # .deb/.rpm ship the EXTRACTED tree; APPIMAGE is unset, source lives in /opt/talktype
     assert get_install_type(appimage_env="", flatpak_env="",
-                            module_path="/opt/talktype/usr/src/tuxtalk/update_checker.py",
+                            module_path="/opt/talktype/usr/src/tuxtalk/installation.py",
                             pkg_query=lambda: "rpm") == "rpm"
 
 
 def test_deb_package_from_opt_tree():
     assert get_install_type(appimage_env="", flatpak_env="",
-                            module_path="/opt/talktype/usr/src/tuxtalk/update_checker.py",
+                            module_path="/opt/talktype/usr/src/tuxtalk/installation.py",
                             pkg_query=lambda: "deb") == "deb"
 
 
 def test_generic_package_when_manager_unknown():
     assert get_install_type(appimage_env="", flatpak_env="",
-                            module_path="/opt/talktype/usr/src/tuxtalk/update_checker.py",
+                            module_path="/opt/talktype/usr/src/tuxtalk/installation.py",
                             pkg_query=lambda: None) == "package"
 
 
 def test_dev_checkout():
     assert get_install_type(appimage_env="", flatpak_env="",
-                            module_path="/home/ron/Projects/TalkType/src/tuxtalk/update_checker.py",
+                            module_path="/home/ron/Projects/TalkType/src/tuxtalk/installation.py",
                             pkg_query=lambda: None) == "dev"
 
 

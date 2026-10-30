@@ -20,7 +20,7 @@ an RTX 4070 Super. That runs as its own helper process,
 parakeet_gpu.py, because whisper-server only serves Whisper models.
 
 At run time it is a whisper-server process, started and watched the same way
-as the AI cleanup engine (engine_process.py): it dies with the dictation
+as the AI engine (ai_server.py, engine_process.py): it dies with the dictation
 service and leftovers from a crash are cleaned up. Each dictation is sent to
 it over 127.0.0.1 as a WAV.
 
@@ -204,7 +204,7 @@ def make_engine_download_func(model_name=None):
             try:
                 progress_callback("Unpacking...", 97)
                 unpack_tar(archive, folder)
-                with install_turn("vulkan-engine"):
+                with install_turn("vulkan-engine", "the graphics engine"):
                     if not is_engine_installed(model_name):     # or another download did it
                         target = _engine_dir()
                         shutil.rmtree(target, ignore_errors=True)
@@ -453,7 +453,7 @@ class VulkanWhisperModel:
         engine_process.kill_orphans(engine_process.processes_of(_binary("whisper-server")),
                                     engine_process.is_talktype_process, "graphics engine")
         self._port = engine_process.free_port()
-        # Unlike llama-server (ai_cleanup.py), whisper-server has no API key
+        # Unlike llama-server (ai_server.py), whisper-server has no API key
         # option. It listens on 127.0.0.1 only and sends nothing of the user's
         # back, so another local program could at most borrow the graphics chip.
         command, env = engine_process.parent_death_command(

@@ -15,13 +15,58 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, GLib  # noqa: E402
 from .ui_style import message_dialog, show_message  # noqa: E402
 
-from . import notes_text, update_checker  # noqa: E402
+from . import installation, notes_text, update_checker, update_install  # noqa: E402
 from .progress_window import run_with_progress  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
 DOWNLOAD_FAILED = "The download could not be completed"
 UNEXPECTED = "Something TuxTalk didn't expect went wrong; the log has the details."
+
+
+def get_update_guidance(install_type: str, latest_version: str,
+                        release_url: str = "") -> dict:
+    """How to update a given install type. Returns a dict with:
+      update_method: 'appimage_swap' (download+swap the AppImage in place),
+                     'pkexec_package' (download the .rpm/.deb, install as root
+                     via a PolicyKit password prompt), or 'manual' (show the
+                     command; the app can't do it safely).
+      can_auto_update: True for appimage_swap and pkexec_package.
+      title, message: user-facing text. command: copy-paste command for manual.
+    """
+    v = latest_version
+    if install_type == "appimage":
+        return {"update_method": "appimage_swap", "can_auto_update": True,
+                "title": "Update Available",
+                "message": f"TuxTalk {v} is available.",
+                "command": None, "release_url": release_url}
+    if install_type in ("rpm", "deb"):
+        return {"update_method": "pkexec_package", "can_auto_update": True,
+                "title": "Update Available",
+                "message": (f"TuxTalk {v} is available. TuxTalk can download and "
+                            f"install it for you — your system will ask for your "
+                            f"password to complete the install."),
+                "command": None, "release_url": release_url}
+    if install_type == "aur":
+        cmd = "yay -S tuxtalk-appimage   # or: paru -S tuxtalk-appimage"
+        msg = (f"TuxTalk {v} is available. You installed from the AUR — "
+               f"update with your AUR helper:")
+    elif install_type == "flatpak":
+        from .config import APP_ID
+        cmd = f"flatpak update {APP_ID}"
+        msg = (f"TuxTalk {v} is available. Update through Flatpak (your software "
+               f"center may also update it automatically):")
+    elif install_type == "dev":
+        cmd = "git pull   # in your TuxTalk project folder"
+        msg = (f"TuxTalk {v} is available. You're running the development "
+               f"version — update with git:")
+    else:  # 'package' / unknown
+        cmd = None
+        msg = (f"TuxTalk {v} is available. Please update using your system's "
+               f"package manager, or download it from the release page.")
+    return {"update_method": "manual", "can_auto_update": False,
+            "title": "Update Available",
+            "message": msg, "command": cmd, "release_url": release_url}
 
 
 def download_failure(last_said):
@@ -138,8 +183,8 @@ def show_update_result(result, install_appimage, install_package):
     # AppImage can be swapped in place; .deb/.rpm/AUR/Flatpak users must use
     # their package manager, so we show instructions instead of downloading
     # and running an AppImage (which fails, e.g. missing libfuse.so.2).
-    install_type = update_checker.get_install_type()
-    guidance = update_checker.get_update_guidance(
+    install_type = installation.get_install_type()
+    guidance = get_update_guidance(
         install_type, result.get("latest_version", "unknown"), release.get("html_url", ""))
 
     # NON-modal and NOT keep-above on purpose: the auto-check pops this on
@@ -244,7 +289,7 @@ def run_appimage_update(release, restart, *, parent=None, failed=None,
         def reporting(message, percent):
             said[0] = message
             progress(message, percent)
-        path = update_checker.download_update(
+        path = update_install.download_update(
             release["appimage_url"], release.get("appimage_name", "TuxTalk-update.AppImage"),
             reporting, checksums_url=release.get("checksums_url"))
         if not path:
@@ -254,7 +299,7 @@ def run_appimage_update(release, restart, *, parent=None, failed=None,
         progress("Installing update...", 90)
 
         def install():
-            return update_checker.install_appimage_update(path, progress)
+            return update_install.install_appimage_update(path, progress)
         return run_install(install) if run_install else install()
 
     def finish(result):
@@ -289,7 +334,7 @@ def run_package_update(release, install_type, restart=None, *, quitting=lambda: 
     tells the user to reopen TuxTalk instead. *quitting* says when TuxTalk
     began quitting meanwhile: then nothing is installed after the download,
     and no result is shown (an install already started finishes)."""
-    url, filename = update_checker.get_package_asset(release, install_type)
+    url, filename = update_install.get_package_asset(release, install_type)
     if not url:
         _error("This release has no package for your install type.\n"
                "Please update from the GitHub release page.")
@@ -304,7 +349,7 @@ def run_package_update(release, install_type, restart=None, *, quitting=lambda: 
             said[:] = [message, percent]
             progress(message, percent)
         try:
-            path = update_checker.download_update(url, filename, reporting,
+            path = update_install.download_update(url, filename, reporting,
                                                   checksums_url=release.get("checksums_url"))
             if not path:
                 return False, (f"{download_failure(said[0])}\n\n"
@@ -312,7 +357,7 @@ def run_package_update(release, install_type, restart=None, *, quitting=lambda: 
             if quitting():
                 return False, "TuxTalk quit before the update was installed."
             progress("Waiting for your password to install…", said[1])
-            return update_checker.install_package_update(path, install_type)
+            return update_install.install_package_update(path, install_type)
         except Exception as e:
             # Caught here to name the error in the box; run_with_progress
             # would hand finish only None.

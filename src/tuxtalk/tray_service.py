@@ -202,12 +202,12 @@ class ServiceLifecycle:
         Returns False so it can be scheduled with GLib.idle_add."""
         if self._quitting:
             return False        # an update that went in after Quit: stay quit
-        from . import update_checker
+        from . import installation, update_install
         # A self-managed AppImage was just swapped in place at APPIMAGE_PATH;
         # packages are started through their /usr/bin launcher.
-        target = (update_checker.APPIMAGE_PATH
-                  if update_checker.get_install_type() == "appimage" else None)
-        ok, msg = update_checker.restart_via_launcher(target)
+        target = (installation.APPIMAGE_PATH
+                  if installation.get_install_type() == "appimage" else None)
+        ok, msg = update_install.restart_via_launcher(target)
         if not ok:
             logger.error(f"Restart failed: {msg}")
             show_message(None, Gtk.MessageType.INFO, "Update installed",

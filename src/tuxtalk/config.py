@@ -1,12 +1,10 @@
 """TuxTalk's settings: the Settings fields and their defaults, loading,
 checking, repairing and saving config.toml, which settings apply live and
-which restart dictation, the data folders, the microphone lookup and the
-snippets file."""
+which restart dictation, the data folders and the snippets file."""
 from __future__ import annotations
 import dataclasses
 import os
 import shutil
-import subprocess
 import sys
 import tempfile
 import time
@@ -261,7 +259,7 @@ class Settings:
     log_transcripts: bool = False
     # drop "um"/"uh" and accidental repeated words (cleanup.py; rules, no download)
     remove_fillers: bool = False
-    # fix "3, no wait, 4" with a local AI model (ai_cleanup.py downloads it)
+    # fix "3, no wait, 4" with a local AI model (ai_download.py downloads it)
     ai_corrections: bool = False
     # Shift + dictation key rewrites the selected text with the same AI model
     voice_editing: bool = False
@@ -989,132 +987,6 @@ def get_data_dir():
              Inside a Flatpak this is the private per-app XDG_DATA_HOME/<DATA_DIR>.
     """
     return os.path.join(_data_home(), DATA_DIR)
-
-
-# ---------------------------------------------------------------------------
-# Audio device detection
-# ---------------------------------------------------------------------------
-
-def default_source_name() -> str | None:
-    """PipeWire's default microphone, by its unique node name, or None.
-
-    Used to notice the desktop switching its default input (GNOME Quick
-    Settings, KDE's volume applet). None when wpctl is missing or fails, so a
-    system without PipeWire never looks like a switch.
-    """
-    try:
-        # errors="replace": a device name in another encoding is still a name.
-        result = subprocess.run(["wpctl", "inspect", "@DEFAULT_SOURCE@"],
-                                capture_output=True, text=True, errors="replace", timeout=2)
-    except (OSError, subprocess.SubprocessError):   # no wpctl, or it hung
-        return None
-    if result.returncode != 0:
-        return None
-    for line in result.stdout.splitlines():
-        key, sep, value = line.strip().lstrip("*").partition("=")
-        if sep and key.strip() == "node.name":
-            return value.strip().strip('"') or None
-    return None
-
-
-def find_input_device(mic_substring: str | None) -> int | None:
-    """Find the best input device index for recording.
-
-    When mic_substring is set, finds a device whose name contains it.
-    When empty/None, auto-detects the system's default microphone via
-    PipeWire (wpctl) instead of relying on PortAudio's ALSA default,
-    which can return garbage audio on PipeWire systems with virtual
-    128-channel default devices.
-
-    Returns:
-        Device index for sounddevice, or None to use sounddevice's default.
-    """
-    try:
-        import sounddevice as sd
-        q = sd.query_devices()
-    except Exception as e:      # no PortAudio, or it can't list: sounddevice's default
-        logger.warning(f"Could not list the sound devices: {e}")
-        return None
-
-    # --- User specified a mic name — find it by substring match ---
-    if mic_substring:
-        m = mic_substring.lower()
-        candidates = [
-            (i, d) for i, d in enumerate(q)
-            if d.get("max_input_channels", 0) > 0
-            and m in d.get("name", "").lower()
-        ]
-        if candidates:
-            return candidates[0][0]
-        return None  # Not found — fall back to sounddevice default
-
-    # --- No mic configured — auto-detect the real default source ---
-    # PipeWire's ALSA "default" device (128 channels) can return clipped
-    # garbage audio instead of actual mic input. We ask PipeWire directly
-    # for the real default source name, then match it in sounddevice's list.
-    default_source = None   # PipeWire's default source, when it could say
-    try:
-        result = subprocess.run(
-            ["wpctl", "inspect", "@DEFAULT_SOURCE@"],
-            capture_output=True, text=True, errors="replace", timeout=2
-        )
-        if result.returncode == 0:
-            for line in result.stdout.splitlines():
-                stripped = line.strip()
-                # Look for node.nick (short name) or node.description (full name)
-                if "node.nick" in stripped or "node.description" in stripped:
-                    parts = stripped.split("=", 1)
-                    if len(parts) == 2:
-                        source_name = parts[1].strip().strip('"').strip()
-                        if not source_name:
-                            continue
-                        default_source = source_name
-                        # Find this device in sounddevice's list, skipping
-                        # virtual devices with unrealistically many channels
-                        for i, d in enumerate(q):
-                            if (d.get("max_input_channels", 0) > 0
-                                    and d.get("max_input_channels", 0) < 10
-                                    and source_name.lower()
-                                    in d.get("name", "").lower()):
-                                logger.info(
-                                    f"Auto-detected mic: [{i}] {d['name']}"
-                                    " (via PipeWire default source)")
-                                return i
-    except (OSError, subprocess.SubprocessError):
-        pass  # wpctl not installed (not a PipeWire system), or it hung
-
-    # --- The default is virtual (noise suppression, a remapped source) ---
-    # PortAudio lists only hardware under their own names, so a virtual
-    # default source has no entry. Its "pipewire" device records from
-    # whatever the default source is; a raw sound card would bypass it.
-    if default_source:
-        for i, d in enumerate(q):
-            if (d.get("name", "").lower() in ("pipewire", "pulse")
-                    and d.get("max_input_channels", 0) > 0):
-                logger.info(f"Auto-detected mic: [{i}] {d['name']}"
-                            f" (the default source {default_source!r} is not a hardware device)")
-                return i
-
-    # --- Fallback: pick a real hardware mic, avoiding virtual devices ---
-    # Filter out monitors, virtual sinks, and PipeWire wrappers
-    skip_names = {"monitor", "default", "pipewire", "sysdefault", "spdif"}
-    hw_mics = [
-        (i, d) for i, d in enumerate(q)
-        if d.get("max_input_channels", 0) > 0
-        and d.get("max_input_channels", 0) < 10
-        and not any(s in d.get("name", "").lower() for s in skip_names)
-    ]
-    if hw_mics:
-        # Prefer USB mics (external) over built-in analog
-        usb = [(i, d) for i, d in hw_mics
-               if "usb" in d.get("name", "").lower()]
-        chosen_i, chosen_d = (usb or hw_mics)[0]
-        logger.info(
-            f"Auto-detected mic (hardware fallback):"
-            f" [{chosen_i}] {chosen_d['name']}")
-        return chosen_i
-
-    return None  # Last resort: let sounddevice use its own default
 
 
 # Custom voice commands configuration

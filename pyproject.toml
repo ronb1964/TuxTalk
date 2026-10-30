@@ -71,7 +71,7 @@ ignore = ["SIM105"]
 # tests/test_ruff_ratchet.py lets only go down; a rule is struck here when
 # its count reaches none, and holds for that file from then on.
 [tool.ruff.lint.per-file-ignores]
-"src/tuxtalk/ai_cleanup.py" = ["B905", "SIM109"]
+"src/tuxtalk/ai_cleanup.py" = ["B905"]
 "src/tuxtalk/audio_duck.py" = ["SIM114"]
 "src/tuxtalk/config.py" = ["B023"]
 "src/tuxtalk/custom_words.py" = ["B905"]

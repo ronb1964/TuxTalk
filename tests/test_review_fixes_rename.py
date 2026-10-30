@@ -4,7 +4,7 @@ import os
 import pathlib
 
 from tuxtalk import desktop_launcher
-from tuxtalk import update_checker as uc
+from tuxtalk import installation
 
 
 def _read(path):
@@ -14,8 +14,10 @@ def _read(path):
 def test_menu_launcher_points_at_the_installed_appimage(tmp_path, monkeypatch):
     # First run copies the AppImage to APPIMAGE_PATH (~/AppImages/TuxTalk.AppImage);
     # the launcher it writes must start that file, not the old TalkType name.
-    monkeypatch.setattr(desktop_launcher, "DESKTOP_FILE_PATH", str(tmp_path / "apps" / "tuxtalk.desktop"))
-    monkeypatch.setattr(uc, "APPIMAGE_PATH", str(tmp_path / "AppImages" / "TuxTalk.AppImage"))
+    monkeypatch.setattr(desktop_launcher, "DESKTOP_FILE_PATH",
+                        str(tmp_path / "apps" / "tuxtalk.desktop"))
+    monkeypatch.setattr(installation, "APPIMAGE_PATH",
+                        str(tmp_path / "AppImages" / "TuxTalk.AppImage"))
     monkeypatch.setattr(desktop_launcher, "install_app_icon", lambda: "tuxtalk")
     monkeypatch.setattr(desktop_launcher.menu_cache, "refresh_menu_cache", lambda: None)
     ok, _ = desktop_launcher.create_desktop_launcher()
@@ -57,7 +59,8 @@ def test_a_user_link_to_another_disk_is_followed_not_skipped(tmp_path):
     rm.migrate(home=h)
     assert os.path.isfile(f"{h}/.local/share/TuxTalk/models/m.bin")
     assert os.path.isfile(f"{h}/.local/share/TalkType/models/m.bin")    # old path still works
-    assert os.path.isfile(str(tmp_path / "bigdisk" / "TalkType" / "models" / "m.bin"))  # never moved
+    # never moved
+    assert os.path.isfile(str(tmp_path / "bigdisk" / "TalkType" / "models" / "m.bin"))
 
 
 def test_a_mount_point_at_the_old_path_is_linked_not_lost(tmp_path, monkeypatch):
@@ -74,7 +77,8 @@ def test_a_mount_point_at_the_old_path_is_linked_not_lost(tmp_path, monkeypatch)
 def _old_entry(h, exec_path, enabled="true"):
     os.makedirs(f"{h}/.config/autostart", exist_ok=True)
     with open(f"{h}/.config/autostart/talktype.desktop", "w") as f:
-        f.write(f"[Desktop Entry]\nName=TalkType\nExec={exec_path}\nX-GNOME-Autostart-enabled={enabled}\n")
+        f.write(f"[Desktop Entry]\nName=TalkType\nExec={exec_path}\n"
+                f"X-GNOME-Autostart-enabled={enabled}\n")
 
 
 def test_only_the_running_appimage_is_renamed(tmp_path):
@@ -112,4 +116,5 @@ def test_an_aur_login_entry_points_at_the_new_opt_path(tmp_path, monkeypatch):
     monkeypatch.setattr(rm.os.path, "exists",
                         lambda p: p == "/opt/tuxtalk/TuxTalk.AppImage" or real_exists(p))
     rm.adopt_old_install(home=h, running_appimage="/opt/tuxtalk/TuxTalk.AppImage")
-    assert "Exec=/opt/tuxtalk/TuxTalk.AppImage\n" in _read(f"{h}/.config/autostart/tuxtalk.desktop")
+    autostart_entry = _read(f"{h}/.config/autostart/tuxtalk.desktop")
+    assert "Exec=/opt/tuxtalk/TuxTalk.AppImage\n" in autostart_entry

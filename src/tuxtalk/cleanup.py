@@ -21,7 +21,7 @@ _FILLER = r"(?:u+m+|u+h+m*|erm)"
 
 # Words that are correctly doubled in ordinary English: "I know that that is
 # true", "she had had enough", "what it is is...", "very very", "so so".
-# The AI's corrections are held to the same list (ai_cleanup).
+# The AI's corrections are held to the same list (correction_safety).
 LEGIT_DOUBLES = {"that", "had", "is", "do", "very", "so", "bye", "no", "yeah", "ha", "really",
                  "far", "long"}
 

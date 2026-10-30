@@ -137,8 +137,8 @@ def apply(cfg):
     voice_editing = bool(getattr(cfg, "voice_editing", False))
     want_ai = ai_corrections or voice_editing
     if want_ai and ai_engine is None:
-        from . import ai_cleanup
-        if ai_cleanup.is_installed():
+        from . import ai_cleanup, ai_download
+        if ai_download.is_installed():
             ai_engine = ai_cleanup.CorrectionEngine()
             ai_engine.start()
         else:

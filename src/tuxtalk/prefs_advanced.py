@@ -111,9 +111,9 @@ class AdvancedTab(Tab):
         # Shown ticked only if its download is actually present. If the files
         # went missing, an unticked box is the truth, and ticking it downloads
         # them again (see _on_ai_corrections_toggled).
-        from tuxtalk import ai_cleanup
+        from tuxtalk import ai_download
         self.ai_corrections_check.set_active(
-            bool(self.config.get("ai_corrections", False)) and ai_cleanup.is_installed())
+            bool(self.config.get("ai_corrections", False)) and ai_download.is_installed())
         self.ai_corrections_check.set_tooltip_text(
             "When you correct yourself mid-sentence (\u201cno wait\u201d, \u201cI mean\u201d, "
             "\u201cscratch that\u201d),\n"
@@ -122,7 +122,7 @@ class AdvancedTab(Tab):
             "Only sentences with a correction phrase are sent to it, and its answer is\n"
             "checked: if it changed anything besides the correction, your words are\n"
             "typed exactly as spoken instead.\n\n"
-            f"Needs a one-time download of about {ai_cleanup.DOWNLOAD_SIZE_TEXT} and roughly "
+            f"Needs a one-time download of about {ai_download.DOWNLOAD_SIZE_TEXT} and roughly "
             "1.5 GB of memory while on.")
         self.ai_corrections_check.connect("toggled", self._on_ai_corrections_toggled)
         grid.attach(self.ai_corrections_check, 0, row, 2, 1)
@@ -130,7 +130,7 @@ class AdvancedTab(Tab):
 
         ai_note = Gtk.Label(xalign=0)
         ai_note.set_markup('<span>    Runs on your computer, nothing is sent online. '
-                           f'One-time download of about {ai_cleanup.DOWNLOAD_SIZE_TEXT}.</span>')
+                           f'One-time download of about {ai_download.DOWNLOAD_SIZE_TEXT}.</span>')
         ai_note.set_opacity(0.7)
         grid.attach(ai_note, 0, row, 2, 1)
         row += 1
@@ -342,7 +342,7 @@ class AdvancedTab(Tab):
     def _labs_editing(self, grid, row):
         """Editing by voice: voice editing, select and move, Show tips again;
         returns the next row."""
-        from . import ai_cleanup, explain
+        from . import ai_download, explain
         grid.attach(subheading("Editing by voice"), 0, row, 2, 1)
         row += 1
 
@@ -352,7 +352,7 @@ class AdvancedTab(Tab):
             label="Voice editing: select text, hold Shift with your dictation key, "
                   "say how to change it")
         self.voice_editing_check.set_active(
-            bool(self.config.get("voice_editing", False)) and ai_cleanup.is_installed())
+            bool(self.config.get("voice_editing", False)) and ai_download.is_installed())
         hold = self.config.get("hotkey") or "F8"      # the key Help names too
         self.voice_editing_check.set_tooltip_text(
             f"Select some text in any app, hold Shift+{hold} (Shift with your hold key, or tap\n"
@@ -362,7 +362,7 @@ class AdvancedTab(Tab):
             "Or, right after dictating, say “edit that, make it shorter”: no keys needed,\n"
             "handy with hands-free and Type at pause.\n\n"
             "Uses the same small AI as self-corrections (one shared "
-            f"{ai_cleanup.DOWNLOAD_SIZE_TEXT} download),\n"
+            f"{ai_download.DOWNLOAD_SIZE_TEXT} download),\n"
             "on this computer. Simple, clear changes work best.")
         self.voice_editing_check.connect("toggled", self._on_voice_editing_toggled)
         self.voice_editing_check.set_margin_start(LABS_INDENT)
@@ -562,15 +562,15 @@ class AdvancedTab(Tab):
             self.update_config(key, False)
             return
 
-        from tuxtalk import ai_cleanup
-        if ai_cleanup.is_installed():
+        from tuxtalk import ai_download
+        if ai_download.is_installed():
             self.update_config(key, True)
             return
 
         response = show_message(
             self.window, Gtk.MessageType.QUESTION, question,
-            f"This downloads a small AI model ({ai_cleanup.MODEL_SIZE_TEXT}) and the "
-            f"llama.cpp engine that runs it ({ai_cleanup.LLAMA_SIZE_TEXT}). It is a "
+            f"This downloads a small AI model ({ai_download.MODEL_SIZE_TEXT}) and the "
+            f"llama.cpp engine that runs it ({ai_download.LLAMA_SIZE_TEXT}). It is a "
             "one-time download.\n\n"
             "Everything runs on this computer. Your dictation is never sent anywhere.",
             [("Cancel", Gtk.ResponseType.CANCEL), ("Download", Gtk.ResponseType.OK)],
@@ -583,11 +583,11 @@ class AdvancedTab(Tab):
         result = run_downloads(
             self.window, "Downloading the AI",
             "One-time download. Everything runs on this computer.",
-            [DownloadTask("AI engine", ai_cleanup.LLAMA_SIZE_TEXT,
-                          ai_cleanup.make_engine_download_func()),
-             DownloadTask("AI model", ai_cleanup.MODEL_SIZE_TEXT,
-                          ai_cleanup.make_model_download_func())],
-            arrived=ai_cleanup.is_installed)
+            [DownloadTask("AI engine", ai_download.LLAMA_SIZE_TEXT,
+                          ai_download.make_engine_download_func()),
+             DownloadTask("AI model", ai_download.MODEL_SIZE_TEXT,
+                          ai_download.make_model_download_func())],
+            arrived=ai_download.is_installed)
 
         if result:
             self.update_config(key, True)

@@ -54,7 +54,7 @@ _initialized = False
 def preload_cuda_libraries():
     """Preload the libraries from TuxTalk's CUDA download, once per process.
 
-    cuda_helper unpacks each wheel to cuda/lib/<package>/lib/. Loading them with
+    cuda_download unpacks each wheel to cuda/lib/<package>/lib/. Loading them with
     RTLD_GLOBAL lets a later open by name (CTranslate2's) find them.
     """
     global _initialized

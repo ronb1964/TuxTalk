@@ -61,8 +61,8 @@ class TestRecordingTheUpdateCheck:
 
 class TestPackageInstallIsBounded:
     def _checker(self):
-        from tuxtalk import update_checker
-        return update_checker
+        from tuxtalk import update_install
+        return update_install
 
     def test_a_hung_package_manager_returns_instead_of_blocking(self, monkeypatch, tmp_path):
         uc = self._checker()

@@ -547,8 +547,8 @@ def test_an_error_partway_still_ends_with_a_message_and_quits(home, monkeypatch)
     """With the tray's parts already stopped, going back to it would leave a
     half-shut TuxTalk (review of 0.17)."""
     told = []
-    monkeypatch.setattr(uninstall.update_checker, "get_install_type", lambda: "appimage")
-    monkeypatch.setattr(uninstall.update_checker, "get_running_appimage_path", lambda: None)
+    monkeypatch.setattr(uninstall.installation, "get_install_type", lambda: "appimage")
+    monkeypatch.setattr(uninstall.installation, "get_running_appimage_path", lambda: None)
     plan = _find(home)
     monkeypatch.setattr(uninstall, "find", lambda *a, **k: plan)
     monkeypatch.setattr(uninstall, "_ask", lambda plan: (False, False, False))
@@ -667,7 +667,7 @@ def test_in_the_development_version_the_button_only_explains(monkeypatch):
     """Ron sees the button in his dev copy too; pressing it there must never
     take away the hotkey helper and models his dev copy runs on."""
     told = []
-    monkeypatch.setattr(uninstall.update_checker, "get_install_type", lambda: "dev")
+    monkeypatch.setattr(uninstall.installation, "get_install_type", lambda: "dev")
     monkeypatch.setattr(uninstall, "_tell", lambda *a, **k: told.append(a[1]))
     monkeypatch.setattr(uninstall, "find", lambda *a, **k: pytest.fail("looked for things to remove"))
     assert uninstall.run() is False

@@ -154,19 +154,13 @@ class FileEngine:
             _steer(self.model, self.words)      # as dictation does (engine._transcribe_parakeet)
             text = self.model.recognize(audio)
         elif self.kind == "vulkan":
-            extra = {"limit_to": self.limit_to} if self.limit_to else {}
-            prompt = custom_words.prompt(self.words)
-            if prompt:
-                extra["prompt"] = prompt
-            text, _ = self.model.transcribe(audio, self.language, timeout=600, **extra)
+            text, _ = self.model.transcribe(audio, self.language, timeout=600,
+                                            prompt=custom_words.prompt(self.words) or None,
+                                            limit_to=self.limit_to)
         else:
             options = dict(beam_size=5, vad_filter=False, hotwords=custom_words.prompt(self.words))
-            segments, info = self.model.transcribe(audio, language=self.language, **options)
-            better = (language_limit.redirect(info.language, dict(info.all_language_probs or ()),
-                                              self.limit_to) if self.limit_to else None)
-            if better:
-                logger.info(f"File: Whisper heard {info.language}, not on the list; using {better}")
-                segments, info = self.model.transcribe(audio, language=better, **options)
+            segments, _ = language_limit.whisper_held_to(
+                self.model.transcribe, audio, self.language, self.limit_to, **options)
             text = " ".join(s.text.strip() for s in segments)
         text = " ".join((text or "").split())
         if self.words:
@@ -206,11 +200,8 @@ def load_engine(cfg):
     name, device = cfg.model, (cfg.device or "cpu").lower()
     parakeet = is_parakeet(name)
     title = model_title(name)
-    language = cfg.language or None
-    limit_to = () if language else language_limit.parse(getattr(cfg, "auto_languages", ""))
-    if not language:
-        language = language_limit.forced_language(limit_to)
-        limit_to = () if language else limit_to
+    language, limit_to = language_limit.language_and_limit(
+        cfg.language, language_limit.parse(getattr(cfg, "auto_languages", "")))
     words = custom_words.load()
     common = dict(language=language, limit_to=limit_to, words=words)
 

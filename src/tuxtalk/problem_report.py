@@ -78,7 +78,7 @@ def fact(read):
 
 def _tuxtalk(cfg):
     from . import __version__, recommend, uinput_helper
-    from .update_checker import get_install_type
+    from .installation import get_install_type
     lines = [
         f"Version: {__version__}",
         f"Installed as: {fact(get_install_type)}",
