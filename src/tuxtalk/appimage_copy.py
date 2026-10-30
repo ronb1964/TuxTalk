@@ -138,7 +138,7 @@ def reboot_system() -> bool:
         if result.returncode != 0 and result.stderr:
             logger.warning(f"systemctl reboot refused: {result.stderr.strip()}")
         return result.returncode == 0
-    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+    except (subprocess.TimeoutExpired, OSError) as e:     # missing, or not runnable
         logger.warning(f"Could not reboot: {e}")
         return False
 
