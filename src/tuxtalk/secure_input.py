@@ -105,8 +105,6 @@ SystemCallFilter=~@privileged @resources @mount @swap @reboot @raw-io @module @o
 WantedBy=multi-user.target
 """
 
-PKEXEC_TIMEOUT = pkexec_runner.SCRIPT_TIMEOUT_S
-
 
 def helper_source():
     """The helper as it's installed: this TuxTalk's own hotkey_helper.py."""
@@ -214,7 +212,7 @@ PACKAGE_NOT_REMOVED = "TUXTALK_PACKAGE_NOT_REMOVED"
 NOT_REMOVED = "TUXTALK_NOT_REMOVED"
 
 # _pkexec()'s message when the password prompt stayed open past
-# PKEXEC_TIMEOUT: pkexec was stopped there, and nothing ran as root.
+# pkexec_runner.SCRIPT_TIMEOUT_S: pkexec was stopped there, and nothing ran as root.
 TIMED_OUT = "That took too long. Please try again."
 
 # _pkexec()'s message, with ok=True, when the time ran out after the
@@ -333,7 +331,8 @@ def _run_as_root(script, what):
 
 def _pkexec(script, what):
     """(ok, message) after running *script* through pkexec."""
-    outcome = pkexec_runner.run(["/bin/bash", "-s"], PKEXEC_TIMEOUT, script=script)
+    outcome = pkexec_runner.run(["/bin/bash", "-s"], pkexec_runner.SCRIPT_TIMEOUT_S,
+                                script=script)
     if outcome.status == pkexec_runner.TIMED_OUT:
         return False, TIMED_OUT
     if outcome.status == pkexec_runner.UNKNOWN:

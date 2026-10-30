@@ -47,6 +47,7 @@ GPU_FILE = "ggml-parakeet-ultra-q8_0.bin"
 FILES = {**CPU_FILES,
          GPU_FILE: (668757119, "fa28ec8c6afd9893da9829ec9f2fa908a60bc0fbebd37fd60bbd2f0953076fb2")}
 
+
 def folder():
     from .config import get_data_dir
     return os.path.join(get_data_dir(), "parakeet-ultra")
@@ -109,5 +110,3 @@ def make_download_func(device):
         progress_callback("Done", 100)
         return True
     return download
-
-

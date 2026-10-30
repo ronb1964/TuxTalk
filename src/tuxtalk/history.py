@@ -86,6 +86,8 @@ def forget(text):
 
 
 def _save(entries):
+    """Write *entries* (newest first, cut to MAX_ENTRIES) as the list, whole
+    or not at all; nothing without a private runtime folder. Never raises."""
     path = _history_path()
     if path is None:
         return

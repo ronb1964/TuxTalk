@@ -450,7 +450,7 @@ class GeneralTab(Tab):
         waiting for it with the window drawn: pkexec waits for the password,
         and after OK the window closes as soon as this returns. True when it
         was updated; otherwise it's said why, and where to update it later."""
-        from . import secure_input, update_offers
+        from . import pkexec_runner, update_offers
         answer, gave_up = {}, []
 
         def done(ok, message):
@@ -458,7 +458,7 @@ class GeneralTab(Tab):
             if gave_up:             # the window stopped waiting: a notification says it
                 update_offers.say_helper_updated(ok, message)
         update_offers.update_helper(done)
-        finished = self._while_drawn(lambda: answer, secure_input.PKEXEC_TIMEOUT + 10)
+        finished = self._while_drawn(lambda: answer, pkexec_runner.SCRIPT_TIMEOUT_S + 10)
         if answer.get("ok"):
             logger.info("Updated the hotkey helper from the hotkey question")
             return True

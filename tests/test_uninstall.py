@@ -473,7 +473,7 @@ def test_a_time_out_after_the_password_carries_on_unsure(monkeypatch):
     def run(*a, **k):
         raise PermissionError(1, "Operation not permitted")
     monkeypatch.setattr(secure_input.subprocess, "run", run)
-    monkeypatch.setattr(secure_input, "PKEXEC_TIMEOUT", 0)
+    monkeypatch.setattr(secure_input.pkexec_runner, "SCRIPT_TIMEOUT_S", 0)
     ok, report = secure_input._pkexec("true", "tested")
     assert (ok, report) == (True, secure_input.RAN_TOO_LONG)
     result = uninstall.root_result(report, leave_group=False, package=True)
