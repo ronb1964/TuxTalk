@@ -6,7 +6,8 @@ libfuse.so.2 on Fedora). get_install_type() is fully injectable so these tests
 never touch the real environment.
 """
 from tuxtalk.installation import get_install_type
-from tuxtalk.update_install import get_package_asset, get_update_guidance, package_install_argv
+from tuxtalk.update_install import get_package_asset, package_install_argv
+from tuxtalk.update_ui import get_update_guidance
 
 
 def test_flatpak_detected_from_env():

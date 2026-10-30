@@ -1,7 +1,6 @@
 """TuxTalk's settings: the Settings fields and their defaults, loading,
 checking, repairing and saving config.toml, which settings apply live and
-which restart dictation, the data folders, the microphone lookup and the
-snippets file."""
+which restart dictation, the data folders and the snippets file."""
 from __future__ import annotations
 import dataclasses
 import os

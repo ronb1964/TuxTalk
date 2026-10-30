@@ -119,17 +119,10 @@ def get_install_type(*, appimage_env=None, flatpak_env=None, appdir_env=None,
     return "dev"
 
 
-def ensure_appimage_in_standard_location() -> Tuple[bool, str]:
-    """
-    Ensure the AppImage is in the standard location.
-
-    If running from an AppImage that's not in ~/AppImages/, offer to copy it there.
-
-    Returns:
-        Tuple[bool, str]: (already_there, current_path)
-            - already_there: True if AppImage is already in standard location
-            - current_path: Path to the running AppImage (or None if not AppImage)
-    """
+def running_appimage_location() -> Tuple[bool, Optional[str]]:
+    """(whether the running AppImage is the copy in ~/AppImages, its path),
+    or (False, None) when TuxTalk isn't running from an AppImage. It only
+    looks; appimage_copy puts a copy there."""
     current_path = get_running_appimage_path()
 
     if not current_path:

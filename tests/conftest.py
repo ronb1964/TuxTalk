@@ -1074,7 +1074,7 @@ def first_run(monkeypatch):
     monkeypatch.setattr(first_run_setup, "show_setup_complete_dialog",
                         lambda **k: done.append("setup complete"))
     monkeypatch.setattr(installation, "is_running_from_appimage", lambda: True)
-    monkeypatch.setattr(installation, "ensure_appimage_in_standard_location",
+    monkeypatch.setattr(installation, "running_appimage_location",
                         lambda: (False, "/home/u/Downloads/TuxTalk.AppImage"))
     monkeypatch.setattr(desktop_launcher, "desktop_launcher_exists", lambda: True)
     monkeypatch.setattr(autostart, "set_autostart",

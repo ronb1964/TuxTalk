@@ -143,51 +143,6 @@ def download_update(
         return None
 
 
-def get_update_guidance(install_type: str, latest_version: str,
-                        release_url: str = "") -> dict:
-    """How to update a given install type. Returns a dict with:
-      update_method: 'appimage_swap' (download+swap the AppImage in place),
-                     'pkexec_package' (download the .rpm/.deb, install as root
-                     via a PolicyKit password prompt), or 'manual' (show the
-                     command; the app can't do it safely).
-      can_auto_update: True for appimage_swap and pkexec_package.
-      title, message: user-facing text. command: copy-paste command for manual.
-    """
-    v = latest_version
-    if install_type == "appimage":
-        return {"update_method": "appimage_swap", "can_auto_update": True,
-                "title": "Update Available",
-                "message": f"TuxTalk {v} is available.",
-                "command": None, "release_url": release_url}
-    if install_type in ("rpm", "deb"):
-        return {"update_method": "pkexec_package", "can_auto_update": True,
-                "title": "Update Available",
-                "message": (f"TuxTalk {v} is available. TuxTalk can download and "
-                            f"install it for you — your system will ask for your "
-                            f"password to complete the install."),
-                "command": None, "release_url": release_url}
-    if install_type == "aur":
-        cmd = "yay -S tuxtalk-appimage   # or: paru -S tuxtalk-appimage"
-        msg = (f"TuxTalk {v} is available. You installed from the AUR — "
-               f"update with your AUR helper:")
-    elif install_type == "flatpak":
-        from .config import APP_ID
-        cmd = f"flatpak update {APP_ID}"
-        msg = (f"TuxTalk {v} is available. Update through Flatpak (your software "
-               f"center may also update it automatically):")
-    elif install_type == "dev":
-        cmd = "git pull   # in your TuxTalk project folder"
-        msg = (f"TuxTalk {v} is available. You're running the development "
-               f"version — update with git:")
-    else:  # 'package' / unknown
-        cmd = None
-        msg = (f"TuxTalk {v} is available. Please update using your system's "
-               f"package manager, or download it from the release page.")
-    return {"update_method": "manual", "can_auto_update": False,
-            "title": "Update Available",
-            "message": msg, "command": cmd, "release_url": release_url}
-
-
 def get_package_asset(release: dict, install_type: str) -> Tuple[Optional[str], Optional[str]]:
     """(download_url, filename) of the .rpm/.deb asset for this install type."""
     if install_type == "rpm":

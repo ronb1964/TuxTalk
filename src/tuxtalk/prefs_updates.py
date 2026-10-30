@@ -509,9 +509,9 @@ class UpdatesTab(Tab):
         # self-managed AppImage can be swapped in place; package/AUR/Flatpak
         # users get instructions + the release link, never an AppImage download
         # (which fails on package installs, e.g. missing libfuse.so.2).
-        from . import installation, update_install
+        from . import installation, update_install, update_ui
         install_type = installation.get_install_type()
-        guidance = update_install.get_update_guidance(
+        guidance = update_ui.get_update_guidance(
             install_type, latest, release.get("html_url", ""))
 
         if has_update:
@@ -553,16 +553,15 @@ class UpdatesTab(Tab):
         """Download & Install, by how TuxTalk was installed: a package update
         through the shared pkexec flow, the release page (AUR, Flatpak, the
         development version), or a self-managed AppImage installed here."""
-        from . import installation, update_checker, update_install
+        from . import installation, update_checker, update_ui
         if not self._current_release:
             return
         install_type = installation.get_install_type()
-        method = update_install.get_update_guidance(install_type, "")["update_method"]
+        method = update_ui.get_update_guidance(install_type, "")["update_method"]
         if method == "manual":
             update_checker.open_release_page(self._current_release.get("html_url", ""))
             return
         if method == "pkexec_package":
-            from . import update_ui
             update_ui.run_package_update(self._current_release, install_type,
                                          self._restart_after_package_update)
             return

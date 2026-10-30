@@ -1,4 +1,4 @@
-"""The local AI's download (ai_download): the engine pinned to a checksum,
+"""The local AI's download (ai_download): the engine checked against its pin,
 a failure that says why, and an update that doesn't leave the old version."""
 import io
 import os
@@ -7,8 +7,22 @@ import types
 from tuxtalk import ai_download as ai
 
 
-def test_download_is_pinned_to_a_checksum():
+def test_the_engine_download_is_checked_against_its_pinned_sha256(tmp_path, monkeypatch):
+    """The pin only protects if the downloader gets it, and an engine that
+    fails the check is never unpacked."""
+    from tuxtalk import download_utils
+    monkeypatch.setattr("tuxtalk.config.get_data_dir", lambda: str(tmp_path))
+    checked, unpacked = [], []
+
+    def tampered(url, dest, expected_sha256=None, **kwargs):
+        checked.append((url, expected_sha256))
+        raise download_utils.DownloadError("the file didn't match its checksum")
+    monkeypatch.setattr(download_utils, "fetch_file", tampered)
+    monkeypatch.setattr(download_utils, "unpack_tar", lambda *a: unpacked.append(a))
+    assert ai.make_engine_download_func()(lambda *r: None, None) is False
     assert len(ai.LLAMA_SHA256) == 64 and ai.LLAMA_TAG in ai.LLAMA_URL
+    assert checked == [(ai.LLAMA_URL, ai.LLAMA_SHA256)]
+    assert unpacked == [] and not os.path.exists(ai.server_binary())
 
 
 # --- an engine update doesn't leave the old version behind -----------------------------------
