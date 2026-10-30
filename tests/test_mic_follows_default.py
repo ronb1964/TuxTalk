@@ -27,10 +27,11 @@ def desktop(monkeypatch):
                                   resolves=[])
     monkeypatch.setattr(microphones, "default_source_name", lambda: state.source)
 
-    def find(mic):
-        state.resolves.append(mic)
-        return 9 if mic else state.idx_for.get(state.source, 2)
-    monkeypatch.setattr(microphones, "find_input_device", find)
+    def default():
+        state.resolves.append("")
+        return state.source, state.idx_for.get(state.source, 2)
+    monkeypatch.setattr(microphones, "default_microphone", default)
+    monkeypatch.setattr(microphones, "find_input_device", lambda mic: 9)
     monkeypatch.setattr(recording, "_system_default_mic", None)
     return state
 
@@ -80,9 +81,9 @@ def test_a_failed_re_resolve_keeps_the_device_in_use(desktop, monkeypatch):
     recording.pick_input_device("")
     desktop.source = "alsa_input.usb-TONOR_TD520S"
 
-    def boom(mic):
+    def boom():
         raise RuntimeError("PortAudio went away")
-    monkeypatch.setattr(microphones, "find_input_device", boom)
+    monkeypatch.setattr(microphones, "default_microphone", boom)
 
     assert recording.follow_system_default(4) == 4
 
@@ -106,6 +107,28 @@ def test_start_recording_opens_the_new_default(desktop, monkeypatch):
         rs.state.current.stream = None
 
     assert opened == [6]
+
+
+def test_system_default_asks_pipewire_once(monkeypatch):
+    """The mic is resolved at startup, on a settings change and when a
+    stream fails to open: one wpctl call names the default source and finds
+    its device (it was asked twice, once for each)."""
+    import sys
+    calls = []
+
+    def wpctl(cmd, **kw):
+        calls.append(cmd)
+        return types.SimpleNamespace(
+            returncode=0, stderr="",
+            stdout='  * node.description = "C920"\n  * node.name = "alsa_input.c920"\n')
+    monkeypatch.setattr(mic_volume.subprocess, "run", wpctl)
+    monkeypatch.setitem(sys.modules, "sounddevice", types.SimpleNamespace(
+        query_devices=lambda: [{"name": "C920 (hw:2,0)", "max_input_channels": 2}]))
+    monkeypatch.setattr(recording, "_system_default_mic", None)
+
+    assert recording.pick_input_device("") == 0
+    assert len(calls) == 1
+    assert recording._system_default_mic == ("alsa_input.c920", 0)
 
 
 class TestDefaultSourceName:

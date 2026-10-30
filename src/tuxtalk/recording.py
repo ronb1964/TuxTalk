@@ -97,18 +97,17 @@ def feed_indicator(indicator, indata, spectrum_processor):
 def pick_input_device(mic_substring: str | None):
     """Return device index for the best matching input device.
 
-    Delegates to microphones.find_input_device() which handles PipeWire
-    auto-detection when no mic name is configured. This avoids the
-    broken ALSA "default" virtual device that returns garbage audio
-    on PipeWire systems.
+    Delegates to microphones, which finds the desktop's default microphone
+    when no mic name is configured. This avoids the broken ALSA "default"
+    virtual device that returns garbage audio on PipeWire systems. System
+    Default is remembered with its source name, so follow_system_default
+    can notice a switch.
     """
     global _system_default_mic
-    from .microphones import find_input_device
     if mic_substring:
         _system_default_mic = None      # a mic chosen by name stays put
-        return find_input_device(mic_substring)
-    source = microphones.default_source_name()
-    idx = find_input_device(mic_substring)
+        return microphones.find_input_device(mic_substring)
+    source, idx = microphones.default_microphone()
     _system_default_mic = (source, idx)
     return idx
 
