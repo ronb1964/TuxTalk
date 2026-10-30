@@ -130,10 +130,10 @@ def context_samples() -> int:
 def corrects_across_pause(raw: str, chunk_role, message) -> bool:
     """True when this phrase corrects the one typed before the pause ("no
     wait, four" after "meet at three"), so the AI should hear both together.
-    Needs AI self-corrections on and a phrase of this recording, *message*'s,
-    typed last: the undo record it takes back is then that phrase."""
-    if (chunk_role is None or not (message.has_words and message.complete)
-            or rs.state.last_message is not message):
+    Needs AI self-corrections on and a phrase of this recording typed:
+    the dictation worker types the recordings in order, so the undo record
+    it takes back is that phrase."""
+    if chunk_role is None or not (message.has_words and message.complete):
         return False
     if not (live.ai_corrections and live.ai_engine is not None
             and rs.state.last_inserted_text.strip()):

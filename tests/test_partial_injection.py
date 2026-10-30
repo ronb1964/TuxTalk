@@ -154,3 +154,17 @@ def test_an_unexpected_typing_error_forgets_the_dictation_before(monkeypatch, qu
         delivery.inject_text("How are you?", "type")
     assert rs.state.last_inserted_text == "" and rs.state.nav_context is None
     assert not rs.state.continue_mid_sentence and rs.state.last_message.shown is None
+
+
+def test_a_dictation_refused_before_its_first_key_leaves_the_last_one_to_fix(monkeypatch):
+    """A Type at pause recording, then a dictation refused for a password
+    field before anything was typed: "fix that word" back in the first
+    window got only the last phrase, as if the refused one were the last."""
+    from tuxtalk import send_countdown
+    earlier, refused = send_countdown.Message(), send_countdown.Message()
+    earlier.shown = "Hi Sam. We meet at three. "
+    monkeypatch.setattr(rs.state, "last_message", earlier)
+    monkeypatch.setattr(focused_window, "destination",
+                        lambda: focused_window.Destination("kwrite", None, password=True))
+    assert delivery.inject_text("swordfish", "type", message=refused) == "password_field"
+    assert rs.state.last_message is earlier and earlier.shown == "Hi Sam. We meet at three. "

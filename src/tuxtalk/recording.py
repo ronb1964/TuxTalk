@@ -451,8 +451,6 @@ def finish_capture(beeps_on: bool, notify_on: bool):
     resume_media_players()
     tray_link.notify_recording_state(False)  # the tray icon shows recording stopped
     trim_auto_stop_tail(rec, frames)
-    if rec.message.cancelled:
-        return None
     if indicator:
         indicator.hide_indicator()
     return frames, rec.samplerate

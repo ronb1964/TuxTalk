@@ -94,10 +94,9 @@ class RecordingState:
     # The last Enter TuxTalk pressed: {"at", "automatic"}, or None
     # (last_dictation.forget_after_key). "edit that" just after it explains itself.
     sent: object = None
-    # The Message of the recording whose words went in last (set by
-    # delivery.inject_text): its screen copy is the one "fix that word" and
-    # forgetting it work on, and a correction across a pause reaches back
-    # only over a phrase of its own recording.
+    # The Message of the recording whose words went in last, or may have
+    # (delivery.inject_text): its screen copy is the one "fix that word"
+    # and "edit that" work on, and the one forgotten when the text changes.
     last_message: send_countdown.Message = field(default_factory=send_countdown.Message)
 
 

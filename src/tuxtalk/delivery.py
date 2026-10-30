@@ -113,8 +113,6 @@ def inject_text(text: str, injection_mode: str, one_block: bool = False, into=No
     """
     before = focused_window.destination()
     sends_before, landed = keyboard_output.this_thread.sends, None
-    if message is not None:
-        rs.state.last_message = message
     keyboard_output.this_thread.into = into
     try:
         # Checked again right before each key, after the waits for the paste
@@ -144,6 +142,12 @@ def inject_text(text: str, injection_mode: str, one_block: bool = False, into=No
         if outcome == "ok":
             landed = send_countdown.landed(before, after)
     if message is not None:
+        # Words that may be in the app make it the last dictation, which
+        # "fix that word" works on; refused before its first key, the
+        # dictation before stays the last.
+        if outcome not in _GAVE_UP_UNTYPED and not (outcome == "password_field"
+                                                    and before.password):
+            rs.state.last_message = message
         message.add(outcome, landed)
     return outcome
 
