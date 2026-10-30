@@ -35,7 +35,7 @@ def open_key_devices(list_devices, input_device):
     """Every keyboard evdev can open, as the service opens them; an empty list
     when /dev/input can't be read. Game controllers, which any user may open,
     are left out: the service would not hear the hotkey through them."""
-    from .uinput_helper import is_keyboard_device
+    from .keyboard_devices import is_keyboard_device
     devices = []
     try:
         paths = list_devices()

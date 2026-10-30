@@ -28,5 +28,5 @@ def test_budgie_on_x11_gets_tuxtalks_own_key_grab(monkeypatch):
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     monkeypatch.setenv("XDG_CURRENT_DESKTOP", "Budgie:GNOME")
     monkeypatch.setenv("DESKTOP_SESSION", "budgie-desktop")
-    monkeypatch.setattr(x11_hotkeys, "is_x11_session", lambda env: True)
+    monkeypatch.setattr(desktop_detect, "is_x11_session", lambda env: True)
     assert x11_hotkeys.should_claim() is True

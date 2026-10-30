@@ -30,7 +30,7 @@ ALLOWED_EXACT = {
     # Files an install from before the rename left, which the uninstall removes.
     "uninstall.py": {"TalkType", "TalkType.AppImage"},
     # The ydotoold unit a TalkType wrote, which 0.18 removes.
-    "uinput_helper.py": {"(TalkType keystroke injection)"},
+    "ydotoold_leftovers.py": {"(TalkType keystroke injection)"},
     # An old TalkType tray that would not quit: its menu still says TalkType.
     "tray_instance.py": {
         "An older TalkType is still running",

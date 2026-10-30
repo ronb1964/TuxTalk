@@ -7,7 +7,7 @@ import pytest
 from conftest import KeyEvent
 from tuxtalk import clipboard as cb
 from tuxtalk import keyboard_grab
-from tuxtalk import uinput_helper
+from tuxtalk import keyboard_devices
 from tuxtalk import keyboard_output
 from tuxtalk.beeps import CANCEL_BEEP, READY_BEEP
 from tuxtalk import recording
@@ -734,7 +734,7 @@ class FakeKeyboard:
 def test_stopping_with_shift_waits_for_it_without_injecting_keys(keyloop, monkeypatch):
     """Injected key events replayed after a slow edit would start a new
     recording, so TuxTalk just waits for the real Shift release."""
-    monkeypatch.setattr(uinput_helper, "is_keyboard_device", lambda d: True)
+    monkeypatch.setattr(keyboard_devices, "is_keyboard_device", lambda d: True)
     kb = FakeKeyboard([[SHIFT], [SHIFT], []])
     key(F9, 1, {SHIFT})
     keyloop["grab_codes"].clear()
@@ -743,7 +743,7 @@ def test_stopping_with_shift_waits_for_it_without_injecting_keys(keyloop, monkey
 
 
 def test_shift_held_too_long_cancels_the_edit(keyloop, monkeypatch):
-    monkeypatch.setattr(uinput_helper, "is_keyboard_device", lambda d: True)
+    monkeypatch.setattr(keyboard_devices, "is_keyboard_device", lambda d: True)
     monkeypatch.setattr(hotkeys, "EDIT_SHIFT_WAIT_S", 0.05)
     cancelled = []
     monkeypatch.setattr(recording, "cancel_recording", lambda b, n, reason="": cancelled.append(reason))

@@ -19,7 +19,7 @@ from tuxtalk import hotkeys
 from tuxtalk import tray_link
 from tuxtalk import keyboard_grab
 from tuxtalk import recording_state as rs
-from tuxtalk import uinput_helper
+from tuxtalk import keyboard_devices
 from tuxtalk import recording
 from tuxtalk import mic_stream
 from tuxtalk import pipeline
@@ -206,24 +206,24 @@ def test_successful_recording_start_reports_success(monkeypatch, quiet_recording
 
 def test_pointer_devices_are_not_treated_as_keyboards():
     """Grabbing mice freezes the pointer for the whole recording."""
-    assert uinput_helper.is_keyboard_device(mouse()) is False
-    assert uinput_helper.is_keyboard_device(touchpad()) is False
+    assert keyboard_devices.is_keyboard_device(mouse()) is False
+    assert keyboard_devices.is_keyboard_device(touchpad()) is False
 
 
 def test_real_keyboards_are_recognised():
-    assert uinput_helper.is_keyboard_device(keyboard()) is True
+    assert keyboard_devices.is_keyboard_device(keyboard()) is True
 
 
 def test_power_button_is_not_treated_as_a_keyboard():
     """It reports EV_KEY but has no letter keys — grabbing it kills the power button."""
-    assert uinput_helper.is_keyboard_device(power_button()) is False
+    assert keyboard_devices.is_keyboard_device(power_button()) is False
 
 
 def test_grab_filtering_leaves_the_mouse_alone():
     kb = keyboard()
     mx = mouse()
 
-    keyboard_grab.grab_all_devices([d for d in (kb, mx) if uinput_helper.is_keyboard_device(d)])
+    keyboard_grab.grab_all_devices([d for d in (kb, mx) if keyboard_devices.is_keyboard_device(d)])
 
     assert kb.is_grabbed
     assert not mx.is_grabbed, "mouse was grabbed — pointer would freeze while recording"
@@ -436,12 +436,12 @@ def test_keyboard_declaring_the_pointer_event_type_is_still_a_keyboard():
     hotkey leak into whatever app has focus.
     """
     k800 = FakeDevice("Logitech K800", {
-        ecodes.EV_KEY: sorted(uinput_helper.LETTER_KEYS) + [ecodes.KEY_F8],
+        ecodes.EV_KEY: sorted(keyboard_devices.LETTER_KEYS) + [ecodes.KEY_F8],
         ecodes.EV_REL: [],
         ecodes.EV_ABS: [],
     })
 
-    assert uinput_helper.is_keyboard_device(k800) is True
+    assert keyboard_devices.is_keyboard_device(k800) is True
 
 
 def test_unifying_mouse_advertising_letter_keys_is_not_grabbed():
@@ -452,11 +452,11 @@ def test_unifying_mouse_advertising_letter_keys_is_not_grabbed():
     mouse buttons. Grabbing them freezes the pointer for the whole recording.
     """
     mx = FakeDevice("Logitech MX Master", {
-        ecodes.EV_KEY: sorted(uinput_helper.LETTER_KEYS) + [ecodes.KEY_F8, ecodes.BTN_LEFT, ecodes.BTN_RIGHT],
+        ecodes.EV_KEY: sorted(keyboard_devices.LETTER_KEYS) + [ecodes.KEY_F8, ecodes.BTN_LEFT, ecodes.BTN_RIGHT],
         ecodes.EV_REL: [ecodes.REL_X, ecodes.REL_Y],
     })
 
-    assert uinput_helper.is_keyboard_device(mx) is False
+    assert keyboard_devices.is_keyboard_device(mx) is False
 
 
 def test_the_apps_own_virtual_keyboard_is_not_grabbed():
@@ -465,7 +465,7 @@ def test_the_apps_own_virtual_keyboard_is_not_grabbed():
     from tuxtalk import virtual_keyboard
     ours = FakeDevice(virtual_keyboard.NAME, virtual_keyboard._capabilities())
 
-    assert uinput_helper.is_keyboard_device(ours) is False
+    assert keyboard_devices.is_keyboard_device(ours) is False
 
 
 def _kanata():
@@ -479,27 +479,27 @@ def test_a_key_remappers_virtual_keyboard_is_read(monkeypatch):
     """kanata takes the real keyboards and passes every key on through its
     own, shaped like a mouse too: skipped, TuxTalk heard no key at all with
     it running (issue #23)."""
-    monkeypatch.setattr(uinput_helper, "is_uinput_device", lambda path: True)
-    assert uinput_helper.is_keyboard_device(_kanata()) is True
-    assert uinput_helper.is_remapper_keyboard(_kanata()) is True
+    monkeypatch.setattr(keyboard_devices, "is_uinput_device", lambda path: True)
+    assert keyboard_devices.is_keyboard_device(_kanata()) is True
+    assert keyboard_devices.is_remapper_keyboard(_kanata()) is True
 
 
 def test_a_real_keyboard_and_mouse_in_one_is_still_skipped(monkeypatch):
     """The same shape from hardware is a Logitech receiver's mouse."""
-    monkeypatch.setattr(uinput_helper, "is_uinput_device", lambda path: False)
-    assert uinput_helper.is_keyboard_device(_kanata()) is False
+    monkeypatch.setattr(keyboard_devices, "is_uinput_device", lambda path: False)
+    assert keyboard_devices.is_keyboard_device(_kanata()) is False
 
 
 def test_a_plain_keyboard_is_no_remapper_keyboard(monkeypatch):
-    monkeypatch.setattr(uinput_helper, "is_uinput_device", lambda path: True)
-    assert uinput_helper.is_remapper_keyboard(keyboard("keyd virtual keyboard")) is False
+    monkeypatch.setattr(keyboard_devices, "is_uinput_device", lambda path: True)
+    assert keyboard_devices.is_remapper_keyboard(keyboard("keyd virtual keyboard")) is False
 
 
 def test_the_apps_own_keyboard_is_skipped_though_a_program_made_it(monkeypatch):
     from tuxtalk import virtual_keyboard
-    monkeypatch.setattr(uinput_helper, "is_uinput_device", lambda path: True)
+    monkeypatch.setattr(keyboard_devices, "is_uinput_device", lambda path: True)
     ours = FakeDevice(virtual_keyboard.NAME, virtual_keyboard._capabilities())
-    assert uinput_helper.is_keyboard_device(ours) is False
+    assert keyboard_devices.is_keyboard_device(ours) is False
 
 
 class _HeldKeyboard(FakeDevice):
@@ -523,7 +523,7 @@ def test_a_key_remappers_keyboard_is_never_grabbed_or_written_to(monkeypatch):
     """Held during a recording, kanata's keyboard would freeze the mouse
     and swallow what TuxTalk types meanwhile (Type at pause, typing while
     the key is held): kanata passes TuxTalk's own typing through it too."""
-    monkeypatch.setattr(uinput_helper, "is_uinput_device",
+    monkeypatch.setattr(keyboard_devices, "is_uinput_device",
                         lambda path: path == "/dev/input/event18")
     real = _HeldKeyboard("USB Keyboard", keyboard()._caps, "/dev/input/event3")
     kanata = _HeldKeyboard("kanata", _kanata()._caps, "/dev/input/event18")
@@ -542,7 +542,7 @@ def test_a_right_ctrl_held_through_a_remapper_is_never_called_hidden(monkeypatch
     down: typing must wait for it, or the dictation turns into Ctrl
     shortcuts (Ctrl+W closes the tab). Also with another keyboard grabbed."""
     from tuxtalk import modifier_hotkeys
-    monkeypatch.setattr(uinput_helper, "is_uinput_device",
+    monkeypatch.setattr(keyboard_devices, "is_uinput_device",
                         lambda path: path == "/dev/input/event18")
     kanata = _HeldKeyboard("kanata", _kanata()._caps, "/dev/input/event18",
                            held=[ecodes.KEY_RIGHTCTRL])
@@ -563,9 +563,9 @@ def test_a_right_ctrl_held_through_a_remapper_is_never_called_hidden(monkeypatch
     ("/sys/devices/pci0000:00/0000:00:14.0/usb1/1-2/input/input7", False)])
 def test_a_program_made_device_is_told_by_where_sysfs_keeps_it(monkeypatch, node, made):
     asked = []
-    monkeypatch.setattr(uinput_helper.os.path, "realpath",
+    monkeypatch.setattr(keyboard_devices.os.path, "realpath",
                         lambda path: asked.append(path) or node)
-    assert uinput_helper.is_uinput_device("/dev/input/event18") is made
+    assert keyboard_devices.is_uinput_device("/dev/input/event18") is made
     assert asked == ["/sys/class/input/event18/device"]
 
 

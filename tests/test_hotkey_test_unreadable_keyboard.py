@@ -92,14 +92,14 @@ def test_a_key_only_gtk_saw_does_not_claim_working():
 
 
 def test_the_notice_asks_for_a_restart_when_setup_is_done(monkeypatch):
-    monkeypatch.setattr(uinput_helper, "_input_group_pending_restart", lambda: True)
+    monkeypatch.setattr(uinput_helper, "input_group_pending_restart", lambda: True)
     notice = hkd._hotkey_test_notice(False)
     assert "restart your computer" in notice
     assert "Fix Typing" not in notice
 
 
 def test_the_notice_points_to_fix_typing_when_setup_is_not_done(monkeypatch):
-    monkeypatch.setattr(uinput_helper, "_input_group_pending_restart", lambda: False)
+    monkeypatch.setattr(uinput_helper, "input_group_pending_restart", lambda: False)
     notice = hkd._hotkey_test_notice(False)
     assert "Fix Typing Permissions" in notice
     assert "restart" in notice
@@ -125,7 +125,7 @@ def _run_dialog(monkeypatch, evdev_paths, during, denied=(), hotkeys=("F8", "F9"
     monkeypatch.setattr(hkd.time, "sleep", lambda s: None)
     monkeypatch.setattr(evdev, "list_devices", lambda: evdev_paths)
     monkeypatch.setattr(evdev, "InputDevice", _input_device(denied=denied))
-    monkeypatch.setattr(uinput_helper, "_input_group_pending_restart", lambda: True)
+    monkeypatch.setattr(uinput_helper, "input_group_pending_restart", lambda: True)
 
     monkeypatch.setattr(Gtk.Dialog, "run", lambda dialog: during(dialog) or Gtk.ResponseType.OK)
     hkd.show_hotkey_test_dialog()

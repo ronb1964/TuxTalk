@@ -1,4 +1,5 @@
-"""Telling the desktop's app menu that TuxTalk's launcher changed.
+"""Telling the desktop's app menu and icon caches that TuxTalk's launcher
+or icon changed.
 
 Most menus watch ~/.local/share/applications themselves. KDE's reads a cache
 that only kbuildsycoca rebuilds, so without this a launcher written or
@@ -41,3 +42,20 @@ def _run(argv):
     else:
         logger.info(f"{' '.join(argv[:2])} didn't refresh the menu cache (exit code {code})")
     return code
+
+
+def refresh_icon_caches(icons_base: str) -> None:
+    """Tell GTK's and the XDG icon caches that TuxTalk's icon under
+    *icons_base* (a hicolor folder) came or went. Neither is needed
+    everywhere, so a missing tool or a failure is only noted."""
+    for argv in (["gtk-update-icon-cache", "-f", "-t", icons_base],
+                 ["xdg-icon-resource", "forceupdate", "--mode", "user"]):
+        try:
+            result = subprocess.run(argv, capture_output=True, text=True, errors="replace",
+                                    timeout=10)
+        except (OSError, subprocess.SubprocessError) as e:
+            logger.info(f"{argv[0]} didn't run (not needed everywhere): {e}")
+            continue
+        if result.returncode:
+            logger.info(f"{argv[0]} failed (exit {result.returncode}, not needed everywhere): "
+                        f"{result.stderr.strip()[:200]}")

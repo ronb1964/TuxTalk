@@ -77,7 +77,7 @@ def _hotkey_test_notice(service_can_read):
     if service_can_read:
         return None
     from tuxtalk import uinput_helper
-    if uinput_helper._input_group_pending_restart():
+    if uinput_helper.input_group_pending_restart():
         return ("TuxTalk can't read the keyboard yet. These keys will work "
                 "once you restart your computer to finish the typing setup.")
     return ("TuxTalk can't read the keyboard yet. These keys will work after "

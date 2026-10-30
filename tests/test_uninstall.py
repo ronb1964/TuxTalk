@@ -53,7 +53,7 @@ def home(tmp_path, monkeypatch):
     for name in ("UNIT_PATH", "HELPER_PATH", "UINPUT_RULE_PATH"):
         monkeypatch.setattr(secure_input, name, str(tmp_path / f"etc-{name}"))
     monkeypatch.setattr(uinput_helper, "UDEV_RULE_PATH", str(tmp_path / "etc-99-rule"))
-    monkeypatch.setattr(uninstall.desktop_detect, "get_extension_dir",
+    monkeypatch.setattr(uninstall.gnome_extensions, "get_extension_dir",
                         lambda: str(home / ".local/share/gnome-shell/extensions"))
     return home
 

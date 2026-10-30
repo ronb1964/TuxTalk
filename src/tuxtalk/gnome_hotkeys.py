@@ -10,14 +10,13 @@ and the extension grabs the keys with global.display.grab_accelerator while
 the service runs. A grabbed key never reaches the focused app; evdev still
 sees it, so recording is unchanged.
 
-Which keys may be claimed is decided once, in kwin_hotkeys.wanted_shortcuts,
-so the two desktops can't drift apart: F-keys, Scroll Lock and modifier
-combos, never a bare letter.
+Which keys may be claimed is decided once, in hotkey_claims, for every
+desktop.
 """
 
-from .kwin_hotkeys import QT_KEYSYMS, wanted_shortcuts
+from .hotkey_claims import QT_KEYSYMS, keys_to_claim
 
-# Qt modifier names (what wanted_shortcuts produces) -> GTK accelerator syntax.
+# Qt modifier names (what keys_to_claim produces) -> GTK accelerator syntax.
 _GNOME_MODIFIERS = {"Ctrl": "<Control>", "Shift": "<Shift>", "Alt": "<Alt>", "Meta": "<Super>"}
 
 
@@ -31,4 +30,4 @@ def accelerator(qt_sequence):
 
 def accelerators(cfg):
     """Every hotkey in *cfg* the extension should hold back, as accelerators."""
-    return [accelerator(key) for _name, _text, key in wanted_shortcuts(cfg)]
+    return [accelerator(key) for _role, _what, key in keys_to_claim(cfg)]

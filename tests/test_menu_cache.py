@@ -53,3 +53,25 @@ def test_no_mime_cache_is_started_where_there_was_none(monkeypatch, tmp_path):
     (apps / "mimeinfo.cache").write_text("")
     menu_cache.refresh_menu_cache()
     assert any(cmd.startswith("update-desktop-database") for cmd in ran)
+
+
+def test_an_icon_cache_tool_that_fails_is_logged_with_its_error(tmp_path, monkeypatch, caplog):
+    import logging
+    monkeypatch.setattr(menu_cache.subprocess, "run", lambda argv, **k: types.SimpleNamespace(
+        returncode=1, stderr="gtk-update-icon-cache: No theme index file.\n"))
+    caplog.set_level(logging.INFO)
+    menu_cache.refresh_icon_caches(str(tmp_path))
+    assert any("No theme index file" in r.getMessage() and "exit 1" in r.getMessage()
+               for r in caplog.records)
+
+
+def test_the_uninstall_tells_the_menus_and_the_icon_caches(tmp_path, monkeypatch):
+    """Otherwise the menu kept showing TuxTalk, or its icon, until the next
+    login."""
+    from tuxtalk import uninstall
+    monkeypatch.setenv("HOME", str(tmp_path))
+    asked = []
+    monkeypatch.setattr(menu_cache, "refresh_icon_caches", lambda base: asked.append(base))
+    monkeypatch.setattr(menu_cache, "refresh_menu_cache", lambda: asked.append("menus"))
+    uninstall._refresh_menus()
+    assert asked == [str(tmp_path / ".local" / "share" / "icons" / "hicolor"), "menus"]

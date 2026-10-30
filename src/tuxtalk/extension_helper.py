@@ -11,7 +11,7 @@ import urllib.error
 import urllib.request
 from typing import Optional, Callable
 
-from . import desktop_detect
+from . import desktop_detect, gnome_extensions
 
 logger = logging.getLogger(__name__)
 
@@ -89,12 +89,12 @@ def is_extension_available() -> bool:
 
 def is_extension_installed() -> bool:
     """Check if TuxTalk GNOME extension is installed"""
-    return desktop_detect.is_extension_installed(EXTENSION_UUID)
+    return gnome_extensions.is_extension_installed(EXTENSION_UUID)
 
 
 def is_extension_enabled() -> bool:
     """Check if TuxTalk GNOME extension is enabled"""
-    return desktop_detect.is_extension_enabled(EXTENSION_UUID)
+    return gnome_extensions.is_extension_enabled(EXTENSION_UUID)
 
 
 def get_extension_status() -> dict:
@@ -165,10 +165,8 @@ def install_extension_from_local(source_dir: str, auto_enable: bool = True) -> b
         without a tray, the extension's menu is how TuxTalk is used.
     """
     try:
-        ext_dir = desktop_detect.get_extension_dir()
-        target_dir = os.path.join(ext_dir, EXTENSION_UUID)
-
-        os.makedirs(ext_dir, exist_ok=True)
+        target_dir = gnome_extensions.extension_folder(EXTENSION_UUID)
+        os.makedirs(os.path.dirname(target_dir), exist_ok=True)
         _swap_in(source_dir, target_dir)
         logger.info(f"Extension installed to {target_dir}")
 
@@ -323,7 +321,7 @@ def enable_extension() -> bool:
     Returns:
         bool: True if successful
     """
-    return desktop_detect.enable_extension(EXTENSION_UUID)
+    return gnome_extensions.enable_extension(EXTENSION_UUID)
 
 
 def uninstall_extension() -> bool:
@@ -334,8 +332,7 @@ def uninstall_extension() -> bool:
         bool: True if successful
     """
     try:
-        ext_dir = desktop_detect.get_extension_dir()
-        target_dir = os.path.join(ext_dir, EXTENSION_UUID)
+        target_dir = gnome_extensions.extension_folder(EXTENSION_UUID)
 
         if os.path.exists(target_dir):
             # First, disable the extension (removes from gsettings)
@@ -354,7 +351,7 @@ def uninstall_extension() -> bool:
         # (a shell that never loaded it) leaves it on enabled-extensions:
         # an uninstall leaves it on neither. Also when the folder is
         # already gone, so a folder deleted by hand leaves no entry behind.
-        desktop_detect.forget_extension(
+        gnome_extensions.forget_extension(
             EXTENSION_UUID, ("disabled-extensions", "enabled-extensions"))
 
         if os.path.exists(target_dir):

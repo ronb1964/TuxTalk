@@ -26,7 +26,7 @@ def dialog(monkeypatch):
     monkeypatch.setattr(r, "detect_hardware", lambda cfg=None: r.Hardware(None, False))
     monkeypatch.setattr(r, "system_language", lambda env=None: "en")
     monkeypatch.setattr(wd, "detect_uinput_access", lambda: (False, "not in input group"))
-    monkeypatch.setattr(wd, "detect_portaudio_status", lambda: {"needs_install": False})
+    monkeypatch.setattr(wd, "portaudio_installed", lambda: True)
     d = wd.WelcomeDialog(force_gnome=False)
     yield d
     d.destroy()
@@ -136,7 +136,7 @@ def needs_uinput(monkeypatch):
     monkeypatch.setattr(r, "detect_hardware", lambda cfg=None: r.Hardware(None, False))
     monkeypatch.setattr(r, "system_language", lambda env=None: "en")
     monkeypatch.setattr(wd, "detect_uinput_access", lambda: (False, "not in input group"))
-    monkeypatch.setattr(wd, "detect_portaudio_status", lambda: {"needs_install": False})
+    monkeypatch.setattr(wd, "portaudio_installed", lambda: True)
     d = wd.WelcomeDialog(force_gnome=False)
     responses = []
     monkeypatch.setattr(d.dialog, "response", lambda r: responses.append(r))
@@ -220,8 +220,8 @@ def test_the_extension_is_offered_only_when_it_is_not_running(monkeypatch, activ
     monkeypatch.setattr(r, "detect_hardware", lambda cfg=None: r.Hardware(None, False))
     monkeypatch.setattr(r, "system_language", lambda env=None: "en")
     monkeypatch.setattr(wd, "detect_uinput_access", lambda: (True, ""))
-    monkeypatch.setattr(wd, "detect_portaudio_status", lambda: {"needs_install": False})
-    monkeypatch.setattr("tuxtalk.desktop_detect.tuxtalk_extension_active", lambda: active)
+    monkeypatch.setattr(wd, "portaudio_installed", lambda: True)
+    monkeypatch.setattr("tuxtalk.extension_helper.is_extension_enabled", lambda: active)
     d = wd.WelcomeDialog(force_gnome=True)
     try:
         assert (d.extension_check is not None) is offered
@@ -244,8 +244,7 @@ def needs_portaudio(monkeypatch):
     monkeypatch.setattr(r, "detect_hardware", lambda cfg=None: r.Hardware(None, False))
     monkeypatch.setattr(r, "system_language", lambda env=None: "en")
     monkeypatch.setattr(wd, "detect_uinput_access", lambda: (True, ""))
-    monkeypatch.setattr(wd, "detect_portaudio_status",
-                        lambda: {"installed": False, "needs_install": True})
+    monkeypatch.setattr(wd, "portaudio_installed", lambda: False)
     monkeypatch.setattr(wd, "show_message", lambda *a, **k: None)
     d = wd.WelcomeDialog(force_gnome=False)
     yield d

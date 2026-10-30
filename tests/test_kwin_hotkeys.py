@@ -9,6 +9,7 @@ import types
 
 import pytest
 
+from tuxtalk import hotkey_claims
 from tuxtalk import kwin_hotkeys as kh
 
 # The real one, before conftest swaps it for one that refuses: the test of the
@@ -66,20 +67,6 @@ def on_kde(monkeypatch, tmp_path):
 
 
 class TestKeySequences:
-    @pytest.mark.parametrize("name,qt", [
-        ("F8", "F8"), ("f12", "F12"), (" F1 ", "F1"),
-        ("Ctrl+Alt+V", "Ctrl+Alt+V"), ("ctrl+shift+h", "Ctrl+Shift+H"),
-        ("Super+F5", "Meta+F5"),
-    ])
-    def test_translates(self, name, qt):
-        assert kh.qt_key_sequence(name) == qt
-
-    @pytest.mark.parametrize("name", ["", "   ", None, "A", "q", "F13", "Hyper+V",
-                                      "Ctrl+", "Ctrl+Esc"])
-    def test_refuses(self, name):
-        """A bare letter would stop the user typing it anywhere."""
-        assert kh.qt_key_sequence(name) is None
-
     def test_one_shortcut_per_key(self):
         names = [k for _n, _t, k in kh.wanted_shortcuts(_cfg("F8", "F8", ""))]
         assert names == ["F8"]
@@ -295,14 +282,6 @@ class TestAppLaunchShortcuts:
     EMOJI = {"/component/org_kde_plasma_emojier_desktop":
              ("org.kde.plasma.emojier.desktop", "Emoji Selector", [F6, META_DOT], False)}
 
-    @pytest.mark.parametrize("name,code", [
-        ("F6", 0x01000035), ("F1", 0x01000030), ("F12", 0x0100003B),
-        ("Shift+F8", 0x02000000 | 0x01000037), ("Ctrl+Alt+V", 0x04000000 | 0x08000000 | 0x56),
-        ("Super+F9", 0x10000000 | 0x01000038), ("", None), ("Space", None),
-    ])
-    def test_qt_key_codes(self, name, code):
-        assert kh.qt_key_code(kh.qt_key_sequence(name)) == code
-
     @pytest.mark.parametrize("hold,vc,qt_code", [
         ("Scroll Lock", "", 0x01000026), ("F8", "Super+F9", 0x10000000 | 0x01000038)])
     def test_an_app_on_scroll_lock_or_a_super_shortcut_is_reported(self, apps, hold, vc,
@@ -312,7 +291,7 @@ class TestAppLaunchShortcuts:
         before = kh.time.time() - 1
         comps = {"/component/kmix": ("kmix", "Audio Volume", [qt_code], True)}
         kh.claim(_cfg(hold, "F10", vc), apps(comps))
-        assert kh.app_shortcuts_since(before) == {kh.qt_key_sequence(vc or hold):
+        assert kh.app_shortcuts_since(before) == {hotkey_claims.qt_key_sequence(vc or hold):
                                                   "Audio Volume"}
 
     def test_an_app_launched_by_our_key_is_reported(self, apps, caplog):

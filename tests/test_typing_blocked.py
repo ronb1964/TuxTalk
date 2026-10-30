@@ -6,6 +6,7 @@ is transcribed but none reaches the window. Saying a dictation didn't arrive is
 not enough, so the notice names the cause and the fix.
 """
 
+import subprocess
 import types
 
 import pytest
@@ -104,7 +105,6 @@ def test_the_fix_script_touches_only_uinput_and_matches_the_group_exactly():
 
 def test_the_fix_script_group_check_runs_in_bash(tmp_path):
     """Run the membership line for real with fake id/usermod commands."""
-    import subprocess
     script = U.get_fix_script_content()
     line = next(l for l in script.splitlines() if l.startswith("id -nG"))
     bin_dir = tmp_path / "bin"
@@ -127,9 +127,21 @@ def test_the_root_script_goes_to_pkexec_on_stdin_never_through_a_file(monkeypatc
 
     def pkexec(cmd, **k):
         seen["cmd"], seen["input"] = cmd, k.get("input")
-        raise U.subprocess.TimeoutExpired(cmd, k.get("timeout"))
-    monkeypatch.setattr(U.subprocess, "run", pkexec)
+        raise subprocess.TimeoutExpired(cmd, k.get("timeout"))
+    monkeypatch.setattr(subprocess, "run", pkexec)
     ok, _message = U.install_udev_rule_with_pkexec()
     assert ok is False
     assert seen["cmd"] == ["pkexec", "/bin/bash", "-s"]
     assert seen["input"] == U.get_fix_script_content()
+
+
+def test_system_check_asks_about_the_user_the_fix_script_adds(host, monkeypatch):
+    """Under su the terminal's login is another user: System check said "not
+    in the input group" for the user the script had just added."""
+    monkeypatch.setattr(U.os, "getlogin", lambda: "someone-else")
+    host.in_system = True
+    host.apply()
+    assert U.check_user_in_input_group() is True
+    host.in_system = False
+    host.apply()
+    assert U.check_user_in_input_group() is False
