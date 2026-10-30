@@ -13,7 +13,7 @@ big ways. Roughly in order:
   tested, and the build tools pinned so a release can't change by itself.
 - [ ] Decide which TuxTalk Labs features graduate and which stay experimental.
 - [ ] Dictation works reliably on the desktops it claims: KDE, GNOME,
-  Cinnamon, XFCE, Sway and Hyprland, on Wayland and X11.
+  Cinnamon, XFCE, COSMIC, Sway and Hyprland, on Wayland and X11.
 - [ ] No big changes left that would disrupt people, like settings that need
   moving or features that work a different way.
 - [ ] A release or two in a row with no serious bug reports.
@@ -26,7 +26,7 @@ big ways. Roughly in order:
 - [~] Per-app profiles, picked by the window you're typing into (cleanup on or off, paste mode, maybe a different model). Window class only. TuxTalk won't read the screen or take screenshots. Started: terminals get no capital or closing period, and code editors no closing period. Full profiles aren't done.
 - [ ] Language quick switch in the tray menu. The setting exists, but only in Preferences.
 - [ ] Ignore background noise that gets transcribed as a word or two (a confidence threshold).
-- [ ] Some kind of signal when a dictation heard nothing at all. Hands-free mode already beeps and stops when you say nothing, but a normal hold-to-talk just types nothing.
+- [~] Some kind of signal when a dictation heard nothing at all. A silent microphone already says "No sound from the microphone", and hands-free mode beeps and stops when you say nothing, but a hold-to-talk that heard sound and no words just types nothing.
 - [ ] Spoken templates, like "compose email" putting in an email layout.
 
 ## Audio
@@ -67,7 +67,7 @@ big ways. Roughly in order:
 
 ## Decided against
 
-- The Snap Store. Typing needs permissions a strict snap only gets after a manual review, and the store won't hand them out automatically, so it wouldn't work after setup the way the AppImage does. Same for a Fedora COPR build for now: the AppImage bundles libraries Fedora's rules don't allow, and a clean build is days of work.
+- The Snap Store. It won't connect the keyboard permission TuxTalk types with by itself, so everyone would have to type a command after installing before dictation worked. The AppImage works after setup with no commands. Same for a Fedora COPR build for now: the AppImage bundles libraries Fedora's rules don't allow, and a clean build is days of work.
 - Live text while you talk, words showing up as you speak. I tried it, and seeing the words appear while I was still talking pulled me out of what I was saying. Not planned unless a lot of people ask for it.
 
 ## Known limitations
