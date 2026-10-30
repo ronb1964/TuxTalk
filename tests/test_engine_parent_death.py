@@ -108,6 +108,23 @@ def test_a_server_that_ends_while_starting_says_what_it_printed():
     assert said == " (exit code 3: no Vulkan device)"
 
 
+def test_a_server_that_prints_a_lot_is_never_held_up_and_its_last_lines_kept():
+    """More than a pipe holds (64 KB) before it ends: read as it goes, or
+    the server would block on its own output and never end."""
+    said = _ended_with([sys.executable, "-c",
+                        "import sys\n"
+                        "for i in range(20000): print(f'loading layer {i}', file=sys.stderr)\n"
+                        "print('out of memory', file=sys.stderr); sys.exit(4)"])
+    assert said.startswith(" (exit code 4: loading layer 19996 |")
+    assert said.endswith("loading layer 19999 | out of memory)")
+
+
+def test_one_endless_line_is_kept_to_a_few_pieces():
+    said = _ended_with([sys.executable, "-c",
+                        "import sys; sys.stderr.write('x' * 1_000_000); sys.exit(5)"])
+    assert len(said) < 6 * engine_process.OutputTail.LINE_BYTES
+
+
 def test_a_launcher_python_cant_run_says_why():
     """Before the launcher's own code runs (a broken Python setup), its
     message went nowhere and the log said only that the engine stopped."""

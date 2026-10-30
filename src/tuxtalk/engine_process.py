@@ -67,6 +67,8 @@ class OutputTail:
     always read, so the pipe never fills and stalls the server. Only shown
     for a server that never got a request, so no dictated text is in it."""
 
+    LINE_BYTES = 500
+
     def __init__(self, stream, lines=5):
         self._lines = collections.deque(maxlen=lines)
         self._reader = threading.Thread(target=self._read, args=(stream,), daemon=True,
@@ -74,8 +76,10 @@ class OutputTail:
         self._reader.start()
 
     def _read(self, stream):
+        # At most LINE_BYTES a read: a server writing one endless line can't
+        # grow the service's memory, its pieces just push each other out.
         with stream:
-            for line in iter(stream.readline, b""):
+            for line in iter(lambda: stream.readline(self.LINE_BYTES), b""):
                 self._lines.append(line.decode(errors="replace").strip())
 
     def text(self, wait=0.5):
