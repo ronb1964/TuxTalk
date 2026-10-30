@@ -3,6 +3,7 @@
 The model itself is never trusted, so these tests use a fake engine that
 returns chosen answers, good and bad, and check that only safe edits land.
 """
+import io
 import os
 import types
 
@@ -379,8 +380,9 @@ def test_corrections_with_signs_and_accents_are_still_safe(said, edited):
 # --- an engine that dies is started again ---------------------------------------------------
 
 class _Proc:
-    def __init__(self, code=None):
+    def __init__(self, code=None, said=b""):
         self.returncode, self.pid = code, 42
+        self.stderr = io.BytesIO(said)
 
     def poll(self):
         return self.returncode
@@ -398,7 +400,7 @@ def dead_engine(monkeypatch):
     monkeypatch.setattr(ai, "_server_binary", lambda: "/x/llama-server")
     monkeypatch.setattr(ai, "_model_path", lambda: "/x/model.gguf")
     monkeypatch.setattr(ai.subprocess, "Popen", lambda *a, **k: started.append(a) or _Proc())
-    monkeypatch.setattr(e, "_wait_until_ready", lambda proc: None)
+    monkeypatch.setattr(e, "_wait_until_ready", lambda proc, output: None)
     e.started = started
     return e
 
@@ -414,6 +416,18 @@ def test_turning_the_ai_off_while_it_starts_is_not_an_error(caplog):
         e._wait_until_ready(starting, limit=1)
     assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
     assert not e._ready.is_set()
+
+
+def test_an_engine_that_ends_while_starting_logs_what_it_printed(caplog):
+    import logging
+    from tuxtalk import engine_process
+    e = ai.CorrectionEngine()
+    dead = _Proc(code=1, said=b"llama: error loading model\n")
+    e._proc = dead
+    with caplog.at_level(logging.INFO, logger=ai.logger.name):
+        e._wait_until_ready(dead, engine_process.OutputTail(dead.stderr), limit=1)
+    assert any("exit code 1: llama: error loading model" in r.getMessage()
+               for r in caplog.records if r.levelno == logging.ERROR)
 
 
 def test_a_warm_up_without_an_answer_is_logged(monkeypatch, caplog):

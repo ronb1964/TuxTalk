@@ -6,10 +6,12 @@ cleanup engine (llama-server, ai_cleanup.py) and the Vulkan graphics engine
 (whisper_vulkan.py, and parakeet_gpu.py for Parakeet). Each can hold a gigabyte
 or more of memory, so none may outlive the dictation service that started it.
 """
+import collections
 import os
 import shutil
 import signal
 import sys
+import threading
 import urllib.request
 
 from . import engine_launcher
@@ -43,12 +45,44 @@ def parent_death_command(argv, env=None):
     return command, env
 
 
-def launch_failure(returncode):
-    """", because ..." when the launcher's exit code says why an engine
-    never ran (its own messages go nowhere), else ""."""
+def launch_failure(returncode, output=None):
+    """", because ..." for an engine that ended while starting: what the
+    launcher's exit code says, else the exit code and the last lines it
+    printed (*output*, an OutputTail), which also explain a launcher that
+    Python couldn't run at all (a broken PYTHONPATH)."""
     why = {engine_launcher.NO_SIGNAL: "the parent-death signal couldn't be set",
            engine_launcher.NO_ENGINE: "its program couldn't be started"}.get(returncode)
-    return f", because {why}" if why else ""
+    if why:
+        return f", because {why}"
+    if output is None:
+        return ""                       # the caller shows the exit code itself
+    said = output.text()
+    return f" (exit code {returncode}{': ' + said if said else ''})"
+
+
+class OutputTail:
+    """The last lines a server writes to *stream* (its stderr, a pipe), read
+    on a thread of their own, to explain one that ends while starting. Not a
+    file, which would grow all session (a server logs every request), and
+    always read, so the pipe never fills and stalls the server. Only shown
+    for a server that never got a request, so no dictated text is in it."""
+
+    def __init__(self, stream, lines=5):
+        self._lines = collections.deque(maxlen=lines)
+        self._reader = threading.Thread(target=self._read, args=(stream,), daemon=True,
+                                        name="engine-output")
+        self._reader.start()
+
+    def _read(self, stream):
+        with stream:
+            for line in iter(stream.readline, b""):
+                self._lines.append(line.decode(errors="replace").strip())
+
+    def text(self, wait=0.5):
+        """The lines kept, joined; waits up to *wait* seconds for the last
+        ones of a server that has just ended."""
+        self._reader.join(wait)
+        return " | ".join(line for line in list(self._lines) if line)
 
 
 # Every engine listens on 127.0.0.1, yet urllib would send even that through

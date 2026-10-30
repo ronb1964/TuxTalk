@@ -92,6 +92,29 @@ def test_an_engine_that_cant_start_says_why(tmp_path):
     assert engine_process.launch_failure(-9) == ""
 
 
+def _ended_with(argv, env=None):
+    """launch_failure for *argv* started through the launcher, once it ends."""
+    command, launch_env = engine_process.parent_death_command(argv, env)
+    proc = subprocess.Popen(command, env=launch_env, stdout=subprocess.DEVNULL,
+                            stderr=subprocess.PIPE)
+    output = engine_process.OutputTail(proc.stderr)
+    proc.wait(timeout=30)
+    return engine_process.launch_failure(proc.returncode, output)
+
+
+def test_a_server_that_ends_while_starting_says_what_it_printed():
+    said = _ended_with([sys.executable, "-c",
+                        "import sys; print('no Vulkan device', file=sys.stderr); sys.exit(3)"])
+    assert said == " (exit code 3: no Vulkan device)"
+
+
+def test_a_launcher_python_cant_run_says_why():
+    """Before the launcher's own code runs (a broken Python setup), its
+    message went nowhere and the log said only that the engine stopped."""
+    said = _ended_with(["/bin/true"], {**os.environ, "PYTHONHOME": "/nonexistent"})
+    assert said.startswith(" (exit code 1: ") and "Python" in said
+
+
 def test_an_engine_starts_where_tuxtalks_own_start_up_would_fail(tmp_path):
     """The launcher imports nothing of TuxTalk: the package's start-up opens
     the log and moves old folders, and a log that can't be written mustn't
