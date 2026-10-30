@@ -68,7 +68,8 @@ _OWN_OPTION = ("quit", "uninstall")
 
 def _parse(argv):
     """The command line's options (--toggle, --start, --stop, --open, --quit,
-    --uninstall); options it doesn't know are left for GTK."""
+    --uninstall). Arguments it doesn't know are ignored: they are the
+    launchers' own (the AppImage's desktop entry runs "AppRun tray")."""
     ap = argparse.ArgumentParser(
         prog="tuxtalk",
         description="Voice dictation for Linux. With no options, starts TuxTalk.",

@@ -40,9 +40,10 @@ class MenuWindow:
 
     def __init__(self, tray, no_tray=False, extension_installed=False, offer_extension=False):
         """Build and show the window: the dictation switch and its model line,
-        the tray's menu as buttons, and under them the note about this
-        desktop's missing tray (*no_tray*), with an offer of the GNOME
-        extension when *offer_extension*."""
+        the tray's menu as buttons, and under them, with *no_tray*, the note
+        about this desktop's missing tray. That note says where the menu
+        will be once *extension_installed* (the GNOME extension, after a new
+        login); without it, *offer_extension* adds a button to install it."""
         self.tray = tray
         self._updating = False      # set while the window moves the switch itself
         self._popup = None          # the open ▸ menu, kept so it isn't collected

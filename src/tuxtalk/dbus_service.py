@@ -137,12 +137,12 @@ class TuxTalkDBusService(dbus.service.Object):
         if hasattr(self.app, method_name):
             GLib.idle_add(getattr(self.app, method_name), *args)
 
-    # ==================== Properties ====================
+    # ==================== Status ====================
 
     def _current_model(self):
         """The model the service really runs, or the configured one before it
         has reported (see NotifyRunningEngine)."""
-        running = getattr(self, "running_engine", None)
+        running = self.running_engine
         if running:
             return running[0]
         if hasattr(self.app, 'config'):
@@ -152,7 +152,7 @@ class TuxTalkDBusService(dbus.service.Object):
     def _device_type(self):
         """The device the model really runs on (cpu, cuda or vulkan), or the
         configured one before the service has reported."""
-        running = getattr(self, "running_engine", None)
+        running = self.running_engine
         if running:
             return running[1]
         if hasattr(self.app, 'config'):
