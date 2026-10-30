@@ -15,7 +15,9 @@ from . import (
     beeps,
     delivery,
     delivery_notices,
+    desktop_detect,
     dictation_worker,
+    first_run_marker,
     hotkey_keys,
     keyboard_devices,
     keyboard_grab,
@@ -298,7 +300,7 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
     # stream can take seconds with a slow sound server.
     if event.code == ecodes.KEY_ESC and rs.state.is_recording and event.value == 1:
         keyboard_grab.release_all()
-        recording.cancel_recording(cfg.beeps, cfg.notify, "Cancelled by ESC")
+        recording.cancel_recording(rs.state.current, cfg.beeps, cfg.notify, "Cancelled by ESC")
 
 
 def _on_test_or_combo(event, hold_key, toggle_key, voice_cmds_combo, paste_last_combo,
@@ -437,7 +439,7 @@ def _stop_edit(shift, devices, cfg) -> bool:
     # with injected key events, as the hold key does, would replay them
     # after a slow edit and start a new recording by itself.
     if shift and not keyboard_grab.wait_for_keys_up(devices, _SHIFT_CODES, EDIT_SHIFT_WAIT_S):
-        recording.cancel_recording(cfg.beeps, cfg.notify,
+        recording.cancel_recording(rs.state.current, cfg.beeps, cfg.notify,
                                    "Voice edit cancelled: let go of Shift to finish it")
         return True
     _stop_recording(cfg)
@@ -466,8 +468,10 @@ def run(cfg: Settings, input_device_idx, keyboards=None):
 
     *keyboards* is the hotkey helper (hotkey_helper_client.HelperKeyboard) when
     it is installed: then no keyboard is opened here at all."""
-    session = os.environ.get("XDG_SESSION_TYPE", "").lower()
-    logger.info(f"Session type: {session}, Wayland: {session=='wayland'}")
+    # X11 as the hotkey grab and the keyboard layout decide it: a startx
+    # session sets no XDG_SESSION_TYPE and is X11 all the same.
+    logger.info(f"Session type: {os.environ.get('XDG_SESSION_TYPE') or 'not set'}, "
+                f"X11: {desktop_detect.is_x11_session(os.environ)}")
     # Both hotkeys work whatever the mode setting says.
     logger.info(f"Hold key: {cfg.hotkey}, Toggle key: {cfg.toggle_hotkey or 'none'}")
     svc = service_tick.ServiceState(cfg, input_device_idx)
@@ -549,13 +553,7 @@ def _open_keyboards(keyboards) -> list:
 def _keys_to_watch(cfg: Settings, devices):
     """The hotkeys to watch; None when there are none yet: first-run setup
     isn't finished, or no hold key is chosen."""
-    try:
-        from tuxtalk.cuda_helper import is_first_run
-        first_run = is_first_run()
-    except Exception as e:
-        logger.info(f"Couldn't tell whether setup is finished ({e}); taking it as finished")
-        first_run = False
-    if first_run:
+    if first_run_marker.is_first_run():
         logger.info("First run detected - onboarding not complete")
         # Also on stderr: started from a terminal, that's where the user looks.
         print("Onboarding not complete. No hotkeys will be active until setup is finished.",

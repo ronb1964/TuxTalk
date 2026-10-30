@@ -1,7 +1,7 @@
 """Ending a dictation with "press enter" sends a real Enter (key_commands.py).
 
-Ron, 2026-10-17: "I really like the press enter, so you can just speak."
-A spoken "new line" stays Shift+Enter, which never sends a chat message.
+Saying it sends a chat message without reaching for the keyboard. A spoken
+"new line" stays Shift+Enter, which never sends a chat message.
 """
 import numpy as np
 import time
@@ -358,8 +358,8 @@ def test_a_tap_too_short_to_dictate_says_not_sent(countdown, monkeypatch):
     _, labels = countdown
     reasons, cancel = [], recording.cancel_recording
     monkeypatch.setattr(recording, "cancel_recording",
-                        lambda beeps, notify, reason="": reasons.append(reason)
-                        or cancel(beeps, notify, reason))
+                        lambda rec, beeps, notify, reason="": reasons.append(reason)
+                        or cancel(rec, beeps, notify, reason))
     monkeypatch.setattr(recording, "stop_stream_safely", lambda rec: None)
     monkeypatch.setattr(recording, "resume_media_players", lambda: None)
     monkeypatch.setattr(recording, "indicator", None)
@@ -491,7 +491,7 @@ def test_a_dictation_that_brings_its_own_space_drops_the_owed_one(countdown, mon
 def test_a_short_tap_types_the_space_when_released(countdown, monkeypatch):
     reasons = []
     monkeypatch.setattr(recording, "cancel_recording",
-                        lambda beeps, notify, reason="": reasons.append(reason))
+                        lambda rec, beeps, notify, reason="": reasons.append(reason))
     monkeypatch.setattr(send_countdown, "_owed", None)
     start_send("test", " ", "type")
     monkeypatch.setattr(rs.state.current, "held_send", send_countdown.hold(announce=False))
@@ -508,7 +508,7 @@ def test_typing_the_space_doesnt_turn_a_tap_into_a_dictation(countdown, monkeypa
     notice. How long the key was down is what counts."""
     reasons = []
     monkeypatch.setattr(recording, "cancel_recording",
-                        lambda beeps, notify, reason="": reasons.append(reason))
+                        lambda rec, beeps, notify, reason="": reasons.append(reason))
     monkeypatch.setattr(delivery, "inject_text",
                         lambda text, mode, **kw: time.sleep(0.1) or TYPED.append(text) or "ok")
     monkeypatch.setattr(send_countdown, "_owed", None)
@@ -584,7 +584,7 @@ def test_a_quick_tap_holds_the_send_even_when_recording_starts_slowly(
     monkeypatch.setattr(hotkeys, "time", clock)
     reasons, dictated = [], []
     monkeypatch.setattr(recording, "cancel_recording",
-                        lambda beeps, notify, reason="": reasons.append(reason))
+                        lambda rec, beeps, notify, reason="": reasons.append(reason))
     monkeypatch.setattr(pipeline, "transcribe_and_inject", lambda *a, **k: dictated.append(1))
     monkeypatch.setattr(recording, "open_input_stream", lambda rec, idx: clock.sleep(start_s))
     monkeypatch.setattr("tuxtalk.type_at_pause.arm_chunker", lambda *a, **k: None)

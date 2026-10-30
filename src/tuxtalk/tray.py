@@ -642,8 +642,8 @@ def main():
         logger.info(f"Could not check GNOME keybindings: {e}")
 
     try:
-        from . import cuda_helper
-        if cuda_helper.is_first_run():
+        from . import first_run_marker
+        if first_run_marker.is_first_run():
             _start_first_run(tray, command)
         else:
             _start_normally(tray, command, open_window)
@@ -742,9 +742,9 @@ def _finish_first_run(tray, result):
 
     # Only mark first run complete if user completed the wizard
     if result and result.get('continue'):
-        from . import cuda_helper
+        from . import first_run_marker
         try:
-            cuda_helper.mark_first_run_complete()
+            first_run_marker.mark_first_run_complete()
         except Exception as e:
             logger.error(f"Failed to mark first run complete: {e}")
         # No tray and no extension running yet: without this

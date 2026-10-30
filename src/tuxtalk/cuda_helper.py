@@ -141,8 +141,8 @@ def has_cuda_libraries():
             try:
                 if _has_required_libs(os.listdir(lib_dir)):
                     return True
-            except (PermissionError, OSError):
-                pass
+            except OSError as e:       # unreadable: look in the next folder
+                logger.info(f"Couldn't look in {lib_dir} for CUDA's libraries: {e}")
 
     return False
 
@@ -158,17 +158,3 @@ def has_talktype_cuda_libraries():
     the UI; has_cuda_libraries() answers whether CUDA can run.
     """
     return cuda_install_looks_complete(get_appdir_cuda_path())
-
-def is_first_run():
-    """Check if this is the first time the app is run."""
-    from .config import get_data_dir
-    flag_file = os.path.join(get_data_dir(), ".first_run_done")
-    return not os.path.exists(flag_file)
-
-def mark_first_run_complete():
-    """Mark that the first run has been completed."""
-    from .config import get_data_dir
-    flag_file = os.path.join(get_data_dir(), ".first_run_done")
-    os.makedirs(os.path.dirname(flag_file), exist_ok=True)
-    with open(flag_file, 'w') as f:
-        f.write('done')

@@ -14,7 +14,7 @@ def helper(monkeypatch):
     """Helper 1.4 installed and running, dictation up: (what was asked,
     updates run, restarts, the answer to give)."""
     asked, updates, restarts, answer = [], [], [], {"update": True, "result": (True, "")}
-    monkeypatch.setattr("tuxtalk.cuda_helper.is_first_run", lambda: False)
+    monkeypatch.setattr("tuxtalk.first_run_marker.is_first_run", lambda: False)
     monkeypatch.setattr("tuxtalk.service_launcher.find_service_pids", lambda: [4242])
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     monkeypatch.setattr(secure_input, "is_installed", lambda: True)

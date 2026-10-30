@@ -1,12 +1,9 @@
 """Which desktop TuxTalk runs on: its name (KDE, GNOME, COSMIC...), whether
-the session is Wayland or X11, whether it shows tray icons, and GNOME Shell's
-version. Many modules ask, since keys, typing and windows work differently
-on each.
+the session is X11, and whether it shows tray icons. Many modules ask, since
+keys, typing and windows work differently on each.
 """
 
 import os
-import subprocess
-from typing import Optional
 
 from .logger import setup_logger
 
@@ -114,43 +111,14 @@ def tray_host_available(bus=None) -> bool:
         return True
 
 
-def get_gnome_shell_version() -> Optional[str]:
-    """
-    Get GNOME Shell version
-
-    Returns:
-        str: Version string (e.g., "48.4") or None if not GNOME
-    """
-    if not is_gnome():
-        return None
-
-    try:
-        result = subprocess.run(
-            ['gnome-shell', '--version'],
-            capture_output=True,
-            text=True, errors="replace",
-            timeout=5
-        )
-        if result.returncode == 0:
-            # Output is like "GNOME Shell 48.4"
-            version = result.stdout.strip().split()[-1]
-            return version
-    except (subprocess.TimeoutExpired, FileNotFoundError, IndexError):
-        pass
-
-    return None
-
-
-def is_wayland() -> bool:
-    """Check if running on Wayland"""
-    session_type = os.environ.get('XDG_SESSION_TYPE', '').lower()
-    wayland_display = os.environ.get('WAYLAND_DISPLAY', '')
-
-    return 'wayland' in session_type or bool(wayland_display)
-
-
 def is_x11_session(env):
-    """XDG_SESSION_TYPE when it is set; otherwise an X DISPLAY with no Wayland one."""
+    """Whether the session is X11: XDG_SESSION_TYPE when it is set; otherwise
+    (startx sets none) an X DISPLAY with no Wayland one.
+
+    The session type wins over WAYLAND_DISPLAY: a Wayland compositor nested in
+    an X11 session (a KWin started for testing) sets WAYLAND_DISPLAY for
+    its own windows, while the keyboard and the hotkeys stay the X server's.
+    """
     session = (env.get("XDG_SESSION_TYPE") or "").lower()
     if session:
         return session == "x11"

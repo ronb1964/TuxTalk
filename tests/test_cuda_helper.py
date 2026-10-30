@@ -8,8 +8,6 @@ from tuxtalk.cuda_helper import (
     detect_nvidia_gpu,
     has_cuda_libraries,
     get_appdir_cuda_path,
-    is_first_run,
-    mark_first_run_complete
 )
 
 
@@ -59,14 +57,6 @@ def test_detect_nvidia_gpu_timeout(mock_run):
     assert result is False
 
 
-def test_first_run_flag(tmp_path, monkeypatch):
-    """First-run setup shows until it is marked done, then never again."""
-    monkeypatch.setattr("tuxtalk.config.get_data_dir", lambda: str(tmp_path / "TuxTalk"))
-    assert is_first_run() is True
-    mark_first_run_complete()
-    assert is_first_run() is False
-
-
 @patch('tuxtalk.cuda_helper.get_appdir_cuda_path', return_value='/nonexistent/cuda')
 @patch('subprocess.run')
 @patch('os.path.exists')
@@ -90,8 +80,8 @@ def test_has_cuda_libraries_permission_error(mock_listdir, mock_exists, mock_run
 @patch('subprocess.run')
 @patch('os.path.exists')
 @patch('os.listdir')
-def test_has_cuda_libraries_os_error(mock_listdir, mock_exists, mock_run, _cuda_path):
-    """Test has_cuda_libraries handles OS errors gracefully"""
+def test_has_cuda_libraries_os_error(mock_listdir, mock_exists, mock_run, _cuda_path, caplog):
+    """A folder that can't be read is skipped, and the log says which and why."""
     # Mock ldconfig to fail (first check in has_cuda_libraries)
     import subprocess
     mock_run.side_effect = subprocess.TimeoutExpired(cmd='ldconfig', timeout=2)
@@ -99,10 +89,12 @@ def test_has_cuda_libraries_os_error(mock_listdir, mock_exists, mock_run, _cuda_
     # Mock directory checks to raise OSError
     mock_exists.return_value = True
     mock_listdir.side_effect = OSError("Disk error")
+    caplog.set_level("INFO")
 
     # Should not crash, should return False
     result = has_cuda_libraries()
     assert result is False
+    assert "Couldn't look in /usr/lib64 for CUDA's libraries: Disk error" in caplog.text
 
 
 LDCONFIG_HEADER = "1234 libs found in cache `/etc/ld.so.cache'\n"

@@ -194,8 +194,9 @@ def test_the_suite_cannot_reach_real_media_players():
 
 
 def test_recording_start_pauses_and_cancel_resumes(service):
-    assert recording.start_recording(False, False, 0) is not None
-    recording.cancel_recording(False, False)
+    rec = recording.start_recording(False, False, 0)
+    assert rec is not None
+    recording.cancel_recording(rec, False, False)
     assert service.calls == ["pause", "resume"]
 
 
@@ -214,8 +215,8 @@ def test_too_short_a_tap_still_resumes(service):
 
 def test_switched_off_pauses_nothing(service, monkeypatch):
     monkeypatch.setattr(live, "pause_media", False)
-    recording.start_recording(False, False, 0)
-    recording.cancel_recording(False, False)
+    rec = recording.start_recording(False, False, 0)
+    recording.cancel_recording(rec, False, False)
     assert "pause" not in service.calls
 
 

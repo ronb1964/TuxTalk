@@ -187,7 +187,7 @@ def _confirm_and_restart(dialog, button):
     # — without this the machine reboots mid-completion and the next
     # launch starts onboarding all over again.
     try:
-        from tuxtalk.cuda_helper import mark_first_run_complete
+        from tuxtalk.first_run_marker import mark_first_run_complete
         mark_first_run_complete()
     except Exception as e:
         # If we can't mark completion, DON'T reboot — a reboot now would

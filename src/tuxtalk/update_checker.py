@@ -17,6 +17,8 @@ import urllib.error
 from pathlib import Path
 from typing import Optional, Tuple
 
+from . import gnome_extensions
+from .extension_helper import EXTENSION_UUID
 
 logger = logging.getLogger(__name__)
 
@@ -25,9 +27,6 @@ GITHUB_API_URL = "https://api.github.com/repos/ronb1964/TuxTalk/releases/latest"
 
 # GitHub raw content URL for fetching extension metadata from a specific tag
 GITHUB_RAW_URL = "https://raw.githubusercontent.com/ronb1964/TuxTalk"
-
-# Extension UUID and path
-EXTENSION_UUID = "talktype@ronb1964.github.io"
 
 
 def get_current_version() -> str:
@@ -50,8 +49,7 @@ def get_extension_version() -> Optional[int]:
     Returns:
         int: Version number (e.g., 2), or None if not installed
     """
-    ext_path = (Path.home() / ".local/share/gnome-shell/extensions" / EXTENSION_UUID
-                / "metadata.json")
+    ext_path = Path(gnome_extensions.extension_folder(EXTENSION_UUID)) / "metadata.json"
 
     if not ext_path.exists():
         return None

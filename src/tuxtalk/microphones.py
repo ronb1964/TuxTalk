@@ -18,9 +18,10 @@ _MAX_MIC_CHANNELS = 10
 _NOT_HARDWARE = ("monitor", "default", "pipewire", "sysdefault", "spdif")
 
 
-def _default_source_properties() -> list[tuple[str, str]] | None:
+def default_source() -> list[tuple[str, str]] | None:
     """The default source's properties as `wpctl inspect` lists them, in its
-    order, or None without PipeWire (no wpctl) or when it doesn't answer."""
+    order, or None without PipeWire (no wpctl) or when it doesn't answer.
+    One call: source_name and default_microphone both read its answer."""
     output = run_sound_tool(["wpctl", "inspect", "@DEFAULT_SOURCE@"])
     if output is None:
         return None
@@ -32,14 +33,14 @@ def _default_source_properties() -> list[tuple[str, str]] | None:
     return properties
 
 
-def default_source_name() -> str | None:
-    """PipeWire's default microphone, by its unique node name, or None.
+def source_name(source) -> str | None:
+    """PipeWire's unique node name for a default_source() answer, or None.
 
     Used to notice the desktop switching its default input (GNOME Quick
     Settings, KDE's volume applet). None when wpctl is missing or fails, so a
     system without PipeWire never looks like a switch.
     """
-    for key, value in _default_source_properties() or ():
+    for key, value in source or ():
         if key == "node.name":
             return value or None
     return None
@@ -130,23 +131,43 @@ def find_input_device(mic_substring: str | None) -> int | None:
     default.
 
     With *mic_substring* set, the first input whose name holds it. Without
-    one, the desktop's default microphone as PipeWire names it, then the
-    sound server's device for a virtual default; without PipeWire, the sound
-    card PulseAudio's default source is on; then a hardware microphone.
+    one, the desktop's default microphone (see default_microphone).
     """
+    if not mic_substring:
+        return default_microphone(default_source())
+    devices = _sound_devices()
+    return None if devices is None else _named_device(devices, mic_substring)
+
+
+def default_microphone(source) -> int | None:
+    """System Default: the sounddevice index to record from for the default
+    source *source* (a default_source() answer, None without PipeWire).
+
+    The default microphone as PipeWire names it, then the sound server's
+    device for a virtual default; without PipeWire, the sound card
+    PulseAudio's default source is on; then a hardware microphone. None for
+    sounddevice's own default: PortAudio can't list its devices, or none
+    records.
+    """
+    devices = _sound_devices()
+    if devices is None:
+        return None
+    names = [value for key, value in source or () if key in _LISTED_NAMES and value]
+    found = _default_source_device(devices, names)
+    if found is None and names:
+        found = _sound_server_device(devices, names[0])
+    if found is None and source is None:
+        found = _pulseaudio_default_device(devices)
+    if found is None:
+        found = _hardware_mic(devices)
+    return found
+
+
+def _sound_devices():
+    """PortAudio's devices, or None when it can't list them."""
     try:
         import sounddevice as sd
-        devices = sd.query_devices()
+        return sd.query_devices()
     except Exception as e:      # no PortAudio, or it can't list: sounddevice's default
         logger.warning(f"Could not list the sound devices: {e}")
         return None
-    if mic_substring:
-        return _named_device(devices, mic_substring)
-    pipewire = _default_source_properties()
-    sources = [value for key, value in pipewire or () if key in _LISTED_NAMES and value]
-    found = _default_source_device(devices, sources)
-    if found is None and sources:
-        found = _sound_server_device(devices, sources[0])
-    if found is None and pipewire is None:
-        found = _pulseaudio_default_device(devices)
-    return _hardware_mic(devices) if found is None else found

@@ -29,3 +29,14 @@ def test_the_result_window_comes_only_when_it_has_something_to_say(monkeypatch, 
     assert bool(shown) is window
     # Version 0 is a version: it reached the extension as 0, not as "unknown" (-1).
     assert signalled[0][4:6] == (0, 3)
+
+
+def test_the_update_check_reads_the_extension_from_the_install_folder(tmp_path, monkeypatch):
+    """The installed version is read from gnome_extensions' folder, the one
+    the install and the uninstall use, not from a copy of its path."""
+    from tuxtalk import extension_helper, gnome_extensions
+    monkeypatch.setattr(gnome_extensions, "get_extension_dir", lambda: str(tmp_path))
+    folder = tmp_path / extension_helper.EXTENSION_UUID
+    folder.mkdir()
+    (folder / "metadata.json").write_text('{"version": 7}')
+    assert update_checker.get_extension_version() == 7
