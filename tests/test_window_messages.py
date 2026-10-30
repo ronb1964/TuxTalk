@@ -11,7 +11,7 @@ from tuxtalk.window_geometry import Rect
 from tuxtalk import notices
 
 SRC = pathlib.Path(wg.__file__).parent
-EXT = next((SRC.parent.parent / "gnome-extension").glob("*/"))
+EXT = SRC.parent.parent / "gnome-extension" / "talktype@ronb1964.github.io"
 
 
 # --- reading what the KWin script / GNOME extension reported ------------------------
