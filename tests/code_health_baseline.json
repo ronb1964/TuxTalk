@@ -23,9 +23,6 @@
   "config.py::_validation_problems": {
    "decisions": 16
   },
-  "config.py::find_input_device": {
-   "decisions": 31
-  },
   "cuda_helper.py::download_cuda_libraries": {
    "decisions": 28,
    "lines": 122

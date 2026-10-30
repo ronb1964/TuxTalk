@@ -13,7 +13,7 @@ import types
 
 import pytest
 
-from tuxtalk import config
+from tuxtalk import microphones
 from tuxtalk import recording_state as rs
 from tuxtalk import recording
 
@@ -25,12 +25,12 @@ def desktop(monkeypatch):
                                   idx_for={"alsa_input.usb-Logitech_C920": 4,
                                            "alsa_input.usb-TONOR_TD520S": 6},
                                   resolves=[])
-    monkeypatch.setattr(config, "default_source_name", lambda: state.source)
+    monkeypatch.setattr(microphones, "default_source_name", lambda: state.source)
 
     def find(mic):
         state.resolves.append(mic)
         return 9 if mic else state.idx_for.get(state.source, 2)
-    monkeypatch.setattr(config, "find_input_device", find)
+    monkeypatch.setattr(microphones, "find_input_device", find)
     monkeypatch.setattr(recording, "_system_default_mic", None)
     return state
 
@@ -82,7 +82,7 @@ def test_a_failed_re_resolve_keeps_the_device_in_use(desktop, monkeypatch):
 
     def boom(mic):
         raise RuntimeError("PortAudio went away")
-    monkeypatch.setattr(config, "find_input_device", boom)
+    monkeypatch.setattr(microphones, "find_input_device", boom)
 
     assert recording.follow_system_default(4) == 4
 
@@ -110,7 +110,7 @@ def test_start_recording_opens_the_new_default(desktop, monkeypatch):
 
 class TestDefaultSourceName:
     def _wpctl(self, monkeypatch, stdout, returncode=0):
-        monkeypatch.setattr(config.subprocess, "run",
+        monkeypatch.setattr(microphones.subprocess, "run",
                             lambda cmd, **kw: types.SimpleNamespace(
                                 returncode=returncode, stdout=stdout))
 
@@ -118,17 +118,17 @@ class TestDefaultSourceName:
         self._wpctl(monkeypatch, 'id 57, type PipeWire:Interface:Node\n'
                     '  * node.description = "C920 Pro Webcam Analog Stereo"\n'
                     '  * node.name = "alsa_input.usb-046d_C920"\n')
-        assert config.default_source_name() == "alsa_input.usb-046d_C920"
+        assert microphones.default_source_name() == "alsa_input.usb-046d_C920"
 
     def test_none_when_wpctl_fails(self, monkeypatch):
         self._wpctl(monkeypatch, "", returncode=1)
-        assert config.default_source_name() is None
+        assert microphones.default_source_name() is None
 
     def test_none_without_wpctl(self, monkeypatch):
         def missing(cmd, **kw):
             raise FileNotFoundError("wpctl")
-        monkeypatch.setattr(config.subprocess, "run", missing)
-        assert config.default_source_name() is None
+        monkeypatch.setattr(microphones.subprocess, "run", missing)
+        assert microphones.default_source_name() is None
 
 
 def test_before_any_microphone_opens_audio_is_taken_at_the_engines_rate():
@@ -146,4 +146,4 @@ def test_a_default_microphone_name_that_isnt_utf8_is_still_read(tmp_path, monkey
     from shell_stubs import stub
     stub(tmp_path, "wpctl", r"printf '  * node.name = \"alsa_input.caf\351\"\n'")
     monkeypatch.setenv("PATH", str(tmp_path))
-    assert config.default_source_name().startswith("alsa_input.caf")
+    assert microphones.default_source_name().startswith("alsa_input.caf")

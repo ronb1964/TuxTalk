@@ -24,7 +24,7 @@ DEFAULT_MIC_NAMES = ("", "default", "pipewire", "pulse")
 
 def recorded_mic(mic, device_names):
     """The input device the service records from for the mic setting *mic*,
-    or "" for the system default. Same rule as config.find_input_device: the
+    or "" for the system default. Same rule as microphones.find_input_device: the
     first name containing *mic*, and the default when none does (a mic that
     was unplugged, say)."""
     if mic:

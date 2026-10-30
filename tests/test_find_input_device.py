@@ -1,4 +1,4 @@
-"""Which microphone "System Default" records from (config.find_input_device).
+"""Which microphone "System Default" records from (microphones.find_input_device).
 
 The Mint test (2026-10-13) had a virtual default microphone. PortAudio's list
 has no entry with its name, so TuxTalk fell back to the first raw sound card
@@ -10,7 +10,7 @@ import types
 
 import pytest
 
-from tuxtalk import config
+from tuxtalk import microphones
 
 DEVICES = [
     {"name": "HDA Intel PCH: ALC892 Analog (hw:0,0)", "max_input_channels": 2},
@@ -33,27 +33,27 @@ def system(monkeypatch):
             raise FileNotFoundError("wpctl")
         out = f' * node.description = "{state.default}"\n   node.nick = "{state.default}"\n'
         return types.SimpleNamespace(returncode=0, stdout=out)
-    monkeypatch.setattr(config.subprocess, "run", run)
+    monkeypatch.setattr(microphones.subprocess, "run", run)
     return state
 
 
 def test_a_hardware_default_is_found_by_name(system):
-    assert config.find_input_device("") == 1
+    assert microphones.find_input_device("") == 1
 
 
 def test_a_virtual_default_records_through_pipewire(system):
     system.default = "FakeMic"            # also EasyEffects' "Easy Effects Source"
-    assert config.find_input_device("") == 3
+    assert microphones.find_input_device("") == 3
 
 
 def test_without_pipewire_the_hardware_fallback_still_applies(system):
     system.default = None                 # wpctl not installed
-    assert config.find_input_device("") == 1   # the USB mic is preferred
+    assert microphones.find_input_device("") == 1   # the USB mic is preferred
 
 
 def test_a_named_mic_is_used_as_chosen(system):
     system.default = "FakeMic"
-    assert config.find_input_device("ALC892") == 0
+    assert microphones.find_input_device("ALC892") == 0
 
 
 def test_a_default_source_name_that_isnt_utf8_still_finds_a_microphone(tmp_path, monkeypatch):
@@ -65,4 +65,21 @@ def test_a_default_source_name_that_isnt_utf8_still_finds_a_microphone(tmp_path,
     stub(tmp_path, "wpctl", r"printf '  * node.description = \"Caf\351 mic\"\n'")
     monkeypatch.setenv("PATH", str(tmp_path))
     # Not a hardware name in the list, so it records through PipeWire's device.
-    assert config.find_input_device(None) == 3
+    assert microphones.find_input_device(None) == 3
+
+
+def test_a_pipewire_that_hangs_is_logged_and_a_microphone_still_found(monkeypatch, caplog):
+    """A wpctl that times out used to be dropped without a word, so the log
+    never said why "System Default" picked another microphone."""
+    import logging
+    import subprocess
+    monkeypatch.setitem(sys.modules, "sounddevice",
+                        types.SimpleNamespace(query_devices=lambda: DEVICES))
+
+    def hang(cmd, **kwargs):
+        raise subprocess.TimeoutExpired(cmd, 2)
+    monkeypatch.setattr(microphones.subprocess, "run", hang)
+    caplog.set_level(logging.INFO)
+
+    assert microphones.find_input_device("") == 1
+    assert any("which microphone is the default" in r.getMessage() for r in caplog.records)
