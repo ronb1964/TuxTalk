@@ -107,11 +107,6 @@ def parse(text: str):
     return None
 
 
-def needs_last_text(command: Command) -> bool:
-    """Whether *command* works on what TuxTalk typed last."""
-    return bool(command.said_unit)
-
-
 @dataclass(frozen=True)
 class Plan:
     chords: list

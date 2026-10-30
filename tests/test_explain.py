@@ -85,10 +85,9 @@ def test_a_broken_file_means_explain_again(tmp_path, monkeypatch):
 def test_show_tips_again_brings_everything_back(problems):
     explain.never_again("cant_format")
     explain.never_again("terminal")
-    assert explain.anything_to_reset() and not explain.should_explain("terminal")
+    assert not explain.should_explain("terminal")
     explain.reset()                            # Preferences' button
     assert explain.should_explain("terminal") and explain.should_explain("cant_format")
-    assert not explain.anything_to_reset()
 
 
 def test_the_window_is_centred_over_the_app_and_kept_on_its_monitor():

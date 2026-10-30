@@ -112,10 +112,6 @@ def reset():
         logger.debug(f"Could not reset the explained kinds: {e}")
 
 
-def anything_to_reset() -> bool:
-    return bool(_never_again())
-
-
 def should_explain(kind) -> bool:
     """Whether *kind* gets the window: it has one, and the user didn't tick
     "Don't explain this again" for it."""

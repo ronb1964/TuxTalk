@@ -86,8 +86,6 @@ def test_a_last_word_with_no_mark_is_selected_whole():
 
 def test_what_i_said_needs_something_said():
     assert nav.chords(nav.parse("select that"), "") is None
-    assert nav.needs_last_text(nav.parse("select the last word"))
-    assert not nav.needs_last_text(nav.parse("select all"))
 
 
 # --- around the cursor --------------------------------------------------------------------
