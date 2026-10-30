@@ -32,25 +32,34 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq --no-install-recommends \
-            python3-venv python3-gi python3-gi-cairo python3-dbus python3-evdev \
+            python3-venv python3-dev python3-gi python3-gi-cairo python3-dbus \
             gir1.2-gtk-3.0 gir1.2-ayatanaappindicator3-0.1 gir1.2-notify-0.7 libportaudio2 \
             libxkbregistry0 xkb-data \
             xvfb xauth dbus dbus-x11 libxtst6
 
-      - name: Python packages
+      # The versions in poetry.lock, the ones the release build installs, so
+      # a new release of a dependency can't change a run by itself. Poetry has
+      # a venv of its own to keep its dependencies out of the tests'; the tests'
+      # venv sees the system's site-packages for python3-gi, and VIRTUAL_ENV
+      # points Poetry at it. evdev builds from source, hence python3-dev.
+      - name: Python packages (poetry.lock)
+        env:
+          POETRY_VIRTUALENVS_CREATE: "false"
         run: |
+          python3 -m venv poetry-venv
+          poetry-venv/bin/pip install -q poetry==2.5.1
           python3 -m venv --system-site-packages venv
-          venv/bin/pip install -q pytest numpy sounddevice pyperclip toml \
-            huggingface_hub tqdm faster-whisper onnx-asr text2num fonttools
+          VIRTUAL_ENV="$PWD/venv" poetry-venv/bin/poetry install --no-root --no-interaction
 
       # A virtual screen for the GTK windows the tests build, and a private
       # D-Bus session bus so no test reaches anything real.
       - name: Run the tests
         run: PYTHONPATH=src xvfb-run -a dbus-run-session --config-file=tests/dbus-session.conf -- venv/bin/python -m pytest tests/ -q
 
-  # Pyflakes catches undefined names and similar mistakes that only crash when
-  # that line finally runs; shellcheck does the same for the build and release
-  # scripts. Neither needs GTK, so this runs separately from the tests.
+  # Ruff catches undefined names and similar mistakes that only crash when
+  # that line finally runs, and likely bugs and needless complication (the
+  # rules pyproject.toml selects); shellcheck does the same for the build and
+  # release scripts. Neither needs GTK, so this runs separately from the tests.
   lint:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -58,20 +67,30 @@ jobs:
       - uses: actions/checkout@v7
 
       # A venv because Ubuntu's own Python refuses pip installs (PEP 668).
-      - name: Install ruff, shellcheck and Poetry
+      - name: Install shellcheck and Poetry
         run: |
-          python3 -m venv lint-venv
-          lint-venv/bin/pip install -q ruff==0.17.0 shellcheck-py==0.11.0.1 poetry==2.5.1
+          python3 -m venv tools-venv
+          tools-venv/bin/pip install -q shellcheck-py==0.11.0.1 poetry==2.5.1
 
       # The release build refuses a stale poetry.lock; this says so on the push
       # that changed pyproject.toml instead of at release time.
       - name: poetry.lock matches pyproject.toml
-        run: lint-venv/bin/poetry check --lock
+        run: tools-venv/bin/poetry check --lock
 
-      - name: Python (pyflakes rules)
+      # Ruff from poetry.lock's dev group: the version the tests' ruff
+      # ratchet counts with.
+      - name: Ruff (poetry.lock)
+        env:
+          POETRY_VIRTUALENVS_CREATE: "false"
+        run: |
+          python3 -m venv lint-venv
+          VIRTUAL_ENV="$PWD/lint-venv" tools-venv/bin/poetry install \
+            --only dev --no-root --no-interaction
+
+      - name: Python (pyflakes, bugbear and simplify rules)
         run: lint-venv/bin/ruff check src/tuxtalk
 
       # Only tracked scripts, so DEV_SETUP.md's copy of this command gives the
       # same answer in a working folder that holds untracked scripts too.
       - name: Shell scripts
-        run: git ls-files -z '*.sh' | xargs -0 lint-venv/bin/shellcheck -S warning
+        run: git ls-files -z '*.sh' | xargs -0 tools-venv/bin/shellcheck -S warning

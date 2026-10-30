@@ -22,6 +22,7 @@ REQUIRED_IN_GIT = [
     "build-deb.sh",            # step 10
     "build-rpm.sh",            # step 10
     "packaging/checksums.sh",  # sourced by the three step 10 scripts
+    "packaging/pinned-download.sh",  # sourced by container-build.sh
     "fresh-start-for-testing.sh",  # step 6
 ]
 

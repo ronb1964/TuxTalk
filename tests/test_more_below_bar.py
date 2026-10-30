@@ -77,5 +77,9 @@ def test_the_welcome_screen_uses_it(welcome_window):
     assert _more_below(shown_text(welcome_window.dialog))
 
 
-def test_setup_complete_uses_it(setup_complete):
+def test_setup_complete_uses_it_on_a_short_screen(setup_complete, monkeypatch):
+    """Its text scrolls only on a screen too short for it: one 480 pixels
+    tall here, whatever xvfb-run gives (640x480 on Fedora, 1280x1024 on
+    Ubuntu, where everything fits)."""
+    monkeypatch.setattr(ui_style, "workarea_height", lambda near=None: int(480 * ui_style.USABLE_SHARE))
     assert _more_below(setup_complete())

@@ -10,7 +10,7 @@
 #
 # Built in Ubuntu 22.04 like the AppImage, so it runs on 22.04 and newer
 # (glibc 2.34). 22.04 has no glslc, so the build uses the LunarG Vulkan SDK,
-# cached in ~/.cache/talktype-vulkan-sdk.
+# pinned in vulkan-engine-container.sh and cached in ~/.cache/talktype-vulkan-sdk.
 #
 # It also builds whisper.cpp's Parakeet library (libparakeet.so), which
 # parakeet_gpu_worker.py loads to run Parakeet on the graphics chip.
@@ -58,6 +58,15 @@ if [ -e "$PROJECT_DIR/$ASSET" ]; then
     echo "❌ $ASSET already exists here. Move it away first." >&2
     exit 1
 fi
+# The commit each whisper.cpp release tag pointed at when it was pinned, so a
+# tag moved since can't change what is built (the container checks it). For a
+# new version: gh api repos/ggml-org/whisper.cpp/commits/v<version> --jq .sha
+case "$WHISPER_CPP_VERSION" in
+    1.9.5) WHISPER_CPP_COMMIT=d1be6fde11ac6e0407606b4e42fe72d34add8037 ;;
+    *)
+        echo "❌ No pinned commit for whisper.cpp $WHISPER_CPP_VERSION: add it to $0" >&2
+        exit 1 ;;
+esac
 SDK_CACHE="$HOME/.cache/talktype-vulkan-sdk"
 mkdir -p "$SDK_CACHE"
 CONTAINER_CMD=$(command -v podman || command -v docker)
@@ -72,7 +81,8 @@ esac
 $CONTAINER_CMD run --rm \
     -v "$PROJECT_DIR:/build:Z" \
     -v "$SDK_CACHE:/cache:Z" \
-    -e WHISPER_CPP_VERSION="$WHISPER_CPP_VERSION" -e ASSET="$ASSET" \
+    -e WHISPER_CPP_VERSION="$WHISPER_CPP_VERSION" -e WHISPER_CPP_COMMIT="$WHISPER_CPP_COMMIT" \
+    -e ASSET="$ASSET" \
     "${OWNER_ARGS[@]}" \
     ubuntu:22.04 bash /build/vulkan-engine-container.sh
 

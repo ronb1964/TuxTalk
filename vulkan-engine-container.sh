@@ -6,22 +6,32 @@ apt-get update -qq >/dev/null
 apt-get install -y -qq build-essential cmake git wget xz-utils libvulkan-dev ca-certificates >/dev/null
 
 # Vulkan SDK for glslc and current Vulkan headers (22.04 has neither).
-cd /cache
-# Unpacked beside sdk/ and moved in only when complete, so a failed unpack
-# is not cached and reused by the next build.
-if [ ! -d sdk ]; then
-    wget -q -O sdk.tar.xz "https://sdk.lunarg.com/sdk/download/latest/linux/vulkan-sdk.tar.xz"
-    rm -rf sdk.partial && mkdir sdk.partial
-    tar xf sdk.tar.xz -C sdk.partial && rm sdk.tar.xz && mv sdk.partial sdk
-fi
-SDK_VERSION_DIR="$(ls /cache/sdk | head -1)"
-export VULKAN_SDK="/cache/sdk/$SDK_VERSION_DIR/x86_64"
+# A pinned version, checked against the SHA256 LunarG publishes at
+# https://sdk.lunarg.com/sdk/sha/<version>/linux/vulkansdk-linux-x86_64-<version>.tar.xz.txt,
+# so two builds of one engine compile its shaders with the same glslc. The
+# archive is kept in /cache; each build checks and unpacks its own copy (a few
+# seconds), so nothing changed in the cache since is ever run.
+VULKAN_SDK_VERSION=1.4.363.0
+VULKAN_SDK_SHA256=197962f5cbf80baf2775a03336a01cee7c8745686c65aaa70d3f751ade4d7e43
+source /build/packaging/pinned-download.sh
+SDK_DIR=$(mktemp -d)
+pinned_download \
+    "https://sdk.lunarg.com/sdk/download/${VULKAN_SDK_VERSION}/linux/vulkansdk-linux-x86_64-${VULKAN_SDK_VERSION}.tar.xz" \
+    "$VULKAN_SDK_SHA256" "/cache/vulkansdk-${VULKAN_SDK_VERSION}.tar.xz" "$SDK_DIR/sdk.tar.xz"
+tar xf "$SDK_DIR/sdk.tar.xz" -C "$SDK_DIR"
+rm "$SDK_DIR/sdk.tar.xz"
+export VULKAN_SDK="$SDK_DIR/$VULKAN_SDK_VERSION/x86_64"
 export PATH="$VULKAN_SDK/bin:$PATH"
 
 WORK=/tmp/whisper-build
 rm -rf "$WORK" && mkdir -p "$WORK" && cd "$WORK"
 git clone -q --depth 1 --branch "v${WHISPER_CPP_VERSION}" https://github.com/ggml-org/whisper.cpp
 cd whisper.cpp
+# Its build scripts run here, so the tag has to be the commit pinned for it.
+if [ "$(git rev-parse HEAD)" != "$WHISPER_CPP_COMMIT" ]; then
+    echo "❌ whisper.cpp v${WHISPER_CPP_VERSION} is $(git rev-parse HEAD), not the pinned $WHISPER_CPP_COMMIT"
+    exit 1
+fi
 # TuxTalk's own changes (vulkan-engine-patches/): Your Words for Parakeet's
 # greedy decoder (parakeet_set_word_boost). A patch that doesn't apply
 # stops the build rather than ship an engine without it.

@@ -44,6 +44,12 @@ dictate-prefs = "tuxtalk.prefs:main"
 pytest = "^8.4.1"
 black = "^25.1.0"
 ruff = "0.17.0"  # the version CI lints with
+# Builds the bundled emoji font (packaging/build-emoji-font.py) and reads it
+# in tests/test_emoji_font.py.
+fonttools = "^4.60"
+# The VM harness's screenshots (tests/vm/vmlib.py), which test_vm_beep_detector.py
+# imports with the beep detector it tests.
+pillow = ">=12.0"
 
 [tool.black]
 line-length = 100
@@ -51,10 +57,35 @@ line-length = 100
 [tool.ruff]
 line-length = 100
 
-# What CI enforces. Length, line length, error handling and docstrings are
-# measured by tests/test_code_health.py, which lets old code only improve.
+# What CI enforces: pyflakes, bugbear and simplify. Length, line length, error
+# handling and docstrings are measured by tests/test_code_health.py.
 [tool.ruff.lint]
-select = ["F"]
+select = ["F", "B", "SIM"]
+# contextlib.suppress would take a swallowed error out of sight of
+# test_code_health.py's except check, so try/except/pass stays as it is.
+ignore = ["SIM105"]
+
+# The rules each file already broke when bugbear and simplify were turned on.
+# How many times each one is kept in tests/ruff_baseline.json, which
+# tests/test_ruff_ratchet.py lets only go down; a rule is struck here when
+# its count reaches none, and holds for that file from then on.
+[tool.ruff.lint.per-file-ignores]
+"src/tuxtalk/ai_cleanup.py" = ["B905", "SIM109"]
+"src/tuxtalk/audio_duck.py" = ["SIM114"]
+"src/tuxtalk/config.py" = ["B023"]
+"src/tuxtalk/custom_words.py" = ["B905"]
+"src/tuxtalk/delivery.py" = ["SIM102"]
+"src/tuxtalk/extension_helper.py" = ["B904"]
+"src/tuxtalk/file_transcribe.py" = ["B905"]
+"src/tuxtalk/keyboard_layout.py" = ["B905"]
+"src/tuxtalk/normalize.py" = ["B905", "SIM905"]
+"src/tuxtalk/notes_text.py" = ["SIM102"]
+"src/tuxtalk/parakeet_gpu.py" = ["SIM115"]
+"src/tuxtalk/recording_indicator.py" = ["SIM108"]
+"src/tuxtalk/settings_backup.py" = ["B904", "SIM905"]
+"src/tuxtalk/virtual_keyboard.py" = ["B904", "SIM300"]
+"src/tuxtalk/vocabulary.py" = ["SIM905"]
+"src/tuxtalk/voice_edit_rules.py" = ["SIM905"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
