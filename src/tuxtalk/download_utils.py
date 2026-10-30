@@ -21,6 +21,7 @@ import shutil
 import tarfile
 import tempfile
 import time
+import urllib.error
 import urllib.request
 
 logger = logging.getLogger(__name__)
@@ -39,16 +40,31 @@ class DownloadError(Exception):
     """Why a download failed, short enough for a download window's status line."""
 
 
-def download_file(url: str, dest_path: str, **options) -> bool:
+def download_file(
+    url: str,
+    dest_path: str,
+    timeout: int = 60,
+    cancel_event=None,
+    progress_hook=None,
+    expected_sha256: str | None = None,
+    user_agent: str = "TuxTalk",
+    report=None,
+) -> bool:
     """fetch_file() for callers that only need to know whether the file
-    landed: True when it did; a failure is logged with its reason."""
+    landed: True when it did; a failure is logged with its reason, and told
+    to *report* (a download window's progress callback) at 0 %, as
+    failure_reason reads it. A cancel is only logged."""
     try:
-        fetch_file(url, dest_path, **options)
+        fetch_file(url, dest_path, timeout=timeout, cancel_event=cancel_event,
+                   progress_hook=progress_hook, expected_sha256=expected_sha256,
+                   user_agent=user_agent)
         return True
     except InterruptedError:
         logger.info(f"Download cancelled: {url}")
     except DownloadError as e:
         logger.error(f"Download failed for {url}: {e}")
+        if report is not None:
+            report(f"Download failed: {e}", 0)
     return False
 
 
@@ -89,9 +105,16 @@ def fetch_file(
         raise
     except Exception as e:
         _remove_quiet(tmp_path)
-        # urllib's errors read "<urlopen error [Errno -2] Name or service not
-        # known>"; their reason alone is what the user can act on.
-        raise DownloadError(str(getattr(e, "reason", None) or e)) from e
+        raise DownloadError(_reason(e)) from e
+
+
+def _reason(error) -> str:
+    """*error* in words for a download window. urllib's read "<urlopen error
+    [Errno -2] Name or service not known>", whose reason alone is what the
+    user can act on; an HTTP error keeps its status ("HTTP 404 Not Found")."""
+    if isinstance(error, urllib.error.HTTPError):
+        return f"HTTP {error.code} {error.reason}"
+    return str(getattr(error, "reason", None) or error)
 
 
 def _fetch_to_temp(url, dest_path, timeout, cancel_event, progress_hook,

@@ -116,6 +116,20 @@ def test_engine_download_fetches_again_when_parakeet_is_missing(tmp_path, monkey
     assert fetched == [wv.ENGINE_URL]
 
 
+def test_a_failed_engine_download_says_why(tmp_path, monkeypatch):
+    """Its window said only "Download failed"."""
+    from tuxtalk import download_utils
+    monkeypatch.setattr(wv, "_engine_dir", lambda: str(tmp_path / "1.9.5" / wv.ENGINE_NAME))
+
+    def offline(url, dest, **kwargs):
+        raise download_utils.DownloadError("Name or service not known")
+    monkeypatch.setattr(download_utils, "fetch_file", offline)
+    reports = []
+    assert wv.make_engine_download_func("small")(lambda *r: reports.append(r), None) is False
+    assert download_utils.failure_reason(*reports[-1]) == (
+        "Download failed: Name or service not known")
+
+
 def test_a_download_that_fails_to_unpack_leaves_nothing_behind(tmp_path, monkeypatch):
     """Not the 22 MB archive, nor a half-unpacked folder."""
     engine = tmp_path / "1.9.5" / wv.ENGINE_NAME

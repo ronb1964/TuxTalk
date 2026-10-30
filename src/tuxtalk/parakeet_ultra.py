@@ -60,7 +60,7 @@ def _path(name):
 
 def missing(device):
     """The files Parakeet Ultra still needs on *device*: "vulkan" for the
-    graphics card, anything else for the processor. download_file puts a file
+    graphics card, anything else for the processor. fetch_file puts a file
     in place only once its SHA256 matched, so a file that's there is whole."""
     names = (GPU_FILE,) if device == "vulkan" else tuple(CPU_FILES)
     return tuple(name for name in names if not os.path.isfile(_path(name)))
