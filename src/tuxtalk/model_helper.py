@@ -471,8 +471,9 @@ def download_parakeet_update(device, parent=None):
     arrived, False when cancelled, None when the download failed."""
     from . import parakeet_ultra
     from .download_progress_dialog import DownloadTask, UnifiedDownloadDialog
-    dialog = UnifiedDownloadDialog(parent=parent, title="Updating Parakeet",
-                                   description="One-time download. Everything runs on this computer.")
+    dialog = UnifiedDownloadDialog(
+        parent=parent, title="Updating Parakeet",
+        description="One-time download. Everything runs on this computer.")
     dialog.add_task(DownloadTask("Parakeet Ultra", parakeet_update_size(device),
                                  parakeet_ultra.make_download_func(device)))
     results = dialog.run()

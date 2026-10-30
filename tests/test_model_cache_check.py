@@ -247,3 +247,32 @@ def test_set_aside_records_each_keep_their_own_copy_and_only_the_last_few(hub_ca
         download_utils.mend_damaged_ref("org/model")
     kept = sorted(p.read_bytes() for p in hub_cache.aside.iterdir())
     assert kept == [b"\xff garbage 2", b"\xff garbage 3", b"\xff garbage 4"]
+
+
+def test_the_copies_kept_are_the_last_set_aside_whatever_their_dates(hub_cache):
+    """Pruning goes by when each record was set aside, not by the damaged
+    file's own date, and the tenth copy sorts after the second."""
+    import os
+    from tuxtalk import download_utils
+    ref = hub_cache.folder / "refs" / "main"
+    for n in range(12):
+        hub_cache.ref(b"\xff garbage %d" % n)
+        os.utime(ref, ns=(10 ** 18 - n, 10 ** 18 - n))     # each one dated earlier
+        download_utils.mend_damaged_ref("org/model")
+    kept = sorted(p.read_bytes() for p in hub_cache.aside.iterdir())
+    assert kept == [b"\xff garbage 10", b"\xff garbage 11", b"\xff garbage 9"]
+
+
+def test_a_linked_damaged_refs_folder_is_not_used(hub_cache, tmp_path):
+    """The copies' folder made a link elsewhere: nothing is moved or pruned
+    through it, and the record stays where it is."""
+    from tuxtalk import download_utils
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    for n in range(4):
+        (elsewhere / f"main-{n}-1-{n}").write_text("someone's file")
+    hub_cache.aside.symlink_to(elsewhere)
+    hub_cache.ref(b"\xff garbage")
+    download_utils.mend_damaged_ref("org/model")
+    assert (hub_cache.folder / "refs" / "main").exists()
+    assert len(list(elsewhere.iterdir())) == 4

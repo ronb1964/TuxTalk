@@ -295,7 +295,7 @@ def _cached(lookup, repo, what):
         if _damaged.failed(what, e):
             logger.warning(f"The download of {what} is damaged; counted as missing: {e}")
         if _damaged_record(e):
-            _set_aside_ref(repo, "main", e)
+            _set_aside_ref(repo, e)
         return None
     if _damaged.worked(what):
         logger.info(f"The download of {what} is no longer damaged")
@@ -317,10 +317,12 @@ def cached_hub_snapshot(repo: str):
     return _cached(lambda: snapshot_download(repo, local_files_only=True), repo, repo)
 
 
-# What Hugging Face writes in refs/<revision>: the commit the snapshot is of.
+# What Hugging Face writes in refs/main: the commit the snapshot is of.
 _COMMIT = re.compile(rb"[0-9a-fA-F]{40,64}")
 _KEEP_DAMAGED = 3               # set-aside records kept per repo, newest first
 _set_asides = itertools.count()     # with the time and pid, a name of its own
+# A set-aside copy's name: main-<nanoseconds>-<pid>-<count>.
+_ASIDE_NAME = re.compile(r"main-(\d+)-(\d+)-(\d+)")
 
 
 def _damaged_record(error) -> bool:
@@ -330,9 +332,9 @@ def _damaged_record(error) -> bool:
     return isinstance(error, UnicodeDecodeError) or "Invalid pointer path" in str(error)
 
 
-def mend_damaged_ref(repo: str, revision: str = "main") -> None:
+def mend_damaged_ref(repo: str) -> None:
     """Before a download from *repo*: when huggingface_hub can't read its
-    record of *revision* (refs/<revision>), set that record aside so the
+    record of the main revision (refs/main), set that record aside so the
     download writes a fresh one. It reads the old record before replacing
     it, as does the disk-space check, so otherwise every download fails.
     Only after its own read failed, and only that record: another process
@@ -343,28 +345,32 @@ def mend_damaged_ref(repo: str, revision: str = "main") -> None:
         try_to_load_from_cache(repo, "config.json")
     except ValueError as e:
         if _damaged_record(e):
-            _set_aside_ref(repo, revision, e)
+            _set_aside_ref(repo, e)
 
 
-def _set_aside_ref(repo, revision, problem):
-    """_set_aside() for *repo*'s record of *revision*."""
+def _set_aside_ref(repo, problem):
+    """_set_aside() for *repo*'s refs/main, the only revision TuxTalk asks for."""
     from huggingface_hub import constants
     from huggingface_hub.file_download import repo_folder_name
     folder = os.path.join(constants.HF_HUB_CACHE, repo_folder_name(repo_id=repo,
                                                                    repo_type="model"))
-    _set_aside(os.path.join(folder, "refs", revision), folder, revision, problem)
+    _set_aside(os.path.join(folder, "refs", "main"), os.path.join(folder, "damaged-refs"),
+               problem)
 
 
-def _set_aside(path, folder, revision, problem):
-    """Rename the damaged record *path* into *folder*/damaged-refs, unless it
-    is a link, holds a commit by now or changed while it was looked at."""
-    aside_dir = os.path.join(folder, "damaged-refs")
+def _set_aside(path, aside_dir, problem):
+    """Rename the damaged record *path* into *aside_dir*, unless the record
+    is a link, holds a commit by now or changed while it was looked at, or
+    *aside_dir* is a link."""
     try:
         before = os.lstat(path)
     except FileNotFoundError:
         return          # gone already: set aside by another process, or never written
     except OSError as e:
         logger.warning(f"Could not look at the damaged record {path}: {e}")
+        return
+    if os.path.islink(aside_dir):
+        logger.warning(f"Not setting aside {path}: {aside_dir} is a link")
         return
     try:
         if not stat.S_ISREG(before.st_mode):
@@ -377,9 +383,12 @@ def _set_aside(path, folder, revision, problem):
                 before.st_mtime_ns, before.st_size, before.st_ino):
             return      # rewritten since huggingface_hub read it
         os.makedirs(aside_dir, exist_ok=True)
-        name = (f"{revision.replace('/', '_')}-{time.strftime('%Y%m%d-%H%M%S')}"
-                f"-{os.getpid()}-{next(_set_asides)}")
-        aside = os.path.join(aside_dir, name)
+        aside = os.path.join(aside_dir,
+                             f"main-{time.time_ns()}-{os.getpid()}-{next(_set_asides)}")
+        # Another process could still write a healthy commit between the
+        # check above and this rename. Accepted: it takes a damaged record and
+        # a download of the same repo at that very microsecond, and all it
+        # costs is that record moved aside, which the next download writes again.
         os.replace(path, aside)
     except OSError as e:
         logger.warning(f"Could not set aside the damaged record {path}: {e}")
@@ -389,11 +398,13 @@ def _set_aside(path, folder, revision, problem):
 
 
 def _keep_newest(folder, keep):
-    """Delete all but the *keep* newest files in *folder*."""
+    """Delete all but the *keep* most recently set-aside copies in *folder*,
+    by the time and count in their names; other files are left alone."""
     try:
-        entries = sorted(os.scandir(folder),
-                         key=lambda e: (e.stat(follow_symlinks=False).st_mtime_ns, e.name))
-        for entry in entries[:-keep]:
+        named = [(tuple(map(int, m.groups())), entry) for entry in os.scandir(folder)
+                 if (m := _ASIDE_NAME.fullmatch(entry.name))
+                 and entry.is_file(follow_symlinks=False)]
+        for _order, entry in sorted(named, key=lambda pair: (pair[0][0], pair[0][2]))[:-keep]:
             os.remove(entry.path)
     except OSError as e:
         logger.info(f"Could not trim the set-aside records in {folder}: {e}")
