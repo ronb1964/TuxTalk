@@ -312,7 +312,7 @@ class TestAppLaunchShortcuts:
         before = kh.time.time() - 1
         comps = {"/component/kmix": ("kmix", "Audio Volume", [qt_code], True)}
         kh.claim(_cfg(hold, "F10", vc), apps(comps))
-        assert kh.app_shortcuts_since(before) == {kh.qt_key_sequence(hold if not vc else vc):
+        assert kh.app_shortcuts_since(before) == {kh.qt_key_sequence(vc or hold):
                                                   "Audio Volume"}
 
     def test_an_app_launched_by_our_key_is_reported(self, apps, caplog):

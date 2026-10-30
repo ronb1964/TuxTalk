@@ -193,7 +193,7 @@ def test_the_menu_offers_the_presets_of_this_computer(tray_menu):
     labels = [item.get_label() for item in performance.get_submenu().get_children()]
     starts = ("Recommended", "Lightest", "Battery saver", "", "Custom (opens Preferences)")
     assert len(labels) == len(starts)
-    assert all(label.startswith(start) for label, start in zip(labels, starts)), labels
+    assert all(label.startswith(start) for label, start in zip(labels, starts, strict=True)), labels
 
 
 def test_moving_the_dot_always_clears_the_busy_flag(tray_menu_object, monkeypatch):

@@ -1,12 +1,6 @@
 """The audio callback feeds only the data the active style needs."""
 import numpy as np
-import pytest
 from tuxtalk import recording
-
-
-@pytest.fixture
-def app():
-    return pytest.importorskip("tuxtalk.app")
 
 
 class StubInd:

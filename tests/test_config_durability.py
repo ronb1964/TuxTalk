@@ -7,6 +7,7 @@ that does nothing and no explanation.
 """
 
 import os
+import pathlib
 
 import pytest
 
@@ -435,7 +436,8 @@ def test_concurrent_saves_do_not_collide(tmp_path):
     assert not errors, f"concurrent saves raised: {errors[:3]}"
 
     # Whoever won, the file must hold exactly one complete version.
-    written = [ln.split('"')[1] for ln in open(path).read().splitlines() if "model" in ln]
+    written = [ln.split('"')[1] for ln in pathlib.Path(path).read_text().splitlines()
+               if "model" in ln]
     assert written, "file ended up empty"
     assert len(set(written)) == 1, f"file interleaves several writers: {set(written)}"
     assert len(written) == 40, f"file is truncated: {len(written)} of 40 lines"

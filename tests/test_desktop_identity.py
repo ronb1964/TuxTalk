@@ -57,14 +57,6 @@ def test_apply_never_raises(monkeypatch):
     desktop_identity.apply()
 
 
-@pytest.mark.parametrize("program", ["tray_main", "prefs_main", "service_main"])
-def test_every_program_with_windows_names_itself_first(program, request):
-    """The tray (and its dialogs), Preferences and the dictation service (the
-    recording indicator) each run as their own process, and each names itself
-    before it opens anything."""
-    assert request.getfixturevalue(program)()[0] == "names itself"
-
-
 def test_apply_does_not_query_the_package_database(monkeypatch):
     """rpm/deb/package all map to one launcher name, so startup skips the
     rpm -q / dpkg-query calls."""

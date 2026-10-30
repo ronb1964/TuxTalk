@@ -3,21 +3,13 @@
 python-evdev opens every device with O_NONBLOCK already. Calling
 set_nonblocking() raises AttributeError, and inside the loop that collects
 keyboards for the welcome screen's hotkey test that would skip every device
-("No keyboards found via evdev").
+("No keyboards found via evdev"). The fake devices that test_hotkey_test_
+unreadable_keyboard.py and test_input_grabs.py open through the hotkey test
+and the service have no such method either, so a call to it fails there.
 """
 import os
-import pathlib
 
 import pytest
-
-SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tuxtalk"
-
-
-def test_nothing_calls_the_missing_method():
-    callers = [f"{p.name}:{n}" for p in SRC.rglob("*.py")
-               for n, line in enumerate(p.read_text().splitlines(), 1)
-               if "set_nonblocking(" in line]
-    assert callers == []
 
 
 def test_evdev_opens_devices_non_blocking():

@@ -1,9 +1,14 @@
 """Rename edge cases: the menu launcher, a pre-rename service, and folders and
 AppImages that need care when they are moved."""
 import os
+import pathlib
 
 from tuxtalk import desktop_launcher
 from tuxtalk import update_checker as uc
+
+
+def _read(path):
+    return pathlib.Path(path).read_text()
 
 
 def test_menu_launcher_points_at_the_installed_appimage(tmp_path, monkeypatch):
@@ -81,10 +86,11 @@ def test_only_the_running_appimage_is_renamed(tmp_path):
         f.write("0.14.6")
     _old_entry(h, f"{h}/AppImages/TalkType.AppImage")
     rm.adopt_old_install(home=h, running_appimage=f"{h}/Downloads/TuxTalk-v0.15.0-x86_64.AppImage")
-    assert open(f"{h}/AppImages/TalkType.AppImage").read() == "0.14.6"
+    assert _read(f"{h}/AppImages/TalkType.AppImage") == "0.14.6"
     assert not os.path.exists(f"{h}/AppImages/TuxTalk.AppImage")
     # ...and the login entry keeps starting a file that exists.
-    assert f"Exec={h}/AppImages/TalkType.AppImage\n" in open(f"{h}/.config/autostart/tuxtalk.desktop").read()
+    autostart = _read(f"{h}/.config/autostart/tuxtalk.desktop")
+    assert f"Exec={h}/AppImages/TalkType.AppImage\n" in autostart
 
 
 def test_the_updated_appimage_renames_itself(tmp_path):
@@ -94,8 +100,9 @@ def test_the_updated_appimage_renames_itself(tmp_path):
         f.write("0.15.0")
     _old_entry(h, f"{h}/AppImages/TalkType.AppImage")
     rm.adopt_old_install(home=h, running_appimage=f"{h}/AppImages/TalkType.AppImage")
-    assert open(f"{h}/AppImages/TuxTalk.AppImage").read() == "0.15.0"
-    assert f"Exec={h}/AppImages/TuxTalk.AppImage\n" in open(f"{h}/.config/autostart/tuxtalk.desktop").read()
+    assert _read(f"{h}/AppImages/TuxTalk.AppImage") == "0.15.0"
+    autostart = _read(f"{h}/.config/autostart/tuxtalk.desktop")
+    assert f"Exec={h}/AppImages/TuxTalk.AppImage\n" in autostart
 
 
 def test_an_aur_login_entry_points_at_the_new_opt_path(tmp_path, monkeypatch):
@@ -105,4 +112,4 @@ def test_an_aur_login_entry_points_at_the_new_opt_path(tmp_path, monkeypatch):
     monkeypatch.setattr(rm.os.path, "exists",
                         lambda p: p == "/opt/tuxtalk/TuxTalk.AppImage" or real_exists(p))
     rm.adopt_old_install(home=h, running_appimage="/opt/tuxtalk/TuxTalk.AppImage")
-    assert "Exec=/opt/tuxtalk/TuxTalk.AppImage\n" in open(f"{h}/.config/autostart/tuxtalk.desktop").read()
+    assert "Exec=/opt/tuxtalk/TuxTalk.AppImage\n" in _read(f"{h}/.config/autostart/tuxtalk.desktop")

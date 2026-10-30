@@ -57,8 +57,9 @@ line-length = 100
 [tool.ruff]
 line-length = 100
 
-# What CI enforces: pyflakes, bugbear and simplify. Length, line length, error
-# handling and docstrings are measured by tests/test_code_health.py.
+# What CI enforces, in src/tuxtalk and tests/: pyflakes, bugbear and simplify.
+# Length, line length, error handling and docstrings are measured by
+# tests/test_code_health.py (in tests/, only each file's length so far).
 [tool.ruff.lint]
 select = ["F", "B", "SIM"]
 # contextlib.suppress would take a swallowed error out of sight of
@@ -86,6 +87,12 @@ ignore = ["SIM105"]
 "src/tuxtalk/virtual_keyboard.py" = ["B904", "SIM300"]
 "src/tuxtalk/vocabulary.py" = ["SIM905"]
 "src/tuxtalk/voice_edit_rules.py" = ["SIM905"]
+
+# A test compares what it got with what it expects, in that order; SIM300
+# would put an expected set first whenever the other side is in capitals.
+# Kept apart from the table above, which only lists what src/tuxtalk owes.
+[tool.ruff.lint.extend-per-file-ignores]
+"tests/*" = ["SIM300"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

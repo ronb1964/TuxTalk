@@ -17,15 +17,8 @@ import types
 
 
 from tuxtalk import service_tick
-from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
 from tuxtalk import recording
-
-
-def _idle(monkeypatch):
-    recording.start_requested.clear()
-    recording.stop_requested.clear()
-    monkeypatch.setattr(rs.state, "is_recording", False, raising=False)
 
 
 def _cfg(mic=""):
@@ -76,9 +69,8 @@ class TestResolvingTheMic:
 
 
 class TestTheNextDictationUsesIt:
-    def test_recording_starts_on_the_newly_chosen_mic(self, monkeypatch):
+    def test_recording_starts_on_the_newly_chosen_mic(self, monkeypatch, idle_service):
         """End to end through the tick both backends share."""
-        _idle(monkeypatch)
         monkeypatch.setattr(live, "config_file_changed", lambda: False)
         monkeypatch.setattr(live, "commands_file_changed", lambda: False)
         monkeypatch.setattr(recording, "pick_input_device", lambda name: 7)

@@ -19,16 +19,9 @@ import types
 
 import pytest
 
-from tuxtalk import dictation_worker, engine, hotkey_keys, recording, service_tick
+from tuxtalk import dictation_worker, engine, hotkey_keys, service_tick
 from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
-
-
-def _idle(monkeypatch):
-    """A service that is running but not recording."""
-    recording.start_requested.clear()
-    recording.stop_requested.clear()
-    monkeypatch.setattr(rs.state, "is_recording", False, raising=False)
 
 
 def _cfg(**overrides):
@@ -38,13 +31,12 @@ def _cfg(**overrides):
 
 
 class TestChangeSignalHasOneOwner:
-    def test_tick_hands_back_the_reloaded_settings(self, monkeypatch):
+    def test_tick_hands_back_the_reloaded_settings(self, monkeypatch, idle_service):
         """The evdev loop rebinds its hotkey locals from this return value.
 
         Without it the loop has to re-detect the change itself, and the
         detector is edge-triggered — the tick already consumed it.
         """
-        _idle(monkeypatch)
         reloaded = hotkey_keys.Hotkeys(
             hold_key=60, toggle_key=None, vc_hotkey_str="",
             voice_cmds_combo=None, voice_cmds_main_key=None,
@@ -55,20 +47,18 @@ class TestChangeSignalHasOneOwner:
         cfg = _cfg()
         assert service_tick.tick(cfg, service_tick.ServiceState(cfg)) is reloaded
 
-    def test_tick_hands_back_nothing_when_the_config_is_unchanged(self, monkeypatch):
-        _idle(monkeypatch)
+    def test_tick_hands_back_nothing_when_the_config_is_unchanged(self, monkeypatch, idle_service):
         monkeypatch.setattr(live, "config_file_changed", lambda: False)
 
         cfg = _cfg()
         assert service_tick.tick(cfg, service_tick.ServiceState(cfg)) is None
 
-    def test_a_new_hotkey_survives_the_tick(self, monkeypatch):
+    def test_a_new_hotkey_survives_the_tick(self, monkeypatch, idle_service):
         """End to end: the change is detected once and the new key comes back.
 
         If the tick discarded the result, the caller would have to detect the
         change a second time, which can never succeed.
         """
-        _idle(monkeypatch)
         monkeypatch.setattr(live, "config_file_changed", lambda: True)
         monkeypatch.setattr(service_tick, "load_config", lambda: _cfg(
             hotkey="F9", toggle_hotkey="", voice_commands_hotkey="", mode="hold",
@@ -94,9 +84,8 @@ class _Engine:
 
 
 class TestAutoTimeoutIsLive:
-    def test_disabling_the_timeout_takes_effect_without_a_restart(self, monkeypatch):
+    def test_disabling_the_timeout_takes_effect_without_a_restart(self, monkeypatch, idle_service):
         """Untick 'auto-timeout' and the service must stop exiting on it."""
-        _idle(monkeypatch)
         cfg = _cfg(auto_timeout_enabled=True, auto_timeout_minutes=5)
         svc = service_tick.ServiceState(cfg)
 
@@ -105,8 +94,7 @@ class TestAutoTimeoutIsLive:
 
         assert svc.timeout_enabled is False
 
-    def test_enabling_the_timeout_takes_effect_without_a_restart(self, monkeypatch):
-        _idle(monkeypatch)
+    def test_enabling_the_timeout_takes_effect_without_a_restart(self, monkeypatch, idle_service):
         cfg = _cfg(auto_timeout_enabled=False, auto_timeout_minutes=1)
         svc = service_tick.ServiceState(cfg)
 
@@ -115,8 +103,7 @@ class TestAutoTimeoutIsLive:
         assert svc.timeout_enabled is True
         assert svc.timeout_seconds == 60
 
-    def test_a_shortened_timeout_takes_effect_without_a_restart(self, monkeypatch):
-        _idle(monkeypatch)
+    def test_a_shortened_timeout_takes_effect_without_a_restart(self, monkeypatch, idle_service):
         cfg = _cfg(auto_timeout_enabled=True, auto_timeout_minutes=30)
         svc = service_tick.ServiceState(cfg)
 
@@ -125,9 +112,8 @@ class TestAutoTimeoutIsLive:
         assert svc.timeout_minutes == 2
         assert svc.timeout_seconds == 120
 
-    def test_a_disabled_timeout_does_not_shut_the_service_down(self, monkeypatch):
+    def test_a_disabled_timeout_does_not_shut_the_service_down(self, monkeypatch, idle_service):
         """The user-visible failure: 'disabled' and it exits anyway."""
-        _idle(monkeypatch)
         monkeypatch.setattr(live, "config_file_changed", lambda: False)
         cfg = _cfg(auto_timeout_enabled=True, auto_timeout_minutes=5)
         svc = service_tick.ServiceState(cfg)
@@ -140,11 +126,11 @@ class TestAutoTimeoutIsLive:
         service_tick.tick(cfg, svc)
         assert engine.model is loaded          # not rested
 
-    def test_switching_the_timeout_on_does_not_stop_the_service_at_once(self, monkeypatch):
+    def test_switching_the_timeout_on_does_not_stop_the_service_at_once(self, monkeypatch,
+                                                                         idle_service):
         """The idle clock must not count only D-Bus commands while the option is
         off, or after a long session of F8 dictation, ticking it on stops the
         service on the next pass, right after the user turned the option on."""
-        _idle(monkeypatch)
         monkeypatch.setattr(live, "commands_file_changed", lambda: False)
         monkeypatch.setattr(live, "words_file_changed", lambda: False)
         cfg = _cfg(auto_timeout_enabled=False, auto_timeout_minutes=5)
@@ -168,11 +154,10 @@ class TestAutoTimeoutIsLive:
         assert engine.model is loaded    # not rested on the very next pass
 
 
-def test_power_saving_rests_the_model_and_keeps_the_service(monkeypatch):
+def test_power_saving_rests_the_model_and_keeps_the_service(monkeypatch, idle_service):
     """Mio, Lemmy 2026-10-17: dictation 'just stops after a while'. Power
     Saving used to end the service, and F8 did nothing until dictation was
     turned back on from the menu. Now it lets go of the model and stays."""
-    _idle(monkeypatch)
     monkeypatch.setattr(live, "config_file_changed", lambda: False)
     shown = []
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: shown.append((title, body)))
@@ -186,11 +171,10 @@ def test_power_saving_rests_the_model_and_keeps_the_service(monkeypatch):
     assert shown == []                    # nothing to explain: F8 still works
 
 
-def test_power_saving_waits_for_a_transcription_still_running(monkeypatch):
+def test_power_saving_waits_for_a_transcription_still_running(monkeypatch, idle_service):
     """Codex review of 0.17: the idle clock starts when the key comes up, so a
     long transcription or Type at pause chunks still typing could outlast a
     1-minute timeout and lose the Vulkan engine mid-request."""
-    _idle(monkeypatch)
     monkeypatch.setattr(live, "config_file_changed", lambda: False)
     loaded = _Engine()
     monkeypatch.setattr(engine, "model", loaded)

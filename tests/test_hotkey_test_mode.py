@@ -17,20 +17,13 @@ import time
 import pytest
 from evdev import ecodes
 
+from conftest import KeyEvent
 from tuxtalk import app, service_launcher
 from tuxtalk import hotkeys
 from tuxtalk import recording_state as rs
 from tuxtalk import keyboard_grab
 from tuxtalk import tray_link
 from tuxtalk import recording
-
-
-class FakeEvent:
-    type = ecodes.EV_KEY
-
-    def __init__(self, code, value):
-        self.code = code
-        self.value = value
 
 
 class FakeConfig:
@@ -56,7 +49,7 @@ def keys(monkeypatch):
 
 
 def press(code):
-    hotkeys._handle_key_event(FakeEvent(code, 1), HOLD, TOGGLE,
+    hotkeys._handle_key_event(KeyEvent(code, 1), HOLD, TOGGLE,
                           None, set(), [], FakeConfig(), 0)
 
 

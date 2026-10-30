@@ -10,8 +10,7 @@ import types
 import pytest
 from evdev import ecodes
 
-from test_send_destination import (  # noqa: F401  (fixtures)
-    FIRST, HELD_TITLE, Countdown, chat, notifications)
+from test_send_destination import FIRST, HELD_TITLE, Countdown
 from tuxtalk import (delivery, dictation_worker, focused_window, hotkeys, keyboard_grab,
                      modifier_hotkeys, recording, send_countdown)
 from tuxtalk import recording_state as rs
