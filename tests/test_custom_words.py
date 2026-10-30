@@ -140,7 +140,7 @@ class FakeVulkan(wv.VulkanWhisperModel):
     def __init__(self, reply="Thank you."):
         self.reply, self.prompts = reply, []
 
-    def transcribe(self, audio, language=None, prompt=None):
+    def transcribe(self, audio, language=None, prompt=None, limit_to=()):
         self.prompts.append(prompt)
         return self.reply, 0.0
 

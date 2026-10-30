@@ -103,7 +103,8 @@ class FakeWhisper:
     def transcribe(self, audio, language=None, **kwargs):
         self.calls.append(language)
         info = type("Info", (), {"language": language or self.heard,
-                                 "all_language_probs": sorted(self.scores.items(), key=lambda x: -x[1])})()
+                                 "all_language_probs": sorted(self.scores.items(),
+                                                              key=lambda x: -x[1])})()
         seg = type("Seg", (), {"text": f"in {language or self.heard}", "no_speech_prob": 0.0,
                                "avg_logprob": -0.1, "compression_ratio": 1.0})()
         return iter([seg]), info
@@ -161,7 +162,8 @@ def test_language_scores_are_only_asked_for_when_needed():
 
 
 def test_language_scores_from_a_reply():
-    assert wv.language_scores({"language_probabilities": {"es": "0.5", "fr": 0.25}}) == {"es": 0.5, "fr": 0.25}
+    scores = wv.language_scores({"language_probabilities": {"es": "0.5", "fr": 0.25}})
+    assert scores == {"es": 0.5, "fr": 0.25}
     assert wv.language_scores({"text": "hi"}) == {}
 
 

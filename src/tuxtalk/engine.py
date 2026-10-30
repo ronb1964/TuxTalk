@@ -66,9 +66,8 @@ def transcribe(audio_f32, language: str | None) -> str | None:
 def _transcribe_vulkan(engine, audio_f32, language, limit_to, words_prompt, started):
     """transcribe() on whisper.cpp's Vulkan engine."""
     from . import custom_words
-    from .whisper_vulkan import transcribe_extras
-    raw, _no_speech = engine.transcribe(audio_f32, language,
-                                        **transcribe_extras(words_prompt, limit_to))
+    raw, _no_speech = engine.transcribe(audio_f32, language, prompt=words_prompt or None,
+                                        limit_to=limit_to)
     logger.info(f"TIMING: Transcription completed in {time.time() - started:.2f}s (Vulkan GPU)")
     logger.info(f"Raw transcription (Vulkan GPU): {live.loggable(raw)}")
     # whisper.cpp's no-speech score isn't reliable (0.90 on clear speech,

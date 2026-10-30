@@ -22,7 +22,8 @@ def test_window_identity_matches_the_new_launchers():
 
 
 def test_updates_come_from_the_renamed_repo():
-    assert update_checker.GITHUB_API_URL == "https://api.github.com/repos/ronb1964/TuxTalk/releases/latest"
+    assert update_checker.GITHUB_API_URL == (
+        "https://api.github.com/repos/ronb1964/TuxTalk/releases/latest")
     assert "/.local/share/TuxTalk/" in update_install.UPDATE_DIR
 
 

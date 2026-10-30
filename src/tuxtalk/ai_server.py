@@ -25,7 +25,7 @@ def _engine_processes():
 def kill_orphaned_engines() -> int:
     """Kill engines whose TuxTalk service is gone. Returns how many."""
     return engine_process.kill_orphans(_engine_processes(), engine_process.is_talktype_process,
-                                       "AI cleanup engine")
+                                       "AI engine")
 
 
 class AIServer:
@@ -56,7 +56,7 @@ class AIServer:
             if self._proc and self._proc.poll() is None:
                 return
             if not ai_download.is_installed():
-                logger.warning("AI cleanup is on but its download is missing; skipping")
+                logger.warning("The AI is on but its download is missing; skipping")
                 return
             kill_orphaned_engines()
             self._ready.clear()
@@ -78,7 +78,7 @@ class AIServer:
             proc = self._proc = self._launcher.popen(command, stdout=subprocess.DEVNULL,
                                                      stderr=subprocess.PIPE, env=env)
             output = engine_process.OutputTail(proc.stderr)
-            logger.info(f"AI cleanup engine starting (pid {proc.pid})")
+            logger.info(f"AI engine starting (pid {proc.pid})")
         # The process started here, not self._proc read again: a stop() just
         # after the lock is let go would hand the waiter None.
         threading.Thread(target=self._wait_until_ready, args=(proc, output), daemon=True).start()
@@ -92,24 +92,24 @@ class AIServer:
             if self._proc is not proc:
                 return                  # turned off while starting
             if proc.poll() is not None:
-                logger.error("AI cleanup engine exited during startup"
+                logger.error("AI engine exited during startup"
                              + engine_process.launch_failure(proc.returncode, output))
                 return
             if not engine_process.answers(self._port):
                 time.sleep(0.25)
                 continue
             started = time.time()
-            answered = self._post(self._warm_up, 200, timeout=60, what="AI cleanup")
+            answered = self._post(self._warm_up, 200, timeout=60, what="AI warm-up")
             with self._lock:
                 if self._proc is not proc:
                     return              # stopped during the warm-up: no answer was expected
                 self._ready.set()
             if answered is None:
-                logger.warning("AI cleanup warm-up got no answer; the first correction "
+                logger.warning("AI engine warm-up got no answer; the first request "
                                "may be slow")
-            logger.info(f"AI cleanup engine ready (warm-up took {time.time() - started:.1f}s)")
+            logger.info(f"AI engine ready (warm-up took {time.time() - started:.1f}s)")
             return
-        logger.error("AI cleanup engine did not become ready")
+        logger.error("AI engine did not become ready")
 
     def stop(self):
         """Stop the server; a start still under way gives up."""
@@ -117,7 +117,7 @@ class AIServer:
             proc, self._proc = self._proc, None
             self._ready.clear()
         if engine_process.stop(proc):
-            logger.info("AI cleanup engine stopped")
+            logger.info("AI engine stopped")
 
     def _restart_if_exited(self):
         """A server that died after it was ready (out of memory, a graphics
@@ -126,7 +126,7 @@ class AIServer:
         proc = self._proc
         if proc is None or not self._ready.is_set() or proc.poll() is None:
             return
-        logger.warning(f"AI cleanup engine exited (code {proc.returncode}); starting it again")
+        logger.warning(f"AI engine exited (code {proc.returncode}); starting it again")
         self._ready.clear()
         self.start(_replacing=proc)
 

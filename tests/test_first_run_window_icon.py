@@ -20,7 +20,8 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 def home(tmp_path, monkeypatch):
     monkeypatch.setattr(desktop_launcher, "DESKTOP_FILE_PATH",
                         str(tmp_path / "apps" / "tuxtalk.desktop"))
-    monkeypatch.setattr(installation, "APPIMAGE_PATH", str(tmp_path / "AppImages" / "TuxTalk.AppImage"))
+    monkeypatch.setattr(installation, "APPIMAGE_PATH",
+                        str(tmp_path / "AppImages" / "TuxTalk.AppImage"))
     monkeypatch.setattr(desktop_launcher, "install_app_icon", lambda: "tuxtalk")
     monkeypatch.setattr(desktop_launcher.menu_cache, "refresh_menu_cache", lambda: None)
     monkeypatch.delenv("FLATPAK_ID", raising=False)

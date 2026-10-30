@@ -29,7 +29,8 @@ def report(monkeypatch, tmp_path):
     monkeypatch.setattr(problem_report, "os_name", lambda: "Fedora Linux 44 (LXQt)")
     monkeypatch.setattr(desktop_detect, "get_desktop_environment", lambda: "unknown")
     monkeypatch.setattr(keyboard_layout, "active_layout", lambda: ("us", "", ""))
-    monkeypatch.setattr(recommend, "detect_hardware", lambda cfg: recommend.Hardware("Intel graphics"))
+    monkeypatch.setattr(recommend, "detect_hardware",
+                        lambda cfg: recommend.Hardware("Intel graphics"))
     monkeypatch.setattr(secure_input, "is_installed", lambda: True)
     monkeypatch.setattr(secure_input, "running_version", lambda: "1.4")
     monkeypatch.setattr(uinput_helper, "typing_blocked_reason", lambda: None)

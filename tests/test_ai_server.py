@@ -15,7 +15,8 @@ def test_orphaned_engines_are_killed_but_live_ones_are_left_alone(monkeypatch):
     killed when a new engine starts; ones owned by a live TuxTalk are not."""
     import signal as _signal
     killed = []
-    monkeypatch.setattr(ai_server, "_engine_processes", lambda: [(100, 1), (200, 50), (300, ai_server.os.getpid())])
+    monkeypatch.setattr(ai_server, "_engine_processes",
+                        lambda: [(100, 1), (200, 50), (300, ai_server.os.getpid())])
     monkeypatch.setattr(engine_process, "is_talktype_process", lambda pid: pid == 50)
     monkeypatch.setattr(ai_server.os, "kill", lambda pid, sig: killed.append((pid, sig)))
     assert ai_server.kill_orphaned_engines() == 1
@@ -53,7 +54,8 @@ def test_the_engine_key_is_not_on_its_command_line(dead_engine, monkeypatch):
     """Every user of the computer can read a process's command line; with the
     key from there, another user could talk to the engine."""
     calls = []
-    monkeypatch.setattr(ai_server.subprocess, "Popen", lambda *a, **k: calls.append((a, k)) or _Proc())
+    monkeypatch.setattr(ai_server.subprocess, "Popen",
+                        lambda *a, **k: calls.append((a, k)) or _Proc())
     dead_engine.start(_replacing=dead_engine._proc)
     (argv,), options = calls[0]
     assert dead_engine._key not in " ".join(argv)
@@ -87,7 +89,8 @@ def dead_engine(monkeypatch):
     monkeypatch.setattr(ai_server, "kill_orphaned_engines", lambda: 0)
     monkeypatch.setattr(ai_download, "server_binary", lambda: "/x/llama-server")
     monkeypatch.setattr(ai_download, "model_path", lambda: "/x/model.gguf")
-    monkeypatch.setattr(ai_server.subprocess, "Popen", lambda *a, **k: started.append(a) or _Proc())
+    monkeypatch.setattr(ai_server.subprocess, "Popen",
+                        lambda *a, **k: started.append(a) or _Proc())
     monkeypatch.setattr(e, "_wait_until_ready", lambda proc, output: None)
     e.started = started
     return e

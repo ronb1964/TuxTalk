@@ -154,9 +154,9 @@ class FileEngine:
             _steer(self.model, self.words)      # as dictation does (engine._transcribe_parakeet)
             text = self.model.recognize(audio)
         elif self.kind == "vulkan":
-            from .whisper_vulkan import transcribe_extras
-            extra = transcribe_extras(custom_words.prompt(self.words), self.limit_to)
-            text, _ = self.model.transcribe(audio, self.language, timeout=600, **extra)
+            text, _ = self.model.transcribe(audio, self.language, timeout=600,
+                                            prompt=custom_words.prompt(self.words) or None,
+                                            limit_to=self.limit_to)
         else:
             options = dict(beam_size=5, vad_filter=False, hotwords=custom_words.prompt(self.words))
             segments, _ = language_limit.whisper_held_to(

@@ -49,7 +49,8 @@ UNSAFE = [
     ("Order two boxes of screws. No, wait, three boxes.", "Order two boxes of screws."),
     # scrambled, or smuggled the wrong value back in after the correction
     ("Order two boxes of screws. No, wait, three boxes.", "Order three screws of boxes."),
-    ("Set the timeout to 5 minutes, actually 10 minutes.", "Set the timeout 10 minutes 5 minutes."),
+    ("Set the timeout to 5 minutes, actually 10 minutes.",
+     "Set the timeout 10 minutes 5 minutes."),
     ("Pay Dave 50, no wait, 60 dollars.", "Pay Dave 60 dollars 50."),
     ("Give Dave the keys, no wait, give Steve the keys.", "Give Dave the keys."),
     # deleted only the correction phrase: both values left, the wrong one first

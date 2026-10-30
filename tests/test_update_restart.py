@@ -71,7 +71,8 @@ def test_an_update_waits_for_the_first_run_copy_to_finish(tmp_path, appimages, m
     copy = threading.Thread(target=update_install._install_appimage_file, args=(str(first), dest))
     copy.start()
     assert copying.wait(10)
-    update = threading.Thread(target=update_install._install_appimage_file, args=(_download(tmp_path), dest))
+    update = threading.Thread(target=update_install._install_appimage_file,
+                              args=(_download(tmp_path), dest))
     update.start()
     update.join(0.5)
     assert update.is_alive()                # waits its turn
@@ -303,7 +304,8 @@ def test_a_failed_copy_points_login_and_the_menu_back_at_the_running_appimage(
     monkeypatch.setattr(autostart, "set_autostart",
                         lambda enable, prefer_installed_appimage=False, command=None:
                         calls.append(command) or True)
-    monkeypatch.setattr(desktop_launcher, "DESKTOP_FILE_PATH", str(tmp_path / "apps" / "tuxtalk.desktop"))
+    monkeypatch.setattr(desktop_launcher, "DESKTOP_FILE_PATH",
+                        str(tmp_path / "apps" / "tuxtalk.desktop"))
     monkeypatch.setattr(desktop_launcher, "install_app_icon", lambda: "tuxtalk")
     monkeypatch.setattr(desktop_launcher.menu_cache, "refresh_menu_cache", lambda: None)
     running = str(tmp_path / "Downloads" / "TuxTalk-v0.19.0-x86_64.AppImage")
@@ -315,7 +317,8 @@ def test_a_failed_copy_points_login_and_the_menu_back_at_the_running_appimage(
 def test_a_launcher_for_a_path_with_a_space_still_opens(monkeypatch, tmp_path):
     """A second download is "TuxTalk (1).AppImage": the menu entry and its
     right-click shortcuts were cut at the space and opened nothing."""
-    monkeypatch.setattr(desktop_launcher, "DESKTOP_FILE_PATH", str(tmp_path / "apps" / "tuxtalk.desktop"))
+    monkeypatch.setattr(desktop_launcher, "DESKTOP_FILE_PATH",
+                        str(tmp_path / "apps" / "tuxtalk.desktop"))
     monkeypatch.setattr(desktop_launcher, "install_app_icon", lambda: "tuxtalk")
     monkeypatch.setattr(desktop_launcher.menu_cache, "refresh_menu_cache", lambda: None)
     running = str(tmp_path / "Downloads" / "TuxTalk (1).AppImage")
@@ -432,7 +435,8 @@ def test_tray_restart_uses_the_package_launcher(monkeypatch):
 
 def test_tray_keeps_running_when_it_cannot_restart(monkeypatch, message_boxes):
     monkeypatch.setattr(installation, "get_install_type", lambda: "appimage")
-    monkeypatch.setattr(update_install, "restart_via_launcher", lambda target=None: (False, "nope"))
+    monkeypatch.setattr(update_install, "restart_via_launcher",
+                        lambda target=None: (False, "nope"))
     tray = FakeTray()
 
     tray.restart_app()
@@ -469,13 +473,16 @@ def test_tray_download_install_restarts_through_restart_app(monkeypatch, idle_qu
     from gi.repository import Gtk
     from tuxtalk import tray
     steps = []
-    monkeypatch.setattr(update_install, "download_update", lambda *a, **k: "/updates/TuxTalk.AppImage")
-    monkeypatch.setattr(update_install, "install_appimage_update", lambda path, progress: steps.append(
+    monkeypatch.setattr(update_install, "download_update",
+                        lambda *a, **k: "/updates/TuxTalk.AppImage")
+    monkeypatch.setattr(update_install, "install_appimage_update",
+                        lambda path, progress: steps.append(
         ("install", path, threading.current_thread() is threading.main_thread()))
         or (installed, "disk full"))
     monkeypatch.setattr(Gtk.Dialog, "run", lambda d: steps.append("error shown"))
     stub = types.SimpleNamespace(restart_app=lambda: steps.append("restart"), _quitting=False)
-    stub._install_not_cut_off = lambda install: tray.DictationTray._install_not_cut_off(stub, install)
+    stub._install_not_cut_off = (
+        lambda install: tray.DictationTray._install_not_cut_off(stub, install))
     tray.DictationTray._download_update(stub, {"appimage_url": "https://x/TuxTalk.AppImage"})
     idle_queue(lambda: len(steps) >= 2)
     install = ("install", "/updates/TuxTalk.AppImage", False)
@@ -491,7 +498,8 @@ def test_the_tray_says_why_an_appimage_update_didnt_go_in(monkeypatch, idle_queu
     monkeypatch.setattr(update_ui, "show_message",
                         lambda parent, kind, title, text, **k: told.append(text))
     stub = types.SimpleNamespace(restart_app=lambda: pytest.fail("restarted"), _quitting=False)
-    stub._install_not_cut_off = lambda install: tray.DictationTray._install_not_cut_off(stub, install)
+    stub._install_not_cut_off = (
+        lambda install: tray.DictationTray._install_not_cut_off(stub, install))
     release = {"appimage_url": "https://x/TuxTalk.AppImage"}
 
     def checksum_mismatch(url, name, progress, **k):
@@ -503,7 +511,8 @@ def test_the_tray_says_why_an_appimage_update_didnt_go_in(monkeypatch, idle_queu
 
     def raises(path, progress):
         raise OSError("disk full")
-    monkeypatch.setattr(update_install, "download_update", lambda *a, **k: "/updates/TuxTalk.AppImage")
+    monkeypatch.setattr(update_install, "download_update",
+                        lambda *a, **k: "/updates/TuxTalk.AppImage")
     monkeypatch.setattr(update_install, "install_appimage_update", raises)
     tray.DictationTray._download_update(stub, release)
     idle_queue(lambda: told)
@@ -537,7 +546,8 @@ def test_preferences_asks_the_tray_to_restart(monkeypatch):
     from tuxtalk import update_ui
     asked = []
     iface = types.SimpleNamespace(RestartApp=lambda: asked.append(True))
-    monkeypatch.setattr(update_ui, "show_message", lambda *a, **k: pytest.fail("no fallback needed"))
+    monkeypatch.setattr(update_ui, "show_message",
+                        lambda *a, **k: pytest.fail("no fallback needed"))
 
     assert update_ui.restart_via_tray(lambda: iface) is True
     assert asked == [True]
@@ -577,8 +587,10 @@ def prefs_update(prefs_window, monkeypatch):
 def test_preferences_restarts_an_installed_appimage_through_the_tray(
         prefs_update, monkeypatch, idle_queue):
     monkeypatch.setattr(installation, "get_install_type", lambda: "appimage")
-    monkeypatch.setattr(update_install, "download_update", lambda *a, **k: "/updates/TuxTalk.AppImage")
-    monkeypatch.setattr(update_install, "install_appimage_update", lambda path, progress: (True, ""))
+    monkeypatch.setattr(update_install, "download_update",
+                        lambda *a, **k: "/updates/TuxTalk.AppImage")
+    monkeypatch.setattr(update_install, "install_appimage_update",
+                        lambda path, progress: (True, ""))
     prefs_update._on_download_update_clicked(None)
     idle_queue(lambda: prefs_update.asked)
     assert prefs_update.asked == ["restart"]
@@ -655,7 +667,8 @@ def test_the_package_is_deleted_once_installed_or_refused(tmp_path, monkeypatch,
         def wait(self, timeout=None):
             return self.returncode
 
-    monkeypatch.setattr(update_install, "package_install_argv", lambda t, p: ["pkexec", "dpkg", "-i", p])
+    monkeypatch.setattr(update_install, "package_install_argv",
+                        lambda t, p: ["pkexec", "dpkg", "-i", p])
     monkeypatch.setattr(uc.subprocess, "Popen", lambda *a, **k: Proc())
 
     update_install.install_package_update(str(package), "deb")
@@ -684,7 +697,8 @@ def test_a_slow_installer_keeps_its_package_until_it_finishes(tmp_path, monkeypa
         def kill(self):
             pytest.fail("a package manager must never be killed mid-transaction")
 
-    monkeypatch.setattr(update_install, "package_install_argv", lambda t, p: ["pkexec", "dpkg", "-i", p])
+    monkeypatch.setattr(update_install, "package_install_argv",
+                        lambda t, p: ["pkexec", "dpkg", "-i", p])
     monkeypatch.setattr(uc.subprocess, "Popen", lambda *a, **k: SlowProc())
 
     ok, _ = update_install.install_package_update(str(package), "deb")
@@ -717,7 +731,8 @@ def test_the_installer_output_does_not_go_through_a_pipe(tmp_path, monkeypatch):
         seen.update(kwargs)
         return Proc()
 
-    monkeypatch.setattr(update_install, "package_install_argv", lambda t, p: ["pkexec", "dpkg", "-i", p])
+    monkeypatch.setattr(update_install, "package_install_argv",
+                        lambda t, p: ["pkexec", "dpkg", "-i", p])
     monkeypatch.setattr(uc.subprocess, "Popen", popen)
 
     update_install.install_package_update(str(package), "deb")
@@ -799,7 +814,8 @@ def test_a_cancelled_password_prompt_says_cancelled(tmp_path, monkeypatch, retur
         def wait(self, timeout=None):
             return self.returncode
 
-    monkeypatch.setattr(update_install, "package_install_argv", lambda t, p: ["pkexec", "dpkg", "-i", p])
+    monkeypatch.setattr(update_install, "package_install_argv",
+                        lambda t, p: ["pkexec", "dpkg", "-i", p])
     monkeypatch.setattr(uc.subprocess, "Popen", lambda argv, stdout, stderr: Proc(stdout))
 
     ok, message = update_install.install_package_update(str(package), "deb")

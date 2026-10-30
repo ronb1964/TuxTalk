@@ -330,7 +330,7 @@ class FakeEngine(wv.VulkanWhisperModel):
     def __init__(self, model_name, device_index):
         self.model_name, self.device_index = model_name, device_index
 
-    def transcribe(self, audio, language=None):
+    def transcribe(self, audio, language=None, prompt=None, limit_to=()):
         return "Thank you.", 0.95          # a high, untrustworthy no-speech score
 
 
@@ -339,7 +339,7 @@ class SignOffEngine(wv.VulkanWhisperModel):
     def __init__(self):
         pass
 
-    def transcribe(self, audio, language=None, prompt=None):
+    def transcribe(self, audio, language=None, prompt=None, limit_to=()):
         return "Thanks for watching!", 0.0
 
 

@@ -285,13 +285,15 @@ def test_the_download_no_longer_writes_the_config_itself(prefs, monkeypatch):
     from tuxtalk import config, cuda_download, download_progress_dialog
     switched = []
     monkeypatch.setattr(cuda_download, "download_cuda_libraries", lambda progress, cancel: True)
-    monkeypatch.setattr(config, "save_config", lambda cfg: pytest.fail("the download saved settings"))
+    monkeypatch.setattr(config, "save_config",
+                        lambda cfg: pytest.fail("the download saved settings"))
     monkeypatch.setattr(download_progress_dialog, "run_downloads", lambda parent, title, text,
                         tasks: all(t.download_func(lambda *a: None, threading.Event())
                                               for t in tasks))
     monkeypatch.setattr(download_progress_dialog, "_say_how_the_cuda_download_went",
                         lambda parent, ok, then: ok and then())
-    assert download_progress_dialog.show_cuda_download_dialog(on_success_callback=lambda: switched.append(1))
+    assert download_progress_dialog.show_cuda_download_dialog(
+        on_success_callback=lambda: switched.append(1))
     assert switched == [1]
 
 

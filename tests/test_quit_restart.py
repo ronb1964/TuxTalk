@@ -277,7 +277,8 @@ def test_uninstall_waits_for_the_service_while_its_window_draws(slow_service, mo
     """It waited on GTK's thread (the "Uninstalling" window couldn't draw)
     and killed the service after 3 s, mid-dictation."""
     from tuxtalk import uninstall
-    monkeypatch.setattr(uninstall, "_end_service", lambda: service_launcher.end_dictation_service())
+    monkeypatch.setattr(uninstall, "_end_service",
+                        lambda: service_launcher.end_dictation_service())
     monkeypatch.setattr(uninstall, "_tuxtalk_pids", lambda engines: [])
     monkeypatch.setattr(uninstall.ydotoold_leftovers, "stop_ydotoold_we_started", lambda: None)
     plan = types.SimpleNamespace(home=Path("/nonexistent-home"), ydotoold_unit=None)
