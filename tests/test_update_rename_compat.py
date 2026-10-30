@@ -6,6 +6,7 @@ every installed TalkType finds, and checksum-verifies, a TuxTalk release.
 import json
 
 from conftest import UrlResponse
+from tuxtalk import update_install
 from tuxtalk import update_checker as uc
 
 RELEASE = {
@@ -34,7 +35,7 @@ def test_old_client_picks_every_tuxtalk_asset(monkeypatch):
 def test_old_client_finds_the_tuxtalk_checksum(monkeypatch):
     sums = "ab" * 32 + "  TuxTalk-v0.15.0-x86_64.AppImage\n" + "cd" * 32 + "  tuxtalk_0.15.0_amd64.deb\n"
     monkeypatch.setattr(uc.urllib.request, "urlopen", lambda *a, **k: UrlResponse(sums.encode()))
-    assert uc.fetch_expected_sha256("https://example.invalid/SHA256SUMS.txt", "TuxTalk-v0.15.0-x86_64.AppImage") == "ab" * 32
+    assert update_install.fetch_expected_sha256("https://example.invalid/SHA256SUMS.txt", "TuxTalk-v0.15.0-x86_64.AppImage") == "ab" * 32
 
 
 def test_two_checks_at_once_each_say_what_went_wrong_for_them(monkeypatch):

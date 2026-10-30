@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from tuxtalk import control, desktop_detect, desktop_launcher, update_checker
+from tuxtalk import control, desktop_detect, desktop_launcher, installation
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -181,7 +181,7 @@ def _launcher(tmp_path, monkeypatch, text):
     path = tmp_path / "tuxtalk.desktop"
     path.write_text(text)
     monkeypatch.setattr(desktop_launcher, "DESKTOP_FILE_PATH", str(path))
-    monkeypatch.setattr(update_checker, "get_install_type", lambda **_k: "appimage")
+    monkeypatch.setattr(installation, "get_install_type", lambda **_k: "appimage")
     monkeypatch.setattr(desktop_launcher.menu_cache, "refresh_menu_cache", lambda: None)
     return path
 
@@ -214,13 +214,13 @@ def test_hidden_entry_and_packages_left_alone(tmp_path, monkeypatch):
     assert desktop_launcher.add_launcher_actions() is False
     assert path.read_text() == hidden
     path.write_text(OLD_LAUNCHER)
-    monkeypatch.setattr(update_checker, "get_install_type", lambda **_k: "deb")
+    monkeypatch.setattr(installation, "get_install_type", lambda **_k: "deb")
     assert desktop_launcher.add_launcher_actions() is False
 
 
 def test_no_launcher_is_fine(tmp_path, monkeypatch):
     monkeypatch.setattr(desktop_launcher, "DESKTOP_FILE_PATH", str(tmp_path / "none.desktop"))
-    monkeypatch.setattr(update_checker, "get_install_type", lambda **_k: "appimage")
+    monkeypatch.setattr(installation, "get_install_type", lambda **_k: "appimage")
     assert desktop_launcher.add_launcher_actions() is False
 
 

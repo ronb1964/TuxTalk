@@ -215,7 +215,7 @@ def _log_what_runs(cfg) -> None:
     of each start in the log: a log sent with a bug report then says what it
     came from."""
     from . import __version__
-    from .update_checker import get_install_type
+    from .installation import get_install_type
     hands_free = (f"stops after {cfg.auto_stop_seconds:g} s of quiet" if cfg.auto_stop_silence
                   else "off")
     logger.info(f"TuxTalk {__version__} ({get_install_type()}) starting; "

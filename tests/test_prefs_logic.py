@@ -415,11 +415,11 @@ def test_an_update_doesnt_start_when_the_changes_couldnt_be_saved(monkeypatch, m
     """"Any unsaved preferences changes will be saved first": with the disk
     full or the file unreadable the save failed, the update went ahead, and
     its restart lost the changes."""
-    from tuxtalk import update_checker
+    from tuxtalk import installation, update_install
     shown = []
     message_boxes.answer = P.Gtk.ResponseType.YES
-    monkeypatch.setattr(update_checker, "get_install_type", lambda: "appimage")
-    monkeypatch.setattr(update_checker, "get_update_guidance",
+    monkeypatch.setattr(installation, "get_install_type", lambda: "appimage")
+    monkeypatch.setattr(update_install, "get_update_guidance",
                         lambda kind, version: {"update_method": "appimage"})
     monkeypatch.setattr(P.Gtk, "Dialog", lambda **kw: pytest.fail("the update started"))
     tab = SimpleNamespace(
@@ -435,11 +435,11 @@ def test_an_update_saves_the_snippets_first(monkeypatch, message_boxes):
     """Snippets are saved apart from the settings: an update after an edited
     snippet, with no Apply, restarted TuxTalk and lost the edit. A failed
     snippet save stops the update, as a failed settings save does."""
-    from tuxtalk import update_checker
+    from tuxtalk import installation, update_install
     saved = []
     message_boxes.answer = P.Gtk.ResponseType.YES
-    monkeypatch.setattr(update_checker, "get_install_type", lambda: "appimage")
-    monkeypatch.setattr(update_checker, "get_update_guidance",
+    monkeypatch.setattr(installation, "get_install_type", lambda: "appimage")
+    monkeypatch.setattr(update_install, "get_update_guidance",
                         lambda kind, version: {"update_method": "appimage"})
     monkeypatch.setattr(P.Gtk, "Dialog", lambda **kw: pytest.fail("the update started"))
     tab = SimpleNamespace(

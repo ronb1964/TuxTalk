@@ -56,9 +56,9 @@ def show_after_start():
 
 def _show_update_complete_once():
     """"Update Complete!", once, when the updater's marker says this start
-    is the first of a new version (update_checker.check_just_updated)."""
-    from . import __version__, update_checker
-    if not update_checker.check_just_updated():
+    is the first of a new version (update_install.check_just_updated)."""
+    from . import __version__, update_install
+    if not update_install.check_just_updated():
         return
     show_message(None, Gtk.MessageType.INFO, "Update Complete!",
                  f"TuxTalk has been updated to <b>v{__version__}</b>\n\n"

@@ -321,7 +321,7 @@ class UpdatesTab(Tab):
         """The tab's page. Packed tight so it fits the window without
         scrolling: the version shares a line with Check for Updates, and the
         Update Status box only appears once a check has run."""
-        from . import update_checker
+        from . import installation
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         vbox.set_margin_start(20)
         vbox.set_margin_end(20)
@@ -338,7 +338,7 @@ class UpdatesTab(Tab):
             "When enabled, TuxTalk will check for updates once per day when it starts.\n"
             "If an update is found, you'll be notified and this tab will open.")
         vbox.pack_start(_indented(auto_check), False, False, 0)
-        install_type = update_checker.get_install_type()
+        install_type = installation.get_install_type()
         vbox.pack_start(_how_it_updates(install_type), False, False, 0)
         self._build_backup(vbox)
         self._build_earlier(vbox)
@@ -509,9 +509,9 @@ class UpdatesTab(Tab):
         # self-managed AppImage can be swapped in place; package/AUR/Flatpak
         # users get instructions + the release link, never an AppImage download
         # (which fails on package installs, e.g. missing libfuse.so.2).
-        from . import update_checker
-        install_type = update_checker.get_install_type()
-        guidance = update_checker.get_update_guidance(
+        from . import installation, update_install
+        install_type = installation.get_install_type()
+        guidance = update_install.get_update_guidance(
             install_type, latest, release.get("html_url", ""))
 
         if has_update:
@@ -519,7 +519,7 @@ class UpdatesTab(Tab):
             show_download = (
                 (method == "appimage_swap" and release.get("appimage_url")) or
                 (method == "pkexec_package" and
-                 update_checker.get_package_asset(release, install_type)[0]))
+                 update_install.get_package_asset(release, install_type)[0]))
             if show_download:
                 self.download_btn.show()
             else:
@@ -553,11 +553,11 @@ class UpdatesTab(Tab):
         """Download & Install, by how TuxTalk was installed: a package update
         through the shared pkexec flow, the release page (AUR, Flatpak, the
         development version), or a self-managed AppImage installed here."""
-        from . import update_checker
+        from . import installation, update_checker, update_install
         if not self._current_release:
             return
-        install_type = update_checker.get_install_type()
-        method = update_checker.get_update_guidance(install_type, "")["update_method"]
+        install_type = installation.get_install_type()
+        method = update_install.get_update_guidance(install_type, "")["update_method"]
         if method == "manual":
             update_checker.open_release_page(self._current_release.get("html_url", ""))
             return
