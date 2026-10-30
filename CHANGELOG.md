@@ -372,6 +372,10 @@ before 0.15.0, so older entries use that name.
   too when the last dictation finished typing during your next recording
   and that one then added nothing (you pressed Esc, only tapped the key, or
   said nothing hands-free). Before, nothing told you the message wasn't sent.
+- If you read TuxTalk's state over D-Bus in a script of your own: the
+  IsRecording, IsServiceRunning, GetCurrentModel and GetDeviceType calls are
+  gone. Nothing in TuxTalk used them any more. GetStatus still gives you all
+  four, as recording, service_running, model and device.
 
 ## [0.18.2] - 2026-10-23
 

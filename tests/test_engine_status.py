@@ -56,16 +56,18 @@ def svc(monkeypatch):
 
 
 def test_the_service_report_wins_over_the_settings(svc):
-    assert svc.GetDeviceType() == "vulkan"
+    assert svc.GetStatus()["device"] == "vulkan"
     svc.NotifyRunningEngine("parakeet-v3", "cpu")
-    assert svc.GetDeviceType() == "cpu" and svc.GetCurrentModel() == "parakeet-v3"
+    status = svc.GetStatus()
+    assert status["device"] == "cpu" and status["model"] == "parakeet-v3"
     assert svc.changed == ["parakeet-v3"], "the GNOME extension refreshes on ModelChanged"
 
 
 def test_a_stopped_service_falls_back_to_the_settings(svc):
     svc.NotifyRunningEngine("small", "cpu")
     svc.clear_running_engine()
-    assert svc.GetCurrentModel() == "parakeet-v3" and svc.GetDeviceType() == "vulkan"
+    status = svc.GetStatus()
+    assert status["model"] == "parakeet-v3" and status["device"] == "vulkan"
 
 
 @pytest.fixture
