@@ -84,5 +84,20 @@ def test_no_cudnn_folder_is_nothing_to_do(cuda_dir):
     assert sorted(os.listdir(cuda_dir / "lib")) == kept
 
 
+def test_the_link_earlier_versions_made_for_pytorch_is_removed(cuda_dir):
+    kept = _install_complete_cuda(cuda_dir)
+    (cuda_dir / "nvidia").symlink_to(cuda_dir / "lib")
+    cuda_helper.remove_pytorch_link()
+    assert sorted(os.listdir(cuda_dir)) == ["lib"]
+    assert sorted(os.listdir(cuda_dir / "lib")) == kept, "the link was followed"
+
+
+def test_a_real_nvidia_folder_is_left_alone(cuda_dir):
+    (cuda_dir / "nvidia").mkdir(parents=True)
+    (cuda_dir / "nvidia" / "kept").write_text("x")
+    cuda_helper.remove_pytorch_link()
+    assert (cuda_dir / "nvidia" / "kept").exists()
+
+
 def test_cudnn_is_not_downloaded():
     assert not any("cudnn" in name for name in cuda_helper.CUDA_PACKAGES)

@@ -13,19 +13,24 @@ import os
 import warnings
 from pathlib import Path
 
+from .config import get_data_dir
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
+
+
+def _cuda_lib_dir():
+    """Where the CUDA download unpacks to (cuda_helper.get_appdir_cuda_path's
+    lib): this copy's data folder, dev or not, the private one in a Flatpak."""
+    return Path(get_data_dir()) / "cuda" / "lib"
+
 
 # Decide at import time, before anything loads CUDA, whether the GPU stays visible:
 #   1. TuxTalk's CUDA download exists: leave it visible.
 #   2. Otherwise, if CTranslate2 already sees a GPU (system CUDA, or CUDA in a
 #      dev venv on LD_LIBRARY_PATH): leave it visible.
 #   3. Otherwise set CUDA_VISIBLE_DEVICES='' for CPU-only mode.
-_appimage_cuda_path = Path.home() / ".local" / "share" / "TuxTalk" / "cuda" / "lib"
-_dev_cuda_path = Path.home() / ".local" / "share" / "TuxTalk-dev" / "cuda" / "lib"
-
-if not _appimage_cuda_path.exists() and not _dev_cuda_path.exists():
+if not _cuda_lib_dir().exists():
     try:
         import ctranslate2 as _ct2
         _has_gpu = _ct2.get_cuda_device_count() > 0
@@ -51,20 +56,14 @@ def preload_cuda_libraries():
 
     cuda_helper unpacks each wheel to cuda/lib/<package>/lib/. Loading them with
     RTLD_GLOBAL lets a later open by name (CTranslate2's) find them.
-
-    Returns False when there is nothing to load; a repeat call returns True.
     """
     global _initialized
     if _initialized:
-        return True
-
-    from .cuda_helper import get_appdir_cuda_path
-    lib_path = Path(get_appdir_cuda_path()) / "lib"
-
-    if not lib_path.exists():
-        # The module-level check has already decided CPU or system CUDA.
-        _initialized = True
-        return False
+        return
+    _initialized = True
+    # With no download nothing matches: the module-level check has already
+    # decided between the processor and the system's CUDA.
+    lib_path = _cuda_lib_dir()
 
     # Globs, not fixed sonames, so any CUDA major version loads.
     lib_patterns = [
@@ -86,8 +85,5 @@ def preload_cuda_libraries():
             except OSError as e:
                 logger.warning(f"Failed to preload {Path(lib_file).name}: {e}")
 
-    _initialized = True
     if loaded_count > 0:
         logger.info(f"Preloaded {loaded_count} CUDA libraries")
-        return True
-    return False

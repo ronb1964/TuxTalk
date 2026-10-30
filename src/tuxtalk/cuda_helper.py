@@ -110,6 +110,21 @@ def remove_unused_cudnn():
     logger.info("Removed the cuDNN earlier versions downloaded with CUDA; nothing uses it")
 
 
+def remove_pytorch_link():
+    """Delete the cuda/nvidia link to cuda/lib that versions before 0.19 made
+    for PyTorch, which TuxTalk doesn't use. Only a link: a real folder there
+    isn't TuxTalk's. Never raises."""
+    link = os.path.join(get_appdir_cuda_path(), "nvidia")
+    if not os.path.islink(link):
+        return
+    try:
+        os.unlink(link)
+    except OSError as e:
+        logger.warning(f"Couldn't remove the unused link {link}: {e}")
+        return
+    logger.info("Removed the cuda/nvidia link earlier versions made for PyTorch")
+
+
 def has_cuda_libraries():
     """
     Check if CUDA libraries are available for running GPU-accelerated models.
