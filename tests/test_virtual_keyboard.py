@@ -228,6 +228,9 @@ def test_a_paste_shortcut_cut_off_is_partial_and_not_typed_after(breaks_once, mo
 
         def poll(self):
             return 0
+    # wl-copy --help is asked once and remembered: whether this Popen gets that
+    # question too depended on the tests run before this one.
+    monkeypatch.setattr("tuxtalk.clipboard.wl_copy_command", lambda: ["wl-copy"])
     monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda *a, **k: Copied())
     assert delivery.inject_text("hello world", "paste") == "partial"
     keys = {code for code, _value in breaks_once.events[4:]}
