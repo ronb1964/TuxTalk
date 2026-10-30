@@ -794,7 +794,8 @@ def test_shift_held_too_long_cancels_the_edit(keyloop, monkeypatch):
     monkeypatch.setattr(keyboard_devices, "is_keyboard_device", lambda d: True)
     monkeypatch.setattr(hotkeys, "EDIT_SHIFT_WAIT_S", 0.05)
     cancelled = []
-    monkeypatch.setattr(recording, "cancel_recording", lambda b, n, reason="": cancelled.append(reason))
+    monkeypatch.setattr(recording, "cancel_recording",
+                        lambda rec, b, n, reason="": cancelled.append(reason))
     key(F9, 1, {SHIFT})
     hotkeys._handle_key_event(KeyEvent(F9, 1), F8, F9, None, {SHIFT}, [FakeKeyboard([[SHIFT]])],
                               Cfg(), 0)

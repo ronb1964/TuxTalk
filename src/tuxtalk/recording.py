@@ -362,11 +362,10 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     return rec
 
 
-def cancel_recording(beeps_on: bool, notify_on: bool, reason="Cancelled"):
-    """End a recording without transcribing it, telling the user *reason*.
+def cancel_recording(rec, beeps_on: bool, notify_on: bool, reason="Cancelled"):
+    """End recording *rec* without transcribing it, telling the user *reason*.
     A send it held stays unsent, and that's said (_leave_held_send_unsent):
     Esc, a tap, hands-free hearing nothing."""
-    rec = rs.state.current
     rs.state.is_recording = False
     rec.message.cancelled = True
     stop_stream_safely(rec)
@@ -462,7 +461,8 @@ def _dropped_as_silent(rec, beeps_on: bool, notify_on: bool) -> bool:
         return False
     rec.silence = None
     dead_mic = frames_are_dead_mic(rec.frames, rec.samplerate)
-    cancel_recording(beeps_on, notify_on and not dead_mic, "Nothing heard, so nothing was typed")
+    cancel_recording(rec, beeps_on, notify_on and not dead_mic,
+                     "Nothing heard, so nothing was typed")
     if dead_mic:
         notices.warn_silent_mic()
     return True
@@ -481,7 +481,7 @@ def _dropped_as_a_tap(rec, beeps_on: bool, notify_on: bool) -> bool:
         return False
     # A tap that held a send is told as "Not sent" alone (cancel_recording).
     if rec.held_send or send_countdown.held_for(rec.message.serial):
-        cancel_recording(beeps_on, False, send_countdown.HELD_NOTICE)
+        cancel_recording(rec, beeps_on, False, send_countdown.HELD_NOTICE)
     else:
-        cancel_recording(beeps_on, notify_on, f"Cancelled (held {held_ms} ms)")
+        cancel_recording(rec, beeps_on, notify_on, f"Cancelled (held {held_ms} ms)")
     return True

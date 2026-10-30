@@ -299,7 +299,7 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
     # stream can take seconds with a slow sound server.
     if event.code == ecodes.KEY_ESC and rs.state.is_recording and event.value == 1:
         keyboard_grab.release_all()
-        recording.cancel_recording(cfg.beeps, cfg.notify, "Cancelled by ESC")
+        recording.cancel_recording(rs.state.current, cfg.beeps, cfg.notify, "Cancelled by ESC")
 
 
 def _on_test_or_combo(event, hold_key, toggle_key, voice_cmds_combo, paste_last_combo,
@@ -438,7 +438,7 @@ def _stop_edit(shift, devices, cfg) -> bool:
     # with injected key events, as the hold key does, would replay them
     # after a slow edit and start a new recording by itself.
     if shift and not keyboard_grab.wait_for_keys_up(devices, _SHIFT_CODES, EDIT_SHIFT_WAIT_S):
-        recording.cancel_recording(cfg.beeps, cfg.notify,
+        recording.cancel_recording(rs.state.current, cfg.beeps, cfg.notify,
                                    "Voice edit cancelled: let go of Shift to finish it")
         return True
     _stop_recording(cfg)

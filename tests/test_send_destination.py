@@ -240,7 +240,7 @@ def test_esc_while_a_phrase_is_transcribed_types_none_of_it(chat, keyboard, monk
     focus, heard, typed, notices = chat
 
     def heard_then_esc(audio, language):
-        recording.cancel_recording(False, False, "Cancelled by ESC")
+        recording.cancel_recording(rs.state.current, False, False, "Cancelled by ESC")
         return "see you at noon"
     monkeypatch.setattr(engine, "transcribe", heard_then_esc)
     dictate("middle")
