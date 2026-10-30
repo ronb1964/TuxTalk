@@ -42,10 +42,6 @@
   "normalize.py::_space_after_ender_repl": {
    "decisions": 18
   },
-  "normalize.py::normalize_text": {
-   "decisions": 17,
-   "lines": 170
-  },
   "output_backends.py::LibeiOutputBackend._run_handshake": {
    "lines": 106
   },
