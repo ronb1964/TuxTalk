@@ -63,8 +63,8 @@ def editing(monkeypatch):
     monkeypatch.setattr("tuxtalk.focused_window.look", lambda: ("org.kde.kwrite", None))
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: Backend())
     monkeypatch.setattr(voice_edit, "edit_selection",
-                        lambda get, beeps, mode, focused, t0, message, spoken=False, window=None:
-                        edits.append((get(), focused, spoken)) or True)
+                        lambda get, beeps, mode, focused, t0, message, expected=None, window=None:
+                        edits.append((get(), focused, expected is not None)) or True)
     monkeypatch.setattr(notices, "edit_problem", lambda kind, beeps: problems.append(kind))
     monkeypatch.setattr(rs.state, "last_inserted_text", "We meet at three. ")
     monkeypatch.setattr(rs.state, "last_inserted_window", "org.kde.kwrite")

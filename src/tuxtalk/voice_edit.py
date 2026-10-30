@@ -155,7 +155,7 @@ def _format_selection(fmt, focused_class, window, beeps_on) -> bool:
     return True
 
 
-def _nothing_selected(get_instruction, spoken, focused_class, beeps_on):
+def _nothing_selected(get_instruction, spoken: bool, focused_class, beeps_on):
     """Nothing is selected. "select the last sentence" needs nothing
     selected: it makes the selection the next edit works on. Anything else
     says to select some text first. The clipboard is already back
@@ -177,6 +177,24 @@ def _put_clipboard_back(put_back, result):
         threading.Timer(EDIT_RESTORE_DELAY_S, put_back, kwargs={"also": also}).start()
     else:
         put_back(also=also)
+
+
+def _refused_selection(selected, expected, put_back, get_instruction, focused_class,
+                       beeps_on) -> bool:
+    """True, with the user told, when *selected* isn't text to change:
+    nothing is selected, or "edit that" counted back over other words than
+    *expected* (typed into by hand, or the cursor moved, since it was
+    dictated). Then the clipboard the selection was copied through is put
+    back."""
+    if not selected:
+        _nothing_selected(get_instruction, expected is not None, focused_class, beeps_on)
+        return True
+    if expected is not None and selected.split() != expected.split():
+        logger.info("Voice edit: the selection isn't the dictation any more")
+        _put_clipboard_back(put_back, None)
+        notices.edit_problem("not_the_dictation", beeps_on)
+        return True
+    return False
 
 
 # _edit_with_keys's answer for an instruction that needs the text rewritten.
@@ -282,13 +300,15 @@ def _type_rewrite(result, injection_mode, message, beeps_on, into):
 
 
 def edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0, message,
-                   spoken=False, window=None):
+                   expected=None, window=None):
     """Change the text selected in *focused_class* as the instruction
     *get_instruction()* says (called only once a selection is found), and
-    type the result over it, as part of *message*. *spoken*: the instruction
-    came after "edit that" in a dictation, which selected the text itself.
-    *window* says which of the app's windows it is, where the desktop says
-    (focus_moved). True when the change went in."""
+    type the result over it, as part of *message*. *expected*: the
+    instruction came after "edit that" in a dictation, which selected the
+    text itself, counting back this text (the last dictation on screen); a
+    selection that holds other words isn't changed. *window* says which of
+    the app's windows it is, where the desktop says (focus_moved). True
+    when the change went in."""
     from . import clipboard, history
     # Before copying the selection or hearing the instruction; checked
     # again before the rewrite replaces it.
@@ -310,8 +330,8 @@ def edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0,
     if copy_sent == [False]:
         _not_pressed(focused_class, window, beeps_on)
         return
-    if not selected:
-        _nothing_selected(get_instruction, spoken, focused_class, beeps_on)
+    if _refused_selection(selected, expected, put_back, get_instruction, focused_class,
+                          beeps_on):
         return
     result = None
     try:
@@ -411,7 +431,7 @@ def handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: str
     if not selected:
         notices.edit_problem("shortcut_failed", beeps_on)
     elif edit_selection(lambda: instruction, beeps_on, injection_mode, focused_class,
-                        time.time(), message, spoken=True, window=where[1]):
+                        time.time(), message, expected=target, window=where[1]):
         return True
     # Not changed as asked: no automatic Enter sends it as it was.
     message.add("failed", None)

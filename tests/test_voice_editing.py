@@ -406,6 +406,29 @@ def test_esc_while_the_ai_rewrites_leaves_the_selection_alone(edit_env, monkeypa
     assert edit_env["typed"] == [] and edit_env["history"] == []
 
 
+def test_edit_that_rewrites_what_it_selected_however_the_lines_are_spaced(edit_env):
+    """The selection holds the dictation, with the app's own line ends and
+    spaces: that is the text "edit that" counted back over."""
+    done = voice_edit.edit_selection(lambda: "make it more professional", False, "type",
+                                     "org.kde.kwrite", 0.0, rs.state.current.message,
+                                     expected="We finished  the\nelectrical today. ")
+    assert done and edit_env["typed"] == ["We completed the electrical work today."]
+
+
+def test_edit_that_leaves_text_changed_by_hand_alone(edit_env, monkeypatch):
+    """"edit that" counts back the last dictation's length from the cursor.
+    Typed into by hand since, or with the cursor moved, that selects other
+    text, which the AI then rewrote."""
+    problems = []
+    monkeypatch.setattr(notices, "edit_problem", lambda kind, beeps: problems.append(kind))
+    edit_env["selection"]["text"] = "the electrical today. Then lunch."
+    done = voice_edit.edit_selection(lambda: "make it more professional", False, "type",
+                                     "org.kde.kwrite", 0.0, rs.state.current.message,
+                                     expected="We finished the electrical today.")
+    assert not done and edit_env["typed"] == [] and problems == ["not_the_dictation"]
+    assert edit_env["put_back"] == 1                # the clipboard is put back
+
+
 def test_an_edit_waiting_its_turn_leaves_another_windows_selection_alone(edit_env, monkeypatch):
     """Shift+F8 let go in one KWrite document while a dictation was still
     typing; a click into a second one and a selection there before the
@@ -1353,5 +1376,6 @@ def test_an_edit_says_whether_the_change_went_in(edit_env, monkeypatch, answer, 
     edit_env["engine"].answer = answer
     monkeypatch.setattr(delivery, "inject_text", lambda text, mode, **kw: typing)
     done = voice_edit.edit_selection(lambda: "make it more professional", False, "type",
-                               "org.kde.kwrite", 0.0, rs.state.current.message, spoken=True)
+                               "org.kde.kwrite", 0.0, rs.state.current.message,
+                               expected="We finished the electrical today.")
     assert bool(done) is went_in
