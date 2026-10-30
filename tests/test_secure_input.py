@@ -206,8 +206,10 @@ def _typing_prefs(monkeypatch, *, running, installed=True, in_group=False):
 
 
 def test_only_an_older_helper_needs_an_update():
-    for running, wanted in (("1.0", True), ("1.3", True), ("garbled", True),
-                            (hotkey_helper.VERSION, False), ("1.10", False), ("9.0", False)):
+    """1.9, installed by test builds, is older than 1.10: the numbers after
+    the dot are compared as numbers, not as text."""
+    for running, wanted in (("1.0", True), ("1.3", True), ("garbled", True), ("1.9", True),
+                            (hotkey_helper.VERSION, False), ("1.11", False), ("9.0", False)):
         assert si.is_older(running) is wanted, running
 
 

@@ -106,7 +106,7 @@ import sys
 import time
 
 PROTOCOL = 1
-VERSION = "1.9"
+VERSION = "1.10"
 
 DEFAULT_SOCKET_DIR = "/run/tuxtalk-hotkeys"
 SOCKET_NAME = "hotkeys.sock"
@@ -510,7 +510,7 @@ class Helper:
         self.next_scan = 0.0
         self.not_keyboards = {}    # path -> identity of a node that isn't a keyboard
         self.unreadable = {}       # path -> (identity, retry at) of a keyboard whose reads failed
-        self.too_many = set()      # identities already logged as one keyboard too many
+        self.too_many = {}         # path -> identity already logged as one keyboard too many
         self.listener = None
         self.running = True
 
@@ -539,8 +539,11 @@ class Helper:
         except OSError:
             return
         paths = [os.path.join(self.input_dir, name) for name in names]
-        for path in self.unreadable.keys() - set(paths):
-            del self.unreadable[path]           # gone: nothing left to wait for
+        # Gone: nothing left to wait for, and the tables stay as small as
+        # /dev/input however often a program makes and destroys a keyboard.
+        for table in (self.not_keyboards, self.unreadable, self.too_many):
+            for path in table.keys() - set(paths):
+                del table[path]
         for path in paths:
             if path not in self.keyboards:
                 self.open_if_keyboard(path)
@@ -566,13 +569,13 @@ class Helper:
             # Not remembered as "not a keyboard": once there's room it's
             # opened on the next scan. Logged once.
             keyboard.close()
-            if identity not in self.too_many:
-                self.too_many.add(identity)
+            if self.too_many.get(path) != identity:
+                self.too_many[path] = identity
                 log(f"not watching {keyboard.name!r}: too many keyboards")
             return
         self.not_keyboards.pop(path, None)
         self.unreadable.pop(path, None)
-        self.too_many.discard(identity)
+        self.too_many.pop(path, None)
         self.keyboards[path] = keyboard
         log(f"watching keyboard {keyboard.name!r} ({path})")
 

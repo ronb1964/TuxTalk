@@ -34,8 +34,8 @@ before 0.15.0, so older entries use that name.
   Compose are typed right instead of coming out as a Compose sequence.
 - Pause isn't on the list. Most keyboards send it as let go the moment it's
   pressed, so you can't hold it.
-- The hotkey helper is version 1.9, because it has to report Right Ctrl and
-  Right Alt on their own now and hear keys through a key remapper (1.9 also
+- The hotkey helper is version 1.10, because it has to report Right Ctrl and
+  Right Alt on their own now and hear keys through a key remapper (1.10 also
   tidies its code after a review, and
   limits how much another program can make it read, which you won't notice).
   TuxTalk asks about the update by itself a few seconds after it starts, and

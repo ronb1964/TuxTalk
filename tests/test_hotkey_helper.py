@@ -932,6 +932,32 @@ def test_a_keyboard_turned_away_as_one_too_many_gets_in_later(setup, monkeypatch
     assert waiting in helper.keyboards
 
 
+def test_a_program_making_keyboards_over_and_over_doesnt_grow_the_helper(
+        setup, monkeypatch, tmp_path):
+    """With the virtual keyboards full, each keyboard a program makes and
+    destroys was remembered for good as one too many: the helper, which runs
+    for days, grew a little with each. Now one goes when its node does."""
+    helper, _kb, _connect, _say, _heard, _seat = setup
+    folder = tmp_path / "input"
+    for i in range(hh.MAX_VIRTUAL_KEYBOARDS):
+        (folder / f"event{i}").write_text("")
+
+    def fake_open(path):
+        keyboard = FakeKeyboard(path)
+        keyboard.virtual = True
+        return keyboard
+    monkeypatch.setattr(hh.Keyboard, "open", staticmethod(fake_open))
+    helper.scan()
+    extra = folder / f"event{hh.MAX_VIRTUAL_KEYBOARDS}"
+    for _ in range(5):
+        extra.write_text("")
+        helper.scan()
+        assert str(extra) not in helper.keyboards
+        extra.unlink()
+        helper.scan()
+    assert not helper.too_many
+
+
 # --- Right Ctrl and Right Alt as dictation keys ---------------------------------------
 
 RCTRL = 97
