@@ -96,7 +96,7 @@ def test_a_file_asked_for_by_name_is_never_optional(monkeypatch):
     def fails(**kwargs):
         raise OSError("connection reset")
     monkeypatch.setattr(huggingface_hub, "hf_hub_download", fails)
-    monkeypatch.setattr(M, "_RETRY_WAITS", (0, 0))
+    monkeypatch.setattr("tuxtalk.download_utils.RETRY_WAITS", (0, 0))
     monkeypatch.setattr(M, "_files_to_download", lambda repo: [("model.gguf", 10)])
     download = M.make_model_download_func("AI model", repo_id="some/repo",
                                           only_files=["model.gguf"])
@@ -138,7 +138,7 @@ def test_one_dropped_connection_doesnt_sink_the_download(monkeypatch):
         return "/cache/model.bin"
     monkeypatch.setattr(huggingface_hub, "hf_hub_download", flaky)
     monkeypatch.setattr(M, "_files_to_download", lambda repo: [("model.bin", 10)])
-    monkeypatch.setattr(M, "_RETRY_WAITS", (0, 0))
+    monkeypatch.setattr("tuxtalk.download_utils.RETRY_WAITS", (0, 0))
     monkeypatch.setattr(download_utils, "free_space_bytes", lambda path: 10 ** 12)
     download = M.make_model_download_func("small")
     assert download(lambda *a: None, type("E", (), {"is_set": lambda self: False})()) is True
@@ -191,7 +191,7 @@ def hub(monkeypatch, tmp_path):
     monkeypatch.setattr(huggingface_hub, "get_hf_file_metadata", lambda url, **k: (
         types.SimpleNamespace(etag="etag-" + url.rsplit("/", 1)[1])))
     monkeypatch.setattr(download_utils, "free_space_bytes", lambda path: 100 * MB)
-    monkeypatch.setattr(M, "_RETRY_WAITS", (0.0, 0.0))
+    monkeypatch.setattr("tuxtalk.download_utils.RETRY_WAITS", (0.0, 0.0))
     return fetched, cached
 
 

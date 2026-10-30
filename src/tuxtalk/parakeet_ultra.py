@@ -21,6 +21,7 @@ Someone who set Parakeet up with an earlier TuxTalk has the original v3 files.
 Those keep working (parakeet_engine.cached_model_dir, whisper_vulkan.model_path)
 until they take the one-time offer to update (update_offers.maybe_offer_parakeet_update).
 """
+import functools
 import os
 
 from .logger import setup_logger
@@ -45,9 +46,6 @@ CPU_FILES = {
 GPU_FILE = "ggml-parakeet-ultra-q8_0.bin"
 FILES = {**CPU_FILES,
          GPU_FILE: (668757119, "fa28ec8c6afd9893da9829ec9f2fa908a60bc0fbebd37fd60bbd2f0953076fb2")}
-
-_TRIES = 3      # a single slow moment shouldn't sink a 670 MB download
-
 
 def folder():
     from .config import get_data_dir
@@ -82,7 +80,7 @@ def make_download_func(device):
     def download(progress_callback, cancel_event):
         """Fetch each missing file, retrying a dropped connection, after
         checking there's room for them all; True once every one is in."""
-        from .download_utils import DownloadError, free_space_bytes
+        from .download_utils import DownloadError, fetch_file, free_space_bytes, with_retries
         todo = missing(device)
         total = sum(FILES[name][0] for name in todo)
         free = free_space_bytes(folder())
@@ -97,7 +95,10 @@ def make_download_func(device):
                 progress_callback("Downloading Parakeet...", min(99, (before + got) * 99 // total))
 
             try:
-                _fetch_with_retries(name, cancel_event, hook)
+                with_retries(functools.partial(
+                    fetch_file, RELEASE_URL + name, _path(name), timeout=60,
+                    cancel_event=cancel_event, progress_hook=hook,
+                    expected_sha256=FILES[name][1]), name, cancel_event)
             except InterruptedError:
                 return False
             except DownloadError as e:
@@ -110,19 +111,3 @@ def make_download_func(device):
     return download
 
 
-def _fetch_with_retries(name, cancel_event, hook):
-    """Fetch the release's file *name*, checked against its SHA256, trying
-    again after a failure; the last try's DownloadError is raised, and a
-    cancel (InterruptedError) at once."""
-    from .download_utils import DownloadError, fetch_file
-    for attempt in range(1, _TRIES + 1):
-        try:
-            fetch_file(RELEASE_URL + name, _path(name), timeout=60, cancel_event=cancel_event,
-                       progress_hook=hook, expected_sha256=FILES[name][1])
-            return
-        except DownloadError as e:
-            if cancel_event is not None and cancel_event.is_set():
-                raise InterruptedError("Download cancelled") from e
-            logger.warning(f"Download of {name} failed (try {attempt} of {_TRIES}): {e}")
-            if attempt == _TRIES:
-                raise

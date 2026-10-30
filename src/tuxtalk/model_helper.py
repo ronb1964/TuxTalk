@@ -262,6 +262,7 @@ def _fetch_files(repo, model_name, files, all_needed, progress_callback, cancel_
     from huggingface_hub import hf_hub_download
     from huggingface_hub.errors import RemoteEntryNotFoundError
     import tqdm as tqdm_lib
+    from .download_utils import with_retries
     total_bytes = sum(size for _, size in files)
     downloaded_bytes = [0]  # across all files
 
@@ -303,7 +304,7 @@ def _fetch_files(repo, model_name, files, all_needed, progress_callback, cancel_
                                    force_download=force)
 
         try:
-            _fetch_with_retry(fetch, filename)
+            with_retries(fetch, filename, cancel_event, give_up_on=(RemoteEntryNotFoundError,))
             # No progress means the file was already cached; count it anyway.
             if downloaded_bytes[0] == bytes_before:
                 downloaded_bytes[0] += file_size
@@ -469,30 +470,6 @@ def download_parakeet_update(device, parent=None):
 class BrokenModelFiles(Exception):
     """A downloaded model won't load, and the caller can't show the download
     dialogs to fetch it again."""
-
-
-# Pauses before the second and third try of a model file.
-_RETRY_WAITS = (2.0, 5.0)
-
-
-def _fetch_with_retry(fetch, filename, sleep=None):
-    """fetch() (one file's download), tried again after a short wait if it
-    fails: a single slow moment shouldn't sink a 670 MB download. A cancel
-    is never retried, nor a file the Hub says the model hasn't; after the
-    last try its error is raised."""
-    import time
-    from huggingface_hub.errors import RemoteEntryNotFoundError
-    sleep = sleep or time.sleep
-    for attempt, wait in enumerate((*_RETRY_WAITS, None), start=1):
-        try:
-            return fetch()
-        except (InterruptedError, RemoteEntryNotFoundError):
-            raise
-        except Exception as e:
-            if wait is None:
-                raise
-            logger.warning(f"Download of {filename} failed (try {attempt}): {e}; trying again")
-            sleep(wait)
 
 
 def download_model_with_progress(model_name, device="cpu", compute_type="int8", parent=None,
