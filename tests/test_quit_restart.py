@@ -733,9 +733,8 @@ def test_a_package_update_installs_nothing_after_quit(monkeypatch):
                         lambda path, kind: installed.append(path) or (True, ""))
     monkeypatch.setattr(update_ui, "_installed_restart_prompt", lambda cb=None: shown.append(1))
     monkeypatch.setattr(update_ui, "_error", lambda message: shown.append(message))
-    monkeypatch.setattr(update_ui.threading, "Thread",
-                        lambda target, daemon=None: types.SimpleNamespace(start=target))
-    monkeypatch.setattr(update_ui.GLib, "idle_add", lambda fn, *a: fn(*a))
+    from test_update_restart import _progress_in_place
+    _progress_in_place(monkeypatch)
     update_ui.run_package_update({}, "deb", quitting=lambda: True)
     assert installed == [] and shown == []
 

@@ -104,3 +104,19 @@ def test_the_work_runs_off_the_windows_thread_and_its_updates_come_back_to_it(mo
         GLib.MainContext.default().iteration(False)
         time.sleep(0.005)
     assert seen == {"work off it": True, "updates": [True, True, True], "finish": (True, "done")}
+
+
+def test_escape_and_the_close_button_leave_the_window_while_the_work_goes_on(run):
+    """Gone, it would leave the update's password prompt to appear later
+    with nothing to explain it, as the package update's own window knew."""
+    go, windows, finished = run
+
+    def work(progress):
+        windows[0].emit("close")            # what Escape does on a Gtk.Dialog
+        windows[0].close()                  # what the window manager's close does
+        for _ in range(20):
+            Gtk.main_iteration_do(False)
+        assert windows[0].get_visible()
+        return "done"
+    go(work)
+    assert finished == ["done"]

@@ -305,68 +305,38 @@ def run_package_update(release, install_type, restart=None, *, quitting=lambda: 
                "Please update from the GitHub release page.")
         return
 
-    progress = Gtk.Dialog(title="Updating TuxTalk", flags=Gtk.DialogFlags.MODAL)
-    # The download and the password prompt carry on whatever happens to this
-    # window, so it stays until they finish rather than vanishing and leaving
-    # a password prompt to appear later with no context.
-    progress.set_deletable(False)
-    progress.connect("delete-event", lambda *_a: True)
-    progress.set_default_size(440, 130)
-    progress.set_position(Gtk.WindowPosition.CENTER)
-    progress.set_keep_above(True)
-    content = progress.get_content_area()
-    content.set_spacing(10)
-    _set_margins(content, 20)
-    status = Gtk.Label(label="Starting download…")
-    status.set_halign(Gtk.Align.START)
-    content.pack_start(status, False, False, 0)
-    bar = Gtk.ProgressBar()
-    bar.set_show_text(True)
-    content.pack_start(bar, False, False, 10)
-    progress.show_all()
+    def work(progress):
+        """On its own thread: the download, then the install as root;
+        (installed, what to say)."""
+        said = ["", 0]      # the download's last words, for download_failure
 
-    last_message = [""]     # for download_failure
+        def reporting(message, percent):
+            said[:] = [message, percent]
+            progress(message, percent)
+        try:
+            path = update_checker.download_update(url, filename, reporting,
+                                                  checksums_url=release.get("checksums_url"))
+            if not path:
+                return False, (f"{download_failure(said[0])}\n\n"
+                               "Please try again or update from GitHub.")
+            if quitting():
+                return False, "TuxTalk quit before the update was installed."
+            progress("Waiting for your password to install…", said[1])
+            return update_checker.install_package_update(path, install_type)
+        except Exception as e:
+            logger.exception("Package update failed")
+            return False, f"The update failed: {e}\n\nPlease try again or update from GitHub."
 
-    def progress_cb(message, percent):
-        last_message[0] = message
-        GLib.idle_add(lambda: status.set_text(message))
-        GLib.idle_add(lambda: bar.set_fraction(percent / 100.0))
-        GLib.idle_add(lambda: bar.set_text(f"{percent}%"))
-
-    def finish(success, message):
-        progress.destroy()
+    def finish(result):
         if quitting():
             return
+        success, message = result
         if success:
             _installed_restart_prompt(restart)
         else:
             _error(message)
 
-    def worker():
-        """Download, then install with pkexec; always ends in finish()."""
-        try:
-            path = update_checker.download_update(
-                url, filename, progress_cb,
-                checksums_url=release.get("checksums_url"))
-            if not path:
-                reason = download_failure(last_message[0])
-                GLib.idle_add(lambda: finish(
-                    False, f"{reason}\n\nPlease try again or update from GitHub."))
-                return
-            if quitting():
-                ok, msg = False, "TuxTalk quit before the update was installed."
-            else:
-                GLib.idle_add(lambda: status.set_text(
-                    "Waiting for your password to install…"))
-                ok, msg = update_checker.install_package_update(path, install_type)
-        except Exception as e:
-            # The window refuses to close while this runs: without an
-            # answer it would stay on screen until TuxTalk quit.
-            logger.exception("Package update failed")
-            ok, msg = False, f"The update failed: {e}\n\nPlease try again or update from GitHub."
-        GLib.idle_add(lambda: finish(ok, msg))
-
-    threading.Thread(target=worker, daemon=True).start()
+    run_with_progress(None, "Updating TuxTalk", "Starting download…", work, finish)
 
 
 def _installed_restart_prompt(restart=None):

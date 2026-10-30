@@ -17,7 +17,11 @@ def _progress_window(parent, title, first_line):
     works: (window, status line, progress bar), shown."""
     dialog = Gtk.Dialog(title=title, transient_for=parent, flags=Gtk.DialogFlags.MODAL)
     dialog.set_default_size(400, 120)
+    # The work carries on whatever happens to the window (a download, a
+    # password prompt), so neither the X nor Escape closes it: gone, it
+    # would leave a password prompt to appear later with nothing to explain it.
     dialog.set_deletable(False)
+    dialog.connect("delete-event", lambda *_a: True)
     if parent is None:              # from the tray: over the other windows, centred
         dialog.set_position(Gtk.WindowPosition.CENTER)
         dialog.set_keep_above(True)

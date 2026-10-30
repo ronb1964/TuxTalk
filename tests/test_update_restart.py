@@ -828,11 +828,22 @@ def test_an_unexpected_install_error_closes_the_update_window_and_says_why(monke
     def broken_install(path, kind):
         raise OSError("no space left")
     monkeypatch.setattr(update_ui.update_checker, "install_package_update", broken_install)
-    monkeypatch.setattr(update_ui.GLib, "idle_add", lambda fn, *a: fn(*a))
-    monkeypatch.setattr(update_ui.threading, "Thread",
-                        lambda target, daemon: type("T", (), {"start": lambda self: target()})())
+    _progress_in_place(monkeypatch)
     errors = []
     monkeypatch.setattr(update_ui, "_error", errors.append)
 
     update_ui.run_package_update({}, "deb")
     assert errors and "no space left" in errors[0]
+
+
+def _progress_in_place(monkeypatch):
+    """progress_window.run_with_progress with no window, its work run at
+    once on this thread."""
+    from tuxtalk import progress_window
+    monkeypatch.setattr(progress_window, "_progress_window", lambda *a: (
+        types.SimpleNamespace(destroy=lambda: None),
+        types.SimpleNamespace(set_text=lambda t: None),
+        types.SimpleNamespace(set_fraction=lambda f: None, set_text=lambda t: None)))
+    monkeypatch.setattr(progress_window.GLib, "idle_add", lambda fn, *a: fn(*a))
+    monkeypatch.setattr(progress_window, "threading", types.SimpleNamespace(
+        Thread=lambda target, daemon=None, name=None: types.SimpleNamespace(start=target)))
