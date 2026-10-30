@@ -251,9 +251,6 @@
   "fix_word_dialog.py::_FixWordDialog.__init__": {
    "lines": 108
   },
-  "keyboard_layout.py::KeyPlanner._index": {
-   "decisions": 17
-  },
   "kwin_hotkeys.py::_app_shortcut_clashes": {
    "decisions": 19
   },

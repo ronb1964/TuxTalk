@@ -432,7 +432,7 @@ def test_no_key_goes_to_a_window_switched_to_while_it_waited(edit_env, keyboard,
     now = {"look": first}
     monkeypatch.setattr(focused_window, "look", lambda: now["look"])
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: focused)
-    monkeypatch.setattr("tuxtalk.keyboard_layout.active_layout", lambda: ("us", ""))
+    monkeypatch.setattr("tuxtalk.keyboard_layout.active_layout", lambda: ("us", "", ""))
     monkeypatch.setattr(speech_engine, "transcribe", lambda audio, lang: said)
 
     def wait_while_held(destination=None):
@@ -453,7 +453,7 @@ def test_no_ctrl_c_goes_to_a_terminal_switched_to_during_the_password_check(edit
     kwrite, konsole = ("org.kde.kwrite", ("tray", "{kwrite}")), ("org.kde.konsole", ("tray", "{konsole}"))
     now = {"look": kwrite}
     monkeypatch.setattr(focused_window, "look", lambda: now["look"])
-    monkeypatch.setattr("tuxtalk.keyboard_layout.active_layout", lambda: ("us", ""))
+    monkeypatch.setattr("tuxtalk.keyboard_layout.active_layout", lambda: ("us", "", ""))
 
     def password_check(beeps):
         now["look"] = konsole                   # the click, while it was asked
@@ -1065,7 +1065,7 @@ def test_exact_jobs_are_done_in_code_even_before_the_ai_is_ready(edit_env, monke
 def keys_sent(edit_env, monkeypatch):
     sent = []
     monkeypatch.setattr(keyboard_output, "send_keys", lambda keys, what="", **kw: sent.append(list(keys)) or True)
-    monkeypatch.setattr("tuxtalk.keyboard_layout.active_layout", lambda: ("us", ""))
+    monkeypatch.setattr("tuxtalk.keyboard_layout.active_layout", lambda: ("us", "", ""))
     return sent
 
 
