@@ -84,8 +84,8 @@ def test_pkexec_that_cannot_start_is_not_mistaken_for_a_late_answer(monkeypatch)
 @pytest.mark.parametrize("there_after, ok", [(True, True), (False, False)])
 def test_a_portaudio_install_past_the_limit_is_judged_by_what_is_there(
         monkeypatch, there_after, ok):
-    checks = iter([(False, ""), (there_after, "")])
-    monkeypatch.setattr(portaudio_setup, "check_portaudio_installed", lambda: next(checks))
+    checks = iter([False, there_after])
+    monkeypatch.setattr(portaudio_setup, "portaudio_installed", lambda: next(checks))
     monkeypatch.setattr(portaudio_setup, "get_portaudio_install_command",
                         lambda: ("dnf", ["dnf", "install", "-y", "portaudio"]))
     monkeypatch.setattr(subprocess, "run", _still_running_as_root)

@@ -24,7 +24,7 @@ from .ui_style import Fold, more_below_bar, show_message
 from .flatpak_welcome import (build_shortcut_setup_section, build_unsupported_desktop_section,
                               shortcut_support)
 from .logger import setup_logger
-from .portaudio_setup import get_portaudio_status
+from .portaudio_setup import portaudio_installed
 from .setup_complete_dialog import menu_location
 from .splash_screen import SplashScreen, fade_in
 from .uinput_helper import check_all_device_permissions
@@ -36,8 +36,6 @@ logger = setup_logger(__name__)
 # group membership, so uinput alone says nothing about hotkeys.
 # Returns (has_access, reason).
 detect_uinput_access = check_all_device_permissions
-# A dict with installed, needs_install, message (PortAudio records the audio).
-detect_portaudio_status = get_portaudio_status
 
 
 # The welcome screen's styles. They go on the whole screen (_install_css), so
@@ -325,10 +323,8 @@ class WelcomeDialog:
         self.needs_uinput_fix = not has_uinput
 
         # PortAudio records the audio.
-        self.portaudio_status = detect_portaudio_status()
-        self.needs_portaudio_install = self.portaudio_status.get('needs_install', False)
-        logger.info(f"PortAudio status: installed={self.portaudio_status.get('installed')}, "
-                    f"needs_install={self.needs_portaudio_install}")
+        self.needs_portaudio_install = not portaudio_installed()
+        logger.info(f"PortAudio installed: {not self.needs_portaudio_install}")
 
         # Inside a Flatpak, typing uses the portal + libei path (Backend B): there
         # is no uinput/input-group setup and no reboot. Showing the host

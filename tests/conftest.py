@@ -1012,7 +1012,7 @@ def welcome_window(monkeypatch):
                         lambda cfg=None: recommend.Hardware("NVIDIA GeForce RTX 4070 SUPER", True))
     monkeypatch.setattr(recommend, "system_language", lambda env=None: "en")
     monkeypatch.setattr(welcome_dialog, "detect_uinput_access", lambda: (True, ""))
-    monkeypatch.setattr(welcome_dialog, "detect_portaudio_status", lambda: {"needs_install": False})
+    monkeypatch.setattr(welcome_dialog, "portaudio_installed", lambda: True)
     window = welcome_dialog.WelcomeDialog(force_gnome=False)
     window.dialog.show_all()                # as run() does, without waiting for an answer
     while Gtk.events_pending():
