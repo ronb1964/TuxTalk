@@ -462,7 +462,7 @@ class VulkanWhisperModel:
         engine_process.kill_orphans(engine_process.processes_of(_binary("whisper-server")),
                                     engine_process.is_talktype_process, "graphics engine")
         self._port = engine_process.free_port()
-        # Unlike llama-server (ai_cleanup.py), whisper-server has no API key
+        # Unlike llama-server (ai_server.py), whisper-server has no API key
         # option. It listens on 127.0.0.1 only and sends nothing of the user's
         # back, so another local program could at most borrow the graphics chip.
         command, env = engine_process.parent_death_command(

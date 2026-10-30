@@ -5,12 +5,6 @@
   "welcome_dialog.py::WelcomeDialog._run_in_background.runner::swallowed_error": 1
  },
  "functions": {
-  "ai_cleanup.py::_deletion_allowed": {
-   "decisions": 17
-  },
-  "ai_cleanup.py::_is_restated_correction": {
-   "decisions": 18
-  },
   "ai_cleanup.py::fix_self_corrections": {
    "decisions": 24
   },
@@ -22,6 +16,12 @@
   },
   "config.py::_validation_problems": {
    "decisions": 16
+  },
+  "correction_safety.py::_deletion_allowed": {
+   "decisions": 16
+  },
+  "correction_safety.py::_is_restated_correction": {
+   "decisions": 18
   },
   "custom_words.py::fix_spelling": {
    "decisions": 28

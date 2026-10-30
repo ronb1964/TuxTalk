@@ -260,7 +260,7 @@ class Settings:
     log_transcripts: bool = False
     # drop "um"/"uh" and accidental repeated words (cleanup.py; rules, no download)
     remove_fillers: bool = False
-    # fix "3, no wait, 4" with a local AI model (ai_cleanup.py downloads it)
+    # fix "3, no wait, 4" with a local AI model (ai_download.py downloads it)
     ai_corrections: bool = False
     # Shift + dictation key rewrites the selected text with the same AI model
     voice_editing: bool = False

@@ -37,7 +37,7 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
-from . import (ai_cleanup, config, cosmic_hotkeys, custom_words,  # noqa: E402
+from . import (ai_download, config, cosmic_hotkeys, custom_words,  # noqa: E402
                desktop_detect, extension_helper, file_transcribe, gnome_keybindings,
                installation, kwin_hotkeys, menu_cache, model_helper, parakeet_engine,
                rename_migration, secure_input, service_launcher, settings_backup,
@@ -87,7 +87,7 @@ HF_REPOS = tuple(sorted({_hub_folder(repo) for repo in (
     *(model_helper.MODEL_REPOS.get(m, f"Systran/faster-whisper-{m}")
       for m in config.VALID_MODELS - {"large"} if not parakeet_engine.is_parakeet(m)),
     parakeet_engine.V3_REPO, whisper_vulkan.MODEL_REPO,
-    *whisper_vulkan.MODEL_REPOS.values(), ai_cleanup.MODEL_REPO)}))
+    *whisper_vulkan.MODEL_REPOS.values(), ai_download.MODEL_REPO)}))
 
 # The runtime folder's files that hold dictated text, as glob patterns:
 # Recent Dictations and Fix a Word's hand-overs (voice_commands._hand_over,
@@ -574,7 +574,7 @@ def _shown(path, home):
 def _shared_what(plan):
     """What the shared cache holds of TuxTalk's, in words, and whether that's
     more than one thing."""
-    ai = _hub_folder(ai_cleanup.MODEL_REPO)
+    ai = _hub_folder(ai_download.MODEL_REPO)
     names = {path.name for path in plan.shared}
     if names == {ai}:
         return "the AI model", False

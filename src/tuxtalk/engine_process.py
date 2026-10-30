@@ -2,7 +2,7 @@
 Keeping TuxTalk's helper engines on a short leash.
 
 TuxTalk runs its optional background engines as separate programs: the AI
-cleanup engine (llama-server, ai_cleanup.py) and the Vulkan graphics engine
+cleanup engine (llama-server, ai_server.py) and the Vulkan graphics engine
 (whisper_vulkan.py, and parakeet_gpu.py for Parakeet). Each can hold a gigabyte
 or more of memory, so none may outlive the dictation service that started it.
 """

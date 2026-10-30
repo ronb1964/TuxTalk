@@ -1,8 +1,8 @@
-"""Download sizes come from one place: the AI's from ai_cleanup (its model
+"""Download sizes come from one place: the AI's from ai_download (its model
 and the engine that runs it: "1.1 GB" alone left the 30 MB engine out), and
 CUDA's from cuda_helper (typed out by hand in Preferences, Help and System
 check, so one change of size meant finding them all)."""
-from tuxtalk import ai_cleanup, cuda_download, cuda_helper, help_text, prefs_speech
+from tuxtalk import ai_download, cuda_download, cuda_helper, help_text, prefs_speech
 
 
 AI_SIZE, CUDA_SIZE = "7.7 GB", "9.9 GB"      # sizes no text would have typed out
@@ -22,7 +22,7 @@ def test_help_gives_the_ai_and_cuda_sizes_from_their_modules(monkeypatch):
 
 def test_voice_commands_give_the_ai_size_and_keep_the_braces(monkeypatch):
     from tuxtalk.voice_commands_dialog import _build_markup
-    monkeypatch.setattr(ai_cleanup, "DOWNLOAD_SIZE_TEXT", AI_SIZE)
+    monkeypatch.setattr(ai_download, "DOWNLOAD_SIZE_TEXT", AI_SIZE)
     markup = _build_markup()
     assert f"about {AI_SIZE})" in markup
     # The formatting that puts the size in must still show each brace once.
