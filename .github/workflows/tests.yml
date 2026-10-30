@@ -52,8 +52,13 @@ jobs:
           VIRTUAL_ENV="$PWD/venv" poetry-venv/bin/poetry install --no-root --no-interaction
 
       # A virtual screen for the GTK windows the tests build, and a private
-      # D-Bus session bus so no test reaches anything real.
+      # D-Bus session bus so no test reaches anything real. The suite uses no
+      # pytest plugins, and the venv also sees the runner's own packages: its
+      # newer platformdirs announces a pytest plugin that the locked one in
+      # front of it doesn't have, and pytest stopped before the first test.
       - name: Run the tests
+        env:
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
         run: PYTHONPATH=src xvfb-run -a dbus-run-session --config-file=tests/dbus-session.conf -- venv/bin/python -m pytest tests/ -q
 
   # Ruff catches undefined names and similar mistakes that only crash when
