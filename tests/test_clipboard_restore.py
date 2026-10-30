@@ -468,3 +468,221 @@ def test_a_clipboard_type_name_in_another_encoding_does_not_stop_the_restore(
     monkeypatch.setenv("PATH", str(tmp_path))
     assert "text/plain" in cb._wl_paste_types()
     assert "--sensitive" in cb._wl_copy_help()
+
+
+# --- Restoring on X11 -----------------------------------------------------------------
+# The service owns the X11 clipboard through GTK while it offers a dictation;
+# X11Board reads the user's copy before and offers it again after. These run
+# on xvfb-run's display (conftest), with other processes as the apps.
+
+def test_an_x11_paste_keeps_the_clipboard_only_when_the_setting_is_on(monkeypatch):
+    """Off by default, as on Wayland; on, the user's copy is saved before the
+    dictation is offered and put back after, even when the paste failed."""
+    events = []
+
+    class Keeper:
+        def __init__(self, board):
+            events.append(("made for", board))
+
+        def before_paste(self):
+            events.append("save")
+
+        def after_paste(self, text):
+            events.append(("restore", text))
+    monkeypatch.setattr(cb, "ClipboardKeeper", Keeper)
+    monkeypatch.setattr(keyboard_output, "_clipboard_keeper", None)
+    monkeypatch.setattr(cb, "offer_dictation_x11",
+                        lambda text: events.append(("offer", text)) or True)
+    monkeypatch.setattr(keyboard_output, "send_paste_keystroke", lambda *a: True)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "xed")
+    monkeypatch.setattr("time.sleep", lambda s: None)
+
+    monkeypatch.setattr(live, "restore_clipboard", False)
+    assert keyboard_output.paste_text_x11("hello") is True
+    assert events == [("offer", "hello")]
+
+    events.clear()
+    monkeypatch.setattr(live, "restore_clipboard", True)
+    assert keyboard_output.paste_text_x11("hello") is True
+    monkeypatch.setattr(cb, "offer_dictation_x11", lambda text: False)
+    assert keyboard_output.paste_text_x11("again") is False
+    assert events == [("made for", cb.X11Board), "save", ("offer", "hello"),
+                      ("restore", "hello"), "save", ("restore", "again")]
+
+
+def test_something_copied_after_an_x11_paste_is_not_replaced(monkeypatch):
+    """Another app owning the clipboard now: the dictation is no longer what
+    it holds, so the restore leaves it alone."""
+    monkeypatch.setattr(cb, "_x11_offered", "dictated words")
+    monkeypatch.setattr(cb, "_x11_offered_data", None)
+    assert cb.X11Board.holds("dictated words") is True
+    cb._x11_paste_taken_over(None, None)
+    assert cb.X11Board.holds("dictated words") is False
+
+
+# An app that has copied argv[1] and keeps it on offer until its input closes.
+_COPY_AND_STAY = """
+import sys
+import gi
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+from gi.repository import Gdk, GLib, Gtk
+Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD).set_text(sys.argv[1], -1)
+GLib.io_add_watch(sys.stdin, GLib.IO_IN | GLib.IO_HUP, lambda *a: Gtk.main_quit())
+GLib.timeout_add_seconds(20, Gtk.main_quit)
+GLib.idle_add(lambda: print("ready", flush=True))
+Gtk.main()
+"""
+_X11_ENV = {**os.environ, "PYTHONIOENCODING": "utf-8", "GDK_BACKEND": "x11"}
+
+
+def _pump_until(done, seconds=10):
+    """Run this process's GTK loop, which answers the clipboard as the
+    service's would, until done() or *seconds*."""
+    from gi.repository import Gtk
+    deadline = time.monotonic() + seconds
+    while not done() and time.monotonic() < deadline:
+        Gtk.main_iteration_do(False)
+        time.sleep(0.005)
+
+
+def _read_in_another_app():
+    """(text, password hint) as an app pasting now reads them."""
+    reader = subprocess.Popen([sys.executable, "-c", _READ_CLIPBOARD], stdout=subprocess.PIPE,
+                              env=_X11_ENV, encoding="utf-8")
+    try:
+        _pump_until(lambda: reader.poll() is not None)
+        return reader.communicate(timeout=1)[0].strip()
+    finally:
+        if reader.poll() is None:
+            reader.kill()
+            reader.wait()
+
+
+def _paste_on_x11_keeping(*texts):
+    """Paste each of *texts* as the service does with restore_clipboard on,
+    one right after the other, its GTK work queued to this thread's loop,
+    and then let the restore run."""
+    import threading
+    from tuxtalk import gtk_loop
+    pending = []
+    keeper = cb.ClipboardKeeper(
+        cb.X11Board, schedule=lambda delay, fn: pending.append(fn) or (lambda: pending.remove(fn)))
+    offered = []
+
+    def paste():
+        for text in texts:
+            keeper.before_paste()
+            offered.append(cb.offer_dictation_x11(text))
+            keeper.after_paste(text)
+    gtk_loop._thread = threading.Thread()       # the loop is "elsewhere": this one
+    worker = threading.Thread(target=paste)
+    worker.start()
+    _pump_until(lambda: not worker.is_alive())
+    assert offered == [True] * len(texts)
+    restore = threading.Thread(target=lambda: [fn() for fn in pending])
+    restore.start()
+    _pump_until(lambda: not restore.is_alive())
+
+
+@pytest.fixture
+def x11_board(monkeypatch):
+    """The service's X11 clipboard state, fresh, and the display's clipboard
+    ownerless to start with."""
+    from gi.repository import Gdk, Gtk
+    from tuxtalk import gtk_loop
+    if not Gtk.init_check()[0]:
+        pytest.skip("no display")
+    for name, value in (("_x11_owner", None), ("_x11_offered", ""),
+                        ("_x11_offered_data", None), ("_x11_offered_at", float("-inf"))):
+        monkeypatch.setattr(cb, name, value)
+    monkeypatch.setattr(gtk_loop, "_thread", None)
+    Gtk.selection_owner_set(None, Gdk.SELECTION_CLIPBOARD, Gdk.CURRENT_TIME)
+    yield
+    if cb._x11_owner is not None:
+        cb._x11_owner.destroy()
+
+
+@pytest.mark.parametrize("dictations", [["dictated words"], ["first", "second"]],
+                         ids=["one dictation", "two before the restore"])
+def test_on_x11_what_another_app_copied_comes_back_after_the_paste(x11_board, dictations):
+    """Two dictations in quick succession bring back what the user copied,
+    not the first dictation."""
+    owner = subprocess.Popen([sys.executable, "-c", _COPY_AND_STAY, "Grüße, what I copied"],
+                             stdin=subprocess.PIPE, stdout=subprocess.PIPE, env=_X11_ENV,
+                             encoding="utf-8")
+    try:
+        assert owner.stdout.readline().strip() == "ready"
+        _paste_on_x11_keeping(*dictations)
+    finally:
+        owner.stdin.close()
+        owner.wait(timeout=10)
+    # Offered by the service now, as the app that copied it has gone, and
+    # not marked as a password: it wasn't one.
+    assert _read_in_another_app() == repr(("Grüße, what I copied", None))
+
+
+def test_on_x11_an_empty_clipboard_is_empty_again_after_the_paste(x11_board):
+    _paste_on_x11_keeping("dictated words")
+    assert _read_in_another_app() == repr((None, None))
+
+
+def test_on_x11_a_copied_image_comes_back_as_an_image_and_a_password_marked(x11_board):
+    """What isn't text is offered again in its own type; a password manager's
+    copy is marked again for clipboard managers to skip."""
+    from gi.repository import Gdk, Gtk
+    board = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
+    assert cb._put_back_x11((b"\x89PNG not really", "image/png", False))
+    got = []
+    board.request_contents(Gdk.Atom.intern("image/png", False),
+                           lambda _board, data: got.append(data.get_data()))
+    _pump_until(lambda: got)
+    assert got == [b"\x89PNG not really"]
+    assert cb._put_back_x11((b"hunter2", "UTF8_STRING", True))
+    assert _read_in_another_app() == repr(("hunter2", b"secret"))
+
+
+# An app that offers argv[1] (a JSON object of type: text) until its input closes.
+_OFFER_AND_STAY = """
+import json, sys
+import gi
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+from gi.repository import Gdk, GdkX11, GLib, Gtk
+offer = json.loads(sys.argv[1])
+owner = Gtk.Invisible()
+for info, name in enumerate(offer):
+    Gtk.selection_add_target(owner, Gdk.SELECTION_CLIPBOARD, Gdk.Atom.intern(name, False), info)
+owner.connect("selection-get", lambda _w, data, _i, _t: data.set(
+    data.get_target(), 8, offer[data.get_target().name()].encode()))
+Gtk.selection_owner_set(owner, Gdk.SELECTION_CLIPBOARD,
+                        GdkX11.x11_get_server_time(owner.get_window()))
+GLib.io_add_watch(sys.stdin, GLib.IO_IN | GLib.IO_HUP, lambda *a: Gtk.main_quit())
+GLib.timeout_add_seconds(20, Gtk.main_quit)
+GLib.idle_add(lambda: print("ready", flush=True))
+Gtk.main()
+"""
+
+
+def test_on_x11_files_copied_in_a_file_manager_come_back_as_files(x11_board):
+    """Nemo and Caja offer copied files as their paths in text as well;
+    restored as that text, pasting in the file manager would paste no files."""
+    import json
+    from gi.repository import Gdk, Gtk
+    uris = "file:///home/me/photo.jpg"
+    offer = {"x-special/gnome-copied-files": "copy\n" + uris, "text/uri-list": uris,
+             "UTF8_STRING": "/home/me/photo.jpg"}
+    owner = subprocess.Popen([sys.executable, "-c", _OFFER_AND_STAY, json.dumps(offer)],
+                             stdin=subprocess.PIPE, stdout=subprocess.PIPE, env=_X11_ENV,
+                             encoding="utf-8")
+    try:
+        assert owner.stdout.readline().strip() == "ready"
+        _paste_on_x11_keeping("dictated words")
+    finally:
+        owner.stdin.close()
+        owner.wait(timeout=10)
+    got = []
+    Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD).request_contents(
+        Gdk.Atom.intern("text/uri-list", False), lambda _board, data: got.append(data.get_data()))
+    _pump_until(lambda: got)
+    assert got == [uris.encode()]

@@ -25,7 +25,7 @@ from .window_classes import SMART_NEWLINE_CLASSES_LOWER, is_terminal_class
 
 logger = setup_logger(__name__)
 
-# clipboard.ClipboardKeeper, made by the first paste that needs it.
+# clipboard.ClipboardKeeper, made by the first paste that needs it (_keeper).
 _clipboard_keeper = None
 
 # Cached tool path lookups — avoids searching PATH on every text injection
@@ -386,6 +386,16 @@ def copy_to_primary(text: str) -> bool:
     return True
 
 
+def _keeper(board):
+    """The clipboard.ClipboardKeeper, made by the first paste that keeps the
+    user's clipboard, on *board*: a session pastes on one kind for its life."""
+    from . import clipboard
+    global _clipboard_keeper
+    if _clipboard_keeper is None:
+        _clipboard_keeper = clipboard.ClipboardKeeper(board)
+    return _clipboard_keeper
+
+
 def paste_text_x11(text: str) -> bool:
     """Paste on an X11 session, for text the keyboard layout can't type.
 
@@ -393,14 +403,22 @@ def paste_text_x11(text: str) -> bool:
     puts the text on the X11 clipboard through its own GTK loop and then sends
     the same paste keystroke. It's only the fallback for untypable text
     (Latin words on a Ukrainian layout, an emoji); ordinary X11 dictation is
-    still typed. True only if the text reached the app.
+    still typed. With restore_clipboard on, the user's clipboard comes back
+    afterwards, as in paste_text. True only if the text reached the app.
     """
     from . import clipboard
-    if not clipboard.offer_dictation_x11(text):
-        logger.error("X11 paste: couldn't put the text on the clipboard; nothing was inserted")
-        return False
-    time.sleep(0.08)    # let the selection settle before the app asks for it
-    return send_paste_keystroke(focused_window.window_class())
+    keeper = _keeper(clipboard.X11Board) if live.restore_clipboard else None
+    if keeper is not None:
+        keeper.before_paste()
+    try:
+        if not clipboard.offer_dictation_x11(text):
+            logger.error("X11 paste: couldn't put the text on the clipboard; nothing was inserted")
+            return False
+        time.sleep(0.08)    # let the selection settle before the app asks for it
+        return send_paste_keystroke(focused_window.window_class())
+    finally:
+        if keeper is not None:
+            keeper.after_paste(text)
 
 
 def _hand_to_wl_copy(proc, text):
@@ -468,12 +486,9 @@ def paste_text(text: str) -> bool:
             # (issue #7). Off by default: a dictation left on the clipboard can
             # be re-pasted if it landed in the wrong window.
             from . import clipboard
-            global _clipboard_keeper
             keeping = live.restore_clipboard
             if keeping:
-                if _clipboard_keeper is None:
-                    _clipboard_keeper = clipboard.ClipboardKeeper()
-                _clipboard_keeper.before_paste()
+                _keeper(clipboard.WaylandBoard).before_paste()
             # --sensitive keeps the dictation out of clipboard managers' history
             # (Klipper saves every entry to disk) where wl-copy supports it.
             proc = subprocess.Popen(clipboard.wl_copy_command(), stdin=subprocess.PIPE,

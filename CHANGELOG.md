@@ -363,6 +363,10 @@ before 0.15.0, so older entries use that name.
   now, so "git commit -m open quote fix the bug close quote" works.
 - With "Restore clipboard" on, something you copied between two quick
   dictations got replaced by what you'd copied before them. It's kept now.
+- On X11 desktops (Mint's Cinnamon, Xfce, MATE), "Put back what I'd copied
+  after pasting a dictation" works too now. TuxTalk only pastes there for
+  what your keyboard layout can't type, like an emoji, and the dictation
+  used to stay on the clipboard instead of what you'd copied.
 - "Unindent" took every bit of indentation off. It takes off one level now,
   the same step "indent this" adds.
 - A graphics engine download that failed to unpack left its 22 MB file

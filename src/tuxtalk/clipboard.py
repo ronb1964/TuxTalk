@@ -5,7 +5,7 @@ copy_text is a deliberate Copy (the tray's Recent Dictations, Fix a Word).
 The rest is the dictation service's paste mode: dictations offered so that
 clipboard managers can skip them, on Wayland (wl-copy --sensitive) and X11
 (offer_dictation_x11), ClipboardKeeper putting the user's clipboard back
-afterwards, and the primary selection voice editing reads.
+afterwards on either, and the primary selection voice editing reads.
 """
 import os
 import shutil
@@ -48,8 +48,9 @@ def copy_text(text):
 # with wl-copy --sensitive, the x-kde-passwordManagerHint=secret marker KeePassXC
 # uses, which Klipper and other clipboard managers skip. With the
 # restore_clipboard setting on, ClipboardKeeper also puts the old contents back
-# once the app has had time to read the paste. It's off by default because some
-# people re-paste a dictation that landed in the wrong window.
+# once the app has had time to read the paste, on Wayland (WaylandBoard) and
+# X11 (X11Board). It's off by default because some people re-paste a dictation
+# that landed in the wrong window.
 
 import functools
 import threading
@@ -97,8 +98,9 @@ def wait_for_x11_paste() -> None:
 
 
 _x11_owner = None           # the invisible window owning the X11 clipboard, made once
-_x11_offered = ""           # what it hands an app that pastes
-_x11_offered_at = float("-inf")     # time.monotonic() of the last offer
+_x11_offered = ""           # the text it hands an app that pastes...
+_x11_offered_data = None    # ...or (type, bytes), the user's image or files put back
+_x11_offered_at = float("-inf")     # time.monotonic() of the last dictation offered
 
 
 def _offer_sensitive_x11(text):
@@ -107,40 +109,53 @@ def _offer_sensitive_x11(text):
     Clipboard managers that honour the hint (Klipper, CopyQ 8 and later)
     don't keep the dictation; others (Xfce's Clipman, older CopyQ) still do.
     Not copy_text: its store() hands the text to the clipboard manager to
-    keep. GTK's selection API, since PyGObject can't reach set_with_data."""
-    global _x11_owner, _x11_offered, _x11_offered_at
-    from gi.repository import Gdk, GdkX11, Gtk
-    if _x11_owner is None:
-        _x11_owner = Gtk.Invisible()
-        _x11_owner.connect("selection-get", _answer_x11_paste)
-        _x11_owner.connect("selection-clear-event", _x11_paste_taken_over)
-    _x11_offered = text
-    Gtk.selection_clear_targets(_x11_owner, Gdk.SELECTION_CLIPBOARD)
-    for info, name in enumerate((*_TEXT_TYPES, _PASSWORD_HINT)):
-        Gtk.selection_add_target(_x11_owner, Gdk.SELECTION_CLIPBOARD,
-                                 Gdk.Atom.intern(name, False), info)
-    # A real time, not CurrentTime, which ICCCM rules out for taking a
-    # selection: apps compare it to tell the newest copy.
-    now = GdkX11.x11_get_server_time(_x11_owner.get_window())
-    owned = Gtk.selection_owner_set(_x11_owner, Gdk.SELECTION_CLIPBOARD, now)
+    keep."""
+    global _x11_offered_at
+    owned = _own_x11_clipboard(text, None, sensitive=True)
     if owned:
         _x11_offered_at = time.monotonic()
     return owned
 
 
+def _own_x11_clipboard(text, data, sensitive):
+    """On GTK's thread: own the X11 clipboard, offering *text* in every text
+    type, or else *data*, a (type, bytes) pair, in its one type; marked with
+    _PASSWORD_HINT if *sensitive*. GTK's selection API, since PyGObject
+    can't reach set_with_data."""
+    global _x11_owner, _x11_offered, _x11_offered_data
+    from gi.repository import Gdk, GdkX11, Gtk
+    if _x11_owner is None:
+        _x11_owner = Gtk.Invisible()
+        _x11_owner.connect("selection-get", _answer_x11_paste)
+        _x11_owner.connect("selection-clear-event", _x11_paste_taken_over)
+    _x11_offered, _x11_offered_data = text or "", data
+    types = _TEXT_TYPES if data is None else (data[0],)
+    Gtk.selection_clear_targets(_x11_owner, Gdk.SELECTION_CLIPBOARD)
+    for info, name in enumerate((*types, _PASSWORD_HINT) if sensitive else types):
+        Gtk.selection_add_target(_x11_owner, Gdk.SELECTION_CLIPBOARD,
+                                 Gdk.Atom.intern(name, False), info)
+    # A real time, not CurrentTime, which ICCCM rules out for taking a
+    # selection: apps compare it to tell the newest copy.
+    now = GdkX11.x11_get_server_time(_x11_owner.get_window())
+    return Gtk.selection_owner_set(_x11_owner, Gdk.SELECTION_CLIPBOARD, now)
+
+
 def _answer_x11_paste(_owner, selection_data, _info, _time):
-    """An app (or a clipboard manager) asks for the offered dictation."""
+    """An app (or a clipboard manager) asks for what is offered: the
+    dictation, or the user's clipboard put back."""
     target = selection_data.get_target()
     if target.name() == _PASSWORD_HINT:
         selection_data.set(target, 8, b"secret")
+    elif _x11_offered_data is not None:
+        selection_data.set(target, 8, _x11_offered_data[1])
     else:
         selection_data.set_text(_x11_offered, -1)
 
 
 def _x11_paste_taken_over(_owner, _event):
-    """Another app owns the clipboard now: drop the dictation kept for it."""
-    global _x11_offered
-    _x11_offered = ""
+    """Another app owns the clipboard now: drop what was kept for it."""
+    global _x11_offered, _x11_offered_data
+    _x11_offered, _x11_offered_data = "", None
     return False
 
 
@@ -259,8 +274,33 @@ def _timer(delay, fn):
     return t.cancel
 
 
+class WaylandBoard:
+    """The Wayland clipboard, for ClipboardKeeper: wl-paste and wl-copy."""
+
+    @staticmethod
+    def read():
+        """What it holds: (bytes, type, sensitive), _EMPTY or _NOTHING."""
+        return _read_clipboard()
+
+    @staticmethod
+    def holds(text):
+        """Whether it still holds the dictation *text*; unreadable, it isn't
+        known to, so it is left alone."""
+        try:
+            current = _wl_paste(_best_type(_wl_paste_types()) or "text/plain")
+        except (OSError, subprocess.SubprocessError):
+            return False
+        return current == text.encode("utf-8")
+
+    @staticmethod
+    def write_back(saved):
+        """Put a read() result back; True if it was."""
+        return _write_back(saved)
+
+
 class ClipboardKeeper:
-    """Puts the user's clipboard back after a paste.
+    """Puts the user's clipboard back after a paste, on *board* (WaylandBoard
+    or X11Board).
 
     before_paste() saves it; after_paste(text) restores it RESTORE_DELAY_S
     later, but only if the clipboard still holds the dictation, so something
@@ -273,17 +313,14 @@ class ClipboardKeeper:
     that puts the dictation there too, so a middle-click still pastes what
     the user last highlighted."""
 
-    def __init__(self, schedule=_timer, delay=RESTORE_DELAY_S):
-        self._schedule, self._delay = schedule, delay
+    def __init__(self, board=WaylandBoard, schedule=_timer, delay=RESTORE_DELAY_S):
+        self._board, self._schedule, self._delay = board, schedule, delay
         self._lock = threading.Lock()
         self._saved = _NOTHING
         self._primary = _NOTHING    # the user's primary selection: text, or None if empty
         self._last_text = None      # the dictation the pending restore waits on
         self._cancel = None
         self._generation = 0
-
-    def _read(self):
-        return _read_clipboard()
 
     def before_paste(self):
         """Save the user's clipboard before a dictation replaces it."""
@@ -295,11 +332,11 @@ class ClipboardKeeper:
                 # something they copied since is newer, and is kept instead.
                 self._cancel()
                 self._cancel = None
-                current = self._read()
+                current = self._board.read()
                 if current is not _NOTHING and not _holds(current, self._last_text):
                     self._saved = current
                 return
-            self._saved = self._read()
+            self._saved = self._board.read()
 
     def before_primary(self):
         """Save the primary selection before the dictation goes on it too.
@@ -327,7 +364,7 @@ class ClipboardKeeper:
         """Put back what the clipboard held before the paste, but only while it
         still holds the dictation: a copy the user made meanwhile stays."""
         # Under the lock throughout: a paste starting meanwhile waits (the
-        # wl-paste / wl-copy calls are time-limited), so it can neither save
+        # clipboard's reads and writes are time-limited), so it can neither save
         # this dictation as the user's copy nor have its own dictation
         # overwritten by this restore before the app reads it.
         with self._lock:
@@ -339,14 +376,10 @@ class ClipboardKeeper:
                 _restore_primary(primary, text)
             if saved is _NOTHING:
                 return
-            try:
-                current = _wl_paste(_best_type(_wl_paste_types()) or "text/plain")
-            except (OSError, subprocess.SubprocessError):
-                current = None      # unreadable: not known to be the dictation, so left alone
-            if current != text.encode("utf-8"):
+            if not self._board.holds(text):
                 logger.info("Clipboard changed after the paste; leaving it as it is")
                 return
-            if _write_back(saved):
+            if self._board.write_back(saved):
                 logger.info("Clipboard restored after paste")
 
 
@@ -375,6 +408,126 @@ def _restore_primary(saved, text):
         logger.info("Primary selection restored after paste")
     except Exception as e:
         logger.warning(f"Couldn't restore the primary selection: {e}")
+
+
+# --- The user's clipboard on X11 ----------------------------------------------------
+# On X11 the service owns the clipboard while it offers a dictation, through
+# GTK on the loop's thread (gtk_loop); reading and putting back go there too.
+# The owner is another app, which answers through the X server: GTK waits up
+# to 30 s for an app that doesn't, so the read is asked for without holding
+# GTK's thread, and given up on after X11_READ_WAIT_S like wl-paste's 1 s.
+
+X11_READ_WAIT_S = 1.0
+# What every X11 owner offers about its copy rather than the copy itself.
+_X11_META_TYPES = ("TARGETS", "TIMESTAMP", "MULTIPLE", "SAVE_TARGETS", "DELETE",
+                   "INSERT_PROPERTY", "INSERT_SELECTION", _PASSWORD_HINT)
+
+
+class X11Board:
+    """The X11 clipboard, for ClipboardKeeper. Kept on X11, the user's copy
+    is the service's to offer until something else is copied: quitting
+    TuxTalk empties the clipboard, unless a clipboard manager kept it."""
+
+    @staticmethod
+    def read():
+        """What it holds: (bytes, type, sensitive), _EMPTY or _NOTHING."""
+        from . import gtk_loop
+        if not gtk_loop.running():
+            return _NOTHING
+        answered, got = threading.Event(), []
+
+        def done(saved):
+            got.append(saved)
+            answered.set()
+        try:
+            gtk_loop.call(_ask_x11_clipboard, done, timeout=X11_READ_WAIT_S)
+        except TimeoutError:
+            return _NOTHING
+        if not answered.wait(X11_READ_WAIT_S):
+            logger.info("The app that owns the clipboard didn't answer; not restoring it")
+            return _NOTHING
+        return got[0]
+
+    @staticmethod
+    def holds(text):
+        """Whether the service still offers the dictation *text*: nothing
+        has been copied since."""
+        from . import gtk_loop
+        try:
+            return gtk_loop.call(lambda: _x11_offered_data is None and _x11_offered == text,
+                                 timeout=X11_READ_WAIT_S)
+        except TimeoutError:
+            return False
+
+    @staticmethod
+    def write_back(saved):
+        """Put a read() result back; True if it was."""
+        from . import gtk_loop
+        if saved is _NOTHING:
+            return False
+        try:
+            return bool(gtk_loop.call(_put_back_x11, saved, timeout=X11_READ_WAIT_S))
+        except TimeoutError:
+            logger.warning("Couldn't restore the clipboard: GTK's thread was busy")
+            return False
+
+
+def _ask_x11_clipboard(done):
+    """On GTK's thread: ask the clipboard's owner which types it offers, then
+    for the best one, and hand done() the result as X11Board.read() gives
+    it. Text is asked for as text, so GTK converts whichever text type the
+    app offers; files, and what isn't text, in their own type (_best_type).
+    An owner that offers no types is an empty clipboard: every X11 app
+    answers that question (ICCCM)."""
+    from gi.repository import Gdk, Gtk
+    board = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
+
+    def got_types(_board, answer):
+        """The owner's types are in *answer*: ask for its copy in the best."""
+        # Asked of no owner, get_targets() trips a GLib warning: nothing came.
+        found, atoms = answer.get_targets() if answer.get_length() >= 0 else (False, [])
+        names = [atom.name() for atom in atoms] if found else []
+        types = [name for name in names if name not in _X11_META_TYPES]
+        if not types:
+            done(_EMPTY)
+            return
+        sensitive = _PASSWORD_HINT in names
+        wanted = _best_type(types)
+        # Files copied in a file manager are offered as text too (their paths).
+        if wanted != "text/uri-list" and Gtk.targets_include_text(atoms):
+            board.request_text(lambda _board, text: done(_x11_saved(
+                None if text is None else text.encode("utf-8"), _TEXT_TYPES[0], sensitive)))
+            return
+        board.request_contents(Gdk.Atom.intern(wanted, False), lambda _board, data: done(
+            _x11_saved(data.get_data() if data.get_length() >= 0 else None, wanted, sensitive)))
+    board.request_contents(Gdk.Atom.intern("TARGETS", False), got_types)
+
+
+def _x11_saved(data, mime, sensitive):
+    """*data* of type *mime* as a saved copy, or _NOTHING when the owner
+    didn't give it or it is too big to keep."""
+    if data is None:
+        logger.info("Couldn't read the clipboard to restore it later")
+        return _NOTHING
+    if len(data) > _MAX_SAVED_BYTES:
+        logger.info("Clipboard contents too large to keep; not restoring them")
+        return _NOTHING
+    return data, mime, sensitive
+
+
+def _put_back_x11(saved):
+    """On GTK's thread: offer the user's copy *saved* again, as it came
+    (text in every text type), or leave the clipboard empty if it was."""
+    global _x11_offered, _x11_offered_data
+    from gi.repository import Gdk, GdkX11, Gtk
+    if saved is _EMPTY:
+        _x11_offered, _x11_offered_data = "", None
+        now = GdkX11.x11_get_server_time(_x11_owner.get_window())
+        return Gtk.selection_owner_set(None, Gdk.SELECTION_CLIPBOARD, now)
+    data, mime, sensitive = saved
+    if mime in _TEXT_TYPES:
+        return _own_x11_clipboard(data.decode("utf-8", "replace"), None, sensitive)
+    return _own_x11_clipboard(None, (mime, data), sensitive)
 
 
 # --- Voice editing: the text selected in the focused app -----------------------------
