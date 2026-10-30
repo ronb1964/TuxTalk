@@ -212,7 +212,9 @@ class KeyPlanner:
         if self._altgr != _KEY_RIGHTALT:
             return None
         # By character, not keysym: Ubuntu 22.04's libxkbcommon names € by a
-        # keysym the keymap doesn't use (see _index).
+        # keysym the keymap doesn't use (see _index). The keypad counts here
+        # though _by_char leaves it out: none of the characters asked about
+        # is on it.
         x = _lib()
         without = {x.xkb_keysym_to_utf32(sym) for sym in self._without_altgr}
         return [c for c in chars if ord(c) in self._by_char and ord(c) not in without]

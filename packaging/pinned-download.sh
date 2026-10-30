@@ -26,6 +26,12 @@ pinned_download() {
     fi
     # A name of its own beside the cache, not one from the PID: builds in two
     # containers can both be PID 1.
+    # The checked copy is all the build needs: a cache that can't be kept
+    # (a full or read-only disk) only means downloading again next time.
     local part
-    part=$(mktemp "$cache.part.XXXXXXXX") && cp "$dest" "$part" && mv "$part" "$cache"
+    if ! { part=$(mktemp "$cache.part.XXXXXXXX") && cp "$dest" "$part" && mv "$part" "$cache"; }
+    then
+        rm -f "$part"
+        echo "   couldn't keep $cache for the next build; carrying on" >&2
+    fi
 }

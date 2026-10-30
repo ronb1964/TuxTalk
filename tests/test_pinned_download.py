@@ -11,7 +11,7 @@ TOOL = b"the pinned tool"
 SHA = hashlib.sha256(TOOL).hexdigest()
 
 
-def _run(tmp_path, served, cache_contents=None):
+def _run(tmp_path, served, cache_contents=None, cache=None):
     """Runs pinned_download with a wget that serves *served* (None: no network)
     and logs each call; returns the result, the cache file and the copy."""
     bin_dir = tmp_path / "bin"
@@ -20,7 +20,7 @@ def _run(tmp_path, served, cache_contents=None):
     fail = "exit 4" if served is None else f'cp "{tmp_path}/served" "$3"'
     (bin_dir / "wget").write_text(f'#!/bin/sh\necho "$@" >> "{tmp_path}/wget.log"\n{fail}\n')
     (bin_dir / "wget").chmod(0o755)
-    cache = tmp_path / "tool.cached"
+    cache = cache or tmp_path / "tool.cached"
     if cache_contents is not None:
         cache.write_bytes(cache_contents)
     dest = tmp_path / "private" / "tool"
@@ -69,3 +69,10 @@ def test_a_failed_download_stops_the_build(tmp_path):
     result, cache, _ = _run(tmp_path, served=None)
     assert result.returncode != 0
     assert not cache.exists()
+
+
+def test_a_cache_that_cant_be_kept_doesnt_stop_the_build(tmp_path):
+    """A full or read-only cache folder: the checked copy is still used."""
+    result, cache, dest = _run(tmp_path, TOOL, cache=tmp_path / "no-such-folder" / "tool")
+    assert result.returncode == 0 and dest.read_bytes() == TOOL and not cache.exists()
+    assert "carrying on" in result.stderr
