@@ -123,12 +123,12 @@ def test_type_at_pause_types_nothing_of_its_own_into_a_password_field(desktop, m
     monkeypatch.setattr(type_at_pause, "resolve_boundary", lambda *a, **k: ran.append("mark"))
     monkeypatch.setattr(type_at_pause, "flush_boundary", lambda *a, **k: ran.append("mark"))
     monkeypatch.setattr(dictation_text, "prepare_text", lambda *a, **k: ran.append("cleanup") or "x")
-    monkeypatch.setattr(rs.state.message, "held_mark", {"mark": "."})
-    monkeypatch.setattr(rs.state.message, "held_cue", "No wait.")
+    monkeypatch.setattr(rs.state.current.message, "held_mark", {"mark": "."})
+    monkeypatch.setattr(rs.state.current.message, "held_cue", "No wait.")
     desktop["password"] = True
     dictate(monkeypatch, chunk_role="middle")
     assert desktop["typed"] == [] and ran == []
-    assert rs.state.message.held_mark is None and rs.state.message.held_cue == ""
+    assert rs.state.current.message.held_mark is None and rs.state.current.message.held_cue == ""
     assert desktop["labels"] == [delivery_notices.PASSWORD_FIELD_LABEL]
 
 

@@ -266,7 +266,7 @@ def test_hands_free_hearing_nothing_leaves_a_send_held_meanwhile_unsent(
     focus, heard, typed, notices = chat
     assert recording.start_recording(False, False, 0, from_toggle=True)
     words_done()
-    monkeypatch.setattr(rs.state, "silence", types.SimpleNamespace(nothing_said=True))
+    monkeypatch.setattr(rs.state.current, "silence", types.SimpleNamespace(nothing_said=True))
     monkeypatch.setattr(recording, "frames_are_dead_mic", lambda frames, rate: False)
     assert recording.finish_capture(False, False) is None
     assert notices == [send_countdown.HELD_NOTICE] and notifications() == [HELD_TITLE]

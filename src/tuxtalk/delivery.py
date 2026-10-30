@@ -250,8 +250,9 @@ def send_automatically(space: str, injection_mode: str, message) -> None:
     if send_countdown.send_automatically("Send each dictation automatically is on", message,
                                          press_key, type_onto_dictation, space,
                                          injection_mode):
-        if (rs.state.message.cancelled and not rs.state.is_recording
-                and send_countdown.say_held_for(rs.state.message.serial)):
+        newer = rs.state.current.message
+        if (newer.cancelled and not rs.state.is_recording
+                and send_countdown.say_held_for(newer.serial)):
             send_countdown.give_back_space()
 
 

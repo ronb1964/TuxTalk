@@ -134,7 +134,8 @@ def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
     work was queued, so a recording started meanwhile can't change where
     this one's Enter may go. By default the current recording's."""
     job = _Job(beeps_on, smart_quotes, notify_on, language, auto_space, auto_period,
-               injection_mode, chunk_role, rs.state.message if message is None else message)
+               injection_mode, chunk_role,
+               rs.state.current.message if message is None else message)
     t0 = time.time()
     logger.info("Recording stopped, starting transcription")
     try:
@@ -436,22 +437,22 @@ def stop_recording(
     itself (finish_capture) runs here, so the hotkey loop goes back to
     reading keys at once: a dictation key pressed while text is still being
     typed starts the next recording."""
-    edit_mode, rs.state.edit_mode = rs.state.edit_mode, False
+    rec = rs.state.current
     cap = recording.finish_capture(beeps_on, notify_on)
     if cap is None:
         return
     frames, rec_sr = cap
-    message = rs.state.message
-    if edit_mode:
+    message = rec.message
+    if rec.edit_mode:
         where = focused_window.look()       # the window the edit is for
         dictation_worker.submit(lambda: voice_edit.transcribe_and_edit(
             frames, rec_sr, beeps_on, language, injection_mode, message, where))
         return
     # Type at pause: the rest is the recording's last phrase, typed after
     # those already queued.
-    chunk_role = "last" if rs.state.chunks_submitted else None
+    chunk_role = "last" if rec.chunks_submitted else None
     if chunk_role:
-        frames = recording.drop_speechless_rest(frames)
+        frames = recording.drop_speechless_rest(rec, frames)
     dictation_worker.submit(lambda: transcribe_and_inject(
         frames, rec_sr, beeps_on, smart_quotes, notify_on, language, auto_space,
         auto_period, injection_mode, chunk_role=chunk_role, message=message))

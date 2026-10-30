@@ -150,7 +150,7 @@ def test_a_tap_while_the_words_were_typed_holds_the_send_and_says_so(sent, monke
     keys, typed, said = sent
     message = send_countdown.Message(CHAT, has_words=True)
     send_countdown.recording_begins()
-    monkeypatch.setattr(rs.state, "message", send_countdown.Message(serial=1, cancelled=True))
+    monkeypatch.setattr(rs.state.current, "message", send_countdown.Message(serial=1, cancelled=True))
     monkeypatch.setattr(rs.state, "is_recording", False)
     delivery.send_automatically(" ", "type", message)
     assert keys == [] and said == ["Not sent"] and typed == [" "]

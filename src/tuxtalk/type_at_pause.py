@@ -54,31 +54,31 @@ def use_transcriber(step: Callable[..., None]) -> None:
     transcribe_phrase = step
 
 
-def cut_chunk(chunker):
-    """The speaker paused: hand the audio so far to the dictation worker.
+def cut_chunk(rec, chunker):
+    """The speaker paused: hand the audio of recording *rec* so far to the
+    dictation worker.
 
     Runs on the audio thread, so it only swaps a list and queues a job; the
     transcription happens on the worker."""
     with chunk_lock:
-        if rs.state.chunker is not chunker:
+        if rec.chunker is not chunker:
             return  # the recording ended while this block was arriving
-        frames, rs.state.frames = rs.state.frames, []
+        frames, rec.frames = rec.frames, []
         chunking.drop_tail_samples(frames, chunker.tail_samples())
-        rs.state.chunks_submitted += 1
-        number = rs.state.chunks_submitted
-        rec_sr = rs.state.recording_samplerate
+        rec.chunks_submitted += 1
+        number = rec.chunks_submitted
         pause = chunker.last_pause
         # Hands-free's "stop when quiet" waits from now until the phrase is
         # typed: it can wait its turn behind the last dictation, and an AI
         # rewrite can take seconds, while the user reads rather than talks.
-        detector = rs.state.silence
+        detector = rec.silence
         if detector is not None:
             detector.hold()
         # Queued before the lock is let go: otherwise the stop could slip in
         # between counting this chunk and queuing it, and queue the last chunk
         # ahead of it. put() on the unbounded queue never blocks.
-        dictation_worker.submit(lambda message=rs.state.message: _transcribe_chunk(
-            frames, rec_sr, number, pause, message, detector))
+        dictation_worker.submit(lambda: _transcribe_chunk(
+            frames, rec.samplerate, number, pause, rec.message, detector))
 
 
 def _transcribe_chunk(frames, rec_sr, number, pause, message, detector):
@@ -99,19 +99,15 @@ def _transcribe_chunk(frames, rec_sr, number, pause, message, detector):
             detector.release()
 
 
-def arm_chunker(rec_sr, edit_mode=False):
-    """Give this recording a pause detector when chunked dictation is on.
+def arm_chunker(rec):
+    """Give recording *rec* a pause detector when chunked dictation is on.
     Never for a voice edit: its instruction needs the whole recording."""
-    chunker = None
-    if live.chunk_pause_seconds > 0 and not edit_mode:
+    if live.chunk_pause_seconds > 0 and not rec.edit_mode:
         from .chunking import PauseDetector
-        chunker = PauseDetector(live.chunk_pause_seconds, rec_sr, speech_db=live.chunk_speech_db)
+        rec.chunker = PauseDetector(live.chunk_pause_seconds, rec.samplerate,
+                                    speech_db=live.chunk_speech_db)
     # Started here, so the audio callback never has to start it.
     dictation_worker.worker()
-    with chunk_lock:
-        rs.state.chunks_submitted = 0
-        rs.state.message = send_countdown.Message(serial=rs.state.recording_serial)
-        rs.state.chunker = chunker
 
 
 # Silence put between two chunks when the engine hears them together, so the

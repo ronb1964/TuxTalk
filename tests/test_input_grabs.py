@@ -97,7 +97,7 @@ def quiet_recording(monkeypatch):
     rs.state.is_recording = False
     yield
     rs.state.is_recording = False
-    rs.state.stream = None
+    rs.state.current.stream = None
 
 
 # --- releasing grabs -------------------------------------------------------
@@ -906,11 +906,11 @@ def test_a_microphone_that_never_stops_cannot_freeze_the_service(monkeypatch):
     monkeypatch.setattr(mic_stream, "STOP_TIMEOUT_S", 0.1)
     monkeypatch.setattr(mic_stream, "_closing", set())
     stream = StuckStream()
-    rs.state.stream = stream
+    rs.state.current.stream = stream
     started = time.monotonic()
     recording.stop_stream_safely()
     assert time.monotonic() - started < 1.0
-    assert rs.state.stream is None
+    assert rs.state.current.stream is None
     assert mic_stream._closing == {stream}
     release.set()
 
@@ -926,7 +926,7 @@ def test_a_normal_stop_closes_the_stream(monkeypatch):
             calls.append("close")
 
     monkeypatch.setattr(mic_stream, "_closing", set())
-    rs.state.stream = Stream()
+    rs.state.current.stream = Stream()
     recording.stop_stream_safely()
     assert calls == ["stop", "close"] and mic_stream._closing == set()
 

@@ -277,14 +277,14 @@ def keyloop(monkeypatch):
     seen = {"starts": [], "stops": 0, "grab_codes": []}
     monkeypatch.setattr(live, "voice_editing", True)
     monkeypatch.setattr(rs.state, "is_recording", False)
-    monkeypatch.setattr(rs.state, "edit_mode", False, raising=False)
+    monkeypatch.setattr(rs.state.current, "edit_mode", False, raising=False)
     monkeypatch.setattr(keyboard_grab, "grab_keyboards_hiding", lambda devs, codes: seen["grab_codes"].append(set(codes)))
     monkeypatch.setattr(keyboard_grab, "release_all", lambda: None)
 
     def start(beeps, notify, idx, from_toggle=False, edit_mode=False, held_send=False):
         seen["starts"].append({"from_toggle": from_toggle, "edit_mode": edit_mode})
         rs.state.is_recording = True
-        rs.state.edit_mode = edit_mode
+        rs.state.current.edit_mode = edit_mode
         return True
 
     def stop(*a, **k):
@@ -388,7 +388,7 @@ def edit_env(monkeypatch):
 
 def run_edit(where=None):
     frames = [np.full(16000, 1000, dtype=np.int16).tobytes()]
-    voice_edit.transcribe_and_edit(frames, 16000, False, "", "type", rs.state.message, where)
+    voice_edit.transcribe_and_edit(frames, 16000, False, "", "type", rs.state.current.message, where)
 
 
 def test_an_edit_waiting_its_turn_leaves_another_windows_selection_alone(edit_env, monkeypatch):
@@ -1338,5 +1338,5 @@ def test_an_edit_says_whether_the_change_went_in(edit_env, monkeypatch, answer, 
     edit_env["engine"].answer = answer
     monkeypatch.setattr(delivery, "inject_text", lambda text, mode, **kw: typing)
     done = voice_edit.edit_selection(lambda: "make it more professional", False, "type",
-                               "org.kde.kwrite", 0.0, rs.state.message, spoken=True)
+                               "org.kde.kwrite", 0.0, rs.state.current.message, spoken=True)
     assert bool(done) is went_in

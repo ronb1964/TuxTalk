@@ -103,7 +103,7 @@ def test_start_recording_opens_the_new_default(desktop, monkeypatch):
         assert recording.start_recording(False, False, 4) is True
     finally:
         rs.state.is_recording = False
-        rs.state.stream = None
+        rs.state.current.stream = None
 
     assert opened == [6]
 
@@ -133,11 +133,11 @@ class TestDefaultSourceName:
 
 def test_before_any_microphone_opens_audio_is_taken_at_the_engines_rate():
     """Chunks, the double-tap check and the trims read the stream's rate
-    from the state; before a stream opens it must be the rate the engines
+    from the recording; before a stream opens it must be the rate the engines
     hear, or a phrase would be resampled from the wrong rate."""
     from tuxtalk import engine
-    from tuxtalk.recording_state import RecordingState
-    assert RecordingState().recording_samplerate == engine.SAMPLE_RATE
+    from tuxtalk.recording_state import Recording
+    assert Recording().samplerate == engine.SAMPLE_RATE
 
 
 def test_a_default_microphone_name_that_isnt_utf8_is_still_read(tmp_path, monkeypatch):

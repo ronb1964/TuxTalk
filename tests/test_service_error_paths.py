@@ -67,9 +67,9 @@ def test_the_mic_stream_is_closed_even_when_stopping_it_fails(monkeypatch):
         def close(self, ignore_errors=True):
             Stream.closed = True
 
-    monkeypatch.setattr(rs.state, "stream", Stream())
+    monkeypatch.setattr(rs.state.current, "stream", Stream())
 
     recording.stop_stream_safely()
 
     assert Stream.closed
-    assert rs.state.stream is None
+    assert rs.state.current.stream is None

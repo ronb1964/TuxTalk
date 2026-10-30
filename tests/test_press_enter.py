@@ -345,12 +345,12 @@ def test_pressing_the_hold_key_holds_the_send_and_records(countdown, monkeypatch
     monkeypatch.setattr(recording, "indicator", None)
     try:
         assert recording.start_recording(False, False, 0) is True
-        assert rs.state.held_send is True
+        assert rs.state.current.held_send is True
         sends()[0].fire()
         assert pressed == []
     finally:
         rs.state.is_recording = False
-        rs.state.stream = None
+        rs.state.current.stream = None
 
 
 def test_a_tap_too_short_to_dictate_says_not_sent(countdown, monkeypatch):
@@ -363,9 +363,9 @@ def test_a_tap_too_short_to_dictate_says_not_sent(countdown, monkeypatch):
         monkeypatch.setattr(recording, name, lambda: None)
     monkeypatch.setattr(recording, "indicator", None)
     monkeypatch.setattr("tuxtalk.tray_link.notify_recording_state", lambda *a, **k: None)
-    monkeypatch.setattr(rs.state, "held_send", True)
-    monkeypatch.setattr(rs.state, "silence", None)
-    monkeypatch.setattr(rs.state, "press_t0", time.time())
+    monkeypatch.setattr(rs.state.current, "held_send", True)
+    monkeypatch.setattr(rs.state.current, "silence", None)
+    monkeypatch.setattr(rs.state.current, "press_t0", time.time())
     assert recording.finish_capture(False, False) is None
     assert reasons == [send_countdown.HELD_NOTICE]
     assert labels == [send_countdown.HELD_NOTICE]
@@ -493,10 +493,10 @@ def test_a_short_tap_types_the_space_when_released(countdown, monkeypatch):
                         lambda beeps, notify, reason="": reasons.append(reason))
     monkeypatch.setattr(send_countdown, "_owed", None)
     start_send("test", " ", "type")
-    monkeypatch.setattr(rs.state, "held_send", send_countdown.hold(announce=False))
-    monkeypatch.setattr(rs.state, "silence", None)
-    monkeypatch.setattr(rs.state, "chunks_submitted", 0)
-    monkeypatch.setattr(rs.state, "press_t0", time.time())
+    monkeypatch.setattr(rs.state.current, "held_send", send_countdown.hold(announce=False))
+    monkeypatch.setattr(rs.state.current, "silence", None)
+    monkeypatch.setattr(rs.state.current, "chunks_submitted", 0)
+    monkeypatch.setattr(rs.state.current, "press_t0", time.time())
     assert recording.finish_capture(False, False) is None
     assert TYPED == [" "] and reasons == [send_countdown.HELD_NOTICE]
 
@@ -512,10 +512,10 @@ def test_typing_the_space_doesnt_turn_a_tap_into_a_dictation(countdown, monkeypa
                         lambda text, mode, **kw: time.sleep(0.1) or TYPED.append(text) or "ok")
     monkeypatch.setattr(send_countdown, "_owed", None)
     start_send("test", " ", "type")
-    monkeypatch.setattr(rs.state, "held_send", send_countdown.hold(announce=False))
-    monkeypatch.setattr(rs.state, "silence", None)
-    monkeypatch.setattr(rs.state, "chunks_submitted", 0)
-    monkeypatch.setattr(rs.state, "press_t0", time.time() - 0.15)
+    monkeypatch.setattr(rs.state.current, "held_send", send_countdown.hold(announce=False))
+    monkeypatch.setattr(rs.state.current, "silence", None)
+    monkeypatch.setattr(rs.state.current, "chunks_submitted", 0)
+    monkeypatch.setattr(rs.state.current, "press_t0", time.time() - 0.15)
     assert recording.finish_capture(False, False) is None
     assert TYPED == [" "] and reasons == [send_countdown.HELD_NOTICE]
 
@@ -595,9 +595,9 @@ def test_a_quick_tap_holds_the_send_even_when_recording_starts_slowly(
     monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
     monkeypatch.setattr(recording, "indicator", None)
     monkeypatch.setattr(send_countdown, "_owed", None)
-    monkeypatch.setattr(rs.state, "silence", None)
-    monkeypatch.setattr(rs.state, "chunks_submitted", 0)
-    monkeypatch.setattr(rs.state, "frames", [])
+    monkeypatch.setattr(rs.state.current, "silence", None)
+    monkeypatch.setattr(rs.state.current, "chunks_submitted", 0)
+    monkeypatch.setattr(rs.state.current, "frames", [])
     cfg = SimpleNamespace(beeps=False, notify=False, smart_quotes=False, language=None,
                           auto_space=True, auto_period=True, injection_mode="type")
     keyboard = _Keyboard([F8] if still_down else [])
@@ -609,7 +609,7 @@ def test_a_quick_tap_holds_the_send_even_when_recording_starts_slowly(
     finally:
         keyboard_grab.release_all()
         rs.state.is_recording = False
-        rs.state.stream = None
+        rs.state.current.stream = None
     if outcome == "held":
         assert reasons == [send_countdown.HELD_NOTICE] and dictated == []
     else:

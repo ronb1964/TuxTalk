@@ -7,6 +7,7 @@ meanwhile, stopping a stream safely, and trimming what a recording ends
 with (the auto-stop's silence, a speechless rest) before it is
 transcribed."""
 import atexit
+import functools
 import threading
 import time
 
@@ -159,27 +160,29 @@ def resample(audio, orig_sr, target_sr):
 def stop_stream_safely():
     """Stop and close the microphone stream. An audio system that stops
     answering costs mic_stream.STOP_TIMEOUT_S, not the whole service."""
-    stream, rs.state.stream = rs.state.stream, None
+    rec = rs.state.current
+    stream, rec.stream = rec.stream, None
     if stream is not None:
         mic_stream.close(stream)
 
 
-def trim_auto_stop_tail(frames):
-    """After an auto-stop, drop the silence the detector measured at the end.
+def trim_auto_stop_tail(rec, frames):
+    """After an auto-stop, drop the silence *rec*'s detector measured at the
+    end of *frames*.
 
     Only whole trailing blocks are removed, and only up to what was measured
     as silent (less a small margin kept for the last word), so speech is never
     touched. Runs after the stream stops, so no block is still being added.
     """
-    detector, rs.state.silence = rs.state.silence, None
+    detector, rec.silence = rec.silence, None
     chunking.drop_tail_samples(frames, detector.tail_to_trim() if detector is not None else 0)
 
 
-def drop_speechless_rest(frames):
-    """The audio after the last cut, or none when the pause detector heard no
-    speech in it: room noise longer than the tap check would otherwise reach
-    the engine, which invents a word for it ("Yeah.")."""
-    if rs.state.last_chunk_speech == 0.0:
+def drop_speechless_rest(rec, frames):
+    """The audio after *rec*'s last cut, or none when the pause detector
+    heard no speech in it: room noise longer than the tap check would
+    otherwise reach the engine, which invents a word for it ("Yeah.")."""
+    if rec.last_chunk_speech == 0.0:
         logger.info("No speech after the last chunk; the rest isn't transcribed")
         return []
     return frames
@@ -224,19 +227,22 @@ toggles_asked = 0
 started_from_toggle_key = threading.Event()
 
 
-def _sd_callback(indata, frames_count, time_info, status):
-    """sounddevice's audio callback: collect frames while recording."""
-    if rs.state.is_recording:
-        rs.state.frames.append(indata.tobytes())
+def _sd_callback(rec, indata, frames_count, time_info, status):
+    """sounddevice's audio callback for recording *rec*'s stream: collect
+    its frames while it records. A stream that didn't stop in time
+    (mic_stream.close gave up on it) may still call this: its blocks are
+    not the newer recording's."""
+    if rs.state.is_recording and rec is rs.state.current:
+        rec.frames.append(indata.tobytes())
 
         # Chunked dictation: at a pause, the phrase so far goes off to be typed.
-        chunker = rs.state.chunker
+        chunker = rec.chunker
         if chunker is not None and chunker.feed(indata):
-            type_at_pause.cut_chunk(chunker)
+            type_at_pause.cut_chunk(rec, chunker)
 
         # Hands-free auto-stop: when the speaker has finished, ask the service
         # loop to stop, exactly as a second press of the toggle key would.
-        detector = rs.state.silence
+        detector = rec.silence
         if detector is not None and detector.feed(indata):
             if detector.nothing_said:
                 logger.info("Auto-stop: nothing said, stopping without typing anything")
@@ -250,21 +256,23 @@ def _sd_callback(indata, frames_count, time_info, status):
 
 
 def open_input_stream(device_idx) -> None:
-    """Open and start the microphone stream. Raises if the device is unusable."""
+    """Open and start the microphone stream of the recording starting.
+    Raises if the device is unusable."""
     # Use the device's native sample rate (may differ from 16kHz on ALSA hw: devices)
     global spectrum_processor
-    rs.state.recording_samplerate = mic_stream.input_samplerate(device_idx, engine.SAMPLE_RATE)
+    rec = rs.state.current
+    rec.samplerate = mic_stream.input_samplerate(device_idx, engine.SAMPLE_RATE)
     # The bars' bands are worked out for one rate; built before the stream
     # starts, so its callback never sees one half made.
-    if (spectrum_processor is not None
-            and spectrum_processor.sample_rate != rs.state.recording_samplerate):
+    if spectrum_processor is not None and spectrum_processor.sample_rate != rec.samplerate:
         from .indicator_dsp import SpectrumProcessor
-        spectrum_processor = SpectrumProcessor(sample_rate=rs.state.recording_samplerate,
+        spectrum_processor = SpectrumProcessor(sample_rate=rec.samplerate,
                                                bins=spectrum_processor.bins)
     sd.default.channels = CHANNELS
-    sd.default.samplerate = rs.state.recording_samplerate
-    rs.state.stream = sd.InputStream(callback=_sd_callback, dtype='int16', device=device_idx)
-    rs.state.stream.start()
+    sd.default.samplerate = rec.samplerate
+    rec.stream = sd.InputStream(callback=functools.partial(_sd_callback, rec), dtype='int16',
+                                device=device_idx)
+    rec.stream.start()
 
 
 def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
@@ -283,16 +291,10 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     # Pressing a hotkey while a send counts down holds it: a tap leaves the
     # text unsent, a hold dictates more onto it. Counted before the
     # microphone opens, so a send set up meanwhile waits for this recording.
-    rs.state.recording_serial, held = send_countdown.recording_begins()
-    rs.state.held_send = held or held_send
-    rs.state.frames = []
-    rs.state.was_cancelled = False
-    rs.state.silence = None
-    rs.state.chunker = None
-    rs.state.press_t0 = time.time()
-    rs.state.released_while_starting = False
-    rs.state.toggle_started_at = None
-    rs.state.edit_mode = edit_mode
+    serial, held = send_countdown.recording_begins()
+    rec = rs.state.current = rs.Recording(
+        send_countdown.Message(serial=serial), edit_mode=edit_mode,
+        held_send=held or held_send, press_t0=time.time())
     # Set before the stream starts — _sd_callback drops frames unless it's set.
     rs.state.is_recording = True
     if engine.model is None:
@@ -322,20 +324,19 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
             rs.state.is_recording = False
             # Counted already (recording_begins), so a send set up meanwhile
             # was held for it: this one ended, cancelled, and that's said.
-            rs.state.message = send_countdown.Message(serial=rs.state.recording_serial,
-                                                      cancelled=True)
+            rec.message.cancelled = True
             stop_stream_safely()
             keyboard_grab.release_all()
             beeps.beep(beeps_on, *CANCEL_BEEP)
             if notify_on:
                 notify_module.notify("Microphone unavailable",
                                      "Check that no other app is using it.")
-            _leave_held_send_unsent()
+            _leave_held_send_unsent(rec)
             return False
 
-    type_at_pause.arm_chunker(rs.state.recording_samplerate, edit_mode)
+    type_at_pause.arm_chunker(rec)
     pause_media_players()
-    rs.state.start_beep = beeps.beep(beeps_on, *START_BEEP)
+    rec.start_beep = beeps.beep(beeps_on, *START_BEEP)
     if notify_on:
         notify_module.notify("Recording… speak now", "")
     tray_link.notify_recording_state(True)
@@ -348,10 +349,10 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
 
     # The double-tap is timed from here, the start beep heard: keys wait on
     # this thread, so a tap made during a slow start still counts (#21).
-    if from_toggle and rs.state.start_beep is not None:
-        beeps.wait_until_played(over=rs.state.start_beep)
-    rs.state.toggle_started_at = time.time() if from_toggle else None
-    logger.info(f"Recording started in {time.time() - rs.state.press_t0:.2f}s")
+    if from_toggle and rec.start_beep is not None:
+        beeps.wait_until_played(over=rec.start_beep)
+    rec.toggle_started_at = time.time() if from_toggle else None
+    logger.info(f"Recording started in {time.time() - rec.press_t0:.2f}s")
     return True
 
 
@@ -359,10 +360,9 @@ def cancel_recording(beeps_on: bool, notify_on: bool, reason="Cancelled"):
     """End a recording without transcribing it, telling the user *reason*.
     A send it held stays unsent, and that's said (_leave_held_send_unsent):
     Esc, a tap, hands-free hearing nothing."""
+    rec = rs.state.current
     rs.state.is_recording = False
-    rs.state.was_cancelled = True
-    rs.state.message.cancelled = True
-    rs.state.edit_mode = False
+    rec.message.cancelled = True
     stop_stream_safely()
     resume_media_players()
     beeps.beep(beeps_on, *CANCEL_BEEP)
@@ -373,18 +373,18 @@ def cancel_recording(beeps_on: bool, notify_on: bool, reason="Cancelled"):
     if indicator:
         indicator.hide_indicator()
     tray_link.notify_recording_state(False)
-    _leave_held_send_unsent()
+    _leave_held_send_unsent(rec)
 
 
-def _leave_held_send_unsent() -> None:
-    """This recording ended with nothing to add to a send it held, when it
-    began (rs.state.held_send) or one set up for it since: say "Not sent",
+def _leave_held_send_unsent(rec) -> None:
+    """Recording *rec* ended with nothing to add to a send it held, when it
+    began (rec.held_send) or one set up for it since: say "Not sent",
     once, and give back the space the send left off. That goes in now, or
     when the dictation key that's still down comes up (hotkeys): after Esc
     during a hold, or a microphone that didn't open. A start without a key
     (the tray, tuxtalk --start) has none to wait for."""
-    said = send_countdown.say_held_for(rs.state.recording_serial)
-    if not said and rs.state.held_send:
+    said = send_countdown.say_held_for(rec.message.serial)
+    if not said and rec.held_send:
         send_countdown.say_held()
         said = True
     if said:
@@ -401,16 +401,16 @@ def toggle_pressed_while_recording(beeps_on: bool) -> bool:
     with the option on, arms auto-stop. A word said before the second tap
     counts as speech; the start beep the mic may pick up first does not.
     """
-    started = rs.state.toggle_started_at
-    if (live.auto_stop_seconds <= 0 or started is None or rs.state.silence is not None
+    rec = rs.state.current
+    started = rec.toggle_started_at
+    if (live.auto_stop_seconds <= 0 or started is None or rec.silence is not None
             or time.time() - started > DOUBLE_TAP_S):
         return False
-    rate = rs.state.recording_samplerate
-    detector = silence.SilenceDetector(live.auto_stop_seconds, rate)
-    beep_hz = START_BEEP[0] if rs.state.start_beep is not None else None
-    if silence.has_a_word(frames_f32(list(rs.state.frames)), rate, ignoring_hz=beep_hz):
+    detector = silence.SilenceDetector(live.auto_stop_seconds, rec.samplerate)
+    beep_hz = START_BEEP[0] if rec.start_beep is not None else None
+    if silence.has_a_word(frames_f32(list(rec.frames)), rec.samplerate, ignoring_hz=beep_hz):
         detector.heard_speech()
-    rs.state.silence = detector
+    rec.silence = detector
     logger.info("Double-tap: this recording will stop by itself when you go quiet")
     beeps.beep(beeps_on, *HANDS_FREE_BEEP)
     return True
@@ -421,60 +421,59 @@ def finish_capture(beeps_on: bool, notify_on: bool):
 
     Validates the hold time, stops the stream, hides the indicator, and SNAPSHOTS
     the captured frames. Returns (frames, rec_sr) or None if the recording was
-    cancelled or too short. start_recording() reassigns state.frames to a fresh
-    list, so the returned reference stays valid even if a new recording begins
-    immediately, which is what lets the dictation worker transcribe and type
-    it while the next recording records, without dropping or mixing audio."""
-    if _dropped_as_silent(beeps_on, notify_on) or _dropped_as_a_tap(beeps_on, notify_on):
+    cancelled or too short. The next recording is a Recording of its own, so
+    the frames returned stay this one's even if it begins at once, which is
+    what lets the dictation worker transcribe and type them while the next
+    recording records, without dropping or mixing audio."""
+    rec = rs.state.current
+    if _dropped_as_silent(rec, beeps_on, notify_on) or _dropped_as_a_tap(rec, beeps_on, notify_on):
         return None
     with type_at_pause.chunk_lock:
         # No more cuts: from here on the audio is the last chunk.
-        chunker, rs.state.chunker = rs.state.chunker, None
-        rs.state.last_chunk_speech = chunker.speech_time if chunker is not None else None
-        frames = rs.state.frames  # snapshot the reference before it can be reassigned
-    if chunker is not None and not rs.state.chunks_submitted:
+        chunker, rec.chunker = rec.chunker, None
+        rec.last_chunk_speech = chunker.speech_time if chunker is not None else None
+        frames = rec.frames  # the last chunk's list; a cut can't swap it now
+    if chunker is not None and not rec.chunks_submitted:
         logger.info(f"Chunked dictation: no pause found ({chunker.describe()})")
-    rec_sr = rs.state.recording_samplerate
     rs.state.is_recording = False
     stop_stream_safely()
     resume_media_players()
     tray_link.notify_recording_state(False)  # the tray icon shows recording stopped
-    trim_auto_stop_tail(frames)
-    if rs.state.was_cancelled:
+    trim_auto_stop_tail(rec, frames)
+    if rec.message.cancelled:
         return None
     if indicator:
         indicator.hide_indicator()
-    return frames, rec_sr
+    return frames, rec.samplerate
 
 
-def _dropped_as_silent(beeps_on: bool, notify_on: bool) -> bool:
-    """Hands-free with nothing said: cancel it, and say so if the mic is dead.
-    Transcribing room noise can type a stray "Thank you." (see
+def _dropped_as_silent(rec, beeps_on: bool, notify_on: bool) -> bool:
+    """Hands-free with nothing said: cancel *rec*, and say so if the mic is
+    dead. Transcribing room noise can type a stray "Thank you." (see
     silence.is_speechless_tap)."""
-    if rs.state.silence is None or not rs.state.silence.nothing_said:
+    if rec.silence is None or not rec.silence.nothing_said:
         return False
-    rs.state.silence = None
-    rate = rs.state.recording_samplerate
-    dead_mic = frames_are_dead_mic(rs.state.frames, rate)
+    rec.silence = None
+    dead_mic = frames_are_dead_mic(rec.frames, rec.samplerate)
     cancel_recording(beeps_on, notify_on and not dead_mic, "Nothing heard, so nothing was typed")
     if dead_mic:
         notices.warn_silent_mic()
     return True
 
 
-def _dropped_as_a_tap(beeps_on: bool, notify_on: bool) -> bool:
-    """A press too short to be a dictation: cancel it. A tap that held a
+def _dropped_as_a_tap(rec, beeps_on: bool, notify_on: bool) -> bool:
+    """A press too short to be a dictation: cancel *rec*. A tap that held a
     pending send leaves that text unsent, as it is."""
-    held_ms = int((time.time() - (rs.state.press_t0 or time.time())) * 1000)
-    if rs.state.held_send and send_countdown.owes_space() and not rs.state.chunks_submitted:
+    held_ms = int((time.time() - (rec.press_t0 or time.time())) * 1000)
+    if rec.held_send and send_countdown.owes_space() and not rec.chunks_submitted:
         # The hotkey that held the send is up now; a tap leaves the text as
         # it is, a dictation goes after this space. On the dictation worker,
         # after what's still being typed.
         dictation_worker.submit(send_countdown.give_back_space)
-    if held_ms >= MIN_HOLD_MS and not (rs.state.held_send and rs.state.released_while_starting):
+    if held_ms >= MIN_HOLD_MS and not (rec.held_send and rec.released_while_starting):
         return False
     # A tap that held a send is told as "Not sent" alone (cancel_recording).
-    if rs.state.held_send or send_countdown.held_for(rs.state.recording_serial):
+    if rec.held_send or send_countdown.held_for(rec.message.serial):
         cancel_recording(beeps_on, False, send_countdown.HELD_NOTICE)
     else:
         cancel_recording(beeps_on, notify_on, f"Cancelled (held {held_ms} ms)")

@@ -70,9 +70,9 @@ def editing(monkeypatch):
     monkeypatch.setattr(rs.state, "last_inserted_text", "We meet at three. ")
     monkeypatch.setattr(rs.state, "last_inserted_window", "org.kde.kwrite")
     monkeypatch.setattr(rs.state, "shown_text", None)
-    monkeypatch.setattr(rs.state.message, "edit_waiting", None)
-    monkeypatch.setattr(rs.state.message, "held_mark", None)
-    monkeypatch.setattr(rs.state.message, "held_cue", "")
+    monkeypatch.setattr(rs.state.current.message, "edit_waiting", None)
+    monkeypatch.setattr(rs.state.current.message, "held_mark", None)
+    monkeypatch.setattr(rs.state.current.message, "held_cue", "")
     monkeypatch.setattr(rs.state, "sent", None)
     return pressed, edits, problems
 
@@ -80,7 +80,7 @@ def editing(monkeypatch):
 
 def _said(raw, chunk_role=None):
     """voice_edit.handle_spoken_edit for *raw*, with beeps, typing and this recording's message."""
-    return voice_edit.handle_spoken_edit(raw, chunk_role, True, "type", rs.state.message)
+    return voice_edit.handle_spoken_edit(raw, chunk_role, True, "type", rs.state.current.message)
 
 def test_edit_that_selects_the_dictation_and_edits_it(editing):
     pressed, edits, problems = editing
@@ -96,7 +96,7 @@ def test_with_type_at_pause_it_edits_every_phrase_on_screen(editing):
     """Phrases since the last Enter are one message: "edit that" takes all of
     them, not only the last phrase."""
     pressed, edits, _ = editing
-    rs.state.shown_serial = rs.state.recording_serial
+    rs.state.shown_serial = rs.state.current.message.serial
     rs.state.shown_text = "Hi Sam. We meet at three. "
     assert _said("edit that make it friendlier", "middle")
     assert pressed.count(((S,), "LEFT")) == len("Hi Sam. We meet at three.")
@@ -153,7 +153,7 @@ def test_a_switch_during_the_pause_after_edit_that_changes_nothing(editing, monk
 def test_the_wait_ends_with_the_recording(editing):
     _pressed, edits, _ = editing
     assert _said("Edit that.", "middle")
-    rs.state.message = send_countdown.Message(serial=1)     # a new recording, its own
+    rs.state.current.message = send_countdown.Message(serial=1)     # a new recording, its own
     assert not _said("Make it more formal.", "middle")
     assert edits == []
 
@@ -226,7 +226,7 @@ def test_pressing_enter_remembers_the_send(monkeypatch):
 
 def test_an_edit_that_went_in_leaves_the_message_to_be_sent(editing):
     assert _said("Edit that, make it shorter.")
-    assert rs.state.message.complete
+    assert rs.state.current.message.complete
 
 
 @pytest.mark.parametrize("why", ["no rewrite", "not selected", "nothing asked"])
@@ -244,7 +244,7 @@ def test_an_edit_that_didnt_change_the_text_isnt_sent_as_it_was(editing, monkeyp
     else:
         raw = "Edit that."
     assert _said(raw)
-    assert not rs.state.message.complete
+    assert not rs.state.current.message.complete
 
 
 def test_edit_that_then_only_a_pause_isnt_sent_as_it_was(editing, monkeypatch):
@@ -255,11 +255,11 @@ def test_edit_that_then_only_a_pause_isnt_sent_as_it_was(editing, monkeypatch):
     sent = []
     monkeypatch.setattr(live, "press_enter_after", True)
     monkeypatch.setattr(delivery, "send_automatically", lambda *a: sent.append(a))
-    rs.state.message.add("ok", rs.state.message.to)       # the message's words
+    rs.state.current.message.add("ok", rs.state.current.message.to)       # the message's words
     assert _said("Edit that.", "middle")                    # waits for what to change
-    type_at_pause.end_in_a_pause(rs.state.message, False, True, True, "type")
+    type_at_pause.end_in_a_pause(rs.state.current.message, False, True, True, "type")
     assert sent == [] and problems == ["edit_that_what"]
-    assert rs.state.message.edit_waiting is None
+    assert rs.state.current.message.edit_waiting is None
 
 
 def test_edit_that_edits_nothing_in_a_window_switched_to_after_the_target_was_found(editing,

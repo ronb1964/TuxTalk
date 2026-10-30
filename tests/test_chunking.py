@@ -10,6 +10,7 @@ import time
 import numpy as np
 import pytest
 
+from conftest import next_recording
 from tuxtalk.history import add_entry as REAL_ADD_ENTRY
 from tuxtalk import focused_window
 from tuxtalk import recording_state as rs
@@ -407,7 +408,7 @@ def pipeline(monkeypatch):
     monkeypatch.setattr(live, "usage_stats", False)
     monkeypatch.setattr(history, "add_entry", lambda text, replaces=None: None)
     monkeypatch.setattr(rs.state, "continue_mid_sentence", False)
-    monkeypatch.setattr(rs.state.message, "held_mark", None)
+    monkeypatch.setattr(rs.state.current.message, "held_mark", None)
     monkeypatch.setattr(rs.state, "last_inserted_text", "")
     return texts, typed, beeps
 
@@ -436,7 +437,7 @@ def test_middle_chunk_holds_back_its_final_mark(pipeline):
     texts.append("we meet.")
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     assert typed == ["We meet"]
-    assert rs.state.message.held_mark["mark"] == "."
+    assert rs.state.current.message.held_mark["mark"] == "."
 
 
 def test_context_without_a_period_carries_the_sentence_on(pipeline):
@@ -561,8 +562,8 @@ def test_held_mark_never_reaches_the_next_recording(pipeline):
     texts, typed, _ = pipeline
     texts.extend(["we meet.", "hello there"])
     call(frames_of(speech(1.0)), "middle")
-    type_at_pause.arm_chunker(SR)            # the next recording starts
-    assert rs.state.message.held_mark is None
+    next_recording(SR)            # the next recording starts
+    assert rs.state.current.message.held_mark is None
     call(frames_of(speech(1.0)), None)
     assert typed[1].strip() == "Hello there"
 
@@ -582,23 +583,15 @@ def recording(monkeypatch, pipeline):
     monkeypatch.setattr(capture, "stop_stream_safely", lambda: None)
     monkeypatch.setattr(capture, "resume_media_players", lambda: None)
     monkeypatch.setattr(tray_link, "notify_recording_state", lambda *a: None)
-    monkeypatch.setattr(rs.state, "silence", None)
-    monkeypatch.setattr(rs.state, "recording_samplerate", SR, raising=False)
-    rs.state.frames = []
-    rs.state.was_cancelled = False
-    rs.state.edit_mode = False
-    rs.state.press_t0 = time.time() - 10
     rs.state.is_recording = True
-    type_at_pause.arm_chunker(SR)
+    next_recording(SR)
     yield pipeline
     rs.state.is_recording = False
-    rs.state.chunker = None
-    rs.state.chunks_submitted = 0
 
 
 def feed(audio):
     for b in blocks(audio):
-        capture._sd_callback(b.reshape(-1, 1), len(b), None, None)
+        capture._sd_callback(rs.state.current, b.reshape(-1, 1), len(b), None, None)
 
 
 def stop(auto_period=False):
@@ -615,14 +608,14 @@ def test_two_pauses_give_three_chunks_in_order(recording):
     stop()
     assert "".join(typed) == "We meet at three in the garden "
     assert beeps.count(READY_BEEP) == 1
-    assert rs.state.chunks_submitted == 2
+    assert rs.state.current.chunks_submitted == 2
 
 
 def test_chunking_off_types_one_dictation(recording, monkeypatch):
     texts, typed, beeps = recording
     monkeypatch.setattr(live, "chunk_pause_seconds", 0.0)
-    type_at_pause.arm_chunker(SR)
-    assert rs.state.chunker is None
+    next_recording(SR)
+    assert rs.state.current.chunker is None
     texts.append("we meet at three in the garden")
     feed(np.concatenate([speech(1.0), noise(1.0), speech(1.0), noise(1.0), speech(0.8)]))
     stop()
@@ -631,8 +624,9 @@ def test_chunking_off_types_one_dictation(recording, monkeypatch):
 
 
 def test_a_voice_edit_is_never_chunked(recording):
-    type_at_pause.arm_chunker(SR, edit_mode=True)
-    assert rs.state.chunker is None
+    rec = rs.Recording(edit_mode=True)
+    type_at_pause.arm_chunker(rec)
+    assert rec.chunker is None
 
 
 def test_auto_stop_after_a_cut_beeps_ready_once(recording):
@@ -661,11 +655,11 @@ def test_cut_after_stop_snapshot_hands_nothing_on(recording):
     """Review focus 2: a block arriving after the stop took its snapshot must
     not cut a chunk from frames the stop already owns."""
     feed(speech(1.0))
-    chunker = rs.state.chunker
+    chunker = rs.state.current.chunker
     cap = capture.finish_capture(beeps_on=False, notify_on=False)
     assert cap is not None
-    type_at_pause.cut_chunk(chunker)
-    assert rs.state.chunks_submitted == 0
+    type_at_pause.cut_chunk(rs.state.current, chunker)
+    assert rs.state.current.chunks_submitted == 0
     assert dictation_worker.worker().drain(1)
 
 
@@ -697,9 +691,8 @@ def test_arming_starts_the_worker(monkeypatch):
     has to build it (a thread start and an import on the audio thread)."""
     monkeypatch.setattr(dictation_worker, "_instance", None)
     monkeypatch.setattr(live, "chunk_pause_seconds", 0.8)
-    type_at_pause.arm_chunker(SR)
+    type_at_pause.arm_chunker(rs.Recording())
     assert dictation_worker._instance is not None
-    rs.state.chunker = None
 
 
 def test_a_cut_queues_its_chunk_before_releasing_the_lock(recording, monkeypatch):
@@ -761,9 +754,9 @@ def test_service_reads_the_new_chunk_settings(monkeypatch):
 def test_speech_db_reaches_the_detector(monkeypatch):
     monkeypatch.setattr(live, "chunk_pause_seconds", 0.8)
     monkeypatch.setattr(live, "chunk_speech_db", 9.0)
-    type_at_pause.arm_chunker(SR)
-    assert rs.state.chunker.speech_over_room == pytest.approx(10 ** (9 / 20))
-    rs.state.chunker = None
+    next_recording(SR)
+    assert rs.state.current.chunker.speech_over_room == pytest.approx(10 ** (9 / 20))
+    rs.state.current.chunker = None
 
 
 def test_context_marks_off_types_the_engines_mark(pipeline, monkeypatch):
@@ -774,7 +767,7 @@ def test_context_marks_off_types_the_engines_mark(pipeline, monkeypatch):
     texts.append("we meet.")
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     assert typed == ["We meet. "]
-    assert rs.state.message.held_mark is None
+    assert rs.state.current.message.held_mark is None
 
 
 # --- final review fixes ------------------------------------------------------
@@ -821,7 +814,7 @@ def ai_on(pipeline, monkeypatch):
     monkeypatch.setattr(live, "ai_engine", ai)
     monkeypatch.setattr(keyboard_output, "output_backend",
                         lambda: SimpleNamespace(backspaces=lambda n: (erased.append(n), True)[1]))
-    monkeypatch.setattr(rs.state.message, "held_cue", "")
+    monkeypatch.setattr(rs.state.current.message, "held_cue", "")
     monkeypatch.setattr(rs.state, "last_inserted_window", None)
     texts, typed, beeps = pipeline
     return texts, typed, erased, ai
@@ -836,7 +829,7 @@ def test_correction_after_a_pause_fixes_the_phrase_before(ai_on):
     call(frames_of(speech(1.0)), "middle")
     assert erased == [len("Meet at three. ")]
     assert typed[-1] == "Meet at four"
-    assert rs.state.message.held_mark["mark"] == "."
+    assert rs.state.current.message.held_mark["mark"] == "."
 
 
 def test_correction_on_the_last_phrase(ai_on):
@@ -868,7 +861,7 @@ def test_a_bare_cue_said_last_is_typed(ai_on):
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     call([], "last", auto_period=True)
     assert typed == ["Meet at three", ". ", "No wait. "]
-    assert erased == [] and rs.state.message.held_cue == ""
+    assert erased == [] and rs.state.current.message.held_cue == ""
 
 
 def test_no_correction_types_the_phrase_as_said(ai_on):
@@ -954,7 +947,7 @@ def recent(pipeline, monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     monkeypatch.setattr(history, "add_entry", REAL_ADD_ENTRY)    # `pipeline` stubbed it
-    type_at_pause.arm_chunker(SR)
+    next_recording(SR)
     return pipeline
 
 
@@ -968,7 +961,7 @@ def test_a_recording_is_one_recent_dictation(recent):
     call(frames_of(speech(1.0)), "last", auto_period=True)
     assert typed == ["We meet", ". ", "The end. "]
     assert history.get_entries() == ["We meet. The end."]
-    type_at_pause.arm_chunker(SR)            # the next recording is an entry of its own
+    next_recording(SR)            # the next recording is an entry of its own
     texts.append("hello there.")
     call(frames_of(speech(1.0)), None, auto_period=True)
     assert history.get_entries() == ["Hello there.", "We meet. The end."]
@@ -1007,7 +1000,7 @@ def fix_word(recent, monkeypatch):
 
 
 def say_fix_that_word(texts):
-    type_at_pause.arm_chunker(SR)
+    next_recording(SR)
     texts.append("fix that word")
     call(frames_of(speech(1.0)), None)
 
@@ -1029,7 +1022,7 @@ def test_fix_that_word_after_a_delete_gets_what_is_left(fix_word, monkeypatch):
     texts.extend(["we meet.", "the end is near.", "we meet. The end is near."])
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     call(frames_of(speech(1.0)), "last", auto_period=True)
-    type_at_pause.arm_chunker(SR)
+    next_recording(SR)
     texts.append("delete last word")
     call(frames_of(speech(1.0)), None)
     left = rs.state.last_inserted_text
@@ -1086,7 +1079,7 @@ def enter(pipeline, monkeypatch):
         return True
     monkeypatch.setattr(keyboard_output, "press_key", fake_enter)
     monkeypatch.setattr(live, "press_enter_after", False)
-    monkeypatch.setattr(rs.state.message, "held_cue", "")
+    monkeypatch.setattr(rs.state.current.message, "held_cue", "")
     return texts, typed, beeps
 
 
@@ -1098,7 +1091,7 @@ def test_press_enter_at_the_end_of_a_phrase_sends_it(enter):
     texts.extend(["see you at noon, press enter", "how are you"])
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     assert typed == ["See you at noon.", "<ENTER>"]
-    assert rs.state.message.held_mark is None and not rs.state.message.has_words
+    assert rs.state.current.message.held_mark is None and not rs.state.current.message.has_words
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     assert typed[2:] == ["How are you"]
 
@@ -1108,7 +1101,7 @@ def test_an_enter_that_couldnt_be_pressed_leaves_the_message_open(enter, monkeyp
     box, so "edit that" must still reach all of it, not start afresh."""
     texts, typed, _ = enter
     monkeypatch.setattr(keyboard_output, "press_key", lambda key, why, claim=None: False)
-    monkeypatch.setattr(rs.state, "recording_serial", 7)
+    monkeypatch.setattr(rs.state.current.message, "serial", 7)
     texts.extend(["see you at noon, press enter", "press enter"])
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     assert typed == ["See you at noon."]
@@ -1128,7 +1121,7 @@ def test_press_enter_after_a_pause_ends_the_phrase_before_it(enter):
     assert typed == ["We meet at three", ".", "<ENTER>"]
     assert texts == []                       # transcribed once each, no joint pass
     assert READY_BEEP not in beeps       # mid-recording: no beep
-    assert rs.state.message.held_mark is None
+    assert rs.state.current.message.held_mark is None
 
 
 def test_press_tab_at_the_end_of_a_phrase_leaves_the_box_without_a_mark(enter):
@@ -1138,7 +1131,7 @@ def test_press_tab_at_the_end_of_a_phrase_leaves_the_box_without_a_mark(enter):
     texts.extend(["john, press tab", "smith"])
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     assert typed == ["John", "<TAB>"]
-    assert rs.state.message.held_mark is None and not rs.state.message.has_words
+    assert rs.state.current.message.held_mark is None and not rs.state.current.message.has_words
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     assert typed[2:] == ["Smith"]
 
@@ -1150,7 +1143,7 @@ def test_press_tab_after_a_pause_types_no_mark_before_it(enter):
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     assert typed == ["John", "<TAB>"]
     assert texts == []                       # no context pass against "press tab"
-    assert rs.state.message.held_mark is None
+    assert rs.state.current.message.held_mark is None
 
 
 def test_press_enter_after_each_dictation_waits_for_the_end(enter, monkeypatch):
@@ -1250,10 +1243,8 @@ def test_a_phrase_waiting_its_turn_holds_hands_free_open(monkeypatch):
     monkeypatch.setattr(type_at_pause, "transcribe_phrase", lambda *a, **k: events.append("work"))
     monkeypatch.setattr(dictation_worker, "_instance", SimpleNamespace(submit=jobs.append))
     pause = SimpleNamespace(tail_samples=lambda: 0, last_pause=1.0)
-    for name, value in (("silence", Detector()), ("chunker", pause), ("frames", [b"\0\0"]),
-                        ("recording_samplerate", SR)):
-        monkeypatch.setattr(rs.state, name, value)
-    type_at_pause.cut_chunk(pause)
+    rec = rs.Recording(silence=Detector(), chunker=pause, frames=[b"\0\0"], samplerate=SR)
+    type_at_pause.cut_chunk(rec, pause)
     assert events == ["hold"]                    # queued, not typed yet
     jobs[0]()
     assert events == ["hold", "work", "release"]
@@ -1269,7 +1260,7 @@ def test_a_held_mark_stays_in_the_window_its_phrase_went_to(pipeline, monkeypatc
     monkeypatch.setattr(focused_window, "look", lambda: (focus["now"], None))
     texts.extend(["what's next?", "what's next?"])
     call(frames_of(speech(1.0)), "middle", auto_period=True)
-    rs.state.message.held_mark["where"] = ("brave-browser", None)
+    rs.state.current.message.held_mark["where"] = ("brave-browser", None)
     focus["now"] = "com.anthropic.Claude"             # the click into the chat
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     assert typed == ["What's next", "What's next"]
@@ -1288,7 +1279,7 @@ def test_a_question_goes_on_across_a_pause(pipeline):
     call(frames_of(speech(1.0)), "last", auto_period=True)
     assert typed[:2] == ["Do you think we need a setting", " "]
     assert typed[2].rstrip() == "to make it work better?"
-    assert rs.state.message.question_open is False
+    assert rs.state.current.message.question_open is False
 
 
 def test_a_question_that_ended_at_the_pause_is_not_carried(pipeline):
@@ -1323,13 +1314,14 @@ def test_a_recording_that_opens_with_digital_silence_still_learns_the_room():
 def test_the_screen_copy_ends_at_another_window_of_the_same_app(monkeypatch):
     """Two KWrite documents: phrases in each made one copy, so "edit that"
     selected the first document's length of the second's text."""
-    for name, value in (("recording_serial", 3), ("shown_serial", 2), ("shown_text", ""),
+    monkeypatch.setattr(rs.state.current.message, "serial", 3)
+    for name, value in (("shown_serial", 2), ("shown_text", ""),
                         ("shown_window", None), ("last_inserted_window", "org.kde.kwrite")):
         monkeypatch.setattr(rs.state, name, value)
     monkeypatch.setattr(rs.state, "last_inserted_where", ("org.kde.kwrite", ("tray", "{first}")))
-    last_dictation.remember_shown("See you at noon.", chunked=True, ok=True, serial=rs.state.recording_serial)
+    last_dictation.remember_shown("See you at noon.", chunked=True, ok=True, serial=rs.state.current.message.serial)
     monkeypatch.setattr(rs.state, "last_inserted_where", ("org.kde.kwrite", ("tray", "{second}")))
-    last_dictation.remember_shown(" How are you?", chunked=True, ok=True, serial=rs.state.recording_serial)
+    last_dictation.remember_shown(" How are you?", chunked=True, ok=True, serial=rs.state.current.message.serial)
     assert rs.state.shown_text is None
 
 
@@ -1337,14 +1329,15 @@ def test_the_screen_copy_survives_the_two_spellings_of_one_app(monkeypatch):
     """Plasma's X11 session: KWin says "google-chrome", X11 "Google-chrome",
     and a busy tray leaves a phrase's look to X11. The copy "edit that" and
     "fix that word" work on was dropped as if the phrase went elsewhere."""
-    for name, value in (("recording_serial", 3), ("shown_serial", 2), ("shown_text", ""),
+    monkeypatch.setattr(rs.state.current.message, "serial", 3)
+    for name, value in (("shown_serial", 2), ("shown_text", ""),
                         ("shown_window", None)):
         monkeypatch.setattr(rs.state, name, value)
     monkeypatch.setattr(rs.state, "last_inserted_window", "google-chrome")
-    last_dictation.remember_shown("See you at noon.", chunked=True, ok=True, serial=rs.state.recording_serial)
+    last_dictation.remember_shown("See you at noon.", chunked=True, ok=True, serial=rs.state.current.message.serial)
     monkeypatch.setattr(rs.state, "last_inserted_window", "Google-chrome")
-    last_dictation.remember_shown(" How are you?", chunked=True, ok=True, serial=rs.state.recording_serial)
+    last_dictation.remember_shown(" How are you?", chunked=True, ok=True, serial=rs.state.current.message.serial)
     assert rs.state.shown_text == "See you at noon. How are you?"
     monkeypatch.setattr(rs.state, "last_inserted_window", "org.kde.kwrite")
-    last_dictation.remember_shown(" Bye.", chunked=True, ok=True, serial=rs.state.recording_serial)
+    last_dictation.remember_shown(" Bye.", chunked=True, ok=True, serial=rs.state.current.message.serial)
     assert rs.state.shown_text is None                 # another app: not trusted

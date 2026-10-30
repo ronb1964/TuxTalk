@@ -131,7 +131,7 @@ class Message:
     # The word its last words were cut off on ("and"), or "": at the end of
     # a Type at pause recording, half a sentence isn't sent.
     ends_on: str = ""
-    # Which recording it is (rs.state.recording_serial when that began):
+    # Which recording it is (recording_begins numbered it):
     # Recent Dictations and the screen copy keep a recording's phrases together.
     serial: int = 0
     # What Type at pause's next phrase of this recording picks up: the last

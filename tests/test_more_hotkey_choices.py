@@ -812,9 +812,9 @@ def test_a_double_tap_of_a_right_ctrl_or_alt_toggle_goes_hands_free(keyboard, re
         hotkeys._handle_key_event(KeyEvent(code, value), F8, code, None, held, [board],
                               Cfg(), 0)
         assert rs.state.is_recording
-    assert rs.state.silence is not None and stopped == []
+    assert rs.state.current.silence is not None and stopped == []
     assert keyboard_grab.grabbed_devices == []
-    rs.state.silence = None
+    rs.state.current.silence = None
 
 
 def test_the_right_alt_guard_goes_while_right_alt_is_held(keyboard, no_hotkeys_noted):

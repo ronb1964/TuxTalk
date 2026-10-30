@@ -174,7 +174,7 @@ def service(monkeypatch):
     rs.state.is_recording = False
     yield spy
     rs.state.is_recording = False
-    rs.state.stream = None
+    rs.state.current.stream = None
 
 
 def test_the_service_never_pauses_real_players_until_config_says_so():
@@ -201,7 +201,7 @@ def test_recording_start_pauses_and_cancel_resumes(service):
 
 def test_a_finished_recording_resumes(service):
     recording.start_recording(False, False, 0)
-    rs.state.press_t0 -= 5           # held long enough to count
+    rs.state.current.press_t0 -= 5           # held long enough to count
     assert recording.finish_capture(False, False) is not None
     assert service.calls == ["pause", "resume"]
 
