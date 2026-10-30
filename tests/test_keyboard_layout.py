@@ -139,7 +139,7 @@ def test_a_smart_apostrophe_on_a_us_keyboard_is_untypable_not_garbled():
 
 def test_a_layout_libxkbcommon_doesnt_know_is_typed_as_us(monkeypatch):
     """A custom layout: typed as US, as ydotool did, not left untyped."""
-    monkeypatch.setattr(kl, "active_layout", lambda: ("no-such-layout", ""))
+    monkeypatch.setattr(kl, "active_layout", lambda: ("no-such-layout", "", ""))
     assert replay(kl.planner_for(kl.US), kl.layout_key_events("Hi there")) == "Hi there"
 
 
@@ -250,6 +250,10 @@ def test_an_option_that_cant_be_built_is_left_out_not_the_layout(monkeypatch, tm
         planner = kl.planner_for(("de", "", "custom:broken"))
     assert planner.layout == "de" and planner.plan("z") == [(21, 1), (21, 0)]   # QWERTZ
     assert "custom:broken" in caplog.text
+    # From the environment (the desktop passes none): the retry mustn't
+    # pick it up again.
+    monkeypatch.setenv("XKB_DEFAULT_OPTIONS", "custom:broken")
+    assert kl.planner_for(("de", "", None)).plan("z") == [(21, 1), (21, 0)]
 
 
 def test_the_blocking_character_is_named():
@@ -322,6 +326,7 @@ def test_options_that_cant_be_read_keep_the_desktops_layout(monkeypatch):
     """No setxkbmap (Arch doesn't install it), or no kreadconfig: the
     layout is still the desktop's, not the system's, with default options.
     KDE with Ukrainian switched on was typed as US."""
+    real_kreadconfig = kl._kreadconfig
     _kde(monkeypatch, session="x11")
 
     def missing():
@@ -329,7 +334,18 @@ def test_options_that_cant_be_read_keep_the_desktops_layout(monkeypatch):
     monkeypatch.setattr(kl, "_setxkbmap_query", missing)
     assert kl.active_layout() == ("ch", "fr", None)
     _kde(monkeypatch)
+    monkeypatch.setattr(kl, "_kreadconfig", real_kreadconfig)
     monkeypatch.setattr(kl.shutil, "which", lambda tool: None)
+    assert kl.active_layout() == ("ch", "fr", None)
+
+
+def test_a_failing_kreadconfig_keeps_the_desktops_layout(monkeypatch):
+    """An exit code other than kreadconfig's yes (0) and no (1) is a failure,
+    not a setting: the defaults are used and the layout is kept."""
+    import subprocess
+    _kde(monkeypatch)
+    monkeypatch.setattr(kl, "_kreadconfig",
+                        lambda *args: subprocess.CompletedProcess(args, 2, stdout=""))
     assert kl.active_layout() == ("ch", "fr", None)
 
 

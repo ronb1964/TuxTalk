@@ -286,10 +286,12 @@ def planner_for(names):
         try:
             _planners[names] = KeyPlanner(layout, variant, options)
         except ValueError as e:
-            if not options:
+            if options == "":
                 raise
-            logger.warning(f"{e}; typing for {layout}({variant}) without them")
-            _planners[names] = KeyPlanner(layout, variant)
+            # "", not None: None would bring back XKB_DEFAULT_OPTIONS, which
+            # may hold the broken option itself.
+            logger.warning(f"{e}; typing for {layout}({variant}) without options")
+            _planners[names] = KeyPlanner(layout, variant, "")
     return _planners[names]
 
 
@@ -327,10 +329,15 @@ def _kde_options():
     defaults) when it isn't, since KWin then passes none."""
     if (os.environ.get("XDG_SESSION_TYPE") or "").lower() == "x11":
         return _setxkbmap_fields().get("options", "")
-    # kreadconfig answers a bool by its exit code, 0 for true.
-    if _kreadconfig("--key", "ResetOldOptions", "--type", "bool").returncode != 0:
+    # kreadconfig answers a bool by its exit code, 0 for true and 1 for false.
+    reset = _kreadconfig("--key", "ResetOldOptions", "--type", "bool")
+    if reset.returncode not in (0, 1):
+        reset.check_returncode()
+    if reset.returncode == 1:
         return None
-    return _kreadconfig("--key", "Options").stdout.strip()
+    options = _kreadconfig("--key", "Options")
+    options.check_returncode()
+    return options.stdout.strip()
 
 
 def _kreadconfig(*args):
@@ -363,7 +370,7 @@ def _note_unreadable_options(problem):
 
 def _gsettings(key):
     return subprocess.run(["gsettings", "get", "org.gnome.desktop.input-sources", key],
-                          capture_output=True, text=True, timeout=2).stdout
+                          capture_output=True, text=True, timeout=2, check=True).stdout
 
 
 def _gnome_layout():
@@ -504,7 +511,8 @@ def _sway_layout():
 
 
 def _setxkbmap_query():
-    return subprocess.run(["setxkbmap", "-query"], capture_output=True, text=True, timeout=2).stdout
+    return subprocess.run(["setxkbmap", "-query"], capture_output=True, text=True, timeout=2,
+                          check=True).stdout
 
 
 def _setxkbmap_fields():
