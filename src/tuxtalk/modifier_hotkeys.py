@@ -84,19 +84,13 @@ def stuck() -> bool:
 
 def shortcut_keys_down() -> bool:
     """Whether Alt, Ctrl or Super is down on the hotkey loop's keyboards,
-    one a grab hides from the desktop aside. Through the hotkey helper, a
-    modifier is known only as held with a dictation key."""
+    one a grab hides from the desktop aside. Complete only where TuxTalk
+    reads the keyboards itself: through the hotkey helper (the default) a
+    modifier is known only while held with a dictation key, so Alt pressed
+    on its own isn't seen (CODE_HEALTH task 46)."""
     devices, _ = _noted
     keyboards = [d for d in list(devices) if is_keyboard_device(d)]
     return bool(keys_down(keyboards) & (SHORTCUT_MODIFIERS - _hidden_now()))
-
-
-def refuse_shortcut_keys() -> None:
-    """For keys that must go out alone (keyboard_output.this_thread.alone):
-    GaveUp("shortcut_keys") while Alt, Ctrl or Super is down."""
-    if shortcut_keys_down():
-        logger.info("Not typed yet: Alt, Ctrl or Super is down")
-        raise virtual_keyboard.GaveUp("shortcut_keys")
 
 
 def wait_while_held(destination=None):

@@ -33,7 +33,7 @@ from . import live_settings as live
 from . import recording_state as rs
 from .beeps import CANCEL_BEEP
 from .config import Settings
-from .hotkey_keys import MODIFIER_CODES, check_modifiers_held, track_modifier
+from .hotkey_keys import MODIFIER_CODES, check_modifiers_held, keys_down, track_modifier
 from .logger import setup_logger
 from .normalize import LINE_BREAK
 
@@ -185,6 +185,16 @@ def _drop_dead_devices(dead_devices, devices, cfg) -> None:
         _stop_recording(cfg)
 
     dead_devices.clear()
+
+
+def _forget_lost_presses(devices, keys) -> None:
+    """After a keyboard went away or the hotkeys changed: forget dictation
+    key presses no remaining keyboard reports down, or whose key isn't a
+    dictation key now, since their release won't be read. Otherwise a space
+    they held back waited until that key was pressed again."""
+    down = keys_down(devices) & {keys.hold_key, keys.toggle_key}   # read outside the lock
+    if send_countdown.forget_presses(down) and send_countdown.owes_space():
+        dictation_worker.submit(send_countdown.give_back_space)
 
 
 # A combo press whose keys aren't all let go within this long is dropped, so a
@@ -536,6 +546,7 @@ def run(cfg: Settings, input_device_idx, keyboards=None):
             keys = reloaded
             # Re-claimed even if the hotkeys look unchanged: claiming is cheap.
             _watch(cfg, devices, keys)
+            _forget_lost_presses(devices, keys)
             logger.info("Applied settings change without restarting")
 
         dead_devices = _read_key_events(devices, keys, held_modifiers, cfg, svc, current_time)
@@ -543,7 +554,8 @@ def run(cfg: Settings, input_device_idx, keyboards=None):
             # Their modifiers' key-ups can't come now, and a Ctrl left held
             # here would stop F8 dictating (_someone_elses_shortcut).
             held_modifiers.clear()
-        _drop_dead_devices(dead_devices, devices, cfg)
+            _drop_dead_devices(dead_devices, devices, cfg)
+            _forget_lost_presses(devices, keys)
 
         # Pick up keyboards that have (re)appeared. Only while idle: rescanning
         # mid-recording would add an ungrabbed device to a grabbed set, letting

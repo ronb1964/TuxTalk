@@ -92,6 +92,14 @@ def busy_worker(monkeypatch):
     return worker
 
 
+@pytest.fixture
+def frozen_clock(monkeypatch):
+    """Press and release at the same moment: a tap, however busy the machine."""
+    clock = types.SimpleNamespace(time=lambda: 1000.0)
+    monkeypatch.setattr(recording, "time", clock)
+    monkeypatch.setattr(hotkeys, "time", clock)
+
+
 def key(code, value, held=(), cfg=CFG):
     """One key event through the hotkey loop's handler, *held* modifiers down."""
     event = types.SimpleNamespace(type=ecodes.EV_KEY, code=code, value=value)
@@ -241,12 +249,9 @@ def test_esc_during_a_hold_leaves_the_send_unsent_and_gives_the_space_at_the_rel
 
 
 def test_a_tap_whose_send_was_held_while_it_ran_says_not_sent_once(
-        chat, keyboard, mic, monkeypatch, notifications):
+        chat, keyboard, mic, monkeypatch, notifications, frozen_clock):
     """Notifications on: a "Cancelled" one came as well, or nothing at all."""
     focus, heard, typed, notices = chat
-    # Pressed and let go at the same moment: a tap, however busy the machine.
-    monkeypatch.setattr(recording, "time", types.SimpleNamespace(time=lambda: 1000.0))
-    monkeypatch.setattr(hotkeys, "time", types.SimpleNamespace(time=lambda: 1000.0))
     cfg = types.SimpleNamespace(**{**vars(CFG), "notify": True})
     key(F8, 1, cfg=cfg)
     words_done()
@@ -318,7 +323,7 @@ def test_overlapping_dictation_keys_keep_the_space_until_both_are_up(
 
 
 def test_a_tap_let_go_with_alt_down_keeps_the_space_owed(chat, keyboard, mic, monkeypatch,
-                                                         keys_held):
+                                                         keys_held, frozen_clock):
     """A tap that held the send, its recording started: its release gave
     the space back without looking at Alt."""
     focus, heard, typed, notices = chat
@@ -329,6 +334,47 @@ def test_a_tap_let_go_with_alt_down_keeps_the_space_owed(chat, keyboard, mic, mo
     key(F8, 0, held={ecodes.KEY_LEFTALT})
     assert notices == [send_countdown.HELD_NOTICE]
     assert typed == [] and send_countdown.owes_space()
+
+
+@pytest.fixture
+def space_to_give_back(monkeypatch, keyboard, keys_held):
+    """A held send's space owed to a chat window, typed through the real
+    delivery onto the recording keyboard. Returns run(meanwhile): give the
+    space back, with *meanwhile* done during the window check made right
+    before its key (focused_window.claim_into, which asks the desktop)."""
+    chat_window = focused_window.Destination("brave-browser", ("tray", "{1}"))
+    monkeypatch.setattr(focused_window, "look", lambda: chat_window[:2])
+    monkeypatch.setattr(focused_window, "is_password", lambda: False)
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    claim_into = focused_window.claim_into
+    send_countdown._owe_space({"space": " ", "to": chat_window, "mode": "type",
+                               "type": delivery.type_onto_dictation})
+
+    def run(meanwhile):
+        def slow_claim(window, now=None):
+            if now is None:                     # send_keys' claim, not inject_text's own look
+                meanwhile()
+            return claim_into(window, now)
+        monkeypatch.setattr(focused_window, "claim_into", slow_claim)
+        send_countdown.give_back_space()
+    return run
+
+
+@pytest.mark.parametrize("pressed", ["Alt", "F8"])
+def test_a_key_pressed_during_the_window_check_keeps_the_space_owed(
+        space_to_give_back, keyboard, keys_held, pressed):
+    """Alt was looked at before the window check, which takes a moment, and
+    the space went out as Alt+Space; F8 pressed then, under F8."""
+    if pressed == "Alt":
+        space_to_give_back(lambda: keys_held.add(ecodes.KEY_LEFTALT))
+    else:
+        space_to_give_back(lambda: send_countdown.key_pressed(F8))
+    assert keyboard.events == [] and send_countdown.owes_space()
+
+
+def test_with_nothing_pressed_the_space_goes_out(space_to_give_back, keyboard):
+    space_to_give_back(lambda: None)
+    assert keyboard.typed_keys() == [ecodes.KEY_SPACE] and not send_countdown.owes_space()
 
 
 def test_alt_going_down_as_the_space_goes_out_keeps_it_owed(keyboard, monkeypatch):
@@ -350,4 +396,43 @@ def test_alt_going_down_as_the_space_goes_out_keeps_it_owed(keyboard, monkeypatc
     send_countdown.give_back_space()
     assert len(looks) == 2                      # when the job ran, and right before the key
     assert keyboard.events == [] and send_countdown.owes_space()
+
+
+# --- a dictation key whose release can't come any more ----------------------
+
+def _hotkeys(hold=F8, toggle=F9):
+    from tuxtalk.hotkey_keys import Hotkeys
+    return Hotkeys(hold, toggle, "", None, None)
+
+
+@pytest.mark.parametrize("why", ["its keyboard went away", "the hotkeys changed"])
+def test_a_press_whose_release_cant_come_no_longer_holds_the_space(
+        chat, keyboard, mic, monkeypatch, why):
+    """F8 held when its keyboard was unplugged: the space waited until F8
+    was pressed again."""
+    focus, heard, typed, notices = chat
+    counting_down(monkeypatch)
+    mic.fails()
+    key(F8, 1)
+    still_there = Keyboards()
+    if why == "the hotkeys changed":
+        still_there.down.add(F8)                # still down, but F6 dictates now
+        hotkeys._forget_lost_presses([still_there], _hotkeys(hold=ecodes.KEY_F6))
+    else:
+        hotkeys._forget_lost_presses([still_there], _hotkeys())
+    assert typed == [(" ", FIRST[1])]
+
+
+def test_a_press_still_down_on_another_keyboard_still_holds_the_space(chat, keyboard, mic,
+                                                                     monkeypatch):
+    focus, heard, typed, notices = chat
+    counting_down(monkeypatch)
+    mic.fails()
+    key(F8, 1)
+    other = Keyboards()
+    other.down.add(F8)
+    hotkeys._forget_lost_presses([other], _hotkeys())
+    assert typed == [] and send_countdown.owes_space()
+    key(F8, 0)
+    assert typed == [(" ", FIRST[1])]
 

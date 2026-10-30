@@ -623,10 +623,11 @@ def give_back_space() -> None:
     """Type the space a held or refused send left off, on its own, in the
     window its text went to, on the dictation worker: once the dictation
     key that held the send is up, or its recording ended with nothing to
-    add. Looked at when it runs, not when it was queued: while a dictation
-    key of TuxTalk's is down (pressed again meanwhile), or Alt, Ctrl or
-    Super is, then or as the key goes out (keyboard_output.this_thread.alone),
-    the space stays owed, for the key's release or the next dictation."""
+    add. Looked at when it runs, not when it was queued, and again right
+    before its key goes out (_refuse_unless_alone): while a dictation key
+    of TuxTalk's is down (pressed again meanwhile) or Alt, Ctrl or Super is
+    (as far as TuxTalk can tell: modifier_hotkeys.shortcut_keys_down), the
+    space stays owed, for the key's release or the next dictation."""
     global _owed
     from . import keyboard_output, modifier_hotkeys
     if modifier_hotkeys.shortcut_keys_down():       # asks the keyboards: not under the lock
@@ -637,12 +638,38 @@ def give_back_space() -> None:
         pending, _owed = _owed, None
     if pending is None or _focus_left(pending):
         return
-    keyboard_output.this_thread.alone = True
+    keyboard_output.this_thread.last_check = _refuse_unless_alone
     try:
         outcome = pending["type"](pending["space"], pending["mode"], into=pending["to"])
     finally:
-        keyboard_output.this_thread.alone = False
-    if outcome == "shortcut_keys":      # Alt or Ctrl went down as it was typed
+        keyboard_output.this_thread.last_check = None
+    if outcome == "keys_down":      # Alt or a dictation key went down meanwhile
         with _send_lock:
             if _owed is None:
                 _owed = pending
+
+
+def _refuse_unless_alone() -> None:
+    """The space's last check, right before its key, after the window's:
+    GaveUp("keys_down") while Alt, Ctrl or Super, or a dictation key of
+    TuxTalk's, is down. The keyboards are read outside the lock."""
+    from . import modifier_hotkeys
+    if modifier_hotkeys.shortcut_keys_down() or _press_down():
+        logger.info("Space not typed yet: Alt, Ctrl, Super or a dictation key is down")
+        raise virtual_keyboard.GaveUp("keys_down")
+
+
+def forget_presses(still_down) -> bool:
+    """Forget TuxTalk's dictation key presses not in *still_down* (the
+    dictation keys the keyboards report down now): their keyboard went away,
+    or they aren't dictation keys any more, and their release will never be
+    read. True when none is left, so a space they held back may go now."""
+    with _send_lock:
+        _keys_down.intersection_update(still_down)
+        return not _keys_down
+
+
+def _press_down() -> bool:
+    """Whether a dictation key press of TuxTalk's is down (key_pressed)."""
+    with _send_lock:
+        return bool(_keys_down)
