@@ -24,7 +24,7 @@ import time
 import urllib.error
 import urllib.request
 
-from .logger import FailureNotes  # noqa: E402
+from .logger import FailureNotes
 
 logger = logging.getLogger(__name__)
 # Damaged downloads, logged once each: the presence checks run on every OK.
