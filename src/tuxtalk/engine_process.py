@@ -6,6 +6,7 @@ cleanup engine (llama-server, ai_cleanup.py) and the Vulkan graphics engine
 (whisper_vulkan.py, and parakeet_gpu.py for Parakeet). Each can hold a gigabyte
 or more of memory, so none may outlive the dictation service that started it.
 """
+import codecs
 import collections
 import os
 import shutil
@@ -57,11 +58,18 @@ def launch_failure(returncode, output=None):
         return f", because {why}{': ' + said if said else ''}"
     if output is None:
         return ""                       # the caller shows the exit code itself
-    if returncode < 0:
-        ended = f"killed by {signal.Signals(-returncode).name}"
-    else:
-        ended = f"exit code {returncode}"
-    return f" ({ended}{': ' + said if said else ''})"
+    return f" ({_how_it_ended(returncode)}{': ' + said if said else ''})"
+
+
+def _how_it_ended(returncode):
+    """"exit code 3", "killed by SIGSEGV", or "killed by signal 40" for a
+    real-time signal, which has no name of its own."""
+    if returncode >= 0:
+        return f"exit code {returncode}"
+    try:
+        return f"killed by {signal.Signals(-returncode).name}"
+    except ValueError:
+        return f"killed by signal {-returncode}"
 
 
 class OutputTail:
@@ -81,10 +89,12 @@ class OutputTail:
 
     def _read(self, stream):
         # At most LINE_BYTES a read: a server writing one endless line can't
-        # grow the service's memory, its pieces just push each other out.
+        # grow the service's memory, its pieces just push each other out. The
+        # decoder carries a character split between two reads over to the next.
+        decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
         with stream:
             for line in iter(lambda: stream.readline(self.LINE_BYTES), b""):
-                text = line.decode(errors="replace").strip()
+                text = decoder.decode(line).strip()
                 if text:            # a blank line mustn't push out a real one
                     self._lines.append(text)
 

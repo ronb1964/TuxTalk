@@ -8,6 +8,7 @@ starts through engine_launcher, a process of its own; these tests start
 real ones.
 """
 import os
+import signal
 import subprocess
 import sys
 import threading
@@ -139,8 +140,23 @@ def test_a_program_that_cant_be_started_says_what_the_launcher_saw(tmp_path):
 
 
 def test_a_server_killed_by_a_signal_says_so():
-    said = _ended_with([sys.executable, "-c", "import os, signal; os.kill(os.getpid(), signal.SIGSEGV)"])
-    assert said == " (killed by SIGSEGV)"
+    said = _ended_with([sys.executable, "-c", "import os, signal; os.kill(os.getpid(), signal.SIGKILL)"])
+    assert said == " (killed by SIGKILL)"
+
+
+def test_a_real_time_signal_is_named_by_its_number():
+    """Those have no name of their own: naming one mustn't fail."""
+    rt = signal.SIGRTMIN + 6
+    said = _ended_with([sys.executable, "-c", f"import os; os.kill(os.getpid(), {int(rt)})"])
+    assert said == f" (killed by signal {int(rt)})"
+
+
+def test_a_character_split_between_two_reads_comes_through_whole():
+    """The 500-byte read ends inside the first é's two bytes."""
+    said = _ended_with([sys.executable, "-c",
+                        "import sys; sys.stderr.buffer.write(b'x' * 499 + 'été'.encode())"])
+    assert "\ufffd" not in said
+    assert said.endswith(" | été)")
 
 
 def test_an_engine_starts_where_tuxtalks_own_start_up_would_fail(tmp_path):
