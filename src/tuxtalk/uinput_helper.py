@@ -46,7 +46,7 @@ UDEV_RULE_PATH = "/etc/udev/rules.d/99-talktype-uinput.rules"
 
 try:
     from evdev import ecodes as _ecodes
-except Exception:      # no evdev: nothing can read /dev/input anyway
+except ImportError:     # no evdev: nothing can read /dev/input anyway
     _ecodes = None
 
 # Letter keys, used to tell a real keyboard from a device that merely reports
@@ -219,7 +219,7 @@ def _readable_input_devices():
     try:
         from evdev import list_devices
         return list(list_devices())
-    except Exception:
+    except ImportError:
         import glob
         return [p for p in glob.glob("/dev/input/event*")
                 if os.access(p, os.R_OK | os.W_OK)]
@@ -231,22 +231,19 @@ def _readable_keyboards():
     paths = _readable_input_devices()
     try:
         from evdev import InputDevice
-    except Exception:
+    except ImportError:
         return paths
     keyboards = []
     for path in paths:
         try:
             dev = InputDevice(path)
-        except Exception:
+        except OSError:     # unplugged since it was listed, or not ours to open
             continue
         try:
             if is_keyboard_device(dev):
                 keyboards.append(path)
         finally:
-            try:
-                dev.close()
-            except Exception:
-                pass
+            dev.close()
     return keyboards
 
 
@@ -257,11 +254,8 @@ def check_input_read_permission():
     Returns:
         tuple: (has_access: bool, reason: str)
     """
-    try:
-        from .hotkey_helper_client import connect_helper
-        helper = connect_helper()
-    except Exception:
-        helper = None
+    from .hotkey_helper_client import connect_helper
+    helper = connect_helper()
     if helper is not None:
         answering = helper.sock is not None
         helper.close()
@@ -455,7 +449,7 @@ def _username():
     """This user's login name, from the passwd database."""
     try:
         return pwd.getpwuid(os.getuid()).pw_name
-    except Exception:
+    except KeyError:    # no passwd entry for this uid (a container, say)
         return os.environ.get("USER", "")
 
 
@@ -664,7 +658,7 @@ def get_fix_script_content():
     # root shell-injection vector.
     try:
         username = pwd.getpwuid(os.getuid()).pw_name
-    except Exception:
+    except KeyError:    # no passwd entry for this uid (a container, say)
         username = os.environ.get('USER', '')
     quoted_user = shlex.quote(username)
 

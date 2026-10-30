@@ -27,7 +27,7 @@ import re
 import shutil
 import stat
 import subprocess
-import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, NamedTuple
@@ -593,22 +593,16 @@ def shared_text(plan, size):
 
 
 def _wait_for(work):
-    """Run *work* on a thread while the window keeps drawing; its result."""
-    result = {}
+    """Run *work* on a thread while the window keeps drawing; its result,
+    or the error it raised."""
     loop = GLib.MainLoop()
-
-    def run():
-        try:
-            result["value"] = work()
-        except Exception as e:      # handed back to the caller below
-            result["error"] = e
-        GLib.idle_add(loop.quit)
-
-    threading.Thread(target=run, daemon=True).start()
-    loop.run()
-    if "error" in result:
-        raise result["error"]
-    return result["value"]
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        done = pool.submit(work)
+        # Run at once, here, when the work is already finished: then the
+        # quit is queued before the loop starts, which still ends it.
+        done.add_done_callback(lambda _future: GLib.idle_add(loop.quit))
+        loop.run()
+    return done.result()
 
 
 def _note(text):
