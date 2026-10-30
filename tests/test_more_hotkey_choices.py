@@ -15,7 +15,6 @@ from tuxtalk import (cosmic_hotkeys, delivery_notices, focused_window, gnome_hot
                      keyboard_layout, modifier_hotkeys, send_countdown, virtual_keyboard,
                      x11_hotkeys)
 from tuxtalk import hotkey_claims
-from tuxtalk import kwin_hotkeys as kh
 from tuxtalk.config import HOTKEY_CHOICES
 from tuxtalk.hotkey_keys import keycode_from_name, track_modifier
 from tuxtalk.hotkey_labels import hotkey_label, layout_label
