@@ -44,9 +44,10 @@ import struct
 import threading
 
 from . import desktop_detect
-from .logger import setup_logger
+from .logger import FailureNotes, setup_logger
 
 logger = setup_logger(__name__)
+_failures = FailureNotes()      # asked before every typed chunk: each failure logged once
 
 TIMEOUT = 0.25      # seconds; these answer in about a millisecond
 
@@ -500,28 +501,39 @@ def focused_class():
     return focused_window()[0] or None
 
 
+def _ask_focused_window(env):
+    """focused_window()'s answer from this desktop's compositor; raises
+    what talking to it raised."""
+    if env.get("HYPRLAND_INSTANCE_SIGNATURE"):
+        return _from_hyprland(env["HYPRLAND_INSTANCE_SIGNATURE"])
+    if env.get("NIRI_SOCKET"):
+        return _from_niri(env["NIRI_SOCKET"])
+    path = env.get("SWAYSOCK") or env.get("I3SOCK")
+    if path:
+        return _from_i3(path)
+    if desktop_detect.get_desktop_environment() == "cosmic":
+        return _from_cosmic(_wayland_socket(env)), None
+    if is_x11_session(env):
+        return _from_x11()
+    return None, None
+
+
 def focused_window():
     """(class or app_id, id) of the focused window, None for what isn't
     known. The id is the compositor's own for the window (X11's window,
     Sway's and i3's con id, Hyprland's address, niri's id): it tells two
     windows of one app apart, and stays the same when the window moves.
-    COSMIC names only the class here."""
-    env = os.environ
+    COSMIC names only the class here. Asked before every typed chunk, so a
+    failure is logged once (_failures)."""
     try:
-        if env.get("HYPRLAND_INSTANCE_SIGNATURE"):
-            return _from_hyprland(env["HYPRLAND_INSTANCE_SIGNATURE"])
-        if env.get("NIRI_SOCKET"):
-            return _from_niri(env["NIRI_SOCKET"])
-        path = env.get("SWAYSOCK") or env.get("I3SOCK")
-        if path:
-            return _from_i3(path)
-        if desktop_detect.get_desktop_environment() == "cosmic":
-            return _from_cosmic(_wayland_socket(env)), None
-        if is_x11_session(env):
-            return _from_x11()
+        found = _ask_focused_window(os.environ)
     except Exception as e:      # an odd answer mustn't stop the typing that asked
-        logger.info(f"Could not ask the compositor for the focused window: {e}")
-    return None, None
+        if _failures.failed("window", e):
+            logger.info(f"Could not ask the compositor for the focused window: {e}")
+        return None, None
+    if _failures.worked("window"):
+        logger.info("The compositor answers again about the focused window")
+    return found
 
 
 # --- Where the focused window is (window_geometry.py) ----------------------------------
@@ -549,14 +561,19 @@ def _rect_from_hyprland(signature):
 
 def focused_rect():
     """The focused window's frame (window_geometry.Rect, compositor
-    coordinates) on Sway, i3 or Hyprland, or None."""
+    coordinates) on Sway, i3 or Hyprland, or None. A failure is logged once,
+    as focused_window's is."""
     env = os.environ
+    path = env.get("SWAYSOCK") or env.get("I3SOCK")
     try:
         if env.get("HYPRLAND_INSTANCE_SIGNATURE"):
-            return _rect_from_hyprland(env["HYPRLAND_INSTANCE_SIGNATURE"])
-        path = env.get("SWAYSOCK") or env.get("I3SOCK")
-        if path:
-            return _rect_from_i3(path)
+            rect = _rect_from_hyprland(env["HYPRLAND_INSTANCE_SIGNATURE"])
+        else:
+            rect = _rect_from_i3(path) if path else None
     except Exception as e:      # an odd answer mustn't stop the window that asked
-        logger.info(f"Could not ask the compositor where the focused window is: {e}")
-    return None
+        if _failures.failed("frame", e):
+            logger.info(f"Could not ask the compositor where the focused window is: {e}")
+        return None
+    if _failures.worked("frame"):
+        logger.info("The compositor answers again about where the focused window is")
+    return rect

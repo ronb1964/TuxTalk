@@ -53,9 +53,10 @@ import shutil
 import subprocess
 import unicodedata
 
-from .logger import setup_logger
+from .logger import FailureNotes, setup_logger
 
 logger = setup_logger(__name__)
+_failures = FailureNotes()      # checks that run before every typed chunk
 
 # --- libxkbcommon ------------------------------------------------------------------
 
@@ -563,7 +564,8 @@ def _x11_layout():
     try:
         group = _x11_active_group() or 0
     except Exception as e:      # no libX11 to ask: the first layout listed
-        logger.info(f"Could not read the active X11 layout group: {e}")
+        if _failures.failed("x11 group", e):
+            logger.info(f"Could not read the active X11 layout group: {e}")
         group = 0
     variants = [v.strip() for v in (fields.get("variant") or "").split(",")]
     # A layout without a variant of its own has none; the first layout's
@@ -577,7 +579,8 @@ def _system_layout():
     """The system-wide default (layout, variant, options), as set at install
     time or by localectl."""
     try:
-        with open(_XORG_KEYBOARD_CONF) as f:
+        # errors="replace": a Latin-1 comment mustn't hide the layout's line.
+        with open(_XORG_KEYBOARD_CONF, errors="replace") as f:
             conf = f.read()
         layout = re.search(r'Option\s+"XkbLayout"\s+"([^"]+)"', conf)
         if layout:
@@ -588,7 +591,7 @@ def _system_layout():
     except OSError:
         pass
     try:
-        with open(_DEBIAN_KEYBOARD) as f:
+        with open(_DEBIAN_KEYBOARD, errors="replace") as f:
             values = dict(re.findall(r'^(\w+)="?([^"\n]*)"?', f.read(), re.M))
         if values.get("XKBLAYOUT"):
             return (_first(values["XKBLAYOUT"]), _first(values.get("XKBVARIANT", "")),
@@ -598,31 +601,39 @@ def _system_layout():
     return None
 
 
+def _desktop_layout():
+    """(layout, variant, XKB options) as the desktop in use reports them, or
+    None where it doesn't say."""
+    if os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"):
+        return _hyprland_layout()
+    if os.environ.get("SWAYSOCK") or os.environ.get("I3SOCK"):
+        return _sway_layout()
+    desktop = _desktop()
+    if desktop == "kde":
+        layouts, index = _kde_layouts()
+        return (*layouts[index], _options_or_defaults(_kde_options)) \
+            if 0 <= index < len(layouts) else None
+    if desktop == "gnome":
+        return _gnome_layout()
+    if desktop == "cosmic":
+        return _cosmic_layout()
+    if (os.environ.get("XDG_SESSION_TYPE") or "").lower() == "x11":
+        return _x11_layout()
+    return None
+
+
 def active_layout():
-    """(layout, variant, XKB options) of the keyboard in use, or None if unknown."""
+    """(layout, variant, XKB options) of the keyboard in use, or None if unknown.
+    Asked before every typed chunk, so a failure is logged once (_failures)."""
     try:
-        found = None
-        if os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"):
-            found = _hyprland_layout()
-        elif os.environ.get("SWAYSOCK") or os.environ.get("I3SOCK"):
-            found = _sway_layout()
-        else:
-            desktop = _desktop()
-            if desktop == "kde":
-                layouts, index = _kde_layouts()
-                if 0 <= index < len(layouts):
-                    found = (*layouts[index], _options_or_defaults(_kde_options))
-            elif desktop == "gnome":
-                found = _gnome_layout()
-            elif desktop == "cosmic":
-                found = _cosmic_layout()
-            elif (os.environ.get("XDG_SESSION_TYPE") or "").lower() == "x11":
-                found = _x11_layout()
-        if found and found[0]:
-            return found
+        found = _desktop_layout()
     except Exception as e:      # an odd desktop answer: the system default is next
-        logger.info(f"Could not read the keyboard layout from the desktop: {e}")
-    return _system_layout()
+        if _failures.failed("layout", e):
+            logger.info(f"Could not read the keyboard layout from the desktop: {e}")
+        return _system_layout()
+    if _failures.worked("layout"):
+        logger.info("The desktop's keyboard layout can be read again")
+    return found if found and found[0] else _system_layout()
 
 
 US = ("us", "", None)
@@ -681,10 +692,12 @@ def shortcut_keycode(letter):
             entry = planner_for(layout)._keys.get(_lib().xkb_utf32_to_keysym(ord(letter)))
             if entry and not entry[1] and not entry[2]:     # no Shift, no AltGr
                 return entry[0]
-        except (OSError, ValueError) as e:
-            # No libxkbcommon, or a layout it doesn't know: the US key, as
-            # typing falls back to US there too.
-            logger.debug(f"Could not find {letter!r} on the {layout} layout: {e}")
+        except (OSError, ValueError, AttributeError) as e:
+            # No libxkbcommon, one before 1.0 (lacking a function _lib
+            # loads), or a layout it doesn't know: the US key, as typing
+            # falls back to US there too.
+            if _failures.failed("shortcut keys", e):
+                logger.info(f"Shortcut keys use the US letters: {e}")
     return _US_LETTER_KEYS[letter]
 
 

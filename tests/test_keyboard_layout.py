@@ -693,3 +693,53 @@ def test_a_shortcut_on_a_layout_libxkbcommon_doesnt_know_uses_the_us_key(monkeyp
     out as US, instead of the paste failing."""
     monkeypatch.setattr(kl, "active_layout", lambda: ("no-such-layout", "", ""))
     assert kl.shortcut_keycode("v") == 47
+
+
+def test_a_shortcut_with_an_old_libxkbcommon_uses_the_us_key(monkeypatch):
+    """libxkbcommon before 1.0 lacks a function TuxTalk loads: Ctrl+Alt+V
+    as a hotkey is resolved at service start, and must not stop it."""
+    def old_library():
+        raise AttributeError("xkb_keymap_key_get_mods_for_level")
+    monkeypatch.setattr(kl, "_lib", old_library)
+    monkeypatch.setattr(kl, "active_layout", lambda: ("fr", "", ""))
+    monkeypatch.setattr(kl, "_planners", {})
+    assert kl.shortcut_keycode("v") == 47
+
+
+def test_a_system_keyboard_file_in_latin1_still_gives_its_layout(monkeypatch, tmp_path):
+    """/etc/default/keyboard written by an old installer can hold a Latin-1
+    comment: the layout in it is read all the same."""
+    debian = tmp_path / "keyboard"
+    debian.write_bytes(b'# Clavier fran\xe7ais\nXKBLAYOUT="fr"\nXKBVARIANT=""\n')
+    xorg = tmp_path / "00-keyboard.conf"
+    xorg.write_bytes(b'# Fran\xe7ais\nSection "InputClass"\nEndSection\n')
+    monkeypatch.setattr(kl, "_XORG_KEYBOARD_CONF", str(xorg))
+    monkeypatch.setattr(kl, "_DEBIAN_KEYBOARD", str(debian))
+    assert kl._system_layout()[:2] == ("fr", "")
+
+
+def test_a_desktop_layout_that_cant_be_read_is_logged_once_not_before_every_chunk(
+        monkeypatch, caplog):
+    """active_layout runs before every typed chunk: the same failure is
+    logged the first time, and its end once."""
+    import logging
+    state = {"broken": True}
+
+    def gnome_layout():
+        if state["broken"]:
+            raise RuntimeError("gsettings hung")
+        return ("de", "", "")
+    monkeypatch.setattr(kl, "_desktop", lambda: "gnome")
+    monkeypatch.setattr(kl, "_gnome_layout", gnome_layout)
+    monkeypatch.setattr(kl, "_system_layout", lambda: None)
+    for env in ("HYPRLAND_INSTANCE_SIGNATURE", "SWAYSOCK", "I3SOCK"):
+        monkeypatch.delenv(env, raising=False)
+    with caplog.at_level(logging.INFO, logger=kl.logger.name):
+        for _ in range(3):
+            kl.active_layout()
+        state["broken"] = False
+        for _ in range(2):
+            assert kl.active_layout() == ("de", "", "")
+    lines = [r.getMessage() for r in caplog.records]
+    assert sum("gsettings hung" in line for line in lines) == 1
+    assert sum("read again" in line for line in lines) == 1

@@ -2,6 +2,7 @@
 import logging
 import logging.handlers
 import os
+import threading
 from pathlib import Path
 
 # The log file in the config folder.
@@ -88,6 +89,28 @@ def redact_text(text, reveal: bool = False) -> str:
     if isinstance(text, str):
         return f"[hidden, {len(text)} chars]"
     return "[hidden]"
+
+class FailureNotes:
+    """The last failure of each check, so a check that runs before every
+    typed chunk logs a failure the first time, not each time: again only
+    when the error changes, and once when the check works again."""
+
+    def __init__(self):
+        self._last = {}
+        self._lock = threading.Lock()
+
+    def failed(self, what, error) -> bool:
+        """Note that *what* failed with *error*; True when that is news."""
+        with self._lock:
+            news = self._last.get(what) != str(error)
+            self._last[what] = str(error)
+        return news
+
+    def worked(self, what) -> bool:
+        """Note that *what* worked; True when it had been failing."""
+        with self._lock:
+            return self._last.pop(what, None) is not None
+
 
 def _shared_handler() -> logging.Handler:
     """The process's single log-file handler, created on first use.

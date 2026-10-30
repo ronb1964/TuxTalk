@@ -138,3 +138,12 @@ def test_before_any_microphone_opens_audio_is_taken_at_the_engines_rate():
     from tuxtalk import engine
     from tuxtalk.recording_state import RecordingState
     assert RecordingState().recording_samplerate == engine.SAMPLE_RATE
+
+
+def test_a_default_microphone_name_that_isnt_utf8_is_still_read(tmp_path, monkeypatch):
+    """Asked at every recording start, after the recording counts as started:
+    a device name in another encoding mustn't leave it started with no stream."""
+    from shell_stubs import stub
+    stub(tmp_path, "wpctl", r"printf '  * node.name = \"alsa_input.caf\351\"\n'")
+    monkeypatch.setenv("PATH", str(tmp_path))
+    assert config.default_source_name().startswith("alsa_input.caf")

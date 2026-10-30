@@ -934,8 +934,9 @@ def default_source_name() -> str | None:
     system without PipeWire never looks like a switch.
     """
     try:
+        # errors="replace": a device name in another encoding is still a name.
         result = subprocess.run(["wpctl", "inspect", "@DEFAULT_SOURCE@"],
-                                capture_output=True, text=True, timeout=2)
+                                capture_output=True, text=True, errors="replace", timeout=2)
     except (OSError, subprocess.SubprocessError):   # no wpctl, or it hung
         return None
     if result.returncode != 0:
@@ -986,7 +987,7 @@ def find_input_device(mic_substring: str | None) -> int | None:
     try:
         result = subprocess.run(
             ["wpctl", "inspect", "@DEFAULT_SOURCE@"],
-            capture_output=True, text=True, timeout=2
+            capture_output=True, text=True, errors="replace", timeout=2
         )
         if result.returncode == 0:
             for line in result.stdout.splitlines():
