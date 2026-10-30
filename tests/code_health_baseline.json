@@ -19,12 +19,7 @@
   "config.py::Settings::long_line": 30,
   "config.py::Settings::undocumented": 1,
   "config.py::_validation_problems::long_line": 14,
-  "config.py::default_source_name::swallowed_error": 1,
   "config.py::find_input_device::long_line": 1,
-  "config.py::find_input_device::swallowed_error": 2,
-  "config.py::load_config::long_line": 1,
-  "config.py::load_config::swallowed_error": 1,
-  "config.py::load_custom_commands::swallowed_error": 1,
   "config.py::write_text_atomic::long_line": 1,
   "control.py::_parse::undocumented": 1,
   "cosmic_hotkeys.py::claim.change::undocumented": 1,
@@ -34,13 +29,9 @@
   "custom_words.py::_joinable::long_line": 1,
   "custom_words.py::fix_spelling::long_line": 1,
   "dbus_service.py::TuxTalkDBusService.CheckForUpdates.do_check::undocumented": 1,
-  "desktop_detect.py::_is_extension_enabled_via_dbus::swallowed_error": 1,
-  "desktop_detect.py::tray_host_available::swallowed_error": 1,
-  "desktop_identity.py::apply::swallowed_error": 1,
   "download_progress_dialog.py::UnifiedDownloadDialog._mark_task_complete.update_ui::long_line": 1,
   "download_progress_dialog.py::UnifiedDownloadDialog._mark_task_complete.update_ui::undocumented": 1,
   "download_progress_dialog.py::show_unified_download_dialog::long_line": 3,
-  "download_utils.py::free_space_bytes::swallowed_error": 1,
   "explain.py::main::undocumented": 1,
   "explain.py::place_over_active_window::swallowed_error": 1,
   "explain.py::start_helper_window::swallowed_error": 1,
@@ -207,8 +198,7 @@
    "decisions": 16
   },
   "config.py::find_input_device": {
-   "decisions": 32,
-   "lines": 101
+   "decisions": 31
   },
   "cuda_helper.py::download_cuda_libraries": {
    "decisions": 28,

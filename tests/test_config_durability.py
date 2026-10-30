@@ -23,9 +23,6 @@ def config_path(tmp_path, monkeypatch):
     # Per-process latches: real processes start fresh, tests must too.
     monkeypatch.setattr(config, "_repair_attempted", False)
     monkeypatch.setattr(config, "_config_read_failed", False)
-    for latch in ("_error_printed", "_invalid_reported", "_read_error_printed"):
-        if hasattr(config.load_config, latch):
-            delattr(config.load_config, latch)
     return path
 
 

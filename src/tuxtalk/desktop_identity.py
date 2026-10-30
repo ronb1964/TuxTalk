@@ -21,6 +21,9 @@ imported, as long as it runs before the first window is shown.
 from gi.repository import GLib
 
 from .config import APP_ID  # noqa: E402  (one app ID, defined in config)
+from .logger import setup_logger
+
+logger = setup_logger(__name__)
 
 _BY_INSTALL_TYPE = {
     "appimage": "tuxtalk",
@@ -69,5 +72,5 @@ def apply() -> None:
         # Every package type has the same launcher name, so the slow query
         # of the package database (rpm or deb?) is skipped at startup.
         GLib.set_prgname(desktop_id(get_install_type(pkg_query=lambda: "package")))
-    except Exception:
-        pass
+    except Exception as e:
+        logger.info(f"Could not name TuxTalk's windows after its launcher: {e}")

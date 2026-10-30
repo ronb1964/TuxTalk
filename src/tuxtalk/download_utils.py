@@ -291,5 +291,5 @@ def free_space_bytes(path: str) -> int:
         p = parent
     try:
         return shutil.disk_usage(p).free
-    except Exception:
+    except OSError:     # unreadable, a broken mount: 0 means unknown
         return 0
