@@ -338,6 +338,58 @@ def test_menu_window_after_installing_the_extension_says_log_out():
         win.window.destroy()
 
 
+def test_opening_a_popup_again_lets_the_last_one_go(monkeypatch):
+    """Each opening builds a new menu: the old ones stayed alive until the
+    window closed."""
+    from tuxtalk import config, tray, tray_menu
+    monkeypatch.setattr(config, "load_config", config.Settings)
+    owner = tray.DictationTray.__new__(tray.DictationTray)
+    fake, win = _menu_window()
+    fake.menu = tray_menu.TrayMenu(owner)
+    performance = next(b for b in _buttons(win) if b.get_label().startswith("Performance"))
+    try:
+        performance.clicked()
+        gone = []
+        win._popup.connect("destroy", lambda w: gone.append(True))
+        performance.clicked()
+        assert gone == [True]
+    finally:
+        win._popup.destroy()
+        fake.menu.widget.destroy()
+        win.window.destroy()
+
+
+def test_menu_window_performance_is_the_tray_menus(monkeypatch):
+    """The window's Performance popup lists what the tray's submenu does, with
+    the dot on the same preset; opening it applies nothing, choosing a preset
+    applies that one, and Custom opens Preferences."""
+    from tuxtalk import config, tray, tray_menu
+    monkeypatch.setattr(config, "load_config", config.Settings)
+    applied, opened = [], []
+    owner = tray.DictationTray.__new__(tray.DictationTray)
+    owner.set_performance_preset = applied.append
+    owner.open_preferences = lambda *a: opened.append(True)
+    fake, win = _menu_window()
+    fake.menu = tray_menu.TrayMenu(owner)
+    try:
+        next(b for b in _buttons(win) if b.get_label().startswith("Performance")).clicked()
+        popup = [i for i in win._popup.get_children() if isinstance(i, Gtk.RadioMenuItem)]
+        submenu = [*fake.menu.preset_radios.values(), fake.menu.preset_custom]
+        assert [i.get_label() for i in popup] == [i.get_label() for i in submenu]
+        assert [i.get_active() for i in popup] == [i.get_active() for i in submenu]
+        assert applied == []
+        ids = list(fake.menu.preset_radios)
+        pick = next(n for n, item in enumerate(popup[:len(ids)]) if not item.get_active())
+        popup[pick].activate()
+        assert applied == [ids[pick]]
+        popup[-1].activate()                                # Custom
+        assert opened == [True] and applied == [ids[pick]]
+    finally:
+        win._popup.destroy()
+        fake.menu.widget.destroy()
+        win.window.destroy()
+
+
 def test_closing_the_window_lets_the_tray_open_a_new_one():
     tray, win = _menu_window()
     tray._menu_window = win
