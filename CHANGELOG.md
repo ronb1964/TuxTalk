@@ -5,6 +5,10 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- When the sound system stopped answering and a microphone stream couldn't
+  be closed, the sound it kept sending went into your next dictation, so the
+  end of the last one could be typed again at the start of the next. Each
+  dictation only takes its own microphone's sound now.
 - The CUDA download for NVIDIA cards is 580 MB now instead of 1.4 GB. It
   included NVIDIA's cuDNN, which the speech engine hasn't needed since 0.16,
   and dictation on CUDA types exactly the same without it. If you downloaded
