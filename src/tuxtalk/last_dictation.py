@@ -55,6 +55,16 @@ def remember_shown(piece: str, chunked: bool, ok: bool, message) -> None:
         message.shown = None
 
 
+def on_screen() -> str:
+    """The last dictation as it is on screen, ending at the cursor: every
+    phrase of its recording since the last Enter while its screen copy can
+    be trusted, else what it typed last (undo's record). What "fix that
+    word" and "edit that" both work on."""
+    typed = rs.state.last_inserted_text
+    shown = rs.state.last_message.shown
+    return shown if typed and shown and shown.endswith(typed) else typed
+
+
 def _where_typed():
     """(class, which window) the last piece went to, as focused_window looks."""
     return rs.state.last_inserted_window, rs.state.last_inserted_where[1]

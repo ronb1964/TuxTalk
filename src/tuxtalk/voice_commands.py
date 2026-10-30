@@ -152,10 +152,7 @@ def handle_fix_word(raw: str, beeps_on: bool) -> bool:
     # user can read (the runtime folder), which it deletes once read.
     args = []
     focused = focused_window.window_class()
-    typed = rs.state.last_inserted_text
-    shown = rs.state.last_message.shown
-    if typed and shown and shown.endswith(typed):
-        typed = shown                      # the whole recording, phrases and all
+    typed = last_dictation.on_screen()
     handoff = None
     if typed.strip() and not keyboard_output.not_where_typed(focused):
         handoff = _hand_over(typed, focused)
@@ -287,20 +284,14 @@ def handle_navigation(raw: str, beeps_on: bool, focused_class=_UNKNOWN_WINDOW) -
     return True
 
 
-def spoken_edit_target(message):
-    """What "edit that" changes: the text on screen of *message*'s
-    recording, the one it's said in (every phrase since the last Enter,
-    with Type at pause), else the last dictation; "" when there's nothing
-    fresh in the focused window."""
-    typed = rs.state.last_inserted_text
-    if not typed or not typed.strip():
+def spoken_edit_target():
+    """What "edit that" changes: the last dictation on screen, every phrase
+    of its recording since the last Enter with Type at pause, as "fix that
+    word" gets it (last_dictation.on_screen); "" when there's nothing fresh
+    in the focused window."""
+    typed = last_dictation.on_screen()
+    if not typed.strip() or keyboard_output.not_where_typed(focused_window.window_class()):
         return ""
-    focused = focused_window.window_class()
-    if keyboard_output.not_where_typed(focused):
-        return ""
-    shown = message.shown
-    if shown and message is rs.state.last_message and shown.endswith(typed):
-        return shown
     return typed
 
 

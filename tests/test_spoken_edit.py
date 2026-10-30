@@ -100,6 +100,18 @@ def test_with_type_at_pause_it_edits_every_phrase_on_screen(editing):
     assert pressed.count(((S,), "LEFT")) == len("Hi Sam. We meet at three.")
 
 
+def test_said_in_the_next_recording_it_edits_every_phrase_of_the_last(editing):
+    """Type at pause's "Hi Sam" (pause) "we meet at three", then a new
+    recording saying "edit that": it selected only the last phrase, while
+    "fix that word" said there got the whole recording."""
+    pressed, edits, _ = editing
+    last = rs.state.last_message = rs.Message(serial=1)
+    last.shown = "Hi Sam. We meet at three. "
+    rs.state.current.message = rs.Message(serial=2)
+    assert _said("edit that make it friendlier")
+    assert pressed.count(((S,), "LEFT")) == len("Hi Sam. We meet at three.")
+
+
 def test_nothing_just_typed_means_the_words_are_typed(editing):
     _pressed, edits, _ = editing
     rs.state.last_inserted_text = ""
