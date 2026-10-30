@@ -3,9 +3,9 @@ calls compositor_focus (which window has focus on X11) and x11_hotkeys (the
 hotkeys held back on X11) make. It's on every X11 system (Xlib itself is
 built on it), so this needs no new dependency. XCB rather than Xlib: Xlib
 reports an error through a process-wide handler whose default exits the
-program, and replacing it would fight GTK's own; XCB returns errors per
-request: the recording indicator runs GTK on X11 in the same process as
-compositor_focus.
+program, and replacing it would fight GTK's own, which the recording
+indicator runs on X11 in the same process as compositor_focus. XCB returns
+errors per request.
 """
 import ctypes
 

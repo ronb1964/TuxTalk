@@ -9,7 +9,8 @@ and an X grab elsewhere on X11 (x11_hotkeys). Which keys are claimed is
 decided once, here, so the desktops can't drift apart: F-keys, Scroll Lock
 and modifier combos, never a bare letter. Keys are named the way Qt names
 them ("Shift+F8", "ScrollLock", "Meta+F9"), which KDE reads as they are and
-the others turn into their own syntax.
+the others turn into their own syntax; qt_key_code gives the number KDE
+reports a key in, for kwin_hotkeys alone.
 """
 
 # TuxTalk's modifier names -> Qt's.
@@ -54,10 +55,10 @@ _QT_F1 = 0x01000030
 
 
 def qt_key_code(sequence):
-    """A Qt key sequence from qt_key_sequence ("Shift+F8", "ScrollLock",
-    "Meta+F9") as the number kglobalaccel reports it in, or None. Read as
-    Qt writes it: run through qt_key_sequence again, Qt's "ScrollLock" and
-    "Meta" weren't TuxTalk names and came out as None."""
+    """The number KDE's kglobalaccel reports a key in, for a key in Qt's
+    spelling as qt_key_sequence gives it ("Shift+F8", "ScrollLock",
+    "Meta+F9"), or None. It takes Qt's names, not TuxTalk's: "Meta", not
+    "Super"."""
     if not sequence:
         return None
     *mods, key = sequence.split("+")
