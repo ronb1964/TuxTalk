@@ -35,7 +35,6 @@ def warn_silent_mic():
     said, like a dictation that didn't arrive: a dead wireless mic otherwise
     looks like TuxTalk ignoring you (asked for in Handy, Wispr Flow added it
     Oct 2026)."""
-    print(SILENT_MIC_NOTICE)
     logger.warning("The microphone sent only silence (muted, unplugged or the wrong one?)")
     notify_module.notify(SILENT_MIC_TITLE, SILENT_MIC_NOTICE)
 
@@ -58,7 +57,6 @@ def warn_mic_switched(old_idx, new_idx):
     notice = (f"{old or 'Your microphone'} didn't respond, so TuxTalk is recording from "
               f"{new or 'another input'} instead. Unplugging the microphone and plugging it "
               "back in usually fixes this.")
-    print(notice)
     logger.warning(f"Recording from {new or new_idx!r}: {old or old_idx!r} didn't open")
     notify_module.notify("Recording from another microphone", notice)
 

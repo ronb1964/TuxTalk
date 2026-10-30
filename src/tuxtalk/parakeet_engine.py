@@ -91,16 +91,12 @@ def cached_model_dir():
     ultra = parakeet_ultra.cpu_dir()
     if ultra is not None:
         return ultra
-    try:
-        from huggingface_hub import hf_hub_download
-        paths = [
-            hf_hub_download(V3_REPO, name, local_files_only=True)
-            for name in V3_FILES
-        ]
-    except Exception:
+    from .download_utils import cached_hub_file
+    first = cached_hub_file(V3_REPO, V3_FILES[0])
+    if first is None or any(cached_hub_file(V3_REPO, name) is None for name in V3_FILES[1:]):
         return None
     # All files come from one repo snapshot, so they share a folder.
-    return os.path.dirname(paths[0])
+    return os.path.dirname(first)
 
 
 class ParakeetModel:

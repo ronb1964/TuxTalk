@@ -34,10 +34,12 @@ def detect_nvidia_gpu():
     if os.environ.get("FLATPAK_ID"):
         return os.path.exists("/dev/nvidiactl") or os.path.exists("/dev/nvidia0")
     try:
+        # errors="replace": an odd byte in the card's name is still a card.
         result = subprocess.run(['nvidia-smi', '--query-gpu=name', '--format=csv,noheader'],
-                              capture_output=True, text=True, timeout=NVIDIA_SMI_TIMEOUT)
+                                capture_output=True, text=True, errors="replace",
+                                timeout=NVIDIA_SMI_TIMEOUT)
         return result.returncode == 0 and result.stdout.strip()
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except (OSError, subprocess.TimeoutExpired):    # not installed, not runnable, or hung
         return False
 
 def _has_required_libs(names) -> bool:
@@ -124,7 +126,8 @@ def has_cuda_libraries():
 
     # Check system-wide CUDA installation via ldconfig (most reliable)
     try:
-        result = subprocess.run(['ldconfig', '-p'], capture_output=True, text=True, timeout=SUBPROCESS_TIMEOUT)
+        result = subprocess.run(['ldconfig', '-p'], capture_output=True, text=True,
+                                errors="replace", timeout=SUBPROCESS_TIMEOUT)
         # Lines look like "\tlibcudart.so.12 (libc6,x86-64) => /usr/lib64/libcudart.so.12".
         names = [line.split()[0] for line in result.stdout.splitlines()[1:] if line.strip()]
         if _has_required_libs(names):

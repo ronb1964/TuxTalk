@@ -28,7 +28,7 @@ def test_the_first_instance_takes_the_lock_and_records_its_pid(lock_dir):
     assert (lock_dir / "talktype.lock").read_text() == str(os.getpid())
 
 
-def test_a_second_instance_exits_and_leaves_the_pid_alone(lock_dir, monkeypatch):
+def test_a_second_instance_exits_and_leaves_the_pid_alone(lock_dir, monkeypatch, capsys):
     monkeypatch.setattr(app, "LOCK_WAIT_S", 0.0)
     app._acquire_single_instance()
     first = app._lockfile_handle
@@ -37,6 +37,7 @@ def test_a_second_instance_exits_and_leaves_the_pid_alone(lock_dir, monkeypatch)
             app._acquire_single_instance()
         assert exit_info.value.code == 0
         assert (lock_dir / "talktype.lock").read_text() == str(os.getpid())
+        assert "already running" in capsys.readouterr().err     # said in the terminal
     finally:
         app._lockfile_handle = first
 

@@ -54,7 +54,8 @@ def _refresh_icon_caches(icons_base: str) -> None:
     for argv in (["gtk-update-icon-cache", "-f", "-t", icons_base],
                  ["xdg-icon-resource", "forceupdate", "--mode", "user"]):
         try:
-            result = subprocess.run(argv, capture_output=True, text=True, timeout=10)
+            result = subprocess.run(argv, capture_output=True, text=True, errors="replace",
+                                    timeout=10)
         except (OSError, subprocess.SubprocessError) as e:
             logger.info(f"{argv[0]} didn't run (not needed everywhere): {e}")
             continue

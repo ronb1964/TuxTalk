@@ -48,7 +48,7 @@ def _install_css_once():
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         _css_installed = True
     except Exception as e:
-        logger.debug(f"notif-help CSS not installed: {e}")
+        logger.info(f"The notification help window's style didn't load: {e}")
 
 
 def show_notification_help_window(parent=None):
@@ -73,10 +73,7 @@ def show_notification_help_window(parent=None):
         win.set_position(Gtk.WindowPosition.CENTER)
         win.get_style_context().add_class("tt-notif-help")
         if parent is not None:
-            try:
-                win.set_transient_for(parent)
-            except Exception:
-                pass
+            win.set_transient_for(parent)
 
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         outer.set_margin_top(14)

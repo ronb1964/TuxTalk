@@ -18,6 +18,8 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
+from .logger import FailureNotes  # noqa: E402
+
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +117,7 @@ class MenuWindow:
                 add.connect("clicked", lambda _b: t._launch_preferences(tab="advanced"))
                 box.pack_start(add, False, False, 0)
 
+        self._failures = FailureNotes()     # refresh runs every second: logged once
         self.refresh()
         # Keep the switch and the model line current, as the tray menu is.
         self._timer = GLib.timeout_add_seconds(1, self.refresh)
@@ -178,9 +181,13 @@ class MenuWindow:
             self.status_label.set_markup(
                 "<b>Dictation is on</b>" if running else "<b>Dictation is off</b>")
             self.engine_label.set_text(self.tray.menu.engine_item.get_label())
-        except Exception as e:
+        except Exception as e:      # the timer keeps going: the next second may work
             self._updating = False
-            logger.debug(f"Menu window refresh failed: {e}")
+            if self._failures.failed("refresh", e):
+                logger.warning(f"Menu window refresh failed: {e}")
+            return True
+        if self._failures.worked("refresh"):
+            logger.info("Menu window refresh works again")
         return True
 
     def _on_switch(self, switch, _pspec):

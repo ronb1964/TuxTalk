@@ -171,12 +171,8 @@ def model_path(model_name):
         ultra = parakeet_ultra.gpu_file()
         if ultra is not None:
             return ultra
-    try:
-        from huggingface_hub import hf_hub_download
-        return hf_hub_download(model_repo(model_name), MODEL_FILES[model_name][0],
-                               local_files_only=True)
-    except Exception:
-        return None
+    from .download_utils import cached_hub_file
+    return cached_hub_file(model_repo(model_name), MODEL_FILES[model_name][0])
 
 
 def is_installed(model_name) -> bool:
@@ -266,7 +262,8 @@ def find_device():
     command, env = engine_process.parent_death_command(
         [_binary("whisper-server"), "--help"], _engine_env())
     try:
-        result = subprocess.run(command, capture_output=True, text=True, timeout=30, env=env)
+        result = subprocess.run(command, capture_output=True, text=True, errors="replace",
+                                timeout=30, env=env)
         out = result.stderr
         why = engine_process.launch_failure(result.returncode)
         if why:
@@ -297,7 +294,7 @@ def _run_timed(cmd, cancel=None, timeout=300):
     # check, killed mid-run, takes the run (a graphics chip and a core) with it.
     command, env = engine_process.parent_death_command(cmd, _engine_env())
     with subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
-                          text=True, env=env) as proc:
+                          text=True, errors="replace", env=env) as proc:
         while True:
             try:
                 stderr = proc.communicate(timeout=0.5)[1]
@@ -474,11 +471,9 @@ class VulkanWhisperModel:
                     raise RuntimeError("the graphics engine stopped while starting"
                                        + engine_process.launch_failure(self._proc.returncode,
                                                                        output))
-                try:
-                    engine_process.open_local(f"http://127.0.0.1:{self._port}/health", timeout=1)
+                if engine_process.answers(self._port):
                     break
-                except Exception:
-                    time.sleep(0.25)
+                time.sleep(0.25)
             else:
                 raise RuntimeError("the graphics engine did not start in time")
             # One short practice run: the first request on a graphics chip pays

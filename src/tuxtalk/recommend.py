@@ -111,11 +111,8 @@ class Hardware:
 @functools.lru_cache(maxsize=1)
 def _nvidia_name():
     """The NVIDIA card's name from nvidia-smi, once per process."""
-    try:
-        from .cuda_helper import detect_nvidia_gpu
-        found = detect_nvidia_gpu()
-    except Exception:
-        return None
+    from .cuda_helper import detect_nvidia_gpu
+    found = detect_nvidia_gpu()
     if isinstance(found, str) and found.strip():
         return found.strip().splitlines()[0]
     return None
@@ -136,10 +133,7 @@ def detect_hardware(cfg=None):
     small built-in chip isn't recommended over and over."""
     if os.environ.get("FLATPAK_ID"):
         return Hardware(None, False)
-    try:
-        usable, vendors = _vulkan_facts()
-    except Exception:
-        return Hardware(None, False)
+    usable, vendors = _vulkan_facts()
     from . import whisper_vulkan as wv
     nvidia = _nvidia_name()
     has_nvidia = bool(nvidia) or wv.NVIDIA_VENDOR in vendors

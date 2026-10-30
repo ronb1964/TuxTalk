@@ -103,12 +103,7 @@ def compare_versions(current: str, latest: str) -> bool:
                 parts.append(0)
         return tuple(parts)
 
-    try:
-        current_tuple = parse_version(current)
-        latest_tuple = parse_version(latest)
-        return latest_tuple > current_tuple
-    except Exception:
-        return False
+    return parse_version(latest) > parse_version(current)
 
 
 def fetch_extension_version_from_release(tag: str) -> Optional[int]:
@@ -140,8 +135,8 @@ def fetch_extension_version_from_release(tag: str) -> Optional[int]:
     except urllib.error.HTTPError as e:
         logger.debug(f"Could not fetch extension metadata for {tag}: {e.code}")
         return None
-    except Exception as e:
-        logger.debug(f"Error fetching extension version for {tag}: {e}")
+    except Exception as e:      # offline, or an odd answer: the extension check waits
+        logger.info(f"Error fetching extension version for {tag}: {e}")
         return None
 
 
@@ -183,8 +178,8 @@ def fetch_release_by_tag(tag: str) -> Optional[dict]:
     except urllib.error.HTTPError as e:
         logger.debug(f"Could not fetch release for {tag}: {e.code}")
         return None
-    except Exception as e:
-        logger.debug(f"Error fetching release {tag}: {e}")
+    except Exception as e:      # offline, or an odd answer: no release notes this time
+        logger.info(f"Error fetching release {tag}: {e}")
         return None
 
 
@@ -817,7 +812,7 @@ def restart_via_launcher(target: Optional[str] = None) -> Tuple[bool, str]:
     try:
         subprocess.Popen(["/bin/sh", "-c", script],
                          start_new_session=True, close_fds=True)
-    except Exception as e:
+    except OSError as e:        # the caller shows it and the user restarts by hand
         return (False, f"Could not start the new instance: {e}")
     return (True, "restarting")
 
@@ -941,8 +936,8 @@ def install_appimage_update(
             with open(just_updated_file, "w") as f:
                 from . import __version__
                 f.write(__version__)
-        except Exception:
-            pass  # Not critical
+        except OSError as e:    # only the "updated" notice is lost
+            logger.info(f"Couldn't leave the just-updated note: {e}")
 
         return (True, "Update installed.")
 
@@ -1033,13 +1028,13 @@ def check_just_updated() -> Optional[str]:
         os.remove(just_updated_file)
 
         return previous_version
-    except Exception as e:
-        logger.debug(f"Error checking just_updated flag: {e}")
+    except (OSError, UnicodeDecodeError) as e:
+        logger.info(f"Error checking just_updated flag: {e}")
         # Try to clean up the file anyway
         try:
             os.remove(just_updated_file)
-        except Exception:
-            pass
+        except OSError:
+            pass        # it can't be read or removed: nothing more to do about a note
         return None
 
 

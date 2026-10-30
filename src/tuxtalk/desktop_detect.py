@@ -7,6 +7,10 @@ import os
 import subprocess
 from typing import Optional
 
+from .logger import setup_logger
+
+logger = setup_logger(__name__)
+
 
 def config_home() -> str:
     """The user's config folder, where the desktops keep their settings.
@@ -121,7 +125,8 @@ def tray_host_available(bus=None) -> bool:
             finally:
                 bus.close()
         return bool(bus.name_has_owner("org.kde.StatusNotifierWatcher"))
-    except Exception:
+    except Exception as e:      # no session bus, or it failed: unknown
+        logger.info(f"Could not ask the session bus for a system tray: {e}")
         return True
 
 
@@ -139,7 +144,7 @@ def get_gnome_shell_version() -> Optional[str]:
         result = subprocess.run(
             ['gnome-shell', '--version'],
             capture_output=True,
-            text=True,
+            text=True, errors="replace",
             timeout=5
         )
         if result.returncode == 0:
@@ -198,7 +203,7 @@ def is_extension_enabled(uuid: str) -> bool:
         result = subprocess.run(
             ['gnome-extensions', 'info', uuid],
             capture_output=True,
-            text=True,
+            text=True, errors="replace",
             timeout=5
         )
         if result.returncode == 0:
@@ -224,10 +229,10 @@ def _is_extension_enabled_via_dbus(uuid: str) -> bool:
     running, name not reachable), which is the correct "don't hide the tray"
     default. Needs --talk-name=org.gnome.Shell in the Flatpak manifest.
     """
+    import gi
+    gi.require_version("Gio", "2.0")
+    from gi.repository import Gio, GLib
     try:
-        import gi
-        gi.require_version("Gio", "2.0")
-        from gi.repository import Gio, GLib
         bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
         ret = bus.call_sync(
             "org.gnome.Shell", "/org/gnome/Shell",
@@ -237,7 +242,7 @@ def _is_extension_enabled_via_dbus(uuid: str) -> bool:
             Gio.DBusCallFlags.NONE, 2000, None)
         info = ret.unpack()[0]
         return bool(info.get("enabled")) or info.get("state") == 1.0
-    except Exception:
+    except GLib.Error:      # not GNOME, or its shell isn't answering: off GNOME, always
         return False
 
 
@@ -289,7 +294,7 @@ def _write_extension_list(key, uuids: list) -> bool:
     try:
         result = subprocess.run(
             ['gsettings', 'set', 'org.gnome.shell', key, repr(uuids)],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True, text=True, errors="replace", timeout=10,
         )
         return result.returncode == 0
     except (subprocess.TimeoutExpired, FileNotFoundError):
@@ -332,14 +337,14 @@ def enable_extension(uuid: str) -> bool:
     try:
         result = subprocess.run(
             ['gnome-extensions', 'enable', uuid],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True, text=True, errors="replace", timeout=10,
         )
         live_enabled = result.returncode == 0
         if not live_enabled and result.stderr:
             # Expected on Wayland for a freshly-installed extension.
-            print(f"gnome-extensions enable deferred to gsettings: {result.stderr.strip()}")
+            logger.info(f"gnome-extensions enable deferred to gsettings: {result.stderr.strip()}")
     except (subprocess.TimeoutExpired, FileNotFoundError) as e:
-        print(f"gnome-extensions enable unavailable, using gsettings: {e}")
+        logger.info(f"gnome-extensions enable unavailable, using gsettings: {e}")
 
     # Persist into the enabled list so it survives to the next shell start even
     # when the live enable above could not take effect. Only touch the setting if
@@ -349,7 +354,7 @@ def enable_extension(uuid: str) -> bool:
     if enabled is not None and uuid not in enabled:
         enabled.append(uuid)
         if _write_enabled_extensions(enabled):
-            print(f"Added {uuid} to enabled-extensions (activates on next login)")
+            logger.info(f"Added {uuid} to enabled-extensions (activates on next login)")
 
     # An earlier uninstall's "disable" may have left it on disabled-extensions.
     forget_extension(uuid)

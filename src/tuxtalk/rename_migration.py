@@ -143,7 +143,8 @@ def run_at_startup(environ=None, home=None):
     try:
         return migrate(home=home, dev=environ.get("DEV_MODE") == "1")
     except Exception as e:      # never stop the app from starting
-        return [f"rename migration failed: {e}"]
+        logger.warning(f"Rename to TuxTalk: moving the folders failed: {e}")
+        return []
 
 
 # Where an old TalkType AppImage path now lives, best match first: the AUR
@@ -185,11 +186,8 @@ def _rewrite_entry(text, dev):
 def _install_tuxtalk_icon():
     """TuxTalk's icon installed for the menu ("tuxtalk"), or None if it
     couldn't be: then an entry keeps the old icon rather than a blank one."""
-    try:
-        from .desktop_launcher import install_app_icon
-        return install_app_icon()
-    except Exception:
-        return None
+    from .desktop_launcher import install_app_icon
+    return install_app_icon()
 
 
 def _refresh_renamed_entries(home):
@@ -403,16 +401,13 @@ def _default_plasma_runner():
 
 def _default_gnome_favorites():
     """(get, set) for GNOME's favourite apps; None when GNOME isn't there."""
-    try:
-        from gi.repository import Gio
-        source = Gio.SettingsSchemaSource.get_default()
-        if source is None or source.lookup("org.gnome.shell", True) is None:
-            return None
-        settings = Gio.Settings.new("org.gnome.shell")
-        return (lambda: list(settings.get_strv("favorite-apps")),
-                lambda value: settings.set_strv("favorite-apps", value))
-    except Exception:
+    from gi.repository import Gio
+    source = Gio.SettingsSchemaSource.get_default()
+    if source is None or source.lookup("org.gnome.shell", True) is None:
         return None
+    settings = Gio.Settings.new("org.gnome.shell")
+    return (lambda: list(settings.get_strv("favorite-apps")),
+            lambda value: settings.set_strv("favorite-apps", value))
 
 
 _DEFAULT = object()
@@ -485,9 +480,10 @@ def repin_launchers(marker_path, run_plasma_script=_DEFAULT, gnome_favorites=_DE
             if left:
                 waiting = True
                 done.append(f"KDE: left {left} old pin(s) alone; the new entry isn't installed")
-        except Exception as e:
+        except Exception as e:      # plasmashell may not be up yet: the next start tries again
+            # Logged here, not also in *done*, as GNOME's failure is.
+            logger.info(f"KDE pinned launchers not updated yet: {e}")
             failed = True
-            done.append(f"KDE: could not update pinned launchers yet: {e}")
     if gnome_favorites:
         gnome_failed, gnome_waiting = _repin_gnome(gnome_favorites, renames, done)
         failed, waiting = failed or gnome_failed, waiting or gnome_waiting

@@ -341,7 +341,7 @@ def uninstall_extension() -> bool:
             try:
                 done = subprocess.run(
                     ['gnome-extensions', 'disable', EXTENSION_UUID],
-                    capture_output=True, text=True, timeout=10)
+                    capture_output=True, text=True, errors="replace", timeout=10)
                 if done.returncode:
                     logger.info(f"gnome-extensions disable said: {done.stderr.strip()}")
             except (OSError, subprocess.SubprocessError) as e:

@@ -54,3 +54,15 @@ def test_without_pipewire_the_hardware_fallback_still_applies(system):
 def test_a_named_mic_is_used_as_chosen(system):
     system.default = "FakeMic"
     assert config.find_input_device("ALC892") == 0
+
+
+def test_a_default_source_name_that_isnt_utf8_still_finds_a_microphone(tmp_path, monkeypatch):
+    """wpctl's answer is read as text: one byte in another encoding mustn't
+    stop the service from finding the microphone."""
+    from shell_stubs import stub
+    fake_sd = types.SimpleNamespace(query_devices=lambda: DEVICES)
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+    stub(tmp_path, "wpctl", r"printf '  * node.description = \"Caf\351 mic\"\n'")
+    monkeypatch.setenv("PATH", str(tmp_path))
+    # Not a hardware name in the list, so it records through PipeWire's device.
+    assert config.find_input_device(None) == 3

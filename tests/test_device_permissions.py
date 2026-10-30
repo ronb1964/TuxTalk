@@ -17,6 +17,7 @@ membership gets fixed as a side effect, which hides the problem there.
 
 import pytest
 
+from tuxtalk import uinput_helper
 from tuxtalk.uinput_helper import (
     check_input_read_permission,
     check_all_device_permissions,
@@ -75,6 +76,36 @@ def test_a_readable_game_controller_alone_is_not_hotkey_access(monkeypatch):
                         lambda: ["/dev/input/pad", "/dev/input/kbd"])
     ok, _ = check_input_read_permission()
     assert ok is True
+
+
+def test_a_keyboard_unplugged_after_it_was_listed_is_skipped(monkeypatch):
+    """A node gone (or refused) between the listing and the open is no
+    keyboard, and the check carries on with the next one."""
+    evdev = pytest.importorskip("evdev")
+
+    def device(path):
+        if path.endswith("gone"):
+            raise FileNotFoundError(path)
+        return _FakeInputDevice([30, 48, 46, 32, 66])
+    monkeypatch.setattr(evdev, "InputDevice", device)
+    monkeypatch.setattr("tuxtalk.uinput_helper._readable_input_devices",
+                        lambda: ["/dev/input/gone", "/dev/input/kbd"])
+    assert uinput_helper._readable_keyboards() == ["/dev/input/kbd"]
+
+
+def test_a_keyboard_unplugged_while_the_nodes_are_listed_does_not_stop_the_check(
+        monkeypatch):
+    """evdev's list_devices() checks that a node exists, then stats it: a
+    keyboard unplugged in between raises there. The setup screen still gets
+    an answer instead of the check failing."""
+    evdev = pytest.importorskip("evdev")
+
+    def unplugged_mid_listing():
+        raise FileNotFoundError("/dev/input/event7")
+    monkeypatch.setattr(evdev, "list_devices", unplugged_mid_listing)
+    monkeypatch.setattr("glob.glob", lambda pattern: [])     # no readable node either
+    ok, reason = check_input_read_permission()
+    assert ok is False and "input" in reason
 
 
 def test_setup_is_required_when_only_hotkey_reading_is_broken(monkeypatch):

@@ -16,10 +16,6 @@ window's rectangle into GDK's monitor of the same name.
 import os
 from collections import namedtuple
 
-from .logger import setup_logger
-
-logger = setup_logger(__name__)
-
 Rect = namedtuple("Rect", "x y w h")
 
 _DBUS_TIMEOUT_S = 0.3     # the tray answers from a cache in a millisecond
@@ -74,21 +70,19 @@ def to_screen_rect(rect, output, output_rect, monitors):
 
 def screen_monitors():
     """[(name, Rect)] for each monitor as GDK sees it. The name is the
-    connector ("DP-6") where GDK knows it."""
-    try:
-        import gi
-        gi.require_version("Gdk", "3.0")
-        from gi.repository import Gdk
-        display = Gdk.Display.get_default()
-        out = []
-        for i in range(display.get_n_monitors()):
-            mon = display.get_monitor(i)
-            g = mon.get_geometry()
-            out.append((mon.get_model() or "", Rect(g.x, g.y, g.width, g.height)))
-        return out
-    except Exception as e:
-        logger.debug(f"Could not list the monitors: {e}")
+    connector ("DP-6") where GDK knows it; none without a display."""
+    import gi
+    gi.require_version("Gdk", "3.0")
+    from gi.repository import Gdk
+    display = Gdk.Display.get_default()
+    if display is None:
         return []
+    out = []
+    for i in range(display.get_n_monitors()):
+        mon = display.get_monitor(i)
+        g = mon.get_geometry()
+        out.append((mon.get_model() or "", Rect(g.x, g.y, g.width, g.height)))
+    return out
 
 
 def _reported():
@@ -104,18 +98,15 @@ def _x11_active_rect():
     Not under Wayland: XWayland knows only the X11 apps."""
     if os.environ.get("XDG_SESSION_TYPE") != "x11":
         return None
-    try:
-        import gi
-        gi.require_version("Gdk", "3.0")
-        from gi.repository import Gdk
-        window = Gdk.Screen.get_default().get_active_window()
-        if window is None:
-            return None
-        g = window.get_frame_extents()
-        return Rect(g.x, g.y, g.width, g.height)
-    except Exception as e:
-        logger.debug(f"Could not ask X11 where the active window is: {e}")
+    import gi
+    gi.require_version("Gdk", "3.0")
+    from gi.repository import Gdk
+    screen = Gdk.Screen.get_default()
+    window = screen.get_active_window() if screen is not None else None
+    if window is None:
         return None
+    g = window.get_frame_extents()
+    return Rect(g.x, g.y, g.width, g.height)
 
 
 _ASK = object()          # active_window_rect(): look the window up now

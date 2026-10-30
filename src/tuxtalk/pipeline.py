@@ -135,7 +135,6 @@ def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
     this one's Enter may go. By default the current recording's."""
     job = _Job(beeps_on, smart_quotes, notify_on, language, auto_space, auto_period,
                injection_mode, chunk_role, rs.state.message if message is None else message)
-    print("Recording stopped. Transcribing…")
     t0 = time.time()
     logger.info("Recording stopped, starting transcription")
     try:
@@ -194,7 +193,7 @@ def _audio_to_hear(frames, rec_sr, job: _Job):
     audio_f32 = recording.frames_f32(frames)
     if audio_f32.size == 0:
         if not _nothing_in_chunk("had no audio", job):
-            print("(No audio captured)")
+            logger.info("No audio captured, so nothing was typed")
         return None
     if rec_sr != engine.SAMPLE_RATE:
         audio_f32 = recording.resample(audio_f32, rec_sr, engine.SAMPLE_RATE)
@@ -212,7 +211,6 @@ def _audio_to_hear(frames, rec_sr, job: _Job):
     # hands-free "nothing said" stop do: silence there read as broken.
     if silence.is_speechless_tap(audio_f32, engine.SAMPLE_RATE):
         if not _nothing_in_chunk("had no speech", job):
-            print("(Short tap with no speech; nothing typed)")
             logger.info(f"Skipped {len(audio_f32) / engine.SAMPLE_RATE:.2f}s with no speech in it")
             beeps.beep(job.beeps_on, *CANCEL_BEEP)
         return None
@@ -230,7 +228,6 @@ def _hear(audio_f32, job: _Job, t0: float):
     if raw:
         return raw
     if not _nothing_in_chunk("was not recognised", job):
-        print("(No speech recognized)")
         logger.info("Nothing recognized, so nothing was typed")
         beeps.beep(job.beeps_on, *CANCEL_BEEP)
     return None

@@ -697,3 +697,15 @@ def test_the_command_line_uninstalls_itself_when_the_running_one_cant(monkeypatc
     with pytest.raises(SystemExit) as finished:
         tray_instance.open_from_command_line("uninstall")
     assert ran == [1] and finished.value.code == 0
+
+
+def test_work_done_while_the_window_waits_gives_back_its_result_or_its_error():
+    """The uninstall's slow steps run off GTK's thread: their result comes
+    back, and an error they raise reaches the caller rather than vanishing."""
+    assert uninstall._wait_for(lambda: 42) == 42
+
+    def fails():
+        time.sleep(0.05)
+        raise PermissionError("not allowed")
+    with pytest.raises(PermissionError):
+        uninstall._wait_for(fails)

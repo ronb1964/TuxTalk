@@ -36,3 +36,35 @@ def test_an_engine_on_this_computer_is_reached_with_a_proxy_set(monkeypatch):
     finally:
         server.shutdown()
         server.server_close()
+
+
+class _Loading(_Health):
+    def do_GET(self):
+        self.send_response(503)
+        self.end_headers()
+
+
+def _serve(handler):
+    server = http.server.HTTPServer(("127.0.0.1", 0), handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
+
+def test_an_engine_still_loading_its_model_is_not_ready_yet():
+    """llama-server and whisper-server answer 503 while they load: waiting
+    goes on instead of sending the warm-up to an engine that can't take it."""
+    loading, ready = _serve(_Loading), _serve(_Health)
+    try:
+        assert engine_process.answers(loading.server_port) is False
+        assert engine_process.answers(ready.server_port) is True
+    finally:
+        for server in (loading, ready):
+            server.shutdown()
+            server.server_close()
+
+
+def test_an_engine_not_listening_yet_is_not_ready():
+    server = http.server.HTTPServer(("127.0.0.1", 0), _Health)
+    port = server.server_port
+    server.server_close()           # the port is free: nothing listens there
+    assert engine_process.answers(port) is False

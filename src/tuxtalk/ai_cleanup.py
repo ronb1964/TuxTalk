@@ -416,11 +416,8 @@ def _server_binary():
 
 def _model_path():
     """Local path of the downloaded model, or None."""
-    try:
-        from huggingface_hub import hf_hub_download
-        return hf_hub_download(MODEL_REPO, MODEL_FILE, local_files_only=True)
-    except Exception:
-        return None
+    from .download_utils import cached_hub_file
+    return cached_hub_file(MODEL_REPO, MODEL_FILE)
 
 
 def is_installed() -> bool:
@@ -557,9 +554,7 @@ class CorrectionEngine:
                 logger.error("AI cleanup engine exited during startup"
                              + engine_process.launch_failure(proc.returncode, output))
                 return
-            try:
-                engine_process.open_local(f"http://127.0.0.1:{self._port}/health", timeout=1)
-            except Exception:
+            if not engine_process.answers(self._port):
                 time.sleep(0.25)
                 continue
             # One practice request before accepting real ones. The first

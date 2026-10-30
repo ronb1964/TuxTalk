@@ -117,7 +117,8 @@ def _loads_on_cpu(model_name):
                              local_files_only=True)
         del model
         return True
-    except Exception:
+    except Exception as e:      # any failure here means it doesn't load
+        logger.info(f"{model_name} doesn't load on the processor either: {e}")
         return False
 
 
@@ -127,21 +128,18 @@ def is_model_cached_fast(model_name):
     cancelled partway reports False. Safe to call on every Apply/OK click."""
     if is_parakeet(model_name):
         return _parakeet_cached_dir() is not None
-    try:
-        from huggingface_hub import snapshot_download
-        repo_id = MODEL_REPOS.get(model_name)
-        if not repo_id:
-            return False
-        snapshot_path = snapshot_download(repo_id, local_files_only=True)
-        # Offline, snapshot_download does not check completeness: it returns a
-        # snapshot holding only config.json just as happily. hf_hub_download
-        # links a file into the snapshot only once it has fully downloaded, so
-        # the presence of the files faster-whisper loads means they are complete.
-        def has(name):
-            return os.path.isfile(os.path.join(snapshot_path, name))
-        return all(map(has, ESSENTIAL_MODEL_FILES)) and any(map(has, VOCABULARY_FILES))
-    except Exception:
+    from .download_utils import cached_hub_snapshot
+    repo_id = MODEL_REPOS.get(model_name)
+    snapshot_path = cached_hub_snapshot(repo_id) if repo_id else None
+    if snapshot_path is None:
         return False
+    # Offline, snapshot_download does not check completeness: it returns a
+    # snapshot holding only config.json just as happily. hf_hub_download
+    # links a file into the snapshot only once it has fully downloaded, so
+    # the presence of the files faster-whisper loads means they are complete.
+    def has(name):
+        return os.path.isfile(os.path.join(snapshot_path, name))
+    return all(map(has, ESSENTIAL_MODEL_FILES)) and any(map(has, VOCABULARY_FILES))
 
 
 def _failure_text(error):
@@ -375,7 +373,10 @@ def make_model_download_func(model_name, repo_id=None, only_files=None, force=Fa
             return False
         try:
             from huggingface_hub.utils import disable_progress_bars
+            from .download_utils import mend_damaged_ref
             disable_progress_bars()
+            # Before the disk-space check, which reads the record too.
+            mend_damaged_ref(repo)
             progress_callback("Getting file list...", 1)
             files = _listed_files(repo, model_name, only_files)
             if not files:
@@ -470,8 +471,9 @@ def download_parakeet_update(device, parent=None):
     arrived, False when cancelled, None when the download failed."""
     from . import parakeet_ultra
     from .download_progress_dialog import DownloadTask, UnifiedDownloadDialog
-    dialog = UnifiedDownloadDialog(parent=parent, title="Updating Parakeet",
-                                   description="One-time download. Everything runs on this computer.")
+    dialog = UnifiedDownloadDialog(
+        parent=parent, title="Updating Parakeet",
+        description="One-time download. Everything runs on this computer.")
     dialog.add_task(DownloadTask("Parakeet Ultra", parakeet_update_size(device),
                                  parakeet_ultra.make_download_func(device)))
     results = dialog.run()
@@ -535,7 +537,6 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
 
     if cached:
         logger.info(f"Model {model_name} already cached, loading directly (no download window)")
-        print(f"Model {model_name} already cached - loading without download")
         try:
             return load_model(model_name, device=device, compute_type=compute_type)
         except Exception as e:
@@ -556,7 +557,6 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
         return None
 
     logger.info(f"Model {model_name} NOT cached - showing download progress dialog")
-    print(f"Model {model_name} NOT cached - will download and show progress")
     settings = Gtk.Settings.get_default()
     if settings:        # for this window and the ones after it
         settings.set_property("gtk-application-prefer-dark-theme", True)

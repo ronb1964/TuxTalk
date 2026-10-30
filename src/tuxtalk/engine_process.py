@@ -8,6 +8,7 @@ or more of memory, so none may outlive the dictation service that started it.
 """
 import codecs
 import collections
+import http.client
 import os
 import shutil
 import signal
@@ -114,6 +115,17 @@ _LOCAL = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 def open_local(request, timeout):
     """urlopen for an engine on this computer: never through a proxy."""
     return _LOCAL.open(request, timeout=timeout)
+
+
+def answers(port) -> bool:
+    """Whether the engine on *port* answers its health check yet. While it
+    loads its model it refuses the connection, answers 503, takes too long
+    or drops the connection mid-reply: each only means "not yet"."""
+    try:
+        with open_local(f"http://127.0.0.1:{port}/health", timeout=1):
+            return True
+    except (OSError, http.client.HTTPException):
+        return False
 
 
 def remove_other_versions(parent, keep):

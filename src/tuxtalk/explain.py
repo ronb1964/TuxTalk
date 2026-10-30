@@ -134,13 +134,10 @@ def start_helper_window(module, *args):
     by these explanations and "fix that word". Returns the Popen."""
     env = os.environ.copy()
     env["GDK_BACKEND"] = "x11,wayland"
-    try:
-        from .service_launcher import dev_pythonpath
-        pythonpath = dev_pythonpath()
-        if pythonpath:
-            env["PYTHONPATH"] = pythonpath
-    except Exception:
-        pass
+    from .service_launcher import dev_pythonpath
+    pythonpath = dev_pythonpath()
+    if pythonpath:
+        env["PYTHONPATH"] = pythonpath
     return subprocess.Popen([sys.executable, "-m", module, *args], env=env,
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                             start_new_session=True)
@@ -203,8 +200,8 @@ def place_over_active_window(dialog):
         dialog.set_position(Gtk.WindowPosition.NONE)
         dialog.move(*position_over((natural.width, natural.height), center,
                                    window_geometry.Rect(g.x, g.y, g.width, g.height)))
-    except Exception as e:
-        logger.debug(f"Could not place the explanation over the window: {e}")
+    except Exception as e:      # it opens centred on the screen instead
+        logger.info(f"Could not place the window over the one dictated into: {e}")
 
 
 def main(argv=None):

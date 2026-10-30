@@ -528,3 +528,27 @@ def test_gnome_terminal_on_cosmic_gets_terminal_paste():
     """COSMIC names GNOME Terminal's windows after its server process."""
     from tuxtalk.window_classes import is_terminal_class
     assert is_terminal_class("gnome-terminal-server")
+
+
+def test_a_compositor_that_stops_answering_is_logged_once_not_at_every_check(
+        monkeypatch, caplog):
+    """The focus is asked before every typed chunk and during a send's
+    countdown: the same failure is logged the first time, and its end once."""
+    import logging
+    state = {"broken": True}
+
+    def from_hyprland(_signature):
+        if state["broken"]:
+            raise ConnectionRefusedError("hyprland socket refused")
+        return "kitty", "0xabc"
+    monkeypatch.setenv("HYPRLAND_INSTANCE_SIGNATURE", "sig")
+    monkeypatch.setattr(cf, "_from_hyprland", from_hyprland)
+    with caplog.at_level(logging.INFO, logger=cf.logger.name):
+        for _ in range(3):
+            assert cf.focused_window() == (None, None)
+        state["broken"] = False
+        for _ in range(2):
+            assert cf.focused_window() == ("kitty", "0xabc")
+    lines = [r.getMessage() for r in caplog.records]
+    assert sum("refused" in line for line in lines) == 1
+    assert sum("answers again" in line for line in lines) == 1

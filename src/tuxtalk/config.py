@@ -3,6 +3,7 @@ import dataclasses
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 try:
@@ -12,7 +13,6 @@ except ImportError:
     import toml as tomllib  # Python 3.10 fallback
     _USE_TOMLLIB = False  # toml library requires text mode ("r")
 from dataclasses import dataclass, field, fields
-import sys
 
 from .logger import setup_logger
 from .virtual_keyboard import KEY_DELAY_MS
@@ -404,13 +404,6 @@ def _repair_invalid_fields(s: Settings, error: ConfigError) -> Settings:
         default = getattr(defaults, name)
         logger.warning(f"Resetting invalid setting {name!r} to default {default!r}")
         setattr(s, name, default)
-
-    if not getattr(load_config, "_invalid_reported", False):
-        print("Some settings held invalid values and were reset to defaults:", file=sys.stderr)
-        for message in error.errors:
-            print(f"  \u2022 {message}", file=sys.stderr)
-        load_config._invalid_reported = True
-
     return s
 
 
@@ -470,7 +463,7 @@ _config_mtime = 0.0
 # written over a file whose contents may be perfectly good.
 _config_read_failed = False
 
-def _recover_damaged_config(error: Exception) -> Settings:
+def _recover_damaged_config() -> Settings:
     """Set a damaged config aside, recover the last known good settings, and
     write them back so the file is actually repaired.
 
@@ -483,9 +476,7 @@ def _recover_damaged_config(error: Exception) -> Settings:
     try:
         shutil.copy2(CONFIG_PATH, quarantine)
         quarantined = True
-        logger.error(f"Damaged config saved to {quarantine}: {error}")
-        print(f"Settings file was unreadable ({error}).", file=sys.stderr)
-        print(f"    A copy was kept at: {quarantine}", file=sys.stderr)
+        logger.error(f"Damaged config saved to {quarantine}")
     except OSError as copy_error:
         logger.error(f"Could not preserve damaged config: {copy_error}")
 
@@ -499,12 +490,16 @@ def _recover_damaged_config(error: Exception) -> Settings:
                 apply_toml(recovered, data)
                 restored_from_backup = True
                 logger.info(f"Recovered settings from {backup}")
-                print("    Your previous settings were restored from backup.", file=sys.stderr)
         except Exception as restore_error:
             logger.error(f"Backup at {backup} is also unreadable: {restore_error}")
 
     if not restored_from_backup:
-        print("    Settings have been reset to defaults.", file=sys.stderr)
+        logger.warning("Settings have been reset to defaults")
+    # Also on stderr: started from a terminal, that's where the user looks.
+    print("TuxTalk's settings file was damaged"
+          + (f"; a copy was kept at {quarantine}" if quarantined else "")
+          + (". Your previous settings were restored from the backup." if restored_from_backup
+             else ". Settings have been reset to defaults."), file=sys.stderr)
 
     # Only replace the file when its previous contents are safely stored
     # elsewhere. If the quarantine copy failed — an unreadable file, a full
@@ -597,11 +592,8 @@ def load_config() -> Settings:
             # open handles. That is not corruption, and it must never trigger
             # the repair path: the contents may be perfectly good, and
             # rewriting them would destroy settings that only needed a chmod.
-            logger.error(f"Could not read {CONFIG_PATH}: {e}")
-            if not getattr(load_config, "_read_error_printed", False):
-                print(f"Could not read settings file: {e}", file=sys.stderr)
-                print("    Using defaults for now; the file has been left untouched.", file=sys.stderr)
-                load_config._read_error_printed = True
+            logger.error(f"Could not read {CONFIG_PATH}: {e}; using defaults for now, "
+                         "the file left untouched")
             s = dataclasses.replace(_config_cache) if _config_cache else Settings()
             # Hand out defaults so the app keeps running, but mark them as
             # never-loaded: save_config() must refuse to write them back over
@@ -615,7 +607,8 @@ def load_config() -> Settings:
             # back to the last known good settings. Silently resetting to
             # defaults would look like a fresh install, and the next save would
             # overwrite the user's real settings for good.
-            s = _recover_damaged_config(e)
+            logger.error(f"Settings file is damaged: {e}")
+            s = _recover_damaged_config()
 
     s = repaired(s)
     _config_cache = s
@@ -947,9 +940,10 @@ def default_source_name() -> str | None:
     system without PipeWire never looks like a switch.
     """
     try:
+        # errors="replace": a device name in another encoding is still a name.
         result = subprocess.run(["wpctl", "inspect", "@DEFAULT_SOURCE@"],
-                                capture_output=True, text=True, timeout=2)
-    except Exception:
+                                capture_output=True, text=True, errors="replace", timeout=2)
+    except (OSError, subprocess.SubprocessError):   # no wpctl, or it hung
         return None
     if result.returncode != 0:
         return None
@@ -975,7 +969,8 @@ def find_input_device(mic_substring: str | None) -> int | None:
     try:
         import sounddevice as sd
         q = sd.query_devices()
-    except Exception:
+    except Exception as e:      # no PortAudio, or it can't list: sounddevice's default
+        logger.warning(f"Could not list the sound devices: {e}")
         return None
 
     # --- User specified a mic name — find it by substring match ---
@@ -998,7 +993,7 @@ def find_input_device(mic_substring: str | None) -> int | None:
     try:
         result = subprocess.run(
             ["wpctl", "inspect", "@DEFAULT_SOURCE@"],
-            capture_output=True, text=True, timeout=2
+            capture_output=True, text=True, errors="replace", timeout=2
         )
         if result.returncode == 0:
             for line in result.stdout.splitlines():
@@ -1021,12 +1016,9 @@ def find_input_device(mic_substring: str | None) -> int | None:
                                 logger.info(
                                     f"Auto-detected mic: [{i}] {d['name']}"
                                     " (via PipeWire default source)")
-                                print(f"Auto-detected mic: {d['name']}")
                                 return i
-    except FileNotFoundError:
-        pass  # wpctl not installed — not a PipeWire system
-    except Exception:
-        pass
+    except (OSError, subprocess.SubprocessError):
+        pass  # wpctl not installed (not a PipeWire system), or it hung
 
     # --- The default is virtual (noise suppression, a remapped source) ---
     # PortAudio lists only hardware under their own names, so a virtual
@@ -1037,7 +1029,6 @@ def find_input_device(mic_substring: str | None) -> int | None:
             if d.get("name", "").lower() in ("pipewire", "pulse") and d.get("max_input_channels", 0) > 0:
                 logger.info(f"Auto-detected mic: [{i}] {d['name']}"
                             f" (the default source {default_source!r} is not a hardware device)")
-                print(f"Auto-detected mic: {d['name']} -> {default_source}")
                 return i
 
     # --- Fallback: pick a real hardware mic, avoiding virtual devices ---
@@ -1057,7 +1048,6 @@ def find_input_device(mic_substring: str | None) -> int | None:
         logger.info(
             f"Auto-detected mic (hardware fallback):"
             f" [{chosen_i}] {chosen_d['name']}")
-        print(f"Auto-detected mic: {chosen_d['name']}")
         return chosen_i
 
     return None  # Last resort: let sounddevice use its own default
@@ -1088,7 +1078,7 @@ def load_custom_commands() -> dict[str, str]:
             data = _load_toml_file(CUSTOM_COMMANDS_PATH)
             commands = _text_snippets(data.get("commands", {}))
         except Exception as e:
-            print(f"Warning: Could not load custom commands: {e}")
+            logger.warning(f"Could not load the snippets: {e}")
             # Preferences rebuilds its list from whatever this returns and
             # writes it back on every Apply/OK, so a bare {} would delete every
             # custom command. Mark the failure so the writer refuses.

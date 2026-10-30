@@ -286,16 +286,12 @@ def read_backup(path):
 
 def _device_works_here(device):
     """Whether this computer can use *device*. CPU always can."""
-    try:
-        if device == "cuda":
-            from .cuda_helper import detect_nvidia_gpu
-            return bool(detect_nvidia_gpu())
-        if device == "vulkan":
-            from . import whisper_vulkan
-            return whisper_vulkan.is_offered()
-    except Exception as e:
-        logger.warning(f"Could not check for {device}: {e}")
-        return False
+    if device == "cuda":
+        from .cuda_helper import detect_nvidia_gpu
+        return bool(detect_nvidia_gpu())
+    if device == "vulkan":
+        from . import whisper_vulkan
+        return whisper_vulkan.is_offered()
     return True
 
 

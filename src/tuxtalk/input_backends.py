@@ -57,11 +57,9 @@ class PortalInputBackend(InputBackend):
         self.input_device_idx = input_device_idx
 
     def _shortcut_id(self, params):
-        """The shortcut id carried by an Activated/Deactivated signal, or None."""
-        try:
-            return params.unpack()[1]
-        except Exception:
-            return None
+        """The shortcut id an Activated/Deactivated signal carries: the
+        portal's signature is (session, shortcut id, timestamp, options)."""
+        return params.unpack()[1]
 
     def _on_activated(self, conn, sender, path, iface, signal, params):
         # Two shortcuts are always live, mirroring Backend A where the hold key

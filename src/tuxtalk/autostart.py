@@ -108,7 +108,8 @@ def get_launch_command(prefer_installed_appimage: bool = False) -> str:
     # Non-standard packaged layout: PATH lookup, still preferring the wrapper.
     for cmd in ("tuxtalk", "talktype", "dictate-tray"):
         try:
-            result = subprocess.run(['which', cmd], capture_output=True, text=True, timeout=5)
+            result = subprocess.run(['which', cmd], capture_output=True, text=True,
+                                    errors="replace", timeout=5)
             if result.returncode == 0:
                 path = result.stdout.strip()
                 if os.path.isfile(path) and os.access(path, os.X_OK):

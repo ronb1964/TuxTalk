@@ -201,14 +201,14 @@ def stop_old_talktype_flatpak(run=subprocess.run) -> bool:
         return False    # inside a sandbox: no flatpak command, nothing of ours to stop
     try:
         ps = run(["flatpak", "ps", "--columns=application"],
-                 capture_output=True, text=True, timeout=3)
+                 capture_output=True, text=True, errors="replace", timeout=3)
     except (OSError, subprocess.SubprocessError):
         return False
     if OLD_TALKTYPE_FLATPAK not in (ps.stdout or "").split():
         return False
     try:
         result = run(["flatpak", "kill", OLD_TALKTYPE_FLATPAK],
-                     capture_output=True, text=True, timeout=5)
+                     capture_output=True, text=True, errors="replace", timeout=5)
     except (OSError, subprocess.SubprocessError) as e:
         logger.warning(f"Could not stop the old {OLD_TALKTYPE_FLATPAK} Flatpak: {e}")
         return False
@@ -441,8 +441,8 @@ def release_desktop_hotkeys() -> None:
         from . import cosmic_hotkeys, kwin_hotkeys
         kwin_hotkeys.release()
         cosmic_hotkeys.release()
-    except Exception as e:
-        logger.debug(f"Could not release the desktop's hotkeys: {e}")
+    except Exception as e:      # the quit goes on; the next start claims the keys afresh
+        logger.info(f"Could not release the desktop's hotkeys: {e}")
 
 
 # The GDK_BACKEND the service's own (SERVICE_GDK_BACKEND) took the place of,

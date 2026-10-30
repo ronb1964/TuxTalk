@@ -33,7 +33,7 @@ def _set(key, value):
     """Write one binding; True if gsettings accepted it."""
     try:
         result = subprocess.run(["gsettings", "set", SCHEMA, key, value],
-                                capture_output=True, text=True, timeout=5)
+                                capture_output=True, text=True, errors="replace", timeout=5)
     except (OSError, subprocess.SubprocessError) as e:
         logger.warning(f"Couldn't set GNOME's {key}: {e}")
         return False
@@ -64,8 +64,8 @@ def restore(saved):
             os.remove(_backup_path())
         except FileNotFoundError:
             pass
-        except Exception as e:
-            logger.debug(f"Could not remove the keybinding backup: {e}")
+        except OSError as e:
+            logger.info(f"Could not remove the keybinding backup: {e}")
     return all_back
 
 
@@ -101,8 +101,10 @@ def disable_for_hotkey_test():
         saved = {key: subprocess.check_output(["gsettings", "get", SCHEMA, key],
                                               text=True, timeout=5).strip()
                  for key in KEYS}
-    except Exception as e:
-        logger.debug(f"Could not read GNOME keybindings: {e}")
+    except (OSError, subprocess.SubprocessError, UnicodeDecodeError) as e:
+        # Undecodable is unreadable too: a value that can't be read back
+        # exactly couldn't be restored, so nothing is cleared.
+        logger.info(f"Could not read GNOME keybindings: {e}")
         return None
     try:
         from .config import write_text_atomic

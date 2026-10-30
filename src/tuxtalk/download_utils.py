@@ -14,17 +14,24 @@ import contextlib
 import fnmatch
 import glob
 import hashlib
+import itertools
 import logging
 import os
+import re
 import secrets
 import shutil
+import stat
 import tarfile
 import tempfile
 import time
 import urllib.error
 import urllib.request
 
+from .logger import FailureNotes
+
 logger = logging.getLogger(__name__)
+# Damaged downloads, logged once each: the presence checks run on every OK.
+_damaged = FailureNotes()
 
 # Read in 64 KiB chunks — large enough for throughput, small enough that
 # cancellation and progress updates stay responsive.
@@ -276,6 +283,133 @@ def failure_reason(message, percent):
     return message if percent == 0 and message else None
 
 
+def _cached(lookup, repo, what):
+    """*lookup*()'s answer from the Hugging Face cache, or None when *what*
+    (from *repo*) isn't downloaded or its cache entry is damaged. A damaged
+    record of the snapshot is set aside, so the next download mends it."""
+    try:
+        found = lookup()
+    except OSError:     # not downloaded: LocalEntryNotFoundError is a FileNotFoundError
+        found = None
+    except ValueError as e:
+        if _damaged.failed(what, e):
+            logger.warning(f"The download of {what} is damaged; counted as missing: {e}")
+        if _damaged_record(e):
+            _set_aside_ref(repo, e)
+        return None
+    if _damaged.worked(what):
+        logger.info(f"The download of {what} is no longer damaged")
+    return found
+
+
+def cached_hub_file(repo: str, filename: str):
+    """The local path of *filename* from Hugging Face *repo*, or None when it
+    isn't fully downloaded. Asks only the cache, never the network."""
+    from huggingface_hub import hf_hub_download
+    return _cached(lambda: hf_hub_download(repo, filename, local_files_only=True),
+                   repo, f"{repo}/{filename}")
+
+
+def cached_hub_snapshot(repo: str):
+    """The local snapshot folder of Hugging Face *repo*, or None when there is
+    none. It may hold only some of the files (see is_model_cached_fast)."""
+    from huggingface_hub import snapshot_download
+    return _cached(lambda: snapshot_download(repo, local_files_only=True), repo, repo)
+
+
+# What Hugging Face writes in refs/main: the commit the snapshot is of.
+_COMMIT = re.compile(rb"[0-9a-fA-F]{40,64}")
+_KEEP_DAMAGED = 3               # set-aside records kept per repo, newest first
+_set_asides = itertools.count()     # with the time and pid, a name of its own
+# A set-aside copy's name: main-<nanoseconds>-<pid>-<count>.
+_ASIDE_NAME = re.compile(r"main-(\d+)-(\d+)-(\d+)")
+
+
+def _damaged_record(error) -> bool:
+    """Whether *error*, from huggingface_hub reading the cache, means its
+    record of the revision is damaged: not text, or a pointer outside the
+    snapshots."""
+    return isinstance(error, UnicodeDecodeError) or "Invalid pointer path" in str(error)
+
+
+def mend_damaged_ref(repo: str) -> None:
+    """Before a download from *repo*: when huggingface_hub can't read its
+    record of the main revision (refs/main), set that record aside so the
+    download writes a fresh one. It reads the old record before replacing
+    it, as does the disk-space check, so otherwise every download fails.
+    Only after its own read failed, and only that record: another process
+    may be writing a healthy one at this moment."""
+    from huggingface_hub import try_to_load_from_cache
+    try:
+        # Any file name: the record is read first, whichever file is asked for.
+        try_to_load_from_cache(repo, "config.json")
+    except ValueError as e:
+        if _damaged_record(e):
+            _set_aside_ref(repo, e)
+
+
+def _set_aside_ref(repo, problem):
+    """_set_aside() for *repo*'s refs/main, the only revision TuxTalk asks for."""
+    from huggingface_hub import constants
+    from huggingface_hub.file_download import repo_folder_name
+    folder = os.path.join(constants.HF_HUB_CACHE, repo_folder_name(repo_id=repo,
+                                                                   repo_type="model"))
+    _set_aside(os.path.join(folder, "refs", "main"), os.path.join(folder, "damaged-refs"),
+               problem)
+
+
+def _set_aside(path, aside_dir, problem):
+    """Rename the damaged record *path* into *aside_dir*, unless the record
+    is a link, holds a commit by now or changed while it was looked at, or
+    *aside_dir* is a link."""
+    try:
+        before = os.lstat(path)
+    except FileNotFoundError:
+        return          # gone already: set aside by another process, or never written
+    except OSError as e:
+        logger.warning(f"Could not look at the damaged record {path}: {e}")
+        return
+    if os.path.islink(aside_dir):
+        logger.warning(f"Not setting aside {path}: {aside_dir} is a link")
+        return
+    try:
+        if not stat.S_ISREG(before.st_mode):
+            logger.warning(f"Not setting aside {path}: it isn't a plain file")
+            return
+        with open(path, "rb") as f:
+            data = f.read()
+        now = os.lstat(path)
+        if _COMMIT.fullmatch(data.strip()) or (now.st_mtime_ns, now.st_size, now.st_ino) != (
+                before.st_mtime_ns, before.st_size, before.st_ino):
+            return      # rewritten since huggingface_hub read it
+        os.makedirs(aside_dir, exist_ok=True)
+        aside = os.path.join(aside_dir,
+                             f"main-{time.time_ns()}-{os.getpid()}-{next(_set_asides)}")
+        # Another process could still write a healthy commit between the
+        # check above and this rename. Accepted: it takes a damaged record and
+        # a download of the same repo at that very microsecond, and all it
+        # costs is that record moved aside, which the next download writes again.
+        os.replace(path, aside)
+    except OSError as e:
+        logger.warning(f"Could not set aside the damaged record {path}: {e}")
+        return
+    logger.warning(f"Set aside a damaged Hugging Face record ({problem}) as {aside}")
+    _keep_newest(aside_dir, _KEEP_DAMAGED)
+
+
+def _keep_newest(folder, keep):
+    """Delete all but the *keep* most recently set-aside copies in *folder*,
+    by the time and count in their names; other files are left alone."""
+    try:
+        named = [(tuple(map(int, m.groups())), entry) for entry in os.scandir(folder)
+                 if (m := _ASIDE_NAME.fullmatch(entry.name))
+                 and entry.is_file(follow_symlinks=False)]
+        for _order, entry in sorted(named, key=lambda pair: (pair[0][0], pair[0][2]))[:-keep]:
+            os.remove(entry.path)
+    except OSError as e:
+        logger.info(f"Could not trim the set-aside records in {folder}: {e}")
+
+
 def free_space_bytes(path: str) -> int:
     """Free disk space (bytes) on the filesystem holding *path*.
 
@@ -291,5 +425,5 @@ def free_space_bytes(path: str) -> int:
         p = parent
     try:
         return shutil.disk_usage(p).free
-    except Exception:
+    except OSError:     # unreadable, a broken mount: 0 means unknown
         return 0

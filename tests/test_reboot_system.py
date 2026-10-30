@@ -14,7 +14,7 @@ from tuxtalk import uinput_helper as uh
 def test_reboot_invokes_systemctl_reboot(monkeypatch):
     calls = {}
 
-    def run(argv, capture_output=True, text=True, timeout=10):
+    def run(argv, **kwargs):
         calls["argv"] = argv
         return types.SimpleNamespace(returncode=0, stdout="", stderr="")
 

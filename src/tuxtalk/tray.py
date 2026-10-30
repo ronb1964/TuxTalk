@@ -52,12 +52,9 @@ class DictationTray(ServiceLifecycle, Presets):
         # TuxTalk is a dark-themed app. This is a global Gtk setting, so setting
         # it once here, before any tray dialog is built, makes the tray's own
         # windows (About, update results) match Preferences and onboarding.
-        try:
-            _settings = Gtk.Settings.get_default()
-            if _settings is not None:
-                _settings.set_property("gtk-application-prefer-dark-theme", True)
-        except Exception as e:
-            logger.debug(f"Could not set dark theme preference: {e}")
+        _settings = Gtk.Settings.get_default()
+        if _settings is not None:
+            _settings.set_property("gtk-application-prefer-dark-theme", True)
 
         self.indicator = AppIndicator3.Indicator.new(
             "talktype",
@@ -146,8 +143,8 @@ class DictationTray(ServiceLifecycle, Presets):
             if extension_helper.is_extension_enabled():
                 logger.info("GNOME extension is enabled - hiding GTK tray")
                 return False
-        except Exception as e:
-            logger.debug(f"Could not check extension status: {e}")
+        except Exception as e:      # unknown: the tray icon shows, as without GNOME
+            logger.info(f"Could not check extension status: {e}")
 
         # Default: show GTK tray (extension not enabled or not GNOME)
         return True
@@ -191,8 +188,8 @@ class DictationTray(ServiceLifecycle, Presets):
             from . import kwin_focus
 
             kwin_focus.stop(kwin_focus.session_bus())
-        except Exception as e:
-            logger.debug(f"Could not stop the KWin focus reporter: {e}")
+        except Exception as e:      # the quit goes on; the next start unloads it first
+            logger.info(f"Could not stop the KWin focus reporter: {e}")
 
     def is_service_running(self):
         """Check if the dictation service is active via /proc (no subprocess spawn).
@@ -534,8 +531,8 @@ class DictationTray(ServiceLifecycle, Presets):
                 return False
             logger.info("No system tray and no extension running: showing the menu window")
             self.show_menu_window()
-        except Exception as e:
-            logger.debug(f"Could not check for a system tray: {e}")
+        except Exception as e:      # unknown: no menu window forced on a desktop with a tray
+            logger.info(f"Could not check for a system tray: {e}")
         return False
 
     def show_help(self, _):

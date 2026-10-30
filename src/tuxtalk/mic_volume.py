@@ -38,12 +38,12 @@ def list_sources():
     """The PipeWire/PulseAudio sources as pactl reports them, or [] if it can't."""
     try:
         result = subprocess.run(["pactl", "-f", "json", "list", "sources"],
-                                capture_output=True, text=True, timeout=2)
+                                capture_output=True, text=True, errors="replace", timeout=2)
         if result.returncode == 0:
             return json.loads(result.stdout)
         # pactl before 16 (Ubuntu 22.04, Mint 21) has no JSON output.
         result = subprocess.run(["pactl", "list", "sources"],
-                                capture_output=True, text=True, timeout=2,
+                                capture_output=True, text=True, errors="replace", timeout=2,
                                 env={**os.environ, "LC_ALL": "C"})
         if result.returncode == 0:
             return parse_pactl_sources(result.stdout)
@@ -135,7 +135,7 @@ def _run(cmd):
     """*cmd*'s output, or None when it isn't installed, fails or takes over
     two seconds."""
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=2)
+        result = subprocess.run(cmd, capture_output=True, text=True, errors="replace", timeout=2)
     except FileNotFoundError:
         return None             # not installed here; the other tool may be
     except (OSError, subprocess.SubprocessError) as e:

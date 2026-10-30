@@ -251,6 +251,7 @@ def test_the_unknown_window_paste_saves_the_primary_before_setting_it(monkeypatc
     monkeypatch.setattr(live, "restore_clipboard", True)
     monkeypatch.setattr(keyboard_output, "_clipboard_keeper", Keeper())
     monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda *a, **k: wl_copy)
+    monkeypatch.setattr(cb, "_sensitive_supported", lambda: False)     # it would run the fake
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
     monkeypatch.setattr(keyboard_output, "copy_to_primary", lambda text: done.append("sets the primary") or True)
     monkeypatch.setattr(keyboard_output, "send_paste_keystroke", lambda cls, primary: done.append("pastes") or True)
@@ -454,3 +455,16 @@ def test_quitting_right_after_an_x11_paste_waits_for_the_app_to_read_it(monkeypa
     monkeypatch.setattr(cb, "_x11_offered_at", cb.time.monotonic() - 5)
     cb.wait_for_x11_paste()
     assert slept == []
+
+
+def test_a_clipboard_type_name_in_another_encoding_does_not_stop_the_restore(
+        tmp_path, monkeypatch):
+    """wl-paste --list-types and wl-copy --help are read as text: an app that
+    offers a type with an odd byte in its name mustn't make the clipboard
+    restore or the voice-edit selection probe fail."""
+    from shell_stubs import stub
+    stub(tmp_path, "wl-paste", r"printf 'text/plain\napplication/x-caf\351\n'")
+    stub(tmp_path, "wl-copy", r"printf 'Usage: wl-copy [--sensitive] caf\351\n'")
+    monkeypatch.setenv("PATH", str(tmp_path))
+    assert "text/plain" in cb._wl_paste_types()
+    assert "--sensitive" in cb._wl_copy_help()

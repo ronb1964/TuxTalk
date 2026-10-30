@@ -441,7 +441,7 @@ def test_a_warm_up_without_an_answer_is_logged(monkeypatch, caplog):
     import logging
     e = ai.CorrectionEngine()
     e._proc, e._port = _Proc(), 1234
-    monkeypatch.setattr(ai.engine_process, "open_local", lambda *a, **k: None)   # /health answers
+    monkeypatch.setattr(ai.engine_process, "answers", lambda port: True)
     monkeypatch.setattr(e, "_ask", lambda sentence, timeout: None)
     with caplog.at_level(logging.INFO, logger=ai.logger.name):
         e._wait_until_ready(e._proc, _no_output(), limit=1)
@@ -456,7 +456,7 @@ def test_a_stop_during_the_warm_up_logs_no_warning(monkeypatch, caplog):
     e = ai.CorrectionEngine()
     starting = _Proc()
     e._proc, e._port = starting, 1234
-    monkeypatch.setattr(ai.engine_process, "open_local", lambda *a, **k: None)
+    monkeypatch.setattr(ai.engine_process, "answers", lambda port: True)
 
     def stopped_meanwhile(sentence, timeout):
         e._proc = None

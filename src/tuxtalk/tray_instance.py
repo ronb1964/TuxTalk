@@ -65,6 +65,7 @@ def _give_way_or_exit(lockfile):
         logger.info("The running TuxTalk didn't answer; waiting in case it's quitting")
         if single_instance.claim(lockfile, QUIT_WAIT_S + _TRAY_QUIT_EXTRA_S):
             return
+    logger.info("Another tray instance is already running. Exiting.")
     print("Another tray instance is already running. Exiting.", file=sys.stderr)
     _show_already_running(older_talktype=bool(pre_rename_tray_pids()))
     sys.exit(0)
@@ -151,4 +152,4 @@ def _show_already_running(older_talktype):
         dialog.run()
         dialog.destroy()
     except Exception as e:      # no display: the stderr line is all there is
-        logger.debug(f"Could not show the already-running notice: {e}")
+        logger.info(f"Could not show the already-running notice: {e}")

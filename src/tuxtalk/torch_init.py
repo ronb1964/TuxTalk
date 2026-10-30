@@ -14,6 +14,10 @@ import ctypes
 import warnings
 from pathlib import Path
 
+from .logger import setup_logger
+
+logger = setup_logger(__name__)
+
 # Decide at import time, before anything loads CUDA, whether the GPU stays visible:
 #   1. TuxTalk's CUDA download exists: leave it visible.
 #   2. Otherwise, if CTranslate2 already sees a GPU (system CUDA, or CUDA in a
@@ -27,18 +31,19 @@ if not _appimage_cuda_path.exists() and not _dev_cuda_path.exists():
         import ctranslate2 as _ct2
         _has_gpu = _ct2.get_cuda_device_count() > 0
         del _ct2
-    except Exception:
+    except Exception as e:      # a broken CUDA driver: the processor it is
+        logger.info(f"CTranslate2 couldn't count the CUDA devices: {e}")
         _has_gpu = False
 
     if not _has_gpu:
         os.environ['CUDA_VISIBLE_DEVICES'] = ''
-        print("No CUDA libraries found - forcing CPU-only mode")
+        logger.info("No CUDA libraries found - forcing CPU-only mode")
 
     # Without TuxTalk's CUDA download, missing-CUDA-library warnings are expected noise.
     warnings.filterwarnings('ignore', message='Could not load CUDA library.*')
     warnings.filterwarnings('ignore', message='.*not found in the system path.*')
 
-# Set once init_cuda_for_pytorch has run, so a second call prints nothing.
+# Set once init_cuda_for_pytorch has run, so a second call logs nothing.
 _initialized = False
 
 
@@ -70,14 +75,14 @@ def init_cuda_for_pytorch():
     if not nvidia_link.exists():
         try:
             nvidia_link.symlink_to(lib_path)
-            print("Created nvidia symlink for PyTorch")
-        except Exception as e:
-            print(f"Failed to create nvidia symlink: {e}")
+            logger.info("Created nvidia symlink for PyTorch")
+        except OSError as e:
+            logger.warning(f"Failed to create nvidia symlink: {e}")
 
     cuda_str = str(cuda_base)
     if cuda_str not in sys.path:
         sys.path.insert(0, cuda_str)
-        print(f"Added {cuda_str} to sys.path for PyTorch")
+        logger.info(f"Added {cuda_str} to sys.path for PyTorch")
 
     # Globs, not fixed sonames, so any CUDA major version loads.
     import glob
@@ -98,12 +103,11 @@ def init_cuda_for_pytorch():
             try:
                 ctypes.CDLL(lib_file, mode=ctypes.RTLD_GLOBAL)
                 loaded_count += 1
-            except Exception as e:
-                lib_name = Path(lib_file).name
-                print(f"Failed to preload {lib_name}: {e}")
+            except OSError as e:
+                logger.warning(f"Failed to preload {Path(lib_file).name}: {e}")
 
     if loaded_count > 0:
-        print(f"Preloaded {loaded_count} CUDA libraries for PyTorch")
+        logger.info(f"Preloaded {loaded_count} CUDA libraries for PyTorch")
         _initialized = True
         return True
 

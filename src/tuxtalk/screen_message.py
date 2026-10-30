@@ -56,11 +56,8 @@ def place(width, height, center, monitor):
 def show(text, center=None):
     """Show *text* centred on *center* (None: the middle of the main screen).
     Safe from any thread; never raises."""
-    try:
-        from gi.repository import GLib
-        GLib.idle_add(_show_now, text, center)
-    except Exception as e:
-        logger.debug(f"Could not show the message: {e}")
+    from gi.repository import GLib
+    GLib.idle_add(_show_now, text, center)
 
 
 def show_over_active_window(text, seconds=None, warning=True, tag=None, low=False):
@@ -75,17 +72,14 @@ def show_over_active_window(text, seconds=None, warning=True, tag=None, low=Fals
         from . import window_geometry
         GLib.idle_add(_show_over_window_now, text, window_geometry.active_window_report(),
                       seconds, warning, tag, low)
-    except Exception as e:
-        logger.debug(f"Could not show the message: {e}")
+    except Exception as e:      # a notice mustn't break the dictation that gives it
+        logger.info(f"Could not show the message over the window: {e}")
 
 
 def hide(tag):
     """Take down the label shown with *tag*, if it is still the one on screen."""
-    try:
-        from gi.repository import GLib
-        GLib.idle_add(_hide_now, tag)
-    except Exception as e:
-        logger.debug(f"Could not hide the message: {e}")
+    from gi.repository import GLib
+    GLib.idle_add(_hide_now, tag)
 
 
 def _hide_now(tag):
@@ -99,11 +93,8 @@ def _hide_now(tag):
 def relabel(tag, text):
     """Change the text of the label shown with *tag*, in place: a countdown
     ticking on one label instead of a new label each second."""
-    try:
-        from gi.repository import GLib
-        GLib.idle_add(_relabel_now, tag, text)
-    except Exception as e:
-        logger.debug(f"Could not change the message: {e}")
+    from gi.repository import GLib
+    GLib.idle_add(_relabel_now, tag, text)
 
 
 def _relabel_now(tag, text):
@@ -121,8 +112,8 @@ def _show_over_window_now(text, report, seconds=None, warning=True, tag=None, lo
             center = low_center(rect) if rect else None
         else:
             center = window_geometry.active_window_center(report)
-    except Exception as e:
-        logger.debug(f"Could not find the active window: {e}")
+    except Exception as e:      # shown in the middle of the screen instead
+        logger.info(f"Could not find the active window: {e}")
         center = None
     return _show_now(text, center, seconds, warning, tag)
 

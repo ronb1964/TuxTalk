@@ -46,7 +46,7 @@ UDEV_RULE_PATH = "/etc/udev/rules.d/99-talktype-uinput.rules"
 
 try:
     from evdev import ecodes as _ecodes
-except Exception:      # no evdev: nothing can read /dev/input anyway
+except ImportError:     # no evdev: nothing can read /dev/input anyway
     _ecodes = None
 
 # Letter keys, used to tell a real keyboard from a device that merely reports
@@ -208,9 +208,10 @@ def check_uinput_permission():
 def _readable_input_devices():
     """Input device nodes this user can actually open, asked evdev's way.
 
-    evdev's list_devices() keeps only nodes passing os.access(R_OK | W_OK) and
-    returns an empty list rather than raising, so posing the question exactly as
-    evdev poses it is the only answer that predicts whether hotkeys will work.
+    evdev's list_devices() keeps only nodes passing os.access(R_OK | W_OK), so
+    posing the question exactly as evdev poses it is the only answer that
+    predicts whether hotkeys will work. Without evdev, or when a node goes
+    while evdev lists them, the same question is asked of each node directly.
 
     Group membership is deliberately not used as a proxy here: a user can be in
     'input' while the nodes carry the wrong mode, and an ACL can grant access
@@ -219,10 +220,13 @@ def _readable_input_devices():
     try:
         from evdev import list_devices
         return list(list_devices())
-    except Exception:
-        import glob
-        return [p for p in glob.glob("/dev/input/event*")
-                if os.access(p, os.R_OK | os.W_OK)]
+    except ImportError:
+        pass
+    except OSError as e:    # it checks that a node exists, then stats it: an unplug between
+        logger.info(f"A device went while listing the input devices: {e}")
+    import glob
+    return [p for p in glob.glob("/dev/input/event*")
+            if os.access(p, os.R_OK | os.W_OK)]
 
 
 def _readable_keyboards():
@@ -231,22 +235,19 @@ def _readable_keyboards():
     paths = _readable_input_devices()
     try:
         from evdev import InputDevice
-    except Exception:
+    except ImportError:
         return paths
     keyboards = []
     for path in paths:
         try:
             dev = InputDevice(path)
-        except Exception:
+        except OSError:     # unplugged since it was listed, or not ours to open
             continue
         try:
             if is_keyboard_device(dev):
                 keyboards.append(path)
         finally:
-            try:
-                dev.close()
-            except Exception:
-                pass
+            dev.close()
     return keyboards
 
 
@@ -257,11 +258,8 @@ def check_input_read_permission():
     Returns:
         tuple: (has_access: bool, reason: str)
     """
-    try:
-        from .hotkey_helper_client import connect_helper
-        helper = connect_helper()
-    except Exception:
-        helper = None
+    from .hotkey_helper_client import connect_helper
+    helper = connect_helper()
     if helper is not None:
         answering = helper.sock is not None
         helper.close()
@@ -315,7 +313,7 @@ def reboot_system() -> bool:
     try:
         result = subprocess.run(
             ['systemctl', 'reboot'],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True, text=True, errors="replace", timeout=10,
         )
         if result.returncode != 0 and result.stderr:
             logger.warning(f"systemctl reboot refused: {result.stderr.strip()}")
@@ -400,7 +398,7 @@ def retire_ydotoold():
         return
     try:
         result = subprocess.run(["systemctl", "--user", "disable", "--now", "ydotoold.service"],
-                                capture_output=True, text=True, timeout=15)
+                                capture_output=True, text=True, errors="replace", timeout=15)
         if result.returncode != 0:
             # Kept, so the next start tries again: removed while systemd still
             # runs it, the daemon would go on until logout.
@@ -455,7 +453,7 @@ def _username():
     """This user's login name, from the passwd database."""
     try:
         return pwd.getpwuid(os.getuid()).pw_name
-    except Exception:
+    except KeyError:    # no passwd entry for this uid (a container, say)
         return os.environ.get("USER", "")
 
 
@@ -593,7 +591,7 @@ def install_portaudio_with_pkexec():
         full_cmd = ['pkexec'] + install_cmd
         logger.info(f"Running: {' '.join(full_cmd)}")
 
-        result = subprocess.run(full_cmd, capture_output=True, text=True,
+        result = subprocess.run(full_cmd, capture_output=True, text=True, errors="replace",
                                 timeout=PKEXEC_INSTALL_TIMEOUT)
 
         if result.returncode == 0:
@@ -664,7 +662,7 @@ def get_fix_script_content():
     # root shell-injection vector.
     try:
         username = pwd.getpwuid(os.getuid()).pw_name
-    except Exception:
+    except KeyError:    # no passwd entry for this uid (a container, say)
         username = os.environ.get('USER', '')
     quoted_user = shlex.quote(username)
 
@@ -720,7 +718,8 @@ def install_udev_rule_with_pkexec():
     logger.info("Running the input group setup with pkexec")
     try:
         result = subprocess.run(['pkexec', '/bin/bash', '-s'], input=get_fix_script_content(),
-                                capture_output=True, text=True, timeout=PKEXEC_SCRIPT_TIMEOUT)
+                                capture_output=True, text=True, errors="replace",
+                                timeout=PKEXEC_SCRIPT_TIMEOUT)
     except subprocess.TimeoutExpired:
         logger.error("pkexec timed out")
         return (False, "The operation timed out. Please try again.")

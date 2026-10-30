@@ -204,27 +204,23 @@ def forward_combo_scroll(combo):
     event alone would also stop the page scrolling while the pointer is over
     a dropdown, so the scroll is forwarded to the nearest ScrolledWindow
     ancestor, and True is still returned so the combo's value never changes.
-    Never raises — a scroll-handler failure must not break the dialog.
     """
     def _on_scroll(widget, event):
-        try:
-            sw = widget.get_ancestor(Gtk.ScrolledWindow)
-            adj = sw.get_vadjustment() if sw is not None else None
-            if adj is not None:
-                step = adj.get_step_increment()
-                if not step or step <= 0:
-                    step = 40.0
-                direction = event.direction
-                if direction == Gdk.ScrollDirection.UP:
-                    adj.set_value(adj.get_value() - step)
-                elif direction == Gdk.ScrollDirection.DOWN:
-                    adj.set_value(adj.get_value() + step)
-                elif direction == Gdk.ScrollDirection.SMOOTH:
-                    ok, _dx, dy = event.get_scroll_deltas()
-                    if ok:
-                        adj.set_value(adj.get_value() + dy * step)
-        except Exception as e:
-            logger.debug(f"forward_combo_scroll failed: {e}")
+        sw = widget.get_ancestor(Gtk.ScrolledWindow)
+        adj = sw.get_vadjustment() if sw is not None else None
+        if adj is not None:
+            step = adj.get_step_increment()
+            if not step or step <= 0:
+                step = 40.0
+            direction = event.direction
+            if direction == Gdk.ScrollDirection.UP:
+                adj.set_value(adj.get_value() - step)
+            elif direction == Gdk.ScrollDirection.DOWN:
+                adj.set_value(adj.get_value() + step)
+            elif direction == Gdk.ScrollDirection.SMOOTH:
+                ok, _dx, dy = event.get_scroll_deltas()
+                if ok:
+                    adj.set_value(adj.get_value() + dy * step)
         return True  # never let the combo change its value on scroll
 
     combo.connect("scroll-event", _on_scroll)

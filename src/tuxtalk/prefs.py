@@ -240,12 +240,8 @@ class PreferencesWindow:
         hundreds of milliseconds while the card wakes up.
         """
         if not hasattr(self, "_nvidia_found"):
-            try:
-                from .cuda_helper import detect_nvidia_gpu
-                self._nvidia_found = detect_nvidia_gpu() or False
-            except Exception as e:
-                logger.warning(f"Could not check for an NVIDIA card: {e}")
-                self._nvidia_found = False
+            from .cuda_helper import detect_nvidia_gpu
+            self._nvidia_found = detect_nvidia_gpu() or False
         return self._nvidia_found
 
     def has_nvidia(self):
