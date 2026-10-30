@@ -854,6 +854,24 @@ def test_rediscovery_survives_an_unreadable_device(monkeypatch):
     assert good in devices
 
 
+def test_a_device_whose_name_isnt_utf8_doesnt_end_the_hotkey_loop(monkeypatch):
+    """evdev decodes a device's name strictly: a Bluetooth device with a
+    Latin-1 name raised out of the rescan, which ended the hotkeys."""
+    good = keyboard("good")
+    good.path = "/dev/input/event4"
+
+    def make(path):
+        if path == "/dev/input/event3":
+            raise UnicodeDecodeError("utf-8", b"Clavier \xe9", 8, 9, "invalid byte")
+        return good
+
+    monkeypatch.setattr(hotkeys, "list_devices", lambda: ["/dev/input/event3", "/dev/input/event4"])
+    monkeypatch.setattr(hotkeys, "InputDevice", make)
+    devices = []
+    assert hotkeys._rediscover_devices(devices) == 1
+    assert devices == [good]
+
+
 def test_the_voice_commands_combo_mid_hold_keeps_the_recordings_grab(key_env, monkeypatch):
     """The combo's brief grab must not end by releasing the hold recording's
     grab too, or the rest of that dictation's keys reach the app."""

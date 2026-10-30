@@ -20,7 +20,7 @@ import grp
 import pwd
 import shlex
 from . import pkexec_runner
-from .keyboard_devices import is_keyboard_device
+from .keyboard_devices import close_devices, open_new_keyboards
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -140,18 +140,9 @@ def _readable_keyboards():
         from evdev import InputDevice
     except ImportError:
         return paths
-    keyboards = []
-    for path in paths:
-        try:
-            dev = InputDevice(path)
-        except OSError:     # unplugged since it was listed, or not ours to open
-            continue
-        try:
-            if is_keyboard_device(dev):
-                keyboards.append(path)
-        finally:
-            dev.close()
-    return keyboards
+    keyboards = open_new_keyboards([], lambda: paths, InputDevice)
+    close_devices(keyboards)
+    return [dev.path for dev in keyboards]
 
 
 def check_input_read_permission():

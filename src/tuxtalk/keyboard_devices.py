@@ -1,7 +1,7 @@
 """Which input devices are keyboards, and opening and closing them: one way
-for everything that reads /dev/input, the dictation service's hotkey loop
-(hotkeys), the first-run hotkey test (hotkey_test_dialog) and the keyboard
-grab.
+for everything that reads /dev/input: the dictation service's hotkey loop
+(hotkeys), the first-run hotkey test (hotkey_test_dialog), the permission
+check (uinput_helper) and the keyboard grab.
 
 Everything under /dev/input reports itself through the same evdev
 interface: keyboards, but also mice, touchpads, the power button, lid
@@ -13,6 +13,7 @@ missing, and their tests stand in for both.
 """
 import contextlib
 import os
+import select
 
 from .logger import setup_logger
 from .virtual_keyboard import NAME as VIRTUAL_KEYBOARD_NAME
@@ -123,8 +124,10 @@ def open_new_keyboards(devices, list_devices, input_device) -> list:
     Anything else (a mouse, the power button, a game controller, which any
     user may open and which reports keys too) is closed at once rather than
     whenever it's garbage-collected, since every scan opens each node again.
-    A node that can't be opened (no permission, unplugged mid-scan) is
-    skipped and logged at debug level: every scan meets the same ones."""
+    A node that can't be opened (no permission, unplugged mid-scan, a name
+    that isn't UTF-8, which evdev can't decode) is skipped and logged at
+    debug level: every scan meets the same ones. The caller says what it
+    opened, in its own words."""
     known = {getattr(d, "path", None) for d in devices}
     try:
         paths = list_devices()
@@ -138,7 +141,7 @@ def open_new_keyboards(devices, list_devices, input_device) -> list:
             continue
         try:
             dev = input_device(path)
-        except OSError as e:
+        except (OSError, UnicodeDecodeError) as e:
             logger.debug(f"Could not open {path}: {e}")
             continue
         if not is_keyboard_device(dev):
@@ -146,8 +149,23 @@ def open_new_keyboards(devices, list_devices, input_device) -> list:
             continue
         devices.append(dev)
         added.append(dev)
-        logger.info(f"Reading keyboard {dev.name!r} at {path}")
     return added
+
+
+def devices_with_events(devices, timeout):
+    """The *devices* with events waiting, after sleeping up to *timeout* for one."""
+    # The hotkey helper may already hold events it took in while answering
+    # another call (active_keys), or have a reconnect due: ready now.
+    due = [d for d in devices if getattr(d, "needs_service", None) and d.needs_service()]
+    if due:
+        return due
+    try:
+        ready, _, _ = select.select(devices, [], [], timeout)
+    except (OSError, ValueError):
+        # A device closed under us. Reading every device finds it, and the
+        # reader's error handling drops it.
+        return list(devices)
+    return ready
 
 
 def close_devices(devices):

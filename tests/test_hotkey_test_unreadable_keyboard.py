@@ -31,8 +31,14 @@ class FakeDevice:
                       "mouse": {2: [0]}}[kind]
         self._r, self._w = os.pipe()
         self._events = list(events)
+        self._gone = False
         if self._events:
             os.write(self._w, b"x")
+
+    def unplug(self):
+        """Gone: select() fires and the read fails, as evdev's does."""
+        self._gone = True
+        os.write(self._w, b"x")
 
     def capabilities(self):
         return self._caps
@@ -41,6 +47,8 @@ class FakeDevice:
         return self._r
 
     def read(self):
+        if self._gone:
+            raise OSError(19, "No such device")
         if not self._events:
             raise BlockingIOError
         os.read(self._r, 1)
@@ -69,7 +77,25 @@ def _input_device(denied=(), queued=None):
 def test_keyboards_are_opened():
     paths = ["/dev/input/kbd", "/dev/input/mouse"]
     opened = keyboard_devices.open_new_keyboards([], lambda: paths, _input_device())
-    assert [d.path for d in opened] == ["/dev/input/kbd"]
+    try:
+        assert [d.path for d in opened] == ["/dev/input/kbd"]
+    finally:
+        keyboard_devices.close_devices(opened)
+
+
+def test_a_device_whose_name_isnt_utf8_is_skipped():
+    """evdev decodes a device's name strictly: a Bluetooth device with a
+    Latin-1 name raised out of the scan, and the hotkey test failed."""
+    def make(path):
+        if path.endswith("latin1"):
+            raise UnicodeDecodeError("utf-8", b"Clavier \xe9", 8, 9, "invalid byte")
+        return FakeDevice(path)
+    paths = ["/dev/input/latin1", "/dev/input/kbd"]
+    opened = keyboard_devices.open_new_keyboards([], lambda: paths, make)
+    try:
+        assert [d.path for d in opened] == ["/dev/input/kbd"]
+    finally:
+        keyboard_devices.close_devices(opened)
 
 
 def test_a_game_controller_is_not_a_keyboard():
@@ -210,6 +236,66 @@ def test_a_keyboard_plugged_in_during_the_test_is_heard(monkeypatch):
                              if isinstance(w, Gtk.Label) and w.get_visible()]
     _run_dialog(monkeypatch, paths, during, queued={plugged: f8})
     assert "✓ Working!" in seen["texts"]
+
+
+def _visible_texts(dialog):
+    from gi.repository import Gtk
+    return [w.get_text() for w in widgets(dialog)
+            if isinstance(w, Gtk.Label) and w.get_visible()]
+
+
+def test_a_keyboard_plugged_in_after_the_test_opened_with_none_is_heard(monkeypatch):
+    """With no keyboard to open at the start (a Bluetooth one still
+    connecting) the test never looked again, so F8 on it went unseen."""
+    from gi.repository import Gtk
+    monkeypatch.setattr(hkd, "RESCAN_SECONDS", 0)
+    paths, plugged = [], "/dev/input/event5"
+    f8 = [SimpleNamespace(type=EV_KEY, code=66, value=value) for value in (1, 0)]
+    seen = {}
+
+    def during(dialog):
+        seen["before"] = _visible_texts(dialog)
+        paths.append(plugged)
+        deadline = time.monotonic() + 5
+        while "✓ Working!" not in seen.setdefault("after", []) and time.monotonic() < deadline:
+            Gtk.main_iteration_do(False)
+            seen["after"] = _visible_texts(dialog)
+    _run_dialog(monkeypatch, paths, during, queued={plugged: f8})
+    assert any("can't read the keyboard" in t for t in seen["before"])
+    assert "✓ Working!" in seen["after"]
+    assert not any("can't read the keyboard" in t for t in seen["after"])
+
+
+def test_after_the_only_keyboard_is_unplugged_a_key_isnt_called_working(monkeypatch):
+    """The test kept the keyboards it opened at the start: with the only one
+    unplugged, a key GTK saw still read "Working!", though the service had
+    nothing to hear it through."""
+    from gi.repository import Gdk, Gtk
+    made, seen = [], {}
+
+    class Recorded(hkd.HotkeyTestDialog):
+        def __init__(self, config):
+            super().__init__(config)
+            made.append(self)
+    monkeypatch.setattr(hkd, "HotkeyTestDialog", Recorded)
+    paths = ["/dev/input/event3"]
+
+    def notice_shown(dialog):
+        return any("can't read the keyboard" in t for t in _visible_texts(dialog))
+
+    def during(dialog):
+        paths.clear()
+        made[0].keyboards[0].unplug()
+        deadline = time.monotonic() + 5
+        while not notice_shown(dialog) and time.monotonic() < deadline:
+            Gtk.main_iteration_do(False)
+        _key(dialog, Gdk.KEY_F8, "key-release-event")
+        seen["texts"] = _visible_texts(dialog)
+        seen["notice"] = notice_shown(dialog)
+    _run_dialog(monkeypatch, paths, during)
+    assert seen["notice"]
+    assert "✓ Seen, not active yet" in seen["texts"]
+    assert "✓ Working!" not in seen["texts"]
 
 
 # --- used from the keyboard alone ------------------------------------------------

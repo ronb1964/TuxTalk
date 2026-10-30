@@ -10,7 +10,7 @@ import socket
 import pytest
 
 from tuxtalk import focused_window, hotkey_helper as hh
-from tuxtalk import hotkeys
+from tuxtalk import hotkeys, keyboard_devices
 from tuxtalk import keyboard_output
 from tuxtalk import keyboard_grab
 from tuxtalk import recording_state as rs
@@ -100,7 +100,7 @@ def rig(tmp_path, monkeypatch):
         """What hotkeys.run does each pass, for the helper's one 'keyboard'."""
         for _ in range(times):
             helper.run_once(timeout=0.01)
-            for dev in hotkeys._devices_with_input([client], 0.01):
+            for dev in keyboard_devices.devices_with_events([client], 0.01):
                 try:
                     events = list(dev.read())
                 except BlockingIOError:
@@ -175,7 +175,7 @@ def test_if_the_helper_goes_away_a_held_key_is_let_go(rig):
     for c in list(helper.clients.values()):
         helper.drop_client(c)            # helper restarted
     for _ in range(3):
-        for dev in hotkeys._devices_with_input([client], 0.01):
+        for dev in keyboard_devices.devices_with_events([client], 0.01):
             try:
                 events = list(dev.read())
             except BlockingIOError:
@@ -293,7 +293,7 @@ def test_events_taken_in_early_are_read_without_waiting(rig):
     helper.run_once(timeout=0.01)
     client.active_keys()                 # takes the DOWN in, as _grab_keyboards_hiding does
     assert client.needs_service()
-    assert hotkeys._devices_with_input([client], 5.0) == [client]
+    assert keyboard_devices.devices_with_events([client], 5.0) == [client]
 
 
 def test_no_helper_means_none(tmp_path):
