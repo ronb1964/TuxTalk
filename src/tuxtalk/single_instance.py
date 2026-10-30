@@ -66,9 +66,27 @@ def private_session_dir():
     fid = os.environ.get("FLATPAK_ID")
     if fid:
         app_dir = os.path.join(base, "app", fid)
-        if _private(app_dir):
+        if _settled(app_dir):
             return app_dir
-    return base if _private(base) else None
+    return base if _settled(base) else None
+
+
+def _settled(path) -> bool:
+    """_private(*path*), and no one else can put another folder in its place:
+    *path* itself isn't a link (one can lead through a folder another user
+    may change), and its parent is root's or this user's, writable by no one
+    else unless sticky (only a file's owner may rename it then), as root's
+    /run/user is."""
+    try:
+        if stat.S_ISLNK(os.lstat(path).st_mode):
+            return False
+        parent = os.stat(os.path.dirname(os.path.abspath(path)))
+    except OSError:
+        return False
+    open_to_others = parent.st_mode & (stat.S_IWGRP | stat.S_IWOTH)
+    return (parent.st_uid in (0, os.getuid())
+            and (not open_to_others or bool(parent.st_mode & stat.S_ISVTX))
+            and _private(path))
 
 
 def _private(path) -> bool:
