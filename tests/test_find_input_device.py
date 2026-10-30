@@ -83,3 +83,57 @@ def test_a_pipewire_that_hangs_is_logged_and_a_microphone_still_found(monkeypatc
 
     assert microphones.find_input_device("") == 1
     assert any("which microphone is the default" in r.getMessage() for r in caplog.records)
+
+
+@pytest.fixture
+def pulseaudio(monkeypatch):
+    """A PulseAudio desktop: no wpctl, and pactl reporting *.default* as the
+    default source, with the built-in mic on card 0 and the headset on card 1."""
+    import json
+    import subprocess
+    monkeypatch.setitem(sys.modules, "sounddevice",
+                        types.SimpleNamespace(query_devices=lambda: DEVICES))
+    state = types.SimpleNamespace(default="alsa_input.pci-0000_00_1f.3.analog-stereo",
+                                  pactl=True)
+    sources = [{"name": "alsa_input.pci-0000_00_1f.3.analog-stereo",
+                "properties": {"alsa.card": "0", "alsa.device": "0"}},
+               {"name": "alsa_input.usb-Sennheiser_headset-00.mono-fallback",
+                "properties": {"alsa.card": "1", "alsa.device": "0"}},
+               {"name": "noise_suppressed", "properties": {}}]
+
+    def run(cmd, **kwargs):
+        if cmd[0] == "wpctl" or not state.pactl:
+            raise FileNotFoundError(cmd[0])
+        if state.pactl == "fails":
+            return types.SimpleNamespace(returncode=1, stdout="")
+        if state.pactl == "hangs":
+            raise subprocess.TimeoutExpired(cmd, 2)
+        if cmd[1:] == ["get-default-source"]:
+            return types.SimpleNamespace(returncode=0, stdout=state.default + "\n")
+        return types.SimpleNamespace(returncode=0, stdout=json.dumps(sources))
+    monkeypatch.setattr(microphones.subprocess, "run", run)
+    return state
+
+
+def test_without_pipewire_the_pulseaudio_default_is_recorded(pulseaudio):
+    """With a USB headset plugged in, System Default recorded from it although
+    PulseAudio's default was the built-in mic: silence, or the wrong room."""
+    assert microphones.find_input_device("") == 0
+
+
+def test_a_pulseaudio_default_on_the_headset_is_found_too(pulseaudio):
+    pulseaudio.default = "alsa_input.usb-Sennheiser_headset-00.mono-fallback"
+    assert microphones.find_input_device("") == 1
+
+
+@pytest.mark.parametrize("pactl", [False, "fails", "hangs"])
+def test_without_pactl_the_hardware_fallback_still_applies(pulseaudio, pactl):
+    pulseaudio.pactl = pactl
+    assert microphones.find_input_device("") == 1       # the USB mic is preferred
+
+
+def test_a_virtual_pulseaudio_default_falls_back_to_hardware(pulseaudio):
+    """Never PortAudio's "pulse" device: the ALSA pulse plugin broke the
+    beeps on real PulseAudio."""
+    pulseaudio.default = "noise_suppressed"
+    assert microphones.find_input_device("") == 1

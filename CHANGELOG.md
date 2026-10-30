@@ -10,6 +10,10 @@ before 0.15.0, so older entries use that name.
   and dictation on CUDA types exactly the same without it. If you downloaded
   CUDA before, TuxTalk deletes that unused part when it starts, which gives
   you back nearly 1 GB.
+- On desktops that still run PulseAudio rather than PipeWire (Mint 21,
+  Ubuntu 22.04), System Default records from the microphone PulseAudio is set
+  to. Before, with a USB headset plugged in, TuxTalk took the headset even
+  when you'd picked the built-in mic, and recorded silence or the wrong room.
 - Downloading CUDA again over a copy that already works can't break it any
   more. The new files are unpacked to one side and only swapped in once
   every one of them is there, so running out of disk space partway, or

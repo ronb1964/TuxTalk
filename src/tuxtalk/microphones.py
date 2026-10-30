@@ -1,7 +1,7 @@
 """Which microphone to record from: the one named in Preferences, or the
-desktop's default as PipeWire reports it. PortAudio's own "default" can't be
-trusted for that: on PipeWire it is a virtual 128-channel device that can
-record clipped noise instead of the microphone.
+desktop's default as PipeWire (or PulseAudio) reports it. PortAudio's own
+"default" can't be trusted for that: on PipeWire it is a virtual
+128-channel device that can record clipped noise instead of the microphone.
 """
 import subprocess
 
@@ -17,22 +17,30 @@ _MAX_MIC_CHANNELS = 10
 _NOT_HARDWARE = ("monitor", "default", "pipewire", "sysdefault", "spdif")
 
 
+def _ask(command, server):
+    """*command*'s output, or None when it isn't installed (that sound
+    server isn't running here), fails, or takes over two seconds. *server*
+    names it in the log."""
+    try:
+        # errors="replace": a device name in another encoding is still a name.
+        result = subprocess.run(command, capture_output=True, text=True, errors="replace",
+                                timeout=2)
+    except FileNotFoundError:
+        return None
+    except (OSError, subprocess.SubprocessError) as e:
+        logger.warning(f"{server} didn't say which microphone is the default: {e}")
+        return None
+    return result.stdout if result.returncode == 0 else None
+
+
 def _default_source_properties() -> list[tuple[str, str]] | None:
     """The default source's properties as `wpctl inspect` lists them, in its
     order, or None without PipeWire (no wpctl) or when it doesn't answer."""
-    try:
-        # errors="replace": a device name in another encoding is still a name.
-        result = subprocess.run(["wpctl", "inspect", "@DEFAULT_SOURCE@"],
-                                capture_output=True, text=True, errors="replace", timeout=2)
-    except FileNotFoundError:
-        return None                     # not a PipeWire system
-    except (OSError, subprocess.SubprocessError) as e:
-        logger.warning(f"PipeWire didn't say which microphone is the default: {e}")
-        return None
-    if result.returncode != 0:
+    output = _ask(["wpctl", "inspect", "@DEFAULT_SOURCE@"], "PipeWire")
+    if output is None:
         return None
     properties = []
-    for line in result.stdout.splitlines():
+    for line in output.splitlines():
         key, sep, value = line.strip().lstrip("*").partition("=")
         if sep:
             properties.append((key.strip(), value.strip().strip('"').strip()))
@@ -91,6 +99,30 @@ def _sound_server_device(devices, source: str) -> int | None:
     return None
 
 
+def _pulseaudio_default_device(devices) -> int | None:
+    """Without PipeWire (PulseAudio: Mint 21, Ubuntu 22.04): the input
+    PulseAudio's default source records from, found by the ALSA card and
+    device numbers pactl gives it, which PortAudio's name carries ("(hw:0,0)").
+    The hardware device itself, never PortAudio's "pulse" device: PortAudio
+    through the ALSA pulse plugin broke the beeps on real PulseAudio. None
+    when pactl can't say, or the default is no sound card's (a virtual one)."""
+    name = (_ask(["pactl", "get-default-source"], "PulseAudio") or "").strip()
+    if not name:
+        return None
+    from .mic_volume import list_sources
+    source = next((s for s in list_sources() if s.get("name") == name), {})
+    properties = source.get("properties", {})
+    card = properties.get("alsa.card")
+    if card is None:
+        return None
+    tag = f"(hw:{card},{properties.get('alsa.device', '')}"
+    for i, d in _inputs(devices):
+        if tag in d.get("name", ""):
+            logger.info(f"Auto-detected mic: [{i}] {d['name']} (PulseAudio's default source)")
+            return i
+    return None
+
+
 def _hardware_mic(devices) -> int | None:
     """A real microphone when the default can't be found: a USB one (plugged
     in on purpose) before the built-in sound card."""
@@ -111,7 +143,8 @@ def find_input_device(mic_substring: str | None) -> int | None:
 
     With *mic_substring* set, the first input whose name holds it. Without
     one, the desktop's default microphone as PipeWire names it, then the
-    sound server's device for a virtual default, then a hardware microphone.
+    sound server's device for a virtual default; without PipeWire, the sound
+    card PulseAudio's default source is on; then a hardware microphone.
     """
     try:
         import sounddevice as sd
@@ -121,9 +154,11 @@ def find_input_device(mic_substring: str | None) -> int | None:
         return None
     if mic_substring:
         return _named_device(devices, mic_substring)
-    sources = [value for key, value in _default_source_properties() or ()
-               if key in _LISTED_NAMES and value]
+    pipewire = _default_source_properties()
+    sources = [value for key, value in pipewire or () if key in _LISTED_NAMES and value]
     found = _default_source_device(devices, sources)
     if found is None and sources:
         found = _sound_server_device(devices, sources[0])
+    if found is None and pipewire is None:
+        found = _pulseaudio_default_device(devices)
     return _hardware_mic(devices) if found is None else found
