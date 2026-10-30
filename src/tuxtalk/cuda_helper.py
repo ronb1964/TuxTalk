@@ -141,8 +141,8 @@ def has_cuda_libraries():
             try:
                 if _has_required_libs(os.listdir(lib_dir)):
                     return True
-            except (PermissionError, OSError):
-                pass
+            except OSError as e:       # unreadable: look in the next folder
+                logger.info(f"Couldn't look in {lib_dir} for CUDA's libraries: {e}")
 
     return False
 
@@ -158,4 +158,3 @@ def has_talktype_cuda_libraries():
     the UI; has_cuda_libraries() answers whether CUDA can run.
     """
     return cuda_install_looks_complete(get_appdir_cuda_path())
-

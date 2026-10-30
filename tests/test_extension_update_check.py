@@ -31,9 +31,9 @@ def test_the_result_window_comes_only_when_it_has_something_to_say(monkeypatch, 
     assert signalled[0][4:6] == (0, 3)
 
 
-def test_the_update_check_reads_the_extension_where_it_is_installed(tmp_path, monkeypatch):
-    """The installed version comes from the folder the extension is installed
-    in and uninstalled from, so the check can't miss an installed extension."""
+def test_the_update_check_reads_the_extension_from_the_install_folder(tmp_path, monkeypatch):
+    """The installed version is read from gnome_extensions' folder, the one
+    the install and the uninstall use, not from a copy of its path."""
     from tuxtalk import extension_helper, gnome_extensions
     monkeypatch.setattr(gnome_extensions, "get_extension_dir", lambda: str(tmp_path))
     folder = tmp_path / extension_helper.EXTENSION_UUID

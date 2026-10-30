@@ -80,8 +80,8 @@ def test_has_cuda_libraries_permission_error(mock_listdir, mock_exists, mock_run
 @patch('subprocess.run')
 @patch('os.path.exists')
 @patch('os.listdir')
-def test_has_cuda_libraries_os_error(mock_listdir, mock_exists, mock_run, _cuda_path):
-    """Test has_cuda_libraries handles OS errors gracefully"""
+def test_has_cuda_libraries_os_error(mock_listdir, mock_exists, mock_run, _cuda_path, caplog):
+    """A folder that can't be read is skipped, and the log says which and why."""
     # Mock ldconfig to fail (first check in has_cuda_libraries)
     import subprocess
     mock_run.side_effect = subprocess.TimeoutExpired(cmd='ldconfig', timeout=2)
@@ -89,10 +89,12 @@ def test_has_cuda_libraries_os_error(mock_listdir, mock_exists, mock_run, _cuda_
     # Mock directory checks to raise OSError
     mock_exists.return_value = True
     mock_listdir.side_effect = OSError("Disk error")
+    caplog.set_level("INFO")
 
     # Should not crash, should return False
     result = has_cuda_libraries()
     assert result is False
+    assert "Couldn't look in /usr/lib64 for CUDA's libraries: Disk error" in caplog.text
 
 
 LDCONFIG_HEADER = "1234 libs found in cache `/etc/ld.so.cache'\n"

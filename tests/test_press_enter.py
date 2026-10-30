@@ -1,7 +1,7 @@
 """Ending a dictation with "press enter" sends a real Enter (key_commands.py).
 
-Ron, 2026-10-17: "I really like the press enter, so you can just speak."
-A spoken "new line" stays Shift+Enter, which never sends a chat message.
+Saying it sends a chat message without reaching for the keyboard. A spoken
+"new line" stays Shift+Enter, which never sends a chat message.
 """
 import numpy as np
 import time

@@ -44,7 +44,11 @@ key_delay_ms = virtual_keyboard.KEY_DELAY_MS
 
 
 def is_wayland_session() -> bool:
-    """True when a Wayland compositor is available for wl-copy to talk to."""
+    """True when a Wayland compositor is available for wl-copy to talk to.
+
+    Not desktop_detect.is_x11_session's question, which is about the session:
+    this asks only whether wl-copy has a compositor to reach, which a
+    compositor nested in an X11 session gives it too."""
     return bool(os.environ.get("WAYLAND_DISPLAY"))
 
 

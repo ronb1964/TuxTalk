@@ -18,9 +18,10 @@ _MAX_MIC_CHANNELS = 10
 _NOT_HARDWARE = ("monitor", "default", "pipewire", "sysdefault", "spdif")
 
 
-def _default_source_properties() -> list[tuple[str, str]] | None:
+def default_source() -> list[tuple[str, str]] | None:
     """The default source's properties as `wpctl inspect` lists them, in its
-    order, or None without PipeWire (no wpctl) or when it doesn't answer."""
+    order, or None without PipeWire (no wpctl) or when it doesn't answer.
+    One call: source_name and default_microphone both read its answer."""
     output = run_sound_tool(["wpctl", "inspect", "@DEFAULT_SOURCE@"])
     if output is None:
         return None
@@ -32,18 +33,14 @@ def _default_source_properties() -> list[tuple[str, str]] | None:
     return properties
 
 
-def default_source_name() -> str | None:
-    """PipeWire's default microphone, by its unique node name, or None.
+def source_name(source) -> str | None:
+    """PipeWire's unique node name for a default_source() answer, or None.
 
     Used to notice the desktop switching its default input (GNOME Quick
     Settings, KDE's volume applet). None when wpctl is missing or fails, so a
     system without PipeWire never looks like a switch.
     """
-    return _node_name(_default_source_properties())
-
-
-def _node_name(properties) -> str | None:
-    for key, value in properties or ():
+    for key, value in source or ():
         if key == "node.name":
             return value or None
     return None
@@ -137,32 +134,33 @@ def find_input_device(mic_substring: str | None) -> int | None:
     one, the desktop's default microphone (see default_microphone).
     """
     if not mic_substring:
-        return default_microphone()[1]
+        return default_microphone(default_source())
     devices = _sound_devices()
     return None if devices is None else _named_device(devices, mic_substring)
 
 
-def default_microphone() -> tuple[str | None, int | None]:
-    """System Default: PipeWire's name for the default source (as
-    default_source_name gives it) and the sounddevice index to record it from,
-    both from one wpctl call.
+def default_microphone(source) -> int | None:
+    """System Default: the sounddevice index to record from for the default
+    source *source* (a default_source() answer, None without PipeWire).
 
-    The device is the default microphone as PipeWire names it, then the
-    sound server's device for a virtual default; without PipeWire, the sound
-    card PulseAudio's default source is on; then a hardware microphone. None
-    for sounddevice's own default when PortAudio can't list its devices.
+    The default microphone as PipeWire names it, then the sound server's
+    device for a virtual default; without PipeWire, the sound card
+    PulseAudio's default source is on; then a hardware microphone. None for
+    sounddevice's own default: PortAudio can't list its devices, or none
+    records.
     """
-    pipewire = _default_source_properties()
     devices = _sound_devices()
     if devices is None:
-        return _node_name(pipewire), None
-    sources = [value for key, value in pipewire or () if key in _LISTED_NAMES and value]
-    found = _default_source_device(devices, sources)
-    if found is None and sources:
-        found = _sound_server_device(devices, sources[0])
-    if found is None and pipewire is None:
+        return None
+    names = [value for key, value in source or () if key in _LISTED_NAMES and value]
+    found = _default_source_device(devices, names)
+    if found is None and names:
+        found = _sound_server_device(devices, names[0])
+    if found is None and source is None:
         found = _pulseaudio_default_device(devices)
-    return _node_name(pipewire), _hardware_mic(devices) if found is None else found
+    if found is None:
+        found = _hardware_mic(devices)
+    return found
 
 
 def _sound_devices():

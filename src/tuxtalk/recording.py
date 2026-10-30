@@ -99,22 +99,27 @@ def pick_input_device(mic_substring: str | None):
 
     Delegates to microphones, which finds the desktop's default microphone
     when no mic name is configured. This avoids the broken ALSA "default"
-    virtual device that returns garbage audio on PipeWire systems. System
-    Default is remembered with its source name, so follow_system_default
-    can notice a switch.
+    virtual device that returns garbage audio on PipeWire systems.
     """
     global _system_default_mic
     if mic_substring:
         _system_default_mic = None      # a mic chosen by name stays put
         return microphones.find_input_device(mic_substring)
-    source, idx = microphones.default_microphone()
-    _system_default_mic = (source, idx)
-    return idx
+    return _use_system_default(microphones.default_source())
 
 
 # (PipeWire default source name, device index) while the mic is on System
 # Default; None when a mic was chosen by name. See follow_system_default.
 _system_default_mic = None
+
+
+def _use_system_default(source):
+    """The device for the default source *source* (one wpctl answer), kept
+    with its name so follow_system_default can notice a switch."""
+    global _system_default_mic
+    idx = microphones.default_microphone(source)
+    _system_default_mic = (microphones.source_name(source), idx)
+    return idx
 
 
 def follow_system_default(input_device_idx):
@@ -123,21 +128,23 @@ def follow_system_default(input_device_idx):
     The default mic is turned into a device number when it's resolved, so
     switching inputs in GNOME's Quick Settings or KDE's applet used to need a
     restart (issue #14). Asking PipeWire costs about a millisecond, so it's
-    done on every recording, and devices are re-resolved only on a change.
-    Anything that goes wrong keeps the device already in use.
+    done on every recording, and devices are re-resolved only on a change,
+    from the same answer. Anything that goes wrong keeps the device already
+    in use.
     """
     tracked = _system_default_mic
     if tracked is None:
         return input_device_idx
-    source = microphones.default_source_name()
-    if source is None or source == tracked[0]:
+    source = microphones.default_source()
+    name = microphones.source_name(source)
+    if name is None or name == tracked[0]:
         return tracked[1]
     try:
-        idx = pick_input_device("")
+        idx = _use_system_default(source)
     except Exception as e:
-        logger.warning(f"Could not follow the new default microphone {source!r}: {e}")
+        logger.warning(f"Could not follow the new default microphone {name!r}: {e}")
         return tracked[1]
-    logger.info(f"The system's default microphone changed to {source!r} (device {idx})")
+    logger.info(f"The system's default microphone changed to {name!r} (device {idx})")
     return idx
 
 
@@ -363,9 +370,10 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
 
 
 def cancel_recording(rec, beeps_on: bool, notify_on: bool, reason="Cancelled"):
-    """End recording *rec* without transcribing it, telling the user *reason*.
-    A send it held stays unsent, and that's said (_leave_held_send_unsent):
-    Esc, a tap, hands-free hearing nothing."""
+    """End recording *rec*, the current one (this clears is_recording),
+    without transcribing it, telling the user *reason*. A send it held stays
+    unsent, and that's said (_leave_held_send_unsent): Esc, a tap,
+    hands-free hearing nothing."""
     rs.state.is_recording = False
     rec.message.cancelled = True
     stop_stream_safely(rec)
@@ -422,7 +430,8 @@ def toggle_pressed_while_recording(beeps_on: bool) -> bool:
 
 
 def finish_capture(rec, beeps_on: bool, notify_on: bool):
-    """End recording *rec* quickly and hand back its audio (the fast half of stop).
+    """End recording *rec*, the current one, quickly and hand back its audio
+    (the fast half of stop).
 
     Validates the hold time, stops the stream, hides the indicator, and takes
     the captured frames, marking the recording captured under chunk_lock so

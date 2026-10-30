@@ -17,6 +17,7 @@ from . import (
     delivery_notices,
     desktop_detect,
     dictation_worker,
+    first_run_marker,
     hotkey_keys,
     keyboard_devices,
     keyboard_grab,
@@ -552,13 +553,7 @@ def _open_keyboards(keyboards) -> list:
 def _keys_to_watch(cfg: Settings, devices):
     """The hotkeys to watch; None when there are none yet: first-run setup
     isn't finished, or no hold key is chosen."""
-    try:
-        from tuxtalk.first_run_marker import is_first_run
-        first_run = is_first_run()
-    except Exception as e:
-        logger.info(f"Couldn't tell whether setup is finished ({e}); taking it as finished")
-        first_run = False
-    if first_run:
+    if first_run_marker.is_first_run():
         logger.info("First run detected - onboarding not complete")
         # Also on stderr: started from a terminal, that's where the user looks.
         print("Onboarding not complete. No hotkeys will be active until setup is finished.",

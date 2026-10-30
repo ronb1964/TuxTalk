@@ -112,8 +112,8 @@ def tray_host_available(bus=None) -> bool:
 
 
 def is_x11_session(env):
-    """Whether the session is X11, the one check for it: XDG_SESSION_TYPE when
-    it is set; otherwise (startx sets none) an X DISPLAY with no Wayland one.
+    """Whether the session is X11: XDG_SESSION_TYPE when it is set; otherwise
+    (startx sets none) an X DISPLAY with no Wayland one.
 
     The session type wins over WAYLAND_DISPLAY: a Wayland compositor nested in
     an X11 session (a KWin started for testing) sets WAYLAND_DISPLAY for
