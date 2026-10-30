@@ -15,10 +15,11 @@ from tuxtalk import gnome_extensions as ge
 UUID = "talktype@ronb1964.github.io"
 
 
-def _fake_run(*, enable_rc, get_out, set_rc=0, get_rc=0):
+def _fake_run(*, enable_rc, get_out, set_rc=0, get_rc=0, disabled_set_rc=0):
     """Build a subprocess.run stand-in keyed on which gsettings/CLI call it is.
     *get_out* and the state are enabled-extensions; disabled-extensions is
-    empty unless a test sets state["disabled"]."""
+    empty unless a test sets state["disabled"], and *disabled_set_rc* other
+    than 0 refuses changing it (a key an administrator locked)."""
     state = {"written": None, "set_calls": 0, "disabled": "@as []"}
 
     def run(argv, **kwargs):
@@ -27,6 +28,9 @@ def _fake_run(*, enable_rc, get_out, set_rc=0, get_rc=0):
         if argv[:2] == ["gsettings", "get"] and argv[3] == "disabled-extensions":
             return types.SimpleNamespace(returncode=0, stdout=state["disabled"], stderr="")
         if argv[:2] == ["gsettings", "set"] and argv[3] == "disabled-extensions":
+            if disabled_set_rc:
+                return types.SimpleNamespace(returncode=disabled_set_rc, stdout="",
+                                             stderr="The key is not writable")
             state["disabled"] = argv[4]
             return types.SimpleNamespace(returncode=0, stdout="", stderr="")
         if argv[:3] == ["gsettings", "get", "org.gnome.shell"]:
@@ -132,6 +136,16 @@ def test_enable_takes_it_off_the_disabled_list(monkeypatch):
     monkeypatch.setattr(ge.subprocess, "run", run)
     assert ge.enable_extension(UUID) is True
     assert state["disabled"] == "['other@x']"
+
+
+def test_enable_fails_when_the_disabled_list_cant_be_cleared(monkeypatch, caplog):
+    """A reinstall listed on disabled-extensions doesn't start, even when
+    it is on enabled-extensions too: setup mustn't say it worked."""
+    run, state = _fake_run(enable_rc=1, get_out=f"['{UUID}']", disabled_set_rc=1)
+    state["disabled"] = f"['{UUID}']"
+    monkeypatch.setattr(ge.subprocess, "run", run)
+    assert ge.enable_extension(UUID) is False
+    assert "The key is not writable" in caplog.text
 
 
 def test_forget_leaves_other_extensions_and_an_unreadable_list_alone(monkeypatch):

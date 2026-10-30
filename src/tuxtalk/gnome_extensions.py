@@ -145,22 +145,29 @@ def _write_extension_list(key, uuids: list) -> bool:
             ['gsettings', 'set', 'org.gnome.shell', key, repr(uuids)],
             capture_output=True, text=True, errors="replace", timeout=10,
         )
-        return result.returncode == 0
-    except (subprocess.TimeoutExpired, FileNotFoundError):
+    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+        logger.warning(f"Could not change GNOME's {key}: {e}")
         return False
+    if result.returncode != 0:
+        # A key an administrator locked is refused here.
+        logger.warning(f"GNOME refused to change {key}: {result.stderr.strip()}")
+    return result.returncode == 0
 
 
-def forget_extension(uuid: str, keys=("disabled-extensions",)) -> None:
+def forget_extension(uuid: str, keys=("disabled-extensions",)) -> bool:
     """Take *uuid* out of org.gnome.shell's extension lists named by *keys*.
+    False when it is still on one: GNOME refused the change.
 
     `gnome-extensions disable` puts an extension on disabled-extensions,
     which outlasts an uninstall and would keep a later reinstall from
     starting on the next login. Each list is read first and left alone if
     the read fails, so the user's other extensions are never lost."""
+    cleared = True
     for key in keys:
         current = _read_extension_list(key)
         if current is not None and uuid in current:
-            _write_extension_list(key, [u for u in current if u != uuid])
+            cleared &= _write_extension_list(key, [u for u in current if u != uuid])
+    return cleared
 
 
 def enable_extension(uuid: str) -> bool:
@@ -205,8 +212,10 @@ def enable_extension(uuid: str) -> bool:
         if _write_enabled_extensions(enabled):
             logger.info(f"Added {uuid} to enabled-extensions (activates on next login)")
 
-    # An earlier uninstall's "disable" may have left it on disabled-extensions.
-    forget_extension(uuid)
+    # An earlier uninstall's "disable" may have left it on disabled-extensions,
+    # where GNOME won't start it, whatever enabled-extensions says.
+    if not forget_extension(uuid):
+        return False
 
     # Success if it is enabled now, or will be on the next shell start.
     final = _read_enabled_extensions()
