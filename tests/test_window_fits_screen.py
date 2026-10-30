@@ -293,6 +293,11 @@ def test_each_small_window_program_prepares_its_windows(program, argv, monkeypat
     monkeypatch.setattr(single_instance, "claim_window", lambda *a: (True, None))
     for name in ("show", "show_all"):
         monkeypatch.setattr(Gtk.Widget, name, lambda widget: _shown(done))
+    # A dialog's run() shows it from C, past show_all; the real window path
+    # ends in present() and Gtk.main().
+    monkeypatch.setattr(Gtk.Window, "present", lambda window: _shown(done))
+    monkeypatch.setattr(Gtk.Dialog, "run", lambda dialog: _shown(done))
+    monkeypatch.setattr(Gtk, "main", lambda: _shown(done))
     with pytest.raises(_Opening):
         importlib.import_module(f"tuxtalk.{program}").main(argv)
     assert done == ["names itself", "prepares windows"]
