@@ -248,6 +248,39 @@ def test_a_part_that_isnt_this_files_own_doesnt_count(hub, tmp_path, blob, link)
     assert failure_reason(*reports[-1]).startswith("Not enough disk space")
 
 
+def test_with_room_for_the_whole_download_the_hub_isnt_asked_about_parts(hub, tmp_path,
+                                                                        monkeypatch):
+    """Any leftover part held a start-up for a lookup per file, plenty of room or not."""
+    import huggingface_hub
+    from tuxtalk import download_utils
+    _partial(tmp_path, "etag-model.bin", 350 * MB)
+    monkeypatch.setattr(download_utils, "free_space_bytes", lambda path: 10 * 1024 * MB)
+    monkeypatch.setattr(huggingface_hub, "get_hf_file_metadata",
+                        lambda url, **k: pytest.fail("asked the Hub"))
+    assert _download([]) is True
+
+
+def test_the_part_lookups_stop_at_a_cancel_and_use_the_hubs_timeout(tmp_path, monkeypatch):
+    import threading
+    import huggingface_hub
+    import huggingface_hub.constants
+    from tuxtalk import model_helper as M
+    cancel, asked = threading.Event(), []
+
+    def metadata(url, timeout):
+        asked.append(timeout)
+        cancel.set()                    # Cancel pressed during the first lookup
+        return types.SimpleNamespace(etag="etag-" + url.rsplit("/", 1)[1])
+    monkeypatch.setattr(huggingface_hub, "get_hf_file_metadata", metadata)
+    monkeypatch.setattr(huggingface_hub.constants, "HF_HUB_ETAG_TIMEOUT", 3)
+    _partial(tmp_path, "etag-model.bin", 300 * MB)
+    _partial(tmp_path, "etag-tokenizer.json", 1 * MB)
+    missing = [("model.bin", 400 * MB), ("tokenizer.json", 2 * MB)]
+    assert M._partial_bytes(str(tmp_path), "Systran/faster-whisper-small", missing,
+                            cancel) == 300 * MB
+    assert asked == [3]
+
+
 def test_fetching_a_broken_model_again_needs_room_for_a_whole_new_copy(hub):
     """A damaged copy is fetched afresh beside the old one. Counted as
     cached, it passed the check on a nearly full disk and then filled it."""
@@ -287,7 +320,7 @@ def test_an_unexpected_error_says_why_in_its_window(hub, monkeypatch):
     from tuxtalk import model_helper as M
     from tuxtalk.download_utils import failure_reason
 
-    def broken(repo, files, force=False):
+    def broken(repo, files, force=False, cancel_event=None):
         raise RuntimeError("the cache folder went away")
     monkeypatch.setattr(M, "_disk_space_problem", broken)
     reports = []

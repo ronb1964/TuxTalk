@@ -19,15 +19,16 @@ def _not_on_the_hub(filename):
 
 @pytest.fixture
 def hub(monkeypatch):
-    """A Hub without the file list: {file name: what fetching it raises};
-    the files fetched."""
+    """A Hub without the file list: ({file name: what fetching it raises},
+    the files fetched, every try at one in order)."""
     import huggingface_hub
-    raises, fetched = {}, []
+    raises, fetched, tries = {}, [], []
 
     def no_list(repo):
         raise OSError("rate limited")
 
     def hf_hub_download(repo_id, filename, tqdm_class=None, force_download=False):
+        tries.append(filename)
         if filename in raises:
             raise raises[filename]
         fetched.append(filename)
@@ -35,7 +36,7 @@ def hub(monkeypatch):
     monkeypatch.setattr(model_helper, "_files_to_download", no_list)
     monkeypatch.setattr(huggingface_hub, "hf_hub_download", hf_hub_download)
     monkeypatch.setattr(model_helper, "_RETRY_WAITS", (0.0, 0.0))
-    return raises, fetched
+    return raises, fetched, tries
 
 
 def _download(model):
@@ -46,7 +47,7 @@ def _download(model):
 def test_without_the_file_list_a_model_with_one_vocabulary_file_downloads(hub):
     """Both vocabulary files are asked for by name, and every model has only
     one: the other's "not found" must not fail a download that's whole."""
-    raises, fetched = hub
+    raises, fetched, _tries = hub
     for name in ("vocabulary.json", "preprocessor_config.json"):
         raises[name] = _not_on_the_hub(name)
     assert _download("small") is True
@@ -57,14 +58,16 @@ def test_a_dropped_connection_on_the_preprocessor_file_fails_the_download(hub):
     """Taken for "this model hasn't got one", large-v3 was reported
     downloaded and then ran with 80 mel bins, and every dictation failed."""
     from huggingface_hub.errors import LocalEntryNotFoundError
-    raises, _fetched = hub
+    raises, _fetched, tries = hub
     raises["vocabulary.txt"] = _not_on_the_hub("vocabulary.txt")
     raises["preprocessor_config.json"] = LocalEntryNotFoundError("connection error, not cached")
     assert _download("large-v3") is False
+    assert tries.count("preprocessor_config.json") == 3     # tried again, like any failure
+    assert tries.count("vocabulary.txt") == 1               # not there: no point trying again
 
 
 def test_a_model_file_the_hub_says_is_missing_still_fails_the_download(hub):
-    raises, _fetched = hub
+    raises, _fetched, _tries = hub
     raises["preprocessor_config.json"] = _not_on_the_hub("preprocessor_config.json")
     raises["model.bin"] = _not_on_the_hub("model.bin")
     assert _download("small") is False

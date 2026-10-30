@@ -168,7 +168,7 @@ def _listed_files(repo, model_name, only_files):
     return files
 
 
-def _disk_space_problem(repo, files, force=False):
+def _disk_space_problem(repo, files, force=False, cancel_event=None):
     """Why the files still to fetch won't fit on the cache's disk, or None.
     Checked up front, so a full disk gives a clear message rather than a
     per-file error halfway through. HF_HUB_CACHE follows HF_HOME,
@@ -177,32 +177,35 @@ def _disk_space_problem(repo, files, force=False):
 
     A download picked up again isn't refused for what it has: files already
     in the cache need no more room, and Hugging Face resumes a file's
-    ".incomplete" part. *force* fetches every file afresh, a whole new copy
-    beside the old one, with no part resumed, so then all of them count."""
+    ".incomplete" part, counted only when the rest wouldn't fit without it
+    (finding each part asks the Hub, file by file). *force* fetches every
+    file afresh, a whole new copy beside the old one, with no part resumed,
+    so then all of them count."""
     from huggingface_hub import try_to_load_from_cache
     from huggingface_hub.constants import HF_HUB_CACHE
     from .download_utils import free_space_bytes
+    free = free_space_bytes(HF_HUB_CACHE)
     if force:
-        needed = sum(size for _, size in files)
+        missing = list(files)
     else:
         missing = [(name, size) for name, size in files
                    if not isinstance(try_to_load_from_cache(repo, name), str)]
-        needed = sum(size for _, size in missing) - _partial_bytes(HF_HUB_CACHE, repo, missing)
-    needed *= 1.1
-    free = free_space_bytes(HF_HUB_CACHE)
+    needed = sum(size for _, size in missing) * 1.1
+    if not force and free and free < needed:
+        needed -= _partial_bytes(HF_HUB_CACHE, repo, missing, cancel_event) * 1.1
     if not (needed and free and free < needed):
         return None
     return (f"Not enough disk space: model needs ~{needed / 1024 ** 3:.1f} GB free, "
             f"only {free / 1024 ** 3:.1f} GB available")
 
 
-def _partial_bytes(cache, repo, missing):
+def _partial_bytes(cache, repo, missing, cancel_event=None):
     """What a cut-off download already holds of the *missing* files
     ((name, size) pairs): each file's own ".incomplete" blob, which Hugging
     Face goes on from, up to that file's size. A blob is named by the
     file's current ETag, so a part left from another file, another model in
     the repo or an older version isn't counted; looked up only when there
-    are parts at all."""
+    are parts at all, and no more once *cancel_event* is set."""
     import stat
     from huggingface_hub.file_download import repo_folder_name
     blobs = os.path.join(cache, repo_folder_name(repo_id=repo, repo_type="model"), "blobs")
@@ -213,6 +216,8 @@ def _partial_bytes(cache, repo, missing):
         return 0        # no blobs folder: nothing of this repo downloaded yet
     held = 0
     for name, size in missing:
+        if cancel_event is not None and cancel_event.is_set():
+            break
         etag = _current_etag(repo, name)
         try:
             part = os.lstat(os.path.join(blobs, f"{etag}.incomplete")) if etag else None
@@ -228,10 +233,13 @@ def _partial_bytes(cache, repo, missing):
 
 def _current_etag(repo, name):
     """The ETag Hugging Face names *name*'s blob after, or None when it
-    can't be had (offline: nothing then counts as resumable)."""
+    can't be had (offline: nothing then counts as resumable). Asked with
+    the timeout huggingface_hub uses for its own ETag lookups
+    (HF_HUB_ETAG_TIMEOUT)."""
     from huggingface_hub import get_hf_file_metadata, hf_hub_url
+    from huggingface_hub.constants import HF_HUB_ETAG_TIMEOUT
     try:
-        return get_hf_file_metadata(hf_hub_url(repo, name), timeout=10).etag
+        return get_hf_file_metadata(hf_hub_url(repo, name), timeout=HF_HUB_ETAG_TIMEOUT).etag
     except Exception as e:
         logger.info(f"Couldn't look up {name} for a partial download: {e}")
         return None
@@ -373,7 +381,7 @@ def make_model_download_func(model_name, repo_id=None, only_files=None, force=Fa
             if not files:
                 return _fetch_unlisted(repo, model_name, progress_callback, cancel_event,
                                        force)
-            problem = _disk_space_problem(repo, files, force)
+            problem = _disk_space_problem(repo, files, force, cancel_event)
             if problem:
                 logger.error(problem)
                 progress_callback(problem, 0)

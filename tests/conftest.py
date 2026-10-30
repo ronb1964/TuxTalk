@@ -300,11 +300,14 @@ def _no_hub_lookups(monkeypatch):
     looks up a file's ETag when the user's own cache holds a partial
     download. Tests of that hand it their own answer."""
     import huggingface_hub
+    import huggingface_hub.file_download
 
     def _refuse(url, **kwargs):
-        raise OSError("tests must not reach the Hugging Face Hub")
+        pytest.fail(f"a test asked the Hugging Face Hub about {url}")
 
+    # Both names: hf_hub_download calls file_download's own.
     monkeypatch.setattr(huggingface_hub, "get_hf_file_metadata", _refuse)
+    monkeypatch.setattr(huggingface_hub.file_download, "get_hf_file_metadata", _refuse)
 
 
 @pytest.fixture(autouse=True)
