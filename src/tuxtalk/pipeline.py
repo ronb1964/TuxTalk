@@ -15,7 +15,6 @@ from . import (
     dictation_worker,
     engine,
     focused_window,
-    keyboard_output,
     last_dictation,
     notices,
     recording,
@@ -60,17 +59,18 @@ def press_said(key: str, chunk_role, after_words: bool = False, message=None) ->
     why = f'said "press {key.lower()}"'
     if (key == "TAB" and pastes_broken(focused_window.window_class())
             and not focused_window.is_password()):
-        outcome = (send_countdown.type_where_sent("    ", key, message, type_onto_dictation)
-                   if after_words else type_onto_dictation("    ", "type"))
+        outcome = (send_countdown.type_where_sent("    ", key, message,
+                                                 delivery.type_onto_dictation)
+                   if after_words else delivery.type_onto_dictation("    ", "type"))
         if outcome not in (None, "ok"):
             logger.warning(f"Tab not typed as four spaces ({outcome})")
             if outcome == "key_held":
                 notify_module.notify(*delivery_notices.key_not_pressed(key))
         return
     if after_words:
-        pressed = send_countdown.press_where_sent(key, why, message, press_key)
+        pressed = send_countdown.press_where_sent(key, why, message, delivery.press_key)
     else:
-        pressed = press_key(key, why)
+        pressed = delivery.press_key(key, why)
     if pressed and chunk_role is not None:
         type_at_pause.start_afresh(message)
 
@@ -86,62 +86,9 @@ def _after_the_words(outcome: str, said: str, press: str, space: str, chunk_role
     elif said:
         press_said(said, chunk_role, after_words=True, message=message)
     elif press:
-        send_automatically(space, injection_mode, message)
+        delivery.send_automatically(space, injection_mode, message)
         if chunk_role is not None:
             type_at_pause.start_afresh(message)
-
-
-def press_key(key: str, why: str, claim=None) -> bool:
-    """keyboard_output.press_key, and the dictation behind the key forgotten
-    with it, in one step on the dictation worker. An automatic send's Enter
-    comes from a timer thread: pressed there, it could go down between a
-    delivery's checks and its keys, and the forgetting take a dictation
-    typed after it. From another thread it waits its turn, after what the
-    worker is typing; a tap meanwhile still holds the send (*claim*)."""
-    def press_and_forget():
-        pressed = keyboard_output.press_key(key, why, claim=claim)
-        if pressed:
-            last_dictation.forget_after_key(key, why)
-        return pressed
-    return dictation_worker.call(press_and_forget)
-
-
-def send_automatically(space: str, injection_mode: str, message) -> None:
-    """"Send each dictation automatically": Enter where *message* went
-    (send_countdown). Held when a newer recording has begun since, as a
-    press of the hold key during the countdown holds it: what's said there
-    is added to this message and sent at its end. A newer one that was
-    only a tap (or heard nothing) is over already: that's said, and the
-    space left off goes in now, its key long up."""
-    if send_countdown.send_automatically("Send each dictation automatically is on", message,
-                                         press_key, type_onto_dictation, space,
-                                         injection_mode):
-        if rs.state.message.cancelled and not rs.state.is_recording:
-            send_countdown.say_held()
-            send_countdown.type_owed_space()
-
-
-# delivery.inject_text's outcomes that are sure nothing was typed: it gave up before
-# the first key (delivery._delivery_stopped). "failed" may follow some of it (wtype
-# timing out), and "password_field" earlier lines.
-_GAVE_UP_UNTYPED = frozenset({"moved", "key_held"})
-
-
-def type_onto_dictation(text: str, injection_mode: str, into=None) -> str:
-    """Type *text* right after the dictation, keeping undo's record of it
-    whole; delivery.inject_text's outcome, and *into* is its. When none of
-    it went in (a space refused because the focus moved), the dictation is
-    in the app as it was, and so is everything that remembers it."""
-    kept = (rs.state.last_inserted_text, rs.state.continue_mid_sentence, rs.state.nav_context,
-            rs.state.shown_text, rs.state.last_inserted_window, rs.state.last_inserted_where)
-    outcome = delivery.inject_text(text, injection_mode, into=into)
-    if outcome == "ok":
-        rs.state.last_inserted_text = kept[0] + text
-    elif outcome in _GAVE_UP_UNTYPED:
-        # The window too: typing takes it for the dictation's before the first key.
-        (rs.state.last_inserted_text, rs.state.continue_mid_sentence, rs.state.nav_context,
-         rs.state.shown_text, rs.state.last_inserted_window, rs.state.last_inserted_where) = kept
-    return outcome
 
 
 class _Job(NamedTuple):
@@ -511,3 +458,8 @@ def stop_recording(
     dictation_worker.submit(lambda: transcribe_and_inject(
         frames, rec_sr, beeps_on, smart_quotes, notify_on, language, auto_space,
         auto_period, injection_mode, chunk_role=chunk_role, message=message))
+
+
+# Type at pause's phrases, cut while the recording goes on, are transcribed and
+# typed here too. Handed over, so type_at_pause never imports this module back.
+type_at_pause.transcribe_phrase = transcribe_and_inject

@@ -2,12 +2,20 @@
 as the window and the settings call for, with line breaks that don't send
 a chat message (Shift+Enter) and never into a password field. The outcome
 ("ok", "partial", "failed", "password_field") says how much arrived, and
-the undo buffer holds only what did."""
+the undo buffer holds only what did. Then what goes in after it: more typed
+onto it, a key pressed after it, and the automatic send's Enter."""
 import os
 import re
 import time
 
-from . import focused_window, keyboard_output, last_dictation, send_countdown, virtual_keyboard
+from . import (
+    dictation_worker,
+    focused_window,
+    keyboard_output,
+    last_dictation,
+    send_countdown,
+    virtual_keyboard,
+)
 from . import recording_state as rs
 from .logger import setup_logger
 from .normalize import LINE_BREAK
@@ -214,6 +222,59 @@ def forget_typed() -> None:
     rs.state.continue_mid_sentence = False
     rs.state.nav_context = None
     last_dictation.forget_shown()
+
+
+def press_key(key: str, why: str, claim=None) -> bool:
+    """keyboard_output.press_key, and the dictation behind the key forgotten
+    with it, in one step on the dictation worker. An automatic send's Enter
+    comes from a timer thread: pressed there, it could go down between a
+    delivery's checks and its keys, and the forgetting take a dictation
+    typed after it. From another thread it waits its turn, after what the
+    worker is typing; a tap meanwhile still holds the send (*claim*)."""
+    def press_and_forget():
+        pressed = keyboard_output.press_key(key, why, claim=claim)
+        if pressed:
+            last_dictation.forget_after_key(key, why)
+        return pressed
+    return dictation_worker.call(press_and_forget)
+
+
+def send_automatically(space: str, injection_mode: str, message) -> None:
+    """"Send each dictation automatically": Enter where *message* went
+    (send_countdown). Held when a newer recording has begun since, as a
+    press of the hold key during the countdown holds it: what's said there
+    is added to this message and sent at its end. A newer one that was
+    only a tap (or heard nothing) is over already: that's said, and the
+    space left off goes in now, its key long up."""
+    if send_countdown.send_automatically("Send each dictation automatically is on", message,
+                                         press_key, type_onto_dictation, space,
+                                         injection_mode):
+        if rs.state.message.cancelled and not rs.state.is_recording:
+            send_countdown.say_held()
+            send_countdown.type_owed_space()
+
+
+# inject_text's outcomes that are sure nothing was typed: it gave up before the
+# first key (_delivery_stopped). "failed" may follow some of it (wtype timing
+# out), and "password_field" earlier lines.
+_GAVE_UP_UNTYPED = frozenset({"moved", "key_held"})
+
+
+def type_onto_dictation(text: str, injection_mode: str, into=None) -> str:
+    """Type *text* right after the dictation, keeping undo's record of it
+    whole; inject_text's outcome, and *into* is its. When none of it went
+    in (a space refused because the focus moved), the dictation is in the
+    app as it was, and so is everything that remembers it."""
+    kept = (rs.state.last_inserted_text, rs.state.continue_mid_sentence, rs.state.nav_context,
+            rs.state.shown_text, rs.state.last_inserted_window, rs.state.last_inserted_where)
+    outcome = inject_text(text, injection_mode, into=into)
+    if outcome == "ok":
+        rs.state.last_inserted_text = kept[0] + text
+    elif outcome in _GAVE_UP_UNTYPED:
+        # The window too: typing takes it for the dictation's before the first key.
+        (rs.state.last_inserted_text, rs.state.continue_mid_sentence, rs.state.nav_context,
+         rs.state.shown_text, rs.state.last_inserted_window, rs.state.last_inserted_where) = kept
+    return outcome
 
 
 def _delivery_stopped(stop, typed_some: bool) -> str:

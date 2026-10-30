@@ -19,7 +19,6 @@ from . import (
     keyboard_output,
     last_dictation,
     notices,
-    pipeline,
     send_countdown,
     virtual_keyboard,
 )
@@ -38,6 +37,12 @@ logger = setup_logger(__name__)
 # Chunked dictation (chunking.py). The audio callback cuts chunks and the stop
 # path takes the rest; this lock keeps the two from both taking the same frames.
 chunk_lock = threading.Lock()
+
+# Transcribes and types a phrase: pipeline.transcribe_and_inject, handed over
+# by the pipeline as it loads. The pipeline calls this module for what goes
+# between two phrases, so importing it here would make each need the other.
+transcribe_phrase = None
+
 
 def cut_chunk(chunker):
     """The speaker paused: hand the audio so far to the dictation worker.
@@ -69,16 +74,16 @@ def cut_chunk(chunker):
 def _transcribe_chunk(frames, rec_sr, number, pause, message, detector):
     """Transcribe and type chunk *number*, cut during the recording after a
     *pause* (seconds), with the settings as they are now, into *message*
-    (pipeline.transcribe_and_inject's). *detector* is that recording's
-    hands-free silence detector, held since the cut (cut_chunk), or None."""
+    (transcribe_phrase's). *detector* is that recording's hands-free silence
+    detector, held since the cut (cut_chunk), or None."""
     # Logged here, on the worker, to keep file writes off the audio thread.
     seconds = sum(len(f) for f in frames) / 2 / rec_sr
     logger.info(f"Chunk {number}: {seconds:.1f}s of audio, cut after a {pause:.2f}s pause")
     cfg = live.chunk_cfg
     try:
-        pipeline.transcribe_and_inject(frames, rec_sr, cfg.beeps, cfg.smart_quotes, cfg.notify,
-                                       cfg.language, cfg.auto_space, cfg.auto_period,
-                                       cfg.injection_mode, chunk_role="middle", message=message)
+        transcribe_phrase(frames, rec_sr, cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
+                          cfg.auto_space, cfg.auto_period, cfg.injection_mode,
+                          chunk_role="middle", message=message)
     finally:
         if detector is not None:
             detector.release()
@@ -325,7 +330,7 @@ def end_in_a_pause(message, beeps_on, auto_space, auto_period, injection_mode) -
     sends = _may_send(message)
     if sends and not cut_off:
         flush_boundary(message, auto_period, False, injection_mode)
-        pipeline.send_automatically(" " if auto_space else "", injection_mode, message)
+        delivery.send_automatically(" " if auto_space else "", injection_mode, message)
         start_afresh(message)
     else:
         flush_boundary(message, auto_period and not cut_off, auto_space, injection_mode)

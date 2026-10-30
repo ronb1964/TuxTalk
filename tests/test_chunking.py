@@ -284,7 +284,7 @@ def test_a_failing_chunk_does_not_stop_the_next():
 
 
 def test_a_call_from_another_thread_gets_the_job_s_answer_or_its_error(monkeypatch):
-    """pipeline.press_key's Enter waits for its answer on the send's timer
+    """delivery.press_key's Enter waits for its answer on the send's timer
     thread; an error in it reaches that thread, and the worker goes on."""
     from tuxtalk import dictation_worker
     from tuxtalk.dictation_worker import DictationWorker
@@ -1247,7 +1247,7 @@ def test_a_phrase_waiting_its_turn_holds_hands_free_open(monkeypatch):
             events.append("release")
     from tuxtalk.config import Settings
     monkeypatch.setattr(live, "chunk_cfg", Settings())
-    monkeypatch.setattr(dictation_pipeline, "transcribe_and_inject", lambda *a, **k: events.append("work"))
+    monkeypatch.setattr(type_at_pause, "transcribe_phrase", lambda *a, **k: events.append("work"))
     monkeypatch.setattr(dictation_worker, "_instance", SimpleNamespace(submit=jobs.append))
     pause = SimpleNamespace(tail_samples=lambda: 0, last_pause=1.0)
     for name, value in (("silence", Detector()), ("chunker", pause), ("frames", [b"\0\0"]),

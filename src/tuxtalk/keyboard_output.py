@@ -139,7 +139,7 @@ def press_key(key: str, why: str, claim=None) -> bool:
     """A real "ENTER" or "TAB" after a dictation (key_commands.py): Enter
     sends a chat message, runs a command or submits a form; Tab moves on to
     a form's next box. Undo can't reach what's behind either; the caller
-    forgets the dictation once it's pressed (pipeline.press_key). Not
+    forgets the dictation once it's pressed (delivery.press_key). Not
     pressed, a key stuck down says so (an automatic send says it its own way).
     *claim* can still stop it right before it goes down (send_countdown)."""
     time.sleep(0.05)   # let the app take in the typed text first
