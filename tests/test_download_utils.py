@@ -7,7 +7,9 @@ import time
 import pytest
 
 from tuxtalk.download_utils import (
+    DownloadError,
     download_file,
+    fetch_file,
     parse_sha256sums,
     free_space_bytes,
 )
@@ -61,6 +63,21 @@ def test_download_file_progress_hook(tmp_path):
                          progress_hook=lambda done, total: seen.append((done, total))) is True
     assert seen, "progress hook never called"
     assert seen[-1][0] == len(content)
+
+
+@pytest.mark.parametrize("problem, reason", [
+    ("missing", "No such file or directory"),
+    ("checksum", "the file didn't match its checksum"),
+])
+def test_a_failed_download_says_why(tmp_path, problem, reason):
+    """The reason reaches the download window: Parakeet's said only
+    "Download failed"."""
+    src, _ = _make_source(tmp_path)
+    url = (tmp_path / "missing.bin").as_uri() if problem == "missing" else src.as_uri()
+    dest = tmp_path / "dest.bin"
+    with pytest.raises(DownloadError, match=reason):
+        fetch_file(url, str(dest), expected_sha256="0" * 64)
+    assert not dest.exists() and os.listdir(tmp_path) == ["source.bin"]
 
 
 def test_download_file_bad_url(tmp_path):

@@ -18,18 +18,17 @@ def data_dir(tmp_path, monkeypatch):
 
 @pytest.fixture
 def fetched(data_dir, monkeypatch):
-    """A fake download_file: records each call and writes the file."""
+    """A fake fetch_file: records each call and writes the file."""
     calls = []
 
-    def download_file(url, dest, timeout, cancel_event, progress_hook, expected_sha256):
+    def fetch_file(url, dest, timeout, cancel_event, progress_hook, expected_sha256):
         calls.append((url, os.path.basename(dest), expected_sha256))
         progress_hook(10, 10)
-        os.makedirs(os.path.dirname(dest), exist_ok=True)      # as download_file does
+        os.makedirs(os.path.dirname(dest), exist_ok=True)      # as fetch_file does
         with open(dest, "w") as f:
             f.write("x")
-        return True
 
-    monkeypatch.setattr("tuxtalk.download_utils.download_file", download_file)
+    monkeypatch.setattr("tuxtalk.download_utils.fetch_file", fetch_file)
     return calls
 
 
@@ -68,13 +67,24 @@ def test_every_parakeet_download_route_fetches_ultra(fetched):
     assert {name for _url, name, _sha in fetched} == set(pu.FILES)
 
 
-def test_a_failed_file_is_tried_three_times_then_reported(data_dir, monkeypatch):
-    tries = []
-    monkeypatch.setattr("tuxtalk.download_utils.download_file",
-                        lambda url, *a, **k: tries.append(url) or False)
-    messages = []
-    assert pu.make_download_func("vulkan")(lambda text, pct: messages.append(text), None) is False
-    assert len(tries) == 3 and messages[-1] == "Download failed"
+def _failing_fetch(monkeypatch, reason, tries):
+    from tuxtalk.download_utils import DownloadError
+
+    def fetch_file(url, *a, **k):
+        tries.append(url)
+        raise DownloadError(reason)
+    monkeypatch.setattr("tuxtalk.download_utils.fetch_file", fetch_file)
+
+
+def test_a_failed_file_is_tried_three_times_then_reported_with_its_reason(
+        data_dir, monkeypatch):
+    """The download window said only "Download failed", for the default model."""
+    from tuxtalk.download_utils import failure_reason
+    tries, reports = [], []
+    _failing_fetch(monkeypatch, "Name or service not known", tries)
+    assert pu.make_download_func("vulkan")(lambda *r: reports.append(r), None) is False
+    assert len(tries) == 3
+    assert failure_reason(*reports[-1]) == "Download failed: Name or service not known"
     assert pu.gpu_file() is None
 
 
@@ -82,11 +92,10 @@ def test_a_cancel_is_not_retried(data_dir, monkeypatch):
     import threading
     cancel = threading.Event()
     cancel.set()
-    tries = []
-    monkeypatch.setattr("tuxtalk.download_utils.download_file",
-                        lambda url, *a, **k: tries.append(url) or False)
-    assert pu.make_download_func("vulkan")(lambda *a: None, cancel) is False
-    assert len(tries) == 1
+    tries, reports = [], []
+    _failing_fetch(monkeypatch, "timed out", tries)
+    assert pu.make_download_func("vulkan")(lambda *r: reports.append(r), cancel) is False
+    assert len(tries) == 1 and reports == []
 
 
 def test_a_full_disk_downloads_nothing(data_dir, fetched, monkeypatch):

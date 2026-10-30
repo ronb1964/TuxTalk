@@ -35,7 +35,24 @@ _CHUNK_SIZE = 65536
 STALE_PARTIAL_S = 10 * 60
 
 
-def download_file(
+class DownloadError(Exception):
+    """Why a download failed, short enough for a download window's status line."""
+
+
+def download_file(url: str, dest_path: str, **options) -> bool:
+    """fetch_file() for callers that only need to know whether the file
+    landed: True when it did; a failure is logged with its reason."""
+    try:
+        fetch_file(url, dest_path, **options)
+        return True
+    except InterruptedError:
+        logger.info(f"Download cancelled: {url}")
+    except DownloadError as e:
+        logger.error(f"Download failed for {url}: {e}")
+    return False
+
+
+def fetch_file(
     url: str,
     dest_path: str,
     timeout: int = 60,
@@ -43,8 +60,9 @@ def download_file(
     progress_hook=None,
     expected_sha256: str | None = None,
     user_agent: str = "TuxTalk",
-) -> bool:
-    """Download *url* to *dest_path* safely. Returns True on success.
+) -> None:
+    """Download *url* to *dest_path* safely. Raises DownloadError saying why
+    when it can't, and InterruptedError when cancelled.
 
     - *timeout* applies to each socket operation, so a stalled connection
       raises instead of hanging forever.
@@ -61,21 +79,40 @@ def download_file(
     untouched.
     """
     tmp_path = None
-    sha = hashlib.sha256()
     try:
-        request = urllib.request.Request(url, headers={"User-Agent": user_agent})
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            total = int(response.headers.get("Content-Length", 0) or 0)
-            downloaded = 0
-            parent = os.path.dirname(dest_path) or "."
-            os.makedirs(parent, exist_ok=True)
-            remove_stale_files(parent, glob.escape(os.path.basename(dest_path)) + ".*.tmp",
-                               STALE_PARTIAL_S)
-            # A temp name of its own: the tray and Preferences can download the
-            # same file at once, and a shared name would let one overwrite the
-            # bytes the other has already checked.
-            fd, tmp_path = tempfile.mkstemp(
-                dir=parent, prefix=os.path.basename(dest_path) + ".", suffix=".tmp")
+        tmp_path = _fetch_to_temp(url, dest_path, timeout, cancel_event, progress_hook,
+                                  expected_sha256, user_agent)
+        os.chmod(tmp_path, 0o644)  # mkstemp makes it owner-only
+        os.replace(tmp_path, dest_path)
+    except (InterruptedError, DownloadError):
+        _remove_quiet(tmp_path)
+        raise
+    except Exception as e:
+        _remove_quiet(tmp_path)
+        # urllib's errors read "<urlopen error [Errno -2] Name or service not
+        # known>"; their reason alone is what the user can act on.
+        raise DownloadError(str(getattr(e, "reason", None) or e)) from e
+
+
+def _fetch_to_temp(url, dest_path, timeout, cancel_event, progress_hook,
+                   expected_sha256, user_agent):
+    """fetch_file's transfer: the checked bytes in a temp file beside
+    *dest_path*, whose path is returned."""
+    sha = hashlib.sha256()
+    request = urllib.request.Request(url, headers={"User-Agent": user_agent})
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        total = int(response.headers.get("Content-Length", 0) or 0)
+        downloaded = 0
+        parent = os.path.dirname(dest_path) or "."
+        os.makedirs(parent, exist_ok=True)
+        remove_stale_files(parent, glob.escape(os.path.basename(dest_path)) + ".*.tmp",
+                           STALE_PARTIAL_S)
+        # A temp name of its own: the tray and Preferences can download the
+        # same file at once, and a shared name would let one overwrite the
+        # bytes the other has already checked.
+        fd, tmp_path = tempfile.mkstemp(
+            dir=parent, prefix=os.path.basename(dest_path) + ".", suffix=".tmp")
+        try:
             with os.fdopen(fd, "wb") as f:
                 while True:
                     if cancel_event is not None and cancel_event.is_set():
@@ -88,35 +125,16 @@ def download_file(
                     downloaded += len(chunk)
                     if progress_hook:
                         progress_hook(downloaded, total)
-
-        if total and downloaded != total:
-            logger.error(
-                f"Download truncated: got {downloaded} of {total} bytes from {url}"
-            )
+            if total and downloaded != total:
+                raise DownloadError(f"the download was cut short ({downloaded} of {total} bytes)")
+            if expected_sha256 and sha.hexdigest() != expected_sha256.strip().lower():
+                logger.error(f"Checksum mismatch for {url}: expected {expected_sha256}, "
+                             f"got {sha.hexdigest()}")
+                raise DownloadError("the file didn't match its checksum")
+        except BaseException:
             _remove_quiet(tmp_path)
-            return False
-
-        if expected_sha256:
-            actual = sha.hexdigest()
-            if actual.lower() != expected_sha256.strip().lower():
-                logger.error(
-                    f"Checksum mismatch for {url}: expected {expected_sha256}, got {actual}"
-                )
-                _remove_quiet(tmp_path)
-                return False
-
-        os.chmod(tmp_path, 0o644)  # mkstemp makes it owner-only
-        os.replace(tmp_path, dest_path)
-        return True
-
-    except InterruptedError:
-        logger.info(f"Download cancelled: {url}")
-        _remove_quiet(tmp_path)
-        return False
-    except Exception as e:
-        logger.error(f"Download failed for {url}: {e}")
-        _remove_quiet(tmp_path)
-        return False
+            raise
+    return tmp_path
 
 
 def _remove_quiet(path: str | None) -> None:
