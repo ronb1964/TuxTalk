@@ -144,6 +144,6 @@ def test_a_default_microphone_name_that_isnt_utf8_is_still_read(tmp_path, monkey
     """Asked at every recording start, after the recording counts as started:
     a device name in another encoding mustn't leave it started with no stream."""
     from shell_stubs import stub
-    stub(tmp_path, "wpctl", r"printf '  * node.name = \"alsa_input.caf\351\"\n'")
+    stub(tmp_path, "wpctl", r"""printf '  * node.name = "alsa_input.caf\351"\n'""")
     monkeypatch.setenv("PATH", str(tmp_path))
     assert config.default_source_name().startswith("alsa_input.caf")
