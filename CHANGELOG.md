@@ -364,6 +364,14 @@ before 0.15.0, so older entries use that name.
   showing the last file's name for the seconds the model took to load.
 - Help and the Voice Commands window list the same "literal" words now.
   Each had its own list, and they didn't quite agree.
+- With "Send each dictation automatically" on, if you pressed your hold key
+  to add more and the microphone wouldn't open, the message stayed unsent
+  and the space after it was left for your next dictation, so a message you
+  then sent yourself could start the next one with a space. Now TuxTalk says
+  "Not sent" and puts the space in once you let go of the key. It says so
+  too when the last dictation finished typing during your next recording
+  and that one then added nothing (you pressed Esc, only tapped the key, or
+  said nothing hands-free). Before, nothing told you the message wasn't sent.
 
 ## [0.18.2] - 2026-10-23
 

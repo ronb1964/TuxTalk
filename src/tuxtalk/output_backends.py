@@ -73,8 +73,10 @@ class LibeiOutputBackend(OutputBackend):
 
     Opens a fresh RemoteDesktop/EIS session for each typing action (the user
     approves the "Allow remote control?" dialog once; a restore token
-    remembers it) and sends the keystrokes over it. type_text never raises — it returns False so the
-    recording core surfaces its usual "couldn't type" notice."""
+    remembers it) and sends the keystrokes over it. Each action returns
+    False rather than raise, so the recording core surfaces its usual
+    "couldn't type" notice; only keys held to a window that has lost the
+    focus raise virtual_keyboard.GaveUp, typing nothing (_with_session)."""
 
     IFACE = "org.freedesktop.portal.RemoteDesktop"
     KEYBOARD = 1  # RemoteDesktop DeviceType bitmask: KEYBOARD=1, POINTER=2
@@ -238,9 +240,20 @@ class LibeiOutputBackend(OutputBackend):
         reused session types only once, because KDE's EIS delivers keystrokes
         on a fresh DEVICE_RESUMED. The saved restore_token means the approval
         dialog appears only the first time. Returns action's bool result,
-        or False if the handshake/device wasn't ready. Never raises."""
+        or False if the handshake/device wasn't ready.
+
+        Keys that may only go into one window (keyboard_output.this_thread.into:
+        a dictation's, Fix a Word's) are held to it right before they go,
+        after every wait for the device (LibeiSession.before_keys): the
+        handshake can take seconds, minutes with the approval dialog, and a
+        paused device up to 2 s more. Another window has the focus by then:
+        virtual_keyboard.GaveUp("moved"), nothing typed, the one exception
+        this raises."""
+        import functools
         import logging
         import os
+        from . import focused_window, keyboard_output
+        from .virtual_keyboard import GaveUp
         logger = logging.getLogger(__name__)
         fd = None
         session_path = None
@@ -257,7 +270,11 @@ class LibeiOutputBackend(OutputBackend):
                 if not session.pump_until_ready():
                     logger.warning("libei device did not become ready")
                     return False
+                if (into := keyboard_output.this_thread.into) is not None:
+                    session.before_keys = functools.partial(focused_window.claim_into, into)
                 return bool(action(session))
+        except GaveUp:
+            raise
         except Exception as e:
             logger.error("libei session action failed: %s", e)
             return False

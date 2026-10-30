@@ -384,9 +384,11 @@ def fix_in_text(typed, fix, window, where=None):
     (_selection_now) is the replacement typed and the cursor stepped forward
     again, nothing else retyped. The keys go only into *window* (its class)
     and, where the desktop says, *where* (its id, focused_window.look's),
-    checked right before each batch of them goes down (the keys of one
-    word go out in milliseconds). Never in a terminal, where Shift+Left
-    selects nothing, nor a password field. True if done."""
+    checked right before each batch of them goes down, in the Flatpak too.
+    Not before each key, as no typing in TuxTalk is: a look asks the
+    desktop, and a batch's keys follow each other at the typing delay.
+    Never in a terminal, where Shift+Left selects nothing, nor a password
+    field. True if done."""
     from . import keyboard_output, virtual_keyboard
     start, end, replacement = fix
     time.sleep(_REFOCUS_S)
@@ -398,6 +400,7 @@ def fix_in_text(typed, fix, window, where=None):
     back = (len(typed) - len(typed.rstrip())) + (len(core) - end)
     backend = keyboard_output.output_backend()
     keyboard_output.this_thread.into = (window, where)
+    fixed = False
     try:
         if not backend.press_keys([((), "LEFT")] * back + [(("SHIFT",), "LEFT")] * (end - start)):
             return _left_alone("keys")
@@ -409,8 +412,14 @@ def fix_in_text(typed, fix, window, where=None):
         if why:
             backend.press_keys([((), "RIGHT")] * (back + 1))      # the cursor back
             return _left_alone(why)
-        done = backend.type_text(replacement) and backend.press_keys([((), "RIGHT")] * back)
-    except (virtual_keyboard.StoppedPartway, virtual_keyboard.GaveUp):
+        fixed = backend.type_text(replacement)
+        done = fixed and backend.press_keys([((), "RIGHT")] * back)
+    except virtual_keyboard.GaveUp as stop:
+        if fixed:           # only the cursor's way back was stopped
+            done = False
+        else:               # another window had the focus by then, or a key stayed down
+            return _left_alone("window" if stop.reason == "moved" else "keys")
+    except virtual_keyboard.StoppedPartway:
         done = False
     finally:
         keyboard_output.this_thread.into = None

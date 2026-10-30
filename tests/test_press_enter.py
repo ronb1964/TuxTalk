@@ -355,9 +355,14 @@ def test_pressing_the_hold_key_holds_the_send_and_records(countdown, monkeypatch
 
 def test_a_tap_too_short_to_dictate_says_not_sent(countdown, monkeypatch):
     _, labels = countdown
-    reasons = []
+    reasons, cancel = [], recording.cancel_recording
     monkeypatch.setattr(recording, "cancel_recording",
-                        lambda beeps, notify, reason="": reasons.append(reason))
+                        lambda beeps, notify, reason="": reasons.append(reason)
+                        or cancel(beeps, notify, reason))
+    for name in ("stop_stream_safely", "resume_media_players"):
+        monkeypatch.setattr(recording, name, lambda: None)
+    monkeypatch.setattr(recording, "indicator", None)
+    monkeypatch.setattr("tuxtalk.tray_link.notify_recording_state", lambda *a, **k: None)
     monkeypatch.setattr(rs.state, "held_send", True)
     monkeypatch.setattr(rs.state, "silence", None)
     monkeypatch.setattr(rs.state, "press_t0", time.time())
@@ -458,7 +463,7 @@ def test_a_held_send_types_its_space_once_the_key_is_up(countdown, monkeypatch):
     start_send("test", " ", "type")
     send_countdown.hold(announce=True)
     assert TYPED == []                     # the key is still down
-    send_countdown.type_owed_space()                 # ...and now it's up
+    send_countdown.give_back_space()       # ...and now it's up
     assert TYPED == [" "]
     # Undo still sees the whole dictation, space included.
     assert rs.state.last_inserted_text == "Testing the delay. "
@@ -624,7 +629,7 @@ def test_no_space_into_another_window(countdown, monkeypatch):
     send_countdown.hold(announce=True)
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "konsole")
     monkeypatch.setattr(focused_window, "look", lambda: ("konsole", None))
-    send_countdown.type_owed_space()
+    send_countdown.give_back_space()
     assert TYPED == []
 
 
@@ -643,7 +648,7 @@ def test_the_owed_space_keeps_to_the_window_after_the_last_look(countdown, monke
         TYPED.append(text)
         return "ok"
     monkeypatch.setattr(delivery, "inject_text", inject)
-    send_countdown.type_owed_space()
+    send_countdown.give_back_space()
     assert TYPED == []
 
 def test_the_dictation_hands_its_left_off_space_to_the_send(monkeypatch):

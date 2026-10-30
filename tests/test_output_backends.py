@@ -481,3 +481,44 @@ def test_a_portal_session_that_wont_close_is_logged(monkeypatch, caplog):
     with caplog.at_level("WARNING"):
         LibeiOutputBackend()._close_session("/org/freedesktop/portal/desktop/session/1_9/t")
     assert "Couldn't close the remote-control session" in caplog.text
+
+
+def _libei_typing_into(monkeypatch, focus_moves_while_the_device_is_away):
+    """A Libei backend over a fake libei whose keyboard device goes away
+    (paused) right before typing and comes back; while it's away, the focus
+    moves to a chat or doesn't. Returns the backend and the keys libei got."""
+    from tuxtalk import focused_window, libei_ctypes
+    from tuxtalk.output_backends import LibeiOutputBackend
+    focus = [("org.kde.kwrite", ("tray", "{1}"))]
+
+    def away():
+        if focus_moves_while_the_device_is_away:
+            focus[0] = ("brave-browser", ("tray", "{2}"))
+    libei = _FakeLibei([(None, 1, 2),          # ready for the session
+                        (None, 3),             # paused as the keys are about to go
+                        (away, 2)])            # back, up to 2 s later
+    monkeypatch.setattr(libei_ctypes, "load_libei", lambda: libei)
+    monkeypatch.setattr(libei_ctypes.time, "sleep", lambda s: None)
+    monkeypatch.setattr(focused_window, "look", lambda: focus[0])
+    b = LibeiOutputBackend()
+    monkeypatch.setattr(b, "_run_handshake", lambda: (_portal_fd(), None))
+    monkeypatch.setattr(keyboard_output.this_thread, "into", ("org.kde.kwrite", ("tray", "{1}")))
+    return b, libei.keys
+
+
+def test_flatpak_typing_held_to_a_window_goes_nowhere_once_another_has_the_focus(monkeypatch):
+    """The user clicked into a chat while the portal's keyboard came back:
+    Fix a Word's replacement, or a dictation that may only go where it was
+    looked at, went into the chat."""
+    import pytest
+    from tuxtalk import virtual_keyboard
+    b, keys = _libei_typing_into(monkeypatch, focus_moves_while_the_device_is_away=True)
+    with pytest.raises(virtual_keyboard.GaveUp):
+        b.type_text("fixed")
+    assert keys == []
+
+
+def test_flatpak_typing_held_to_a_window_goes_in_while_it_has_the_focus(monkeypatch):
+    b, keys = _libei_typing_into(monkeypatch, focus_moves_while_the_device_is_away=False)
+    assert b.type_text("fixed") is True
+    assert len(keys) == 2 * len("fixed")

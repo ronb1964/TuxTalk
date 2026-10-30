@@ -244,20 +244,21 @@ def send_automatically(space: str, injection_mode: str, message) -> None:
     (send_countdown). Held when a newer recording has begun since, as a
     press of the hold key during the countdown holds it: what's said there
     is added to this message and sent at its end. A newer one that was
-    only a tap (or heard nothing) is over already: that's said, and the
-    space left off goes in now, its key long up."""
+    only a tap (or heard nothing, or its microphone didn't open) is over
+    already: that's said, and the space left off goes in now, unless its
+    key is still down; then it goes in when the key comes up (hotkeys)."""
     if send_countdown.send_automatically("Send each dictation automatically is on", message,
                                          press_key, type_onto_dictation, space,
                                          injection_mode):
-        if rs.state.message.cancelled and not rs.state.is_recording:
-            send_countdown.say_held()
-            send_countdown.type_owed_space()
+        if (rs.state.message.cancelled and not rs.state.is_recording
+                and send_countdown.say_held_for(rs.state.message.serial)):
+            send_countdown.give_back_space()
 
 
 # inject_text's outcomes that are sure nothing was typed: it gave up before the
 # first key (_delivery_stopped). "failed" may follow some of it (wtype timing
 # out), and "password_field" earlier lines.
-_GAVE_UP_UNTYPED = frozenset({"moved", "key_held"})
+_GAVE_UP_UNTYPED = frozenset({"moved", "key_held", "keys_down"})
 
 
 def type_onto_dictation(text: str, injection_mode: str, into=None) -> str:
