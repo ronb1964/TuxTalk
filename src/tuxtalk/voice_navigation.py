@@ -59,8 +59,10 @@ _RULES = [
     # Around the cursor.
     (r"select (?:all|everything)", lambda n: ("", (((C,), "A"),), ())),
     (rf"select {_LINE}", lambda n: ("", (((S,), "END"),), (((), "HOME"),))),
-    (rf"select (?:the )?next {_N}words?", lambda n: ("", (((C, S), "RIGHT"),), (), ("word", 1, True))),
-    (rf"select (?:the )?previous {_N}words?", lambda n: ("", (((C, S), "LEFT"),), (), ("word", -1, True))),
+    (rf"select (?:the )?next {_N}words?",
+     lambda n: ("", (((C, S), "RIGHT"),), (), ("word", 1, True))),
+    (rf"select (?:the )?previous {_N}words?",
+     lambda n: ("", (((C, S), "LEFT"),), (), ("word", -1, True))),
     (rf"select (?:the )?next {_N}lines?", lambda n: ("", (((S,), "DOWN"),), ())),
     (rf"select (?:the )?previous {_N}lines?", lambda n: ("", (((S,), "UP"),), ())),
     (rf"select to (?:the )?end of {_LINE}", lambda n: ("", (((S,), "END"),), ())),
@@ -72,10 +74,14 @@ _RULES = [
     (rf"go to (?:the )?(?:start|beginning) of {_LINE}", lambda n: ("", (((), "HOME"),), ())),
     (rf"go to (?:the )?(?:end|bottom){_DOC}", lambda n: ("", (((C,), "END"),), ())),
     (rf"go to (?:the )?(?:start|beginning|top){_DOC}", lambda n: ("", (((C,), "HOME"),), ())),
-    (rf"go (?:back|left) {_N}words?|previous word", lambda n: ("", (((C,), "LEFT"),), (), ("word", -1, False))),
-    (rf"go (?:forward|right) {_N}words?|next word", lambda n: ("", (((C,), "RIGHT"),), (), ("word", 1, False))),
-    (rf"go (?:back|left) {_N}(?:characters?|letters?)", lambda n: ("", (((), "LEFT"),), (), ("char", -1, False))),
-    (rf"go (?:forward|right) {_N}(?:characters?|letters?)", lambda n: ("", (((), "RIGHT"),), (), ("char", 1, False))),
+    (rf"go (?:back|left) {_N}words?|previous word",
+     lambda n: ("", (((C,), "LEFT"),), (), ("word", -1, False))),
+    (rf"go (?:forward|right) {_N}words?|next word",
+     lambda n: ("", (((C,), "RIGHT"),), (), ("word", 1, False))),
+    (rf"go (?:back|left) {_N}(?:characters?|letters?)",
+     lambda n: ("", (((), "LEFT"),), (), ("char", -1, False))),
+    (rf"go (?:forward|right) {_N}(?:characters?|letters?)",
+     lambda n: ("", (((), "RIGHT"),), (), ("char", 1, False))),
     (rf"go up {_N}lines?", lambda n: ("", (((), "UP"),), ())),
     (rf"go down {_N}lines?", lambda n: ("", (((), "DOWN"),), ())),
     # Unselect: Right collapses a selection to its end.
@@ -105,11 +111,6 @@ def parse(text: str):
         return Command(name=name, said_unit=unit, count=count, keys=keys, first=first,
                        step=step[0] if step else ())
     return None
-
-
-def needs_last_text(command: Command) -> bool:
-    """Whether *command* works on what TuxTalk typed last."""
-    return bool(command.said_unit)
 
 
 @dataclass(frozen=True)
@@ -165,9 +166,11 @@ def plan(command: Command, left=None, right: str = ""):
     if command.step and left is not None:
         unit, direction, select = command.step
         if direction < 0:
-            n = _words_back(left, command.count) if unit == "word" else min(command.count, len(left))
+            n = (_words_back(left, command.count) if unit == "word"
+                 else min(command.count, len(left)))
         else:
-            n = _words_forward(right, command.count) if unit == "word" else min(command.count, len(right))
+            n = (_words_forward(right, command.count) if unit == "word"
+                 else min(command.count, len(right)))
         mods = (S,) if select else ()
         keys = [(mods, "LEFT" if direction < 0 else "RIGHT")] * n
         if select:
@@ -199,8 +202,8 @@ def chords(command: Command, last_text: str):
     core = span.rstrip()
     if command.said_unit == "word":
         # A word without the sentence's mark after it: "select the last word"
-        # is for replacing or fixing the word, and the period stays (Ron,
-        # 2026-10-18). A sentence keeps its mark, it's part of the sentence.
+        # is for replacing or fixing the word, and the period stays. A
+        # sentence keeps its mark, it's part of the sentence.
         core = core.rstrip(_WORD_END_MARKS)
     trailing = len(span) - len(core)
     words = len(core.strip())

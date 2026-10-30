@@ -181,8 +181,6 @@ def test_dbus_exposes_presets_and_the_active_one():
         config=types.SimpleNamespace(model="parakeet-v3", device="vulkan",
                                      auto_timeout_enabled=True, auto_timeout_minutes=5),
         is_recording=False, service_running=True)
-    svc.IsRecording = lambda: False
-    svc.IsServiceRunning = lambda: True
     assert list(svc.GetPresets()) == [("recommended", "Recommended for this computer", "x")]
     assert svc.GetStatus()["preset"] == "recommended"
 

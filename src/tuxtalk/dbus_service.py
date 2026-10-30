@@ -137,33 +137,22 @@ class TuxTalkDBusService(dbus.service.Object):
         if hasattr(self.app, method_name):
             GLib.idle_add(getattr(self.app, method_name), *args)
 
-    # ==================== Properties ====================
+    # ==================== Status ====================
 
-    @dbus.service.method(DBUS_INTERFACE, out_signature='b')
-    def IsRecording(self):
-        """Check if currently recording"""
-        return self.app.is_recording if hasattr(self.app, 'is_recording') else False
-
-    @dbus.service.method(DBUS_INTERFACE, out_signature='b')
-    def IsServiceRunning(self):
-        """Check if the dictation service is running"""
-        return self.app.service_running if hasattr(self.app, 'service_running') else False
-
-    @dbus.service.method(DBUS_INTERFACE, out_signature='s')
-    def GetCurrentModel(self):
+    def _current_model(self):
         """The model the service really runs, or the configured one before it
         has reported (see NotifyRunningEngine)."""
-        running = getattr(self, "running_engine", None)
+        running = self.running_engine
         if running:
             return running[0]
         if hasattr(self.app, 'config'):
             return str(getattr(self.app.config, 'model', 'large-v3'))
         return 'unknown'
 
-    @dbus.service.method(DBUS_INTERFACE, out_signature='s')
-    def GetDeviceType(self):
-        """Get the device the model really runs on (cpu, cuda or vulkan)."""
-        running = getattr(self, "running_engine", None)
+    def _device_type(self):
+        """The device the model really runs on (cpu, cuda or vulkan), or the
+        configured one before the service has reported."""
+        running = self.running_engine
         if running:
             return running[1]
         if hasattr(self.app, 'config'):
@@ -174,12 +163,13 @@ class TuxTalkDBusService(dbus.service.Object):
 
     @dbus.service.method(DBUS_INTERFACE, out_signature='a{sv}')
     def GetStatus(self):
-        """Get comprehensive status information"""
+        """What the GNOME extension's menu shows: recording, the model and
+        where it runs, the hotkeys to grab and the performance preset."""
         status = {
-            'recording': self.IsRecording(),
-            'service_running': self.IsServiceRunning(),
-            'model': self.GetCurrentModel(),
-            'device': self.GetDeviceType(),
+            'recording': bool(getattr(self.app, 'is_recording', False)),
+            'service_running': bool(getattr(self.app, 'service_running', False)),
+            'model': self._current_model(),
+            'device': self._device_type(),
         }
 
         # Older GNOME extensions tell the battery-saving preset apart by its
@@ -492,6 +482,8 @@ class TuxTalkDBusService(dbus.service.Object):
         import threading
 
         def do_check():
+            """Check for updates on its own thread, show the result window and
+            tell the extension, with a failure reported the same way."""
             try:
                 from . import update_checker
                 result = update_checker.check_for_updates()

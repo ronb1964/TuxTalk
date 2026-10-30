@@ -97,6 +97,9 @@ def _small_digits_as_words(text: str) -> str:
     after a name or a label ("Python 3", "page 3"), before a unit ("3 GB",
     "3 pm") or in a range ("2 to 4") stays a digit."""
     def word(m: re.Match) -> str:
+        """One to nine back as a word ("3 cats" -> "three cats"), capitalized
+        at a sentence's start, but kept a digit with a unit, in a range, or
+        after a name or a label ("Python 3", "page 4")."""
         digit, after = m.group(1), m.group(2)
         before = text[:m.start()].rstrip()
         prev = re.search(r"([\w'-]+)\W*$", before)

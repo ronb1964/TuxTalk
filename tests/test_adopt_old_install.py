@@ -105,6 +105,11 @@ def test_tray_removes_the_unused_cudnn_on_start(tray_main):
     assert started.index("removes the unused cuDNN") < started.index("makes the tray")
 
 
+def test_tray_removes_the_old_pytorch_link_on_start(tray_main):
+    started = tray_main()
+    assert started.index("removes the PyTorch link") < started.index("makes the tray")
+
+
 # --- Ubuntu VM test, 2026-10-13: renamed entries finished off on a later start ---
 
 def test_a_later_start_points_renamed_entries_at_the_new_appimage(tmp_path, monkeypatch):

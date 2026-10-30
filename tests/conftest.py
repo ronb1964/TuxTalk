@@ -881,6 +881,7 @@ def tray_main(monkeypatch):
     monkeypatch.setattr(settings_backup, "snapshot_if_changed", step("snapshots the settings"))
     monkeypatch.setattr(uinput_helper, "retire_ydotoold", step("retires ydotoold"))
     monkeypatch.setattr(cuda_helper, "remove_unused_cudnn", step("removes the unused cuDNN"))
+    monkeypatch.setattr(cuda_helper, "remove_pytorch_link", step("removes the PyTorch link"))
     monkeypatch.setattr(gnome_keybindings, "restore_left_over",
                         step("restores GNOME keybindings"))
     monkeypatch.setattr(autostart, "repair_stale_appimage_autostart", lambda: False)

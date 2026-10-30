@@ -90,3 +90,7 @@ def test_the_arrow_keys_move_the_cursor_word_by_word(dialog):
 def test_the_dictation_dropdown_is_named_too(dialog):
     label = next(w for w in dialog.combo_row.get_children() if isinstance(w, Gtk.Label))
     assert label.get_mnemonic_widget() is dialog.combo
+
+
+def test_a_screen_reader_names_the_words_box(dialog):
+    assert dialog.view.get_accessible().get_name() == "Dictation: select the words to fix"

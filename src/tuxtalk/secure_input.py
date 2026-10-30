@@ -118,7 +118,8 @@ def helper_source():
 def _heredoc(path, content, delimiter):
     if delimiter in content:
         raise ValueError(f"{delimiter} appears in the content for {path}")
-    return f"cat > {path} <<'{delimiter}'\n{content}{'' if content.endswith(chr(10)) else chr(10)}{delimiter}\n"
+    newline = "" if content.endswith("\n") else "\n"
+    return f"cat > {path} <<'{delimiter}'\n{content}{newline}{delimiter}\n"
 
 
 def _install_file(path, content, delimiter, mode):
@@ -137,6 +138,9 @@ def install_script(leave_group=False):
     (switching from the input group) the user also leaves that group, in
     the same password prompt."""
     leave = leave_group_lines() if leave_group else ""
+    files = (_install_file(HELPER_PATH, helper_source(), "TUXTALK_HELPER_EOF", "0755")
+             + _install_file(UNIT_PATH, UNIT, "TUXTALK_UNIT_EOF", "0644")
+             + _install_file(UINPUT_RULE_PATH, UINPUT_RULE, "TUXTALK_RULE_EOF", "0644"))
     return f"""set -euo pipefail
 umask 022
 # The folder the service runs from must be root's own, never a link.
@@ -145,7 +149,7 @@ if [ -L {HELPER_DIR} ] || [ -L {os.path.dirname(HELPER_DIR)} ]; then
     exit 1
 fi
 install -d -m 0755 -o root -g root {HELPER_DIR}
-{_install_file(HELPER_PATH, helper_source(), "TUXTALK_HELPER_EOF", "0755")}{_install_file(UNIT_PATH, UNIT, "TUXTALK_UNIT_EOF", "0644")}{_install_file(UINPUT_RULE_PATH, UINPUT_RULE, "TUXTALK_RULE_EOF", "0644")}{leave}systemctl daemon-reload
+{files}{leave}systemctl daemon-reload
 systemctl enable {SERVICE}
 # restart, not start: a TuxTalk update brings a new helper with it
 systemctl restart {SERVICE}

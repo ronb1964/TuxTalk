@@ -62,6 +62,8 @@ class PortalInputBackend(InputBackend):
         return params.unpack()[1]
 
     def _on_activated(self, conn, sender, path, iface, signal, params):
+        """A portal shortcut was pressed: the hold key starts a dictation, the
+        toggle key starts or stops one."""
         # Two shortcuts are always live, mirroring Backend A where the hold key
         # (F8) and the toggle key (F9) both work at once — not a single mode-gated
         # key. "dictate_hold" = press-and-hold; "dictate_toggle" = tap on/off.
@@ -91,6 +93,9 @@ class PortalInputBackend(InputBackend):
         return True  # keep the GLib timer running
 
     def start(self):
+        """The Flatpak's input loop: create a GlobalShortcuts session, bind the
+        hold and toggle shortcuts, and run the service's tick on GLib's main
+        loop. Returns only if the portal won't create the session."""
         import logging
         import gi
         gi.require_version("Gio", "2.0")
@@ -118,6 +123,8 @@ class PortalInputBackend(InputBackend):
             bind()
 
         def bind():
+            """Ask the portal for TuxTalk's two shortcuts; the desktop asks the
+            user which keys they get."""
             # Register BOTH keys, always live (Backend A parity): hold-to-talk and
             # tap-to-toggle. The desktop lets the user assign a key to each.
             # Descriptions are short: desktops group these under the app name

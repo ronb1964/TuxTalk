@@ -181,7 +181,11 @@ def session_bus():
     scripting = kwin_focus.session_bus()
 
     class _Bus:
+        """The calls kwin_hotkeys makes, each sent to KWin scripting or
+        kglobalaccel, whichever answers it, with the D-Bus time limit."""
         def call(self, method, *args):
+            """Send *method* to the D-Bus object that has it. Raises ValueError
+            for a method it doesn't route."""
             if method in ("loadScript", "unloadScript", "start"):
                 return scripting.call(method, *args)
             # introspect=False: dbus-python's look at the object would wait

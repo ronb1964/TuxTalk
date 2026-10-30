@@ -8,9 +8,9 @@ import os
 # XET bypasses tqdm_class progress tracking, breaking our download progress UI
 os.environ["HF_HUB_DISABLE_XET"] = "1"
 
-# Import torch_init FIRST to configure CUDA library paths before any torch imports
-from .torch_init import init_cuda_for_pytorch
-init_cuda_for_pytorch()
+# Before any engine loads: makes TuxTalk's CUDA download findable.
+from .cuda_preload import preload_cuda_libraries
+preload_cuda_libraries()
 
 import signal
 import sys

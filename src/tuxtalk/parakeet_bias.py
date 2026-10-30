@@ -83,6 +83,10 @@ class WordBooster:
     def __init__(self, vocab, words, blank_idx, *, start_margin=START_MARGIN,
                  step_margin=STEP_MARGIN, blank_margin=BLANK_MARGIN,
                  word_budget=WORD_BUDGET, max_frames=MAX_FRAMES):
+        """Spell each of *words* (up to MAX_WORDS, with their variants) in the
+        pieces of *vocab* that can make it, dropping the ones no pieces can
+        spell. The margins and budget say how far Parakeet's own guess may
+        be overruled."""
         self.blank_idx = blank_idx
         self.start_margin = start_margin
         self.step_margin = step_margin
@@ -201,6 +205,11 @@ def boosted_tdt_decoding(asr, booster, on_word=None):
         return (tokens, timestamps, state, t, emitted), cost
 
     def _decoding(encoder_out, encoder_out_lens, /, **kwargs):
+        """onnx-asr's greedy TDT decoding, plus: where a frame's best piece
+        could start one of the user's words, that word is tried, and kept if
+        it fits within the budget. Yields tokens, timestamps and
+        log-probabilities as onnx-asr's own decoding does; asked for
+        log-probabilities, it steers nothing."""
         need_logprobs = kwargs.get("need_logprobs")
         if asr.use_low_precision:
             encoder_out_lens = np.minimum(encoder_out_lens, encoder_out.shape[1])

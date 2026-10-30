@@ -260,6 +260,9 @@ class _CosmicWindows(threading.Thread):
             self.ready.set()        # nobody waits for an answer that won't come
 
     def _follow(self, wl):
+        """Bind cosmic-comp's window list on *wl*, take in the windows open
+        now, then follow their changes until the connection ends. Raises
+        ConnectionError when the list isn't offered."""
         registry = wl.new_id()
         wl.request(_WL_DISPLAY, _WL_DISPLAY_GET_REGISTRY, struct.pack("<I", registry))
         offered = {}                # interface -> (global name, version)
@@ -288,6 +291,8 @@ class _CosmicWindows(threading.Thread):
         wl.read_until(None, None, self._on_event)
 
     def _on_event(self, obj, opcode, body):
+        """Keep the app ids and the active window up to date from one Wayland
+        event: a window opening, naming its app, closing or changing state."""
         if obj == self.toplevel_list and opcode == _EXT_LIST_TOPLEVEL:
             handle = struct.unpack_from("<I", body)[0]
             self.app_ids[handle] = None

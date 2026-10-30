@@ -42,7 +42,8 @@ MAX_PIECE_S = 30
 # What the file picker offers. PyAV reads far more than this, so the picker
 # also has an "All files" choice.
 AUDIO_EXTENSIONS = ("mp3", "m4a", "aac", "ogg", "oga", "opus", "flac", "wav", "wma", "amr", "aiff")
-VIDEO_EXTENSIONS = ("mp4", "mkv", "webm", "mov", "avi", "m4v", "wmv", "flv", "3gp", "mpeg", "mpg", "ts")
+VIDEO_EXTENSIONS = ("mp4", "mkv", "webm", "mov", "avi", "m4v", "wmv", "flv", "3gp", "mpeg", "mpg",
+                    "ts")
 
 
 class NotDownloaded(Exception):
@@ -145,6 +146,8 @@ class FileEngine:
         self.language, self.limit_to, self.words = language, tuple(limit_to), list(words)
 
     def text(self, audio):
+        """The text of one piece of the file, from whichever engine is loaded,
+        with the user's words steered and spelled as dictation does."""
         from . import custom_words, language_limit
         if self.kind == "parakeet":
             from .parakeet_gpu import _steer
@@ -231,7 +234,8 @@ def load_engine(cfg):
 
     if parakeet:
         try:
-            return FileEngine(load_parakeet_model(), "parakeet", f"{title} on the processor", **common)
+            return FileEngine(load_parakeet_model(), "parakeet", f"{title} on the processor",
+                              **common)
         except FileNotFoundError as e:
             raise NotDownloaded(missing) from e
 
@@ -242,8 +246,10 @@ def load_engine(cfg):
         try:
             from .cuda_helper import has_cuda_libraries
             if has_cuda_libraries():
-                model = WhisperModel(name, device="cuda", compute_type="float16", local_files_only=True)
-                return FileEngine(model, "whisper", f"{title} on the graphics card (CUDA)", **common)
+                model = WhisperModel(name, device="cuda", compute_type="float16",
+                                     local_files_only=True)
+                return FileEngine(model, "whisper", f"{title} on the graphics card (CUDA)",
+                                  **common)
         except Exception as e:
             logger.warning(f"File transcription: CUDA not used ({e}); using the processor")
     model = WhisperModel(name, device="cpu", compute_type="int8",

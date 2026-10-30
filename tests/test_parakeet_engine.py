@@ -102,7 +102,7 @@ def test_the_download_question_names_the_model_as_the_menus_do(monkeypatch):
 
 def test_menus_show_the_device_parakeet_really_uses():
     """Picking Parakeet in Preferences can leave device = "cuda" in the config;
-    both the tray and the GNOME extension (via GetDeviceType) must say CPU."""
+    both the tray and the GNOME extension (via GetStatus) must say CPU."""
     from tuxtalk.parakeet_engine import effective_device
     assert effective_device("parakeet-v3", "cuda") == "cpu"
     assert effective_device("large-v3", "cuda") == "cuda"
@@ -121,7 +121,8 @@ def test_parakeet_is_on_the_graphics_chip_only_once_its_vulkan_files_are_there(m
     from tuxtalk.dbus_service import TuxTalkDBusService
     svc = TuxTalkDBusService.__new__(TuxTalkDBusService)
     svc.app = SimpleNamespace(config=SimpleNamespace(model="parakeet-v3", device="cuda"))
-    assert TuxTalkDBusService.GetDeviceType(svc) == "cpu"
+    svc.running_engine, svc.claimed_hotkeys = None, []
+    assert svc.GetStatus()["device"] == "cpu"
 
 
 def _parakeet_saying(monkeypatch, text, nobody_talked):

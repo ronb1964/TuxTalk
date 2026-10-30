@@ -80,6 +80,8 @@ def make_download_func(device):
     """DownloadTask function: fetch what *device* still needs (see missing()).
     A failure's reason is its last report, at 0 %."""
     def download(progress_callback, cancel_event):
+        """Fetch each missing file, retrying a dropped connection, after
+        checking there's room for them all; True once every one is in."""
         from .download_utils import DownloadError, free_space_bytes
         todo = missing(device)
         total = sum(FILES[name][0] for name in todo)

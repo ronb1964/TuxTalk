@@ -174,7 +174,8 @@ def _wl_paste_types():
 
 def _wl_paste(mime):
     """The clipboard's contents as *mime*, in bytes. Raises OSError on failure."""
-    result = subprocess.run(["wl-paste", "--no-newline", "--type", mime], capture_output=True, timeout=1)
+    result = subprocess.run(["wl-paste", "--no-newline", "--type", mime],
+                            capture_output=True, timeout=1)
     if result.returncode != 0:
         raise OSError(f"wl-paste exited {result.returncode}")
     return result.stdout
@@ -323,6 +324,8 @@ class ClipboardKeeper:
             self._cancel = self._schedule(self._delay, lambda: self._restore(text, generation))
 
     def _restore(self, text, generation):
+        """Put back what the clipboard held before the paste, but only while it
+        still holds the dictation: a copy the user made meanwhile stays."""
         # Under the lock throughout: a paste starting meanwhile waits (the
         # wl-paste / wl-copy calls are time-limited), so it can neither save
         # this dictation as the user's copy nor have its own dictation

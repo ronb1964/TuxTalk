@@ -33,7 +33,8 @@ from .parakeet_gpu_worker import encode_request, encode_words
 logger = setup_logger(__name__)
 
 SAMPLE_RATE = 16000
-START_TIMEOUT = 180          # the very first run on a chip compiles shaders (8 s on an RTX 4070 Super)
+# The very first run on a chip compiles shaders (8 s on an RTX 4070 Super).
+START_TIMEOUT = 180
 MIN_SAMPLES = SAMPLE_RATE    # shorter recordings are padded with silence to one second
 REPLY_TIMEOUT = 60           # for one recording, plus a second per second of audio
 
@@ -55,6 +56,9 @@ class ParakeetGpuModel:
     code treats the two the same."""
 
     def __init__(self, device_index, threads=None, command=None):
+        """Start the graphics card's Parakeet helper on *device_index* with
+        *threads* processor threads, or *command* instead (the tests'
+        stand-in). Raises when the helper doesn't come up."""
         from . import whisper_vulkan as wv
         self.device_index = device_index
         threads = threads or max(1, (os.cpu_count() or 2) // 2)
@@ -82,6 +86,9 @@ class ParakeetGpuModel:
     # --- the helper process ---------------------------------------------------
 
     def _start(self):
+        """Start the helper (again) and wait for it to say it's ready. Raises
+        RuntimeError with the helper's reason when it doesn't, with the
+        helper stopped."""
         self._stop()
         self._proc = self._launcher.submit(
             subprocess.Popen, self._command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,

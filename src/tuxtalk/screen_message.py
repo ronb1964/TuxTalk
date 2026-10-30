@@ -136,8 +136,8 @@ def _show_now(text, center, seconds=None, warning=True, tag=None):
         # only on X11 (XWayland). The service falls back to native Wayland
         # when there's no X display, and there GTK 3 makes the label an
         # ordinary window that takes the focus, so everything typed while it
-        # shows is lost ("Press Enter when you're ready" included; VM test,
-        # 2026-10-20).
+        # shows is lost ("Press Enter when you're ready" included, as the VM
+        # tests showed).
         if not is_x11(display):
             logger.info(f"Not showing {text!r} over the window: no X display, so it would "
                         "take the keyboard")
@@ -161,7 +161,8 @@ def _show_now(text, center, seconds=None, warning=True, tag=None):
         sign = "⚠  " if warning else ""
 
         def set_text(words):
-            layout.set_markup(f'<span size="large">{sign}{GLib.markup_escape_text(words)}</span>', -1)
+            escaped = GLib.markup_escape_text(words)
+            layout.set_markup(f'<span size="large">{sign}{escaped}</span>', -1)
         set_text(text)
         text_w, text_h = layout.get_pixel_size()
         width, height = text_w + 2 * _PAD_X, text_h + 2 * _PAD_Y
@@ -169,6 +170,8 @@ def _show_now(text, center, seconds=None, warning=True, tag=None):
         win.move(*place(width, height, center, monitor))
 
         def draw(_widget, cr):
+            """Paint the message: a dark rounded label with an amber edge for a
+            warning or a blue one for news, on a see-through window."""
             cr.set_operator(cairo.OPERATOR_SOURCE)
             cr.set_source_rgba(0, 0, 0, 0)
             cr.paint()

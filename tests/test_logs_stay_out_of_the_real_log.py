@@ -27,19 +27,22 @@ def test_log_file_is_not_in_the_users_config():
 
 def test_handlers_created_on_import_point_at_the_test_log_dir():
     import tuxtalk.app  # noqa: F401  (imports many modules that set up loggers)
+    inspected = 0
     for name in list(logging.root.manager.loggerDict):
-        if not name.startswith("talktype"):
+        if name != "tuxtalk" and not name.startswith("tuxtalk."):
             continue
         for handler in getattr(logging.getLogger(name), "handlers", []):
             if isinstance(handler, logging.FileHandler):
+                inspected += 1
                 assert REAL_HOME / ".config" not in Path(handler.baseFilename).parents, (
                     f"{name} logs to {handler.baseFilename}")
+    assert inspected, "no log file handler on the tuxtalk loggers was looked at"
 
 
 def test_folders_found_on_import_are_not_the_users():
     # Found once, when tuxtalk is imported: before any fixture could move them.
-    from tuxtalk import torch_init
-    for folder in (config._config_home(), config._data_home(), torch_init._appimage_cuda_path):
+    from tuxtalk import cuda_preload
+    for folder in (config._config_home(), config._data_home(), cuda_preload._cuda_lib_dir()):
         assert REAL_HOME not in Path(folder).parents, folder
 
 

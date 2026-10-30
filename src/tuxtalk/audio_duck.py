@@ -130,7 +130,8 @@ def list_streams(run=subprocess.run):
 
 
 def _set_volume(index, volumes, run=subprocess.run):
-    return _pactl("set-sink-input-volume", str(index), *[str(v) for v in volumes], run=run) is not None
+    return _pactl("set-sink-input-volume", str(index), *[str(v) for v in volumes],
+                  run=run) is not None
 
 
 RESET_TIMEOUT_S = 3.0
@@ -160,7 +161,8 @@ def reset_remembered(app, volumes, run=subprocess.run, popen=subprocess.Popen):
             mine = [st for st in list_streams(run) if st["pid"] == player.pid]
             if mine:
                 st = mine[0]
-                want = volumes if len(volumes) == len(st["volumes"]) else [max(volumes)] * len(st["volumes"])
+                channels = len(st["volumes"])
+                want = volumes if len(volumes) == channels else [max(volumes)] * channels
                 done = _set_volume(st["index"], want, run)
                 break
         if done:
@@ -250,6 +252,9 @@ class AudioDucker:
                 logger.info(f"Couldn't turn other sounds down or back: {e}")
 
     def _duck_now(self):
+        """Turn every other app's sound down, each one saved first so the next
+        start puts it back if TuxTalk stops in between. On the worker
+        thread."""
         if self._closing:
             return
         self._round += 1
@@ -283,6 +288,9 @@ class AudioDucker:
                    for st in list_streams(self._run))
 
     def _restore_now(self):
+        """Put back the volumes that were turned down, unless the user changed
+        one meanwhile, and settle the apps whose next sound may have opened
+        at the lowered level. On the worker thread."""
         ducked, self._ducked = self._ducked, {}
         if not ducked and not self._owed:
             return

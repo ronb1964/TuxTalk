@@ -362,17 +362,3 @@ def enable_extension(uuid: str) -> bool:
     # Success if it is enabled now, or will be on the next shell start.
     final = _read_enabled_extensions()
     return live_enabled or (final is not None and uuid in final)
-
-
-if __name__ == '__main__':
-    # Print what this computer reports, for checking detection by hand.
-    print(f"Desktop Environment: {get_desktop_environment()}")
-    print(f"Is GNOME: {is_gnome()}")
-    print(f"GNOME Shell Version: {get_gnome_shell_version()}")
-    print(f"Is Wayland: {is_wayland()}")
-    print(f"Extension directory: {get_extension_dir()}")
-
-    uuid = 'talktype@ronb1964.github.io'
-    print(f"\nExtension '{uuid}':")
-    print(f"  Installed: {is_extension_installed(uuid)}")
-    print(f"  Enabled: {is_extension_enabled(uuid)}")

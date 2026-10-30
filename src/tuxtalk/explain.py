@@ -112,10 +112,6 @@ def reset():
         logger.debug(f"Could not reset the explained kinds: {e}")
 
 
-def anything_to_reset() -> bool:
-    return bool(_never_again())
-
-
 def should_explain(kind) -> bool:
     """Whether *kind* gets the window: it has one, and the user didn't tick
     "Don't explain this again" for it."""
@@ -205,6 +201,9 @@ def place_over_active_window(dialog):
 
 
 def main(argv=None):
+    """The explanation window's own process: show the window for the kind
+    named on the command line and remember a ticked "Don't explain this
+    again". Returns 1 for a kind it doesn't know."""
     argv = sys.argv[1:] if argv is None else argv
     kind = argv[0] if argv else ""
     if kind not in EXPLANATIONS:

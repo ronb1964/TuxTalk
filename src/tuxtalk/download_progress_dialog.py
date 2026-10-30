@@ -314,6 +314,8 @@ class UnifiedDownloadDialog:
     def _mark_task_complete(self, task, success):
         """Mark a task as complete (thread-safe)."""
         def update_ui():
+            """Show the task as complete, failed or stopped, on GTK's thread,
+            then see whether every task is done."""
             if task not in self.task_widgets:
                 return False
 
@@ -328,7 +330,8 @@ class UnifiedDownloadDialog:
                 # The download returns False when cancelled; it didn't fail.
                 pass
             elif success:
-                widgets['status'].set_markup('<span size="small" color="#51cf66">✅ Complete!</span>')
+                widgets['status'].set_markup(
+                    '<span size="small" color="#51cf66">✅ Complete!</span>')
                 widgets['progress'].set_fraction(1.0)
                 widgets['progress'].set_text("100%")
                 widgets['cancel_btn'].set_label("Done")
@@ -455,9 +458,12 @@ def show_unified_download_dialog(cuda=False, extension=False, model=None, parent
         model_size = MODEL_DISPLAY_SIZES.get(model, "~3 GB")
         description = (
             f"To run {model} on your NVIDIA graphics card with CUDA, TuxTalk needs two things:\n\n"
-            f"  • <b>CUDA GPU Libraries</b> (~{cuda_size}) — unlocks GPU acceleration on your NVIDIA card\n"
-            f"  • <b>{model} AI Model</b> ({model_size}) — the highest-accuracy speech recognition model\n\n"
-            f"Both are one-time downloads. This may take several minutes depending on your connection."
+            f"  • <b>CUDA GPU Libraries</b> (~{cuda_size}) — unlocks GPU acceleration on "
+            "your NVIDIA card\n"
+            f"  • <b>{model} AI Model</b> ({model_size}) — the highest-accuracy speech "
+            "recognition model\n\n"
+            "Both are one-time downloads. This may take several minutes depending on "
+            "your connection."
         )
 
     dialog = UnifiedDownloadDialog(parent=parent, title=title, description=description)
@@ -503,40 +509,3 @@ def show_unified_download_dialog(cuda=False, extension=False, model=None, parent
         dialog.add_task(task)
 
     return dialog.run()
-
-
-if __name__ == '__main__':
-    # Show the dialog with two dummy downloads, for checking it by hand.
-    import sys
-    from tuxtalk import cuda_helper
-    Gtk.init(sys.argv)
-    from .ui_style import prepare_windows
-    prepare_windows()
-
-    def dummy_download(progress_callback, cancel_event):
-        import time
-        for i in range(0, 101, 10):
-            if cancel_event.is_set():
-                return False
-            progress_callback(f"Downloading... {i}%", i)
-            time.sleep(0.3)
-        return True
-
-    dialog = UnifiedDownloadDialog()
-
-    task1 = DownloadTask(
-        name=CUDA_TASK,
-        size_text=f"~{cuda_helper.DOWNLOAD_SIZE_TEXT}",
-        download_func=dummy_download
-    )
-    dialog.add_task(task1)
-
-    task2 = DownloadTask(
-        name=EXTENSION_TASK,
-        size_text="~10KB",
-        download_func=dummy_download
-    )
-    dialog.add_task(task2)
-
-    results = dialog.run()
-    print(f"Results: {results}")

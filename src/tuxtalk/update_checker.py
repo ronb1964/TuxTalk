@@ -63,7 +63,8 @@ def get_extension_version() -> Optional[int]:
     Returns:
         int: Version number (e.g., 2), or None if not installed
     """
-    ext_path = Path.home() / ".local/share/gnome-shell/extensions" / EXTENSION_UUID / "metadata.json"
+    ext_path = (Path.home() / ".local/share/gnome-shell/extensions" / EXTENSION_UUID
+                / "metadata.json")
 
     if not ext_path.exists():
         return None
@@ -201,7 +202,8 @@ def _fetch_failure_message():
     if kind == "http" and code in (403, 429):
         return "GitHub is limiting update checks right now. Try again later."
     if kind == "http":
-        return f"GitHub couldn't give TuxTalk's release information (error {code}). Try again later."
+        return (f"GitHub couldn't give TuxTalk's release information (error {code}). "
+                "Try again later.")
     return "Couldn't check for updates. Try again later."
 
 
@@ -800,7 +802,8 @@ def restart_via_launcher(target: Optional[str] = None) -> Tuple[bool, str]:
     if target:
         command = shlex.quote(target)
         if not os.access(target, os.X_OK):
-            return (False, f"{target} is missing or not executable; please restart TuxTalk manually.")
+            return (False, f"{target} is missing or not executable; "
+                           "please restart TuxTalk manually.")
     else:
         launcher = next((p for p in ("/usr/bin/tuxtalk", "/usr/bin/talktype")
                          if os.path.exists(p)), "/usr/bin/tuxtalk")
@@ -1036,29 +1039,3 @@ def check_just_updated() -> Optional[str]:
         except OSError:
             pass        # it can't be read or removed: nothing more to do about a note
         return None
-
-
-# Print what the checker sees, for checking it by hand.
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-
-    print("Testing update checker...")
-    print(f"Current version: {get_current_version()}")
-    print(f"Extension version: {get_extension_version()}")
-    print(f"Running from AppImage: {is_running_from_appimage()}")
-    print(f"AppImage path: {get_running_appimage_path()}")
-    print(f"Standard location: {APPIMAGE_PATH}")
-    from .desktop_launcher import desktop_launcher_exists
-    print(f"Desktop launcher exists: {desktop_launcher_exists()}")
-
-    print("\nChecking for updates...")
-    result = check_for_updates()
-
-    if result["success"]:
-        print(f"Latest version: {result['latest_version']}")
-        print(f"Update available: {result['update_available']}")
-        if result["release"]:
-            print(f"Release URL: {result['release'].get('html_url')}")
-            print(f"AppImage URL: {result['release'].get('appimage_url')}")
-    else:
-        print(f"Error: {result['error']}")

@@ -29,7 +29,7 @@ def detect_nvidia_gpu():
     The host asks nvidia-smi. A Flatpak sandbox has no nvidia-smi, so there the
     driver's device nodes (/dev/nvidiactl, /dev/nvidia0, exposed by the
     manifest's --device=dri) are checked instead, which also works when
-    torch_init has cleared CUDA_VISIBLE_DEVICES.
+    cuda_preload has cleared CUDA_VISIBLE_DEVICES.
     """
     if os.environ.get("FLATPAK_ID"):
         return os.path.exists("/dev/nvidiactl") or os.path.exists("/dev/nvidia0")
@@ -108,6 +108,21 @@ def remove_unused_cudnn():
         logger.warning(f"Couldn't remove the unused cuDNN in {cudnn}: {e}")
         return
     logger.info("Removed the cuDNN earlier versions downloaded with CUDA; nothing uses it")
+
+
+def remove_pytorch_link():
+    """Delete the cuda/nvidia link to cuda/lib that versions before 0.19 made
+    for PyTorch, which TuxTalk doesn't use. Only a link: a real folder there
+    isn't TuxTalk's. Never raises."""
+    link = os.path.join(get_appdir_cuda_path(), "nvidia")
+    if not os.path.islink(link):
+        return
+    try:
+        os.unlink(link)
+    except OSError as e:
+        logger.warning(f"Couldn't remove the unused link {link}: {e}")
+        return
+    logger.info("Removed the cuda/nvidia link earlier versions made for PyTorch")
 
 
 def has_cuda_libraries():
@@ -301,7 +316,7 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
 
     # Clean up on failure/cancellation — but only what this run created.
     cleanup_cuda_dir = _make_cuda_cleanup(cuda_path)
-    
+
     try:
         import tempfile
         from .download_utils import download_file, free_space_bytes
@@ -356,7 +371,8 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
                     return False
 
             # --- Phase 3: download each wheel (timeout + cancel + sha256) ---
-            for pkg_idx, (pkg_name, wheel_url, wheel_filename, wheel_sha256, _size) in enumerate(wheels):
+            for pkg_idx, wheel in enumerate(wheels):
+                pkg_name, wheel_url, wheel_filename, wheel_sha256, _size = wheel
                 if cancel_event and cancel_event.is_set():
                     logger.info("Download cancelled by user")
                     cleanup_cuda_dir()
@@ -378,13 +394,8 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
                             f"Downloading {_pkg}... {int(download_percent)}%",
                             current_percent)
 
-                if not download_file(
-                    wheel_url, wheel_path,
-                    timeout=60,
-                    cancel_event=cancel_event,
-                    progress_hook=progress_hook,
-                    expected_sha256=wheel_sha256,
-                ):
+                if not download_file(wheel_url, wheel_path, timeout=60, cancel_event=cancel_event,
+                                     progress_hook=progress_hook, expected_sha256=wheel_sha256):
                     logger.error(f"Failed to download {pkg_name}")
                     if progress_callback and not (cancel_event and cancel_event.is_set()):
                         progress_callback(f"Download of {pkg_name} failed or was corrupted", 0)
@@ -452,7 +463,8 @@ def show_cuda_download_dialog(parent=None, on_success_callback=None):
     content.pack_start(progress_bar, False, False, 0)
 
     info_label = Gtk.Label()
-    info_label.set_markup('<span size="small"><i>This may take several minutes depending on your connection...</i></span>')
+    info_label.set_markup('<span size="small"><i>This may take several minutes depending on '
+                          'your connection...</i></span>')
     info_label.set_opacity(0.7)
     content.pack_start(info_label, False, False, 0)
 

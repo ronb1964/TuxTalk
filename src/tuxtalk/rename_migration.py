@@ -272,7 +272,8 @@ def adopt_old_install(home=None, dev=False, running_appimage=None):
                 os.replace(tmp, new)
                 done.append(f"moved {folder}/talktype{suffix}.desktop to tuxtalk{suffix}.desktop")
             else:
-                done.append(f"removed {folder}/talktype{suffix}.desktop (tuxtalk{suffix}.desktop exists)")
+                done.append(f"removed {folder}/talktype{suffix}.desktop "
+                            f"(tuxtalk{suffix}.desktop exists)")
             os.remove(old)
         except OSError as e:
             done.append(f"could not move {folder}/talktype{suffix}.desktop: {e}")
@@ -355,7 +356,8 @@ def _plasma_script(renames=LAUNCHER_RENAMES):
     import json
     old = [f"applications:{a}" for a in LAUNCHER_RENAMES]
     renames = {f"applications:{a}": f"applications:{b}" for a, b in renames.items()}
-    return ("var renames = " + json.dumps(renames) + ";\nvar old = " + json.dumps(old) + ";\n" + r"""
+    head = f"var renames = {json.dumps(renames)};\nvar old = {json.dumps(old)};\n"
+    return (head + r"""
 var changed = 0, waiting = 0;
 function fix(w) {
     if (w.type.indexOf("taskmanager") < 0 && w.type.indexOf("icontasks") < 0) return;

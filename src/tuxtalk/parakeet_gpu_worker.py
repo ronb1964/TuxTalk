@@ -160,6 +160,9 @@ def load_engine(engine_dir, model, device, threads):
             for i in range(lib.parakeet_full_n_segments(ctx)))
 
     def set_words(words):
+        """Hand the engine the user's words as boost tables; the number it
+        took, or None for an engine built without TuxTalk's word boost.
+        Raises RuntimeError when the engine refuses them."""
         try:
             setter = lib.parakeet_set_word_boost
         except AttributeError:

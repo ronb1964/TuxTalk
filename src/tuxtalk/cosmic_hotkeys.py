@@ -194,6 +194,9 @@ def claim(cfg) -> bool:
     held = []
 
     def change(current):
+        """COSMIC's custom shortcuts text with TuxTalk's entries swapped for
+        the hotkeys wanted now, skipping any key COSMIC already uses. Raises
+        _Unreadable when the text can't be edited safely."""
         theirs = _OURS.sub("", current) if current else current
         taken = _taken(theirs or "")
         for default in _default_paths():

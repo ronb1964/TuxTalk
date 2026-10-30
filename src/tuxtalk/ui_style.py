@@ -43,8 +43,9 @@ combobox {
 # The theme draws that checkmark white, which is invisible on the white swatch.
 # GTK already tags each swatch .light or .dark by its own luminance, so key off
 # that: a near-black check on light swatches (white, amber…) and a near-white
-# check on dark ones (black, purple…). The checkmark is a symbolic icon that follows the node's `color`, so
-# setting `color` on the swatch and its overlay child recolors just the check.
+# check on dark ones (black, purple…). The checkmark is a symbolic icon that
+# follows the node's `color`, so setting `color` on the swatch and its overlay
+# child recolors just the check.
 _SWATCH_CSS = b"""
 colorswatch.light,
 colorswatch.light overlay {
@@ -206,6 +207,7 @@ def forward_combo_scroll(combo):
     ancestor, and True is still returned so the combo's value never changes.
     """
     def _on_scroll(widget, event):
+        """Scroll the page the combo sits in, never the combo's own value."""
         sw = widget.get_ancestor(Gtk.ScrolledWindow)
         adj = sw.get_vadjustment() if sw is not None else None
         if adj is not None:
@@ -234,7 +236,7 @@ WARNING_AMBER = "#e6aa3c"
 # The share of the screen's height a window may count on, whatever the work
 # area says. Under Wayland GTK 3 isn't told about panels and docks, so the work
 # area is the whole screen: on Pop!_OS at 1280x800, Setup Complete filled it
-# and its buttons sat behind COSMIC's dock (VM, 2026-10-21). Three quarters is
+# and its buttons sat behind COSMIC's dock (in the VM). Three quarters is
 # also as tall as COSMIC opens a window, title bar included; asked for more,
 # it cut the bottom off.
 USABLE_SHARE = 0.75
@@ -601,6 +603,10 @@ class Fold(Gtk.Box):
     """
 
     def __init__(self, show_label, hide_label, on_toggle=None):
+        """A closed fold: a button reading *show_label* (*hide_label* once
+        open) with the summary beside it, and its settings in a grid that
+        slides open below. *on_toggle* gets True or False each time it opens
+        or closes."""
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self._labels = (show_label, hide_label)
         self._on_toggle = on_toggle

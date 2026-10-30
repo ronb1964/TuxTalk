@@ -1286,12 +1286,3 @@ def show_welcome_dialog(parent=None):
     Gtk.main()
 
     return result_container[0]
-
-
-if __name__ == '__main__':
-    # Test the welcome dialog
-    Gtk.init(None)
-    from .ui_style import prepare_windows
-    prepare_windows()
-    result = show_welcome_dialog()
-    print(f"Welcome dialog result: {result}")

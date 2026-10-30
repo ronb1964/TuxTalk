@@ -146,7 +146,8 @@ _CONTEXT_PROTECT_PATTERNS = [
 
     # "ended with a question mark", "add a comma": with an article the mark
     # is being talked about, not dictated. Nobody dictates "a question mark"
-    # to end a sentence (Ron, 2026-10-18: typed "ended with a?").
+    # to end a sentence (without this, "ended with a question mark" typed
+    # "ended with a?").
     (re.compile(r"\b(a|an|the|this|that|another|no|one)\s+question\s+mark\b",
                 re.IGNORECASE), r"\1 __LIT_QMARK__"),
     (re.compile(r"\b(a|an|the|this|that|another|no|one)\s+exclamation\s+point\b",
@@ -172,8 +173,10 @@ _ENGINE_PERIOD = r"(?:(?<=[^\W\d_])(?<!\.[^\W\d_])\.\s+)?"
 _MULTI_WORD_REPLACEMENTS = [
     # A spoken "comma" is still a word here, so a comma written just before
     # the command is the engine's pause and goes, as it does for paragraphs.
-    (re.compile(r"[,\s]*\b(?:new\s*line|return|line\s+break)\b[,.:;\s]*", re.IGNORECASE), LINE_BREAK),
-    (re.compile(r"[,.\s]*\bnew\s+paragraph\b[,.:;\s]*|\bparagraph\s+break\b[,.:;\s]*", re.IGNORECASE), LINE_BREAK * 2),
+    (re.compile(r"[,\s]*\b(?:new\s*line|return|line\s+break)\b[,.:;\s]*", re.IGNORECASE),
+     LINE_BREAK),
+    (re.compile(r"[,.\s]*\bnew\s+paragraph\b[,.:;\s]*|\bparagraph\s+break\b[,.:;\s]*",
+                re.IGNORECASE), LINE_BREAK * 2),
     (re.compile(r"[,.\s]*\bsoft\s+(?:break|line)\b[,.\s]*", re.IGNORECASE), _SOFT_BREAK),
     # Only "press tab" is a Tab: a bare "tab" is far more often the word ("every
     # tab shows"). Like "new line", it takes the spaces and punctuation the
@@ -440,17 +443,18 @@ _RE_FILE_EXT = re.compile(rf"\.(?:{_FILE_EXTENSIONS})\b", re.IGNORECASE)
 # "six forty-one p.m." as "6.41 p.m." one time and "641 p.m." the next. Only an
 # hour of 1-12 and minutes of 00-59 count, so "2000 pm" is left alone.
 _RE_TIME_FORMAT = re.compile(
-    r'\b(1[0-2]|0?[1-9])(?:[.:]\s*([0-5][0-9])|([0-5][0-9]))?\s+([Pp]\.?\s*[Mm]\.?|[Aa]\.?\s*[Mm]\.?)(?![A-Za-z])',
+    r'\b(1[0-2]|0?[1-9])(?:[.:]\s*([0-5][0-9])|([0-5][0-9]))?'
+    r'\s+([Pp]\.?\s*[Mm]\.?|[Aa]\.?\s*[Mm]\.?)(?![A-Za-z])',
     re.IGNORECASE
 )
 
 # "F eight" -> "F8", "B five A seven" -> "B5 A7": a capital letter and a
 # number name one thing (a key, a grid square, a seat, vitamin B12), so the
 # number stays a digit whatever "Write numbers as digits" does with eight on
-# its own. Parakeet writes "F8" one time and "F eight" the next (Ron,
-# 2026-10-18). "A" and "I" are words too ("A five minute walk"), so they are
-# joined only beside another pair ("B five A seven"). A lowercase "f" counts
-# because Whisper writes "f eight".
+# its own. Parakeet writes "F8" one time and "F eight" the next. "A" and "I"
+# are words too ("A five minute walk"), so they are joined only beside
+# another pair ("B five A seven"). A lowercase "f" counts because Whisper
+# writes "f eight".
 _LETTER_NUMBERS = {"zero": "0", "one": "1", "two": "2", "three": "3", "four": "4",
                    "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9",
                    "ten": "10", "eleven": "11", "twelve": "12"}
