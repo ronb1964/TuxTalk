@@ -912,11 +912,14 @@ def test_a_screen_reader_names_each_hotkey_dropdown_by_its_label(prefs_window):
     assert tab.toggle_combo.list_mnemonic_labels() == [tab.toggle_label]
 
 
-@pytest.mark.parametrize("layout,lost", [(("us", ""), None), (("de", ""), ("@", "€")),
-                                         (("gb", ""), ("€",)), (("pl", ""), ("€",))])
+@pytest.mark.parametrize("layout,lost", [
+    (("us", ""), None), (("de", ""), ("@", "€")), (("gb", ""), ("€",)), (("pl", ""), ("€",)),
+    (("us", "", "lv3:ralt_switch"), ()), (("us", "", "lv3:ralt_switch,eurosign:e"), ("€",)),
+    (("de", "", "compose:ralt"), None), (("de", "", "lv3:ralt_alt"), None)])
 def test_right_alt_warns_where_the_layout_makes_it_altgr(monkeypatch, layout, lost):
     """On a German keyboard @ and € are AltGr+Q and AltGr+E; on a UK one @
-    has a key of its own."""
+    has a key of its own. The desktop's keyboard options count: they can
+    make a US Right Alt AltGr, or a German one Compose or plain Alt."""
     monkeypatch.setattr(keyboard_layout, "active_layout", lambda: layout)
     assert keyboard_layout.altgr_characters() == lost
 

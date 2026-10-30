@@ -128,8 +128,9 @@ def layout_text():
     found = keyboard_layout.active_layout()
     if not found:
         return None
-    layout, variant = found
-    return f"{layout} ({variant})" if variant else layout
+    layout, variant, options = found
+    text = f"{layout} ({variant})" if variant else layout
+    return f"{text}, options {options}" if options else text
 
 
 def _settings(cfg):

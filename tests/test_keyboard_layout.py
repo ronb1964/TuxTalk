@@ -186,6 +186,33 @@ def test_a_euro_sign_on_a_us_keyboard_is_pasted_not_lost():
     assert kl.planner_for(kl.US).plan("5 €") is None
 
 
+def test_right_alt_switched_to_altgr_on_a_us_keyboard_is_altgr():
+    """lv3:ralt_switch makes a US keyboard's Right Alt AltGr: picking it as
+    a dictation key takes the € that eurosign:e puts on AltGr+E."""
+    assert kl.KeyPlanner("us", "").altgr_only("@€") is None
+    assert kl.KeyPlanner("us", "", "lv3:ralt_switch").altgr_only("@€") == []
+    euro = kl.KeyPlanner("us", "", "lv3:ralt_switch,eurosign:e")
+    assert euro.altgr_only("@€") == ["€"]
+    assert replay(euro, euro.plan("5 €")) == "5 €"
+
+
+@pytest.mark.parametrize("options", ["compose:ralt", "lv3:ralt_alt"])
+def test_a_german_right_alt_made_compose_or_alt_is_not_altgr(options):
+    """@ is AltGr+Q there, typed with Right Alt; with Right Alt made Compose
+    or plain Alt that came out as a Compose sequence or an Alt+Q shortcut."""
+    plain, changed = kl.KeyPlanner("de", ""), kl.KeyPlanner("de", "", options)
+    assert changed.altgr_only("@€") is None
+    assert replay(changed, plain.plan("@")) != "@"          # what reading no options typed
+    assert replay(changed, changed.plan("Mail an a@b.de")) == "Mail an a@b.de"
+    assert all(code != 100 for code, _ in changed.plan("@€"))   # never Right Alt
+
+
+def test_each_set_of_options_gets_its_own_keymap():
+    assert kl.planner_for(("de", "", "compose:ralt")) is not kl.planner_for(("de", "", ""))
+    assert kl.planner_for(("de", "", "compose:ralt")).altgr_only("@") is None
+    assert kl.planner_for(("de", "", "")).altgr_only("@") == ["@"]
+
+
 def test_the_blocking_character_is_named():
     """Naming it saves matching timestamps to find which dictation fell back."""
     assert kl.KeyPlanner("ua", "").plan_or_blocker("Це Windows 10") == (None, "W")
@@ -194,27 +221,62 @@ def test_the_blocking_character_is_named():
 
 
 def test_untypable_text_raises_with_the_layout_and_character(monkeypatch):
-    monkeypatch.setattr(kl, "active_layout", lambda: ("us", ""))
+    monkeypatch.setattr(kl, "active_layout", lambda: ("us", "", ""))
     with pytest.raises(kl.UntypableText) as e:
         kl.layout_key_events("Привіт")
-    assert e.value.args == (("us", ""), "П")
+    assert e.value.args == (("us", "", ""), "П")
 
 
 # --- finding the active layout ---------------------------------------------------
 
-def test_kde_reports_the_active_layout(monkeypatch):
+def _kde(monkeypatch, tmp_path, kxkbrc=None, session="wayland"):
+    """A KDE session with Swiss French switched on; *kxkbrc* is what KDE's
+    keyboard settings saved, if anything."""
     monkeypatch.setattr(kl, "_kde_layouts", lambda: ([("us", ""), ("ch", "fr")], 1))
     monkeypatch.setattr(kl, "_desktop", lambda: "kde")
-    assert kl.active_layout() == ("ch", "fr")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("XDG_SESSION_TYPE", session)
+    if kxkbrc is not None:
+        (tmp_path / "kxkbrc").write_text(kxkbrc)
 
 
-@pytest.mark.parametrize("mru, sources, expected", [
-    ("[('xkb', 'ch'), ('xkb', 'us')]", "[('xkb', 'us'), ('xkb', 'ch')]", ("ch", "")),
-    ("@a(ss) []", "[('xkb', 'de+nodeadkeys')]", ("de", "nodeadkeys")),
-    ("@a(ss) []", "[('ibus', 'anthy')]", None),
+def test_kde_reports_the_active_layout(monkeypatch, tmp_path):
+    _kde(monkeypatch, tmp_path)
+    assert kl.active_layout() == ("ch", "fr", "")
+
+
+def test_kde_reports_the_options_set_in_its_keyboard_settings(monkeypatch, tmp_path):
+    """The keyboard daemon's D-Bus interface doesn't list them; kxkbrc has them."""
+    _kde(monkeypatch, tmp_path, "[$Version]\nupdate_info=kxkb.upd:remove-empty-lists\n\n"
+         "[Layout]\nLayoutList=us,ch\nOptions=lv3:ralt_switch,compose:rctrl\n"
+         "ResetOldOptions=true\nUse=true\nVariantList=,fr\n")
+    assert kl.active_layout() == ("ch", "fr", "lv3:ralt_switch,compose:rctrl")
+
+
+def test_kde_options_left_switched_off_are_not_used(monkeypatch, tmp_path):
+    """KWin applies kxkbrc's Options only with ResetOldOptions on."""
+    _kde(monkeypatch, tmp_path, "[Layout]\nOptions=compose:ralt\nResetOldOptions=false\n")
+    assert kl.active_layout() == ("ch", "fr", "")
+
+
+def test_kde_on_x11_without_options_of_its_own_keeps_the_x_servers(monkeypatch, tmp_path):
+    _kde(monkeypatch, tmp_path, "[Layout]\nOptions=compose:ralt\n", session="x11")
+    monkeypatch.setattr(kl, "_setxkbmap_query", lambda: (
+        "rules:      evdev\nlayout:     us,ch\noptions:    lv3:ralt_alt\n"))
+    assert kl.active_layout() == ("ch", "fr", "lv3:ralt_alt")
+
+
+@pytest.mark.parametrize("mru, sources, options, expected", [
+    ("[('xkb', 'ch'), ('xkb', 'us')]", "[('xkb', 'us'), ('xkb', 'ch')]", "@as []",
+     ("ch", "", "")),
+    ("@a(ss) []", "[('xkb', 'de+nodeadkeys')]", "['lv3:ralt_alt']",
+     ("de", "nodeadkeys", "lv3:ralt_alt")),
+    ("@a(ss) []", "[('xkb', 'us')]", "['lv3:ralt_switch', 'compose:rctrl']",
+     ("us", "", "lv3:ralt_switch,compose:rctrl")),
+    ("@a(ss) []", "[('ibus', 'anthy')]", "@as []", None),
 ])
-def test_gnome_reports_the_active_layout(monkeypatch, mru, sources, expected):
-    values = {"mru-sources": mru, "sources": sources}
+def test_gnome_reports_the_active_layout(monkeypatch, mru, sources, options, expected):
+    values = {"mru-sources": mru, "sources": sources, "xkb-options": options}
     monkeypatch.setattr(kl, "_gsettings", lambda key: values[key])
     monkeypatch.setattr(kl, "_desktop", lambda: "gnome")
     monkeypatch.setattr(kl, "_system_layout", lambda: None)
@@ -225,7 +287,7 @@ def _cosmic(monkeypatch, tmp_path, xkb_config=None):
     """A COSMIC session; *xkb_config* is what COSMIC Settings saved, if anything."""
     monkeypatch.setattr(kl, "_desktop", lambda: "cosmic")
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
-    monkeypatch.setattr(kl, "_system_layout", lambda: ("us", ""))
+    monkeypatch.setattr(kl, "_system_layout", lambda: ("us", "", ""))
     if xkb_config is not None:
         folder = tmp_path / "cosmic" / "com.system76.CosmicComp" / "v1"
         folder.mkdir(parents=True)
@@ -238,7 +300,15 @@ def test_cosmic_reports_the_layout_set_in_cosmic_settings(monkeypatch, tmp_path)
     _cosmic(monkeypatch, tmp_path, '(\n    rules: "",\n    model: "pc105",\n'
             '    layout: "ch,us",\n    variant: "fr,",\n    options: Some(""),\n'
             '    repeat_delay: 600,\n    repeat_rate: 25,\n)')
-    assert kl.active_layout() == ("ch", "fr")
+    assert kl.active_layout() == ("ch", "fr", "")
+
+
+@pytest.mark.parametrize("saved, options", [('Some("compose:ralt")', "compose:ralt"),
+                                            ("None", "")])
+def test_cosmic_reports_the_options_set_in_cosmic_settings(monkeypatch, tmp_path, saved, options):
+    _cosmic(monkeypatch, tmp_path, '(rules: "", model: "pc105", layout: "de", variant: "",'
+            f' options: {saved}, repeat_delay: 600, repeat_rate: 25)')
+    assert kl.active_layout() == ("de", "", options)
 
 
 def test_cosmic_with_several_layouts_says_which_one_it_types_for(monkeypatch, tmp_path, caplog):
@@ -256,19 +326,19 @@ def test_cosmic_with_several_layouts_says_which_one_it_types_for(monkeypatch, tm
 
 def test_cosmic_without_a_layout_of_its_own_uses_the_systems(monkeypatch, tmp_path):
     _cosmic(monkeypatch, tmp_path)
-    assert kl.active_layout() == ("us", "")
+    assert kl.active_layout() == ("us", "", "")
     _cosmic(monkeypatch, tmp_path, '(rules: "", model: "", layout: "", variant: "", options: None)')
-    assert kl.active_layout() == ("us", "")
+    assert kl.active_layout() == ("us", "", "")
 
 
 def test_hyprland_reports_the_active_layout(monkeypatch):
     devices = {"keyboards": [
         {"name": "virtual-keyboard", "main": False, "layout": "us", "variant": ""},
         {"name": "logitech", "main": True, "layout": "ch,us", "variant": "fr,",
-         "active_layout_index": 0}]}
+         "options": "compose:ralt", "active_layout_index": 0}]}
     monkeypatch.setattr(kl, "_hyprland_devices", lambda: devices)
     monkeypatch.setenv("HYPRLAND_INSTANCE_SIGNATURE", "x")
-    assert kl.active_layout() == ("ch", "fr")
+    assert kl.active_layout() == ("ch", "fr", "compose:ralt")
 
 
 def test_sway_reports_the_active_layout_by_its_description(monkeypatch):
@@ -278,39 +348,45 @@ def test_sway_reports_the_active_layout_by_its_description(monkeypatch):
     monkeypatch.delenv("HYPRLAND_INSTANCE_SIGNATURE", raising=False)
     monkeypatch.setenv("SWAYSOCK", "/x")
     monkeypatch.setattr(kl, "_sway_inputs", lambda: inputs)
-    assert kl.active_layout() == ("ch", "")
+    assert kl.active_layout() == ("ch", "", "")     # Sway doesn't report its options
 
 
-def _x11(monkeypatch, layouts, variants, group):
+def _x11(monkeypatch, layouts, variants, group, options=None):
     monkeypatch.setattr(kl, "_desktop", lambda: "lxqt")
     monkeypatch.setattr(kl, "_setxkbmap_query", lambda: (
         f"rules:      evdev\nmodel:      pc105\nlayout:     {layouts}\n"
-        + (f"variant:    {variants}\n" if variants is not None else "")))
+        + (f"variant:    {variants}\n" if variants is not None else "")
+        + (f"options:    {options}\n" if options is not None else "")))
     monkeypatch.setattr(kl, "_x11_active_group", lambda: group)
     monkeypatch.setenv("XDG_SESSION_TYPE", "x11")
 
 
 def test_x11_reports_the_layout(monkeypatch):
     _x11(monkeypatch, "fr,us", "oss,", 0)
-    assert kl.active_layout() == ("fr", "oss")
+    assert kl.active_layout() == ("fr", "oss", "")
+
+
+def test_x11_reports_the_options(monkeypatch):
+    _x11(monkeypatch, "us", None, 0, "lv3:ralt_switch,grp:alt_shift_toggle")
+    assert kl.active_layout() == ("us", "", "lv3:ralt_switch,grp:alt_shift_toggle")
 
 
 def test_x11_reports_the_layout_that_is_on_not_the_first(monkeypatch):
     """"us,ua" with Ukrainian active must not be typed as US, which turns
     Ukrainian into 9s with commas and full stops as б and ю."""
     _x11(monkeypatch, "us,ua", None, 1)
-    assert kl.active_layout() == ("ua", "")
+    assert kl.active_layout() == ("ua", "", "")
 
 
 def test_x11_never_gives_the_first_layouts_variant_to_another(monkeypatch):
     _x11(monkeypatch, "us,ua", "dvorak", 1)
-    assert kl.active_layout() == ("ua", "")
+    assert kl.active_layout() == ("ua", "", "")
 
 
 @pytest.mark.parametrize("group", [None, 7])
 def test_x11_without_a_usable_group_uses_the_first(monkeypatch, group):
     _x11(monkeypatch, "us,ua", ",", group)
-    assert kl.active_layout() == ("us", "")
+    assert kl.active_layout() == ("us", "", "")
 
 
 def test_x11_group_failure_is_not_fatal(monkeypatch):
@@ -320,20 +396,25 @@ def test_x11_group_failure_is_not_fatal(monkeypatch):
         raise OSError("no libX11")
 
     monkeypatch.setattr(kl, "_x11_active_group", broken)
-    assert kl.active_layout() == ("de", "")
+    assert kl.active_layout() == ("de", "", "")
 
 
 def test_the_system_setting_is_the_last_resort(monkeypatch, tmp_path):
     conf = tmp_path / "00-keyboard.conf"
-    conf.write_text('Section "InputClass"\n  Option "XkbLayout" "ch"\n  Option "XkbVariant" "de_nodeadkeys"\nEndSection\n')
+    conf.write_text('Section "InputClass"\n  Option "XkbLayout" "ch"\n'
+                    '  Option "XkbVariant" "de_nodeadkeys"\n'
+                    '  Option "XkbOptions" "compose:ralt"\nEndSection\n')
     monkeypatch.setattr(kl, "_XORG_KEYBOARD_CONF", str(conf))
     monkeypatch.setattr(kl, "_DEBIAN_KEYBOARD", str(tmp_path / "missing"))
-    assert kl._system_layout() == ("ch", "de_nodeadkeys")
+    assert kl._system_layout() == ("ch", "de_nodeadkeys", "compose:ralt")
     debian = tmp_path / "keyboard"
-    debian.write_text('XKBMODEL="pc105"\nXKBLAYOUT="de"\nXKBVARIANT=""\n')
+    debian.write_text('XKBMODEL="pc105"\nXKBLAYOUT="de"\nXKBVARIANT=""\n'
+                      'XKBOPTIONS="lv3:ralt_alt"\n')
     monkeypatch.setattr(kl, "_XORG_KEYBOARD_CONF", str(tmp_path / "missing"))
     monkeypatch.setattr(kl, "_DEBIAN_KEYBOARD", str(debian))
-    assert kl._system_layout() == ("de", "")
+    assert kl._system_layout() == ("de", "", "lv3:ralt_alt")
+    debian.write_text('XKBMODEL="pc105"\nXKBLAYOUT="de"\nXKBVARIANT=""\n')
+    assert kl._system_layout() == ("de", "", "")
 
 
 def test_a_detection_failure_means_unknown(monkeypatch):
@@ -355,6 +436,15 @@ def typing(monkeypatch, keyboard):
     monkeypatch.setattr(keyboard_output, "paste_text_x11", lambda text: calls.append(("x11 paste", text)) or True)
     monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
     return app, calls
+
+
+def test_typing_follows_the_desktops_keyboard_options(typing, keyboard, monkeypatch):
+    """With Right Alt made Compose, @ on a German keyboard isn't typed with it."""
+    app, calls = typing
+    monkeypatch.setattr(kl, "active_layout", lambda: ("de", "", "compose:ralt"))
+    assert keyboard_output.type_text_raw("a@b") is True
+    assert replay(kl.planner_for(("de", "", "compose:ralt")), keyboard.events) == "a@b"
+    assert (100, 1) not in keyboard.events
 
 
 def test_type_mode_on_a_swiss_keyboard_sends_the_right_keys(typing, keyboard, monkeypatch):
