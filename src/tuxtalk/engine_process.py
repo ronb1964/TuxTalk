@@ -6,10 +6,13 @@ cleanup engine (llama-server, ai_cleanup.py) and the Vulkan graphics engine
 (whisper_vulkan.py, and parakeet_gpu.py for Parakeet). Each can hold a gigabyte
 or more of memory, so none may outlive the dictation service that started it.
 """
+import codecs
+import collections
 import os
 import shutil
 import signal
 import sys
+import threading
 import urllib.request
 
 from . import engine_launcher
@@ -43,12 +46,63 @@ def parent_death_command(argv, env=None):
     return command, env
 
 
-def launch_failure(returncode):
-    """", because ..." when the launcher's exit code says why an engine
-    never ran (its own messages go nowhere), else ""."""
+def launch_failure(returncode, output=None):
+    """", because ..." for an engine that ended while starting: what the
+    launcher's exit code says, else the exit code and the last lines it
+    printed (*output*, an OutputTail), which also explain a launcher that
+    Python couldn't run at all (a broken PYTHONPATH)."""
     why = {engine_launcher.NO_SIGNAL: "the parent-death signal couldn't be set",
            engine_launcher.NO_ENGINE: "its program couldn't be started"}.get(returncode)
-    return f", because {why}" if why else ""
+    said = output.text() if output is not None else ""
+    if why:
+        return f", because {why}{': ' + said if said else ''}"
+    if output is None:
+        return ""                       # the caller shows the exit code itself
+    return f" ({_how_it_ended(returncode)}{': ' + said if said else ''})"
+
+
+def _how_it_ended(returncode):
+    """"exit code 3", "killed by SIGSEGV", or "killed by signal 40" for a
+    real-time signal, which has no name of its own."""
+    if returncode >= 0:
+        return f"exit code {returncode}"
+    try:
+        return f"killed by {signal.Signals(-returncode).name}"
+    except ValueError:
+        return f"killed by signal {-returncode}"
+
+
+class OutputTail:
+    """The last lines a server writes to *stream* (its stderr, a pipe), read
+    on a thread of their own, to explain one that ends while starting. Not a
+    file, which would grow all session (a server logs every request), and
+    always read, so the pipe never fills and stalls the server. Only shown
+    for a server that never got a request, so no dictated text is in it."""
+
+    LINE_BYTES = 500
+
+    def __init__(self, stream, lines=5):
+        self._lines = collections.deque(maxlen=lines)
+        self._reader = threading.Thread(target=self._read, args=(stream,), daemon=True,
+                                        name="engine-output")
+        self._reader.start()
+
+    def _read(self, stream):
+        # At most LINE_BYTES a read: a server writing one endless line can't
+        # grow the service's memory, its pieces just push each other out. The
+        # decoder carries a character split between two reads over to the next.
+        decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+        with stream:
+            for line in iter(lambda: stream.readline(self.LINE_BYTES), b""):
+                text = decoder.decode(line).strip()
+                if text:            # a blank line mustn't push out a real one
+                    self._lines.append(text)
+
+    def text(self, wait=0.5):
+        """The lines kept, joined; waits up to *wait* seconds for the last
+        ones of a server that has just ended."""
+        self._reader.join(wait)
+        return " | ".join(list(self._lines))
 
 
 # Every engine listens on 127.0.0.1, yet urllib would send even that through

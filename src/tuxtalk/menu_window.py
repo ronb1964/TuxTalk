@@ -18,7 +18,6 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
-from . import tray_presets  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -149,6 +148,8 @@ class MenuWindow:
             logger.error(f"Menu window action failed: {e}", exc_info=True)
 
     def _show_popup(self, button, menu):
+        if self._popup is not None:
+            self._popup.destroy()       # each opening builds a new one
         menu.show_all()
         menu.attach_to_widget(button, None)
         self._popup = menu
@@ -160,24 +161,9 @@ class MenuWindow:
         self._show_popup(button, menu)
 
     def _popup_performance(self, button):
+        """The tray menu's Performance presets, as a popup beside *button*."""
         menu = Gtk.Menu()
-        presets = tray_presets.current_presets()
-        current = tray_presets.preset_in_use()
-        group = None
-        for preset in presets:
-            radio = Gtk.RadioMenuItem(label=f"{preset.label} ({preset.description})",
-                                      group=group)
-            group = group or radio
-            radio.set_active(preset.id == current)
-            # GTK fires "activate" on the radio being unselected too.
-            radio.connect("activate", lambda w, pid=preset.id:
-                          w.get_active() and self.tray.set_performance_preset(pid))
-            menu.append(radio)
-        menu.append(Gtk.SeparatorMenuItem())
-        custom = Gtk.RadioMenuItem(label="Custom (opens Preferences)", group=group)
-        custom.set_active(current not in {p.id for p in presets})
-        custom.connect("activate", lambda w: w.get_active() and self.tray.open_preferences(None))
-        menu.append(custom)
+        self.tray.menu.fill_performance(menu)
         self._show_popup(button, menu)
 
     # ----- keeping it current -----

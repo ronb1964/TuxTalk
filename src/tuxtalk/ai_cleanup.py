@@ -538,22 +538,24 @@ class CorrectionEngine:
                  "LLAMA_API_KEY": self._key})
             proc = self._proc = self._launcher.submit(
                 subprocess.Popen, command,
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env).result()
+                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env=env).result()
+            output = engine_process.OutputTail(proc.stderr)
             logger.info(f"AI cleanup engine starting (pid {proc.pid})")
         # The process started here, not self._proc read again: a stop() just
         # after the lock is let go would hand the waiter None.
-        threading.Thread(target=self._wait_until_ready, args=(proc,), daemon=True).start()
+        threading.Thread(target=self._wait_until_ready, args=(proc, output), daemon=True).start()
 
-    def _wait_until_ready(self, proc, limit=90):
+    def _wait_until_ready(self, proc, output, limit=90):
         """Wait for the server *proc* to answer, warm it up, then mark it
-        ready, unless it was stopped (or replaced) meanwhile."""
+        ready, unless it was stopped (or replaced) meanwhile. *output* is
+        what it printed (engine_process.OutputTail)."""
         deadline = time.time() + limit
         while time.time() < deadline:
             if self._proc is not proc:
                 return                  # turned off while starting
             if proc.poll() is not None:
                 logger.error("AI cleanup engine exited during startup"
-                             + engine_process.launch_failure(proc.returncode))
+                             + engine_process.launch_failure(proc.returncode, output))
                 return
             try:
                 engine_process.open_local(f"http://127.0.0.1:{self._port}/health", timeout=1)

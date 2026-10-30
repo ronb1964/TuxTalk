@@ -33,7 +33,11 @@ FAKE_WORKER = textwrap.dedent("""
         import time; time.sleep(60)
     if mode == "refuse":
         reply({"error": "no graphics chip"}); sys.exit(1)
+    if mode == "crash":
+        sys.exit("ggml_vulkan: no device found")
     reply({"ready": True})
+    if mode == "chatty":
+        print("the dictated words", file=sys.stderr); sys.stderr.flush()
     if mode == "deaf":
         import time; time.sleep(60)
     answered = 0
@@ -51,7 +55,7 @@ FAKE_WORKER = textwrap.dedent("""
         if mode == "half":
             out.write(b'{"text": "par'); out.flush()
             import time; time.sleep(60)
-        if mode == "die" or (mode == "once" and answered):
+        if mode in ("die", "chatty") or (mode == "once" and answered):
             sys.exit(3)
         reply({"text": f" {n} samples "})
         answered += 1
@@ -91,6 +95,31 @@ def test_very_short_audio_is_padded_to_a_second(fake):
 def test_a_helper_that_cannot_start_says_why(fake):
     with pytest.raises(RuntimeError, match="no graphics chip"):
         parakeet_gpu.ParakeetGpuModel(0, command=fake("refuse"))
+
+
+def test_a_helper_that_dies_while_starting_says_what_it_printed(fake):
+    with pytest.raises(RuntimeError, match="ggml_vulkan: no device found"):
+        parakeet_gpu.ParakeetGpuModel(0, command=fake("crash"))
+
+
+def test_what_a_ready_helper_prints_never_reaches_the_log(fake, monkeypatch, caplog):
+    """It dies during a dictation after printing: by then its messages could
+    hold the words, so the log says only that it stopped."""
+    import logging
+
+    class Cpu:
+        def recognize(self, audio):
+            return "from the processor"
+
+    monkeypatch.setattr(parakeet_gpu, "load_parakeet_model", lambda: Cpu())
+    model = parakeet_gpu.ParakeetGpuModel(0, command=fake("chatty"))
+    try:
+        with caplog.at_level(logging.DEBUG):
+            assert model.recognize(_audio()) == "from the processor"
+        assert "helper stopped" in caplog.text
+        assert "dictated words" not in caplog.text
+    finally:
+        model.close()
 
 
 def test_a_crashed_helper_is_started_again(fake):
