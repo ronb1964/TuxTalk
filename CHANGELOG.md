@@ -376,6 +376,9 @@ before 0.15.0, so older entries use that name.
   IsRecording, IsServiceRunning, GetCurrentModel and GetDeviceType calls are
   gone. Nothing in TuxTalk used them any more. GetStatus still gives you all
   four, as recording, service_running, model and device.
+- If you start your desktop with startx, TuxTalk now types for the keyboard
+  layout you have switched on. It didn't recognise that kind of X11 session
+  before, so it fell back to the system's default layout.
 
 ## [0.18.2] - 2026-10-23
 
