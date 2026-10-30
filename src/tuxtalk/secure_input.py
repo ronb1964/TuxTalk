@@ -333,7 +333,7 @@ def _pkexec(script, what):
     started = time.monotonic()
     try:
         result = subprocess.run(["pkexec", "/bin/bash", "-s"], input=script, text=True,
-                                capture_output=True, timeout=PKEXEC_TIMEOUT)
+                                errors="replace", capture_output=True, timeout=PKEXEC_TIMEOUT)
     except subprocess.TimeoutExpired:
         return False, TIMED_OUT
     except PermissionError:

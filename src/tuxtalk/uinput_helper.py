@@ -313,7 +313,7 @@ def reboot_system() -> bool:
     try:
         result = subprocess.run(
             ['systemctl', 'reboot'],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True, text=True, errors="replace", timeout=10,
         )
         if result.returncode != 0 and result.stderr:
             logger.warning(f"systemctl reboot refused: {result.stderr.strip()}")
@@ -398,7 +398,7 @@ def retire_ydotoold():
         return
     try:
         result = subprocess.run(["systemctl", "--user", "disable", "--now", "ydotoold.service"],
-                                capture_output=True, text=True, timeout=15)
+                                capture_output=True, text=True, errors="replace", timeout=15)
         if result.returncode != 0:
             # Kept, so the next start tries again: removed while systemd still
             # runs it, the daemon would go on until logout.
@@ -591,7 +591,7 @@ def install_portaudio_with_pkexec():
         full_cmd = ['pkexec'] + install_cmd
         logger.info(f"Running: {' '.join(full_cmd)}")
 
-        result = subprocess.run(full_cmd, capture_output=True, text=True,
+        result = subprocess.run(full_cmd, capture_output=True, text=True, errors="replace",
                                 timeout=PKEXEC_INSTALL_TIMEOUT)
 
         if result.returncode == 0:
@@ -718,7 +718,8 @@ def install_udev_rule_with_pkexec():
     logger.info("Running the input group setup with pkexec")
     try:
         result = subprocess.run(['pkexec', '/bin/bash', '-s'], input=get_fix_script_content(),
-                                capture_output=True, text=True, timeout=PKEXEC_SCRIPT_TIMEOUT)
+                                capture_output=True, text=True, errors="replace",
+                                timeout=PKEXEC_SCRIPT_TIMEOUT)
     except subprocess.TimeoutExpired:
         logger.error("pkexec timed out")
         return (False, "The operation timed out. Please try again.")

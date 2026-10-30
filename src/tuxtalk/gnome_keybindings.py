@@ -33,7 +33,7 @@ def _set(key, value):
     """Write one binding; True if gsettings accepted it."""
     try:
         result = subprocess.run(["gsettings", "set", SCHEMA, key, value],
-                                capture_output=True, text=True, timeout=5)
+                                capture_output=True, text=True, errors="replace", timeout=5)
     except (OSError, subprocess.SubprocessError) as e:
         logger.warning(f"Couldn't set GNOME's {key}: {e}")
         return False

@@ -69,7 +69,8 @@ def _state_path():
 def _pactl(*args, run=subprocess.run):
     """pactl's output, or None if it isn't there or fails."""
     try:
-        result = run(["pactl", *args], capture_output=True, text=True, timeout=PACTL_TIMEOUT_S)
+        result = run(["pactl", *args], capture_output=True, text=True, errors="replace",
+                     timeout=PACTL_TIMEOUT_S)
     except (OSError, subprocess.TimeoutExpired) as e:
         logger.debug(f"Audio duck: pactl {args[0] if args else ''} failed: {e}")
         return None

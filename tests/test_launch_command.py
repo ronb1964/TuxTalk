@@ -43,7 +43,7 @@ def _make_prefs(
     exists = set(exists)
     which_map = which_map or {}
 
-    def fake_which(argv, capture_output=True, text=True, timeout=5):
+    def fake_which(argv, **kwargs):
         path = which_map.get(argv[1])
         return types.SimpleNamespace(
             returncode=0 if path else 1,

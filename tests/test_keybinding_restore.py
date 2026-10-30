@@ -177,3 +177,17 @@ def test_bindings_that_cant_be_read_as_text_are_left_alone(monkeypatch, tmp_path
     monkeypatch.setattr(G, "_backup_path", lambda: str(tmp_path / G.BACKUP_NAME))
     assert G.disable_for_hotkey_test() is None
     assert "set" not in log.read_text().split()
+
+
+def test_a_refusal_in_another_encoding_still_puts_the_other_binding_back(monkeypatch, tmp_path):
+    """restore() never raises and tries every key: gsettings complaining
+    about one in bytes that aren't UTF-8 mustn't skip the other."""
+    from shell_stubs import stub
+    log = tmp_path / "gsettings.log"
+    stub(tmp_path, "gsettings", f'echo "$3" >> {log}\n'
+                                r"""[ "$3" = begin-resize ] && { printf 'refus\351\n' >&2; exit 1; }
+exit 0""")
+    monkeypatch.setenv("PATH", str(tmp_path))
+    monkeypatch.setattr(G, "_backup_path", lambda: str(tmp_path / G.BACKUP_NAME))
+    assert G.restore({"begin-resize": "['<Alt>F8']", "begin-move": "['<Alt>F7']"}) is False
+    assert log.read_text().split() == ["begin-resize", "begin-move"]

@@ -354,7 +354,7 @@ def _kreadconfig(*args):
     if not tool:
         raise FileNotFoundError("neither kreadconfig6 nor kreadconfig5 is installed")
     return subprocess.run([tool, "--file", "kxkbrc", "--group", "Layout", *args],
-                          capture_output=True, text=True, timeout=2)
+                          capture_output=True, text=True, errors="replace", timeout=2)
 
 
 def _options_or_defaults(read):
@@ -376,7 +376,8 @@ def _note_unreadable_options(problem):
 
 def _gsettings(key):
     return subprocess.run(["gsettings", "get", "org.gnome.desktop.input-sources", key],
-                          capture_output=True, text=True, timeout=2, check=True).stdout
+                          capture_output=True, text=True, errors="replace", timeout=2,
+                          check=True).stdout
 
 
 def _gnome_layout():
@@ -517,8 +518,8 @@ def _sway_layout():
 
 
 def _setxkbmap_query():
-    return subprocess.run(["setxkbmap", "-query"], capture_output=True, text=True, timeout=2,
-                          check=True).stdout
+    return subprocess.run(["setxkbmap", "-query"], capture_output=True, text=True,
+                          errors="replace", timeout=2, check=True).stdout
 
 
 def _setxkbmap_fields():

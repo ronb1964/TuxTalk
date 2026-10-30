@@ -144,7 +144,7 @@ def get_gnome_shell_version() -> Optional[str]:
         result = subprocess.run(
             ['gnome-shell', '--version'],
             capture_output=True,
-            text=True,
+            text=True, errors="replace",
             timeout=5
         )
         if result.returncode == 0:
@@ -203,7 +203,7 @@ def is_extension_enabled(uuid: str) -> bool:
         result = subprocess.run(
             ['gnome-extensions', 'info', uuid],
             capture_output=True,
-            text=True,
+            text=True, errors="replace",
             timeout=5
         )
         if result.returncode == 0:
@@ -294,7 +294,7 @@ def _write_extension_list(key, uuids: list) -> bool:
     try:
         result = subprocess.run(
             ['gsettings', 'set', 'org.gnome.shell', key, repr(uuids)],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True, text=True, errors="replace", timeout=10,
         )
         return result.returncode == 0
     except (subprocess.TimeoutExpired, FileNotFoundError):
@@ -337,7 +337,7 @@ def enable_extension(uuid: str) -> bool:
     try:
         result = subprocess.run(
             ['gnome-extensions', 'enable', uuid],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True, text=True, errors="replace", timeout=10,
         )
         live_enabled = result.returncode == 0
         if not live_enabled and result.stderr:

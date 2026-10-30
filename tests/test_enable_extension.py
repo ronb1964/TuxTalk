@@ -21,7 +21,7 @@ def _fake_run(*, enable_rc, get_out, set_rc=0, get_rc=0):
     empty unless a test sets state["disabled"]."""
     state = {"written": None, "set_calls": 0, "disabled": "@as []"}
 
-    def run(argv, capture_output=True, text=True, timeout=10):
+    def run(argv, **kwargs):
         if argv[0] == "gnome-extensions" and argv[1] == "enable":
             return types.SimpleNamespace(returncode=enable_rc, stdout="", stderr="not found")
         if argv[:2] == ["gsettings", "get"] and argv[3] == "disabled-extensions":
