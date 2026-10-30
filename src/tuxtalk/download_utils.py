@@ -24,7 +24,11 @@ import time
 import urllib.error
 import urllib.request
 
+from .logger import FailureNotes  # noqa: E402
+
 logger = logging.getLogger(__name__)
+# Damaged downloads, logged once each: the presence checks run on every OK.
+_damaged = FailureNotes()
 
 # Read in 64 KiB chunks — large enough for throughput, small enough that
 # cancellation and progress updates stay responsive.
@@ -274,6 +278,36 @@ def failure_reason(message, percent):
     gave its progress callback: each reports its reason last, at 0 %. None
     when that last word was only progress."""
     return message if percent == 0 and message else None
+
+
+def _cached(lookup, what):
+    """*lookup*()'s answer from the Hugging Face cache, or None when *what*
+    isn't downloaded or its cache entry is damaged."""
+    try:
+        return lookup()
+    except OSError:     # not downloaded: LocalEntryNotFoundError is a FileNotFoundError
+        return None
+    except ValueError as e:
+        # A damaged entry: refs/main that isn't text (UnicodeDecodeError) or
+        # names a folder outside the snapshots ("Invalid pointer path").
+        if _damaged.failed(what, e):
+            logger.warning(f"The download of {what} is damaged; counted as missing: {e}")
+        return None
+
+
+def cached_hub_file(repo: str, filename: str):
+    """The local path of *filename* from Hugging Face *repo*, or None when it
+    isn't fully downloaded. Asks only the cache, never the network."""
+    from huggingface_hub import hf_hub_download
+    return _cached(lambda: hf_hub_download(repo, filename, local_files_only=True),
+                   f"{repo}/{filename}")
+
+
+def cached_hub_snapshot(repo: str):
+    """The local snapshot folder of Hugging Face *repo*, or None when there is
+    none. It may hold only some of the files (see is_model_cached_fast)."""
+    from huggingface_hub import snapshot_download
+    return _cached(lambda: snapshot_download(repo, local_files_only=True), repo)
 
 
 def free_space_bytes(path: str) -> int:

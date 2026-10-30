@@ -416,11 +416,8 @@ def _server_binary():
 
 def _model_path():
     """Local path of the downloaded model, or None."""
-    try:
-        from huggingface_hub import hf_hub_download
-        return hf_hub_download(MODEL_REPO, MODEL_FILE, local_files_only=True)
-    except OSError:     # not downloaded: LocalEntryNotFoundError is a FileNotFoundError
-        return None
+    from .download_utils import cached_hub_file
+    return cached_hub_file(MODEL_REPO, MODEL_FILE)
 
 
 def is_installed() -> bool:

@@ -171,12 +171,8 @@ def model_path(model_name):
         ultra = parakeet_ultra.gpu_file()
         if ultra is not None:
             return ultra
-    try:
-        from huggingface_hub import hf_hub_download
-        return hf_hub_download(model_repo(model_name), MODEL_FILES[model_name][0],
-                               local_files_only=True)
-    except OSError:     # not downloaded: LocalEntryNotFoundError is a FileNotFoundError
-        return None
+    from .download_utils import cached_hub_file
+    return cached_hub_file(model_repo(model_name), MODEL_FILES[model_name][0])
 
 
 def is_installed(model_name) -> bool:

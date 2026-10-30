@@ -117,7 +117,7 @@ def _loads_on_cpu(model_name):
                              local_files_only=True)
         del model
         return True
-    except Exception as e:      # whatever stops it, the files are what's wrong
+    except Exception as e:      # any failure here means it doesn't load
         logger.info(f"{model_name} doesn't load on the processor either: {e}")
         return False
 
@@ -128,21 +128,18 @@ def is_model_cached_fast(model_name):
     cancelled partway reports False. Safe to call on every Apply/OK click."""
     if is_parakeet(model_name):
         return _parakeet_cached_dir() is not None
-    try:
-        from huggingface_hub import snapshot_download
-        repo_id = MODEL_REPOS.get(model_name)
-        if not repo_id:
-            return False
-        snapshot_path = snapshot_download(repo_id, local_files_only=True)
-        # Offline, snapshot_download does not check completeness: it returns a
-        # snapshot holding only config.json just as happily. hf_hub_download
-        # links a file into the snapshot only once it has fully downloaded, so
-        # the presence of the files faster-whisper loads means they are complete.
-        def has(name):
-            return os.path.isfile(os.path.join(snapshot_path, name))
-        return all(map(has, ESSENTIAL_MODEL_FILES)) and any(map(has, VOCABULARY_FILES))
-    except OSError:     # not downloaded: LocalEntryNotFoundError is a FileNotFoundError
+    from .download_utils import cached_hub_snapshot
+    repo_id = MODEL_REPOS.get(model_name)
+    snapshot_path = cached_hub_snapshot(repo_id) if repo_id else None
+    if snapshot_path is None:
         return False
+    # Offline, snapshot_download does not check completeness: it returns a
+    # snapshot holding only config.json just as happily. hf_hub_download
+    # links a file into the snapshot only once it has fully downloaded, so
+    # the presence of the files faster-whisper loads means they are complete.
+    def has(name):
+        return os.path.isfile(os.path.join(snapshot_path, name))
+    return all(map(has, ESSENTIAL_MODEL_FILES)) and any(map(has, VOCABULARY_FILES))
 
 
 def _failure_text(error):

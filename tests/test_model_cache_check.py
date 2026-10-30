@@ -91,3 +91,29 @@ def test_models_never_downloaded_are_reported_missing_not_raised():
     assert whisper_vulkan.model_path("small") is None
     if parakeet_ultra.cpu_dir() is None:
         assert parakeet_engine.cached_model_dir() is None
+
+
+def test_a_damaged_download_record_counts_as_not_downloaded_and_is_logged(
+        monkeypatch, tmp_path, caplog):
+    """Hugging Face's record of which snapshot is current (refs/main) can
+    be left as garbage by a crash: each presence check says "not
+    downloaded", names the damage in the log, and nothing raises."""
+    import logging
+
+    import huggingface_hub.constants
+    from tuxtalk import ai_cleanup, parakeet_engine, parakeet_ultra, whisper_vulkan
+    monkeypatch.setattr(huggingface_hub.constants, "HF_HUB_CACHE", str(tmp_path))
+    repos = {ai_cleanup.MODEL_REPO, whisper_vulkan.model_repo("small"),
+             parakeet_engine.V3_REPO, M.MODEL_REPOS["small"]}
+    for repo in repos:
+        folder = tmp_path / ("models--" + repo.replace("/", "--"))
+        (folder / "refs").mkdir(parents=True)
+        (folder / "snapshots").mkdir()
+        (folder / "refs" / "main").write_bytes(b"\xff\xfe garbage")
+    with caplog.at_level(logging.WARNING):
+        assert M.is_model_cached_fast("small") is False
+        assert ai_cleanup._model_path() is None
+        assert whisper_vulkan.model_path("small") is None
+        if parakeet_ultra.cpu_dir() is None:
+            assert parakeet_engine.cached_model_dir() is None
+    assert "damaged" in caplog.text
