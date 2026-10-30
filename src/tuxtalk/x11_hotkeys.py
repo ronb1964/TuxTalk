@@ -25,8 +25,8 @@ key's release then reaches the app, which ignores it.
 The X server's keycodes are evdev's plus 8 (both the evdev and libinput
 drivers), so the grab is on the physical key the service listens to: an
 F-key or Scroll Lock, or for a letter the key that types it on the active
-layout. Which keys are held is decided in kwin_hotkeys.wanted_shortcuts, as
-for KDE and GNOME: F-keys, Scroll Lock and modifier combos, never a bare letter.
+layout. Which keys are held is decided in hotkey_claims, as for KDE and
+GNOME: F-keys, Scroll Lock and modifier combos, never a bare letter.
 
 Nothing here may be fatal: failing to hold a key costs the stray characters,
 never dictation.
@@ -38,7 +38,7 @@ import threading
 
 from . import desktop_detect
 from .compositor_focus import free, is_x11_session, x11_root, xcb_lib
-from .kwin_hotkeys import wanted_shortcuts
+from .hotkey_claims import keys_to_claim
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -68,7 +68,7 @@ def should_claim() -> bool:
 
 
 def x_grab(qt_sequence):
-    """(X keycode, modifier mask) for a key from wanted_shortcuts ("Shift+F8")."""
+    """(X keycode, modifier mask) for a key from keys_to_claim ("Shift+F8")."""
     from evdev import ecodes
 
     from .keyboard_layout import shortcut_keycode
@@ -132,7 +132,7 @@ def claim(cfg) -> bool:
         # Every request goes out before the first answer is read, so this
         # costs one round trip however many keys there are.
         cookies = []
-        for _name, _text, key in wanted_shortcuts(cfg):
+        for _role, _what, key in keys_to_claim(cfg):
             keycode, mask = x_grab(key)
             cookies.append((key, [lib.xcb_grab_key_checked(
                 conn, 0, root, mask | lock, keycode, _GRAB_MODE_ASYNC, _GRAB_MODE_ASYNC)

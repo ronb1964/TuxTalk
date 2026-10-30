@@ -221,7 +221,7 @@ def _held_shift(held_modifiers) -> set:
 
 def _someone_elses_shortcut(held_modifiers) -> bool:
     """A dictation key pressed with modifiers the desktop doesn't hold back
-    for us (kwin_hotkeys.wanted_shortcuts: the plain key, and Shift with it
+    for us (hotkey_claims.keys_to_claim: the plain key, and Shift with it
     when voice editing is on). Such a press reaches the app (Alt+F8 resizes
     the window on KDE and GNOME), so it mustn't start a dictation as well."""
     allowed = _SHIFT_CODES if live.voice_editing else frozenset()

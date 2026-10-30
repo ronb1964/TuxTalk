@@ -9,6 +9,7 @@ import types
 
 import pytest
 
+from tuxtalk import hotkey_claims
 from tuxtalk import kwin_hotkeys as kh
 
 # The real one, before conftest swaps it for one that refuses: the test of the
@@ -72,13 +73,13 @@ class TestKeySequences:
         ("Super+F5", "Meta+F5"),
     ])
     def test_translates(self, name, qt):
-        assert kh.qt_key_sequence(name) == qt
+        assert hotkey_claims.qt_key_sequence(name) == qt
 
     @pytest.mark.parametrize("name", ["", "   ", None, "A", "q", "F13", "Hyper+V",
                                       "Ctrl+", "Ctrl+Esc"])
     def test_refuses(self, name):
         """A bare letter would stop the user typing it anywhere."""
-        assert kh.qt_key_sequence(name) is None
+        assert hotkey_claims.qt_key_sequence(name) is None
 
     def test_one_shortcut_per_key(self):
         names = [k for _n, _t, k in kh.wanted_shortcuts(_cfg("F8", "F8", ""))]
@@ -301,7 +302,7 @@ class TestAppLaunchShortcuts:
         ("Super+F9", 0x10000000 | 0x01000038), ("", None), ("Space", None),
     ])
     def test_qt_key_codes(self, name, code):
-        assert kh.qt_key_code(kh.qt_key_sequence(name)) == code
+        assert hotkey_claims.qt_key_code(hotkey_claims.qt_key_sequence(name)) == code
 
     @pytest.mark.parametrize("hold,vc,qt_code", [
         ("Scroll Lock", "", 0x01000026), ("F8", "Super+F9", 0x10000000 | 0x01000038)])
@@ -312,7 +313,7 @@ class TestAppLaunchShortcuts:
         before = kh.time.time() - 1
         comps = {"/component/kmix": ("kmix", "Audio Volume", [qt_code], True)}
         kh.claim(_cfg(hold, "F10", vc), apps(comps))
-        assert kh.app_shortcuts_since(before) == {kh.qt_key_sequence(vc or hold):
+        assert kh.app_shortcuts_since(before) == {hotkey_claims.qt_key_sequence(vc or hold):
                                                   "Audio Volume"}
 
     def test_an_app_launched_by_our_key_is_reported(self, apps, caplog):
