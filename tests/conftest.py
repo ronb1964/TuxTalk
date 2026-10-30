@@ -295,6 +295,19 @@ def _no_real_explanation_windows(monkeypatch, tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def _no_hub_lookups(monkeypatch):
+    """Never let a test ask Hugging Face about a file: the disk-space check
+    looks up a file's ETag when the user's own cache holds a partial
+    download. Tests of that hand it their own answer."""
+    import huggingface_hub
+
+    def _refuse(url, **kwargs):
+        raise OSError("tests must not reach the Hugging Face Hub")
+
+    monkeypatch.setattr(huggingface_hub, "get_hf_file_metadata", _refuse)
+
+
+@pytest.fixture(autouse=True)
 def _no_real_kwin(monkeypatch):
     """Never let a test register or release hotkeys in the user's live KWin.
 

@@ -9,6 +9,8 @@ What faster-whisper actually needs is already spelled out in this module:
 model.bin, config.json, tokenizer.json.
 """
 
+import types
+
 import pytest
 
 from tuxtalk.model_helper import ESSENTIAL_MODEL_FILES, _download_is_usable
@@ -27,6 +29,13 @@ def test_a_model_without_a_preprocessor_file_is_still_downloaded():
     """Asked for by name (no file list), the smaller models haven't got one."""
     assert _download_is_usable(["preprocessor_config.json"], _LISTED,
                                absent=["preprocessor_config.json"]) is True
+
+
+def test_only_the_preprocessor_file_may_be_missing_from_the_model():
+    """Every file the Hub says a model hasn't got dropped out of the
+    required list, model.bin too."""
+    for name in ESSENTIAL_MODEL_FILES:
+        assert _download_is_usable([name], _LISTED, absent=[name]) is False
 
 
 def test_a_missing_readme_does_not_fail_the_download():
@@ -178,6 +187,9 @@ def hub(monkeypatch, tmp_path):
     monkeypatch.setattr(huggingface_hub, "hf_hub_download",
                         lambda repo_id, filename, **k: fetched.append(filename))
     monkeypatch.setattr(huggingface_hub.constants, "HF_HUB_CACHE", str(tmp_path))
+    # Each file's current ETag, which its blob is named after.
+    monkeypatch.setattr(huggingface_hub, "get_hf_file_metadata", lambda url, **k: (
+        types.SimpleNamespace(etag="etag-" + url.rsplit("/", 1)[1])))
     monkeypatch.setattr(download_utils, "free_space_bytes", lambda path: 100 * MB)
     monkeypatch.setattr(M, "_RETRY_WAITS", (0.0, 0.0))
     return fetched, cached
@@ -199,18 +211,41 @@ def test_files_already_downloaded_need_no_more_disk_space(hub):
     assert fetched == ["model.bin", "config.json", "tokenizer.json", "vocabulary.txt"]
 
 
+def _partial(tmp_path, blob, size, link=False):
+    """A cut-off download's part in the fake cache: sparse, so it takes no room."""
+    import os
+    blobs = tmp_path / "models--Systran--faster-whisper-small" / "blobs"
+    blobs.mkdir(parents=True, exist_ok=True)
+    target = blobs / (blob + (".data" if link else ".incomplete"))
+    with open(target, "wb") as part:
+        os.truncate(part.fileno(), size)
+    if link:
+        (blobs / f"{blob}.incomplete").symlink_to(target)
+
+
 def test_a_download_cut_off_partway_goes_on_when_the_rest_fits(hub, tmp_path):
     """350 of model.bin's 400 MB were in Hugging Face's ".incomplete" part,
     which it resumes, but the whole 400 MB was asked for and refused with
     100 MB free."""
-    import os
     fetched = hub[0]
-    blobs = tmp_path / "models--Systran--faster-whisper-small" / "blobs"
-    blobs.mkdir(parents=True)
-    with open(blobs / "0123abcd.incomplete", "wb") as part:
-        os.truncate(part.fileno(), 350 * MB)      # sparse: takes no room here
+    _partial(tmp_path, "etag-model.bin", 350 * MB)
     assert _download([]) is True
     assert "model.bin" in fetched
+
+
+@pytest.mark.parametrize("blob, link", [
+    ("etag-of-an-older-model.bin", False),    # another version, or another model's file
+    ("etag-config.json", False),              # another file's part: config.json is 2 bytes
+    ("etag-model.bin", True),                 # a link, not a part Hugging Face wrote
+])
+def test_a_part_that_isnt_this_files_own_doesnt_count(hub, tmp_path, blob, link):
+    """Any .incomplete in the repo's folder was subtracted, so a stale 350 MB
+    part let a 400 MB download start with 100 MB free and fill the disk."""
+    from tuxtalk.download_utils import failure_reason
+    _partial(tmp_path, blob, 350 * MB, link)
+    reports = []
+    assert _download(reports) is False
+    assert failure_reason(*reports[-1]).startswith("Not enough disk space")
 
 
 def test_fetching_a_broken_model_again_needs_room_for_a_whole_new_copy(hub):
