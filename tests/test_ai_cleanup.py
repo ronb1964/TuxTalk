@@ -261,6 +261,7 @@ def test_the_engine_starts_through_the_launcher_with_its_own_libraries(dead_engi
     assert argv[argv.index("--") + 1] == ai._server_binary()
     assert kwargs["env"][ai.engine_process.engine_launcher.ENGINE_LIBRARY_PATH] == "/x"
     assert "preexec_fn" not in kwargs
+    assert kwargs["stderr"] is ai.subprocess.PIPE       # read, to explain a failed start
 
 
 def test_the_engine_key_is_not_on_its_command_line(dead_engine, monkeypatch):
@@ -379,6 +380,11 @@ def test_corrections_with_signs_and_accents_are_still_safe(said, edited):
 
 # --- an engine that dies is started again ---------------------------------------------------
 
+def _no_output():
+    from tuxtalk import engine_process
+    return engine_process.OutputTail(io.BytesIO())
+
+
 class _Proc:
     def __init__(self, code=None, said=b""):
         self.returncode, self.pid = code, 42
@@ -413,7 +419,7 @@ def test_turning_the_ai_off_while_it_starts_is_not_an_error(caplog):
     starting = _Proc()
     e._proc = None                      # stop() ran
     with caplog.at_level(logging.INFO, logger=ai.logger.name):
-        e._wait_until_ready(starting, limit=1)
+        e._wait_until_ready(starting, _no_output(), limit=1)
     assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
     assert not e._ready.is_set()
 
@@ -438,7 +444,7 @@ def test_a_warm_up_without_an_answer_is_logged(monkeypatch, caplog):
     monkeypatch.setattr(ai.engine_process, "open_local", lambda *a, **k: None)   # /health answers
     monkeypatch.setattr(e, "_ask", lambda sentence, timeout: None)
     with caplog.at_level(logging.INFO, logger=ai.logger.name):
-        e._wait_until_ready(e._proc, limit=1)
+        e._wait_until_ready(e._proc, _no_output(), limit=1)
     assert any("warm-up" in r.getMessage() and r.levelno == logging.WARNING
                for r in caplog.records)
 
@@ -457,7 +463,7 @@ def test_a_stop_during_the_warm_up_logs_no_warning(monkeypatch, caplog):
         return None
     monkeypatch.setattr(e, "_ask", stopped_meanwhile)
     with caplog.at_level(logging.INFO, logger=ai.logger.name):
-        e._wait_until_ready(starting, limit=1)
+        e._wait_until_ready(starting, _no_output(), limit=1)
     assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
     assert not e._ready.is_set()
 

@@ -170,8 +170,9 @@ def test_the_engine_has_room_for_a_selection(monkeypatch):
     monkeypatch.setattr(ai_cleanup, "_server_binary", lambda: "/x/llama-server")
     monkeypatch.setattr(ai_cleanup, "_model_path", lambda: "/x/model.gguf")
     monkeypatch.setattr(ai_cleanup.subprocess, "Popen",
-                        lambda argv, **k: started.append(argv) or types.SimpleNamespace(pid=42))
-    monkeypatch.setattr(engine, "_wait_until_ready", lambda proc: None)
+                        lambda argv, **k: started.append(argv)
+                        or types.SimpleNamespace(pid=42, stderr=io.BytesIO()))
+    monkeypatch.setattr(engine, "_wait_until_ready", lambda proc, output: None)
     engine.start()
     argv = started[0]
     assert int(argv[argv.index("-c") + 1]) >= 4096

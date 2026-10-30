@@ -129,7 +129,18 @@ def test_a_launcher_python_cant_run_says_why():
     """Before the launcher's own code runs (a broken Python setup), its
     message went nowhere and the log said only that the engine stopped."""
     said = _ended_with(["/bin/true"], {**os.environ, "PYTHONHOME": "/nonexistent"})
-    assert said.startswith(" (exit code 1: ") and "Python" in said
+    assert said.startswith(" (exit code 1: ") and "encodings" in said
+
+
+def test_a_program_that_cant_be_started_says_what_the_launcher_saw(tmp_path):
+    said = _ended_with([str(tmp_path / "missing-server")])
+    assert said.startswith(", because its program couldn't be started: ")
+    assert "missing-server" in said
+
+
+def test_a_server_killed_by_a_signal_says_so():
+    said = _ended_with([sys.executable, "-c", "import os, signal; os.kill(os.getpid(), signal.SIGSEGV)"])
+    assert said == " (killed by SIGSEGV)"
 
 
 def test_an_engine_starts_where_tuxtalks_own_start_up_would_fail(tmp_path):

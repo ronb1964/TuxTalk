@@ -19,7 +19,6 @@ import os
 import select
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -67,7 +66,7 @@ class ParakeetGpuModel:
             command = engine_process.parent_death_command(command)[0]   # its own environment
         self._command = command
         self._proc = None
-        self._stderr = None
+        self._output = None         # the helper's messages while it starts (OutputTail)
         self._unread = b""          # the helper's output past the last full line
         self._cpu = None
         self._words = ()
@@ -84,12 +83,12 @@ class ParakeetGpuModel:
 
     def _start(self):
         self._stop()
-        # The engine's own messages go to a temporary file: kept out of the way,
-        # but there to explain a helper that dies while starting.
-        self._stderr = tempfile.TemporaryFile()
         self._proc = self._launcher.submit(
             subprocess.Popen, self._command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=self._stderr).result()
+            stderr=subprocess.PIPE).result()
+        # Kept to explain a helper that dies while starting, and dropped once
+        # it's ready: after a dictation they could hold its words.
+        self._output = engine_process.OutputTail(self._proc.stderr)
         # The pipes are used through their descriptors, never the buffered
         # files, so a reply that stops halfway or a helper that stops reading
         # ends at the deadline instead of blocking the dictation worker.
@@ -108,16 +107,13 @@ class ParakeetGpuModel:
             self._stop()
             raise RuntimeError(reply.get("error") or "the helper did not start")
         self._sent_words = ()
+        self._output = None
         logger.info("Parakeet graphics helper ready")
 
     def _engine_messages(self):
-        """The last lines the engine printed, to explain a failure."""
-        try:
-            self._stderr.seek(0)
-            lines = self._stderr.read().decode(errors="replace").strip().splitlines()
-            return " | ".join(lines[-3:])
-        except Exception:
-            return ""
+        """The last lines the engine printed while starting, to explain why
+        it didn't; nothing once it's ready."""
+        return self._output.text() if self._output is not None else ""
 
     def _read_reply(self, timeout):
         """The helper's next JSON reply, waiting at most *timeout* seconds."""
@@ -154,9 +150,7 @@ class ParakeetGpuModel:
         if proc is not None and proc.poll() is None:
             proc.kill()
             proc.wait()
-        if self._stderr is not None:
-            self._stderr.close()
-            self._stderr = None
+        self._output = None
 
     def _send_words(self):
         """Give the helper Your Words when they changed since it last had them.

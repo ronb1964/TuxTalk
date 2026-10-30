@@ -534,13 +534,16 @@ def test_speed_check_remembers_which_won(monkeypatch, times, slower):
 # --- the server process ------------------------------------------------------
 
 # A stand-in whisper-server: /health answers once it is up, /inference
-# answers with fixed text, or with an error when started with --fail-inference
-# in its environment (so the warm-up fails).
+# answers with fixed text, or with an error when started with FAKE_FAIL_INFERENCE
+# in its environment (so the warm-up fails); FAKE_FAIL_START makes it print
+# that and end at once.
 FAKE_SERVER = '''
 import json, os, sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 port = int(sys.argv[sys.argv.index("--port") + 1])
 fail = os.environ.get("FAKE_FAIL_INFERENCE") == "1"
+if os.environ.get("FAKE_FAIL_START"):
+    sys.exit(os.environ["FAKE_FAIL_START"])
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -607,6 +610,13 @@ def test_the_graphics_engine_starts_through_the_engine_launcher(fake_server, mon
         assert "preexec_fn" not in kwargs
     finally:
         model.close()
+
+
+def test_a_server_that_ends_at_start_says_what_it_printed(fake_server, monkeypatch):
+    """Its messages went nowhere: the log said only that it stopped."""
+    monkeypatch.setenv("FAKE_FAIL_START", "no Vulkan device found")
+    with pytest.raises(RuntimeError, match="exit code 1: no Vulkan device found"):
+        wv.VulkanWhisperModel("small", 0, threads=1)
 
 
 def test_a_failed_warm_up_stops_the_server(fake_server, monkeypatch):

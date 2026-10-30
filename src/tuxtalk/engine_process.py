@@ -52,12 +52,16 @@ def launch_failure(returncode, output=None):
     Python couldn't run at all (a broken PYTHONPATH)."""
     why = {engine_launcher.NO_SIGNAL: "the parent-death signal couldn't be set",
            engine_launcher.NO_ENGINE: "its program couldn't be started"}.get(returncode)
+    said = output.text() if output is not None else ""
     if why:
-        return f", because {why}"
+        return f", because {why}{': ' + said if said else ''}"
     if output is None:
         return ""                       # the caller shows the exit code itself
-    said = output.text()
-    return f" (exit code {returncode}{': ' + said if said else ''})"
+    if returncode < 0:
+        ended = f"killed by {signal.Signals(-returncode).name}"
+    else:
+        ended = f"exit code {returncode}"
+    return f" ({ended}{': ' + said if said else ''})"
 
 
 class OutputTail:
@@ -80,13 +84,15 @@ class OutputTail:
         # grow the service's memory, its pieces just push each other out.
         with stream:
             for line in iter(lambda: stream.readline(self.LINE_BYTES), b""):
-                self._lines.append(line.decode(errors="replace").strip())
+                text = line.decode(errors="replace").strip()
+                if text:            # a blank line mustn't push out a real one
+                    self._lines.append(text)
 
     def text(self, wait=0.5):
         """The lines kept, joined; waits up to *wait* seconds for the last
         ones of a server that has just ended."""
         self._reader.join(wait)
-        return " | ".join(line for line in list(self._lines) if line)
+        return " | ".join(list(self._lines))
 
 
 # Every engine listens on 127.0.0.1, yet urllib would send even that through

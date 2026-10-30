@@ -545,7 +545,7 @@ class CorrectionEngine:
         # after the lock is let go would hand the waiter None.
         threading.Thread(target=self._wait_until_ready, args=(proc, output), daemon=True).start()
 
-    def _wait_until_ready(self, proc, output=None, limit=90):
+    def _wait_until_ready(self, proc, output, limit=90):
         """Wait for the server *proc* to answer, warm it up, then mark it
         ready, unless it was stopped (or replaced) meanwhile. *output* is
         what it printed (engine_process.OutputTail)."""
