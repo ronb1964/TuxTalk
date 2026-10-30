@@ -7,6 +7,10 @@ import os
 import subprocess
 from typing import Optional
 
+from .logger import setup_logger
+
+logger = setup_logger(__name__)
+
 
 def config_home() -> str:
     """The user's config folder, where the desktops keep their settings.
@@ -82,6 +86,31 @@ def flatpak_hotkey_hint() -> str:
 def is_gnome() -> bool:
     """Check if running GNOME desktop"""
     return get_desktop_environment() == 'gnome'
+
+
+def tuxtalk_extension_active() -> bool:
+    """Whether TuxTalk's GNOME extension is installed and enabled."""
+    try:
+        from .extension_helper import is_extension_enabled
+        return bool(is_extension_enabled())
+    except Exception as e:
+        logger.info(f"Could not tell whether the GNOME extension is on: {e}")
+        return False
+
+
+def menu_location() -> str:
+    """Where this desktop shows TuxTalk's menu, for the welcome screen's and
+    Setup Complete's tips: plain GNOME has no tray, so "the tray icon" sent
+    people looking for nothing."""
+    try:
+        if tuxtalk_extension_active():
+            return "its icon in the top bar"
+        if tray_host_available():
+            return "its tray icon"
+    except Exception as e:
+        logger.info(f"Could not tell where TuxTalk's menu shows: {e}")
+        return "its tray icon"
+    return "open TuxTalk again from your apps"
 
 
 def tray_host_available(bus=None) -> bool:

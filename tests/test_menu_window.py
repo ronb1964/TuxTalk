@@ -353,7 +353,7 @@ def test_setup_ticks_the_extension_only_without_a_tray(monkeypatch, has_tray):
         pytest.skip("no display")
     from tuxtalk import welcome_dialog
     monkeypatch.setattr(desktop_detect, "tray_host_available", lambda bus=None: has_tray)
-    monkeypatch.setattr(welcome_dialog, "_extension_already_active", lambda: False)
+    monkeypatch.setattr(desktop_detect, "tuxtalk_extension_active", lambda: False)
     dialog = welcome_dialog.WelcomeDialog(force_gnome=True)
     try:
         assert dialog.extension_check is not None

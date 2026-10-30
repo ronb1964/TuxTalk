@@ -11,7 +11,8 @@ from gi.repository import GLib, Gtk
 
 from .logger import setup_logger
 from .ui_style import message_dialog, more_below_bar, show_message
-from .welcome_dialog import menu_location, saved_hold_key
+from .config import saved_hold_key
+from .desktop_detect import menu_location
 
 logger = setup_logger(__name__)
 

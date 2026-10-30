@@ -48,3 +48,4 @@ def test_the_stylesheet_goes_with_the_splash(splash, monkeypatch):
     splash._fade_out(0.05, lambda: done.append(True))
     assert removed == [splash.css_provider]
     assert done == [True]
+

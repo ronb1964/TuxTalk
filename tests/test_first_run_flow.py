@@ -4,6 +4,7 @@ import types
 
 import pytest
 
+from tuxtalk import config
 from tuxtalk import first_run_setup as fr
 from tuxtalk import welcome_dialog as wd
 
@@ -316,13 +317,13 @@ def test_the_ready_screen_names_the_key_the_user_chose(setup_complete, monkeypat
     """Not always F8: the hotkey test may have changed the key."""
     monkeypatch.setattr("tuxtalk.config.load_config",
                         lambda: types.SimpleNamespace(hotkey="F10"))
-    assert wd.saved_hold_key() == "F10"
+    assert config.saved_hold_key() == "F10"
     shown = setup_complete()
     assert "1. Hold F10" in shown
     assert not [text for text in shown if "or your hotkey" in text]
     monkeypatch.setattr("tuxtalk.config.load_config",
                         lambda: types.SimpleNamespace(hotkey=""))
-    assert wd.saved_hold_key() == "F8"
+    assert config.saved_hold_key() == "F8"
 
 
 # --- a failed download asks before falling back (VM tests, 2026-10-13) --------
