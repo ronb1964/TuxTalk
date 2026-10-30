@@ -318,10 +318,12 @@ def start_afresh(message, ended=True) -> None:
     """Type at pause pressed Enter or Tab mid-recording, or "edit that"
     rewrote what was typed: what's said next in *message*'s recording reaches
     back across nothing (no held-back mark, correction, lowercase start or
-    screen copy). After Enter or Tab (*ended*) the message starts over; a
+    screen copy). After Enter or Tab (*ended*) the message starts over,
+    and its screen copy starts in whichever window it's typed into next; a
     rewrite stays in the unsent one."""
     if ended:
         message.start_over()
+        message.shown_window = None
     message.held_mark, message.question_open, message.held_cue = None, False, ""
     rs.state.continue_mid_sentence = False
     if message.shown is not None:

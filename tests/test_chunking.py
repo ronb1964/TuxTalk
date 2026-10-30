@@ -1353,6 +1353,20 @@ def test_the_screen_copy_ends_at_another_window_of_the_same_app(monkeypatch):
     assert message.shown is None
 
 
+def test_after_enter_the_screen_copy_starts_in_the_window_typed_into_next(monkeypatch):
+    """Hands-free: "see you at noon, press enter" in one chat, then a click
+    into another and "how are you": the new message's copy was compared
+    with the first chat's window and dropped, so "edit that" had nothing."""
+    message = rs.Message()
+    monkeypatch.setattr(rs.state, "last_inserted_window", "brave-browser")
+    monkeypatch.setattr(rs.state, "last_inserted_where", ("brave-browser", ("tray", "{one}")))
+    last_dictation.remember_shown("See you at noon.", chunked=True, ok=True, message=message)
+    type_at_pause.start_afresh(message)
+    monkeypatch.setattr(rs.state, "last_inserted_where", ("brave-browser", ("tray", "{two}")))
+    last_dictation.remember_shown("How are you?", chunked=True, ok=True, message=message)
+    assert message.shown == "How are you?"
+
+
 def test_the_screen_copy_survives_the_two_spellings_of_one_app(monkeypatch):
     """Plasma's X11 session: KWin says "google-chrome", X11 "Google-chrome",
     and a busy tray leaves a phrase's look to X11. The copy "edit that" and
