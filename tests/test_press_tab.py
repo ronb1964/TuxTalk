@@ -146,7 +146,7 @@ def test_a_key_that_couldnt_be_pressed_leaves_undo_and_no_send(monkeypatch, key)
     monkeypatch.setattr("time.sleep", lambda s: None)
     monkeypatch.setattr(rs.state, "last_inserted_text", "John")
     monkeypatch.setattr(rs.state, "sent", None)
-    assert keyboard_output.press_key(key, "test") is False
+    assert delivery.press_key(key, "test") is False
     assert rs.state.last_inserted_text == "John" and rs.state.sent is None
 
 
