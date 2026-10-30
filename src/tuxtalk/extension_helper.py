@@ -165,10 +165,8 @@ def install_extension_from_local(source_dir: str, auto_enable: bool = True) -> b
         without a tray, the extension's menu is how TuxTalk is used.
     """
     try:
-        ext_dir = gnome_extensions.get_extension_dir()
-        target_dir = os.path.join(ext_dir, EXTENSION_UUID)
-
-        os.makedirs(ext_dir, exist_ok=True)
+        target_dir = gnome_extensions.extension_folder(EXTENSION_UUID)
+        os.makedirs(os.path.dirname(target_dir), exist_ok=True)
         _swap_in(source_dir, target_dir)
         logger.info(f"Extension installed to {target_dir}")
 
@@ -334,8 +332,7 @@ def uninstall_extension() -> bool:
         bool: True if successful
     """
     try:
-        ext_dir = gnome_extensions.get_extension_dir()
-        target_dir = os.path.join(ext_dir, EXTENSION_UUID)
+        target_dir = gnome_extensions.extension_folder(EXTENSION_UUID)
 
         if os.path.exists(target_dir):
             # First, disable the extension (removes from gsettings)

@@ -256,8 +256,8 @@ def find(home, install_type, environ=os.environ, appimage=None):
     unit = ydotoold_leftovers.our_ydotoold_unit(home)
     if unit is not None:
         plan.ydotoold_unit = Path(unit)
-    plan.extension = exists(Path(gnome_extensions.get_extension_dir())
-                            / extension_helper.EXTENSION_UUID)
+    plan.extension = exists(Path(gnome_extensions.extension_folder(
+        extension_helper.EXTENSION_UUID)))
     plan.helper = any(os.path.exists(p) for p in (secure_input.UNIT_PATH, secure_input.HELPER_PATH))
     plan.typing_rule = any(os.path.exists(p) for p in (secure_input.UINPUT_RULE_PATH,
                                                        uinput_helper.UDEV_RULE_PATH))
@@ -501,7 +501,7 @@ def undo_desktop_changes(plan):
     if plan.extension or desktop_detect.is_gnome():
         extension_helper.uninstall_extension()
         # Its result can't tell "removed nothing" from "wasn't there".
-        folder = Path(gnome_extensions.get_extension_dir()) / extension_helper.EXTENSION_UUID
+        folder = Path(gnome_extensions.extension_folder(extension_helper.EXTENSION_UUID))
         if os.path.lexists(folder):
             left.append(f"the GNOME extension ({_shown(folder, plan.home)})")
     if not kwin_hotkeys.forget_our_components():

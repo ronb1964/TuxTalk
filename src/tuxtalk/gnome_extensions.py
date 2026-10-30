@@ -6,6 +6,7 @@ extension_helper installs TuxTalk's own extension through these. Every
 write to those lists reads them first and leaves them alone when the read
 fails, so the user's other extensions are never switched off.
 """
+import ast
 import os
 import subprocess
 
@@ -15,39 +16,23 @@ logger = setup_logger(__name__)
 
 
 def get_extension_dir() -> str:
-    """Get GNOME extensions directory"""
-    home = os.path.expanduser('~')
-    return os.path.join(home, '.local', 'share', 'gnome-shell', 'extensions')
+    """The folder this user's GNOME Shell extensions are installed in."""
+    return os.path.join(os.path.expanduser('~'), '.local', 'share', 'gnome-shell', 'extensions')
+
+
+def extension_folder(uuid: str) -> str:
+    """Where the extension *uuid* is installed, or would be."""
+    return os.path.join(get_extension_dir(), uuid)
 
 
 def is_extension_installed(uuid: str) -> bool:
-    """
-    Check if a GNOME extension is installed
-
-    Args:
-        uuid: Extension UUID (e.g., 'talktype@ronb1964.github.io')
-
-    Returns:
-        bool: True if extension is installed
-    """
-    ext_dir = get_extension_dir()
-    ext_path = os.path.join(ext_dir, uuid)
-
-    # Check if extension directory exists and has metadata.json
-    metadata_path = os.path.join(ext_path, 'metadata.json')
-    return os.path.isfile(metadata_path)
+    """Whether the extension *uuid* is installed: GNOME Shell loads a folder
+    only with its metadata.json."""
+    return os.path.isfile(os.path.join(extension_folder(uuid), 'metadata.json'))
 
 
 def is_extension_enabled(uuid: str) -> bool:
-    """
-    Check if a GNOME extension is enabled
-
-    Args:
-        uuid: Extension UUID
-
-    Returns:
-        bool: True if extension is enabled
-    """
+    """Whether GNOME Shell has the extension *uuid* enabled."""
     try:
         result = subprocess.run(
             ['gnome-extensions', 'info', uuid],
@@ -56,7 +41,6 @@ def is_extension_enabled(uuid: str) -> bool:
             timeout=5
         )
         if result.returncode == 0:
-            # Look for "State: ENABLED" in output
             return 'State: ENABLED' in result.stdout or 'State: ACTIVE' in result.stdout
     except (subprocess.TimeoutExpired, OSError):
         pass        # no gnome-extensions here (or not runnable): ask the shell instead
@@ -127,7 +111,6 @@ def _read_extension_list(key):
         raw = result.stdout.strip()
         if raw.startswith('@as'):
             raw = raw[len('@as'):].strip()
-        import ast
         value = ast.literal_eval(raw)
         return list(value) if isinstance(value, (list, tuple)) else None
     except (subprocess.TimeoutExpired, FileNotFoundError, ValueError, SyntaxError):
@@ -171,8 +154,9 @@ def forget_extension(uuid: str, keys=("disabled-extensions",)) -> bool:
 
 
 def enable_extension(uuid: str) -> bool:
-    """
-    Enable a GNOME extension so it activates on the next shell start.
+    """Enable the extension *uuid* now when the shell can, and for the next
+    shell start in any case. True when either worked and disabled-extensions
+    doesn't hold it back.
 
     Two mechanisms, because neither alone is reliable on a fresh install:
 
