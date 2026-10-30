@@ -380,7 +380,7 @@ class FakeCosmic:
                    + _wl_message(ext, 3, _wl_str(app_id)) + _wl_message(ext, 1))
 
     def send_states(self):
-        for app_id, (_ext, cosmic) in self.handles.items():
+        for app_id, (_ext, cosmic) in list(self.handles.items()):
             if cosmic is not None:
                 states = [0, 2] if app_id == self.active else [0]   # maximized, activated
                 self._send(_wl_message(cosmic, 8, struct.pack("<I", 4 * len(states))

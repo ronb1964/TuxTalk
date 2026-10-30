@@ -12,8 +12,8 @@ from evdev import ecodes
 from . import focused_window, virtual_keyboard
 from .config import HOTKEY_CHOICES
 from .hotkey_keys import MODIFIER_CODES, keys_down
+from .keyboard_devices import is_keyboard_device
 from .logger import setup_logger
-from .uinput_helper import is_keyboard_device
 
 logger = setup_logger(__name__)
 

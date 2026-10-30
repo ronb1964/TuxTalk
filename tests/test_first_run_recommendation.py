@@ -110,7 +110,7 @@ def test_the_card_shows_on_a_computer_with_nothing_to_fix(monkeypatch):
                         lambda cfg=None: r.Hardware("AMD Radeon 780M", False))
     monkeypatch.setattr(r, "system_language", lambda env=None: "de")
     monkeypatch.setattr(wd, "detect_uinput_access", lambda: (True, ""))
-    monkeypatch.setattr(wd, "detect_portaudio_status", lambda: {"needs_install": False})
+    monkeypatch.setattr(wd, "portaudio_installed", lambda: True)
     d = wd.WelcomeDialog(force_gnome=False)
     try:
         assert hasattr(d, "lang_combo") and d._language() == "de"

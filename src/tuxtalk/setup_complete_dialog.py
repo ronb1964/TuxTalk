@@ -9,10 +9,10 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import GLib, Gtk
 
+from . import desktop_detect, extension_helper
+from .config import saved_hold_key
 from .logger import setup_logger
 from .ui_style import more_below_bar, show_message
-from .config import saved_hold_key
-from .desktop_detect import menu_location
 
 logger = setup_logger(__name__)
 
@@ -31,6 +31,17 @@ def _open_preferences():
         launch_preferences()
     except Exception as e:
         logger.warning(f"Could not open Preferences: {e}")
+
+
+def menu_location() -> str:
+    """Where this desktop shows TuxTalk's menu, for the welcome screen's and
+    Setup Complete's tips: plain GNOME has no tray, so "the tray icon" sent
+    people looking for nothing."""
+    if extension_helper.is_extension_enabled():
+        return "its icon in the top bar"
+    if desktop_detect.tray_host_available():
+        return "its tray icon"
+    return "open TuxTalk again from your apps"
 
 
 def _ready_tips(is_flatpak):

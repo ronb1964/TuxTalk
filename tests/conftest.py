@@ -846,8 +846,8 @@ def tray_main(monkeypatch):
     import dbus.mainloop.glib
     from tuxtalk import (autostart, control, cuda_helper, desktop_identity, desktop_launcher,
                          first_run_setup, gnome_keybindings, rename_migration,
-                         service_launcher, settings_backup, tray, ui_style, uinput_helper,
-                         update_install)
+                         service_launcher, settings_backup, tray, ui_style, update_install,
+                         ydotoold_leftovers)
     done = _Steps()
 
     def step(name, result=None):
@@ -879,7 +879,7 @@ def tray_main(monkeypatch):
     monkeypatch.setattr(desktop_launcher, "add_launcher_actions", step("adds launcher actions"))
     monkeypatch.setattr(update_install, "check_just_updated", lambda: None)
     monkeypatch.setattr(settings_backup, "snapshot_if_changed", step("snapshots the settings"))
-    monkeypatch.setattr(uinput_helper, "retire_ydotoold", step("retires ydotoold"))
+    monkeypatch.setattr(ydotoold_leftovers, "retire_ydotoold", step("retires ydotoold"))
     monkeypatch.setattr(cuda_helper, "remove_unused_cudnn", step("removes the unused cuDNN"))
     monkeypatch.setattr(cuda_helper, "remove_pytorch_link", step("removes the PyTorch link"))
     monkeypatch.setattr(gnome_keybindings, "restore_left_over",
@@ -1012,7 +1012,7 @@ def welcome_window(monkeypatch):
                         lambda cfg=None: recommend.Hardware("NVIDIA GeForce RTX 4070 SUPER", True))
     monkeypatch.setattr(recommend, "system_language", lambda env=None: "en")
     monkeypatch.setattr(welcome_dialog, "detect_uinput_access", lambda: (True, ""))
-    monkeypatch.setattr(welcome_dialog, "detect_portaudio_status", lambda: {"needs_install": False})
+    monkeypatch.setattr(welcome_dialog, "portaudio_installed", lambda: True)
     window = welcome_dialog.WelcomeDialog(force_gnome=False)
     window.dialog.show_all()                # as run() does, without waiting for an answer
     while Gtk.events_pending():

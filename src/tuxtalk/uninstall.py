@@ -38,10 +38,11 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
 from . import (ai_download, config, cosmic_hotkeys, custom_words,  # noqa: E402
-               desktop_detect, extension_helper, file_transcribe, gnome_keybindings,
-               installation, kwin_hotkeys, menu_cache, model_helper, parakeet_engine,
-               rename_migration, secure_input, service_launcher, settings_backup,
-               single_instance, uinput_helper, whisper_vulkan)
+               desktop_detect, extension_helper, file_transcribe, gnome_extensions,
+               gnome_keybindings, installation, kwin_hotkeys, menu_cache, model_helper,
+               parakeet_engine, rename_migration, secure_input, service_launcher,
+               settings_backup, single_instance, uinput_helper, whisper_vulkan,
+               ydotoold_leftovers)
 from .logger import LOG_FILE_NAME, setup_logger, stop_file_logging  # noqa: E402
 from .ui_style import message_dialog, show_message  # noqa: E402
 
@@ -252,11 +253,11 @@ def find(home, install_type, environ=os.environ, appimage=None):
     runtime = Path(single_instance.session_runtime_dir(environ))
     plan.runtime = sorted(path for pattern in RUNTIME_FILES for path in runtime.glob(pattern))
 
-    unit = uinput_helper.our_ydotoold_unit(home)
+    unit = ydotoold_leftovers.our_ydotoold_unit(home)
     if unit is not None:
         plan.ydotoold_unit = Path(unit)
-    plan.extension = exists(Path(desktop_detect.get_extension_dir())
-                            / extension_helper.EXTENSION_UUID)
+    plan.extension = exists(Path(gnome_extensions.extension_folder(
+        extension_helper.EXTENSION_UUID)))
     plan.helper = any(os.path.exists(p) for p in (secure_input.UNIT_PATH, secure_input.HELPER_PATH))
     plan.typing_rule = any(os.path.exists(p) for p in (secure_input.UINPUT_RULE_PATH,
                                                        uinput_helper.UDEV_RULE_PATH))
@@ -472,7 +473,7 @@ def stop_tuxtalk(plan, shut_down=None):
 def _stop_processes(plan):
     """stop_tuxtalk's waiting half: every other TuxTalk process and the old
     ydotoold service."""
-    uinput_helper.stop_ydotoold_we_started()
+    ydotoold_leftovers.stop_ydotoold_we_started()
     # Each engine folder, not the whole data folder: that may be a link into
     # a folder where other programs run from.
     data_dir = plan.home / ".local" / "share" / config.DATA_DIR
@@ -500,7 +501,7 @@ def undo_desktop_changes(plan):
     if plan.extension or desktop_detect.is_gnome():
         extension_helper.uninstall_extension()
         # Its result can't tell "removed nothing" from "wasn't there".
-        folder = Path(desktop_detect.get_extension_dir()) / extension_helper.EXTENSION_UUID
+        folder = Path(gnome_extensions.extension_folder(extension_helper.EXTENSION_UUID))
         if os.path.lexists(folder):
             left.append(f"the GNOME extension ({_shown(folder, plan.home)})")
     if not kwin_hotkeys.forget_our_components():
@@ -513,12 +514,7 @@ def undo_desktop_changes(plan):
 def _refresh_menus():
     """Let the app menus and the icon cache forget the launcher and its icon;
     quiet when a tool is missing."""
-    icons = Path.home() / ".local" / "share" / "icons" / "hicolor"
-    try:
-        subprocess.run(["gtk-update-icon-cache", "-q", "-f", "-t", str(icons)],
-                       capture_output=True, timeout=30)
-    except (OSError, subprocess.SubprocessError):
-        pass
+    menu_cache.refresh_icon_caches(str(Path.home() / ".local" / "share" / "icons" / "hicolor"))
     menu_cache.refresh_menu_cache()
 
 

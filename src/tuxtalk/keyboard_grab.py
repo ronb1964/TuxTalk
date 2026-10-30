@@ -26,7 +26,7 @@ import time
 
 from evdev import ecodes
 
-from . import modifier_hotkeys, uinput_helper
+from . import keyboard_devices, modifier_hotkeys
 from . import recording_state as rs
 from .hotkey_keys import keys_down
 from .logger import setup_logger
@@ -72,14 +72,14 @@ def grab_keyboards_hiding(devices, codes) -> None:
 
     Only keys the kernel still reports as down are balanced: if one was already
     released (a very fast tap), the desktop saw that release and nothing is owed.
-    A key remapper's keyboard is left alone (uinput_helper.is_remapper_keyboard),
+    A key remapper's keyboard is left alone (keyboard_devices.is_remapper_keyboard),
     so with kanata running the hotkey still reaches the focused app.
     """
     keyboards, shown = [], set()    # shown: keys the desktop may still see down
     for dev in devices:
-        if not uinput_helper.is_keyboard_device(dev):
+        if not keyboard_devices.is_keyboard_device(dev):
             continue
-        if uinput_helper.is_remapper_keyboard(dev):
+        if keyboard_devices.is_remapper_keyboard(dev):
             # Held there, the desktop sees the key down all along: typing
             # under a Right Ctrl would turn into shortcuts.
             shown |= codes & keys_down([dev])
@@ -157,7 +157,7 @@ def release_if_not_recording() -> bool:
 
 def wait_for_keys_up(devices, codes, timeout) -> bool:
     """Wait until none of *codes* is down on any keyboard. False on timeout."""
-    keyboards = [d for d in devices if uinput_helper.is_keyboard_device(d)]
+    keyboards = [d for d in devices if keyboard_devices.is_keyboard_device(d)]
     deadline = time.time() + timeout
     while True:
         if not keys_down(keyboards) & set(codes):

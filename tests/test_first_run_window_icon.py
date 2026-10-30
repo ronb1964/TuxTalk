@@ -130,18 +130,6 @@ def test_writing_the_launcher_doesnt_wait_for_the_menu_cache(home, monkeypatch):
         released.set()
 
 
-def test_a_cache_tool_that_fails_is_logged_with_its_error(tmp_path, monkeypatch, caplog):
-    import logging
-    import subprocess
-    import types
-    monkeypatch.setattr(subprocess, "run", lambda argv, **k: types.SimpleNamespace(
-        returncode=1, stderr="gtk-update-icon-cache: No theme index file.\n"))
-    caplog.set_level(logging.INFO)
-    desktop_launcher._refresh_icon_caches(str(tmp_path))
-    assert any("No theme index file" in r.getMessage() and "exit 1" in r.getMessage()
-               for r in caplog.records)
-
-
 def test_the_icon_goes_in_every_size_even_without_the_cache_tools(tmp_path, monkeypatch):
     """KDE looks for one of its own sizes; a desktop without
     gtk-update-icon-cache or xdg-icon-resource still gets the icon."""

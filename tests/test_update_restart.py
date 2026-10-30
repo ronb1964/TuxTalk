@@ -262,7 +262,7 @@ def test_the_restart_button_waits_for_the_first_run_copy(monkeypatch):
     gi.require_version("Gtk", "3.0")
     from gi.repository import Gtk
     from gtk_text import find
-    from tuxtalk import cuda_helper, uinput_helper
+    from tuxtalk import cuda_helper
     from tuxtalk import appimage_copy
     from tuxtalk import setup_complete_dialog
     copying = types.SimpleNamespace(alive=True)
@@ -270,7 +270,7 @@ def test_the_restart_button_waits_for_the_first_run_copy(monkeypatch):
     monkeypatch.setattr(appimage_copy, "_thread", copying)
     monkeypatch.setattr(cuda_helper, "mark_first_run_complete", lambda: None)
     rebooted, polls = [], []
-    monkeypatch.setattr(uinput_helper, "reboot_system", lambda: rebooted.append(True) or True)
+    monkeypatch.setattr(appimage_copy, "reboot_system", lambda: rebooted.append(True) or True)
     monkeypatch.setattr(appimage_copy.GLib, "timeout_add", lambda ms, fn, *a: polls.append(fn))
 
     def run(dialog):

@@ -18,17 +18,16 @@ import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
 from gi.repository import Gtk, Gdk, GLib
-from . import config, desktop_detect
+from . import config, extension_helper
 from .ui_style import Fold, more_below_bar, show_message
 
 from .flatpak_welcome import (build_shortcut_setup_section, build_unsupported_desktop_section,
                               shortcut_support)
 from .logger import setup_logger
+from .portaudio_setup import portaudio_installed
+from .setup_complete_dialog import menu_location
 from .splash_screen import SplashScreen, fade_in
-from .uinput_helper import (
-    check_all_device_permissions,
-    get_portaudio_status,
-)
+from .uinput_helper import check_all_device_permissions
 
 logger = setup_logger(__name__)
 
@@ -37,8 +36,6 @@ logger = setup_logger(__name__)
 # group membership, so uinput alone says nothing about hotkeys.
 # Returns (has_access, reason).
 detect_uinput_access = check_all_device_permissions
-# A dict with installed, needs_install, message (PortAudio records the audio).
-detect_portaudio_status = get_portaudio_status
 
 
 # The welcome screen's styles. They go on the whole screen (_install_css), so
@@ -309,7 +306,7 @@ class WelcomeDialog:
         self.has_gnome = is_gnome() if force_gnome is None else force_gnome
         # The extension is offered only when it isn't already running;
         # updating an installed one is Preferences' job.
-        self.offer_extension = self.has_gnome and not desktop_detect.tuxtalk_extension_active()
+        self.offer_extension = self.has_gnome and not extension_helper.is_extension_enabled()
         # What to recommend (recommend.py): the graphics chip and the language.
         from . import recommend
         try:
@@ -326,10 +323,8 @@ class WelcomeDialog:
         self.needs_uinput_fix = not has_uinput
 
         # PortAudio records the audio.
-        self.portaudio_status = detect_portaudio_status()
-        self.needs_portaudio_install = self.portaudio_status.get('needs_install', False)
-        logger.info(f"PortAudio status: installed={self.portaudio_status.get('installed')}, "
-                    f"needs_install={self.needs_portaudio_install}")
+        self.needs_portaudio_install = not portaudio_installed()
+        logger.info(f"PortAudio installed: {not self.needs_portaudio_install}")
 
         # Inside a Flatpak, typing uses the portal + libei path (Backend B): there
         # is no uinput/input-group setup and no reboot. Showing the host
@@ -517,7 +512,7 @@ class WelcomeDialog:
             f"1. Hold {key}",
             "2. Talk",
             "3. Let go: your words are typed where your cursor is",
-            f"Settings and Help are in the TuxTalk menu ({desktop_detect.menu_location()})",
+            f"Settings and Help are in the TuxTalk menu ({menu_location()})",
         ]
 
         for tip in tips:
@@ -612,7 +607,7 @@ class WelcomeDialog:
 
     def _on_install_portaudio_clicked(self, button):
         """Handle the Install PortAudio button click."""
-        from tuxtalk.uinput_helper import install_portaudio_with_pkexec
+        from tuxtalk.portaudio_setup import install_portaudio_with_pkexec
 
         # Disable button while processing
         button.set_sensitive(False)

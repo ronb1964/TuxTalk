@@ -18,6 +18,7 @@ from . import (
     delivery_notices,
     dictation_worker,
     hotkey_keys,
+    keyboard_devices,
     keyboard_grab,
     modifier_hotkeys,
     notices,
@@ -27,7 +28,6 @@ from . import (
     send_countdown,
     service_tick,
     tray_link,
-    uinput_helper,
 )
 from . import live_settings as live
 from . import recording_state as rs
@@ -140,7 +140,7 @@ def _rediscover_devices(devices) -> int:
             continue
         try:
             dev = InputDevice(path)
-            if not uinput_helper.is_keyboard_device(dev):
+            if not keyboard_devices.is_keyboard_device(dev):
                 # Closed now, not whenever it is garbage-collected: every
                 # mouse and button node is opened again on each scan.
                 dev.close()
@@ -221,7 +221,7 @@ def _held_shift(held_modifiers) -> set:
 
 def _someone_elses_shortcut(held_modifiers) -> bool:
     """A dictation key pressed with modifiers the desktop doesn't hold back
-    for us (kwin_hotkeys.wanted_shortcuts: the plain key, and Shift with it
+    for us (hotkey_claims.keys_to_claim: the plain key, and Shift with it
     when voice editing is on). Such a press reaches the app (Alt+F8 resizes
     the window on KDE and GNOME), so it mustn't start a dictation as well."""
     allowed = _SHIFT_CODES if live.voice_editing else frozenset()

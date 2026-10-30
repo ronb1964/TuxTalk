@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from tuxtalk import control, desktop_detect, desktop_launcher, installation
+from tuxtalk import control, desktop_detect, desktop_launcher, extension_helper, installation
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -406,13 +406,27 @@ def test_setup_ticks_the_extension_only_without_a_tray(monkeypatch, has_tray):
         pytest.skip("no display")
     from tuxtalk import welcome_dialog
     monkeypatch.setattr(desktop_detect, "tray_host_available", lambda bus=None: has_tray)
-    monkeypatch.setattr(desktop_detect, "tuxtalk_extension_active", lambda: False)
+    monkeypatch.setattr(extension_helper, "is_extension_enabled", lambda: False)
     dialog = welcome_dialog.WelcomeDialog(force_gnome=True)
     try:
         assert dialog.extension_check is not None
         assert dialog.extension_check.get_active() is (not has_tray)
     finally:
         dialog.dialog.destroy()
+
+
+@pytest.mark.parametrize("extension, has_tray, where", [
+    (True, False, "its icon in the top bar"),
+    (False, True, "its tray icon"),
+    (False, False, "open TuxTalk again from your apps"),
+])
+def test_setup_tells_where_the_menu_is_on_this_desktop(monkeypatch, extension, has_tray, where):
+    """Plain GNOME has no tray: "the tray icon" there sent people looking
+    for nothing."""
+    from tuxtalk import setup_complete_dialog
+    monkeypatch.setattr(extension_helper, "is_extension_enabled", lambda: extension)
+    monkeypatch.setattr(desktop_detect, "tray_host_available", lambda bus=None: has_tray)
+    assert setup_complete_dialog.menu_location() == where
 
 
 def test_menu_window_buttons_dont_keep_a_focus_box():

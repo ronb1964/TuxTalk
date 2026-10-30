@@ -18,7 +18,7 @@ import types
 
 import pytest
 
-from tuxtalk import compositor_focus as cf
+from tuxtalk import xcb_ctypes
 from tuxtalk import x11_hotkeys as xh
 
 _XTST = ctypes.util.find_library("Xtst")
@@ -61,7 +61,7 @@ def xserver(monkeypatch):
         for thread in threading.enumerate():
             if thread.name == "tt-x11-hotkeys":
                 thread.join(5)
-        cf.xcb_lib().xcb_disconnect(xh._x[0])
+        xcb_ctypes.xcb_lib().xcb_disconnect(xh._x[0])
 
 
 class App:
@@ -71,19 +71,19 @@ class App:
 
     def __init__(self):
         # The test's own calls, declared on the library the module loaded.
-        self.lib = lib = cf.xcb_lib()
+        self.lib = lib = xcb_ctypes.xcb_lib()
         P, U8, U32 = ctypes.c_void_p, ctypes.c_uint8, ctypes.c_uint32
         lib.xcb_poll_for_event.restype = P
         lib.xcb_poll_for_event.argtypes = [P]
-        lib.xcb_change_window_attributes_checked.restype = cf._Cookie
+        lib.xcb_change_window_attributes_checked.restype = xcb_ctypes.Cookie
         lib.xcb_change_window_attributes_checked.argtypes = [P, U32, U32, ctypes.POINTER(U32)]
-        lib.xcb_grab_keyboard.restype = cf._Cookie
+        lib.xcb_grab_keyboard.restype = xcb_ctypes.Cookie
         lib.xcb_grab_keyboard.argtypes = [P, U8, U32, U32, U8, U8]
         lib.xcb_grab_keyboard_reply.restype = ctypes.POINTER(U8)
-        lib.xcb_grab_keyboard_reply.argtypes = [P, cf._Cookie, P]
+        lib.xcb_grab_keyboard_reply.argtypes = [P, xcb_ctypes.Cookie, P]
         screen = ctypes.c_int(0)
         self.conn = self.lib.xcb_connect(None, ctypes.byref(screen))
-        self.root = cf.x11_root(self.lib, self.conn, screen.value)
+        self.root = xcb_ctypes.x11_root(self.lib, self.conn, screen.value)
         mask = (ctypes.c_uint32 * 1)(1)          # KeyPress
         cookie = lib.xcb_change_window_attributes_checked(self.conn, self.root,
                                                           _CW_EVENT_MASK, mask)
@@ -93,13 +93,13 @@ class App:
         # A round trip: the reply comes after every event sent before it.
         reply = self.lib.xcb_intern_atom_reply(
             self.conn, self.lib.xcb_intern_atom(self.conn, 1, 7, b"PRIMARY"), None)
-        cf.free(reply)
+        xcb_ctypes.free(reply)
         got = []
         while event := self.lib.xcb_poll_for_event(self.conn):
             raw = ctypes.string_at(event, 2)
             if raw[0] & 0x7f == _KEY_PRESS:
                 got.append(raw[1])
-            cf.free(event)
+            xcb_ctypes.free(event)
         return got
 
     def try_grab(self, keycode, mods=0):
@@ -107,7 +107,7 @@ class App:
         error = self.lib.xcb_request_check(self.conn, self.lib.xcb_grab_key_checked(
             self.conn, 0, self.root, mods, keycode, 1, 1))
         if error:
-            cf.free(error)
+            xcb_ctypes.free(error)
             return False
         self.lib.xcb_ungrab_key(self.conn, keycode, self.root, mods)
         self.lib.xcb_flush(self.conn)
@@ -119,7 +119,7 @@ class App:
         reply = lib.xcb_grab_keyboard_reply(
             self.conn, lib.xcb_grab_keyboard(self.conn, 0, self.root, 0, 1, 1), None)
         status = reply[1]                    # 0: Success, 1: AlreadyGrabbed
-        cf.free(reply)
+        xcb_ctypes.free(reply)
         lib.xcb_ungrab_keyboard(self.conn, 0)
         lib.xcb_flush(self.conn)
         return status == 0
