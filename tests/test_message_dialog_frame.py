@@ -134,7 +134,11 @@ def _answered(Gtk, monkeypatch, response):
 
 def test_a_question_has_its_buttons_in_order_and_enter_gives_its_default(Gtk, monkeypatch):
     from tuxtalk.ui_style import show_message
+    modal = []
     shown = _answered(Gtk, monkeypatch, Gtk.ResponseType.CANCEL)
+    answering = Gtk.Dialog.run
+    monkeypatch.setattr(Gtk.Dialog, "run",
+                        lambda box: modal.append(box.get_modal()) or answering(box))
     answer = show_message(None, Gtk.MessageType.QUESTION, "Apply your changes?", "Or not.",
                           [("Keep Editing", Gtk.ResponseType.CANCEL),
                            ("Apply", Gtk.ResponseType.OK)], default=Gtk.ResponseType.OK)
@@ -142,6 +146,7 @@ def test_a_question_has_its_buttons_in_order_and_enter_gives_its_default(Gtk, mo
     assert shown == [{"title": "Apply your changes?", "text": "Or not.", "markup": False,
                       "buttons": ["Keep Editing", "Apply"], "default": ["Apply"],
                       "warning": []}]
+    assert modal == [True]          # a box that waits holds its window
 
 
 def test_a_button_that_deletes_or_reboots_is_drawn_as_a_warning(Gtk, monkeypatch):
@@ -174,12 +179,13 @@ def test_a_box_from_the_tray_opens_over_the_other_windows(Gtk, monkeypatch):
 
 
 def test_a_box_that_doesnt_wait_closes_itself_when_answered(Gtk, monkeypatch):
-    """From the tray: the menu keeps working while it's open."""
+    """From the tray: the menu and its other windows (the menu window where
+    there's no tray) keep working while it's open."""
     from tuxtalk.ui_style import show_message
     monkeypatch.setattr(Gtk.Dialog, "run", lambda box: pytest.fail("waited"))
     assert show_message(None, Gtk.MessageType.ERROR, "Update Failed", "No network.",
                         wait=False) is None
     box = _open_box(Gtk, "Update Failed")
-    assert box is not None
+    assert box is not None and not box.get_modal()
     box.response(Gtk.ResponseType.OK)
     assert _open_box(Gtk, "Update Failed") is None

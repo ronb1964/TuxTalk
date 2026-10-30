@@ -597,7 +597,9 @@ def show_message(parent, kind, title, text="", buttons=Gtk.ButtonsType.OK,
     in the middle of the screen.
     """
     pairs = () if isinstance(buttons, Gtk.ButtonsType) else buttons
-    dialog = message_dialog(transient_for=parent, modal=True, message_type=kind,
+    # Only a box that waits holds the windows behind it: one that doesn't
+    # comes from the tray, whose other windows must keep working.
+    dialog = message_dialog(transient_for=parent, modal=wait, message_type=kind,
                             buttons=Gtk.ButtonsType.NONE if pairs else buttons, text=title)
     for label, response in pairs:
         button = dialog.add_button(label, response)
