@@ -550,7 +550,7 @@ def _keys_to_watch(cfg: Settings, devices):
     """The hotkeys to watch; None when there are none yet: first-run setup
     isn't finished, or no hold key is chosen."""
     try:
-        from tuxtalk.cuda_helper import is_first_run
+        from tuxtalk.first_run_setup import is_first_run
         first_run = is_first_run()
     except Exception as e:
         logger.info(f"Couldn't tell whether setup is finished ({e}); taking it as finished")

@@ -932,7 +932,7 @@ def tray_main(monkeypatch):
     # The wait for it runs at once here, not on a thread of its own.
     monkeypatch.setattr(service_launcher, "end_in_background",
                         lambda then, pids: done.append("stops a running service") or then(True))
-    monkeypatch.setattr(cuda_helper, "mark_first_run_complete", step("marks setup done"))
+    monkeypatch.setattr(first_run_setup, "mark_first_run_complete", step("marks setup done"))
     monkeypatch.setattr(control, "report", lambda status: None)
     monkeypatch.setattr(tray, "DictationTray", Tray)
     monkeypatch.delenv("FLATPAK_ID", raising=False)
@@ -946,7 +946,7 @@ def tray_main(monkeypatch):
                             lambda ms, fn, *args: done.timers.append((ms, fn, args)))
         monkeypatch.setattr(tray.Gtk, "main", step("runs"))
         monkeypatch.setattr(sys, "argv", ["tuxtalk", *argv])
-        monkeypatch.setattr(cuda_helper, "is_first_run", lambda: first_run)
+        monkeypatch.setattr(first_run_setup, "is_first_run", lambda: first_run)
         monkeypatch.setattr(first_run_setup, "show_welcome_and_install", welcome)
         tray.main()
         return done

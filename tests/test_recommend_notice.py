@@ -18,7 +18,7 @@ def env(monkeypatch):
     monkeypatch.setattr("tuxtalk.config.load_config", lambda: cfg)
     monkeypatch.setattr("tuxtalk.config.save_config", lambda c: saved.append(c.recommend_notice_shown))
     monkeypatch.setattr("tuxtalk.notify.notify", lambda t, b: notes.append(b))
-    monkeypatch.setattr("tuxtalk.cuda_helper.is_first_run", lambda: False)
+    monkeypatch.setattr("tuxtalk.first_run_setup.is_first_run", lambda: False)
     monkeypatch.setattr("tuxtalk.service_launcher.find_service_pids", lambda: [4242])
     monkeypatch.setattr(r, "detect_hardware", lambda cfg=None: NVIDIA)
     monkeypatch.delenv("FLATPAK_ID", raising=False)
@@ -44,9 +44,9 @@ def test_silent_when_already_on_the_recommendation(env):
 
 def test_never_on_first_run_or_flatpak(env, monkeypatch):
     cfg, notes, saved = env
-    monkeypatch.setattr("tuxtalk.cuda_helper.is_first_run", lambda: True)
+    monkeypatch.setattr("tuxtalk.first_run_setup.is_first_run", lambda: True)
     update_offers.maybe_show_recommend_notice()
-    monkeypatch.setattr("tuxtalk.cuda_helper.is_first_run", lambda: False)
+    monkeypatch.setattr("tuxtalk.first_run_setup.is_first_run", lambda: False)
     monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TalkType")
     update_offers.maybe_show_recommend_notice()
     assert notes == []

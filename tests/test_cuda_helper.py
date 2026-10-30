@@ -8,8 +8,6 @@ from tuxtalk.cuda_helper import (
     detect_nvidia_gpu,
     has_cuda_libraries,
     get_appdir_cuda_path,
-    is_first_run,
-    mark_first_run_complete
 )
 
 
@@ -57,14 +55,6 @@ def test_detect_nvidia_gpu_timeout(mock_run):
     mock_run.side_effect = subprocess.TimeoutExpired(cmd='nvidia-smi', timeout=5)
     result = detect_nvidia_gpu()
     assert result is False
-
-
-def test_first_run_flag(tmp_path, monkeypatch):
-    """First-run setup shows until it is marked done, then never again."""
-    monkeypatch.setattr("tuxtalk.config.get_data_dir", lambda: str(tmp_path / "TuxTalk"))
-    assert is_first_run() is True
-    mark_first_run_complete()
-    assert is_first_run() is False
 
 
 @patch('tuxtalk.cuda_helper.get_appdir_cuda_path', return_value='/nonexistent/cuda')

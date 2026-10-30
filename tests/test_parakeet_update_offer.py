@@ -15,7 +15,7 @@ def env(monkeypatch):
     asked, saved, restarts = [], [], []
     monkeypatch.setattr("tuxtalk.config.load_config", lambda: cfg)
     monkeypatch.setattr("tuxtalk.config.save_config", lambda c: saved.append(c.parakeet_update_offered))
-    monkeypatch.setattr("tuxtalk.cuda_helper.is_first_run", lambda: False)
+    monkeypatch.setattr("tuxtalk.first_run_setup.is_first_run", lambda: False)
     monkeypatch.setattr("tuxtalk.service_launcher.find_service_pids", lambda: [4242])
     monkeypatch.setattr("tuxtalk.model_helper.parakeet_update_needed", lambda c: "vulkan")
     answer = {"value": True}
@@ -56,9 +56,9 @@ def test_it_waits_for_dictation_and_never_shows_on_first_run(env, monkeypatch):
     monkeypatch.setattr("tuxtalk.service_launcher.find_service_pids", lambda: [])
     assert offers._offer_in_turn(restarts.append) is True and asked == []
     monkeypatch.setattr("tuxtalk.service_launcher.find_service_pids", lambda: [4242])
-    monkeypatch.setattr("tuxtalk.cuda_helper.is_first_run", lambda: True)
+    monkeypatch.setattr("tuxtalk.first_run_setup.is_first_run", lambda: True)
     assert offers._offer_in_turn(restarts.append) is False and asked == []
-    monkeypatch.setattr("tuxtalk.cuda_helper.is_first_run", lambda: False)
+    monkeypatch.setattr("tuxtalk.first_run_setup.is_first_run", lambda: False)
     assert offers._offer_in_turn(restarts.append) is False and asked == ["vulkan"]
 
 

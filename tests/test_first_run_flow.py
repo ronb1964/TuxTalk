@@ -379,3 +379,12 @@ def test_setup_complete_promises_a_start_at_login_only_when_it_is_on(setup_compl
     monkeypatch.setattr(config, "load_config", lambda: config.Settings(launch_at_login=on))
     shown = " ".join(setup_complete())
     assert ("start automatically when you log in" in shown) is on
+
+
+def test_first_run_setup_shows_until_it_is_finished(tmp_path, monkeypatch):
+    """The welcome screens come back at every start until setup is finished,
+    then never again."""
+    monkeypatch.setattr(config, "get_data_dir", lambda: str(tmp_path / "TuxTalk"))
+    assert fr.is_first_run() is True
+    fr.mark_first_run_complete()
+    assert fr.is_first_run() is False
