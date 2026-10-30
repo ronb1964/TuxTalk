@@ -11,7 +11,8 @@ import types
 import pytest
 from evdev import ecodes
 
-from tuxtalk import dictation_worker, hotkeys, keyboard_output, pipeline, recording, send_countdown
+from tuxtalk import (delivery, dictation_worker, hotkeys, keyboard_output, pipeline, recording,
+                     send_countdown)
 from tuxtalk import recording_state as rs
 from tuxtalk.dictation_worker import DictationWorker
 from tuxtalk.focused_window import Destination
@@ -110,7 +111,7 @@ def sent(monkeypatch):
     keys, typed, said = [], [], []
     monkeypatch.setattr(keyboard_output, "press_key", lambda key, why, claim=None:
                         keys.append(key) or True)
-    monkeypatch.setattr(pipeline, "type_onto_dictation", lambda text, mode, into=None:
+    monkeypatch.setattr(delivery, "type_onto_dictation", lambda text, mode, into=None:
                         typed.append(text) or "ok")
     monkeypatch.setattr(send_countdown, "say_held", lambda: said.append("Not sent"))
     monkeypatch.setattr(send_countdown, "_delay", 0.0)
@@ -125,21 +126,21 @@ def test_a_recording_begun_while_the_words_were_typed_holds_their_send(sent):
     keys, typed, said = sent
     message = send_countdown.Message(CHAT, has_words=True)
     send_countdown.recording_begins()                   # the next recording
-    pipeline.send_automatically(" ", "type", message)
+    delivery.send_automatically(" ", "type", message)
     assert keys == [] and said == [] and send_countdown.owes_space()
 
 
 def test_a_recording_begun_once_the_send_is_set_up_holds_it_too(sent, monkeypatch):
     keys, typed, said = sent
     monkeypatch.setattr(send_countdown, "_send_right_away", lambda pending: None)
-    pipeline.send_automatically(" ", "type", send_countdown.Message(CHAT, has_words=True))
+    delivery.send_automatically(" ", "type", send_countdown.Message(CHAT, has_words=True))
     number, held = send_countdown.recording_begins()
     assert held and keys == []
 
 
 def test_without_a_newer_recording_the_send_goes(sent):
     keys, typed, said = sent
-    pipeline.send_automatically(" ", "type", send_countdown.Message(CHAT, has_words=True))
+    delivery.send_automatically(" ", "type", send_countdown.Message(CHAT, has_words=True))
     assert keys == ["ENTER"]
 
 
@@ -151,7 +152,7 @@ def test_a_tap_while_the_words_were_typed_holds_the_send_and_says_so(sent, monke
     send_countdown.recording_begins()
     monkeypatch.setattr(rs.state, "message", send_countdown.Message(serial=1, cancelled=True))
     monkeypatch.setattr(rs.state, "is_recording", False)
-    pipeline.send_automatically(" ", "type", message)
+    delivery.send_automatically(" ", "type", message)
     assert keys == [] and said == ["Not sent"] and typed == [" "]
     assert not send_countdown.owes_space()
 
@@ -186,7 +187,7 @@ def test_a_send_about_to_claim_its_enter_when_a_recording_begins_stays_held(sent
     monkeypatch.setattr(focused_window, "look", lambda: CHAT[:2])
     monkeypatch.setattr(focused_window, "destination", lambda: CHAT)
     monkeypatch.setattr(send_countdown, "_send_right_away", lambda pending: None)
-    pipeline.send_automatically(" ", "type", send_countdown.Message(CHAT, has_words=True))
+    delivery.send_automatically(" ", "type", send_countdown.Message(CHAT, has_words=True))
     take = send_countdown._claim(send_countdown._pending)
     lock = _LockThatLetsAClaimIn(send_countdown._send_lock, take)
     monkeypatch.setattr(send_countdown, "_send_lock", lock)
@@ -195,12 +196,12 @@ def test_a_send_about_to_claim_its_enter_when_a_recording_begins_stays_held(sent
 
 
 def _press_from_the_send_timer(worker):
-    """pipeline.press_key as the automatic send's timer thread calls it,
+    """delivery.press_key as the automatic send's timer thread calls it,
     returned once its Enter is queued behind the job *worker* is running:
     the thread, and a list that gets its answer."""
     answer = []
     thread = threading.Thread(target=lambda: answer.append(
-        pipeline.press_key("ENTER", "Send each dictation automatically is on")))
+        delivery.press_key("ENTER", "Send each dictation automatically is on")))
     thread.start()
     _until_queued(worker, 2)
     return thread, answer
@@ -287,7 +288,7 @@ def test_a_send_held_or_switched_away_from_while_its_enter_waits_its_turn(real_w
         return True
     monkeypatch.setattr(keyboard_output, "press_key", press_key)
     monkeypatch.setattr(rs.state, "last_inserted_text", "See you at noon.")
-    pipeline.send_automatically(" ", "type", send_countdown.Message(CHAT, has_words=True))
+    delivery.send_automatically(" ", "type", send_countdown.Message(CHAT, has_words=True))
     busy, may_finish = threading.Event(), threading.Event()
     real_worker.submit(lambda: busy.set() or may_finish.wait(5))
     assert busy.wait(5)

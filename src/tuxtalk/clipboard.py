@@ -1,12 +1,16 @@
 """
-Put text on the clipboard from TuxTalk's own windows and menus.
+The clipboard, for TuxTalk's windows and for pasting dictations.
 
-Shared by the tray's Recent Dictations (Copy) and the Fix a Word window,
-which can be opened from the tray or from Preferences.
+copy_text is a deliberate Copy (the tray's Recent Dictations, Fix a Word).
+The rest is the dictation service's paste mode: dictations offered so that
+clipboard managers can skip them, on Wayland (wl-copy --sensitive) and X11
+(offer_dictation_x11), ClipboardKeeper putting the user's clipboard back
+afterwards, and the primary selection voice editing reads.
 """
 import os
 import shutil
 import subprocess
+import time
 
 from .logger import setup_logger
 
@@ -37,24 +41,6 @@ def copy_text(text):
         return False
 
 
-def copy_text_on_gtk_thread(text, timeout=1.0):
-    """copy_text, run on the thread that runs Gtk.main(). True on success.
-
-    For the dictation service on X11, which has no wl-copy to lean on. GTK may
-    only be touched from its own thread, and the service's typing runs on
-    another one, so the copy is queued there and waited for. The service keeps
-    the X11 clipboard selection afterwards and its GTK loop answers the
-    target app's paste request. If the loop doesn't get to it within
-    *timeout*, this returns False and the copy is called off: nothing gets
-    pasted, so the dictation mustn't land on the clipboard later.
-    """
-    from . import gtk_loop
-    try:
-        return bool(gtk_loop.call(copy_text, text, timeout=timeout))
-    except TimeoutError:
-        return False
-
-
 # --- Paste mode and the user's clipboard (see issue #7) -------------------------------
 # Paste mode puts each dictation on the clipboard and sends Ctrl+V, which
 # replaces what the user had copied, and clipboard managers such as KDE's
@@ -76,6 +62,86 @@ _EMPTY = object()               # the clipboard was empty before the paste
 _UNREADABLE = object()          # the primary selection couldn't be read: left as it is
 # KeePassXC and friends mark a copied password with this type; Klipper skips it.
 _PASSWORD_HINT = "x-kde-passwordManagerHint"
+
+
+def offer_dictation_x11(text, timeout=1.0):
+    """Put a dictation on the X11 clipboard for pasting, from the thread that
+    runs Gtk.main(); True on success.
+
+    For the dictation service on X11, which has no wl-copy to lean on. GTK may
+    only be touched from its own thread, and the service's typing runs on
+    another one, so the offer is queued there and waited for. The service keeps
+    the X11 clipboard selection afterwards and its GTK loop answers the
+    target app's paste request, so without a running loop nothing could be
+    pasted. If the loop doesn't get to it within *timeout*, this returns
+    False and the offer is called off: nothing gets pasted, so the dictation
+    mustn't land on the clipboard later.
+    """
+    from . import gtk_loop
+    if not gtk_loop.running():
+        logger.error("X11 paste: GTK's loop isn't running to answer the paste")
+        return False
+    try:
+        return bool(gtk_loop.call(_offer_sensitive_x11, text, timeout=timeout))
+    except TimeoutError:
+        return False
+
+
+def wait_for_x11_paste() -> None:
+    """Before the service exits: give the app a dictation was just pasted
+    into time to read it. Only this process holds an X11 offer (no store()),
+    so quitting right after the Ctrl+V left the paste empty."""
+    left = _x11_offered_at + RESTORE_DELAY_S - time.monotonic()
+    if left > 0:
+        time.sleep(left)
+
+
+_x11_owner = None           # the invisible window owning the X11 clipboard, made once
+_x11_offered = ""           # what it hands an app that pastes
+_x11_offered_at = float("-inf")     # time.monotonic() of the last offer
+
+
+def _offer_sensitive_x11(text):
+    """On GTK's thread: own the X11 clipboard, offering *text* as text and
+    marked with _PASSWORD_HINT, as wl-copy --sensitive does on Wayland.
+    Clipboard managers that honour the hint (Klipper, CopyQ 8 and later)
+    don't keep the dictation; others (Xfce's Clipman, older CopyQ) still do.
+    Not copy_text: its store() hands the text to the clipboard manager to
+    keep. GTK's selection API, since PyGObject can't reach set_with_data."""
+    global _x11_owner, _x11_offered, _x11_offered_at
+    from gi.repository import Gdk, GdkX11, Gtk
+    if _x11_owner is None:
+        _x11_owner = Gtk.Invisible()
+        _x11_owner.connect("selection-get", _answer_x11_paste)
+        _x11_owner.connect("selection-clear-event", _x11_paste_taken_over)
+    _x11_offered = text
+    Gtk.selection_clear_targets(_x11_owner, Gdk.SELECTION_CLIPBOARD)
+    for info, name in enumerate((*_TEXT_TYPES, _PASSWORD_HINT)):
+        Gtk.selection_add_target(_x11_owner, Gdk.SELECTION_CLIPBOARD,
+                                 Gdk.Atom.intern(name, False), info)
+    # A real time, not CurrentTime, which ICCCM rules out for taking a
+    # selection: apps compare it to tell the newest copy.
+    now = GdkX11.x11_get_server_time(_x11_owner.get_window())
+    owned = Gtk.selection_owner_set(_x11_owner, Gdk.SELECTION_CLIPBOARD, now)
+    if owned:
+        _x11_offered_at = time.monotonic()
+    return owned
+
+
+def _answer_x11_paste(_owner, selection_data, _info, _time):
+    """An app (or a clipboard manager) asks for the offered dictation."""
+    target = selection_data.get_target()
+    if target.name() == _PASSWORD_HINT:
+        selection_data.set(target, 8, b"secret")
+    else:
+        selection_data.set_text(_x11_offered, -1)
+
+
+def _x11_paste_taken_over(_owner, _event):
+    """Another app owns the clipboard now: drop the dictation kept for it."""
+    global _x11_offered
+    _x11_offered = ""
+    return False
 
 
 def _wl_copy_help():
@@ -362,7 +428,6 @@ def copy_selection(send_copy, wait=COPY_WAIT_S, sleep=None):
     With nothing selected, the clipboard is put back before returning.
     Raises ClipboardUnavailable when the marker can't be put on the clipboard."""
     import secrets
-    import time
     sleep = sleep or time.sleep
     saved = _read_clipboard()
     marker = f"tuxtalk-selection-probe-{secrets.token_hex(8)}"

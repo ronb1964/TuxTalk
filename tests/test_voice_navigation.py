@@ -8,7 +8,7 @@ from tuxtalk import live_settings as live
 from tuxtalk import keyboard_output
 from tuxtalk import notices
 from tuxtalk import voice_commands
-from tuxtalk import pipeline
+from tuxtalk import delivery
 from tuxtalk import focused_window
 
 C, S = "CTRL", "SHIFT"
@@ -307,7 +307,7 @@ def test_after_press_enter_a_move_doesnt_count_on_an_older_one(dictation, monkey
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: Keys())
     monkeypatch.setattr("time.sleep", lambda s: None)
     monkeypatch.setattr(rs.state, "nav_context", ("An older dictation.", ""))
-    assert pipeline.press_key("ENTER", 'said "press enter"')
+    assert delivery.press_key("ENTER", 'said "press enter"')
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: dictation["backend"])
     assert voice_commands.handle_navigation("select the last word", False) is True
     assert dictation["pressed"] == [] and dictation["problems"] == ["nothing_said"]

@@ -72,9 +72,20 @@ def grab_keyboards_hiding(devices, codes) -> None:
 
     Only keys the kernel still reports as down are balanced: if one was already
     released (a very fast tap), the desktop saw that release and nothing is owed.
+    A key remapper's keyboard is left alone (uinput_helper.is_remapper_keyboard),
+    so with kanata running the hotkey still reaches the focused app.
     """
-    keyboards = [d for d in devices if uinput_helper.is_keyboard_device(d)]
-    held, shown = [], set()     # shown: keys the desktop may still see down
+    keyboards, shown = [], set()    # shown: keys the desktop may still see down
+    for dev in devices:
+        if not uinput_helper.is_keyboard_device(dev):
+            continue
+        if uinput_helper.is_remapper_keyboard(dev):
+            # Held there, the desktop sees the key down all along: typing
+            # under a Right Ctrl would turn into shortcuts.
+            shown |= codes & keys_down([dev])
+        else:
+            keyboards.append(dev)
+    held = []
     for dev in keyboards:
         try:
             down = set(dev.active_keys())

@@ -66,7 +66,7 @@ def forget_after_key(key: str, why: str) -> None:
     what's behind it is out of reach of undo, "edit that" and voice moves,
     which would count on a dictation that's gone. After Enter, "edit that"
     says it was sent. Run on the dictation worker in the same step as the
-    key (pipeline.press_key), so nothing can be typed between them."""
+    key (delivery.press_key), so nothing can be typed between them."""
     rs.state.last_inserted_text, rs.state.nav_context = "", None
     if key == "ENTER":
         rs.state.sent = {"at": time.time(), "automatic": why.startswith("Send each")}
