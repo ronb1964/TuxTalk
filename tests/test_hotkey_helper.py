@@ -1122,8 +1122,11 @@ def _failing_keyboard_at(node, helper, kb, monkeypatch):
 
 
 def _replug(node):
-    node.unlink()
-    node.write_text("")                 # a new node: another inode
+    """A new node at *node*'s path. Made before the old one goes, so the
+    file system can't hand the new one the old inode number."""
+    new = node.with_name(node.name + ".new")
+    new.write_text("")
+    os.replace(new, node)
 
 
 def test_a_keyboard_that_failed_to_read_waits_to_be_plugged_in_again(setup, monkeypatch, tmp_path):
@@ -1156,6 +1159,23 @@ def test_a_keyboard_plugged_in_while_the_old_one_failed_isnt_skipped(setup, monk
     monkeypatch.setattr(hh.Keyboard, "open", classmethod(lambda cls, path: opened.append(path)))
     _replug(node)
     helper.read_keyboard(kb)
+    helper.scan()
+    assert opened == [str(node)]
+
+
+def test_a_keyboard_that_failed_to_read_is_tried_again_after_a_while(setup, monkeypatch, tmp_path):
+    """A built-in keyboard is never plugged in again: skipped for good after
+    one failed read, its hotkeys stayed dead until a reboot."""
+    helper, kb, _connect, _say, _heard, _seat = setup
+    node = tmp_path / "input" / "event5"
+    _failing_keyboard_at(node, helper, kb, monkeypatch)
+    opened = []
+    monkeypatch.setattr(hh.Keyboard, "open", classmethod(lambda cls, path: opened.append(path)))
+    helper.read_keyboard(kb)
+    helper.scan()
+    assert opened == []
+    later = time.monotonic() + hh.UNREADABLE_RETRY_S + 1
+    monkeypatch.setattr(hh.time, "monotonic", lambda: later)
     helper.scan()
     assert opened == [str(node)]
 
