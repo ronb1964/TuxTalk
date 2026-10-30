@@ -406,14 +406,15 @@ def paste_text_x11(text: str) -> bool:
     still typed. With restore_clipboard on, the user's clipboard comes back
     afterwards, as in paste_text. True only if the text reached the app.
     """
-    from . import clipboard
-    keeper = _keeper(clipboard.X11Board) if live.restore_clipboard else None
+    from . import x11_clipboard
+    keeper = _keeper(x11_clipboard.X11Board) if live.restore_clipboard else None
     if keeper is not None:
         keeper.before_paste()
+    if not x11_clipboard.offer_dictation(text):
+        # The clipboard never changed, so there is nothing to put back.
+        logger.error("X11 paste: couldn't put the text on the clipboard; nothing was inserted")
+        return False
     try:
-        if not clipboard.offer_dictation_x11(text):
-            logger.error("X11 paste: couldn't put the text on the clipboard; nothing was inserted")
-            return False
         time.sleep(0.08)    # let the selection settle before the app asks for it
         return send_paste_keystroke(focused_window.window_class())
     finally:

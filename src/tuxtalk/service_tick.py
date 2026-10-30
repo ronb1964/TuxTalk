@@ -7,7 +7,6 @@ import time
 
 from . import config as config_module
 from . import (
-    clipboard,
     dictation_worker,
     engine,
     hotkey_keys,
@@ -15,6 +14,7 @@ from . import (
     keyboard_output,
     pipeline,
     recording,
+    x11_clipboard,
 )
 from . import live_settings as live
 from . import recording_state as rs
@@ -217,7 +217,8 @@ def _quit(cfg, svc: ServiceState) -> None:
         notify("A dictation wasn't typed",
                "TuxTalk was quitting and couldn't finish it in time. Say it again once "
                "TuxTalk is back.")
-    clipboard.wait_for_x11_paste()
+    x11_clipboard.wait_for_paste()
+    x11_clipboard.keep_copy_at_quit()
     logger.info("Quitting")
     raise SystemExit(0)
 

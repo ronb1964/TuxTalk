@@ -909,8 +909,8 @@ def test_an_app_without_primary_selection_keeps_a_line_selection(monkeypatch):
 def test_a_copied_link_stays_text(monkeypatch):
     """A browser offers a link as text/uri-list and text; only a file manager's
     copy is files."""
-    assert cb._best_type(["text/uri-list", "text/plain;charset=utf-8"]) == "text/plain;charset=utf-8"
-    assert cb._best_type(["text/uri-list", "x-special/gnome-copied-files", "text/plain"]) == "text/uri-list"
+    assert cb.best_type(["text/uri-list", "text/plain;charset=utf-8"]) == "text/plain;charset=utf-8"
+    assert cb.best_type(["text/uri-list", "x-special/gnome-copied-files", "text/plain"]) == "text/uri-list"
 
 
 def test_a_line_by_line_pasted_rewrite_still_restores(edit_env, monkeypatch):
@@ -1301,7 +1301,7 @@ def test_the_probe_marker_is_not_left_when_the_clipboard_could_not_be_kept(monke
     "tuxtalk-selection-probe-…"."""
     board = FakeBoard(selected=None)
     board.install(monkeypatch)
-    monkeypatch.setattr(cb, "_read_clipboard", lambda: cb._NOTHING)
+    monkeypatch.setattr(cb, "_read_clipboard", lambda: cb.NOTHING)
     text, _ = cb.copy_selection(board.ctrl_c, sleep=lambda s: None)
     assert text is None and board.data is None
 
