@@ -5,6 +5,7 @@ These run the real build scripts on a stand-in AppImage in a copy of the
 project, with stand-ins for fpm and rpmbuild that record the tree they were
 handed, so what each package would install is checked, not the scripts' text.
 """
+import hashlib
 import os
 import pathlib
 import shutil
@@ -165,15 +166,22 @@ def test_the_package_gets_its_checksum_for_the_updater(project, script, package)
 
 
 def _listing(tree, license_folder):
-    """Every path in *tree* with its mode (and a link's target), leaving out
-    the package's own license folder, the one place the two may differ."""
+    """Every path in *tree* with its mode and what it holds (a link's target,
+    a file's SHA256), leaving out the package's own license folder, the one
+    place the two may differ."""
     listed = {}
     for path in sorted(tree.rglob("*")):
         relative = str(path.relative_to(tree))
         if relative == license_folder or relative.startswith(license_folder + "/"):
             continue
         mode = path.lstat().st_mode
-        listed[relative] = (oct(mode), os.readlink(path) if path.is_symlink() else None)
+        if stat.S_ISLNK(mode):
+            held = os.readlink(path)
+        elif stat.S_ISREG(mode):
+            held = hashlib.sha256(path.read_bytes()).hexdigest()
+        else:
+            held = None
+        listed[relative] = (oct(mode), held)
     return listed
 
 
