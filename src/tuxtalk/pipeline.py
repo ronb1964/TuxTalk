@@ -178,9 +178,20 @@ def _still_wanted(words, job: _Job) -> bool:
     """Whether *words*, shaped for typing, may still be announced and typed.
     The AI can take seconds over them: Esc meanwhile cancels them too, and
     the focus may have moved into a password field (asked again before the
-    beep and the "Transcribed" notification, which shows the words)."""
-    return not (_cancelled(job)
-                or (words.text and notices.refuse_password_field(job.beeps_on)))
+    beep and the "Transcribed" notification, which shows the words).
+
+    A correction across a pause that has already taken the phrase before
+    back (words.taken_back) goes in whatever Esc says: the phrase would
+    vanish with nothing in its place. A password field still stops it, and
+    then says the phrase before is gone."""
+    if not words.taken_back and _cancelled(job):
+        return False
+    if words.text and notices.refuse_password_field(job.beeps_on):
+        if words.taken_back:
+            notify_module.notify("A correction wasn't typed",
+                                 "The phrase before it was taken back. Check the text.")
+        return False
+    return True
 
 
 def _nothing_in_chunk(what: str, job: _Job) -> bool:

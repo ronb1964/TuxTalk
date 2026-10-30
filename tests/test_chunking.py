@@ -863,6 +863,52 @@ def test_esc_while_the_ai_corrects_across_a_pause_takes_nothing_back(ai_on, monk
     assert not any("four" in text for text in typed)
 
 
+def _erase_then(monkeypatch, then):
+    """Backspaces that run *then* while they go out: the moment the phrase
+    before a correction has been taken back. What they erased."""
+    from types import SimpleNamespace
+    erased = []
+
+    def backspaces(count):
+        erased.append(count)
+        then()
+        return True
+    monkeypatch.setattr(keyboard_output, "output_backend",
+                        lambda: SimpleNamespace(backspaces=backspaces))
+    return erased
+
+
+def test_esc_while_a_correction_backspaces_still_types_the_correction(ai_on, monkeypatch):
+    """Esc during the backspacing of "Meet at three. ": the phrase was gone
+    and its correction dropped as cancelled, so neither was on screen."""
+    texts, typed, _, _ = ai_on
+    texts.extend(["meet at three.", "no wait, four.", "meet at three. No wait, four."])
+    call(frames_of(speech(1.0)), "middle")
+    erased = _erase_then(monkeypatch,
+                         lambda: setattr(rs.state.current.message, "cancelled", True))
+    call(frames_of(speech(1.0)), "middle")
+    assert erased == [len("Meet at three. ")] and typed[-1] == "Meet at four"
+
+
+def test_a_password_field_after_a_correction_backspaced_says_to_check_the_text(ai_on,
+                                                                              monkeypatch):
+    """The focus moved into a password field while the phrase before was
+    backspaced: the correction is refused there, and the phrase before is
+    gone, which was said nowhere."""
+    texts, typed, _, _ = ai_on
+    texts.extend(["meet at three.", "no wait, four.", "meet at three. No wait, four."])
+    call(frames_of(speech(1.0)), "middle")
+    password = []
+    monkeypatch.setattr("tuxtalk.focused_window.is_password", lambda: bool(password))
+    said = []
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body="": said.append(title))
+    erased = _erase_then(monkeypatch, lambda: password.append(True))
+    call(frames_of(speech(1.0)), "middle")
+    assert erased == [len("Meet at three. ")] and typed[0] == "Meet at three"
+    assert not any("four" in text for text in typed)
+    assert "A correction wasn't typed" in said
+
+
 def test_correction_on_the_last_phrase(ai_on):
     texts, typed, erased, _ = ai_on
     texts.extend(["meet at three.", "no wait, four.", "meet at three. No wait, four."])
