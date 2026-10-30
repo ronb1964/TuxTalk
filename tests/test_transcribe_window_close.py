@@ -338,3 +338,7 @@ def test_the_drop_hint_shows_only_while_empty(win):
     assert not win.drop_hint.get_visible()
     win._set_busy(True)
     assert not win.drop_hint.get_visible()
+
+
+def test_a_screen_reader_names_the_transcript(win):
+    assert win.view.get_accessible().get_name() == "Transcript"

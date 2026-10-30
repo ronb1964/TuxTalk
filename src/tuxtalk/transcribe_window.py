@@ -223,6 +223,7 @@ class TranscribeWindow:
         here wouldn't reach them. Copy or save it and edit it anywhere."""
         self.view = Gtk.TextView()
         self.view.set_editable(False)
+        self.view.get_accessible().set_name("Transcript")
         self.view.set_cursor_visible(False)
         self.view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
         for side in ("left", "right", "top", "bottom"):

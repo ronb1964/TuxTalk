@@ -199,6 +199,7 @@ class _FixWordDialog:
         everywhere else. The selection is snapped to whole words."""
         self.view = Gtk.TextView()
         self.view.set_editable(False)
+        self.view.get_accessible().set_name("Dictation: select the words to fix")
         # Its cursor stays visible: hidden, the arrow keys scroll instead of moving.
         self.view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
         for side in ("left", "right", "top", "bottom"):
