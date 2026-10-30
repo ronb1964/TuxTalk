@@ -464,14 +464,16 @@ class VulkanWhisperModel:
              "-t", str(self.threads), "-dev", str(self.device_index)], _engine_env())
         self._proc = self._launcher.submit(
             subprocess.Popen, command,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env).result()
+            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env=env).result()
+        output = engine_process.OutputTail(self._proc.stderr)
         logger.info(f"Graphics engine starting (pid {self._proc.pid}, device {self.device_index})")
         try:
             deadline = time.time() + 120
             while time.time() < deadline:
                 if self._proc.poll() is not None:
                     raise RuntimeError("the graphics engine stopped while starting"
-                                       + engine_process.launch_failure(self._proc.returncode))
+                                       + engine_process.launch_failure(self._proc.returncode,
+                                                                       output))
                 try:
                     engine_process.open_local(f"http://127.0.0.1:{self._port}/health", timeout=1)
                     break

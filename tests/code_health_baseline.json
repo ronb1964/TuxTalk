@@ -117,7 +117,6 @@
   "parakeet_engine.py::cached_model_dir::swallowed_error": 1,
   "parakeet_gpu.py::<module>::long_line": 1,
   "parakeet_gpu.py::ParakeetGpuModel.__init__::undocumented": 1,
-  "parakeet_gpu.py::ParakeetGpuModel._engine_messages::swallowed_error": 1,
   "parakeet_gpu.py::ParakeetGpuModel._start::undocumented": 1,
   "parakeet_gpu_worker.py::load_engine.set_words::undocumented": 1,
   "parakeet_gpu_worker.py::main::swallowed_error": 2,
