@@ -26,9 +26,6 @@
   "custom_words.py::fix_spelling": {
    "decisions": 28
   },
-  "file_transcribe.py::load_engine": {
-   "decisions": 19
-  },
   "kwin_hotkeys.py::_app_shortcut_clashes": {
    "decisions": 19
   },

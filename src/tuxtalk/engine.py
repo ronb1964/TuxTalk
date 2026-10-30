@@ -54,12 +54,8 @@ def transcribe(audio_f32, language: str | None) -> str | None:
     from .parakeet_gpu import ParakeetGpuModel
     from .whisper_vulkan import VulkanWhisperModel
     words_prompt = custom_words.prompt(live.words)
-    # Auto-detect held to the user's languages: one language is simply used,
-    # two or more are checked against Whisper's own pick (language_limit.py).
-    # Parakeet has no language setting, so this changes nothing there.
-    if not language:
-        language = language_limit.forced_language(live.auto_languages)
-    limit_to = () if language else live.auto_languages
+    # Parakeet has no language setting, so the list changes nothing there.
+    language, limit_to = language_limit.language_and_limit(language, live.auto_languages)
     if isinstance(engine, VulkanWhisperModel):
         return _transcribe_vulkan(engine, audio_f32, language, limit_to, words_prompt, started)
     if isinstance(engine, (ParakeetModel, ParakeetGpuModel)):
@@ -70,14 +66,9 @@ def transcribe(audio_f32, language: str | None) -> str | None:
 def _transcribe_vulkan(engine, audio_f32, language, limit_to, words_prompt, started):
     """transcribe() on whisper.cpp's Vulkan engine."""
     from . import custom_words
-    # Only pass a prompt or a language list when there is one, so nothing
-    # changes without them.
-    extra = {}
-    if words_prompt:
-        extra["prompt"] = words_prompt
-    if limit_to:
-        extra["limit_to"] = limit_to
-    raw, _no_speech = engine.transcribe(audio_f32, language, **extra)
+    from .whisper_vulkan import transcribe_extras
+    raw, _no_speech = engine.transcribe(audio_f32, language,
+                                        **transcribe_extras(words_prompt, limit_to))
     logger.info(f"TIMING: Transcription completed in {time.time() - started:.2f}s (Vulkan GPU)")
     logger.info(f"Raw transcription (Vulkan GPU): {live.loggable(raw)}")
     # whisper.cpp's no-speech score isn't reliable (0.90 on clear speech,
@@ -141,16 +132,8 @@ def _transcribe_whisper(engine, audio_f32, language, limit_to, words_prompt, sta
     as hotwords, which faster-whisper puts in every 30-second window's prompt."""
     from . import custom_words, language_limit
     options = dict(WHISPER_OPTIONS, hotwords=words_prompt)
-    segments, info = engine.transcribe(audio_f32, language=(language or None), **options)
-    # faster-whisper detects the language before it decodes a word (segments
-    # is a generator), so starting again in another language costs only that
-    # detection, and only when its pick is off the user's list.
-    better = (language_limit.redirect(info.language, dict(info.all_language_probs or ()),
-                                      limit_to) if limit_to else None)
-    if better:
-        logger.info(f"Language: Whisper heard {info.language}, which isn't on your list; "
-                    f"using {better}")
-        segments, info = engine.transcribe(audio_f32, language=better, **options)
+    segments, _ = language_limit.whisper_held_to(engine.transcribe, audio_f32, language,
+                                                 limit_to, **options)
     transcribe_time = time.time() - started
     logger.info(f"TIMING: Transcription completed in {transcribe_time:.2f}s")
     if transcribe_time > 2.0:

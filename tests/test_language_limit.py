@@ -68,6 +68,18 @@ def test_a_language_without_a_score_counts_as_unlikely():
     assert language_limit.redirect("fr", {"fr": 0.9}, ("en", "es")) == "en"
 
 
+@pytest.mark.parametrize("language, codes, expected", [
+    ("ja", ("en", "es"), ("ja", ())),          # chosen by hand: the list waits
+    (None, ("de",), ("de", ())),               # a list of one is that language
+    ("", ("en", "es"), (None, ("en", "es"))),  # detected, held to the list
+    (None, (), (None, ())),                    # no list: auto-detect as it is
+])
+def test_dictation_and_files_take_the_language_the_same_way(language, codes, expected):
+    """Dictation and Transcribe a File each worked this out on their own,
+    and had already drifted apart once (E-04)."""
+    assert language_limit.language_and_limit(language, codes) == expected
+
+
 def test_the_setting_defaults_to_any_language_and_applies_without_a_restart():
     assert config.Settings().auto_languages == ""
     assert "auto_languages" in config.LIVE_APPLIED_KEYS

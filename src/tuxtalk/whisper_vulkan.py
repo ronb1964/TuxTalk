@@ -424,6 +424,15 @@ def language_scores(reply):
     return {code: float(p) for code, p in scores.items()}
 
 
+def transcribe_extras(prompt, limit_to):
+    """VulkanWhisperModel.transcribe's prompt and language list, each only
+    when there is one, so nothing changes without them."""
+    extra = {"prompt": prompt} if prompt else {}
+    if limit_to:
+        extra["limit_to"] = limit_to
+    return extra
+
+
 class VulkanWhisperModel:
     """A whisper-server process running *model_name* on graphics chip
     *device_index*, kept running for the life of the dictation service."""

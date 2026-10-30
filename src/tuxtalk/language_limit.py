@@ -19,7 +19,10 @@ so next to the list.
 The setting is stored as text, "en,es", like every other setting in
 config.toml; "" means any language.
 """
+from .logger import setup_logger
 from .recommend import LANGUAGES
+
+logger = setup_logger(__name__)
 
 # The languages the pickers offer, and so the only ones a list may hold.
 KNOWN = frozenset(code for code, _name in LANGUAGES)
@@ -74,3 +77,29 @@ def redirect(detected, probabilities, codes):
     if not codes or detected in codes:
         return None
     return best_allowed(probabilities, codes)
+
+
+def language_and_limit(language, codes):
+    """(language, limit_to) for one transcription, dictation or a file: a
+    language chosen by hand is used as it is; otherwise a list of one is
+    that language, and a longer list holds auto-detect to it."""
+    if not language:
+        language = forced_language(codes)
+    return (language, ()) if language else (None, tuple(codes))
+
+
+def whisper_held_to(transcribe, audio, language, limit_to, **options):
+    """faster-whisper's (segments, info) for *audio*, run again in the
+    likeliest language on *limit_to* when it detected one that isn't.
+    *transcribe* is the model's transcribe. It detects the language before
+    it decodes a word (segments is a generator), so starting again costs
+    only that detection, and only when its pick is off the list."""
+    segments, info = transcribe(audio, language=language, **options)
+    if not limit_to:
+        return segments, info
+    better = redirect(info.language, dict(info.all_language_probs or ()), limit_to)
+    if better:
+        logger.info(f"Language: Whisper heard {info.language}, which isn't on your list; "
+                    f"using {better}")
+        segments, info = transcribe(audio, language=better, **options)
+    return segments, info
