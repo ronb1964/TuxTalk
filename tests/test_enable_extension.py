@@ -10,7 +10,7 @@ which the shell reads on its next start.
 import types
 
 
-from tuxtalk import desktop_detect as dd
+from tuxtalk import gnome_extensions as ge
 
 UUID = "talktype@ronb1964.github.io"
 
@@ -48,37 +48,37 @@ def _fake_run(*, enable_rc, get_out, set_rc=0, get_rc=0):
 def test_reads_empty_typed_array(monkeypatch):
     def run(argv, **k):
         return types.SimpleNamespace(returncode=0, stdout="@as []\n", stderr="")
-    monkeypatch.setattr(dd.subprocess, "run", run)
-    assert dd._read_enabled_extensions() == []
+    monkeypatch.setattr(ge.subprocess, "run", run)
+    assert ge._read_enabled_extensions() == []
 
 
 def test_reads_populated_array(monkeypatch):
     def run(argv, **k):
         return types.SimpleNamespace(returncode=0, stdout="['a@x', 'b@y']\n", stderr="")
-    monkeypatch.setattr(dd.subprocess, "run", run)
-    assert dd._read_enabled_extensions() == ["a@x", "b@y"]
+    monkeypatch.setattr(ge.subprocess, "run", run)
+    assert ge._read_enabled_extensions() == ["a@x", "b@y"]
 
 
 def test_enable_persists_via_gsettings_when_live_enable_fails(monkeypatch):
     # Wayland fresh install: CLI enable fails, list starts empty.
     run, state = _fake_run(enable_rc=1, get_out="@as []")
-    monkeypatch.setattr(dd.subprocess, "run", run)
+    monkeypatch.setattr(ge.subprocess, "run", run)
 
-    assert dd.enable_extension(UUID) is True
+    assert ge.enable_extension(UUID) is True
     assert UUID in state["written"], "UUID must be written into enabled-extensions"
 
 
 def test_enable_returns_true_when_live_enable_succeeds(monkeypatch):
     run, _ = _fake_run(enable_rc=0, get_out="@as []")
-    monkeypatch.setattr(dd.subprocess, "run", run)
-    assert dd.enable_extension(UUID) is True
+    monkeypatch.setattr(ge.subprocess, "run", run)
+    assert ge.enable_extension(UUID) is True
 
 
 def test_enable_does_not_duplicate_existing_entry(monkeypatch):
     run, state = _fake_run(enable_rc=1, get_out=f"['{UUID}']")
-    monkeypatch.setattr(dd.subprocess, "run", run)
+    monkeypatch.setattr(ge.subprocess, "run", run)
 
-    assert dd.enable_extension(UUID) is True
+    assert ge.enable_extension(UUID) is True
     # Never wrote, because it was already present (no set call recorded).
     assert state["written"] is None
 
@@ -87,9 +87,9 @@ def test_does_not_clobber_extensions_when_read_fails(monkeypatch):
     """A failed `gsettings get` must NOT trigger a write — that would overwrite
     the user's entire enabled-extensions list with only TuxTalk's."""
     run, state = _fake_run(enable_rc=1, get_out="", get_rc=1)
-    monkeypatch.setattr(dd.subprocess, "run", run)
+    monkeypatch.setattr(ge.subprocess, "run", run)
 
-    result = dd.enable_extension(UUID)
+    result = ge.enable_extension(UUID)
     assert state["set_calls"] == 0, "must not write enabled-extensions when the read failed"
     assert result is False, "neither CLI enable nor a safe gsettings write succeeded"
 
@@ -97,8 +97,8 @@ def test_does_not_clobber_extensions_when_read_fails(monkeypatch):
 def test_enable_fails_when_neither_mechanism_works(monkeypatch):
     # CLI enable fails AND gsettings set fails -> genuinely could not enable.
     run, _ = _fake_run(enable_rc=1, get_out="@as []", set_rc=1)
-    monkeypatch.setattr(dd.subprocess, "run", run)
-    assert dd.enable_extension(UUID) is False
+    monkeypatch.setattr(ge.subprocess, "run", run)
+    assert ge.enable_extension(UUID) is False
 
 
 def test_is_enabled_falls_back_to_dbus_when_cli_absent(monkeypatch):
@@ -108,10 +108,9 @@ def test_is_enabled_falls_back_to_dbus_when_cli_absent(monkeypatch):
     # otherwise the GTK tray shows alongside the extension (the double tray icon).
     def no_cli(argv, **k):
         raise FileNotFoundError("gnome-extensions")
-    monkeypatch.setattr(dd.subprocess, "run", no_cli)
-    monkeypatch.setattr(dd, "_is_extension_enabled_via_dbus",
-                        lambda uuid: True, raising=False)
-    assert dd.is_extension_enabled(UUID) is True
+    monkeypatch.setattr(ge.subprocess, "run", no_cli)
+    monkeypatch.setattr(ge, "_is_extension_enabled_via_dbus", lambda uuid: True)
+    assert ge.is_extension_enabled(UUID) is True
 
 
 def test_is_enabled_uses_cli_result_without_dbus_on_host(monkeypatch):
@@ -119,11 +118,10 @@ def test_is_enabled_uses_cli_result_without_dbus_on_host(monkeypatch):
     # D-Bus (host behavior unchanged).
     def cli_enabled(argv, **k):
         return types.SimpleNamespace(returncode=0, stdout="State: ENABLED\n", stderr="")
-    monkeypatch.setattr(dd.subprocess, "run", cli_enabled)
-    monkeypatch.setattr(dd, "_is_extension_enabled_via_dbus",
-                        lambda uuid: (_ for _ in ()).throw(AssertionError("D-Bus must not be used when the CLI answers")),
-                        raising=False)
-    assert dd.is_extension_enabled(UUID) is True
+    monkeypatch.setattr(ge.subprocess, "run", cli_enabled)
+    monkeypatch.setattr(ge, "_is_extension_enabled_via_dbus",
+                        lambda uuid: (_ for _ in ()).throw(AssertionError("D-Bus must not be used when the CLI answers")))
+    assert ge.is_extension_enabled(UUID) is True
 
 
 def test_enable_takes_it_off_the_disabled_list(monkeypatch):
@@ -131,21 +129,21 @@ def test_enable_takes_it_off_the_disabled_list(monkeypatch):
     wouldn't start a reinstall listed on it."""
     run, state = _fake_run(enable_rc=1, get_out="@as []\n")
     state["disabled"] = f"['other@x', '{UUID}']"
-    monkeypatch.setattr(dd.subprocess, "run", run)
-    assert dd.enable_extension(UUID) is True
+    monkeypatch.setattr(ge.subprocess, "run", run)
+    assert ge.enable_extension(UUID) is True
     assert state["disabled"] == "['other@x']"
 
 
 def test_forget_leaves_other_extensions_and_an_unreadable_list_alone(monkeypatch):
     run, state = _fake_run(enable_rc=0, get_out="@as []\n")
     state["disabled"] = "['a@x', 'b@y']"
-    monkeypatch.setattr(dd.subprocess, "run", run)
-    dd.forget_extension(UUID)
+    monkeypatch.setattr(ge.subprocess, "run", run)
+    ge.forget_extension(UUID)
     assert state["disabled"] == "['a@x', 'b@y']"        # nothing of ours: untouched
 
     def failing(argv, **k):
         if argv[:2] == ["gsettings", "set"]:
             raise AssertionError("must not write a list it couldn't read")
         return types.SimpleNamespace(returncode=1, stdout="", stderr="")
-    monkeypatch.setattr(dd.subprocess, "run", failing)
-    dd.forget_extension(UUID)
+    monkeypatch.setattr(ge.subprocess, "run", failing)
+    ge.forget_extension(UUID)

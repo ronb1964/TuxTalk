@@ -18,13 +18,14 @@ import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
 from gi.repository import Gtk, Gdk, GLib
-from . import config, desktop_detect
+from . import config, extension_helper
 from .ui_style import Fold, more_below_bar, show_message
 
 from .flatpak_welcome import (build_shortcut_setup_section, build_unsupported_desktop_section,
                               shortcut_support)
 from .logger import setup_logger
 from .portaudio_setup import get_portaudio_status
+from .setup_complete_dialog import menu_location
 from .splash_screen import SplashScreen, fade_in
 from .uinput_helper import check_all_device_permissions
 
@@ -307,7 +308,7 @@ class WelcomeDialog:
         self.has_gnome = is_gnome() if force_gnome is None else force_gnome
         # The extension is offered only when it isn't already running;
         # updating an installed one is Preferences' job.
-        self.offer_extension = self.has_gnome and not desktop_detect.tuxtalk_extension_active()
+        self.offer_extension = self.has_gnome and not extension_helper.is_extension_enabled()
         # What to recommend (recommend.py): the graphics chip and the language.
         from . import recommend
         try:
@@ -515,7 +516,7 @@ class WelcomeDialog:
             f"1. Hold {key}",
             "2. Talk",
             "3. Let go: your words are typed where your cursor is",
-            f"Settings and Help are in the TuxTalk menu ({desktop_detect.menu_location()})",
+            f"Settings and Help are in the TuxTalk menu ({menu_location()})",
         ]
 
         for tip in tips:

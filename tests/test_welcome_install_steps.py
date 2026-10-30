@@ -221,7 +221,7 @@ def test_the_extension_is_offered_only_when_it_is_not_running(monkeypatch, activ
     monkeypatch.setattr(r, "system_language", lambda env=None: "en")
     monkeypatch.setattr(wd, "detect_uinput_access", lambda: (True, ""))
     monkeypatch.setattr(wd, "detect_portaudio_status", lambda: {"needs_install": False})
-    monkeypatch.setattr("tuxtalk.desktop_detect.tuxtalk_extension_active", lambda: active)
+    monkeypatch.setattr("tuxtalk.extension_helper.is_extension_enabled", lambda: active)
     d = wd.WelcomeDialog(force_gnome=True)
     try:
         assert (d.extension_check is not None) is offered

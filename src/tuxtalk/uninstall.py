@@ -38,10 +38,11 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
 from . import (ai_cleanup, config, cosmic_hotkeys, custom_words,  # noqa: E402
-               desktop_detect, extension_helper, file_transcribe, gnome_keybindings,
-               kwin_hotkeys, menu_cache, model_helper, parakeet_engine, rename_migration,
-               secure_input, service_launcher, settings_backup, single_instance, uinput_helper,
-               update_checker, whisper_vulkan, ydotoold_leftovers)
+               desktop_detect, extension_helper, file_transcribe, gnome_extensions,
+               gnome_keybindings, kwin_hotkeys, menu_cache, model_helper, parakeet_engine,
+               rename_migration, secure_input, service_launcher, settings_backup,
+               single_instance, uinput_helper, update_checker, whisper_vulkan,
+               ydotoold_leftovers)
 from .logger import LOG_FILE_NAME, setup_logger, stop_file_logging  # noqa: E402
 from .ui_style import message_dialog, show_message  # noqa: E402
 
@@ -255,7 +256,7 @@ def find(home, install_type, environ=os.environ, appimage=None):
     unit = ydotoold_leftovers.our_ydotoold_unit(home)
     if unit is not None:
         plan.ydotoold_unit = Path(unit)
-    plan.extension = exists(Path(desktop_detect.get_extension_dir())
+    plan.extension = exists(Path(gnome_extensions.get_extension_dir())
                             / extension_helper.EXTENSION_UUID)
     plan.helper = any(os.path.exists(p) for p in (secure_input.UNIT_PATH, secure_input.HELPER_PATH))
     plan.typing_rule = any(os.path.exists(p) for p in (secure_input.UINPUT_RULE_PATH,
@@ -500,7 +501,7 @@ def undo_desktop_changes(plan):
     if plan.extension or desktop_detect.is_gnome():
         extension_helper.uninstall_extension()
         # Its result can't tell "removed nothing" from "wasn't there".
-        folder = Path(desktop_detect.get_extension_dir()) / extension_helper.EXTENSION_UUID
+        folder = Path(gnome_extensions.get_extension_dir()) / extension_helper.EXTENSION_UUID
         if os.path.lexists(folder):
             left.append(f"the GNOME extension ({_shown(folder, plan.home)})")
     if not kwin_hotkeys.forget_our_components():

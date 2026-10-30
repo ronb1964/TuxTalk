@@ -4,16 +4,16 @@ import types
 
 import pytest
 
-from tuxtalk import desktop_detect, extension_helper as eh
+from tuxtalk import extension_helper as eh, gnome_extensions
 
 
 def test_uninstall_removes_the_files_and_both_list_entries(monkeypatch, tmp_path):
     (tmp_path / eh.EXTENSION_UUID).mkdir()
     (tmp_path / eh.EXTENSION_UUID / "metadata.json").write_text("{}")
-    monkeypatch.setattr(desktop_detect, "get_extension_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(gnome_extensions, "get_extension_dir", lambda: str(tmp_path))
     monkeypatch.setattr(eh.subprocess, "run", lambda *a, **k: types.SimpleNamespace(returncode=0))
     forgotten = []
-    monkeypatch.setattr(desktop_detect, "forget_extension",
+    monkeypatch.setattr(gnome_extensions, "forget_extension",
                         lambda uuid, keys: forgotten.append((uuid, set(keys))))
     assert eh.uninstall_extension() is True
     assert not (tmp_path / eh.EXTENSION_UUID).exists()

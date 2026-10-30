@@ -3,7 +3,7 @@ import os
 
 import pytest
 
-from tuxtalk import desktop_detect
+from tuxtalk import gnome_extensions
 from tuxtalk import extension_helper as eh
 
 
@@ -11,7 +11,7 @@ from tuxtalk import extension_helper as eh
 def extensions(tmp_path, monkeypatch):
     """A gnome-shell/extensions folder of its own, and an extension to install."""
     ext_dir = tmp_path / "gnome-shell" / "extensions"
-    monkeypatch.setattr(desktop_detect, "get_extension_dir", lambda: str(ext_dir))
+    monkeypatch.setattr(gnome_extensions, "get_extension_dir", lambda: str(ext_dir))
     runtime = tmp_path / "run"                  # the install lock, never the real one
     runtime.mkdir()
     monkeypatch.setattr("tuxtalk.single_instance.runtime_dir", lambda: str(runtime))
@@ -134,7 +134,7 @@ def test_the_install_enables_once_and_its_progress_only_goes_up(extensions, monk
     ext_dir, source = extensions
     enabled, shown = [], []
     monkeypatch.setattr(eh, "is_extension_available", lambda: True)
-    monkeypatch.setattr(desktop_detect, "enable_extension", lambda uuid: enabled.append(uuid) or True)
+    monkeypatch.setattr(gnome_extensions, "enable_extension", lambda uuid: enabled.append(uuid) or True)
     monkeypatch.setattr(eh, "checkout_extension_path", lambda: str(source) if from_checkout else None)
 
     def download(url, dest, **kwargs):
@@ -157,7 +157,7 @@ def test_a_checkout_copy_that_fails_falls_back_without_the_bar_going_back(extens
     ext_dir, source = extensions
     shown = []
     monkeypatch.setattr(eh, "is_extension_available", lambda: True)
-    monkeypatch.setattr(desktop_detect, "enable_extension", lambda uuid: True)
+    monkeypatch.setattr(gnome_extensions, "enable_extension", lambda uuid: True)
     monkeypatch.setattr(eh, "checkout_extension_path", lambda: str(source))
     real_local = eh.install_extension_from_local
     tries = []
@@ -198,7 +198,7 @@ def test_an_extension_gnome_wont_turn_on_is_not_reported_installed(extensions, m
     """Without a tray its menu is how TuxTalk is used: "installed" would leave
     the user with nothing."""
     _ext_dir, source = extensions
-    monkeypatch.setattr(desktop_detect, "enable_extension", lambda uuid: False)
+    monkeypatch.setattr(gnome_extensions, "enable_extension", lambda uuid: False)
     assert eh.install_extension_from_local(str(source)) is False
 
 
@@ -208,7 +208,7 @@ def test_a_checkout_copy_gnome_wont_turn_on_isnt_downloaded_again(extensions, mo
     _ext_dir, source = extensions
     monkeypatch.setattr(eh, "is_extension_available", lambda: True)
     monkeypatch.setattr(eh, "checkout_extension_path", lambda: str(source))
-    monkeypatch.setattr(desktop_detect, "enable_extension", lambda uuid: False)
+    monkeypatch.setattr(gnome_extensions, "enable_extension", lambda uuid: False)
     downloaded = []
     monkeypatch.setattr(eh, "download_and_install_extension",
                         lambda callback=None: downloaded.append(True))
