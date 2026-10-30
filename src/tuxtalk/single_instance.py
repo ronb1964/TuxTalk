@@ -54,15 +54,21 @@ def runtime_dir() -> str:
     no lock at all, two services typed every dictation twice and two GNOME
     extension installs could meet.
     """
+    return private_session_dir() or _private_fallback()
+
+
+def private_session_dir():
+    """runtime_dir() without its /tmp fallback: the session's runtime folder
+    (the Flatpak's own inside one) when it is this user's alone, else None.
+    A RAM-backed folder emptied at logout, unlike /tmp on some systems, so
+    the place for anything holding dictated text."""
     base = session_runtime_dir()
     fid = os.environ.get("FLATPAK_ID")
     if fid:
         app_dir = os.path.join(base, "app", fid)
         if _private(app_dir):
             return app_dir
-    if _private(base):
-        return base
-    return _private_fallback()
+    return base if _private(base) else None
 
 
 def _private(path) -> bool:

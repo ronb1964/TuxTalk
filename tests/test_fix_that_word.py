@@ -97,6 +97,19 @@ def test_right_after_a_dictation_it_can_fix_the_text(opened, typed, monkeypatch)
     assert rs.state.last_inserted_text == ""                     # undo can't trust it now
 
 
+def test_without_a_private_runtime_folder_the_dictation_is_never_written(typed, monkeypatch):
+    """The locks' /tmp fallback may be on disk: the dictation isn't handed
+    over through it, and Fix a Word just doesn't fix it in the text."""
+    from tuxtalk import single_instance
+    shared = typed / "shared"
+    shared.mkdir()
+    shared.chmod(0o777)
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(shared))
+    monkeypatch.setattr(single_instance, "FALLBACK_ROOT", str(typed))
+    assert voice_commands._hand_over(" Mary had a lamb. ", ("org.kde.kwrite", None)) is None
+    assert [p for p in typed.rglob("*") if p.is_file()] == []
+
+
 def test_a_window_that_cannot_start_leaves_no_copy_of_the_dictation(typed, monkeypatch):
     """The dictation was written for the window to read and delete; with no
     window, it would sit in the runtime folder until logout."""

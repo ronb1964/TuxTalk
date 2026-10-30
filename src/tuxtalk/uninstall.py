@@ -89,11 +89,12 @@ HF_REPOS = tuple(sorted({_hub_folder(repo) for repo in (
     parakeet_engine.V3_REPO, whisper_vulkan.MODEL_REPO,
     *whisper_vulkan.MODEL_REPOS.values(), ai_cleanup.MODEL_REPO)}))
 
-# The runtime folder's files that hold dictated text: Recent Dictations and
-# Fix a Word's last dictation. Logging out empties the folder anyway; its
-# lock files stay, since a development copy running beside this one uses
-# the same names.
-RUNTIME_FILES = ("talktype-history.json", "tuxtalk-fix-word.json")
+# The runtime folder's files that hold dictated text, as glob patterns:
+# Recent Dictations and Fix a Word's hand-overs (voice_commands._hand_over,
+# a name of its own each). Logging out empties the folder anyway; its lock
+# files stay, since a development copy running beside this one uses the
+# same names.
+RUNTIME_FILES = ("talktype-history.json", "tuxtalk-fix-word-*.json")
 
 ICON_SIZES = ("256x256", "128x128", "64x64", "48x48", "32x32")
 
@@ -249,7 +250,7 @@ def find(home, install_type, environ=os.environ, appimage=None):
             plan.folders.append((folder, names))
 
     runtime = Path(single_instance.session_runtime_dir(environ))
-    plan.runtime = [runtime / name for name in RUNTIME_FILES if exists(runtime / name)]
+    plan.runtime = sorted(path for pattern in RUNTIME_FILES for path in runtime.glob(pattern))
 
     unit = uinput_helper.our_ydotoold_unit(home)
     if unit is not None:
