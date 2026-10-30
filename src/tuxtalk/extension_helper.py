@@ -98,18 +98,12 @@ def is_extension_enabled() -> bool:
 
 
 def get_extension_status() -> dict:
-    """
-    Get comprehensive extension status
-
-    Returns:
-        dict: Status information
-    """
+    """Whether the extension can run here (GNOME), is installed and is
+    enabled, for Preferences' extension status."""
     return {
         'available': is_extension_available(),
         'installed': is_extension_installed(),
         'enabled': is_extension_enabled(),
-        'gnome_version': desktop_detect.get_gnome_shell_version(),
-        'wayland': desktop_detect.is_wayland(),
     }
 
 
