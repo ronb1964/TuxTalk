@@ -222,7 +222,9 @@ before 0.15.0, so older entries use that name.
 - The microphone test in Preferences, Audio, tells you when your room is
   noisy for your voice, under the level grade: a headset, or the mic closer
   to your mouth, will help. It measures how far your voice stands above the
-  room in the recording you just made.
+  room's usual noise in the recording you just made, so a kitchen, a cafe or
+  traffic counts as noisy even when it goes quiet now and then. Say a
+  sentence or more: from a single quick word it can't tell.
 - Preferences opens again when a number in the settings file was edited by
   hand into something that isn't one, or into nan or inf. It shows that
   setting's default, which is what TuxTalk uses for it.

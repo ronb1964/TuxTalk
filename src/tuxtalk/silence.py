@@ -589,41 +589,57 @@ def has_no_speech(audio_f32, sample_rate) -> bool:
 # --- A noisy room, for the microphone test ------------------------------------
 # How far a test recording's speech stands over its room, in dB: the 90th
 # percentile of its blocks while talking (from the first to the last 0.1 s
-# clearly louder than the room) over the 10th of the whole recording. Only
-# that stretch is speech: a quick "testing" in an eight-second take left the
-# whole take's 90th percentile in the room, and the test called a quiet room
-# noisy. Measured on 125 recorded readers' clips of 0.3 to 4 s with silence
-# around them, three voice levels, in pink, white, fan, dryer and babble
-# noise (2,400 takes at each level): with the noise 40 dB under the voice it
-# never warned. With it 30 and 20 dB under, it warned in 159 and 348, all
-# of them a second or less of talking, most with a dryer or a TV, whose
-# thumps and voices stand out in so short a take; with 2.5 s or more of
-# talking it never warned there. At 10 dB under the voice it warned in two
-# of five, at 5 dB in most.
-NOISY_ROOM_DB = 16.0
-# Blocks this much louder than the room (+8 dB), and never quieter than
-# speech's minimum, are clearly talking when they last _TALKING_RUN_S...
+# clearly louder than the room's quietest moments) over the room's median
+# outside that stretch. Only that stretch is speech: a quick "testing" in an
+# eight-second take left the whole take's 90th percentile in the room. The
+# room is its median, not its quietest moments: a kitchen, a cafe or traffic
+# goes quiet now and then between its clatter, and against those moments a
+# voice stood well over a room in which hands-free never stopped by itself.
+# Measured with 125 recorded readers in six recorded rooms (DEMAND: kitchen,
+# living room, laundry, office, cafeteria, traffic) and five made ones, at
+# three voice levels; hands-free in those rooms stops by itself with the
+# room 30 dB under the voice, and hardly ever with it 20 dB under. With 2.5 s
+# of talking at a normal level in the recorded rooms it warns in none of 150
+# takes at 40 or 30 dB, 144 at 20 dB and 148 at 10 dB; over the quietest
+# moments (the 10th percentile, at 16 dB) it warned in 0 at 20 dB and 4 at
+# 10. With a second or more of talking, at any level, it warns in 7 of 1,800
+# at 40 dB (one reader's soft first second at the loudest voice), 64 at 30
+# dB, 1,496 at 20 dB.
+NOISY_ROOM_DB = 28.0
+# Blocks this much louder than the room's quietest moments (+8 dB), and never
+# quieter than speech's minimum, are clearly talking when they last
+# _TALKING_RUN_S...
 _TALKING_OVER_ROOM = 2.5
 _TALKING_RUN_S = 0.1
 # ...and talking for less than this, from the first to the last, is too
-# little to tell how far over the room it stands.
-_TALKING_TO_JUDGE_S = 0.3
+# little to tell how far over the room it stands: a take's first fraction of
+# a second is often a word's soft start, and a quiet room was called noisy.
+_TALKING_TO_JUDGE_S = 1.0
+# With less of the room than this outside the talking (talking from Start to
+# Stop), the room is the quietest quarter of the take instead, which the
+# pauses between words reach.
+_ROOM_TO_JUDGE_S = 0.5
 
 
 def speech_over_room_db(audio_f32, sample_rate):
     """How much louder a recording's speech is than its room, in dB, or None
-    for a recording under a second or with too little clear talking to
-    tell. Under NOISY_ROOM_DB the room is noisy for that voice."""
+    with too little clear talking to tell. Under NOISY_ROOM_DB the room is
+    noisy for that voice: hands-free can't tell the end of talking from it."""
     rms = _blocks_rms(audio_f32, sample_rate)
-    if len(rms) * _TAP_BLOCK_S < 1.0:
+    if len(rms) * _TAP_BLOCK_S < _TALKING_TO_JUDGE_S:
         return None
-    room = np.percentile(rms, 10)
-    loud = rms >= max(_MIN_SPEECH_RMS, room * _TALKING_OVER_ROOM)
+    loud = rms >= max(_MIN_SPEECH_RMS, np.percentile(rms, 10) * _TALKING_OVER_ROOM)
     run = max(1, round(_TALKING_RUN_S / _TAP_BLOCK_S))
     starts = np.flatnonzero(np.convolve(loud, np.ones(run, dtype=int), "valid") == run)
     if starts.size == 0:
         return None
-    talking = rms[starts[0]:starts[-1] + run]
-    if len(talking) * _TAP_BLOCK_S < _TALKING_TO_JUDGE_S:
+    first, last = starts[0], starts[-1] + run
+    if (last - first) * _TAP_BLOCK_S < _TALKING_TO_JUDGE_S:
         return None
-    return float(20 * np.log10(max(np.percentile(talking, 90), 1.0) / max(room, 1.0)))
+    outside = np.concatenate([rms[:first], rms[last:]])
+    if len(outside) * _TAP_BLOCK_S >= _ROOM_TO_JUDGE_S:
+        room = np.median(outside)
+    else:
+        room = np.percentile(rms, 25)
+    speech = np.percentile(rms[first:last], 90)
+    return float(20 * np.log10(max(speech, 1.0) / max(room, 1.0)))
