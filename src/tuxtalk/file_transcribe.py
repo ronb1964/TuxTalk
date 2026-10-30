@@ -173,18 +173,15 @@ class FileEngine:
     def reload_words(self):
         """Your Words as they are now: they can change between two files."""
         from . import custom_words
-        try:
-            self.words = custom_words.load()
-        except Exception:
-            pass
+        self.words = custom_words.load()
 
     def close(self):
         close = getattr(self.model, "close", None)
         if close:
             try:
                 close()
-            except Exception as e:
-                logger.debug(f"Closing the file engine: {e}")
+            except Exception as e:      # closing is the last thing it does: nothing to undo
+                logger.info(f"Couldn't close the file engine cleanly: {e}")
 
 
 def engine_settings(cfg):
@@ -211,10 +208,7 @@ def load_engine(cfg):
     if not language:
         language = language_limit.forced_language(limit_to)
         limit_to = () if language else limit_to
-    try:
-        words = custom_words.load()
-    except Exception:
-        words = []
+    words = custom_words.load()
     common = dict(language=language, limit_to=limit_to, words=words)
 
     gpu_failed = False

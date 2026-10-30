@@ -97,7 +97,7 @@ def cached_model_dir():
             hf_hub_download(V3_REPO, name, local_files_only=True)
             for name in V3_FILES
         ]
-    except Exception:
+    except OSError:     # not downloaded: LocalEntryNotFoundError is a FileNotFoundError
         return None
     # All files come from one repo snapshot, so they share a folder.
     return os.path.dirname(paths[0])

@@ -252,8 +252,8 @@ class _CosmicWindows(threading.Thread):
                 sock.settimeout(TIMEOUT)
                 sock.connect(self.path)
                 self._follow(_Wayland(sock))
-        except Exception as e:
-            logger.debug(f"Stopped following COSMIC's windows: {e}")
+        except Exception as e:      # whatever ends it, the focus is unknown from here on
+            logger.info(f"Stopped following COSMIC's windows: {e}")
         finally:
             self.active = None
             self.ready.set()        # nobody waits for an answer that won't come
@@ -519,8 +519,8 @@ def focused_window():
             return _from_cosmic(_wayland_socket(env)), None
         if is_x11_session(env):
             return _from_x11()
-    except Exception as e:
-        logger.debug(f"Could not ask the compositor for the focused window: {e}")
+    except Exception as e:      # an odd answer mustn't stop the typing that asked
+        logger.info(f"Could not ask the compositor for the focused window: {e}")
     return None, None
 
 
@@ -557,6 +557,6 @@ def focused_rect():
         path = env.get("SWAYSOCK") or env.get("I3SOCK")
         if path:
             return _rect_from_i3(path)
-    except Exception as e:
-        logger.debug(f"Could not ask the compositor where the focused window is: {e}")
+    except Exception as e:      # an odd answer mustn't stop the window that asked
+        logger.info(f"Could not ask the compositor where the focused window is: {e}")
     return None

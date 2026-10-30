@@ -117,7 +117,8 @@ def _loads_on_cpu(model_name):
                              local_files_only=True)
         del model
         return True
-    except Exception:
+    except Exception as e:      # whatever stops it, the files are what's wrong
+        logger.info(f"{model_name} doesn't load on the processor either: {e}")
         return False
 
 
@@ -140,7 +141,7 @@ def is_model_cached_fast(model_name):
         def has(name):
             return os.path.isfile(os.path.join(snapshot_path, name))
         return all(map(has, ESSENTIAL_MODEL_FILES)) and any(map(has, VOCABULARY_FILES))
-    except Exception:
+    except OSError:     # not downloaded: LocalEntryNotFoundError is a FileNotFoundError
         return False
 
 
@@ -535,7 +536,6 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
 
     if cached:
         logger.info(f"Model {model_name} already cached, loading directly (no download window)")
-        print(f"Model {model_name} already cached - loading without download")
         try:
             return load_model(model_name, device=device, compute_type=compute_type)
         except Exception as e:
@@ -556,7 +556,6 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
         return None
 
     logger.info(f"Model {model_name} NOT cached - showing download progress dialog")
-    print(f"Model {model_name} NOT cached - will download and show progress")
     settings = Gtk.Settings.get_default()
     if settings:        # for this window and the ones after it
         settings.set_property("gtk-application-prefer-dark-theme", True)

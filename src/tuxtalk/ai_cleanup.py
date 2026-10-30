@@ -419,7 +419,7 @@ def _model_path():
     try:
         from huggingface_hub import hf_hub_download
         return hf_hub_download(MODEL_REPO, MODEL_FILE, local_files_only=True)
-    except Exception:
+    except OSError:     # not downloaded: LocalEntryNotFoundError is a FileNotFoundError
         return None
 
 
@@ -557,9 +557,7 @@ class CorrectionEngine:
                 logger.error("AI cleanup engine exited during startup"
                              + engine_process.launch_failure(proc.returncode, output))
                 return
-            try:
-                engine_process.open_local(f"http://127.0.0.1:{self._port}/health", timeout=1)
-            except Exception:
+            if not engine_process.answers(self._port):
                 time.sleep(0.25)
                 continue
             # One practice request before accepting real ones. The first

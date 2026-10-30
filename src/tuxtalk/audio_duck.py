@@ -245,8 +245,8 @@ class AudioDucker:
             job = self._jobs.get()
             try:
                 job()
-            except Exception as e:
-                logger.debug(f"Audio duck: {e}")
+            except Exception as e:      # one failed turn-down mustn't end the worker
+                logger.info(f"Couldn't turn other sounds down or back: {e}")
 
     def _duck_now(self):
         if self._closing:

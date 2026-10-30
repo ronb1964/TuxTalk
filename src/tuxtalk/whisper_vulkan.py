@@ -175,7 +175,7 @@ def model_path(model_name):
         from huggingface_hub import hf_hub_download
         return hf_hub_download(model_repo(model_name), MODEL_FILES[model_name][0],
                                local_files_only=True)
-    except Exception:
+    except OSError:     # not downloaded: LocalEntryNotFoundError is a FileNotFoundError
         return None
 
 
@@ -474,11 +474,9 @@ class VulkanWhisperModel:
                     raise RuntimeError("the graphics engine stopped while starting"
                                        + engine_process.launch_failure(self._proc.returncode,
                                                                        output))
-                try:
-                    engine_process.open_local(f"http://127.0.0.1:{self._port}/health", timeout=1)
+                if engine_process.answers(self._port):
                     break
-                except Exception:
-                    time.sleep(0.25)
+                time.sleep(0.25)
             else:
                 raise RuntimeError("the graphics engine did not start in time")
             # One short practice run: the first request on a graphics chip pays

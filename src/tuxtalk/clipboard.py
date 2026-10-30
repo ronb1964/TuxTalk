@@ -154,7 +154,7 @@ def _sensitive_supported():
     """wl-copy --sensitive arrived in wl-clipboard 2.3.0 (some distros back-port it)."""
     try:
         return "--sensitive" in _wl_copy_help()
-    except Exception:
+    except (OSError, subprocess.SubprocessError):   # no wl-copy: nothing to mark
         return False
 
 
@@ -335,8 +335,8 @@ class ClipboardKeeper:
                 return
             try:
                 current = _wl_paste(_best_type(_wl_paste_types()) or "text/plain")
-            except Exception:
-                current = None
+            except (OSError, subprocess.SubprocessError):
+                current = None      # unreadable: not known to be the dictation, so left alone
             if current != text.encode("utf-8"):
                 logger.info("Clipboard changed after the paste; leaving it as it is")
                 return
@@ -408,8 +408,8 @@ def _read_text():
         types = _wl_paste_types()
         mime = next((t for t in _TEXT_TYPES if t in types), None)
         return _wl_paste(mime).decode("utf-8", "replace") if mime else None
-    except Exception:
-        return None
+    except (OSError, subprocess.SubprocessError):
+        return None     # callers leave a clipboard they can't read alone
 
 
 class ClipboardUnavailable(Exception):
@@ -444,7 +444,7 @@ def copy_selection(send_copy, wait=COPY_WAIT_S, sleep=None):
             # copied, or a clipboard that can't be read, is left alone.
             try:
                 replaceable = not _wl_paste_types()
-            except Exception:
+            except (OSError, subprocess.SubprocessError):
                 replaceable = False
         else:
             replaceable = current in {s for s in (marker, text, *also) if s is not None}

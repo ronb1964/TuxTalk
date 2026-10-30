@@ -359,8 +359,9 @@ def _build_vulkan_model(settings: Settings):
                 logger.info(f"Model loaded: {settings.model} on vulkan device {device_index}")
                 _record_engine(settings.model, "vulkan")
                 return model
-        except Exception as e:
-            reason = f"the graphics engine failed to start ({e})"
+        except Exception as e:      # any failure here falls back to the processor
+            logger.warning(f"The graphics engine failed to start: {e}")
+            reason = "the graphics engine failed to start"
     logger.warning(f"Vulkan GPU not used for {settings.model}: {reason}; using the processor")
     notify_module.notify("Couldn't use the graphics card",
                 "TuxTalk is using the processor for now. Choose the device again in "
@@ -391,8 +392,9 @@ def _build_parakeet_gpu_model(settings: Settings):
             logger.info(f"Model loaded: {PARAKEET_MODEL} on vulkan device {device_index}")
             _record_engine(PARAKEET_MODEL, "vulkan")
             return model
-    except Exception as e:
-        reason = f"the graphics helper failed to start ({e})"
+    except Exception as e:          # any failure here falls back to the processor
+        logger.warning(f"Parakeet's graphics helper failed to start: {e}")
+        reason = "the graphics helper failed to start"
     logger.warning(f"Vulkan GPU not used for Parakeet: {reason}; using the processor")
     notify_module.notify("Couldn't run Parakeet on the graphics card",
                 "TuxTalk is using the processor for now. Choose the device again in "
