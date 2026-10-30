@@ -19,9 +19,9 @@ def test_new_indicator_fields_have_approved_defaults():
 
 
 def test_valid_sets_exist():
-    assert {"orb", "waveform", "bars", "radial"} == config.VALID_INDICATOR_STYLES
+    assert config.VALID_INDICATOR_STYLES == {"orb", "waveform", "bars", "radial"}
     # There are two choices: match the desktop accent, or pick a color.
-    assert {"system", "custom"} == config.VALID_COLOR_MODES
+    assert config.VALID_COLOR_MODES == {"system", "custom"}
 
 
 def test_legacy_cyan_mode_migrates_to_custom_classic_cyan():

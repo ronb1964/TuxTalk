@@ -381,7 +381,9 @@ def test_the_helper_starts_with_nothing_but_the_standard_library():
     """The service runs it with the system's python3, isolated and without
     site-packages (secure_input's unit), outside TuxTalk: with one import
     from anywhere else it never starts, and F8 is dead. Asked for an option
-    it doesn't know, it gets past its imports to its usage line."""
+    it doesn't know, it gets past its imports to its usage line. Only the
+    top-level imports are tried this way; the helper has none inside its
+    functions, and its docstring says to keep it so."""
     import subprocess
     from tuxtalk import secure_input
     if not os.path.exists(secure_input.PYTHON):
