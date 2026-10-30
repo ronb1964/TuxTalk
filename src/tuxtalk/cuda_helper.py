@@ -428,6 +428,8 @@ def show_cuda_download_dialog(parent=None, on_success_callback=None):
     refresh Preferences. Returns True on success, False on failure and None
     if the user cancelled.
     """
+    # GTK only here: recommend.py and the dictation service read this
+    # module's sizes and detection without loading it.
     from .download_progress_dialog import CUDA_TASK, DownloadTask, run_downloads
     from .download_utils import failure_reason
     task = DownloadTask(CUDA_TASK, f"~{DOWNLOAD_SIZE_TEXT}", download_cuda_libraries)

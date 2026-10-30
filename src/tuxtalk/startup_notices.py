@@ -76,11 +76,10 @@ def _show_rename_notice_once():
     folder = os.path.dirname(config.CONFIG_PATH)
     if not rename_migration.notice_pending(folder):
         return
-    show_message(None, Gtk.MessageType.INFO, "TalkType is now TuxTalk",
-                 "Same app, new name. Your settings, models, snippets and stats all came "
-                 "across. Look for TuxTalk in your app menu from now on.\n\n"
-                 "Why the change: another company owns the name TalkType for dictation "
-                 "software.",
-                 [("Got it", Gtk.ResponseType.OK)], keep_above=True)
+    show_message(None, Gtk.MessageType.INFO, "TalkType is now TuxTalk", "\n\n".join((
+        "Same app, new name. Your settings, models, snippets and stats all came "
+        "across. Look for TuxTalk in your app menu from now on.",
+        "Why the change: another company owns the name TalkType for dictation "
+        "software.")), [("Got it", Gtk.ResponseType.OK)], keep_above=True)
     rename_migration.notice_shown(folder)
     logger.info("Rename to TuxTalk: showed the one-time notice")

@@ -314,6 +314,8 @@ def run_package_update(release, install_type, restart=None, *, quitting=lambda: 
             progress("Waiting for your password to install…", said[1])
             return update_checker.install_package_update(path, install_type)
         except Exception as e:
+            # Caught here to name the error in the box; run_with_progress
+            # would hand finish only None.
             logger.exception("Package update failed")
             return False, f"The update failed: {e}\n\nPlease try again or update from GitHub."
 
