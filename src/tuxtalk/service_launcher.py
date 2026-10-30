@@ -441,8 +441,8 @@ def release_desktop_hotkeys() -> None:
         from . import cosmic_hotkeys, kwin_hotkeys
         kwin_hotkeys.release()
         cosmic_hotkeys.release()
-    except Exception as e:
-        logger.debug(f"Could not release the desktop's hotkeys: {e}")
+    except Exception as e:      # the quit goes on; the next start claims the keys afresh
+        logger.info(f"Could not release the desktop's hotkeys: {e}")
 
 
 # The GDK_BACKEND the service's own (SERVICE_GDK_BACKEND) took the place of,

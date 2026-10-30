@@ -445,7 +445,7 @@ def input_access_diagnosis() -> str:
     in_session = group.gr_gid in os.getgroups()
     try:
         username = pwd.getpwuid(os.getuid()).pw_name
-    except Exception:
+    except KeyError:    # no passwd entry for this uid (a container, say)
         username = os.environ.get("USER", "")
     in_system = username in group.gr_mem
 

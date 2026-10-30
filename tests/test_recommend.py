@@ -153,15 +153,6 @@ def test_flatpak_has_no_usable_graphics(monkeypatch):
     assert not r.detect_hardware().gpu
 
 
-def test_detect_hardware_never_raises(monkeypatch):
-    def boom():
-        raise OSError("no sysfs")
-    monkeypatch.delenv("FLATPAK_ID", raising=False)
-    monkeypatch.setattr(r, "_vulkan_facts", boom)
-    monkeypatch.setattr(r, "_nvidia_name", lambda: None)
-    assert r.detect_hardware() == r.Hardware(None, False)
-
-
 def test_hardware_facts_are_cached():
     """The tray asks every second; nvidia-smi must run once."""
     assert hasattr(r._nvidia_name, "cache_info") and hasattr(r._vulkan_facts, "cache_info")

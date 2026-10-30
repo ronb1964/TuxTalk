@@ -37,7 +37,7 @@ def detect_nvidia_gpu():
         result = subprocess.run(['nvidia-smi', '--query-gpu=name', '--format=csv,noheader'],
                               capture_output=True, text=True, timeout=NVIDIA_SMI_TIMEOUT)
         return result.returncode == 0 and result.stdout.strip()
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except (OSError, subprocess.TimeoutExpired):    # not installed, not runnable, or hung
         return False
 
 def _has_required_libs(names) -> bool:

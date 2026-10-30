@@ -44,6 +44,13 @@ def test_detect_nvidia_gpu_no_nvidia_smi(mock_run):
     assert result is False
 
 
+@patch('subprocess.run', side_effect=PermissionError)
+def test_an_nvidia_smi_that_cannot_run_means_no_nvidia_card(mock_run):
+    """A broken driver install leaves nvidia-smi without its execute bit:
+    no NVIDIA card, rather than an error out of every caller."""
+    assert detect_nvidia_gpu() is False
+
+
 @patch('subprocess.run')
 def test_detect_nvidia_gpu_timeout(mock_run):
     """Test GPU detection handles timeout gracefully"""
