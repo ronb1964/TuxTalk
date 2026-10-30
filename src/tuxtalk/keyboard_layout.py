@@ -562,8 +562,8 @@ def _x11_layout():
         return None
     try:
         group = _x11_active_group() or 0
-    except Exception as e:
-        logger.debug(f"Could not read the active X11 layout group: {e}")
+    except Exception as e:      # no libX11 to ask: the first layout listed
+        logger.info(f"Could not read the active X11 layout group: {e}")
         group = 0
     variants = [v.strip() for v in (fields.get("variant") or "").split(",")]
     # A layout without a variant of its own has none; the first layout's
@@ -620,12 +620,9 @@ def active_layout():
                 found = _x11_layout()
         if found and found[0]:
             return found
-    except Exception as e:
-        logger.debug(f"Could not read the keyboard layout from the desktop: {e}")
-    try:
-        return _system_layout()
-    except Exception:
-        return None
+    except Exception as e:      # an odd desktop answer: the system default is next
+        logger.info(f"Could not read the keyboard layout from the desktop: {e}")
+    return _system_layout()
 
 
 US = ("us", "", None)
@@ -684,7 +681,9 @@ def shortcut_keycode(letter):
             entry = planner_for(layout)._keys.get(_lib().xkb_utf32_to_keysym(ord(letter)))
             if entry and not entry[1] and not entry[2]:     # no Shift, no AltGr
                 return entry[0]
-        except Exception as e:
+        except (OSError, ValueError) as e:
+            # No libxkbcommon, or a layout it doesn't know: the US key, as
+            # typing falls back to US there too.
             logger.debug(f"Could not find {letter!r} on the {layout} layout: {e}")
     return _US_LETTER_KEYS[letter]
 

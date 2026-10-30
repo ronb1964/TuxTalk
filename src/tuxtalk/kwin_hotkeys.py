@@ -213,14 +213,14 @@ def _unregister_ours(bus) -> None:
     try:
         names = [str(n) for n in bus.call("shortcutNames")]
     except Exception as e:
-        logger.debug(f"Could not list KWin shortcuts: {e}")
+        logger.info(f"Could not list KWin shortcuts: {e}")
         return
     for name in names:
         if name.startswith((SHORTCUT_PREFIX,) + OLD_SHORTCUT_PREFIXES):
             try:
                 bus.call("unregister", "kwin", name)
             except Exception as e:
-                logger.debug(f"Could not unregister KWin shortcut {name}: {e}")
+                logger.info(f"Could not unregister KWin shortcut {name}: {e}")
 
 
 # Pauses before reading KWin's shortcuts again, about a second in all. KWin
@@ -334,7 +334,7 @@ def _app_shortcut_clashes(bus, shortcuts) -> dict:
     try:
         paths = [str(p) for p in bus.call("allComponents") or []]
     except Exception as e:
-        logger.debug(f"Could not list KDE's shortcut components: {e}")
+        logger.info(f"Could not list KDE's shortcut components: {e}")
         return clashes
     for path in paths:
         if path == KWIN_COMPONENT_PATH:
@@ -342,7 +342,7 @@ def _app_shortcut_clashes(bus, shortcuts) -> dict:
         try:
             infos = bus.call("componentShortcuts", path) or []
         except Exception as e:
-            logger.debug(f"Could not read KDE shortcuts of {path}: {e}")
+            logger.info(f"Could not read KDE shortcuts of {path}: {e}")
             continue
         for info in infos:
             unique, friendly = str(info[2]), str(info[3]) or str(info[1])
@@ -354,7 +354,8 @@ def _app_shortcut_clashes(bus, shortcuts) -> dict:
             try:
                 live = (_desktop_file_exists(unique) if unique.endswith(".desktop")
                         else bool(bus.call("componentIsActive", path)))
-            except Exception:
+            except Exception as e:      # not known to be running: no clash to report
+                logger.info(f"Could not tell whether {unique} is running: {e}")
                 live = False
             if live:
                 for key in hits:
@@ -373,7 +374,7 @@ def _log_refused(bus, shortcuts) -> list:
             #  keys, default keys), as read back from Plasma 6.7.4.
             got = {str(i[0]): list(i[6]) for i in infos}
         except Exception as e:
-            logger.debug(f"Could not read back KWin shortcuts: {e}")
+            logger.info(f"Could not read back KWin shortcuts: {e}")
             return []
         missing = [s for s in shortcuts if not got.get(s[0])]
         if not missing or not waits:
@@ -398,7 +399,7 @@ def claim(cfg, bus=None) -> bool:
     try:
         bus = bus or session_bus()
     except Exception as e:
-        logger.debug(f"No session bus for KWin hotkeys: {e}")
+        logger.info(f"No session bus for KWin hotkeys: {e}")
         return False
     release(bus)
     if not shortcuts:
@@ -430,11 +431,11 @@ def release(bus=None) -> None:
     try:
         bus = bus or session_bus()
     except Exception as e:
-        logger.debug(f"No session bus for KWin hotkeys: {e}")
+        logger.info(f"No session bus for KWin hotkeys: {e}")
         return
     for plugin in (SCRIPT_PLUGIN_NAME,) + OLD_SCRIPT_PLUGIN_NAMES:
         try:
             bus.call("unloadScript", plugin)
         except Exception as e:
-            logger.debug(f"Could not unload the KWin hotkey script {plugin}: {e}")
+            logger.info(f"Could not unload the KWin hotkey script {plugin}: {e}")
     _unregister_ours(bus)

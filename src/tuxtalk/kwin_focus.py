@@ -221,8 +221,8 @@ def start(bus) -> bool:
     for plugin in OLD_SCRIPT_PLUGIN_NAMES + (SCRIPT_PLUGIN_NAME,):
         try:
             bus.call("unloadScript", plugin)
-        except Exception as e:
-            logger.debug(f"No previous KWin focus script {plugin} to unload: {e}")
+        except Exception as e:      # KWin didn't answer; loading says whether it's there
+            logger.info(f"Could not unload a previous KWin focus script {plugin}: {e}")
 
     try:
         load_and_start(bus, path, SCRIPT_PLUGIN_NAME)
@@ -241,5 +241,5 @@ def stop(bus) -> None:
     for plugin in (SCRIPT_PLUGIN_NAME,) + OLD_SCRIPT_PLUGIN_NAMES:
         try:
             bus.call("unloadScript", plugin)
-        except Exception as e:
-            logger.debug(f"Could not unload the KWin focus script {plugin}: {e}")
+        except Exception as e:      # the quit goes on; the next start unloads it first
+            logger.info(f"Could not unload the KWin focus script {plugin}: {e}")

@@ -123,14 +123,14 @@ class MediaPauser:
             job = self._jobs.get()
             try:
                 job()
-            except Exception as e:
-                logger.debug(f"Media pause: {e}")
+            except Exception as e:      # one failed pause mustn't end the worker
+                logger.info(f"Couldn't pause or resume other media: {e}")
 
     def _status(self, name):
         try:
             return self._bus.playback_status(name)
         except Exception as e:
-            logger.debug(f"Media pause: no answer from {name}: {e}")
+            logger.info(f"Media pause: no answer from {name}: {e}")
             return None
 
     def _pause_now(self):
@@ -143,7 +143,7 @@ class MediaPauser:
             try:
                 self._bus.call(name, "Pause")
             except Exception as e:
-                logger.debug(f"Media pause: could not pause {name}: {e}")
+                logger.info(f"Media pause: could not pause {name}: {e}")
                 continue
             if name not in self._paused:
                 self._paused.append(name)
@@ -158,4 +158,4 @@ class MediaPauser:
                 self._bus.call(name, "Play")
                 logger.info(f"Resumed {name[len(MPRIS_PREFIX):]}")
             except Exception as e:
-                logger.debug(f"Media pause: could not resume {name}: {e}")
+                logger.info(f"Media pause: could not resume {name}: {e}")

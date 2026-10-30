@@ -686,3 +686,10 @@ def test_the_shortcuts_tuxtalk_presses_use_the_letter_on_the_users_keyboard(
     assert keyboard_output.ctrl_keys(letter) == [(29, 1), (key, 1), (key, 0), (29, 0)]
     assert keyboard_output.ctrl_keys(letter, shift=True) == [(42, 1), (29, 1), (key, 1), (key, 0),
                                                   (29, 0), (42, 0)]
+
+
+def test_a_shortcut_on_a_layout_libxkbcommon_doesnt_know_uses_the_us_key(monkeypatch):
+    """A custom layout: Ctrl+V goes out on the US V key, as its typing goes
+    out as US, instead of the paste failing."""
+    monkeypatch.setattr(kl, "active_layout", lambda: ("no-such-layout", "", ""))
+    assert kl.shortcut_keycode("v") == 47

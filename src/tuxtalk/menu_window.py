@@ -115,6 +115,7 @@ class MenuWindow:
                 add.connect("clicked", lambda _b: t._launch_preferences(tab="advanced"))
                 box.pack_start(add, False, False, 0)
 
+        self._refresh_failed = False    # logged once: it runs every second
         self.refresh()
         # Keep the switch and the model line current, as the tray menu is.
         self._timer = GLib.timeout_add_seconds(1, self.refresh)
@@ -178,9 +179,11 @@ class MenuWindow:
             self.status_label.set_markup(
                 "<b>Dictation is on</b>" if running else "<b>Dictation is off</b>")
             self.engine_label.set_text(self.tray.menu.engine_item.get_label())
-        except Exception as e:
+        except Exception as e:      # the timer keeps going: the next second may work
             self._updating = False
-            logger.debug(f"Menu window refresh failed: {e}")
+            if not self._refresh_failed:
+                logger.warning(f"Menu window refresh failed: {e}")
+            self._refresh_failed = True
         return True
 
     def _on_switch(self, switch, _pspec):

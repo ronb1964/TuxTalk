@@ -64,8 +64,8 @@ def restore(saved):
             os.remove(_backup_path())
         except FileNotFoundError:
             pass
-        except Exception as e:
-            logger.debug(f"Could not remove the keybinding backup: {e}")
+        except OSError as e:
+            logger.info(f"Could not remove the keybinding backup: {e}")
     return all_back
 
 
@@ -101,8 +101,8 @@ def disable_for_hotkey_test():
         saved = {key: subprocess.check_output(["gsettings", "get", SCHEMA, key],
                                               text=True, timeout=5).strip()
                  for key in KEYS}
-    except Exception as e:
-        logger.debug(f"Could not read GNOME keybindings: {e}")
+    except (OSError, subprocess.SubprocessError) as e:
+        logger.info(f"Could not read GNOME keybindings: {e}")
         return None
     try:
         from .config import write_text_atomic
