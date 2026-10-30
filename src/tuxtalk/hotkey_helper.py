@@ -197,8 +197,8 @@ MAX_VIRTUAL_KEYBOARDS = 8      # made by programs; real keyboards always have ro
 HELLO_DEADLINE_S = 5.0
 RESCAN_S = 2.0
 # How long a keyboard whose reads failed with an unexpected error is left
-# alone. Opened again at each scan it failed again each time, logging; skipped
-# for good, a built-in keyboard (never plugged in again) stayed dead.
+# alone: long enough not to fill the log with a failure at every scan, short
+# enough that a built-in keyboard, never plugged in again, comes back.
 UNREADABLE_RETRY_S = 300.0
 HIDE_MAX_S = 15 * 60          # a held keyboard comes back on release, and never later than this
 INJECTED_TTL_S = 2.0
@@ -538,8 +538,10 @@ class Helper:
             names = sorted(n for n in os.listdir(self.input_dir) if n.startswith("event"))
         except OSError:
             return
-        for name in names:
-            path = os.path.join(self.input_dir, name)
+        paths = [os.path.join(self.input_dir, name) for name in names]
+        for path in self.unreadable.keys() - set(paths):
+            del self.unreadable[path]           # gone: nothing left to wait for
+        for path in paths:
             if path not in self.keyboards:
                 self.open_if_keyboard(path)
 

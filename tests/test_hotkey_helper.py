@@ -1180,6 +1180,17 @@ def test_a_keyboard_that_failed_to_read_is_tried_again_after_a_while(setup, monk
     assert opened == [str(node)]
 
 
+def test_an_unreadable_keyboard_unplugged_is_forgotten(setup, monkeypatch, tmp_path):
+    helper, kb, _connect, _say, _heard, _seat = setup
+    node = tmp_path / "input" / "event5"
+    _failing_keyboard_at(node, helper, kb, monkeypatch)
+    helper.read_keyboard(kb)
+    assert str(node) in helper.unreadable
+    node.unlink()
+    helper.scan()
+    assert helper.unreadable == {}
+
+
 # --- which devices are keyboards -----------------------------------------------------------
 
 _LETTERS = set(range(16, 26)) | set(range(30, 39))      # Q..P, A..L
