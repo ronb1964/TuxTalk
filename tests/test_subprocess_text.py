@@ -12,9 +12,10 @@ check_output, check_call and Popen, under any name an import or a
 `run=subprocess.run` default gives them; text mode from text=,
 universal_newlines= (anything but a literal False or None) or encoding=;
 and .decode() of a call's .stdout or .stderr or of check_output() itself.
-Such a call passes when it has errors= set to anything but "strict" or
-None, or sits in a try whose handler catches ValueError (or wider) and
-has no raise. A call with **options and no errors= is reported, since
+Such a call passes when it has errors= (for .decode(), also its second
+argument) set to anything but "strict" or None, or sits in a try whose
+first handler that catches UnicodeDecodeError (ValueError or wider) has
+no raise. A call with **options and no errors= is reported, since
 the check can't see inside the dictionary.
 
 What it can't see: output decoded later from a variable (stdout=PIPE, then
@@ -66,19 +67,23 @@ def _off(value):
     return isinstance(value, ast.Constant) and value.value in (False, None)
 
 
+def _strict_errors(value):
+    """Whether an errors= value (None: not given) decodes strictly."""
+    return value is None or (isinstance(value, ast.Constant) and value.value in (None, "strict"))
+
+
 def _strict(node, modules, functions):
     """Whether *node* is a call that decodes a program's output strictly."""
     kw = {k.arg: k.value for k in node.keywords}
     if _is_subprocess_call(node, modules, functions):
         if "errors" in kw:
-            return _off(kw["errors"]) or (isinstance(kw["errors"], ast.Constant)
-                                          and kw["errors"].value == "strict")
+            return _strict_errors(kw["errors"])
         text = any(k in kw and not _off(kw[k]) for k in ("text", "universal_newlines"))
         return text or "encoding" in kw or None in kw      # None: **options
     f = node.func
     if not (isinstance(f, ast.Attribute) and f.attr == "decode"):
         return False
-    if len(node.args) > 1 or "errors" in kw:
+    if not _strict_errors(kw.get("errors", node.args[1] if len(node.args) > 1 else None)):
         return False
     source = f.value
     if isinstance(source, ast.Attribute) and source.attr in ("stdout", "stderr"):
@@ -86,14 +91,19 @@ def _strict(node, modules, functions):
     return isinstance(source, ast.Call) and _is_subprocess_call(source, modules, functions)
 
 
-def _guards(handler):
-    """Whether *handler* catches a decoding error and lets it go."""
+def _catches_decoding(handler):
     caught = handler.type
     items = [] if caught is None else (caught.elts if isinstance(caught, ast.Tuple) else [caught])
     names = {getattr(c, "attr", None) or getattr(c, "id", "") for c in items}
-    catches = caught is None or bool(names & _CATCHES_DECODING)
-    return catches and not any(isinstance(n, ast.Raise) for b in handler.body
-                               for n in ast.walk(b))
+    return caught is None or bool(names & _CATCHES_DECODING)
+
+
+def _guards(handlers):
+    """Whether a try with *handlers* lets a decoding error go: the first
+    handler that catches it decides, and it mustn't raise."""
+    first = next((h for h in handlers if _catches_decoding(h)), None)
+    return first is not None and not any(isinstance(n, ast.Raise) for b in first.body
+                                         for n in ast.walk(b))
 
 
 def strict_unguarded(source):
@@ -105,7 +115,7 @@ def strict_unguarded(source):
 
     def visit(node, guarded):
         if isinstance(node, ast.Try):
-            safe = guarded or any(_guards(h) for h in node.handlers)
+            safe = guarded or _guards(node.handlers)
             for child in node.body:
                 visit(child, safe)
             for child in node.handlers + node.orelse + node.finalbody:
@@ -145,12 +155,20 @@ subprocess.run(['f'], text=mode)
 subprocess.run(['g'], **options)
 subprocess.run(['h'], capture_output=True).stdout.decode()
 co(['i']).decode('utf-8')
+co(['k']).decode(errors='strict')
+co(['l']).decode('utf-8', 'strict')
+try:
+    co(['m'], text=True)
+except UnicodeDecodeError:
+    raise
+except ValueError:
+    pass
 
 
 def ask(run=subprocess.run):
     return run(['j'], text=True)
 '''
-    assert strict_unguarded(source) == [6, 7, 8, 9, 10, 11, 12, 13, 14, 18]
+    assert strict_unguarded(source) == [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 26]
 
 
 def test_the_check_lets_loose_reads_guarded_reads_and_other_runs_pass():
