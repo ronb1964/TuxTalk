@@ -5,9 +5,7 @@ When Hugging Face's file list can't be fetched, a Whisper model's files are
 fetched by name instead. The window must still close then, rather than sit
 until the user presses Cancel, which throws the finished model away.
 """
-import sys
 import threading
-import types
 
 import pytest
 
@@ -94,19 +92,51 @@ def test_the_window_says_it_loads_the_model_once_the_files_are_in(monkeypatch):
     assert _Text.shown[-3:] == ["95%", "Loading model...", "100%"]
 
 
-def test_a_failed_download_says_why(monkeypatch):
+def _failed_startup_download(monkeypatch, reason):
+    """The start-up download of Whisper Small failing with *reason* (its
+    last report, at 0 %): what its error window says."""
     errors = []
     monkeypatch.setattr(mh, "is_model_cached_fast", lambda name: False)
     monkeypatch.setattr(mh, "make_model_download_func", lambda *a, **k: (
-        lambda report, cancel: report("Download failed: Name or service not known", 0)))
+        lambda report, cancel: report(reason, 0)))
     monkeypatch.setattr(mh, "load_model", lambda *a, **k: pytest.fail("loaded"))
-    monkeypatch.setattr(mh, "_show_download_failed",
-                        lambda parent, name, error: errors.append(str(error)))
+    monkeypatch.setattr(mh, "_show_download_failed", lambda parent, name, error: errors.append(
+        mh._download_failed_text(name, error)))
     _quiet_window(monkeypatch)
     monkeypatch.setattr(mh.GLib, "timeout_add", lambda ms, fn, *a: fn(*a))
-
     assert mh.download_model_with_progress("small", show_confirmation=False) is None
-    assert errors == ["Download failed: Name or service not known"]
+    return errors
+
+
+def test_a_failed_download_says_why(monkeypatch):
+    [text] = _failed_startup_download(monkeypatch, "Download failed: Name or service not known")
+    assert "Error: Download failed: Name or service not known" in text
+    assert text.endswith("Check your internet connection and try again.")
+
+
+def test_a_disk_space_refusal_asks_for_room_not_a_connection(monkeypatch):
+    """It said to check the internet connection for a full disk too."""
+    [text] = _failed_startup_download(
+        monkeypatch, "Not enough disk space: model needs ~0.5 GB free, only 0.1 GB available")
+    assert "Not enough disk space" in text
+    assert text.endswith("Free up some disk space and try again.")
+
+
+def test_parakeet_not_yet_downloaded_is_fetched_then_loaded(monkeypatch):
+    """The start-up download of Parakeet goes through Parakeet Ultra's
+    download, then loads the model as for Whisper."""
+    from tuxtalk import parakeet_ultra
+    from tuxtalk.parakeet_engine import PARAKEET_MODEL
+    asked = []
+    monkeypatch.setattr(mh, "is_model_cached_fast", lambda name: False)
+    monkeypatch.setattr(parakeet_ultra, "make_download_func", lambda device: asked.append(
+        device) or (lambda report, cancel: report("Done", 100) or True))
+    monkeypatch.setattr(mh, "load_model", lambda name, **k: f"loaded {name}")
+    _quiet_window(monkeypatch)
+    monkeypatch.setattr(mh.GLib, "timeout_add", lambda ms, fn, *a: fn(*a))
+    result = mh.download_model_with_progress(PARAKEET_MODEL, show_confirmation=False)
+    assert result == f"loaded {PARAKEET_MODEL}" and asked == ["cpu"]
+    assert "Loading model..." in _Text.shown
 
 
 def test_a_cancel_just_after_the_download_keeps_the_model(monkeypatch):

@@ -17,6 +17,18 @@ from tuxtalk.model_helper import ESSENTIAL_MODEL_FILES, _download_is_usable
 _LISTED = (*ESSENTIAL_MODEL_FILES, "vocabulary.txt", "README.md", ".gitattributes")
 
 
+def test_large_v3_without_its_preprocessor_file_is_not_downloaded():
+    """It loaded with 80 mel bins where it needs 128, and every dictation failed."""
+    listed = (*_LISTED, "preprocessor_config.json")
+    assert _download_is_usable(["preprocessor_config.json"], listed) is False
+
+
+def test_a_model_without_a_preprocessor_file_is_still_downloaded():
+    """Asked for by name (no file list), the smaller models haven't got one."""
+    assert _download_is_usable(["preprocessor_config.json"], _LISTED,
+                               absent=["preprocessor_config.json"]) is True
+
+
 def test_a_missing_readme_does_not_fail_the_download():
     assert _download_is_usable(["README.md"], _LISTED) is True
 
@@ -150,9 +162,11 @@ MB = 1024 * 1024
 
 
 @pytest.fixture
-def hub(monkeypatch):
-    """A fake Hugging Face for Whisper Small: (files fetched, files cached)."""
+def hub(monkeypatch, tmp_path):
+    """A fake Hugging Face for Whisper Small, its cache in *tmp_path*:
+    (files fetched, files cached)."""
     import huggingface_hub
+    import huggingface_hub.constants
     from tuxtalk import download_utils
     from tuxtalk import model_helper as M
     fetched, cached = [], set()
@@ -163,15 +177,16 @@ def hub(monkeypatch):
                         lambda repo, name: f"/cache/{name}" if name in cached else None)
     monkeypatch.setattr(huggingface_hub, "hf_hub_download",
                         lambda repo_id, filename, **k: fetched.append(filename))
+    monkeypatch.setattr(huggingface_hub.constants, "HF_HUB_CACHE", str(tmp_path))
     monkeypatch.setattr(download_utils, "free_space_bytes", lambda path: 100 * MB)
     monkeypatch.setattr(M, "_RETRY_WAITS", (0.0, 0.0))
     return fetched, cached
 
 
-def _download(reports):
+def _download(reports, force=False):
     import threading
     from tuxtalk import model_helper as M
-    return M.make_model_download_func("small")(lambda text, percent: reports.append(
+    return M.make_model_download_func("small", force=force)(lambda text, percent: reports.append(
         (text, percent)), threading.Event())
 
 
@@ -182,6 +197,32 @@ def test_files_already_downloaded_need_no_more_disk_space(hub):
     cached.add("model.bin")                    # 400 MB here already, 100 MB free
     assert _download([]) is True
     assert fetched == ["model.bin", "config.json", "tokenizer.json", "vocabulary.txt"]
+
+
+def test_a_download_cut_off_partway_goes_on_when_the_rest_fits(hub, tmp_path):
+    """350 of model.bin's 400 MB were in Hugging Face's ".incomplete" part,
+    which it resumes, but the whole 400 MB was asked for and refused with
+    100 MB free."""
+    import os
+    fetched = hub[0]
+    blobs = tmp_path / "models--Systran--faster-whisper-small" / "blobs"
+    blobs.mkdir(parents=True)
+    with open(blobs / "0123abcd.incomplete", "wb") as part:
+        os.truncate(part.fileno(), 350 * MB)      # sparse: takes no room here
+    assert _download([]) is True
+    assert "model.bin" in fetched
+
+
+def test_fetching_a_broken_model_again_needs_room_for_a_whole_new_copy(hub):
+    """A damaged copy is fetched afresh beside the old one. Counted as
+    cached, it passed the check on a nearly full disk and then filled it."""
+    from tuxtalk.download_utils import failure_reason
+    fetched, cached = hub
+    cached.update({"model.bin", "config.json", "tokenizer.json", "vocabulary.txt"})
+    reports = []
+    assert _download(reports, force=True) is False
+    assert failure_reason(*reports[-1]).startswith("Not enough disk space")
+    assert fetched == []
 
 
 def test_too_little_room_for_the_files_still_to_come_is_said(hub):
@@ -211,7 +252,7 @@ def test_an_unexpected_error_says_why_in_its_window(hub, monkeypatch):
     from tuxtalk import model_helper as M
     from tuxtalk.download_utils import failure_reason
 
-    def broken(repo, files):
+    def broken(repo, files, force=False):
         raise RuntimeError("the cache folder went away")
     monkeypatch.setattr(M, "_disk_space_problem", broken)
     reports = []

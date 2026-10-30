@@ -26,19 +26,26 @@ logger = setup_logger(__name__)
 ESSENTIAL_MODEL_FILES = ("model.bin", "config.json", "tokenizer.json")
 # A Whisper model has one of these (.json for large-v3) and won't load without it.
 VOCABULARY_FILES = ("vocabulary.txt", "vocabulary.json")
+# Only large-v3 has it, and without it faster-whisper loads that model with
+# 80 mel bins where it needs 128, so every dictation fails.
+PREPROCESSOR_FILE = "preprocessor_config.json"
 
 
-def _download_is_usable(failed_files, asked_for) -> bool:
+def _download_is_usable(failed_files, asked_for, absent=()) -> bool:
     """True if a Whisper model can still be loaded despite *failed_files*,
-    of the files *asked_for*: no essential file failed, and of the
-    vocabulary files asked for, one came. A model has only one, so asked
-    for both by name (no file list), the other one always fails.
+    of the files *asked_for*: no essential file failed (the preprocessor
+    file among them, unless it's one of the files the repo turned out not
+    to have, *absent*), and of the vocabulary files asked for, one came. A
+    model has only one, so asked for both by name (no file list), the other
+    one always fails.
 
     Paths may be nested (list_repo_tree is recursive), so match on the file
     name rather than the whole path.
     """
     failed = {os.path.basename(p) for p in failed_files}
-    if failed & set(ESSENTIAL_MODEL_FILES):
+    essential = {*ESSENTIAL_MODEL_FILES, PREPROCESSOR_FILE} - {
+        os.path.basename(p) for p in absent}
+    if failed & essential:
         return False
     vocabulary = {os.path.basename(p) for p in asked_for} & set(VOCABULARY_FILES)
     return not vocabulary or bool(vocabulary - failed)
@@ -160,23 +167,48 @@ def _listed_files(repo, model_name, only_files):
     return files
 
 
-def _disk_space_problem(repo, files):
+def _disk_space_problem(repo, files, force=False):
     """Why the files still to fetch won't fit on the cache's disk, or None.
     Checked up front, so a full disk gives a clear message rather than a
-    per-file error halfway through. Files already in the cache need no more
-    room, so a download picked up again isn't refused for them. HF_HUB_CACHE
-    follows HF_HOME, HF_HUB_CACHE and XDG_CACHE_HOME (set inside the
-    Flatpak), so this measures the disk the files land on."""
+    per-file error halfway through. HF_HUB_CACHE follows HF_HOME,
+    HF_HUB_CACHE and XDG_CACHE_HOME (set inside the Flatpak), so this
+    measures the disk the files land on.
+
+    A download picked up again isn't refused for what it has: files already
+    in the cache need no more room, and Hugging Face resumes a file's
+    ".incomplete" part. *force* fetches every file afresh, a whole new copy
+    beside the old one, with no part resumed, so then all of them count."""
     from huggingface_hub import try_to_load_from_cache
     from huggingface_hub.constants import HF_HUB_CACHE
     from .download_utils import free_space_bytes
-    needed = sum(size for name, size in files
-                 if not isinstance(try_to_load_from_cache(repo, name), str)) * 1.1
+    if force:
+        needed = sum(size for _, size in files)
+    else:
+        needed = sum(size for name, size in files
+                     if not isinstance(try_to_load_from_cache(repo, name), str))
+        needed = max(0, needed - _partial_bytes(HF_HUB_CACHE, repo))
+    needed *= 1.1
     free = free_space_bytes(HF_HUB_CACHE)
     if not (needed and free and free < needed):
         return None
     return (f"Not enough disk space: model needs ~{needed / 1024 ** 3:.1f} GB free, "
             f"only {free / 1024 ** 3:.1f} GB available")
+
+
+def _partial_bytes(cache, repo):
+    """The bytes of *repo*'s files a cut-off download left in the cache, as
+    ".incomplete" blobs, which Hugging Face goes on from."""
+    from huggingface_hub.file_download import repo_folder_name
+    blobs = os.path.join(cache, repo_folder_name(repo_id=repo, repo_type="model"), "blobs")
+    try:
+        with os.scandir(blobs) as entries:
+            return sum(entry.stat().st_size for entry in entries
+                       if entry.name.endswith(".incomplete") and entry.is_file())
+    except FileNotFoundError:
+        return 0
+    except OSError as e:
+        logger.info(f"Couldn't look for a partial download of {repo}: {e}")
+        return 0
 
 
 def _fetch_unlisted(repo, model_name, progress_callback, cancel_event, force=False):
@@ -185,7 +217,7 @@ def _fetch_unlisted(repo, model_name, progress_callback, cancel_event, force=Fal
     progress, since their sizes aren't known. Never through WhisperModel(),
     which would load the model as well: its caller loads it when it needs it."""
     progress_callback("Downloading model files...", 5)
-    names = (*ESSENTIAL_MODEL_FILES, *VOCABULARY_FILES, "preprocessor_config.json")
+    names = (*ESSENTIAL_MODEL_FILES, *VOCABULARY_FILES, PREPROCESSOR_FILE)
     return _fetch_files(repo, model_name, [(name, 0) for name in names], False,
                         progress_callback, cancel_event, force)
 
@@ -197,6 +229,7 @@ def _fetch_files(repo, model_name, files, all_needed, progress_callback, cancel_
     ones faster-whisper loads (see _download_is_usable). *force* fetches
     files the cache has already, for a model whose cached copy won't load."""
     from huggingface_hub import hf_hub_download
+    from huggingface_hub.utils import EntryNotFoundError
     import tqdm as tqdm_lib
     total_bytes = sum(size for _, size in files)
     downloaded_bytes = [0]  # across all files
@@ -226,7 +259,7 @@ def _fetch_files(repo, model_name, files, all_needed, progress_callback, cancel_
             downloaded_bytes[0] += n
             report(f"Downloading {self._current_file}...")
 
-    failed_files, first_error = [], None
+    failed_files, absent, first_error = [], [], None
     for filename, file_size in files:
         if cancel_event.is_set():
             return False
@@ -247,6 +280,8 @@ def _fetch_files(repo, model_name, files, all_needed, progress_callback, cancel_
         except InterruptedError:
             return False
         except Exception as e:
+            if isinstance(e, EntryNotFoundError):
+                absent.append(filename)     # asked for by name, and this model hasn't it
             logger.warning(f"Error downloading {filename}: {e}")
             # Keep the progress bar moving, but remember the failure:
             # a model missing essential files must not be reported as
@@ -256,7 +291,7 @@ def _fetch_files(repo, model_name, files, all_needed, progress_callback, cancel_
             downloaded_bytes[0] += file_size
 
     if failed_files and (all_needed or not _download_is_usable(
-            failed_files, [name for name, _ in files])):
+            failed_files, [name for name, _ in files], absent)):
         logger.error(f"Model {model_name} download incomplete: "
                      f"{len(failed_files)} file(s) failed: {failed_files[:3]}")
         # At 0 %, so the window shows the reason (download_utils.failure_reason).
@@ -310,7 +345,7 @@ def make_model_download_func(model_name, repo_id=None, only_files=None, force=Fa
             if not files:
                 return _fetch_unlisted(repo, model_name, progress_callback, cancel_event,
                                        force)
-            problem = _disk_space_problem(repo, files)
+            problem = _disk_space_problem(repo, files, force)
             if problem:
                 logger.error(problem)
                 progress_callback(problem, 0)
@@ -545,6 +580,14 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
     return download_result[0]
 
 
+def _download_failed_text(model_name, error):
+    """What the start-up download's error window says: the reason, and what
+    to do about it."""
+    advice = ("Free up some disk space and try again." if "disk space" in str(error)
+              else "Check your internet connection and try again.")
+    return f"Could not download {model_title(model_name)} model.\n\nError: {error}\n\n{advice}"
+
+
 def _show_download_failed(parent, model_name, error):
     """Tell the user the start-up download of *model_name* failed, and why."""
     msg = message_dialog(
@@ -553,11 +596,7 @@ def _show_download_failed(parent, model_name, error):
         buttons=Gtk.ButtonsType.OK,
         text="Model Download Failed"
     )
-    msg.format_secondary_text(
-        f"Could not download {model_title(model_name)} model.\n\n"
-        f"Error: {error}\n\n"
-        "Check your internet connection and try again."
-    )
+    msg.format_secondary_text(_download_failed_text(model_name, error))
     msg.run()
     msg.destroy()
 
