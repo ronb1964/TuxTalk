@@ -145,7 +145,8 @@ def _x11_paste_taken_over(_owner, _event):
 
 
 def _wl_copy_help():
-    result = subprocess.run(["wl-copy", "--help"], capture_output=True, text=True, timeout=3)
+    result = subprocess.run(["wl-copy", "--help"], capture_output=True, text=True,
+                            errors="replace", timeout=3)
     return result.stdout + result.stderr
 
 
@@ -164,8 +165,10 @@ def wl_copy_command():
 
 
 def _wl_paste_types():
-    """The types the clipboard offers now; [] when it is empty."""
-    result = subprocess.run(["wl-paste", "--list-types"], capture_output=True, text=True, timeout=1)
+    """The types the clipboard offers now; [] when it is empty. errors="replace":
+    an app may name a type with any bytes, and only text types are looked for."""
+    result = subprocess.run(["wl-paste", "--list-types"], capture_output=True, text=True,
+                            errors="replace", timeout=1)
     return [t for t in result.stdout.splitlines() if t.strip()] if result.returncode == 0 else []
 
 

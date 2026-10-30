@@ -101,7 +101,9 @@ def disable_for_hotkey_test():
         saved = {key: subprocess.check_output(["gsettings", "get", SCHEMA, key],
                                               text=True, timeout=5).strip()
                  for key in KEYS}
-    except (OSError, subprocess.SubprocessError) as e:
+    except (OSError, subprocess.SubprocessError, UnicodeDecodeError) as e:
+        # Undecodable is unreadable too: a value that can't be read back
+        # exactly couldn't be restored, so nothing is cleared.
         logger.info(f"Could not read GNOME keybindings: {e}")
         return None
     try:

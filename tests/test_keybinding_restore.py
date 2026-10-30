@@ -163,3 +163,17 @@ def test_a_key_gnome_refuses_is_logged_with_its_reason(monkeypatch):
         "R", (), {"returncode": 1, "stderr": "No such key “begin-resize”\n"})())
     assert G._set("begin-resize", "[]") is False
     assert said == ["GNOME didn't take begin-resize: No such key “begin-resize”"]
+
+
+def test_bindings_that_cant_be_read_as_text_are_left_alone(monkeypatch, tmp_path):
+    """gsettings' answer is read as text and written back later: one that
+    can't be decoded isn't cleared, since it couldn't be put back."""
+    from shell_stubs import stub
+    log = tmp_path / "gsettings.log"
+    stub(tmp_path, "gsettings", f'echo "$1" >> {log}\n'
+                                r"""[ "$1" = get ] && printf "['<Alt>F\377']\n"; exit 0""")
+    monkeypatch.setenv("PATH", str(tmp_path))
+    monkeypatch.setenv("XDG_CURRENT_DESKTOP", "GNOME")
+    monkeypatch.setattr(G, "_backup_path", lambda: str(tmp_path / G.BACKUP_NAME))
+    assert G.disable_for_hotkey_test() is None
+    assert "set" not in log.read_text().split()
