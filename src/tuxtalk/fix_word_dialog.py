@@ -400,6 +400,7 @@ def fix_in_text(typed, fix, window, where=None):
     back = (len(typed) - len(typed.rstrip())) + (len(core) - end)
     backend = keyboard_output.output_backend()
     keyboard_output.this_thread.into = (window, where)
+    fixed = False
     try:
         if not backend.press_keys([((), "LEFT")] * back + [(("SHIFT",), "LEFT")] * (end - start)):
             return _left_alone("keys")
@@ -411,8 +412,14 @@ def fix_in_text(typed, fix, window, where=None):
         if why:
             backend.press_keys([((), "RIGHT")] * (back + 1))      # the cursor back
             return _left_alone(why)
-        done = backend.type_text(replacement) and backend.press_keys([((), "RIGHT")] * back)
-    except (virtual_keyboard.StoppedPartway, virtual_keyboard.GaveUp):
+        fixed = backend.type_text(replacement)
+        done = fixed and backend.press_keys([((), "RIGHT")] * back)
+    except virtual_keyboard.GaveUp as stop:
+        if fixed:           # only the cursor's way back was stopped
+            done = False
+        else:               # another window had the focus by then, or a key stayed down
+            return _left_alone("window" if stop.reason == "moved" else "keys")
+    except virtual_keyboard.StoppedPartway:
         done = False
     finally:
         keyboard_output.this_thread.into = None

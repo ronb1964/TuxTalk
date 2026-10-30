@@ -483,52 +483,42 @@ def test_a_portal_session_that_wont_close_is_logged(monkeypatch, caplog):
     assert "Couldn't close the remote-control session" in caplog.text
 
 
-def _libei_typing_into(monkeypatch, focus_after_handshake):
-    """A Libei backend whose portal session records what it types, and
-    whose handshake leaves *focus_after_handshake* focused."""
-    import tuxtalk.libei_ctypes as libei_ctypes
-    from tuxtalk import focused_window
+def _libei_typing_into(monkeypatch, focus_moves_while_the_device_is_away):
+    """A Libei backend over a fake libei whose keyboard device goes away
+    (paused) right before typing and comes back; while it's away, the focus
+    moves to a chat or doesn't. Returns the backend and the keys libei got."""
+    from tuxtalk import focused_window, libei_ctypes
     from tuxtalk.output_backends import LibeiOutputBackend
-    b, typed, focus = LibeiOutputBackend(), [], [("org.kde.kwrite", ("tray", "{1}"))]
+    focus = [("org.kde.kwrite", ("tray", "{1}"))]
 
-    class FakeSession(_FakeSessionBase):
-        def pump_until_ready(self):
-            return True
-
-        def type_string(self, t):
-            typed.append(t)
-            return True
-
-    def handshake():
-        focus[0] = focus_after_handshake
-        return _portal_fd(), None
-    monkeypatch.setattr(b, "_run_handshake", handshake)
-    monkeypatch.setattr(libei_ctypes, "LibeiSession", FakeSession)
+    def away():
+        if focus_moves_while_the_device_is_away:
+            focus[0] = ("brave-browser", ("tray", "{2}"))
+    libei = _FakeLibei([(None, 1, 2),          # ready for the session
+                        (None, 3),             # paused as the keys are about to go
+                        (away, 2)])            # back, up to 2 s later
+    monkeypatch.setattr(libei_ctypes, "load_libei", lambda: libei)
+    monkeypatch.setattr(libei_ctypes.time, "sleep", lambda s: None)
     monkeypatch.setattr(focused_window, "look", lambda: focus[0])
-    return b, typed
+    b = LibeiOutputBackend()
+    monkeypatch.setattr(b, "_run_handshake", lambda: (_portal_fd(), None))
+    monkeypatch.setattr(keyboard_output.this_thread, "into", ("org.kde.kwrite", ("tray", "{1}")))
+    return b, libei.keys
 
 
 def test_flatpak_typing_held_to_a_window_goes_nowhere_once_another_has_the_focus(monkeypatch):
-    """The portal's handshake took a moment and the user clicked into a chat
-    meanwhile: Fix a Word's replacement, or a dictation that may only go
-    where it was looked at, went into the chat."""
+    """The user clicked into a chat while the portal's keyboard came back:
+    Fix a Word's replacement, or a dictation that may only go where it was
+    looked at, went into the chat."""
     import pytest
     from tuxtalk import virtual_keyboard
-    b, typed = _libei_typing_into(monkeypatch, ("brave-browser", ("tray", "{2}")))
-    keyboard_output.this_thread.into = ("org.kde.kwrite", ("tray", "{1}"))
-    try:
-        with pytest.raises(virtual_keyboard.GaveUp):
-            b.type_text("Fixed")
-    finally:
-        keyboard_output.this_thread.into = None
-    assert typed == []
+    b, keys = _libei_typing_into(monkeypatch, focus_moves_while_the_device_is_away=True)
+    with pytest.raises(virtual_keyboard.GaveUp):
+        b.type_text("fixed")
+    assert keys == []
 
 
 def test_flatpak_typing_held_to_a_window_goes_in_while_it_has_the_focus(monkeypatch):
-    b, typed = _libei_typing_into(monkeypatch, ("org.kde.kwrite", ("tray", "{1}")))
-    keyboard_output.this_thread.into = ("org.kde.kwrite", ("tray", "{1}"))
-    try:
-        assert b.type_text("Fixed") is True
-    finally:
-        keyboard_output.this_thread.into = None
-    assert typed == ["Fixed"]
+    b, keys = _libei_typing_into(monkeypatch, focus_moves_while_the_device_is_away=False)
+    assert b.type_text("fixed") is True
+    assert len(keys) == 2 * len("fixed")

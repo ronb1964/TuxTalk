@@ -73,10 +73,10 @@ class LibeiOutputBackend(OutputBackend):
 
     Opens a fresh RemoteDesktop/EIS session for each typing action (the user
     approves the "Allow remote control?" dialog once; a restore token
-    remembers it) and sends the keystrokes over it. type_text returns False
-    rather than raise, so the recording core surfaces its usual "couldn't
-    type" notice; only a delivery held to a window that lost the focus
-    raises, as on the virtual keyboard (_with_session)."""
+    remembers it) and sends the keystrokes over it. Each action returns
+    False rather than raise, so the recording core surfaces its usual
+    "couldn't type" notice; only keys held to a window that has lost the
+    focus raise virtual_keyboard.GaveUp, typing nothing (_with_session)."""
 
     IFACE = "org.freedesktop.portal.RemoteDesktop"
     KEYBOARD = 1  # RemoteDesktop DeviceType bitmask: KEYBOARD=1, POINTER=2
@@ -243,11 +243,13 @@ class LibeiOutputBackend(OutputBackend):
         or False if the handshake/device wasn't ready.
 
         Keys that may only go into one window (keyboard_output.this_thread.into:
-        a dictation's, Fix a Word's) are held to it once the device is
-        ready, right before they go: the handshake can take seconds, minutes
-        with the approval dialog. Another window has the focus by then:
+        a dictation's, Fix a Word's) are held to it right before they go,
+        after every wait for the device (LibeiSession.before_keys): the
+        handshake can take seconds, minutes with the approval dialog, and a
+        paused device up to 2 s more. Another window has the focus by then:
         virtual_keyboard.GaveUp("moved"), nothing typed, the one exception
-        this raises, as the virtual keyboard's claim does."""
+        this raises."""
+        import functools
         import logging
         import os
         from . import focused_window, keyboard_output
@@ -269,7 +271,7 @@ class LibeiOutputBackend(OutputBackend):
                     logger.warning("libei device did not become ready")
                     return False
                 if (into := keyboard_output.this_thread.into) is not None:
-                    focused_window.claim_into(into)
+                    session.before_keys = functools.partial(focused_window.claim_into, into)
                 return bool(action(session))
         except GaveUp:
             raise
