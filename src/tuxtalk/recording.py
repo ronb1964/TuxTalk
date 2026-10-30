@@ -300,7 +300,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     # microphone opens, so a send set up meanwhile waits for this recording.
     serial, held = send_countdown.recording_begins()
     rec = rs.state.current = rs.Recording(
-        send_countdown.Message(serial=serial), edit_mode=edit_mode,
+        rs.Message(serial=serial), edit_mode=edit_mode,
         held_send=held or held_send, press_t0=time.time())
     # Set before the stream starts — _sd_callback drops frames unless it's set.
     rs.state.is_recording = True

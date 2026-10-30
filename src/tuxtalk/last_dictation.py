@@ -13,7 +13,7 @@ from .normalize import LINE_BREAK
 def remember_said(text: str, chunked: bool, message, takes_back: str = "") -> str:
     """Put *text* in Recent Dictations, one entry per recording: a phrase of
     a recording typed at pauses (*chunked*) adds to its recording's entry,
-    kept on its *message* (send_countdown.Message.said).
+    kept on its *message* (recording_state.Message.said).
     *takes_back* is the end of that entry a correction across a pause
     replaced ("Meet at three. " for "Meet at four"). Returns the entry as it
     was before, for unsay."""

@@ -43,7 +43,7 @@ SECOND = ("brave-browser", ("tray", "{9f04b7c3}"))      # another window, same a
 
 def send_automatically(sent_to):
     """An automatic send of words delivered to *sent_to* (a destination)."""
-    send_countdown.send_automatically("test", send_countdown.Message(sent_to), keyboard_output.press_key,
+    send_countdown.send_automatically("test", rs.Message(sent_to), keyboard_output.press_key,
                                       delivery.type_onto_dictation)
 
 
@@ -610,7 +610,7 @@ def test_a_tuxtalk_window_however_the_desktop_names_it_gets_no_key(
             monkeypatch.setattr(focused_window, "reported", lambda: None)
             monkeypatch.setattr(compositor_focus, "focused_window", lambda: (wm_class, window_id))
     focus(*before)
-    message = send_countdown.Message(focused_window.destination(), has_words=True)
+    message = rs.Message(focused_window.destination(), has_words=True)
     focus(*after)
     if told == "tray":                    # 0.18's extension: the class alone
         dbus_service.TuxTalkDBusService.SetFocusedWindowClass(service, "tuxtalk")
@@ -644,7 +644,7 @@ def test_words_dictated_into_a_tuxtalk_box_get_only_the_key_said_after_them(
     else:
         monkeypatch.setattr(focused_window, "reported", lambda: None)
         monkeypatch.setattr(compositor_focus, "focused_window", lambda: window)
-    message = send_countdown.Message(focused_window.destination(), has_words=True)
+    message = rs.Message(focused_window.destination(), has_words=True)
     if key == "auto":
         send_countdown.send_automatically("test", message, keyboard_output.press_key, None)
         assert keyboard.events == [] and notices == [send_countdown.OWN_WINDOW_NOTICE]
@@ -1255,7 +1255,7 @@ def test_a_countdown_called_off_partway_still_gives_back_its_space(chat, keyboar
         def cancel(self):
             pass
     monkeypatch.setattr(send_countdown.threading, "Timer", Timer)
-    send_countdown.send_automatically("test", send_countdown.Message(focused_window.destination()),
+    send_countdown.send_automatically("test", rs.Message(focused_window.destination()),
                                       keyboard_output.press_key, delivery.type_onto_dictation, " ")
     focus[:] = SECOND
     timers[1].run(*timers[1].args)                  # "Sending in 2 s": another window

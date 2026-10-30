@@ -12,7 +12,6 @@ from tuxtalk import pipeline
 from tuxtalk import type_at_pause
 from tuxtalk import keyboard_output
 from tuxtalk import recording_state as rs
-from tuxtalk import send_countdown
 from tuxtalk.voice_edit_rules import spoken_edit
 from tuxtalk import live_settings as live
 from tuxtalk import engine
@@ -152,7 +151,7 @@ def test_a_switch_during_the_pause_after_edit_that_changes_nothing(editing, monk
 def test_the_wait_ends_with_the_recording(editing):
     _pressed, edits, _ = editing
     assert _said("Edit that.", "middle")
-    rs.state.current.message = send_countdown.Message(serial=1)     # a new recording, its own
+    rs.state.current.message = rs.Message(serial=1)     # a new recording, its own
     assert not _said("Make it more formal.", "middle")
     assert edits == []
 

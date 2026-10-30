@@ -238,7 +238,7 @@ BRAVE = ("brave-browser", ("tray", "{b4a7}"))   # the countdown fixture's window
 
 def start_send(why="test", space="", mode="type"):
     """An automatic send for a dictation typed into the window focused now."""
-    send_countdown.send_automatically(why, send_countdown.Message(focused_window.destination()),
+    send_countdown.send_automatically(why, rs.Message(focused_window.destination()),
                                       keyboard_output.press_key, delivery.type_onto_dictation, space, mode)
 
 

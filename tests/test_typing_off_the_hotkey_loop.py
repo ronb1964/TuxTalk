@@ -124,7 +124,7 @@ def test_a_recording_begun_while_the_words_were_typed_holds_their_send(sent):
     dictation's Enter was set up: the Enter went out 2 s later, mid-dictation,
     and the message went out in two."""
     keys, typed, said = sent
-    message = send_countdown.Message(CHAT, has_words=True)
+    message = rs.Message(CHAT, has_words=True)
     send_countdown.recording_begins()                   # the next recording
     delivery.send_automatically(" ", "type", message)
     assert keys == [] and said == [] and send_countdown.owes_space()
@@ -133,14 +133,14 @@ def test_a_recording_begun_while_the_words_were_typed_holds_their_send(sent):
 def test_a_recording_begun_once_the_send_is_set_up_holds_it_too(sent, monkeypatch):
     keys, typed, said = sent
     monkeypatch.setattr(send_countdown, "_send_right_away", lambda pending: None)
-    delivery.send_automatically(" ", "type", send_countdown.Message(CHAT, has_words=True))
+    delivery.send_automatically(" ", "type", rs.Message(CHAT, has_words=True))
     number, held = send_countdown.recording_begins()
     assert held and keys == []
 
 
 def test_without_a_newer_recording_the_send_goes(sent):
     keys, typed, said = sent
-    delivery.send_automatically(" ", "type", send_countdown.Message(CHAT, has_words=True))
+    delivery.send_automatically(" ", "type", rs.Message(CHAT, has_words=True))
     assert keys == ["ENTER"]
 
 
@@ -148,9 +148,9 @@ def test_a_tap_while_the_words_were_typed_holds_the_send_and_says_so(sent, monke
     """The tap is over, its key up: "Not sent", and the space goes in now
     rather than in front of the next message after the user's own Enter."""
     keys, typed, said = sent
-    message = send_countdown.Message(CHAT, has_words=True)
+    message = rs.Message(CHAT, has_words=True)
     send_countdown.recording_begins()
-    monkeypatch.setattr(rs.state.current, "message", send_countdown.Message(serial=1, cancelled=True))
+    monkeypatch.setattr(rs.state.current, "message", rs.Message(serial=1, cancelled=True))
     monkeypatch.setattr(rs.state, "is_recording", False)
     delivery.send_automatically(" ", "type", message)
     assert keys == [] and said == ["Not sent"] and typed == [" "]
@@ -187,7 +187,7 @@ def test_a_send_about_to_claim_its_enter_when_a_recording_begins_stays_held(sent
     monkeypatch.setattr(focused_window, "look", lambda: CHAT[:2])
     monkeypatch.setattr(focused_window, "destination", lambda: CHAT)
     monkeypatch.setattr(send_countdown, "_send_right_away", lambda pending: None)
-    delivery.send_automatically(" ", "type", send_countdown.Message(CHAT, has_words=True))
+    delivery.send_automatically(" ", "type", rs.Message(CHAT, has_words=True))
     take = send_countdown._claim(send_countdown._pending)
     lock = _LockThatLetsAClaimIn(send_countdown._send_lock, take)
     monkeypatch.setattr(send_countdown, "_send_lock", lock)
@@ -288,7 +288,7 @@ def test_a_send_held_or_switched_away_from_while_its_enter_waits_its_turn(real_w
         return True
     monkeypatch.setattr(keyboard_output, "press_key", press_key)
     monkeypatch.setattr(rs.state, "last_inserted_text", "See you at noon.")
-    delivery.send_automatically(" ", "type", send_countdown.Message(CHAT, has_words=True))
+    delivery.send_automatically(" ", "type", rs.Message(CHAT, has_words=True))
     busy, may_finish = threading.Event(), threading.Event()
     real_worker.submit(lambda: busy.set() or may_finish.wait(5))
     assert busy.wait(5)

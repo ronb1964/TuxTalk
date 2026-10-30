@@ -102,7 +102,7 @@ class _Job(NamedTuple):
     auto_period: bool
     injection_mode: str
     chunk_role: str | None
-    message: send_countdown.Message
+    message: rs.Message
 
 
 class _Words(NamedTuple):
@@ -130,7 +130,7 @@ def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
     dropped quietly), "last" for the rest after the stop (the usual READY beep,
     even when it holds no speech, since earlier chunks were typed).
 
-    *message* is the recording's (send_countdown.Message), taken when its
+    *message* is the recording's (recording_state.Message), taken when its
     work was queued, so a recording started meanwhile can't change where
     this one's Enter may go. By default the current recording's."""
     job = _Job(beeps_on, smart_quotes, notify_on, language, auto_space, auto_period,

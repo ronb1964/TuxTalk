@@ -160,8 +160,7 @@ def test_a_dictation_refused_before_its_first_key_leaves_the_last_one_to_fix(mon
     """A Type at pause recording, then a dictation refused for a password
     field before anything was typed: "fix that word" back in the first
     window got only the last phrase, as if the refused one were the last."""
-    from tuxtalk import send_countdown
-    earlier, refused = send_countdown.Message(), send_countdown.Message()
+    earlier, refused = rs.Message(), rs.Message()
     earlier.shown = "Hi Sam. We meet at three. "
     monkeypatch.setattr(rs.state, "last_message", earlier)
     monkeypatch.setattr(focused_window, "destination",

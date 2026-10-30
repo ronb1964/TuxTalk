@@ -416,7 +416,7 @@ def test_a_stuck_key_that_keeps_back_the_enter_says_so(keyboard, stuck_right_ctr
         assert notes[0][0] == "Enter not pressed: a dictation key stayed down"
     else:
         monkeypatch.setattr(send_countdown, "_delay", 0.0)
-        message = send_countdown.Message(focused_window.Destination(*KWRITE))
+        message = rs.Message(focused_window.Destination(*KWRITE))
         send_countdown.send_automatically("test", message, keyboard_output.press_key, None)
         assert notices == [send_countdown.HELD_NOTICE]
     assert keyboard.events == []

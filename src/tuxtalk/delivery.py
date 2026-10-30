@@ -101,7 +101,7 @@ def inject_text(text: str, injection_mode: str, one_block: bool = False, into=No
     window it landed in, for undo, "fix that word" and select and move.
     *into*, a look taken earlier, is the only window it may go into: "moved"
     when another has the focus by the time it would. Words of *message*
-    (send_countdown.Message) are added to it, with where they went, for an
+    (recording_state.Message) are added to it, with where they went, for an
     automatic Enter or a key said after them.
 
     The focus is checked once more after typing because the report from

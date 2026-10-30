@@ -108,7 +108,7 @@ def key(code, value, held=(), cfg=CFG):
 
 def words_done(space=" "):
     """The last dictation's words went in: its automatic send is set up."""
-    delivery.send_automatically(space, "type", send_countdown.Message(
+    delivery.send_automatically(space, "type", rs.Message(
         focused_window.destination(), has_words=True))
 
 

@@ -218,7 +218,7 @@ def next_recording(samplerate=16000):
     key went down long enough ago to be a dictation, not a tap."""
     from tuxtalk import send_countdown, type_at_pause
     serial, _ = send_countdown.recording_begins()
-    rec = rs.state.current = rs.Recording(send_countdown.Message(serial=serial),
+    rec = rs.state.current = rs.Recording(rs.Message(serial=serial),
                                           press_t0=time.time() - 10, samplerate=samplerate)
     type_at_pause.arm_chunker(rec)
     return rec
@@ -282,7 +282,7 @@ def _no_real_send_countdown(monkeypatch, request):
     # in a window the desktop named, where an automatic Enter may go.
     from tuxtalk import focused_window
     monkeypatch.setattr(rs.state, "last_inserted_where", (None, None))
-    monkeypatch.setattr(rs.state, "current", rs.Recording(send_countdown.Message(
+    monkeypatch.setattr(rs.state, "current", rs.Recording(rs.Message(
         focused_window.Destination(None, ("tray", "{test window}")))))
 
 

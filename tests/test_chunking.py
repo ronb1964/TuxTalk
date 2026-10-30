@@ -12,7 +12,7 @@ import pytest
 
 from conftest import next_recording
 from tuxtalk.history import add_entry as REAL_ADD_ENTRY
-from tuxtalk import focused_window, send_countdown
+from tuxtalk import focused_window
 from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
 from tuxtalk import keyboard_grab
@@ -1344,7 +1344,7 @@ def test_a_recording_that_opens_with_digital_silence_still_learns_the_room():
 def test_the_screen_copy_ends_at_another_window_of_the_same_app(monkeypatch):
     """Two KWrite documents: phrases in each made one copy, so "edit that"
     selected the first document's length of the second's text."""
-    message = send_countdown.Message()
+    message = rs.Message()
     monkeypatch.setattr(rs.state, "last_inserted_window", "org.kde.kwrite")
     monkeypatch.setattr(rs.state, "last_inserted_where", ("org.kde.kwrite", ("tray", "{first}")))
     last_dictation.remember_shown("See you at noon.", chunked=True, ok=True, message=message)
@@ -1357,7 +1357,7 @@ def test_the_screen_copy_survives_the_two_spellings_of_one_app(monkeypatch):
     """Plasma's X11 session: KWin says "google-chrome", X11 "Google-chrome",
     and a busy tray leaves a phrase's look to X11. The copy "edit that" and
     "fix that word" work on was dropped as if the phrase went elsewhere."""
-    message = send_countdown.Message()
+    message = rs.Message()
     monkeypatch.setattr(rs.state, "last_inserted_window", "google-chrome")
     last_dictation.remember_shown("See you at noon.", chunked=True, ok=True, message=message)
     monkeypatch.setattr(rs.state, "last_inserted_window", "Google-chrome")
