@@ -23,7 +23,8 @@ import re
 # before it. Anywhere else in a sentence it's words. So that "Edit that file
 # and send it" stays words, the instruction must come after a pause (the
 # engine writes a comma or a period there) or start with an editing word.
-_SPOKEN_EDIT = re.compile(r"^\s*(?:please\s+)?edit\s+that\b(?P<pause>[\s]*[,.:;!?-])?\s*(?P<rest>.*?)\s*$",
+_SPOKEN_EDIT = re.compile(r"^\s*(?:please\s+)?edit\s+that\b"
+                          r"(?P<pause>[\s]*[,.:;!?-])?\s*(?P<rest>.*?)\s*$",
                           re.IGNORECASE | re.DOTALL)
 _EDIT_VERBS = frozenset("""make change turn remove delete take add put replace rewrite reword
     fix correct shorten lengthen expand simplify use say write translate capitalize
@@ -57,9 +58,11 @@ def _norm(instruction: str) -> str:
 
 
 _TARGET = (r"(?:this|it|that|these|everything|all of (?:this|it)|the (?:whole )?(?:text|selection"
-           r"|selected text|words?|sentences?|lines?|thing)|(?:these|those|each|every) (?:lines?|sentences?))")
+           r"|selected text|words?|sentences?|lines?|thing)"
+           r"|(?:these|those|each|every) (?:lines?|sentences?))")
 # "make this", "change it to", "put everything in", or nothing at all
-_LEAD = rf"(?:(?:make|change|turn|convert|put|set|switch|write)\s+(?:{_TARGET}\s+)?(?:(?:to|in|into)\s+)?)?"
+_LEAD = (r"(?:(?:make|change|turn|convert|put|set|switch|write)\s+"
+         rf"(?:{_TARGET}\s+)?(?:(?:to|in|into)\s+)?)?")
 
 
 def _case_rule(words: str, verbs: str) -> re.Pattern:
@@ -90,14 +93,18 @@ _FROM = rf"(?:\s+(?:from|in|out of)\s+{_TARGET})?(?:\s+everywhere)?"
 _REMOVE_MARKS = re.compile(rf"^{_REMOVE}\s+(?:all\s+)?(?:of\s+)?(?:the\s+)?"
                            rf"({'|'.join(sorted(_MARKS, key=len, reverse=True))}){_FROM}$")
 _REMOVE_BULLETS = re.compile(rf"^{_REMOVE}\s+(?:all\s+)?(?:of\s+)?(?:the\s+)?"
-                             rf"(?:bullets?|bullet points|numbering|list (?:markers|numbers)){_FROM}$")
+                             r"(?:bullets?|bullet points|numbering|list (?:markers|numbers))"
+                             rf"{_FROM}$")
 # A list line's marker: "- ", "* ", "• ", "2. ", "10) ".
 _BULLET = re.compile(r"^(?:[-*\u2022\u2013]|\d+[.)])\s+")
-_BULLETED = re.compile(rf"^(?:{_LEAD}|add\s+|use\s+)?(?:an?\s+)?(?:bullet(?:ed)?(?: point)?s?(?: list)?"
+_BULLETED = re.compile(rf"^(?:{_LEAD}|add\s+|use\s+)?(?:an?\s+)?"
+                       r"(?:bullet(?:ed)?(?: point)?s?(?: list)?"
                        r"|bullet points|list with bullets)$")
-_NUMBERED = re.compile(rf"^(?:{_LEAD}(?:an?\s+)?numbered list|number (?:{_TARGET}|them|the lines|each line)"
+_NUMBERED = re.compile(rf"^(?:{_LEAD}(?:an?\s+)?numbered list"
+                       rf"|number (?:{_TARGET}|them|the lines|each line)"
                        r"|add numbers|numbered)$")
-_INDENT = re.compile(rf"^(?:indent\s+(?:{_TARGET}|them|each line)|add (?:an |some )?indent(?:ation)?"
+_INDENT = re.compile(rf"^(?:indent\s+(?:{_TARGET}|them|each line)"
+                     r"|add (?:an |some )?indent(?:ation)?"
                      rf"(?:\s+(?:to|in)\s+{_TARGET})?|{_LEAD}indented)$")
 _UNINDENT = re.compile(rf"^(?:(?:unindent|outdent|dedent)(?:\s+(?:{_TARGET}|them))?"
                        rf"|{_REMOVE}\s+(?:the\s+|all\s+the\s+)?(?:indent|indents|indentation)"
