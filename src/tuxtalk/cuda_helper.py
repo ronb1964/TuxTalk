@@ -29,7 +29,7 @@ def detect_nvidia_gpu():
     The host asks nvidia-smi. A Flatpak sandbox has no nvidia-smi, so there the
     driver's device nodes (/dev/nvidiactl, /dev/nvidia0, exposed by the
     manifest's --device=dri) are checked instead, which also works when
-    torch_init has cleared CUDA_VISIBLE_DEVICES.
+    cuda_preload has cleared CUDA_VISIBLE_DEVICES.
     """
     if os.environ.get("FLATPAK_ID"):
         return os.path.exists("/dev/nvidiactl") or os.path.exists("/dev/nvidia0")

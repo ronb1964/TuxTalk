@@ -26,7 +26,7 @@ export PYTHONPATH="$ROOT/src:/usr/lib64/python$PYVER/site-packages:/usr/lib/pyth
 
 # ctranslate2 (faster-whisper's engine) loads its own bundled libraries from
 # this folder; TuxTalk preloads the CUDA libraries it downloaded itself
-# (torch_init.py).
+# (cuda_preload.py).
 CT2_LIBS="$ROOT/.venv/lib64/python$PYVER/site-packages/ctranslate2.libs"
 export LD_LIBRARY_PATH="$CT2_LIBS${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 

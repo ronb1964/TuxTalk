@@ -19,8 +19,8 @@ import time
 
 # Before any engine loads, as in the dictation service: makes TuxTalk's CUDA
 # download findable for a Whisper model on CUDA.
-from .torch_init import init_cuda_for_pytorch
-init_cuda_for_pytorch()
+from .cuda_preload import preload_cuda_libraries
+preload_cuda_libraries()
 
 import gi
 gi.require_version("Gtk", "3.0")

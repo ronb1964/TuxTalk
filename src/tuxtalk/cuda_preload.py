@@ -1,16 +1,15 @@
-#!/usr/bin/env python3
 """
 Make TuxTalk's downloaded CUDA libraries findable, before any engine loads.
 
-Import this first. CTranslate2 (faster-whisper) opens libcublas by name, and
-TuxTalk's own CUDA folder is not on LD_LIBRARY_PATH, so the libraries are
-preloaded here with RTLD_GLOBAL. When no CUDA is
-usable at all, the GPU is hidden so nothing tries to load it.
+Import this and call preload_cuda_libraries() first. CTranslate2
+(faster-whisper) opens libcublas by name, and TuxTalk's own CUDA folder is not
+on LD_LIBRARY_PATH, so the libraries are preloaded here with RTLD_GLOBAL. When
+no CUDA is usable at all, the GPU is hidden so nothing tries to load it.
 """
 
-import sys
-import os
 import ctypes
+import glob
+import os
 import warnings
 from pathlib import Path
 
@@ -43,16 +42,15 @@ if not _appimage_cuda_path.exists() and not _dev_cuda_path.exists():
     warnings.filterwarnings('ignore', message='Could not load CUDA library.*')
     warnings.filterwarnings('ignore', message='.*not found in the system path.*')
 
-# Set once init_cuda_for_pytorch has run, so a second call logs nothing.
+# Set once preload_cuda_libraries has run, so a second call logs nothing.
 _initialized = False
 
 
-def init_cuda_for_pytorch():
+def preload_cuda_libraries():
     """Preload the libraries from TuxTalk's CUDA download, once per process.
 
     cuda_helper unpacks each wheel to cuda/lib/<package>/lib/. Loading them with
-    RTLD_GLOBAL lets a later open by name (CTranslate2's) find them. The nvidia
-    symlink and sys.path entry recreate the layout PyTorch's own search expects.
+    RTLD_GLOBAL lets a later open by name (CTranslate2's) find them.
 
     Returns False when there is nothing to load; a repeat call returns True.
     """
@@ -61,32 +59,14 @@ def init_cuda_for_pytorch():
         return True
 
     from .cuda_helper import get_appdir_cuda_path
-    cuda_base = Path(get_appdir_cuda_path())
-    lib_path = cuda_base / "lib"
+    lib_path = Path(get_appdir_cuda_path()) / "lib"
 
     if not lib_path.exists():
         # The module-level check has already decided CPU or system CUDA.
         _initialized = True
         return False
 
-    # PyTorch looks in {sys.path}/nvidia/<package>/lib/; cuda/nvidia -> cuda/lib
-    # provides that layout.
-    nvidia_link = cuda_base / "nvidia"
-    if not nvidia_link.exists():
-        try:
-            nvidia_link.symlink_to(lib_path)
-            logger.info("Created nvidia symlink for PyTorch")
-        except OSError as e:
-            logger.warning(f"Failed to create nvidia symlink: {e}")
-
-    cuda_str = str(cuda_base)
-    if cuda_str not in sys.path:
-        sys.path.insert(0, cuda_str)
-        logger.info(f"Added {cuda_str} to sys.path for PyTorch")
-
     # Globs, not fixed sonames, so any CUDA major version loads.
-    import glob
-
     lib_patterns = [
         ("cuda_runtime", "lib", "libcudart.so.*"),
         ("cublas", "lib", "libcublas.so.*"),
@@ -106,15 +86,8 @@ def init_cuda_for_pytorch():
             except OSError as e:
                 logger.warning(f"Failed to preload {Path(lib_file).name}: {e}")
 
-    if loaded_count > 0:
-        logger.info(f"Preloaded {loaded_count} CUDA libraries for PyTorch")
-        _initialized = True
-        return True
-
     _initialized = True
+    if loaded_count > 0:
+        logger.info(f"Preloaded {loaded_count} CUDA libraries")
+        return True
     return False
-
-
-# Importing the module is enough to preload.
-if __name__ != "__main__":
-    init_cuda_for_pytorch()

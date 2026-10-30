@@ -38,8 +38,9 @@ def test_handlers_created_on_import_point_at_the_test_log_dir():
 
 def test_folders_found_on_import_are_not_the_users():
     # Found once, when tuxtalk is imported: before any fixture could move them.
-    from tuxtalk import torch_init
-    for folder in (config._config_home(), config._data_home(), torch_init._appimage_cuda_path):
+    from tuxtalk import cuda_preload
+    for folder in (config._config_home(), config._data_home(),
+                   cuda_preload._appimage_cuda_path):
         assert REAL_HOME not in Path(folder).parents, folder
 
 

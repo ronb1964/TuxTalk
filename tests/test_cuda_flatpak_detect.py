@@ -1,6 +1,6 @@
 """GPU detection must work inside a Flatpak, where nvidia-smi is absent.
 
-The sandbox has no nvidia-smi binary, and torch_init clears CUDA_VISIBLE_DEVICES
+The sandbox has no nvidia-smi binary, and cuda_preload clears CUDA_VISIBLE_DEVICES
 on first run (before any CUDA libs exist), so a ctranslate2/libcuda probe would
 report zero devices. The driver's device node (/dev/nvidiactl, exposed by the
 manifest's --device=dri) is the reliable, dependency-free signal. On the host the
