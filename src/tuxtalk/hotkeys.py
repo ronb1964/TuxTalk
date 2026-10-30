@@ -15,6 +15,7 @@ from . import (
     beeps,
     delivery,
     delivery_notices,
+    desktop_detect,
     dictation_worker,
     hotkey_keys,
     keyboard_devices,
@@ -466,8 +467,10 @@ def run(cfg: Settings, input_device_idx, keyboards=None):
 
     *keyboards* is the hotkey helper (hotkey_helper_client.HelperKeyboard) when
     it is installed: then no keyboard is opened here at all."""
-    session = os.environ.get("XDG_SESSION_TYPE", "").lower()
-    logger.info(f"Session type: {session}, Wayland: {session=='wayland'}")
+    # X11 as the hotkey grab and the keyboard layout decide it: a startx
+    # session sets no XDG_SESSION_TYPE and is X11 all the same.
+    logger.info(f"Session type: {os.environ.get('XDG_SESSION_TYPE') or 'not set'}, "
+                f"X11: {desktop_detect.is_x11_session(os.environ)}")
     # Both hotkeys work whatever the mode setting says.
     logger.info(f"Hold key: {cfg.hotkey}, Toggle key: {cfg.toggle_hotkey or 'none'}")
     svc = service_tick.ServiceState(cfg, input_device_idx)
