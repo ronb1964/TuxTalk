@@ -692,7 +692,9 @@ def prefs_window(monkeypatch):
         return lambda *args: timers.append(add(*args)) or timers[-1]
 
     def build(**settings):
-        values = asdict(config.Settings())
+        # The hotkeys first run sets: left blank (Settings' default before
+        # onboarding), the window's own F8 and F9 would count as changes.
+        values = {**asdict(config.Settings()), "hotkey": "F8", "toggle_hotkey": "F9"}
         values.update(settings)
         monkeypatch.setattr(prefs.PreferencesWindow, "load_config", lambda self: dict(values))
         monkeypatch.setattr(prefs_words, "load_custom_commands", lambda: {})

@@ -386,7 +386,8 @@ class UnifiedDownloadDialog:
         Show the dialog and run all download tasks.
 
         Returns:
-            dict: Results for each task {task_name: (success: bool, cancelled: bool)}
+            dict: {task name: {'success': bool, 'cancelled': bool,
+                   'completed': bool}}, read with succeeded()
         """
         if not self.tasks:
             logger.warning("No download tasks to run")
@@ -507,6 +508,7 @@ def show_unified_download_dialog(cuda=False, extension=False, model=None, parent
 if __name__ == '__main__':
     # Show the dialog with two dummy downloads, for checking it by hand.
     import sys
+    from tuxtalk import cuda_helper
     Gtk.init(sys.argv)
     from .ui_style import prepare_windows
     prepare_windows()
@@ -524,7 +526,7 @@ if __name__ == '__main__':
 
     task1 = DownloadTask(
         name=CUDA_TASK,
-        size_text="~1.4GB",
+        size_text=f"~{cuda_helper.DOWNLOAD_SIZE_TEXT}",
         download_func=dummy_download
     )
     dialog.add_task(task1)

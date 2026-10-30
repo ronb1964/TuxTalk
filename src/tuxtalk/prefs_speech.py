@@ -97,6 +97,17 @@ def download_model(parent, model):
     return ok, cancelled
 
 
+def fetch_model(parent, model):
+    """Download *model* (download_model); True once it's here. A failed
+    download says so; a cancelled one stops quietly."""
+    success, cancelled = download_model(parent, model)
+    if not success and not cancelled:
+        show_message(parent, Gtk.MessageType.ERROR, "Model download failed!",
+                     "Failed to download the speech model. "
+                     "Please check your internet connection.")
+    return success
+
+
 def ask_whisper_model_for_cuda(parent):
     """Which Whisper model to use CUDA with, or None to keep Parakeet.
 
@@ -287,7 +298,7 @@ class SpeechSection(Tab):
         setup.attach(label, 0, row, 1, 1)
         self.device_combo = dropdown(Gtk.ComboBoxText())
         label.set_mnemonic_widget(self.device_combo)
-        self.refresh_device_options()
+        self._fill_device_options()
         # What _on_device_changed falls back to when a setup is refused.
         self._device_before = self.config.get("device", "cpu")
         self.device_combo.connect("changed", self._on_device_changed)
@@ -570,15 +581,20 @@ class SpeechSection(Tab):
         switches to them; with only CUDA's, nothing switches."""
         from .download_progress_dialog import (CUDA_TASK, model_task,
                                                show_unified_download_dialog, succeeded)
-        results = show_unified_download_dialog(cuda=True, model="large-v3", parent=self.window)
-        if succeeded(results, CUDA_TASK):
-            self._cuda_downloaded(
-                "large-v3" if succeeded(results, model_task("large-v3")) else None)
+        # Busy, so an uninstall's close can't close the window under the
+        # download, and its end doesn't save and restart after that.
+        with self.win.busy():
+            results = show_unified_download_dialog(cuda=True, model="large-v3",
+                                                   parent=self.window)
+            if succeeded(results, CUDA_TASK):
+                self._cuda_downloaded(
+                    "large-v3" if succeeded(results, model_task("large-v3")) else None)
 
     # --- The Device dropdown ----------------------------------------------------
 
-    def refresh_device_options(self):
-        """Rebuild the Device dropdown.
+    def _fill_device_options(self):
+        """Fill the Device dropdown, its "changed" reactions live: for the
+        build, before they're connected; afterwards _refill_device_options.
 
         CUDA is listed on every NVIDIA computer, like Vulkan, not only once
         its files are downloaded: people looking for their graphics card look
@@ -621,7 +637,7 @@ class SpeechSection(Tab):
         reactions (a rebuild is no pick)."""
         self.device_combo.handler_block_by_func(self._on_device_changed)
         try:
-            self.refresh_device_options()
+            self._fill_device_options()
         finally:
             self.device_combo.handler_unblock_by_func(self._on_device_changed)
         self._device_before = self.config["device"]
@@ -687,14 +703,15 @@ class SpeechSection(Tab):
 
     def _finish_cuda_for_parakeet(self, combo):
         """CUDA picked, already downloaded, with Parakeet selected. Choosing
-        a Whisper model selects it and CUDA, applied by OK or Apply like any
-        other choice (Apply downloads the model). Keep Parakeet puts the
-        dropdown back: under "CUDA" it would only run on the processor."""
+        a Whisper model selects it and CUDA. Unlike after CUDA's download
+        (_cuda_downloaded), nothing was done yet, so it's a choice like any
+        other: OK or Apply puts it in effect and downloads the model, Cancel
+        drops it. Keep Parakeet puts the dropdown back: under "CUDA" it
+        would only run on the processor."""
         self.set_choice("device", self._device_before)
         model = ask_whisper_model_for_cuda(self.window)
         if model is not None:
-            self.set_choice("model", model)
-            self.set_choice("device", "cuda")
+            self._select_on_cuda(model)
         return False        # run once
 
     def _setup_vulkan(self, model, confirm=True):
@@ -727,9 +744,10 @@ class SpeechSection(Tab):
                 buttons=Gtk.ButtonsType.YES_NO) != Gtk.ResponseType.YES:
             return
 
-        cuda_helper.show_cuda_download_dialog(
-            parent=self.window,
-            on_success_callback=lambda: self._cuda_downloaded(self.config.get("model")))
+        with self.win.busy():           # as in _download_cuda_and_large_v3
+            cuda_helper.show_cuda_download_dialog(
+                parent=self.window,
+                on_success_callback=lambda: self._cuda_downloaded(self.config.get("model")))
 
     def _cuda_downloaded(self, model):
         """CUDA's files are here: the dropdowns stop naming their download,
@@ -737,13 +755,15 @@ class SpeechSection(Tab):
         switch to (large-v3's own download didn't finish).
 
         Both ways to CUDA's download, the Device dropdown and large-v3 in the
-        Model dropdown, end here, and the switch is applied at once: the
-        download, minutes long, was the user's yes, and Cancel can't take it
-        back. Through Apply, never by saving directly: that moves the
-        baseline Apply diffs against, so the switch would be saved without
-        restarting dictation. Parakeet can't use CUDA, and switching its
-        device would move it from the graphics card to the processor, so its
-        user picks a Whisper model first (Keep Parakeet switches nothing).
+        Model dropdown, end here, and the switch is saved and put in force
+        at once: the download, minutes long, was the user's yes, and Cancel
+        can't take it back. Only the model and device are saved
+        (PreferencesWindow.save_now), and dictation restarts for them; the
+        window's other changes stay the user's to Apply or Cancel. Parakeet
+        can't use CUDA, and switching its device would move it from the
+        graphics card to the processor, so its user picks a Whisper model
+        first (Keep Parakeet switches nothing), downloaded here if it isn't
+        yet: dictation can't restart onto a model that isn't there.
         """
         from .parakeet_engine import is_parakeet
         self.win.refresh_gpu_status()
@@ -751,11 +771,16 @@ class SpeechSection(Tab):
         self._refill_device_options()
         if model is not None and is_parakeet(model):
             model = ask_whisper_model_for_cuda(self.window)
-        if model is None:
+        if model is None or not fetch_model(self.window, model):
             return
+        self._select_on_cuda(model)
+        if self.win.save_now({"model": model, "device": "cuda"}):
+            self.win.put_in_force({"model", "device"})
+
+    def _select_on_cuda(self, model):
+        """Show *model* on CUDA in the dropdowns, chosen."""
         self.set_choice("model", model)
         self.set_choice("device", "cuda")
-        self.win.on_apply(None)
 
     def set_choice(self, key, value):
         """Set the model or device and its dropdown without the dropdown's
@@ -806,12 +831,7 @@ class SpeechSection(Tab):
             if whisper_vulkan.supports_model(model):
                 from .vulkan_setup_dialogs import ensure_files
                 return ensure_files(self.window, model, False)
-        success, cancelled = download_model(self.window, model)
-        if not success and not cancelled:
-            show_message(self.window, Gtk.MessageType.ERROR, "Model download failed!",
-                         "Failed to download the speech model. "
-                         "Please check your internet connection.")
-        return success
+        return fetch_model(self.window, model)
 
     def rollback_download(self, previous):
         """Undo a model or device change whose download never completed.

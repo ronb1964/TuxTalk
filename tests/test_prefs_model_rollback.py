@@ -74,6 +74,11 @@ class StubPrefs:
         self.restart_calls += 1
         return True
 
+    def put_in_force(self, changed):
+        from tuxtalk.prefs import PreferencesWindow
+
+        return PreferencesWindow.put_in_force(self, changed)
+
     # --- helpers the tests read ---
 
     @property
