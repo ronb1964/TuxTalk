@@ -6,7 +6,7 @@ import pathlib
 
 import pytest
 
-from tuxtalk import compositor_focus, window_geometry as wg
+from tuxtalk import compositor_focus, compositor_ipc, window_geometry as wg
 from tuxtalk.window_geometry import Rect
 from tuxtalk import notices
 
@@ -106,13 +106,13 @@ def test_sway_focused_rect(monkeypatch):
     monkeypatch.setenv("SWAYSOCK", "/tmp/sway.sock")
     for var in ("HYPRLAND_INSTANCE_SIGNATURE", "NIRI_SOCKET"):
         monkeypatch.delenv(var, raising=False)
-    monkeypatch.setattr(compositor_focus, "_exchange", lambda path, req, read: tree)
+    monkeypatch.setattr(compositor_ipc, "exchange", lambda path, req, read: tree)
     assert compositor_focus.focused_rect() == Rect(10, 20, 300, 200)
 
 
 def test_hyprland_focused_rect(monkeypatch):
     monkeypatch.setenv("HYPRLAND_INSTANCE_SIGNATURE", "abc")
-    monkeypatch.setattr(compositor_focus, "_exchange",
+    monkeypatch.setattr(compositor_ipc, "exchange",
                         lambda path, req, read: json.dumps({"at": [5, 6], "size": [70, 80]}).encode())
     assert compositor_focus.focused_rect() == Rect(5, 6, 70, 80)
 

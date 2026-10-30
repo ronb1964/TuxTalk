@@ -46,13 +46,13 @@ Anything that fails just means "unknown", and unknown means the US path.
 import ctypes as C
 import ctypes.util
 import functools
-import json
 import os
 import re
 import shutil
 import subprocess
 import unicodedata
 
+from . import compositor_ipc
 from .logger import FailureNotes, setup_logger
 
 logger = setup_logger(__name__)
@@ -432,9 +432,8 @@ def _note_several_layouts(layouts):
 
 
 def _hyprland_devices():
-    from .compositor_focus import _exchange, _recv_until_closed, hyprland_socket
-    return json.loads(_exchange(hyprland_socket(os.environ["HYPRLAND_INSTANCE_SIGNATURE"]),
-                                b"j/devices", _recv_until_closed))
+    return compositor_ipc.hyprland_request(os.environ["HYPRLAND_INSTANCE_SIGNATURE"],
+                                           b"j/devices")
 
 
 def _hyprland_layout():
@@ -449,11 +448,8 @@ def _hyprland_layout():
 
 
 def _sway_inputs():
-    import struct
-    from .compositor_focus import _I3_MAGIC, _exchange, _i3_reply
-    get_inputs = 100
-    return _exchange(os.environ.get("SWAYSOCK") or os.environ["I3SOCK"],
-                     _I3_MAGIC + struct.pack("<II", 0, get_inputs), _i3_reply)
+    return compositor_ipc.i3_request(os.environ.get("SWAYSOCK") or os.environ["I3SOCK"],
+                                     compositor_ipc.I3_GET_INPUTS)
 
 
 # Description -> (layout, variant) for every layout libxkbregistry knows,

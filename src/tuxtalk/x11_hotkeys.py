@@ -10,7 +10,7 @@ of the focused window. evdev and the hotkey helper read below X, so they still
 see the press and release, and recording is unaffected.
 
 The grab is on a connection the service keeps open for its whole life, made
-through XCB for the reason compositor_focus gives. The X server drops a
+through XCB for the reason xcb_ctypes gives. The X server drops a
 client's grabs when its connection closes, so a stop, the auto-timeout, a
 crash or a SIGKILL all hand the keys back by themselves; unlike KDE, nothing
 in service_launcher or the tray has to release them. A hotkey change ungrabs
@@ -37,9 +37,9 @@ import os
 import threading
 
 from . import desktop_detect
-from .compositor_focus import free, is_x11_session, x11_root, xcb_lib
 from .hotkey_claims import keys_to_claim
 from .logger import setup_logger
+from .xcb_ctypes import free, x11_root, xcb_lib
 
 logger = setup_logger(__name__)
 
@@ -62,7 +62,7 @@ _x = None
 def should_claim() -> bool:
     """An X11 session that is neither KDE nor GNOME, outside a Flatpak (which
     gets its keys from the GlobalShortcuts portal)."""
-    if os.environ.get("FLATPAK_ID") or not is_x11_session(os.environ):
+    if os.environ.get("FLATPAK_ID") or not desktop_detect.is_x11_session(os.environ):
         return False
     return desktop_detect.get_desktop_environment() not in ("kde", "gnome")
 

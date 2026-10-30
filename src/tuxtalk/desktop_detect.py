@@ -1,5 +1,5 @@
 """Which desktop TuxTalk runs on: its name (KDE, GNOME, COSMIC...), whether
-the session is Wayland, whether it shows tray icons, and GNOME Shell's
+the session is Wayland or X11, whether it shows tray icons, and GNOME Shell's
 version. Many modules ask, since keys, typing and windows work differently
 on each.
 """
@@ -147,3 +147,11 @@ def is_wayland() -> bool:
     wayland_display = os.environ.get('WAYLAND_DISPLAY', '')
 
     return 'wayland' in session_type or bool(wayland_display)
+
+
+def is_x11_session(env):
+    """XDG_SESSION_TYPE when it is set; otherwise an X DISPLAY with no Wayland one."""
+    session = (env.get("XDG_SESSION_TYPE") or "").lower()
+    if session:
+        return session == "x11"
+    return bool(env.get("DISPLAY")) and not env.get("WAYLAND_DISPLAY")
