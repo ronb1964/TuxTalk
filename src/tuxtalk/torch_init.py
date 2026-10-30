@@ -2,9 +2,9 @@
 """
 Make TuxTalk's downloaded CUDA libraries findable, before any engine loads.
 
-Import this first. CTranslate2 (faster-whisper) opens libcudart, libcublas
-and libcudnn by name, and TuxTalk's own CUDA folder is not on
-LD_LIBRARY_PATH, so they are preloaded here with RTLD_GLOBAL. When no CUDA is
+Import this first. CTranslate2 (faster-whisper) opens libcublas by name, and
+TuxTalk's own CUDA folder is not on LD_LIBRARY_PATH, so the libraries are
+preloaded here with RTLD_GLOBAL. When no CUDA is
 usable at all, the GPU is hidden so nothing tries to load it.
 """
 
@@ -79,14 +79,13 @@ def init_cuda_for_pytorch():
         sys.path.insert(0, cuda_str)
         print(f"Added {cuda_str} to sys.path for PyTorch")
 
-    # Globs, not fixed sonames, so any CUDA or cuDNN major version loads.
+    # Globs, not fixed sonames, so any CUDA major version loads.
     import glob
 
     lib_patterns = [
         ("cuda_runtime", "lib", "libcudart.so.*"),
         ("cublas", "lib", "libcublas.so.*"),
         ("cublas", "lib", "libcublasLt.so.*"),
-        ("cudnn", "lib", "libcudnn.so.*"),
     ]
 
     loaded_count = 0

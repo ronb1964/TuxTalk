@@ -5,6 +5,11 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- The CUDA download for NVIDIA cards is 580 MB now instead of 1.4 GB. It
+  included NVIDIA's cuDNN, which the speech engine hasn't needed since 0.16,
+  and dictation on CUDA types exactly the same without it. If you downloaded
+  CUDA before, TuxTalk deletes that unused part when it starts, which gives
+  you back nearly 1 GB.
 - With the key remapper kanata running, F8 and F9 did nothing, and the
   hotkey test didn't see them either. kanata takes your keyboards for itself
   and passes every key on through a virtual keyboard of its own, which is a
