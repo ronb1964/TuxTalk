@@ -102,9 +102,6 @@
   "menu_window.py::MenuWindow._popup_performance::undocumented": 1,
   "menu_window.py::MenuWindow.refresh::swallowed_error": 1,
   "model_helper.py::_loads_on_cpu::swallowed_error": 1,
-  "model_helper.py::download_model_with_progress.do_download.GtkProgressTqdm.update::long_line": 1,
-  "model_helper.py::download_model_with_progress.do_download::long_line": 2,
-  "model_helper.py::download_model_with_progress::long_line": 2,
   "model_helper.py::download_parakeet_update::long_line": 1,
   "model_helper.py::is_model_cached_fast::swallowed_error": 1,
   "normalize.py::<module>::dated_comment": 3,
@@ -255,11 +252,7 @@
    "decisions": 19
   },
   "model_helper.py::download_model_with_progress": {
-   "lines": 301
-  },
-  "model_helper.py::download_model_with_progress.do_download": {
-   "decisions": 22,
-   "lines": 135
+   "lines": 104
   },
   "normalize.py::_space_after_ender_repl": {
    "decisions": 18
