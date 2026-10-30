@@ -24,5 +24,8 @@ pinned_download() {
         echo "❌ $url doesn't match its pinned SHA256" >&2
         return 1
     fi
-    cp "$dest" "$cache.part.$$" && mv "$cache.part.$$" "$cache"
+    # A name of its own beside the cache, not one from the PID: builds in two
+    # containers can both be PID 1.
+    local part
+    part=$(mktemp "$cache.part.XXXXXXXX") && cp "$dest" "$part" && mv "$part" "$cache"
 }
