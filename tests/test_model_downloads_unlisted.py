@@ -12,7 +12,7 @@ def test_without_the_file_list_a_model_with_one_vocabulary_file_downloads(monkey
     def no_list(repo):
         raise OSError("rate limited")
 
-    def hf_hub_download(repo_id, filename, tqdm_class=None):
+    def hf_hub_download(repo_id, filename, tqdm_class=None, force_download=False):
         if filename in ("vocabulary.json", "preprocessor_config.json"):
             raise EntryNotFoundError(f"{filename} not in {repo_id}")
         fetched.append(filename)
