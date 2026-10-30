@@ -1,8 +1,9 @@
 """Paste mode and the clipboard (GitHub issue #7).
 
-Dictations are always marked sensitive, so clipboard managers such as Klipper
-don't save them to their history, and with "Restore clipboard after pasting"
-on, whatever the user had copied comes back after the paste.
+Dictations are always marked sensitive, so clipboard managers that honour the
+mark (Klipper, CopyQ 8 and later) don't save them to their history, and on
+Wayland, with "Restore clipboard after pasting" on, whatever the user had
+copied comes back after the paste.
 """
 import os
 import subprocess
@@ -407,14 +408,15 @@ def test_an_app_pastes_an_x11_dictation_marked_for_managers_to_skip(monkeypatch)
         pytest.skip("no display")
     monkeypatch.setattr(Gtk.Clipboard, "store", lambda self: pytest.fail("handed to the manager"))
     monkeypatch.setattr(cb, "_x11_owner", None)
-    assert cb._offer_sensitive_x11("Привіт, café") is True
-    reader = subprocess.Popen([sys.executable, "-c", _READ_CLIPBOARD], stdout=subprocess.PIPE,
-                              # X11: GTK would otherwise find the user's own
-                              # Wayland desktop (conftest) and read its clipboard.
-                              env={**os.environ, "PYTHONIOENCODING": "utf-8",
-                                   "GDK_BACKEND": "x11"},
-                              encoding="utf-8")
+    reader = None
     try:
+        assert cb._offer_sensitive_x11("Привіт, café") is True
+        reader = subprocess.Popen(
+            [sys.executable, "-c", _READ_CLIPBOARD], stdout=subprocess.PIPE,
+            # X11: GTK would otherwise find the user's own Wayland desktop
+            # (conftest) and read its clipboard.
+            env={**os.environ, "PYTHONIOENCODING": "utf-8", "GDK_BACKEND": "x11"},
+            encoding="utf-8")
         # The paste request comes through the X server: answer it as the
         # service's GTK loop would.
         deadline = time.monotonic() + 10
@@ -423,7 +425,11 @@ def test_an_app_pastes_an_x11_dictation_marked_for_managers_to_skip(monkeypatch)
             time.sleep(0.005)
         said = reader.communicate(timeout=1)[0]
     finally:
-        cb._x11_owner.destroy()
+        if reader is not None and reader.poll() is None:
+            reader.kill()
+            reader.wait()
+        if cb._x11_owner is not None:
+            cb._x11_owner.destroy()
     assert said.strip() == repr(("Привіт, café", b"secret"))
 
 
