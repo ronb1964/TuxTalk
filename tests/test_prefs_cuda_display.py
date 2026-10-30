@@ -48,7 +48,7 @@ def test_an_unrelated_ok_keeps_the_saved_cuda_choice(tmp_path, monkeypatch):
     d.show_without_saving = lambda key, value: PreferencesWindow.show_without_saving(d, key, value)
     speech = SimpleNamespace(win=d, config=d.config, device_combo=FakeCombo())
 
-    SpeechSection.refresh_device_options(speech)
+    SpeechSection._fill_device_options(speech)
     assert speech.device_combo.active == "cpu"     # what the service really uses
 
     d.config["beeps"] = False                       # the user's only change

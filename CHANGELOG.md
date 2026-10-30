@@ -345,6 +345,10 @@ before 0.15.0, so older entries use that name.
   Dictation Off" (with the checkmark, since it's on) or "Turn Dictation On".
   It used to read "Dictation on/off" with only the checkmark to tell you,
   which a screen reader couldn't say.
+- Picking large-v3 on an NVIDIA card and downloading CUDA with it now
+  switches dictation over as soon as the downloads are done, the same as
+  picking CUDA under Device always did. Before, it waited for you to click
+  Apply or OK first.
 
 ## [0.18.2] - 2026-10-23
 

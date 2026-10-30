@@ -605,7 +605,7 @@ class AdvancedTab(Tab):
             for other_key, other in (("ai_corrections", self.ai_corrections_check),
                                      ("voice_editing", self.voice_editing_check)):
                 if other_key != key and other is not None and not other.get_active():
-                    self.win.save_now(other_key, False)
+                    self.win.save_now({other_key: False})
             return
 
         self._untick_ai_feature(check, key, handler)

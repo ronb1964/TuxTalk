@@ -508,5 +508,5 @@ def _say_how_it_went(parent, success, on_success_callback, reason=None):
         try:
             on_success_callback()
         except Exception as e:
-            logger.warning(f"Error in success callback: {e}")
+            logger.warning(f"Error in success callback: {e}", exc_info=True)
     logger.info("CUDA libraries downloaded successfully")

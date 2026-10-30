@@ -514,7 +514,7 @@ class PreferencesWindow:
         then writes launch_at_login's autostart file, so Cancel has nothing
         to undo)."""
         # GTK combos emit 'changed' with get_active_id()=None while being
-        # rebuilt (SpeechSection.refresh_device_options). Writing that None
+        # rebuilt (SpeechSection._fill_device_options). Writing that None
         # would produce 'device = None' in the TOML file, invalid TOML that
         # wipes all settings on the next load. Never a real user action.
         if value is not None:
@@ -528,20 +528,24 @@ class PreferencesWindow:
             self._config_at_open[key] = value
         self.config[key] = value
 
-    def save_now(self, key, value):
-        """Save *key* at once, not on Apply: a setting that follows from
-        something done already (a download), which Cancel can't undo. If it
-        can't be written, it stays a change for Apply to save."""
+    def save_now(self, settings):
+        """Save *settings* ({key: value}) at once, in one write, not on
+        Apply: settings that follow from something done already (a
+        download), which Cancel can't undo. The window's other changes stay
+        unsaved. True when written; if they can't be, they stay changes for
+        Apply to save."""
         from .config import ConfigNotLoadedError, load_config, save_config
-        self.config[key] = value
+        self.config.update(settings)
         try:
             cfg = load_config()
-            setattr(cfg, key, value)
+            for key, value in settings.items():
+                setattr(cfg, key, value)
             save_config(cfg)
         except (OSError, ConfigNotLoadedError) as e:
-            logger.warning(f"Could not save {key}: {e}")
-            return
-        self._config_at_open[key] = value
+            logger.warning(f"Could not save {sorted(settings)}: {e}")
+            return False
+        self._config_at_open.update(settings)
+        return True
 
     def save_before_restart(self):
         """Save the snippets and the settings, as something about to restart
@@ -707,6 +711,20 @@ class PreferencesWindow:
             return False
         return self.restart_service(on_failed=failed_later)
 
+    def put_in_force(self, changed):
+        """Put the settings named in *changed*, saved already, in force:
+        True when they are. Dictation restarts only when they need it; the
+        service picks up everything else from the config file within a
+        second, which avoids a ~10 s rebuild of the speech model during
+        which the hotkey does nothing at all. A restart that failed says so
+        and stays owed until one works: the save moved the baseline on, so
+        later Applies would find nothing changed."""
+        restarted = self._apply_or_restart(changed)
+        self._restart_owed = set() if restarted else self._restart_owed | set(changed)
+        if not restarted:
+            self._say_restart_failed()
+        return restarted
+
     def restart_service(self, on_failed=None):
         """Restart the dictation service; True if it was done or asked for.
         A running tray does it (Restart Service: it waits for the old service
@@ -771,17 +789,8 @@ class PreferencesWindow:
         if saved is None:
             return
         changed, saved_at = saved
-        # Restart only when the change requires it. The service picks up
-        # everything else from the config file within a second, which avoids
-        # a ~10 s rebuild of the speech model during which the hotkey does
-        # nothing at all.
-        restarted = self._apply_or_restart(changed)
-        # A restart that failed stays owed until one works: the save moved the
-        # baseline on, so later Applies would find nothing changed.
-        self._restart_owed = set() if restarted else set(changed)
-        if not restarted:
-            self._say_restart_failed()
-        elif not self.general_tab.after_hotkey_change(changed, saved_at):
+        if self.put_in_force(changed) and not self.general_tab.after_hotkey_change(
+                changed, saved_at):
             # (A hotkey question stands in for this.) Whether the service
             # really restarted, not just that the change applied.
             from .config import needs_service_restart

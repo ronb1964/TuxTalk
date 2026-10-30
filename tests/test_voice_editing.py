@@ -667,7 +667,7 @@ def test_an_off_that_cant_be_saved_at_once_is_left_for_apply(prefs_window, monke
     def read_only(cfg):
         raise PermissionError(13, "Permission denied")
     monkeypatch.setattr(config, "save_config", read_only)
-    window.save_now("ai_corrections", False)
+    window.save_now({"ai_corrections": False})
     assert "ai_corrections" in window._changed_since_open()      # Apply saves it
 
 
