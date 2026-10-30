@@ -7,9 +7,12 @@ Designed to be glanceable: organized by category with clear formatting.
 
 import gi
 gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk, Gdk
+from gi.repository import Gtk, Gdk, GLib
 
 from . import commands_reference
+from .logger import setup_logger
+
+logger = setup_logger(__name__)
 
 # Singleton guard — prevents multiple stacked dialogs
 _active_dialog = None
@@ -58,28 +61,7 @@ def show_voice_commands_dialog():
 
     # Hotkey hint at the bottom
     hint = Gtk.Label()
-    try:
-        from .config import load_config
-        cfg = load_config()
-        hotkey = getattr(cfg, 'voice_commands_hotkey', '')
-        if hotkey:
-            hint.set_markup(
-                f'<span size="small" color="#888888">'
-                f'Tip: Press <b>{hotkey}</b> anytime to open this reference'
-                f'</span>'
-            )
-        else:
-            hint.set_markup(
-                '<span size="small" color="#888888">'
-                'Tip: Set a hotkey in Preferences → General to open this with a keypress'
-                '</span>'
-            )
-    except Exception:
-        hint.set_markup(
-            '<span size="small" color="#888888">'
-            'Tip: Set a hotkey in Preferences → General to open this with a keypress'
-            '</span>'
-        )
+    hint.set_markup(f'<span size="small" color="#888888">{_hint_markup()}</span>')
     hint.set_xalign(0.5)
     hint.set_margin_top(6)
     hint.set_margin_bottom(4)
@@ -102,6 +84,19 @@ def show_voice_commands_dialog():
     dialog.present()
 
 
+def _hint_markup():
+    """The tip under the cheat sheet: the key that opens it, or where to set one."""
+    try:
+        from .config import load_config
+        hotkey = getattr(load_config(), "voice_commands_hotkey", "")
+    except Exception as e:
+        logger.warning(f"Could not read the Voice Commands key from the settings: {e}")
+        hotkey = ""
+    if hotkey:
+        return f"Tip: Press <b>{GLib.markup_escape_text(hotkey)}</b> anytime to open this reference"
+    return "Tip: Set a hotkey in Preferences → General to open this with a keypress"
+
+
 def _on_key_press(dialog, event):
     """Close dialog on Escape key."""
     if event.keyval == Gdk.KEY_Escape:
@@ -112,17 +107,11 @@ def _on_key_press(dialog, event):
 
 def _build_markup():
     """The cheat sheet: the shared command table (commands_reference) in its
-    short layout, then literal words and snippets."""
+    short layout, then snippets."""
     return f'''<span size="large"><b>Voice Commands</b></span>
 The commands are English words, whatever language you dictate in.
 
 {commands_reference.short_markup()}
-
-<b>Literal Words</b>
-Say <b>literal</b> or <b>the word</b> before a basic punctuation or line-break word
-(period, comma, quote, dash, new line…) to type the word itself:
-  <b>literal period</b> → "period"    <b>the word comma</b> → "comma"
-  <b>literal new line</b> → "new line"
 
 <b>Snippets</b>
 Say a short phrase, get the full text. Add your own in Preferences → Words.

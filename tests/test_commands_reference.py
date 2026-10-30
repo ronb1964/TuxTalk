@@ -39,8 +39,14 @@ def test_each_listed_phrase_is_recognised(kind, phrase):
         assert voice_navigation.parse(phrase) is not None
     elif kind == "correction":
         assert ai_cleanup._RE_CORRECTION.search(f"meet at 3, {phrase}, 4")
+    elif kind == "literal":
+        word = re.sub(r"^(literal|the word) ", "", phrase)
+        assert normalize.normalize_text(f"apple {phrase} banana") == f"Apple {word} banana."
     else:
-        assert kind == "instruction"        # anything works: the AI reads it
+        # Any wording works, the AI reads it; the exact jobs are done in code.
+        assert kind == "instruction"
+        done_in_code = {"make this all caps": "ONE, TWO", "remove the commas": "one two"}
+        assert voice_edit_rules.mechanical_edit("one, two", phrase) == done_in_code.get(phrase)
 
 
 def test_a_symbol_comes_out_as_the_symbol_listed():
@@ -92,3 +98,17 @@ def test_every_way_to_clear_and_to_fix_a_word_is_listed():
     listed = {phrase for _kind, phrase in PHRASES}
     assert undo.EVERYTHING_PATTERNS <= listed
     assert {"fix that", "fix that word"} <= listed
+
+
+def test_a_labs_heading_puts_its_colon_after_the_brackets():
+    help_page = help_text._commands()
+    assert "<b>Editing by Voice</b> (TuxTalk Labs: turn on in Preferences → Advanced):" in help_page
+    assert "Editing by Voice:" not in _plain(help_page)
+
+
+def test_both_screens_show_the_one_literal_words_list():
+    """Help and the Voice Commands window each had their own, worded
+    differently."""
+    for page in (_plain(help_text._commands()), _plain(_build_markup())):
+        assert page.count("Literal Words") == 1
+        assert "It works with: period, comma, press tab" in page

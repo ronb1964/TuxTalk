@@ -10,10 +10,13 @@ Each command is checked by its *kind*: "inline" (normalize_text turns it into
 punctuation or formatting mid-sentence), "key" (a closing "press enter",
 split_key_command), "undo" (detect_undo_command), "fix" (Fix a Word's
 phrases), "edit" ("edit that, ..."), "select" (voice_navigation),
-"correction" (a self-correction the AI acts on, found by its pattern), or
-"instruction" (an example of what to tell the AI; any wording works).
+"correction" (a self-correction the AI acts on, found by its pattern),
+"instruction" (an example of what to tell the AI; any wording works), or
+"literal" (normalize_text types the word after "literal" or "the word").
 """
 from typing import NamedTuple
+
+from .normalize import LITERAL_REPLACEMENTS
 
 _LABS = "TuxTalk Labs: turn on in Preferences → Advanced"
 
@@ -37,6 +40,11 @@ class Section(NamedTuple):
 
 def _inline(*said, result, note=""):
     return Command(said, result, "inline", note)
+
+
+def _literal(word, result, *said):
+    """The command that types *word* itself; *said* adds other ways to say it."""
+    return Command((f"literal {word}", *said), f'"{word}" (not {result})', "literal")
 
 
 SECTIONS = (
@@ -102,8 +110,8 @@ SECTIONS = (
     Section("Editing by Voice", labs=True, commands=(
         Command(("make this more formal", "fix the grammar", "make this all caps",
                  "remove the commas"),
-                "with text selected, hold Shift with your dictation key and say the change",
-                "instruction", "The Writing section has the details"),
+                "changes the selected text: hold Shift with your dictation key as you "
+                "say it", "instruction", "The Writing section has the details"),
         Command(("edit that, make it shorter",), "right after dictating, no keys: changes it",
                 "edit"),
     )),
@@ -123,6 +131,18 @@ SECTIONS = (
                 'correct yourself mid-sentence: "meet at 3, no wait, 4" → "meet at 4"',
                 "correction"),
     )),
+    Section("Literal Words",
+            note="Say <b>literal</b> or <b>the word</b> before a punctuation or line-break "
+                 "word to type the word itself. It works with: "
+                 + ", ".join(LITERAL_REPLACEMENTS) + ".",
+            commands=(
+                _literal("period", ".", "the word period"),
+                _literal("comma", ",", "the word comma"),
+                _literal("press tab", "a tab character"),
+                _literal("new line", "a line break", "the word new line"),
+                _literal("question mark", "?"),
+                _literal("exclamation point", "!"),
+            )),
 )
 
 
@@ -131,8 +151,10 @@ def _said(command):
 
 
 def _title(section, colon=""):
-    labs = f" ({_LABS})" if section.labs else ""
-    return f"<b>{section.title}{colon}</b>{labs}"
+    """The section's heading; a Labs one says so in brackets before the colon."""
+    if section.labs:
+        return f"<b>{section.title}</b> ({_LABS}){colon}"
+    return f"<b>{section.title}{colon}</b>"
 
 
 def _note(section):
