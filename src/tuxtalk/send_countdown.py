@@ -652,9 +652,12 @@ def give_back_space() -> None:
 def _refuse_unless_alone() -> None:
     """The space's last check, right before its key, after the window's:
     GaveUp("keys_down") while Alt, Ctrl or Super, or a dictation key of
-    TuxTalk's, is down. The keyboards are read outside the lock."""
+    TuxTalk's, is down, or may be (the hotkey helper not connected). Made
+    with TuxTalk's keyboard held, so it waits on nothing: a pause here would
+    let a window switch slip in after the window check. The keyboards are
+    read outside _send_lock."""
     from . import modifier_hotkeys
-    if modifier_hotkeys.shortcut_keys_down() or _press_down():
+    if modifier_hotkeys.shortcut_keys_maybe_down() or _press_down():
         logger.info("Space not typed yet: Alt, Ctrl, Super or a dictation key is down")
         raise virtual_keyboard.GaveUp("keys_down")
 

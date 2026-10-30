@@ -4,6 +4,7 @@ unsent, "Not sent" is said once, and the space the send left off goes in
 once the dictation key is up, never while it's down (GNOME without the
 extension sees the key too and loses the space) and never with Alt or Ctrl
 held (Alt+Space opens KRunner)."""
+import os
 import types
 
 import pytest
@@ -396,6 +397,73 @@ def test_alt_going_down_as_the_space_goes_out_keeps_it_owed(keyboard, monkeypatc
     send_countdown.give_back_space()
     assert len(looks) == 2                      # when the job ran, and right before the key
     assert keyboard.events == [] and send_countdown.owes_space()
+
+
+# --- the hotkey helper's keyboard ----------------------------------------------
+
+@pytest.fixture
+def helper_keyboard(monkeypatch):
+    """The hotkey helper as the hotkey loop's one keyboard, its connection
+    faked. Each _pump (which can reconnect and wait up to a second for the
+    helper's hello) is counted."""
+    from tuxtalk.hotkey_helper_client import HelperKeyboard
+    helper = HelperKeyboard(path="/nonexistent")
+    helper.reconnect_at = float("inf")          # never tries to reconnect here
+    pumps = []
+    monkeypatch.setattr(helper, "_pump", lambda: pumps.append(1))
+    monkeypatch.setattr(modifier_hotkeys, "_noted", ([helper], frozenset()))
+    yield helper, pumps
+    os.close(helper._idle_r)
+    os.close(helper._idle_w)
+
+
+@pytest.mark.parametrize("state, refused", [("connected, nothing held", False),
+                                            ("connected, Alt held", True),
+                                            ("not connected", True)])
+def test_the_last_check_never_waits_on_the_helper(helper_keyboard, state, refused):
+    """Made with TuxTalk's keyboard held: asking the helper (a reconnect,
+    up to a second) let a window switch in after the window check."""
+    from tuxtalk import virtual_keyboard
+    helper, pumps = helper_keyboard
+    if state.startswith("connected"):
+        helper.sock = object()
+    if "Alt" in state:
+        helper.held = {ecodes.KEY_LEFTALT}
+    if refused:
+        with pytest.raises(virtual_keyboard.GaveUp):
+            send_countdown._refuse_unless_alone()
+    else:
+        send_countdown._refuse_unless_alone()
+    assert pumps == []
+
+
+def test_the_helper_busy_reconnecting_on_another_thread_counts_as_unknown(helper_keyboard):
+    import threading
+    helper, pumps = helper_keyboard
+    helper.sock = object()
+    taken, done = threading.Event(), threading.Event()
+
+    def reconnecting():
+        with helper._lock:
+            taken.set()
+            done.wait(5)
+    thread = threading.Thread(target=reconnecting)
+    thread.start()
+    try:
+        assert taken.wait(5)
+        assert helper.held_now() is None
+    finally:
+        done.set()
+        thread.join(5)
+    assert helper.held_now() == frozenset()
+
+
+def test_with_the_helper_gone_the_space_stays_owed(space_to_give_back, keyboard,
+                                                   helper_keyboard):
+    helper, pumps = helper_keyboard
+    space_to_give_back(lambda: None)
+    assert keyboard.events == [] and send_countdown.owes_space()
+    assert pumps == [1]                         # asked once, when the job ran
 
 
 # --- a dictation key whose release can't come any more ----------------------

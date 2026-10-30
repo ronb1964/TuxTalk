@@ -88,9 +88,29 @@ def shortcut_keys_down() -> bool:
     reads the keyboards itself: through the hotkey helper (the default) a
     modifier is known only while held with a dictation key, so Alt pressed
     on its own isn't seen (CODE_HEALTH task 46)."""
+    return bool(keys_down(_keyboards()) & (SHORTCUT_MODIFIERS - _hidden_now()))
+
+
+def shortcut_keys_maybe_down() -> bool:
+    """As shortcut_keys_down, for a check made with TuxTalk's keyboard held,
+    right before a key: nothing it asks may wait. The hotkey helper's last
+    word is used (HelperKeyboard.held_now), never asked for again; while
+    the helper isn't connected the keys can't be known, and they may be
+    down."""
+    down = set()
+    for keyboard in _keyboards():
+        if not hasattr(keyboard, "held_now"):
+            down |= keys_down([keyboard])       # an ioctl: answers at once
+        elif (held := keyboard.held_now()) is None:
+            return True
+        else:
+            down |= held
+    return bool(down & (SHORTCUT_MODIFIERS - _hidden_now()))
+
+
+def _keyboards():
     devices, _ = _noted
-    keyboards = [d for d in list(devices) if is_keyboard_device(d)]
-    return bool(keys_down(keyboards) & (SHORTCUT_MODIFIERS - _hidden_now()))
+    return [d for d in list(devices) if is_keyboard_device(d)]
 
 
 def wait_while_held(destination=None):
