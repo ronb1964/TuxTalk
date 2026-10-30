@@ -2,8 +2,8 @@
 
 Dictations are always marked sensitive, so clipboard managers that honour the
 mark (Klipper, CopyQ 8 and later) don't save them to their history, and on
-Wayland, with "Restore clipboard after pasting" on, whatever the user had
-copied comes back after the paste.
+Wayland and X11, with "Restore clipboard after pasting" on, whatever the user
+had copied comes back after the paste.
 """
 import os
 import subprocess
