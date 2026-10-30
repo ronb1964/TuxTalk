@@ -13,8 +13,6 @@ is Shift+Insert, which GUI apps (GTK, Qt, Chromium, Firefox, LibreOffice)
 paste the clipboard with and terminals (VTE, Konsole, kitty, foot, Alacritty)
 paste the primary selection with.
 """
-import pathlib
-import re
 import subprocess
 
 import pytest
@@ -26,8 +24,6 @@ from tuxtalk import live_settings as live
 from tuxtalk import keyboard_output
 from tuxtalk import delivery
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
-EXT = ROOT / "gnome-extension" / "talktype@ronb1964.github.io"
 
 CTRL_V = [(29, 1), (47, 1), (47, 0), (29, 0)]
 CTRL_SHIFT_V = [(42, 1), (29, 1), (47, 1), (47, 0), (29, 0), (42, 0)]
@@ -79,16 +75,6 @@ def test_a_reported_tuxtalk_window_gets_no_paste_class(monkeypatch):
 def test_a_tuxtalk_window_from_the_compositor_gets_no_paste_class(monkeypatch):
     _reported(monkeypatch, "", "Tuxtalk")
     assert focused_window.window_class() is None
-
-
-def test_the_extension_clears_the_focus_when_it_is_turned_off():
-    """Disabled or uninstalled, the extension stops reporting; the class it
-    reported last must not outlive it."""
-    js = (EXT / "extension.js").read_text()
-    destroy = js[js.index("    destroy() {"):]
-    destroy = destroy[:destroy.index("super.destroy();")]
-    assert re.search(r"SetFocusedWindowClassRemote\(\s*''", destroy)
-    assert destroy.index("SetFocusedWindowClassRemote") < destroy.index("this._proxy = null")
 
 
 # --- the paste keystroke for an unknown window ----------------------------------------

@@ -22,9 +22,11 @@ def test_x11_also_gets_the_quick_restart(monkeypatch):
 
 
 def test_the_feature_list_matches_the_extension_menu():
-    from pathlib import Path
-    menu = (Path(__file__).parent.parent / "gnome-extension"
-            / "talktype@ronb1964.github.io" / "extension.js").read_text()
+    from gnome_extension_js import run
+    menu, _logs = run("""
+        const {button} = await t.enable();
+        t.report(t.labels(button.menu).join(' '));
+    """)
     assert "Switch Whisper models" not in P.EXTENSION_FEATURES
     for item in ("Recent Dictations", "Fix a Word", "Performance", "Preferences"):
         assert item in P.EXTENSION_FEATURES

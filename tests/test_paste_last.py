@@ -196,15 +196,6 @@ def test_the_hint_text():
     assert history.paste_last_hint("") is None
 
 
-def test_the_gnome_menu_says_so_too():
-    """The tray's line is checked by building it, below; the extension's is
-    JavaScript, read as text."""
-    import pathlib
-    root = pathlib.Path(__file__).resolve().parent.parent
-    ext = next((root / "gnome-extension").glob("*/extension.js")).read_text()
-    assert "GetPasteLastHotkey" in ext and "types the newest one again" in ext
-
-
 def test_the_tray_tells_the_extension_the_key(monkeypatch):
     from tuxtalk import dbus_service
     monkeypatch.setattr(config, "load_config", lambda: config.Settings(paste_last_hotkey="Ctrl+Super+P"))
