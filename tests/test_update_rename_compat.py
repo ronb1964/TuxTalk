@@ -3,9 +3,9 @@
 These run against the updater as it stands BEFORE the rename. Passing proves
 every installed TalkType finds, and checksum-verifies, a TuxTalk release.
 """
-import io
 import json
 
+from conftest import UrlResponse
 from tuxtalk import update_checker as uc
 
 RELEASE = {
@@ -23,17 +23,9 @@ RELEASE = {
 }
 
 
-class _Resp(io.BytesIO):
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *a):
-        return False
-
-
 def test_old_client_picks_every_tuxtalk_asset(monkeypatch):
     monkeypatch.setattr(uc.urllib.request, "urlopen",
-                        lambda *a, **k: _Resp(json.dumps(RELEASE).encode()))
+                        lambda *a, **k: UrlResponse(json.dumps(RELEASE).encode()))
     r = uc.fetch_latest_release()
     assert r["appimage_url"] == "A" and r["appimage_name"] == "TuxTalk-v0.15.0-x86_64.AppImage"
     assert (r["deb_url"], r["rpm_url"], r["extension_url"], r["checksums_url"]) == ("D", "R", "E", "S")
@@ -41,7 +33,7 @@ def test_old_client_picks_every_tuxtalk_asset(monkeypatch):
 
 def test_old_client_finds_the_tuxtalk_checksum(monkeypatch):
     sums = "ab" * 32 + "  TuxTalk-v0.15.0-x86_64.AppImage\n" + "cd" * 32 + "  tuxtalk_0.15.0_amd64.deb\n"
-    monkeypatch.setattr(uc.urllib.request, "urlopen", lambda *a, **k: _Resp(sums.encode()))
+    monkeypatch.setattr(uc.urllib.request, "urlopen", lambda *a, **k: UrlResponse(sums.encode()))
     assert uc.fetch_expected_sha256("https://example.invalid/SHA256SUMS.txt", "TuxTalk-v0.15.0-x86_64.AppImage") == "ab" * 32
 
 

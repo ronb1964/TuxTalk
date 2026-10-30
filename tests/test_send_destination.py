@@ -15,6 +15,7 @@ import numpy as np
 import pytest
 from evdev import ecodes
 
+from conftest import CHAT_WINDOW as FIRST
 from tuxtalk import (atspi_helper, compositor_focus, dbus_service, focused_window, history,
                      modifier_hotkeys, send_countdown)
 from tuxtalk import recording_state as rs
@@ -37,34 +38,7 @@ ENTER, RCTRL, F8, F9 = ecodes.KEY_ENTER, ecodes.KEY_RIGHTCTRL, ecodes.KEY_F8, ec
 # before the chat fixture fakes the delivery.
 SEND_RIGHT_AWAY = send_countdown._send_right_away
 DELIVER_TEXT = delivery.deliver_text
-FIRST = ("brave-browser", ("tray", "{5c1d0e2a}"))
 SECOND = ("brave-browser", ("tray", "{9f04b7c3}"))      # another window, same app
-
-
-@pytest.fixture
-def chat(monkeypatch, keyboard):
-    """Dictation into a chat window with "Send each dictation automatically"
-    on, sent right away. *focus* is the window that has the focus; typed
-    holds (text, window it went into); notices what floated over it."""
-    focus = list(FIRST)
-    heard, typed, notices = [], [], []
-    monkeypatch.setattr(focused_window, "look", lambda: tuple(focus))
-    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: focus[0])
-
-    def deliver(text, mode, one_block=False, *, where):
-        typed.append((text, focus[1]))
-        rs.state.last_inserted_text = text
-        return "ok"
-    monkeypatch.setattr(delivery, "deliver_text", deliver)
-    monkeypatch.setattr("time.sleep", lambda s: None)
-    monkeypatch.setattr(engine, "transcribe", lambda audio, language: heard.pop(0))
-    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
-    monkeypatch.setattr(live, "press_enter_after", True)
-    monkeypatch.setattr(live, "usage_stats", False)
-    monkeypatch.setattr(rs.state.message, "held_mark", None)
-    monkeypatch.setattr(history, "add_entry", lambda text, replaces=None: None)
-    monkeypatch.setattr(send_countdown, "show_notice", notices.append)
-    return focus, heard, typed, notices
 
 
 def send_automatically(sent_to):
@@ -422,21 +396,6 @@ def test_the_hold_key_holds_the_send_before_it_hides_itself(chat, keyboard, monk
     finally:
         rs.state.is_recording = False
         rs.state.stream = None
-
-
-@pytest.fixture
-def notifications(monkeypatch):
-    """Desktop notifications' titles, once the threads sending them are done."""
-    from tuxtalk import notify
-    sent = []
-    monkeypatch.setattr(notify, "_send", lambda title, body: sent.append(title))
-
-    def titles():
-        for thread in threading.enumerate():
-            if thread.name in ("send-held-notice", "send-not-sent-notice"):
-                thread.join(5)
-        return sent
-    return titles
 
 
 HELD_TITLE = "Not sent: you held it"

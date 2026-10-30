@@ -15,8 +15,6 @@ import pytest
 
 from tuxtalk import service_tick
 from tuxtalk import live_settings as live
-from tuxtalk import recording_state as rs
-from tuxtalk import recording
 
 
 @pytest.fixture
@@ -34,12 +32,6 @@ def commands_file(tmp_path, monkeypatch):
 def _write(path, mapping):
     body = "[commands]\n" + "".join(f'"{k}" = "{v}"\n' for k, v in mapping.items())
     path.write_text(body)
-
-
-def _idle(monkeypatch):
-    recording.start_requested.clear()
-    recording.stop_requested.clear()
-    monkeypatch.setattr(rs.state, "is_recording", False, raising=False)
 
 
 def _cfg():
@@ -92,10 +84,9 @@ class TestApplyingTheEdit:
 
 class TestTheServiceTickPicksItUp:
     def test_editing_commands_alone_applies_without_a_restart(
-        self, commands_file, monkeypatch
+        self, commands_file, monkeypatch, idle_service
     ):
         """The whole point: no config.toml change, and it still takes effect."""
-        _idle(monkeypatch)
         monkeypatch.setattr(live, "config_file_changed", lambda: False)
         cfg = _cfg()
         svc = service_tick.ServiceState(cfg)

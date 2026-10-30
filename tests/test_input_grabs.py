@@ -13,6 +13,7 @@ import time
 import pytest
 from evdev import ecodes
 
+from conftest import KeyEvent
 from tuxtalk import send_countdown
 from tuxtalk import hotkeys
 from tuxtalk import tray_link
@@ -230,13 +231,6 @@ def test_grab_filtering_leaves_the_mouse_alone():
 
 # --- key-event handling: every path must end with the keyboard released ------
 
-class FakeEvent:
-    def __init__(self, code, value):
-        self.type = ecodes.EV_KEY
-        self.code = code
-        self.value = value  # 1 = press, 0 = release
-
-
 class FakeConfig:
     mic = None
     beeps = False
@@ -277,7 +271,7 @@ def key_env(monkeypatch):
 
 
 def press_hold(devices):
-    hotkeys._handle_key_event(FakeEvent(HOLD, 1), HOLD, TOGGLE,
+    hotkeys._handle_key_event(KeyEvent(HOLD, 1), HOLD, TOGGLE,
                           None, set(), devices, FakeConfig(), 0)
 
 
@@ -294,7 +288,7 @@ def test_releasing_the_hotkey_releases_the_keyboard(key_env):
     press_hold([kb])
     assert kb.is_grabbed
 
-    hotkeys._handle_key_event(FakeEvent(HOLD, 0), HOLD, TOGGLE,
+    hotkeys._handle_key_event(KeyEvent(HOLD, 0), HOLD, TOGGLE,
                           None, set(), [kb], FakeConfig(), 0)
 
     assert not kb.is_grabbed
@@ -306,7 +300,7 @@ def test_toggle_key_pressed_while_holding_releases_the_keyboard(key_env):
     press_hold([kb])
     assert kb.is_grabbed
 
-    hotkeys._handle_key_event(FakeEvent(TOGGLE, 1), HOLD, TOGGLE,
+    hotkeys._handle_key_event(KeyEvent(TOGGLE, 1), HOLD, TOGGLE,
                           None, set(), [kb], FakeConfig(), 0)
 
     assert not rs.state.is_recording
@@ -317,7 +311,7 @@ def test_escape_releases_the_keyboard(key_env):
     kb = keyboard()
     press_hold([kb])
 
-    hotkeys._handle_key_event(FakeEvent(ecodes.KEY_ESC, 1), HOLD, TOGGLE,
+    hotkeys._handle_key_event(KeyEvent(ecodes.KEY_ESC, 1), HOLD, TOGGLE,
                           None, set(), [kb], FakeConfig(), 0)
 
     assert not kb.is_grabbed
@@ -335,7 +329,7 @@ def test_escape_gives_the_keyboard_back_before_the_microphone_stops(key_env, mon
         grabbed_while_cancelling.append(kb.is_grabbed)
         return real_cancel(*a, **k)
     monkeypatch.setattr(recording, "cancel_recording", slow_cancel)
-    hotkeys._handle_key_event(FakeEvent(ecodes.KEY_ESC, 1), HOLD, TOGGLE,
+    hotkeys._handle_key_event(KeyEvent(ecodes.KEY_ESC, 1), HOLD, TOGGLE,
                           None, set(), [kb], FakeConfig(), 0)
     assert grabbed_while_cancelling == [False]
 
@@ -580,7 +574,7 @@ def test_a_program_made_device_is_told_by_where_sysfs_keeps_it(monkeypatch, node
 def _press_voice_combo(devices, monkeypatch, dbus=None):
     """Press the Ctrl+Alt+V style combo (no modifiers required, for brevity)."""
     monkeypatch.setattr(tray_link, "show_voice_commands", dbus or (lambda: None))
-    hotkeys._handle_key_event(FakeEvent(ecodes.KEY_V, 1), HOLD, TOGGLE,
+    hotkeys._handle_key_event(KeyEvent(ecodes.KEY_V, 1), HOLD, TOGGLE,
                           (set(), ecodes.KEY_V), set(), devices, FakeConfig(), 0)
 
 
@@ -758,7 +752,7 @@ def test_dropping_a_device_mid_hold_ends_the_recording_in_toggle_mode(key_env):
     started, stopped = key_env
     kb1, kb2 = keyboard("dies"), keyboard("survives")
     devices = [kb1, kb2]
-    hotkeys._handle_key_event(FakeEvent(HOLD, 1), HOLD, TOGGLE,
+    hotkeys._handle_key_event(KeyEvent(HOLD, 1), HOLD, TOGGLE,
                           None, set(), devices, ToggleModeConfig(), 0)
     assert rs.state.is_recording and kb2.is_grabbed
 
@@ -775,7 +769,7 @@ def test_a_toggle_recording_survives_an_unrelated_keyboard_dropping_out(key_env)
     started, stopped = key_env
     kb1, kb2 = keyboard("dies"), keyboard("survives")
     devices = [kb1, kb2]
-    hotkeys._handle_key_event(FakeEvent(TOGGLE, 1), HOLD, TOGGLE,
+    hotkeys._handle_key_event(KeyEvent(TOGGLE, 1), HOLD, TOGGLE,
                           None, set(), devices, FakeConfig(), 0)
     assert rs.state.is_recording
 
@@ -869,7 +863,7 @@ def test_the_voice_commands_combo_mid_hold_keeps_the_recordings_grab(key_env, mo
     assert kb.is_grabbed
 
     combo = (set(), ecodes.KEY_H)
-    hotkeys._handle_key_event(FakeEvent(ecodes.KEY_H, 1), HOLD, TOGGLE,
+    hotkeys._handle_key_event(KeyEvent(ecodes.KEY_H, 1), HOLD, TOGGLE,
                           combo, set(), [kb], FakeConfig(), 0)
 
     assert rs.state.is_recording
@@ -882,7 +876,7 @@ def test_a_toggle_tap_during_a_send_countdown_only_holds_it(key_env, monkeypatch
     started, _ = key_env
     held = []
     monkeypatch.setattr(send_countdown, "hold", lambda announce: held.append(announce) or True)
-    hotkeys._handle_key_event(FakeEvent(TOGGLE, 1), HOLD, TOGGLE,
+    hotkeys._handle_key_event(KeyEvent(TOGGLE, 1), HOLD, TOGGLE,
                           None, set(), [keyboard()], FakeConfig(), 0)
     assert held == [True]
     assert started == []
@@ -891,7 +885,7 @@ def test_a_toggle_tap_during_a_send_countdown_only_holds_it(key_env, monkeypatch
 def test_a_toggle_tap_with_nothing_counting_down_starts_recording(key_env, monkeypatch):
     started, _ = key_env
     monkeypatch.setattr(send_countdown, "hold", lambda announce: False)
-    hotkeys._handle_key_event(FakeEvent(TOGGLE, 1), HOLD, TOGGLE,
+    hotkeys._handle_key_event(KeyEvent(TOGGLE, 1), HOLD, TOGGLE,
                           None, set(), [keyboard()], FakeConfig(), 0)
     assert len(started) == 1
 

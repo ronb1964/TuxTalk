@@ -15,18 +15,11 @@ keeps the previous settings and carries on.
 """
 
 
-import pytest
 
 from tuxtalk import hotkey_keys
 from tuxtalk import config
 from tuxtalk import live_settings as live
 from tuxtalk import service_tick
-
-
-@pytest.fixture
-def app():
-    """Import app.py, skipping when its heavy dependencies are unavailable."""
-    return pytest.importorskip("tuxtalk.app")
 
 
 class StubIndicator:

@@ -7,6 +7,7 @@ in a fixture. Subprocesses started by tests inherit it through the
 environment.
 """
 import atexit
+import io
 import os
 import shutil
 import tempfile
@@ -1083,3 +1084,105 @@ def first_run(monkeypatch):
         first_run_setup.show_welcome_and_install()
         return done
     return run
+
+
+# --- Shared by several test files ----------------------------------------------
+# Plain classes are imported (from conftest import KeyEvent); the rest are
+# fixtures.
+
+class KeyEvent:
+    """An evdev key event as the service reads it: *value* 1 down, 0 up."""
+
+    def __init__(self, code, value):
+        from evdev import ecodes
+        self.type, self.code, self.value = ecodes.EV_KEY, code, value
+
+
+class UrlResponse(io.BytesIO):
+    """What urllib.request.urlopen returns, holding *body*."""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+class AnyWidget:
+    """Takes any widget call and returns another AnyWidget: GTK, for a test
+    of what happens around the widgets rather than what they show."""
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def __getattr__(self, name):
+        return lambda *a, **k: AnyWidget()
+
+
+@pytest.fixture
+def app():
+    """The dictation service's app.py, skipping when its heavy dependencies
+    (numpy, sounddevice) are unavailable."""
+    return pytest.importorskip("tuxtalk.app")
+
+
+@pytest.fixture
+def prefs_cls():
+    """The Preferences window's class, for calling its methods on a stand-in."""
+    from tuxtalk.prefs import PreferencesWindow
+    return PreferencesWindow
+
+
+@pytest.fixture
+def idle_service(monkeypatch):
+    """A dictation service that is running but not recording, with no start
+    or stop asked for."""
+    recording.start_requested.clear()
+    recording.stop_requested.clear()
+    monkeypatch.setattr(rs.state, "is_recording", False, raising=False)
+
+
+# The chat window the chat fixture dictates into.
+CHAT_WINDOW = ("brave-browser", ("tray", "{5c1d0e2a}"))
+
+
+@pytest.fixture
+def chat(monkeypatch, keyboard):
+    """Dictation into a chat window with "Send each dictation automatically"
+    on, sent right away. *focus* is the window that has the focus; typed
+    holds (text, window it went into); notices what floated over it."""
+    from tuxtalk import delivery, focused_window, history, send_countdown
+    focus = list(CHAT_WINDOW)
+    heard, typed, notices = [], [], []
+    monkeypatch.setattr(focused_window, "look", lambda: tuple(focus))
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: focus[0])
+
+    def deliver(text, mode, one_block=False, *, where):
+        typed.append((text, focus[1]))
+        rs.state.last_inserted_text = text
+        return "ok"
+    monkeypatch.setattr(delivery, "deliver_text", deliver)
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    monkeypatch.setattr(engine, "transcribe", lambda audio, language: heard.pop(0))
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
+    monkeypatch.setattr(live, "press_enter_after", True)
+    monkeypatch.setattr(live, "usage_stats", False)
+    monkeypatch.setattr(rs.state.message, "held_mark", None)
+    monkeypatch.setattr(history, "add_entry", lambda text, replaces=None: None)
+    monkeypatch.setattr(send_countdown, "show_notice", notices.append)
+    return focus, heard, typed, notices
+
+
+@pytest.fixture
+def notifications(monkeypatch):
+    """Desktop notifications' titles, once the threads sending them are done."""
+    from tuxtalk import notify
+    sent = []
+    monkeypatch.setattr(notify, "_send", lambda title, body: sent.append(title))
+
+    def titles():
+        for thread in threading.enumerate():
+            if thread.name in ("send-held-notice", "send-not-sent-notice"):
+                thread.join(5)
+        return sent
+    return titles

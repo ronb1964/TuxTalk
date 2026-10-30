@@ -4,6 +4,7 @@ local AI model.
 """
 import pytest
 
+from conftest import KeyEvent
 from tuxtalk import clipboard as cb
 from tuxtalk import keyboard_grab
 from tuxtalk import uinput_helper
@@ -260,11 +261,6 @@ F8, F9 = ecodes.KEY_F8, ecodes.KEY_F9
 SHIFT = ecodes.KEY_LEFTSHIFT
 
 
-class Ev:
-    def __init__(self, code, value):
-        self.type, self.code, self.value = ecodes.EV_KEY, code, value
-
-
 class Cfg:
     beeps = False
     notify = False
@@ -301,7 +297,7 @@ def keyloop(monkeypatch):
 
 
 def key(code, value, held):
-    hotkeys._handle_key_event(Ev(code, value), F8, F9, None, held, [], Cfg(), 0)
+    hotkeys._handle_key_event(KeyEvent(code, value), F8, F9, None, held, [], Cfg(), 0)
 
 
 def test_shift_f8_starts_an_edit_and_hides_shift_from_the_desktop(keyloop):
@@ -742,7 +738,7 @@ def test_stopping_with_shift_waits_for_it_without_injecting_keys(keyloop, monkey
     kb = FakeKeyboard([[SHIFT], [SHIFT], []])
     key(F9, 1, {SHIFT})
     keyloop["grab_codes"].clear()
-    hotkeys._handle_key_event(Ev(F9, 1), F8, F9, None, {SHIFT}, [kb], Cfg(), 0)
+    hotkeys._handle_key_event(KeyEvent(F9, 1), F8, F9, None, {SHIFT}, [kb], Cfg(), 0)
     assert keyloop["stops"] == 1 and keyloop["grab_codes"] == []
 
 
@@ -752,7 +748,8 @@ def test_shift_held_too_long_cancels_the_edit(keyloop, monkeypatch):
     cancelled = []
     monkeypatch.setattr(recording, "cancel_recording", lambda b, n, reason="": cancelled.append(reason))
     key(F9, 1, {SHIFT})
-    hotkeys._handle_key_event(Ev(F9, 1), F8, F9, None, {SHIFT}, [FakeKeyboard([[SHIFT]])], Cfg(), 0)
+    hotkeys._handle_key_event(KeyEvent(F9, 1), F8, F9, None, {SHIFT}, [FakeKeyboard([[SHIFT]])],
+                              Cfg(), 0)
     assert keyloop["stops"] == 0 and cancelled and "Shift" in cancelled[0]
 
 
