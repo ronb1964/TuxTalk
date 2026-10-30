@@ -12,9 +12,12 @@ import http.client
 import os
 import shutil
 import signal
+import socket
+import subprocess
 import sys
 import threading
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 
 from . import engine_launcher
 from .logger import setup_logger
@@ -33,8 +36,7 @@ def parent_death_command(argv, env=None):
     shutdown and then ignores SIGTERM, and no engine holds state worth saving.
 
     The signal fires when the thread that called Popen exits, not the
-    process, so spawn from a thread that lives as long as the engine (see
-    parakeet_gpu's _launcher)."""
+    process, so spawn it through a Launcher."""
     env = dict(os.environ if env is None else env)
     own_libs = os.environ.get("LD_LIBRARY_PATH")
     if env.get("LD_LIBRARY_PATH") != own_libs:
@@ -45,6 +47,51 @@ def parent_death_command(argv, env=None):
             env["LD_LIBRARY_PATH"] = own_libs
     command = [sys.executable, engine_launcher.__file__, str(os.getpid()), "--", *argv]
     return command, env
+
+
+class Launcher:
+    """The one thread an engine's processes are started from, for as long
+    as the engine lives.
+
+    An engine dies with the thread that started it (PR_SET_PDEATHSIG is per
+    thread, see parent_death_command), and a restart after a crash can come
+    on a short-lived dictation thread (the Flatpak build makes one per
+    dictation): an engine started there was killed as soon as that
+    dictation ended. So every start goes through this thread instead."""
+
+    def __init__(self, name):
+        """A launcher whose thread is named after *name* (in the log and
+        in a stack dump)."""
+        self._thread = ThreadPoolExecutor(max_workers=1, thread_name_prefix=name)
+
+    def popen(self, command, **kwargs):
+        """subprocess.Popen(*command*, **kwargs), run on the launcher's thread."""
+        return self._thread.submit(subprocess.Popen, command, **kwargs).result()
+
+    def close(self):
+        """Let the thread go; nothing is started through it afterwards."""
+        self._thread.shutdown(wait=False)
+
+
+def free_port():
+    """A local TCP port no one listens on right now, for a server to take."""
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def stop(proc, grace_s=5.0):
+    """End the server *proc* if it still runs: asked first, killed if it
+    hasn't gone within *grace_s* seconds. True when it was still running."""
+    if proc is None or proc.poll() is not None:
+        return False
+    proc.terminate()
+    try:
+        proc.wait(timeout=grace_s)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+    return True
 
 
 def launch_failure(returncode, output=None):

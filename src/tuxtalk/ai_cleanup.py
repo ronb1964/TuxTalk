@@ -27,12 +27,10 @@ import os
 import re
 import secrets
 import shutil
-import socket
 import subprocess
 import threading
 import time
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor
 
 from . import engine_process
 from .cleanup import LEGIT_DOUBLES
@@ -503,12 +501,7 @@ class CorrectionEngine:
         self._key = None
         self._ready = threading.Event()
         self._lock = threading.Lock()
-        # The server dies with the thread that started it (PR_SET_PDEATHSIG
-        # is per thread), and a restart after a crash happens on the
-        # dictation's own short-lived thread: the new server was killed as
-        # soon as that dictation ended. Every start goes through this thread,
-        # which lives as long as the engine, as in whisper_vulkan.
-        self._launcher = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ai-engine")
+        self._launcher = engine_process.Launcher("ai-engine")
 
     def start(self, _replacing=None):
         """Start the server in the background. Returns immediately.
@@ -524,9 +517,7 @@ class CorrectionEngine:
                 return
             kill_orphaned_engines()
             self._ready.clear()
-            with socket.socket() as s:
-                s.bind(("127.0.0.1", 0))
-                self._port = s.getsockname()[1]
+            self._port = engine_process.free_port()
             # A random key, so other users' programs can't use the engine. It
             # goes in the environment, which only this user can read: every
             # user can read a command line (/proc/<pid>/cmdline). This user's
@@ -540,9 +531,8 @@ class CorrectionEngine:
                  "-c", "4096", "-np", "1", "--jinja", "-ngl", "99", "--no-webui"],
                 {**os.environ, "LD_LIBRARY_PATH": os.path.dirname(binary),
                  "LLAMA_API_KEY": self._key})
-            proc = self._proc = self._launcher.submit(
-                subprocess.Popen, command,
-                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env=env).result()
+            proc = self._proc = self._launcher.popen(command, stdout=subprocess.DEVNULL,
+                                                     stderr=subprocess.PIPE, env=env)
             output = engine_process.OutputTail(proc.stderr)
             logger.info(f"AI cleanup engine starting (pid {proc.pid})")
         # The process started here, not self._proc read again: a stop() just
@@ -585,12 +575,7 @@ class CorrectionEngine:
         with self._lock:
             proc, self._proc = self._proc, None
             self._ready.clear()
-        if proc and proc.poll() is None:
-            proc.terminate()
-            try:
-                proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                proc.kill()
+        if engine_process.stop(proc):
             logger.info("AI cleanup engine stopped")
 
     def _restart_if_exited(self):

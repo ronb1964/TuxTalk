@@ -34,14 +34,12 @@ import json
 import os
 import re
 import shutil
-import socket
 import subprocess
 import threading
 import time
 import urllib.request
 import uuid
 import wave
-from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 
@@ -440,15 +438,11 @@ class VulkanWhisperModel:
         self._port = None
         # Re-entrant: a restart inside transcribe() runs a warm-up transcribe().
         self._lock = threading.RLock()
-        # The server dies with the thread that started it (PR_SET_PDEATHSIG
-        # is per thread), and a restart can happen on a short-lived dictation
-        # thread (the Flatpak build makes one per dictation). So every start
-        # goes through this one thread, which lives as long as the model.
-        self._launcher = ThreadPoolExecutor(max_workers=1, thread_name_prefix="vulkan-whisper")
+        self._launcher = engine_process.Launcher("vulkan-whisper")
         try:
             self._start()
         except BaseException:
-            self._launcher.shutdown(wait=False)
+            self._launcher.close()
             raise
 
     def _start(self):
@@ -458,9 +452,7 @@ class VulkanWhisperModel:
         server stopped."""
         engine_process.kill_orphans(engine_process.processes_of(_binary("whisper-server")),
                                     engine_process.is_talktype_process, "graphics engine")
-        with socket.socket() as s:
-            s.bind(("127.0.0.1", 0))
-            self._port = s.getsockname()[1]
+        self._port = engine_process.free_port()
         # Unlike llama-server (ai_cleanup.py), whisper-server has no API key
         # option. It listens on 127.0.0.1 only and sends nothing of the user's
         # back, so another local program could at most borrow the graphics chip.
@@ -468,9 +460,8 @@ class VulkanWhisperModel:
             [_binary("whisper-server"), "-m", model_path(self.model_name),
              "--host", "127.0.0.1", "--port", str(self._port),
              "-t", str(self.threads), "-dev", str(self.device_index)], _engine_env())
-        self._proc = self._launcher.submit(
-            subprocess.Popen, command,
-            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env=env).result()
+        self._proc = self._launcher.popen(command, stdout=subprocess.DEVNULL,
+                                          stderr=subprocess.PIPE, env=env)
         output = engine_process.OutputTail(self._proc.stderr)
         logger.info(f"Graphics engine starting (pid {self._proc.pid}, device {self.device_index})")
         try:
@@ -532,15 +523,9 @@ class VulkanWhisperModel:
 
     def _stop(self):
         proc, self._proc = self._proc, None
-        if proc and proc.poll() is None:
-            proc.terminate()
-            try:
-                proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait()
+        engine_process.stop(proc)
 
     def close(self):
         """Stop the server for good."""
         self._stop()
-        self._launcher.shutdown(wait=False)
+        self._launcher.close()
