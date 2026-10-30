@@ -366,8 +366,7 @@ def cancel_recording(beeps_on: bool, notify_on: bool, reason="Cancelled"):
     stop_stream_safely()
     resume_media_players()
     beeps.beep(beeps_on, *CANCEL_BEEP)
-    print(reason)
-    logger.debug(f"Recording cancelled: {reason}")
+    logger.info(f"Recording cancelled: {reason}")
     if notify_on:
         notify_module.notify(reason, "")
 

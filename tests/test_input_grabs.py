@@ -829,6 +829,18 @@ def test_rediscovery_ignores_non_keyboards(monkeypatch):
     assert getattr(mx, "closed", False), "a rejected device was left open"
 
 
+def test_a_keyboard_unplugged_while_the_nodes_are_listed_keeps_the_hotkeys_going(monkeypatch):
+    """evdev's list_devices() checks a node exists, then stats it: an unplug
+    in between raises there, inside the hotkey loop. That scan finds nothing;
+    the next one tries again."""
+    def unplugged_mid_listing():
+        raise FileNotFoundError("/dev/input/event7")
+    monkeypatch.setattr(hotkeys, "list_devices", unplugged_mid_listing)
+    devices = []
+    assert hotkeys._rediscover_devices(devices) == 0
+    assert devices == []
+
+
 def test_rediscovery_survives_an_unreadable_device(monkeypatch):
     """Permission denied on one node must not stop the others being found."""
     good = keyboard("good")

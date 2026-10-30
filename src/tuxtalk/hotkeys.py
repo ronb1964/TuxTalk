@@ -130,7 +130,12 @@ def _rediscover_devices(devices) -> int:
     """
     known = {getattr(d, "path", None) for d in devices}
     added = 0
-    for path in list_devices():
+    try:
+        paths = list_devices()
+    except OSError as e:    # it checks a node exists, then stats it: an unplug between
+        logger.info(f"A device went while listing the input devices; next scan: {e}")
+        return 0
+    for path in paths:
         if path in known:
             continue
         try:
@@ -143,9 +148,10 @@ def _rediscover_devices(devices) -> int:
             devices.append(dev)  # evdev opens it non-blocking already
             added += 1
             logger.info(f"Input device appeared, now monitoring: {dev.name}")
-        except Exception as e:
+        except OSError as e:
             # A node we cannot open (permissions, disappeared mid-scan) must
-            # not stop the rest of the scan.
+            # not stop the rest of the scan. Debug: every scan meets the same
+            # unreadable nodes again.
             logger.debug(f"Could not open {path}: {e}")
     return added
 
@@ -597,13 +603,16 @@ def _keys_to_watch(cfg: Settings, devices):
         first_run = False
     if first_run:
         logger.info("First run detected - onboarding not complete")
-        print("Onboarding not complete. No hotkeys will be active until setup is finished.")
+        # Also on stderr: started from a terminal, that's where the user looks.
+        print("Onboarding not complete. No hotkeys will be active until setup is finished.",
+              file=sys.stderr)
         return None
 
     keys = hotkey_keys.Hotkeys.from_settings(cfg)
     if keys.hold_key is None:
         logger.info("No hotkey configured - service will not monitor any keys")
-        print("No hotkey configured. Complete onboarding to activate dictation.")
+        print("No hotkey configured. Complete onboarding to activate dictation.",
+              file=sys.stderr)
         return None
 
     # A hotkey is configured and onboarding is done, so from here on every
