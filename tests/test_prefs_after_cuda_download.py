@@ -46,7 +46,7 @@ def nvidia(prefs_window, monkeypatch):
     Whisper-model question answers, and build.download_both() fakes
     large-v3's window of two downloads."""
     from gi.repository import Gtk
-    from tuxtalk import (cuda_helper, download_progress_dialog, model_helper, prefs,
+    from tuxtalk import (cuda_download, download_progress_dialog, model_helper, prefs,
                          prefs_speech, recommend)
     from tuxtalk.download_progress_dialog import CUDA_TASK, model_task
     happened, installed, missing = [], [], set()
@@ -89,7 +89,7 @@ def nvidia(prefs_window, monkeypatch):
         monkeypatch.setattr(model_helper, "is_model_cached_fast",
                             lambda model: model not in missing)
         monkeypatch.setattr(model_helper, "download_model_files", download_model_files)
-        monkeypatch.setattr(cuda_helper, "show_cuda_download_dialog", download_cuda)
+        monkeypatch.setattr(cuda_download, "show_cuda_download_dialog", download_cuda)
         answer(None)
         return prefs_window(model=model, device="cpu").general_tab.speech
 
@@ -282,16 +282,16 @@ def test_the_download_no_longer_writes_the_config_itself(prefs, monkeypatch):
     it: a download that saved device = "cuda" itself moved the baseline
     Apply compares against, and nothing restarted."""
     import threading
-    from tuxtalk import config, cuda_helper, download_progress_dialog
+    from tuxtalk import config, cuda_download, download_progress_dialog
     switched = []
-    monkeypatch.setattr(cuda_helper, "download_cuda_libraries", lambda progress, cancel: True)
+    monkeypatch.setattr(cuda_download, "download_cuda_libraries", lambda progress, cancel: True)
     monkeypatch.setattr(config, "save_config", lambda cfg: pytest.fail("the download saved settings"))
     monkeypatch.setattr(download_progress_dialog, "run_downloads", lambda parent, title, text,
                         tasks: all(t.download_func(lambda *a: None, threading.Event())
                                               for t in tasks))
-    monkeypatch.setattr(cuda_helper, "_say_how_it_went",
+    monkeypatch.setattr(cuda_download, "_say_how_it_went",
                         lambda parent, ok, then: ok and then())
-    assert cuda_helper.show_cuda_download_dialog(on_success_callback=lambda: switched.append(1))
+    assert cuda_download.show_cuda_download_dialog(on_success_callback=lambda: switched.append(1))
     assert switched == [1]
 
 

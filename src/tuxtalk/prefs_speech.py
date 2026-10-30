@@ -731,10 +731,8 @@ class SpeechSection(Tab):
     def _download_cuda(self):
         """Ask, then download CUDA's files with a progress bar; once they're
         here, _cuda_downloaded() switches the selected model to CUDA."""
-        import os
-        from . import cuda_helper
-        from .config import get_data_dir
-        cuda_path = os.path.join(get_data_dir(), "cuda")
+        from . import cuda_download, cuda_helper
+        cuda_path = cuda_helper.get_appdir_cuda_path()
         if show_message(
                 self.window, Gtk.MessageType.QUESTION, "Download CUDA Libraries?",
                 "CUDA runs the Whisper models on your NVIDIA graphics card. It needs "
@@ -745,7 +743,7 @@ class SpeechSection(Tab):
             return
 
         with self.win.busy():           # as in _download_cuda_and_large_v3
-            cuda_helper.show_cuda_download_dialog(
+            cuda_download.show_cuda_download_dialog(
                 parent=self.window,
                 on_success_callback=lambda: self._cuda_downloaded(self.config.get("model")))
 

@@ -310,9 +310,9 @@ def test_the_cuda_download_says_why_it_failed_once(monkeypatch):
     same reason in a box after it was said twice. A Cancel shows nothing
     more; a failure with no reason in the window gets the box."""
     pytest.importorskip("gi")
-    from tuxtalk import cuda_helper, download_progress_dialog as dpd
+    from tuxtalk import cuda_download, download_progress_dialog as dpd
     said = []
-    monkeypatch.setattr(cuda_helper, "_say_how_it_went",
+    monkeypatch.setattr(cuda_download, "_say_how_it_went",
                         lambda parent, ok, then: said.append(ok))
 
     def window(answer, last_report):
@@ -321,8 +321,8 @@ def test_the_cuda_download_says_why_it_failed_once(monkeypatch):
             return answer
         monkeypatch.setattr(dpd, "run_downloads", run)
     window(False, ("Downloading...", 40))
-    assert cuda_helper.show_cuda_download_dialog() is None and said == []
+    assert cuda_download.show_cuda_download_dialog() is None and said == []
     window(None, ("Not enough disk space: 1.4 GB needed", 0))
-    assert cuda_helper.show_cuda_download_dialog() is False and said == []
+    assert cuda_download.show_cuda_download_dialog() is False and said == []
     window(None, ("Downloading...", 40))
-    assert cuda_helper.show_cuda_download_dialog() is False and said == [False]
+    assert cuda_download.show_cuda_download_dialog() is False and said == [False]

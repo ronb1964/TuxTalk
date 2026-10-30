@@ -489,11 +489,11 @@ def show_unified_download_dialog(cuda=False, extension=False, model=None, parent
     dialog = UnifiedDownloadDialog(parent=parent, title=title, description=description)
 
     if cuda:
-        from tuxtalk import cuda_helper
+        from tuxtalk import cuda_download, cuda_helper
         task = DownloadTask(
             name=CUDA_TASK,
             size_text=f"~{cuda_helper.DOWNLOAD_SIZE_TEXT}",
-            download_func=cuda_helper.download_cuda_libraries
+            download_func=cuda_download.download_cuda_libraries
         )
         dialog.add_task(task)
 

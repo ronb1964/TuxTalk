@@ -23,10 +23,6 @@
   "config.py::_validation_problems": {
    "decisions": 16
   },
-  "cuda_helper.py::download_cuda_libraries": {
-   "decisions": 28,
-   "lines": 122
-  },
   "custom_words.py::fix_spelling": {
    "decisions": 28
   },
