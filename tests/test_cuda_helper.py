@@ -239,3 +239,13 @@ def test_the_download_bar_never_goes_backwards(tmp_path, monkeypatch):
     percents = []
     assert cuda_helper.download_cuda_libraries(lambda message, percent: percents.append(percent))
     assert percents == sorted(percents) and percents[-1] == 100
+
+
+def test_an_nvidia_card_name_in_another_encoding_is_still_a_card(tmp_path, monkeypatch):
+    """nvidia-smi's answer is read as text; one odd byte in the card's name
+    mustn't raise out of the welcome screen or the Performance menu."""
+    from shell_stubs import stub
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    stub(tmp_path, "nvidia-smi", r"printf 'NVIDIA GeForce RTX 4070 \377\n'")
+    monkeypatch.setenv("PATH", str(tmp_path))
+    assert "RTX 4070" in detect_nvidia_gpu()

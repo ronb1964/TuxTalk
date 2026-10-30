@@ -178,3 +178,30 @@ def test_the_help_notes_give_the_real_graphics_engine_size():
     """Help, Preferences and these notes said 24 MB for a 22 MB engine."""
     from tuxtalk import recommend, whisper_vulkan
     assert any(whisper_vulkan.ENGINE_SIZE_TEXT in n for n in recommend.COMPATIBILITY_NOTES)
+
+
+def test_detect_hardware_answers_with_an_unreadable_card_and_no_runnable_nvidia_smi(
+        monkeypatch, tmp_path):
+    """The tray asks every second: a card's vendor file it may not read and
+    an nvidia-smi without its execute bit still give an answer."""
+    import functools
+    import subprocess
+    from tuxtalk import whisper_vulkan as wv
+    card = tmp_path / "card0" / "device"
+    card.mkdir(parents=True)
+    (card / "vendor").write_text("0x10de\n")
+    (card / "vendor").chmod(0)
+
+    def not_runnable(*_a, **_k):
+        raise PermissionError("nvidia-smi")
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    monkeypatch.setattr(wv, "graphics_vendors",
+                        functools.partial(wv.graphics_vendors, drm_root=str(tmp_path)))
+    monkeypatch.setattr(subprocess, "run", not_runnable)
+    r._nvidia_name.cache_clear()
+    r._vulkan_facts.cache_clear()
+    try:
+        assert r.detect_hardware() == r.Hardware(None, False)
+    finally:
+        r._nvidia_name.cache_clear()
+        r._vulkan_facts.cache_clear()

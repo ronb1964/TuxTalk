@@ -93,6 +93,21 @@ def test_a_keyboard_unplugged_after_it_was_listed_is_skipped(monkeypatch):
     assert uinput_helper._readable_keyboards() == ["/dev/input/kbd"]
 
 
+def test_a_keyboard_unplugged_while_the_nodes_are_listed_does_not_stop_the_check(
+        monkeypatch):
+    """evdev's list_devices() checks that a node exists, then stats it: a
+    keyboard unplugged in between raises there. The setup screen still gets
+    an answer instead of the check failing."""
+    evdev = pytest.importorskip("evdev")
+
+    def unplugged_mid_listing():
+        raise FileNotFoundError("/dev/input/event7")
+    monkeypatch.setattr(evdev, "list_devices", unplugged_mid_listing)
+    monkeypatch.setattr("glob.glob", lambda pattern: [])     # no readable node either
+    ok, reason = check_input_read_permission()
+    assert ok is False and "input" in reason
+
+
 def test_setup_is_required_when_only_hotkey_reading_is_broken(monkeypatch):
     """The Fedora case: uinput fine, /dev/input unreadable → MUST still fix."""
     monkeypatch.setattr(

@@ -208,9 +208,10 @@ def check_uinput_permission():
 def _readable_input_devices():
     """Input device nodes this user can actually open, asked evdev's way.
 
-    evdev's list_devices() keeps only nodes passing os.access(R_OK | W_OK) and
-    returns an empty list rather than raising, so posing the question exactly as
-    evdev poses it is the only answer that predicts whether hotkeys will work.
+    evdev's list_devices() keeps only nodes passing os.access(R_OK | W_OK), so
+    posing the question exactly as evdev poses it is the only answer that
+    predicts whether hotkeys will work. Without evdev, or when a node goes
+    while evdev lists them, the same question is asked of each node directly.
 
     Group membership is deliberately not used as a proxy here: a user can be in
     'input' while the nodes carry the wrong mode, and an ACL can grant access
@@ -220,9 +221,12 @@ def _readable_input_devices():
         from evdev import list_devices
         return list(list_devices())
     except ImportError:
-        import glob
-        return [p for p in glob.glob("/dev/input/event*")
-                if os.access(p, os.R_OK | os.W_OK)]
+        pass
+    except OSError as e:    # it checks that a node exists, then stats it: an unplug between
+        logger.info(f"A device went while listing the input devices: {e}")
+    import glob
+    return [p for p in glob.glob("/dev/input/event*")
+            if os.access(p, os.R_OK | os.W_OK)]
 
 
 def _readable_keyboards():

@@ -34,8 +34,10 @@ def detect_nvidia_gpu():
     if os.environ.get("FLATPAK_ID"):
         return os.path.exists("/dev/nvidiactl") or os.path.exists("/dev/nvidia0")
     try:
+        # errors="replace": an odd byte in the card's name is still a card.
         result = subprocess.run(['nvidia-smi', '--query-gpu=name', '--format=csv,noheader'],
-                              capture_output=True, text=True, timeout=NVIDIA_SMI_TIMEOUT)
+                                capture_output=True, text=True, errors="replace",
+                                timeout=NVIDIA_SMI_TIMEOUT)
         return result.returncode == 0 and result.stdout.strip()
     except (OSError, subprocess.TimeoutExpired):    # not installed, not runnable, or hung
         return False
