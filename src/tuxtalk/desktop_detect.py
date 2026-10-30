@@ -8,6 +8,12 @@ import subprocess
 from typing import Optional
 
 
+def config_home() -> str:
+    """The user's config folder, where the desktops keep their settings.
+    Not TuxTalk's own (config.py), which differs inside a Flatpak."""
+    return os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+
+
 def get_desktop_environment() -> str:
     """
     Detect the current desktop environment

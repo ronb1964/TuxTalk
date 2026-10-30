@@ -187,7 +187,7 @@ def test_press_enter_key_uses_the_output_backend_and_forgets_undo(monkeypatch):
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: Backend())
     monkeypatch.setattr("time.sleep", lambda s: None)
     rs.state.last_inserted_text = "See you at noon."
-    assert pipeline.press_key("ENTER", "test") is True
+    assert delivery.press_key("ENTER", "test") is True
     assert pressed == [[((), "ENTER")]]
     # A sent message can't be backspaced away.
     assert rs.state.last_inserted_text == ""
@@ -239,7 +239,7 @@ BRAVE = ("brave-browser", ("tray", "{b4a7}"))   # the countdown fixture's window
 def start_send(why="test", space="", mode="type"):
     """An automatic send for a dictation typed into the window focused now."""
     send_countdown.send_automatically(why, send_countdown.Message(focused_window.destination()),
-                                      keyboard_output.press_key, pipeline.type_onto_dictation, space, mode)
+                                      keyboard_output.press_key, delivery.type_onto_dictation, space, mode)
 
 
 @pytest.fixture

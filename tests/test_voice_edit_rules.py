@@ -155,19 +155,19 @@ def test_other_edits_keep_the_lines(said):
 # --- shortcut keys on the active keyboard layout --------------------------------------
 
 def test_shortcut_keys_on_us_qwertz_and_azerty(monkeypatch):
-    for layout in [("us", ""), ("de", ""), ("fr", "")]:
+    for layout in [("us", "", ""), ("de", "", ""), ("fr", "", "")]:
         monkeypatch.setattr(kl, "active_layout", lambda layout=layout: layout)
         assert [kl.shortcut_keycode(c) for c in "biu"] == [48, 23, 22]
 
 
 def test_shortcut_keys_follow_dvorak(monkeypatch):
     """Dvorak's B is where QWERTY has N: the US key there would be Ctrl+X, cut."""
-    monkeypatch.setattr(kl, "active_layout", lambda: ("us", "dvorak"))
+    monkeypatch.setattr(kl, "active_layout", lambda: ("us", "dvorak", ""))
     assert kl.shortcut_keycode("b") == 49
 
 
 def test_a_layout_without_latin_letters_uses_the_us_keys(monkeypatch):
-    monkeypatch.setattr(kl, "active_layout", lambda: ("ru", ""))
+    monkeypatch.setattr(kl, "active_layout", lambda: ("ru", "", ""))
     assert kl.shortcut_keycode("b") == 48
     monkeypatch.setattr(kl, "active_layout", lambda: None)
     assert kl.shortcut_keycode("u") == 22

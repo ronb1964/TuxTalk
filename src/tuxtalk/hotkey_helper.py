@@ -106,7 +106,7 @@ import sys
 import time
 
 PROTOCOL = 1
-VERSION = "1.8"
+VERSION = "1.9"
 
 DEFAULT_SOCKET_DIR = "/run/tuxtalk-hotkeys"
 SOCKET_NAME = "hotkeys.sock"
@@ -196,6 +196,10 @@ MAX_KEYBOARDS = 48
 MAX_VIRTUAL_KEYBOARDS = 8      # made by programs; real keyboards always have room
 HELLO_DEADLINE_S = 5.0
 RESCAN_S = 2.0
+# How long a keyboard whose reads failed with an unexpected error is left
+# alone: long enough not to fill the log with a failure at every scan, short
+# enough that a built-in keyboard, never plugged in again, comes back.
+UNREADABLE_RETRY_S = 300.0
 HIDE_MAX_S = 15 * 60          # a held keyboard comes back on release, and never later than this
 INJECTED_TTL_S = 2.0
 READ_EVENTS = 64              # events per read of a keyboard
@@ -315,6 +319,18 @@ def device_group(rdev, sys_dir=SYS_CHAR_DIR, writable=False, uhid_private=True):
     if not physical:
         return f"virtual:{number}"
     return f"own:{number}" if writable else "real"
+
+
+def node_identity(node):
+    """The device node *node* (a path, or an open descriptor) as (device
+    number, inode, change time), which changes when a device is plugged in
+    again, and when udev changes the node's owner or permissions; None when
+    it's gone."""
+    try:
+        st = os.stat(node)
+    except OSError:
+        return None
+    return st.st_rdev, st.st_ino, st.st_ctime_ns
 
 
 def made_through_uinput(rdev, sys_dir=SYS_CHAR_DIR):
@@ -492,7 +508,8 @@ class Helper:
         self.combo_holds = {}      # group -> shortcut keys reported while its modifiers stay down
         self.combo_logged = set()  # groups whose hold has had "too many keys" logged
         self.next_scan = 0.0
-        self.not_keyboards = {}    # path -> identity of a node not to open again
+        self.not_keyboards = {}    # path -> identity of a node that isn't a keyboard
+        self.unreadable = {}       # path -> (identity, retry at) of a keyboard whose reads failed
         self.too_many = set()      # identities already logged as one keyboard too many
         self.listener = None
         self.running = True
@@ -521,21 +538,24 @@ class Helper:
             names = sorted(n for n in os.listdir(self.input_dir) if n.startswith("event"))
         except OSError:
             return
-        for name in names:
-            path = os.path.join(self.input_dir, name)
+        paths = [os.path.join(self.input_dir, name) for name in names]
+        for path in self.unreadable.keys() - set(paths):
+            del self.unreadable[path]           # gone: nothing left to wait for
+        for path in paths:
             if path not in self.keyboards:
                 self.open_if_keyboard(path)
 
     def open_if_keyboard(self, path):
         """Open the device at *path* if it's a keyboard there's room for. One
         that isn't is remembered by its identity, so it isn't opened again."""
-        try:
-            st = os.stat(path)
-            identity = (st.st_rdev, st.st_ino, st.st_ctime_ns)
-        except OSError:
+        identity = node_identity(path)
+        if identity is None:
             return
         if self.not_keyboards.get(path) == identity:
-            return                      # a mouse, a button, or one too many
+            return                      # a mouse, a button, a game controller
+        failed = self.unreadable.get(path)
+        if failed is not None and failed[0] == identity and time.monotonic() < failed[1]:
+            return
         keyboard = Keyboard.open(path)
         if keyboard is None:
             self.not_keyboards[path] = identity
@@ -551,12 +571,13 @@ class Helper:
                 log(f"not watching {keyboard.name!r}: too many keyboards")
             return
         self.not_keyboards.pop(path, None)
+        self.unreadable.pop(path, None)
         self.too_many.discard(identity)
         self.keyboards[path] = keyboard
         log(f"watching keyboard {keyboard.name!r} ({path})")
 
-    def drop_keyboard(self, keyboard):
-        log(f"keyboard gone: {keyboard.name!r} ({keyboard.path})")
+    def drop_keyboard(self, keyboard, why="gone"):
+        log(f"keyboard {why}: {keyboard.name!r} ({keyboard.path})")
         self.keyboards.pop(keyboard.path, None)
         keyboard.close()
         # Its keys can't come up any more: tell whoever was told they went down.
@@ -1027,6 +1048,13 @@ class Helper:
             # either way, stop reading it rather than spin on it.
             if e.errno not in (errno.ENODEV, errno.EIO, errno.EBADF):
                 log(f"couldn't read keyboard {keyboard.name!r}: {e}")
+                # By its descriptor: the path may hold a new device by now.
+                identity = node_identity(keyboard.fd)
+                if identity is not None:
+                    self.unreadable[keyboard.path] = (
+                        identity, time.monotonic() + UNREADABLE_RETRY_S)
+                self.drop_keyboard(keyboard, "let go")
+                return 0
             self.drop_keyboard(keyboard)
             return 0
         for offset in range(0, len(data) - EVENT.size + 1, EVENT.size):

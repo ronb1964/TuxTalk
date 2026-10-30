@@ -77,8 +77,7 @@ def should_claim() -> bool:
 
 
 def custom_path() -> str:
-    config = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
-    return os.path.join(config, SHORTCUTS_DIR, "custom")
+    return os.path.join(desktop_detect.config_home(), SHORTCUTS_DIR, "custom")
 
 
 def _default_paths():

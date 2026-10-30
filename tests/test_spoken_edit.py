@@ -218,9 +218,9 @@ def test_pressing_enter_remembers_the_send(monkeypatch):
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: Backend())
     monkeypatch.setattr("time.sleep", lambda s: None)
     monkeypatch.setattr(rs.state, "sent", None)
-    pipeline.press_key("ENTER", "Send each dictation automatically is on")
+    delivery.press_key("ENTER", "Send each dictation automatically is on")
     assert rs.state.sent["automatic"] is True
-    pipeline.press_key("ENTER", 'said "press enter"')
+    delivery.press_key("ENTER", 'said "press enter"')
     assert rs.state.sent["automatic"] is False
 
 
@@ -254,7 +254,7 @@ def test_edit_that_then_only_a_pause_isnt_sent_as_it_was(editing, monkeypatch):
     pressed, edits, problems = editing
     sent = []
     monkeypatch.setattr(live, "press_enter_after", True)
-    monkeypatch.setattr(pipeline, "send_automatically", lambda *a: sent.append(a))
+    monkeypatch.setattr(delivery, "send_automatically", lambda *a: sent.append(a))
     rs.state.message.add("ok", rs.state.message.to)       # the message's words
     assert _said("Edit that.", "middle")                    # waits for what to change
     type_at_pause.end_in_a_pause(rs.state.message, False, True, True, "type")

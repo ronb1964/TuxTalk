@@ -912,11 +912,15 @@ def test_a_screen_reader_names_each_hotkey_dropdown_by_its_label(prefs_window):
     assert tab.toggle_combo.list_mnemonic_labels() == [tab.toggle_label]
 
 
-@pytest.mark.parametrize("layout,lost", [(("us", ""), None), (("de", ""), ("@", "€")),
-                                         (("gb", ""), ("€",)), (("pl", ""), ("€",))])
+@pytest.mark.parametrize("layout,lost", [
+    (("us", "", ""), None), (("de", "", ""), ("@", "€")), (("gb", "", ""), ("€",)),
+    (("pl", "", ""), ("€",)),
+    (("us", "", "lv3:ralt_switch"), ()), (("us", "", "lv3:ralt_switch,eurosign:e"), ("€",)),
+    (("de", "", "compose:ralt"), None), (("de", "", "lv3:ralt_alt"), None)])
 def test_right_alt_warns_where_the_layout_makes_it_altgr(monkeypatch, layout, lost):
     """On a German keyboard @ and € are AltGr+Q and AltGr+E; on a UK one @
-    has a key of its own."""
+    has a key of its own. The desktop's keyboard options count: they can
+    make a US Right Alt AltGr, or a German one Compose or plain Alt."""
     monkeypatch.setattr(keyboard_layout, "active_layout", lambda: layout)
     assert keyboard_layout.altgr_characters() == lost
 
@@ -928,7 +932,7 @@ def test_the_first_run_hotkey_test_says_what_right_alt_gives_up(monkeypatch):
     from gi.repository import Gdk, Gtk
     from gtk_text import widgets
     from test_hotkey_test_unreadable_keyboard import _key, _run_dialog
-    monkeypatch.setattr(keyboard_layout, "active_layout", lambda: ("de", ""))
+    monkeypatch.setattr(keyboard_layout, "active_layout", lambda: ("de", "", ""))
     seen = {}
 
     def labels(dialog):
@@ -951,6 +955,6 @@ def test_the_first_run_hotkey_test_says_what_right_alt_gives_up(monkeypatch):
 
 
 def test_right_alt_on_a_us_keyboard_only_stops_being_alt(monkeypatch):
-    monkeypatch.setattr(keyboard_layout, "active_layout", lambda: ("us", ""))
+    monkeypatch.setattr(keyboard_layout, "active_layout", lambda: ("us", "", ""))
     assert layout_label("Right Alt") == "Right Alt (stops working as Alt)"
     assert layout_label("F8") == "F8"
