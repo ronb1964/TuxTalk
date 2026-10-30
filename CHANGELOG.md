@@ -349,6 +349,14 @@ before 0.15.0, so older entries use that name.
   switches dictation over as soon as the downloads are done, the same as
   picking CUDA under Device always did. Before, it waited for you to click
   Apply or OK first.
+- When the Parakeet download fails, the download window says why now, like
+  no internet connection or a download that got cut short, instead of just
+  "Download failed".
+- If the speech model has to be downloaded when TuxTalk starts, that window
+  says "Loading model..." again once the files are in. It used to keep
+  showing the last file's name for the seconds the model took to load.
+- Help and the Voice Commands window list the same "literal" words now.
+  Each had its own list, and they didn't quite agree.
 
 ## [0.18.2] - 2026-10-23
 
