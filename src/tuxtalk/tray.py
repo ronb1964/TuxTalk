@@ -21,7 +21,7 @@ import threading
 import sys
 import warnings
 from .logger import setup_logger
-from . import menu_cache, startup_notices, tray_instance, update_offers, update_ui
+from . import menu_cache, startup_notices, tray_instance, ui_style, update_offers, update_ui
 from .tray_menu import TrayMenu, copy_dictation
 from .tray_presets import Presets
 from .tray_service import ServiceLifecycle
@@ -49,12 +49,9 @@ class DictationTray(ServiceLifecycle, Presets):
     def __init__(self):
         """Make the icon and its menu, offer the D-Bus service and start the
         status poll; the dictation service is started by main()."""
-        # TuxTalk is a dark-themed app. This is a global Gtk setting, so setting
-        # it once here, before any tray dialog is built, makes the tray's own
-        # windows (About, update results) match Preferences and onboarding.
-        _settings = Gtk.Settings.get_default()
-        if _settings is not None:
-            _settings.set_property("gtk-application-prefer-dark-theme", True)
+        # Before any tray window is built, so About and the update results
+        # match Preferences and onboarding.
+        ui_style.prefer_dark_theme()
 
         self.indicator = AppIndicator3.Indicator.new(
             "talktype",
@@ -598,7 +595,7 @@ def main():
     """The tray process: what comes before the tray (the command line, the
     single-instance lock, an old install adopted), the tray, then first-run
     setup or the dictation service, and GTK's main loop."""
-    from . import desktop_identity, ui_style
+    from . import desktop_identity
     desktop_identity.apply()        # TuxTalk's icon on its windows, not KDE's generic one
     ui_style.prepare_windows()   # emoji that show, buttons clear of panels and docks
     command, open_window = _handle_command_line()

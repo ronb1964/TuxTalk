@@ -458,6 +458,15 @@ def load_emoji_font():
         logger.warning(f"Couldn't load TuxTalk's emoji font from {EMOJI_FONT}")
 
 
+def prefer_dark_theme():
+    """Draw this process's windows dark, from the next one built on: TuxTalk
+    is a dark-themed app (the tray's windows, Preferences, onboarding and the
+    service's start-up download)."""
+    settings = Gtk.Settings.get_default()
+    if settings is not None:
+        settings.set_property("gtk-application-prefer-dark-theme", True)
+
+
 def prepare_windows():
     """What every TuxTalk process does before its first window: emoji that
     show everywhere, and windows that fit the screen."""

@@ -421,104 +421,26 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
         return False
 
 def show_cuda_download_dialog(parent=None, on_success_callback=None):
-    """Download TuxTalk's CUDA libraries behind a progress dialog (Preferences' Device choice).
+    """Download TuxTalk's CUDA libraries in the download window (Preferences'
+    Device choice), then say how it went.
 
     on_success_callback runs after the "Downloaded!" message, for example to
     refresh Preferences. Returns True on success, False on failure and None
     if the user cancelled.
     """
-    # GTK only here: recommend.py and the dictation service read this
-    # module's sizes and detection without loading it.
-    import threading
-    import gi
-    gi.require_version('Gtk', '3.0')
-    from gi.repository import GLib, Gtk
-
-    progress_dialog = Gtk.Dialog(title="Downloading CUDA Libraries")
-    progress_dialog.set_default_size(500, 150)
-    progress_dialog.set_modal(True)
-    progress_dialog.set_position(Gtk.WindowPosition.CENTER)
-
-    if parent:
-        progress_dialog.set_transient_for(parent)
-
-    content = progress_dialog.get_content_area()
-    content.set_margin_top(20)
-    content.set_margin_bottom(20)
-    content.set_margin_start(30)
-    content.set_margin_end(30)
-    content.set_spacing(15)
-
-    title_label = Gtk.Label()
-    title_label.set_markup('<span size="large"><b>Downloading CUDA Libraries</b></span>')
-    content.pack_start(title_label, False, False, 0)
-
-    status_label = Gtk.Label()
-    status_label.set_markup(f'<span>Initializing download... (~{DOWNLOAD_SIZE_TEXT})</span>')
-    status_label.set_line_wrap(True)
-    content.pack_start(status_label, False, False, 0)
-
-    progress_bar = Gtk.ProgressBar()
-    progress_bar.set_show_text(True)
-    content.pack_start(progress_bar, False, False, 0)
-
-    info_label = Gtk.Label()
-    info_label.set_markup('<span size="small"><i>This may take several minutes depending on '
-                          'your connection...</i></span>')
-    info_label.set_opacity(0.7)
-    content.pack_start(info_label, False, False, 0)
-
-    cancel_button = Gtk.Button(label="Cancel")
-    progress_dialog.add_action_widget(cancel_button, Gtk.ResponseType.CANCEL)
-
-    progress_dialog.show_all()
-
-    # Cancellation flag and download result
-    cancel_event = threading.Event()
-    download_success = [False]
-
-    last_report = ["", None]
-
-    def update_progress(message, percent):
-        """Update progress bar and status from callback"""
-        last_report[:] = [message, percent]
-
-        def update_ui():
-            if cancel_event.is_set():
-                return False       # Cancel closed the window: nothing to draw on
-            progress_bar.set_fraction(percent / 100.0)
-            progress_bar.set_text(f"{percent}%")
-            status_label.set_text(message)
-            return False
-        GLib.idle_add(update_ui)
-
-    def do_download():
-        """Run download in background thread"""
-        download_success[0] = download_cuda_libraries(
-            progress_callback=update_progress,
-            cancel_event=cancel_event
-        )
-        GLib.idle_add(lambda: None if cancel_event.is_set()     # Cancel closed it already
-                      else progress_dialog.response(Gtk.ResponseType.OK))
-
-    download_thread = threading.Thread(target=do_download)
-    download_thread.daemon = True
-    download_thread.start()
-
-    response = progress_dialog.run()
-    progress_dialog.destroy()
-
-    if response == Gtk.ResponseType.CANCEL or response == Gtk.ResponseType.DELETE_EVENT:
-        logger.info("User cancelled CUDA download")
-        # The download thread notices the event and cleans up by itself.
-        cancel_event.set()
-        return None
-
-    download_thread.join()
+    from .download_progress_dialog import CUDA_TASK, DownloadTask, run_downloads
     from .download_utils import failure_reason
-    _say_how_it_went(parent, download_success[0], on_success_callback,
-                     failure_reason(*last_report))
-    return download_success[0]
+    task = DownloadTask(CUDA_TASK, f"~{DOWNLOAD_SIZE_TEXT}", download_cuda_libraries)
+    result = run_downloads(parent, "Downloading CUDA Libraries",
+                           "This may take several minutes depending on your connection.",
+                           [task])
+    if result is False:
+        # The download notices the Cancel and cleans up by itself.
+        logger.info("User cancelled CUDA download")
+        return None
+    _say_how_it_went(parent, bool(result), on_success_callback,
+                     failure_reason(*task.last_report))
+    return bool(result)
 
 
 def _say_how_it_went(parent, success, on_success_callback, reason=None):

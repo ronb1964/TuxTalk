@@ -293,7 +293,11 @@ class UnifiedDownloadDialog:
                 logger.info(f"Window closed — cancelling {task.name}")
 
     def _update_task_progress(self, task, message, percent):
-        """Update progress for a specific task (thread-safe)."""
+        """Update progress for a specific task (thread-safe). Only a change
+        is sent to GTK: a download reports every chunk it gets, and that
+        would flood GTK's loop."""
+        if (message, percent) == task.last_report:
+            return
         task.last_report = (message, percent)
 
         def update_ui():
@@ -429,6 +433,22 @@ class UnifiedDownloadDialog:
             }
 
         return results
+
+
+def run_downloads(parent, title, description, tasks, arrived=lambda: True):
+    """Run the DownloadTasks *tasks* in one download window over *parent*.
+    True once every one finished and *arrived()* finds what they fetched,
+    False when one was cancelled (closing the window cancels), None when
+    one failed: its reason is in its last_report, and the window showed it."""
+    dialog = UnifiedDownloadDialog(parent=parent, title=title, description=description)
+    for task in tasks:
+        dialog.add_task(task)
+    results = dialog.run().values()
+    if all(r.get("success") for r in results) and arrived():
+        return True
+    if any(r.get("cancelled") for r in results):
+        return False
+    return None
 
 
 def show_unified_download_dialog(cuda=False, extension=False, model=None, parent=None,

@@ -8,6 +8,7 @@ import gi
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gtk, Gdk, GLib
+from . import ui_style
 from .ui_style import message_dialog, show_message
 from .logger import setup_logger
 from .prefs_audio import AudioTab
@@ -158,9 +159,7 @@ class PreferencesWindow:
 
     def __init__(self):
         """Read the settings, build the window and show it."""
-        settings = Gtk.Settings.get_default()
-        if settings:
-            settings.set_property("gtk-application-prefer-dark-theme", True)
+        ui_style.prefer_dark_theme()
 
         self.window = Gtk.Window(title="TuxTalk Preferences")
         self.window.set_name("preferences_window")
@@ -831,7 +830,7 @@ class PreferencesWindow:
 def main():
     """Open Preferences (python -m tuxtalk.prefs [--tab TAB]), or bring the
     one already open to the front."""
-    from . import desktop_identity, ui_style
+    from . import desktop_identity
     desktop_identity.apply()        # TuxTalk's icon on its windows, not KDE's generic one
     ui_style.prepare_windows()   # emoji that show, buttons clear of panels and docks
     # Before anything opens the shared D-Bus connection, as in the tray: one

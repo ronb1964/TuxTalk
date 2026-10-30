@@ -73,15 +73,11 @@ def _missing_files(model):
 
 def _download(parent, tasks, model):
     """Run *tasks* in one download window: (engine and model here now, cancelled)."""
-    from .download_progress_dialog import UnifiedDownloadDialog
-    dialog = UnifiedDownloadDialog(
-        parent=parent, title="Setting Up Vulkan",
-        description="One-time download. Everything runs on this computer.")
-    for task in tasks:
-        dialog.add_task(task)
-    results = dialog.run()
-    ok = all(r.get("success") for r in results.values()) and wv.is_installed(model)
-    return ok, not ok and any(r.get("cancelled") for r in results.values())
+    from .download_progress_dialog import run_downloads
+    result = run_downloads(parent, "Setting Up Vulkan",
+                           "One-time download. Everything runs on this computer.", tasks,
+                           arrived=lambda: wv.is_installed(model))
+    return bool(result), result is False
 
 
 def fetch_files(parent, model):

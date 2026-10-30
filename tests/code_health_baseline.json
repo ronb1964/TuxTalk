@@ -39,9 +39,6 @@
   "kwin_hotkeys.py::_app_shortcut_clashes": {
    "decisions": 19
   },
-  "model_helper.py::download_model_with_progress": {
-   "lines": 102
-  },
   "normalize.py::_space_after_ender_repl": {
    "decisions": 18
   },

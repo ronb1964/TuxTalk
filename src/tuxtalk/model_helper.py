@@ -5,10 +5,9 @@ import os
 # tqdm_class, so the progress bars would never move.
 os.environ["HF_HUB_DISABLE_XET"] = "1"
 
-import threading
 import gi
 gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk, GLib
+from gi.repository import Gtk
 from .ui_style import message_dialog
 from .logger import setup_logger
 from .recommend import model_title
@@ -426,22 +425,19 @@ def download_model_files(parent, model, confirm=False):
     window: (here now, cancelled). The caller checks is_model_cached_fast
     first. The model isn't loaded; what dictates with it loads it.
     *confirm* asks first. Success is told only once every file is there."""
-    from .download_progress_dialog import DownloadTask, UnifiedDownloadDialog
+    from .download_progress_dialog import DownloadTask, run_downloads
     if confirm and not _confirm_download(parent, model):
         return False, True
     logger.info(f"Model {model} not found, downloading...")
-    dialog = UnifiedDownloadDialog(
-        parent=parent, title="Downloading the speech model",
-        description="This may take a few minutes depending on your connection.")
     task = DownloadTask(model_title(model), MODEL_DISPLAY_SIZES.get(model, "unknown size"),
                         make_model_download_func(model))
-    dialog.add_task(task)
-    dialog.run()
     # The downloader's word is trusted only once the cache holds every file.
-    ok = task.success and not task.cancelled and is_model_cached_fast(model)
-    if ok:
+    result = run_downloads(parent, "Downloading the speech model",
+                           "This may take a few minutes depending on your connection.",
+                           [task], arrived=lambda: is_model_cached_fast(model))
+    if result:
         logger.info(f"Model {model} downloaded successfully")
-    return ok, task.cancelled
+    return bool(result), result is False
 
 
 def parakeet_update_needed(cfg):
@@ -470,18 +466,12 @@ def download_parakeet_update(device, parent=None):
     tray's one-time offer and Preferences' Update Parakeet. True when it
     arrived, False when cancelled, None when the download failed."""
     from . import parakeet_ultra
-    from .download_progress_dialog import DownloadTask, UnifiedDownloadDialog
-    dialog = UnifiedDownloadDialog(
-        parent=parent, title="Updating Parakeet",
-        description="One-time download. Everything runs on this computer.")
-    dialog.add_task(DownloadTask("Parakeet Ultra", parakeet_update_size(device),
-                                 parakeet_ultra.make_download_func(device)))
-    results = dialog.run()
-    if all(r.get("success") for r in results.values()) and not parakeet_ultra.missing(device):
-        return True
-    if any(r.get("cancelled") for r in results.values()):
-        return False
-    return None
+    from .download_progress_dialog import DownloadTask, run_downloads
+    return run_downloads(parent, "Updating Parakeet",
+                         "One-time download. Everything runs on this computer.",
+                         [DownloadTask("Parakeet Ultra", parakeet_update_size(device),
+                                       parakeet_ultra.make_download_func(device))],
+                         arrived=lambda: not parakeet_ultra.missing(device))
 
 
 class BrokenModelFiles(Exception):
@@ -557,64 +547,46 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
         return None
 
     logger.info(f"Model {model_name} NOT cached - showing download progress dialog")
-    settings = Gtk.Settings.get_default()
-    if settings:        # for this window and the ones after it
-        settings.set_property("gtk-application-prefer-dark-theme", True)
-
-    size_str = MODEL_DISPLAY_SIZES.get(model_name, "unknown size")
-
+    from .ui_style import prefer_dark_theme
+    prefer_dark_theme()     # for this window and the ones after it
     if show_confirmation and not _confirm_download(parent, model_name):
         return None
+    from .download_progress_dialog import DownloadTask, run_downloads
+    from .download_utils import failure_reason
+    loaded, error = [], []
 
-    window = _StartupDownloadWindow(model_name, size_str, parent)
-    cancel_event = threading.Event()
-    download_result = [None]
-    download_error = [None]
-
-    def do_download():
-        """Fetch the files through the download every window shares, then
-        load the model, closing the window on every way out."""
-        last_report = [("", 0)]
-
-        def report(text, percent):
-            last_report[0] = (text, percent)
-            window.show_progress(percent * 0.95, text, cancel_event)    # the rest: loading
-
+    def download_and_load(report, cancel_event):
+        """Fetch the files (afresh when the cached copy won't load), then load
+        the model in the same window: the download's progress to 95 %, the
+        load for the rest."""
+        if not make_model_download_func(model_name, force=cached)(
+                lambda text, percent: report(text, int(percent * 0.95)), cancel_event):
+            return False
+        report("Loading model...", 95)
         try:
-            if not make_model_download_func(model_name, force=cached)(report, cancel_event):
-                if not cancel_event.is_set():
-                    from .download_utils import failure_reason
-                    download_error[0] = RuntimeError(
-                        failure_reason(*last_report[0]) or "the files could not be downloaded")
-                return
-            window.show_progress(95, "Loading model...", cancel_event)
             model = load_model(model_name, device=device, compute_type=compute_type)
-            if not cancel_event.is_set():
-                download_result[0] = model
-                logger.info(f"Model {model_name} loaded successfully")
         except Exception as e:
-            download_error[0] = e
             logger.error(f"Model download failed: {e}")
-        finally:
-            # Otherwise run() waits for a Cancel that then throws the
-            # finished model away.
-            GLib.idle_add(window.close_when_done, cancel_event)
+            error.append(e)
+            report(f"Couldn't load the model: {e}", 0)
+            return False
+        if not cancel_event.is_set():
+            loaded.append(model)
+            logger.info(f"Model {model_name} loaded successfully")
+        return True
 
-    threading.Thread(target=do_download, daemon=True).start()
-    response = window.dialog.run()
-    window.dialog.destroy()
-    cancel_event.set()      # the window is gone: nothing may update it any more
-
-    # A Cancel after the download finished, in the 200 ms before the window
-    # closes by itself, keeps the model.
-    if (response in (Gtk.ResponseType.CANCEL, Gtk.ResponseType.DELETE_EVENT)
-            and download_result[0] is None):
+    task = DownloadTask(model_title(model_name),
+                        MODEL_DISPLAY_SIZES.get(model_name, "unknown size"), download_and_load)
+    result = run_downloads(parent, f"Downloading Model: {model_title(model_name)}",
+                           "This may take several minutes on first download...", [task])
+    if result is False:
         logger.info(f"User cancelled model download: {model_name}")
         return None
-    if download_error[0]:
-        _show_download_failed(parent, model_name, download_error[0])
+    if result is None:
+        _show_download_failed(parent, model_name, error[0] if error else RuntimeError(
+            failure_reason(*task.last_report) or "the files could not be downloaded"))
         return None
-    return download_result[0]
+    return loaded[0]
 
 
 def _download_failed_text(model_name, error):
@@ -636,78 +608,3 @@ def _show_download_failed(parent, model_name, error):
     msg.format_secondary_text(_download_failed_text(model_name, error))
     msg.run()
     msg.destroy()
-
-
-class _StartupDownloadWindow:
-    """The progress window of download_model_with_progress: the service's
-    own download of a model missing at start, which loads it afterwards."""
-
-    def __init__(self, model_name, size_str, parent):
-        """Build and show the window for *model_name* (*size_str* to fetch)."""
-        self._shown = None      # (percent, text) last sent to GTK
-        self.dialog = Gtk.Dialog(title=f"Downloading Model: {model_title(model_name)}")
-        self.dialog.set_default_size(500, 150)
-        self.dialog.set_modal(True)
-        self.dialog.set_position(Gtk.WindowPosition.CENTER)
-        if parent:
-            self.dialog.set_transient_for(parent)
-        content = self.dialog.get_content_area()
-        content.set_margin_top(20)
-        content.set_margin_bottom(20)
-        content.set_margin_start(30)
-        content.set_margin_end(30)
-        content.set_spacing(15)
-
-        title_label = Gtk.Label()
-        title_label.set_markup(f'<span size="large"><b>Downloading {model_title(model_name)} '
-                               'Model</b></span>')
-        content.pack_start(title_label, False, False, 0)
-        self.status_label = Gtk.Label()
-        self.status_label.set_markup(f'<span>Downloading... ({size_str})</span>')
-        self.status_label.set_line_wrap(True)
-        content.pack_start(self.status_label, False, False, 0)
-        self.progress_bar = Gtk.ProgressBar()
-        self.progress_bar.set_show_text(True)
-        self.progress_bar.set_text("0%")
-        content.pack_start(self.progress_bar, False, False, 0)
-        info_label = Gtk.Label()
-        info_label.set_markup('<span size="small"><i>This may take several minutes on first '
-                              'download...</i></span>')
-        info_label.set_opacity(0.7)
-        content.pack_start(info_label, False, False, 0)
-
-        cancel_button = Gtk.Button(label="Cancel")
-        cancel_button.set_can_default(True)
-        cancel_button.show()
-        self.dialog.add_action_widget(cancel_button, Gtk.ResponseType.CANCEL)
-        self.dialog.show_all()
-
-    def show_progress(self, percent, text, cancel_event):
-        """Show *percent* and *text* from any thread. Only a change is sent
-        to GTK, so per-chunk reports don't flood its loop; a new text at the
-        same percent is a change ("Loading model..." comes at the 95 % the
-        download ended on)."""
-        shown = (int(percent), text)
-        if shown == self._shown:
-            return
-        self._shown = shown
-
-        def update():
-            if not cancel_event.is_set():       # else the window is already gone
-                self.progress_bar.set_fraction(percent / 100.0)
-                self.progress_bar.set_text(f"{int(percent)}%")
-                if text:
-                    self.status_label.set_text(text)    # a file name can hold & or <
-            return False
-        GLib.idle_add(update)
-
-    def close_when_done(self, cancel_event):
-        """Fill the bar and close the window shortly after, on GTK's thread."""
-        if cancel_event.is_set():
-            return False       # the window is already gone
-        self.progress_bar.set_fraction(1.0)
-        self.progress_bar.set_text("100%")
-        # Unless a Cancel in these 200 ms closed the window already.
-        GLib.timeout_add(200, lambda: not cancel_event.is_set()
-                         and self.dialog.response(Gtk.ResponseType.OK))
-        return False

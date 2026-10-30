@@ -587,17 +587,17 @@ class AdvancedTab(Tab):
             self._untick_ai_feature(check, key, handler)
             return
 
-        from tuxtalk.download_progress_dialog import DownloadTask, UnifiedDownloadDialog
-        dialog = UnifiedDownloadDialog(
-            parent=self.window, title="Downloading the AI",
-            description="One-time download. Everything runs on this computer.")
-        dialog.add_task(DownloadTask("AI engine", ai_cleanup.LLAMA_SIZE_TEXT,
-                                     ai_cleanup.make_engine_download_func()))
-        dialog.add_task(DownloadTask("AI model", ai_cleanup.MODEL_SIZE_TEXT,
-                                     ai_cleanup.make_model_download_func()))
-        results = dialog.run()
+        from tuxtalk.download_progress_dialog import DownloadTask, run_downloads
+        result = run_downloads(
+            self.window, "Downloading the AI",
+            "One-time download. Everything runs on this computer.",
+            [DownloadTask("AI engine", ai_cleanup.LLAMA_SIZE_TEXT,
+                          ai_cleanup.make_engine_download_func()),
+             DownloadTask("AI model", ai_cleanup.MODEL_SIZE_TEXT,
+                          ai_cleanup.make_model_download_func())],
+            arrived=ai_cleanup.is_installed)
 
-        if all(r.get("success") for r in results.values()) and ai_cleanup.is_installed():
+        if result:
             self.update_config(key, True)
             # The other option's box showed unticked while the files were
             # missing; the download mustn't turn it on behind that box, even
@@ -609,7 +609,7 @@ class AdvancedTab(Tab):
             return
 
         self._untick_ai_feature(check, key, handler)
-        if not any(r.get("cancelled") for r in results.values()):
+        if result is None:
             show_message(self.window,
                          Gtk.MessageType.ERROR,
                          "The AI download did not finish",
