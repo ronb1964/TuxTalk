@@ -568,6 +568,9 @@ def _x11_layout():
         if _failures.failed("x11 group", e):
             logger.info(f"Could not read the active X11 layout group: {e}")
         group = 0
+    else:
+        if _failures.worked("x11 group"):
+            logger.info("The active X11 layout group can be read again")
     variants = [v.strip() for v in (fields.get("variant") or "").split(",")]
     # A layout without a variant of its own has none; the first layout's
     # ("us(dvorak),ua" lists just "dvorak") must not be applied to it.
@@ -691,14 +694,17 @@ def shortcut_keycode(letter):
     if layout:
         try:
             entry = planner_for(layout)._keys.get(_lib().xkb_utf32_to_keysym(ord(letter)))
-            if entry and not entry[1] and not entry[2]:     # no Shift, no AltGr
-                return entry[0]
         except (OSError, ValueError, AttributeError) as e:
             # No libxkbcommon, one before 1.0 (lacking a function _lib
             # loads), or a layout it doesn't know: the US key, as typing
             # falls back to US there too.
             if _failures.failed("shortcut keys", e):
                 logger.info(f"Shortcut keys use the US letters: {e}")
+            return _US_LETTER_KEYS[letter]
+        if _failures.worked("shortcut keys"):
+            logger.info(f"Shortcut keys follow the {layout[0]} layout again")
+        if entry and not entry[1] and not entry[2]:     # no Shift, no AltGr
+            return entry[0]
     return _US_LETTER_KEYS[letter]
 
 

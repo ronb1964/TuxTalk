@@ -743,3 +743,21 @@ def test_a_desktop_layout_that_cant_be_read_is_logged_once_not_before_every_chun
     lines = [r.getMessage() for r in caplog.records]
     assert sum("gsettings hung" in line for line in lines) == 1
     assert sum("read again" in line for line in lines) == 1
+
+
+def test_a_shortcut_fallback_that_comes_back_after_working_is_logged_again(
+        monkeypatch, caplog):
+    """Logged once per failure, not once per process: after the layout works
+    again, the same failure is news once more."""
+    import logging
+    layout = {"now": ("no-such-layout", "", "")}
+    monkeypatch.setattr(kl, "active_layout", lambda: layout["now"])
+    monkeypatch.setattr(kl, "_failures", kl.FailureNotes())
+    with caplog.at_level(logging.INFO, logger=kl.logger.name):
+        kl.shortcut_keycode("v")
+        kl.shortcut_keycode("v")
+        layout["now"] = ("us", "", "")
+        kl.shortcut_keycode("v")
+        layout["now"] = ("no-such-layout", "", "")
+        kl.shortcut_keycode("v")
+    assert sum("US letters" in r.getMessage() for r in caplog.records) == 2
