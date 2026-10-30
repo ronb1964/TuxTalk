@@ -421,11 +421,12 @@ def _dictation_key_up(key, held_modifiers) -> None:
     """Dictation key *key* came up. When its press was TuxTalk's
     (send_countdown.key_pressed) and its recording is over already (a tap
     that only held a send, Esc, a microphone that didn't open), the space a
-    held send left off goes in now. Never while another modifier is still
-    down: Alt or Ctrl with it makes a shortcut (Alt+Space opens KRunner).
-    A recording still running gives it back when it ends."""
+    held send left off goes in now. Never while Alt, Ctrl or Super is still
+    down: with it the space makes a shortcut (Alt+Space opens KRunner).
+    Shift is fine (Shift+Space is a space), and is still down after a voice
+    edit's Shift+F8. A recording still running gives it back when it ends."""
     if (send_countdown.key_released(key) and send_countdown.owes_space()
-            and not rs.state.is_recording and not held_modifiers - {key}):
+            and not rs.state.is_recording and not held_modifiers - {key} - _SHIFT_CODES):
         # After what's still being typed.
         dictation_worker.submit(send_countdown.type_owed_space)
 

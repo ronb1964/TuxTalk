@@ -149,6 +149,16 @@ def test_a_release_with_ctrl_pressed_meanwhile_keeps_the_space_owed(chat, keyboa
     assert typed == [] and send_countdown.owes_space()
 
 
+def test_a_release_with_shift_still_down_gives_the_space_back(chat, keyboard, mic, monkeypatch):
+    """Shift+F8 is a voice edit; Shift+Space is still just a space."""
+    focus, heard, typed, notices = chat
+    counting_down(monkeypatch)
+    mic.fails()
+    key(F8, 1)
+    key(F8, 0, held={ecodes.KEY_LEFTSHIFT})
+    assert typed == [(" ", FIRST[1])] and not send_countdown.owes_space()
+
+
 def test_a_toggle_tap_that_holds_the_send_gives_its_space_back_at_the_release(
         chat, keyboard, mic, monkeypatch):
     focus, heard, typed, notices = chat
