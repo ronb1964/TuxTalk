@@ -55,9 +55,13 @@ def _refresh_icon_caches(icons_base: str) -> None:
     for argv in (["gtk-update-icon-cache", "-f", "-t", icons_base],
                  ["xdg-icon-resource", "forceupdate", "--mode", "user"]):
         try:
-            subprocess.run(argv, capture_output=True, timeout=10)
+            result = subprocess.run(argv, capture_output=True, text=True, timeout=10)
         except (OSError, subprocess.SubprocessError) as e:
             logger.info(f"{argv[0]} didn't run (not needed everywhere): {e}")
+            continue
+        if result.returncode:
+            logger.info(f"{argv[0]} failed (exit {result.returncode}, not needed everywhere): "
+                        f"{result.stderr.strip()[:200]}")
 
 
 def install_app_icon() -> Optional[str]:
@@ -131,37 +135,18 @@ def point_at_running_appimage(running: str) -> None:
 
 
 def create_desktop_launcher(appimage_exec_path: Optional[str] = None) -> Tuple[bool, str]:
-    """
-    Create a desktop launcher (.desktop file) for TuxTalk.
-
-    Creates a launcher in ~/.local/share/applications/ that points to
-    the standard AppImage location (~/AppImages/TuxTalk.AppImage),
-    or to *appimage_exec_path*: the running AppImage, when the copy there failed.
-
-    Returns:
-        Tuple[bool, str]: (success, message)
-    """
+    """Write the Applications-menu launcher for the AppImage installed in
+    ~/AppImages, or for *appimage_exec_path*: the running AppImage, when the
+    copy there failed. (success, message for the user)."""
     try:
-        # Ensure applications directory exists
-        apps_dir = os.path.dirname(DESKTOP_FILE_PATH)
-        os.makedirs(apps_dir, exist_ok=True)
-
-        # Install the TuxTalk icon and get the icon name to use
-        icon_name = install_app_icon()
-        if not icon_name:
-            icon_name = "audio-input-microphone"  # Fallback to system icon
-
-        # Get the current version for the comment
+        os.makedirs(os.path.dirname(DESKTOP_FILE_PATH), exist_ok=True)
+        icon_name = install_app_icon() or "audio-input-microphone"
         version = update_checker.get_current_version()
-
-        # The file first-run setup and the updater install to.
         appimage_exec_path = appimage_exec_path or update_checker.APPIMAGE_PATH
         logger.info(f"Desktop launcher Exec path: {appimage_exec_path}")
         # Quoted where it must be: a download named "TuxTalk (1).AppImage"
         # was cut at the space, and the menu entry opened nothing.
         program = desktop_exec_program(appimage_exec_path)
-
-        # Desktop file content
         desktop_content = f"""[Desktop Entry]
 Name=TuxTalk
 Comment=Hold a key, talk, and your words are typed for you (v{version})
@@ -173,21 +158,14 @@ Keywords=dictation;speech;voice;transcription;whisper;
 StartupNotify=true
 Terminal=false
 {desktop_actions(program)}"""
-
-        # Write the desktop file
         with open(DESKTOP_FILE_PATH, "w") as f:
             f.write(desktop_content)
-
-        # Make it executable (not strictly required but good practice)
         os.chmod(DESKTOP_FILE_PATH, 0o755)
-
         # The menu cache (KDE's above all) is refreshed in the background, as
         # add_launcher_actions does: it takes seconds, and Setup Complete waits.
         threading.Thread(target=menu_cache.refresh_menu_cache, daemon=True).start()
-
         logger.info(f"Desktop launcher created at {DESKTOP_FILE_PATH}")
         return (True, "Desktop launcher created!\n\nTuxTalk is now in your Applications menu.")
-
     except Exception as e:
         logger.error(f"Failed to create desktop launcher: {e}")
         return (False, f"Failed to create launcher: {e}")

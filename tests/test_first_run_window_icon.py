@@ -111,15 +111,35 @@ def test_writing_the_launcher_doesnt_wait_for_the_menu_cache(home, monkeypatch):
     """KDE's cache refresh (a 0.5 s sleep and kbuildsycoca) held Setup Complete
     back one to three seconds after the downloads."""
     import threading
-    released = threading.Event()
-    monkeypatch.setattr(desktop_launcher.menu_cache, "refresh_menu_cache", lambda: released.wait(5))
-    finished = threading.Event()
-    threading.Thread(target=lambda: desktop_launcher.create_desktop_launcher() and finished.set(),
-                     daemon=True).start()
+    released, refreshing, finished = threading.Event(), threading.Event(), threading.Event()
+    result = []
+
+    def refresh():
+        refreshing.set()
+        released.wait(5)
+    monkeypatch.setattr(desktop_launcher.menu_cache, "refresh_menu_cache", refresh)
+
+    def write():
+        result.append(desktop_launcher.create_desktop_launcher())
+        finished.set()
+    threading.Thread(target=write, daemon=True).start()
     try:
-        assert finished.wait(2)
+        assert finished.wait(2) and result[0][0] is True
+        assert refreshing.wait(2), "the menu cache was never refreshed"
     finally:
         released.set()
+
+
+def test_a_cache_tool_that_fails_is_logged_with_its_error(tmp_path, monkeypatch, caplog):
+    import logging
+    import subprocess
+    import types
+    monkeypatch.setattr(subprocess, "run", lambda argv, **k: types.SimpleNamespace(
+        returncode=1, stderr="gtk-update-icon-cache: No theme index file.\n"))
+    caplog.set_level(logging.INFO)
+    desktop_launcher._refresh_icon_caches(str(tmp_path))
+    assert any("No theme index file" in r.getMessage() and "exit 1" in r.getMessage()
+               for r in caplog.records)
 
 
 def test_the_icon_goes_in_every_size_even_without_the_cache_tools(tmp_path, monkeypatch):

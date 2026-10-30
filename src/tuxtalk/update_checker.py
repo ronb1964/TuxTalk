@@ -43,7 +43,6 @@ APPIMAGE_NAME = "TuxTalk.AppImage"
 APPIMAGE_PATH = os.path.join(APPIMAGE_DIR, APPIMAGE_NAME)
 
 
-
 def get_current_version() -> str:
     """
     Get current TuxTalk version.
