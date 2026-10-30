@@ -44,7 +44,8 @@ dictate-prefs = "tuxtalk.prefs:main"
 pytest = "^8.4.1"
 black = "^25.1.0"
 ruff = "0.17.0"  # the version CI lints with
-# Reads the bundled emoji font in tests/test_emoji_font.py.
+# Builds the bundled emoji font (packaging/build-emoji-font.py) and reads it
+# in tests/test_emoji_font.py.
 fonttools = "^4.60"
 
 [tool.black]

@@ -49,8 +49,7 @@ jobs:
           python3 -m venv poetry-venv
           poetry-venv/bin/pip install -q poetry==2.5.1
           python3 -m venv --system-site-packages venv
-          VIRTUAL_ENV="$PWD/venv" poetry-venv/bin/poetry install \
-            --with dev --no-root --no-interaction
+          VIRTUAL_ENV="$PWD/venv" poetry-venv/bin/poetry install --no-root --no-interaction
 
       # A virtual screen for the GTK windows the tests build, and a private
       # D-Bus session bus so no test reaches anything real.
@@ -68,15 +67,25 @@ jobs:
       - uses: actions/checkout@v7
 
       # A venv because Ubuntu's own Python refuses pip installs (PEP 668).
-      - name: Install ruff, shellcheck and Poetry
+      - name: Install shellcheck and Poetry
         run: |
-          python3 -m venv lint-venv
-          lint-venv/bin/pip install -q ruff==0.17.0 shellcheck-py==0.11.0.1 poetry==2.5.1
+          python3 -m venv tools-venv
+          tools-venv/bin/pip install -q shellcheck-py==0.11.0.1 poetry==2.5.1
 
       # The release build refuses a stale poetry.lock; this says so on the push
       # that changed pyproject.toml instead of at release time.
       - name: poetry.lock matches pyproject.toml
-        run: lint-venv/bin/poetry check --lock
+        run: tools-venv/bin/poetry check --lock
+
+      # Ruff from poetry.lock's dev group: the version the tests' ruff
+      # ratchet counts with.
+      - name: Ruff (poetry.lock)
+        env:
+          POETRY_VIRTUALENVS_CREATE: "false"
+        run: |
+          python3 -m venv lint-venv
+          VIRTUAL_ENV="$PWD/lint-venv" tools-venv/bin/poetry install \
+            --only dev --no-root --no-interaction
 
       - name: Python (pyflakes, bugbear and simplify rules)
         run: lint-venv/bin/ruff check src/tuxtalk
@@ -84,4 +93,4 @@ jobs:
       # Only tracked scripts, so DEV_SETUP.md's copy of this command gives the
       # same answer in a working folder that holds untracked scripts too.
       - name: Shell scripts
-        run: git ls-files -z '*.sh' | xargs -0 lint-venv/bin/shellcheck -S warning
+        run: git ls-files -z '*.sh' | xargs -0 tools-venv/bin/shellcheck -S warning
