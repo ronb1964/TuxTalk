@@ -11,6 +11,7 @@ import os
 import shutil
 import tempfile
 import threading
+import types
 
 import gi
 import pytest
@@ -842,7 +843,6 @@ def tray_main(monkeypatch):
     """The tray's main(), on a start that isn't the first unless
     run(first_run=True); *welcome* stands in for the welcome screens."""
     import sys
-    import types
     import dbus.mainloop.glib
     from tuxtalk import (autostart, control, cuda_helper, desktop_identity, desktop_launcher,
                          first_run_setup, gnome_keybindings, rename_migration,
@@ -1084,3 +1084,58 @@ def first_run(monkeypatch):
         first_run_setup.show_welcome_and_install()
         return done
     return run
+
+
+class _MessageBox:
+    """One of ui_style's message boxes, with no window: what it showed."""
+
+    def __init__(self, boxes, **kwargs):
+        self._boxes = boxes
+        self.kind, self.title = kwargs.get("message_type"), kwargs.get("text", "")
+        self.parent = kwargs.get("transient_for")
+        self.text, self.buttons, self.default = "", [], None
+        self.keep_above = self.centred = self.destructive = False
+        boxes.shown.append(self)
+
+    def format_secondary_text(self, text):
+        self.text = text
+
+    format_secondary_markup = format_secondary_text
+
+    def add_button(self, label, response):
+        self.buttons.append(label)
+        box = self
+
+        class _Style:
+            def add_class(self, name):
+                box.destructive = box.destructive or name == "destructive-action"
+        return types.SimpleNamespace(get_style_context=_Style)
+
+    def set_default_response(self, response):
+        self.default = response
+
+    def set_position(self, position):
+        self.centred = True
+
+    def set_keep_above(self, on):
+        self.keep_above = on
+
+    def run(self):
+        answer = self._boxes.answer
+        return answer(self) if callable(answer) else answer
+
+    def destroy(self, *_args):
+        pass
+
+    connect = show_all = present = destroy
+
+
+@pytest.fixture
+def message_boxes(monkeypatch):
+    """ui_style.show_message's boxes without a window. Each answers
+    .answer (a Gtk.ResponseType, or a function of the box), and .shown keeps
+    every box in order: its title, text, buttons, default and so on."""
+    from tuxtalk import ui_style
+    boxes = types.SimpleNamespace(shown=[], answer=None)
+    monkeypatch.setattr(ui_style, "message_dialog", lambda **k: _MessageBox(boxes, **k))
+    return boxes

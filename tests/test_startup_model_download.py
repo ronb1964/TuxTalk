@@ -200,7 +200,7 @@ def test_broken_files_raise_instead_of_opening_dialogs_off_the_gtk_thread(monkey
     monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda m: True)
     monkeypatch.setattr(model_helper, "load_model", broken)
     monkeypatch.setattr(model_helper, "_loads_on_cpu", lambda m: False)
-    monkeypatch.setattr(model_helper, "message_dialog", no_dialogs)
+    monkeypatch.setattr(model_helper, "show_message", no_dialogs)
     monkeypatch.setattr(model_helper.Gtk, "Dialog", no_dialogs)
     with pytest.raises(model_helper.BrokenModelFiles):
         model_helper.download_model_with_progress("small", dialogs=False)
@@ -220,7 +220,7 @@ def test_power_saving_never_opens_a_download_off_the_gtk_thread(monkeypatch):
     monkeypatch.setattr(engine, "load_config", lambda: _settings(device="cpu"))
     checked = []
     monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda m: checked.append(m) or False)
-    monkeypatch.setattr(model_helper, "message_dialog", no_dialogs)
+    monkeypatch.setattr(model_helper, "show_message", no_dialogs)
     monkeypatch.setattr(model_helper.Gtk, "Dialog", no_dialogs)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: shown.append(body))
     assert engine.wake() is None

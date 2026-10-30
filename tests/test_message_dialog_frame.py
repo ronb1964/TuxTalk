@@ -109,3 +109,77 @@ def test_no_module_builds_a_message_dialog_directly():
         if re.search(r"\bGtk\.MessageDialog\(", line)
     ]
     assert offenders == []
+
+
+# --- show_message: every message box in one place --------------------------------
+
+def _answered(Gtk, monkeypatch, response):
+    """Make every box answer *response* at once; returns what each showed,
+    read while it was open."""
+    shown = []
+
+    def run(box):
+        buttons = box.get_action_area().get_children()
+        shown.append({
+            "title": box.props.text, "text": box.props.secondary_text,
+            "markup": box.props.secondary_use_markup,
+            "buttons": [b.get_label() for b in buttons],
+            "default": [b.get_label() for b in buttons if b.has_default()],
+            "warning": [b.get_label() for b in buttons
+                        if b.get_style_context().has_class("destructive-action")]})
+        return response
+    monkeypatch.setattr(Gtk.Dialog, "run", run)
+    return shown
+
+
+def test_a_question_has_its_buttons_in_order_and_enter_gives_its_default(Gtk, monkeypatch):
+    from tuxtalk.ui_style import show_message
+    shown = _answered(Gtk, monkeypatch, Gtk.ResponseType.CANCEL)
+    answer = show_message(None, Gtk.MessageType.QUESTION, "Apply your changes?", "Or not.",
+                          [("Keep Editing", Gtk.ResponseType.CANCEL),
+                           ("Apply", Gtk.ResponseType.OK)], default=Gtk.ResponseType.OK)
+    assert answer == Gtk.ResponseType.CANCEL
+    assert shown == [{"title": "Apply your changes?", "text": "Or not.", "markup": False,
+                      "buttons": ["Keep Editing", "Apply"], "default": ["Apply"],
+                      "warning": []}]
+
+
+def test_a_button_that_deletes_or_reboots_is_drawn_as_a_warning(Gtk, monkeypatch):
+    from tuxtalk.ui_style import show_message
+    shown = _answered(Gtk, monkeypatch, Gtk.ResponseType.CANCEL)
+    show_message(None, Gtk.MessageType.WARNING, "Clear the log?", "",
+                 [("Cancel", Gtk.ResponseType.CANCEL), ("Clear log", Gtk.ResponseType.OK)],
+                 destructive=Gtk.ResponseType.OK)
+    assert shown[0]["warning"] == ["Clear log"]
+
+
+def test_markup_is_drawn_and_plain_text_is_shown_as_typed(Gtk, monkeypatch):
+    """A file name or a dictated word can hold & or <: plain text must never
+    be read as markup."""
+    from tuxtalk.ui_style import show_message
+    shown = _answered(Gtk, monkeypatch, Gtk.ResponseType.OK)
+    show_message(None, Gtk.MessageType.INFO, "Saved", "Tom & <Jerry>.txt")
+    show_message(None, Gtk.MessageType.INFO, "Updated", "<b>v0.19</b>", markup=True)
+    assert (shown[0]["text"], shown[0]["markup"]) == ("Tom & <Jerry>.txt", False)
+    assert shown[1]["markup"] is True
+
+
+def test_a_box_from_the_tray_opens_over_the_other_windows(Gtk, monkeypatch):
+    from tuxtalk.ui_style import show_message
+    centred = []
+    monkeypatch.setattr(Gtk.Window, "set_position", lambda box, pos: centred.append(pos))
+    _answered(Gtk, monkeypatch, Gtk.ResponseType.OK)
+    show_message(None, Gtk.MessageType.INFO, "Update installed", "", keep_above=True)
+    assert centred == [Gtk.WindowPosition.CENTER]
+
+
+def test_a_box_that_doesnt_wait_closes_itself_when_answered(Gtk, monkeypatch):
+    """From the tray: the menu keeps working while it's open."""
+    from tuxtalk.ui_style import show_message
+    monkeypatch.setattr(Gtk.Dialog, "run", lambda box: pytest.fail("waited"))
+    assert show_message(None, Gtk.MessageType.ERROR, "Update Failed", "No network.",
+                        wait=False) is None
+    box = _open_box(Gtk, "Update Failed")
+    assert box is not None
+    box.response(Gtk.ResponseType.OK)
+    assert _open_box(Gtk, "Update Failed") is None

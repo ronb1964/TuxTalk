@@ -13,7 +13,7 @@ from gi.repository import GLib, Gtk
 from .hotkey_test_dialog import show_hotkey_test_dialog
 from .logger import setup_logger
 from .setup_complete_dialog import show_setup_complete_dialog
-from .ui_style import message_dialog, show_message
+from .ui_style import show_message
 from .welcome_dialog import show_welcome_dialog
 
 logger = setup_logger(__name__)
@@ -71,19 +71,12 @@ def _ask_retry_download(model):
     """After a failed first-run download: True to try *model* again, False
     to use a smaller model."""
     from .recommend import model_title
-    msg = message_dialog(
-        message_type=Gtk.MessageType.QUESTION,
-        buttons=Gtk.ButtonsType.NONE,
-        text=f"Try downloading {model_title(model)} again?",
-    )
-    msg.format_secondary_text(
+    answer = show_message(
+        None, Gtk.MessageType.QUESTION, f"Try downloading {model_title(model)} again?",
         "The download didn't finish, often just a slow moment on the network. "
-        "You can try again, or use a smaller model for now and switch later.")
-    msg.add_button("Use a Smaller Model", Gtk.ResponseType.NO)
-    msg.add_button("Try Again", Gtk.ResponseType.YES)
-    msg.set_default_response(Gtk.ResponseType.YES)
-    answer = msg.run()
-    msg.destroy()
+        "You can try again, or use a smaller model for now and switch later.",
+        [("Use a Smaller Model", Gtk.ResponseType.NO), ("Try Again", Gtk.ResponseType.YES)],
+        default=Gtk.ResponseType.YES)
     return answer == Gtk.ResponseType.YES
 
 

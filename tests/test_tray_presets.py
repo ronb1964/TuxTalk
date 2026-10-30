@@ -314,22 +314,10 @@ def test_a_processor_preset_downloads_without_loading_the_model(env, monkeypatch
     assert saved == [("tiny", "cpu")] and t.restarted == 1
 
 
-def test_a_declined_preset_download_opens_no_window(monkeypatch):
+def test_a_declined_preset_download_opens_no_window(monkeypatch, message_boxes):
+    from gi.repository import Gtk
     from tuxtalk import download_progress_dialog, model_helper
-
-    class Declined:
-        def format_secondary_text(self, text):
-            pass
-
-        def set_position(self, pos):
-            pass
-
-        def run(self):
-            return model_helper.Gtk.ResponseType.CANCEL
-
-        def destroy(self):
-            pass
-    monkeypatch.setattr(model_helper, "message_dialog", lambda **k: Declined())
+    message_boxes.answer = Gtk.ResponseType.CANCEL
     monkeypatch.setattr(download_progress_dialog, "UnifiedDownloadDialog",
                         lambda **k: pytest.fail("opened the download window"))
     assert model_helper.download_model_files(None, "small", confirm=True) == (False, True)

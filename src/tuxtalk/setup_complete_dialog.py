@@ -10,7 +10,7 @@ gi.require_version('Gtk', '3.0')
 from gi.repository import GLib, Gtk
 
 from .logger import setup_logger
-from .ui_style import message_dialog, more_below_bar, show_message
+from .ui_style import more_below_bar, show_message
 from .config import saved_hold_key
 from .desktop_detect import menu_location
 
@@ -163,20 +163,11 @@ def _restart_reminder(vbox):
 def _confirm_and_restart(dialog, button):
     """Restart computer now: ask first (a reboot closes everything), mark
     first run done, and reboot once the AppImage copy has finished."""
-    confirm = message_dialog(
-        transient_for=dialog, modal=True,
-        message_type=Gtk.MessageType.QUESTION,
-        buttons=Gtk.ButtonsType.NONE,
-        text="Restart now?",
-    )
-    confirm.format_secondary_text(
-        "Save any work in your other apps first — this will close everything."
-    )
-    confirm.add_button("Cancel", Gtk.ResponseType.CANCEL)
-    go = confirm.add_button("Restart computer now", Gtk.ResponseType.OK)
-    go.get_style_context().add_class("destructive-action")
-    resp = confirm.run()
-    confirm.destroy()
+    resp = show_message(
+        dialog, Gtk.MessageType.QUESTION, "Restart now?",
+        "Save any work in your other apps first — this will close everything.",
+        [("Cancel", Gtk.ResponseType.CANCEL), ("Restart computer now", Gtk.ResponseType.OK)],
+        destructive=Gtk.ResponseType.OK)
     if resp != Gtk.ResponseType.OK:
         return
     # Mark onboarding complete BEFORE rebooting. The reboot happens here,

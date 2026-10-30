@@ -43,7 +43,7 @@ from . import (ai_cleanup, config, cosmic_hotkeys, custom_words,  # noqa: E402
                secure_input, service_launcher, settings_backup, single_instance, uinput_helper,
                update_checker, whisper_vulkan)
 from .logger import LOG_FILE_NAME, setup_logger, stop_file_logging  # noqa: E402
-from .ui_style import message_dialog  # noqa: E402
+from .ui_style import message_dialog, show_message  # noqa: E402
 
 logger = setup_logger(__name__)
 
@@ -684,15 +684,7 @@ def _working_window():
 
 
 def _tell(kind, heading, body, markup=False):
-    dialog = message_dialog(message_type=kind, buttons=Gtk.ButtonsType.OK, text=heading)
-    if markup:
-        dialog.format_secondary_markup(body)
-    else:
-        dialog.format_secondary_text(body)
-    dialog.set_position(Gtk.WindowPosition.CENTER)
-    dialog.set_keep_above(True)
-    dialog.run()
-    dialog.destroy()
+    show_message(None, kind, heading, body, keep_above=True, markup=markup)
 
 
 # What the root script's NOT_REMOVED lines name, in words.

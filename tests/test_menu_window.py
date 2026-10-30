@@ -458,6 +458,7 @@ def test_fix_typing_success_updates_the_status_lines(monkeypatch):
         pytest.skip("no display")
     from tuxtalk import welcome_dialog
     fake_msg = types.SimpleNamespace(format_secondary_text=lambda t: None,
+                                     set_position=lambda p: None,
                                      run=lambda: None, destroy=lambda: None)
     monkeypatch.setattr("tuxtalk.ui_style.message_dialog", lambda **k: fake_msg)
     uinput = Gtk.Label()

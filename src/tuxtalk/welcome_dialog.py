@@ -19,7 +19,7 @@ gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
 from gi.repository import Gtk, Gdk, GLib
 from . import config, desktop_detect
-from .ui_style import Fold, message_dialog, more_below_bar, show_message
+from .ui_style import Fold, more_below_bar, show_message
 
 from .flatpak_welcome import (build_shortcut_setup_section, build_unsupported_desktop_section,
                               shortcut_support)
@@ -779,20 +779,11 @@ class WelcomeDialog:
     def _continue_without_typing(self):
         """Warn that the hotkey and typing won't work; continue if the user
         says so, otherwise stay on this screen."""
-        msg = message_dialog(
-            transient_for=self.dialog,
-            modal=True,
-            message_type=Gtk.MessageType.WARNING,
-            buttons=Gtk.ButtonsType.NONE,
-            text="Typing isn't set up yet",
-        )
-        msg.format_secondary_text(
+        answer = show_message(
+            self.dialog, Gtk.MessageType.WARNING, "Typing isn't set up yet",
             "Without it your dictation key and typing won't work. Go back and "
-            "click Fix Typing, or continue and set it up later in Preferences.")
-        msg.add_button("Go Back", Gtk.ResponseType.CANCEL)
-        msg.add_button("Continue Anyway", Gtk.ResponseType.OK)
-        answer = msg.run()
-        msg.destroy()
+            "click Fix Typing, or continue and set it up later in Preferences.",
+            [("Go Back", Gtk.ResponseType.CANCEL), ("Continue Anyway", Gtk.ResponseType.OK)])
         if answer == Gtk.ResponseType.OK:
             self.dialog.response(Gtk.ResponseType.OK)
 

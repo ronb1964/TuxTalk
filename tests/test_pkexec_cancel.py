@@ -63,7 +63,6 @@ def test_prefs_says_cancelled_instead_of_setup_failed(monkeypatch):
     from tuxtalk import prefs_system_check as P
 
     dialogs = []
-    monkeypatch.setattr(P, "message_dialog", lambda **k: dialogs.append(k))
     monkeypatch.setattr("tuxtalk.ui_style.message_dialog", lambda **k: dialogs.append(k))
     monkeypatch.setattr(uinput_helper.subprocess, "run", _fake_run(127, NOT_AUTHORIZED))
     _, message = uinput_helper.install_udev_rule_with_pkexec()

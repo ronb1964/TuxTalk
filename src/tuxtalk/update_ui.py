@@ -129,7 +129,9 @@ def show_update_result(result, install_appimage, install_package):
     *install_package(release, install_type)*. GNOME extension updates are
     installed from Preferences → Updates & Backup instead."""
     if not result.get("update_available", False):
-        _up_to_date(result.get("current_version", "unknown"))
+        show_message(None, Gtk.MessageType.INFO, "You're Up to Date!",
+                     f"<b>TuxTalk {result.get('current_version', 'unknown')}</b> is the "
+                     "latest version.", keep_above=True, markup=True, wait=False)
         return
     release = result.get("release", {})
     # How TuxTalk was installed decides HOW to update. Only a self-managed
@@ -176,18 +178,6 @@ def show_update_result(result, install_appimage, install_package):
         elif response == Gtk.ResponseType.APPLY:
             install_package(release, install_type)
     dialog.connect("response", on_response)
-    dialog.show_all()
-    dialog.present()
-
-
-def _up_to_date(current):
-    """"You're Up to Date!" for TuxTalk *current*."""
-    dialog = message_dialog(message_type=Gtk.MessageType.INFO, buttons=Gtk.ButtonsType.OK,
-                            text="You're Up to Date!")
-    dialog.format_secondary_markup(f"<b>TuxTalk {current}</b> is the latest version.")
-    dialog.set_position(Gtk.WindowPosition.CENTER)
-    dialog.set_keep_above(True)
-    dialog.connect("response", lambda d, _r: d.destroy())
     dialog.show_all()
     dialog.present()
 
@@ -396,28 +386,11 @@ def restart_via_tray(get_interface=None) -> bool:
 
 def _reopen_to_finish():
     """Tell the user to quit and reopen TuxTalk, when it can't restart itself."""
-    _info("Update installed",
-          "Please quit TuxTalk from the tray icon and open it "
-          "again to finish updating.")
-
-
-def _info(title, message):
-    dlg = message_dialog(message_type=Gtk.MessageType.INFO,
-                            buttons=Gtk.ButtonsType.OK, text=title)
-    dlg.format_secondary_text(message)
-    dlg.set_position(Gtk.WindowPosition.CENTER)
-    dlg.connect("response", lambda d, _r: d.destroy())
-    dlg.show_all()
-    dlg.present()
+    show_message(None, Gtk.MessageType.INFO, "Update installed",
+                 "Please quit TuxTalk from the tray icon and open it "
+                 "again to finish updating.", wait=False)
 
 
 def _error(message, title="Update Failed"):
     """*title* and *message* in an error box over the other windows."""
-    err = message_dialog(message_type=Gtk.MessageType.ERROR,
-                         buttons=Gtk.ButtonsType.OK, text=title)
-    err.format_secondary_text(message)
-    err.set_position(Gtk.WindowPosition.CENTER)
-    err.set_keep_above(True)
-    err.connect("response", lambda d, _r: d.destroy())
-    err.show_all()
-    err.present()
+    show_message(None, Gtk.MessageType.ERROR, title, message, keep_above=True, wait=False)

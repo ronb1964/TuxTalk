@@ -12,7 +12,7 @@ from .desktop_detect import is_gnome
 from .logger import setup_logger
 from .prefs_tab import Tab, fold, subheading
 from .progress_window import run_with_progress
-from .ui_style import WARNING_AMBER, message_dialog, show_message
+from .ui_style import WARNING_AMBER, show_message
 from .whisper_vulkan import ENGINE_SIZE_TEXT
 
 logger = setup_logger(__name__)
@@ -606,23 +606,14 @@ class SystemCheck(Tab):
 
     def _on_install_extension_clicked(self, button):
         """Install Extension: what it adds, and install it if asked to."""
-        dialog = message_dialog(
-            transient_for=self.window,
-            flags=0,
-            message_type=Gtk.MessageType.QUESTION,
-            buttons=Gtk.ButtonsType.YES_NO,
-            text="Install GNOME Extension?"
-        )
-        dialog.format_secondary_markup(
+        response = show_message(
+            self.window, Gtk.MessageType.QUESTION, "Install GNOME Extension?",
             "<b>TuxTalk GNOME Shell Extension</b>\n\n"
             "✨ <b>Features:</b>\n"
             f"{EXTENSION_FEATURES}\n\n"
             "⚠️  <b>Note:</b> it starts working after you log out and back in.\n\n"
-            "Install now?"
-        )
-
-        response = dialog.run()
-        dialog.destroy()
+            "Install now?",
+            Gtk.ButtonsType.YES_NO, markup=True)
         if response == Gtk.ResponseType.YES:
             self._install_extension(button)
 
@@ -636,18 +627,14 @@ class SystemCheck(Tab):
             """What to do next, or why it failed."""
             if success:
                 self._check_extension_status()
-                done = message_dialog(
-                    transient_for=self.window, flags=0, message_type=Gtk.MessageType.INFO,
-                    buttons=Gtk.ButtonsType.OK, text="Extension Installed Successfully!")
-                done.format_secondary_markup(
-                    "<b>Next Steps:</b>\n\n"
-                    "1. To activate the extension: "
-                    f"{GLib.markup_escape_text(extension_reload_steps())}\n\n"
-                    "2. The TuxTalk icon will appear in your top panel\n\n"
-                    "3. The icon gives you:\n"
-                    f"{EXTENSION_FEATURES}")
-                done.run()
-                done.destroy()
+                show_message(self.window, Gtk.MessageType.INFO,
+                             "Extension Installed Successfully!",
+                             "<b>Next Steps:</b>\n\n"
+                             "1. To activate the extension: "
+                             f"{GLib.markup_escape_text(extension_reload_steps())}\n\n"
+                             "2. The TuxTalk icon will appear in your top panel\n\n"
+                             "3. The icon gives you:\n"
+                             f"{EXTENSION_FEATURES}", markup=True)
             else:
                 button.set_sensitive(True)
                 self._check_extension_status()      # it may be in place, but off
@@ -689,16 +676,6 @@ class SystemCheck(Tab):
 
     def _on_restart_info_clicked(self, button):
         """Show information about restarting GNOME Shell."""
-        dialog = message_dialog(
-            transient_for=self.window,
-            flags=0,
-            message_type=Gtk.MessageType.INFO,
-            buttons=Gtk.ButtonsType.OK,
-            text="How to Restart GNOME Shell"
-        )
-        dialog.format_secondary_markup(
-            "<b>To activate or update the extension:</b>\n\n"
-            + GLib.markup_escape_text(extension_reload_steps())
-        )
-        dialog.run()
-        dialog.destroy()
+        show_message(self.window, Gtk.MessageType.INFO, "How to Restart GNOME Shell",
+                     "<b>To activate or update the extension:</b>\n\n"
+                     + GLib.markup_escape_text(extension_reload_steps()), markup=True)

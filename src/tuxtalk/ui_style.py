@@ -582,19 +582,42 @@ def message_dialog(closable=True, **kwargs):
 
 
 def show_message(parent, kind, title, text="", buttons=Gtk.ButtonsType.OK,
-                 keep_above=False):
-    """Show a message box over *parent* and wait for an answer: *title* in
-    bold, *text* under it. Returns the button pressed (a Gtk.ResponseType).
+                 keep_above=False, *, default=None, destructive=None, markup=False,
+                 wait=True):
+    """Show a message box over *parent*: *title* in bold, *text* under it
+    (Pango markup with *markup*). Waits for an answer and returns the button
+    pressed (a Gtk.ResponseType); with wait=False it returns at once and the
+    box closes itself when answered.
 
-    keep_above keeps it over other windows, for a box shown with no parent
-    of its own (from the tray) that would otherwise open behind them.
+    *buttons* is a Gtk.ButtonsType, or (label, response) pairs, left to
+    right. *default* is the response Enter gives; *destructive* the one whose
+    button is drawn as a warning (deleting, rebooting). keep_above keeps it
+    over other windows, for a box shown with no parent of its own (from the
+    tray) that would otherwise open behind them. A box with no parent opens
+    in the middle of the screen.
     """
+    pairs = () if isinstance(buttons, Gtk.ButtonsType) else buttons
     dialog = message_dialog(transient_for=parent, modal=True, message_type=kind,
-                            buttons=buttons, text=title)
-    if text:
+                            buttons=Gtk.ButtonsType.NONE if pairs else buttons, text=title)
+    for label, response in pairs:
+        button = dialog.add_button(label, response)
+        if response == destructive:
+            button.get_style_context().add_class("destructive-action")
+    if text and markup:
+        dialog.format_secondary_markup(text)
+    elif text:
         dialog.format_secondary_text(text)
+    if default is not None:
+        dialog.set_default_response(default)
+    if parent is None:
+        dialog.set_position(Gtk.WindowPosition.CENTER)
     if keep_above:
         dialog.set_keep_above(True)
+    if not wait:
+        dialog.connect("response", lambda box, _response: box.destroy())
+        dialog.show_all()
+        dialog.present()
+        return None
     response = dialog.run()
     dialog.destroy()
     return response

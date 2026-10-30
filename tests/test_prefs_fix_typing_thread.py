@@ -32,21 +32,8 @@ class FakeButton:
         self.sensitive = value
 
 
-class FakeDialog:
-    def __init__(self, answer):
-        self.answer = answer
-
-    def format_secondary_text(self, text):
-        pass
-
-    def run(self):
-        return self.answer
-
-    def destroy(self):
-        pass
-
-
-def test_pkexec_runs_off_the_gtk_thread_and_a_failure_resets_the_button(monkeypatch):
+def test_pkexec_runs_off_the_gtk_thread_and_a_failure_resets_the_button(monkeypatch,
+                                                                       message_boxes):
     threads, idle = [], []
     # Only the System check's threads: the sound thread started at the
     # test's end must stay a real one.
@@ -54,9 +41,7 @@ def test_pkexec_runs_off_the_gtk_thread_and_a_failure_resets_the_button(monkeypa
         Thread=lambda target, daemon=None: threads.append(target) or
         SimpleNamespace(start=lambda: None)))
     monkeypatch.setattr(P.GLib, "idle_add", lambda fn, *a: idle.append((fn, a)))
-    monkeypatch.setattr(P, "message_dialog", lambda **k: FakeDialog(P.Gtk.ResponseType.YES))
-    monkeypatch.setattr("tuxtalk.ui_style.message_dialog",
-                        lambda **k: FakeDialog(P.Gtk.ResponseType.YES))
+    message_boxes.answer = P.Gtk.ResponseType.YES
     ran_in = []
     from tuxtalk import secure_input
     # The "input" group route; the hotkey helper's goes the same way.

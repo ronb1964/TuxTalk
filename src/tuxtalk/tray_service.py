@@ -16,7 +16,7 @@ from gi.repository import GLib, Gtk  # noqa: E402
 from gi.repository import AyatanaAppIndicator3 as AppIndicator3  # noqa: E402
 
 from .logger import setup_logger  # noqa: E402
-from .ui_style import message_dialog, show_message  # noqa: E402
+from .ui_style import show_message  # noqa: E402
 
 logger = setup_logger(__name__)
 
@@ -210,18 +210,10 @@ class ServiceLifecycle:
         ok, msg = update_checker.restart_via_launcher(target)
         if not ok:
             logger.error(f"Restart failed: {msg}")
-            dlg = message_dialog(
-                message_type=Gtk.MessageType.INFO,
-                buttons=Gtk.ButtonsType.OK,
-                text="Update installed"
-            )
-            dlg.format_secondary_text(
-                "TuxTalk couldn't restart by itself. Quit TuxTalk from the tray "
-                "icon and open it again to start the new version.")
-            dlg.set_position(Gtk.WindowPosition.CENTER)
-            dlg.set_keep_above(True)
-            dlg.connect("response", lambda d, _r: d.destroy())
-            dlg.show_all()
+            show_message(None, Gtk.MessageType.INFO, "Update installed",
+                         "TuxTalk couldn't restart by itself. Quit TuxTalk from the tray "
+                         "icon and open it again to start the new version.",
+                         keep_above=True, wait=False)
             return False
         logger.info("Restart scheduled; quitting this instance to hand off.")
         self.quit_app(None)

@@ -434,20 +434,16 @@ def test_tray_restart_uses_the_package_launcher(monkeypatch):
     assert targets == [None]
 
 
-def test_tray_keeps_running_when_it_cannot_restart(monkeypatch):
-    from tuxtalk import tray_service
-    shown = []
+def test_tray_keeps_running_when_it_cannot_restart(monkeypatch, message_boxes):
     monkeypatch.setattr(uc, "get_install_type", lambda: "appimage")
     monkeypatch.setattr(uc, "restart_via_launcher", lambda target=None: (False, "nope"))
-    monkeypatch.setattr(tray_service, "message_dialog", lambda **k: shown.append(k) or types.SimpleNamespace(
-        format_secondary_text=lambda t: None, set_position=lambda p: None,
-        set_keep_above=lambda b: None, connect=lambda *a: None, show_all=lambda: None))
     tray = FakeTray()
 
     tray.restart_app()
 
     assert tray.quit == 0
-    assert shown, "the user was not told to reopen TuxTalk"
+    assert [box.title for box in message_boxes.shown] == ["Update installed"], \
+        "the user was not told to reopen TuxTalk"
 
 
 @pytest.fixture
@@ -545,7 +541,7 @@ def test_preferences_asks_the_tray_to_restart(monkeypatch):
     from tuxtalk import update_ui
     asked = []
     iface = types.SimpleNamespace(RestartApp=lambda: asked.append(True))
-    monkeypatch.setattr(update_ui, "_info", lambda *a: pytest.fail("no fallback needed"))
+    monkeypatch.setattr(update_ui, "show_message", lambda *a, **k: pytest.fail("no fallback needed"))
 
     assert update_ui.restart_via_tray(lambda: iface) is True
     assert asked == [True]
@@ -554,7 +550,8 @@ def test_preferences_asks_the_tray_to_restart(monkeypatch):
 def test_preferences_explains_when_the_tray_is_unreachable(monkeypatch):
     from tuxtalk import update_ui
     shown = []
-    monkeypatch.setattr(update_ui, "_info", lambda title, msg: shown.append(msg))
+    monkeypatch.setattr(update_ui, "show_message", lambda parent, kind, title, msg, **k:
+                        shown.append(msg))
 
     def unreachable():
         raise RuntimeError("org.freedesktop.DBus.Error.ServiceUnknown")

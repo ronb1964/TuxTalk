@@ -8,7 +8,7 @@ os.environ["HF_HUB_DISABLE_XET"] = "1"
 import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk
-from .ui_style import message_dialog
+from .ui_style import show_message
 from .logger import setup_logger
 from .recommend import model_title
 from .parakeet_engine import (
@@ -399,21 +399,13 @@ def make_model_download_func(model_name, repo_id=None, only_files=None, force=Fa
 def _confirm_download(parent, model_name):
     """Ask before downloading *model_name*, naming its size: True to go on."""
     size_str = MODEL_DISPLAY_SIZES.get(model_name, "unknown size")
-    confirm_dialog = message_dialog(
-        parent=parent,
-        message_type=Gtk.MessageType.QUESTION,
-        buttons=Gtk.ButtonsType.OK_CANCEL,
-        text=f"Download {model_title(model_name)} Model?"
-    )
-    confirm_dialog.format_secondary_text(
+    response = show_message(
+        parent, Gtk.MessageType.QUESTION, f"Download {model_title(model_name)} Model?",
         f"TuxTalk needs to download the {model_title(model_name)} AI model ({size_str}) "
         "for speech recognition.\n\n"
         "This is a one-time download that will be cached for future use.\n\n"
-        "Continue with download?"
-    )
-    confirm_dialog.set_position(Gtk.WindowPosition.CENTER)
-    response = confirm_dialog.run()
-    confirm_dialog.destroy()
+        "Continue with download?",
+        Gtk.ButtonsType.OK_CANCEL)
     if response != Gtk.ResponseType.OK:
         logger.info(f"User declined model download: {model_name}")
         return False
@@ -599,12 +591,5 @@ def _download_failed_text(model_name, error):
 
 def _show_download_failed(parent, model_name, error):
     """Tell the user the start-up download of *model_name* failed, and why."""
-    msg = message_dialog(
-        parent=parent,
-        message_type=Gtk.MessageType.ERROR,
-        buttons=Gtk.ButtonsType.OK,
-        text="Model Download Failed"
-    )
-    msg.format_secondary_text(_download_failed_text(model_name, error))
-    msg.run()
-    msg.destroy()
+    show_message(parent, Gtk.MessageType.ERROR, "Model Download Failed",
+                 _download_failed_text(model_name, error))

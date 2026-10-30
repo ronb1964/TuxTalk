@@ -10,7 +10,7 @@ from gi.repository import Gtk
 from .prefs_system_check import SystemCheck
 from .prefs_tab import LABS_INDENT, Tab, dropdown, fold, subheading
 from .prefs_type_at_pause import TypeAtPause
-from .ui_style import message_dialog, show_message
+from .ui_style import show_message
 
 # The Numbers dropdown: (label, numbers_as_digits, numbers_small_as_words).
 # "As written" leaves the one-to-nine choice as it was (None), for next time.
@@ -567,22 +567,14 @@ class AdvancedTab(Tab):
             self.update_config(key, True)
             return
 
-        confirm = message_dialog(
-            transient_for=self.window, modal=True,
-            message_type=Gtk.MessageType.QUESTION,
-            buttons=Gtk.ButtonsType.NONE,
-            text=question,
-        )
-        confirm.format_secondary_text(
+        response = show_message(
+            self.window, Gtk.MessageType.QUESTION, question,
             f"This downloads a small AI model ({ai_cleanup.MODEL_SIZE_TEXT}) and the "
             f"llama.cpp engine that runs it ({ai_cleanup.LLAMA_SIZE_TEXT}). It is a "
             "one-time download.\n\n"
-            "Everything runs on this computer. Your dictation is never sent anywhere.")
-        confirm.add_button("Cancel", Gtk.ResponseType.CANCEL)
-        confirm.add_button("Download", Gtk.ResponseType.OK)
-        confirm.set_default_response(Gtk.ResponseType.OK)
-        response = confirm.run()
-        confirm.destroy()
+            "Everything runs on this computer. Your dictation is never sent anywhere.",
+            [("Cancel", Gtk.ResponseType.CANCEL), ("Download", Gtk.ResponseType.OK)],
+            default=Gtk.ResponseType.OK)
         if response != Gtk.ResponseType.OK:
             self._untick_ai_feature(check, key, handler)
             return
@@ -631,25 +623,15 @@ class AdvancedTab(Tab):
             self.update_config("log_transcripts", False)
             return
 
-        dialog = message_dialog(
-            transient_for=self.window,
-            modal=True,
-            message_type=Gtk.MessageType.WARNING,
-            buttons=Gtk.ButtonsType.NONE,
-            text="Log all transcribed text?",
-        )
-        dialog.format_secondary_text(
+        response = show_message(
+            self.window, Gtk.MessageType.WARNING, "Log all transcribed text?",
             "This saves the full text of EVERYTHING you dictate to TuxTalk's log "
             "file on disk, in plain text, and keeps it there until you turn this "
             "setting back off.\n\n"
-            "Only enable it if you are troubleshooting a dictation problem."
-        )
-        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
-        enable_btn = dialog.add_button("Yes, log everything I dictate", Gtk.ResponseType.OK)
-        enable_btn.get_style_context().add_class("destructive-action")
-        dialog.set_default_response(Gtk.ResponseType.CANCEL)
-        response = dialog.run()
-        dialog.destroy()
+            "Only enable it if you are troubleshooting a dictation problem.",
+            [("Cancel", Gtk.ResponseType.CANCEL),
+             ("Yes, log everything I dictate", Gtk.ResponseType.OK)],
+            default=Gtk.ResponseType.CANCEL, destructive=Gtk.ResponseType.OK)
 
         if response == Gtk.ResponseType.OK:
             self.update_config("log_transcripts", True)
@@ -661,24 +643,13 @@ class AdvancedTab(Tab):
 
     def _on_clear_log_clicked(self, _button):
         """Erase the on-disk log after confirming — it can hold past dictation."""
-        dialog = message_dialog(
-            transient_for=self.window,
-            modal=True,
-            message_type=Gtk.MessageType.WARNING,
-            buttons=Gtk.ButtonsType.NONE,
-            text="Clear the TuxTalk log?",
-        )
-        dialog.format_secondary_text(
+        response = show_message(
+            self.window, Gtk.MessageType.WARNING, "Clear the TuxTalk log?",
             "This permanently deletes the current log file and its backup from "
             "disk, including any past transcriptions recorded there. This cannot "
-            "be undone."
-        )
-        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
-        clear_btn = dialog.add_button("Clear log", Gtk.ResponseType.OK)
-        clear_btn.get_style_context().add_class("destructive-action")
-        dialog.set_default_response(Gtk.ResponseType.CANCEL)
-        response = dialog.run()
-        dialog.destroy()
+            "be undone.",
+            [("Cancel", Gtk.ResponseType.CANCEL), ("Clear log", Gtk.ResponseType.OK)],
+            default=Gtk.ResponseType.CANCEL, destructive=Gtk.ResponseType.OK)
 
         if response == Gtk.ResponseType.OK:
             from .logger import clear_log

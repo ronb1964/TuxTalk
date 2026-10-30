@@ -9,7 +9,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
 from .logger import setup_logger  # noqa: E402
-from .ui_style import message_dialog  # noqa: E402
+from .ui_style import show_message  # noqa: E402
 
 logger = setup_logger(__name__)
 
@@ -60,20 +60,11 @@ def _show_update_complete_once():
     from . import __version__, update_checker
     if not update_checker.check_just_updated():
         return
-    dialog = message_dialog(
-        message_type=Gtk.MessageType.INFO,
-        buttons=Gtk.ButtonsType.OK,
-        text="Update Complete!"
-    )
-    dialog.format_secondary_markup(
-        f"TuxTalk has been updated to <b>v{__version__}</b>\n\n"
-        f"The update was installed automatically and "
-        f"TuxTalk has restarted with the new version."
-    )
-    dialog.set_position(Gtk.WindowPosition.CENTER)
-    dialog.set_keep_above(True)
-    dialog.run()
-    dialog.destroy()
+    show_message(None, Gtk.MessageType.INFO, "Update Complete!",
+                 f"TuxTalk has been updated to <b>v{__version__}</b>\n\n"
+                 "The update was installed automatically and "
+                 "TuxTalk has restarted with the new version.",
+                 keep_above=True, markup=True)
 
 
 def _show_rename_notice_once():
@@ -85,20 +76,11 @@ def _show_rename_notice_once():
     folder = os.path.dirname(config.CONFIG_PATH)
     if not rename_migration.notice_pending(folder):
         return
-    dialog = message_dialog(
-        message_type=Gtk.MessageType.INFO,
-        buttons=Gtk.ButtonsType.NONE,
-        text="TalkType is now TuxTalk",
-    )
-    dialog.format_secondary_text("\n\n".join((
-        "Same app, new name. Your settings, models, snippets and stats all came "
-        "across. Look for TuxTalk in your app menu from now on.",
-        "Why the change: another company owns the name TalkType for dictation "
-        "software.")))
-    dialog.add_button("Got it", Gtk.ResponseType.OK)
-    dialog.set_position(Gtk.WindowPosition.CENTER)
-    dialog.set_keep_above(True)
-    dialog.run()
-    dialog.destroy()
+    show_message(None, Gtk.MessageType.INFO, "TalkType is now TuxTalk",
+                 "Same app, new name. Your settings, models, snippets and stats all came "
+                 "across. Look for TuxTalk in your app menu from now on.\n\n"
+                 "Why the change: another company owns the name TalkType for dictation "
+                 "software.",
+                 [("Got it", Gtk.ResponseType.OK)], keep_above=True)
     rename_migration.notice_shown(folder)
     logger.info("Rename to TuxTalk: showed the one-time notice")
