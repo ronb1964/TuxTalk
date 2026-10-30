@@ -2,7 +2,8 @@
 """
 Unified Download Progress Dialog for TuxTalk
 Shows one or more downloads (the Vulkan engine, speech models, CUDA libraries,
-the GNOME extension) in one window, each with its own progress bar and Cancel.
+the GNOME extension) in one window, each with its own progress bar and Cancel,
+and Preferences' CUDA download window built on it.
 """
 
 import threading
@@ -449,6 +450,56 @@ def run_downloads(parent, title, description, tasks, arrived=lambda: True):
     if any(r.get("cancelled") for r in results):
         return False
     return None
+
+
+def show_cuda_download_dialog(parent=None, on_success_callback=None):
+    """Download TuxTalk's CUDA libraries in the download window (Preferences'
+    Device choice), then say how it went.
+
+    on_success_callback runs after the "Downloaded!" message, for example to
+    refresh Preferences. Returns True on success, False on failure and None
+    if the user cancelled.
+    """
+    from tuxtalk import cuda_download, cuda_helper
+    task = DownloadTask(CUDA_TASK, f"~{cuda_helper.DOWNLOAD_SIZE_TEXT}",
+                        cuda_download.download_cuda_libraries)
+    result = run_downloads(parent, "Downloading CUDA Libraries",
+                           "This may take several minutes depending on your connection.",
+                           [task])
+    if result is False:
+        # The download notices the Cancel and cleans up by itself.
+        logger.info("User cancelled CUDA download")
+        return None
+    if result is None and failure_reason(*task.last_report):
+        # The window showed why and waited for Close: not twice.
+        logger.error("CUDA libraries download failed")
+        return False
+    _say_how_the_cuda_download_went(parent, bool(result), on_success_callback)
+    return bool(result)
+
+
+def _say_how_the_cuda_download_went(parent, success, on_success_callback):
+    """"CUDA Libraries Downloaded!", then *on_success_callback*, or "Download
+    Failed" for a failure the download window couldn't explain. Switching the device
+    is the caller's job (Preferences applies it, so the service restarts
+    onto it), after the message so its question doesn't come before
+    "Downloaded!"."""
+    from tuxtalk.ui_style import show_message
+    if not success:
+        show_message(parent, Gtk.MessageType.ERROR, "Download Failed",
+                     "Could not download CUDA libraries.\n\nYou can try again later: choose "
+                     "CUDA under Preferences → General → Change model, device or language → "
+                     "Device.")
+        logger.error("CUDA libraries download failed")
+        return
+    show_message(parent, Gtk.MessageType.INFO, "CUDA Libraries Downloaded!",
+                 "Your NVIDIA graphics card can now run the Whisper models with CUDA.")
+    if on_success_callback:
+        try:
+            on_success_callback()
+        except Exception as e:
+            logger.warning(f"Error in success callback: {e}", exc_info=True)
+    logger.info("CUDA libraries downloaded successfully")
 
 
 def show_unified_download_dialog(cuda=False, extension=False, model=None, parent=None,

@@ -2,16 +2,18 @@
 wheels on PyPI, download them (each checked against PyPI's SHA256), unpack
 their libraries into a folder of their own, check that every library is
 there, and only then put it in place of the old one. A download that fails
-at any point leaves a working CUDA as it was.
+or is cancelled at any point, or a TuxTalk killed part-way, leaves a working
+CUDA as it was.
 
-The download window (show_cuda_download_dialog) is here too; cuda_helper
-says whether CUDA is there at all.
+cuda_helper says whether CUDA is there at all; its download window is
+download_progress_dialog.show_cuda_download_dialog.
 """
 import os
+import re
 import shutil
 import tempfile
 
-from . import cuda_helper
+from . import cuda_helper, download_utils
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -23,6 +25,9 @@ _SPARE_BYTES = 100 * 1024 * 1024
 # The progress bar: the downloads share 0-70 %, unpacking 70-95 %.
 _DOWNLOAD_SHARE = 70
 _UNPACK_SHARE = 25
+_SHA256 = re.compile(r"[0-9a-f]{64}")
+# The start of an unpacking folder's name (download_utils.download_area's).
+_UNPACKING = ".lib."
 
 
 class _Stop(Exception):
@@ -44,9 +49,12 @@ def _pypi_wheel(pkg_name):
         if (file_info['packagetype'] == 'bdist_wheel' and 'x86_64' in file_info['filename']
                 and 'manylinux' in file_info['filename']):
             # PyPI's published sha256, so a corrupted or tampered download is
-            # never installed.
-            return (pkg_name, file_info['url'], file_info['filename'],
-                    file_info.get('digests', {}).get('sha256'),
+            # never installed; without one it isn't downloaded at all.
+            sha256 = (file_info.get('digests') or {}).get('sha256') or ""
+            if not _SHA256.fullmatch(sha256):
+                raise LookupError(f"PyPI gave no checksum for {file_info['filename']}, "
+                                  "so it isn't downloaded")
+            return (pkg_name, file_info['url'], file_info['filename'], sha256,
                     int(file_info.get('size', 0) or 0))
     raise LookupError(f"PyPI has no {pkg_name} for this computer")
 
@@ -187,60 +195,55 @@ def _extract_wheels(wheel_paths, lib_path, report, cancel_event):
                 f"library files in {lib_path}")
 
 
-def _swap_in(staging, lib_path):
-    """*staging* becomes *lib_path*; the old libraries go only once it has."""
-    old = lib_path + ".old"
-    shutil.rmtree(old, ignore_errors=True)      # what a killed swap left
-    if os.path.lexists(lib_path):
-        os.rename(lib_path, old)
+def _remove_leftovers(cuda_path):
+    """What an install killed part-way left, with the install lock held, so
+    no other install is unpacking now: the libraries put back if the swap
+    was cut off between its renames, then the old copy and every unpacking
+    folder removed, however recent."""
+    lib = os.path.join(cuda_path, "lib")
+    download_utils.restore_cut_off_swap(lib, lib + ".old")
+    download_utils.remove_tree(lib + ".old")
     try:
-        os.rename(staging, lib_path)
-    except OSError:
-        if os.path.lexists(old):
-            os.rename(old, lib_path)
-        raise
-    shutil.rmtree(old, ignore_errors=True)
+        entries = list(os.scandir(cuda_path))
+    except FileNotFoundError:
+        return
+    for entry in entries:
+        if entry.name.startswith(_UNPACKING):
+            logger.info(f"Removing an unfinished CUDA install: {entry.name}")
+            download_utils.remove_tree(entry.path)
+
+
+def recover_cut_off_install():
+    """At start, before anything loads CUDA: _remove_leftovers, unless
+    another TuxTalk is installing CUDA now (that one tidies). Never raises."""
+    cuda_path = cuda_helper.get_appdir_cuda_path()
+    if not os.path.isdir(cuda_path):
+        return
+    try:
+        with download_utils.install_turn("cuda", wait_s=0):
+            _remove_leftovers(cuda_path)
+    except OSError as e:        # the lock is busy or can't be made: next start
+        logger.info(f"CUDA's folder wasn't checked this time: {e}")
 
 
 def _install(wheel_paths, cuda_path, report, cancel_event):
     """The wheels' libraries in place as *cuda_path*/lib. They are unpacked
     into a folder of their own and moved in only when every library CUDA
     needs is among them, so a failure part-way, or a wheel laid out
-    differently upstream, never mixes files into a working install."""
-    from .download_utils import download_area, install_turn
-    with download_area(cuda_path, "lib") as (_archive, staging):
-        _extract_wheels(wheel_paths, staging, report, cancel_event)
-        if not cuda_helper.holds_required_libs(staging):
-            logger.error(f"The CUDA download lacks one of {cuda_helper.REQUIRED_CUDA_LIBS}")
-            raise _Stop("The CUDA download didn't hold every library it needs")
-        with install_turn("cuda"):
-            _swap_in(staging, os.path.join(cuda_path, "lib"))
-
-
-def _make_cuda_cleanup(cuda_path: str):
-    """Build the failure cleanup for a CUDA download attempt.
-
-    Snapshots whether a complete installation is already present *before* the
-    download starts. If one is, a failed or cancelled attempt leaves it alone
-    rather than deleting a working setup.
-    """
-    pre_existing = cuda_helper.cuda_install_looks_complete(cuda_path)
-
-    def cleanup_cuda_dir():
-        if pre_existing:
-            logger.warning(
-                f"CUDA download failed, but {cuda_path} already held a complete "
-                f"installation before this attempt — leaving it in place"
-            )
-            return
-        try:
-            if os.path.exists(cuda_path):
-                shutil.rmtree(cuda_path)
-                logger.info(f"Cleaned up incomplete CUDA installation at {cuda_path}")
-        except Exception as e:
-            logger.warning(f"Could not clean up CUDA directory: {e}")
-
-    return cleanup_cuda_dir
+    differently upstream, never mixes files into a working install. The
+    install lock is held from the unpacking on: another install waits its
+    turn instead of taking this one's folder for a leftover."""
+    with download_utils.install_turn("cuda"):
+        _check_cancel(cancel_event)         # cancelled while it waited its turn
+        _remove_leftovers(cuda_path)
+        with download_utils.download_area(cuda_path, "lib") as (_archive, staging):
+            _extract_wheels(wheel_paths, staging, report, cancel_event)
+            if not cuda_helper.holds_required_libs(staging):
+                logger.error(f"The CUDA download lacks one of {cuda_helper.REQUIRED_CUDA_LIBS}")
+                raise _Stop("The CUDA download didn't hold every library it needs")
+            _check_cancel(cancel_event, " before the libraries went in")
+            lib = os.path.join(cuda_path, "lib")
+            download_utils.replace_folder(staging, lib, lib + ".old")
 
 
 def download_cuda_libraries(progress_callback=None, cancel_event=None):
@@ -248,14 +251,16 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
 
     *progress_callback(message, percent)* hears how it goes, a failure as a
     message at 0 % (download_utils.failure_reason); *cancel_event* (a
-    threading.Event) stops it. On a failure or a cancel, what this attempt
-    left is removed.
+    threading.Event) stops it. A failure or a cancel removes only this
+    attempt's own files: what is installed, by an earlier attempt or one
+    running beside it, stays.
     """
     report = progress_callback or (lambda message, percent: None)
     cuda_path = cuda_helper.get_appdir_cuda_path()
-    cleanup_cuda_dir = _make_cuda_cleanup(cuda_path)
     try:
         os.makedirs(cuda_path, exist_ok=True)
+        with download_utils.install_turn("cuda"):
+            _remove_leftovers(cuda_path)    # a copy cut off last time comes back first
         with tempfile.TemporaryDirectory() as temp_dir:
             wheels = _resolve_wheels(report, cancel_event)
             _check_space(wheels, temp_dir, cuda_path)
@@ -264,63 +269,10 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
     except _Stop as stop:
         if stop.args and stop.args[0]:
             report(stop.args[0], 0)
-        cleanup_cuda_dir()
         return False
     except Exception as e:
         logger.error(f"Error downloading CUDA libraries: {e}", exc_info=True)
         report(f"Couldn't install CUDA's libraries: {e}", 0)
-        cleanup_cuda_dir()
         return False
     report("CUDA libraries installed successfully!", 100)
     return True
-
-
-def show_cuda_download_dialog(parent=None, on_success_callback=None):
-    """Download TuxTalk's CUDA libraries in the download window (Preferences'
-    Device choice), then say how it went.
-
-    on_success_callback runs after the "Downloaded!" message, for example to
-    refresh Preferences. Returns True on success, False on failure and None
-    if the user cancelled.
-    """
-    from .download_progress_dialog import CUDA_TASK, DownloadTask, run_downloads
-    from .download_utils import failure_reason
-    task = DownloadTask(CUDA_TASK, f"~{cuda_helper.DOWNLOAD_SIZE_TEXT}", download_cuda_libraries)
-    result = run_downloads(parent, "Downloading CUDA Libraries",
-                           "This may take several minutes depending on your connection.",
-                           [task])
-    if result is False:
-        # The download notices the Cancel and cleans up by itself.
-        logger.info("User cancelled CUDA download")
-        return None
-    if result is None and failure_reason(*task.last_report):
-        # The window showed why and waited for Close: not twice.
-        logger.error("CUDA libraries download failed")
-        return False
-    _say_how_it_went(parent, bool(result), on_success_callback)
-    return bool(result)
-
-
-def _say_how_it_went(parent, success, on_success_callback):
-    """"CUDA Libraries Downloaded!", then *on_success_callback*, or "Download
-    Failed" for a failure the download window couldn't explain. Switching the device
-    is the caller's job (Preferences applies it, so the service restarts
-    onto it), after the message so its question doesn't come before
-    "Downloaded!"."""
-    from gi.repository import Gtk
-    from .ui_style import show_message
-    if not success:
-        show_message(parent, Gtk.MessageType.ERROR, "Download Failed",
-                     "Could not download CUDA libraries.\n\nYou can try again later: choose "
-                     "CUDA under Preferences → General → Change model, device or language → "
-                     "Device.")
-        logger.error("CUDA libraries download failed")
-        return
-    show_message(parent, Gtk.MessageType.INFO, "CUDA Libraries Downloaded!",
-                 "Your NVIDIA graphics card can now run the Whisper models with CUDA.")
-    if on_success_callback:
-        try:
-            on_success_callback()
-        except Exception as e:
-            logger.warning(f"Error in success callback: {e}", exc_info=True)
-    logger.info("CUDA libraries downloaded successfully")

@@ -310,9 +310,9 @@ def test_the_cuda_download_says_why_it_failed_once(monkeypatch):
     same reason in a box after it was said twice. A Cancel shows nothing
     more; a failure with no reason in the window gets the box."""
     pytest.importorskip("gi")
-    from tuxtalk import cuda_download, download_progress_dialog as dpd
+    from tuxtalk import download_progress_dialog as dpd
     said = []
-    monkeypatch.setattr(cuda_download, "_say_how_it_went",
+    monkeypatch.setattr(dpd, "_say_how_the_cuda_download_went",
                         lambda parent, ok, then: said.append(ok))
 
     def window(answer, last_report):
@@ -321,8 +321,20 @@ def test_the_cuda_download_says_why_it_failed_once(monkeypatch):
             return answer
         monkeypatch.setattr(dpd, "run_downloads", run)
     window(False, ("Downloading...", 40))
-    assert cuda_download.show_cuda_download_dialog() is None and said == []
+    assert dpd.show_cuda_download_dialog() is None and said == []
     window(None, ("Not enough disk space: 1.4 GB needed", 0))
-    assert cuda_download.show_cuda_download_dialog() is False and said == []
+    assert dpd.show_cuda_download_dialog() is False and said == []
     window(None, ("Downloading...", 40))
-    assert cuda_download.show_cuda_download_dialog() is False and said == [False]
+    assert dpd.show_cuda_download_dialog() is False and said == [False]
+
+
+def test_a_cuda_failure_the_window_couldnt_explain_says_where_to_try_again(monkeypatch):
+    pytest.importorskip("gi")
+    from tuxtalk import download_progress_dialog as dpd, ui_style
+    said = []
+    monkeypatch.setattr(ui_style, "show_message",
+                        lambda parent, kind, title, text, **k: said.append((title, text)))
+    dpd._say_how_the_cuda_download_went(None, False, None)
+    assert said[0][0] == "Download Failed"
+    assert said[0][1].startswith("Could not download CUDA libraries.")
+    assert "Preferences → General" in said[0][1]

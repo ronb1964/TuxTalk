@@ -1,7 +1,10 @@
 """CUDA's download (cuda_download): the wheels from PyPI, each checked against
 PyPI's SHA256, their libraries unpacked into a folder of their own and put in
-place only when every library is there, so a failed or odd download never
-leaves a working CUDA broken."""
+place only when every library is there, so a failed, cancelled or odd
+download, or a TuxTalk killed part-way, never leaves a working CUDA broken."""
+import contextlib
+import io
+import json
 import os
 import zipfile
 
@@ -72,7 +75,7 @@ def test_a_download_missing_a_library_is_not_installed(pypi):
     assert not cuda_download.download_cuda_libraries(lambda m, p: reports.append((m, p)))
     assert download_utils.failure_reason(*reports[-1]) == (
         "The CUDA download didn't hold every library it needs")
-    assert not pypi.cuda.exists()
+    assert os.listdir(pypi.cuda) == []
 
 
 def test_a_failed_re_download_leaves_the_working_cuda_as_it_was(pypi, monkeypatch):
@@ -127,17 +130,6 @@ def test_the_libraries_unpack_into_their_package_folders(tmp_path, monkeypatch):
     assert unpacked.stat().st_size == 1000 and os.access(unpacked, os.X_OK)
 
 
-def test_a_failure_the_window_couldnt_explain_says_where_to_try_again(monkeypatch):
-    from tuxtalk import ui_style
-    said = []
-    monkeypatch.setattr(ui_style, "show_message",
-                        lambda parent, kind, title, text, **k: said.append((title, text)))
-    cuda_download._say_how_it_went(None, False, None)
-    assert said[0][0] == "Download Failed"
-    assert said[0][1].startswith("Could not download CUDA libraries.")
-    assert "Preferences → General" in said[0][1]
-
-
 def test_no_wheel_on_pypi_is_the_reason_given(tmp_path, monkeypatch):
     """It ended on "Looking up CUDA packages...", shown as the reason."""
     monkeypatch.setattr(cuda_helper, "get_appdir_cuda_path", lambda: str(tmp_path / "cuda"))
@@ -157,3 +149,93 @@ def test_the_download_bar_never_goes_backwards(pypi):
     percents = []
     assert cuda_download.download_cuda_libraries(lambda message, percent: percents.append(percent))
     assert percents == sorted(percents) and percents[-1] == 100
+
+
+def _cut_off_between_the_renames(cuda):
+    """What a TuxTalk killed in the middle of the swap leaves: the working
+    copy moved aside as lib.old and nothing at lib yet."""
+    _install_complete_cuda(cuda)
+    (cuda / "lib").rename(cuda / "lib.old")
+
+
+def test_an_install_cut_off_between_its_renames_is_put_back_at_start(pypi):
+    """CUDA read as not downloaded although the whole copy was in lib.old,
+    and a later download could delete it."""
+    _cut_off_between_the_renames(pypi.cuda)
+    cuda_download.recover_cut_off_install()
+    assert cuda_helper.has_talktype_cuda_libraries()
+    assert (pypi.cuda / "lib" / LIBRARIES[0]).read_text() == "the working one"
+    assert sorted(os.listdir(pypi.cuda)) == ["lib"]
+
+
+def test_a_retry_that_fails_still_puts_a_cut_off_install_back(pypi, monkeypatch):
+    _cut_off_between_the_renames(pypi.cuda)
+
+    def offline(pkg):
+        raise OSError("no network")
+    monkeypatch.setattr(cuda_download, "_pypi_wheel", offline)
+    assert not cuda_download.download_cuda_libraries()
+    assert (pypi.cuda / "lib" / LIBRARIES[0]).read_text() == "the working one"
+
+
+def test_an_unfinished_unpacking_folder_is_removed_however_recent(pypi):
+    """A kill mid-unpack left up to 1.5 GB in a hidden folder, swept only
+    when it was ten minutes old and only by another download."""
+    _install_complete_cuda(pypi.cuda)
+    (pypi.cuda / ".lib.0123abcd.d" / "cublas").mkdir(parents=True)
+    cuda_download.recover_cut_off_install()
+    assert sorted(os.listdir(pypi.cuda)) == ["lib"]
+    (pypi.cuda / ".lib.4567cdef.d").mkdir()
+    assert cuda_download.download_cuda_libraries()
+    assert sorted(os.listdir(pypi.cuda)) == ["lib"]
+
+
+def test_a_failed_attempt_never_removes_what_another_one_installed(pypi, monkeypatch):
+    """Two attempts started with no CUDA; the one that failed deleted the
+    whole folder, with the other's finished install in it."""
+    fetch = download_utils.download_file
+    attempts = []
+
+    def other_attempt_finishes_meanwhile(url, path, **kwargs):
+        if not attempts:
+            attempts.append("other")
+            assert cuda_download.download_cuda_libraries()
+            return False                    # then this attempt's own download fails
+        return fetch(url, path, **kwargs)
+    monkeypatch.setattr(download_utils, "download_file", other_attempt_finishes_meanwhile)
+    assert not cuda_download.download_cuda_libraries()
+    assert cuda_helper.has_talktype_cuda_libraries()
+
+
+def test_a_cancel_while_waiting_for_the_install_lock_installs_nothing(pypi, monkeypatch):
+    """Cancel closes the window at once; an attempt still waiting for its
+    turn went on to replace the libraries anyway."""
+    import threading
+    _install_complete_cuda(pypi.cuda)
+    cancel, turns = threading.Event(), []
+
+    @contextlib.contextmanager
+    def turn(name, wait_s=120.0):
+        turns.append(name)
+        if len(turns) == 2:                 # the install's turn: Cancel came meanwhile
+            cancel.set()
+        yield
+    monkeypatch.setattr(download_utils, "install_turn", turn)
+    assert not cuda_download.download_cuda_libraries(cancel_event=cancel)
+    assert (pypi.cuda / "lib" / LIBRARIES[0]).read_text() == "the working one"
+    assert sorted(os.listdir(pypi.cuda)) == ["lib"]
+
+
+def test_a_wheel_pypi_lists_without_a_checksum_is_not_downloaded(monkeypatch):
+    """Without PyPI's SHA256 the download went ahead unchecked and the log
+    said "Downloaded and verified"."""
+    import urllib.request
+    entry = {"packagetype": "bdist_wheel", "url": "https://x/w.whl", "size": 1,
+             "filename": "nvidia_cublas_cu12-12.9-py3-none-manylinux_2_27_x86_64.whl"}
+    for digests in ({}, {"sha256": ""}, {"sha256": "not-a-hash"}):
+        body = json.dumps({"urls": [dict(entry, digests=digests)]}).encode()
+        monkeypatch.setattr(urllib.request, "urlopen",
+                            lambda request, timeout, body=body:
+                            contextlib.nullcontext(io.BytesIO(body)))
+        with pytest.raises(LookupError, match="no checksum"):
+            cuda_download._pypi_wheel("nvidia-cublas-cu12")

@@ -1,11 +1,7 @@
-"""A failed CUDA re-download must not delete the CUDA the user already has.
-
-cuda_download.download_cuda_libraries() cleans up on failure by rmtree'ing the whole CUDA
-directory. That is right when the directory is a half-finished download this
-run created. It is wrong when a complete installation was already
-there: an early failure (no network, pip missing, a cancelled dialog) would
-destroy a working GPU setup the user has to download all over again.
-"""
+"""What is in TuxTalk's CUDA folder: when an install counts as complete, and
+what earlier versions left there (the unused cuDNN, PyTorch's link) going
+at start. A failed or cut-off download leaving the CUDA you had is
+test_cuda_download's."""
 
 import os
 
@@ -30,28 +26,6 @@ def _install_complete_cuda(path):
         (lib / folder / "lib").mkdir(parents=True, exist_ok=True)
         (lib / folder / "lib" / name).write_text("x" * 1000)
     return sorted(os.listdir(lib))
-
-
-def test_a_pre_existing_install_survives_a_failed_download(cuda_dir):
-    before = _install_complete_cuda(cuda_dir)
-
-    cleanup = cuda_download._make_cuda_cleanup(str(cuda_dir))
-    cleanup()
-
-    assert cuda_dir.exists(), "deleted the user's working CUDA installation"
-    assert sorted(os.listdir(cuda_dir / "lib")) == before
-
-
-def test_a_partial_download_is_cleaned_up(cuda_dir):
-    """Nothing usable was there before, so removing the debris is correct."""
-    lib = cuda_dir / "lib"
-    lib.mkdir(parents=True)
-    (lib / "libcudart.so.partial").write_text("half a file")
-
-    cleanup = cuda_download._make_cuda_cleanup(str(cuda_dir))
-    cleanup()
-
-    assert not cuda_dir.exists(), "left a broken half-download in place"
 
 
 def test_the_real_nested_layout_counts_as_complete(cuda_dir):

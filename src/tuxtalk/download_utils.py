@@ -210,6 +210,45 @@ def _remove_quiet(path: str | None) -> None:
         pass
 
 
+def remove_tree(path: str) -> None:
+    """Delete the folder *path* if it is there. A failure is logged, not
+    raised: the folder is only taking space."""
+    try:
+        shutil.rmtree(path)
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        logger.warning(f"Couldn't remove {path}: {e}")
+
+
+def restore_cut_off_swap(target: str, old: str) -> None:
+    """Put *old* back as *target* when a replace_folder was cut off between
+    its two renames (killed, a power cut): *target* gone, the only complete
+    copy still at *old*. Hold the install's lock."""
+    if not os.path.lexists(target) and os.path.lexists(old):
+        os.rename(old, target)
+        logger.info(f"Put back {target}: replacing it was cut off part-way")
+
+
+def replace_folder(staging: str, target: str, old: str) -> None:
+    """*staging* becomes *target*. The copy there waits as *old* until the
+    new one is in place, and comes back if it can't be (the rename failed),
+    so there is a complete copy at *target* or *old* at every moment. All
+    three sit in one folder, so the renames never cross filesystems. Hold
+    the install's lock."""
+    restore_cut_off_swap(target, old)
+    remove_tree(old)            # an earlier replace that couldn't remove it
+    if os.path.lexists(target):
+        os.rename(target, old)
+    try:
+        os.rename(staging, target)
+    except OSError:
+        if os.path.lexists(old):
+            os.rename(old, target)
+        raise
+    remove_tree(old)
+
+
 def remove_stale_files(directory: str, pattern: str, max_age_s: float,
                        folders: bool = False) -> None:
     """Delete the files (and with *folders*, the folders) in *directory*
@@ -262,7 +301,7 @@ def download_area(parent: str, name: str, old_names=()):
         yield archive, folder
     finally:
         _remove_quiet(archive)
-        shutil.rmtree(folder, ignore_errors=True)
+        remove_tree(folder)
 
 
 @contextlib.contextmanager

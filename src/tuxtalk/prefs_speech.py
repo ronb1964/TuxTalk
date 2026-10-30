@@ -731,7 +731,7 @@ class SpeechSection(Tab):
     def _download_cuda(self):
         """Ask, then download CUDA's files with a progress bar; once they're
         here, _cuda_downloaded() switches the selected model to CUDA."""
-        from . import cuda_download, cuda_helper
+        from . import cuda_helper, download_progress_dialog
         cuda_path = cuda_helper.get_appdir_cuda_path()
         if show_message(
                 self.window, Gtk.MessageType.QUESTION, "Download CUDA Libraries?",
@@ -743,7 +743,7 @@ class SpeechSection(Tab):
             return
 
         with self.win.busy():           # as in _download_cuda_and_large_v3
-            cuda_download.show_cuda_download_dialog(
+            download_progress_dialog.show_cuda_download_dialog(
                 parent=self.window,
                 on_success_callback=lambda: self._cuda_downloaded(self.config.get("model")))
 

@@ -844,8 +844,8 @@ def tray_main(monkeypatch):
     run(first_run=True); *welcome* stands in for the welcome screens."""
     import sys
     import dbus.mainloop.glib
-    from tuxtalk import (autostart, control, cuda_helper, desktop_identity, desktop_launcher,
-                         first_run_setup, gnome_keybindings, rename_migration,
+    from tuxtalk import (autostart, control, cuda_download, cuda_helper, desktop_identity,
+                         desktop_launcher, first_run_setup, gnome_keybindings, rename_migration,
                          service_launcher, settings_backup, tray, ui_style, update_install,
                          ydotoold_leftovers)
     done = _Steps()
@@ -880,6 +880,8 @@ def tray_main(monkeypatch):
     monkeypatch.setattr(update_install, "check_just_updated", lambda: None)
     monkeypatch.setattr(settings_backup, "snapshot_if_changed", step("snapshots the settings"))
     monkeypatch.setattr(ydotoold_leftovers, "retire_ydotoold", step("retires ydotoold"))
+    monkeypatch.setattr(cuda_download, "recover_cut_off_install",
+                        step("puts back a cut-off CUDA install"))
     monkeypatch.setattr(cuda_helper, "remove_unused_cudnn", step("removes the unused cuDNN"))
     monkeypatch.setattr(cuda_helper, "remove_pytorch_link", step("removes the PyTorch link"))
     monkeypatch.setattr(gnome_keybindings, "restore_left_over",

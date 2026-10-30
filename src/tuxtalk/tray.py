@@ -621,6 +621,8 @@ def main():
 
     from .ydotoold_leftovers import retire_ydotoold
     retire_ydotoold()       # what TuxTalk typed through until 0.18
+    from .cuda_download import recover_cut_off_install
+    recover_cut_off_install()   # before the service loads CUDA
     from .cuda_helper import remove_pytorch_link, remove_unused_cudnn
     remove_unused_cudnn()   # downloaded with CUDA until 0.19
     remove_pytorch_link()   # made with the CUDA preload until 0.19
