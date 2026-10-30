@@ -96,7 +96,8 @@ def _reported():
 def _x11_active_rect():
     """The active window's frame in an X11 session, from the window manager.
     Not under Wayland: XWayland knows only the X11 apps."""
-    if os.environ.get("XDG_SESSION_TYPE") != "x11":
+    from .desktop_detect import is_x11_session
+    if not is_x11_session(os.environ):
         return None
     import gi
     gi.require_version("Gdk", "3.0")

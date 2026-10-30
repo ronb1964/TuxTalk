@@ -33,15 +33,13 @@ It's a hint for picking the paste shortcut, so anything going wrong means
 "don't know" (None), quickly, and never an error.
 """
 import ctypes
-import json
 import os
 import socket
 import struct
 import threading
 
 from . import desktop_detect
-from .compositor_ipc import (I3_GET_TREE, TIMEOUT, exchange, hyprland_request, i3_request,
-                             recv_line)
+from .compositor_ipc import I3_GET_TREE, TIMEOUT, hyprland_request, i3_request, niri_request
 from .logger import FailureNotes, setup_logger
 from .single_instance import session_runtime_dir
 from .xcb_ctypes import free, x11_root, xcb_lib
@@ -87,7 +85,7 @@ def _from_hyprland(signature):
 # --- niri ----------------------------------------------------------------------------
 
 def _from_niri(path):
-    reply = json.loads(exchange(path, b'"FocusedWindow"\n', recv_line))
+    reply = niri_request(path, b'"FocusedWindow"')
     window = (reply.get("Ok") or {}).get("FocusedWindow") or {}
     return window.get("app_id"), window.get("id")
 

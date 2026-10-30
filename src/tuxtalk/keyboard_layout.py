@@ -52,7 +52,7 @@ import shutil
 import subprocess
 import unicodedata
 
-from . import compositor_ipc
+from . import compositor_ipc, desktop_detect
 from .logger import FailureNotes, setup_logger
 
 logger = setup_logger(__name__)
@@ -313,8 +313,7 @@ _DEBIAN_KEYBOARD = "/etc/default/keyboard"
 
 
 def _desktop():
-    from .desktop_detect import get_desktop_environment
-    return get_desktop_environment()
+    return desktop_detect.get_desktop_environment()
 
 
 def _first(csv, index=0):
@@ -338,7 +337,7 @@ def _kde_options():
     Wayland they are kxkbrc's, read as KWin reads them (src/xkb.cpp):
     Options only when ResetOldOptions is on, and None (libxkbcommon's
     defaults) when it isn't, since KWin then passes none."""
-    if (os.environ.get("XDG_SESSION_TYPE") or "").lower() == "x11":
+    if desktop_detect.is_x11_session(os.environ):
         return _setxkbmap_fields().get("options", "")
     # kreadconfig answers a bool by its exit code, 0 for true and 1 for false.
     reset = _kreadconfig("--key", "ResetOldOptions", "--type", "bool")
@@ -403,8 +402,8 @@ def _gnome_layout():
 
 
 def _cosmic_xkb_config():
-    from .desktop_detect import config_home
-    path = os.path.join(config_home(), "cosmic", "com.system76.CosmicComp", "v1", "xkb_config")
+    path = os.path.join(desktop_detect.config_home(), "cosmic", "com.system76.CosmicComp",
+                        "v1", "xkb_config")
     with open(path, encoding="utf-8") as f:
         return f.read()
 
@@ -432,8 +431,12 @@ def _note_several_layouts(layouts):
 
 
 def _hyprland_devices():
-    return compositor_ipc.hyprland_request(os.environ["HYPRLAND_INSTANCE_SIGNATURE"],
-                                           b"j/devices")
+    devices = compositor_ipc.hyprland_request(os.environ["HYPRLAND_INSTANCE_SIGNATURE"],
+                                              b"j/devices")
+    if not devices:
+        # Raised, not None, so active_layout says once that it couldn't ask.
+        raise ValueError("Hyprland gave an empty answer about its keyboards")
+    return devices
 
 
 def _hyprland_layout():
@@ -621,7 +624,7 @@ def _desktop_layout():
         return _gnome_layout()
     if desktop == "cosmic":
         return _cosmic_layout()
-    if (os.environ.get("XDG_SESSION_TYPE") or "").lower() == "x11":
+    if desktop_detect.is_x11_session(os.environ):
         return _x11_layout()
     return None
 

@@ -46,7 +46,7 @@ def _recv_until_closed(sock):
     return b"".join(chunks)
 
 
-def recv_line(sock):
+def _recv_line(sock):
     """One line of reply, newline included; less if the compositor hangs up."""
     data = b""
     while not data.endswith(b"\n"):
@@ -63,6 +63,12 @@ def _i3_reply(sock):
         raise ValueError("not an i3 IPC reply")
     length, _kind = struct.unpack("<II", head[6:])
     return json.loads(_recv_exact(sock, length))
+
+
+def niri_request(path, request):
+    """niri's JSON answer to *request* (b'"FocusedWindow"', a JSON value) on
+    its socket at *path*; each goes on one line, both ways."""
+    return json.loads(exchange(path, request + b"\n", _recv_line))
 
 
 def i3_request(path, kind):

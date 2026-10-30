@@ -455,6 +455,19 @@ def test_hyprland_reports_the_active_layout(monkeypatch):
     assert kl.active_layout() == ("ch", "fr", "compose:ralt")
 
 
+def test_an_empty_answer_from_hyprland_is_logged_and_the_system_layout_used(
+        monkeypatch, caplog):
+    import logging
+    from tuxtalk import compositor_ipc
+    monkeypatch.setenv("HYPRLAND_INSTANCE_SIGNATURE", "x")
+    monkeypatch.setattr(compositor_ipc, "exchange", lambda path, request, read: b"")
+    monkeypatch.setattr(kl, "_system_layout", lambda: ("de", "", ""))
+    monkeypatch.setattr(kl, "_failures", kl.FailureNotes())
+    with caplog.at_level(logging.INFO, logger=kl.logger.name):
+        assert kl.active_layout() == ("de", "", "")
+    assert "empty answer" in caplog.text
+
+
 def test_sway_reports_the_active_layout_by_its_description(monkeypatch):
     inputs = [{"type": "pointer"},
               {"type": "keyboard", "xkb_active_layout_index": 1,
@@ -477,6 +490,17 @@ def _x11(monkeypatch, layouts, variants, group, options=None):
 
 def test_x11_reports_the_layout(monkeypatch):
     _x11(monkeypatch, "fr,us", "oss,", 0)
+    assert kl.active_layout() == ("fr", "oss", "")
+
+
+def test_an_x_session_started_without_its_type_is_read_as_x11(monkeypatch):
+    """startx sets no XDG_SESSION_TYPE; the layout was then the system's,
+    not the one switched on."""
+    _x11(monkeypatch, "fr,us", "oss,", 0)
+    monkeypatch.delenv("XDG_SESSION_TYPE")
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    monkeypatch.setenv("DISPLAY", ":0")
+    monkeypatch.setattr(kl, "_system_layout", lambda: ("us", "", ""))
     assert kl.active_layout() == ("fr", "oss", "")
 
 
