@@ -184,6 +184,8 @@ class LibeiSession:
     before_keys = None
 
     def __init__(self, fd: int):
+        """Open a libei sender context on *fd*, the portal's connection. Raises
+        RuntimeError when libei turns it down, with *fd* closed then too."""
         try:
             self.ei = load_libei()
             self.ctx = self.ei.ei_new_sender(None)
@@ -356,6 +358,8 @@ class LibeiSession:
         given, is asked right before the first key, once the device is ready,
         and False presses nothing (an automatic send a tap held meanwhile)."""
         def emit():
+            """Press every chord, each modifier down before its key and up
+            after it."""
             ei, ctx, dev = self.ei, self.ctx, self.device
 
             def key(code, down):

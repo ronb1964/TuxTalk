@@ -57,6 +57,9 @@ _RE_REPEAT = re.compile(r"(?i)\b((?:[\w']+ +){0,2}[\w']+)(?: +\1\b)+")
 def _remove_fillers(text: str) -> str:
     """Delete hesitation sounds, with the commas that were only there for them."""
     def repl(m):
+        """What one filler match becomes: nothing, a space or the comma that
+        was the sentence's own, plus a mark that capitalizes the next word
+        when the filler opened the sentence."""
         start = m.start()
         at_line_start = start == 0 or text[:start].endswith(("\xa7", "\n", "\t"))
         # "Um, so we..." -> "So we...": when the filler opened a sentence (it

@@ -70,7 +70,15 @@ def _named(text, widget):
     return label
 
 class _FixWordDialog:
+    """The Fix a Word window: pick the words a dictation got wrong, type how
+    they should be written, and save it as a fix applied to every dictation
+    from then on."""
     def __init__(self, entries, index, copy_text, before_show=None, in_place=False):
+        """Build and show the window over *entries*, the recent dictations,
+        opened at *index*. *copy_text* puts the corrected dictation on the
+        clipboard; *in_place* (said "fix that word") fixes it in the app's
+        text instead, once the window has closed. *before_show* gets the
+        window before it shows, to place it."""
         self.entries = entries
         self.copy_text = copy_text
         # "fix that word" right after the dictation: fix it in the app's text
@@ -302,6 +310,9 @@ class _FixWordDialog:
     # --- saving -----------------------------------------------------------
 
     def _on_save(self):
+        """Save the fix (asking first about a phrase that could change ordinary
+        words), then copy the corrected dictation or note where to fix it in
+        the text, and close."""
         if not self.save_button.get_sensitive():
             return
         phrase = self._phrase()

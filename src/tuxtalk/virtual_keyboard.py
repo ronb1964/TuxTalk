@@ -101,6 +101,8 @@ def _capabilities():
 
 
 def _keyboard_class():
+    """evdev's UInput as a keyboard TuxTalk only writes to. Built when a
+    keyboard is made, so importing this module needs no evdev."""
     from evdev import UInput
 
     class Keyboard(UInput):

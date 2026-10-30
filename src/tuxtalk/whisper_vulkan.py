@@ -184,6 +184,9 @@ def make_engine_download_func(model_name=None):
     """DownloadTask function: fetch, verify and unpack the engine, unless the
     one already there can run *model_name*."""
     def download(progress_callback, cancel_event):
+        """Fetch, check and unpack the Vulkan engine into its folder, reporting
+        progress; True once it's there. Another download finishing first is
+        fine."""
         from .download_utils import download_area, download_file, install_turn, unpack_tar
         if is_engine_installed(model_name):
             progress_callback("Already downloaded", 100)
@@ -428,6 +431,8 @@ class VulkanWhisperModel:
     *device_index*, kept running for the life of the dictation service."""
 
     def __init__(self, model_name, device_index, threads=None):
+        """Start whisper-server for *model_name* on graphics card
+        *device_index*, warmed up. Raises when it doesn't start."""
         self.model_name = model_name
         self.device_index = device_index
         self.threads = threads or max(1, (os.cpu_count() or 2) // 2)
@@ -447,6 +452,10 @@ class VulkanWhisperModel:
             raise
 
     def _start(self):
+        """Start whisper-server on a free local port, wait up to two minutes
+        for it to answer, and warm it up with a practice run. Raises
+        RuntimeError with the reason when it doesn't come up, with the
+        server stopped."""
         engine_process.kill_orphans(engine_process.processes_of(_binary("whisper-server")),
                                     engine_process.is_talktype_process, "graphics engine")
         with socket.socket() as s:

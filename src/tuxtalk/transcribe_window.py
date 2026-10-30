@@ -112,7 +112,13 @@ def _duration(seconds):
 
 
 class TranscribeWindow:
+    """The Transcribe a File window: a file chosen or dropped is decoded and
+    transcribed on a thread of its own, shown in paragraphs, and can be
+    copied or saved as text or subtitles. The engine stays loaded for the
+    next file."""
     def __init__(self):
+        """Build and show the window, empty, with its buttons and the text
+        area, which takes a dropped file as the window does."""
         self.engine = None            # loaded on the first file, kept for the next
         self.engine_key = None        # the settings it was loaded with (engine_settings)
         self.pieces = []
@@ -267,6 +273,8 @@ class TranscribeWindow:
     # --- choosing a file -----------------------------------------------------------------
 
     def _on_choose(self, _button):
+        """Choose a File: ask about unsaved text first, then open the desktop's
+        file dialog on audio and video and transcribe what's picked."""
         if not self._may_discard("new"):
             return
         chooser = Gtk.FileChooserNative.new("Choose a recording or video", self.window,
@@ -332,6 +340,9 @@ class TranscribeWindow:
         threading.Thread(target=self._work, args=(path,), daemon=True).start()
 
     def _work(self, path):
+        """Decode and transcribe *path* on the worker thread, loading the
+        engine for the current settings when they changed, and report
+        progress, the result or the failure back on GTK's thread."""
         started = time.time()
         try:
             audio = ft.decode(path)
@@ -376,6 +387,8 @@ class TranscribeWindow:
         return False
 
     def _on_done(self, pieces, total, seconds, stopped):
+        """Show the finished (or stopped) transcript and say how it went,
+        keeping it under Earlier Transcripts. On GTK's thread."""
         self.pieces = pieces
         self.kept = self.copied = False
         self.remembered = bool(pieces) and ft.remember(self.path, pieces, total) is not None
@@ -467,6 +480,8 @@ class TranscribeWindow:
         self.status.set_text("Copied. Paste it wherever you like.")
 
     def _save(self, kind):
+        """Save what's shown as text (*kind* "txt") or subtitles ("srt"),
+        asking where with the file's own folder and name offered."""
         shown = self._shown()
         content = (ft.to_srt(shown) if kind == "srt"
                    else ft.to_text(shown, times=self.times_check.get_active()) + "\n")

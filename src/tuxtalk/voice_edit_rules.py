@@ -155,6 +155,8 @@ def _remove_phrase(text: str, phrase: str):
         return None                       # not there: let the AI make sense of it
 
     def change(body):
+        """*body* without the phrase, with the word that then opens a sentence
+        capitalised."""
         if not pattern.search(body):
             return body                   # a line without the phrase stays as it is
         out, pos, capitalise = [], 0, False

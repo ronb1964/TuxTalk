@@ -169,6 +169,8 @@ def _show_now(text, center, seconds=None, warning=True, tag=None):
         win.move(*place(width, height, center, monitor))
 
         def draw(_widget, cr):
+            """Paint the message: a dark rounded label with an amber edge for a
+            warning or a blue one for news, on a see-through window."""
             cr.set_operator(cairo.OPERATOR_SOURCE)
             cr.set_source_rgba(0, 0, 0, 0)
             cr.paint()

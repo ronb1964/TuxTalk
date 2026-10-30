@@ -187,6 +187,9 @@ class HelperKeyboard:
                 self._handle(line.decode("ascii", "replace").split())
 
     def _handle(self, words):
+        """Turn one line from the hotkey helper into key events for the
+        service's loop (DOWN with the modifiers held, UP), or into the
+        answer to a request (OK, ERR)."""
         if not words:
             return
         kind, args = words[0], words[1:]

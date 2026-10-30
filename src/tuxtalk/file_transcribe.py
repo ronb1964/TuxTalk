@@ -145,6 +145,8 @@ class FileEngine:
         self.language, self.limit_to, self.words = language, tuple(limit_to), list(words)
 
     def text(self, audio):
+        """The text of one piece of the file, from whichever engine is loaded,
+        with the user's words steered and spelled as dictation does."""
         from . import custom_words, language_limit
         if self.kind == "parakeet":
             from .parakeet_gpu import _steer

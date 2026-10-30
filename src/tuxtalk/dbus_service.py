@@ -482,6 +482,8 @@ class TuxTalkDBusService(dbus.service.Object):
         import threading
 
         def do_check():
+            """Check for updates on its own thread, show the result window and
+            tell the extension, with a failure reported the same way."""
             try:
                 from . import update_checker
                 result = update_checker.check_for_updates()

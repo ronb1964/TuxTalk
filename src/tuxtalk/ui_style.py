@@ -206,6 +206,7 @@ def forward_combo_scroll(combo):
     ancestor, and True is still returned so the combo's value never changes.
     """
     def _on_scroll(widget, event):
+        """Scroll the page the combo sits in, never the combo's own value."""
         sw = widget.get_ancestor(Gtk.ScrolledWindow)
         adj = sw.get_vadjustment() if sw is not None else None
         if adj is not None:
@@ -601,6 +602,10 @@ class Fold(Gtk.Box):
     """
 
     def __init__(self, show_label, hide_label, on_toggle=None):
+        """A closed fold: a button reading *show_label* (*hide_label* once
+        open) with the summary beside it, and its settings in a grid that
+        slides open below. *on_toggle* gets True or False each time it opens
+        or closes."""
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self._labels = (show_label, hide_label)
         self._on_toggle = on_toggle

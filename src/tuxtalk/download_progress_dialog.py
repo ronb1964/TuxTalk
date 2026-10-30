@@ -314,6 +314,8 @@ class UnifiedDownloadDialog:
     def _mark_task_complete(self, task, success):
         """Mark a task as complete (thread-safe)."""
         def update_ui():
+            """Show the task as complete, failed or stopped, on GTK's thread,
+            then see whether every task is done."""
             if task not in self.task_widgets:
                 return False
 

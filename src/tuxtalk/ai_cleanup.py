@@ -428,6 +428,9 @@ def is_installed() -> bool:
 def make_engine_download_func():
     """DownloadTask function: fetch, verify and unpack the llama.cpp engine."""
     def download(progress_callback, cancel_event):
+        """Fetch, check and unpack llama.cpp's server into the engine folder,
+        reporting progress; True once it's there. Another download finishing
+        first is fine."""
         from .download_utils import download_area, download_file, install_turn, unpack_tar
         if os.access(_server_binary(), os.X_OK):
             progress_callback("Already downloaded", 100)
@@ -640,6 +643,8 @@ class CorrectionEngine:
         return "\n".join(out)
 
     def _edit_once(self, text: str, instruction: str):
+        """One voice edit: *text* rewritten by *instruction*, or None when the
+        AI didn't answer or answered with nothing to use."""
         messages = [{"role": "system", "content": EDIT_SYSTEM}]
         for before, instr, after in EDIT_EXAMPLES:
             messages += [{"role": "user", "content": _edit_request(before, instr)},

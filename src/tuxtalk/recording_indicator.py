@@ -156,6 +156,10 @@ class RecordingIndicator(Gtk.Window):
     def __init__(self, position="center", offset_x=0, offset_y=0, size="medium",
                  style="orb", color_mode="custom", custom_color="#4db3ff",
                  sensitivity=1.0, follow_window=False):
+        """Build the indicator window, not shown yet: transparent, above
+        everything and never taking the focus, drawn in *style* at *size*,
+        placed at *position* plus the offsets, or near the window being
+        dictated into with *follow_window*."""
         super().__init__(title="TuxTalk Recording", type=window_type())
         # TuxTalk Labs: show near the bottom of the window being dictated
         # into, instead of the fixed position (_follow_target).
@@ -243,6 +247,8 @@ class RecordingIndicator(Gtk.Window):
         """Show the indicator at the configured position"""
         # Must be called from GTK main thread
         def _do_show():
+            """Place the window, show it without taking the focus and start the
+            animation, on GTK's thread."""
             try:
                 # Window dimensions — same expression used to size the window,
                 # so the maths and the real window cannot disagree.
@@ -298,6 +304,8 @@ class RecordingIndicator(Gtk.Window):
     def hide_indicator(self):
         """Hide the indicator and stop animation"""
         def _do_hide():
+            """Hide the window, stop its animation and clear the recording's
+            sound, on GTK's thread."""
             self.hide()
             if self.animation_timeout_id is not None:
                 GLib.source_remove(self.animation_timeout_id)

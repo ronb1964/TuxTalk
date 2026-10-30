@@ -1,3 +1,7 @@
+"""TuxTalk's settings: the Settings fields and their defaults, loading,
+checking, repairing and saving config.toml, which settings apply live and
+which restart dictation, the data folders, the microphone lookup and the
+snippets file."""
 from __future__ import annotations
 import dataclasses
 import os
@@ -185,6 +189,9 @@ def has_battery(power_dir="/sys/class/power_supply") -> bool:
 
 @dataclass
 class Settings:
+    """Every setting, with its default. The fields are what config.toml
+    holds; a field added here is a new setting that older files don't have
+    yet, so they get the default."""
     model: str = "parakeet-v3"  # parakeet-v3 or tiny/base/small/medium/large-v3 …
                                 # Parakeet is the default: more accurate than large-v3 on
                                 # English (Open ASR Leaderboard) and fast on a processor.

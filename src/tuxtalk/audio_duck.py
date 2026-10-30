@@ -250,6 +250,9 @@ class AudioDucker:
                 logger.info(f"Couldn't turn other sounds down or back: {e}")
 
     def _duck_now(self):
+        """Turn every other app's sound down, each one saved first so the next
+        start puts it back if TuxTalk stops in between. On the worker
+        thread."""
         if self._closing:
             return
         self._round += 1
@@ -283,6 +286,9 @@ class AudioDucker:
                    for st in list_streams(self._run))
 
     def _restore_now(self):
+        """Put back the volumes that were turned down, unless the user changed
+        one meanwhile, and settle the apps whose next sound may have opened
+        at the lowered level. On the worker thread."""
         ducked, self._ducked = self._ducked, {}
         if not ducked and not self._owed:
             return
