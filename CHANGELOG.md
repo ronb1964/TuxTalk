@@ -12,8 +12,8 @@ before 0.15.0, so older entries use that name.
   you back nearly 1 GB.
 - Downloading CUDA again over a copy that already works can't break it any
   more. The new files are unpacked to one side and only swapped in once
-  every one of them is there, so running out of disk space partway leaves
-  the CUDA you had.
+  every one of them is there, so running out of disk space partway, or
+  TuxTalk being closed in the middle, leaves the CUDA you had.
 - With the key remapper kanata running, F8 and F9 did nothing, and the
   hotkey test didn't see them either. kanata takes your keyboards for itself
   and passes every key on through a virtual keyboard of its own, which is a
