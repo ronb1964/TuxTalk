@@ -1111,23 +1111,51 @@ def test_a_keyboard_that_fails_to_read_is_let_go_not_spun_on(setup, monkeypatch)
     assert kb.path not in helper.keyboards
 
 
-def test_a_keyboard_that_failed_to_read_waits_to_be_plugged_in_again(setup, monkeypatch, tmp_path):
-    """Opened again by every scan, it failed again every 2 s, three lines in
-    the log each time."""
-    helper, kb, _connect, _say, _heard, _seat = setup
-    node = tmp_path / "input" / "event5"
+def _failing_keyboard_at(node, helper, kb, monkeypatch):
+    """*kb* opened from the device node *node*, its reads failing."""
     node.write_text("")
     helper.keyboards.pop(kb.path)
-    kb.path = str(node)
+    os.close(kb.fd)
+    kb.path, kb.fd = str(node), os.open(node, os.O_RDONLY)
     helper.keyboards[kb.path] = kb
-    opened = []
-    monkeypatch.setattr(hh.Keyboard, "open", classmethod(lambda cls, path: opened.append(path)))
     _fail_reads_of(kb, monkeypatch)
+
+
+def _replug(node):
+    node.unlink()
+    node.write_text("")                 # a new node: another inode
+
+
+def test_a_keyboard_that_failed_to_read_waits_to_be_plugged_in_again(setup, monkeypatch, tmp_path):
+    """Opened again by every scan, it failed again every 2 s, three lines in
+    the log each time. Plugged in again, it's read and its hotkeys work."""
+    helper, kb, connect, say, heard, _seat = setup
+    node = tmp_path / "input" / "event5"
+    _failing_keyboard_at(node, helper, kb, monkeypatch)
+    replacement = FakeKeyboard(str(node))
+    opened = []
+    monkeypatch.setattr(hh.Keyboard, "open",
+                        classmethod(lambda cls, path: opened.append(path) or replacement))
     helper.read_keyboard(kb)
     helper.scan()
     assert opened == []
-    node.unlink()
-    node.write_text("")                 # plugged in again: a new node
+    _replug(node)
+    helper.scan()
+    assert helper.keyboards[str(node)] is replacement
+    sock = _ready(connect, say, heard)
+    replacement.press(F8)
+    assert heard(sock) == ["DOWN 66 -"]
+
+
+def test_a_keyboard_plugged_in_while_the_old_one_failed_isnt_skipped(setup, monkeypatch, tmp_path):
+    """The failure is the old keyboard's: the new one at its path is opened."""
+    helper, kb, _connect, _say, _heard, _seat = setup
+    node = tmp_path / "input" / "event5"
+    _failing_keyboard_at(node, helper, kb, monkeypatch)
+    opened = []
+    monkeypatch.setattr(hh.Keyboard, "open", classmethod(lambda cls, path: opened.append(path)))
+    _replug(node)
+    helper.read_keyboard(kb)
     helper.scan()
     assert opened == [str(node)]
 

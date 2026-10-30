@@ -317,11 +317,12 @@ def device_group(rdev, sys_dir=SYS_CHAR_DIR, writable=False, uhid_private=True):
     return f"own:{number}" if writable else "real"
 
 
-def node_identity(path):
-    """The device node at *path* as (device number, inode, change time), which
-    changes when a device is plugged in again; None when it's gone."""
+def node_identity(node):
+    """The device node *node* (a path, or an open descriptor) as (device
+    number, inode, change time), which changes when a device is plugged in
+    again; None when it's gone."""
     try:
-        st = os.stat(path)
+        st = os.stat(node)
     except OSError:
         return None
     return st.st_rdev, st.st_ino, st.st_ctime_ns
@@ -1037,7 +1038,8 @@ class Helper:
                 log(f"couldn't read keyboard {keyboard.name!r}: {e}")
                 # Reopened by the next scan, it would fail the same way every
                 # RESCAN_S, logging each time: skip it until it's plugged in again.
-                identity = node_identity(keyboard.path)
+                # By its descriptor: the path may hold a new device by now.
+                identity = node_identity(keyboard.fd)
                 if identity is not None:
                     self.not_keyboards[keyboard.path] = identity
             self.drop_keyboard(keyboard)
