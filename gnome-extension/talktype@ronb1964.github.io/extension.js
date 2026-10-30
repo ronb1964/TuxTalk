@@ -135,6 +135,7 @@ class TuxTalkIndicator extends PanelMenu.Button {
         this._grabs = new Map();
 
         this._buildMenu();
+        this._updateButton();
 
         // Hidden until watch_name sees TuxTalk on the bus.
         this.hide();
@@ -184,7 +185,7 @@ class TuxTalkIndicator extends PanelMenu.Button {
             this._signalIds = [];
             this._signalIds.push(this._proxy.connectSignal('RecordingStateChanged', (proxy, sender, [isRecording]) => {
                 this._isRecording = isRecording;
-                this._updateIcon();
+                this._updateButton();
             }));
 
             this._signalIds.push(this._proxy.connectSignal('ServiceStateChanged', (proxy, sender, [isRunning]) => {
@@ -193,7 +194,7 @@ class TuxTalkIndicator extends PanelMenu.Button {
                 // mid-recording never said so.
                 if (!isRunning)
                     this._isRecording = false;
-                this._updateIcon();
+                this._updateButton();
                 this._updateMenu();  // Update menu when service state changes
                 this._syncHotkeyGrabs();
             }));
@@ -272,7 +273,8 @@ class TuxTalkIndicator extends PanelMenu.Button {
                 try {
                     this._geometryWindow.disconnect(id);
                 } catch (e) {
-                    // The window closed: its signals went with it.
+                    // A window already freed can refuse; the ids go anyway.
+                    console.warn('TuxTalk: could not stop following a window:', e);
                 }
             }
         }
@@ -346,7 +348,7 @@ class TuxTalkIndicator extends PanelMenu.Button {
                 this._isServiceRunning = false;
                 this._isRecording = false;
                 this._syncHotkeyGrabs();  // TuxTalk quit: give the keys back
-                this._updateIcon();         // shown off, not as it was, when it comes back
+                this._updateButton();       // shown off, not as it was, when it comes back
                 this._updateMenu();
                 this.hide();
             }
@@ -401,9 +403,8 @@ class TuxTalkIndicator extends PanelMenu.Button {
         this._addRemoteItem('Your Stats...', 'OpenPreferencesStats');
         this._addRemoteItem('Help...', 'ShowHelp');
         this._addRemoteItem('About TuxTalk...', 'ShowAbout');
-        this._updatesItem = new PopupMenu.PopupMenuItem('Check for Updates...');
-        this._updatesItem.connect('activate', () => this._checkForUpdates());
-        this.menu.addMenuItem(this._updatesItem);
+        this._updatesItem = this.menu.addAction('Check for Updates...',
+            () => this._checkForUpdates());
         // For when something's wrong, so it sits with Help.
         this._addRemoteItem('Restart Service', 'RestartService');
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
@@ -411,13 +412,10 @@ class TuxTalkIndicator extends PanelMenu.Button {
     }
 
     // A menu item that asks TuxTalk for something: *method* of its D-Bus
-    // interface. Before the proxy is ready a click does nothing.
-    _addRemoteItem(label, method, iconName = null) {
-        const item = iconName
-            ? new PopupMenu.PopupImageMenuItem(label, iconName)
-            : new PopupMenu.PopupMenuItem(label);
-        item.connect('activate', () => this._proxy?.[`${method}Remote`]());
-        this.menu.addMenuItem(item);
+    // interface. Before the proxy is ready a click does nothing. Without
+    // *iconName* (undefined, never null) addAction makes a plain item.
+    _addRemoteItem(label, method, iconName) {
+        this.menu.addAction(label, () => this._proxy?.[`${method}Remote`](), iconName);
     }
 
     _checkForUpdates() {
@@ -534,9 +532,7 @@ class TuxTalkIndicator extends PanelMenu.Button {
                 menu.addMenuItem(item);
             }
             menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-            const clearItem = new PopupMenu.PopupMenuItem('Clear History');
-            clearItem.connect('activate', () => this._proxy?.ClearRecentDictationsRemote());
-            menu.addMenuItem(clearItem);
+            menu.addAction('Clear History', () => this._proxy?.ClearRecentDictationsRemote());
         });
     }
     _updateStatus() {
@@ -562,7 +558,7 @@ class TuxTalkIndicator extends PanelMenu.Button {
             // Absent from a TuxTalk older than 0.14.1, which grabs nothing.
             this._hotkeys = status.hotkeys ? status.hotkeys.deep_unpack() : [];
 
-            this._updateIcon();
+            this._updateButton();
             this._updateMenu();
             this._syncHotkeyGrabs();
         });
@@ -621,24 +617,23 @@ class TuxTalkIndicator extends PanelMenu.Button {
                 return;
             }
             for (const [id, label, description] of presets) {
-                const item = new PopupMenu.PopupMenuItem(`${label} (${description})`);
-                item.connect('activate', () => this._proxy?.ApplyPerformancePresetRemote(id));
-                this._presetItems[id] = item;
-                menu.addMenuItem(item);
+                this._presetItems[id] = menu.addAction(`${label} (${description})`,
+                    () => this._proxy?.ApplyPerformancePresetRemote(id));
             }
             // Same as the GTK tray: Custom has the dot when the settings match
             // no preset (status.preset is 'custom'), and opens Preferences,
             // where a custom setup is made.
             menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-            const custom = new PopupMenu.PopupMenuItem('Custom (opens Preferences)');
-            custom.connect('activate', () => this._proxy?.OpenPreferencesRemote());
-            this._presetItems['custom'] = custom;
-            menu.addMenuItem(custom);
+            this._presetItems['custom'] = menu.addAction('Custom (opens Preferences)',
+                () => this._proxy?.OpenPreferencesRemote());
             this._updatePresetSelection(this._currentPreset);
         });
     }
 
-    _updateIcon() {
+    // The button shows whether dictation is on, and says so to a screen
+    // reader, which reads a panel button by its accessible name (set from
+    // PanelMenu.Button's nameText) and can't see the icon.
+    _updateButton() {
         // Dictation off: the crossed-out microphone, dimmed (St's CSS has no
         // opacity). Recording: red (stylesheet.css). With TuxTalk not running
         // the button is hidden.
@@ -648,6 +643,10 @@ class TuxTalkIndicator extends PanelMenu.Button {
         this._icon.opacity = off ? 128 : 255;
         this._icon.style_class = this._isRecording
             ? 'system-status-icon tuxtalk-recording' : 'system-status-icon';
+        if (this._isRecording)
+            this.accessible_name = 'TuxTalk, recording';
+        else
+            this.accessible_name = off ? 'TuxTalk, dictation off' : 'TuxTalk, dictation on';
     }
 
     _updateMenu() {
@@ -708,7 +707,8 @@ class TuxTalkIndicator extends PanelMenu.Button {
                     this._proxy.SetFocusedWindowClassRemote('', () => {});
                     this._proxy.SetFocusedWindowGeometryRemote('', () => {});
                 } catch (e) {
-                    // TuxTalk may be quitting too — nothing left to clear
+                    // TuxTalk may be quitting too: nothing left to clear.
+                    console.warn('TuxTalk: could not clear the focused window:', e);
                 }
             }
             // Disconnect every D-Bus signal subscription before dropping the
@@ -718,7 +718,8 @@ class TuxTalkIndicator extends PanelMenu.Button {
                     try {
                         this._proxy.disconnectSignal(id);
                     } catch (e) {
-                        // proxy may already be tearing down — ignore
+                        // The proxy may be tearing down already.
+                        console.warn('TuxTalk: could not disconnect a D-Bus signal:', e);
                     }
                 }
                 this._signalIds = null;

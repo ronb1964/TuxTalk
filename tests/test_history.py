@@ -7,7 +7,6 @@ GNOME extension present it the same way.
 """
 import os
 import stat
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -17,8 +16,6 @@ from tuxtalk import engine
 from tuxtalk import dictation_text
 from tuxtalk import delivery
 from tuxtalk import pipeline
-
-ROOT = Path(__file__).resolve().parent.parent
 
 
 # Saved before conftest points every test at a throwaway file: these tests
@@ -137,25 +134,15 @@ def test_dictation_is_recorded_before_it_is_typed(monkeypatch):
     assert order == [("typed", ["Hello there."])]
 
 
-def test_tray_and_gnome_extension_place_recent_dictations_first(tray_menu):
+def test_the_tray_places_recent_dictations_first(tray_menu):
     """CLAUDE.md menu order: the on/off switch, then Recent Dictations, Fix a
-    Word, Transcribe a File, in both. Restart Service sits at the end, with
-    Help and Check for Updates (0.16 simplicity review)."""
+    Word, Transcribe a File. Restart Service sits at the end, with Help and
+    Check for Updates (0.16 simplicity review). The GNOME menu matches it
+    item for item (test_gnome_extension)."""
     items = [item.get_label() or "---" for item in tray_menu.get_children()]
     assert items[:5] == ["Turn Dictation On", "Recent Dictations", "Fix a Word...",
                          "Transcribe a File...", "---"]        # off until the status comes
     assert items[-4:] == ["Check for Updates...", "Restart Service", "---", "Quit TuxTalk"]
-
-    js = (ROOT / "gnome-extension/talktype@ronb1964.github.io/extension.js").read_text()
-    switch = js.index("new PopupMenu.PopupSwitchMenuItem('Dictation on/off'")
-    recent = js.index("new PopupMenu.PopupSubMenuMenuItem('Recent Dictations')")
-    fix_word = js.index("_addRemoteItem('Fix a Word...'")
-    transcribe = js.index("_addRemoteItem('Transcribe a File...'")
-    separator = js.index("new PopupMenu.PopupSeparatorMenuItem()", recent)
-    updates = js.index("new PopupMenu.PopupMenuItem('Check for Updates...')")
-    restart = js.index("_addRemoteItem('Restart Service'")
-    quit_item = js.index("_addRemoteItem('Quit TuxTalk'")
-    assert switch < recent < fix_word < transcribe < separator < updates < restart < quit_item
 
 
 def test_full_text_lines_wraps_keeps_breaks_and_caps():

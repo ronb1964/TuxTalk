@@ -8,7 +8,7 @@ as working. Preferences has its own test (prefs_hotkey_test), run through
 the dictation service instead.
 """
 
-import select
+import functools
 import threading
 import time
 
@@ -19,10 +19,11 @@ from gi.repository import Gdk, GLib, Gtk
 
 from .config import HOTKEY_CHOICES
 from .hotkey_labels import layout_label
-from .hotkey_test_devices import (close_devices, flush_pending_events, hotkey_test_helper,
-                                  open_key_devices, read_ready)
+from .hotkey_test_devices import flush_pending_events, hotkey_test_helper, read_ready
 from .hotkey_test_keys import (captured_key_problem, evdev_key_action, evdev_key_name,
                                gtk_key_name, hotkeys_to_save, loggable_key, service_hears)
+from .keyboard_devices import (RESCAN_SECONDS, close_devices, devices_with_events,
+                               open_new_keyboards)
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -129,7 +130,15 @@ class HotkeyTestDialog:
         # events a released keyboard grab produces are presses only. Events
         # before the dialog is up are ignored.
         self.ready = False
-        self.keyboards = []         # evdev devices, opened just before the dialog shows
+        # What the test reads, opened just before the dialog shows: evdev
+        # devices or the hotkey helper. The reader thread owns them once it runs.
+        self.keyboards = []
+        # Whether evdev reads them, so a keyboard plugged in mid-test is
+        # opened too; not when the hotkey helper reads them.
+        self._rescan = False
+        # What the reader reads now, as GTK's thread last heard it: whether
+        # the dictation service would hear a key follows it (service_hears).
+        self._reading_now = []
         self._stop = threading.Event()
         # Hardware key codes held down, to ignore GTK's auto-repeat: it sends
         # repeated presses while a key is held, with no "is_repeat" flag.
@@ -262,7 +271,7 @@ class HotkeyTestDialog:
         self.keys[self.capturing] = keyname
         label, _button, status = self.rows[self.capturing]
         label.set_markup(f'<b>{_TITLES[self.capturing]}:</b> {layout_label(keyname)}')
-        status.set_markup(_key_seen_markup(service_hears(self.keyboards, keyname)))
+        status.set_markup(_key_seen_markup(service_hears(self._reading_now, keyname)))
         self._end_capture()
 
     def _mark_working(self, keyname):
@@ -270,7 +279,7 @@ class HotkeyTestDialog:
         for which, key in self.keys.items():
             if keyname == key:
                 status = self.rows[which][2]
-                status.set_markup(_key_seen_markup(service_hears(self.keyboards, keyname)))
+                status.set_markup(_key_seen_markup(service_hears(self._reading_now, keyname)))
                 return
 
     def _on_gtk_press(self, _widget, event):
@@ -309,28 +318,61 @@ class HotkeyTestDialog:
         already shows whether the service will hear it."""
         if self._evdev is not None:
             input_device, ecodes, list_devices = self._evdev
-            self.keyboards.extend(open_key_devices(list_devices, input_device))
-            if not self.keyboards:
-                # With the hotkey helper the user isn't in the "input" group,
-                # so the keyboards can't be opened here: hear the keys through
-                # the helper, as the dictation service does. Without this the
-                # test said the keys wouldn't work until a restart.
-                helper = hotkey_test_helper(ecodes)
-                if helper is not None:
-                    self.keyboards.append(helper)
+            for dev in open_new_keyboards(self.keyboards, list_devices, input_device):
+                logger.info(f"Hotkey test: reading keyboard {dev.name!r}")
+            # With the hotkey helper the user isn't in the "input" group, so
+            # the keyboards can't be opened here: hear the keys through the
+            # helper, as the dictation service does. Without this the test
+            # said the keys wouldn't work until a restart.
+            helper = None if self.keyboards else hotkey_test_helper(ecodes)
+            if helper is not None:
+                self.keyboards.append(helper)
+            # Without the helper evdev reads them, from none yet if none is
+            # plugged in: one plugged in mid-test still counts.
+            self._rescan = helper is None
         if not self.keyboards:
             logger.warning("No keyboards found via evdev")
+        self._show_reading(list(self.keyboards))
+
+    def _show_reading(self, keyboards):
+        """What the reader reads now, on GTK's thread: whether a key counts
+        as working follows it, and without a keyboard the notice says what
+        makes the keys work."""
+        if self._stop.is_set():
+            return False    # the window has closed
+        self._reading_now = keyboards
+        if keyboards:
+            self.keyboard_notice.hide()
+        else:
             self.keyboard_notice.set_markup(
                 f'<span color="#FF9800">'
                 f'{GLib.markup_escape_text(_hotkey_test_notice(False))}</span>')
             self.keyboard_notice.show()
+        return False        # also run from GLib.idle_add: once
+
+    def _open_plugged_in(self, reading):
+        """Open, into *reading*, keyboards plugged in since the last look,
+        and tell GTK's thread."""
+        input_device, _ecodes, list_devices = self._evdev
+        added = open_new_keyboards(reading, list_devices, input_device)
+        for dev in added:
+            logger.info(f"Hotkey test: reading keyboard {dev.name!r}, plugged in meanwhile")
+        if added:
+            GLib.idle_add(self._show_reading, list(reading))
+
+    def _keyboard_gone(self, reading, held_modifiers):
+        """A keyboard went mid-test: the keys it held will never come up, and
+        GTK's thread hears what's left."""
+        held_modifiers.clear()
+        GLib.idle_add(self._show_reading, list(reading))
 
     def _reader_loop(self):
         """Read the keyboards through evdev until the test ends, passing each
         key to _on_key on GTK's thread; this hears keys the desktop grabs
-        before GTK sees them. Closes the keyboards when done."""
+        before GTK sees them. A keyboard plugged in meanwhile is read too,
+        as the service would. Closes the keyboards when done."""
         ecodes = self._evdev[1]
-        reading = list(self.keyboards)  # its own: service_hears reads keyboards (GTK's thread)
+        reading = list(self.keyboards)  # its own; GTK's thread hears of it (_show_reading)
         logger.info(f"Hotkey test: reading {len(reading)} keyboard(s)")
         # Without this, a prior F8 press (e.g. from using TuxTalk just before
         # onboarding) still in the kernel's queue would show as "Working!".
@@ -339,17 +381,17 @@ class HotkeyTestDialog:
                           ecodes.KEY_LEFTCTRL, ecodes.KEY_RIGHTCTRL,
                           ecodes.KEY_LEFTMETA, ecodes.KEY_RIGHTMETA}
         held_modifiers = set()
+        on_gone = functools.partial(self._keyboard_gone, reading, held_modifiers)
         last_error = None
+        next_scan = time.monotonic() + RESCAN_SECONDS
         while not self._stop.is_set():
             try:
-                # The helper can hold events already taken in, with nothing
-                # left on its socket for select() to see.
-                ready = [d for d in reading
-                         if hasattr(d, "needs_service") and d.needs_service()]
-                if not ready:
-                    ready, _w, _x = select.select(reading, [], [], 0.1)
+                if self._rescan and time.monotonic() >= next_scan:
+                    next_scan = time.monotonic() + RESCAN_SECONDS
+                    self._open_plugged_in(reading)
+                ready = devices_with_events(reading, 0.1)
                 # A keyboard unplugged with Ctrl held must not leave Ctrl held.
-                for event in read_ready(reading, ready, on_gone=held_modifiers.clear):
+                for event in read_ready(reading, ready, on_gone=on_gone):
                     if event.type != ecodes.EV_KEY:
                         continue
                     # Releases count too: they are what marks a key as
@@ -365,7 +407,7 @@ class HotkeyTestDialog:
                     logger.info(f"Hotkey test: reading the keyboards failed: {e}")
                     last_error = str(e)
                 time.sleep(0.1)
-        close_devices(self.keyboards)
+        close_devices(reading)      # read_ready closed the ones that went
 
     def _save_keys(self, confirmed):
         """Save the keys the test ended with. Whatever closed the dialog, the
@@ -410,7 +452,7 @@ class HotkeyTestDialog:
             time.sleep(0.3)  # Allow kernel/X server to settle keyboard state
             self._open_keyboards()
             self.dialog.show_all()
-            if self.keyboards:
+            if self.keyboards or self._rescan:
                 reader = threading.Thread(target=self._reader_loop, daemon=True)
                 reader.start()
             self.ready = True

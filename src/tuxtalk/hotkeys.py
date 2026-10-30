@@ -6,7 +6,6 @@ runs the service's shared tick (service_tick.tick), and keyboards that come
 and go are picked up while no recording runs."""
 import atexit
 import os
-import select
 import sys
 import time
 
@@ -84,11 +83,6 @@ def _claim_desktop_hotkeys(cfg):
                    what="send the hotkeys to the tray")
 
 
-# How often to look for input devices that have appeared or come back.
-# Frequent enough that a reconnected keyboard starts working on its own,
-# rare enough that it costs nothing.
-DEVICE_RESCAN_SECONDS = 3.0
-
 # How long the input loop sleeps waiting for a key event before it does its
 # other work: D-Bus start/stop commands, the auto-timeout, settings changes.
 # Waiting on the devices instead of reading each one every few milliseconds
@@ -100,60 +94,19 @@ INPUT_WAIT_S = 0.05
 INPUT_MIN_PASS_S = 0.005
 
 
-def _devices_with_input(devices, timeout):
-    """The devices with events waiting, after sleeping up to *timeout* for one."""
-    # The hotkey helper may already hold events it took in while answering
-    # another call (active_keys), or have a reconnect due: ready now.
-    due = [d for d in devices if getattr(d, "needs_service", None) and d.needs_service()]
-    if due:
-        return due
-    try:
-        ready, _, _ = select.select(devices, [], [], timeout)
-    except (OSError, ValueError):
-        # A device closed under us. Reading every device finds it, and the
-        # loop's error handling drops it.
-        return list(devices)
-    return ready
-
-
 def _rediscover_devices(devices) -> int:
     """Add keyboards that have appeared since the last scan. Returns how many.
 
     Without this, a device dropped by _drop_dead_devices (after a wireless
     receiver blip, a USB reset or a resume from suspend) would be gone for the
     life of the process, and on a single-keyboard machine the hotkey would
-    silently stop working.
-
-    Matched on the device node path, which is what identifies a device across
-    reconnects here. Non-keyboards are ignored so this never grows the poll
-    list with mice or power buttons.
+    silently stop working. Only keyboards are added, so the poll list never
+    grows with mice or power buttons.
     """
-    known = {getattr(d, "path", None) for d in devices}
-    added = 0
-    try:
-        paths = list_devices()
-    except OSError as e:    # it checks a node exists, then stats it: an unplug between
-        logger.info(f"A device went while listing the input devices; next scan: {e}")
-        return 0
-    for path in paths:
-        if path in known:
-            continue
-        try:
-            dev = InputDevice(path)
-            if not keyboard_devices.is_keyboard_device(dev):
-                # Closed now, not whenever it is garbage-collected: every
-                # mouse and button node is opened again on each scan.
-                dev.close()
-                continue
-            devices.append(dev)  # evdev opens it non-blocking already
-            added += 1
-            logger.info(f"Input device appeared, now monitoring: {dev.name}")
-        except OSError as e:
-            # A node we cannot open (permissions, disappeared mid-scan) must
-            # not stop the rest of the scan. Debug: every scan meets the same
-            # unreadable nodes again.
-            logger.debug(f"Could not open {path}: {e}")
-    return added
+    added = keyboard_devices.open_new_keyboards(devices, list_devices, InputDevice)
+    for dev in added:
+        logger.info(f"Input device appeared, now monitoring: {dev.name}")
+    return len(added)
 
 
 def _drop_dead_devices(dead_devices, devices, cfg) -> None:
@@ -568,7 +521,7 @@ def run(cfg: Settings, input_device_idx, keyboards=None):
         # the hotkey leak into the focused app. Throttled because it opens
         # every node under /dev/input.
         if (not use_helper and not rs.state.is_recording
-                and current_time - last_device_scan >= DEVICE_RESCAN_SECONDS):
+                and current_time - last_device_scan >= keyboard_devices.RESCAN_SECONDS):
             last_device_scan = current_time
             _rediscover_devices(devices)
 
@@ -641,7 +594,7 @@ def _read_key_events(devices, keys: "hotkey_keys.Hotkeys", held_modifiers, cfg: 
                      now: float) -> list:
     """Act on the key events waiting on *devices*; the devices that failed."""
     dead_devices = []
-    for dev in _devices_with_input(devices, INPUT_WAIT_S):
+    for dev in keyboard_devices.devices_with_events(devices, INPUT_WAIT_S):
         try:
             for event in dev.read():
                 if event.type != ecodes.EV_KEY:

@@ -34,8 +34,8 @@ before 0.15.0, so older entries use that name.
   Compose are typed right instead of coming out as a Compose sequence.
 - Pause isn't on the list. Most keyboards send it as let go the moment it's
   pressed, so you can't hold it.
-- The hotkey helper is version 1.9, because it has to report Right Ctrl and
-  Right Alt on their own now and hear keys through a key remapper (1.9 also
+- The hotkey helper is version 1.10, because it has to report Right Ctrl and
+  Right Alt on their own now and hear keys through a key remapper (1.10 also
   tidies its code after a review, and
   limits how much another program can make it read, which you won't notice).
   TuxTalk asks about the update by itself a few seconds after it starts, and
@@ -350,6 +350,16 @@ before 0.15.0, so older entries use that name.
   Dictation Off" (with the checkmark, since it's on) or "Turn Dictation On".
   It used to read "Dictation on/off" with only the checkmark to tell you,
   which a screen reader couldn't say.
+- On GNOME, the TuxTalk button in the top bar tells a screen reader whether
+  dictation is on now: "TuxTalk, dictation on", "dictation off" or
+  "recording". Before, it only ever said "TuxTalk", so you had to open the
+  menu to find out.
+- Without the hotkey helper, the hotkey test on the welcome screen now
+  notices a keyboard you plug in while it's open, within a few seconds,
+  even if no keyboard was there when it opened. It only read the keyboards
+  that were there at the start, so on a new one a key your desktop keeps
+  for itself could look like it didn't work. And if you unplug the keyboard
+  it reads, it stops calling a key Working when only the window saw it.
 - Picking large-v3 on an NVIDIA card and downloading CUDA with it now
   switches dictation over as soon as the downloads are done, the same as
   picking CUDA under Device always did. Before, it waited for you to click

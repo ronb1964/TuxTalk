@@ -2,16 +2,12 @@
 middle of the active window instead of only in the corner notification.
 """
 import json
-import pathlib
 
 import pytest
 
 from tuxtalk import compositor_focus, compositor_ipc, window_geometry as wg
 from tuxtalk.window_geometry import Rect
 from tuxtalk import notices
-
-SRC = pathlib.Path(wg.__file__).parent
-EXT = SRC.parent.parent / "gnome-extension" / "talktype@ronb1964.github.io"
 
 
 # --- reading what the KWin script / GNOME extension reported ------------------------
@@ -135,14 +131,6 @@ def test_the_kwin_script_reports_geometry_and_follows_moves():
     assert "SetFocusedWindowGeometry" in js
     assert "frameGeometryChanged" in js and "output" in js
     assert '"SetFocusedWindow"' in js              # still reports the class
-
-
-def test_the_gnome_extension_reports_geometry():
-    js = (EXT / "extension.js").read_text()
-    assert '<method name="SetFocusedWindowGeometry">' in js
-    assert "SetFocusedWindowGeometryRemote" in js
-    assert "position-changed" in js and "size-changed" in js
-    assert json.loads((EXT / "metadata.json").read_text())["version"] >= 19
 
 
 # --- the floating label -------------------------------------------------------------------------

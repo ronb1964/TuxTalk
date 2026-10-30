@@ -1,9 +1,9 @@
-"""The keyboards the first-run hotkey test reads: opened as the dictation
-service opens them, drained of old presses, read, and closed, with the
-hotkey helper standing in for them when it runs. Nothing here opens a window.
+"""The keyboards the first-run hotkey test reads (opened and closed by
+keyboard_devices, as the dictation service's are): drained of old presses
+and read, with the hotkey helper standing in for them when it runs. Nothing
+here opens a window.
 """
-import contextlib
-
+from .keyboard_devices import close_devices
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -29,43 +29,6 @@ def flush_pending_events(devices):
             pass  # Queue is now empty
         except Exception as e:
             logger.info(f"Could not flush events from {getattr(dev, 'name', dev)}: {e}")
-
-
-def open_key_devices(list_devices, input_device):
-    """Every keyboard evdev can open, as the service opens them; an empty list
-    when /dev/input can't be read. Game controllers, which any user may open,
-    are left out: the service would not hear the hotkey through them."""
-    from .keyboard_devices import is_keyboard_device
-    devices = []
-    try:
-        paths = list_devices()
-    except Exception as e:
-        logger.error(f"Error listing devices: {e}")
-        return devices
-    for path in paths:
-        try:
-            dev = input_device(path)
-        except PermissionError:
-            logger.debug(f"Permission denied for {path}")
-            continue
-        except Exception as e:
-            logger.info(f"Could not open {path}: {e}")
-            continue
-        if is_keyboard_device(dev):
-            # Already non-blocking: evdev opens with O_NONBLOCK.
-            devices.append(dev)
-            logger.info(f"Opened input device: {dev.name} at {path}")
-        else:
-            close_devices([dev])
-    return devices
-
-
-def close_devices(devices):
-    """Close input devices the hotkey test opened; one unplugged meanwhile
-    is closed already."""
-    for dev in devices:
-        with contextlib.suppress(OSError):
-            dev.close()
 
 
 def hotkey_test_helper(ecodes, connect=None):

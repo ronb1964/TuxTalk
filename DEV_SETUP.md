@@ -65,6 +65,10 @@ refuse to start on a bus that has them.
 
 Plain `.venv/bin/pytest` won't work, for the same PyGObject reason. On Debian and Ubuntu the system folder is `/usr/lib/python3/dist-packages`.
 
+The GNOME extension's tests run its JavaScript under Node (20.6 or newer, no
+npm packages), with stand-ins for GNOME Shell in `tests/gnome_shell`. Without
+Node they're skipped, and say so.
+
 CI also runs two linters, and they should pass before you push. These are the same versions CI uses (`poetry install` put the lock's ruff in the venv), and the shell check covers only the scripts git tracks, so a private script of your own in the folder doesn't trip it:
 
 ```bash

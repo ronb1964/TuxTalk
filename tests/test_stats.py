@@ -250,19 +250,11 @@ def test_stats_are_saved_after_the_text_is_typed(stats_file, monkeypatch):
     assert order == ["typed", "counted"]
 
 
-def test_your_stats_sits_between_voice_commands_and_help_in_both_menus(tray_menu):
-    """CLAUDE.md menu order; the tray and the GNOME extension must match."""
-    import pathlib
+def test_your_stats_sits_between_voice_commands_and_help(tray_menu):
+    """CLAUDE.md menu order; the GNOME menu matches it (test_gnome_extension)."""
     items = [item.get_label() for item in tray_menu.get_children()]
     stats = items.index("Your Stats...")
     assert items[stats - 1:stats + 2] == ["Voice Commands...", "Your Stats...", "Help..."]
-
-    root = pathlib.Path(__file__).resolve().parent.parent
-    js = (root / "gnome-extension/talktype@ronb1964.github.io/extension.js").read_text()
-    order = [js.index(f"_addRemoteItem('{label}'")
-             for label in ("Voice Commands...", "Your Stats...", "Help...")]
-    assert order == sorted(order)
-    assert '<method name="OpenPreferencesStats"/>' in js
 
 
 # --- the user's own typing speed ---------------------------------------------

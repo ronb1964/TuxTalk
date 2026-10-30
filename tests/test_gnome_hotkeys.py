@@ -3,19 +3,14 @@
 Same leak as KDE (test_kwin_hotkeys): the service reads keys below the desktop,
 so GNOME Shell also hands F8 to the app and a terminal prints "~". The service
 sends its hotkeys to the tray in accelerator syntax, the tray relays them, and
-the extension grabs them while the service runs. The grab itself is checked by
-hand in a GNOME VM; these pin the Python side and the contract the extension
-depends on.
+the extension grabs them while the service runs. These pin the Python side;
+test_gnome_extension runs the extension's grabs.
 """
-import pathlib
 import types
 
 import pytest
 
 from tuxtalk import gnome_hotkeys as gh
-
-ROOT = pathlib.Path(__file__).resolve().parent.parent
-EXTENSION = ROOT / "gnome-extension" / "talktype@ronb1964.github.io" / "extension.js"
 
 
 def _cfg(hotkey="F8", toggle="F9", vc="Ctrl+Alt+V"):
@@ -68,29 +63,3 @@ class TestTheTrayRelaysThem:
     def test_clearing_nothing_sends_nothing(self, svc):
         svc.clear_claimed_hotkeys()
         assert svc.sent == []
-
-
-class TestTheExtensionContract:
-    """String checks: the extension can't be run here, and these are the
-    lines whose loss would quietly bring the leak back or strand a grab."""
-
-    src = EXTENSION.read_text()
-
-    def test_it_listens_for_the_signal(self):
-        assert '<signal name="HotkeysChanged">' in self.src
-        assert "connectSignal('HotkeysChanged'" in self.src
-
-    def test_it_reads_them_from_status(self):
-        assert "status.hotkeys" in self.src
-
-    def test_it_only_grabs_while_the_service_runs(self):
-        assert "(this._dbusAvailable && this._isServiceRunning) ? this._hotkeys : []" in self.src
-
-    def test_destroy_ungrabs(self):
-        destroy = self.src[self.src.index("    destroy() {"):]
-        assert "this._ungrabHotkey(action)" in destroy
-
-    def test_service_state_changes_resync(self):
-        block = self.src[self.src.index("connectSignal('ServiceStateChanged'"):]
-        block = block[:block.index("}));")]
-        assert "_syncHotkeyGrabs()" in block

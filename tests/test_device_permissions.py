@@ -42,8 +42,8 @@ def test_reports_success_when_a_keyboard_is_readable(monkeypatch):
 
 
 class _FakeInputDevice:
-    def __init__(self, keys):
-        self._keys = keys
+    def __init__(self, keys, path=""):
+        self._keys, self.path = keys, path
         self.closed = False
 
     def capabilities(self):
@@ -62,7 +62,7 @@ def test_a_readable_game_controller_alone_is_not_hotkey_access(monkeypatch):
     opened = []
 
     def device(path):
-        dev = _FakeInputDevice(gamepad_keys if path.endswith("pad") else keyboard_keys)
+        dev = _FakeInputDevice(gamepad_keys if path.endswith("pad") else keyboard_keys, path)
         opened.append(dev)
         return dev
     monkeypatch.setattr(evdev, "InputDevice", device)
@@ -86,7 +86,7 @@ def test_a_keyboard_unplugged_after_it_was_listed_is_skipped(monkeypatch):
     def device(path):
         if path.endswith("gone"):
             raise FileNotFoundError(path)
-        return _FakeInputDevice([30, 48, 46, 32, 66])
+        return _FakeInputDevice([30, 48, 46, 32, 66], path)
     monkeypatch.setattr(evdev, "InputDevice", device)
     monkeypatch.setattr("tuxtalk.uinput_helper._readable_input_devices",
                         lambda: ["/dev/input/gone", "/dev/input/kbd"])
