@@ -25,11 +25,9 @@ PYVER="$("$PY" -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
 export PYTHONPATH="$ROOT/src:/usr/lib64/python$PYVER/site-packages:/usr/lib/python$PYVER/site-packages:/usr/lib/python3/dist-packages"
 
 # ctranslate2 (faster-whisper's engine) loads its own bundled libraries from
-# the first folder. The nvidia/cudnn folder only exists in a venv that has the
-# nvidia wheels; otherwise TuxTalk preloads the CUDA libraries it downloaded
-# itself (torch_init.py).
+# this folder; TuxTalk preloads the CUDA libraries it downloaded itself
+# (torch_init.py).
 CT2_LIBS="$ROOT/.venv/lib64/python$PYVER/site-packages/ctranslate2.libs"
-CUDNN_LIBS="$ROOT/.venv/lib/python$PYVER/site-packages/nvidia/cudnn/lib"
-export LD_LIBRARY_PATH="$CT2_LIBS:$CUDNN_LIBS${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export LD_LIBRARY_PATH="$CT2_LIBS${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
 exec "$PY" -m tuxtalk.tray "$@"

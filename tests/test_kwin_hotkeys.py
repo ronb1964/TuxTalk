@@ -11,6 +11,10 @@ import pytest
 
 from tuxtalk import kwin_hotkeys as kh
 
+# The real one, before conftest swaps it for one that refuses: the test of the
+# calls it makes hands it a fake dbus.
+_REAL_SESSION_BUS = kh.session_bus
+
 
 def _cfg(hotkey="F8", toggle="F9", vc="Ctrl+Alt+V"):
     return types.SimpleNamespace(hotkey=hotkey, toggle_hotkey=toggle,
@@ -346,3 +350,29 @@ class TestAppLaunchShortcuts:
         kh.claim(_cfg("F6", "", ""), FakeBus(fail={"allComponents"}))
         assert kh.refused_since(before) == []
         assert kh.app_shortcuts_since(before) == {}
+
+
+def test_every_kwin_call_is_bounded_and_scripting_goes_through_kwin_focus(monkeypatch):
+    """A frozen KWin held each call 25 s; the scripting calls kept a copy of
+    kwin_focus's proxy code, overloaded loadScript's signature included."""
+    dbus = pytest.importorskip("dbus")
+    calls = []
+
+    class Remote:
+        def __init__(self, path):
+            self.path = path
+
+        def __getattr__(self, method):
+            return lambda *args, **kwargs: calls.append((self.path, method, kwargs)) or []
+
+    class Bus:
+        def get_object(self, service, path, **kwargs):
+            assert kwargs.get("introspect") is False    # a call of its own, unbounded
+            return Remote(path)
+    monkeypatch.setattr(dbus, "SessionBus", Bus)
+    bus = _REAL_SESSION_BUS()
+    bus.call("loadScript", "/x.js", "tuxtalk-hotkeys")
+    bus.call("unregister", "kwin", "tuxtalk-F8")
+    bus.call("shortcutNames")
+    assert all(kwargs["timeout"] == 3.0 for _path, _method, kwargs in calls)
+    assert calls[0][:2] == ("/Scripting", "loadScript") and calls[0][2]["signature"] == "ss"

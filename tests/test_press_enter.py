@@ -748,12 +748,40 @@ def test_a_pause_at_the_end_after_switching_windows_sends_nothing(monkeypatch, k
     assert keyboard.events == []
 
 
-def test_a_send_taken_from_its_countdown_is_stopped_before_its_thread_can_look(monkeypatch):
-    """Its thread checks "claimed or stopped?" under the same lock: found
-    neither, it said "Not sent: a dictation key stayed down" when the user
-    had only pressed F8 to dictate more."""
-    pending = {"space": False}
+def _send_caught_mid_press(monkeypatch, meanwhile):
+    """A send whose Enter is under way when *meanwhile* runs, as a key press
+    or a countdown tick can, and the Enter then doesn't go: what _send said
+    afterwards ([(why, relabel)])."""
+    said = []
+    pending = {"to": "brave-browser", "why": "sending automatically", "space": "",
+               "mode": "type", "timer": None, "ticks": [], "type": lambda *a, **k: None}
+
+    def press(key, why, claim):
+        meanwhile(pending)
+        return False                    # the claim found the send taken
+    pending["press"] = press
     monkeypatch.setattr(send_countdown, "_pending", pending)
-    with send_countdown._send_lock:
-        assert send_countdown._take_pending() is pending
-        assert pending["stopped"]
+    monkeypatch.setattr(send_countdown, "_begun", send_countdown._begun)
+    monkeypatch.setattr(send_countdown, "_say_not_sent",
+                        lambda why, relabel=False, key="ENTER": said.append((why, relabel)))
+    monkeypatch.setattr("tuxtalk.screen_message.hide", lambda tag: None)
+    send_countdown._send(pending)
+    return said
+
+
+def test_dictating_more_while_the_enter_goes_says_nothing(monkeypatch):
+    """F8 pressed to dictate more as the Enter went: "Not sent: a dictation
+    key stayed down" followed, when the user had only meant to go on."""
+    said = _send_caught_mid_press(monkeypatch, lambda pending: send_countdown.recording_begins())
+    assert said == []
+
+
+def test_a_countdown_tick_that_stops_the_send_says_so_once(monkeypatch):
+    """The last tick, slow to find the window (up to 1.75 s), took the send
+    while its Enter was under way: "Not sent: you switched windows." and
+    then "a dictation key stayed down" as well."""
+    monkeypatch.setattr(send_countdown, "_why_not", lambda to, now, spoken=False: "switched")
+    monkeypatch.setattr(focused_window, "destination", lambda: ("konsole", 1))
+    said = _send_caught_mid_press(monkeypatch,
+                                  lambda pending: send_countdown._count_down(pending, 1))
+    assert said == [("switched", True)]

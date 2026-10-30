@@ -46,12 +46,34 @@ def test_help_lists_exactly_the_literal_words(help_pages):
     """Help must not say "Works with any punctuation or formatting command",
     or that "literal new line" types "newline" (it types "new line")."""
     commands = next(text for title, text in help_pages.items() if "Commands" in title)
-    line = next(l for l in commands.splitlines() if l.startswith("Works with: "))
-    listed = line[len("Works with: "):].rstrip(".").replace(" and ", ", ").split(", ")
+    commands = re.sub(r"<[^>]+>", "", commands)
+    listed = re.search(r"It works with: ([^.]*)\.", commands).group(1).split(", ")
     assert sorted(listed) == sorted(normalize.LITERAL_REPLACEMENTS)
-    assert 'literal new line → "new line"' in commands
+    assert 'literal new line / the word new line → "new line"' in commands
     assert normalize.normalize_text("literal new line").lower().startswith("new line")
 
 
 def test_says_commands_are_english_words():
     assert "english words" in TEXT
+
+
+def test_a_settings_error_is_logged_not_shown_as_no_key(monkeypatch, caplog):
+    """The window fell back to "set a hotkey" without a word in the log, so a
+    real failure looked like a key nobody had set."""
+    import logging
+    from tuxtalk import voice_commands_dialog as vcd
+
+    def broken():
+        raise OSError("settings unreadable")
+    monkeypatch.setattr("tuxtalk.config.load_config", broken)
+    caplog.set_level(logging.INFO)
+    assert vcd._hint_markup().startswith("Tip: Set a hotkey")
+    assert any("settings unreadable" in r.getMessage() for r in caplog.records)
+
+
+def test_the_tip_names_the_key_that_opens_the_window(monkeypatch):
+    import types
+    from tuxtalk import voice_commands_dialog as vcd
+    monkeypatch.setattr("tuxtalk.config.load_config",
+                        lambda: types.SimpleNamespace(voice_commands_hotkey="F12"))
+    assert vcd._hint_markup() == "Tip: Press <b>F12</b> anytime to open this reference"

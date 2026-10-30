@@ -7,7 +7,9 @@ import time
 import pytest
 
 from tuxtalk.download_utils import (
+    DownloadError,
     download_file,
+    fetch_file,
     parse_sha256sums,
     free_space_bytes,
 )
@@ -61,6 +63,21 @@ def test_download_file_progress_hook(tmp_path):
                          progress_hook=lambda done, total: seen.append((done, total))) is True
     assert seen, "progress hook never called"
     assert seen[-1][0] == len(content)
+
+
+@pytest.mark.parametrize("problem, reason", [
+    ("missing", "No such file or directory"),
+    ("checksum", "the file didn't match its checksum"),
+])
+def test_a_failed_download_says_why(tmp_path, problem, reason):
+    """The reason reaches the download window: Parakeet's said only
+    "Download failed"."""
+    src, _ = _make_source(tmp_path)
+    url = (tmp_path / "missing.bin").as_uri() if problem == "missing" else src.as_uri()
+    dest = tmp_path / "dest.bin"
+    with pytest.raises(DownloadError, match=reason):
+        fetch_file(url, str(dest), expected_sha256="0" * 64)
+    assert not dest.exists() and os.listdir(tmp_path) == ["source.bin"]
 
 
 def test_download_file_bad_url(tmp_path):
@@ -225,3 +242,31 @@ def test_unpacking_refuses_what_would_land_outside_the_folder(tmp_path, member):
     with pytest.raises(tarfile.FilterError):
         unpack_tar(str(tmp_path / "a.tar"), str(tmp_path / "out"))
     assert not (tmp_path / "outside").exists()
+
+
+def test_an_http_error_keeps_its_status(tmp_path, monkeypatch):
+    """"Not Found" alone didn't say it was the server's answer."""
+    import urllib.error
+    import urllib.request
+
+    def not_found(request, timeout):
+        raise urllib.error.HTTPError(request.full_url, 404, "Not Found", {}, None)
+    monkeypatch.setattr(urllib.request, "urlopen", not_found)
+    with pytest.raises(DownloadError, match="^HTTP 404 Not Found$"):
+        fetch_file("https://example.invalid/x", str(tmp_path / "x"))
+
+
+def test_a_download_window_is_told_why_and_a_cancel_says_nothing(tmp_path):
+    """The graphics and AI engines' windows said only "Download failed"."""
+    src, _ = _make_source(tmp_path)
+    reports = []
+    assert download_file((tmp_path / "missing.bin").as_uri(), str(tmp_path / "a"),
+                         report=lambda *r: reports.append(r)) is False
+    assert reports[-1][1] == 0 and reports[-1][0].startswith("Download failed: ")
+    assert "No such file" in reports[-1][0]
+    cancel = threading.Event()
+    cancel.set()
+    reports.clear()
+    assert download_file(src.as_uri(), str(tmp_path / "b"), cancel_event=cancel,
+                         report=lambda *r: reports.append(r)) is False
+    assert reports == []

@@ -9,6 +9,7 @@ import pathlib
 
 import pytest
 
+from tuxtalk import desktop_launcher
 from tuxtalk import update_checker as uc
 from tuxtalk.autostart import desktop_exec_program
 
@@ -17,10 +18,11 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 @pytest.fixture
 def home(tmp_path, monkeypatch):
-    monkeypatch.setattr(uc, "DESKTOP_FILE_PATH", str(tmp_path / "apps" / "tuxtalk.desktop"))
+    monkeypatch.setattr(desktop_launcher, "DESKTOP_FILE_PATH",
+                        str(tmp_path / "apps" / "tuxtalk.desktop"))
     monkeypatch.setattr(uc, "APPIMAGE_PATH", str(tmp_path / "AppImages" / "TuxTalk.AppImage"))
-    monkeypatch.setattr(uc, "_install_app_icon", lambda: "tuxtalk")
-    monkeypatch.setattr(uc.menu_cache, "refresh_menu_cache", lambda: None)
+    monkeypatch.setattr(desktop_launcher, "install_app_icon", lambda: "tuxtalk")
+    monkeypatch.setattr(desktop_launcher.menu_cache, "refresh_menu_cache", lambda: None)
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     monkeypatch.setenv("APPIMAGE", str(tmp_path / "Downloads" / "TuxTalk-v0.15.0-x86_64.AppImage"))
     # Running from inside it: APPIMAGE alone may be another app's, inherited.
@@ -29,31 +31,31 @@ def home(tmp_path, monkeypatch):
 
 
 def test_an_appimage_without_a_launcher_gets_a_hidden_entry(home):
-    assert uc.create_hidden_desktop_entry()
+    assert desktop_launcher.create_hidden_desktop_entry()
     text = (home / "apps" / "tuxtalk.desktop").read_text()
     assert "Icon=tuxtalk\n" in text
     assert "NoDisplay=true\n" in text          # no menu entry before setup finishes
     assert f"Exec={home}/Downloads/TuxTalk-v0.15.0-x86_64.AppImage\n" in text
     assert "Type=Application\n" in text
     # ...which doesn't count as the launcher, so the Ready screen still writes it.
-    assert not uc.desktop_launcher_exists()
+    assert not desktop_launcher.desktop_launcher_exists()
 
 
 def test_the_ready_screen_replaces_it_with_the_real_launcher(home):
-    uc.create_hidden_desktop_entry()
-    ok, _ = uc.create_desktop_launcher()
+    desktop_launcher.create_hidden_desktop_entry()
+    ok, _ = desktop_launcher.create_desktop_launcher()
     assert ok
     text = (home / "apps" / "tuxtalk.desktop").read_text()
     assert "NoDisplay" not in text
-    assert uc.desktop_launcher_exists()
+    assert desktop_launcher.desktop_launcher_exists()
 
 
 def test_an_existing_launcher_is_left_alone(home):
     (home / "apps").mkdir()
     (home / "apps" / "tuxtalk.desktop").write_text("[Desktop Entry]\nName=Mine\n")
-    assert not uc.create_hidden_desktop_entry()
+    assert not desktop_launcher.create_hidden_desktop_entry()
     assert (home / "apps" / "tuxtalk.desktop").read_text() == "[Desktop Entry]\nName=Mine\n"
-    assert uc.desktop_launcher_exists()
+    assert desktop_launcher.desktop_launcher_exists()
 
 
 @pytest.mark.parametrize("appimage,flatpak", [
@@ -64,13 +66,13 @@ def test_an_existing_launcher_is_left_alone(home):
 def test_installs_with_their_own_launcher_get_nothing(home, monkeypatch, appimage, flatpak):
     monkeypatch.setenv("APPIMAGE", appimage)
     monkeypatch.setenv("FLATPAK_ID", flatpak)
-    assert not uc.create_hidden_desktop_entry()
+    assert not desktop_launcher.create_hidden_desktop_entry()
     assert not (home / "apps" / "tuxtalk.desktop").exists()
 
 
 def test_a_failure_never_raises(home, monkeypatch):
-    monkeypatch.setattr(uc, "DESKTOP_FILE_PATH", "/proc/nope/tuxtalk.desktop")
-    assert not uc.create_hidden_desktop_entry()
+    monkeypatch.setattr(desktop_launcher, "DESKTOP_FILE_PATH", "/proc/nope/tuxtalk.desktop")
+    assert not desktop_launcher.create_hidden_desktop_entry()
 
 
 def test_the_tray_writes_it_after_the_rename_and_before_any_window(tray_main):
@@ -92,7 +94,7 @@ def test_a_download_path_with_spaces_still_makes_a_valid_entry(home, monkeypatch
     appimage.write_text("#!/bin/sh\n")
     appimage.chmod(0o755)
     monkeypatch.setenv("APPIMAGE", str(appimage))
-    assert uc.create_hidden_desktop_entry()
+    assert desktop_launcher.create_hidden_desktop_entry()
     info = gio.DesktopAppInfo.new_from_filename(str(home / "apps" / "tuxtalk.desktop"))
     assert info is not None
     # GLib splits the command line like this before it expands field codes.
@@ -109,12 +111,49 @@ def test_writing_the_launcher_doesnt_wait_for_the_menu_cache(home, monkeypatch):
     """KDE's cache refresh (a 0.5 s sleep and kbuildsycoca) held Setup Complete
     back one to three seconds after the downloads."""
     import threading
-    released = threading.Event()
-    monkeypatch.setattr(uc.menu_cache, "refresh_menu_cache", lambda: released.wait(5))
-    finished = threading.Event()
-    threading.Thread(target=lambda: uc.create_desktop_launcher() and finished.set(),
-                     daemon=True).start()
+    released, refreshing, finished = threading.Event(), threading.Event(), threading.Event()
+    result = []
+
+    def refresh():
+        refreshing.set()
+        released.wait(5)
+    monkeypatch.setattr(desktop_launcher.menu_cache, "refresh_menu_cache", refresh)
+
+    def write():
+        result.append(desktop_launcher.create_desktop_launcher())
+        finished.set()
+    threading.Thread(target=write, daemon=True).start()
     try:
-        assert finished.wait(2)
+        assert finished.wait(2) and result[0][0] is True
+        assert refreshing.wait(2), "the menu cache was never refreshed"
     finally:
         released.set()
+
+
+def test_a_cache_tool_that_fails_is_logged_with_its_error(tmp_path, monkeypatch, caplog):
+    import logging
+    import subprocess
+    import types
+    monkeypatch.setattr(subprocess, "run", lambda argv, **k: types.SimpleNamespace(
+        returncode=1, stderr="gtk-update-icon-cache: No theme index file.\n"))
+    caplog.set_level(logging.INFO)
+    desktop_launcher._refresh_icon_caches(str(tmp_path))
+    assert any("No theme index file" in r.getMessage() and "exit 1" in r.getMessage()
+               for r in caplog.records)
+
+
+def test_the_icon_goes_in_every_size_even_without_the_cache_tools(tmp_path, monkeypatch):
+    """KDE looks for one of its own sizes; a desktop without
+    gtk-update-icon-cache or xdg-icon-resource still gets the icon."""
+    import subprocess
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("APPIMAGE", raising=False)
+
+    def missing(argv, **kwargs):
+        raise FileNotFoundError(argv[0])
+    monkeypatch.setattr(subprocess, "run", missing)
+    assert desktop_launcher.install_app_icon() == "tuxtalk"
+    icons = tmp_path / ".local/share/icons/hicolor"
+    assert sorted(p.parent.parent.name for p in icons.glob("*/apps/tuxtalk.png")) == [
+        "128x128", "256x256", "32x32", "48x48", "64x64"]
+    assert desktop_launcher.installed_app_icon() == "tuxtalk"

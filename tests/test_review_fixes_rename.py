@@ -2,17 +2,18 @@
 AppImages that need care when they are moved."""
 import os
 
+from tuxtalk import desktop_launcher
 from tuxtalk import update_checker as uc
 
 
 def test_menu_launcher_points_at_the_installed_appimage(tmp_path, monkeypatch):
     # First run copies the AppImage to APPIMAGE_PATH (~/AppImages/TuxTalk.AppImage);
     # the launcher it writes must start that file, not the old TalkType name.
-    monkeypatch.setattr(uc, "DESKTOP_FILE_PATH", str(tmp_path / "apps" / "tuxtalk.desktop"))
+    monkeypatch.setattr(desktop_launcher, "DESKTOP_FILE_PATH", str(tmp_path / "apps" / "tuxtalk.desktop"))
     monkeypatch.setattr(uc, "APPIMAGE_PATH", str(tmp_path / "AppImages" / "TuxTalk.AppImage"))
-    monkeypatch.setattr(uc, "_install_app_icon", lambda: "tuxtalk")
-    monkeypatch.setattr(uc.menu_cache, "refresh_menu_cache", lambda: None)
-    ok, _ = uc.create_desktop_launcher()
+    monkeypatch.setattr(desktop_launcher, "install_app_icon", lambda: "tuxtalk")
+    monkeypatch.setattr(desktop_launcher.menu_cache, "refresh_menu_cache", lambda: None)
+    ok, _ = desktop_launcher.create_desktop_launcher()
     assert ok
     text = (tmp_path / "apps" / "tuxtalk.desktop").read_text()
     assert f"Exec={tmp_path}/AppImages/TuxTalk.AppImage\n" in text

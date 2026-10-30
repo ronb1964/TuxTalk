@@ -58,7 +58,10 @@ _CSS = ("""
 
 def fade_in(window, then=None, opacity=0.0):
     """Raise *window*'s opacity to full over about half a second (20 steps
-    of 25 ms), then call *then*."""
+    of 25 ms), then call *then*. A window closed meanwhile (the welcome
+    screen can be, in its first half second) ends the ramp."""
+    if window.get_window() is None:
+        return
     opacity += 0.05
     window.set_opacity(opacity)
     if opacity < 1.0:
@@ -69,18 +72,19 @@ def fade_in(window, then=None, opacity=0.0):
 
 def _icon_candidates():
     """Where the icon may be, best first; an SVG renders more cleanly at
-    256 px than a PNG does."""
+    256 px than a PNG does. All absolute: which icon shows mustn't depend on
+    the folder TuxTalk was started from."""
     paths = []
     appdir = os.environ.get('APPDIR')       # a running AppImage, with a PNG at its root
     if appdir:
         paths += [os.path.join(appdir, f"{_APP_ID}.png"),
                   os.path.join(appdir, f"{_APP_ID}.svg"),
                   os.path.join(appdir, "usr", _SCALABLE)]
+    # The project's own icons/, beside src/, when running from the source.
     project_icons = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icons")
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "icons")
     paths += [
         os.path.join(project_icons, "OFFICIAL_ICON_DO_NOT_CHANGE.svg"),
-        os.path.join(project_icons, "TT_retro_square_light_transparent.png"),
         f"/app/{_SCALABLE}",
         # System install locations (.deb / .rpm): the hicolor SVG, then the
         # pixmaps PNG. A packaged install has no $APPDIR and no project
@@ -88,9 +92,6 @@ def _icon_candidates():
         f"/usr/{_SCALABLE}",
         f"/usr/share/icons/hicolor/256x256/apps/{_APP_ID}.png",
         f"/usr/share/pixmaps/{_APP_ID}.png",
-        "../icons/OFFICIAL_ICON_DO_NOT_CHANGE.svg",
-        "../icons/TT_retro_square_light_transparent.png",
-        "icons/OFFICIAL_ICON_DO_NOT_CHANGE.svg",
         os.path.expanduser(f"~/.local/{_SCALABLE}"),
     ]
     return paths

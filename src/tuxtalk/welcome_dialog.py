@@ -18,6 +18,7 @@ import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
 from gi.repository import Gtk, Gdk, GLib
+from . import config, desktop_detect
 from .ui_style import Fold, message_dialog, more_below_bar, show_message
 
 from .flatpak_welcome import (build_shortcut_setup_section, build_unsupported_desktop_section,
@@ -180,42 +181,6 @@ def _fix_typing_steps():
             "needs_restart": needs_restart if fixed else False}
 
 
-def _extension_already_active():
-    """Whether TuxTalk's GNOME extension is installed and enabled."""
-    try:
-        from .extension_helper import is_extension_enabled
-        return bool(is_extension_enabled())
-    except Exception as e:
-        logger.info(f"Could not tell whether the GNOME extension is on: {e}")
-        return False
-
-
-def menu_location():
-    """Where this desktop shows TuxTalk's menu, for the welcome screen's and
-    Setup Complete's tips: plain GNOME has no tray, so "the tray icon" sent
-    people looking for nothing."""
-    try:
-        if _extension_already_active():
-            return "its icon in the top bar"
-        from .desktop_detect import tray_host_available
-        if tray_host_available():
-            return "its tray icon"
-    except Exception as e:
-        logger.info(f"Could not tell where TuxTalk's menu shows: {e}")
-        return "its tray icon"
-    return "open TuxTalk again from your apps"
-
-
-def saved_hold_key():
-    """The push-to-talk key in the settings, F8 when there is none yet."""
-    try:
-        from tuxtalk.config import load_config
-        return load_config().hotkey or "F8"
-    except Exception as e:
-        logger.warning(f"Could not read the hold key from the settings: {e}")
-        return "F8"
-
-
 # A setup step built by _required_step: its box, the box of what the button
 # does, the status line, the button, and the label for the button's result.
 _RequiredStep = collections.namedtuple("_RequiredStep", "box details status button result")
@@ -344,7 +309,7 @@ class WelcomeDialog:
         self.has_gnome = is_gnome() if force_gnome is None else force_gnome
         # The extension is offered only when it isn't already running;
         # updating an installed one is Preferences' job.
-        self.offer_extension = self.has_gnome and not _extension_already_active()
+        self.offer_extension = self.has_gnome and not desktop_detect.tuxtalk_extension_active()
         # What to recommend (recommend.py): the graphics chip and the language.
         from . import recommend
         try:
@@ -510,7 +475,7 @@ class WelcomeDialog:
         features_box.set_margin_start(20)
         features_box.set_margin_top(5)
 
-        hold = GLib.markup_escape_text(saved_hold_key())      # a hand edit may hold "&"
+        hold = GLib.markup_escape_text(config.saved_hold_key())      # a hand edit may hold "&"
         hotkey_hint = "your desktop assigns the key" if self.is_flatpak else f"default: {hold} key"
         features = [
             f"🎤 <b>Hold-to-talk dictation</b> ({hotkey_hint})",
@@ -552,7 +517,7 @@ class WelcomeDialog:
             f"1. Hold {key}",
             "2. Talk",
             "3. Let go: your words are typed where your cursor is",
-            f"Settings and Help are in the TuxTalk menu ({menu_location()})",
+            f"Settings and Help are in the TuxTalk menu ({desktop_detect.menu_location()})",
         ]
 
         for tip in tips:

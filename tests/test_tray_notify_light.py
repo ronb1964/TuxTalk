@@ -18,7 +18,7 @@ SCRIPT = textwrap.dedent("""
     import tuxtalk.config as config
     import tuxtalk.model_helper as model_helper
     import tuxtalk.notify as notify
-    from tuxtalk import tray, tray_presets
+    from tuxtalk import tray, tray_presets   # tray: its imports count in the weight
     from tuxtalk.recommend import Preset
 
     cfg = types.SimpleNamespace(model="small", device="cpu", notify=True)
@@ -31,12 +31,11 @@ SCRIPT = textwrap.dedent("""
     lightest = Preset("lightest", "Lightest", "", "base", "cpu")
     tray_presets.current_presets = lambda: [lightest]
     tray_presets.preset_in_use = lambda: "recommended"
-    t = types.SimpleNamespace(
-        _applying_preset=False, update_menu_display=lambda: None,
-        _emit_model_changed=lambda model: None, restart_service=lambda _: None)
-    for name in ("_apply_preset", "_preset_files", "_save_preset"):
-        setattr(t, name, getattr(tray.DictationTray, name).__get__(t))
-    tray.DictationTray.set_performance_preset(t, "lightest")
+    class Tray(tray_presets.Presets):
+        _applying_preset = False
+        update_menu_display = _emit_model_changed = restart_service = (
+            lambda self, *a: None)
+    Tray().set_performance_preset("lightest")
 
     assert shown and shown[0].startswith("Performance: Lightest"), shown
     # (numpy comes along with whisper_vulkan, which the preset asks about the

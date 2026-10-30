@@ -7,7 +7,7 @@ from .logger import setup_logger
 
 # NVIDIA's CUDA libraries, downloaded once when CUDA is picked: the size
 # Preferences, System check, the setup choices and Help give.
-DOWNLOAD_SIZE_TEXT = "1.4 GB"
+DOWNLOAD_SIZE_TEXT = "580 MB"
 
 logger = setup_logger(__name__)
 
@@ -15,9 +15,13 @@ logger = setup_logger(__name__)
 NVIDIA_SMI_TIMEOUT = 5
 SUBPROCESS_TIMEOUT = 2
 
-# The libraries CTranslate2 needs to run on CUDA: the runtime, cuBLAS and
-# cuDNN. Without cuDNN the model loads "on cuda" and the first dictation crashes.
-_REQUIRED_CUDA_LIBS = ("libcudart.so", "libcublas.so", "libcudnn.so")
+# The libraries a CUDA install needs here: CTranslate2 opens CUDA 12's cuBLAS
+# and cuBLASLt by these names, so another major version (11, 13) doesn't do;
+# the runtime comes with the same download and stays a sign of a whole one.
+# Without them the model loads "on cuda" and every dictation fails inside the
+# speech library (libcublas.so.12 not found). cuDNN isn't among them:
+# CTranslate2's Linux wheels are built without it since 4.7 (TuxTalk 0.16).
+_REQUIRED_CUDA_LIBS = ("libcudart.so.12", "libcublas.so.12", "libcublasLt.so.12")
 
 def detect_nvidia_gpu():
     """Check if an NVIDIA GPU is present.
@@ -46,8 +50,8 @@ def _has_required_libs(names) -> bool:
 def _cuda_install_looks_complete(cuda_path: str) -> bool:
     """True if *cuda_path* holds every required library of a usable install.
 
-    The download unpacks each wheel into its own folder (lib/cudnn/lib/...,
-    lib/cublas/lib/..., lib/cuda_runtime/lib/...), so the whole tree is
+    The download unpacks each wheel into its own folder (lib/cublas/lib/...,
+    lib/cuda_runtime/lib/...), so the whole tree is
     searched. A directory holding only the debris of an interrupted download
     does not read as complete.
     """
@@ -65,7 +69,7 @@ def _make_cuda_cleanup(cuda_path: str):
 
     Snapshots whether a complete installation is already present *before* the
     download starts. If one is, a failed or cancelled attempt leaves it alone
-    rather than deleting a working 1.4 GB setup.
+    rather than deleting a working setup.
     """
     import shutil
 
@@ -86,6 +90,22 @@ def _make_cuda_cleanup(cuda_path: str):
             logger.warning(f"Could not clean up CUDA directory: {e}")
 
     return cleanup_cuda_dir
+
+
+def remove_unused_cudnn():
+    """Delete the cuDNN an earlier TuxTalk downloaded with CUDA (lib/cudnn):
+    nothing uses it, and it takes nearly 1 GB. Never raises."""
+    import shutil
+    cudnn = os.path.join(get_appdir_cuda_path(), "lib", "cudnn")
+    # A link there isn't TuxTalk's download: leave it and what it points at.
+    if not os.path.isdir(cudnn) or os.path.islink(cudnn):
+        return
+    try:
+        shutil.rmtree(cudnn)
+    except OSError as e:
+        logger.warning(f"Couldn't remove the unused cuDNN in {cudnn}: {e}")
+        return
+    logger.info("Removed the cuDNN earlier versions downloaded with CUDA; nothing uses it")
 
 
 def has_cuda_libraries():
@@ -234,7 +254,7 @@ def _extract_wheels(wheel_paths, lib_path, progress_callback, cancel_event):
 
 
 # The wheels come straight from PyPI's JSON API; no pip is needed.
-CUDA_PACKAGES = ('nvidia-cuda-runtime-cu12', 'nvidia-cublas-cu12', 'nvidia-cudnn-cu12')
+CUDA_PACKAGES = ('nvidia-cuda-runtime-cu12', 'nvidia-cublas-cu12')
 
 
 def _pypi_wheel(pkg_name):
@@ -349,8 +369,8 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
                 def progress_hook(downloaded, total, _pkg=pkg_name, _idx=pkg_idx):
                     if progress_callback and total > 0:
                         download_percent = min(100, (downloaded / total) * 100)
-                        # Map to overall progress: each package gets ~23% of total
-                        current_percent = _idx * 23 + int((download_percent / 100) * 23)
+                        # The downloads share the first 70 % of the bar equally.
+                        current_percent = int(70 * (_idx + download_percent / 100) / len(wheels))
                         progress_callback(
                             f"Downloading {_pkg}... {int(download_percent)}%",
                             current_percent)

@@ -151,30 +151,35 @@ class TrayMenu:
     # ----- Performance -----
 
     def _performance_submenu(self):
-        """The Performance item: this computer's presets (Recommended,
-        Lightest, Battery saver), then Custom."""
+        """The Performance item, its submenu filled by fill_performance."""
         submenu = Gtk.Menu()
-        self.preset_radios = {}
-        preset_group = None
-        for preset in tray_presets.current_presets():
-            label = f"{preset.label} ({preset.description})"
-            radio = (Gtk.RadioMenuItem(label=label) if preset_group is None
-                     else Gtk.RadioMenuItem(label=label, group=preset_group))
-            preset_group = preset_group or radio
-            radio.connect("activate", self._on_preset, preset.id)
-            submenu.append(radio)
-            self.preset_radios[preset.id] = radio
-
-        # Custom has the dot when the settings match no preset; it opens Preferences.
-        submenu.append(Gtk.SeparatorMenuItem())
-        self.preset_custom = Gtk.RadioMenuItem(label="Custom (opens Preferences)",
-                                               group=preset_group)
-        self.preset_custom.connect("activate", self._on_custom)
-        submenu.append(self.preset_custom)
-
+        self.preset_radios, self.preset_custom = self.fill_performance(submenu)
         item = Gtk.MenuItem(label="Performance")
         item.set_submenu(submenu)
         return item
+
+    def fill_performance(self, menu):
+        """Fill *menu* with this computer's presets (Recommended, Lightest,
+        Battery saver), then Custom, with the dot on the one in use: the
+        tray's submenu, and the menu window's popup (menu_window.py). Returns
+        the presets' radio items by id, and Custom's."""
+        radios = {}
+        group = None
+        for preset in tray_presets.current_presets():
+            radio = (Gtk.RadioMenuItem(label=_preset_label(preset)) if group is None
+                     else Gtk.RadioMenuItem(label=_preset_label(preset), group=group))
+            group = group or radio
+            radio.connect("activate", self._on_preset, preset.id)
+            menu.append(radio)
+            radios[preset.id] = radio
+
+        # Custom has the dot when the settings match no preset; it opens Preferences.
+        menu.append(Gtk.SeparatorMenuItem())
+        custom = Gtk.RadioMenuItem(label="Custom (opens Preferences)", group=group)
+        custom.connect("activate", self._on_custom)
+        menu.append(custom)
+        self._put_dot(radios, custom)
+        return radios, custom
 
     def _on_preset(self, item, preset_id):
         """A preset was clicked: the tray applies it. GTK fires "activate" on
@@ -194,7 +199,7 @@ class TrayMenu:
         """Refresh the Performance labels and put the dot on the preset in use."""
         for preset in tray_presets.current_presets():
             if preset.id in self.preset_radios:
-                relabel(self.preset_radios[preset.id], f"{preset.label} ({preset.description})")
+                relabel(self.preset_radios[preset.id], _preset_label(preset))
         self.put_dot_back()
 
     def _dotted_preset(self):
@@ -203,13 +208,16 @@ class TrayMenu:
                     "custom")
 
     def put_dot_back(self):
-        """Put the Performance dot on the preset that's actually in use. The
-        flag that makes the radios ignore this is always cleared, or every
-        later click would be ignored."""
+        """Put the Performance dot on the preset that's actually in use."""
+        self._put_dot(self.preset_radios, self.preset_custom)
+
+    def _put_dot(self, radios, custom):
+        """Put the dot on the radio in *radios* of the preset in use, or on
+        *custom*. The flag that makes the radios ignore this is always
+        cleared, or every later click would be ignored."""
         self._moving_dot = True
         try:
-            radio = self.preset_radios.get(tray_presets.preset_in_use(), self.preset_custom)
-            radio.set_active(True)
+            radios.get(tray_presets.preset_in_use(), custom).set_active(True)
         finally:
             self._moving_dot = False
 
@@ -344,3 +352,8 @@ def _gear_menu_item(label):
     item.set_image(Gtk.Image.new_from_icon_name(name, Gtk.IconSize.MENU))
     item.set_always_show_image(True)
     return item
+
+
+def _preset_label(preset):
+    """A Performance preset's menu label: its name and what it means here."""
+    return f"{preset.label} ({preset.description})"

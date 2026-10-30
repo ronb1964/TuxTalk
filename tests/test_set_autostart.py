@@ -89,8 +89,8 @@ def test_an_extracted_appimage_s_own_icon_isnt_named_either(tmp_path, monkeypatc
 def test_the_icon_lookup_only_looks(tmp_path, monkeypatch):
     """Preferences sets start at login on its window's thread; installing the
     icon there refreshes icon caches, which can freeze it for seconds."""
-    from tuxtalk import update_checker
-    monkeypatch.setattr(update_checker, "_install_app_icon",
+    from tuxtalk import desktop_launcher
+    monkeypatch.setattr(desktop_launcher, "install_app_icon",
                         lambda: pytest.fail("installed the icon"))
     monkeypatch.setattr(autostart, "_project_root", lambda: str(tmp_path / "none"))
     monkeypatch.setattr(autostart.sys, "executable", str(tmp_path / "none/bin/python3"))

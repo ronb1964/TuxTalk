@@ -26,11 +26,9 @@ class FakeMenu:
         self.tray.reverted += 1
 
 
-class FakeTray:
-    set_performance_preset = tray_mod.DictationTray.set_performance_preset
-    _apply_preset = tray_mod.DictationTray._apply_preset
-    _preset_files = tray_mod.DictationTray._preset_files
-    _save_preset = tray_mod.DictationTray._save_preset
+class FakeTray(tray_presets.Presets):
+    """The tray around its Presets mixin: counts the dot put back and the
+    restarts, and has none of the tray's windows or service."""
 
     def __init__(self):
         self.reverted = 0
@@ -268,7 +266,7 @@ def test_leaving_battery_saver_on_a_desktop_turns_the_timeout_off(env, monkeypat
     assert (cfg.auto_timeout_enabled, cfg.auto_timeout_minutes) == (False, 5)
 
 
-def test_a_second_preset_clicked_during_the_first_ones_download_waits(env, monkeypatch):
+def test_a_second_preset_clicked_during_the_first_ones_download_is_turned_away(env, monkeypatch):
     """The download window runs a loop of its own and the menu still takes
     clicks: a second preset opened a second download window."""
     t = FakeTray()

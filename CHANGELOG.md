@@ -5,6 +5,11 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- The CUDA download for NVIDIA cards is 580 MB now instead of 1.4 GB. It
+  included NVIDIA's cuDNN, which the speech engine hasn't needed since 0.16,
+  and dictation on CUDA types exactly the same without it. If you downloaded
+  CUDA before, TuxTalk deletes that unused part when it starts, which gives
+  you back nearly 1 GB.
 - With the key remapper kanata running, F8 and F9 did nothing, and the
   hotkey test didn't see them either. kanata takes your keyboards for itself
   and passes every key on through a virtual keyboard of its own, which is a
@@ -349,6 +354,16 @@ before 0.15.0, so older entries use that name.
   switches dictation over as soon as the downloads are done, the same as
   picking CUDA under Device always did. Before, it waited for you to click
   Apply or OK first.
+- When the Parakeet, graphics engine or AI engine download fails, the
+  download window says why now, like no internet connection or a download
+  that got cut short, instead of just "Download failed".
+- A Whisper model download that was cut off partway isn't refused for disk
+  space any more when the rest of it fits.
+- If the speech model has to be downloaded when TuxTalk starts, that window
+  says "Loading model..." again once the files are in. It used to keep
+  showing the last file's name for the seconds the model took to load.
+- Help and the Voice Commands window list the same "literal" words now.
+  Each had its own list, and they didn't quite agree.
 - With "Send each dictation automatically" on, if you pressed your hold key
   to add more and the microphone wouldn't open, the message stayed unsent
   and the space after it was left for your next dictation, so a message you
