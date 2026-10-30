@@ -384,9 +384,11 @@ def fix_in_text(typed, fix, window, where=None):
     (_selection_now) is the replacement typed and the cursor stepped forward
     again, nothing else retyped. The keys go only into *window* (its class)
     and, where the desktop says, *where* (its id, focused_window.look's),
-    checked right before each batch of them goes down (the keys of one
-    word go out in milliseconds). Never in a terminal, where Shift+Left
-    selects nothing, nor a password field. True if done."""
+    checked right before each batch of them goes down, in the Flatpak too.
+    Not before each key, as no typing in TuxTalk is: a look asks the
+    desktop, and a batch's keys follow each other at the typing delay.
+    Never in a terminal, where Shift+Left selects nothing, nor a password
+    field. True if done."""
     from . import keyboard_output, virtual_keyboard
     start, end, replacement = fix
     time.sleep(_REFOCUS_S)
