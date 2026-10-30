@@ -1094,13 +1094,101 @@ def test_hiding_is_refused_when_the_kernel_cant_say_which_keys_are_down(setup, m
     assert ("grab", True) not in kb.calls and helper.hide is None
 
 
+def _fail_reads_of(kb, monkeypatch):
+    real_read = hh.os.read
+
+    def read(fd, size):
+        if fd == kb.fd:
+            raise OSError(errno.EPERM, "Operation not permitted")
+        return real_read(fd, size)
+    monkeypatch.setattr(hh.os, "read", read)
+
+
 def test_a_keyboard_that_fails_to_read_is_let_go_not_spun_on(setup, monkeypatch):
     helper, kb, _connect, _say, _heard, _seat = setup
-    def failing_read(fd, size):
-        raise OSError(errno.EPERM, "Operation not permitted")
-    monkeypatch.setattr(hh.os, "read", failing_read)
+    _fail_reads_of(kb, monkeypatch)
     assert helper.read_keyboard(kb) == 0
     assert kb.path not in helper.keyboards
+
+
+def _failing_keyboard_at(node, helper, kb, monkeypatch):
+    """*kb* opened from the device node *node*, its reads failing."""
+    node.write_text("")
+    helper.keyboards.pop(kb.path)
+    os.close(kb.fd)
+    kb.path, kb.fd = str(node), os.open(node, os.O_RDONLY)
+    helper.keyboards[kb.path] = kb
+    _fail_reads_of(kb, monkeypatch)
+
+
+def _replug(node):
+    """A new node at *node*'s path. Made before the old one goes, so the
+    file system can't hand the new one the old inode number."""
+    new = node.with_name(node.name + ".new")
+    new.write_text("")
+    os.replace(new, node)
+
+
+def test_a_keyboard_that_failed_to_read_waits_to_be_plugged_in_again(setup, monkeypatch, tmp_path):
+    """Opened again by every scan, it failed again every 2 s, three lines in
+    the log each time. Plugged in again, it's read and its hotkeys work."""
+    helper, kb, connect, say, heard, _seat = setup
+    node = tmp_path / "input" / "event5"
+    _failing_keyboard_at(node, helper, kb, monkeypatch)
+    replacement = FakeKeyboard(str(node))
+    opened = []
+    monkeypatch.setattr(hh.Keyboard, "open",
+                        classmethod(lambda cls, path: opened.append(path) or replacement))
+    helper.read_keyboard(kb)
+    helper.scan()
+    assert opened == []
+    _replug(node)
+    helper.scan()
+    assert helper.keyboards[str(node)] is replacement
+    sock = _ready(connect, say, heard)
+    replacement.press(F8)
+    assert heard(sock) == ["DOWN 66 -"]
+
+
+def test_a_keyboard_plugged_in_while_the_old_one_failed_isnt_skipped(setup, monkeypatch, tmp_path):
+    """The failure is the old keyboard's: the new one at its path is opened."""
+    helper, kb, _connect, _say, _heard, _seat = setup
+    node = tmp_path / "input" / "event5"
+    _failing_keyboard_at(node, helper, kb, monkeypatch)
+    opened = []
+    monkeypatch.setattr(hh.Keyboard, "open", classmethod(lambda cls, path: opened.append(path)))
+    _replug(node)
+    helper.read_keyboard(kb)
+    helper.scan()
+    assert opened == [str(node)]
+
+
+def test_a_keyboard_that_failed_to_read_is_tried_again_after_a_while(setup, monkeypatch, tmp_path):
+    """A built-in keyboard is never plugged in again: skipped for good after
+    one failed read, its hotkeys stayed dead until a reboot."""
+    helper, kb, _connect, _say, _heard, _seat = setup
+    node = tmp_path / "input" / "event5"
+    _failing_keyboard_at(node, helper, kb, monkeypatch)
+    opened = []
+    monkeypatch.setattr(hh.Keyboard, "open", classmethod(lambda cls, path: opened.append(path)))
+    helper.read_keyboard(kb)
+    helper.scan()
+    assert opened == []
+    later = time.monotonic() + hh.UNREADABLE_RETRY_S + 1
+    monkeypatch.setattr(hh.time, "monotonic", lambda: later)
+    helper.scan()
+    assert opened == [str(node)]
+
+
+def test_an_unreadable_keyboard_unplugged_is_forgotten(setup, monkeypatch, tmp_path):
+    helper, kb, _connect, _say, _heard, _seat = setup
+    node = tmp_path / "input" / "event5"
+    _failing_keyboard_at(node, helper, kb, monkeypatch)
+    helper.read_keyboard(kb)
+    assert str(node) in helper.unreadable
+    node.unlink()
+    helper.scan()
+    assert helper.unreadable == {}
 
 
 # --- which devices are keyboards -----------------------------------------------------------
