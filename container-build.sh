@@ -248,9 +248,16 @@ meson setup "/tmp/wayland-protocols-${WAYLAND_PROTOCOLS_VERSION}/build" \
 ninja -C "/tmp/wayland-protocols-${WAYLAND_PROTOCOLS_VERSION}/build" install > /dev/null
 
 WL_CLIPBOARD_VERSION=v2.3.0
+# The commit the tag pointed at when it was pinned: its build scripts run
+# here, and a tag moved since would change what is built.
+WL_CLIPBOARD_COMMIT=67a7b937895bceec1ae5ccebb10216f63f70ca1b
 echo "📋 Building wl-clipboard $WL_CLIPBOARD_VERSION..."
 rm -rf /tmp/wl-clipboard
 git clone -q --depth 1 --branch "$WL_CLIPBOARD_VERSION" https://github.com/bugaevc/wl-clipboard /tmp/wl-clipboard
+if [ "$(git -C /tmp/wl-clipboard rev-parse HEAD)" != "$WL_CLIPBOARD_COMMIT" ]; then
+    echo "❌ wl-clipboard $WL_CLIPBOARD_VERSION isn't the pinned commit $WL_CLIPBOARD_COMMIT"
+    exit 1
+fi
 PKG_CONFIG_PATH="/tmp/wayland-protocols-prefix/share/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}" \
     meson setup /tmp/wl-clipboard/build /tmp/wl-clipboard --buildtype=release > /dev/null
 ninja -C /tmp/wl-clipboard/build > /dev/null

@@ -27,6 +27,11 @@ WORK=/tmp/whisper-build
 rm -rf "$WORK" && mkdir -p "$WORK" && cd "$WORK"
 git clone -q --depth 1 --branch "v${WHISPER_CPP_VERSION}" https://github.com/ggml-org/whisper.cpp
 cd whisper.cpp
+# Its build scripts run here, so the tag has to be the commit pinned for it.
+if [ "$(git rev-parse HEAD)" != "$WHISPER_CPP_COMMIT" ]; then
+    echo "❌ whisper.cpp v${WHISPER_CPP_VERSION} is $(git rev-parse HEAD), not the pinned $WHISPER_CPP_COMMIT"
+    exit 1
+fi
 # TuxTalk's own changes (vulkan-engine-patches/): Your Words for Parakeet's
 # greedy decoder (parakeet_set_word_boost). A patch that doesn't apply
 # stops the build rather than ship an engine without it.
