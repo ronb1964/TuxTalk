@@ -106,7 +106,7 @@ import sys
 import time
 
 PROTOCOL = 1
-VERSION = "1.7"
+VERSION = "1.8"
 
 DEFAULT_SOCKET_DIR = "/run/tuxtalk-hotkeys"
 SOCKET_NAME = "hotkeys.sock"
@@ -127,6 +127,8 @@ EV_SYN, EV_KEY, EV_REL = 0, 1, 2
 SYN_REPORT, SYN_DROPPED = 0, 3
 REL_X = 0
 BTN_LEFT = 0x110
+# The keyboard TuxTalk types with (virtual_keyboard.NAME): never read.
+OWN_KEYBOARD_NAME = "TuxTalk virtual keyboard"
 KEY_MAX = 0x2FF
 KEY_ESC, KEY_SCROLLLOCK, KEY_PAUSE = 1, 70, 119
 KEY_RIGHTCTRL, KEY_RIGHTALT = 97, 100
@@ -315,13 +317,38 @@ def device_group(rdev, sys_dir=SYS_CHAR_DIR, writable=False, uhid_private=True):
     return f"own:{number}" if writable else "real"
 
 
+def made_through_uinput(rdev, sys_dir=SYS_CHAR_DIR):
+    """Whether the input device *rdev* is one a program made through uinput:
+    its sysfs node is under /sys/devices/virtual/input. A Bluetooth LE
+    device (uhid) is not, whoever may use /dev/uhid."""
+    path = os.path.realpath(os.path.join(sys_dir, f"{os.major(rdev)}:{os.minor(rdev)}"))
+    return path.startswith("/sys/devices/virtual/input/")
+
+
+def counts_as_keyboard(keys, pointer, uinput, name) -> bool:
+    """Whether a device with the key codes *keys*, mouse motion (*pointer*),
+    made through uinput or not (*uinput*) and called *name*, is a keyboard to
+    read: it has letter keys, and it isn't a mouse claiming them (a Logitech
+    receiver) nor the keyboard TuxTalk types with. A uinput one shaped like a
+    mouse is read, and never held (Keyboard.listen_only): kanata takes the
+    real keyboards and passes every key on through one (issue #23)."""
+    mouse = pointer and not uinput
+    return len(keys & LETTER_KEYS) >= 3 and not mouse and name != OWN_KEYBOARD_NAME
+
+
 # --- keyboards --------------------------------------------------------------------------
 
 class Keyboard:
     """One open /dev/input/event* keyboard and the keys down on it."""
 
-    def __init__(self, path, fd, name, down, virtual, group):
+    def __init__(self, path, fd, name, down, virtual, group, listen_only=False):
+        """*down*: the keys down when it was opened; *virtual*: a program may
+        have made it; *group*: device_group's answer."""
         self.path, self.fd, self.name, self.virtual, self.group = path, fd, name, virtual, group
+        # A program's keyboard shaped like a mouse (counts_as_keyboard): a
+        # remapper's, carrying the mouse's motion and the text TuxTalk types.
+        # Holding it would freeze the one and swallow the other.
+        self.listen_only = listen_only
         self.down = set(down)
         # The modifiers the desktop saw go down on this keyboard: only these
         # unlock a key. One already down when it was opened, pressed while we
@@ -354,20 +381,22 @@ class Keyboard:
             fcntl.ioctl(fd, EVIOCGBIT(EV_REL, len(rel)), rel, True)
             pointer = REL_X in bits(rel) and BTN_LEFT in keys
             st = os.fstat(fd)
-            if len(keys & LETTER_KEYS) < 3 or pointer or udev_seat(st.st_rdev) != "seat0":
+            group = device_group(st.st_rdev, writable=others_can_write(st),
+                                 uhid_private=uhid_is_private())
+            name = bytearray(256)
+            fcntl.ioctl(fd, EVIOCGNAME(len(name)), name, True)
+            name = name.split(b"\0", 1)[0].decode("utf-8", "replace")
+            seat = udev_seat(st.st_rdev)
+            uinput = made_through_uinput(st.st_rdev)
+            if not counts_as_keyboard(keys, pointer, uinput, name) or seat != "seat0":
                 os.close(fd)
                 return None
             ident = bytearray(8)
             fcntl.ioctl(fd, EVIOCGID, ident, True)
-            group = device_group(st.st_rdev, writable=others_can_write(st),
-                                 uhid_private=uhid_is_private())
             virtual = struct.unpack("HHHH", ident)[0] == BUS_VIRTUAL or group.startswith("virtual:")
-            name = bytearray(256)
-            fcntl.ioctl(fd, EVIOCGNAME(len(name)), name, True)
             state = bytearray(KEY_BYTES)
             fcntl.ioctl(fd, EVIOCGKEY(len(state)), state, True)
-            keyboard = cls(path, fd, name.split(b"\0", 1)[0].decode("utf-8", "replace"),
-                           bits(state), virtual, group)
+            keyboard = cls(path, fd, name, bits(state), virtual, group, listen_only=pointer)
         except OSError:
             os.close(fd)
             return None
@@ -783,7 +812,12 @@ class Helper:
         again, which only we see, so the real release still reaches us. By
         the kernel's state, not what's been read, in case a release is on its
         way. The press's own keyboard (*is_origin*) is kept; another keyboard
-        of its group only has its modifiers hidden the same way."""
+        of its group only has its modifiers hidden the same way. A
+        listen-only keyboard is never held or written to: its keys reach the
+        desktop as they are."""
+        if keyboard.listen_only:
+            log(f"not holding keyboard {keyboard.name!r}: a program's keyboard and mouse in one")
+            return False
         released = self.let_up(keyboard, codes)
         if released is None:
             return None

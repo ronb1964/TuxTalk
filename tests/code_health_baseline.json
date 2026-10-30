@@ -181,7 +181,6 @@
   "uinput_helper.py::_username::swallowed_error": 1,
   "uinput_helper.py::check_input_read_permission::swallowed_error": 1,
   "uinput_helper.py::get_fix_script_content::swallowed_error": 1,
-  "uinput_helper.py::is_keyboard_device::swallowed_error": 1,
   "uninstall.py::_package_lines::long_line": 1,
   "uninstall.py::_wait_for.run::swallowed_error": 1,
   "uninstall.py::find::long_line": 2,

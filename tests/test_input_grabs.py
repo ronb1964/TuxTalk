@@ -474,6 +474,107 @@ def test_the_apps_own_virtual_keyboard_is_not_grabbed():
     assert uinput_helper.is_keyboard_device(ours) is False
 
 
+def _kanata():
+    """kanata's virtual keyboard, from its source (src/oskbd/linux.rs): every
+    key code below 560 and mouse motion, so mouse keys pass through too."""
+    return FakeDevice("kanata", {ecodes.EV_KEY: list(range(560)),
+                                 ecodes.EV_REL: [ecodes.REL_X, ecodes.REL_Y, ecodes.REL_WHEEL]})
+
+
+def test_a_key_remappers_virtual_keyboard_is_read(monkeypatch):
+    """kanata takes the real keyboards and passes every key on through its
+    own, shaped like a mouse too: skipped, TuxTalk heard no key at all with
+    it running (issue #23)."""
+    monkeypatch.setattr(uinput_helper, "is_uinput_device", lambda path: True)
+    assert uinput_helper.is_keyboard_device(_kanata()) is True
+    assert uinput_helper.is_remapper_keyboard(_kanata()) is True
+
+
+def test_a_real_keyboard_and_mouse_in_one_is_still_skipped(monkeypatch):
+    """The same shape from hardware is a Logitech receiver's mouse."""
+    monkeypatch.setattr(uinput_helper, "is_uinput_device", lambda path: False)
+    assert uinput_helper.is_keyboard_device(_kanata()) is False
+
+
+def test_a_plain_keyboard_is_no_remapper_keyboard(monkeypatch):
+    monkeypatch.setattr(uinput_helper, "is_uinput_device", lambda path: True)
+    assert uinput_helper.is_remapper_keyboard(keyboard("keyd virtual keyboard")) is False
+
+
+def test_the_apps_own_keyboard_is_skipped_though_a_program_made_it(monkeypatch):
+    from tuxtalk import virtual_keyboard
+    monkeypatch.setattr(uinput_helper, "is_uinput_device", lambda path: True)
+    ours = FakeDevice(virtual_keyboard.NAME, virtual_keyboard._capabilities())
+    assert uinput_helper.is_keyboard_device(ours) is False
+
+
+class _HeldKeyboard(FakeDevice):
+    """A keyboard holding *held* (F8), recording what's written into it."""
+
+    def __init__(self, name, caps, path, held=(ecodes.KEY_F8,)):
+        super().__init__(name, caps)
+        self.path, self.written, self.held = path, [], list(held)
+
+    def active_keys(self):
+        return self.held
+
+    def write(self, etype, code, value):
+        self.written.append((code, value))
+
+    def syn(self):
+        pass
+
+
+def test_a_key_remappers_keyboard_is_never_grabbed_or_written_to(monkeypatch):
+    """Held during a recording, kanata's keyboard would freeze the mouse
+    and swallow what TuxTalk types meanwhile (Type at pause, typing while
+    the key is held): kanata passes TuxTalk's own typing through it too."""
+    monkeypatch.setattr(uinput_helper, "is_uinput_device",
+                        lambda path: path == "/dev/input/event18")
+    real = _HeldKeyboard("USB Keyboard", keyboard()._caps, "/dev/input/event3")
+    kanata = _HeldKeyboard("kanata", _kanata()._caps, "/dev/input/event18")
+    try:
+        keyboard_grab.grab_keyboards_hiding([real, kanata], {ecodes.KEY_F8})
+        assert real.is_grabbed and real.written
+        assert not kanata.is_grabbed and kanata.written == []
+    finally:
+        keyboard_grab.release_all()
+        keyboard_grab._injected_pending.clear()
+
+
+@pytest.mark.parametrize("real_keyboard", [False, True])
+def test_a_right_ctrl_held_through_a_remapper_is_never_called_hidden(monkeypatch, real_keyboard):
+    """kanata's keyboard isn't grabbed, so the desktop sees its Right Ctrl
+    down: typing must wait for it, or the dictation turns into Ctrl
+    shortcuts (Ctrl+W closes the tab). Also with another keyboard grabbed."""
+    from tuxtalk import modifier_hotkeys
+    monkeypatch.setattr(uinput_helper, "is_uinput_device",
+                        lambda path: path == "/dev/input/event18")
+    kanata = _HeldKeyboard("kanata", _kanata()._caps, "/dev/input/event18",
+                           held=[ecodes.KEY_RIGHTCTRL])
+    real = _HeldKeyboard("USB Keyboard", keyboard()._caps, "/dev/input/event3", held=[])
+    devices = [real, kanata] if real_keyboard else [kanata]
+    try:
+        keyboard_grab.grab_keyboards_hiding(devices, {ecodes.KEY_RIGHTCTRL})
+        assert real.is_grabbed is real_keyboard
+        assert ecodes.KEY_RIGHTCTRL not in modifier_hotkeys._hidden_now()
+    finally:
+        keyboard_grab.release_all()
+        keyboard_grab._injected_pending.clear()
+
+
+@pytest.mark.parametrize("node,made", [
+    ("/sys/devices/virtual/input/input42", True),               # uinput: kanata
+    ("/sys/devices/virtual/misc/uhid/0005:046D:B023.0001/input/input23", False),  # BLE
+    ("/sys/devices/pci0000:00/0000:00:14.0/usb1/1-2/input/input7", False)])
+def test_a_program_made_device_is_told_by_where_sysfs_keeps_it(monkeypatch, node, made):
+    asked = []
+    monkeypatch.setattr(uinput_helper.os.path, "realpath",
+                        lambda path: asked.append(path) or node)
+    assert uinput_helper.is_uinput_device("/dev/input/event18") is made
+    assert asked == ["/sys/class/input/event18/device"]
+
+
 # --- the Voice Commands hotkey is a grab path too ---------------------------
 
 def _press_voice_combo(devices, monkeypatch, dbus=None):

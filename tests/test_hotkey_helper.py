@@ -1101,3 +1101,59 @@ def test_a_keyboard_that_fails_to_read_is_let_go_not_spun_on(setup, monkeypatch)
     monkeypatch.setattr(hh.os, "read", failing_read)
     assert helper.read_keyboard(kb) == 0
     assert kb.path not in helper.keyboards
+
+
+# --- which devices are keyboards -----------------------------------------------------------
+
+_LETTERS = set(range(16, 26)) | set(range(30, 39))      # Q..P, A..L
+
+
+@pytest.mark.parametrize("pointer,uinput,name,read", [
+    (False, False, "USB Keyboard", True),
+    (True, False, "Logitech MX Master", False),         # a mouse claiming letter keys
+    (True, True, "kanata", True),                       # a remapper's keyboard (issue #23)
+    (False, True, "keyd virtual keyboard", True),
+    (True, True, hh.OWN_KEYBOARD_NAME, False)])         # the one TuxTalk types with
+def test_which_devices_are_read_as_keyboards(pointer, uinput, name, read):
+    assert hh.counts_as_keyboard(_LETTERS | {hh.BTN_LEFT}, pointer, uinput, name) is read
+
+
+def test_a_device_without_letter_keys_is_no_keyboard():
+    assert hh.counts_as_keyboard({hh.BTN_LEFT, 66}, False, False, "Power Button") is False
+
+
+def test_only_a_uinput_device_counts_as_made_by_a_program(tmp_path):
+    """A Bluetooth LE mouse comes through /dev/uhid, under /sys/devices/virtual
+    too: taken for a program's keyboard, a mouse claiming letter keys was read."""
+    chars = tmp_path / "char"
+    chars.mkdir()
+    (chars / "13:80").symlink_to("/sys/devices/virtual/input/input40/event20")
+    (chars / "13:81").symlink_to(
+        "/sys/devices/virtual/misc/uhid/0005:046D:B023.0001/input/input41/event21")
+    (chars / "13:82").symlink_to("/sys/devices/pci0000:00/0000:11:00.0/usb1/1-3/input/input42/event22")
+    assert hh.made_through_uinput(os.makedev(13, 80), str(chars)) is True
+    assert hh.made_through_uinput(os.makedev(13, 81), str(chars)) is False
+    assert hh.made_through_uinput(os.makedev(13, 82), str(chars)) is False
+
+
+def test_the_helper_knows_the_name_tuxtalk_types_with():
+    """The helper runs as root on its own and can't import TuxTalk."""
+    from tuxtalk import virtual_keyboard
+    assert hh.OWN_KEYBOARD_NAME == virtual_keyboard.NAME
+
+
+def test_a_remappers_keyboard_is_listened_to_but_never_held(setup):
+    """kanata's keyboard carries the mouse's motion and the text TuxTalk
+    types: held while the hotkey is down, the mouse froze and the dictation
+    typed meanwhile was lost. Its keys reach the desktop as they are, and
+    the service is told the keyboard couldn't be held."""
+    helper, kb, connect, say, heard, _seat = setup
+    kb.listen_only = True
+    sock = _ready(connect, say, heard)
+    kb.press(F8)
+    assert heard(sock) == ["DOWN 66 -"]
+    say(sock, "HIDE 66")
+    assert heard(sock) == ["ERR couldn't hold the keyboard"]
+    assert kb.calls == [] and helper.hide is None
+    kb.press(F8, 0)
+    assert heard(sock) == ["UP 66"]
