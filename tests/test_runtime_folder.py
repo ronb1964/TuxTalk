@@ -127,3 +127,23 @@ def test_the_usual_runtime_folder_is_used(monkeypatch):
     monkeypatch.setenv("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     assert single_instance.private_session_dir() == f"/run/user/{os.getuid()}"
+
+
+@pytest.mark.parametrize("layout", ["open parent", "link"])
+def test_the_locks_stay_where_they_were_when_the_strict_check_refuses(tmp_path, monkeypatch,
+                                                                      layout):
+    """Moved by the stricter check, a new copy's lock would miss the one an
+    older copy still holds in the old folder, and both would run."""
+    if layout == "open parent":
+        shared = tmp_path / "shared"
+        shared.mkdir()
+        shared.chmod(0o777)
+        run = _private_folder(shared / "run")
+    else:
+        run = tmp_path / "run"
+        run.symlink_to(_private_folder(tmp_path / "real"))
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(run))
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    monkeypatch.setattr(single_instance, "FALLBACK_ROOT", str(tmp_path / "fallback"))
+    assert single_instance.private_session_dir() is None
+    assert single_instance.runtime_dir() == str(run)

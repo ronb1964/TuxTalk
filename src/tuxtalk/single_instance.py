@@ -2,8 +2,9 @@
 hold a lock file in the user's runtime folder for as long as they run.
 
 It also says where that folder is: session_runtime_dir() for what the
-desktop keeps there (a compositor's socket), runtime_dir() for TuxTalk's own
-private files (locks, Recent Dictations, a hand-over to Fix a Word).
+desktop keeps there (a compositor's socket), runtime_dir() for the locks,
+private_session_dir() for files holding dictated text (Recent Dictations, a
+hand-over to Fix a Word).
 
 flock is atomic, and the kernel lets go of the lock when the process exits,
 however it exits.
@@ -40,8 +41,8 @@ def session_runtime_dir(env=None) -> str:
 
 
 def runtime_dir() -> str:
-    """The user's private runtime folder, where TuxTalk's own files go:
-    lock files, Recent Dictations, a hand-over to Fix a Word.
+    """The user's runtime folder, where the lock files go (files holding
+    dictated text go to private_session_dir()).
 
     Inside a Flatpak, XDG_RUNTIME_DIR (/run/user/N) is shared with the host,
     so a host install's lock would make the Flatpak's process exit as
@@ -54,21 +55,32 @@ def runtime_dir() -> str:
     no lock at all, two services typed every dictation twice and two GNOME
     extension installs could meet.
     """
-    return private_session_dir() or _private_fallback()
+    # The check and the lookup the locks have always had, an empty
+    # XDG_RUNTIME_DIR included: a stricter one would move them while an
+    # older copy, still running, holds its lock in the old place, and two
+    # would run side by side through an update.
+    base = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+    return _session_folder(base, _private) or _private_fallback()
 
 
 def private_session_dir():
-    """runtime_dir() without its /tmp fallback: the session's runtime folder
-    (the Flatpak's own inside one) when it is this user's alone, else None.
-    A RAM-backed folder emptied at logout, unlike /tmp on some systems, so
-    the place for anything holding dictated text."""
-    base = session_runtime_dir()
+    """The session's runtime folder (the Flatpak's own inside one) when it
+    is this user's alone and no one else can swap it (_settled), else None;
+    never the locks' /tmp fallback. A RAM-backed folder emptied at logout,
+    unlike /tmp on some systems, so the place for anything holding dictated
+    text."""
+    return _session_folder(session_runtime_dir(), _settled)
+
+
+def _session_folder(base, usable):
+    """The Flatpak's own folder in the runtime folder *base* inside one,
+    else *base*, when *usable*(it); else None."""
     fid = os.environ.get("FLATPAK_ID")
     if fid:
         app_dir = os.path.join(base, "app", fid)
-        if _settled(app_dir):
+        if usable(app_dir):
             return app_dir
-    return base if _settled(base) else None
+    return base if usable(base) else None
 
 
 def _settled(path) -> bool:
@@ -77,6 +89,8 @@ def _settled(path) -> bool:
     may change), and its parent is root's or this user's, writable by no one
     else unless sticky (only a file's owner may rename it then), as root's
     /run/user is."""
+    # Only the immediate parent: root's /run/user and a sticky /tmp are the
+    # layouts there really are, and the files in it are 0600 regardless.
     try:
         if stat.S_ISLNK(os.lstat(path).st_mode):
             return False
