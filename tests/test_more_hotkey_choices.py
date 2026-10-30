@@ -921,6 +921,17 @@ def test_right_alt_warns_where_the_layout_makes_it_altgr(monkeypatch, layout, lo
     assert keyboard_layout.altgr_characters() == lost
 
 
+def test_right_alt_warns_about_euro_where_libxkbcommon_names_it_otherwise(monkeypatch):
+    """Ubuntu 22.04's libxkbcommon names € 0x13a4 while layouts put 0x20ac
+    on their keys, and the warning left € out there."""
+    lib = keyboard_layout._lib()
+    newer = lib.xkb_utf32_to_keysym
+    monkeypatch.setattr(lib, "xkb_utf32_to_keysym",
+                        lambda char: 0x13a4 if char == ord("€") else newer(char))
+    assert keyboard_layout.KeyPlanner("de").altgr_only("@€") == ["@", "€"]
+    assert keyboard_layout.KeyPlanner("gb").altgr_only("@€") == ["€"]
+
+
 def test_the_first_run_hotkey_test_says_what_right_alt_gives_up(monkeypatch):
     """Picked there, or set already, Right Alt took a German keyboard's @
     and € away unsaid."""
