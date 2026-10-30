@@ -28,6 +28,9 @@ class Recording:
     press_t0: float = None
     # Raw int16 blocks since it began, or since Type at pause's last cut.
     frames: list = field(default_factory=list)
+    # finish_capture took its audio (under type_at_pause.chunk_lock): a
+    # block still arriving is dropped.
+    captured: bool = False
     stream: object = None
     # The open stream's rate, which may not be the engines' 16 kHz (an ALSA
     # hw: device's own); engine.SAMPLE_RATE until a stream opens.
@@ -42,6 +45,10 @@ class Recording:
     # Hands-free auto-stop (a silence.SilenceDetector), or None unless a
     # double-tap of the toggle key armed it.
     silence: object = None
+    # That detector heard the speaker finish: the service tick stops this
+    # recording as a second tap would. Its own, so an audio callback still
+    # running for it can't stop the next one.
+    went_quiet: bool = False
     # When the toggle key started it (None for any other start), so a quick
     # second tap can be told apart from a stop, and its start beep (what
     # beeps.beep returned, None with beeps off), which the second tap's

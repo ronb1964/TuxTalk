@@ -35,8 +35,9 @@ from .window_classes import app_kind, is_document_window
 
 logger = setup_logger(__name__)
 
-# Chunked dictation (chunking.py). The audio callback cuts chunks and the stop
-# path takes the rest; this lock keeps the two from both taking the same frames.
+# Chunked dictation (chunking.py). The audio callback adds blocks and cuts
+# chunks, and the stop takes the rest; this lock keeps a block or a cut from
+# landing in frames the stop has already taken.
 chunk_lock = threading.Lock()
 
 # Transcribes and types a phrase: pipeline.transcribe_and_inject, handed over

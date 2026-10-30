@@ -134,14 +134,15 @@ def _start(monkeypatch, from_toggle=True, seconds=1.0, mic_delay=0.0, beeps_on=F
 def _speak_then_go_quiet(quiet_seconds=3.0):
     audio = np.concatenate([speech(1.0), noise(quiet_seconds)])
     for i in range(0, len(audio), BLOCK):
-        recording._sd_callback(rs.state.current, audio[i:i + BLOCK].reshape(-1, 1), BLOCK, None, None)
+        recording._sd_callback(rs.state.current, audio[i:i + BLOCK].reshape(-1, 1),
+                                BLOCK, None, None)
 
 
 def test_a_single_tap_is_a_plain_toggle_however_long_the_pause(monkeypatch):
     _start(monkeypatch)
     assert rs.state.current.silence is None
     _speak_then_go_quiet(quiet_seconds=8.0)
-    assert not recording.stop_requested.is_set()
+    assert not rs.state.current.went_quiet
     rs.state.is_recording = False
 
 
@@ -150,8 +151,7 @@ def test_a_double_tap_switches_to_hands_free_and_it_stops_itself(monkeypatch):
     assert recording.toggle_pressed_while_recording(beeps_on=False) is True   # 2nd tap: keep going
     assert rs.state.current.silence is not None
     _speak_then_go_quiet()
-    assert recording.stop_requested.is_set()
-    recording.stop_requested.clear()
+    assert rs.state.current.went_quiet
     rs.state.is_recording = False
 
 
@@ -171,8 +171,9 @@ def _goes_quiet():
     one in which nothing was said, which drops it instead of typing it)."""
     quiet = noise(12.0)
     for i in range(0, len(quiet), BLOCK):
-        recording._sd_callback(rs.state.current, quiet[i:i + BLOCK].reshape(-1, 1), BLOCK, None, None)
-        if recording.stop_requested.is_set():
+        recording._sd_callback(rs.state.current, quiet[i:i + BLOCK].reshape(-1, 1),
+                                BLOCK, None, None)
+        if rs.state.current.went_quiet:
             return (i + BLOCK) / SR, rs.state.current.silence.nothing_said
     return None, False
 
@@ -181,14 +182,14 @@ def _stopped_to_type_it():
     """Going quiet stops the recording the usual way, after the auto-stop
     setting's second of quiet, to type what was said."""
     stopped_after, nothing_said = _goes_quiet()
-    recording.stop_requested.clear()
     rs.state.is_recording = False
     return stopped_after == pytest.approx(1.0, abs=0.05) and not nothing_said
 
 
 def _say(audio):
     for i in range(0, len(audio), BLOCK):
-        recording._sd_callback(rs.state.current, audio[i:i + BLOCK].reshape(-1, 1), BLOCK, None, None)
+        recording._sd_callback(rs.state.current, audio[i:i + BLOCK].reshape(-1, 1),
+                                BLOCK, None, None)
 
 
 def test_a_word_said_before_the_second_tap_is_kept(monkeypatch):
@@ -266,7 +267,6 @@ def _nothing_said(monkeypatch, heard, beeps_on=True):
     _say(heard)
     assert recording.toggle_pressed_while_recording(beeps_on=False) is True
     stopped_after, nothing_said = _goes_quiet()
-    recording.stop_requested.clear()
     rs.state.is_recording = False
     assert stopped_after is not None, "the recording never stopped by itself"
     return nothing_said
@@ -415,7 +415,6 @@ def test_a_word_kept_with_the_start_beep_is_transcribed(monkeypatch):
     frames, rate = recording.finish_capture(False, False)
     assert rate == SR
     assert b"".join(frames).startswith(word.tobytes())
-    recording.stop_requested.clear()
 
 
 def test_a_quick_second_tap_counts_when_the_recording_was_slow_to_start(monkeypatch):
@@ -486,7 +485,7 @@ def test_a_hold_recording_cannot_become_hands_free(monkeypatch):
     _start(monkeypatch, from_toggle=False)
     assert recording.toggle_pressed_while_recording(beeps_on=False) is False
     _speak_then_go_quiet()
-    assert not recording.stop_requested.is_set()
+    assert not rs.state.current.went_quiet
     rs.state.is_recording = False
 
 
@@ -626,12 +625,12 @@ def test_a_hands_free_recording_with_nothing_said_is_dropped(monkeypatch):
     assert recording.toggle_pressed_while_recording(beeps_on=False) is True
     audio = noise(SilenceDetector.NOTHING_SAID_S + 0.5)
     for i in range(0, len(audio), BLOCK):
-        recording._sd_callback(rs.state.current, audio[i:i + BLOCK].reshape(-1, 1), BLOCK, None, None)
-    assert recording.stop_requested.is_set()
+        recording._sd_callback(rs.state.current, audio[i:i + BLOCK].reshape(-1, 1),
+                                BLOCK, None, None)
+    assert rs.state.current.went_quiet
     monkeypatch.setattr(recording, "stop_stream_safely", lambda: None)
     assert recording.finish_capture(False, False) is None      # nothing is transcribed
     assert rs.state.current.message.cancelled
-    recording.stop_requested.clear()
     rs.state.current.message.cancelled = False
 
 

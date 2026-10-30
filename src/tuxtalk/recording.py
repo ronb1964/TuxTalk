@@ -211,8 +211,9 @@ indicator = None
 spectrum_processor = None
 
 # Requests to start or stop recording, set by the signal handler, the D-Bus
-# thread or the audio callback, and taken by the service tick. Two Events
+# thread or the portal's shortcuts, and taken by the service tick. Two Events
 # rather than one flag, so a start and a stop can't overwrite each other.
+# Hands-free's own stop is the recording's (Recording.went_quiet).
 start_requested = threading.Event()
 stop_requested = threading.Event()
 # Set by the SIGTERM handler (Quit, Restart Service, an update), taken by the
@@ -230,29 +231,35 @@ started_from_toggle_key = threading.Event()
 def _sd_callback(rec, indata, frames_count, time_info, status):
     """sounddevice's audio callback for recording *rec*'s stream: collect
     its frames while it records. A stream that didn't stop in time
-    (mic_stream.close gave up on it) may still call this: its blocks are
-    not the newer recording's."""
-    if rs.state.is_recording and rec is rs.state.current:
-        rec.frames.append(indata.tobytes())
+    (mic_stream.close gave up on it) may still call this, and a call can
+    still be under way when its recording stops and the next begins: what
+    it does stays with *rec*, never the newer recording."""
+    if not (rs.state.is_recording and rec is rs.state.current):
+        return
+    block = indata.tobytes()
+    with type_at_pause.chunk_lock:
+        if rec.captured:
+            return          # finish_capture has taken its audio
+        rec.frames.append(block)
 
-        # Chunked dictation: at a pause, the phrase so far goes off to be typed.
-        chunker = rec.chunker
-        if chunker is not None and chunker.feed(indata):
-            type_at_pause.cut_chunk(rec, chunker)
+    # Chunked dictation: at a pause, the phrase so far goes off to be typed.
+    chunker = rec.chunker
+    if chunker is not None and chunker.feed(indata):
+        type_at_pause.cut_chunk(rec, chunker)
 
-        # Hands-free auto-stop: when the speaker has finished, ask the service
-        # loop to stop, exactly as a second press of the toggle key would.
-        detector = rec.silence
-        if detector is not None and detector.feed(indata):
-            if detector.nothing_said:
-                logger.info("Auto-stop: nothing said, stopping without typing anything")
-            else:
-                logger.info("Auto-stop: speaker went quiet, stopping the recording")
-            stop_requested.set()
+    # Hands-free auto-stop: when the speaker has finished, ask the service
+    # loop to stop it, exactly as a second press of the toggle key would.
+    detector = rec.silence
+    if detector is not None and detector.feed(indata):
+        if detector.nothing_said:
+            logger.info("Auto-stop: nothing said, stopping without typing anything")
+        else:
+            logger.info("Auto-stop: speaker went quiet, stopping the recording")
+        rec.went_quiet = True
 
-        # Feed the recording indicator whatever its active style needs.
-        if indicator:
-            feed_indicator(indicator, indata, spectrum_processor)
+    # Feed the recording indicator whatever its active style needs.
+    if indicator:
+        feed_indicator(indicator, indata, spectrum_processor)
 
 
 def open_input_stream(device_idx) -> None:
@@ -419,20 +426,24 @@ def toggle_pressed_while_recording(beeps_on: bool) -> bool:
 def finish_capture(beeps_on: bool, notify_on: bool):
     """End a recording quickly and hand back its audio (the fast half of stop).
 
-    Validates the hold time, stops the stream, hides the indicator, and SNAPSHOTS
-    the captured frames. Returns (frames, rec_sr) or None if the recording was
-    cancelled or too short. The next recording is a Recording of its own, so
-    the frames returned stay this one's even if it begins at once, which is
-    what lets the dictation worker transcribe and type them while the next
-    recording records, without dropping or mixing audio."""
+    Validates the hold time, stops the stream, hides the indicator, and takes
+    the captured frames, marking the recording captured under chunk_lock so
+    no block or cut is added to them afterwards. Returns (frames, rec_sr) or
+    None if the recording was cancelled or too short. The next recording is a
+    Recording of its own, so the frames returned stay this one's even if it
+    begins at once, which is what lets the dictation worker transcribe and
+    type them while the next recording records, without dropping or mixing
+    audio."""
     rec = rs.state.current
     if _dropped_as_silent(rec, beeps_on, notify_on) or _dropped_as_a_tap(rec, beeps_on, notify_on):
         return None
     with type_at_pause.chunk_lock:
-        # No more cuts: from here on the audio is the last chunk.
+        # No more cuts or blocks: from here on the audio is the last chunk,
+        # and a callback still under way adds nothing to it.
+        rec.captured = True
         chunker, rec.chunker = rec.chunker, None
         rec.last_chunk_speech = chunker.speech_time if chunker is not None else None
-        frames = rec.frames  # the last chunk's list; a cut can't swap it now
+        frames = rec.frames
     if chunker is not None and not rec.chunks_submitted:
         logger.info(f"Chunked dictation: no pause found ({chunker.describe()})")
     rs.state.is_recording = False

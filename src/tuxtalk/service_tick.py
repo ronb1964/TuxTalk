@@ -223,11 +223,12 @@ def _quit(cfg, svc: ServiceState) -> None:
 
 
 def _take_stop_request(cfg, svc: ServiceState, now: float) -> None:
-    """Stop the recording and type it if the tray, D-Bus or the portal asked."""
-    if not recording.stop_requested.is_set():
-        return
-    recording.stop_requested.clear()
-    if not rs.state.is_recording:
+    """Stop the recording and type it if the tray, D-Bus or the portal
+    asked, or hands-free heard the speaker finish it."""
+    asked = recording.stop_requested.is_set()
+    if asked:
+        recording.stop_requested.clear()
+    if not (rs.state.is_recording and (asked or rs.state.current.went_quiet)):
         return
     keyboard_grab.release_all()
     pipeline.stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
