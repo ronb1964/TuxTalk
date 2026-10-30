@@ -6,7 +6,7 @@ NVIDIA graphics, through CUDA. This runs whisper.cpp built with its Vulkan
 backend instead, which works on AMD, Intel and NVIDIA alike. For AMD and
 Intel it's the only way to use the graphics chip. For NVIDIA it's the light
 option: measured on an RTX 4070 Super it matched CUDA's speed (large-v3,
-0.51 s vs 0.53 s for 11 s of speech) for a 22 MB download instead of 1.4 GB. whisper.cpp
+0.51 s vs 0.53 s for 11 s of speech) for a 22 MB download instead of 580 MB. whisper.cpp
 publishes no Linux Vulkan build, so TuxTalk builds one (build-vulkan-engine.sh)
 and hosts it as a GitHub pre-release.
 
@@ -201,8 +201,8 @@ def make_engine_download_func(model_name=None):
         # Before 0.19 the archive was ENGINE_ASSET itself, left behind when unpacking failed.
         with download_area(parent, ENGINE_NAME, old_names=(ENGINE_ASSET,)) as (archive, folder):
             if not download_file(ENGINE_URL, archive, timeout=60, cancel_event=cancel_event,
-                                 progress_hook=hook, expected_sha256=ENGINE_SHA256):
-                progress_callback("Download failed", 0)
+                                 progress_hook=hook, expected_sha256=ENGINE_SHA256,
+                                 report=progress_callback):
                 return False
             try:
                 progress_callback("Unpacking...", 97)
@@ -464,14 +464,16 @@ class VulkanWhisperModel:
              "-t", str(self.threads), "-dev", str(self.device_index)], _engine_env())
         self._proc = self._launcher.submit(
             subprocess.Popen, command,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env).result()
+            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env=env).result()
+        output = engine_process.OutputTail(self._proc.stderr)
         logger.info(f"Graphics engine starting (pid {self._proc.pid}, device {self.device_index})")
         try:
             deadline = time.time() + 120
             while time.time() < deadline:
                 if self._proc.poll() is not None:
                     raise RuntimeError("the graphics engine stopped while starting"
-                                       + engine_process.launch_failure(self._proc.returncode))
+                                       + engine_process.launch_failure(self._proc.returncode,
+                                                                       output))
                 try:
                     engine_process.open_local(f"http://127.0.0.1:{self._port}/health", timeout=1)
                     break

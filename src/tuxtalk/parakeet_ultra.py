@@ -60,7 +60,7 @@ def _path(name):
 
 def missing(device):
     """The files Parakeet Ultra still needs on *device*: "vulkan" for the
-    graphics card, anything else for the processor. download_file puts a file
+    graphics card, anything else for the processor. fetch_file puts a file
     in place only once its SHA256 matched, so a file that's there is whole."""
     names = (GPU_FILE,) if device == "vulkan" else tuple(CPU_FILES)
     return tuple(name for name in names if not os.path.isfile(_path(name)))
@@ -77,9 +77,10 @@ def gpu_file():
 
 
 def make_download_func(device):
-    """DownloadTask function: fetch what *device* still needs (see missing())."""
+    """DownloadTask function: fetch what *device* still needs (see missing()).
+    A failure's reason is its last report, at 0 %."""
     def download(progress_callback, cancel_event):
-        from .download_utils import download_file, free_space_bytes
+        from .download_utils import DownloadError, free_space_bytes
         todo = missing(device)
         total = sum(FILES[name][0] for name in todo)
         free = free_space_bytes(folder())
@@ -90,24 +91,36 @@ def make_download_func(device):
             return False
         done = 0
         for name in todo:
-            size, sha256 = FILES[name]
-
             def hook(got, _total, before=done):
                 progress_callback("Downloading Parakeet...", min(99, (before + got) * 99 // total))
 
-            for attempt in range(1, _TRIES + 1):
-                if download_file(RELEASE_URL + name, _path(name), timeout=60,
-                                 cancel_event=cancel_event, progress_hook=hook,
-                                 expected_sha256=sha256):
-                    break
-                if cancel_event is not None and cancel_event.is_set():
-                    return False
-                logger.warning(f"Download of {name} failed (try {attempt} of {_TRIES})")
-            else:
-                progress_callback("Download failed", 0)
+            try:
+                _fetch_with_retries(name, cancel_event, hook)
+            except InterruptedError:
                 return False
-            done += size
+            except DownloadError as e:
+                progress_callback(f"Download failed: {e}", 0)
+                return False
+            done += FILES[name][0]
         logger.info(f"Parakeet Ultra downloaded for {device or 'cpu'}")
         progress_callback("Done", 100)
         return True
     return download
+
+
+def _fetch_with_retries(name, cancel_event, hook):
+    """Fetch the release's file *name*, checked against its SHA256, trying
+    again after a failure; the last try's DownloadError is raised, and a
+    cancel (InterruptedError) at once."""
+    from .download_utils import DownloadError, fetch_file
+    for attempt in range(1, _TRIES + 1):
+        try:
+            fetch_file(RELEASE_URL + name, _path(name), timeout=60, cancel_event=cancel_event,
+                       progress_hook=hook, expected_sha256=FILES[name][1])
+            return
+        except DownloadError as e:
+            if cancel_event is not None and cancel_event.is_set():
+                raise InterruptedError("Download cancelled") from e
+            logger.warning(f"Download of {name} failed (try {attempt} of {_TRIES}): {e}")
+            if attempt == _TRIES:
+                raise

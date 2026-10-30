@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from tuxtalk import control, desktop_detect, update_checker
+from tuxtalk import control, desktop_detect, desktop_launcher, update_checker
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -150,7 +150,7 @@ def _actions(text):
 
 def _expected(program):
     return {aid: (name, f"{program} {args}")
-            for aid, name, args in update_checker.DESKTOP_ACTIONS}
+            for aid, name, args in desktop_launcher.DESKTOP_ACTIONS}
 
 
 @pytest.mark.parametrize("path, program", [
@@ -179,9 +179,9 @@ def test_package_scripts_keep_the_shortcuts(script):
 def _launcher(tmp_path, monkeypatch, text):
     path = tmp_path / "tuxtalk.desktop"
     path.write_text(text)
-    monkeypatch.setattr(update_checker, "DESKTOP_FILE_PATH", str(path))
+    monkeypatch.setattr(desktop_launcher, "DESKTOP_FILE_PATH", str(path))
     monkeypatch.setattr(update_checker, "get_install_type", lambda **_k: "appimage")
-    monkeypatch.setattr(update_checker.menu_cache, "refresh_menu_cache", lambda: None)
+    monkeypatch.setattr(desktop_launcher.menu_cache, "refresh_menu_cache", lambda: None)
     return path
 
 
@@ -198,33 +198,33 @@ Terminal=false
 
 def test_older_launcher_gets_the_shortcuts_once(tmp_path, monkeypatch):
     path = _launcher(tmp_path, monkeypatch, OLD_LAUNCHER)
-    assert update_checker.add_launcher_actions() is True
+    assert desktop_launcher.add_launcher_actions() is True
     text = path.read_text()
     assert _actions(text) == _expected("/home/someone/AppImages/TuxTalk.AppImage")
     main = text.split("\n[Desktop Action", 1)[0]
     assert "Actions=" in main and "Exec=/home/someone/AppImages/TuxTalk.AppImage" in main
-    assert update_checker.add_launcher_actions() is False      # once
+    assert desktop_launcher.add_launcher_actions() is False      # once
     assert path.read_text() == text
 
 
 def test_hidden_entry_and_packages_left_alone(tmp_path, monkeypatch):
-    hidden = OLD_LAUNCHER + update_checker._HIDDEN_ENTRY_MARK + "\n"
+    hidden = OLD_LAUNCHER + desktop_launcher._HIDDEN_ENTRY_MARK + "\n"
     path = _launcher(tmp_path, monkeypatch, hidden)
-    assert update_checker.add_launcher_actions() is False
+    assert desktop_launcher.add_launcher_actions() is False
     assert path.read_text() == hidden
     path.write_text(OLD_LAUNCHER)
     monkeypatch.setattr(update_checker, "get_install_type", lambda **_k: "deb")
-    assert update_checker.add_launcher_actions() is False
+    assert desktop_launcher.add_launcher_actions() is False
 
 
 def test_no_launcher_is_fine(tmp_path, monkeypatch):
-    monkeypatch.setattr(update_checker, "DESKTOP_FILE_PATH", str(tmp_path / "none.desktop"))
+    monkeypatch.setattr(desktop_launcher, "DESKTOP_FILE_PATH", str(tmp_path / "none.desktop"))
     monkeypatch.setattr(update_checker, "get_install_type", lambda **_k: "appimage")
-    assert update_checker.add_launcher_actions() is False
+    assert desktop_launcher.add_launcher_actions() is False
 
 
 def test_new_appimage_launcher_has_the_shortcuts():
-    text = update_checker.desktop_actions("/x/TuxTalk.AppImage")
+    text = desktop_launcher.desktop_actions("/x/TuxTalk.AppImage")
     assert _actions("[Desktop Entry]\n" + text) == _expected("/x/TuxTalk.AppImage")
 
 
@@ -338,6 +338,58 @@ def test_menu_window_after_installing_the_extension_says_log_out():
         win.window.destroy()
 
 
+def test_opening_a_popup_again_lets_the_last_one_go(monkeypatch):
+    """Each opening builds a new menu: the old ones stayed alive until the
+    window closed."""
+    from tuxtalk import config, tray, tray_menu
+    monkeypatch.setattr(config, "load_config", config.Settings)
+    owner = tray.DictationTray.__new__(tray.DictationTray)
+    fake, win = _menu_window()
+    fake.menu = tray_menu.TrayMenu(owner)
+    performance = next(b for b in _buttons(win) if b.get_label().startswith("Performance"))
+    try:
+        performance.clicked()
+        gone = []
+        win._popup.connect("destroy", lambda w: gone.append(True))
+        performance.clicked()
+        assert gone == [True]
+    finally:
+        win._popup.destroy()
+        fake.menu.widget.destroy()
+        win.window.destroy()
+
+
+def test_menu_window_performance_is_the_tray_menus(monkeypatch):
+    """The window's Performance popup lists what the tray's submenu does, with
+    the dot on the same preset; opening it applies nothing, choosing a preset
+    applies that one, and Custom opens Preferences."""
+    from tuxtalk import config, tray, tray_menu
+    monkeypatch.setattr(config, "load_config", config.Settings)
+    applied, opened = [], []
+    owner = tray.DictationTray.__new__(tray.DictationTray)
+    owner.set_performance_preset = applied.append
+    owner.open_preferences = lambda *a: opened.append(True)
+    fake, win = _menu_window()
+    fake.menu = tray_menu.TrayMenu(owner)
+    try:
+        next(b for b in _buttons(win) if b.get_label().startswith("Performance")).clicked()
+        popup = [i for i in win._popup.get_children() if isinstance(i, Gtk.RadioMenuItem)]
+        submenu = [*fake.menu.preset_radios.values(), fake.menu.preset_custom]
+        assert [i.get_label() for i in popup] == [i.get_label() for i in submenu]
+        assert [i.get_active() for i in popup] == [i.get_active() for i in submenu]
+        assert applied == []
+        ids = list(fake.menu.preset_radios)
+        pick = next(n for n, item in enumerate(popup[:len(ids)]) if not item.get_active())
+        popup[pick].activate()
+        assert applied == [ids[pick]]
+        popup[-1].activate()                                # Custom
+        assert opened == [True] and applied == [ids[pick]]
+    finally:
+        win._popup.destroy()
+        fake.menu.widget.destroy()
+        win.window.destroy()
+
+
 def test_closing_the_window_lets_the_tray_open_a_new_one():
     tray, win = _menu_window()
     tray._menu_window = win
@@ -353,7 +405,7 @@ def test_setup_ticks_the_extension_only_without_a_tray(monkeypatch, has_tray):
         pytest.skip("no display")
     from tuxtalk import welcome_dialog
     monkeypatch.setattr(desktop_detect, "tray_host_available", lambda bus=None: has_tray)
-    monkeypatch.setattr(welcome_dialog, "_extension_already_active", lambda: False)
+    monkeypatch.setattr(desktop_detect, "tuxtalk_extension_active", lambda: False)
     dialog = welcome_dialog.WelcomeDialog(force_gnome=True)
     try:
         assert dialog.extension_check is not None

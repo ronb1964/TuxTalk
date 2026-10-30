@@ -26,19 +26,27 @@ logger = setup_logger(__name__)
 ESSENTIAL_MODEL_FILES = ("model.bin", "config.json", "tokenizer.json")
 # A Whisper model has one of these (.json for large-v3) and won't load without it.
 VOCABULARY_FILES = ("vocabulary.txt", "vocabulary.json")
+# Only large-v3 has it, and without it faster-whisper loads that model with
+# 80 mel bins where it needs 128, so every dictation fails.
+PREPROCESSOR_FILE = "preprocessor_config.json"
 
 
-def _download_is_usable(failed_files, asked_for) -> bool:
+def _download_is_usable(failed_files, asked_for, absent=()) -> bool:
     """True if a Whisper model can still be loaded despite *failed_files*,
     of the files *asked_for*: no essential file failed, and of the
     vocabulary files asked for, one came. A model has only one, so asked
-    for both by name (no file list), the other one always fails.
+    for both by name (no file list), the other one always fails. The
+    preprocessor file is essential too, unless the Hub said the model has
+    none (it's among *absent*): only large-v3 has one.
 
     Paths may be nested (list_repo_tree is recursive), so match on the file
     name rather than the whole path.
     """
     failed = {os.path.basename(p) for p in failed_files}
-    if failed & set(ESSENTIAL_MODEL_FILES):
+    essential = set(ESSENTIAL_MODEL_FILES)
+    if PREPROCESSOR_FILE not in {os.path.basename(p) for p in absent}:
+        essential.add(PREPROCESSOR_FILE)
+    if failed & essential:
         return False
     vocabulary = {os.path.basename(p) for p in asked_for} & set(VOCABULARY_FILES)
     return not vocabulary or bool(vocabulary - failed)
@@ -160,41 +168,102 @@ def _listed_files(repo, model_name, only_files):
     return files
 
 
-def _disk_space_problem(repo, files):
+def _disk_space_problem(repo, files, force=False, cancel_event=None):
     """Why the files still to fetch won't fit on the cache's disk, or None.
     Checked up front, so a full disk gives a clear message rather than a
-    per-file error halfway through. Files already in the cache need no more
-    room, so a download picked up again isn't refused for them. HF_HUB_CACHE
-    follows HF_HOME, HF_HUB_CACHE and XDG_CACHE_HOME (set inside the
-    Flatpak), so this measures the disk the files land on."""
+    per-file error halfway through. HF_HUB_CACHE follows HF_HOME,
+    HF_HUB_CACHE and XDG_CACHE_HOME (set inside the Flatpak), so this
+    measures the disk the files land on.
+
+    A download picked up again isn't refused for what it has: files already
+    in the cache need no more room, and Hugging Face resumes a file's
+    ".incomplete" part, counted only when the rest wouldn't fit without it
+    (finding each part asks the Hub, file by file). *force* fetches every
+    file afresh, a whole new copy beside the old one, with no part resumed,
+    so then all of them count."""
     from huggingface_hub import try_to_load_from_cache
     from huggingface_hub.constants import HF_HUB_CACHE
     from .download_utils import free_space_bytes
-    needed = sum(size for name, size in files
-                 if not isinstance(try_to_load_from_cache(repo, name), str)) * 1.1
     free = free_space_bytes(HF_HUB_CACHE)
+    if force:
+        missing = list(files)
+    else:
+        missing = [(name, size) for name, size in files
+                   if not isinstance(try_to_load_from_cache(repo, name), str)]
+    needed = sum(size for _, size in missing) * 1.1
+    if not force and free and free < needed:
+        needed -= _partial_bytes(HF_HUB_CACHE, repo, missing, cancel_event) * 1.1
     if not (needed and free and free < needed):
         return None
     return (f"Not enough disk space: model needs ~{needed / 1024 ** 3:.1f} GB free, "
             f"only {free / 1024 ** 3:.1f} GB available")
 
 
-def _fetch_unlisted(repo, model_name, progress_callback, cancel_event):
+def _partial_bytes(cache, repo, missing, cancel_event=None):
+    """What a cut-off download already holds of the *missing* files
+    ((name, size) pairs): each file's own ".incomplete" blob, which Hugging
+    Face goes on from, up to that file's size. A blob is named by the
+    file's current ETag, so a part left from another file, another model in
+    the repo or an older version isn't counted; looked up only when there
+    are parts at all, and no more once *cancel_event* is set."""
+    import stat
+    from huggingface_hub.file_download import repo_folder_name
+    blobs = os.path.join(cache, repo_folder_name(repo_id=repo, repo_type="model"), "blobs")
+    try:
+        if not any(name.endswith(".incomplete") for name in os.listdir(blobs)):
+            return 0
+    except OSError:
+        return 0        # no blobs folder: nothing of this repo downloaded yet
+    held = 0
+    for name, size in missing:
+        if cancel_event is not None and cancel_event.is_set():
+            break
+        etag = _current_etag(repo, name)
+        try:
+            part = os.lstat(os.path.join(blobs, f"{etag}.incomplete")) if etag else None
+        except FileNotFoundError:
+            continue
+        except OSError as e:
+            logger.info(f"Couldn't look at the partial download of {name}: {e}")
+            continue
+        if part is not None and stat.S_ISREG(part.st_mode):
+            held += min(part.st_size, size)
+    return held
+
+
+def _current_etag(repo, name):
+    """The ETag Hugging Face names *name*'s blob after, or None when it
+    can't be had (offline: nothing then counts as resumable). Asked with
+    the timeout huggingface_hub uses for its own ETag lookups
+    (HF_HUB_ETAG_TIMEOUT)."""
+    from huggingface_hub import get_hf_file_metadata, hf_hub_url
+    from huggingface_hub.constants import HF_HUB_ETAG_TIMEOUT
+    try:
+        return get_hf_file_metadata(hf_hub_url(repo, name), timeout=HF_HUB_ETAG_TIMEOUT).etag
+    except Exception as e:
+        logger.info(f"Couldn't look up {name} for a partial download: {e}")
+        return None
+
+
+def _fetch_unlisted(repo, model_name, progress_callback, cancel_event, force=False):
     """Without a file list, fetch the files faster-whisper loads by name,
     one at a time like the listed ones, so Cancel stops it; without byte
     progress, since their sizes aren't known. Never through WhisperModel(),
     which would load the model as well: its caller loads it when it needs it."""
     progress_callback("Downloading model files...", 5)
-    names = (*ESSENTIAL_MODEL_FILES, *VOCABULARY_FILES, "preprocessor_config.json")
+    names = (*ESSENTIAL_MODEL_FILES, *VOCABULARY_FILES, PREPROCESSOR_FILE)
     return _fetch_files(repo, model_name, [(name, 0) for name in names], False,
-                        progress_callback, cancel_event)
+                        progress_callback, cancel_event, force)
 
 
-def _fetch_files(repo, model_name, files, all_needed, progress_callback, cancel_event):
+def _fetch_files(repo, model_name, files, all_needed, progress_callback, cancel_event,
+                 force=False):
     """Fetch *files* from *repo* into the cache, with byte progress. True
     when everything needed is there: every file when *all_needed*, else the
-    ones faster-whisper loads (see _download_is_usable)."""
+    ones faster-whisper loads (see _download_is_usable). *force* fetches
+    files the cache has already, for a model whose cached copy won't load."""
     from huggingface_hub import hf_hub_download
+    from huggingface_hub.errors import RemoteEntryNotFoundError
     import tqdm as tqdm_lib
     total_bytes = sum(size for _, size in files)
     downloaded_bytes = [0]  # across all files
@@ -224,7 +293,7 @@ def _fetch_files(repo, model_name, files, all_needed, progress_callback, cancel_
             downloaded_bytes[0] += n
             report(f"Downloading {self._current_file}...")
 
-    failed_files, first_error = [], None
+    failed_files, absent, first_error = [], [], None
     for filename, file_size in files:
         if cancel_event.is_set():
             return False
@@ -233,7 +302,8 @@ def _fetch_files(repo, model_name, files, all_needed, progress_callback, cancel_
         def fetch(filename=filename, bytes_before=bytes_before):
             # A retried file counts its bytes once.
             downloaded_bytes[0] = bytes_before
-            return hf_hub_download(repo_id=repo, filename=filename, tqdm_class=ProgressTqdm)
+            return hf_hub_download(repo_id=repo, filename=filename, tqdm_class=ProgressTqdm,
+                                   force_download=force)
 
         try:
             _fetch_with_retry(fetch, filename)
@@ -244,6 +314,10 @@ def _fetch_files(repo, model_name, files, all_needed, progress_callback, cancel_
         except InterruptedError:
             return False
         except Exception as e:
+            # Only the Hub's own "not found": LocalEntryNotFoundError, the
+            # network gone and nothing cached, says nothing about the model.
+            if isinstance(e, RemoteEntryNotFoundError):
+                absent.append(filename)     # asked for by name, and this model hasn't it
             logger.warning(f"Error downloading {filename}: {e}")
             # Keep the progress bar moving, but remember the failure:
             # a model missing essential files must not be reported as
@@ -253,7 +327,7 @@ def _fetch_files(repo, model_name, files, all_needed, progress_callback, cancel_
             downloaded_bytes[0] += file_size
 
     if failed_files and (all_needed or not _download_is_usable(
-            failed_files, [name for name, _ in files])):
+            failed_files, [name for name, _ in files], absent)):
         logger.error(f"Model {model_name} download incomplete: "
                      f"{len(failed_files)} file(s) failed: {failed_files[:3]}")
         # At 0 %, so the window shows the reason (download_utils.failure_reason).
@@ -269,7 +343,7 @@ def _fetch_files(repo, model_name, files, all_needed, progress_callback, cancel_
     return True
 
 
-def make_model_download_func(model_name, repo_id=None, only_files=None):
+def make_model_download_func(model_name, repo_id=None, only_files=None, force=False):
     """
     Build a DownloadTask function that fetches model files into the Hugging Face
     cache without loading them, for UnifiedDownloadDialog.
@@ -280,6 +354,8 @@ def make_model_download_func(model_name, repo_id=None, only_files=None):
         repo_id: Download from this Hugging Face repo instead of MODEL_REPOS
             (used for the AI cleanup model, which is not a speech model).
         only_files: With *repo_id*, fetch just these files from the repo.
+        force: Fetch a Whisper model's files again even if they're cached,
+            because the cached copy won't load.
 
     Returns:
         Callable: Function with signature (progress_callback, cancel_event) -> bool
@@ -303,14 +379,15 @@ def make_model_download_func(model_name, repo_id=None, only_files=None):
             progress_callback("Getting file list...", 1)
             files = _listed_files(repo, model_name, only_files)
             if not files:
-                return _fetch_unlisted(repo, model_name, progress_callback, cancel_event)
-            problem = _disk_space_problem(repo, files)
+                return _fetch_unlisted(repo, model_name, progress_callback, cancel_event,
+                                       force)
+            problem = _disk_space_problem(repo, files, force, cancel_event)
             if problem:
                 logger.error(problem)
                 progress_callback(problem, 0)
                 return False
             return _fetch_files(repo, model_name, files, bool(only_files),
-                                progress_callback, cancel_event)
+                                progress_callback, cancel_event, force)
         except Exception as e:
             logger.error(f"Model download failed for {model_name}: {e}")
             progress_callback(_failure_text(e), 0)
@@ -417,15 +494,16 @@ _RETRY_WAITS = (2.0, 5.0)
 def _fetch_with_retry(fetch, filename, sleep=None):
     """fetch() (one file's download), tried again after a short wait if it
     fails: a single slow moment shouldn't sink a 670 MB download. A cancel
-    is never retried; after the last try its error is raised."""
+    is never retried, nor a file the Hub says the model hasn't; after the
+    last try its error is raised."""
     import time
-    from huggingface_hub.utils import EntryNotFoundError
+    from huggingface_hub.errors import RemoteEntryNotFoundError
     sleep = sleep or time.sleep
     for attempt, wait in enumerate((*_RETRY_WAITS, None), start=1):
         try:
             return fetch()
-        except (InterruptedError, EntryNotFoundError):
-            raise                       # a cancel, or a file the model hasn't
+        except (InterruptedError, RemoteEntryNotFoundError):
+            raise
         except Exception as e:
             if wait is None:
                 raise
@@ -488,224 +566,43 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
     if show_confirmation and not _confirm_download(parent, model_name):
         return None
 
-    progress_dialog = Gtk.Dialog(title=f"Downloading Model: {model_title(model_name)}")
-    progress_dialog.set_default_size(500, 150)
-    progress_dialog.set_modal(True)
-    progress_dialog.set_position(Gtk.WindowPosition.CENTER)
-    if parent:
-        progress_dialog.set_transient_for(parent)
-
-    content = progress_dialog.get_content_area()
-    content.set_margin_top(20)
-    content.set_margin_bottom(20)
-    content.set_margin_start(30)
-    content.set_margin_end(30)
-    content.set_spacing(15)
-
-    title_label = Gtk.Label()
-    title_label.set_markup(f'<span size="large"><b>Downloading {model_title(model_name)} Model</b></span>')
-    content.pack_start(title_label, False, False, 0)
-
-    status_label = Gtk.Label()
-    status_label.set_markup(f'<span>Downloading... ({size_str})</span>')
-    status_label.set_line_wrap(True)
-    content.pack_start(status_label, False, False, 0)
-
-    progress_bar = Gtk.ProgressBar()
-    progress_bar.set_show_text(True)
-    progress_bar.set_text("0%")
-    content.pack_start(progress_bar, False, False, 0)
-
-    info_label = Gtk.Label()
-    info_label.set_markup('<span size="small"><i>This may take several minutes on first download...</i></span>')
-    info_label.set_opacity(0.7)
-    content.pack_start(info_label, False, False, 0)
-
-    cancel_button = Gtk.Button(label="Cancel")
-    cancel_button.set_can_default(True)
-    cancel_button.show()
-    progress_dialog.add_action_widget(cancel_button, Gtk.ResponseType.CANCEL)
-
-    progress_dialog.show_all()
-
+    window = _StartupDownloadWindow(model_name, size_str, parent)
     cancel_event = threading.Event()
     download_result = [None]
     download_error = [None]
 
-    # Progress tracking state (shared between threads)
-    progress_state = {
-        'total_bytes': 0,
-        'downloaded_bytes': 0,
-        'last_percent': -1
-    }
-
-    def update_ui_progress(percent, file_info=""):
-        """Update the progress bar on the GTK thread, only when the whole percent changes."""
-        if int(percent) == progress_state['last_percent']:
-            return
-        progress_state['last_percent'] = int(percent)
-
-        def do_update():
-            if not cancel_event.is_set():       # else the dialog is already gone
-                progress_bar.set_fraction(percent / 100.0)
-                progress_bar.set_text(f"{int(percent)}%")
-                if file_info:
-                    status_label.set_text(file_info)    # a file name can hold & or <
-            return False
-        GLib.idle_add(do_update)
-
-    def close_dialog():
-        if cancel_event.is_set():
-            return False       # the dialog is already gone
-        progress_bar.set_fraction(1.0)
-        progress_bar.set_text("100%")
-        # Unless a Cancel in these 200 ms closed the window already.
-        GLib.timeout_add(200, lambda: not cancel_event.is_set()
-                         and progress_dialog.response(Gtk.ResponseType.OK))
-        return False
-
     def do_download():
-        """Download model files with byte-level progress tracking"""
+        """Fetch the files through the download every window shares, then
+        load the model, closing the window on every way out."""
+        last_report = [("", 0)]
+
+        def report(text, percent):
+            last_report[0] = (text, percent)
+            window.show_progress(percent * 0.95, text, cancel_event)    # the rest: loading
+
         try:
-            if cancel_event.is_set():
-                return
-
-            if is_parakeet(model_name):
-                from . import parakeet_ultra
-                if not parakeet_ultra.make_download_func("cpu")(
-                        lambda text, percent: update_ui_progress(percent * 0.95, text),
-                        cancel_event):
-                    if not cancel_event.is_set():
-                        download_error[0] = RuntimeError("the files could not be downloaded")
-                    return
-                update_ui_progress(95, "Loading model...")
-                model = load_model(model_name)
+            if not make_model_download_func(model_name, force=cached)(report, cancel_event):
                 if not cancel_event.is_set():
-                    download_result[0] = model
+                    from .download_utils import failure_reason
+                    download_error[0] = RuntimeError(
+                        failure_reason(*last_report[0]) or "the files could not be downloaded")
                 return
-
-            logger.info(f"Downloading model {model_name} using huggingface_hub")
-
-            from huggingface_hub import hf_hub_download
-            from huggingface_hub.utils import disable_progress_bars
-            import tqdm
-
-            disable_progress_bars()
-
-            repo_id = MODEL_REPOS.get(model_name)
-            if not repo_id:
-                raise ValueError(f"Unknown model: {model_name}")
-
-            try:
-                files_with_sizes = _files_to_download(repo_id)
-                total_bytes = sum(size for _, size in files_with_sizes)
-                progress_state['total_bytes'] = total_bytes
-                logger.info(f"Model {model_name}: {len(files_with_sizes)} files, {total_bytes / 1024 / 1024:.1f} MB total")
-            except Exception as e:
-                logger.warning(f"Could not get file sizes: {e}")
-                files_with_sizes = []
-                total_bytes = 0
-
-            if not files_with_sizes:
-                # Without a file list, let WhisperModel download it (no byte progress).
-                from faster_whisper import WhisperModel
-                update_ui_progress(50, "Downloading model...")
-                model = WhisperModel(
-                    model_name,
-                    device=device,
-                    compute_type=compute_type,
-                    cpu_threads=os.cpu_count() or 4
-                )
-                download_result[0] = model
-                return
-
-            class GtkProgressTqdm(tqdm.tqdm):
-                """Tqdm subclass that drives this dialog's GTK progress bar."""
-                def __init__(self, *args, **kwargs):
-                    import io
-                    self._current_file = kwargs.get('desc', 'file')
-                    # huggingface_hub passes 'name', which tqdm rejects.
-                    kwargs.pop('name', None)
-                    # tqdm disables itself without a TTY; this one feeds a
-                    # progress bar, so keep it on and send its text nowhere.
-                    kwargs['disable'] = False
-                    kwargs['file'] = io.StringIO()
-                    super().__init__(*args, **kwargs)
-
-                def update(self, n=1):
-                    if cancel_event.is_set():
-                        raise InterruptedError("Download cancelled")
-                    super().update(n)
-                    progress_state['downloaded_bytes'] += n
-                    if progress_state['total_bytes'] > 0:
-                        percent = (progress_state['downloaded_bytes'] / progress_state['total_bytes']) * 95
-                        percent = min(95, percent)  # the last 5% is loading the model
-                        update_ui_progress(percent, f"Downloading {self._current_file}...")
-
-            failed = []
-            for filename, file_size in files_with_sizes:
-                if cancel_event.is_set():
-                    raise InterruptedError("Download cancelled")
-
-                bytes_before = progress_state['downloaded_bytes']
-
-                def fetch(filename=filename, bytes_before=bytes_before):
-                    # A retried file counts its bytes once.
-                    progress_state['downloaded_bytes'] = bytes_before
-                    return hf_hub_download(repo_id=repo_id, filename=filename,
-                                           tqdm_class=GtkProgressTqdm, force_download=cached)
-
-                try:
-                    _fetch_with_retry(fetch, filename)
-                    # No progress means the file was already cached; count it anyway.
-                    if progress_state['downloaded_bytes'] == bytes_before:
-                        progress_state['downloaded_bytes'] += file_size
-                        if progress_state['total_bytes'] > 0:
-                            percent = (progress_state['downloaded_bytes'] / progress_state['total_bytes']) * 95
-                            percent = min(95, percent)
-                            update_ui_progress(percent, f"Loaded from cache: {filename}")
-                except InterruptedError:
-                    raise
-                except Exception as e:
-                    # Keep the bar moving; a missing essential file shows up
-                    # when the model fails to load below.
-                    logger.warning(f"Error downloading {filename}: {e}")
-                    failed.append(filename)
-                    progress_state['downloaded_bytes'] = bytes_before + file_size
-
-            if cancel_event.is_set():
-                return
-
-            update_ui_progress(95, "Loading model...")
-            if failed:
-                logger.warning(f"{len(failed)} file(s) failed to download ({', '.join(failed)}); "
-                               f"trying to load model {model_name} anyway")
-            else:
-                logger.info(f"All files downloaded, loading model {model_name}")
-
+            window.show_progress(95, "Loading model...", cancel_event)
             model = load_model(model_name, device=device, compute_type=compute_type)
-
             if not cancel_event.is_set():
                 download_result[0] = model
                 logger.info(f"Model {model_name} loaded successfully")
-
-        except InterruptedError:
-            logger.info("Model download interrupted by user")
         except Exception as e:
             download_error[0] = e
             logger.error(f"Model download failed: {e}")
         finally:
-            # Every way out closes the dialog, including the early return of
-            # the fallback path; otherwise run() waits for a Cancel that then
-            # throws the finished model away.
-            GLib.idle_add(close_dialog)
+            # Otherwise run() waits for a Cancel that then throws the
+            # finished model away.
+            GLib.idle_add(window.close_when_done, cancel_event)
 
-    download_thread = threading.Thread(target=do_download)
-    download_thread.daemon = True
-    download_thread.start()
-
-    response = progress_dialog.run()
-    progress_dialog.destroy()
+    threading.Thread(target=do_download, daemon=True).start()
+    response = window.dialog.run()
+    window.dialog.destroy()
     cancel_event.set()      # the window is gone: nothing may update it any more
 
     # A Cancel after the download finished, in the 200 ms before the window
@@ -714,23 +611,103 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
             and download_result[0] is None):
         logger.info(f"User cancelled model download: {model_name}")
         return None
-
-    download_thread.join()
-
     if download_error[0]:
-        msg = message_dialog(
-            parent=parent,
-            message_type=Gtk.MessageType.ERROR,
-            buttons=Gtk.ButtonsType.OK,
-            text="Model Download Failed"
-        )
-        msg.format_secondary_text(
-            f"Could not download {model_title(model_name)} model.\n\n"
-            f"Error: {str(download_error[0])}\n\n"
-            "Check your internet connection and try again."
-        )
-        msg.run()
-        msg.destroy()
+        _show_download_failed(parent, model_name, download_error[0])
         return None
-
     return download_result[0]
+
+
+def _download_failed_text(model_name, error):
+    """What the start-up download's error window says: the reason, and what
+    to do about it."""
+    advice = ("Free up some disk space and try again." if "disk space" in str(error)
+              else "Check your internet connection and try again.")
+    return f"Could not download {model_title(model_name)} model.\n\nError: {error}\n\n{advice}"
+
+
+def _show_download_failed(parent, model_name, error):
+    """Tell the user the start-up download of *model_name* failed, and why."""
+    msg = message_dialog(
+        parent=parent,
+        message_type=Gtk.MessageType.ERROR,
+        buttons=Gtk.ButtonsType.OK,
+        text="Model Download Failed"
+    )
+    msg.format_secondary_text(_download_failed_text(model_name, error))
+    msg.run()
+    msg.destroy()
+
+
+class _StartupDownloadWindow:
+    """The progress window of download_model_with_progress: the service's
+    own download of a model missing at start, which loads it afterwards."""
+
+    def __init__(self, model_name, size_str, parent):
+        """Build and show the window for *model_name* (*size_str* to fetch)."""
+        self._shown = None      # (percent, text) last sent to GTK
+        self.dialog = Gtk.Dialog(title=f"Downloading Model: {model_title(model_name)}")
+        self.dialog.set_default_size(500, 150)
+        self.dialog.set_modal(True)
+        self.dialog.set_position(Gtk.WindowPosition.CENTER)
+        if parent:
+            self.dialog.set_transient_for(parent)
+        content = self.dialog.get_content_area()
+        content.set_margin_top(20)
+        content.set_margin_bottom(20)
+        content.set_margin_start(30)
+        content.set_margin_end(30)
+        content.set_spacing(15)
+
+        title_label = Gtk.Label()
+        title_label.set_markup(f'<span size="large"><b>Downloading {model_title(model_name)} '
+                               'Model</b></span>')
+        content.pack_start(title_label, False, False, 0)
+        self.status_label = Gtk.Label()
+        self.status_label.set_markup(f'<span>Downloading... ({size_str})</span>')
+        self.status_label.set_line_wrap(True)
+        content.pack_start(self.status_label, False, False, 0)
+        self.progress_bar = Gtk.ProgressBar()
+        self.progress_bar.set_show_text(True)
+        self.progress_bar.set_text("0%")
+        content.pack_start(self.progress_bar, False, False, 0)
+        info_label = Gtk.Label()
+        info_label.set_markup('<span size="small"><i>This may take several minutes on first '
+                              'download...</i></span>')
+        info_label.set_opacity(0.7)
+        content.pack_start(info_label, False, False, 0)
+
+        cancel_button = Gtk.Button(label="Cancel")
+        cancel_button.set_can_default(True)
+        cancel_button.show()
+        self.dialog.add_action_widget(cancel_button, Gtk.ResponseType.CANCEL)
+        self.dialog.show_all()
+
+    def show_progress(self, percent, text, cancel_event):
+        """Show *percent* and *text* from any thread. Only a change is sent
+        to GTK, so per-chunk reports don't flood its loop; a new text at the
+        same percent is a change ("Loading model..." comes at the 95 % the
+        download ended on)."""
+        shown = (int(percent), text)
+        if shown == self._shown:
+            return
+        self._shown = shown
+
+        def update():
+            if not cancel_event.is_set():       # else the window is already gone
+                self.progress_bar.set_fraction(percent / 100.0)
+                self.progress_bar.set_text(f"{int(percent)}%")
+                if text:
+                    self.status_label.set_text(text)    # a file name can hold & or <
+            return False
+        GLib.idle_add(update)
+
+    def close_when_done(self, cancel_event):
+        """Fill the bar and close the window shortly after, on GTK's thread."""
+        if cancel_event.is_set():
+            return False       # the window is already gone
+        self.progress_bar.set_fraction(1.0)
+        self.progress_bar.set_text("100%")
+        # Unless a Cancel in these 200 ms closed the window already.
+        GLib.timeout_add(200, lambda: not cancel_event.is_set()
+                         and self.dialog.response(Gtk.ResponseType.OK))
+        return False

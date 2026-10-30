@@ -28,8 +28,8 @@ def cuda_installed(monkeypatch):
 
 def test_missing_cuda_files_use_the_processor_instead_of_crashing(monkeypatch):
     """Device CUDA with the CUDA files gone: the model still loads "on cuda",
-    then the first dictation crashes the service inside the speech library
-    (libcudnn_ops.so.9 not found), past every Python fallback. So use the
+    then every dictation fails inside the speech library (libcublas.so.12 not
+    found), after the load-time fallback. So use the
     processor for this run and say why; keep the setting."""
     from tuxtalk import cuda_helper
     monkeypatch.setattr(cuda_helper, "has_cuda_libraries", lambda: False)
@@ -108,6 +108,18 @@ def test_the_indicator_and_the_d_bus_stand_in_are_made_on_gtk_s_thread(service_m
     started = service_main()
     assert started.index("starts the GTK loop") < started.index("offers its D-Bus service")
     assert [fn.__name__ for fn in started.on_gtk] == ["_make_gtk_parts"]
+
+
+def test_a_gtk_loop_that_wont_run_leaves_the_service_dictating_without_it(
+        service_main, monkeypatch):
+    """GTK's loop dying at start ended the service at start: it now goes on
+    without the indicator and the D-Bus stand-in, as with no GTK at all."""
+    def dies():
+        raise RuntimeError("GTK's main loop ended before it started")
+    monkeypatch.setattr(gtk_loop, "start", dies)
+    started = service_main(cached=False)
+    assert started.on_gtk == [] and "offers its D-Bus service" not in started
+    assert "loads the speech model" in started and "listens for hotkeys" in started
 
 
 @pytest.mark.parametrize("wanted,downloaded,cuda,expected", [

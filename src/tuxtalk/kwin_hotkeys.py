@@ -35,9 +35,8 @@ never cost dictation.
 import os
 import time
 
-from . import desktop_detect
-from .kwin_focus import (DBUS_TIMEOUT_S, KWIN_SCRIPTING_INTERFACE, KWIN_SCRIPTING_PATH,
-                         KWIN_SERVICE, load_and_start)
+from . import desktop_detect, kwin_focus
+from .kwin_focus import DBUS_TIMEOUT_S, load_and_start
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -170,7 +169,8 @@ def should_claim() -> bool:
 
 
 def session_bus():
-    """A .call(method, *args) shim over KWin scripting and kglobalaccel.
+    """A .call(method, *args) shim over KWin scripting (kwin_focus's) and
+    kglobalaccel.
 
     Imported lazily so this module stays importable (and testable) without
     dbus-python.
@@ -178,18 +178,15 @@ def session_bus():
     import dbus
 
     bus = dbus.SessionBus()
+    scripting = kwin_focus.session_bus()
 
     class _Bus:
         def call(self, method, *args):
+            if method in ("loadScript", "unloadScript", "start"):
+                return scripting.call(method, *args)
             # introspect=False: dbus-python's look at the object would wait
             # its own 25 s on a frozen KWin, before the 3 s limit applies.
             t = {"timeout": DBUS_TIMEOUT_S}
-            if method in ("loadScript", "unloadScript", "start"):
-                obj = bus.get_object(KWIN_SERVICE, KWIN_SCRIPTING_PATH, introspect=False)
-                # loadScript is overloaded; see kwin_focus.session_bus.
-                sig = {"loadScript": "ss", "unloadScript": "s", "start": ""}[method]
-                return getattr(obj, method)(*args, dbus_interface=KWIN_SCRIPTING_INTERFACE,
-                                            signature=sig, **t)
             if method == "unregister":
                 obj = bus.get_object(KGLOBALACCEL_SERVICE, KGLOBALACCEL_PATH, introspect=False)
                 return obj.unregister(*args, dbus_interface=KGLOBALACCEL_INTERFACE, **t)

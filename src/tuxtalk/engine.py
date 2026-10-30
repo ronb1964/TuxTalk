@@ -472,9 +472,9 @@ def build(settings: Settings):
 def _without_missing_cuda(settings):
     """*settings*, on the processor for this run when they ask for CUDA but
     its files are missing. The model would load "on cuda" without them, then
-    the first dictation crashes inside the speech library (libcudnn missing),
-    past every fallback. The setting stays: downloading CUDA again in
-    Preferences fixes it."""
+    every dictation would fail inside the speech library (libcublas.so.12 not
+    found), after the load-time fallback. The setting stays: downloading CUDA
+    again in Preferences fixes it."""
     from . import cuda_helper
     from .parakeet_engine import is_parakeet
     if (settings.device.lower() != "cuda" or is_parakeet(settings.model)

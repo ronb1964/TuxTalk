@@ -116,6 +116,20 @@ def test_engine_download_fetches_again_when_parakeet_is_missing(tmp_path, monkey
     assert fetched == [wv.ENGINE_URL]
 
 
+def test_a_failed_engine_download_says_why(tmp_path, monkeypatch):
+    """Its window said only "Download failed"."""
+    from tuxtalk import download_utils
+    monkeypatch.setattr(wv, "_engine_dir", lambda: str(tmp_path / "1.9.5" / wv.ENGINE_NAME))
+
+    def offline(url, dest, **kwargs):
+        raise download_utils.DownloadError("Name or service not known")
+    monkeypatch.setattr(download_utils, "fetch_file", offline)
+    reports = []
+    assert wv.make_engine_download_func("small")(lambda *r: reports.append(r), None) is False
+    assert download_utils.failure_reason(*reports[-1]) == (
+        "Download failed: Name or service not known")
+
+
 def test_a_download_that_fails_to_unpack_leaves_nothing_behind(tmp_path, monkeypatch):
     """Not the 22 MB archive, nor a half-unpacked folder."""
     engine = tmp_path / "1.9.5" / wv.ENGINE_NAME
@@ -534,13 +548,16 @@ def test_speed_check_remembers_which_won(monkeypatch, times, slower):
 # --- the server process ------------------------------------------------------
 
 # A stand-in whisper-server: /health answers once it is up, /inference
-# answers with fixed text, or with an error when started with --fail-inference
-# in its environment (so the warm-up fails).
+# answers with fixed text, or with an error when started with FAKE_FAIL_INFERENCE
+# in its environment (so the warm-up fails); FAKE_FAIL_START makes it print
+# that and end at once.
 FAKE_SERVER = '''
 import json, os, sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 port = int(sys.argv[sys.argv.index("--port") + 1])
 fail = os.environ.get("FAKE_FAIL_INFERENCE") == "1"
+if os.environ.get("FAKE_FAIL_START"):
+    sys.exit(os.environ["FAKE_FAIL_START"])
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -607,6 +624,13 @@ def test_the_graphics_engine_starts_through_the_engine_launcher(fake_server, mon
         assert "preexec_fn" not in kwargs
     finally:
         model.close()
+
+
+def test_a_server_that_ends_at_start_says_what_it_printed(fake_server, monkeypatch):
+    """Its messages went nowhere: the log said only that it stopped."""
+    monkeypatch.setenv("FAKE_FAIL_START", "no Vulkan device found")
+    with pytest.raises(RuntimeError, match="exit code 1: no Vulkan device found"):
+        wv.VulkanWhisperModel("small", 0, threads=1)
 
 
 def test_a_failed_warm_up_stops_the_server(fake_server, monkeypatch):

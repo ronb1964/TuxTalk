@@ -9,12 +9,33 @@ What faster-whisper actually needs is already spelled out in this module:
 model.bin, config.json, tokenizer.json.
 """
 
+import types
+
 import pytest
 
 from tuxtalk.model_helper import ESSENTIAL_MODEL_FILES, _download_is_usable
 
 # What a listed repo holds: the essentials and its one vocabulary file.
 _LISTED = (*ESSENTIAL_MODEL_FILES, "vocabulary.txt", "README.md", ".gitattributes")
+
+
+def test_large_v3_without_its_preprocessor_file_is_not_downloaded():
+    """It loaded with 80 mel bins where it needs 128, and every dictation failed."""
+    listed = (*_LISTED, "preprocessor_config.json")
+    assert _download_is_usable(["preprocessor_config.json"], listed) is False
+
+
+def test_a_model_without_a_preprocessor_file_is_still_downloaded():
+    """Asked for by name (no file list), the smaller models haven't got one."""
+    assert _download_is_usable(["preprocessor_config.json"], _LISTED,
+                               absent=["preprocessor_config.json"]) is True
+
+
+def test_only_the_preprocessor_file_may_be_missing_from_the_model():
+    """Every file the Hub says a model hasn't got dropped out of the
+    required list, model.bin too."""
+    for name in ESSENTIAL_MODEL_FILES:
+        assert _download_is_usable([name], _LISTED, absent=[name]) is False
 
 
 def test_a_missing_readme_does_not_fail_the_download():
@@ -150,9 +171,11 @@ MB = 1024 * 1024
 
 
 @pytest.fixture
-def hub(monkeypatch):
-    """A fake Hugging Face for Whisper Small: (files fetched, files cached)."""
+def hub(monkeypatch, tmp_path):
+    """A fake Hugging Face for Whisper Small, its cache in *tmp_path*:
+    (files fetched, files cached)."""
     import huggingface_hub
+    import huggingface_hub.constants
     from tuxtalk import download_utils
     from tuxtalk import model_helper as M
     fetched, cached = [], set()
@@ -163,15 +186,19 @@ def hub(monkeypatch):
                         lambda repo, name: f"/cache/{name}" if name in cached else None)
     monkeypatch.setattr(huggingface_hub, "hf_hub_download",
                         lambda repo_id, filename, **k: fetched.append(filename))
+    monkeypatch.setattr(huggingface_hub.constants, "HF_HUB_CACHE", str(tmp_path))
+    # Each file's current ETag, which its blob is named after.
+    monkeypatch.setattr(huggingface_hub, "get_hf_file_metadata", lambda url, **k: (
+        types.SimpleNamespace(etag="etag-" + url.rsplit("/", 1)[1])))
     monkeypatch.setattr(download_utils, "free_space_bytes", lambda path: 100 * MB)
     monkeypatch.setattr(M, "_RETRY_WAITS", (0.0, 0.0))
     return fetched, cached
 
 
-def _download(reports):
+def _download(reports, force=False):
     import threading
     from tuxtalk import model_helper as M
-    return M.make_model_download_func("small")(lambda text, percent: reports.append(
+    return M.make_model_download_func("small", force=force)(lambda text, percent: reports.append(
         (text, percent)), threading.Event())
 
 
@@ -182,6 +209,88 @@ def test_files_already_downloaded_need_no_more_disk_space(hub):
     cached.add("model.bin")                    # 400 MB here already, 100 MB free
     assert _download([]) is True
     assert fetched == ["model.bin", "config.json", "tokenizer.json", "vocabulary.txt"]
+
+
+def _partial(tmp_path, blob, size, link=False):
+    """A cut-off download's part in the fake cache: sparse, so it takes no room."""
+    import os
+    blobs = tmp_path / "models--Systran--faster-whisper-small" / "blobs"
+    blobs.mkdir(parents=True, exist_ok=True)
+    target = blobs / (blob + (".data" if link else ".incomplete"))
+    with open(target, "wb") as part:
+        os.truncate(part.fileno(), size)
+    if link:
+        (blobs / f"{blob}.incomplete").symlink_to(target)
+
+
+def test_a_download_cut_off_partway_goes_on_when_the_rest_fits(hub, tmp_path):
+    """350 of model.bin's 400 MB were in Hugging Face's ".incomplete" part,
+    which it resumes, but the whole 400 MB was asked for and refused with
+    100 MB free."""
+    fetched = hub[0]
+    _partial(tmp_path, "etag-model.bin", 350 * MB)
+    assert _download([]) is True
+    assert "model.bin" in fetched
+
+
+@pytest.mark.parametrize("blob, link", [
+    ("etag-of-an-older-model.bin", False),    # another version, or another model's file
+    ("etag-config.json", False),              # another file's part: config.json is 2 bytes
+    ("etag-model.bin", True),                 # a link, not a part Hugging Face wrote
+])
+def test_a_part_that_isnt_this_files_own_doesnt_count(hub, tmp_path, blob, link):
+    """Any .incomplete in the repo's folder was subtracted, so a stale 350 MB
+    part let a 400 MB download start with 100 MB free and fill the disk."""
+    from tuxtalk.download_utils import failure_reason
+    _partial(tmp_path, blob, 350 * MB, link)
+    reports = []
+    assert _download(reports) is False
+    assert failure_reason(*reports[-1]).startswith("Not enough disk space")
+
+
+def test_with_room_for_the_whole_download_the_hub_isnt_asked_about_parts(hub, tmp_path,
+                                                                        monkeypatch):
+    """Any leftover part held a start-up for a lookup per file, plenty of room or not."""
+    import huggingface_hub
+    from tuxtalk import download_utils
+    _partial(tmp_path, "etag-model.bin", 350 * MB)
+    monkeypatch.setattr(download_utils, "free_space_bytes", lambda path: 10 * 1024 * MB)
+    monkeypatch.setattr(huggingface_hub, "get_hf_file_metadata",
+                        lambda url, **k: pytest.fail("asked the Hub"))
+    assert _download([]) is True
+
+
+def test_the_part_lookups_stop_at_a_cancel_and_use_the_hubs_timeout(tmp_path, monkeypatch):
+    import threading
+    import huggingface_hub
+    import huggingface_hub.constants
+    from tuxtalk import model_helper as M
+    cancel, asked = threading.Event(), []
+
+    def metadata(url, timeout):
+        asked.append(timeout)
+        cancel.set()                    # Cancel pressed during the first lookup
+        return types.SimpleNamespace(etag="etag-" + url.rsplit("/", 1)[1])
+    monkeypatch.setattr(huggingface_hub, "get_hf_file_metadata", metadata)
+    monkeypatch.setattr(huggingface_hub.constants, "HF_HUB_ETAG_TIMEOUT", 3)
+    _partial(tmp_path, "etag-model.bin", 300 * MB)
+    _partial(tmp_path, "etag-tokenizer.json", 1 * MB)
+    missing = [("model.bin", 400 * MB), ("tokenizer.json", 2 * MB)]
+    assert M._partial_bytes(str(tmp_path), "Systran/faster-whisper-small", missing,
+                            cancel) == 300 * MB
+    assert asked == [3]
+
+
+def test_fetching_a_broken_model_again_needs_room_for_a_whole_new_copy(hub):
+    """A damaged copy is fetched afresh beside the old one. Counted as
+    cached, it passed the check on a nearly full disk and then filled it."""
+    from tuxtalk.download_utils import failure_reason
+    fetched, cached = hub
+    cached.update({"model.bin", "config.json", "tokenizer.json", "vocabulary.txt"})
+    reports = []
+    assert _download(reports, force=True) is False
+    assert failure_reason(*reports[-1]).startswith("Not enough disk space")
+    assert fetched == []
 
 
 def test_too_little_room_for_the_files_still_to_come_is_said(hub):
@@ -211,7 +320,7 @@ def test_an_unexpected_error_says_why_in_its_window(hub, monkeypatch):
     from tuxtalk import model_helper as M
     from tuxtalk.download_utils import failure_reason
 
-    def broken(repo, files):
+    def broken(repo, files, force=False, cancel_event=None):
         raise RuntimeError("the cache folder went away")
     monkeypatch.setattr(M, "_disk_space_problem", broken)
     reports = []

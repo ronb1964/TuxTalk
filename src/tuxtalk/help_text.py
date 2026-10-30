@@ -94,14 +94,8 @@ def _no_hotkey_tips(is_flatpak, keys_where):
 def tabs():
     """[(title, Pango markup)] for each of Help's sections, in order."""
     values = _values()
-    pages = []
-    for title, text, formatted in _TABS:
-        if callable(text):
-            text = text()
-        elif formatted:
-            text = text.format(**values)
-        pages.append((title, text))
-    return pages
+    return [(title, text() if callable(text) else text.format(**values))
+            for title, text in _TABS]
 
 
 def _values():
@@ -662,7 +656,6 @@ Saying only <b>press enter</b> or <b>press tab</b> there still works, to log in 
   • <b>Questions, ideas, or just how it's working for you:</b> <a href="{FEEDBACK_URL}">TuxTalk Discussions</a>
   • <b>Log file:</b> {log_path}'''
 
-# Plain text, never formatted: the brace commands below contain { and }.
 _COMMANDS_INTRO = '''<span size="large"><b>Voice Commands Reference</b></span>
 
 There are two kinds:
@@ -674,20 +667,7 @@ There are two kinds:
 The commands are English words, whatever language you dictate in. A shorter list
 is in the TuxTalk menu → Voice Commands....'''
 
-_COMMANDS_LITERAL = '''<b>Literal Words:</b>
-To output the word instead of executing the command, say <b>literal</b> or
-<b>the word</b> before it:
-
-• <b>literal period</b> or <b>the word period</b> → "period" (not .)
-• <b>literal comma</b> or <b>the word comma</b> → "comma" (not ,)
-• <b>literal press tab</b> → "press tab" (not a tab character)
-• <b>literal new line</b> → "new line", <b>the word newline</b> → "newline" (not a line break)
-• <b>literal question mark</b> → "question mark" (not ?)
-• <b>literal exclamation point</b> → "exclamation point" (not !)
-
-Works with: period, comma, colon, semicolon, question mark, exclamation point, exclamation mark, apostrophe, quote, hyphen, dash, ellipsis, dot dot dot, press tab, return, new line, newline, line break, new paragraph and paragraph break.
-
-<b>Usage Examples:</b>
+_COMMANDS_EXAMPLES = '''<b>Usage Examples:</b>
 Say: <i>Hello world comma how are you question mark</i>
 Result: Hello world, how are you?
 
@@ -698,8 +678,8 @@ Second sentence!'''
 
 def _commands():
     """The Commands tab: the shared table (commands_reference) between the
-    explanation of the two kinds and the literal words with examples."""
-    return "\n\n".join((_COMMANDS_INTRO, commands_reference.help_markup(), _COMMANDS_LITERAL))
+    explanation of the two kinds and examples."""
+    return "\n\n".join((_COMMANDS_INTRO, commands_reference.help_markup(), _COMMANDS_EXAMPLES))
 
 
 TIPS = '''<span size="large"><b>Tips</b></span>
@@ -732,13 +712,13 @@ TIPS = '''<span size="large"><b>Tips</b></span>
   • {paste_line}<b>Recent Dictations</b> in the TuxTalk menu keeps your last 20.'''
 
 _TABS = [
-    ("Start Here", START_HERE, True),
-    ("Chatting", CHATTING, True),
-    ("Writing", WRITING, True),
-    ("Terminals", TERMINALS, True),
-    ("Hands-free", HANDS_FREE, True),
-    ("Mistakes", MISTAKES, True),
-    ("Tips", TIPS, True),
-    (PROBLEMS_TITLE, PROBLEMS, True),
-    ("Commands", _commands, False),
+    ("Start Here", START_HERE),
+    ("Chatting", CHATTING),
+    ("Writing", WRITING),
+    ("Terminals", TERMINALS),
+    ("Hands-free", HANDS_FREE),
+    ("Mistakes", MISTAKES),
+    ("Tips", TIPS),
+    (PROBLEMS_TITLE, PROBLEMS),
+    ("Commands", _commands),
 ]

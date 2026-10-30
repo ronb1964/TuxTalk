@@ -1,13 +1,13 @@
 """Install paths, launcher names and update URLs after the rename (0.15.0)."""
 import os
 
-from tuxtalk import autostart, config, desktop_identity, update_checker as uc
+from tuxtalk import autostart, config, desktop_identity, desktop_launcher, update_checker as uc
 
 
 def test_appimage_and_launchers_use_the_new_name(monkeypatch):
     assert uc.APPIMAGE_NAME == "TuxTalk.AppImage"
     assert autostart.INSTALLED_APPIMAGE.endswith("/AppImages/TuxTalk.AppImage")
-    assert uc.DESKTOP_FILE_PATH.endswith("/applications/tuxtalk.desktop")
+    assert desktop_launcher.DESKTOP_FILE_PATH.endswith("/applications/tuxtalk.desktop")
     monkeypatch.setattr(config, "DEV_MODE", False)
     assert autostart._autostart_desktop_path().endswith("/autostart/tuxtalk.desktop")
     monkeypatch.setattr(config, "DEV_MODE", True)

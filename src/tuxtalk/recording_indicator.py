@@ -346,38 +346,36 @@ class RecordingIndicator(Gtk.Window):
         """Adopt new appearance settings without rebuilding the indicator.
 
         show_at_position() reads position, scale and the offsets at show time,
-        so updating them here is enough — the change takes effect the next time
-        the indicator is shown. A visible indicator is never moved: the orb
+        so updating them is enough: the change takes effect the next time the
+        indicator is shown. A visible indicator is never moved: the orb
         should not jump mid-dictation. Keyword arguments left as None keep
         their current value.
 
         Called from the service's config watcher on the input thread, so
-        Preferences can change these without a service restart. Safe from any
-        thread: the window itself is only resized on the GTK thread.
+        Preferences can change these without a service restart. The change
+        is made on GTK's thread, all of it at once: a frame drawn there
+        between a new scale and the old orb size or window would mix them.
         """
+        GLib.idle_add(lambda: self._apply_settings(
+            position, size, offset_x, offset_y, style, color_mode, custom_color,
+            sensitivity, follow_window))
+
+    def _apply_settings(self, position, size, offset_x, offset_y, style, color_mode,
+                        custom_color, sensitivity, follow_window):
+        """apply_settings' change, on GTK's thread."""
         self.position = str(position).lower()
         self.offset_x = offset_x
         self.offset_y = offset_y
         if follow_window is not None:
             self.follow_window = follow_window
-
         new_scale = _scale_for_size(size)
         if new_scale != self.scale:
             self.scale = new_scale
+            self.base_size = int(15 * new_scale)     # the orb, with its window
             # The window must match the size the positioning maths assumes.
-            width = int(BASE_WIDTH * new_scale)
-            height = int(BASE_HEIGHT * new_scale)
-
-            def _do_resize():
-                # GTK is not thread-safe: two threads touching it at once
-                # can crash the service.
-                self.base_size = int(15 * new_scale)     # the orb, with its window
-                self.set_default_size(width, height)
-                self.resize(width, height)
-                return False
-
-            GLib.idle_add(_do_resize)
-
+            width, height = int(BASE_WIDTH * new_scale), int(BASE_HEIGHT * new_scale)
+            self.set_default_size(width, height)
+            self.resize(width, height)
         if style is not None:
             self.style = style
         if color_mode is not None:
@@ -386,6 +384,7 @@ class RecordingIndicator(Gtk.Window):
             self.custom_color = custom_color
         if sensitivity is not None:
             self.sensitivity = sensitivity
+        return False
 
     @property
     def _orb_level(self):

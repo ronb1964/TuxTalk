@@ -627,6 +627,8 @@ def main():
 
     from .uinput_helper import retire_ydotoold
     retire_ydotoold()       # what TuxTalk typed through until 0.18
+    from .cuda_helper import remove_unused_cudnn
+    remove_unused_cudnn()   # downloaded with CUDA until 0.19
 
     tray = DictationTray()
     tray.quit_on_sigterm()
@@ -696,7 +698,7 @@ def _adopt_old_install():
     except Exception as e:      # never stop the tray from starting
         logger.warning(f"Rename to TuxTalk: could not move the launchers: {e}")
     # After the rename, which treats an existing tuxtalk.desktop as done.
-    from .update_checker import add_launcher_actions, create_hidden_desktop_entry
+    from .desktop_launcher import add_launcher_actions, create_hidden_desktop_entry
     create_hidden_desktop_entry()   # TuxTalk's icon on first-run windows
     add_launcher_actions()          # right-click shortcuts for older launchers
 

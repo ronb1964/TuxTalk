@@ -28,7 +28,7 @@ def _project_root() -> str:
 
 
 # Where setup installs the AppImage; the Applications-menu launcher points here
-# too (update_checker.create_desktop_launcher).
+# too (desktop_launcher.create_desktop_launcher).
 INSTALLED_APPIMAGE = os.path.expanduser("~/AppImages/TuxTalk.AppImage")
 
 # How long the Flatpak waits for the Background portal's answer. Long enough
@@ -134,7 +134,7 @@ def get_icon_path() -> str:
         if os.path.isfile(path) and not _in_running_appimage(os.path.abspath(path)):
             return os.path.abspath(path)
     # The user's icon folder instead: first run puts it there.
-    from .update_checker import installed_app_icon
+    from .desktop_launcher import installed_app_icon
     return installed_app_icon() or 'audio-input-microphone'
 
 
