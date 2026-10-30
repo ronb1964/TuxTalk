@@ -355,9 +355,14 @@ def test_pressing_the_hold_key_holds_the_send_and_records(countdown, monkeypatch
 
 def test_a_tap_too_short_to_dictate_says_not_sent(countdown, monkeypatch):
     _, labels = countdown
-    reasons = []
+    reasons, cancel = [], recording.cancel_recording
     monkeypatch.setattr(recording, "cancel_recording",
-                        lambda beeps, notify, reason="": reasons.append(reason))
+                        lambda beeps, notify, reason="": reasons.append(reason)
+                        or cancel(beeps, notify, reason))
+    for name in ("stop_stream_safely", "resume_media_players"):
+        monkeypatch.setattr(recording, name, lambda: None)
+    monkeypatch.setattr(recording, "indicator", None)
+    monkeypatch.setattr("tuxtalk.tray_link.notify_recording_state", lambda *a, **k: None)
     monkeypatch.setattr(rs.state, "held_send", True)
     monkeypatch.setattr(rs.state, "silence", None)
     monkeypatch.setattr(rs.state, "press_t0", time.time())

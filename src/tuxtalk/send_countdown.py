@@ -88,8 +88,15 @@ _owed = None
 # its number (serial); a send for one with an older number waits for the newer.
 _begun = 0
 # The recording a send was held for when it was set up (send_automatically),
-# until "Not sent" is said for it (say_held_for): its number, else 0.
+# until "Not sent" is said for it (say_held_for) or the next recording
+# begins: its number, else 0.
 _held_for = 0
+# The dictation key whose press, TuxTalk's, is still down, else None. The
+# space a held send owes waits for it to come up: typed while it's down,
+# GNOME without the extension sees the key too and the space is lost. A
+# press turned away as another app's shortcut (Alt+F8) never counts, so its
+# release, Alt still down, can't turn the space into Alt+Space.
+_key_down = None
 # Whether this session's notifications have said why an automatic send
 # can't go where the focus can't be told: on such a desktop it's every
 # dictation, so after once only the floating notice says so.
@@ -361,11 +368,12 @@ def recording_begins() -> tuple[int, bool]:
     lock, so a send set up from now on for an earlier recording is held
     for this one instead (send_automatically); one set up before is held
     here."""
-    global _begun
+    global _begun, _held_for
     # The count and the hold in one go: the Enter's claim (_claim) checks
     # under the same lock that its send is still pending.
     with _send_lock:
         _begun += 1
+        _held_for = 0
         number = _begun
         pending = _take_pending()
     return number, _stop_held(pending, announce=False)
@@ -467,6 +475,35 @@ def say_held_for(serial: int) -> bool:
         _held_for = 0
     say_held()
     return True
+
+
+def held_for(serial: int) -> bool:
+    """Whether a send set up while recording *serial* ran was held for it
+    and its "Not sent" isn't said yet (say_held_for)."""
+    with _send_lock:
+        return serial == _held_for
+
+
+def key_pressed(code: int) -> None:
+    """A press of dictation key *code* that is TuxTalk's: until it comes up,
+    an owed space waits (key_is_down)."""
+    global _key_down
+    _key_down = code
+
+
+def key_released(code: int) -> bool:
+    """Dictation key *code* came up: True when its press was the one an
+    owed space waited for (key_pressed), which it no longer does."""
+    global _key_down
+    if code != _key_down:
+        return False
+    _key_down = None
+    return True
+
+
+def key_is_down() -> bool:
+    """Whether an owed space waits for a dictation key to come up."""
+    return _key_down is not None
 
 
 def say_held_back(word: str, message: Message) -> None:

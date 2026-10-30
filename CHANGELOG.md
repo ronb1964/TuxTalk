@@ -368,9 +368,10 @@ before 0.15.0, so older entries use that name.
   to add more and the microphone wouldn't open, the message stayed unsent
   and the space after it was left for your next dictation, so a message you
   then sent yourself could start the next one with a space. Now TuxTalk says
-  "Not sent" and puts the space in once you let go of the key. It also said
-  nothing at all when the last dictation finished typing while the
-  microphone was still failing to open.
+  "Not sent" and puts the space in once you let go of the key. It says so
+  too when the last dictation finished typing during your next recording
+  and that one then added nothing (you pressed Esc, only tapped the key, or
+  said nothing hands-free). Before, nothing told you the message wasn't sent.
 
 ## [0.18.2] - 2026-10-23
 

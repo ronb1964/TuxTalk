@@ -330,12 +330,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
             if notify_on:
                 notify_module.notify("Microphone unavailable",
                                      "Check that no other app is using it.")
-            # Nothing to dictate onto a send it held, when it began or set
-            # up for it meanwhile: it stays unsent, and its space goes in
-            # once the key is up (hotkeys).
-            if (not send_countdown.say_held_for(rs.state.recording_serial)
-                    and rs.state.held_send):
-                send_countdown.say_held()
+            _leave_held_send_unsent()
             return False
 
     type_at_pause.arm_chunker(rs.state.recording_samplerate, edit_mode)
@@ -361,7 +356,9 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
 
 
 def cancel_recording(beeps_on: bool, notify_on: bool, reason="Cancelled"):
-    """End a recording without transcribing it, telling the user *reason*."""
+    """End a recording without transcribing it, telling the user *reason*.
+    A send it held stays unsent, and that's said (_leave_held_send_unsent):
+    Esc, a tap, hands-free hearing nothing."""
     rs.state.is_recording = False
     rs.state.was_cancelled = True
     rs.state.message.cancelled = True
@@ -377,6 +374,23 @@ def cancel_recording(beeps_on: bool, notify_on: bool, reason="Cancelled"):
     if indicator:
         indicator.hide_indicator()
     tray_link.notify_recording_state(False)
+    _leave_held_send_unsent()
+
+
+def _leave_held_send_unsent() -> None:
+    """This recording ended with nothing to add to a send it held, when it
+    began (rs.state.held_send) or one set up for it since: say "Not sent",
+    once, and give back the space the send left off. That goes in now, or
+    when the dictation key that's still down comes up (hotkeys): after Esc
+    during a hold, or a microphone that didn't open. A start without a key
+    (the tray, tuxtalk --start) has none to wait for."""
+    said = send_countdown.say_held_for(rs.state.recording_serial)
+    if not said and rs.state.held_send:
+        send_countdown.say_held()
+        said = True
+    if said and not send_countdown.key_is_down():
+        # After what's still being typed, not into the middle of it.
+        dictation_worker.submit(send_countdown.type_owed_space)
 
 
 def toggle_pressed_while_recording(beeps_on: bool) -> bool:
@@ -460,9 +474,9 @@ def _dropped_as_a_tap(beeps_on: bool, notify_on: bool) -> bool:
         dictation_worker.submit(send_countdown.type_owed_space)
     if held_ms >= MIN_HOLD_MS and not (rs.state.held_send and rs.state.released_while_starting):
         return False
-    if rs.state.held_send:
+    # A tap that held a send is told as "Not sent" alone (cancel_recording).
+    if rs.state.held_send or send_countdown.held_for(rs.state.recording_serial):
         cancel_recording(beeps_on, False, send_countdown.HELD_NOTICE)
-        send_countdown.say_held()
     else:
         cancel_recording(beeps_on, notify_on, f"Cancelled (held {held_ms} ms)")
     return True

@@ -281,6 +281,7 @@ def _start_hold_recording(hold_key, held_modifiers, devices, cfg, input_device_i
     keyboard_grab.grab_keyboards_hiding); start_recording lets go of it if the mic fails
     to open. Shift unhidden, the Ctrl+C that copies the selection would
     arrive as Ctrl+Shift+C."""
+    send_countdown.key_pressed(hold_key)
     held = send_countdown.hold(announce=False)
     shift = _held_shift(held_modifiers) if live.voice_editing else set()
     keyboard_grab.grab_keyboards_hiding(devices, {hold_key, *shift})
@@ -312,6 +313,7 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
                          held_modifiers, devices, cfg):
         return
     if toggle_key and _toggle_tap_holds_send(event, toggle_key, held_modifiers):
+        send_countdown.key_pressed(toggle_key)
         return   # the tap only held the send: no recording
     if event.code in MODIFIER_CODES and event.code in (hold_key, toggle_key):
         _hide_modifier_hotkey(event, toggle_key, devices, held_modifiers)
@@ -403,6 +405,8 @@ def _on_voice_commands_combo(event, combo, held_modifiers, devices) -> bool:
 
 def _on_hold_key(event, hold_key, held_modifiers, devices, cfg, input_device_idx) -> None:
     """Hold-to-talk: the hold key down records, let go stops and types."""
+    if event.value == 0:
+        _dictation_key_up(hold_key, held_modifiers)
     if (event.value == 1 and not rs.state.is_recording
             and not _someone_elses_shortcut(held_modifiers - {hold_key})):
         _start_hold_recording(hold_key, held_modifiers, devices, cfg, input_device_idx)
@@ -411,9 +415,18 @@ def _on_hold_key(event, hold_key, held_modifiers, devices, cfg, input_device_idx
         # reach the app again
         keyboard_grab.release_all()
         _stop_recording(cfg)
-    elif event.value == 0 and send_countdown.owes_space():
-        # A send this press held, its recording over before the key came
-        # up (the microphone didn't open): the space can go in now.
+
+
+def _dictation_key_up(key, held_modifiers) -> None:
+    """Dictation key *key* came up. When its press was TuxTalk's
+    (send_countdown.key_pressed) and its recording is over already (a tap
+    that only held a send, Esc, a microphone that didn't open), the space a
+    held send left off goes in now. Never while another modifier is still
+    down: Alt or Ctrl with it makes a shortcut (Alt+Space opens KRunner).
+    A recording still running gives it back when it ends."""
+    if (send_countdown.key_released(key) and send_countdown.owes_space()
+            and not rs.state.is_recording and not held_modifiers - {key}):
+        # After what's still being typed.
         dictation_worker.submit(send_countdown.type_owed_space)
 
 
@@ -421,11 +434,11 @@ def _on_toggle_key(event, toggle_key, held_modifiers, devices, cfg, input_device
     """Tap-to-toggle: a tap starts a recording, the next stops it, and a
     quick second tap makes it hands-free. With Shift (voice editing on) it
     is a voice edit. True when a voice edit was cancelled."""
-    if event.value == 0 and send_countdown.owes_space() and not rs.state.is_recording:
-        # The tap that held the send is over; typed after what's still being typed.
-        dictation_worker.submit(send_countdown.type_owed_space)
+    if event.value == 0:
+        _dictation_key_up(toggle_key, held_modifiers)
     if event.value != 1 or _someone_elses_shortcut(held_modifiers - {toggle_key}):
         return False
+    send_countdown.key_pressed(toggle_key)
     shift = _held_shift(held_modifiers) if live.voice_editing else set()
     if not rs.state.is_recording:
         if shift:
