@@ -21,7 +21,7 @@ from conftest import KeyEvent
 from tuxtalk import hotkeys
 from tuxtalk import keyboard_grab
 from tuxtalk import recording_state as rs
-from tuxtalk import uinput_helper
+from tuxtalk import keyboard_devices
 from tuxtalk import recording
 from tuxtalk import pipeline
 
@@ -74,7 +74,7 @@ def kb(monkeypatch):
     dev = KernelKeyboard()
     keyboard_grab._injected_pending.clear()
     keyboard_grab.grabbed_devices.clear()
-    monkeypatch.setattr(uinput_helper, "is_keyboard_device", lambda d: True)
+    monkeypatch.setattr(keyboard_devices, "is_keyboard_device", lambda d: True)
     monkeypatch.setattr(recording, "start_recording",
                         lambda *a, **k: setattr(rs.state, "is_recording", True) or True)
     stops = []

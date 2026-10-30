@@ -3,6 +3,7 @@ in the background (it's 300 MB and more, and the Ready screen shows
 meanwhile), the menu launcher and start at login; and Setup Complete's
 "Restart computer now", which waits for the copy: a reboot mid-copy leaves
 the menu launcher and autostart pointing at a copy that never arrived."""
+import subprocess
 import threading
 import time
 
@@ -121,11 +122,31 @@ def after(callback, still_copying, timeout=WAIT_S) -> None:
     GLib.timeout_add(200, poll)
 
 
+def reboot_system() -> bool:
+    """Reboot the machine via systemd-logind.
+
+    `systemctl reboot` asks logind, which lets an active local desktop session
+    reboot without a password. Returns False rather than raising if the command
+    is missing or refused, so the caller can fall back to telling the user to
+    restart manually.
+    """
+    try:
+        result = subprocess.run(
+            ['systemctl', 'reboot'],
+            capture_output=True, text=True, errors="replace", timeout=10,
+        )
+        if result.returncode != 0 and result.stderr:
+            logger.warning(f"systemctl reboot refused: {result.stderr.strip()}")
+        return result.returncode == 0
+    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+        logger.warning(f"Could not reboot: {e}")
+        return False
+
+
 def reboot_when_copied(parent, button) -> None:
     """Restart computer now, once the copy is done: *button* (the one
     clicked) says so meanwhile; *parent* is the window messages go over."""
     from .ui_style import show_message
-    from .uinput_helper import reboot_system
     if copying():
         button.set_label("Finishing install…")
         button.set_sensitive(False)

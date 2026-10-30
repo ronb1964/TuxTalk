@@ -18,6 +18,7 @@ from . import (
     delivery_notices,
     dictation_worker,
     hotkey_keys,
+    keyboard_devices,
     keyboard_grab,
     modifier_hotkeys,
     notices,
@@ -27,7 +28,6 @@ from . import (
     send_countdown,
     service_tick,
     tray_link,
-    uinput_helper,
 )
 from . import live_settings as live
 from . import recording_state as rs
@@ -140,7 +140,7 @@ def _rediscover_devices(devices) -> int:
             continue
         try:
             dev = InputDevice(path)
-            if not uinput_helper.is_keyboard_device(dev):
+            if not keyboard_devices.is_keyboard_device(dev):
                 # Closed now, not whenever it is garbage-collected: every
                 # mouse and button node is opened again on each scan.
                 dev.close()

@@ -272,8 +272,8 @@ class HelperKeyboard:
             self._lock.release()
 
     def capabilities(self, verbose=False):
-        """Enough for uinput_helper.is_keyboard_device: letter keys, no pointer."""
-        from .uinput_helper import LETTER_KEYS
+        """Enough for keyboard_devices.is_keyboard_device: letter keys, no pointer."""
+        from .keyboard_devices import LETTER_KEYS
         return {EV_KEY: sorted(LETTER_KEYS)}
 
     def write(self, event_type, code, value):

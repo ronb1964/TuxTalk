@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from tuxtalk import pkexec_runner, uinput_helper
+from tuxtalk import pkexec_runner, portaudio_setup, uinput_helper
 
 
 def _answer(returncode, stdout="", stderr=""):
@@ -85,9 +85,9 @@ def test_pkexec_that_cannot_start_is_not_mistaken_for_a_late_answer(monkeypatch)
 def test_a_portaudio_install_past_the_limit_is_judged_by_what_is_there(
         monkeypatch, there_after, ok):
     checks = iter([(False, ""), (there_after, "")])
-    monkeypatch.setattr(uinput_helper, "check_portaudio_installed", lambda: next(checks))
-    monkeypatch.setattr(uinput_helper, "get_portaudio_install_command",
+    monkeypatch.setattr(portaudio_setup, "check_portaudio_installed", lambda: next(checks))
+    monkeypatch.setattr(portaudio_setup, "get_portaudio_install_command",
                         lambda: ("dnf", ["dnf", "install", "-y", "portaudio"]))
     monkeypatch.setattr(subprocess, "run", _still_running_as_root)
     monkeypatch.setattr(pkexec_runner, "INSTALL_TIMEOUT_S", 0)
-    assert uinput_helper.install_portaudio_with_pkexec()[0] is ok
+    assert portaudio_setup.install_portaudio_with_pkexec()[0] is ok

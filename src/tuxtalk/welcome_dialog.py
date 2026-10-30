@@ -24,11 +24,9 @@ from .ui_style import Fold, more_below_bar, show_message
 from .flatpak_welcome import (build_shortcut_setup_section, build_unsupported_desktop_section,
                               shortcut_support)
 from .logger import setup_logger
+from .portaudio_setup import get_portaudio_status
 from .splash_screen import SplashScreen, fade_in
-from .uinput_helper import (
-    check_all_device_permissions,
-    get_portaudio_status,
-)
+from .uinput_helper import check_all_device_permissions
 
 logger = setup_logger(__name__)
 
@@ -612,7 +610,7 @@ class WelcomeDialog:
 
     def _on_install_portaudio_clicked(self, button):
         """Handle the Install PortAudio button click."""
-        from tuxtalk.uinput_helper import install_portaudio_with_pkexec
+        from tuxtalk.portaudio_setup import install_portaudio_with_pkexec
 
         # Disable button while processing
         button.set_sensitive(False)

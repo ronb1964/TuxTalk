@@ -41,7 +41,7 @@ from . import (ai_cleanup, config, cosmic_hotkeys, custom_words,  # noqa: E402
                desktop_detect, extension_helper, file_transcribe, gnome_keybindings,
                kwin_hotkeys, menu_cache, model_helper, parakeet_engine, rename_migration,
                secure_input, service_launcher, settings_backup, single_instance, uinput_helper,
-               update_checker, whisper_vulkan)
+               update_checker, whisper_vulkan, ydotoold_leftovers)
 from .logger import LOG_FILE_NAME, setup_logger, stop_file_logging  # noqa: E402
 from .ui_style import message_dialog, show_message  # noqa: E402
 
@@ -252,7 +252,7 @@ def find(home, install_type, environ=os.environ, appimage=None):
     runtime = Path(single_instance.session_runtime_dir(environ))
     plan.runtime = sorted(path for pattern in RUNTIME_FILES for path in runtime.glob(pattern))
 
-    unit = uinput_helper.our_ydotoold_unit(home)
+    unit = ydotoold_leftovers.our_ydotoold_unit(home)
     if unit is not None:
         plan.ydotoold_unit = Path(unit)
     plan.extension = exists(Path(desktop_detect.get_extension_dir())
@@ -472,7 +472,7 @@ def stop_tuxtalk(plan, shut_down=None):
 def _stop_processes(plan):
     """stop_tuxtalk's waiting half: every other TuxTalk process and the old
     ydotoold service."""
-    uinput_helper.stop_ydotoold_we_started()
+    ydotoold_leftovers.stop_ydotoold_we_started()
     # Each engine folder, not the whole data folder: that may be a link into
     # a folder where other programs run from.
     data_dir = plan.home / ".local" / "share" / config.DATA_DIR

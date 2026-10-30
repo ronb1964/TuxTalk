@@ -619,7 +619,7 @@ def main():
     from .settings_backup import snapshot_if_changed
     snapshot_if_changed()
 
-    from .uinput_helper import retire_ydotoold
+    from .ydotoold_leftovers import retire_ydotoold
     retire_ydotoold()       # what TuxTalk typed through until 0.18
     from .cuda_helper import remove_pytorch_link, remove_unused_cudnn
     remove_unused_cudnn()   # downloaded with CUDA until 0.19

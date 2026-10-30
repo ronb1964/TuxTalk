@@ -6,6 +6,7 @@ is transcribed but none reaches the window. Saying a dictation didn't arrive is
 not enough, so the notice names the cause and the fix.
 """
 
+import subprocess
 import types
 
 import pytest
@@ -104,7 +105,6 @@ def test_the_fix_script_touches_only_uinput_and_matches_the_group_exactly():
 
 def test_the_fix_script_group_check_runs_in_bash(tmp_path):
     """Run the membership line for real with fake id/usermod commands."""
-    import subprocess
     script = U.get_fix_script_content()
     line = next(l for l in script.splitlines() if l.startswith("id -nG"))
     bin_dir = tmp_path / "bin"
@@ -127,8 +127,8 @@ def test_the_root_script_goes_to_pkexec_on_stdin_never_through_a_file(monkeypatc
 
     def pkexec(cmd, **k):
         seen["cmd"], seen["input"] = cmd, k.get("input")
-        raise U.subprocess.TimeoutExpired(cmd, k.get("timeout"))
-    monkeypatch.setattr(U.subprocess, "run", pkexec)
+        raise subprocess.TimeoutExpired(cmd, k.get("timeout"))
+    monkeypatch.setattr(subprocess, "run", pkexec)
     ok, _message = U.install_udev_rule_with_pkexec()
     assert ok is False
     assert seen["cmd"] == ["pkexec", "/bin/bash", "-s"]
