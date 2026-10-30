@@ -47,23 +47,6 @@ def _icon_source() -> Optional[str]:
     return next((path for path in candidates if os.path.exists(path)), None)
 
 
-def _refresh_icon_caches(icons_base: str) -> None:
-    """Tell GTK's and the XDG icon caches about the new icon. Neither is
-    needed everywhere, so a missing tool or a failure is only noted."""
-    import subprocess
-    for argv in (["gtk-update-icon-cache", "-f", "-t", icons_base],
-                 ["xdg-icon-resource", "forceupdate", "--mode", "user"]):
-        try:
-            result = subprocess.run(argv, capture_output=True, text=True, errors="replace",
-                                    timeout=10)
-        except (OSError, subprocess.SubprocessError) as e:
-            logger.info(f"{argv[0]} didn't run (not needed everywhere): {e}")
-            continue
-        if result.returncode:
-            logger.info(f"{argv[0]} failed (exit {result.returncode}, not needed everywhere): "
-                        f"{result.stderr.strip()[:200]}")
-
-
 def install_app_icon() -> Optional[str]:
     """Put TuxTalk's icon in the user's icon folders, for the launcher to
     name: the icon name ("tuxtalk"), or None when it couldn't be installed.
@@ -87,7 +70,7 @@ def install_app_icon() -> Optional[str]:
         logger.warning(f"Could not install TuxTalk icon: {e}")
         return None
     logger.info(f"Installed TuxTalk icon from {source} to {icons_base} ({len(sizes)} sizes)")
-    _refresh_icon_caches(icons_base)
+    menu_cache.refresh_icon_caches(icons_base)
     return "tuxtalk"
 
 

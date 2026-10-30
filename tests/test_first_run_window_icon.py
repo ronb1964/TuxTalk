@@ -9,7 +9,7 @@ import pathlib
 
 import pytest
 
-from tuxtalk import desktop_launcher
+from tuxtalk import desktop_launcher, menu_cache
 from tuxtalk import update_checker as uc
 from tuxtalk.autostart import desktop_exec_program
 
@@ -137,7 +137,7 @@ def test_a_cache_tool_that_fails_is_logged_with_its_error(tmp_path, monkeypatch,
     monkeypatch.setattr(subprocess, "run", lambda argv, **k: types.SimpleNamespace(
         returncode=1, stderr="gtk-update-icon-cache: No theme index file.\n"))
     caplog.set_level(logging.INFO)
-    desktop_launcher._refresh_icon_caches(str(tmp_path))
+    menu_cache.refresh_icon_caches(str(tmp_path))
     assert any("No theme index file" in r.getMessage() and "exit 1" in r.getMessage()
                for r in caplog.records)
 

@@ -514,12 +514,7 @@ def undo_desktop_changes(plan):
 def _refresh_menus():
     """Let the app menus and the icon cache forget the launcher and its icon;
     quiet when a tool is missing."""
-    icons = Path.home() / ".local" / "share" / "icons" / "hicolor"
-    try:
-        subprocess.run(["gtk-update-icon-cache", "-q", "-f", "-t", str(icons)],
-                       capture_output=True, timeout=30)
-    except (OSError, subprocess.SubprocessError):
-        pass
+    menu_cache.refresh_icon_caches(str(Path.home() / ".local" / "share" / "icons" / "hicolor"))
     menu_cache.refresh_menu_cache()
 
 
