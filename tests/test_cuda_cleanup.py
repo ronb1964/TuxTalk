@@ -25,8 +25,9 @@ def _install_complete_cuda(path):
     """Look like a real, complete CUDA install: the download unpacks each
     wheel into its own folder, lib/<package>/lib/<library>."""
     lib = path / "lib"
-    for folder, name in (("cuda_runtime", "libcudart.so.12"), ("cublas", "libcublas.so.12")):
-        (lib / folder / "lib").mkdir(parents=True)
+    for folder, name in (("cuda_runtime", "libcudart.so.12"), ("cublas", "libcublas.so.12"),
+                         ("cublas", "libcublasLt.so.12")):
+        (lib / folder / "lib").mkdir(parents=True, exist_ok=True)
         (lib / folder / "lib" / name).write_text("x" * 1000)
     return sorted(os.listdir(lib))
 

@@ -118,6 +118,21 @@ def test_system_cuda_without_cublas_is_not_enough(monkeypatch):
     assert has_cuda_libraries() is False
 
 
+def test_system_cuda_11_is_not_enough(monkeypatch):
+    """The speech engine opens CUDA 12's libraries by name."""
+    _no_other_cuda(monkeypatch)
+    monkeypatch.setattr("subprocess.run", lambda *a, **k: _ldconfig(
+        "libcudart.so.11.0", "libcublas.so.11", "libcublasLt.so.11"))
+    assert has_cuda_libraries() is False
+
+
+def test_system_cuda_without_cublaslt_is_not_enough(monkeypatch):
+    _no_other_cuda(monkeypatch)
+    monkeypatch.setattr("subprocess.run", lambda *a, **k: _ldconfig(
+        "libcudart.so.12", "libcublas.so.12"))
+    assert has_cuda_libraries() is False
+
+
 def test_system_cuda_runtime_and_cublas_are_enough_without_cudnn(monkeypatch):
     _no_other_cuda(monkeypatch)
     monkeypatch.setattr("subprocess.run", lambda *a, **k: _ldconfig(
@@ -193,3 +208,23 @@ def test_no_wheel_on_pypi_is_the_reason_given(tmp_path, monkeypatch):
     reports = []
     assert not cuda_helper.download_cuda_libraries(lambda m, p: reports.append((m, p)))
     assert failure_reason(*reports[-1]) == "PyPI has no nvidia-cuda-runtime-cu12 for this computer"
+
+
+def test_the_download_bar_never_goes_backwards(tmp_path, monkeypatch):
+    """With two packages it was laid out for three, so the second one's
+    progress dropped the bar from 35 % to 23 %."""
+    from tuxtalk import download_utils
+    monkeypatch.setattr(cuda_helper, "get_appdir_cuda_path", lambda: str(tmp_path / "cuda"))
+    monkeypatch.setattr(cuda_helper, "_pypi_wheel",
+                        lambda pkg: (pkg, f"https://x/{pkg}.whl", f"{pkg}.whl", None, 1000))
+    monkeypatch.setattr(download_utils, "free_space_bytes", lambda path: 10 ** 12)
+
+    def download_file(url, path, progress_hook=None, **kwargs):
+        for done in (0, 500, 1000):
+            progress_hook(done, 1000)
+        return True
+    monkeypatch.setattr(download_utils, "download_file", download_file)
+    monkeypatch.setattr(cuda_helper, "_extract_wheels", lambda *a: True)
+    percents = []
+    assert cuda_helper.download_cuda_libraries(lambda message, percent: percents.append(percent))
+    assert percents == sorted(percents) and percents[-1] == 100

@@ -15,11 +15,12 @@ logger = setup_logger(__name__)
 NVIDIA_SMI_TIMEOUT = 5
 SUBPROCESS_TIMEOUT = 2
 
-# The libraries CTranslate2 needs to run on CUDA: the runtime and cuBLAS.
-# Without them the model loads "on cuda" and the first dictation crashes.
-# cuDNN isn't among them: CTranslate2 has done without it since 4.7 (its
-# library doesn't name it), and Whisper on CUDA types the same text.
-_REQUIRED_CUDA_LIBS = ("libcudart.so", "libcublas.so")
+# The libraries CTranslate2 needs to run on CUDA: CUDA 12's runtime and
+# cuBLAS (with cuBLASLt), by these names, which is how it opens them; a
+# CUDA 11 install doesn't do. Without them the model loads "on cuda" and the
+# first dictation crashes. cuDNN isn't among them: CTranslate2's Linux
+# wheels are built without it since 4.7, and Whisper on CUDA types the same.
+_REQUIRED_CUDA_LIBS = ("libcudart.so.12", "libcublas.so.12", "libcublasLt.so.12")
 
 def detect_nvidia_gpu():
     """Check if an NVIDIA GPU is present.
@@ -365,8 +366,8 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
                 def progress_hook(downloaded, total, _pkg=pkg_name, _idx=pkg_idx):
                     if progress_callback and total > 0:
                         download_percent = min(100, (downloaded / total) * 100)
-                        # Map to overall progress: each package gets ~23% of total
-                        current_percent = _idx * 23 + int((download_percent / 100) * 23)
+                        # The downloads share the first 70 % of the bar equally.
+                        current_percent = int(70 * (_idx + download_percent / 100) / len(wheels))
                         progress_callback(
                             f"Downloading {_pkg}... {int(download_percent)}%",
                             current_percent)
