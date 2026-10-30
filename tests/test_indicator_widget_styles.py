@@ -18,6 +18,14 @@ def indicator():
         Gtk.main_iteration()
 
 
+def _apply(indicator, *args, **kwargs):
+    """apply_settings, then GTK's loop runs the change it queued."""
+    from gi.repository import Gtk
+    indicator.apply_settings(*args, **kwargs)
+    while Gtk.events_pending():
+        Gtk.main_iteration()
+
+
 def test_style_is_stored(indicator):
     assert indicator.style == "bars"
 
@@ -36,22 +44,22 @@ def test_setters_store_data(indicator):
 
 
 def test_apply_settings_changes_style_live(indicator):
-    indicator.apply_settings("center", "medium", 0, 0, style="radial")
+    _apply(indicator, "center", "medium", 0, 0, style="radial")
     assert indicator.style == "radial"
 
 
 def test_apply_settings_changes_sensitivity(indicator):
-    indicator.apply_settings("center", "medium", 0, 0, sensitivity=1.5)
+    _apply(indicator, "center", "medium", 0, 0, sensitivity=1.5)
     assert indicator.sensitivity == 1.5
 
 
 def test_apply_settings_position_only_leaves_style_untouched(indicator):
     """Omitted style kwarg must not reset the style — existing callers pass 4 args."""
-    indicator.apply_settings("top-left", "large", 10, 10)
+    _apply(indicator, "top-left", "large", 10, 10)
     assert indicator.style == "bars"
 
 
 def test_orb_style_keeps_its_draw_path(indicator):
-    indicator.apply_settings("center", "medium", 0, 0, style="orb")
+    _apply(indicator, "center", "medium", 0, 0, style="orb")
     assert indicator.style == "orb"
     assert hasattr(indicator, "draw_orb")
