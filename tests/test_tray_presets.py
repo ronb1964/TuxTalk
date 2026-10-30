@@ -26,11 +26,9 @@ class FakeMenu:
         self.tray.reverted += 1
 
 
-class FakeTray:
-    set_performance_preset = tray_mod.DictationTray.set_performance_preset
-    _apply_preset = tray_mod.DictationTray._apply_preset
-    _preset_files = tray_mod.DictationTray._preset_files
-    _save_preset = tray_mod.DictationTray._save_preset
+class FakeTray(tray_presets.Presets):
+    """The tray around its Presets mixin: counts the dot put back and the
+    restarts, and has none of the tray's windows or service."""
 
     def __init__(self):
         self.reverted = 0
