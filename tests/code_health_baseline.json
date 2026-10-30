@@ -99,7 +99,6 @@
   "media_pause.py::MediaPauser._status::swallowed_error": 1,
   "menu_window.py::MenuWindow.__init__::undocumented": 1,
   "menu_window.py::MenuWindow._button::dated_comment": 1,
-  "menu_window.py::MenuWindow._popup_performance::undocumented": 1,
   "menu_window.py::MenuWindow.refresh::swallowed_error": 1,
   "model_helper.py::_loads_on_cpu::swallowed_error": 1,
   "model_helper.py::download_model_with_progress.do_download.GtkProgressTqdm.update::long_line": 1,

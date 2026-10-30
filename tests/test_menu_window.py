@@ -338,6 +338,34 @@ def test_menu_window_after_installing_the_extension_says_log_out():
         win.window.destroy()
 
 
+def test_menu_window_performance_is_the_tray_menus(monkeypatch):
+    """The window's Performance popup lists what the tray's submenu does, with
+    the dot on the same preset; opening it applies nothing, and choosing a
+    preset applies that one."""
+    from tuxtalk import config, tray, tray_menu
+    monkeypatch.setattr(config, "load_config", config.Settings)
+    applied = []
+    owner = tray.DictationTray.__new__(tray.DictationTray)
+    owner.set_performance_preset = applied.append
+    fake, win = _menu_window()
+    fake.menu = tray_menu.TrayMenu(owner)
+    try:
+        next(b for b in _buttons(win) if b.get_label().startswith("Performance")).clicked()
+        popup = [i for i in win._popup.get_children() if isinstance(i, Gtk.RadioMenuItem)]
+        submenu = [*fake.menu.preset_radios.values(), fake.menu.preset_custom]
+        assert [i.get_label() for i in popup] == [i.get_label() for i in submenu]
+        assert [i.get_active() for i in popup] == [i.get_active() for i in submenu]
+        assert applied == []
+        ids = list(fake.menu.preset_radios)
+        pick = next(n for n, item in enumerate(popup[:len(ids)]) if not item.get_active())
+        popup[pick].activate()
+        assert applied == [ids[pick]]
+    finally:
+        win._popup.destroy()
+        fake.menu.widget.destroy()
+        win.window.destroy()
+
+
 def test_closing_the_window_lets_the_tray_open_a_new_one():
     tray, win = _menu_window()
     tray._menu_window = win
