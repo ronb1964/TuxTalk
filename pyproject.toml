@@ -61,9 +61,10 @@ select = ["F", "B", "SIM"]
 # test_code_health.py's except check, so try/except/pass stays as it is.
 ignore = ["SIM105"]
 
-# Findings already there when bugbear and simplify were turned on. The list
-# may only shrink: tests/test_ruff_ratchet.py fails when an entry is no longer
-# needed, so it is struck and the rule holds for that file from then on.
+# The rules each file already broke when bugbear and simplify were turned on.
+# How many times each one is kept in tests/ruff_baseline.json, which
+# tests/test_ruff_ratchet.py lets only go down; a rule is struck here when
+# its count reaches none, and holds for that file from then on.
 [tool.ruff.lint.per-file-ignores]
 "src/tuxtalk/ai_cleanup.py" = ["B905", "SIM109"]
 "src/tuxtalk/audio_duck.py" = ["SIM114"]

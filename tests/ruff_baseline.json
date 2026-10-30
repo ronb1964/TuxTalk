@@ -1,0 +1,54 @@
+{
+ "src/tuxtalk/ai_cleanup.py": {
+  "B905": 2,
+  "SIM109": 1
+ },
+ "src/tuxtalk/audio_duck.py": {
+  "SIM114": 1
+ },
+ "src/tuxtalk/config.py": {
+  "B023": 1
+ },
+ "src/tuxtalk/custom_words.py": {
+  "B905": 1
+ },
+ "src/tuxtalk/delivery.py": {
+  "SIM102": 1
+ },
+ "src/tuxtalk/extension_helper.py": {
+  "B904": 2
+ },
+ "src/tuxtalk/file_transcribe.py": {
+  "B905": 1
+ },
+ "src/tuxtalk/keyboard_layout.py": {
+  "B905": 1
+ },
+ "src/tuxtalk/normalize.py": {
+  "B905": 1,
+  "SIM905": 2
+ },
+ "src/tuxtalk/notes_text.py": {
+  "SIM102": 1
+ },
+ "src/tuxtalk/parakeet_gpu.py": {
+  "SIM115": 1
+ },
+ "src/tuxtalk/recording_indicator.py": {
+  "SIM108": 1
+ },
+ "src/tuxtalk/settings_backup.py": {
+  "B904": 2,
+  "SIM905": 1
+ },
+ "src/tuxtalk/virtual_keyboard.py": {
+  "B904": 1,
+  "SIM300": 1
+ },
+ "src/tuxtalk/vocabulary.py": {
+  "SIM905": 1
+ },
+ "src/tuxtalk/voice_edit_rules.py": {
+  "SIM905": 2
+ }
+}

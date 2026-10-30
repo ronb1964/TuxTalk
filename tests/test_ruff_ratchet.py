@@ -1,16 +1,22 @@
-"""Ruff's bugbear and simplify findings in src/tuxtalk may only go away.
+"""Ruff's bugbear and simplify findings in src/tuxtalk may only go down.
 
-pyproject.toml turns the two rule families on and lists, file by file, the
-findings that were already there in its per-file-ignores. CI's ruff step holds
-new code to the rules; these tests make the list a ratchet: an entry whose
-finding is gone has to be struck, so the rule holds for that file from then on.
+pyproject.toml turns the two rule families on, and its per-file-ignores let
+off the rules each file broke when they came in, so `ruff check` passes. A
+per-file ignore lets off every finding of that rule in the file, a new one
+too, so the number each file had is kept in ruff_baseline.json and these
+tests count again with nothing let off: a file with more findings of a rule
+than its baseline fails, and so does one with fewer until the baseline is
+lowered (and the per-file ignore struck when it reaches none). The baseline
+is edited by hand, only ever downwards, never raised without the maintainer's OK.
 
-Rules change between ruff versions, so the tests run only with the version
-pyproject.toml pins for CI (poetry install --with dev installs it).
+Rules change between ruff versions, so the count is made with the version
+poetry.lock pins, which CI installs. Elsewhere another version skips; in CI
+it fails, so the ratchet can't quietly stop running there.
 """
+import collections
 import json
+import os
 import pathlib
-import re
 import subprocess
 import sys
 
@@ -18,10 +24,14 @@ import pytest
 import toml
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-PYPROJECT = toml.loads((ROOT / "pyproject.toml").read_text())
-LISTED = {(path, code)
-          for path, codes in PYPROJECT["tool"]["ruff"]["lint"]["per-file-ignores"].items()
-          for code in codes}
+BASELINE = json.loads(pathlib.Path(__file__).with_name("ruff_baseline.json").read_text())
+IGNORES = toml.loads((ROOT / "pyproject.toml").read_text())["tool"]["ruff"]["lint"][
+    "per-file-ignores"]
+
+
+def _pinned_ruff():
+    lock = toml.loads((ROOT / "poetry.lock").read_text())
+    return next(p["version"] for p in lock["package"] if p["name"] == "ruff")
 
 
 def _ruff(*args):
@@ -29,30 +39,48 @@ def _ruff(*args):
                           capture_output=True, text=True, check=False)
 
 
+def _not_measurable(why):
+    if os.environ.get("CI"):
+        pytest.fail(f"{why}; CI must count with the pinned ruff")
+    pytest.skip(why)
+
+
 @pytest.fixture(scope="module")
 def findings():
-    """(file, rule) pairs ruff reports in src/tuxtalk with no file let off."""
-    pytest.importorskip("ruff")
-    pinned = PYPROJECT["tool"]["poetry"]["group"]["dev"]["dependencies"]["ruff"]
-    installed = re.search(r"[\d.]+", _ruff("--version").stdout).group()
-    if installed != pinned:
-        pytest.skip(f"ruff {installed} is installed; the ratchet is measured with {pinned}")
+    """How many times each file breaks each rule, with no file let off."""
+    try:
+        import ruff  # noqa: F401  (only to know it's installed)
+    except ImportError:
+        _not_measurable("ruff isn't installed")
+    installed = _ruff("--version").stdout.split()[-1]
+    if installed != _pinned_ruff():
+        _not_measurable(f"ruff {installed} is installed; poetry.lock pins {_pinned_ruff()}")
     result = _ruff("check", "src/tuxtalk", "--no-cache", "--exit-zero", "--output-format",
                    "json", "--config", "lint.per-file-ignores = {}")
     assert result.returncode == 0, result.stderr
-    return {(pathlib.Path(f["filename"]).relative_to(ROOT).as_posix(), f["code"])
-            for f in json.loads(result.stdout)}
+    return collections.Counter(
+        (pathlib.Path(f["filename"]).relative_to(ROOT).as_posix(), f["code"])
+        for f in json.loads(result.stdout))
 
 
-def test_every_listed_finding_is_still_there(findings):
-    gone = sorted(LISTED - findings)
-    assert not gone, (
-        "fixed, so strike them from [tool.ruff.lint.per-file-ignores] in pyproject.toml:\n  "
-        + "\n  ".join(f"{path}: {code}" for path, code in gone))
+def test_no_file_breaks_a_rule_more_often_than_its_baseline(findings):
+    over = sorted(f"{path}: {code} {count} (baseline {BASELINE.get(path, {}).get(code, 0)})"
+                  for (path, code), count in findings.items()
+                  if count > BASELINE.get(path, {}).get(code, 0))
+    assert not over, ("new bugbear or simplify findings; fix them "
+                      "(ruff check src/tuxtalk --config 'lint.per-file-ignores = {}'):\n  "
+                      + "\n  ".join(over))
 
 
-def test_no_finding_outside_the_list(findings):
-    new = sorted(findings - LISTED)
-    assert not new, (
-        "new bugbear or simplify findings; fix them (`ruff check src/tuxtalk` says where):\n  "
-        + "\n  ".join(f"{path}: {code}" for path, code in new))
+def test_a_lower_count_lowers_the_baseline(findings):
+    under = sorted(f"{path}: {code} {findings[path, code]} (baseline {count})"
+                   for path, codes in BASELINE.items() for code, count in codes.items()
+                   if findings[path, code] < count)
+    assert not under, ("fewer findings: lower these in tests/ruff_baseline.json, and strike "
+                       "the ones at 0 from it and from pyproject's per-file-ignores:\n  "
+                       + "\n  ".join(under))
+
+
+def test_the_per_file_ignores_let_off_exactly_the_rules_in_the_baseline():
+    ignored = {path: sorted(codes) for path, codes in IGNORES.items()}
+    assert ignored == {path: sorted(codes) for path, codes in BASELINE.items()}
