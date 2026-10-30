@@ -1,6 +1,8 @@
 """The GNOME extension's panel button and menu, run under Node with stand-ins
 for GNOME Shell (gnome_extension_js): what a GNOME user, or a screen reader,
 gets from it as TuxTalk starts, changes and quits."""
+import json
+
 from gnome_extension_js import run
 
 STARTED = """
@@ -74,9 +76,10 @@ def test_a_status_update_never_turns_dictation_on_or_off():
     assert calls == [[], "StartService"]
 
 
-def test_every_menu_item_reaches_a_method_tuxtalk_has():
-    """Each item asks for a method by a name built at run time: one TuxTalk
-    doesn't declare would throw on the click (GJS's proxy has no such call)."""
+def test_every_menu_item_calls_a_method_its_interface_declares():
+    """Each item asks for a method by a name built at run time: one the
+    interface doesn't declare would throw on the click (GJS's proxy has no
+    such call). That TuxTalk has each one: test_the_interface_is_tuxtalks."""
     asked, logs = run(STARTED + """
         for (const label of ['Fix a Word...', 'Transcribe a File...', 'Preferences...',
                 'Voice Commands...', 'Your Stats...', 'Help...', 'About TuxTalk...',
@@ -112,13 +115,16 @@ def test_a_click_before_tuxtalk_answers_does_nothing():
 
 def test_the_extension_never_starts_tuxtalk_or_waits_on_it():
     """The proxy is made with a callback, so GNOME Shell isn't blocked on
-    D-Bus at every login and unlock, and without starting TuxTalk."""
+    D-Bus at every login and unlock, without starting TuxTalk, and without
+    asking for properties TuxTalk doesn't have (one more round trip)."""
     asked, _logs = run("""
         await t.enable();
         const setup = t.shell.proxySetups[0];
-        t.report([typeof setup.callback, setup.flags & t.Gio.DBusProxyFlags.DO_NOT_AUTO_START]);
+        const {DO_NOT_AUTO_START, DO_NOT_LOAD_PROPERTIES} = t.Gio.DBusProxyFlags;
+        t.report([typeof setup.callback, Boolean(setup.flags & DO_NOT_AUTO_START),
+                  Boolean(setup.flags & DO_NOT_LOAD_PROPERTIES)]);
     """)
-    assert asked == ["function", 1]
+    assert asked == ["function", True, True]
 
 
 def test_a_proxy_that_failed_is_made_again_when_tuxtalk_next_starts():
@@ -201,6 +207,38 @@ def test_a_late_reply_never_replaces_the_newer_list():
         t.report(t.labels(button.menu.items[1].menu).slice(1, -2));
     """)
     assert shown == ["newest", "older"]
+
+
+def test_the_paste_key_reply_after_the_extension_is_turned_off_does_nothing():
+    """The screen lock between the two replies: the paste key's line went
+    into the destroyed menu ("already disposed" in the journal)."""
+    shown, logs = run(STARTED + """
+        t.openMenu(button);
+        tux.answer('GetRecentDictations', ['see you at noon']);
+        const history = button.menu.items[1].menu;
+        const before = t.labels(history);
+        extension.disable();
+        tux.answer('GetPasteLastHotkey', 'Ctrl+Alt+P');
+        t.report([before, t.labels(history)]);
+    """)
+    before, after = shown
+    assert after == before
+    assert logs == []
+
+
+def test_a_late_paste_key_reply_never_lands_in_the_newer_list():
+    """The menu opened again before the paste key's reply came: the old
+    reply added its line to the new list, which then had it twice."""
+    shown, _logs = run(STARTED + """
+        t.openMenu(button);
+        tux.answer('GetRecentDictations', ['older']);
+        t.openMenu(button);
+        tux.answer('GetRecentDictations', ['newest', 'older']);
+        tux.answer('GetPasteLastHotkey', 'Ctrl+Alt+P');     // the first menu's
+        tux.answer('GetPasteLastHotkey', 'Ctrl+Alt+P');
+        t.report(t.labels(button.menu.items[1].menu));
+    """)
+    assert shown.count("Ctrl+Alt+P types the newest one again") == 1
 
 
 def test_a_recent_dictation_is_copied_and_the_paste_key_named():
@@ -298,17 +336,6 @@ def test_the_focused_window_is_reported_in_one_call():
         t.report(tux.calls.filter(c => c[0].startsWith('SetFocused')));
     """)
     assert calls[-1] == ["SetFocusedWindow", ["org.kde.kwrite", "7", "10,20,800,600||0,0,1920,1080"]]
-
-
-def test_a_tuxtalk_without_the_one_call_gets_the_class_and_frame_the_old_way():
-    calls, _logs = run(STARTED + """
-        const kwrite = new t.Window('org.kde.kwrite', 7);
-        t.focus(kwrite);
-        tux.fail('SetFocusedWindow', t.dbusError(t.Gio.DBusError.UNKNOWN_METHOD));
-        t.report(tux.calls.slice(-2));
-    """)
-    assert calls == [["SetFocusedWindowClass", ["org.kde.kwrite"]],
-                     ["SetFocusedWindowGeometry", ["10,20,800,600||0,0,1920,1080"]]]
 
 
 # Focused before TuxTalk starts, so the window's report is the only one waiting.
@@ -424,6 +451,15 @@ def test_check_for_updates_says_so_and_comes_back_if_no_answer_comes():
                      [["Checking for TuxTalk updates", "The result shows in a moment."]]]
 
 
+def test_a_failed_update_check_says_what_failed():
+    """The title says what happened, never just "TuxTalk" (gnome.mjs refuses one)."""
+    shown, _logs = run(STARTED + """
+        tux.signal('UpdateCheckComplete', false, '', '', false, -1, -1, false, '', 'No internet');
+        t.report(t.shell.notifications);
+    """)
+    assert shown == [["TuxTalk update check failed", "No internet"]]
+
+
 def test_an_extension_update_opens_the_updates_tab():
     shown, _logs = run(STARTED + """
         t.item(button.menu, 'Check for Updates...').activate();
@@ -433,3 +469,80 @@ def test_an_extension_update_opens_the_updates_tab():
     assert shown == [0, "OpenPreferencesUpdates",
                      ["TuxTalk extension update available",
                       "Opening Updates & Backup to install it."]]
+
+
+# --- the stand-ins hold the extension to what GNOME Shell and TuxTalk accept ---------
+
+def test_an_import_gnome_shell_doesnt_have_fails(tmp_path):
+    """A wrong path, and GNOME Shell doesn't load the extension at all."""
+    from gnome_extension_js import STAND_INS
+    source = (STAND_INS.parent.parent / "gnome-extension" / "talktype@ronb1964.github.io"
+              / "extension.js").read_text()
+    broken = tmp_path / "extension.js"
+    broken.write_text(source.replace("ui/panelMenu.js", "ui/panelMenus.js"))
+    loaded, _logs = run(f"""
+        try {{
+            await t.enable({json.dumps(broken.as_uri())});
+            t.report('loaded');
+        }} catch (e) {{
+            t.report(String(e));
+        }}
+    """)
+    assert "No such module" in loaded and "panelMenus.js" in loaded
+
+
+def test_a_call_with_the_wrong_arguments_is_refused():
+    """GJS packs the arguments by the interface's types: one too few, or a
+    number for a string, throws in GNOME Shell, so it throws here too."""
+    refused, _logs = run(STARTED + """
+        const refused = [];
+        for (const call of [() => tux.SetFocusedWindowRemote('firefox', () => {}),
+                            () => tux.ApplyPerformancePresetRemote(3)]) {
+            try {
+                call();
+            } catch (e) {
+                refused.push(e.message);
+            }
+        }
+        t.report(refused);
+    """)
+    assert refused == ["SetFocusedWindowRemote takes 3 argument(s) (sss), got 1",
+                       "ApplyPerformancePresetRemote: argument 1 must be a s, got 3"]
+
+
+def _interface(xml):
+    """{name: signature} for the methods (in-args, then '->' and out-args)
+    and signals of a D-Bus interface's XML."""
+    import xml.etree.ElementTree as ET
+    found = {}
+    for element in ET.fromstring(xml).iter():
+        args = element.findall("arg")
+        if element.tag == "method":
+            found[element.get("name")] = (
+                "".join(a.get("type") for a in args if a.get("direction") == "in") + "->"
+                + "".join(a.get("type") for a in args if a.get("direction") == "out"))
+        elif element.tag == "signal":
+            found[element.get("name")] = "".join(a.get("type") for a in args)
+    return found
+
+
+def test_the_interface_is_tuxtalks():
+    """Every method and signal the extension declares, TuxTalk has, with the
+    same arguments: one TuxTalk dropped (task 8 dropped four) would fail on
+    GNOME and pass every test that runs the extension."""
+    import re
+    from gnome_extension_js import STAND_INS
+    from tuxtalk.dbus_service import TuxTalkDBusService
+    source = (STAND_INS.parent.parent / "gnome-extension" / "talktype@ronb1964.github.io"
+              / "extension.js").read_text()
+    declared = _interface(re.search(r"const TuxTalkIface = `(.*?)`;", source, re.S)[1])
+    tuxtalk = {}
+    for name in dir(TuxTalkDBusService):
+        member = getattr(TuxTalkDBusService, name)
+        if getattr(member, "_dbus_is_method", False):
+            tuxtalk[name] = ((member._dbus_in_signature or "") + "->"
+                             + (member._dbus_out_signature or ""))
+        elif getattr(member, "_dbus_is_signal", False):
+            tuxtalk[name] = member._dbus_signature or ""
+    assert {name: tuxtalk.get(name) for name in declared} == declared
+

@@ -14,6 +14,7 @@ export const shell = {
     timeouts: [],           // {id, callback} not run yet
     watchers: [],           // {name, appeared, vanished, watching}
     proxySetups: [],        // {callback, cancellable, flags, methods, signals} per proxy made
+                            // (methods: name -> its in-args' types)
     statusArea: {},
     clipboard: null,
 };
@@ -120,7 +121,12 @@ export const Gio = {
         // Like GJS's: the proxy has a NameRemote(...args, callback) for each
         // method the interface declares, and no other.
         makeProxyWrapper(xml) {
-            const methods = [...xml.matchAll(/<method name="(\w+)"/g)].map(m => m[1]);
+            const methods = {};
+            for (const [, name, body = ''] of xml.matchAll(
+                /<method name="(\w+)"\s*(?:\/>|>([\s\S]*?)<\/method>)/g)) {
+                methods[name] = [...body.matchAll(/<arg type="([^"]+)" direction="in"/g)]
+                    .map(m => m[1]);
+            }
             const signals = [...xml.matchAll(/<signal name="(\w+)"/g)].map(m => m[1]);
             return function (_bus, _name, _path, callback, cancellable, flags) {
                 shell.proxySetups.push({callback, cancellable, flags, methods, signals});
@@ -132,7 +138,10 @@ export const Gio = {
 // --- resource:///org/gnome/shell modules ------------------------------------------
 
 // ui/main.js
+// A notification's title says what happened, never just "TuxTalk".
 export function notify(title, body) {
+    if (title === 'TuxTalk')
+        throw new Error(`A notification titled only "TuxTalk": ${body}`);
     shell.notifications.push([title, body]);
 }
 
@@ -324,9 +333,10 @@ globalThis.global = {display: new Display()};
 const EXTENSION = new URL('../../gnome-extension/talktype@ronb1964.github.io/extension.js',
     import.meta.url).href;
 
-/** Turn the extension on; its panel button. */
-export async function enable() {
-    const {default: TuxTalkExtension} = await import(EXTENSION);
+/** Turn the extension on (extension.js, or the copy at the file URL *url*);
+ * its panel button. */
+export async function enable(url = EXTENSION) {
+    const {default: TuxTalkExtension} = await import(url);
     const extension = new TuxTalkExtension();
     extension.enable();
     return {extension, button: shell.statusArea.talktype};
@@ -344,9 +354,26 @@ export function dbusError(code = 'Failed') {
 /** A value of GetStatus's a{sv}, as GJS unpacks it. */
 export const variant = value => ({deep_unpack: () => value});
 
+// The JavaScript type GJS packs into each D-Bus type the interface uses.
+const JS_TYPES = {s: 'string', b: 'boolean', i: 'number', u: 'number'};
+
+/** Refuse a call GJS would: the wrong number of arguments, or one GJS
+ * can't pack into its D-Bus type. */
+function checkArgs(method, types, args) {
+    if (args.length !== types.length) {
+        throw new Error(`${method}Remote takes ${types.length} argument(s) ` +
+            `(${types.join('')}), got ${args.length}`);
+    }
+    types.forEach((type, i) => {
+        if (type in JS_TYPES && typeof args[i] !== JS_TYPES[type])
+            throw new Error(`${method}Remote: argument ${i + 1} must be a ${type}, got ${args[i]}`);
+    });
+}
+
 /**
- * TuxTalk on the bus, as the proxy the extension gets: each XRemote call is
- * kept in `calls` as [X, args], and one with a reply callback waits in
+ * TuxTalk on the bus, as the proxy the extension gets, with *methods* (name
+ * -> in-args' types) as the interface declares them: each XRemote call is
+ * checked as GJS checks it and kept in `calls` as [X, args], and one with a reply callback waits in
  * `waiting` until answer(X, result) or fail(X, error). signal(name, ...args)
  * emits one of its D-Bus signals.
  */
@@ -387,10 +414,11 @@ export function tuxtalk(methods) {
             if (key in target || typeof key !== 'string' || !key.endsWith('Remote'))
                 return target[key];
             const method = key.slice(0, -'Remote'.length);
-            if (!methods.includes(method))
+            if (!(method in methods))
                 return undefined;
             return (...args) => {
                 const callback = typeof args.at(-1) === 'function' ? args.pop() : null;
+                checkArgs(method, methods[method], args);
                 calls.push([method, args]);
                 if (callback)
                     waiting.push({method, callback});

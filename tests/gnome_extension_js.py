@@ -5,7 +5,9 @@ source reads: a guard broken in effect but kept in form fails here.
 A test hands run() JavaScript that drives the extension through gnome.mjs's
 functions (imported as `t`) and ends with t.report(value); run() returns that
 value and what the extension logged."""
+import functools
 import json
+import os
 import pathlib
 import re
 import shutil
@@ -17,15 +19,29 @@ import pytest
 STAND_INS = pathlib.Path(__file__).resolve().parent / "gnome_shell"
 
 
-def _node():
-    """Node's path; the test is skipped without a Node that has module hooks."""
+@functools.cache
+def _node_or_why_not():
+    """(Node's path, None), or (None, why these tests can't run)."""
     node = shutil.which("node")
     if node is None:
-        pytest.skip("Node isn't installed: the GNOME extension's tests run its code under Node")
-    version = subprocess.run([node, "--version"], capture_output=True, text=True).stdout.strip()
+        return None, "Node isn't installed: the GNOME extension's tests run its code under Node"
+    version = subprocess.run([node, "--version"], capture_output=True, text=True,
+                             timeout=10).stdout.strip()
     found = re.match(r"v(\d+)\.(\d+)", version)
     if not found or (int(found[1]), int(found[2])) < (20, 6):
-        pytest.skip(f"Node {version} has no module hooks; the extension's tests need 20.6 or newer")
+        return None, f"Node {version} has no module hooks; the extension's tests need 20.6 or newer"
+    return node, None
+
+
+def _node():
+    """Node's path. Without a Node that has module hooks the test is skipped
+    here, and fails in CI, where a skip would hide that the extension went
+    untested."""
+    node, why_not = _node_or_why_not()
+    if node is None:
+        if os.environ.get("CI"):
+            pytest.fail(why_not)
+        pytest.skip(why_not)
     return node
 
 
