@@ -15,7 +15,7 @@ def test_running_pid_reads_a_live_preferences_pid(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
     assert prefs_ipc.running_pid() is None                 # no pidfile
 
-    monkeypatch.setattr(prefs_ipc, "_process_argv",
+    monkeypatch.setattr("tuxtalk.service_launcher.read_argv",
                         lambda pid: ["/usr/bin/python3", "-m", "tuxtalk.prefs"])
     (tmp_path / "talktype-prefs.pid").write_text(str(os.getpid()))
     assert prefs_ipc.running_pid() == os.getpid()
@@ -49,9 +49,7 @@ def test_preferences_is_recognised_by_whole_arguments():
 def test_a_pid_that_vanishes_while_checked_is_not_running(monkeypatch):
     """It exited between the existence check and reading its command line:
     treating that as "running" would make the new window exit and nothing open."""
-    def gone(pid):
-        raise FileNotFoundError
-    monkeypatch.setattr(prefs_ipc, "_process_argv", gone)
+    monkeypatch.setattr("tuxtalk.service_launcher.read_argv", lambda pid: None)
     assert prefs_ipc.is_prefs_pid(4242) is False
 
 
