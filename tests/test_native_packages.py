@@ -162,3 +162,30 @@ def test_the_package_gets_its_checksum_for_the_updater(project, script, package)
     assert _build(project, script).returncode == 0
     sums = (project[0] / "SHA256SUMS.txt").read_text()
     assert sums.split()[1] == package
+
+
+def _listing(tree, license_folder):
+    """Every path in *tree* with its mode (and a link's target), leaving out
+    the package's own license folder, the one place the two may differ."""
+    listed = {}
+    for path in sorted(tree.rglob("*")):
+        relative = str(path.relative_to(tree))
+        if relative == license_folder or relative.startswith(license_folder + "/"):
+            continue
+        mode = path.lstat().st_mode
+        listed[relative] = (oct(mode), os.readlink(path) if path.is_symlink() else None)
+    return listed
+
+
+def test_the_deb_and_the_rpm_install_the_same_tree(project):
+    """Staged by one script, so nothing drifts between them (the copies
+    had begun to: a dependency, a comment, the order of two steps)."""
+    record = project[2]
+    trees = {}
+    for script, licenses in (("build-deb.sh", "usr/share/doc"),
+                             ("build-rpm.sh", "usr/share/licenses")):
+        assert _build(project, script).returncode == 0
+        trees[script] = _listing(record / "tree", licenses)
+        shutil.rmtree(record / "tree")
+    assert trees["build-deb.sh"] == trees["build-rpm.sh"]
+    assert "opt/talktype/AppRun" in trees["build-deb.sh"]
