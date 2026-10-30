@@ -317,6 +317,16 @@ def device_group(rdev, sys_dir=SYS_CHAR_DIR, writable=False, uhid_private=True):
     return f"own:{number}" if writable else "real"
 
 
+def node_identity(path):
+    """The device node at *path* as (device number, inode, change time), which
+    changes when a device is plugged in again; None when it's gone."""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    return st.st_rdev, st.st_ino, st.st_ctime_ns
+
+
 def made_through_uinput(rdev, sys_dir=SYS_CHAR_DIR):
     """Whether the input device *rdev* is one a program made through uinput:
     its sysfs node is under /sys/devices/virtual/input. A Bluetooth LE
@@ -529,10 +539,8 @@ class Helper:
     def open_if_keyboard(self, path):
         """Open the device at *path* if it's a keyboard there's room for. One
         that isn't is remembered by its identity, so it isn't opened again."""
-        try:
-            st = os.stat(path)
-            identity = (st.st_rdev, st.st_ino, st.st_ctime_ns)
-        except OSError:
+        identity = node_identity(path)
+        if identity is None:
             return
         if self.not_keyboards.get(path) == identity:
             return                      # a mouse, a button, or one too many
@@ -1027,6 +1035,11 @@ class Helper:
             # either way, stop reading it rather than spin on it.
             if e.errno not in (errno.ENODEV, errno.EIO, errno.EBADF):
                 log(f"couldn't read keyboard {keyboard.name!r}: {e}")
+                # Reopened by the next scan, it would fail the same way every
+                # RESCAN_S, logging each time: skip it until it's plugged in again.
+                identity = node_identity(keyboard.path)
+                if identity is not None:
+                    self.not_keyboards[keyboard.path] = identity
             self.drop_keyboard(keyboard)
             return 0
         for offset in range(0, len(data) - EVENT.size + 1, EVENT.size):
