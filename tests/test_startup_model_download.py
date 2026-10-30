@@ -29,7 +29,7 @@ def cuda_installed(monkeypatch):
 def test_missing_cuda_files_use_the_processor_instead_of_crashing(monkeypatch):
     """Device CUDA with the CUDA files gone: the model still loads "on cuda",
     then the first dictation crashes the service inside the speech library
-    (libcudnn_ops.so.9 not found), past every Python fallback. So use the
+    (a CUDA library not found), past every Python fallback. So use the
     processor for this run and say why; keep the setting."""
     from tuxtalk import cuda_helper
     monkeypatch.setattr(cuda_helper, "has_cuda_libraries", lambda: False)

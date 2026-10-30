@@ -98,7 +98,7 @@ class DownloadTask:
 
         Args:
             name: Display name (e.g., "CUDA Libraries")
-            size_text: Size indicator (e.g., "~1.4GB")
+            size_text: Size indicator (e.g., "~580 MB")
             download_func: Function that performs the download
                           Should accept (progress_callback, cancel_event) args
                           progress_callback signature: func(message, percent)

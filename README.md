@@ -458,7 +458,7 @@ A graphics card makes the Whisper models much faster, and with Vulkan it speeds 
 | | Works on | Download | Pick it in |
 |---|---|---|---|
 | **Vulkan (Light)** | NVIDIA, AMD and Intel | 22 MB | Preferences → General → Device → Vulkan (any GPU) |
-| **CUDA (Full)** | NVIDIA only | 1.4 GB | Preferences → General → Device → CUDA (NVIDIA) |
+| **CUDA (Full)** | NVIDIA only | 580 MB | Preferences → General → Device → CUDA (NVIDIA) |
 
 On an RTX 4070 Super both were equally fast: half a second for 11 seconds of speech with the Large model. First run uses any graphics card through Vulkan. CUDA is set up from Preferences by choosing it as the Device.
 

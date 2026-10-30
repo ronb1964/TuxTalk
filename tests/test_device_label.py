@@ -10,7 +10,7 @@ from tuxtalk.prefs_speech import SpeechSection, device_label
 
 
 def test_cuda_not_downloaded_names_the_download():
-    assert device_label("cuda", "small", cuda_ready=False) == "CUDA (NVIDIA, 1.4 GB download)"
+    assert device_label("cuda", "small", cuda_ready=False) == "CUDA (NVIDIA, 580 MB download)"
 
 
 def test_cuda_installed_is_plain():
@@ -23,8 +23,8 @@ def test_cuda_with_parakeet_says_it_runs_on_the_processor(ready):
 
 
 def test_cuda_with_parakeet_still_names_the_download():
-    assert "1.4 GB" in device_label("cuda", "parakeet-v3", cuda_ready=False)
-    assert "1.4 GB" not in device_label("cuda", "parakeet-v3", cuda_ready=True)
+    assert "580 MB" in device_label("cuda", "parakeet-v3", cuda_ready=False)
+    assert "580 MB" not in device_label("cuda", "parakeet-v3", cuda_ready=True)
 
 
 def test_other_devices_keep_their_names():

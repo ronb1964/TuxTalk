@@ -110,19 +110,18 @@ def _no_other_cuda(monkeypatch):
     monkeypatch.setattr(cuda_helper.os.path, "exists", lambda p: False)
 
 
-def test_system_cuda_without_cudnn_is_not_enough(monkeypatch):
-    """With a distro CUDA runtime but no cuDNN, the model would load on CUDA
+def test_system_cuda_without_cublas_is_not_enough(monkeypatch):
+    """With a distro CUDA runtime but no cuBLAS, the model would load on CUDA
     and the first dictation would crash."""
     _no_other_cuda(monkeypatch)
-    monkeypatch.setattr("subprocess.run", lambda *a, **k: _ldconfig(
-        "libcudart.so.12", "libcublas.so.12", "libcublasLt.so.12"))
+    monkeypatch.setattr("subprocess.run", lambda *a, **k: _ldconfig("libcudart.so.12"))
     assert has_cuda_libraries() is False
 
 
-def test_system_cuda_with_cudnn_is_found(monkeypatch):
+def test_system_cuda_runtime_and_cublas_are_enough_without_cudnn(monkeypatch):
     _no_other_cuda(monkeypatch)
     monkeypatch.setattr("subprocess.run", lambda *a, **k: _ldconfig(
-        "libcudart.so.12", "libcublas.so.12", "libcudnn.so.9"))
+        "libcudart.so.12", "libcublas.so.12", "libcublasLt.so.12"))
     assert has_cuda_libraries() is True
 
 

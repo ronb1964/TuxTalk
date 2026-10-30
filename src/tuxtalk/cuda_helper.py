@@ -7,7 +7,7 @@ from .logger import setup_logger
 
 # NVIDIA's CUDA libraries, downloaded once when CUDA is picked: the size
 # Preferences, System check, the setup choices and Help give.
-DOWNLOAD_SIZE_TEXT = "1.4 GB"
+DOWNLOAD_SIZE_TEXT = "580 MB"
 
 logger = setup_logger(__name__)
 
@@ -15,9 +15,11 @@ logger = setup_logger(__name__)
 NVIDIA_SMI_TIMEOUT = 5
 SUBPROCESS_TIMEOUT = 2
 
-# The libraries CTranslate2 needs to run on CUDA: the runtime, cuBLAS and
-# cuDNN. Without cuDNN the model loads "on cuda" and the first dictation crashes.
-_REQUIRED_CUDA_LIBS = ("libcudart.so", "libcublas.so", "libcudnn.so")
+# The libraries CTranslate2 needs to run on CUDA: the runtime and cuBLAS.
+# Without them the model loads "on cuda" and the first dictation crashes.
+# cuDNN isn't among them: CTranslate2 has done without it since 4.7 (its
+# library doesn't name it), and Whisper on CUDA types the same text.
+_REQUIRED_CUDA_LIBS = ("libcudart.so", "libcublas.so")
 
 def detect_nvidia_gpu():
     """Check if an NVIDIA GPU is present.
@@ -46,8 +48,8 @@ def _has_required_libs(names) -> bool:
 def _cuda_install_looks_complete(cuda_path: str) -> bool:
     """True if *cuda_path* holds every required library of a usable install.
 
-    The download unpacks each wheel into its own folder (lib/cudnn/lib/...,
-    lib/cublas/lib/..., lib/cuda_runtime/lib/...), so the whole tree is
+    The download unpacks each wheel into its own folder (lib/cublas/lib/...,
+    lib/cuda_runtime/lib/...), so the whole tree is
     searched. A directory holding only the debris of an interrupted download
     does not read as complete.
     """
@@ -65,7 +67,7 @@ def _make_cuda_cleanup(cuda_path: str):
 
     Snapshots whether a complete installation is already present *before* the
     download starts. If one is, a failed or cancelled attempt leaves it alone
-    rather than deleting a working 1.4 GB setup.
+    rather than deleting a working setup.
     """
     import shutil
 
@@ -234,7 +236,21 @@ def _extract_wheels(wheel_paths, lib_path, progress_callback, cancel_event):
 
 
 # The wheels come straight from PyPI's JSON API; no pip is needed.
-CUDA_PACKAGES = ('nvidia-cuda-runtime-cu12', 'nvidia-cublas-cu12', 'nvidia-cudnn-cu12')
+CUDA_PACKAGES = ('nvidia-cuda-runtime-cu12', 'nvidia-cublas-cu12')
+
+
+def remove_unused_cudnn():
+    """Delete the cuDNN an earlier TuxTalk downloaded with CUDA (lib/cudnn):
+    nothing uses it, and it takes about 900 MB. Never raises."""
+    import shutil
+    cudnn = os.path.join(get_appdir_cuda_path(), "lib", "cudnn")
+    if not os.path.isdir(cudnn) or os.path.islink(cudnn):
+        return
+    shutil.rmtree(cudnn, ignore_errors=True)
+    if os.path.exists(cudnn):
+        logger.warning(f"Couldn't remove the unused cuDNN in {cudnn}")
+    else:
+        logger.info("Removed the cuDNN earlier versions downloaded with CUDA; nothing uses it")
 
 
 def _pypi_wheel(pkg_name):

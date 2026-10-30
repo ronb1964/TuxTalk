@@ -472,7 +472,7 @@ def build(settings: Settings):
 def _without_missing_cuda(settings):
     """*settings*, on the processor for this run when they ask for CUDA but
     its files are missing. The model would load "on cuda" without them, then
-    the first dictation crashes inside the speech library (libcudnn missing),
+    the first dictation crashes inside the speech library (a CUDA library missing),
     past every fallback. The setting stays: downloading CUDA again in
     Preferences fixes it."""
     from . import cuda_helper
