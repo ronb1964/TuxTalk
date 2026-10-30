@@ -10,50 +10,49 @@ from . import recording_state as rs
 from .normalize import LINE_BREAK
 
 
-def remember_said(text: str, chunked: bool, serial: int, takes_back: str = "") -> str:
+def remember_said(text: str, chunked: bool, message, takes_back: str = "") -> str:
     """Put *text* in Recent Dictations, one entry per recording: a phrase of
     a recording typed at pauses (*chunked*) adds to its recording's entry,
-    the one numbered *serial* (send_countdown.Message.serial).
+    kept on its *message* (send_countdown.Message.said).
     *takes_back* is the end of that entry a correction across a pause
     replaced ("Meet at three. " for "Meet at four"). Returns the entry as it
     was before, for unsay."""
     from . import history
     text = text.replace(LINE_BREAK, "\n")
-    same_recording = rs.state.said_serial == serial
-    old = rs.state.said_text if chunked and same_recording else ""
+    old = message.said if chunked else ""
     base = old[:len(old) - len(takes_back)] if takes_back and old.endswith(takes_back) else old
-    rs.state.said_serial, rs.state.said_text = serial, base + text
+    message.said = base + text
     if old:
-        history.add_entry(rs.state.said_text, replaces=old)
+        history.add_entry(message.said, replaces=old)
     else:
-        history.add_entry(rs.state.said_text)
+        history.add_entry(message.said)
     return old
 
 
-def unsay(before: str) -> None:
-    """Undo the last remember_said, which returned *before*: the text went
-    into Recent Dictations first and was then refused for a password field."""
+def unsay(message, before: str) -> None:
+    """Undo the last remember_said of *message*, which returned *before*:
+    the text went into Recent Dictations first and was then refused for a
+    password field."""
     from . import history
-    said, rs.state.said_text = rs.state.said_text, before
+    said, message.said = message.said, before
     if before:
         history.add_entry(before, replaces=said)
     else:
         history.forget(said)
 
 
-def remember_shown(piece: str, chunked: bool, ok: bool, serial: int) -> None:
+def remember_shown(piece: str, chunked: bool, ok: bool, message) -> None:
     """*piece* was just typed (*ok*) or tried: add it to the screen copy of
-    recording *serial*. The copy is only trusted while every piece landed,
-    in one window, one after the other."""
-    if not (chunked and rs.state.shown_serial == serial):
-        rs.state.shown_serial, rs.state.shown_text = serial, ""
-        rs.state.shown_window = _where_typed()
-    if rs.state.shown_text is None:
+    *message*'s recording. The copy is only trusted while every piece
+    landed, in one window, one after the other."""
+    if not chunked or message.shown_window is None:
+        message.shown, message.shown_window = "", _where_typed()
+    if message.shown is None:
         return
-    if ok and focused_window.same_window(rs.state.shown_window, _where_typed()) is not False:
-        rs.state.shown_text += piece
+    if ok and focused_window.same_window(message.shown_window, _where_typed()) is not False:
+        message.shown += piece
     else:
-        rs.state.shown_text = None
+        message.shown = None
 
 
 def _where_typed():
@@ -74,11 +73,13 @@ def forget_after_key(key: str, why: str) -> None:
 
 def trim_shown(tail: str, count: int) -> None:
     """*count* characters were backspaced off *tail*, the newest typing."""
-    shown = rs.state.shown_text
-    if shown is not None:
-        rs.state.shown_text = shown[:len(shown) - count] if tail and shown.endswith(tail) else None
+    last = rs.state.last_message
+    if last.shown is not None:
+        last.shown = (last.shown[:len(last.shown) - count]
+                      if tail and last.shown.endswith(tail) else None)
 
 
 def forget_shown() -> None:
-    """The cursor moved or the text changed: the screen copy can't be trusted."""
-    rs.state.shown_text = None
+    """The cursor moved or the text changed: the screen copy of the last
+    dictation can't be trusted."""
+    rs.state.last_message.shown = None

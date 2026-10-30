@@ -129,8 +129,10 @@ def context_samples() -> int:
 def corrects_across_pause(raw: str, chunk_role, message) -> bool:
     """True when this phrase corrects the one typed before the pause ("no
     wait, four" after "meet at three"), so the AI should hear both together.
-    Needs AI self-corrections on and a phrase of this recording typed."""
-    if chunk_role is None or not (message.has_words and message.complete):
+    Needs AI self-corrections on and a phrase of this recording, *message*'s,
+    typed last: the undo record it takes back is then that phrase."""
+    if (chunk_role is None or not (message.has_words and message.complete)
+            or rs.state.last_message is not message):
         return False
     if not (live.ai_corrections and live.ai_engine is not None
             and rs.state.last_inserted_text.strip()):
@@ -200,11 +202,11 @@ def _type_boundary(message, pending: dict, tail: str, injection_mode: str) -> No
     of *message*, the one the chunk is in."""
     if not tail:
         return
-    last_dictation.remember_said(tail, True, message.serial)
+    last_dictation.remember_said(tail, True, message)
     # Only into the phrase's window: the context pass before this can take a while.
     ok = delivery.inject_text(tail, injection_mode, into=pending["where"],
                               message=message) == "ok"
-    last_dictation.remember_shown(tail, True, ok, message.serial)
+    last_dictation.remember_shown(tail, True, ok, message)
     if ok:
         # Undo and "delete last sentence" then see the whole chunk.
         rs.state.last_inserted_text = pending["typed"] + tail
@@ -317,8 +319,8 @@ def start_afresh(message, ended=True) -> None:
         message.start_over()
     message.held_mark, message.question_open, message.held_cue = None, False, ""
     rs.state.continue_mid_sentence = False
-    if rs.state.shown_text is not None and rs.state.shown_serial == message.serial:
-        rs.state.shown_text = ""
+    if message.shown is not None:
+        message.shown = ""
 
 
 def end_in_a_pause(message, beeps_on, auto_space, auto_period, injection_mode) -> None:

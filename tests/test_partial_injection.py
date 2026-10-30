@@ -147,10 +147,10 @@ def test_an_unexpected_typing_error_forgets_the_dictation_before(monkeypatch, qu
     rs.state.last_inserted_text = "See you at noon. "
     monkeypatch.setattr(rs.state, "nav_context", ("kwrite", "See you at noon. "))
     monkeypatch.setattr(rs.state, "continue_mid_sentence", True)
-    monkeypatch.setattr(rs.state, "shown_text", "See you at noon. ")
+    monkeypatch.setattr(rs.state.last_message, "shown", "See you at noon. ")
     monkeypatch.setattr(focused_window, "destination", lambda: ("kwrite", None, False))
     monkeypatch.setattr(delivery, "deliver_text", lambda *a, **k: 1 / 0)
     with pytest.raises(ZeroDivisionError):
         delivery.inject_text("How are you?", "type")
     assert rs.state.last_inserted_text == "" and rs.state.nav_context is None
-    assert not rs.state.continue_mid_sentence and rs.state.shown_text is None
+    assert not rs.state.continue_mid_sentence and rs.state.last_message.shown is None

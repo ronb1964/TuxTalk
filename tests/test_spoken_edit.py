@@ -69,7 +69,6 @@ def editing(monkeypatch):
     monkeypatch.setattr(notices, "edit_problem", lambda kind, beeps: problems.append(kind))
     monkeypatch.setattr(rs.state, "last_inserted_text", "We meet at three. ")
     monkeypatch.setattr(rs.state, "last_inserted_window", "org.kde.kwrite")
-    monkeypatch.setattr(rs.state, "shown_text", None)
     monkeypatch.setattr(rs.state.current.message, "edit_waiting", None)
     monkeypatch.setattr(rs.state.current.message, "held_mark", None)
     monkeypatch.setattr(rs.state.current.message, "held_cue", "")
@@ -96,8 +95,8 @@ def test_with_type_at_pause_it_edits_every_phrase_on_screen(editing):
     """Phrases since the last Enter are one message: "edit that" takes all of
     them, not only the last phrase."""
     pressed, edits, _ = editing
-    rs.state.shown_serial = rs.state.current.message.serial
-    rs.state.shown_text = "Hi Sam. We meet at three. "
+    rs.state.last_message = rs.state.current.message
+    rs.state.last_message.shown = "Hi Sam. We meet at three. "
     assert _said("edit that make it friendlier", "middle")
     assert pressed.count(((S,), "LEFT")) == len("Hi Sam. We meet at three.")
 

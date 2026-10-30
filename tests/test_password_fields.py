@@ -211,7 +211,6 @@ def test_a_dictation_refused_at_the_last_moment_leaves_recent_dictations(desktop
     """It goes into Recent Dictations before it's typed; refused then, it comes back out."""
     forgotten = []
     monkeypatch.setattr(history, "forget", lambda text: forgotten.append(text))
-    monkeypatch.setattr(rs.state, "said_text", "")
     desktop["answers"] = [False, False, True]    # before the AI, before the beep, at delivery
     dictate(monkeypatch)
     assert desktop["typed"] == []

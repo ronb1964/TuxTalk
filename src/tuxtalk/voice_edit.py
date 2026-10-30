@@ -363,7 +363,7 @@ def handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: str
         instruction = voice_edit_rules.spoken_edit(raw)
         if instruction is None:
             return False
-        target = voice_commands.spoken_edit_target(message.serial)
+        target = voice_commands.spoken_edit_target(message)
         if not target:
             return voice_commands.refused_as_sent(beeps_on)
     logger.info(f"Voice command: edit that ({len(target)} characters)")

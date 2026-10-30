@@ -120,7 +120,13 @@ class Message:
     its own. An automatic Enter and a key said after its words go only where
     they went, and only while all of them went in: a phrase that stopped
     partway leaves a hole a send would let out, and the phrases after it
-    don't fill it."""
+    don't fill it.
+
+    It is also the part of a recording the dictation worker carries on
+    with once the recording has stopped (recording_state.Recording holds
+    the rest): what its next phrase picks up, its Recent Dictations entry
+    and its screen copy, so a recording started before its phrases are
+    typed can't take them over."""
     # Where its words went (landed()), None once the focus moved while any
     # of them went in: they may be in two places.
     to: focused_window.Destination | None = None
@@ -131,8 +137,8 @@ class Message:
     # The word its last words were cut off on ("and"), or "": at the end of
     # a Type at pause recording, half a sentence isn't sent.
     ends_on: str = ""
-    # Which recording it is (recording_begins numbered it):
-    # Recent Dictations and the screen copy keep a recording's phrases together.
+    # Which recording it is (recording_begins numbered it): a send for it
+    # waits while a newer one records (send_automatically).
     serial: int = 0
     # What Type at pause's next phrase of this recording picks up: the last
     # phrase's final mark, held back for it to decide
@@ -149,6 +155,16 @@ class Message:
     # Its recording was cancelled (Esc): a phrase of it still waiting to be
     # typed is dropped.
     cancelled: bool = False
+    # Its recording's entry in Recent Dictations, all its phrases, typed or
+    # tried (last_dictation.remember_said); not started over by Enter or Tab.
+    said: str = ""
+    # Its screen copy: the text it believes it put on screen in
+    # shown_window, ending at the cursor while it's the last typed, which
+    # "fix that word" and "edit that" work on; None once that can't be
+    # trusted, and shown_window None until its first piece is typed
+    # (last_dictation.remember_shown).
+    shown: str | None = ""
+    shown_window: tuple | None = None
 
     def add(self, outcome: str, landed) -> None:
         """Words of it were delivered: delivery.inject_text's *outcome*, and

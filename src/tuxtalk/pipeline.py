@@ -379,8 +379,7 @@ def _deliver(words: _Words, audio_f32, job: _Job) -> None:
     send_countdown.type_owed_space(before=words.text)
     text = words.text
     chunked = job.chunk_role is not None
-    said_before = last_dictation.remember_said(text, chunked, job.message.serial,
-                                               words.taken_back)
+    said_before = last_dictation.remember_said(text, chunked, job.message, words.taken_back)
     try:
         outcome = delivery.inject_text(text, job.injection_mode, message=job.message)
     except Exception as e:
@@ -391,9 +390,9 @@ def _deliver(words: _Words, audio_f32, job: _Job) -> None:
         outcome = "failed"
         job.message.add(outcome, None)
     if outcome == "password_field":
-        last_dictation.unsay(said_before)
+        last_dictation.unsay(job.message, said_before)
     last_dictation.remember_shown(rs.state.last_inserted_text, chunked, outcome == "ok",
-                                  job.message.serial)
+                                  job.message)
     job.message.ends_on = ends_unfinished(words.raw)
     _after_the_words(outcome, words.said, words.press, words.space_left_off, job.chunk_role,
                      job.beeps_on, job.injection_mode, job.message)

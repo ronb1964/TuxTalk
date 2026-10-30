@@ -12,7 +12,7 @@ import pytest
 
 from conftest import next_recording
 from tuxtalk.history import add_entry as REAL_ADD_ENTRY
-from tuxtalk import focused_window
+from tuxtalk import focused_window, send_countdown
 from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
 from tuxtalk import keyboard_grab
@@ -397,6 +397,7 @@ def pipeline(monkeypatch):
         typed.append(text)
         rs.state.last_inserted_text = text
         if message is not None:
+            rs.state.last_message = message
             message.add("ok", message.to)       # into the window its words went to
         return "ok"
 
@@ -1101,13 +1102,12 @@ def test_an_enter_that_couldnt_be_pressed_leaves_the_message_open(enter, monkeyp
     box, so "edit that" must still reach all of it, not start afresh."""
     texts, typed, _ = enter
     monkeypatch.setattr(keyboard_output, "press_key", lambda key, why, claim=None: False)
-    monkeypatch.setattr(rs.state.current.message, "serial", 7)
     texts.extend(["see you at noon, press enter", "press enter"])
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     assert typed == ["See you at noon."]
-    assert rs.state.shown_text == "See you at noon."
+    assert rs.state.current.message.shown == "See you at noon."
     call(frames_of(speech(1.0)), "middle", auto_period=True)
-    assert rs.state.shown_text == "See you at noon."
+    assert rs.state.current.message.shown == "See you at noon."
 
 
 def test_press_enter_after_a_pause_ends_the_phrase_before_it(enter):
@@ -1314,30 +1314,25 @@ def test_a_recording_that_opens_with_digital_silence_still_learns_the_room():
 def test_the_screen_copy_ends_at_another_window_of_the_same_app(monkeypatch):
     """Two KWrite documents: phrases in each made one copy, so "edit that"
     selected the first document's length of the second's text."""
-    monkeypatch.setattr(rs.state.current.message, "serial", 3)
-    for name, value in (("shown_serial", 2), ("shown_text", ""),
-                        ("shown_window", None), ("last_inserted_window", "org.kde.kwrite")):
-        monkeypatch.setattr(rs.state, name, value)
+    message = send_countdown.Message()
+    monkeypatch.setattr(rs.state, "last_inserted_window", "org.kde.kwrite")
     monkeypatch.setattr(rs.state, "last_inserted_where", ("org.kde.kwrite", ("tray", "{first}")))
-    last_dictation.remember_shown("See you at noon.", chunked=True, ok=True, serial=rs.state.current.message.serial)
+    last_dictation.remember_shown("See you at noon.", chunked=True, ok=True, message=message)
     monkeypatch.setattr(rs.state, "last_inserted_where", ("org.kde.kwrite", ("tray", "{second}")))
-    last_dictation.remember_shown(" How are you?", chunked=True, ok=True, serial=rs.state.current.message.serial)
-    assert rs.state.shown_text is None
+    last_dictation.remember_shown(" How are you?", chunked=True, ok=True, message=message)
+    assert message.shown is None
 
 
 def test_the_screen_copy_survives_the_two_spellings_of_one_app(monkeypatch):
     """Plasma's X11 session: KWin says "google-chrome", X11 "Google-chrome",
     and a busy tray leaves a phrase's look to X11. The copy "edit that" and
     "fix that word" work on was dropped as if the phrase went elsewhere."""
-    monkeypatch.setattr(rs.state.current.message, "serial", 3)
-    for name, value in (("shown_serial", 2), ("shown_text", ""),
-                        ("shown_window", None)):
-        monkeypatch.setattr(rs.state, name, value)
+    message = send_countdown.Message()
     monkeypatch.setattr(rs.state, "last_inserted_window", "google-chrome")
-    last_dictation.remember_shown("See you at noon.", chunked=True, ok=True, serial=rs.state.current.message.serial)
+    last_dictation.remember_shown("See you at noon.", chunked=True, ok=True, message=message)
     monkeypatch.setattr(rs.state, "last_inserted_window", "Google-chrome")
-    last_dictation.remember_shown(" How are you?", chunked=True, ok=True, serial=rs.state.current.message.serial)
-    assert rs.state.shown_text == "See you at noon. How are you?"
+    last_dictation.remember_shown(" How are you?", chunked=True, ok=True, message=message)
+    assert message.shown == "See you at noon. How are you?"
     monkeypatch.setattr(rs.state, "last_inserted_window", "org.kde.kwrite")
-    last_dictation.remember_shown(" Bye.", chunked=True, ok=True, serial=rs.state.current.message.serial)
-    assert rs.state.shown_text is None                 # another app: not trusted
+    last_dictation.remember_shown(" Bye.", chunked=True, ok=True, message=message)
+    assert message.shown is None                       # another app: not trusted

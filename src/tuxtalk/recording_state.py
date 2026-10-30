@@ -87,17 +87,11 @@ class RecordingState:
     # The last Enter TuxTalk pressed: {"at", "automatic"}, or None
     # (last_dictation.forget_after_key). "edit that" just after it explains itself.
     sent: object = None
-    # A recording typed in phrases (Type at pause) is still one dictation.
-    # said_serial is the number of the one said_text is all of, typed or
-    # tried: its Recent Dictations entry (last_dictation.remember_said).
-    # shown_text is the part of it on screen in shown_window, ending at the
-    # cursor, for "fix that word" to fix in place; None once that isn't
-    # known (last_dictation.remember_shown).
-    said_serial: int = -1
-    said_text: str = ""
-    shown_serial: int = -1
-    shown_text: object = None
-    shown_window: object = None
+    # The Message of the recording whose words went in last (set by
+    # delivery.inject_text): its screen copy is the one "fix that word" and
+    # forgetting it work on, and a correction across a pause reaches back
+    # only over a phrase of its own recording.
+    last_message: send_countdown.Message = field(default_factory=send_countdown.Message)
 
 
 # The one the dictation service keeps, read as recording_state.state.

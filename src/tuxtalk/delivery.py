@@ -113,6 +113,8 @@ def inject_text(text: str, injection_mode: str, one_block: bool = False, into=No
     """
     before = focused_window.destination()
     sends_before, landed = keyboard_output.this_thread.sends, None
+    if message is not None:
+        rs.state.last_message = message
     keyboard_output.this_thread.into = into
     try:
         # Checked again right before each key, after the waits for the paste
@@ -267,15 +269,16 @@ def type_onto_dictation(text: str, injection_mode: str, into=None) -> str:
     whole; inject_text's outcome, and *into* is its. When none of it went
     in (a space refused because the focus moved), the dictation is in the
     app as it was, and so is everything that remembers it."""
+    last = rs.state.last_message
     kept = (rs.state.last_inserted_text, rs.state.continue_mid_sentence, rs.state.nav_context,
-            rs.state.shown_text, rs.state.last_inserted_window, rs.state.last_inserted_where)
+            last.shown, rs.state.last_inserted_window, rs.state.last_inserted_where)
     outcome = inject_text(text, injection_mode, into=into)
     if outcome == "ok":
         rs.state.last_inserted_text = kept[0] + text
     elif outcome in _GAVE_UP_UNTYPED:
         # The window too: typing takes it for the dictation's before the first key.
         (rs.state.last_inserted_text, rs.state.continue_mid_sentence, rs.state.nav_context,
-         rs.state.shown_text, rs.state.last_inserted_window, rs.state.last_inserted_where) = kept
+         last.shown, rs.state.last_inserted_window, rs.state.last_inserted_where) = kept
     return outcome
 
 
