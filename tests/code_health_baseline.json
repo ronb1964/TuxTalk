@@ -102,15 +102,8 @@
   "uninstall.py::_package_lines::long_line": 1,
   "uninstall.py::find::long_line": 2,
   "update_checker.py::_fetch_failure_message::long_line": 1,
-  "update_checker.py::check_just_updated::swallowed_error": 2,
-  "update_checker.py::compare_versions::swallowed_error": 1,
-  "update_checker.py::fetch_extension_version_from_release::swallowed_error": 1,
-  "update_checker.py::fetch_release_by_tag::swallowed_error": 1,
   "update_checker.py::get_extension_version::long_line": 1,
-  "update_checker.py::install_appimage_update::swallowed_error": 1,
   "update_checker.py::restart_via_launcher::long_line": 1,
-  "update_checker.py::restart_via_launcher::swallowed_error": 1,
-  "update_offers.py::maybe_show_recommend_notice::swallowed_error": 1,
   "virtual_keyboard.py::<module>::dated_comment": 2,
   "virtual_keyboard.py::_keyboard_class::undocumented": 1,
   "virtual_keyboard.py::send::long_line": 1,
@@ -119,14 +112,11 @@
   "voice_navigation.py::<module>::long_line": 6,
   "voice_navigation.py::chords::dated_comment": 2,
   "voice_navigation.py::plan::long_line": 2,
-  "vulkan_setup_dialogs.py::run_speed_check.work::swallowed_error": 1,
   "welcome_dialog.py::WelcomeDialog._run_in_background.runner::swallowed_error": 1,
   "whisper_vulkan.py::VulkanWhisperModel.__init__::undocumented": 1,
   "whisper_vulkan.py::VulkanWhisperModel._start::undocumented": 1,
   "whisper_vulkan.py::VulkanWhisperModel.transcribe::long_line": 1,
-  "whisper_vulkan.py::make_engine_download_func.download::undocumented": 1,
-  "window_geometry.py::_x11_active_rect::swallowed_error": 1,
-  "window_geometry.py::screen_monitors::swallowed_error": 1
+  "whisper_vulkan.py::make_engine_download_func.download::undocumented": 1
  },
  "functions": {
   "ai_cleanup.py::_deletion_allowed": {

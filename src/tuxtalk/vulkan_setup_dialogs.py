@@ -199,7 +199,8 @@ def run_speed_check(parent, model):
                 result["error"] = "TuxTalk couldn't find a graphics chip it can use."
             else:
                 result["times"] = wv.speed_check(model, device, cancel=cancel)
-        except Exception as e:
+        except Exception as e:      # shown to the user, who keeps the processor
+            logger.warning(f"The speed check didn't work: {e}")
             result["error"] = f"The speed check didn't work: {e}"
 
     _wait_dialog(parent, work)

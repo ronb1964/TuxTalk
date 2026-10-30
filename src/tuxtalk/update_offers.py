@@ -229,6 +229,6 @@ def maybe_show_recommend_notice():
             logger.info(f"Told the user about the recommended setup: {better.title}")
         cfg.recommend_notice_shown = True
         save_config(cfg)
-    except Exception as e:
-        logger.debug(f"Recommended-setup notice skipped: {e}")
+    except Exception as e:      # a nicety: never worth breaking the tray's timer
+        logger.info(f"Recommended-setup notice skipped: {e}")
     return False
