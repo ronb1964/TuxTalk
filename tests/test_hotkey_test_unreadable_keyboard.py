@@ -5,6 +5,7 @@ in the input group, evdev opens no keyboard, yet the dialog's GTK fallback
 still sees the keys. Those keys must show as seen but not active yet, with a
 note saying what makes them work, never a plain "Working!". It can be used from the keyboard alone, too.
 """
+import logging
 import os
 import time
 from types import SimpleNamespace
@@ -83,19 +84,27 @@ def test_keyboards_are_opened():
         keyboard_devices.close_devices(opened)
 
 
-def test_a_device_whose_name_isnt_utf8_is_skipped():
+def test_a_device_whose_name_isnt_utf8_is_skipped_and_said_once(monkeypatch, caplog):
     """evdev decodes a device's name strictly: a Bluetooth device with a
-    Latin-1 name raised out of the scan, and the hotkey test failed."""
+    Latin-1 name raised out of the scan, and the hotkey test failed. It's
+    left out now, and the log says why once, not at every scan."""
+    monkeypatch.setattr(keyboard_devices, "_undecodable", set())
+
     def make(path):
         if path.endswith("latin1"):
             raise UnicodeDecodeError("utf-8", b"Clavier \xe9", 8, 9, "invalid byte")
         return FakeDevice(path)
     paths = ["/dev/input/latin1", "/dev/input/kbd"]
-    opened = keyboard_devices.open_new_keyboards([], lambda: paths, make)
-    try:
-        assert [d.path for d in opened] == ["/dev/input/kbd"]
-    finally:
-        keyboard_devices.close_devices(opened)
+    with caplog.at_level(logging.INFO, logger=keyboard_devices.logger.name):
+        opened = keyboard_devices.open_new_keyboards([], lambda: paths, make)
+        try:
+            assert [d.path for d in opened] == ["/dev/input/kbd"]
+            assert keyboard_devices.open_new_keyboards(opened, lambda: paths, make) == []
+        finally:
+            keyboard_devices.close_devices(opened)
+    said = [r for r in caplog.records
+            if r.levelno == logging.INFO and "isn't UTF-8" in r.getMessage()]
+    assert len(said) == 1 and "/dev/input/latin1" in said[0].getMessage()
 
 
 def test_a_game_controller_is_not_a_keyboard():

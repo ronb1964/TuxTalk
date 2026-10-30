@@ -473,8 +473,9 @@ def test_an_extension_update_opens_the_updates_tab():
 
 # --- the stand-ins hold the extension to what GNOME Shell and TuxTalk accept ---------
 
-def test_an_import_gnome_shell_doesnt_have_fails(tmp_path):
-    """A wrong path, and GNOME Shell doesn't load the extension at all."""
+def test_an_import_of_a_module_without_a_stand_in_fails(tmp_path):
+    """A wrong path, and GNOME Shell doesn't load the extension at all: it
+    fails here too, as any module the stand-ins don't have does."""
     from gnome_extension_js import STAND_INS
     source = (STAND_INS.parent.parent / "gnome-extension" / "talktype@ronb1964.github.io"
               / "extension.js").read_text()
@@ -518,8 +519,10 @@ def _interface(xml):
     for element in ET.fromstring(xml).iter():
         args = element.findall("arg")
         if element.tag == "method":
+            # A method's arg without a direction is an in-arg, as D-Bus says.
             found[element.get("name")] = (
-                "".join(a.get("type") for a in args if a.get("direction") == "in") + "->"
+                "".join(a.get("type") for a in args if a.get("direction", "in") == "in")
+                + "->"
                 + "".join(a.get("type") for a in args if a.get("direction") == "out"))
         elif element.tag == "signal":
             found[element.get("name")] = "".join(a.get("type") for a in args)
@@ -546,3 +549,23 @@ def test_the_interface_is_tuxtalks():
             tuxtalk[name] = member._dbus_signature or ""
     assert {name: tuxtalk.get(name) for name in declared} == declared
 
+
+INTERFACE_IN_ANY_ORDER = """<node><interface name="io.example.Test">
+  <method name="Mixed">
+    <arg direction="in" type="s" name="first"/>
+    <arg type="u" name="no_direction"/>
+    <arg name="answer" type="b" direction="out"/>
+  </method>
+</interface></node>"""
+
+
+def test_args_are_read_in_any_attribute_order_and_default_to_in():
+    """D-Bus allows the attributes in any order, and a method's arg without
+    a direction is an in-arg: both readers of the interface agree."""
+    assert _interface(INTERFACE_IN_ANY_ORDER) == {"Mixed": "su->b"}
+    types, _logs = run(f"""
+        const Wrapper = t.Gio.DBusProxy.makeProxyWrapper({json.dumps(INTERFACE_IN_ANY_ORDER)});
+        new Wrapper(null, '', '', () => {{}}, null, 0);
+        t.report(t.shell.proxySetups.at(-1).methods.Mixed);
+    """)
+    assert types == ["s", "u"]

@@ -7,7 +7,9 @@ import {isMainThread} from 'node:worker_threads';
 const STAND_INS = new URL('./gnome.mjs', import.meta.url).href;
 
 // The libraries and GNOME Shell modules the extension imports, with what
-// each gives it; an import of anything else fails, as it would in GNOME Shell.
+// each gives it. An import of any other gi:// or resource:/// module fails,
+// whether GNOME Shell lacks it (a wrong path, which fails there too) or only
+// these stand-ins do (then one is added here).
 const GI = ['GLib', 'GObject', 'Gio', 'Meta', 'Pango', 'Shell', 'St'];
 const SHELL = {
     'resource:///org/gnome/shell/ui/main.js': ['notify', 'panel', 'wm'],

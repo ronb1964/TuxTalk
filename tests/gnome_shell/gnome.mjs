@@ -124,8 +124,13 @@ export const Gio = {
             const methods = {};
             for (const [, name, body = ''] of xml.matchAll(
                 /<method name="(\w+)"\s*(?:\/>|>([\s\S]*?)<\/method>)/g)) {
-                methods[name] = [...body.matchAll(/<arg type="([^"]+)" direction="in"/g)]
-                    .map(m => m[1]);
+                // Attributes in any order; a method's arg without a
+                // direction is an in-arg, as D-Bus says.
+                methods[name] = [...body.matchAll(/<arg\b([^>]*)>/g)]
+                    .map(([, attrs]) => [attrs.match(/\btype="([^"]+)"/)?.[1],
+                        attrs.match(/\bdirection="(\w+)"/)?.[1] ?? 'in'])
+                    .filter(([, direction]) => direction === 'in')
+                    .map(([type]) => type);
             }
             const signals = [...xml.matchAll(/<signal name="(\w+)"/g)].map(m => m[1]);
             return function (_bus, _name, _path, callback, cancellable, flags) {
@@ -358,7 +363,9 @@ export const variant = value => ({deep_unpack: () => value});
 const JS_TYPES = {s: 'string', b: 'boolean', i: 'number', u: 'number'};
 
 /** Refuse a call GJS would: the wrong number of arguments, or one GJS
- * can't pack into its D-Bus type. */
+ * can't pack into its D-Bus type. Only a reply callback is told apart
+ * from the arguments; a cancellable or flags after it, which GJS also
+ * takes, aren't modelled (the extension passes neither). */
 function checkArgs(method, types, args) {
     if (args.length !== types.length) {
         throw new Error(`${method}Remote takes ${types.length} argument(s) ` +

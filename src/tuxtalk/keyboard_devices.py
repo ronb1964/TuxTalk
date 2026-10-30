@@ -111,9 +111,15 @@ def is_uinput_device(path) -> bool:
 
 
 # How often to look for keyboards plugged in (or back) meanwhile: often enough
-# that one starts working on its own, rare enough that opening every node under
-# /dev/input each time costs nothing.
+# that one starts working on its own. Each look opens and closes every node
+# under /dev/input once, a few dozen system calls, at most once every few
+# seconds and only while no recording runs.
 RESCAN_SECONDS = 3.0
+
+# Nodes logged as having a name evdev can't decode, so the normal log says
+# once per plug why that device is left out, not at every scan. Only nodes
+# still listed are kept.
+_undecodable = set()
 
 
 def open_new_keyboards(devices, list_devices, input_device) -> list:
@@ -124,10 +130,11 @@ def open_new_keyboards(devices, list_devices, input_device) -> list:
     Anything else (a mouse, the power button, a game controller, which any
     user may open and which reports keys too) is closed at once rather than
     whenever it's garbage-collected, since every scan opens each node again.
-    A node that can't be opened (no permission, unplugged mid-scan, a name
-    that isn't UTF-8, which evdev can't decode) is skipped and logged at
-    debug level: every scan meets the same ones. The caller says what it
-    opened, in its own words."""
+    A node that can't be opened (no permission, unplugged mid-scan) is
+    skipped and logged at debug level: every scan meets the same ones. One
+    whose name isn't UTF-8, which evdev can't decode, is skipped too, and
+    said once in the normal log, since that device then never works. The
+    caller says what it opened, in its own words."""
     known = {getattr(d, "path", None) for d in devices}
     try:
         paths = list_devices()
@@ -135,14 +142,20 @@ def open_new_keyboards(devices, list_devices, input_device) -> list:
         # evdev checks that a node exists, then stats it: an unplug in between.
         logger.info(f"A device went while listing the input devices; next scan: {e}")
         return []
+    _undecodable.intersection_update(paths)
     added = []
     for path in paths:
         if path in known:
             continue
         try:
             dev = input_device(path)
-        except (OSError, UnicodeDecodeError) as e:
+        except OSError as e:
             logger.debug(f"Could not open {path}: {e}")
+            continue
+        except UnicodeDecodeError as e:
+            if path not in _undecodable:
+                _undecodable.add(path)
+                logger.info(f"Leaving out the device at {path}: its name isn't UTF-8 ({e})")
             continue
         if not is_keyboard_device(dev):
             close_devices([dev])
