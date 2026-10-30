@@ -3,18 +3,9 @@
 # ==========================
 # Repackages the release AppImage into a Fedora/RHEL/openSUSE .rpm.
 #
-# Same approach as build-deb.sh: the AppImage already bundles a self-contained
-# runtime (its own Python, GTK bindings, faster-whisper/CTranslate2,
-# wl-clipboard) built on Ubuntu 22.04 for wide glibc compatibility. We extract that
-# finished tree and wrap it as an .rpm rather than maintaining a second build.
-# Run ./build-release.sh FIRST.
-#
-# Layout produced (identical to the .deb):
-#   /opt/talktype/            <- the whole extracted AppImage tree (AppRun + usr/)
-#   /usr/bin/tuxtalk         <- tiny launcher: exec /opt/talktype/AppRun "$@"
-#   /usr/share/applications/  <- desktop entry (Exec=tuxtalk tray)
-#   /usr/share/icons/hicolor/scalable/apps/  <- crisp SVG icon
-#   /usr/share/pixmaps/       <- PNG icon fallback
+# It reuses the finished AppImage, as build-deb.sh does
+# (packaging/stage-from-appimage.sh says why and what it installs, the same
+# tree as the .deb's), so run ./build-release.sh FIRST.
 #
 # System deps are DECLARED (the bundle relies on the host's GTK stack). Fedora names:
 #   gtk3, libayatana-appindicator-gtk3 (tray), portaudio (mic), and /usr/bin/pactl
@@ -28,89 +19,32 @@ set -e
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$PROJECT_DIR"
 
-export PATH="$HOME/bin:$PATH"
-if ! command -v fpm >/dev/null 2>&1; then
-    echo "❌ fpm not found. Install it with:  gem install --user-install fpm"
-    exit 1
-fi
+# shellcheck source=packaging/stage-from-appimage.sh
+source "$PROJECT_DIR/packaging/stage-from-appimage.sh"
+require_fpm
 if ! command -v rpmbuild >/dev/null 2>&1; then
     echo "❌ rpmbuild not found. Install it with:  sudo dnf install rpm-build"
     exit 1
 fi
-
-VERSION=$(grep -E "^version = " "$PROJECT_DIR/pyproject.toml" | sed 's/version = "\(.*\)"/\1/')
-if [ -z "$VERSION" ]; then
-    echo "❌ Could not read version from pyproject.toml"
-    exit 1
-fi
-APPIMAGE="$PROJECT_DIR/TuxTalk-v${VERSION}-x86_64.AppImage"
-if [ ! -f "$APPIMAGE" ]; then
-    echo "❌ AppImage not found: $APPIMAGE"
-    echo "   Run ./build-release.sh first to produce it."
-    exit 1
-fi
+VERSION=$(project_version "$PROJECT_DIR")
+APPIMAGE=$(release_appimage "$PROJECT_DIR" "$VERSION")
 
 echo "📦 Building TuxTalk .rpm from $(basename "$APPIMAGE")"
 echo "========================================"
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
-
-echo "📂 Extracting the AppImage..."
-( cd "$WORK" && "$APPIMAGE" --appimage-extract >/dev/null 2>&1 )
-TREE="$WORK/squashfs-root"
-[ -d "$TREE" ] || { echo "❌ extraction failed"; exit 1; }
-
-echo "🏗️  Staging the .rpm filesystem..."
+stage_tree "$APPIMAGE" "$WORK" "$PROJECT_DIR"
 STAGE="$WORK/stage"
-mkdir -p "$STAGE/opt" "$STAGE/usr/bin" "$STAGE/usr/share/applications" "$STAGE/usr/share/pixmaps"
 
-# Whole tree -> /opt/talktype. AppRun sits at /opt/talktype/AppRun and derives its
-# paths relative to itself, so it works unchanged at this location.
-# The folder keeps its name from before the 0.15.0 rename (nobody sees it):
-# upgrades then replace files in place, like every earlier one, instead of
-# deleting the folder a running 0.14.x tray still imports from.
-mv "$TREE" "$STAGE/opt/talktype"
-
-# Third-party licenses ride inside the AppImage's tree (packaging/collect-licenses.sh).
-# Refuse to package an AppImage built without them.
-LIC_SRC="$STAGE/opt/talktype/usr/share/licenses"
-for f in tuxtalk/LICENSE tuxtalk/THIRD_PARTY_LICENSES.md wl-clipboard/COPYING; do
-    [ -f "$LIC_SRC/$f" ] || { echo "❌ The AppImage has no $f: rebuild it with ./build-release.sh"; exit 1; }
-done
 # Fedora keeps a package's license in /usr/share/licenses/<package>/.
+LIC_SRC="$STAGE/opt/talktype/usr/share/licenses"
 mkdir -p "$STAGE/usr/share/licenses/tuxtalk"
 cp "$LIC_SRC/tuxtalk/LICENSE" "$LIC_SRC/tuxtalk/THIRD_PARTY_LICENSES.md" \
     "$STAGE/usr/share/licenses/tuxtalk/"
 
-cat > "$STAGE/usr/bin/tuxtalk" <<'LAUNCHER'
-#!/bin/sh
-# TuxTalk system launcher — hands off to the bundled AppRun, which sets
-# PYTHONHOME/PYTHONPATH/LD_LIBRARY_PATH/GI_TYPELIB_PATH relative to itself.
-exec /opt/talktype/AppRun "$@"
-LAUNCHER
-chmod +x "$STAGE/usr/bin/tuxtalk"
-# The command before the 0.15.0 rename: old shortcuts, scripts and a 0.14.x
-# updater (which restarts /usr/bin/talktype after installing this) still use it.
-ln -s tuxtalk "$STAGE/usr/bin/talktype"
-
-sed 's/^Exec=AppRun/Exec=tuxtalk/' "$PROJECT_DIR/io.github.ronb1964.TuxTalk.desktop" \
-    > "$STAGE/usr/share/applications/io.github.ronb1964.TuxTalk.desktop"
-cp "$PROJECT_DIR/io.github.ronb1964.TuxTalk.png" "$STAGE/usr/share/pixmaps/"
-install -Dm644 "$PROJECT_DIR/icons/OFFICIAL_ICON_DO_NOT_CHANGE.svg" \
-    "$STAGE/usr/share/icons/hicolor/scalable/apps/io.github.ronb1964.TuxTalk.svg"
-
-# Normalize permissions so nothing installs unreadable (same guard as the .deb).
-chmod -R a+rX "$STAGE"
-
 POSTINST="$WORK/postinst.sh"
-cat > "$POSTINST" <<'POST'
-#!/bin/sh
-set -e
-command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache -q -f /usr/share/icons/hicolor 2>/dev/null || true
-command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database -q /usr/share/applications 2>/dev/null || true
-exit 0
-POST
+finish_stage "$STAGE" "$POSTINST"
 
 echo "🔧 Packaging with fpm..."
 rm -f "$PROJECT_DIR"/tuxtalk-"${VERSION}"-*.rpm "$PROJECT_DIR"/tuxtalk-"${VERSION}".*.rpm

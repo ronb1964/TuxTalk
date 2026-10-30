@@ -42,12 +42,8 @@ def test_deb_and_rpm_replace_the_talktype_package():
         for flag in ('--replaces "talktype < 0.15.0"', '--conflicts "talktype < 0.15.0"',
                      '--provides "talktype"'):
             assert flag in s, (name, flag)
-        assert 'ln -s tuxtalk "$STAGE/usr/bin/talktype"' in s, name
-        # The install folder keeps its pre-rename name: upgrades then replace
-        # files in place, like every earlier one, instead of deleting the
-        # folder a running 0.14.x tray still imports from.
-        assert 'mv "$TREE" "$STAGE/opt/talktype"' in s, name
-        assert "exec /opt/talktype/AppRun" in s, name
+    # The /usr/bin/talktype command and the /opt/talktype folder they keep:
+    # test_native_packages builds both and looks.
 
 
 def test_docs_name_the_folder_the_packages_install_to():

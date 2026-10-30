@@ -44,12 +44,11 @@ def test_only_one_action_at_a_time():
 
 
 def test_every_launcher_hands_its_arguments_to_the_tray():
-    """The AppImage's AppRun, the .deb/.rpm launchers (which run AppRun) and
-    run-dev.sh all pass "$@" on, so the tray's main() sees --toggle."""
+    """The AppImage's AppRun and run-dev.sh pass "$@" on, so the tray's
+    main() sees --toggle; so do the .deb/.rpm launchers, which run AppRun
+    (test_native_packages builds them)."""
     assert '-m tuxtalk.tray "$@"' in (ROOT / "container-build.sh").read_text()
     assert '-m tuxtalk.tray "$@"' in (ROOT / "run-dev.sh").read_text()
-    for script in ("build-deb.sh", "build-rpm.sh"):
-        assert 'exec /opt/talktype/AppRun "$@"' in (ROOT / script).read_text()
 
 
 @pytest.mark.parametrize("action,recording,expected", [
