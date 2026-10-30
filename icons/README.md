@@ -1,36 +1,26 @@
 # TuxTalk Icons
 
-## Official Icon: TT_retro_square_light.svg
+| File | What it's for |
+|---|---|
+| `OFFICIAL_ICON_DO_NOT_CHANGE.svg` | **The official icon.** The .deb, the .rpm, the Flatpak manifest, start at login and the splash screen all install or show this file. Read-only on purpose. |
+| `TT_retro_square_light-Inkscape.svg` | The Inkscape working copy, to edit the icon. |
+| `TT_retro_square_light_transparent.png` | The splash screen's picture when the SVG can't be loaded. |
+| `TT_square_light.png` | The icon the updater installs for the desktop's menu. |
 
-**This is the OFFICIAL TuxTalk icon.** All builds and launchers must use this icon.
+The AppImage carries its own copy, `io.github.ronb1964.TuxTalk.png` at the
+project root, which `container-build.sh` puts in the AppImage.
 
-### Files in this directory:
+## Changing the icon
 
-- ✅ **TT_retro_square_light.svg** - **OFFICIAL ICON** (retro square design with blue on white)
-- 🔒 **OFFICIAL_ICON_DO_NOT_CHANGE.svg** - Read-only backup of the official icon
-- 📝 **TT_retro_square_light-Inkscape.svg** - Inkscape working file (editable version)
+1. Edit `TT_retro_square_light-Inkscape.svg` in Inkscape.
+2. Save it as "Plain SVG" over the official icon:
+   ```bash
+   chmod 644 OFFICIAL_ICON_DO_NOT_CHANGE.svg
+   # in Inkscape: File, Save a Copy, Plain SVG, OFFICIAL_ICON_DO_NOT_CHANGE.svg
+   chmod 444 OFFICIAL_ICON_DO_NOT_CHANGE.svg
+   ```
+3. Make the PNGs again from it (the root `io.github.ronb1964.TuxTalk.png`, and
+   the two PNGs here) so every build shows the same icon.
 
-### Unused/Legacy Icons:
-- TT_retro_round_dark.png
-- TT_retro_round_light.png
-- TT_retro_square_dark.png
-- TT_retro_square_gradient_light.png
-- TT_retro_square_light.png (PNG version)
-- TT_round_light.png
-- TT_square_dark.png
-- TT_square_gradient_light.png
-- TT_square_light.png
-
-## Important Notes
-
-1. **DO NOT** replace or modify `TT_retro_square_light.svg`
-2. **DO NOT** modify `OFFICIAL_ICON_DO_NOT_CHANGE.svg` (it's read-only)
-3. The icon at the project root (`../io.github.ronb1964.TuxTalk.svg`) must always be a copy of this official icon
-4. See `../ICON_DOCUMENTATION.md` for complete documentation
-
-## If You Need to Edit the Icon
-
-1. Work with `TT_retro_square_light-Inkscape.svg` in Inkscape
-2. When satisfied, export as "Plain SVG" and save to `TT_retro_square_light.svg`
-3. Copy to the project root: `cp TT_retro_square_light.svg ../io.github.ronb1964.TalkType.svg`
-4. Update the protected backup: `chmod 644 OFFICIAL_ICON_DO_NOT_CHANGE.svg && cp TT_retro_square_light.svg OFFICIAL_ICON_DO_NOT_CHANGE.svg && chmod 444 OFFICIAL_ICON_DO_NOT_CHANGE.svg`
+Earlier designs (round, dark and gradient versions, and the icons from before
+the rename to TuxTalk) are in git's history.
