@@ -215,15 +215,51 @@ def test_a_cancel_while_waiting_for_the_install_lock_installs_nothing(pypi, monk
     cancel, turns = threading.Event(), []
 
     @contextlib.contextmanager
-    def turn(name, wait_s=120.0):
+    def turn(name, what, wait_s=120.0):
         turns.append(name)
         if len(turns) == 2:                 # the install's turn: Cancel came meanwhile
             cancel.set()
         yield
     monkeypatch.setattr(download_utils, "install_turn", turn)
+    unpacked = []
+    monkeypatch.setattr(cuda_download, "_extract_wheels", lambda *a: unpacked.append(a))
+    assert not cuda_download.download_cuda_libraries(cancel_event=cancel)
+    assert unpacked == [], "it unpacked after the Cancel"
+    assert (pypi.cuda / "lib" / LIBRARIES[0]).read_text() == "the working one"
+    assert sorted(os.listdir(pypi.cuda)) == ["lib"]
+
+
+def test_a_cancel_during_the_last_wheels_unpack_installs_nothing(pypi, monkeypatch):
+    """The window closes at the Cancel; the libraries mustn't go in after it."""
+    import threading
+    _install_complete_cuda(pypi.cuda)
+    cancel = threading.Event()
+    extract = cuda_download._extract_wheels
+
+    def cancelled_as_it_ends(*args):
+        extract(*args)
+        cancel.set()
+    monkeypatch.setattr(cuda_download, "_extract_wheels", cancelled_as_it_ends)
     assert not cuda_download.download_cuda_libraries(cancel_event=cancel)
     assert (pypi.cuda / "lib" / LIBRARIES[0]).read_text() == "the working one"
     assert sorted(os.listdir(pypi.cuda)) == ["lib"]
+
+
+def test_a_tray_starting_during_the_unpack_leaves_the_unpacking_folder_alone(pypi, monkeypatch):
+    """The sweep at start removes unpacking folders whatever their age. It
+    is safe only because unpacking holds the install lock: a sweep that
+    didn't wait for it took the folder away, and the install failed."""
+    extract = cuda_download._extract_wheels
+    seen = []
+
+    def tray_starts_meanwhile(wheel_paths, staging, report, cancel_event):
+        extract(wheel_paths, staging, report, cancel_event)
+        cuda_download.recover_cut_off_install()
+        seen.append(os.path.isdir(staging))
+    monkeypatch.setattr(cuda_download, "_extract_wheels", tray_starts_meanwhile)
+    assert cuda_download.download_cuda_libraries()
+    assert seen == [True]
+    assert cuda_helper.has_talktype_cuda_libraries()
 
 
 def test_a_wheel_pypi_lists_without_a_checksum_is_not_downloaded(monkeypatch):

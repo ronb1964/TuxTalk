@@ -303,3 +303,13 @@ def test_a_replace_whose_rename_fails_puts_the_old_folder_back(tmp_path, monkeyp
     with pytest.raises(OSError):
         download_utils.replace_folder(staging, target, old)
     assert os.path.isdir(target) and not os.path.exists(old)
+
+
+def test_a_turn_that_doesnt_come_says_what_was_installing():
+    """It reached the CUDA window as "another cuda install didn't finish"."""
+    from tuxtalk import download_utils, single_instance
+    with single_instance.open_lock("cuda-install.lock") as held:
+        assert single_instance.claim(held)
+        with (pytest.raises(OSError, match="^another install of CUDA didn't finish$"),
+              download_utils.install_turn("cuda", "CUDA", wait_s=0)):
+            pass

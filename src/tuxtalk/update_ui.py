@@ -20,6 +20,9 @@ from .progress_window import run_with_progress  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
+DOWNLOAD_FAILED = "The download could not be completed"
+UNEXPECTED = "Something TuxTalk didn't expect went wrong; the log has the details."
+
 
 def get_update_guidance(install_type: str, latest_version: str,
                         release_url: str = "") -> dict:
@@ -64,9 +67,6 @@ def get_update_guidance(install_type: str, latest_version: str,
     return {"update_method": "manual", "can_auto_update": False,
             "title": "Update Available",
             "message": msg, "command": cmd, "release_url": release_url}
-
-DOWNLOAD_FAILED = "The download could not be completed"
-UNEXPECTED = "Something TuxTalk didn't expect went wrong; the log has the details."
 
 
 def download_failure(last_said):

@@ -85,7 +85,7 @@ def make_engine_download_func():
             try:
                 progress_callback("Unpacking...", 97)
                 unpack_tar(archive, folder)
-                with install_turn("ai-engine"):
+                with install_turn("ai-engine", "the AI engine"):
                     if not os.access(server_binary(), os.X_OK):    # or another download did it
                         for name in os.listdir(folder):
                             target = os.path.join(engine_dir, name)

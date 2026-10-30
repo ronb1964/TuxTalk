@@ -147,3 +147,12 @@ def test_the_locks_stay_where_they_were_when_the_strict_check_refuses(tmp_path, 
     monkeypatch.setattr(single_instance, "FALLBACK_ROOT", str(tmp_path / "fallback"))
     assert single_instance.private_session_dir() is None
     assert single_instance.runtime_dir() == str(run)
+
+
+def test_tests_never_use_the_users_own_runtime_folder():
+    """conftest gives each test a runtime folder of its own: a test that
+    took the user's real cuda-install.lock could hold up a live TuxTalk."""
+    import conftest
+    for folder in (single_instance.runtime_dir(), single_instance.session_runtime_dir()):
+        assert not os.path.realpath(folder).startswith(
+            os.path.realpath(conftest._REAL_RUNTIME_DIR))

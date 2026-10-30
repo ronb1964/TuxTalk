@@ -235,10 +235,11 @@ def replace_folder(staging: str, target: str, old: str) -> None:
     new one is in place, and comes back if it can't be (the rename failed),
     so there is a complete copy at *target* or *old* at every moment. All
     three sit in one folder, so the renames never cross filesystems. Hold
-    the install's lock."""
-    restore_cut_off_swap(target, old)
-    remove_tree(old)            # an earlier replace that couldn't remove it
+    the install's lock; an earlier replace cut off part-way is the caller's
+    to put back first (restore_cut_off_swap), and an *old* left without a
+    *target* is removed only once the new copy is in place."""
     if os.path.lexists(target):
+        remove_tree(old)        # an earlier replace that couldn't remove it
         os.rename(target, old)
     try:
         os.rename(staging, target)
@@ -305,16 +306,17 @@ def download_area(parent: str, name: str, old_names=()):
 
 
 @contextlib.contextmanager
-def install_turn(name: str, wait_s: float = 120.0):
+def install_turn(name: str, what: str, wait_s: float = 120.0):
     """Hold *name*'s install lock while a downloaded engine is put in place:
     the tray and Preferences may finish the same download together, and one
     removing the engine folder while the other moved its copy in failed
     both. Whoever comes second should check whether it is there already.
-    Raises OSError when the turn doesn't come within *wait_s*."""
+    Raises OSError, naming *what* for the window that shows it, when the
+    turn doesn't come within *wait_s*."""
     from . import single_instance
     with single_instance.open_lock(f"{name}-install.lock") as lock:
         if not single_instance.claim(lock, wait_s=wait_s):
-            raise OSError(f"another {name} install didn't finish")
+            raise OSError(f"another install of {what} didn't finish")
         yield
 
 

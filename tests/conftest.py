@@ -66,6 +66,15 @@ for _var, _sub in (("XDG_CONFIG_HOME", ".config"), ("XDG_DATA_HOME", ".local/sha
     os.environ[_var] = os.path.join(_TEST_HOME, _sub)
 atexit.register(shutil.rmtree, _TEST_HOME, ignore_errors=True)
 
+# The same for the runtime folder: TuxTalk's locks (the tray's, the service's,
+# CUDA's install turn) are files there, and a test holding the user's real
+# cuda-install.lock could block a live TuxTalk's install, or be blocked by it.
+# Each test gets its own (_private_runtime_folder); this one covers imports.
+_REAL_RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+_TEST_RUNTIME = tempfile.mkdtemp(prefix="tuxtalk-test-run-")
+os.environ["XDG_RUNTIME_DIR"] = _TEST_RUNTIME
+atexit.register(shutil.rmtree, _TEST_RUNTIME, ignore_errors=True)
+
 _LOG_DIR = tempfile.mkdtemp(prefix="talktype-test-logs-")
 os.environ["TUXTALK_LOG_DIR"] = _LOG_DIR
 # Never move the real ~/.config/talktype or ~/.local/share/TalkType while the
@@ -113,7 +122,7 @@ def _not_private(address):
         # Asked for by a test, the desktop's would start and outlive the bus.
         return (f"{len(started)} desktop services start on it when asked for; run "
                 "dbus-run-session with --config-file=tests/dbus-session.conf")
-    own = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}", "bus")
+    own = os.path.join(_REAL_RUNTIME_DIR, "bus")
     if os.path.exists(own):
         try:
             users = connect(f"unix:path={own}")
@@ -164,6 +173,14 @@ def _hold_back_notifications():
 
 
 _hold_back_notifications()
+
+
+@pytest.fixture(autouse=True)
+def _private_runtime_folder(tmp_path_factory, monkeypatch):
+    """Each test's runtime folder is a new one of its own (private, as
+    logind makes them), so no lock a test takes is the user's, or one an
+    earlier test left held."""
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path_factory.mktemp("run")))
 
 
 @pytest.fixture(autouse=True)

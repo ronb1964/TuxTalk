@@ -220,7 +220,7 @@ def recover_cut_off_install():
     if not os.path.isdir(cuda_path):
         return
     try:
-        with download_utils.install_turn("cuda", wait_s=0):
+        with download_utils.install_turn("cuda", "CUDA", wait_s=0):
             _remove_leftovers(cuda_path)
     except OSError as e:        # the lock is busy or can't be made: next start
         logger.info(f"CUDA's folder wasn't checked this time: {e}")
@@ -233,7 +233,7 @@ def _install(wheel_paths, cuda_path, report, cancel_event):
     differently upstream, never mixes files into a working install. The
     install lock is held from the unpacking on: another install waits its
     turn instead of taking this one's folder for a leftover."""
-    with download_utils.install_turn("cuda"):
+    with download_utils.install_turn("cuda", "CUDA"):
         _check_cancel(cancel_event)         # cancelled while it waited its turn
         _remove_leftovers(cuda_path)
         with download_utils.download_area(cuda_path, "lib") as (_archive, staging):
@@ -259,7 +259,7 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
     cuda_path = cuda_helper.get_appdir_cuda_path()
     try:
         os.makedirs(cuda_path, exist_ok=True)
-        with download_utils.install_turn("cuda"):
+        with download_utils.install_turn("cuda", "CUDA"):
             _remove_leftovers(cuda_path)    # a copy cut off last time comes back first
         with tempfile.TemporaryDirectory() as temp_dir:
             wheels = _resolve_wheels(report, cancel_event)
