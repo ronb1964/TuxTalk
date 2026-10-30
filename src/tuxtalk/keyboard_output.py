@@ -89,6 +89,8 @@ def send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY_
     """
     if claim is None and this_thread.into is not None:
         claim = functools.partial(focused_window.claim_into, this_thread.into)
+    if this_thread.last_check is not None:
+        claim = _then(claim, this_thread.last_check)
     before_press = modifier_hotkeys.wait_while_held(focused_window.destination)
     try:
         sent = virtual_keyboard.send(events, delay_ms, before_press, claim)
@@ -109,13 +111,33 @@ def send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY_
     return sent
 
 
+def _then(claim, check):
+    """*claim* (None for none), then *check*, which raises GaveUp to stop the
+    keys: asked in the claim's take, with the keyboard held, right before
+    the first key. Not before the claim, whose checks (which window has the
+    focus) take a while: a key pressed meanwhile would be missed."""
+    def claimed():
+        take = claim() if claim is not None else None
+
+        def checked_take():
+            check()
+            if take is not None:
+                take()
+        return checked_take
+    return claimed
+
+
 class _ThisThread(threading.local):
     """What send_keys knows of the delivery on this thread (delivery.inject_text):
     how many sends went out whole, so a wait that gives up after earlier
-    lines were typed stopped it partway, not before it began; and the only
-    window it may go into, else None."""
+    lines were typed stopped it partway, not before it began; the only
+    window it may go into, else None; and a last check its keys must pass
+    right before the first goes down, else None (a held send's space on its
+    own may not go out with Alt or a dictation key down:
+    send_countdown.give_back_space)."""
     sends = 0
     into = None
+    last_check = None
 
 
 this_thread = _ThisThread()

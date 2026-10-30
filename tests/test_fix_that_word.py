@@ -252,6 +252,24 @@ def test_the_picked_words_still_selected_are_fixed(selection):
     assert keyboard_output.this_thread.into is None        # the window lock let go
 
 
+@pytest.mark.parametrize("keys", ["the way to the word", "the replacement"])
+def test_the_focus_moving_before_the_flatpaks_keys_says_why(selection, monkeypatch, keys):
+    """The Flatpak's portal holds the keys to the window right before they
+    go and gives up when another has the focus: the fix stopped with nothing
+    said, the text unchanged."""
+    from tuxtalk import fix_word_dialog as fw, virtual_keyboard
+    pressed, typed_text, reads = selection
+    backend = keyboard_output.output_backend()
+
+    def moved(*a):
+        raise virtual_keyboard.GaveUp("moved")
+    monkeypatch.setattr(backend, "press_keys" if keys.startswith("the way") else "type_text",
+                        moved)
+    monkeypatch.setattr(keyboard_output, "output_backend", lambda: backend)
+    assert fw.fix_in_text(OLD, (START, START + 5, "fleece"), "org.kde.kwrite") is False
+    assert typed_text == [] and "another window" in reads["notice"]
+
+
 def test_a_terminal_isnt_changed(selection, monkeypatch):
     """Shift+Left selects nothing there: the replacement went in mid-line."""
     from tuxtalk import fix_word_dialog as fw

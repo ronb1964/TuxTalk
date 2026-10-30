@@ -33,7 +33,7 @@ from . import live_settings as live
 from . import recording_state as rs
 from .beeps import CANCEL_BEEP
 from .config import Settings
-from .hotkey_keys import MODIFIER_CODES, check_modifiers_held, track_modifier
+from .hotkey_keys import MODIFIER_CODES, check_modifiers_held, keys_down, track_modifier
 from .logger import setup_logger
 from .normalize import LINE_BREAK
 
@@ -187,6 +187,16 @@ def _drop_dead_devices(dead_devices, devices, cfg) -> None:
     dead_devices.clear()
 
 
+def _forget_lost_presses(devices, keys) -> None:
+    """After a keyboard went away or the hotkeys changed: forget dictation
+    key presses no remaining keyboard reports down, or whose key isn't a
+    dictation key now, since their release won't be read. Otherwise a space
+    they held back waited until that key was pressed again."""
+    down = keys_down(devices) & {keys.hold_key, keys.toggle_key}   # read outside the lock
+    if send_countdown.forget_presses(down) and send_countdown.owes_space():
+        dictation_worker.submit(send_countdown.give_back_space)
+
+
 # A combo press whose keys aren't all let go within this long is dropped, so a
 # missed key release can never make TuxTalk paste out of the blue later.
 PASTE_LAST_EXPIRY_S = 5.0
@@ -281,6 +291,7 @@ def _start_hold_recording(hold_key, held_modifiers, devices, cfg, input_device_i
     keyboard_grab.grab_keyboards_hiding); start_recording lets go of it if the mic fails
     to open. Shift unhidden, the Ctrl+C that copies the selection would
     arrive as Ctrl+Shift+C."""
+    send_countdown.key_pressed(hold_key)
     held = send_countdown.hold(announce=False)
     shift = _held_shift(held_modifiers) if live.voice_editing else set()
     keyboard_grab.grab_keyboards_hiding(devices, {hold_key, *shift})
@@ -312,6 +323,7 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
                          held_modifiers, devices, cfg):
         return
     if toggle_key and _toggle_tap_holds_send(event, toggle_key, held_modifiers):
+        send_countdown.key_pressed(toggle_key)
         return   # the tap only held the send: no recording
     if event.code in MODIFIER_CODES and event.code in (hold_key, toggle_key):
         _hide_modifier_hotkey(event, toggle_key, devices, held_modifiers)
@@ -403,6 +415,8 @@ def _on_voice_commands_combo(event, combo, held_modifiers, devices) -> bool:
 
 def _on_hold_key(event, hold_key, held_modifiers, devices, cfg, input_device_idx) -> None:
     """Hold-to-talk: the hold key down records, let go stops and types."""
+    if event.value == 0:
+        _dictation_key_up(hold_key)
     if (event.value == 1 and not rs.state.is_recording
             and not _someone_elses_shortcut(held_modifiers - {hold_key})):
         _start_hold_recording(hold_key, held_modifiers, devices, cfg, input_device_idx)
@@ -413,15 +427,27 @@ def _on_hold_key(event, hold_key, held_modifiers, devices, cfg, input_device_idx
         _stop_recording(cfg)
 
 
+def _dictation_key_up(key) -> None:
+    """Dictation key *key* came up. When its press was TuxTalk's
+    (send_countdown.key_pressed) and its recording is over already (a tap
+    that only held a send, Esc, a microphone that didn't open), the space a
+    held send left off may go in (send_countdown.give_back_space, which
+    looks at the keys again when it runs). A recording still running gives
+    it back when it ends."""
+    if send_countdown.key_released(key) and not rs.state.is_recording:
+        # After what's still being typed.
+        dictation_worker.submit(send_countdown.give_back_space)
+
+
 def _on_toggle_key(event, toggle_key, held_modifiers, devices, cfg, input_device_idx) -> bool:
     """Tap-to-toggle: a tap starts a recording, the next stops it, and a
     quick second tap makes it hands-free. With Shift (voice editing on) it
     is a voice edit. True when a voice edit was cancelled."""
-    if event.value == 0 and send_countdown.owes_space() and not rs.state.is_recording:
-        # The tap that held the send is over; typed after what's still being typed.
-        dictation_worker.submit(send_countdown.type_owed_space)
+    if event.value == 0:
+        _dictation_key_up(toggle_key)
     if event.value != 1 or _someone_elses_shortcut(held_modifiers - {toggle_key}):
         return False
+    send_countdown.key_pressed(toggle_key)
     shift = _held_shift(held_modifiers) if live.voice_editing else set()
     if not rs.state.is_recording:
         if shift:
@@ -520,6 +546,7 @@ def run(cfg: Settings, input_device_idx, keyboards=None):
             keys = reloaded
             # Re-claimed even if the hotkeys look unchanged: claiming is cheap.
             _watch(cfg, devices, keys)
+            _forget_lost_presses(devices, keys)
             logger.info("Applied settings change without restarting")
 
         dead_devices = _read_key_events(devices, keys, held_modifiers, cfg, svc, current_time)
@@ -527,7 +554,8 @@ def run(cfg: Settings, input_device_idx, keyboards=None):
             # Their modifiers' key-ups can't come now, and a Ctrl left held
             # here would stop F8 dictating (_someone_elses_shortcut).
             held_modifiers.clear()
-        _drop_dead_devices(dead_devices, devices, cfg)
+            _drop_dead_devices(dead_devices, devices, cfg)
+            _forget_lost_presses(devices, keys)
 
         # Pick up keyboards that have (re)appeared. Only while idle: rescanning
         # mid-recording would add an ungrabbed device to a grabbed set, letting

@@ -80,13 +80,23 @@ _hold_key_name = "F8"       # named in the "Sending in 2 s" label
 _pending = None
 # The send a tap held, or one refused once its countdown began, while the
 # space it left off waits for the hotkey that held it to come up
-# or the next dictation (type_owed_space), else None.
+# or the next dictation (give_back_space, type_owed_space), else None.
 # Typed while the key is down, GNOME without the extension sees the key
 # too and the space is lost.
 _owed = None
 # Recordings begun so far (recording_begins). A recording's Message carries
 # its number (serial); a send for one with an older number waits for the newer.
 _begun = 0
+# The recording a send was held for when it was set up (send_automatically),
+# until "Not sent" is said for it (say_held_for) or the next recording
+# begins: its number, else 0.
+_held_for = 0
+# The dictation keys whose presses, TuxTalk's, are still down (F8 and F9
+# can overlap), guarded by _send_lock. The space a held send owes waits for
+# all of them to come up: typed while one is down, GNOME without the
+# extension sees the key too and the space is lost. A press turned away as
+# another app's shortcut (Alt+F8) never counts.
+_keys_down = set()
 # Whether this session's notifications have said why an automatic send
 # can't go where the focus can't be told: on such a desktop it's every
 # dictation, so after once only the floating notice says so.
@@ -301,7 +311,7 @@ def send_automatically(why: str, message: Message, press, type_more, space: str 
     True when a newer recording had begun (recording_begins), its key read
     while these words were still being typed: the send is held for it, as a
     press during the countdown holds it, and its space owed."""
-    global _pending, _owed
+    global _pending, _owed, _held_for
     pending = {"to": message.to, "why": why, "press": press, "type": type_more,
                "space": space, "mode": injection_mode, "timer": None, "ticks": []}
     # Nothing to count down to when no Enter could go: part of the message
@@ -328,6 +338,7 @@ def send_automatically(why: str, message: Message, press, type_more, space: str 
     with _send_lock:
         newer = message.serial != _begun
         if newer:
+            _held_for = _begun
             if space and message.to is not None:
                 _owed = pending
         else:
@@ -357,11 +368,12 @@ def recording_begins() -> tuple[int, bool]:
     lock, so a send set up from now on for an earlier recording is held
     for this one instead (send_automatically); one set up before is held
     here."""
-    global _begun
+    global _begun, _held_for
     # The count and the hold in one go: the Enter's claim (_claim) checks
     # under the same lock that its send is still pending.
     with _send_lock:
         _begun += 1
+        _held_for = 0
         number = _begun
         pending = _take_pending()
     return number, _stop_held(pending, announce=False)
@@ -448,6 +460,45 @@ def say_held() -> None:
     show_notice(HELD_NOTICE)
     _notify_in_background("Not sent: you held it",
                           "The text is still in the box. Press Enter when you're ready.")
+
+
+def say_held_for(serial: int) -> bool:
+    """Say "Not sent" for the send held for recording *serial* when it was
+    set up (send_automatically), once: that recording ended without adding
+    to it. The recording's end and the send come in either order (a
+    microphone that fails to open takes a moment to give up), and whichever
+    is second says it. False when no send was held for it, or it was said."""
+    global _held_for
+    with _send_lock:
+        if serial != _held_for:
+            return False
+        _held_for = 0
+    say_held()
+    return True
+
+
+def held_for(serial: int) -> bool:
+    """Whether a send set up while recording *serial* ran was held for it
+    and its "Not sent" isn't said yet (say_held_for)."""
+    with _send_lock:
+        return serial == _held_for
+
+
+def key_pressed(code: int) -> None:
+    """A press of dictation key *code* that is TuxTalk's: until it comes up,
+    an owed space waits (give_back_space)."""
+    with _send_lock:
+        _keys_down.add(code)
+
+
+def key_released(code: int) -> bool:
+    """Dictation key *code* came up: True when its press was TuxTalk's
+    (key_pressed)."""
+    with _send_lock:
+        if code not in _keys_down:
+            return False
+        _keys_down.discard(code)
+        return True
 
 
 def say_held_back(word: str, message: Message) -> None:
@@ -554,17 +605,74 @@ def _take_owed():
     return pending
 
 
-def type_owed_space(before: str | None = None) -> None:
-    """Type the space a held or refused send left off, in the window its
-    text went to: once the hotkey that held it is up, or ahead of the next
-    dictation, whose text is *before*. On its own and held to that window,
-    never as part of the next dictation's text: a dictation goes wherever
-    the focus is, and a space in it would go along. Dropped when that
-    dictation is empty or brings its own space."""
+def type_owed_space(before: str) -> None:
+    """Type the space a held or refused send left off ahead of the next
+    dictation, whose text is *before*, in the window the send's text went
+    to. On its own and held to that window, never as part of the next
+    dictation's text: a dictation goes wherever the focus is, and a space
+    in it would go along. Dropped when that dictation is empty or brings
+    its own space."""
     pending = _take_owed()
-    if pending is None or _focus_left(pending):
-        return
-    if before is not None and (not before or before[0].isspace()):
+    if pending is None or _focus_left(pending) or not before or before[0].isspace():
         return
     # Held to that window up to the key: the focus can move after this look.
     pending["type"](pending["space"], pending["mode"], into=pending["to"])
+
+
+def give_back_space() -> None:
+    """Type the space a held or refused send left off, on its own, in the
+    window its text went to, on the dictation worker: once the dictation
+    key that held the send is up, or its recording ended with nothing to
+    add. Looked at when it runs, not when it was queued, and again right
+    before its key goes out (_refuse_unless_alone): while a dictation key
+    of TuxTalk's is down (pressed again meanwhile) or Alt, Ctrl or Super is
+    (as far as TuxTalk can tell: modifier_hotkeys.shortcut_keys_down), the
+    space stays owed, for the key's release or the next dictation."""
+    global _owed
+    from . import keyboard_output, modifier_hotkeys
+    if modifier_hotkeys.shortcut_keys_down():       # asks the keyboards: not under the lock
+        return
+    with _send_lock:
+        if _keys_down:
+            return
+        pending, _owed = _owed, None
+    if pending is None or _focus_left(pending):
+        return
+    keyboard_output.this_thread.last_check = _refuse_unless_alone
+    try:
+        outcome = pending["type"](pending["space"], pending["mode"], into=pending["to"])
+    finally:
+        keyboard_output.this_thread.last_check = None
+    if outcome == "keys_down":      # Alt or a dictation key went down meanwhile
+        with _send_lock:
+            if _owed is None:
+                _owed = pending
+
+
+def _refuse_unless_alone() -> None:
+    """The space's last check, right before its key, after the window's:
+    GaveUp("keys_down") while Alt, Ctrl or Super, or a dictation key of
+    TuxTalk's, is down, or may be (the hotkey helper not connected). Made
+    with TuxTalk's keyboard held, so it waits on nothing: a pause here would
+    let a window switch slip in after the window check. The keyboards are
+    read outside _send_lock."""
+    from . import modifier_hotkeys
+    if modifier_hotkeys.shortcut_keys_maybe_down() or _press_down():
+        logger.info("Space not typed yet: Alt, Ctrl, Super or a dictation key is down")
+        raise virtual_keyboard.GaveUp("keys_down")
+
+
+def forget_presses(still_down) -> bool:
+    """Forget TuxTalk's dictation key presses not in *still_down* (the
+    dictation keys the keyboards report down now): their keyboard went away,
+    or they aren't dictation keys any more, and their release will never be
+    read. True when none is left, so a space they held back may go now."""
+    with _send_lock:
+        _keys_down.intersection_update(still_down)
+        return not _keys_down
+
+
+def _press_down() -> bool:
+    """Whether a dictation key press of TuxTalk's is down (key_pressed)."""
+    with _send_lock:
+        return bool(_keys_down)

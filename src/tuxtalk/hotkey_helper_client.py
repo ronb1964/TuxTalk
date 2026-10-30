@@ -255,6 +255,18 @@ class HelperKeyboard:
             self._pump()
             return sorted(self.held)
 
+    def held_now(self):
+        """The keys the helper last said are down, without asking it again
+        or reconnecting, so nothing waits: None while it isn't connected, or
+        while another thread has its connection (a reconnect can take a
+        second)."""
+        if not self._lock.acquire(blocking=False):
+            return None
+        try:
+            return None if self.sock is None else frozenset(self.held)
+        finally:
+            self._lock.release()
+
     def capabilities(self, verbose=False):
         """Enough for uinput_helper.is_keyboard_device: letter keys, no pointer."""
         from .uinput_helper import LETTER_KEYS

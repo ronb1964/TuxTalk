@@ -178,6 +178,11 @@ class LibeiSession:
     context. Use it as a context manager (or call close()) so the context and
     the device references are freed."""
 
+    # Asked right before every emission's keys, once the device is ready
+    # (_run_emitting); it stops them by raising (the output backend's check
+    # that the focus is still in the window the keys are for).
+    before_keys = None
+
     def __init__(self, fd: int):
         try:
             self.ei = load_libei()
@@ -295,7 +300,8 @@ class LibeiSession:
         and flush the socket. Returns False if no device became ready (never
         raises), or if *ready*, asked once the device is, says no. type_string
         and the editing key-combos all go through here so the device-readiness
-        and flush handling live in exactly one place."""
+        and flush handling live in exactly one place. Raises what
+        before_keys raises, with nothing emitted."""
         # Service the connection and refresh device state right before emitting.
         self._drain()
         if self.device is None and not self.pump_until_ready(timeout=2.0):
@@ -303,6 +309,8 @@ class LibeiSession:
             return False
         if ready is not None and not ready():
             return False
+        if self.before_keys is not None:
+            self.before_keys()
         ei, ctx, dev = self.ei, self.ctx, self.device
         self._seq += 1
         ei.ei_device_start_emulating(dev, self._seq)

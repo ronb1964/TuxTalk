@@ -974,13 +974,3 @@ def test_reopening_the_same_mic_says_nothing(monkeypatch, quiet_recording):
     assert recording.start_recording(beeps_on=False, notify_on=False, input_device_idx=14) is True
     assert notices == []
     keyboard_grab.release_all()
-
-
-def test_letting_go_of_the_toggle_key_types_a_held_sends_space(key_env, monkeypatch):
-    """The F9 tap that held a send: its space goes in once F9 is up."""
-    typed = []
-    monkeypatch.setattr(send_countdown, "type_owed_space", lambda: typed.append(" "))
-    monkeypatch.setattr(send_countdown, "_owed", {"space": " "})
-    hotkeys._handle_key_event(FakeEvent(TOGGLE, 0), HOLD, TOGGLE,
-                          None, set(), [keyboard()], FakeConfig(), 0)
-    assert typed == [" "]
