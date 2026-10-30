@@ -93,7 +93,8 @@ VALID_MODELS = {
     "parakeet-v3",
 }
 
-VALID_DEVICES = {"cpu", "cuda", "vulkan"}   # vulkan: any GPU through whisper.cpp (whisper_vulkan.py)
+# vulkan: any GPU through whisper.cpp (whisper_vulkan.py)
+VALID_DEVICES = {"cpu", "cuda", "vulkan"}
 VALID_MODES = {"hold", "toggle"}
 
 # The dictation keys (hotkey, toggle_hotkey), by the name the settings save and
@@ -195,7 +196,8 @@ class Settings:
     model: str = "parakeet-v3"  # parakeet-v3 or tiny/base/small/medium/large-v3 …
                                 # Parakeet is the default: more accurate than large-v3 on
                                 # English (Open ASR Leaderboard) and fast on a processor.
-    device: str = "cpu"         # "cpu", "cuda" (NVIDIA via CUDA) or "vulkan" (any GPU via whisper.cpp)
+    # "cpu", "cuda" (NVIDIA via CUDA) or "vulkan" (any GPU via whisper.cpp)
+    device: str = "cpu"
     hotkey: str = ""            # hold-to-talk hotkey (empty until user picks during onboarding)
     beeps: bool = True          # beeps on/off
     smart_quotes: bool = True   # "smart quotes"
@@ -214,54 +216,86 @@ class Settings:
     # ...after this many seconds, so a tap of the hotkey can hold it (0-4)
     press_enter_delay: float = 2.0
     mode: str = "hold"          # "hold" or "toggle"
-    toggle_hotkey: str = ""     # used only when mode="toggle" (empty until user picks during onboarding)
+    # used only when mode="toggle" (empty until user picks during onboarding)
+    toggle_hotkey: str = ""
     mic: str = ""               # substring to match input device (empty = default)
     notify: bool = False        # desktop notifications
     language: str = ""          # optional language code (e.g., "en"); empty = auto-detect
-    auto_space: bool = True     # prepend a space before new utterance when not starting a new line/tab
+    # prepend a space before new utterance when not starting a new line/tab
+    auto_space: bool = True
     auto_period: bool = True   # append a period when an utterance ends without terminal punctuation
-    injection_mode: str = "auto"  # "auto" (smart detection), "type" (the virtual keyboard), or "paste" (wl-copy + Ctrl+V)
+    # "auto" (smart detection), "type" (the virtual keyboard), or "paste" (wl-copy + Ctrl+V)
+    injection_mode: str = "auto"
     key_delay: int = KEY_DELAY_MS  # milliseconds after each typed key event (1-50, higher = slower)
     # Turn dictation off after a while unused, to save power: on by default
     # on a laptop, off on a desktop, where F8 then simply always works.
     auto_timeout_enabled: bool = field(default_factory=lambda: has_battery())
     auto_timeout_minutes: int = 5       # minutes of inactivity before auto-stop
     recording_indicator: bool = True    # show visual recording indicator near cursor
-    indicator_position: str = "center"  # screen position: center, top-left, top-center, top-right, bottom-left, bottom-center, bottom-right, left-center, right-center
-    indicator_offset_x: int = 0         # custom X offset from position anchor (pixels, can be negative)
-    indicator_offset_y: int = 0         # custom Y offset from position anchor (pixels, can be negative)
+    # screen position: center, top-left, top-center, top-right, bottom-left, bottom-center,
+    # bottom-right, left-center, right-center
+    indicator_position: str = "center"
+    # custom X offset from position anchor (pixels, can be negative)
+    indicator_offset_x: int = 0
+    # custom Y offset from position anchor (pixels, can be negative)
+    indicator_offset_y: int = 0
     indicator_size: str = "medium"      # indicator size: small, medium, large
     indicator_style: str = "orb"        # orb / waveform / bars / radial
     indicator_color_mode: str = "custom"  # system / custom (governs every style)
     indicator_color: str = CLASSIC_CYAN_HEX  # the chosen color; defaults to classic cyan
     indicator_sensitivity: float = 1.0  # scales how strongly audio drives the animation (0.5-2.0)
-    indicator_follow_window: bool = False  # TuxTalk Labs: show near the bottom of the window being dictated into
+    # TuxTalk Labs: show near the bottom of the window being dictated into
+    indicator_follow_window: bool = False
     voice_commands_hotkey: str = "Ctrl+Alt+V"  # hotkey combo to open voice commands quick reference
-    paste_last_hotkey: str = "Ctrl+Alt+P"      # hotkey combo that types the last dictation again ("" = off)
+    # hotkey combo that types the last dictation again ("" = off)
+    paste_last_hotkey: str = "Ctrl+Alt+P"
     auto_check_updates: bool = True      # automatically check for updates on startup (once per day)
     last_update_check: str = ""          # ISO timestamp of last update check
-    language_mode: str = "auto"          # "auto" (detect language) or "manual" (use `language`); UI state for prefs
-    auto_languages: str = ""             # auto-detect only picks from these, "en,es" (language_limit.py); "" = any
-    launch_at_login: bool = False        # start TuxTalk automatically at login (prefs manages the autostart file)
-    log_transcripts: bool = False        # write full transcribed text to the log (off = redacted); opt-in for troubleshooting only
-    remove_fillers: bool = False         # drop "um"/"uh" and accidental repeated words (cleanup.py; rules, no download)
-    ai_corrections: bool = False         # fix "3, no wait, 4" with a local AI model (ai_cleanup.py downloads it)
-    voice_editing: bool = False          # Shift + dictation key rewrites the selected text with the same AI model
-    auto_stop_silence: bool = False      # toggle recordings stop by themselves when you stop talking (silence.py)
+    # "auto" (detect language) or "manual" (use `language`); UI state for prefs
+    language_mode: str = "auto"
+    # auto-detect only picks from these, "en,es" (language_limit.py); "" = any
+    auto_languages: str = ""
+    # start TuxTalk automatically at login (prefs manages the autostart file)
+    launch_at_login: bool = False
+    # write full transcribed text to the log (off = redacted); opt-in for troubleshooting only
+    log_transcripts: bool = False
+    # drop "um"/"uh" and accidental repeated words (cleanup.py; rules, no download)
+    remove_fillers: bool = False
+    # fix "3, no wait, 4" with a local AI model (ai_cleanup.py downloads it)
+    ai_corrections: bool = False
+    # Shift + dictation key rewrites the selected text with the same AI model
+    voice_editing: bool = False
+    # toggle recordings stop by themselves when you stop talking (silence.py)
+    auto_stop_silence: bool = False
     auto_stop_seconds: float = 2.0       # seconds of silence before an auto-stop (0.5-10)
-    chunked_dictation: bool = False      # type each phrase at the pause after it, while still recording (chunking.py; config.toml only)
-    chunk_pause_seconds: float = 0.8     # seconds of silence that end a chunk (0.3-3.0; kept below auto_stop_seconds)
-    chunk_speech_db: float = 6.0         # how much louder than the room speech must be, in dB (3-12)
-    chunk_context_marks: bool = True     # decide the mark at a pause by hearing both chunks together
-    usage_stats: bool = True             # count words/dictations/speaking time per day (stats.py; numbers only, never text)
-    restore_clipboard: bool = False      # put back what the user had copied after pasting a dictation (clipboard.ClipboardKeeper, issue #7)
-    typing_wpm: int = 40                 # the user's typing speed, for "time saved" on the Stats tab (10-200)
-    dictation_language: str = ""         # language picked at first run (recommend.py); "" = system locale
-    recommend_notice_shown: bool = False  # the one-time "better setup" notice was shown (or not needed)
-    parakeet_update_offered: bool = False  # the one-time Parakeet Ultra offer was answered (tray.py)
-    vulkan_slower: bool = False          # the speed check found the processor faster than the graphics chip
-    pause_media: bool = True             # pause playing music/videos while dictating, resume after (media_pause.py)
-    duck_audio: bool = False             # turn other apps' sound down while dictating, back after (audio_duck.py)
+    # type each phrase at the pause after it, while still recording (chunking.py; config.toml
+    # only)
+    chunked_dictation: bool = False
+    # seconds of silence that end a chunk (0.3-3.0; kept below auto_stop_seconds)
+    chunk_pause_seconds: float = 0.8
+    # how much louder than the room speech must be, in dB (3-12)
+    chunk_speech_db: float = 6.0
+    # decide the mark at a pause by hearing both chunks together
+    chunk_context_marks: bool = True
+    # count words/dictations/speaking time per day (stats.py; numbers only, never text)
+    usage_stats: bool = True
+    # put back what the user had copied after pasting a dictation (clipboard.ClipboardKeeper,
+    # issue #7)
+    restore_clipboard: bool = False
+    # the user's typing speed, for "time saved" on the Stats tab (10-200)
+    typing_wpm: int = 40
+    # language picked at first run (recommend.py); "" = system locale
+    dictation_language: str = ""
+    # the one-time "better setup" notice was shown (or not needed)
+    recommend_notice_shown: bool = False
+    # the one-time Parakeet Ultra offer was answered (tray.py)
+    parakeet_update_offered: bool = False
+    # the speed check found the processor faster than the graphics chip
+    vulkan_slower: bool = False
+    # pause playing music/videos while dictating, resume after (media_pause.py)
+    pause_media: bool = True
+    # turn other apps' sound down while dictating, back after (audio_duck.py)
+    duck_audio: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -301,44 +335,65 @@ def _validation_problems(s: Settings) -> list[tuple[str, str]]:
     problems = []
 
     if s.model not in VALID_MODELS:
-        problems.append(("model", f"Invalid model '{s.model}'. Valid options: {', '.join(sorted(VALID_MODELS))}"))
+        problems.append(("model", f"Invalid model '{s.model}'. "
+                                  f"Valid options: {', '.join(sorted(VALID_MODELS))}"))
 
     if s.device.lower() not in VALID_DEVICES:
-        problems.append(("device", f"Invalid device '{s.device}'. Must be 'cpu', 'cuda' or 'vulkan'"))
+        problems.append(("device", f"Invalid device '{s.device}'. "
+                                   "Must be 'cpu', 'cuda' or 'vulkan'"))
 
     if s.mode.lower() not in VALID_MODES:
         problems.append(("mode", f"Invalid mode '{s.mode}'. Must be 'hold' or 'toggle'"))
 
     if s.injection_mode.lower() not in VALID_INJECTION_MODES:
-        problems.append(("injection_mode", f"Invalid injection_mode '{s.injection_mode}'. Must be 'type', 'paste', or 'auto'"))
+        problems.append(("injection_mode", f"Invalid injection_mode '{s.injection_mode}'. "
+                                           "Must be 'type', 'paste', or 'auto'"))
 
     if s.auto_timeout_minutes <= 0:
-        problems.append(("auto_timeout_minutes", f"Invalid auto_timeout_minutes '{s.auto_timeout_minutes}'. Must be positive"))
+        problems.append(("auto_timeout_minutes",
+                         f"Invalid auto_timeout_minutes '{s.auto_timeout_minutes}'. "
+                         "Must be positive"))
 
     if s.indicator_position.lower() not in VALID_INDICATOR_POSITIONS:
-        problems.append(("indicator_position", f"Invalid indicator_position '{s.indicator_position}'. Valid options: {', '.join(sorted(VALID_INDICATOR_POSITIONS))}"))
+        problems.append(("indicator_position",
+                         f"Invalid indicator_position '{s.indicator_position}'. "
+                         f"Valid options: {', '.join(sorted(VALID_INDICATOR_POSITIONS))}"))
 
     if s.indicator_size.lower() not in VALID_INDICATOR_SIZES:
-        problems.append(("indicator_size", f"Invalid indicator_size '{s.indicator_size}'. Valid options: {', '.join(sorted(VALID_INDICATOR_SIZES))}"))
+        problems.append(("indicator_size",
+                         f"Invalid indicator_size '{s.indicator_size}'. "
+                         f"Valid options: {', '.join(sorted(VALID_INDICATOR_SIZES))}"))
 
     if s.indicator_style.lower() not in VALID_INDICATOR_STYLES:
-        problems.append(("indicator_style", f"Invalid indicator_style '{s.indicator_style}'. Valid options: {', '.join(sorted(VALID_INDICATOR_STYLES))}"))
+        problems.append(("indicator_style",
+                         f"Invalid indicator_style '{s.indicator_style}'. "
+                         f"Valid options: {', '.join(sorted(VALID_INDICATOR_STYLES))}"))
 
     if s.indicator_color_mode.lower() not in VALID_COLOR_MODES:
-        problems.append(("indicator_color_mode", f"Invalid indicator_color_mode '{s.indicator_color_mode}'. Valid options: {', '.join(sorted(VALID_COLOR_MODES))}"))
+        problems.append(("indicator_color_mode",
+                         f"Invalid indicator_color_mode '{s.indicator_color_mode}'. "
+                         f"Valid options: {', '.join(sorted(VALID_COLOR_MODES))}"))
 
     if not (0.0 <= s.press_enter_delay <= 4.0):
-        problems.append(("press_enter_delay", f"Invalid press_enter_delay '{s.press_enter_delay}'. Must be between 0 and 4"))
+        problems.append(("press_enter_delay", f"Invalid press_enter_delay '{s.press_enter_delay}'. "
+                                              "Must be between 0 and 4"))
     if not (0.5 <= s.auto_stop_seconds <= 10.0):
-        problems.append(("auto_stop_seconds", f"Invalid auto_stop_seconds '{s.auto_stop_seconds}'. Must be between 0.5 and 10"))
+        problems.append(("auto_stop_seconds", f"Invalid auto_stop_seconds '{s.auto_stop_seconds}'. "
+                                              "Must be between 0.5 and 10"))
     if not (0.3 <= s.chunk_pause_seconds <= 3.0):
-        problems.append(("chunk_pause_seconds", f"Invalid chunk_pause_seconds '{s.chunk_pause_seconds}'. Must be between 0.3 and 3.0"))
+        problems.append(("chunk_pause_seconds",
+                         f"Invalid chunk_pause_seconds '{s.chunk_pause_seconds}'. "
+                         "Must be between 0.3 and 3.0"))
     if not (3.0 <= s.chunk_speech_db <= 12.0):
-        problems.append(("chunk_speech_db", f"Invalid chunk_speech_db '{s.chunk_speech_db}'. Must be between 3 and 12"))
+        problems.append(("chunk_speech_db", f"Invalid chunk_speech_db '{s.chunk_speech_db}'. "
+                                            "Must be between 3 and 12"))
     if not (1 <= s.key_delay <= 50):
-        problems.append(("key_delay", f"Invalid key_delay '{s.key_delay}'. Must be between 1 and 50"))
+        problems.append(("key_delay", f"Invalid key_delay '{s.key_delay}'. "
+                                      "Must be between 1 and 50"))
     if not (0.5 <= s.indicator_sensitivity <= 2.0):
-        problems.append(("indicator_sensitivity", f"Invalid indicator_sensitivity '{s.indicator_sensitivity}'. Must be between 0.5 and 2.0"))
+        problems.append(("indicator_sensitivity",
+                         f"Invalid indicator_sensitivity '{s.indicator_sensitivity}'. "
+                         "Must be between 0.5 and 2.0"))
 
     return problems
 
@@ -697,7 +752,8 @@ def write_text_atomic(path: str, text: str | bytes, keep_backup: bool = True,
     # settings — the tray, the dictation service and Preferences — and a shared
     # temp name would let them truncate each other's half-written file and fail
     # the rename with FileNotFoundError.
-    fd, tmp_path = tempfile.mkstemp(dir=directory, prefix=os.path.basename(path) + ".", suffix=".tmp")
+    fd, tmp_path = tempfile.mkstemp(dir=directory, prefix=os.path.basename(path) + ".",
+                                    suffix=".tmp")
     try:
         # Bytes as they are: a file put back after a failed restore
         # (settings_backup) needn't be valid UTF-8.
@@ -1033,7 +1089,8 @@ def find_input_device(mic_substring: str | None) -> int | None:
     # whatever the default source is; a raw sound card would bypass it.
     if default_source:
         for i, d in enumerate(q):
-            if d.get("name", "").lower() in ("pipewire", "pulse") and d.get("max_input_channels", 0) > 0:
+            if (d.get("name", "").lower() in ("pipewire", "pulse")
+                    and d.get("max_input_channels", 0) > 0):
                 logger.info(f"Auto-detected mic: [{i}] {d['name']}"
                             f" (the default source {default_source!r} is not a hardware device)")
                 return i
