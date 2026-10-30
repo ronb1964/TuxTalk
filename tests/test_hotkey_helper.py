@@ -1108,19 +1108,32 @@ def test_a_keyboard_that_fails_to_read_is_let_go_not_spun_on(setup, monkeypatch)
 _LETTERS = set(range(16, 26)) | set(range(30, 39))      # Q..P, A..L
 
 
-@pytest.mark.parametrize("pointer,group,name,read", [
-    (False, "real", "USB Keyboard", True),
-    (True, "real", "Logitech MX Master", False),        # a mouse claiming letter keys
-    (True, "virtual:13:82", "kanata", True),             # a remapper's keyboard (issue #23)
-    (False, "virtual:13:83", "keyd virtual keyboard", True),
-    (True, "virtual:13:84", hh.OWN_KEYBOARD_NAME, False),   # the one TuxTalk types with
-    (True, "own:13:85", "a mouse others can write to", False)])
-def test_which_devices_are_read_as_keyboards(pointer, group, name, read):
-    assert hh.counts_as_keyboard(_LETTERS | {hh.BTN_LEFT}, pointer, group, name) is read
+@pytest.mark.parametrize("pointer,uinput,name,read", [
+    (False, False, "USB Keyboard", True),
+    (True, False, "Logitech MX Master", False),         # a mouse claiming letter keys
+    (True, True, "kanata", True),                       # a remapper's keyboard (issue #23)
+    (False, True, "keyd virtual keyboard", True),
+    (True, True, hh.OWN_KEYBOARD_NAME, False)])         # the one TuxTalk types with
+def test_which_devices_are_read_as_keyboards(pointer, uinput, name, read):
+    assert hh.counts_as_keyboard(_LETTERS | {hh.BTN_LEFT}, pointer, uinput, name) is read
 
 
 def test_a_device_without_letter_keys_is_no_keyboard():
-    assert hh.counts_as_keyboard({hh.BTN_LEFT, 66}, False, "real", "Power Button") is False
+    assert hh.counts_as_keyboard({hh.BTN_LEFT, 66}, False, False, "Power Button") is False
+
+
+def test_only_a_uinput_device_counts_as_made_by_a_program(tmp_path):
+    """A Bluetooth LE mouse comes through /dev/uhid, under /sys/devices/virtual
+    too: taken for a program's keyboard, a mouse claiming letter keys was read."""
+    chars = tmp_path / "char"
+    chars.mkdir()
+    (chars / "13:80").symlink_to("/sys/devices/virtual/input/input40/event20")
+    (chars / "13:81").symlink_to(
+        "/sys/devices/virtual/misc/uhid/0005:046D:B023.0001/input/input41/event21")
+    (chars / "13:82").symlink_to("/sys/devices/pci0000:00/0000:11:00.0/usb1/1-3/input/input42/event22")
+    assert hh.made_through_uinput(os.makedev(13, 80), str(chars)) is True
+    assert hh.made_through_uinput(os.makedev(13, 81), str(chars)) is False
+    assert hh.made_through_uinput(os.makedev(13, 82), str(chars)) is False
 
 
 def test_the_helper_knows_the_name_tuxtalk_types_with():

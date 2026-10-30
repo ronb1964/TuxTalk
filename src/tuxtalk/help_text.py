@@ -579,7 +579,8 @@ Microphone</b> and the test beside it.
   • With the key remapper kanata, TuxTalk's typing goes through kanata's rules too
     (home-row keys can turn letters into Ctrl or Shift). Add
     <tt>linux-dev-names-exclude ("TuxTalk virtual keyboard")</tt> to the defcfg
-    of your kanata config and restart kanata.
+    of your kanata config and restart kanata. If the config lists its keyboards
+    with <tt>linux-dev</tt>, leave TuxTalk's out of that list instead.
 
 <b>Too slow</b>
   • Use your graphics card: TuxTalk menu → Performance → Recommended for this

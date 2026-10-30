@@ -317,15 +317,23 @@ def device_group(rdev, sys_dir=SYS_CHAR_DIR, writable=False, uhid_private=True):
     return f"own:{number}" if writable else "real"
 
 
-def counts_as_keyboard(keys, pointer, group, name) -> bool:
+def made_through_uinput(rdev, sys_dir=SYS_CHAR_DIR):
+    """Whether the input device *rdev* is one a program made through uinput:
+    its sysfs node is under /sys/devices/virtual/input. A Bluetooth LE
+    device (uhid) is not, whoever may use /dev/uhid."""
+    path = os.path.realpath(os.path.join(sys_dir, f"{os.major(rdev)}:{os.minor(rdev)}"))
+    return path.startswith("/sys/devices/virtual/input/")
+
+
+def counts_as_keyboard(keys, pointer, uinput, name) -> bool:
     """Whether a device with the key codes *keys*, mouse motion (*pointer*),
-    in *group* (device_group) and called *name*, is a keyboard to read: it
-    has letter keys, and it isn't a real mouse claiming them (a Logitech
-    receiver) nor the keyboard TuxTalk types with. A program's virtual one
-    shaped like a mouse is read, and never held (Keyboard.listen_only): kanata
-    takes the real keyboards and passes every key on through one (issue #23)."""
-    real_mouse = pointer and not group.startswith("virtual:")
-    return len(keys & LETTER_KEYS) >= 3 and not real_mouse and name != OWN_KEYBOARD_NAME
+    made through uinput or not (*uinput*) and called *name*, is a keyboard to
+    read: it has letter keys, and it isn't a mouse claiming them (a Logitech
+    receiver) nor the keyboard TuxTalk types with. A uinput one shaped like a
+    mouse is read, and never held (Keyboard.listen_only): kanata takes the
+    real keyboards and passes every key on through one (issue #23)."""
+    mouse = pointer and not uinput
+    return len(keys & LETTER_KEYS) >= 3 and not mouse and name != OWN_KEYBOARD_NAME
 
 
 # --- keyboards --------------------------------------------------------------------------
@@ -379,7 +387,8 @@ class Keyboard:
             fcntl.ioctl(fd, EVIOCGNAME(len(name)), name, True)
             name = name.split(b"\0", 1)[0].decode("utf-8", "replace")
             seat = udev_seat(st.st_rdev)
-            if not counts_as_keyboard(keys, pointer, group, name) or seat != "seat0":
+            uinput = made_through_uinput(st.st_rdev)
+            if not counts_as_keyboard(keys, pointer, uinput, name) or seat != "seat0":
                 os.close(fd)
                 return None
             ident = bytearray(8)

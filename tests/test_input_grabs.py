@@ -509,14 +509,14 @@ def test_the_apps_own_keyboard_is_skipped_though_a_program_made_it(monkeypatch):
 
 
 class _HeldKeyboard(FakeDevice):
-    """A keyboard holding F8, recording what's written into it."""
+    """A keyboard holding *held* (F8), recording what's written into it."""
 
-    def __init__(self, name, caps, path):
+    def __init__(self, name, caps, path, held=(ecodes.KEY_F8,)):
         super().__init__(name, caps)
-        self.path, self.written = path, []
+        self.path, self.written, self.held = path, [], list(held)
 
     def active_keys(self):
-        return [ecodes.KEY_F8]
+        return self.held
 
     def write(self, etype, code, value):
         self.written.append((code, value))
@@ -537,6 +537,27 @@ def test_a_key_remappers_keyboard_is_never_grabbed_or_written_to(monkeypatch):
         keyboard_grab.grab_keyboards_hiding([real, kanata], {ecodes.KEY_F8})
         assert real.is_grabbed and real.written
         assert not kanata.is_grabbed and kanata.written == []
+    finally:
+        keyboard_grab.release_all()
+        keyboard_grab._injected_pending.clear()
+
+
+@pytest.mark.parametrize("real_keyboard", [False, True])
+def test_a_right_ctrl_held_through_a_remapper_is_never_called_hidden(monkeypatch, real_keyboard):
+    """kanata's keyboard isn't grabbed, so the desktop sees its Right Ctrl
+    down: typing must wait for it, or the dictation turns into Ctrl
+    shortcuts (Ctrl+W closes the tab). Also with another keyboard grabbed."""
+    from tuxtalk import modifier_hotkeys
+    monkeypatch.setattr(uinput_helper, "is_uinput_device",
+                        lambda path: path == "/dev/input/event18")
+    kanata = _HeldKeyboard("kanata", _kanata()._caps, "/dev/input/event18",
+                           held=[ecodes.KEY_RIGHTCTRL])
+    real = _HeldKeyboard("USB Keyboard", keyboard()._caps, "/dev/input/event3", held=[])
+    devices = [real, kanata] if real_keyboard else [kanata]
+    try:
+        keyboard_grab.grab_keyboards_hiding(devices, {ecodes.KEY_RIGHTCTRL})
+        assert real.is_grabbed is real_keyboard
+        assert ecodes.KEY_RIGHTCTRL not in modifier_hotkeys._hidden_now()
     finally:
         keyboard_grab.release_all()
         keyboard_grab._injected_pending.clear()
