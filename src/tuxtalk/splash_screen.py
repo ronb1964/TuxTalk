@@ -85,7 +85,6 @@ def _icon_candidates():
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "icons")
     paths += [
         os.path.join(project_icons, "OFFICIAL_ICON_DO_NOT_CHANGE.svg"),
-        os.path.join(project_icons, "TT_retro_square_light_transparent.png"),
         f"/app/{_SCALABLE}",
         # System install locations (.deb / .rpm): the hicolor SVG, then the
         # pixmaps PNG. A packaged install has no $APPDIR and no project

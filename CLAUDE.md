@@ -222,6 +222,8 @@ after this step silently drops the .deb and .rpm checksums. If you go back to
 Step 2 for a fix, re-run all of Step 10 afterwards.
 
 ### Step 11: Commit, Push, and Create GitHub Release
+First rewrite the README's "New in X.Y" section (and its link at the top)
+for this version, in plain words, from the CHANGELOG.
 ```bash
 git add <changed files>
 git commit -m "..."

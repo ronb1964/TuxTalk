@@ -9,11 +9,11 @@ Things I'd like to add or fix, roughly grouped. Nothing here has a date on it. W
 1.0 means TuxTalk does its main job reliably and won't change under you in
 big ways. Roughly in order:
 
-- [ ] 0.15.1 ships, with everything built since 0.15.0.
-- [ ] A polish release (0.16) that fixes what early users report, and decides
-  which TuxTalk Labs features graduate and which stay experimental.
+- [~] 0.19, a clean-up release: smaller files, code that's easy to read and
+  tested, and the build tools pinned so a release can't change by itself.
+- [ ] Decide which TuxTalk Labs features graduate and which stay experimental.
 - [ ] Dictation works reliably on the desktops it claims: KDE, GNOME,
-  Cinnamon, XFCE, Sway and Hyprland, on Wayland and X11.
+  Cinnamon, XFCE, COSMIC, Sway and Hyprland, on Wayland and X11.
 - [ ] No big changes left that would disrupt people, like settings that need
   moving or features that work a different way.
 - [ ] A release or two in a row with no serious bug reports.
@@ -26,7 +26,7 @@ big ways. Roughly in order:
 - [~] Per-app profiles, picked by the window you're typing into (cleanup on or off, paste mode, maybe a different model). Window class only. TuxTalk won't read the screen or take screenshots. Started: terminals get no capital or closing period, and code editors no closing period. Full profiles aren't done.
 - [ ] Language quick switch in the tray menu. The setting exists, but only in Preferences.
 - [ ] Ignore background noise that gets transcribed as a word or two (a confidence threshold).
-- [ ] Some kind of signal when a dictation heard nothing at all. Hands-free mode already beeps and stops when you say nothing, but a normal hold-to-talk just types nothing.
+- [~] Some kind of signal when a dictation heard nothing at all. A silent microphone already says "No sound from the microphone", and hands-free mode beeps and stops when you say nothing, but a hold-to-talk that heard sound and no words just types nothing.
 - [ ] Spoken templates, like "compose email" putting in an email layout.
 
 ## Audio
@@ -62,12 +62,12 @@ big ways. Roughly in order:
 
 ## Packaging
 
-- [~] Flatpak, on hold until more people ask for it (vote in [Discussion #6](https://github.com/ronb1964/TuxTalk/discussions/6)). The AppImage already runs on the immutable distros a Flatpak would mostly be for. The manifests are in `packaging/flatpak/` and were updated for the rename, but they haven't been built since, and nothing is published. Typing inside the Flatpak still only handles plain English letters, so that gets fixed first. The Flathub submission was closed, so it would be a `.flatpak` file or a self-hosted Flatpak repo.
-- [ ] Snap.
+- [~] Flatpak, on hold until more people ask for it (vote in [Discussion #6](https://github.com/ronb1964/TuxTalk/discussions/6)). The AppImage already runs on the immutable distros a Flatpak would mostly be for. The manifest is in `packaging/flatpak/` and was updated for the rename, but it hasn't been built since, and nothing is published. Typing inside the Flatpak still only handles plain English letters, so that gets fixed first. Flathub doesn't take apps written with AI, so it would be a `.flatpak` file or a self-hosted Flatpak repo.
 - [ ] macOS or Windows. Big jobs, since the hotkeys, typing and tray are all Linux-specific today.
 
 ## Decided against
 
+- The Snap Store. It won't connect the keyboard permission TuxTalk types with by itself, so everyone would have to type a command after installing before dictation worked. The AppImage works after setup with no commands. Same for a Fedora COPR build for now: the AppImage bundles libraries Fedora's rules don't allow, and a clean build is days of work.
 - Live text while you talk, words showing up as you speak. I tried it, and seeing the words appear while I was still talking pulled me out of what I was saying. Not planned unless a lot of people ask for it.
 
 ## Known limitations
