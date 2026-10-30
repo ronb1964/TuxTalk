@@ -20,11 +20,12 @@ EXTENSION_UUID = 'talktype@ronb1964.github.io'
 # Every release publishes the zip under this TalkType name and as
 # tuxtalk-gnome-extension.zip, so older installs find it too.
 EXTENSION_ZIP_NAME = 'talktype-gnome-extension.zip'
-EXTENSION_DOWNLOAD_URL = f'https://github.com/ronb1964/TuxTalk/releases/latest/download/{EXTENSION_ZIP_NAME}'
+_LATEST_RELEASE = 'https://github.com/ronb1964/TuxTalk/releases/latest/download'
+EXTENSION_DOWNLOAD_URL = f'{_LATEST_RELEASE}/{EXTENSION_ZIP_NAME}'
 # The release publishes SHA256SUMS.txt alongside the zip. The extension
 # contains JavaScript that runs in GNOME Shell, so verifying the download
 # closes a code-execution vector (a corrupted or tampered zip).
-EXTENSION_CHECKSUMS_URL = 'https://github.com/ronb1964/TuxTalk/releases/latest/download/SHA256SUMS.txt'
+EXTENSION_CHECKSUMS_URL = f'{_LATEST_RELEASE}/SHA256SUMS.txt'
 
 
 class ChecksumUnavailableError(Exception):

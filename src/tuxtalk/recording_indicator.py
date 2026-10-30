@@ -510,13 +510,19 @@ class RecordingIndicator(Gtk.Window):
         pill_x = orb_x - 32 * self.scale
         pill_y = orb_y - pill_height / 2
 
-        # Draw rounded rectangle (pill shape)
-        cr.new_sub_path()
-        cr.arc(pill_x + pill_radius, pill_y + pill_radius, pill_radius, math.pi, 3 * math.pi / 2)
-        cr.arc(pill_x + pill_width - pill_radius, pill_y + pill_radius, pill_radius, 3 * math.pi / 2, 0)
-        cr.arc(pill_x + pill_width - pill_radius, pill_y + pill_height - pill_radius, pill_radius, 0, math.pi / 2)
-        cr.arc(pill_x + pill_radius, pill_y + pill_height - pill_radius, pill_radius, math.pi / 2, math.pi)
-        cr.close_path()
+        # The centres of the pill's four rounded corners.
+        left, right = pill_x + pill_radius, pill_x + pill_width - pill_radius
+        top, bottom = pill_y + pill_radius, pill_y + pill_height - pill_radius
+
+        def pill_path():
+            cr.new_sub_path()
+            cr.arc(left, top, pill_radius, math.pi, 3 * math.pi / 2)
+            cr.arc(right, top, pill_radius, 3 * math.pi / 2, 0)
+            cr.arc(right, bottom, pill_radius, 0, math.pi / 2)
+            cr.arc(left, bottom, pill_radius, math.pi / 2, math.pi)
+            cr.close_path()
+
+        pill_path()
 
         # Semi-transparent dark background - more opaque
         cr.set_source_rgba(0.1, 0.1, 0.15, 0.85)
@@ -524,12 +530,7 @@ class RecordingIndicator(Gtk.Window):
 
         # Red border when recording (push-to-talk active)
         if self.is_recording:
-            cr.new_sub_path()
-            cr.arc(pill_x + pill_radius, pill_y + pill_radius, pill_radius, math.pi, 3 * math.pi / 2)
-            cr.arc(pill_x + pill_width - pill_radius, pill_y + pill_radius, pill_radius, 3 * math.pi / 2, 0)
-            cr.arc(pill_x + pill_width - pill_radius, pill_y + pill_height - pill_radius, pill_radius, 0, math.pi / 2)
-            cr.arc(pill_x + pill_radius, pill_y + pill_height - pill_radius, pill_radius, math.pi / 2, math.pi)
-            cr.close_path()
+            pill_path()
             cr.set_source_rgba(1.0, 0.2, 0.2, 0.9)  # Bright red
             cr.set_line_width(2.5 * self.scale)
             cr.stroke()
@@ -557,7 +558,9 @@ class RecordingIndicator(Gtk.Window):
             glow_radius = current_size * (1.5 - i * 0.15)
             gradient = cairo.RadialGradient(x, y, current_size * 0.5, x, y, glow_radius)
 
-            alpha = 0.4 * (1.0 - i * 0.3) if not self.is_recording else 0.4 * self._orb_level * (1.0 - i * 0.3)
+            alpha = 0.4 * (1.0 - i * 0.3)
+            if self.is_recording:
+                alpha *= self._orb_level
             gradient.add_color_stop_rgba(0, glow_color[0], glow_color[1], glow_color[2], alpha)
             gradient.add_color_stop_rgba(1, glow_color[0], glow_color[1], glow_color[2], 0)
 
@@ -609,7 +612,8 @@ class RecordingIndicator(Gtk.Window):
                 # Stay at rest position
                 particle_radial_extend = 0.0
 
-            radial_distance = base_radius * (min_distance + (max_distance - min_distance) * particle_radial_extend)
+            spread = max_distance - min_distance
+            radial_distance = base_radius * (min_distance + spread * particle_radial_extend)
 
             # Particle position along the radial line
             px = center_x + radial_distance * math.cos(angle)
@@ -626,7 +630,7 @@ class RecordingIndicator(Gtk.Window):
                 particle_size = 4 * pulse
 
             # Color shifts based on distance from orb: near→far grading.
-            distance_factor = (radial_distance / base_radius - min_distance) / (max_distance - min_distance)
+            distance_factor = (radial_distance / base_radius - min_distance) / spread
             if palette:
                 near, far = palette["p_near"], palette["p_far"]
                 r = near[0] + (far[0] - near[0]) * distance_factor

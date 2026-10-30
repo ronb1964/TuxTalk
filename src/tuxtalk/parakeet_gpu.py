@@ -33,7 +33,8 @@ from .parakeet_gpu_worker import encode_request, encode_words
 logger = setup_logger(__name__)
 
 SAMPLE_RATE = 16000
-START_TIMEOUT = 180          # the very first run on a chip compiles shaders (8 s on an RTX 4070 Super)
+# The very first run on a chip compiles shaders (8 s on an RTX 4070 Super).
+START_TIMEOUT = 180
 MIN_SAMPLES = SAMPLE_RATE    # shorter recordings are padded with silence to one second
 REPLY_TIMEOUT = 60           # for one recording, plus a second per second of audio
 

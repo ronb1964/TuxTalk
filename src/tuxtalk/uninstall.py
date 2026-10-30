@@ -232,7 +232,8 @@ def find(home, install_type, environ=os.environ, appimage=None):
                        home / ".local" / "share" / "applications" / name]
     icons = home / ".local" / "share" / "icons" / "hicolor"
     for size in ICON_SIZES:
-        candidates += [icons / size / "apps" / "tuxtalk.png", icons / size / "apps" / "talktype.png"]
+        apps = icons / size / "apps"
+        candidates += [apps / "tuxtalk.png", apps / "talktype.png"]
     candidates.append(icons / "scalable" / "apps" / f"{config.APP_ID}.svg")
     for path in candidates:
         if exists(path) and path not in plan.leftovers:
@@ -253,7 +254,8 @@ def find(home, install_type, environ=os.environ, appimage=None):
     unit = uinput_helper.our_ydotoold_unit(home)
     if unit is not None:
         plan.ydotoold_unit = Path(unit)
-    plan.extension = exists(Path(desktop_detect.get_extension_dir()) / extension_helper.EXTENSION_UUID)
+    plan.extension = exists(Path(desktop_detect.get_extension_dir())
+                            / extension_helper.EXTENSION_UUID)
     plan.helper = any(os.path.exists(p) for p in (secure_input.UNIT_PATH, secure_input.HELPER_PATH))
     plan.typing_rule = any(os.path.exists(p) for p in (secure_input.UINPUT_RULE_PATH,
                                                        uinput_helper.UDEV_RULE_PATH))
@@ -293,7 +295,8 @@ def _package_lines(plan):
         command = f"DEBIAN_FRONTEND=noninteractive apt-get remove -y {name}"
     elif plan.install_type == "rpm":
         command = (f"if command -v dnf >/dev/null; then dnf remove -y {name}; "
-                   f"elif command -v zypper >/dev/null; then zypper --non-interactive remove {name}; "
+                   "elif command -v zypper >/dev/null; then "
+                   f"zypper --non-interactive remove {name}; "
                    f"else rpm -e {name}; fi")
     else:
         command = f"pacman -R --noconfirm {name}"

@@ -512,7 +512,8 @@ class VulkanWhisperModel:
             heard = max(scores, key=scores.get) if scores else None
             better = language_limit.redirect(heard, scores, limit_to) if scores else None
             if better:
-                logger.info(f"Language: Whisper heard {heard}, which isn't on your list; using {better}")
+                logger.info(f"Language: Whisper heard {heard}, which isn't on your list; "
+                            f"using {better}")
                 reply = self._inference(request_fields(better, prompt), wav, timeout)
         return parse_result(reply)
 

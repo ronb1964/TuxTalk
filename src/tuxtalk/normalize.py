@@ -173,8 +173,10 @@ _ENGINE_PERIOD = r"(?:(?<=[^\W\d_])(?<!\.[^\W\d_])\.\s+)?"
 _MULTI_WORD_REPLACEMENTS = [
     # A spoken "comma" is still a word here, so a comma written just before
     # the command is the engine's pause and goes, as it does for paragraphs.
-    (re.compile(r"[,\s]*\b(?:new\s*line|return|line\s+break)\b[,.:;\s]*", re.IGNORECASE), LINE_BREAK),
-    (re.compile(r"[,.\s]*\bnew\s+paragraph\b[,.:;\s]*|\bparagraph\s+break\b[,.:;\s]*", re.IGNORECASE), LINE_BREAK * 2),
+    (re.compile(r"[,\s]*\b(?:new\s*line|return|line\s+break)\b[,.:;\s]*", re.IGNORECASE),
+     LINE_BREAK),
+    (re.compile(r"[,.\s]*\bnew\s+paragraph\b[,.:;\s]*|\bparagraph\s+break\b[,.:;\s]*",
+                re.IGNORECASE), LINE_BREAK * 2),
     (re.compile(r"[,.\s]*\bsoft\s+(?:break|line)\b[,.\s]*", re.IGNORECASE), _SOFT_BREAK),
     # Only "press tab" is a Tab: a bare "tab" is far more often the word ("every
     # tab shows"). Like "new line", it takes the spaces and punctuation the
@@ -441,7 +443,8 @@ _RE_FILE_EXT = re.compile(rf"\.(?:{_FILE_EXTENSIONS})\b", re.IGNORECASE)
 # "six forty-one p.m." as "6.41 p.m." one time and "641 p.m." the next. Only an
 # hour of 1-12 and minutes of 00-59 count, so "2000 pm" is left alone.
 _RE_TIME_FORMAT = re.compile(
-    r'\b(1[0-2]|0?[1-9])(?:[.:]\s*([0-5][0-9])|([0-5][0-9]))?\s+([Pp]\.?\s*[Mm]\.?|[Aa]\.?\s*[Mm]\.?)(?![A-Za-z])',
+    r'\b(1[0-2]|0?[1-9])(?:[.:]\s*([0-5][0-9])|([0-5][0-9]))?'
+    r'\s+([Pp]\.?\s*[Mm]\.?|[Aa]\.?\s*[Mm]\.?)(?![A-Za-z])',
     re.IGNORECASE
 )
 

@@ -196,7 +196,8 @@ class HelperKeyboard:
         try:
             if kind == "DOWN" and args:
                 code = int(args[0])
-                mods = [int(m) for m in args[1].split(",")] if len(args) > 1 and args[1] != "-" else []
+                held_mods = args[1] if len(args) > 1 else "-"
+                mods = [] if held_mods == "-" else [int(m) for m in held_mods.split(",")]
                 # Modifiers first, as the keyboard would have sent them, so the
                 # loop's held_modifiers has them when the key itself arrives.
                 for mod in mods:

@@ -43,8 +43,9 @@ combobox {
 # The theme draws that checkmark white, which is invisible on the white swatch.
 # GTK already tags each swatch .light or .dark by its own luminance, so key off
 # that: a near-black check on light swatches (white, amber…) and a near-white
-# check on dark ones (black, purple…). The checkmark is a symbolic icon that follows the node's `color`, so
-# setting `color` on the swatch and its overlay child recolors just the check.
+# check on dark ones (black, purple…). The checkmark is a symbolic icon that
+# follows the node's `color`, so setting `color` on the swatch and its overlay
+# child recolors just the check.
 _SWATCH_CSS = b"""
 colorswatch.light,
 colorswatch.light overlay {

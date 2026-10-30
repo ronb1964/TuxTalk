@@ -81,8 +81,10 @@ def _lib():
         x.xkb_keymap_min_keycode.argtypes = [P]
         x.xkb_keymap_max_keycode.argtypes = [P]
         x.xkb_keymap_num_levels_for_key.argtypes = [P, U32, U32]
-        x.xkb_keymap_key_get_syms_by_level.argtypes = [P, U32, U32, U32, C.POINTER(C.POINTER(U32))]
-        x.xkb_keymap_key_get_mods_for_level.argtypes = [P, U32, U32, U32, C.POINTER(U32), C.c_size_t]
+        x.xkb_keymap_key_get_syms_by_level.argtypes = [P, U32, U32, U32,
+                                                       C.POINTER(C.POINTER(U32))]
+        x.xkb_keymap_key_get_mods_for_level.argtypes = [P, U32, U32, U32, C.POINTER(U32),
+                                                        C.c_size_t]
         x.xkb_keymap_key_get_mods_for_level.restype = C.c_size_t
         x.xkb_keymap_mod_get_index.argtypes = [P, C.c_char_p]
         x.xkb_keymap_mod_get_index.restype = U32
@@ -196,11 +198,14 @@ class KeyPlanner:
         for kc in range(x.xkb_keymap_min_keycode(self.keymap), last + 1):
             for level in range(x.xkb_keymap_num_levels_for_key(self.keymap, kc, 0)):
                 syms = C.POINTER(C.c_uint32)()
-                if x.xkb_keymap_key_get_syms_by_level(self.keymap, kc, 0, level, C.byref(syms)) != 1:
+                found = x.xkb_keymap_key_get_syms_by_level(self.keymap, kc, 0, level,
+                                                           C.byref(syms))
+                if found != 1:
                     continue
                 sym = syms[0]
                 masks = (C.c_uint32 * 8)()
-                for i in range(x.xkb_keymap_key_get_mods_for_level(self.keymap, kc, 0, level, masks, 8)):
+                count = x.xkb_keymap_key_get_mods_for_level(self.keymap, kc, 0, level, masks, 8)
+                for i in range(count):
                     mask = masks[i]
                     if mask & ~allowed:
                         continue        # needs Caps Lock, Level5 or the like: skip

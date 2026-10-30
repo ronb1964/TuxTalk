@@ -172,7 +172,9 @@ def _joinable(core, word, hyphens=True):
     word has it too. An apostrophe makes "she'll" a contraction and
     "William's" a possessive, never the word Shell or Williams, and a dot
     makes "tux.talk" something else again."""
-    return all(c.isalnum() or (hyphens and c == "-") or c in word or (c in _APOSTROPHES and any(a in word for a in _APOSTROPHES))
+    word_has_apostrophe = any(a in word for a in _APOSTROPHES)
+    return all(c.isalnum() or (hyphens and c == "-") or c in word
+               or (c in _APOSTROPHES and word_has_apostrophe)
                for c in core)
 
 
@@ -223,8 +225,9 @@ def fix_spelling(text, words, hyphens=True):
                 # Same sound, other letters. The apostrophe of "Tuck's" belongs
                 # to the mishearing, so it may sit inside the match.
                 word = sounds.get(_sound(joined)) if len(joined) >= MIN_SOUND_LETTERS else None
-                if word is None or not all(_joinable(t[3].replace("'", "").replace("\u2019", ""), word, hyphens)
-                                           for t in group):
+                if word is None or not all(
+                        _joinable(t[3].replace("'", "").replace("\u2019", ""), word, hyphens)
+                        for t in group):
                     continue
             core_start = group[0][0] + len(group[0][2])
             core_end = group[-1][1] - len(group[-1][4])

@@ -106,10 +106,14 @@ function tuxtalkReport(w) {{
              tuxtalkFrame(w));
     // Follow this window's moves and resizes until another one is active.
     if (tuxtalkWatched && tuxtalkWatched.frameGeometryChanged) {{
-        try {{ tuxtalkWatched.frameGeometryChanged.disconnect(tuxtalkGeometryChanged); }} catch (e) {{}}
+        try {{
+            tuxtalkWatched.frameGeometryChanged.disconnect(tuxtalkGeometryChanged);
+        }} catch (e) {{}}
     }}
     if (tuxtalkWatched && tuxtalkWatched.interactiveMoveResizeFinished) {{
-        try {{ tuxtalkWatched.interactiveMoveResizeFinished.disconnect(tuxtalkGeometry); }} catch (e) {{}}
+        try {{
+            tuxtalkWatched.interactiveMoveResizeFinished.disconnect(tuxtalkGeometry);
+        }} catch (e) {{}}
     }}
     tuxtalkWatched = w;
     if (w && w.frameGeometryChanged) {{

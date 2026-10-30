@@ -130,7 +130,8 @@ def list_streams(run=subprocess.run):
 
 
 def _set_volume(index, volumes, run=subprocess.run):
-    return _pactl("set-sink-input-volume", str(index), *[str(v) for v in volumes], run=run) is not None
+    return _pactl("set-sink-input-volume", str(index), *[str(v) for v in volumes],
+                  run=run) is not None
 
 
 RESET_TIMEOUT_S = 3.0
@@ -160,7 +161,8 @@ def reset_remembered(app, volumes, run=subprocess.run, popen=subprocess.Popen):
             mine = [st for st in list_streams(run) if st["pid"] == player.pid]
             if mine:
                 st = mine[0]
-                want = volumes if len(volumes) == len(st["volumes"]) else [max(volumes)] * len(st["volumes"])
+                channels = len(st["volumes"])
+                want = volumes if len(volumes) == channels else [max(volumes)] * channels
                 done = _set_volume(st["index"], want, run)
                 break
         if done:

@@ -211,7 +211,8 @@ def send(events, delay_ms: float = KEY_DELAY_MS, before_press=None, claim=None) 
                 if left > 0:
                     time.sleep(left)
         except OSError as e:
-            logger.error(f"TuxTalk's virtual keyboard failed after {sent} of {len(events)} key events: {e}")
+            logger.error(f"TuxTalk's virtual keyboard failed after {sent} of {len(events)} "
+                         f"key events: {e}")
             _close_broken(device, down)
             if sent:
                 raise StoppedPartway(f"{sent} of {len(events)} key events")

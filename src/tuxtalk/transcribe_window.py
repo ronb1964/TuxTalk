@@ -176,42 +176,12 @@ class TranscribeWindow:
         self.status.set_line_wrap(True)
         box.pack_start(self.status, False, False, 0)
 
-        # Read-only: the subtitles are built from what was heard, so an edit
-        # here wouldn't reach them. Copy or save it and edit it anywhere.
-        self.view = Gtk.TextView()
-        self.view.set_editable(False)
-        self.view.set_cursor_visible(False)
-        self.view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
-        for side in ("left", "right", "top", "bottom"):
-            getattr(self.view, f"set_{side}_margin")(8)
-        scrolled = Gtk.ScrolledWindow()
-        scrolled.set_shadow_type(Gtk.ShadowType.IN)
-        scrolled.add(self.view)
-        # A read-only text view turns down every drop, and it's most of the
-        # window, so it takes files itself (_on_view_drag_motion).
-        self.view.drag_dest_set(Gtk.DestDefaults.ALL, [], Gdk.DragAction.COPY)
-        self.view.drag_dest_add_uri_targets()
-        self.view.connect("drag-motion", self._on_view_drag_motion)
-        self.view.connect("drag-leave", lambda w, *_a: w.drag_unhighlight())
-        self.view.connect("drag-drop", self._on_view_drag_drop)
-        self.view.connect("drag-data-received", self._on_view_drop)
-        # Where to drop, while there's nothing to show yet.
-        self.drop_hint = Gtk.Label(justify=Gtk.Justification.CENTER)
-        self.drop_hint.set_markup(
-            "<span size='large'>Drop an audio or video file here</span>\n"
-            "<small>or use Choose a File…</small>")
-        self.drop_hint.set_opacity(0.6)
-        self.drop_hint.set_halign(Gtk.Align.CENTER)
-        self.drop_hint.set_valign(Gtk.Align.CENTER)
-        overlay = Gtk.Overlay()
-        overlay.add(scrolled)
-        overlay.add_overlay(self.drop_hint)
-        overlay.set_overlay_pass_through(self.drop_hint, True)
-        box.pack_start(overlay, True, True, 0)
+        box.pack_start(self._text_area(), True, True, 0)
 
         bottom = Gtk.Box(spacing=8)
         self.times_check = Gtk.CheckButton(label="Show times")
-        self.times_check.set_tooltip_text("Start each paragraph with where it is in the file, like [1:05]")
+        self.times_check.set_tooltip_text(
+            "Start each paragraph with where it is in the file, like [1:05]")
         self.times_check.connect("toggled", lambda _c: self._show_text())
         bottom.pack_start(self.times_check, False, False, 0)
         self.clean_check = Gtk.CheckButton(label="Remove ums and repeats")
@@ -245,6 +215,43 @@ class TranscribeWindow:
         self.progress.hide()
         self.cancel_btn.hide()
 
+    def _text_area(self):
+        """The transcript's text (self.view) in a scroller, with the drop hint
+        (self.drop_hint) over it while there's nothing to show.
+
+        Read-only: the subtitles are built from what was heard, so an edit
+        here wouldn't reach them. Copy or save it and edit it anywhere."""
+        self.view = Gtk.TextView()
+        self.view.set_editable(False)
+        self.view.set_cursor_visible(False)
+        self.view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        for side in ("left", "right", "top", "bottom"):
+            getattr(self.view, f"set_{side}_margin")(8)
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_shadow_type(Gtk.ShadowType.IN)
+        scrolled.add(self.view)
+        # A read-only text view turns down every drop, and it's most of the
+        # window, so it takes files itself (_on_view_drag_motion).
+        self.view.drag_dest_set(Gtk.DestDefaults.ALL, [], Gdk.DragAction.COPY)
+        self.view.drag_dest_add_uri_targets()
+        self.view.connect("drag-motion", self._on_view_drag_motion)
+        self.view.connect("drag-leave", lambda w, *_a: w.drag_unhighlight())
+        self.view.connect("drag-drop", self._on_view_drag_drop)
+        self.view.connect("drag-data-received", self._on_view_drop)
+        # Where to drop, while there's nothing to show yet.
+        self.drop_hint = Gtk.Label(justify=Gtk.Justification.CENTER)
+        self.drop_hint.set_markup(
+            "<span size='large'>Drop an audio or video file here</span>\n"
+            "<small>or use Choose a File…</small>")
+        self.drop_hint.set_opacity(0.6)
+        self.drop_hint.set_halign(Gtk.Align.CENTER)
+        self.drop_hint.set_valign(Gtk.Align.CENTER)
+        overlay = Gtk.Overlay()
+        overlay.add(scrolled)
+        overlay.add_overlay(self.drop_hint)
+        overlay.set_overlay_pass_through(self.drop_hint, True)
+        return overlay
+
     # --- states -----------------------------------------------------------------------
 
     def _set_busy(self, busy):
@@ -264,7 +271,8 @@ class TranscribeWindow:
         return ft.cleaned(self.pieces) if self.clean_check.get_active() else self.pieces
 
     def _show_text(self):
-        self.view.get_buffer().set_text(ft.to_text(self._shown(), times=self.times_check.get_active()))
+        times = self.times_check.get_active()
+        self.view.get_buffer().set_text(ft.to_text(self._shown(), times=times))
 
     def present(self):
         self.window.present()
@@ -372,7 +380,8 @@ class TranscribeWindow:
                 GLib.idle_add(self._on_progress, done, whole, describe)
 
             pieces = ft.transcribe(audio, self.engine, progress, self._cancel.is_set)
-            GLib.idle_add(self._on_done, pieces, total, time.time() - started, self._cancel.is_set())
+            GLib.idle_add(self._on_done, pieces, total, time.time() - started,
+                          self._cancel.is_set())
         except (ft.NotDownloaded, ft.NoSound) as e:
             GLib.idle_add(self._on_failed, str(e) + (
                 " Choose a model in Preferences → General, or dictate once, and it downloads."
@@ -383,7 +392,8 @@ class TranscribeWindow:
 
     def _on_progress(self, done, whole, describe):
         self.progress.set_fraction(min(1.0, done / whole) if whole else 1.0)
-        self.status.set_text(f"Transcribing with {describe}: {_duration(done)} of {_duration(whole)}")
+        self.status.set_text(f"Transcribing with {describe}: {_duration(done)} of "
+                             f"{_duration(whole)}")
         return False
 
     def _on_done(self, pieces, total, seconds, stopped):
@@ -425,7 +435,8 @@ class TranscribeWindow:
         self.kept = self.copied = False
         self.remembered = True
         self.file_label.set_markup(f"<b>{GLib.markup_escape_text(entry.name)}</b>")
-        self.status.set_text(f"Transcribed {_when(entry.when)}. It's kept under Earlier Transcripts.")
+        self.status.set_text(f"Transcribed {_when(entry.when)}. "
+                             "It's kept under Earlier Transcripts.")
         self._set_busy(False)
         self._show_text()
 
@@ -485,8 +496,9 @@ class TranscribeWindow:
         shown = self._shown()
         content = (ft.to_srt(shown) if kind == "srt"
                    else ft.to_text(shown, times=self.times_check.get_active()) + "\n")
-        chooser = Gtk.FileChooserNative.new("Save as subtitles" if kind == "srt" else "Save as text",
-                                            self.window, Gtk.FileChooserAction.SAVE, None, None)
+        title = "Save as subtitles" if kind == "srt" else "Save as text"
+        chooser = Gtk.FileChooserNative.new(title, self.window, Gtk.FileChooserAction.SAVE,
+                                            None, None)
         stem = os.path.splitext(os.path.basename(self.path or "transcript"))[0]
         chooser.set_current_name(f"{stem}.{kind}")
         if self.path:

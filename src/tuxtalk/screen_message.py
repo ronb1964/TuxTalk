@@ -161,7 +161,8 @@ def _show_now(text, center, seconds=None, warning=True, tag=None):
         sign = "⚠  " if warning else ""
 
         def set_text(words):
-            layout.set_markup(f'<span size="large">{sign}{GLib.markup_escape_text(words)}</span>', -1)
+            escaped = GLib.markup_escape_text(words)
+            layout.set_markup(f'<span size="large">{sign}{escaped}</span>', -1)
         set_text(text)
         text_w, text_h = layout.get_pixel_size()
         width, height = text_w + 2 * _PAD_X, text_h + 2 * _PAD_Y

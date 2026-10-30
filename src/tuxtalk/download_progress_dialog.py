@@ -330,7 +330,8 @@ class UnifiedDownloadDialog:
                 # The download returns False when cancelled; it didn't fail.
                 pass
             elif success:
-                widgets['status'].set_markup('<span size="small" color="#51cf66">✅ Complete!</span>')
+                widgets['status'].set_markup(
+                    '<span size="small" color="#51cf66">✅ Complete!</span>')
                 widgets['progress'].set_fraction(1.0)
                 widgets['progress'].set_text("100%")
                 widgets['cancel_btn'].set_label("Done")
@@ -457,9 +458,12 @@ def show_unified_download_dialog(cuda=False, extension=False, model=None, parent
         model_size = MODEL_DISPLAY_SIZES.get(model, "~3 GB")
         description = (
             f"To run {model} on your NVIDIA graphics card with CUDA, TuxTalk needs two things:\n\n"
-            f"  • <b>CUDA GPU Libraries</b> (~{cuda_size}) — unlocks GPU acceleration on your NVIDIA card\n"
-            f"  • <b>{model} AI Model</b> ({model_size}) — the highest-accuracy speech recognition model\n\n"
-            f"Both are one-time downloads. This may take several minutes depending on your connection."
+            f"  • <b>CUDA GPU Libraries</b> (~{cuda_size}) — unlocks GPU acceleration on "
+            "your NVIDIA card\n"
+            f"  • <b>{model} AI Model</b> ({model_size}) — the highest-accuracy speech "
+            "recognition model\n\n"
+            "Both are one-time downloads. This may take several minutes depending on "
+            "your connection."
         )
 
     dialog = UnifiedDownloadDialog(parent=parent, title=title, description=description)

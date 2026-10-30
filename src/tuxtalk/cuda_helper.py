@@ -301,7 +301,7 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
 
     # Clean up on failure/cancellation — but only what this run created.
     cleanup_cuda_dir = _make_cuda_cleanup(cuda_path)
-    
+
     try:
         import tempfile
         from .download_utils import download_file, free_space_bytes
@@ -356,7 +356,8 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
                     return False
 
             # --- Phase 3: download each wheel (timeout + cancel + sha256) ---
-            for pkg_idx, (pkg_name, wheel_url, wheel_filename, wheel_sha256, _size) in enumerate(wheels):
+            for pkg_idx, wheel in enumerate(wheels):
+                pkg_name, wheel_url, wheel_filename, wheel_sha256, _size = wheel
                 if cancel_event and cancel_event.is_set():
                     logger.info("Download cancelled by user")
                     cleanup_cuda_dir()
@@ -378,13 +379,8 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
                             f"Downloading {_pkg}... {int(download_percent)}%",
                             current_percent)
 
-                if not download_file(
-                    wheel_url, wheel_path,
-                    timeout=60,
-                    cancel_event=cancel_event,
-                    progress_hook=progress_hook,
-                    expected_sha256=wheel_sha256,
-                ):
+                if not download_file(wheel_url, wheel_path, timeout=60, cancel_event=cancel_event,
+                                     progress_hook=progress_hook, expected_sha256=wheel_sha256):
                     logger.error(f"Failed to download {pkg_name}")
                     if progress_callback and not (cancel_event and cancel_event.is_set()):
                         progress_callback(f"Download of {pkg_name} failed or was corrupted", 0)
@@ -452,7 +448,8 @@ def show_cuda_download_dialog(parent=None, on_success_callback=None):
     content.pack_start(progress_bar, False, False, 0)
 
     info_label = Gtk.Label()
-    info_label.set_markup('<span size="small"><i>This may take several minutes depending on your connection...</i></span>')
+    info_label.set_markup('<span size="small"><i>This may take several minutes depending on '
+                          'your connection...</i></span>')
     info_label.set_opacity(0.7)
     content.pack_start(info_label, False, False, 0)
 

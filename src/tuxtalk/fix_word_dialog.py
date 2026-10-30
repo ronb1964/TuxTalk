@@ -126,32 +126,7 @@ class _FixWordDialog:
                            'for you.</span>')
             box.pack_start(tip, False, False, 0)
 
-        # A read-only text box rather than a button per word: it reads like
-        # the sentence it is, and click-or-drag is how people select text
-        # everywhere else. The selection is snapped to whole words.
-        self.view = Gtk.TextView()
-        self.view.set_editable(False)
-        # Its cursor stays visible: hidden, the arrow keys scroll instead of moving.
-        self.view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
-        for side in ("left", "right", "top", "bottom"):
-            getattr(self.view, f"set_{side}_margin")(8)
-        # The picked words get their own highlight: the normal selection fades
-        # to nearly nothing once focus moves to the "Should be" box.
-        self.picked_tag = self.view.get_buffer().create_tag(
-            "picked", background="#3584e4", foreground="#ffffff")
-        # False: the text box must still get the release itself. idle_add's
-        # return value (a source id) read as "handled", so the box never saw
-        # the button come up and ignored every click after the first pick.
-        self.view.connect("button-release-event", self._pick_soon, True)
-        self.view.connect("key-release-event", self._pick_soon, False)
-        scroller = Gtk.ScrolledWindow()
-        scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scroller.set_shadow_type(Gtk.ShadowType.IN)
-        scroller.set_min_content_height(70)
-        scroller.set_max_content_height(220)
-        scroller.set_propagate_natural_height(True)
-        scroller.add(self.view)
-        box.pack_start(scroller, True, True, 0)
+        box.pack_start(self._words_view(), True, True, 0)
 
         self.heard_label = Gtk.Label(xalign=0)
         box.pack_start(self.heard_label, False, False, 0)
@@ -214,6 +189,37 @@ class _FixWordDialog:
         self.first = self.last = None
         self.view.get_buffer().set_text(self.text)
         self._update()
+
+    def _words_view(self):
+        """The dictation as read-only text (self.view) in a scroller that
+        grows with it, where the words to fix are clicked or dragged across.
+
+        A read-only text box rather than a button per word: it reads like
+        the sentence it is, and click-or-drag is how people select text
+        everywhere else. The selection is snapped to whole words."""
+        self.view = Gtk.TextView()
+        self.view.set_editable(False)
+        # Its cursor stays visible: hidden, the arrow keys scroll instead of moving.
+        self.view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        for side in ("left", "right", "top", "bottom"):
+            getattr(self.view, f"set_{side}_margin")(8)
+        # The picked words get their own highlight: the normal selection fades
+        # to nearly nothing once focus moves to the "Should be" box.
+        self.picked_tag = self.view.get_buffer().create_tag(
+            "picked", background="#3584e4", foreground="#ffffff")
+        # False: the text box must still get the release itself. idle_add's
+        # return value (a source id) read as "handled", so the box never saw
+        # the button come up and ignored every click after the first pick.
+        self.view.connect("button-release-event", self._pick_soon, True)
+        self.view.connect("key-release-event", self._pick_soon, False)
+        scroller = Gtk.ScrolledWindow()
+        scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroller.set_shadow_type(Gtk.ShadowType.IN)
+        scroller.set_min_content_height(70)
+        scroller.set_max_content_height(220)
+        scroller.set_propagate_natural_height(True)
+        scroller.add(self.view)
+        return scroller
 
     def _fix_row(self):
         """"Should be:" and the box for the right spelling (self.entry)."""

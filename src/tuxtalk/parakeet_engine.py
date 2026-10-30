@@ -146,10 +146,12 @@ class ParakeetModel:
             booster = parakeet_bias.WordBooster(asr._vocab, words, asr._blank_idx)
             if booster:
                 asr._decoding = parakeet_bias.boosted_tdt_decoding(asr, booster, on_word=_log_word)
-            logger.info(f"Your Words for Parakeet: {len(booster.targets)} spellings of {len(words)} words")
+            logger.info(f"Your Words for Parakeet: {len(booster.targets)} spellings of "
+                        f"{len(words)} words")
         except Exception as e:
             asr._decoding = plain
-            logger.warning(f"Your Words can't steer Parakeet, so only the spelling pass applies: {e}")
+            logger.warning("Your Words can't steer Parakeet, so only the spelling pass "
+                           f"applies: {e}")
 
 
 def _log_word(word, cost, kept):

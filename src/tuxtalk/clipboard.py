@@ -174,7 +174,8 @@ def _wl_paste_types():
 
 def _wl_paste(mime):
     """The clipboard's contents as *mime*, in bytes. Raises OSError on failure."""
-    result = subprocess.run(["wl-paste", "--no-newline", "--type", mime], capture_output=True, timeout=1)
+    result = subprocess.run(["wl-paste", "--no-newline", "--type", mime],
+                            capture_output=True, timeout=1)
     if result.returncode != 0:
         raise OSError(f"wl-paste exited {result.returncode}")
     return result.stdout
