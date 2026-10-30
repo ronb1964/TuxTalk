@@ -93,7 +93,7 @@ jobs:
             --only dev --no-root --no-interaction
 
       - name: Python (pyflakes, bugbear and simplify rules)
-        run: lint-venv/bin/ruff check src/tuxtalk
+        run: lint-venv/bin/ruff check src/tuxtalk tests
 
       # Only tracked scripts, so DEV_SETUP.md's copy of this command gives the
       # same answer in a working folder that holds untracked scripts too.

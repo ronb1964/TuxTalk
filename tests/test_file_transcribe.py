@@ -3,6 +3,7 @@
 The file is cut into pieces at quiet moments, pieces nobody talks in are
 skipped, and the rest come out as paragraphs or as SRT subtitles.
 """
+import itertools
 import os
 import types
 import wave
@@ -36,7 +37,7 @@ def test_pieces_cover_the_file_and_are_never_longer_than_30_seconds():
     audio = np.concatenate([_speech(7, i) if i % 2 == 0 else _quiet(1.5) for i in range(40)])
     cuts = ft.cut_points(audio)
     assert cuts[0][0] == 0 and cuts[-1][1] == len(audio)
-    assert all(a[1] == b[0] for a, b in zip(cuts, cuts[1:]))         # no gaps, no overlap
+    assert all(a[1] == b[0] for a, b in itertools.pairwise(cuts))         # no gaps, no overlap
     assert all((end - start) / SR <= ft.MAX_PIECE_S for start, end in cuts)
     assert all((end - start) / SR >= ft.MIN_PIECE_S for start, end in cuts[:-1])
 

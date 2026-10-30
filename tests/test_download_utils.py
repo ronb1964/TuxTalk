@@ -1,6 +1,7 @@
 """Tests for the shared download helper (uses file:// URLs — no network)."""
 import hashlib
 import os
+import pathlib
 import threading
 import time
 
@@ -169,7 +170,7 @@ def test_a_failed_unpack_leaves_neither_archive_nor_folder(tmp_path):
     from tuxtalk.download_utils import download_area, unpack_tar
     try:
         with download_area(str(tmp_path), "engine") as (archive, folder):
-            open(archive, "wb").write(b"not a tar file")
+            pathlib.Path(archive).write_bytes(b"not a tar file")
             unpack_tar(archive, folder)
     except Exception:
         pass

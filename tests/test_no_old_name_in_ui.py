@@ -55,10 +55,10 @@ def _strings(tree):
     """Every string constant except docstrings (those are for developers)."""
     docs = set()
     for node in ast.walk(tree):
-        if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            if node.body and isinstance(node.body[0], ast.Expr) and isinstance(
-                    getattr(node.body[0], "value", None), ast.Constant):
-                docs.add(id(node.body[0].value))
+        if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) \
+                and node.body and isinstance(node.body[0], ast.Expr) \
+                and isinstance(getattr(node.body[0], "value", None), ast.Constant):
+            docs.add(id(node.body[0].value))
     for node in ast.walk(tree):
         if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in docs:
             yield node.lineno, node.value

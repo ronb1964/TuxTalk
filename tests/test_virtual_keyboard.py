@@ -3,6 +3,8 @@
 Every test here runs on the recording keyboard from conftest.py; a real one
 would type into whatever window has the focus on the computer running them.
 """
+import itertools
+
 import pytest
 
 from tuxtalk import virtual_keyboard
@@ -152,7 +154,7 @@ def test_after_this_process_was_held_up_keys_never_go_out_in_a_burst(settled, mo
         write(*a)
     monkeypatch.setattr(settled, "write", held_up_once)
     virtual_keyboard.send([(30, 1), (30, 0)] * 50, delay_ms=2)
-    gaps = [b - a for a, b in zip(sent_at, sent_at[1:])]
+    gaps = [b - a for a, b in itertools.pairwise(sent_at)]
     assert sum(1 for g in gaps if g < 0.002 * 0.99) <= 1
 
 

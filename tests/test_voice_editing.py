@@ -1043,7 +1043,7 @@ def test_a_failed_line_fails_the_whole_edit(engine, monkeypatch):
         try:
             return Reply(next(replies))
         except StopIteration:
-            raise OSError("server gone")
+            raise OSError("server gone") from None
     monkeypatch.setattr(ai_cleanup.engine_process, "open_local", urlopen)
     assert engine.edit("first\nsecond", "add an exclamation point") is None
 

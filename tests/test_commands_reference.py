@@ -96,7 +96,7 @@ def test_the_short_list_keeps_each_note():
 
 def test_every_way_to_clear_and_to_fix_a_word_is_listed():
     listed = {phrase for _kind, phrase in PHRASES}
-    assert undo.EVERYTHING_PATTERNS <= listed
+    assert listed >= undo.EVERYTHING_PATTERNS
     assert {"fix that", "fix that word"} <= listed
 
 

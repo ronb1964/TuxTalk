@@ -28,8 +28,7 @@ def test_test_mode_ends_with_the_window_even_after_an_error(tmp_path, monkeypatc
     """A flag left behind would keep dictation off until it went stale."""
     flag = tmp_path / "hotkey-test"
     monkeypatch.setattr(service_launcher, "hotkey_test_flag_path", lambda: str(flag))
-    with pytest.raises(RuntimeError):
-        with prefs_hotkey_test._test_mode():
-            assert flag.exists()
-            raise RuntimeError("the window failed")
+    with pytest.raises(RuntimeError), prefs_hotkey_test._test_mode():
+        assert flag.exists()
+        raise RuntimeError("the window failed")
     assert not flag.exists()

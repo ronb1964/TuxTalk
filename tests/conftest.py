@@ -27,9 +27,8 @@ import pytest
 # before Gtk opens and before PortAudio first reads ALSA's configuration. A
 # test that gives a child an environment of its own drops this, but only
 # shell scripts are run that way.
-_ALSA_CONF = tempfile.NamedTemporaryFile(
-    "w", prefix="tuxtalk-test-alsa-", suffix=".conf", delete=False)
-with _ALSA_CONF:
+with tempfile.NamedTemporaryFile(
+        "w", prefix="tuxtalk-test-alsa-", suffix=".conf", delete=False) as _ALSA_CONF:
     _ALSA_CONF.write("pcm.!default { type hw card no_sound_in_tests }\n")
 atexit.register(os.remove, _ALSA_CONF.name)
 os.environ.update({
@@ -843,7 +842,6 @@ def tray_main(monkeypatch):
     """The tray's main(), on a start that isn't the first unless
     run(first_run=True); *welcome* stands in for the welcome screens."""
     import sys
-    import types
     import dbus.mainloop.glib
     from tuxtalk import (autostart, control, cuda_helper, desktop_identity, desktop_launcher,
                          first_run_setup, gnome_keybindings, rename_migration,

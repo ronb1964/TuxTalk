@@ -57,8 +57,9 @@ line-length = 100
 [tool.ruff]
 line-length = 100
 
-# What CI enforces: pyflakes, bugbear and simplify. Length, line length, error
-# handling and docstrings are measured by tests/test_code_health.py.
+# What CI enforces, in src/tuxtalk and tests/: pyflakes, bugbear and simplify.
+# Length, line length, error handling and docstrings are measured by
+# tests/test_code_health.py (src/tuxtalk only).
 [tool.ruff.lint]
 select = ["F", "B", "SIM"]
 # contextlib.suppress would take a swallowed error out of sight of
