@@ -19,14 +19,22 @@ import pytest
 # program inherits this, so a child Python's sounddevice, a player started
 # by a shell, GTK's event sounds and GStreamer find no sound server: the
 # PulseAudio and PipeWire sockets named here can't exist (a path under a
-# file), and ALSA's configuration defines no device at all, the sound cards
-# included. Set before Gtk opens and before PortAudio first reads ALSA's
-# configuration. A test that gives a child an environment of its own drops
-# this, but only shell scripts are run that way.
+# file), and ALSA reads only the configuration below, so the sound cards and
+# the desktop's sound server have no name it knows. Its one device, the
+# default, is on a sound card that doesn't exist: with no device at all,
+# Ubuntu's PortAudio (19.6) aborts the moment sounddevice is imported. Set
+# before Gtk opens and before PortAudio first reads ALSA's configuration. A
+# test that gives a child an environment of its own drops this, but only
+# shell scripts are run that way.
+_ALSA_CONF = tempfile.NamedTemporaryFile(
+    "w", prefix="tuxtalk-test-alsa-", suffix=".conf", delete=False)
+with _ALSA_CONF:
+    _ALSA_CONF.write("pcm.!default { type hw card no_sound_in_tests }\n")
+atexit.register(os.remove, _ALSA_CONF.name)
 os.environ.update({
     "PULSE_SERVER": f"unix:{os.devnull}/no-sound-server",
     "PIPEWIRE_REMOTE": f"{os.devnull}/no-sound-server",
-    "ALSA_CONFIG_PATH": os.devnull,
+    "ALSA_CONFIG_PATH": _ALSA_CONF.name,
     "JACK_NO_START_SERVER": "1",
     "JACK_DEFAULT_SERVER": "no-sound-server",
 })
