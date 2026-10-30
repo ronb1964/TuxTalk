@@ -1,6 +1,10 @@
 """One copy of each TuxTalk process: the dictation service and the tray each
 hold a lock file in the user's runtime folder for as long as they run.
 
+It also says where that folder is: session_runtime_dir() for what the
+desktop keeps there (a compositor's socket), runtime_dir() for TuxTalk's own
+private files (locks, Recent Dictations, a hand-over to Fix a Word).
+
 flock is atomic, and the kernel lets go of the lock when the process exits,
 however it exits.
 """
@@ -25,8 +29,19 @@ CLOSING_WAIT_S = 10.0
 FALLBACK_ROOT = "/tmp"
 
 
+def session_runtime_dir(env=None) -> str:
+    """The session's runtime folder, XDG_RUNTIME_DIR of *env* (os.environ
+    by default) or /run/user/<uid> without one: where the desktop and older
+    TuxTalks put their sockets and files. Not checked, so not for files of
+    TuxTalk's own; runtime_dir() is."""
+    env = os.environ if env is None else env
+    # An empty value counts as unset, as the XDG spec says.
+    return env.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+
+
 def runtime_dir() -> str:
-    """The user's runtime folder, where the lock files go.
+    """The user's private runtime folder, where TuxTalk's own files go:
+    lock files, Recent Dictations, a hand-over to Fix a Word.
 
     Inside a Flatpak, XDG_RUNTIME_DIR (/run/user/N) is shared with the host,
     so a host install's lock would make the Flatpak's process exit as
@@ -39,7 +54,7 @@ def runtime_dir() -> str:
     no lock at all, two services typed every dictation twice and two GNOME
     extension installs could meet.
     """
-    base = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+    base = session_runtime_dir()
     fid = os.environ.get("FLATPAK_ID")
     if fid:
         app_dir = os.path.join(base, "app", fid)

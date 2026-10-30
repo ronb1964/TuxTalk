@@ -72,3 +72,11 @@ def test_a_runtime_folder_others_can_open_is_not_used(no_runtime_folder, tmp_pat
     shared.chmod(0o777)
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(shared))
     assert single_instance.runtime_dir() == str(no_runtime_folder)
+
+
+def test_an_empty_runtime_folder_setting_counts_as_none(monkeypatch):
+    """The desktop's sockets (Hyprland's, a Wayland display) are looked for
+    in /run/user/<uid>, not in the current folder."""
+    monkeypatch.setenv("XDG_RUNTIME_DIR", "")
+    assert single_instance.session_runtime_dir() == f"/run/user/{os.getuid()}"
+    assert single_instance.session_runtime_dir({"XDG_RUNTIME_DIR": "/run/x"}) == "/run/x"

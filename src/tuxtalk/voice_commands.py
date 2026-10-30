@@ -188,9 +188,10 @@ def _hand_over(typed, focused):
     keeps a later request's file apart."""
     import json
     import tempfile
-    folder = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+    from .single_instance import runtime_dir
     try:
-        fd, path = tempfile.mkstemp(dir=folder, prefix="tuxtalk-fix-word-", suffix=".json")
+        fd, path = tempfile.mkstemp(dir=runtime_dir(), prefix="tuxtalk-fix-word-",
+                                    suffix=".json")
     except OSError as e:
         logger.info(f"Fix a Word can't fix it in the text: {e}")
         return None

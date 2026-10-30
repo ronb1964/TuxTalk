@@ -45,6 +45,7 @@ import threading
 
 from . import desktop_detect
 from .logger import FailureNotes, setup_logger
+from .single_instance import session_runtime_dir
 
 logger = setup_logger(__name__)
 _failures = FailureNotes()      # asked before every typed chunk: each failure logged once
@@ -122,10 +123,14 @@ def _from_i3(path):
 
 # --- Hyprland ------------------------------------------------------------------------
 
+def hyprland_socket(signature):
+    """The command socket of the Hyprland session *signature*."""
+    return os.path.join(session_runtime_dir(), "hypr", signature, ".socket.sock")
+
+
 def _from_hyprland(signature):
-    runtime = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
-    path = os.path.join(runtime, "hypr", signature, ".socket.sock")
-    window = json.loads(_exchange(path, b"j/activewindow", _recv_until_closed) or b"{}")
+    window = json.loads(_exchange(hyprland_socket(signature), b"j/activewindow",
+                                  _recv_until_closed) or b"{}")
     return window.get("class") or window.get("initialClass"), window.get("address")
 
 
@@ -341,8 +346,7 @@ def _from_cosmic(path):
 
 def _wayland_socket(env):
     name = env.get("WAYLAND_DISPLAY") or "wayland-0"
-    runtime = env.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
-    return os.path.join(runtime, name)
+    return os.path.join(session_runtime_dir(env), name)
 
 
 # --- X11 ----------------------------------------------------------------------------
@@ -557,9 +561,8 @@ def _rect_from_i3(path):
 
 def _rect_from_hyprland(signature):
     from .window_geometry import Rect
-    runtime = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
-    path = os.path.join(runtime, "hypr", signature, ".socket.sock")
-    window = json.loads(_exchange(path, b"j/activewindow", _recv_until_closed) or b"{}")
+    window = json.loads(_exchange(hyprland_socket(signature), b"j/activewindow",
+                                  _recv_until_closed) or b"{}")
     at, size = window.get("at"), window.get("size")
     return Rect(at[0], at[1], size[0], size[1]) if at and size else None
 

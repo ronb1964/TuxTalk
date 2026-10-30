@@ -75,6 +75,22 @@ def test_file_lives_in_the_runtime_dir_and_is_private(runtime_dir):
     assert stat.S_IMODE(os.stat(path).st_mode) == 0o600
 
 
+def test_a_runtime_folder_others_can_read_is_not_used(runtime_dir, monkeypatch):
+    """A misconfigured, shared runtime folder: dictated text goes to
+    TuxTalk's private folder instead, never where another user can read it."""
+    from tuxtalk import single_instance
+    shared = runtime_dir / "shared"
+    shared.mkdir()
+    shared.chmod(0o777)
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(shared))
+    monkeypatch.setattr(single_instance, "FALLBACK_ROOT", str(runtime_dir))
+    history.add_entry("secret-ish")
+    assert not (shared / "talktype-history.json").exists()
+    private = runtime_dir / f"tuxtalk-{os.getuid()}"
+    assert (private / "talktype-history.json").exists()
+    assert history.get_entries() == ["secret-ish"]
+
+
 def test_clear_and_missing_or_corrupt_file(runtime_dir):
     assert history.get_entries() == []          # no file yet
     history.add_entry("x")

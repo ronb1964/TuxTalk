@@ -3,10 +3,11 @@ Recent dictations: the last few things the user dictated, so text that went
 to the wrong window (focus stolen by a notification, a form that reloaded,
 nothing focused at all) can be copied again instead of being spoken twice.
 
-Privacy: the list lives in the user's runtime directory (XDG_RUNTIME_DIR,
-normally /run/user/<uid>). That is RAM-backed tmpfs, readable only by the
-user, and wiped at logout, so dictated text is never written to disk. This
-matches TuxTalk's promise that dictated text stays out of the log.
+Privacy: the list lives in the user's private runtime directory
+(single_instance.runtime_dir: XDG_RUNTIME_DIR, normally /run/user/<uid>).
+That is RAM-backed tmpfs, readable only by the user, and wiped at logout,
+so dictated text is never written to disk. This matches TuxTalk's promise
+that dictated text stays out of the log.
 
 The dictation service writes the list; the tray and the GNOME extension (via
 D-Bus) read it. A small file is the simplest way to share it between those
@@ -26,15 +27,11 @@ PREVIEW_CHARS = 50
 
 
 def _history_path():
-    """The history file, in the user's (or the Flatpak's) runtime directory."""
-    base = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
-    # Inside a Flatpak, use its private runtime dir (same rule as app/tray
-    # _runtime_dir) so a host install and the Flatpak keep separate lists.
-    fid = os.environ.get("FLATPAK_ID")
-    if fid:
-        app_dir = os.path.join(base, "app", fid)
-        if os.path.isdir(app_dir):
-            base = app_dir
+    """The history file, in the user's (or the Flatpak's) private runtime
+    folder, so a host install and the Flatpak keep separate lists. Raises
+    OSError when there is no private folder to be had."""
+    from .single_instance import runtime_dir
+    base = runtime_dir()
     return os.path.join(base, "talktype-history.json")
 
 

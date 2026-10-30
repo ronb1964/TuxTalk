@@ -40,7 +40,7 @@ from gi.repository import GLib, Gtk  # noqa: E402
 from . import (ai_cleanup, config, cosmic_hotkeys, custom_words,  # noqa: E402
                desktop_detect, extension_helper, file_transcribe, gnome_keybindings,
                kwin_hotkeys, menu_cache, model_helper, parakeet_engine, rename_migration,
-               secure_input, service_launcher, settings_backup, uinput_helper,
+               secure_input, service_launcher, settings_backup, single_instance, uinput_helper,
                update_checker, whisper_vulkan)
 from .logger import LOG_FILE_NAME, setup_logger, stop_file_logging  # noqa: E402
 from .ui_style import message_dialog  # noqa: E402
@@ -248,7 +248,7 @@ def find(home, install_type, environ=os.environ, appimage=None):
         if exists(folder):
             plan.folders.append((folder, names))
 
-    runtime = Path(environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}")
+    runtime = Path(single_instance.session_runtime_dir(environ))
     plan.runtime = [runtime / name for name in RUNTIME_FILES if exists(runtime / name)]
 
     unit = uinput_helper.our_ydotoold_unit(home)

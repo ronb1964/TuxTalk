@@ -413,8 +413,8 @@ def retire_ydotoold():
 
 def _our_ydotoold_pidfile():
     """Where an older TuxTalk noted the ydotoold it started itself."""
-    runtime = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
-    return os.path.join(runtime, "tuxtalk-ydotoold.pid")
+    from .single_instance import session_runtime_dir
+    return os.path.join(session_runtime_dir(), "tuxtalk-ydotoold.pid")
 
 
 def stop_ydotoold_we_started():

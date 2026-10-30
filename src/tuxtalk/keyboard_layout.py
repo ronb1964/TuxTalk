@@ -432,10 +432,9 @@ def _note_several_layouts(layouts):
 
 
 def _hyprland_devices():
-    from .compositor_focus import _exchange, _recv_until_closed
-    runtime = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
-    path = os.path.join(runtime, "hypr", os.environ["HYPRLAND_INSTANCE_SIGNATURE"], ".socket.sock")
-    return json.loads(_exchange(path, b"j/devices", _recv_until_closed))
+    from .compositor_focus import _exchange, _recv_until_closed, hyprland_socket
+    return json.loads(_exchange(hyprland_socket(os.environ["HYPRLAND_INSTANCE_SIGNATURE"]),
+                                b"j/devices", _recv_until_closed))
 
 
 def _hyprland_layout():
