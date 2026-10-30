@@ -25,8 +25,8 @@ the password dialog is open.
 """
 import os
 import subprocess
-import time
 
+from . import pkexec_runner
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -105,7 +105,7 @@ SystemCallFilter=~@privileged @resources @mount @swap @reboot @raw-io @module @o
 WantedBy=multi-user.target
 """
 
-PKEXEC_TIMEOUT = 300
+PKEXEC_TIMEOUT = pkexec_runner.SCRIPT_TIMEOUT_S
 
 
 def helper_source():
@@ -333,26 +333,18 @@ def _run_as_root(script, what):
 
 def _pkexec(script, what):
     """(ok, message) after running *script* through pkexec."""
-    from .uinput_helper import pkexec_was_declined
-    started = time.monotonic()
-    try:
-        result = subprocess.run(["pkexec", "/bin/bash", "-s"], input=script, text=True,
-                                errors="replace", capture_output=True, timeout=PKEXEC_TIMEOUT)
-    except subprocess.TimeoutExpired:
+    outcome = pkexec_runner.run(["/bin/bash", "-s"], PKEXEC_TIMEOUT, script=script)
+    if outcome.status == pkexec_runner.TIMED_OUT:
         return False, TIMED_OUT
-    except PermissionError:
-        if time.monotonic() - started < PKEXEC_TIMEOUT:
-            raise
-        # Killing pkexec on the time-out fails once it runs the script as
-        # root; subprocess then waits for the script to end.
+    if outcome.status == pkexec_runner.UNKNOWN:
         logger.warning(f"Hotkey helper {what}: ran past the time-out as root; "
                        "its result is unknown")
         return True, RAN_TOO_LONG
-    except FileNotFoundError:
+    if outcome.status == pkexec_runner.MISSING:
         return False, "pkexec isn't installed, so TuxTalk can't ask for your password."
-    if result.returncode == 0:
+    if outcome.status == pkexec_runner.DONE:
         logger.info(f"Hotkey helper {what}")
-        out = result.stdout or ""
+        out = outcome.stdout
         if STILL_IN_GROUP in out:
             logger.warning("Still in the input group after gpasswd")
         if PACKAGE_NOT_REMOVED in out:
@@ -361,12 +353,11 @@ def _pkexec(script, what):
             logger.warning(f"Not removed as root: {out.strip()}")
         # The script's own report lines (the markers above), one per line.
         return True, "\n".join(line for line in out.splitlines() if line.startswith("TUXTALK_"))
-    if pkexec_was_declined(result):
+    if outcome.status == pkexec_runner.DECLINED:
         logger.info(f"Hotkey helper {what}: cancelled at the password prompt")
         return False, "cancelled"
-    detail = (result.stderr or result.stdout or "").strip()
-    logger.error(f"Hotkey helper {what} failed: {detail}")
-    return False, detail or "it failed for an unknown reason"
+    logger.error(f"Hotkey helper {what} failed: {outcome.detail}")
+    return False, outcome.detail or "it failed for an unknown reason"
 
 
 def fix_permissions():

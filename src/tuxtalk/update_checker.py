@@ -775,8 +775,8 @@ def install_package_update(package_path: str, install_type: str) -> Tuple[bool, 
     _remove_package(package_path)
     if proc.returncode == 0:
         return (True, "Update installed. Restart TuxTalk to use the new version.")
-    from .uinput_helper import pkexec_was_declined
-    if pkexec_was_declined(subprocess.CompletedProcess(argv, proc.returncode, stderr=detail)):
+    from .pkexec_runner import was_declined
+    if was_declined(proc.returncode, detail):
         return (False, "Authorization was cancelled — the update was not installed.")
     if proc.returncode == 127:
         return (False, "Could not start the installer (authorization failed).")

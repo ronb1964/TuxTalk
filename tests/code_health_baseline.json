@@ -64,9 +64,6 @@
   "rename_migration.py::repin_launchers": {
    "decisions": 19
   },
-  "secure_input.py::_pkexec": {
-   "decisions": 16
-  },
   "settings_backup.py::read_backup": {
    "decisions": 18
   },
@@ -77,7 +74,7 @@
    "decisions": 16
   },
   "uninstall.py::find": {
-   "decisions": 23
+   "decisions": 22
   },
   "update_checker.py::get_install_type": {
    "decisions": 16
