@@ -57,10 +57,11 @@ def _on_link(label, uri):
     return True
 
 
-def _page(markup_text):
-    """A section's text: *markup_text* in a wrapping label that scrolls. The
-    label takes the keyboard focus (Tab from the list), so the arrow keys,
-    Page Up and Down, Home and End scroll it, and a screen reader reads it."""
+def text_page(markup_text):
+    """A page of text: *markup_text* in a wrapping label that scrolls (Help's
+    sections, the Voice Commands window). The label takes the keyboard focus,
+    so the arrow keys, Page Up and Down, Home and End scroll it, and a screen
+    reader reads it."""
     scrolled = Gtk.ScrolledWindow()
     scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
     label = Gtk.Label()
@@ -80,7 +81,7 @@ def _page(markup_text):
     return scrolled
 
 
-def _problems_page(markup):
+def _problemstext_page(markup):
     """The Problems section, with a Report a Problem button above its text:
     the first thing seen there, not a link near the bottom of the page."""
     report = Gtk.Button(label="Report a Problem\u2026")
@@ -98,7 +99,7 @@ def _problems_page(markup):
     row.pack_start(note, True, True, 0)
     page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
     page.pack_start(row, False, False, 0)
-    page.pack_start(_page(markup), True, True, 0)
+    page.pack_start(text_page(markup), True, True, 0)
     return page
 
 
@@ -106,7 +107,7 @@ def _sections():
     """The notebook of sections, one tab each, in Help's order."""
     notebook = Gtk.Notebook()
     for title, markup in help_text.tabs():
-        page = _problems_page(markup) if title == PROBLEMS_TITLE else _page(markup)
+        page = _problemstext_page(markup) if title == PROBLEMS_TITLE else text_page(markup)
         notebook.append_page(page, Gtk.Label(label=title))
     notebook.get_accessible().set_name("Help sections")
     return notebook
@@ -145,7 +146,7 @@ def show_help_dialog(tab=None):
     opens came up behind it."""
     window = Gtk.Window(title="TuxTalk Help")
     window.set_position(Gtk.WindowPosition.CENTER)
-    window.connect("key-press-event", _close_on_escape)
+    ui_style.close_on_escape(window)
 
     content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
     for side in ("top", "bottom", "start", "end"):
@@ -185,11 +186,3 @@ def show_help_dialog(tab=None):
     window.show_all()
     window.present()  # Bring to front and focus
     return window
-
-
-def _close_on_escape(window, event):
-    """Escape closes Help, as it would a dialog."""
-    if event.keyval != Gdk.KEY_Escape:
-        return False
-    window.destroy()
-    return True

@@ -15,20 +15,18 @@ import time
 import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, GLib
-from .ui_style import show_message
 
 from . import vocabulary
 from .config import ConfigNotLoadedError
 from .history import get_entries, preview
 from .logger import setup_logger
+from .ui_style import WARNING_AMBER, close_on_escape, show_message
 
 logger = setup_logger(__name__)
 
 # Singleton guard, same as the Voice Commands window: a second menu click
 # brings the open window forward instead of stacking another.
 _active_dialog = None
-
-_WARNING_COLOR = "#e5a50a"
 
 
 def show_fix_word_dialog(index=0, copy_text=None):
@@ -61,13 +59,13 @@ def show_fix_word_dialog(index=0, copy_text=None):
     _active_dialog = _FixWordDialog(entries, index, copy_text)
 
 
-
 def _named(text, widget):
     """A label for *widget*: Alt and the underlined letter go to it, and a
     screen reader names it by the label."""
     label = Gtk.Label.new_with_mnemonic(text)
     label.set_mnemonic_widget(widget)
     return label
+
 
 class _FixWordDialog:
     """The Fix a Word window: pick the words a dictation got wrong, type how
@@ -94,7 +92,7 @@ class _FixWordDialog:
         win.set_keep_above(True)
         win.set_border_width(16)
         win.connect("destroy", self._on_destroy)
-        win.connect("key-press-event", self._on_key)
+        close_on_escape(win)
 
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         win.add(box)
@@ -309,7 +307,7 @@ class _FixWordDialog:
     def _show_warning(self, text):
         if text:
             self.warning_label.set_markup(
-                f'<span foreground="{_WARNING_COLOR}">{GLib.markup_escape_text(text)}</span>')
+                f'<span foreground="{WARNING_AMBER}">{GLib.markup_escape_text(text)}</span>')
             self.warning_label.show()
         else:
             self.warning_label.hide()
@@ -360,12 +358,6 @@ class _FixWordDialog:
         return answer == Gtk.ResponseType.OK
 
     # --- closing ------------------------------------------------------------
-
-    def _on_key(self, _widget, event):
-        if event.keyval == Gdk.KEY_Escape:
-            self.window.destroy()
-            return True
-        return False
 
     def _on_destroy(self, _widget):
         global _active_dialog

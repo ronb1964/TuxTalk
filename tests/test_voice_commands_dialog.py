@@ -77,3 +77,54 @@ def test_the_tip_names_the_key_that_opens_the_window(monkeypatch):
     monkeypatch.setattr("tuxtalk.config.load_config",
                         lambda: types.SimpleNamespace(voice_commands_hotkey="F12"))
     assert vcd._hint_markup() == "Tip: Press <b>F12</b> anytime to open this reference"
+
+
+def _open_window(monkeypatch):
+    """The window, built but never on the desktop."""
+    import pytest
+    gi = pytest.importorskip("gi")
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import Gtk
+    if not Gtk.init_check()[0]:
+        pytest.skip("no display")
+    from tuxtalk import voice_commands_dialog as vcd
+    monkeypatch.setattr(Gtk.Window, "show_all", lambda self: None)
+    monkeypatch.setattr(Gtk.Window, "present", lambda self: None)
+    return vcd.show_voice_commands_dialog()
+
+
+def _key(widget, keyval):
+    from gi.repository import Gdk
+    event = Gdk.Event.new(Gdk.EventType.KEY_PRESS)
+    event.keyval = keyval
+    return widget.emit("key-press-event", event)
+
+
+def test_the_cheat_sheet_scrolls_from_the_keyboard(monkeypatch):
+    """Its text takes the focus, so Page Down and the arrows scroll it and a
+    screen reader can read it, as in Help. Before, only Close could be
+    focused and a keyboard user saw the first third."""
+    from gi.repository import Gdk, Gtk
+    from gtk_text import widgets
+    dialog = _open_window(monkeypatch)
+    try:
+        text = next(w for w in widgets(dialog)
+                    if isinstance(w, Gtk.Label) and "Voice Commands" in w.get_label())
+        assert text.get_selectable() and text.get_can_focus()
+        assert _key(text, Gdk.KEY_Page_Down) is True
+    finally:
+        dialog.destroy()
+
+
+def test_escape_and_close_shut_the_window_once(monkeypatch):
+    from gi.repository import Gdk, Gtk
+    dialog = _open_window(monkeypatch)
+    destroyed = []
+    dialog.connect("destroy", lambda _d: destroyed.append(True))
+    _key(dialog, Gdk.KEY_Escape)
+    assert destroyed == [True]
+    dialog = _open_window(monkeypatch)
+    destroyed.clear()
+    dialog.connect("destroy", lambda _d: destroyed.append(True))
+    dialog.get_widget_for_response(Gtk.ResponseType.CLOSE).clicked()
+    assert destroyed == [True]

@@ -462,6 +462,10 @@ before 0.15.0, so older entries use that name.
   Hyprland). It could come back empty there.
 - Dropping a web link on Transcribe a File says only a file on this computer
   can be transcribed. Before, nothing happened.
+- The Voice Commands window scrolls from the keyboard now (Page Down, the
+  arrows, Home and End), and a screen reader can read it, as in Help.
+  Before, a keyboard could only reach its Close button, so you saw the
+  first third of the list.
 
 ## [0.18.2] - 2026-10-23
 
