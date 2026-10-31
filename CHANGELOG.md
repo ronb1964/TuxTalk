@@ -444,10 +444,11 @@ before 0.15.0, so older entries use that name.
   was removed. Now first run copies only a TuxTalk AppImage you downloaded
   yourself, and the AUR package starts at login through its own tuxtalk
   command.
-- Uninstalling with "Also delete my settings" ticked could delete other
-  files of yours in ~/.config/talktype, when that folder couldn't be moved
-  at the 0.15 rename (a mount point, say). Only TuxTalk's own files go from
-  it now.
+- Uninstalling deleted any file of yours you'd put in TuxTalk's data
+  folder, and with "Also delete my settings" ticked, in its settings folder
+  or an old TalkType folder the 0.15 rename left in place. Only TuxTalk's
+  own files go from them now, and a folder with something of yours still in
+  it stays.
 - An update, or the GNOME extension, from a release that was published
   without its checksums file is refused now, with a message saying so. It
   used to go in unchecked, and a .deb or .rpm update installs as root.
