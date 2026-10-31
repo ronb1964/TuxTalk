@@ -21,7 +21,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 from . import engine_launcher
-from .logger import setup_logger
+from .logger import FailureNotes, setup_logger
 
 logger = setup_logger(__name__)
 
@@ -183,6 +183,9 @@ def answers(port, pid, path="") -> bool:
 # number in this machine's byte order, in hex.
 _LOOPBACK_HEX = "%08X" % struct.unpack("=I", socket.inet_aton("127.0.0.1"))[0]
 _LISTEN = "0A"
+# The health check polls listens_on several times a second while an engine
+# loads: an unreadable socket table is logged once, not at every poll.
+_unreadable = FailureNotes()
 
 
 def listens_on(pid, port, proc="/proc") -> bool:
@@ -194,14 +197,20 @@ def listens_on(pid, port, proc="/proc") -> bool:
     port first and answer the health check: it would then be sent the
     dictation's audio (or the AI's key) and choose the text that's typed.
     Our engine fails to bind and ends, and the start fails as any other.
+    When the socket table can't be read, nothing proves the answer came
+    from our engine, so it isn't trusted: the start times out and fails
+    as any other (Vulkan falls back to the processor, the AI tries again).
     """
     try:
         with open(f"{proc}/net/tcp") as f:
             rows = [line.split() for line in f.read().splitlines()[1:]]
     except OSError as e:
-        # Never seen on a Linux with /proc; the engines must still work there.
-        logger.warning(f"Couldn't check who listens on port {port}: {e}")
-        return True
+        if _unreadable.failed("tcp", e):
+            logger.warning(f"Can't tell which program answers on port {port}, so the engine "
+                           f"started there isn't used: {e}")
+        return False
+    if _unreadable.worked("tcp"):
+        logger.info("The socket table is readable again")
     address = f"{_LOOPBACK_HEX}:{port:04X}"
     inodes = {row[9] for row in rows if len(row) > 9 and row[1] == address and row[3] == _LISTEN}
     if not inodes:

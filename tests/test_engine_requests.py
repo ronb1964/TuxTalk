@@ -134,3 +134,15 @@ def test_a_listening_socket_held_by_someone_else_is_not_the_engines(tmp_path):
     proc = _fake_proc(tmp_path, listening_inode=999, engine_fds=[555, 777])
     assert engine_process.listens_on(42, 8080, proc=proc) is False
     assert engine_process.listens_on(42, 8081, proc=proc) is False      # nobody on that port
+
+
+def test_an_engine_whose_socket_cant_be_checked_is_not_trusted(tmp_path, caplog):
+    """Without /proc/net/tcp nothing shows the answer came from the engine
+    TuxTalk started, so it's not used, and the log says why once."""
+    import logging
+    proc = _fake_proc(tmp_path, listening_inode=777, engine_fds=[777])
+    (tmp_path / "net" / "tcp").unlink()
+    with caplog.at_level(logging.WARNING, logger=engine_process.logger.name):
+        assert engine_process.listens_on(42, 8080, proc=proc) is False
+        assert engine_process.listens_on(42, 8080, proc=proc) is False
+    assert sum("isn't used" in r.getMessage() for r in caplog.records) == 1
