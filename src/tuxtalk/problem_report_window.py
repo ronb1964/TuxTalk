@@ -144,6 +144,8 @@ class ReportWindow:
         self.status.set_text("Copied. Paste it into a forum post, an email or a GitHub issue.")
 
     def _on_issue(self, _button):
+        """Copy the report and open GitHub's bug form with what TuxTalk knows
+        filled in: the report is pasted there by the user."""
         if not self._copy():
             self.status.set_text("Couldn't copy the report. Save it to a file, then attach "
                                  "it to the issue.")
