@@ -29,8 +29,10 @@ import numpy as np
 
 # Hands-free judges the audio in windows this long, whatever size of block
 # the microphone sends: how steady the noise is, and how long a sound lasts,
-# depend on the length they are measured over, so fixed windows make every
-# decision the same with any block size.
+# depend on the length they are measured over, so fixed windows measure them
+# the same with any block size. One decision still looks at the whole block:
+# speech anywhere in the block that reaches the nothing-said limit keeps the
+# recording (SilenceDetector.feed).
 _WINDOW_S = 0.02
 # Speech must be this much louder than the background noise (about +8 dB)...
 _SPEECH_OVER_NOISE = 2.5
