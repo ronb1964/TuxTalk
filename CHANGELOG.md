@@ -222,7 +222,9 @@ before 0.15.0, so older entries use that name.
 - The microphone test in Preferences, Audio, tells you when your room is
   noisy for your voice, under the level grade: a headset, or the mic closer
   to your mouth, will help. It measures how far your voice stands above the
-  room in the recording you just made.
+  room's usual noise in the recording you just made, so a kitchen, a cafe or
+  traffic counts as noisy even when it goes quiet now and then. Say a
+  sentence or more: from a single quick word it can't tell.
 - Preferences opens again when a number in the settings file was edited by
   hand into something that isn't one, or into nan or inf. It shows that
   setting's default, which is what TuxTalk uses for it.
@@ -361,6 +363,13 @@ before 0.15.0, so older entries use that name.
   now, so "git commit -m open quote fix the bug close quote" works.
 - With "Restore clipboard" on, something you copied between two quick
   dictations got replaced by what you'd copied before them. It's kept now.
+- On X11 desktops (Mint's Cinnamon, Xfce, MATE), "Put back what I'd copied
+  after pasting a dictation" works too now. TuxTalk only pastes there for
+  what your keyboard layout can't type, like an emoji, and the dictation
+  used to stay on the clipboard instead of what you'd copied. TuxTalk holds
+  on to what it put back, so when it quits or restarts, copied text goes to
+  your clipboard manager if you have one, but a copied password, picture or
+  files are gone from the clipboard.
 - "Unindent" took every bit of indentation off. It takes off one level now,
   the same step "indent this" adds.
 - A graphics engine download that failed to unpack left its 22 MB file

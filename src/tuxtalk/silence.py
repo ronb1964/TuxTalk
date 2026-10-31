@@ -589,41 +589,69 @@ def has_no_speech(audio_f32, sample_rate) -> bool:
 # --- A noisy room, for the microphone test ------------------------------------
 # How far a test recording's speech stands over its room, in dB: the 90th
 # percentile of its blocks while talking (from the first to the last 0.1 s
-# clearly louder than the room) over the 10th of the whole recording. Only
-# that stretch is speech: a quick "testing" in an eight-second take left the
-# whole take's 90th percentile in the room, and the test called a quiet room
-# noisy. Measured on 125 recorded readers' clips of 0.3 to 4 s with silence
-# around them, three voice levels, in pink, white, fan, dryer and babble
-# noise (2,400 takes at each level): with the noise 40 dB under the voice it
-# never warned. With it 30 and 20 dB under, it warned in 159 and 348, all
-# of them a second or less of talking, most with a dryer or a TV, whose
-# thumps and voices stand out in so short a take; with 2.5 s or more of
-# talking it never warned there. At 10 dB under the voice it warned in two
-# of five, at 5 dB in most.
-NOISY_ROOM_DB = 16.0
-# Blocks this much louder than the room (+8 dB), and never quieter than
-# speech's minimum, are clearly talking when they last _TALKING_RUN_S...
+# clearly louder than the room's quietest moments) over the room's median
+# outside that stretch. Only that stretch is speech: a quick "testing" in an
+# eight-second take left the whole take's 90th percentile in the room. The
+# room is its median, not its quietest moments: a kitchen, a cafe or traffic
+# goes quiet now and then between its clatter, and against those moments a
+# voice stood well over a room in which hands-free never stopped by itself.
+# Measured with 125 recorded readers in six recorded rooms (DEMAND: kitchen,
+# living room, laundry, office, cafeteria, traffic) and five made ones, at
+# three voice levels. In the recorded rooms hands-free (1 to 3 s waits, 702
+# runs at each level) stops by itself in 96% with the room 30 dB under the
+# voice, 81% at 25 dB, 45% at 22 and 31% at 20; in steady noise it does stop,
+# but cuts the speaker off mid-sentence more often as it nears the voice
+# (white noise: 15% of runs at 30 dB, 27% at 25, 38% at 22, 45% at 20).
+# With a second or more of talking, of 1,800 takes in the recorded rooms at
+# each level, it warns in 8 at 40 dB (a reader whose first second is a soft
+# start), 59 at 30, 214 at 25, 1,196 at 22 and 1,416 at 20; over the
+# quietest moments, at 16 dB, it warned in 0, 25, 47, 77 and 86.
+NOISY_ROOM_DB = 28.0
+# Blocks this much louder than the room's quietest moments (+8 dB), and never
+# quieter than speech's minimum, are clearly talking when they last
+# _TALKING_RUN_S...
 _TALKING_OVER_ROOM = 2.5
 _TALKING_RUN_S = 0.1
 # ...and talking for less than this, from the first to the last, is too
-# little to tell how far over the room it stands.
-_TALKING_TO_JUDGE_S = 0.3
+# little to tell how far over the room it stands: a take's first fraction of
+# a second is often a word's soft start, and a quiet room was called noisy.
+_TALKING_TO_JUDGE_S = 1.0
+# With less than this outside the talking (talking from Start to Stop), what
+# is outside is mostly the soft start and end of the words, not the room: a
+# quiet room was called noisy in 33 of 41 such takes, and half a second still
+# left 7. With a second, 1 or 2 (the quietest moments, 0 or 1).
+_ROOM_TO_JUDGE_S = 1.0
+# A shorter take can't hold both.
+_SHORTEST_TAKE_S = _TALKING_TO_JUDGE_S + _ROOM_TO_JUDGE_S
+# The room outside the talking is heard in the pauses between its words too.
+# When those pauses are much quieter (+15 dB), what is outside is soft words
+# at the start or end, not the room. In the recorded and made rooms the room
+# stood at most 13.75 dB over the pauses, in all 16,180 takes with a second
+# of talking and of room around it, at every level.
+_ROOM_OVER_PAUSES = 10 ** (15 / 20)
 
 
 def speech_over_room_db(audio_f32, sample_rate):
     """How much louder a recording's speech is than its room, in dB, or None
-    for a recording under a second or with too little clear talking to
-    tell. Under NOISY_ROOM_DB the room is noisy for that voice."""
+    without a second of clear talking and a second of the room around it,
+    or when what is around it is louder than the pauses between the words.
+    Under NOISY_ROOM_DB the room is noisy for that voice: in recorded rooms
+    like it hands-free stops by itself about half the time or less, and in
+    steady noise it cuts the speaker off mid-sentence more often."""
     rms = _blocks_rms(audio_f32, sample_rate)
-    if len(rms) * _TAP_BLOCK_S < 1.0:
+    if len(rms) * _TAP_BLOCK_S < _SHORTEST_TAKE_S:
         return None
-    room = np.percentile(rms, 10)
-    loud = rms >= max(_MIN_SPEECH_RMS, room * _TALKING_OVER_ROOM)
+    loud = rms >= max(_MIN_SPEECH_RMS, np.percentile(rms, 10) * _TALKING_OVER_ROOM)
     run = max(1, round(_TALKING_RUN_S / _TAP_BLOCK_S))
     starts = np.flatnonzero(np.convolve(loud, np.ones(run, dtype=int), "valid") == run)
     if starts.size == 0:
         return None
-    talking = rms[starts[0]:starts[-1] + run]
-    if len(talking) * _TAP_BLOCK_S < _TALKING_TO_JUDGE_S:
+    first, last = starts[0], starts[-1] + run
+    outside = np.concatenate([rms[:first], rms[last:]])
+    if ((last - first) * _TAP_BLOCK_S < _TALKING_TO_JUDGE_S
+            or len(outside) * _TAP_BLOCK_S < _ROOM_TO_JUDGE_S):
+        return None
+    room, talking = np.median(outside), rms[first:last]
+    if room > np.percentile(talking, 10) * _ROOM_OVER_PAUSES:
         return None
     return float(20 * np.log10(max(np.percentile(talking, 90), 1.0) / max(room, 1.0)))

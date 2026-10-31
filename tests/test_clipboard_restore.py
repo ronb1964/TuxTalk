@@ -3,11 +3,9 @@
 Dictations are always marked sensitive, so clipboard managers that honour the
 mark (Klipper, CopyQ 8 and later) don't save them to their history, and on
 Wayland, with "Restore clipboard after pasting" on, whatever the user had
-copied comes back after the paste.
+copied comes back after the paste. X11: test_x11_clipboard.py.
 """
-import os
 import subprocess
-import sys
 import time
 
 import pytest
@@ -107,6 +105,16 @@ def test_something_copied_between_two_quick_dictations_is_what_comes_back(keeper
     assert board.data == b"copied in between"
 
 
+def test_quitting_with_a_restore_pending_puts_the_clipboard_back_first(keeper, board):
+    """The restore's timer would end with the service: restore_now() runs it
+    before quitting, once the app has had its half second."""
+    paste(keeper, board, "dictated words")
+    started = time.monotonic()
+    keeper.restore_now()
+    assert board.data == b"what I copied" and keeper.pending == []
+    assert time.monotonic() - started >= cb.RESTORE_DELAY_S - 0.05
+
+
 def test_an_empty_clipboard_stays_empty(keeper, board):
     board.data = None
     paste(keeper, board, "dictated words")
@@ -124,7 +132,13 @@ def test_an_image_on_the_clipboard_comes_back_as_an_image(keeper, board):
 def test_text_is_preferred_when_the_clipboard_offers_several_types(monkeypatch):
     monkeypatch.setattr(cb, "_wl_paste_types",
                         lambda: ["image/png", "text/html", "text/plain;charset=utf-8", "TEXT"])
-    assert cb._best_type(cb._wl_paste_types()) == "text/plain;charset=utf-8"
+    assert cb.best_type(cb._wl_paste_types()) == "text/plain;charset=utf-8"
+
+
+def test_a_picture_is_kept_as_png_where_qt_lists_its_own_type_first():
+    """Gwenview and Okular offer application/x-qt-image first, which only Qt
+    apps can paste."""
+    assert cb.best_type(["application/x-qt-image", "image/png", "image/bmp"]) == "image/png"
 
 
 def test_a_clipboard_that_cannot_be_read_is_not_touched(keeper, board, monkeypatch):
@@ -215,7 +229,7 @@ def test_a_highlight_that_could_not_be_read_is_not_cleared(keeper, board, primar
 
 def test_the_primary_comes_back_even_when_the_clipboard_cannot(keeper, board, primary,
                                                                  monkeypatch):
-    monkeypatch.setattr(cb, "_read_clipboard", lambda: cb._NOTHING)
+    monkeypatch.setattr(cb, "_read_clipboard", lambda: cb.NOTHING)
     paste_with_primary(keeper, board, primary, "dictated words")
     run_pending(keeper)
     assert primary["text"] == "my highlighted words"
@@ -359,23 +373,6 @@ def test_a_paste_waits_for_a_restore_that_is_under_way(keeper, board, monkeypatc
     assert held == [True] and board.data == b"what I copied"
 
 
-def test_an_x11_copy_that_timed_out_never_lands_later(monkeypatch):
-    """After the wait gives up, nothing was pasted; the copy still queued
-    on a stalled GTK loop must not put that dictation on the clipboard
-    when the loop catches up."""
-    import threading
-    from gi.repository import GLib
-    from tuxtalk import gtk_loop
-    copied = []
-    monkeypatch.setattr(cb, "_offer_sensitive_x11", lambda text: copied.append(text) or True)
-    monkeypatch.setattr(gtk_loop, "_thread", threading.Thread())   # running, stalled
-    assert cb.offer_dictation_x11("never pasted", timeout=0.05) is False
-    context = GLib.MainContext.default()
-    while context.iteration(False):
-        pass
-    assert copied == []
-
-
 @pytest.mark.parametrize("said", [b"No selection\n",            # wl-clipboard 2.0, 2.1
                                   b"Nothing is copied\n"])      # 2.2 on
 def test_nothing_highlighted_is_empty_in_every_wl_paste(monkeypatch, said):
@@ -386,75 +383,6 @@ def test_nothing_highlighted_is_empty_in_every_wl_paste(monkeypatch, said):
                         lambda cmd, **kw: types.SimpleNamespace(returncode=1, stdout=b"",
                                                                 stderr=said))
     assert _REAL_PRIMARY_TO_KEEP() is None
-
-
-# Another process reading the clipboard, as the app a dictation is pasted into.
-_READ_CLIPBOARD = """
-import gi
-gi.require_version("Gtk", "3.0")
-gi.require_version("Gdk", "3.0")
-from gi.repository import Gdk, Gtk
-board = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
-hint = board.wait_for_contents(Gdk.Atom.intern("x-kde-passwordManagerHint", False))
-print(repr((board.wait_for_text(), hint and hint.get_data())))
-"""
-
-
-def test_an_app_pastes_an_x11_dictation_marked_for_managers_to_skip(monkeypatch):
-    """A dictation pasted on X11 reaches the app that pastes it, another
-    process, with the hint clipboard managers skip, and is never handed to
-    the clipboard manager to keep."""
-    from gi.repository import Gtk
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
-    monkeypatch.setattr(Gtk.Clipboard, "store", lambda self: pytest.fail("handed to the manager"))
-    monkeypatch.setattr(cb, "_x11_owner", None)
-    reader = None
-    try:
-        assert cb._offer_sensitive_x11("Привіт, café") is True
-        reader = subprocess.Popen(
-            [sys.executable, "-c", _READ_CLIPBOARD], stdout=subprocess.PIPE,
-            # X11: GTK would otherwise find the user's own Wayland desktop
-            # (conftest) and read its clipboard.
-            env={**os.environ, "PYTHONIOENCODING": "utf-8", "GDK_BACKEND": "x11"},
-            encoding="utf-8")
-        # The paste request comes through the X server: answer it as the
-        # service's GTK loop would.
-        deadline = time.monotonic() + 10
-        while reader.poll() is None and time.monotonic() < deadline:
-            Gtk.main_iteration_do(False)
-            time.sleep(0.005)
-        said = reader.communicate(timeout=1)[0]
-    finally:
-        if reader is not None and reader.poll() is None:
-            reader.kill()
-            reader.wait()
-        if cb._x11_owner is not None:
-            cb._x11_owner.destroy()
-    assert said.strip() == repr(("Привіт, café", b"secret"))
-
-
-def test_no_x11_offer_without_the_loop_that_answers_pastes(monkeypatch):
-    """With GTK's loop not running nothing would answer the app's paste:
-    reported as not pasted rather than typed as nothing."""
-    from tuxtalk import gtk_loop
-    monkeypatch.setattr(gtk_loop, "running", lambda: False)
-    monkeypatch.setattr(cb, "_offer_sensitive_x11", lambda text: pytest.fail("offered"))
-    assert cb.offer_dictation_x11("hello") is False
-
-
-def test_quitting_right_after_an_x11_paste_waits_for_the_app_to_read_it(monkeypatch):
-    """Only the service holds an X11 offer: gone at once, the app found
-    nothing to paste."""
-    slept = []
-    monkeypatch.setattr(cb.time, "sleep", slept.append)
-    monkeypatch.setattr(cb, "_x11_offered_at", cb.time.monotonic())
-    cb.wait_for_x11_paste()
-    assert slept and 0.4 < slept[0] <= cb.RESTORE_DELAY_S
-    slept.clear()
-    monkeypatch.setattr(cb, "_x11_offered_at", cb.time.monotonic() - 5)
-    cb.wait_for_x11_paste()
-    assert slept == []
 
 
 def test_a_clipboard_type_name_in_another_encoding_does_not_stop_the_restore(
@@ -468,3 +396,4 @@ def test_a_clipboard_type_name_in_another_encoding_does_not_stop_the_restore(
     monkeypatch.setenv("PATH", str(tmp_path))
     assert "text/plain" in cb._wl_paste_types()
     assert "--sensitive" in cb._wl_copy_help()
+

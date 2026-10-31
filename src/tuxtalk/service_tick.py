@@ -7,7 +7,6 @@ import time
 
 from . import config as config_module
 from . import (
-    clipboard,
     dictation_worker,
     engine,
     hotkey_keys,
@@ -15,6 +14,7 @@ from . import (
     keyboard_output,
     pipeline,
     recording,
+    x11_clipboard,
 )
 from . import live_settings as live
 from . import recording_state as rs
@@ -217,9 +217,18 @@ def _quit(cfg, svc: ServiceState) -> None:
         notify("A dictation wasn't typed",
                "TuxTalk was quitting and couldn't finish it in time. Say it again once "
                "TuxTalk is back.")
-    clipboard.wait_for_x11_paste()
+    _leave_the_clipboard()
     logger.info("Quitting")
     raise SystemExit(0)
+
+
+def _leave_the_clipboard() -> None:
+    """Before the service exits: let the app read a dictation just pasted on
+    X11, put the user's copy back if that is still pending, and hand it to
+    the clipboard manager to keep. Bounded: about two seconds for each."""
+    x11_clipboard.wait_for_paste()
+    keyboard_output.restore_clipboard_now()
+    x11_clipboard.keep_copy_at_quit()
 
 
 def _take_stop_request(cfg, svc: ServiceState, now: float) -> None:

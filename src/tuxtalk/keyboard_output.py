@@ -25,7 +25,7 @@ from .window_classes import SMART_NEWLINE_CLASSES_LOWER, is_terminal_class
 
 logger = setup_logger(__name__)
 
-# clipboard.ClipboardKeeper, made by the first paste that needs it.
+# clipboard.ClipboardKeeper, made by the first paste that needs it (_keeper).
 _clipboard_keeper = None
 
 # Cached tool path lookups — avoids searching PATH on every text injection
@@ -72,7 +72,7 @@ def key_delay() -> int:
 
 
 def send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY_MS,
-              raise_if_partial: bool = False, claim=None) -> bool:
+              raise_if_partial: bool = False, claim=None, right_before=None) -> bool:
     """Press keys [(evdev code, 1 down / 0 up)] on TuxTalk's virtual keyboard.
     True only if all of them were sent: keystrokes that never happened must
     not reach the undo buffer.
@@ -90,11 +90,15 @@ def send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY_
     not go out another way (wtype, the clipboard) either. *claim* is
     virtual_keyboard.send's; in a delivery that may only go into one window
     (delivery.inject_text's *into*), the claim checks it's still that one.
+    *right_before* runs with the keyboard held right before the first key
+    goes down, after every check and wait.
     """
     if claim is None and this_thread.into is not None:
         claim = functools.partial(focused_window.claim_into, this_thread.into)
     if this_thread.last_check is not None:
         claim = _then(claim, this_thread.last_check)
+    if right_before is not None:
+        claim = _last(claim, right_before)
     before_press = modifier_hotkeys.wait_while_held(focused_window.destination)
     try:
         sent = virtual_keyboard.send(events, delay_ms, before_press, claim)
@@ -128,6 +132,20 @@ def _then(claim, check):
             if take is not None:
                 take()
         return checked_take
+    return claimed
+
+
+def _last(claim, fn):
+    """*claim* (None for none), then *fn* once the claim's take has let the
+    keys go ahead, right before the first key: never for keys it stopped."""
+    def claimed():
+        take = claim() if claim is not None else None
+
+        def take_then_fn():
+            if take is not None:
+                take()
+            fn()
+        return take_then_fn
     return claimed
 
 
@@ -346,7 +364,8 @@ def type_text_raw(text: str) -> bool:
     return False
 
 
-def send_paste_keystroke(focused_class: str | None, primary_holds_text: bool = False) -> bool:
+def send_paste_keystroke(focused_class: str | None, primary_holds_text: bool = False,
+                         right_before=None) -> bool:
     """Send the paste shortcut for *focused_class*. True if it was sent.
 
     A terminal gets Ctrl+Shift+V (Ctrl+V is readline's quoted-insert there and
@@ -354,7 +373,7 @@ def send_paste_keystroke(focused_class: str | None, primary_holds_text: bool = F
     Shift+Insert when the primary selection holds the text too: GUI toolkits
     paste the clipboard on Shift+Insert and terminals paste the primary
     selection, so it lands either way. Without that, Ctrl+V, which suits most
-    apps."""
+    apps. *right_before* as for send_keys."""
     if is_terminal_class(focused_class):
         keys = ctrl_keys("v", shift=True)
         logger.info(f"Paste: Ctrl+Shift+V (terminal class={focused_class!r})")
@@ -364,7 +383,7 @@ def send_paste_keystroke(focused_class: str | None, primary_holds_text: bool = F
     else:
         keys = ctrl_keys("v")
         logger.info(f"Paste: Ctrl+V (class={focused_class!r})")
-    if not send_keys(keys, what="paste", raise_if_partial=True):
+    if not send_keys(keys, what="paste", raise_if_partial=True, right_before=right_before):
         # The keystroke never reached the desktop: the text is sitting on the
         # clipboard but never made it into the app.
         logger.error("Paste keystroke failed — text was not inserted")
@@ -390,6 +409,23 @@ def copy_to_primary(text: str) -> bool:
     return True
 
 
+def _keeper(board):
+    """The clipboard.ClipboardKeeper, made by the first paste that keeps the
+    user's clipboard, on *board*: a session pastes on one kind for its life."""
+    from . import clipboard
+    global _clipboard_keeper
+    if _clipboard_keeper is None:
+        _clipboard_keeper = clipboard.ClipboardKeeper(board)
+    return _clipboard_keeper
+
+
+def restore_clipboard_now() -> None:
+    """Before the service exits: put the user's clipboard back now if a
+    restore is still pending (clipboard.ClipboardKeeper.restore_now)."""
+    if _clipboard_keeper is not None:
+        _clipboard_keeper.restore_now()
+
+
 def paste_text_x11(text: str) -> bool:
     """Paste on an X11 session, for text the keyboard layout can't type.
 
@@ -397,14 +433,27 @@ def paste_text_x11(text: str) -> bool:
     puts the text on the X11 clipboard through its own GTK loop and then sends
     the same paste keystroke. It's only the fallback for untypable text
     (Latin words on a Ukrainian layout, an emoji); ordinary X11 dictation is
-    still typed. True only if the text reached the app.
+    still typed. With restore_clipboard on, the user's clipboard comes back
+    afterwards, as in paste_text. True only if the text reached the app.
     """
-    from . import clipboard
-    if not clipboard.offer_dictation_x11(text):
+    from . import x11_clipboard
+    keeper = _keeper(x11_clipboard.X11Board) if live.restore_clipboard else None
+    if keeper is not None:
+        keeper.before_paste()
+    if not x11_clipboard.offer_dictation(text):
+        # The clipboard never changed: only an earlier dictation's restore,
+        # called off by before_paste(), is left to do.
         logger.error("X11 paste: couldn't put the text on the clipboard; nothing was inserted")
+        if keeper is not None:
+            keeper.paste_failed()
         return False
-    time.sleep(0.08)    # let the selection settle before the app asks for it
-    return send_paste_keystroke(focused_window.window_class())
+    try:
+        time.sleep(0.08)    # let the selection settle before the app asks for it
+        return send_paste_keystroke(focused_window.window_class(),
+                                    right_before=x11_clipboard.reads_from_now)
+    finally:
+        if keeper is not None:
+            keeper.after_paste(text)
 
 
 def _hand_to_wl_copy(proc, text):
@@ -472,12 +521,9 @@ def paste_text(text: str) -> bool:
             # (issue #7). Off by default: a dictation left on the clipboard can
             # be re-pasted if it landed in the wrong window.
             from . import clipboard
-            global _clipboard_keeper
             keeping = live.restore_clipboard
             if keeping:
-                if _clipboard_keeper is None:
-                    _clipboard_keeper = clipboard.ClipboardKeeper()
-                _clipboard_keeper.before_paste()
+                _keeper(clipboard.WaylandBoard).before_paste()
             # --sensitive keeps the dictation out of clipboard managers' history
             # (Klipper saves every entry to disk) where wl-copy supports it.
             proc = subprocess.Popen(clipboard.wl_copy_command(), stdin=subprocess.PIPE,
