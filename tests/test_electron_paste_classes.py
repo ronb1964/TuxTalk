@@ -1,9 +1,10 @@
 """Claude Desktop must be recognised by the app id it actually reports.
 
 Synthetic Ctrl+V is silently dropped by Electron/Chromium apps on Wayland, so
-_inject_text types into those apps instead. The routing is one check,
-window_classes.pastes_broken, which makes its list the whole feature: an app id missing from it means the override never fires and
-the user gets a paste that quietly does nothing.
+delivery.inject_text types into those apps instead. The routing is one check,
+window_classes.pastes_broken, which makes its list the whole feature: an app id
+missing from it means the override never fires and the user gets a paste that
+quietly does nothing.
 
 Claude Desktop reports itself as 'claude-desktop' or as 'com.anthropic.Claude'
 depending on how it was packaged, so the set must list both.
@@ -22,7 +23,7 @@ OBSERVED_CLAUDE_DESKTOP_APP_IDS = [
 
 
 def test_every_observed_claude_desktop_app_id_takes_the_fast_type_path():
-    """The check _inject_text makes, for each id seen in the log."""
+    """The check delivery.inject_text makes, for each id seen in the log."""
     for app_id in OBSERVED_CLAUDE_DESKTOP_APP_IDS:
         assert window_classes.pastes_broken(app_id), (
             f"Claude Desktop reports {app_id!r}; without it in the set the "

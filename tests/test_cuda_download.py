@@ -275,3 +275,12 @@ def test_a_wheel_pypi_lists_without_a_checksum_is_not_downloaded(monkeypatch):
                             contextlib.nullcontext(io.BytesIO(body)))
         with pytest.raises(LookupError, match="no checksum"):
             cuda_download._pypi_wheel("nvidia-cublas-cu12")
+
+
+def test_a_cuda_wheel_file_named_outside_its_folder_is_skipped(tmp_path):
+    """A wheel's file names are data: "nvidia//home/u/x.so" or "../x.so"
+    would have been written wherever they pointed."""
+    assert cuda_download._inside(str(tmp_path), "cublas/lib/libcublas.so.12") \
+        == str(tmp_path / "cublas/lib/libcublas.so.12")
+    assert cuda_download._inside(str(tmp_path), "/home/u/.config/autostart/x.so.desktop") is None
+    assert cuda_download._inside(str(tmp_path), "../../x.so") is None

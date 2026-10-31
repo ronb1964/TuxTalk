@@ -6,6 +6,7 @@ games, apps without media keys.
 """
 import json
 import subprocess
+import time
 
 from tuxtalk import audio_duck
 from tuxtalk import live_settings as live
@@ -253,8 +254,9 @@ def test_a_player_reopening_its_sound_after_resume_gets_its_volume_back(tmp_path
     del pactl.streams[5]                            # paused: Brave closed its sound
     d._restore_now()
     pactl.streams[6] = {"pid": 77, "volumes": [32768], "app": "Brave"}   # resumed
-    import time
-    time.sleep(0.4)
+    deadline = time.monotonic() + 5
+    while pactl.streams[6]["volumes"] != [65536] and time.monotonic() < deadline:
+        time.sleep(0.01)
     assert d.wait_idle(2)
     assert pactl.streams[6]["volumes"] == [65536]
     assert d._owed == {}

@@ -156,7 +156,8 @@ def test_the_dictation_services_status_doesnt_load_the_tray():
         "s.running_engine, s.claimed_hotkeys = None, []\n"
         "assert s.GetStatus()['engine'] == 'Whisper Small on the processor'\n"
         "assert 'tuxtalk.tray' not in sys.modules, 'the tray was imported'\n")
-    ran = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True)
+    ran = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True,
+                         timeout=60)
     assert ran.returncode == 0, ran.stderr[-800:]
 
 
