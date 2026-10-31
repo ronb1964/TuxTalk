@@ -42,7 +42,9 @@ def test_every_selector_is_scoped_to_the_prefs_window():
     (".talktype-prefs label, button { color: red; }", ["button"]),
     ("* { color: red; }", ["*"]),
     (".talktype-prefs-old label { color: red; }", [".talktype-prefs-old label"]),
+    ("window:not(.talktype-prefs) { color: red; }", ["window:not(.talktype-prefs)"]),
     ("window.talktype-prefs { color: red; }", []),
+    ("window.talktype-prefs:not(.dialog) label { color: red; }", []),
 ])
 def test_the_scope_check_catches_each_unscoped_selector(css, unscoped):
     assert unscoped_selectors(css, SCOPE_CLASS) == unscoped

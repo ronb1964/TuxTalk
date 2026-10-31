@@ -1320,4 +1320,6 @@ def unscoped_selectors(css, scope_class):
     selectors = re.findall(r"^([^{}\s][^{}]*?)\s*\{", provider.to_string(), re.MULTILINE)
     assert selectors, "the stylesheet has no rules"
     scoped = re.compile(rf"\.{re.escape(scope_class)}(?![\w-])")
-    return [selector for selector in selectors if not scoped.search(selector)]
+    # Inside :not() the class picks every window *without* it.
+    return [selector for selector in selectors
+            if not scoped.search(re.sub(r":not\([^)]*\)", "", selector))]
