@@ -434,24 +434,55 @@ def test_restart_service_after_dictation_off_turns_it_on_again(slow_service):
     t, _bus_side, launched = _tray_with_dbus(slow_service)
     t.stop_service(None)
     slow_service.gone.set()
-    _run_main_loop_until(lambda: len(slow_service.waited_on) == 1, timeout=2)
+    _run_main_loop_until(lambda: not slow_service.running, timeout=2)
     t.restart_service(None)
     assert _run_main_loop_until(lambda: launched)
     assert t._dictation_on is True
 
 
+def test_dictation_turned_on_again_takes_the_next_automatic_restart(slow_service):
+    """Dictation off and on again, then a Preferences change: the restart
+    must still happen, or the service runs on the old settings."""
+    from tuxtalk.dbus_service import TuxTalkDBusService
+    t, bus_side, launched = _tray_with_dbus(slow_service)
+    t.stop_service(None)
+    slow_service.gone.set()
+    assert _run_main_loop_until(lambda: not slow_service.running)     # the old one has gone
+    t.start_service(None)                   # Dictation on
+    slow_service.running.append(43)
+    TuxTalkDBusService.RestartIfOn(bus_side)
+    assert _run_main_loop_until(lambda: len(launched) == 2)     # the start, then the restart
+
+
+def test_the_update_offers_restart_leaves_dictation_off(monkeypatch):
+    """The Parakeet Ultra download restarts dictation onto it: as the user's
+    Restart Service, it turned Dictation back on after the user had turned
+    it off."""
+    given = []
+    monkeypatch.setattr(tray_mod.update_offers, "start", given.append)
+    monkeypatch.setattr(tray_mod.DictationTray, "_check_tray_visibility", lambda self: False)
+    monkeypatch.setattr(tray_mod.DictationTray, "_init_dbus_service", lambda self: None)
+    monkeypatch.setattr(tray_mod.DictationTray, "is_service_running", lambda self: True)
+    monkeypatch.setattr(tray_mod.DictationTray, "update_menu_display", lambda self, on: None)
+    monkeypatch.setattr(tray_mod, "TrayMenu",
+                        lambda tray: types.SimpleNamespace(widget=tray_mod.Gtk.Menu()))
+    monkeypatch.setattr(tray_mod.GLib, "timeout_add_seconds", lambda *a: 0)
+    t = tray_mod.DictationTray()
+    assert given == [t.restart_if_on]
+
+
 @pytest.mark.parametrize("second, starts", [("restart_service", True),
                                             ("restart_if_on", False)])
 def test_a_restart_queued_after_dictation_off(slow_service, second, starts):
-    """Restart, Dictation off while it waits, then another restart queued
-    behind the first. The user's Restart Service turns dictation on; an
-    automatic one (a preset chosen meanwhile) leaves it off."""
+    """Restart, Dictation off while it waits, then another restart. The
+    user's Restart Service is queued behind the first and turns dictation
+    on; an automatic one (a preset chosen meanwhile) leaves it off."""
     launched = []
     t = _bare_tray(_launch_service=lambda: launched.append(True),
                    update_status_and_menu=lambda repeat=True: False)
     t.restart_service(None)
-    t._drop_pending_launches()              # Dictation off
-    getattr(t, second)()                    # queued, while the first waits
+    t.stop_service(None)                    # Dictation off
+    getattr(t, second)()                    # while the first still waits
     slow_service.gone.set()
     assert bool(_run_main_loop_until(lambda: launched, timeout=0.5)) is starts
     assert _run_main_loop_until(lambda: not t._restarting)
