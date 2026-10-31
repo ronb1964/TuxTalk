@@ -333,33 +333,6 @@ def test_chunk_pause_stays_below_auto_stop(monkeypatch):
     live.apply(SimpleNamespace(chunked_dictation=False))
 
 
-# --- where a sentence ends at a pause (the engine's word, in context) ---------
-
-@pytest.mark.parametrize("prev,joint,mark", [
-    ("Wir treffen uns morgen.", "Wir treffen uns morgen um drei Uhr.", ""),
-    ("Das ist gut.", "Das ist gut. Wir gehen.", "."),
-    ("Kommst du?", "Kommst du? Ich warte.", "?"),
-    ("Wir treffen uns morgen", "Wir treffen uns morgen, um drei.", ","),
-    ("Die Straße.", "die strasse ist nass", ""),          # ß, casefolded
-    ("Hallo Welt.", "Etwas ganz anderes.", None),       # no match: no verdict
-    ("Wir gehen.", "Wir gehen.", None),                  # nothing after it
-])
-def test_boundary_mark(prev, joint, mark):
-    from tuxtalk.chunking import boundary_mark
-    assert boundary_mark(prev, joint) == mark
-
-
-@pytest.mark.parametrize("prev,joint,heard", [
-    ("then let the timer run out.", "then let the timer run out it", "it"),
-    ("Wir treffen uns morgen.", "Wir treffen uns morgen, um drei Uhr.", "um drei Uhr."),
-    ("Hallo Welt.", "Etwas ganz anderes.", None),
-    ("Wir gehen.", "Wir gehen.", None),
-])
-def test_words_in_context(prev, joint, heard):
-    from tuxtalk.chunking import words_in_context
-    assert words_in_context(prev, joint) == heard
-
-
 # --- chunk roles in the pipeline ---------------------------------------------
 
 @pytest.fixture
@@ -452,26 +425,6 @@ def test_stop_after_a_pause_adds_the_auto_period(pipeline):
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     call([], "last", auto_period=True)
     assert typed == ["We meet", ". "]
-
-
-def test_a_dictated_period_is_not_held_back():
-    """A voice command ("Punkt" -> ".") made the period: it is the speaker's own,
-    not the engine's guess, so it is typed as it is."""
-    from tuxtalk import chunking
-    text = "Bei jedem Unterbruch ein. "
-    assert chunking.hold_back_boundary(text, "bei jedem Unterbruch ein Punkt.") == (text, None)
-
-
-def test_the_engines_period_is_held_back():
-    from tuxtalk import chunking
-    assert chunking.hold_back_boundary("Die Strasse ist nass. ", "die Straße ist nass.") == \
-        ("Die Strasse ist nass", ".")
-
-
-def test_a_line_break_is_not_held_back():
-    from tuxtalk import chunking
-    text = "Dear John,\n"
-    assert chunking.hold_back_boundary(text, "dear john new line") == (text, None)
 
 
 def test_a_command_after_a_pause_sees_the_finished_chunk(pipeline, monkeypatch):

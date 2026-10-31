@@ -27,7 +27,7 @@ from . import live_settings as live
 from . import notify as notify_module
 from . import recording_state as rs
 from .beeps import READY_BEEP
-from .chunking import boundary_mark, word_count, words_in_context
+from .chunk_text import boundary_mark, word_count, words_in_context
 from .key_commands import split_key_command
 from .logger import setup_logger
 from .normalize import safe_to_lowercase_first_word
@@ -224,7 +224,7 @@ ENTER_IN_CONTEXT_MAX_WORDS = 3
 
 # A phrase this short (seconds) is typed as the context pass heard it when
 # that pass heard fewer words: alone, the engine can make a sentence up
-# around a word or two (chunking.words_in_context).
+# around a word or two (chunk_text.words_in_context).
 SHORT_CHUNK_S = 2.0
 
 

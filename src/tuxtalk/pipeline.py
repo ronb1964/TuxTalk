@@ -28,7 +28,7 @@ from . import live_settings as live
 from . import notify as notify_module
 from . import recording_state as rs
 from .beeps import CANCEL_BEEP, READY_BEEP
-from .chunking import carry_question, hold_back_boundary
+from .chunk_text import carry_question, hold_back_boundary
 from .key_commands import auto_send, ends_unfinished, split_key_command
 from .logger import setup_logger
 from .window_classes import app_kind, is_document_window, pastes_broken
