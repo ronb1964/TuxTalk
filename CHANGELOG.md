@@ -446,6 +446,9 @@ before 0.15.0, so older entries use that name.
   sentence ending in "please subscribe" lost those words. TuxTalk took them
   for the YouTube sign-offs Whisper sometimes makes up from silence. It
   only takes them out now when Whisper says it heard no speech.
+- If Parakeet's downloaded files got damaged, dictation didn't start at
+  all. TuxTalk now uses another speech model you have downloaded for the
+  time being, and says so, as it already did for Whisper.
 
 ## [0.18.2] - 2026-10-23
 

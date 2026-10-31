@@ -206,6 +206,36 @@ def test_broken_files_raise_instead_of_opening_dialogs_off_the_gtk_thread(monkey
         model_helper.download_model_with_progress("small", dialogs=False)
 
 
+@pytest.mark.parametrize("dialogs", [True, False])
+def test_a_broken_parakeet_is_reported_as_broken_files(monkeypatch, dialogs):
+    """A cached Parakeet that won't load used to escape as the loader's own
+    error, past the fallback to another downloaded model, and dictation
+    didn't start at all."""
+    def broken(*a, **k):
+        raise ValueError("invalid ONNX model")
+
+    monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda m: True)
+    monkeypatch.setattr(model_helper, "load_model", broken)
+    with pytest.raises(model_helper.BrokenModelFiles, match="invalid ONNX model"):
+        model_helper.download_model_with_progress("parakeet-v3", dialogs=dialogs)
+
+
+def test_a_broken_parakeet_falls_back_to_another_downloaded_model(monkeypatch):
+    def load(name, *a, **k):
+        if name == "parakeet-v3":
+            raise ValueError("invalid ONNX model")
+        return f"model:{name}"
+
+    monkeypatch.setattr(gtk_loop, "_thread", None)
+    monkeypatch.setattr(engine, "_running_engine", None)
+    monkeypatch.setattr(model_helper, "is_model_cached_fast",
+                        lambda m: m in ("parakeet-v3", "small"))
+    monkeypatch.setattr(model_helper, "load_model", load)
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda *a: None)
+    settings = _settings(model="parakeet-v3", device="cpu")
+    assert engine.build_or_exit(settings) == "model:small"
+
+
 def test_power_saving_never_opens_a_download_off_the_gtk_thread(monkeypatch):
     """Power Saving loads the model again on a dictation's thread. If its
     files went missing meanwhile, the download dialogs would open there, with

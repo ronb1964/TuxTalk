@@ -468,8 +468,8 @@ def download_parakeet_update(device, parent=None):
 
 
 class BrokenModelFiles(Exception):
-    """A downloaded model won't load, and the caller can't show the download
-    dialogs to fetch it again."""
+    """A downloaded model won't load, and downloading it again here isn't
+    possible (no dialogs on this thread) or wouldn't help (Parakeet)."""
 
 
 def download_model_with_progress(model_name, device="cpu", compute_type="int8", parent=None,
@@ -500,10 +500,13 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
             return load_model(model_name, device=device, compute_type=compute_type)
         except Exception as e:
             # Broken files are downloaded again; a device problem (the files
-            # load on the processor) is the caller's to report.
-            if is_parakeet(model_name) or _loads_on_cpu(model_name):
+            # load on the processor) is the caller's to report. Parakeet's
+            # files were hash-checked as they arrived, and a download skips
+            # files that are there, so fetching again can't mend them: the
+            # caller falls back to another model.
+            if not is_parakeet(model_name) and _loads_on_cpu(model_name):
                 raise
-            if not dialogs:
+            if not dialogs or is_parakeet(model_name):
                 raise BrokenModelFiles(
                     f"{model_name} looked downloaded but won't load: {e}") from e
             # Afresh (force_download below): the cache's copy is what won't load.
