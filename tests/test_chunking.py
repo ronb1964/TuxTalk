@@ -349,24 +349,24 @@ def test_chunk_settings_apply_without_a_restart():
 
 
 def test_chunk_setting_follows_config(monkeypatch):
-    from types import SimpleNamespace
+    from tuxtalk.config import Settings
     monkeypatch.setattr(live, "ai_engine", None)
-    on = SimpleNamespace(chunked_dictation=True, chunk_pause_seconds=1.0)
+    on = Settings(chunked_dictation=True, chunk_pause_seconds=1.0)
     live.apply(on)
     assert live.chunk_pause_seconds == 1.0
     assert live.chunk_cfg is on
-    live.apply(SimpleNamespace(chunked_dictation=False, chunk_pause_seconds=1.0))
+    live.apply(Settings(chunked_dictation=False, chunk_pause_seconds=1.0))
     assert live.chunk_pause_seconds == 0.0
 
 
 def test_chunk_pause_stays_below_auto_stop(monkeypatch):
-    from types import SimpleNamespace
+    from tuxtalk.config import Settings
     monkeypatch.setattr(live, "ai_engine", None)
-    live.apply(SimpleNamespace(
+    live.apply(Settings(
         chunked_dictation=True, chunk_pause_seconds=1.5,
         auto_stop_silence=True, auto_stop_seconds=1.0))
     assert live.chunk_pause_seconds == pytest.approx(0.8)
-    live.apply(SimpleNamespace(chunked_dictation=False))
+    live.apply(Settings(chunked_dictation=False))
 
 
 # --- chunk roles in the pipeline ---------------------------------------------
@@ -736,13 +736,13 @@ def test_new_chunk_settings_apply_without_a_restart():
 
 
 def test_service_reads_the_new_chunk_settings(monkeypatch):
-    from types import SimpleNamespace
+    from tuxtalk.config import Settings
     monkeypatch.setattr(live, "ai_engine", None)
-    live.apply(SimpleNamespace(
+    live.apply(Settings(
         chunked_dictation=True, chunk_speech_db=9.0, chunk_context_marks=False))
     assert live.chunk_speech_db == 9.0
     assert live.chunk_context_marks is False
-    live.apply(SimpleNamespace(chunked_dictation=False))
+    live.apply(Settings(chunked_dictation=False))
     assert live.chunk_speech_db == 6.0
     assert live.chunk_context_marks is True
 

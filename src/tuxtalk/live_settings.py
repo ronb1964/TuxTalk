@@ -97,19 +97,17 @@ def apply(cfg):
     global chunk_pause_seconds, chunk_cfg, chunk_speech_db, chunk_context_marks
     global log_transcripts, usage_stats, restore_clipboard, pause_media, duck_audio
     global paste_last_hotkey
-    log_transcripts = getattr(cfg, "log_transcripts", False)
-    usage_stats = getattr(cfg, "usage_stats", True)
-    restore_clipboard = getattr(cfg, "restore_clipboard", False)
-    pause_media = getattr(cfg, "pause_media", True)
-    duck_audio = getattr(cfg, "duck_audio", False)
-    paste_last_hotkey = getattr(cfg, "paste_last_hotkey", "")
-    auto_stop_seconds = (float(getattr(cfg, "auto_stop_seconds", 2.0))
-                         if getattr(cfg, "auto_stop_silence", False) else 0.0)
+    log_transcripts = cfg.log_transcripts
+    usage_stats = cfg.usage_stats
+    restore_clipboard = cfg.restore_clipboard
+    pause_media = cfg.pause_media
+    duck_audio = cfg.duck_audio
+    paste_last_hotkey = cfg.paste_last_hotkey
+    auto_stop_seconds = float(cfg.auto_stop_seconds) if cfg.auto_stop_silence else 0.0
     chunk_cfg = cfg
-    chunk_speech_db = float(getattr(cfg, "chunk_speech_db", 6.0))
-    chunk_context_marks = bool(getattr(cfg, "chunk_context_marks", True))
-    pause = (float(getattr(cfg, "chunk_pause_seconds", 0.8))
-             if getattr(cfg, "chunked_dictation", False) else 0.0)
+    chunk_speech_db = float(cfg.chunk_speech_db)
+    chunk_context_marks = bool(cfg.chunk_context_marks)
+    pause = float(cfg.chunk_pause_seconds) if cfg.chunked_dictation else 0.0
     if pause > 0 and auto_stop_seconds > 0 and pause >= auto_stop_seconds:
         # A pause as long as auto-stop's would end the recording instead of
         # the chunk, so the chunk pause gives way.
@@ -118,23 +116,22 @@ def apply(cfg):
                        f"{auto_stop_seconds}; using {clamped}")
         pause = clamped
     chunk_pause_seconds = pause
-    remove_fillers = bool(getattr(cfg, "remove_fillers", False))
-    swiss_spelling = bool(getattr(cfg, "swiss_spelling", False))
-    voice_navigation = bool(getattr(cfg, "voice_navigation", False))
-    adapt_to_app = bool(getattr(cfg, "adapt_to_app", True))
-    press_enter_after = bool(getattr(cfg, "press_enter_after", False))
+    remove_fillers = bool(cfg.remove_fillers)
+    swiss_spelling = bool(cfg.swiss_spelling)
+    voice_navigation = bool(cfg.voice_navigation)
+    adapt_to_app = bool(cfg.adapt_to_app)
+    press_enter_after = bool(cfg.press_enter_after)
     send_countdown.configure(cfg)
     from . import language_limit
-    auto_languages = language_limit.parse(getattr(cfg, "auto_languages", ""))
-    if getattr(cfg, "numbers_as_digits", False):
-        small = getattr(cfg, "numbers_small_as_words", False)
-        numbers_mode = "small_as_words" if small else "all"
+    auto_languages = language_limit.parse(cfg.auto_languages)
+    if cfg.numbers_as_digits:
+        numbers_mode = "small_as_words" if cfg.numbers_small_as_words else "all"
     else:
         numbers_mode = None
     from .recommend import effective_language
     numbers_language = effective_language(cfg)
-    ai_corrections = bool(getattr(cfg, "ai_corrections", False))
-    voice_editing = bool(getattr(cfg, "voice_editing", False))
+    ai_corrections = bool(cfg.ai_corrections)
+    voice_editing = bool(cfg.voice_editing)
     want_ai = ai_corrections or voice_editing
     if want_ai and ai_engine is None:
         from . import ai_cleanup, ai_download

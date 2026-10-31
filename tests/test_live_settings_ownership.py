@@ -25,9 +25,10 @@ from tuxtalk import recording_state as rs
 
 
 def _cfg(**overrides):
+    from tuxtalk import config
     base = dict(auto_timeout_enabled=False, auto_timeout_minutes=5, notify=False)
     base.update(overrides)
-    return types.SimpleNamespace(**base)
+    return config.Settings(**base)
 
 
 class TestChangeSignalHasOneOwner:

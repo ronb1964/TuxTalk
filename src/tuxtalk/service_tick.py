@@ -54,25 +54,15 @@ def _reload_live_settings(cfg, indicator):
 
     try:
         for key in config_module.LIVE_APPLIED_KEYS:
-            if hasattr(fresh, key) and hasattr(cfg, key):
-                setattr(cfg, key, getattr(fresh, key))
+            setattr(cfg, key, getattr(fresh, key))
 
         keyboard_output.key_delay_ms = cfg.key_delay
 
         live.apply(cfg)
 
         if indicator is not None:
-            indicator.apply_settings(
-                cfg.indicator_position,
-                cfg.indicator_size,
-                cfg.indicator_offset_x,
-                cfg.indicator_offset_y,
-                style=cfg.indicator_style,
-                color_mode=cfg.indicator_color_mode,
-                custom_color=cfg.indicator_color,
-                sensitivity=cfg.indicator_sensitivity,
-                follow_window=getattr(cfg, "indicator_follow_window", False),
-            )
+            from .recording_indicator import settings_in
+            indicator.apply_settings(**settings_in(cfg))
 
         return hotkey_keys.Hotkeys.from_settings(cfg)
     except Exception as e:

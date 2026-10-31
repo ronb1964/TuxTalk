@@ -326,9 +326,11 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     try:
         open_input_stream(rec, input_device_idx)
     except Exception as first_error:
-        # The mic is stored as a device NUMBER, resolved once at startup. Unplug
-        # a USB device and the numbering shifts, leaving that number pointing at
-        # nothing. Re-resolve by name and try once more before giving up.
+        # The mic is stored as a device number, resolved at startup. PortAudio's
+        # device list is fixed when it starts, so a mic chosen by name maps to
+        # the same entry again (a second try still helps one busy for a
+        # moment); on System Default the desktop may name another default now,
+        # on another listed device. Resolve again and try once more.
         logger.warning(f"Microphone {input_device_idx} failed ({first_error}); re-resolving")
         stop_stream_safely(rec)
         try:

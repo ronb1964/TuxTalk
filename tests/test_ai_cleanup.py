@@ -108,7 +108,7 @@ def test_text_without_corrections_never_touches_the_engine():
 
 
 def test_settings_start_and_stop_the_engine(monkeypatch):
-    from types import SimpleNamespace
+    from tuxtalk.config import Settings
 
     events = []
 
@@ -120,10 +120,10 @@ def test_settings_start_and_stop_the_engine(monkeypatch):
     monkeypatch.setattr(ai_download, "is_installed", lambda: True)
     monkeypatch.setattr(live, "ai_engine", None)
 
-    live.apply(SimpleNamespace(remove_fillers=True, ai_corrections=True))
+    live.apply(Settings(remove_fillers=True, ai_corrections=True))
     assert live.remove_fillers and live.ai_engine is not None
-    live.apply(SimpleNamespace(remove_fillers=True, ai_corrections=True))
-    live.apply(SimpleNamespace(remove_fillers=False, ai_corrections=False))
+    live.apply(Settings(remove_fillers=True, ai_corrections=True))
+    live.apply(Settings(remove_fillers=False, ai_corrections=False))
     assert events == ["start", "stop"] and live.ai_engine is None
 
 

@@ -543,11 +543,11 @@ def test_auto_stop_settings_apply_without_a_restart():
 
 
 def test_setting_follows_config(monkeypatch):
-    from types import SimpleNamespace
+    from tuxtalk.config import Settings
     monkeypatch.setattr(live, "ai_engine", None)
-    live.apply(SimpleNamespace(auto_stop_silence=True, auto_stop_seconds=3.0))
+    live.apply(Settings(auto_stop_silence=True, auto_stop_seconds=3.0))
     assert live.auto_stop_seconds == 3.0
-    live.apply(SimpleNamespace(auto_stop_silence=False, auto_stop_seconds=3.0))
+    live.apply(Settings(auto_stop_silence=False, auto_stop_seconds=3.0))
     assert live.auto_stop_seconds == 0.0
 
 
