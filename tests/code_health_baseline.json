@@ -39,7 +39,7 @@
    "decisions": 17
   },
   "rename_migration.py::migrate": {
-   "decisions": 23
+   "decisions": 20
   },
   "rename_migration.py::repin_launchers": {
    "decisions": 19
