@@ -14,7 +14,7 @@ from .logger import setup_logger
 from .prefs_hotkey_test import run_hotkey_test
 from .prefs_speech import SpeechSection
 from .prefs_system_check import UPDATE_HELPER_LABEL
-from .prefs_tab import Tab, dropdown, fold, scroll_into_view, section_header
+from .prefs_tab import Tab, dropdown, fold, scroll_into_view, section_header, tip_label
 from .ui_style import WARNING_AMBER, message_dialog, show_message
 
 logger = setup_logger(__name__)
@@ -145,8 +145,8 @@ class GeneralTab(Tab):
     def _build_keys(self, grid, row):
         """The hold and toggle keys, hands-free and Test Hotkeys; returns the
         next free row."""
-        self.hotkey_label = Gtk.Label(label="Hold Hotkey 💡:", xalign=0)
-        self.hotkey_label.set_tooltip_text(
+        self.hotkey_label = tip_label(
+            "Hold Hotkey",
             "Hold this key while speaking — release to stop and transcribe.\n"
             "Both hotkeys are always active simultaneously.\n"
             "Recommended: F8 (default). Avoid: F1, F5, F11, F12.\n"
@@ -156,8 +156,8 @@ class GeneralTab(Tab):
         grid.attach(self.hotkey_label, 0, row, 1, 1)
         grid.attach(self.hotkey_combo, 1, row, 1, 1)
 
-        self.toggle_label = Gtk.Label(label="Toggle Hotkey 💡:", xalign=0)
-        self.toggle_label.set_tooltip_text(
+        self.toggle_label = tip_label(
+            "Toggle Hotkey",
             "Press once to start recording, press again to stop.\n"
             "Double-tap it for hands-free (the option under this row):\n"
             "the recording stops by itself when you stop talking.\n"

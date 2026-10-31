@@ -15,7 +15,7 @@ from gi.repository import GLib, Gtk
 from .config import Settings
 from .logger import setup_logger
 from .prefs_language import LanguageRow, language_summary
-from .prefs_tab import Tab, dropdown, fold, section_header
+from .prefs_tab import Tab, dropdown, fold, section_header, tip_label
 from .ui_style import WARNING_AMBER, message_dialog, show_message
 from .cuda_helper import DOWNLOAD_SIZE_TEXT as CUDA_SIZE_TEXT
 from .whisper_vulkan import ENGINE_SIZE_TEXT
@@ -235,8 +235,8 @@ class SpeechSection(Tab):
 
     def _build_model_row(self, setup, row):
         """The Model label and dropdown at *row* of the fold."""
-        label = Gtk.Label(label="Model 💡:", xalign=0)
-        label.set_tooltip_text(
+        label = tip_label(
+            "Model",
             "Speech model - choose based on your needs:\n\n"
             "• Parakeet (670 MB): recommended. The most accurate for English\n"
             "  and 24 European languages, and fast even on the processor.\n"

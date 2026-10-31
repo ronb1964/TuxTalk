@@ -10,7 +10,7 @@ from . import mic_volume
 from .logger import setup_logger
 from .mic_test import MicTest
 from .prefs_indicator import IndicatorSettings
-from .prefs_tab import Tab, dropdown, section_header
+from .prefs_tab import Tab, dropdown, section_header, tip_label
 from .ui_style import show_message
 
 logger = setup_logger(__name__)
@@ -199,8 +199,8 @@ class AudioTab(Tab):
     def _other_sound_row(self):
         """What happens to other sound while you talk: one question, one
         dropdown over the two settings (sound_choice), which keep their meaning."""
-        sound_label = Gtk.Label(label="Other sound while you dictate 💡:", xalign=0)
-        sound_label.set_tooltip_text(
+        sound_label = tip_label(
+            "Other sound while you dictate",
             "Pause: YouTube, Spotify and other players pause while you talk, so the\n"
             "microphone hears only you. Only what TuxTalk paused starts again.\n\n"
             "Turn down: every other app's sound goes down while you talk (to half on\n"

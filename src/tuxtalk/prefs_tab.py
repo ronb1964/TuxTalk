@@ -111,6 +111,17 @@ def _focus_on_press(widget, _event):
     return False
 
 
+def tip_label(name, tooltip):
+    """The name of a setting with the light bulb that says hovering over it
+    explains the setting (*tooltip*). A screen reader gets the name without
+    the bulb: it read the emoji aloud as "light bulb", in the label and in
+    the name of the control the label is for."""
+    label = Gtk.Label(label=f"{name} 💡:", xalign=0)
+    label.get_accessible().set_name(f"{name}:")
+    label.set_tooltip_text(tooltip)
+    return label
+
+
 def subheading(text):
     """A small heading inside a section or fold."""
     label = Gtk.Label(xalign=0)

@@ -9,7 +9,7 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 
-from .prefs_tab import Tab, dropdown
+from .prefs_tab import Tab, dropdown, tip_label
 from .ui_style import WARNING_AMBER
 
 # The Language dropdown's entry for auto-detect held to a list of languages.
@@ -77,8 +77,8 @@ class LanguageRow(Tab):
 
     def build(self, grid, row, model):
         """The label and the dropdown at *row* of *grid*, filled for *model*."""
-        label = Gtk.Label(label="Language 💡:", xalign=0)
-        label.set_tooltip_text(
+        label = tip_label(
+            "Language",
             "The language you speak.\n"
             "Detect automatically works for most people. Picking your language\n"
             "makes it a little faster, and it never takes you for another one.\n"

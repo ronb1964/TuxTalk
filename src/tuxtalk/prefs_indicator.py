@@ -8,7 +8,7 @@ from gi.repository import Gdk, Gtk
 
 from . import ui_style
 from .config import CLASSIC_CYAN_HEX
-from .prefs_tab import Tab, dropdown, fold
+from .prefs_tab import Tab, dropdown, fold, tip_label
 
 _SIZES = (("small", "Small (60%)"), ("medium", "Medium (100%)"), ("large", "Large (140%)"))
 _STYLES = (("orb", "Orb"), ("waveform", "Waveform"), ("bars", "Frequency bars"),
@@ -36,10 +36,11 @@ def _rgba(hex_color):
     return color
 
 
-def _row_label(grid, row, text, control, tooltip=None):
-    """The name of a setting, in the left column of *row*; a screen reader
-    names *control* by it."""
-    label = Gtk.Label(label=text, xalign=0)
+def _row_label(grid, row, label, control, tooltip=None):
+    """The name of a setting (*label*: its text, or a tip_label), in the left
+    column of *row*; a screen reader names *control* by it."""
+    if isinstance(label, str):
+        label = Gtk.Label(label=label, xalign=0)
     if tooltip:
         label.set_tooltip_text(tooltip)
     label.set_mnemonic_widget(control)
@@ -107,12 +108,14 @@ class IndicatorSettings(Tab):
         # The tooltips are on the labels: on a dropdown they get in the way
         # of its popup.
         size = self._setting_dropdown("indicator_size", "medium", _SIZES)
-        _row_label(grid, row, "Size 💡:", size,
-                   "Choose the size of the recording indicator.\nMedium is the default size.")
+        _row_label(grid, row, tip_label(
+            "Size", "Choose the size of the recording indicator.\nMedium is the default size."),
+            size)
         grid.attach(size, 1, row, 1, 1)
         style = self._setting_dropdown("indicator_style", "orb", _STYLES)
-        _row_label(grid, row + 1, "Style 💡:", style,
-                   "Choose how the recording indicator looks.\nOrb is the default.")
+        _row_label(grid, row + 1, tip_label(
+            "Style", "Choose how the recording indicator looks.\nOrb is the default."),
+            style)
         grid.attach(style, 1, row + 1, 1, 1)
         return row + 2
 

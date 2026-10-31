@@ -471,7 +471,8 @@ before 0.15.0, so older entries use that name.
   graphics chip losing, so Preferences still recommends your graphics card.
 - Screen readers now name the hands-free seconds and Power Saving minutes,
   the boxes in the Snippet and Your Word windows, and hear the line beside
-  each "Show ..." button.
+  each "Show ..." button. They no longer read the light bulb beside a
+  setting's name aloud ("Model light bulb").
 
 ## [0.18.2] - 2026-10-23
 
