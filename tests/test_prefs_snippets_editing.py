@@ -151,6 +151,14 @@ def test_the_tab_says_when_the_snippets_file_cant_be_read(broken_file):
     assert str(broken_file) in d.read_problem.get_text()
 
 
+def test_the_words_tab_opens_with_the_warning(broken_file):
+    """What the user sees first: the tab built as Preferences builds it."""
+    d = W.WordsTab(SimpleNamespace(window=None))
+    page = d.build()     # kept: a page let go of takes its label with it
+    assert d.read_problem.get_visible() and d.read_problem.get_parent() is page
+    assert "can't be read" in d.read_problem.get_text()
+
+
 def test_the_warning_goes_once_the_file_is_fixed(broken_file):
     from tuxtalk import config as C
     d = _tab_on([])
