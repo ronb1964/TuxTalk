@@ -98,7 +98,11 @@ def test_signal_handlers_are_installed_before_anything_slow(monkeypatch):
     """SIGUSR1 and SIGUSR2 end a process that doesn't handle them. Loading the
     model takes seconds (minutes with a download), so handlers installed after
     it would leave a window in which a signal kills the service."""
-    saved = {s: signal.getsignal(s) for s in (signal.SIGUSR1, signal.SIGUSR2)}
+    # main() takes over Ctrl+C and the quit's alarm as well: pytest's own
+    # handlers and signal mask go back afterwards.
+    saved = {s: signal.getsignal(s) for s in (signal.SIGUSR1, signal.SIGUSR2, signal.SIGTERM,
+                                              signal.SIGINT, signal.SIGHUP, signal.SIGALRM)}
+    mask = signal.pthread_sigmask(signal.SIG_BLOCK, ())
 
     class Stop(Exception):
         pass
@@ -118,3 +122,4 @@ def test_signal_handlers_are_installed_before_anything_slow(monkeypatch):
     finally:
         for s, handler in saved.items():
             signal.signal(s, handler)
+        signal.pthread_sigmask(signal.SIG_SETMASK, mask)
