@@ -95,6 +95,49 @@ def test_lines_follow_the_log_after_another_process_rolls_it_over(monkeypatch, t
             h.close()
 
 
+def _mode(path):
+    return os.stat(path).st_mode & 0o777
+
+
+def test_only_this_user_can_read_the_log(monkeypatch, tmp_path):
+    """With "Log transcribed text" on, the log holds every dictation, and a
+    home folder is often open to every account: the log is 0600 from its
+    first line, after another process rolls it over, and when an earlier
+    version left it 0644. A new log folder is 0700."""
+    old_umask = os.umask(0o022)
+    folder = tmp_path / "config"
+    folder.mkdir()
+    for name in ("tuxtalk.log", "tuxtalk.log.old", "talktype.log"):
+        (folder / name).write_text("an earlier version's line\n")
+        os.chmod(folder / name, 0o644)
+    tlog = _fresh_handler(monkeypatch, folder)
+    log = tlog.setup_logger("test_private_log")
+    try:
+        log.info("first")
+        for name in ("tuxtalk.log", "tuxtalk.log.old", "talktype.log"):
+            assert _mode(folder / name) == 0o600, name
+        os.replace(folder / "tuxtalk.log", folder / "tuxtalk.log.old")
+        log.info("after the rollover")
+        assert "after the rollover" in (folder / "tuxtalk.log").read_text()
+        assert _mode(folder / "tuxtalk.log") == 0o600
+    finally:
+        for h in list(log.handlers):
+            log.removeHandler(h)
+            h.close()
+        os.umask(old_umask)
+
+    monkeypatch.setattr(tlog, "_handler", None)
+    monkeypatch.setenv("TUXTALK_LOG_DIR", str(tmp_path / "new"))
+    log = tlog.setup_logger("test_private_folder")
+    try:
+        assert _mode(tmp_path / "new") == 0o700
+        assert _mode(tmp_path / "new" / "tuxtalk.log") == 0o600
+    finally:
+        for h in list(log.handlers):
+            log.removeHandler(h)
+            h.close()
+
+
 def test_one_handler_per_process_and_one_line_per_message(monkeypatch, tmp_path):
     tlog = _fresh_handler(monkeypatch, tmp_path)
     a = tlog.setup_logger("test_shared_a")
