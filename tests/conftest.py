@@ -1285,3 +1285,17 @@ def message_boxes(monkeypatch):
     boxes = types.SimpleNamespace(shown=[], answer=None)
     monkeypatch.setattr(ui_style, "message_dialog", lambda **k: _MessageBox(boxes, **k))
     return boxes
+
+
+def import_vm_tool(name):
+    """A module of the VM harness in tests/vm, which imports its neighbours
+    by plain name: their folder is on sys.path only while it loads, so no
+    other test can import "run" or "report" from there by accident."""
+    import importlib
+    import sys
+    folder = os.path.join(os.path.dirname(__file__), "vm")
+    sys.path.insert(0, folder)
+    try:
+        return importlib.import_module(name)
+    finally:
+        sys.path.remove(folder)
