@@ -1,14 +1,11 @@
 """Transcribe a File: closing the window or opening another file never loses
-a transcript without asking (Ron closed one with no question, 2026-10-15)."""
+a transcript without asking."""
 import os
 
 import pytest
+from gi.repository import Gdk, Gtk
 
-gi = pytest.importorskip("gi")
-gi.require_version("Gtk", "3.0")
-from gi.repository import Gdk, Gtk  # noqa: E402
-
-from tuxtalk import file_transcribe as ft  # noqa: E402
+from tuxtalk import file_transcribe as ft
 
 
 @pytest.fixture
@@ -117,7 +114,7 @@ def test_closing_while_transcribing_asks_to_stop(win):
 # --- earlier transcripts, kept for next time ---------------------------------
 
 def test_a_kept_transcript_still_asks_on_close(win):
-    """Ron wants the question on every close as insurance; it says the text
+    """The question comes on every close, as insurance; it says the text
     is kept, so it isn't a scare. Don't Save then closes."""
     done(win, kept_for_next_time=True)
     assert win.remembered
@@ -270,7 +267,6 @@ def test_the_tick_box_cleans_what_is_shown_and_saved(win, monkeypatch, tmp_path)
 
 def test_a_save_that_fails_leaves_the_file_it_would_replace(win, monkeypatch, tmp_path):
     """A full disk: the transcript saved there before is still whole."""
-    import os
     win.path = str(tmp_path / "clip.mov")
     done(win, "Meet me at noon.")
     earlier = tmp_path / "clip.txt"
@@ -289,12 +285,11 @@ def test_a_save_that_fails_leaves_the_file_it_would_replace(win, monkeypatch, tm
 
     def disk_full(fd):
         raise OSError(28, "No space left on device")
-    monkeypatch.setattr(os, "fsync", disk_full)
-    win._save("txt")
+    with monkeypatch.context() as full:
+        full.setattr(os, "fsync", disk_full)
+        win._save("txt")
     assert earlier.read_text() == "the transcript from yesterday\n"
     assert not win.kept
-    monkeypatch.undo()
-    monkeypatch.setattr(Gtk.FileChooserNative, "new", lambda *a: Chooser())
     earlier.chmod(0o600)                                  # kept private by its owner
     win._save("txt")
     assert "Meet me at noon." in earlier.read_text()
