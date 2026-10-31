@@ -1,7 +1,7 @@
 #!/bin/bash
 # Shared by container-build.sh and vulkan-engine-container.sh, which download
-# build tools pinned by SHA256 (appimagetool, its runtime, the Vulkan SDK) and
-# keep them between builds.
+# build tools pinned by SHA256 (wayland-protocols, appimagetool, its runtime,
+# the Vulkan SDK) and keep them between builds.
 
 # pinned_download URL SHA256 CACHE DEST
 # Leaves at DEST a file with the pinned SHA256: a copy of CACHE when that

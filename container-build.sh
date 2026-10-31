@@ -232,15 +232,17 @@ fi
 # has 1.25. Without it wl-copy falls back to a window of its own, which can
 # take the keyboard focus, and the Ctrl+V right after lands in that window:
 # dictations lost on KDE (Ron, 2026-10-18). Pinned tarball, checked by SHA256,
-# installed only for this build.
+# kept in the project folder like appimagetool below, installed only for
+# this build.
+source packaging/pinned-download.sh
 WAYLAND_PROTOCOLS_VERSION=1.45
 WAYLAND_PROTOCOLS_SHA256=4d2b2a9e3e099d017dc8107bf1c334d27bb87d9e4aff19a0c8d856d17cd41ef0
+WAYLAND_PROTOCOLS_CACHE="wayland-protocols-${WAYLAND_PROTOCOLS_VERSION}.tar.xz"
 echo "📋 Getting wayland-protocols $WAYLAND_PROTOCOLS_VERSION for wl-clipboard..."
 rm -rf /tmp/wayland-protocols-* /tmp/wayland-protocols-prefix
-wget -q -O /tmp/wayland-protocols.tar.xz \
-    "https://gitlab.freedesktop.org/wayland/wayland-protocols/-/releases/${WAYLAND_PROTOCOLS_VERSION}/downloads/wayland-protocols-${WAYLAND_PROTOCOLS_VERSION}.tar.xz"
-echo "${WAYLAND_PROTOCOLS_SHA256}  /tmp/wayland-protocols.tar.xz" | sha256sum -c --quiet \
-    || { echo "❌ wayland-protocols download doesn't match its pinned SHA256"; exit 1; }
+pinned_download \
+    "https://gitlab.freedesktop.org/wayland/wayland-protocols/-/releases/${WAYLAND_PROTOCOLS_VERSION}/downloads/wayland-protocols-${WAYLAND_PROTOCOLS_VERSION}.tar.xz" \
+    "$WAYLAND_PROTOCOLS_SHA256" "$WAYLAND_PROTOCOLS_CACHE" /tmp/wayland-protocols.tar.xz
 tar -xJf /tmp/wayland-protocols.tar.xz -C /tmp
 meson setup "/tmp/wayland-protocols-${WAYLAND_PROTOCOLS_VERSION}/build" \
     "/tmp/wayland-protocols-${WAYLAND_PROTOCOLS_VERSION}" \
@@ -443,16 +445,16 @@ APPIMAGETOOL_VERSION=1.9.1
 APPIMAGETOOL_SHA256=ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0
 TYPE2_RUNTIME_VERSION=20251108
 TYPE2_RUNTIME_SHA256=2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d
+APPIMAGETOOL_CACHE="appimagetool-${APPIMAGETOOL_VERSION}-x86_64.AppImage"
+TYPE2_RUNTIME_CACHE="type2-runtime-${TYPE2_RUNTIME_VERSION}-x86_64"
 echo "   Getting appimagetool $APPIMAGETOOL_VERSION and type2 runtime $TYPE2_RUNTIME_VERSION..."
-source packaging/pinned-download.sh
 TOOLS_DIR=$(mktemp -d)
 pinned_download \
     "https://github.com/AppImage/appimagetool/releases/download/${APPIMAGETOOL_VERSION}/appimagetool-x86_64.AppImage" \
-    "$APPIMAGETOOL_SHA256" "appimagetool-${APPIMAGETOOL_VERSION}-x86_64.AppImage" \
-    "$TOOLS_DIR/appimagetool.AppImage"
+    "$APPIMAGETOOL_SHA256" "$APPIMAGETOOL_CACHE" "$TOOLS_DIR/appimagetool.AppImage"
 pinned_download \
     "https://github.com/AppImage/type2-runtime/releases/download/${TYPE2_RUNTIME_VERSION}/runtime-x86_64" \
-    "$TYPE2_RUNTIME_SHA256" "type2-runtime-${TYPE2_RUNTIME_VERSION}-x86_64" "$TOOLS_DIR/runtime"
+    "$TYPE2_RUNTIME_SHA256" "$TYPE2_RUNTIME_CACHE" "$TOOLS_DIR/runtime"
 chmod +x "$TOOLS_DIR/appimagetool.AppImage"
 (cd "$TOOLS_DIR" && ./appimagetool.AppImage --appimage-extract > /dev/null 2>&1)
 APPIMAGETOOL="$TOOLS_DIR/squashfs-root/AppRun"
@@ -499,6 +501,14 @@ if [ -n "$BUILD_USER" ]; then
     chown $BUILD_USER:$BUILD_GROUP /build/TuxTalk-v${VERSION}-x86_64.AppImage \
         "/build/$ZSYNC_FILE" "/build/$COMPAT_ZSYNC" 2>/dev/null \
         || echo "   ⚠️  Warning: could not chown the AppImage to $BUILD_USER:$BUILD_GROUP (it stays root-owned)"
+    # The downloads kept for the next build too; one pinned_download couldn't
+    # keep isn't there.
+    for cache in "$WAYLAND_PROTOCOLS_CACHE" "$APPIMAGETOOL_CACHE" "$TYPE2_RUNTIME_CACHE"; do
+        if [ -f "/build/$cache" ]; then
+            chown "$BUILD_USER:$BUILD_GROUP" "/build/$cache" 2>/dev/null \
+                || echo "   ⚠️  Warning: could not chown $cache (it stays root-owned)"
+        fi
+    done
 fi
 
 # Clean up build artifacts inside container

@@ -13,11 +13,12 @@ apt-get install -y -qq build-essential cmake git wget xz-utils libvulkan-dev ca-
 # seconds), so nothing changed in the cache since is ever run.
 VULKAN_SDK_VERSION=1.4.363.0
 VULKAN_SDK_SHA256=197962f5cbf80baf2775a03336a01cee7c8745686c65aaa70d3f751ade4d7e43
+VULKAN_SDK_CACHE="/cache/vulkansdk-${VULKAN_SDK_VERSION}.tar.xz"
 source /build/packaging/pinned-download.sh
 SDK_DIR=$(mktemp -d)
 pinned_download \
     "https://sdk.lunarg.com/sdk/download/${VULKAN_SDK_VERSION}/linux/vulkansdk-linux-x86_64-${VULKAN_SDK_VERSION}.tar.xz" \
-    "$VULKAN_SDK_SHA256" "/cache/vulkansdk-${VULKAN_SDK_VERSION}.tar.xz" "$SDK_DIR/sdk.tar.xz"
+    "$VULKAN_SDK_SHA256" "$VULKAN_SDK_CACHE" "$SDK_DIR/sdk.tar.xz"
 tar xf "$SDK_DIR/sdk.tar.xz" -C "$SDK_DIR"
 rm "$SDK_DIR/sdk.tar.xz"
 export VULKAN_SDK="$SDK_DIR/$VULKAN_SDK_VERSION/x86_64"
@@ -70,5 +71,9 @@ tar czf "/build/$TARBALL" "$NAME"
 cd /build && sha256sum "$TARBALL" > "$TARBALL.sha256"
 if [ -n "$BUILD_USER" ]; then
     chown "$BUILD_USER:$BUILD_GROUP" "/build/$TARBALL" "/build/$TARBALL.sha256" 2>/dev/null || true
+    # The SDK kept in ~/.cache too, if pinned_download could keep it.
+    if [ -f "$VULKAN_SDK_CACHE" ]; then
+        chown "$BUILD_USER:$BUILD_GROUP" "$VULKAN_SDK_CACHE" 2>/dev/null || true
+    fi
 fi
 echo "✅ Built $TARBALL"
