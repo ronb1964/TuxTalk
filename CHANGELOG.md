@@ -7,9 +7,11 @@ before 0.15.0, so older entries use that name.
 
 - An app behind the one you're dictating into could stop every dictation
   with "TuxTalk doesn't type into password fields", when it still said a
-  login box of its own had the focus. Now only the app you're in counts,
-  wherever TuxTalk can tell which one that is, and the desktop's own
-  password prompts always do.
+  login box of its own had the focus. Now that doesn't count once the app
+  you're in answers that its own box isn't one. An app that doesn't answer
+  (some only do with accessibility switched on) still lets the other app's
+  login box count, the safe way round, and the desktop's own password
+  prompts always count.
 - With "Send each dictation automatically" on, the Flatpaks of LibreOffice,
   OnlyOffice and AbiWord, and LibreOffice Draw, got a new line after every
   dictation, as if they were a chat. They're left alone now, like the other
@@ -35,6 +37,11 @@ before 0.15.0, so older entries use that name.
   a login form that can press its button. TuxTalk now checks for a password
   box right before every line, line break and paste key, also after it has
   got the clipboard ready, and stops there.
+- With Type at pause and AI self-corrections on, "meet at three" ... "no
+  wait, four" backspaces the first phrase to type the fixed one. If you
+  clicked into another window just as those backspaces went out, they
+  deleted text there. They go only into the window the phrase is in now;
+  otherwise nothing is deleted and the correction is typed as you said it.
 - With nothing selected, "select the line" said with Shift+F8 pressed its
   keys into whatever window had the focus once it was understood, so a
   click into another window meanwhile selected text there. Those keys go
