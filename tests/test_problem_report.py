@@ -37,6 +37,7 @@ def report(monkeypatch, tmp_path):
                         lambda cfg: recommend.Hardware("Intel graphics"))
     monkeypatch.setattr(secure_input, "is_installed", lambda: True)
     monkeypatch.setattr(secure_input, "running_version", lambda: "1.4")
+    monkeypatch.setattr(uinput_helper, "check_uinput_exists", lambda: True)
     monkeypatch.setattr(uinput_helper, "typing_blocked_reason", lambda: None)
     monkeypatch.setattr(installation, "get_install_type", lambda: "appimage")
     log = tmp_path / "tuxtalk.log"
@@ -284,52 +285,103 @@ def _logged(text):
     return redact_text(text, reveal=True)
 
 
+_LEVELS = {"debug", "info", "warning", "error", "exception", "critical", "log"}
+
+
+def _is_loggable(node):
+    return (isinstance(node, ast.Call)
+            and getattr(node.func, "attr", getattr(node.func, "id", "")) == "loggable")
+
+
+def _holds_loggable(node):
+    return any(_is_loggable(n) for n in ast.walk(node))
+
+
+def _loggable_calls(source, name="<test>"):
+    """(where, call) for each logging call in *source*, at any level, with
+    a live.loggable anywhere in its arguments."""
+    for call in ast.walk(ast.parse(source)):
+        if (isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
+                and call.func.attr in _LEVELS
+                and any(_holds_loggable(a) for a in [*call.args,
+                                                     *(k.value for k in call.keywords)])):
+            yield f"{name}:{call.lineno}", call
+
+
 def _loggable_messages():
-    """Every log message that can hold what was said (each live.loggable
-    call), as the log writes it, with SAID[n] for the words."""
+    """Every log call in src that can hold what was said."""
     src = pathlib.Path(problem_report.__file__).parent
     for path in sorted(src.rglob("*.py")):
-        tree = ast.parse(path.read_text())
-        for call in ast.walk(tree):
-            if (isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
-                    and call.func.attr in ("info", "warning", "debug", "error") and call.args
-                    and any(isinstance(n, ast.Call) and getattr(n.func, "attr", "") == "loggable"
-                            for n in ast.walk(call.args[0]))):
-                yield f"{path.name}:{call.lineno}", call.args[0]
+        yield from _loggable_calls(path.read_text(), path.name)
 
 
-def _render(node, said):
-    """The message *node* writes, with *said* where the words go."""
+def _render(node, said, where):
+    """What *node* writes, with *said* where the words go. A form this can't
+    render fails the test rather than being passed over."""
+    if _is_loggable(node):
+        return _logged(said)
     if isinstance(node, ast.Constant):
         return str(node.value)
     if isinstance(node, ast.JoinedStr):
-        return "".join(_render(part, said) for part in node.values)
+        return "".join(_render(part, said, where) for part in node.values)
     if isinstance(node, ast.FormattedValue):
-        loggable = any(isinstance(n, ast.Call) and getattr(n.func, "attr", "") == "loggable"
-                       for n in ast.walk(node))
-        return _logged(said) if loggable else "x"
-    if isinstance(node, ast.BinOp):
-        return _render(node.left, said) + _render(node.right, said)
+        return _render(node.value, said, where)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        return _render(node.left, said, where) + _render(node.right, said, where)
     if isinstance(node, ast.IfExp):
-        return _render(node.body, said)
+        return _render(node.body, said, where)
+    if _holds_loggable(node):
+        pytest.fail(f"{where}: can't tell how this log line shows the words")
     return "x"
+
+
+def _message(call, said, where):
+    """The message *call* logs, %-arguments filled in as logging does."""
+    args = call.args[1:] if call.func.attr == "log" else call.args
+    if call.keywords and any(_holds_loggable(k.value) for k in call.keywords):
+        pytest.fail(f"{where}: the words are passed by keyword")
+    text = _render(args[0], said, where)
+    if len(args) > 1:
+        # Numbers stand in for the other arguments: a %d or %.1f takes them.
+        text = text % tuple(_logged(said) if _holds_loggable(a) else 0 for a in args[1:])
+    return text
+
+
+def _found_everywhere(where, call):
+    for said in SAID:
+        line = f"2026-10-31 12:00:00 - tuxtalk.x - INFO - {_message(call, said, where)}"
+        hidden, left_out = problem_report.hide_dictations(line)
+        if said in hidden or not left_out or f"[hidden, {len(said)} chars]" not in hidden:
+            return False
+    return True
 
 
 def test_every_kind_of_log_line_with_dictated_words_is_found():
     """A new live.loggable line the report doesn't know would put words in it."""
-    messages = list(_loggable_messages())
-    assert len(messages) >= 10
-    for where, node in messages:
-        for said in SAID:
-            line = f"2026-10-31 12:00:00 - tuxtalk.x - INFO - {_render(node, said)}"
-            hidden, left_out = problem_report.hide_dictations(line)
-            assert said not in hidden and left_out, where
-            assert f"[hidden, {len(said)} chars]" in hidden, where
+    calls = list(_loggable_messages())
+    assert len(calls) >= 10
+    for where, call in calls:
+        assert _found_everywhere(where, call), where
+
+
+@pytest.mark.parametrize("source", [
+    'logger.info("New words: %s", live.loggable(text))',
+    'logger.exception(f"New words: {live.loggable(text)}")',
+    'logger.log(20, "New words: %s (%d)", live.loggable(text), n)',
+])
+def test_the_line_check_sees_every_way_of_logging(source):
+    """A line the report doesn't know is found and caught however it's
+    written: deferred %-arguments, any level."""
+    [(where, call)] = _loggable_calls(source)
+    assert not _found_everywhere(where, call)
 
 
 def test_lines_without_dictated_words_stay_as_they_are():
     log = ("Paste: Ctrl+V (class='org.kde.kwrite')\n"
-           "Raw transcription (Parakeet): [hidden, 25 chars]")
+           "Raw transcription (Parakeet): [hidden, 25 chars]\n"
+           "Voice edit: no formatting shortcuts in 'org.kde.kwrite'\n"
+           "Voice edit: the AI answered 'None.'; not using it\n"
+           "Chunk (last) was only noise; nothing typed for it")
     assert problem_report.hide_dictations(log) == (log, False)
 
 
@@ -440,9 +492,8 @@ def test_a_user_named_after_the_distro_leaves_the_distro_named(report, monkeypat
 
 
 def test_no_uinput_isnt_reported_as_can_type(report, monkeypatch):
-    exists = os.path.exists
-    monkeypatch.setattr(problem_report.os.path, "exists",
-                        lambda path: path != "/dev/uinput" and exists(path))
+    from tuxtalk import uinput_helper
+    monkeypatch.setattr(uinput_helper, "check_uinput_exists", lambda: False)
     assert "Typing: can't: no /dev/uinput" in report().text
 
 

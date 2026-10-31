@@ -49,8 +49,8 @@ def build(layout, home=None, user=None) -> Report:
 
 def scrub(text, home, user) -> str:
     """*text* with the home folder written as ~ and the user name taken out,
-    "Ron's headset" too. A one-letter name is left: it would take out
-    letters everywhere."""
+    "Ron's headset" too. A one-letter name is left: a user called "a" or
+    "i" would have that word replaced all through the settings and the log."""
     home = (home or "").rstrip("/")
     if home:
         text = re.sub(rf"{re.escape(home)}(?![^/\s'\"])", "~", text)
@@ -63,8 +63,12 @@ def scrub(text, home, user) -> str:
 # Where each log line that can hold what was said (every live.loggable caller)
 # says so. With "Log transcribed text" on, the words follow as a Python repr,
 # in double quotes when they have an apostrophe; off, as "[hidden, N chars]".
+# The voice-edit ones are named exactly: others start "Voice edit:" too and
+# quote a window class or the AI's answer, which aren't what was said.
 _SPOKEN = re.compile(r"Raw transcription \(|Normalized text: |Custom commands applied: "
-                     r"|Stripped a hallucination|keyboard layout can't type |Voice edit"
+                     r"|Stripped a hallucination|keyboard layout can't type "
+                     r"|Voice edit(?: result)?: (?=['\"])|Voice edit: no change for "
+                     r"|Voice edit done in code, without the AI \("
                      r"|Heard \"press enter\" in context|Short phrase: |Chunk \([^)]*\): ")
 _QUOTED = re.compile(r"'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\"")
 
@@ -130,7 +134,7 @@ def _typing_state():
     from . import uinput_helper
     if os.environ.get("FLATPAK_ID"):
         return "through the desktop's portal (Flatpak)"
-    if not os.path.exists("/dev/uinput"):
+    if not uinput_helper.check_uinput_exists():
         return "can't: no /dev/uinput (the uinput module isn't loaded)"
     return uinput_helper.typing_blocked_reason() or "can type"
 
