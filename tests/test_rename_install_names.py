@@ -125,7 +125,10 @@ def test_an_unreadable_os_release_means_no_package_manager(monkeypatch, caplog):
 def test_package_restart_uses_the_tuxtalk_launcher(monkeypatch):
     import subprocess
     started = []
-    monkeypatch.setattr(update_install.os.path, "exists", lambda p: p == "/usr/bin/tuxtalk")
+    exists = os.path.exists
+    monkeypatch.setattr(update_install.os.path, "exists",          # the launchers alone
+                        lambda p: p == "/usr/bin/tuxtalk" if p.startswith("/usr/bin/")
+                        else exists(p))
     monkeypatch.setattr(subprocess, "Popen", lambda args, **k: started.append(args))
     ok, _ = update_install.restart_via_launcher()
     assert ok and "/usr/bin/tuxtalk" in started[0][-1]
