@@ -170,6 +170,13 @@ class TestStopDictationService:
             "a normal stop must not SIGKILL"
         )
 
+    def test_given_pids_only_those_are_signalled(self, monkeypatch):
+        """The pre-rename clean-up at start stopped every service, a TuxTalk
+        one Preferences had started included."""
+        sent = self._capture(monkeypatch, [11, 12])
+        service_launcher.stop_dictation_service(pids=[12])
+        assert sent == [(12, signal.SIGTERM)]
+
     def test_force_uses_sigkill(self, monkeypatch):
         sent = self._capture(monkeypatch, [11])
         service_launcher.stop_dictation_service(force=True)

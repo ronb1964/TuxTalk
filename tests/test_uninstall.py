@@ -699,7 +699,8 @@ def test_an_error_partway_still_ends_with_a_message_and_quits(home, monkeypatch)
     monkeypatch.setattr(uninstall, "_close_preferences", lambda: True)
     assert uninstall.run(uninstall.TrayParts(stop=lambda: None, resume=lambda: None,
                                              shut_down=lambda: stopped.append(1),
-                                             preferences_open=lambda: False)) is True
+                                             preferences_open=lambda: False,
+                                             dictation_on=lambda: True)) is True
     assert stopped == [1]
     heading, body = told[0]
     assert heading == "TuxTalk couldn't remove everything"

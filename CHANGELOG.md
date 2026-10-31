@@ -523,7 +523,9 @@ before 0.15.0, so older entries use that name.
 - If you read TuxTalk's state over D-Bus in a script of your own: the
   IsRecording, IsServiceRunning, GetCurrentModel and GetDeviceType calls are
   gone. Nothing in TuxTalk used them any more. GetStatus still gives you all
-  four, as recording, service_running, model and device.
+  four, as recording, service_running, model and device. SetModel is gone
+  too: change the model in Preferences, or in config.toml followed by
+  RestartService.
 - If you start your desktop with startx, TuxTalk now types for the keyboard
   layout you have switched on. It didn't recognise that kind of X11 session
   before, so it fell back to the system's default layout.
@@ -642,6 +644,36 @@ before 0.15.0, so older entries use that name.
 - A screen reader now names the dictation switch in TuxTalk's menu window
   and the release notes in About and Update Available. Before, it read
   them as an unnamed switch and an unnamed text box.
+- If TuxTalk's tray icon crashed and you opened TuxTalk again, the
+  dictation that was still running couldn't reach the new one: the GNOME
+  panel stopped showing when you were recording, Test Hotkeys never heard a
+  key, tuxtalk --start never started, and on GNOME F8 could leak into the
+  app you were typing in. That lasted until dictation restarted. Now it
+  finds the new tray straight away.
+- If you turned Dictation off, picking a Performance preset, applying a
+  Preferences change that needs a restart, or the Parakeet Ultra download
+  turned it back on. So did loading a settings backup, Fix Typing and a
+  cancelled uninstall. Now it stays off, even while your last dictation is
+  still being typed, and the change is used when you turn Dictation on.
+  Restart Service in the menu still turns it on, since you asked for it.
+- Clearing Recent Dictations at the same moment a dictation finished could
+  bring the cleared ones back. Now the clear waits for the dictation to be
+  saved first.
+- TuxTalk's log could be read by other accounts on the same computer. That
+  matters if you switched on "Log transcribed text", which puts what you
+  dictate in it. Only you can read it now, an old log included.
+- A wrong "ready" report reaching the tray while a tuxtalk --start waited
+  for the speech model could make TuxTalk send a signal that ends one of
+  your other programs. TuxTalk now checks it's its own dictation service
+  first.
+- If the desktop's notification service hung, a notice from TuxTalk could
+  hold up dictation for 25 seconds. It gives up after 2 now, as intended.
+- The tray menu no longer freezes for a moment on KDE when dictation stops.
+- The KDE "turn off the notification" guide closes with Escape, Enter or
+  Space now.
+- tuxtalk --uninstall run while TuxTalk was quitting said nothing and did
+  nothing, as if it had worked. It says it couldn't now. --open does the
+  same.
 
 ## [0.18.2] - 2026-10-23
 

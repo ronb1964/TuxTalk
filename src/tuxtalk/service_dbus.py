@@ -1,7 +1,7 @@
 """The object the dictation service offers on D-Bus when no tray is
 running (dbus_service.TuxTalkDBusService, primary=False): the GNOME
-extension's menu can still start and stop recording, open Preferences,
-change the model and quit. With the tray running, the tray answers
+extension's menu can still start and stop recording, open Preferences
+and quit. With the tray running, the tray answers
 instead and this is never reached."""
 import os
 import signal
@@ -21,7 +21,6 @@ class AppInstance:
     def __init__(self, cfg, start_event, stop_event, control):
         self.config = cfg
         self.service_running = True
-        self.dbus_service = None
         self._start_event = start_event
         self._stop_event = stop_event
         self._control = control
@@ -61,24 +60,6 @@ class AppInstance:
         """Dictation off, with no tray: this service is the one to stop, the
         same way as Quit (the service-wide stop skips its own process)."""
         self.quit()
-
-    def set_model(self, model_name: str):
-        """Change the speech model (it applies after a service restart),
-        through config.save_config, the same path every other writer uses."""
-        try:
-            from .config import VALID_MODELS, load_config, save_config
-            if model_name not in VALID_MODELS:
-                logger.error(f"SetModel: refusing unknown model {model_name!r}")
-                return
-            cfg = load_config()
-            cfg.model = model_name
-            save_config(cfg)
-            self.config.model = model_name
-            logger.info(f"Model changed to {model_name} (restart required)")
-            if self.dbus_service:
-                self.dbus_service.emit_model_changed(model_name)   # so the extension updates
-        except Exception as e:
-            logger.error(f"Failed to set model: {e}", exc_info=True)
 
     def quit(self):
         """Quit with no tray: this service quits as a SIGTERM asks it to

@@ -18,7 +18,6 @@ import pytest
 from tuxtalk import control
 from tuxtalk.control import WaitingStart, act_now, parse_action
 from tuxtalk import recording_state as rs
-from tuxtalk import tray_link
 from tuxtalk import recording
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -276,6 +275,20 @@ def test_a_ready_report_from_a_stopped_service_counts_for_nothing(tray_ns):
     assert tray_ns.signals == []
 
 
+@pytest.mark.parametrize("pid", [12345, 0, -1])
+def test_a_ready_report_for_another_process_signals_nothing(tray_ns, pid):
+    """Any program on the session bus can call NotifyServiceReady. While a
+    --start waits, a PID that isn't a dictation service must not get the
+    SIGUSR1 (it would end that program; 0 is the tray's process group), and
+    the waiting request stays for the real service."""
+    assert tray_ns.control("start") == "waiting"
+    tray_ns.service_ready(pid)
+    assert tray_ns.signals == []
+    assert tray_ns._ready_pid is None
+    tray_ns.service_ready(4242)
+    assert tray_ns.signals == [4242], "the real service still gets the recording"
+
+
 def test_a_tray_started_after_the_service_reads_its_ready_file(tray_ns, monkeypatch):
     from tuxtalk import service_launcher
     monkeypatch.setattr(service_launcher, "read_ready_pid", lambda: 4242)
@@ -373,6 +386,30 @@ def test_control_dictation_refuses_anything_else():
     assert make_service(object()).ControlDictation("toggle") == "unknown"
 
 
+@pytest.mark.parametrize("method, name", [
+    ("Uninstall", "uninstall"), ("OpenPreferences", "preferences"),
+    ("TranscribeFile", "transcribe"), ("FixWordInDictation", "fix-word"), ("ShowHelp", "help")])
+def test_uninstall_or_a_window_while_quitting_says_it_failed(monkeypatch, method, name):
+    """Refused quietly, tuxtalk --uninstall exited 0 with nothing removed,
+    and --open as if the window had opened."""
+    import dbus
+    from tuxtalk import dbus_service, tray_instance
+    monkeypatch.setattr(dbus_service.GLib, "idle_add", lambda f, *a: pytest.fail("ran"))
+    app = types.SimpleNamespace(quitting=True, uninstall=lambda: None)
+    s = make_service(app)
+    with pytest.raises(dbus.exceptions.DBusException) as refused:
+        getattr(s, method)()
+    assert refused.value.get_dbus_name() == dbus_service.QUITTING_ERROR
+    assert control.OPEN_METHODS[name] == method
+
+    def ask_running(*_a, **_k):
+        raise refused.value
+    monkeypatch.setattr(control, "open_in_running", ask_running)
+    with pytest.raises(SystemExit) as exited:
+        tray_instance.open_from_command_line(name)
+    assert exited.value.code == 1
+
+
 def test_notify_service_ready_reaches_the_tray(monkeypatch):
     from tuxtalk import dbus_service
     monkeypatch.setattr(dbus_service.GLib, "idle_add", lambda f, *a: f(*a))
@@ -393,11 +430,11 @@ def service(monkeypatch):
     monkeypatch.setattr(service_launcher, "write_ready_pid", written.append)
     told = []
 
-    class Tray:
-        def NotifyServiceReady(self, pid, dbus_interface, timeout, signature=None):
-            told.append((int(pid), signature))
+    class Bus:
+        def call_blocking(self, name, path, interface, method, signature, args, timeout):
+            told.append((int(args[0]), signature))
 
-    monkeypatch.setattr(tray_link, "get_proxy", lambda: Tray())
+    monkeypatch.setattr("dbus.SessionBus", Bus)
     recording.start_requested.clear()
     recording.stop_requested.clear()
     yield types.SimpleNamespace(app=app, written=written, told=told)
@@ -418,7 +455,6 @@ def test_the_service_gets_ready_even_without_dbus(monkeypatch):
     import sys
     from tuxtalk import app, service_launcher
     monkeypatch.setitem(sys.modules, "dbus", None)    # "import dbus" raises
-    monkeypatch.setattr(tray_link, "_tray_dbus_proxy", None)
     monkeypatch.setattr(app, "_service_ready", False)
     monkeypatch.setattr(app, "_waiting_start", None)
     written = []

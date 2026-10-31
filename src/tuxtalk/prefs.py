@@ -723,17 +723,27 @@ class PreferencesWindow:
 
     def restart_service(self, on_failed=None):
         """Restart the dictation service; True if it was done or asked for.
-        A running tray does it (Restart Service: it waits for the old service
-        off its menu's thread, and starts none once Quit or Dictation off came
-        after); one that doesn't answer is left to it, never worked around.
+        A running tray does it (RestartIfOn: it waits for the old service off
+        its menu's thread, and starts none while Dictation is off, the old
+        service still typing included, or once Quit came after); one that
+        doesn't answer is left to it, never worked around.
         With no tray it's done here, on a thread: the old service types what
         it holds and quits (or is killed past its time), then a new one starts.
         A start that fails there calls *on_failed*(True) on GTK's thread,
-        and one still not ready at the wait's end *on_failed*(False)."""
+        and one still not ready at the wait's end *on_failed*(False).
+        With Dictation off nothing starts: the user turned it off, and the
+        service reads the new settings when it's turned on. With no tray,
+        "off" can only mean no service runs, so one turned off from the
+        GNOME extension and still typing what it held is restarted
+        (CODE_HEALTH row 70(d))."""
         from . import single_instance, tray_instance, update_ui
+        from .service_launcher import find_service_pids
+        if not find_service_pids():
+            logger.info("Dictation is off; the new settings apply when it's turned on")
+            return True
         if single_instance.held_elsewhere(tray_instance.TRAY_LOCK):
             try:
-                update_ui.tray_interface().RestartService()
+                update_ui.tray_interface().RestartIfOn()
                 return True
             except Exception as e:
                 logger.warning(f"Could not ask the tray to restart dictation: {e}")

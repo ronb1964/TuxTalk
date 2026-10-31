@@ -81,16 +81,6 @@ def hotkey_test_flag_path() -> str:
     return os.path.join(get_data_dir(), ".hotkey_test_mode")
 
 
-# Python site-package paths to expose in dev mode, so the service can find the
-# system PyGObject that the venv cannot see.
-_DEV_SITE_PACKAGES = (
-    "/usr/lib64/python3.14/site-packages",
-    "/usr/lib/python3.14/site-packages",
-    "/usr/lib64/python3.13/site-packages",
-    "/usr/lib/python3.13/site-packages",
-)
-
-
 # Python's own flags TuxTalk could be started with, ahead of -m or the
 # script; anything else there (-c, -, --) makes what follows mere data.
 _PYTHON_FLAGS = re.compile(r"-[bBdEiIOPqsSuvx]+")
@@ -261,10 +251,12 @@ def find_service_pids():
     ]
 
 
-def stop_dictation_service(force: bool = False) -> None:
-    """Signal the dictation service, and only the dictation service, without
-    waiting: the pre-0.15.0 service at start. *force* sends SIGKILL instead
-    of SIGTERM: the welcome dialog, for a service started during setup.
+def stop_dictation_service(force: bool = False, pids=None) -> None:
+    """Signal the dictation services, and only those, without waiting: the
+    pre-0.15.0 one at start (its *pids* alone, so a TuxTalk service
+    Preferences started is left running) and, with *force*, the first-run
+    hotkey test, for one started during setup. *force* sends SIGKILL
+    instead of SIGTERM. Every service found now when *pids* is None.
 
     Never raises: every caller is a cleanup path, where a service left
     running is better than an exception. Waiting, and killing past the
@@ -272,7 +264,8 @@ def stop_dictation_service(force: bool = False) -> None:
     """
     sig = signal.SIGKILL if force else signal.SIGTERM
     try:
-        pids = find_service_pids()
+        if pids is None:
+            pids = find_service_pids()
     except Exception as e:
         logger.warning(f"Could not look for the dictation service: {e}")
         return
@@ -450,7 +443,7 @@ def release_desktop_hotkeys() -> None:
 _USERS_GDK_BACKEND = "TUXTALK_USERS_GDK_BACKEND"
 
 
-def build_service_env(base_env=None, dev_pythonpath=None):
+def build_service_env(base_env=None):
     """Return the environment the dictation service must be started with.
 
     Always overrides GDK_BACKEND rather than deferring to what the caller
@@ -461,18 +454,7 @@ def build_service_env(base_env=None, dev_pythonpath=None):
     # The user's own, for Preferences the service opens (launch_preferences).
     env[_USERS_GDK_BACKEND] = env.get("GDK_BACKEND", "")
     env["GDK_BACKEND"] = SERVICE_GDK_BACKEND
-    if dev_pythonpath:
-        env["PYTHONPATH"] = dev_pythonpath
     return env
-
-
-def dev_pythonpath():
-    """PYTHONPATH for running from a source checkout, or None for the AppImage."""
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-    src_dir = os.path.join(project_root, "src")
-    if not os.path.exists(src_dir):
-        return None
-    return ":".join([os.path.abspath(src_dir), *_DEV_SITE_PACKAGES])
 
 
 def launch_dictation_service():
@@ -482,10 +464,10 @@ def launch_dictation_service():
     Callers must not spawn it themselves, so every path starts it the same way
     (tests/test_service_launch_parity.py checks this).
     """
-    # Every install runs the module. The AppImage, .deb and .rpm child inherits
-    # PYTHONPATH and the library paths from dictate-tray; in a source checkout
-    # dev_pythonpath() adds src/ and the system PyGObject.
-    env = build_service_env(dev_pythonpath=dev_pythonpath())
+    # Every install runs the module. The child inherits PYTHONPATH and the
+    # library paths from the tray's launcher (dictate-tray in the AppImage,
+    # .deb and .rpm; run-dev.sh or the dev launcher in a source checkout).
+    env = build_service_env()
     proc = subprocess.Popen([sys.executable, "-m", "tuxtalk.app"], env=env)
     logger.info(f"Started dictation service via python -m tuxtalk.app (PID {proc.pid})")
     return proc
@@ -495,11 +477,7 @@ def launch_transcribe_window():
     """Start the Transcribe a File window as its own process, like
     Preferences (and keeping the caller's GDK_BACKEND for the same reason).
     A second one brings the open window to the front and quits."""
-    env = os.environ.copy()
-    pythonpath = dev_pythonpath()
-    if pythonpath:
-        env["PYTHONPATH"] = pythonpath
-    return subprocess.Popen([sys.executable, "-m", "tuxtalk.transcribe_window"], env=env)
+    return subprocess.Popen([sys.executable, "-m", "tuxtalk.transcribe_window"])
 
 
 def launch_preferences(tab=None):
@@ -519,9 +497,6 @@ def launch_preferences(tab=None):
             env["GDK_BACKEND"] = users
         else:
             env.pop("GDK_BACKEND", None)
-    pythonpath = dev_pythonpath()
-    if pythonpath:
-        env["PYTHONPATH"] = pythonpath
     cmd = [sys.executable, "-m", "tuxtalk.prefs"]
     if tab:
         cmd.append(f"--tab={tab}")

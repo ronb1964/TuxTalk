@@ -149,7 +149,7 @@ def window_type():
     """A popup on COSMIC, an ordinary window elsewhere.
 
     COSMIC's X11 window manager focuses the indicator when it appears, even
-    though it asks for no focus below (Pop!_OS VM, 2026-10-21): the app
+    though it asks for no focus below (seen on Pop!_OS): the app
     being dictated into lost the keyboard for the whole recording, and a
     space typed during it went nowhere. A popup (override-redirect) is never
     managed, so never focused, as the floating labels in screen_message are.

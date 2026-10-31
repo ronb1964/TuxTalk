@@ -32,13 +32,17 @@ from .tray_service import ServiceLifecycle
 warnings.filterwarnings("ignore", message=r"Gtk\.ImageMenuItem\.", category=DeprecationWarning)
 logger = setup_logger(__name__)
 
-# D-Bus service import (optional - only needed for GNOME extension)
+# The tray's D-Bus service: the dictation service reaches the tray through
+# it, and so do the GNOME extension, KDE's focus reports, tuxtalk --toggle,
+# TuxTalk opened again and Preferences. Without dbus-python the tray still
+# starts and dictates, with none of those.
 try:
     from .dbus_service import TuxTalkDBusService
     DBUS_AVAILABLE = True
 except ImportError:
     DBUS_AVAILABLE = False
-    logger.warning("D-Bus service not available - GNOME extension integration disabled")
+    logger.warning("D-Bus service not available: no GNOME extension, focus reports "
+                   "or command-line control")
 
 
 class DictationTray(ServiceLifecycle, Presets):
@@ -53,6 +57,8 @@ class DictationTray(ServiceLifecycle, Presets):
         # match Preferences and onboarding.
         ui_style.prefer_dark_theme()
 
+        # The pre-rename id, kept: KDE remembers by it where the user put the
+        # icon (shown always, or hidden in the tray's arrow).
         self.indicator = AppIndicator3.Indicator.new(
             "talktype",
             "microphone-sensitivity-muted",  # start with muted icon
@@ -78,12 +84,18 @@ class DictationTray(ServiceLifecycle, Presets):
         self._menu_window = None    # menu_window.MenuWindow while it's open
         self._uninstalling = False  # the uninstall's question is up, or it's running
         self._quitting = False      # Quit began: waiting for the service to go
+        # The user's Dictation switch: off from Dictation off until it's
+        # turned on or Restart Service is chosen. An automatic restart
+        # (restart_if_on) doesn't go by a service still running: one turned
+        # off types what it holds before it goes.
+        self._dictation_on = True
         # Counts the user's decisions about the service (Stop, Quit, Restart,
         # uninstall); a launch scheduled under an older one is dropped.
         self._service_gen = 0
         self._install_thread = None     # an update going in (Download & Install)
         self._restarting = False    # Restart Service waits for the old service
         self._restart_pending = False   # another restart asked for meanwhile
+        self._pending_starts_dictation = False  # and it may start dictation that's off
 
         # Cached PID of the dictation service (for fast /proc-based status checks)
         self._service_pid = None
@@ -97,7 +109,7 @@ class DictationTray(ServiceLifecycle, Presets):
         self._ready_pid = None
         self._waiting_start = WaitingStart()
 
-        # Initialize D-Bus service (optional - for GNOME extension integration)
+        # The tray's D-Bus service (see DBUS_AVAILABLE above)
         self.dbus_service = None
         self._init_dbus_service()
 
@@ -120,7 +132,7 @@ class DictationTray(ServiceLifecycle, Presets):
 
         # After updating: the recommended setup, and the hotkey helper or
         # Parakeet Ultra this TuxTalk brings.
-        update_offers.start(self.restart_service)
+        update_offers.start(self.restart_if_on)
 
     def _check_tray_visibility(self) -> bool:
         """
@@ -147,7 +159,8 @@ class DictationTray(ServiceLifecycle, Presets):
         return True
 
     def _init_dbus_service(self):
-        """Initialize D-Bus service for GNOME extension integration (optional)."""
+        """Offer the tray's D-Bus service (see DBUS_AVAILABLE), then KDE's
+        focus reporter, which reports to it."""
         if not DBUS_AVAILABLE:
             return
 
@@ -155,7 +168,7 @@ class DictationTray(ServiceLifecycle, Presets):
             from .tray_dbus_app import TrayAppInstance
             app_instance = TrayAppInstance(self)
             self.dbus_service = TuxTalkDBusService(app_instance)
-            logger.info("D-Bus service initialized for GNOME extension integration")
+            logger.info("D-Bus service initialized")
         except Exception as e:
             logger.warning(f"Failed to initialize D-Bus service: {e}")
             self.dbus_service = None
@@ -338,7 +351,20 @@ class DictationTray(ServiceLifecycle, Presets):
         return status
 
     def service_ready(self, pid):
-        """The service loaded its model and acts on toggles from now on."""
+        """The service loaded its model and acts on toggles from now on.
+
+        *pid* comes over D-Bus, and a waiting --start sends it SIGUSR1 at
+        once, which ends a process with no handler for it. So a PID that
+        isn't a running dictation service (a stale report, or 0, which would
+        signal the tray's own process group) is turned away before it's kept
+        or takes the waiting request. This guards against mistakes, not
+        attacks: every client on the session bus runs as this user and can
+        signal the service itself, so the sender isn't checked (under
+        Flatpak's D-Bus proxy the bus would see the proxy's PID anyway).
+        """
+        if pid <= 0 or not self._check_pid_is_service(pid):
+            logger.info(f"Ignored a ready report for PID {pid}: not a dictation service")
+            return
         self._ready_pid = pid
         logger.info(f"Dictation service is ready (PID {pid})")
         if self._waiting_start.take():
@@ -354,15 +380,26 @@ class DictationTray(ServiceLifecycle, Presets):
             logger.warning(f"Could not reach the dictation service: {e}")
 
     def _release_desktop_hotkeys(self):
-        """Give the hotkeys back to the desktop if no service is holding them.
+        """Give the hotkeys back to the desktop if no service is holding them,
+        on a thread of its own: KWin can take seconds to answer, and this
+        runs on GTK's thread after every stop. The thread, or None.
 
         Rechecked here because a service started in the meantime has claimed
-        them for itself, and releasing would undo that.
+        them for itself, and releasing would undo that; and again on the
+        thread, right before the release, since a service can start (a quick
+        Dictation on, a restart's launch) while the thread waits to run.
         """
         if self.is_service_running():
-            return
-        from .service_launcher import release_desktop_hotkeys
-        release_desktop_hotkeys()
+            return None
+        from .service_launcher import find_service_pids, release_desktop_hotkeys
+
+        def release_unless_claimed():
+            if not find_service_pids():
+                release_desktop_hotkeys()
+        thread = threading.Thread(target=release_unless_claimed, name="release-hotkeys",
+                                  daemon=True)
+        thread.start()
+        return thread
 
     def toggle_service(self, widget):
         """The Dictation item was clicked: start or stop the service. The
@@ -389,83 +426,26 @@ class DictationTray(ServiceLifecycle, Presets):
         except Exception as e:
             logger.error(f"Failed to emit model change: {e}")
 
-    def set_model(self, model_name: str):
-        """Change the speech model. Reachable over D-Bus as SetModel.
-
-        Follows the same sequence as applying a performance preset: persist,
-        tell the extension, restart.
-        """
-        from .config import VALID_MODELS, load_config, save_config
-
-        if model_name not in VALID_MODELS:
-            logger.error(
-                f"SetModel: refusing unknown model {model_name!r}. "
-                f"Valid: {', '.join(sorted(VALID_MODELS))}"
-            )
-            return
-
+    def open_preferences(self, _=None, tab=None):
+        """Open Preferences, on *tab* if given ("stats", "updates",
+        "advanced"); the widget that asked, if any, comes first. Already
+        open, it's brought forward on *tab* instead: doing nothing looked
+        like Preferences failed to open when it was behind other windows."""
         try:
-            cfg = load_config()
-            if cfg.model == model_name:
-                logger.info(f"SetModel: already using {model_name}")
-                return
-            cfg.model = model_name
-            save_config(cfg)
-            logger.info(f"SetModel: switched to {model_name}")
-
-            self.update_menu_display()
-            # The tray owns the D-Bus name the extension listens on, so the
-            # change notification has to be emitted from here.
-            self._emit_model_changed(model_name)
-            self.restart_service(None)
-        except Exception as e:
-            logger.error(f"SetModel failed: {e}", exc_info=True)
-
-    def launch_preferences(self, tab=None):
-        """Launch the preferences window subprocess.
-
-        Args:
-            tab: Optional tab name to open directly (e.g. "updates").
-        """
-        # Already open: bring it forward instead of opening a second one.
-        # Doing nothing here looked like Preferences failed to open when the
-        # window was hidden behind others.
-        if self.preferences_process and self.preferences_process.poll() is None:
-            from . import prefs_ipc
-            pid = prefs_ipc.running_pid()
-            if pid and prefs_ipc.bring_to_front(pid, tab):
-                logger.info("Preferences already open; brought it to the front")
-                return
-            # Still starting, or closing: a new one brings the starting window
-            # forward on *tab*, or opens once the closing one has gone
-            # (prefs._acquire_prefs_singleton). Doing nothing lost the click.
-
-        tab_desc = f" ({tab} tab)" if tab else ""
-
-        from .service_launcher import launch_preferences
-        self.preferences_process = launch_preferences(tab)
-        logger.info(f"Opened preferences{tab_desc}")
-
-    def open_preferences(self, _):
-        """Launch preferences window."""
-        try:
-            self.launch_preferences()
+            if self._preferences_open():
+                from . import prefs_ipc
+                pid = prefs_ipc.running_pid()
+                if pid and prefs_ipc.bring_to_front(pid, tab):
+                    logger.info("Preferences already open; brought it to the front")
+                    return
+                # Still starting, or closing: a new one brings the starting
+                # window forward on *tab*, or opens once the closing one has
+                # gone (prefs._acquire_prefs_singleton). Doing nothing lost the click.
+            from .service_launcher import launch_preferences
+            self.preferences_process = launch_preferences(tab)
+            logger.info("Opened preferences" + (f" ({tab} tab)" if tab else ""))
         except Exception as e:
             logger.error(f"Failed to open preferences: {e}")
-
-    def open_preferences_stats(self, _):
-        """Open Preferences on the Stats tab (tray menu "Your Stats...")."""
-        try:
-            self.launch_preferences(tab="stats")
-        except Exception as e:
-            logger.error(f"Failed to open preferences stats tab: {e}")
-
-    def open_preferences_updates(self, _):
-        """Launch preferences window directly to Updates tab."""
-        try:
-            self.launch_preferences(tab="updates")
-        except Exception as e:
-            logger.error(f"Failed to open preferences updates tab: {e}")
 
     def open_transcribe_window(self, _=None):
         """Open Transcribe a File (transcribe_window.py), its own process."""
@@ -807,7 +787,7 @@ def _start_normally(tray, command, open_window):
         logger.info(f"Started with --{command}: {status}")
         control.report(status)
     tray._auto_start_service(1000)
-    if open_window and open_window != "quit":
+    if open_window:
         # Started by --open (a launcher shortcut) with nothing running.
         GLib.timeout_add(1500, tray.open_window, open_window)
     # Check for updates after a delay (don't interfere with startup)

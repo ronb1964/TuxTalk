@@ -134,6 +134,7 @@ def _bare_tray(**attrs):
     t._install_thread = None
     t._uninstalling = False
     t._waiting_start = WaitingStart()
+    t._dictation_on = True
     t._menu_window = None
     t.preferences_process = None
     t.dbus_service = None
@@ -154,16 +155,19 @@ def _run_main_loop_until(done, timeout=5):
 
 @pytest.fixture
 def slow_service(monkeypatch):
-    """A service that takes until gone.set() to quit; where it was waited for."""
-    gone, waited_on = threading.Event(), []
+    """A service (PID 42) that takes until gone.set() to quit; where it was
+    waited for."""
+    gone, waited_on, running = threading.Event(), [], [42]
 
     def end(wait_s=None, pids=None):
         waited_on.append(threading.current_thread())
         assert gone.wait(10)
+        running.clear()
         return True
     monkeypatch.setattr(service_launcher, "end_dictation_service", end)
     monkeypatch.setattr(service_launcher, "stop_dictation_service", lambda force=False: None)
-    return types.SimpleNamespace(gone=gone, waited_on=waited_on)
+    monkeypatch.setattr(service_launcher, "find_service_pids", lambda: list(running))
+    return types.SimpleNamespace(gone=gone, waited_on=waited_on, running=running)
 
 
 def test_quit_returns_at_once_and_leaves_once_the_service_has_gone(slow_service):
@@ -179,6 +183,31 @@ def test_quit_returns_at_once_and_leaves_once_the_service_has_gone(slow_service)
     slow_service.gone.set()
     assert _run_main_loop_until(lambda: left)
     assert slow_service.waited_on[0] is not threading.main_thread()
+
+
+def test_the_desktop_gets_its_hotkeys_back_off_gtks_thread(monkeypatch):
+    """After every stop the tray hands KWin and COSMIC the hotkeys back. On
+    GTK's thread the menu froze while KWin took its time to answer."""
+    on = []
+    monkeypatch.setattr(service_launcher, "release_desktop_hotkeys",
+                        lambda: on.append(threading.current_thread()))
+    monkeypatch.setattr(service_launcher, "find_service_pids", lambda: [])
+    t = _bare_tray(is_service_running=lambda: False)
+    t._release_desktop_hotkeys().join(5)
+    assert on and on[0] is not threading.main_thread()
+
+
+def test_a_service_started_before_the_release_keeps_its_hotkeys(monkeypatch):
+    """Dictation off, then on again before the release thread ran: handing
+    KWin or COSMIC the keys back then undid the new service's claim, and F8
+    typed stray characters in terminals until the next start."""
+    released = []
+    monkeypatch.setattr(service_launcher, "release_desktop_hotkeys",
+                        lambda: released.append(True))
+    monkeypatch.setattr(service_launcher, "find_service_pids", lambda: [43])  # the new one
+    t = _bare_tray(is_service_running=lambda: False)     # none, when the tray looked
+    t._release_desktop_hotkeys().join(5)
+    assert released == []
 
 
 def test_a_second_quit_while_quitting_does_nothing(slow_service):
@@ -297,10 +326,12 @@ def test_uninstall_waits_for_the_service_while_its_window_draws(slow_service, mo
     assert len(ticks) >= 3 and slow_service.waited_on[0] is not threading.main_thread()
 
 
-def test_uninstall_stops_the_tray_and_service_before_the_root_step(monkeypatch):
+@pytest.mark.parametrize("dictation_on", [True, False])
+def test_uninstall_stops_the_tray_and_service_before_the_root_step(monkeypatch, dictation_on):
     """A restart queued in the tray started a new service while the package
     was being removed; cancelled at the password prompt, everything is as
-    it was, dictation included."""
+    it was, dictation included. A service still typing after Dictation off
+    isn't started again: that turned Dictation back on."""
     from tuxtalk import uninstall
     order = []
     monkeypatch.setattr(uninstall.installation, "get_install_type", lambda: "deb")
@@ -318,11 +349,12 @@ def test_uninstall_stops_the_tray_and_service_before_the_root_step(monkeypatch):
     tray = uninstall.TrayParts(stop=lambda: order.append("tray stops"),
                                resume=lambda: order.append("tray resumes"),
                                shut_down=lambda: order.append("tray shuts down"),
-                               preferences_open=lambda: False)
+                               preferences_open=lambda: False,
+                               dictation_on=lambda: dictation_on)
     monkeypatch.setattr(uninstall, "_close_preferences", lambda: True)
     assert uninstall.run(tray) is False
-    assert order == ["tray stops", "service ends", "root step", "tray resumes",
-                     "dictation back on"]
+    assert order == ["tray stops", "service ends", "root step", "tray resumes"] + (
+        ["dictation back on"] if dictation_on else [])
 
 
 def test_a_restart_finishing_after_dictation_off_starts_nothing(slow_service):
@@ -336,17 +368,127 @@ def test_a_restart_finishing_after_dictation_off_starts_nothing(slow_service):
     assert t._restarting is False
 
 
-def test_restart_stop_restart_ends_with_dictation_on(slow_service):
-    """The last restart was queued behind the first, which the Stop made
-    obsolete: it was dropped with it, and dictation stayed off."""
+def test_an_automatic_restart_with_dictation_off_leaves_it_off(slow_service):
+    """A Performance preset or the Parakeet Ultra download restarts
+    dictation; after the user turned Dictation off, it turned it back on,
+    hotkeys and all."""
+    slow_service.running.clear()            # Dictation off
+    launched = []
+    t = _bare_tray(_launch_service=lambda: launched.append(True),
+                   update_status_and_menu=lambda repeat=True: False)
+    t.restart_if_on()
+    assert not _run_main_loop_until(lambda: launched, timeout=0.3)
+    assert slow_service.waited_on == [] and t._restarting is False
+
+
+def test_restart_service_with_dictation_off_turns_it_on(slow_service):
+    """The user's own Restart Service (the menu, the GNOME extension) is a
+    request to have dictation running."""
+    slow_service.running.clear()            # Dictation off
+    slow_service.gone.set()                 # nothing to wait for
     launched = []
     t = _bare_tray(_launch_service=lambda: launched.append(True),
                    update_status_and_menu=lambda repeat=True: False)
     t.restart_service(None)
-    t._drop_pending_launches()              # Dictation off
-    t.restart_service(None)                 # and Restart again, while the first waits
+    assert _run_main_loop_until(lambda: launched)
+
+
+def _tray_with_dbus(slow_service):
+    """A bare tray and the D-Bus service Preferences reaches it through."""
+    from tuxtalk.dbus_service import TuxTalkDBusService
+    from tuxtalk.tray_dbus_app import TrayAppInstance
+    launched = []
+    t = _bare_tray(_launch_service=lambda: launched.append(True),
+                   update_status_and_menu=lambda repeat=True: False)
+    bus_side = TuxTalkDBusService.__new__(TuxTalkDBusService)
+    bus_side.app = TrayAppInstance(t)
+    return t, bus_side, launched
+
+
+def test_an_automatic_restart_while_the_stopped_service_types_leaves_dictation_off(
+        slow_service):
+    """Dictation off while the old service still typed a long paragraph,
+    then a Performance preset or a Preferences change: the restart saw that
+    service still running, waited for it and started a new one, so Dictation
+    came back on by itself."""
+    from tuxtalk.dbus_service import TuxTalkDBusService
+    t, bus_side, launched = _tray_with_dbus(slow_service)
+    t.stop_service(None)                    # PID 42 is still typing
+    t.restart_if_on()                       # a Performance preset
+    TuxTalkDBusService.RestartIfOn(bus_side)    # Preferences after a change
+    _run_main_loop_until(lambda: False, timeout=0.2)
+    slow_service.gone.set()
+    assert not _run_main_loop_until(lambda: launched, timeout=0.5)
+    assert len(slow_service.waited_on) == 1     # the Stop's wait, no other
+    assert t._restarting is False
+
+
+def test_preferences_restart_restarts_while_dictation_is_on(slow_service):
+    from tuxtalk.dbus_service import TuxTalkDBusService
+    t, bus_side, launched = _tray_with_dbus(slow_service)
+    TuxTalkDBusService.RestartIfOn(bus_side)
+    _run_main_loop_until(lambda: slow_service.waited_on, timeout=2)
     slow_service.gone.set()
     assert _run_main_loop_until(lambda: launched)
+
+
+def test_restart_service_after_dictation_off_turns_it_on_again(slow_service):
+    """The user's own Restart Service still means "have dictation running"."""
+    t, _bus_side, launched = _tray_with_dbus(slow_service)
+    t.stop_service(None)
+    slow_service.gone.set()
+    _run_main_loop_until(lambda: not slow_service.running, timeout=2)
+    t.restart_service(None)
+    assert _run_main_loop_until(lambda: launched)
+    assert t._dictation_on is True
+
+
+def test_dictation_turned_on_again_takes_the_next_automatic_restart(slow_service):
+    """Dictation off and on again, then a Preferences change: the restart
+    must still happen, or the service runs on the old settings."""
+    from tuxtalk.dbus_service import TuxTalkDBusService
+    t, bus_side, launched = _tray_with_dbus(slow_service)
+    t.stop_service(None)
+    slow_service.gone.set()
+    assert _run_main_loop_until(lambda: not slow_service.running)     # the old one has gone
+    t.start_service(None)                   # Dictation on
+    slow_service.running.append(43)
+    TuxTalkDBusService.RestartIfOn(bus_side)
+    assert _run_main_loop_until(lambda: len(launched) == 2)     # the start, then the restart
+
+
+def test_the_update_offers_restart_leaves_dictation_off(monkeypatch):
+    """The Parakeet Ultra download restarts dictation onto it: as the user's
+    Restart Service, it turned Dictation back on after the user had turned
+    it off."""
+    given = []
+    monkeypatch.setattr(tray_mod.update_offers, "start", given.append)
+    monkeypatch.setattr(tray_mod.DictationTray, "_check_tray_visibility", lambda self: False)
+    monkeypatch.setattr(tray_mod.DictationTray, "_init_dbus_service", lambda self: None)
+    monkeypatch.setattr(tray_mod.DictationTray, "is_service_running", lambda self: True)
+    monkeypatch.setattr(tray_mod.DictationTray, "update_menu_display", lambda self, on: None)
+    monkeypatch.setattr(tray_mod, "TrayMenu",
+                        lambda tray: types.SimpleNamespace(widget=tray_mod.Gtk.Menu()))
+    monkeypatch.setattr(tray_mod.GLib, "timeout_add_seconds", lambda *a: 0)
+    t = tray_mod.DictationTray()
+    assert given == [t.restart_if_on]
+
+
+@pytest.mark.parametrize("second, starts", [("restart_service", True),
+                                            ("restart_if_on", False)])
+def test_a_restart_queued_after_dictation_off(slow_service, second, starts):
+    """Restart, Dictation off while it waits, then another restart. The
+    user's Restart Service is queued behind the first and turns dictation
+    on; an automatic one (a preset chosen meanwhile) leaves it off."""
+    launched = []
+    t = _bare_tray(_launch_service=lambda: launched.append(True),
+                   update_status_and_menu=lambda repeat=True: False)
+    t.restart_service(None)
+    t.stop_service(None)                    # Dictation off
+    getattr(t, second)()                    # while the first still waits
+    slow_service.gone.set()
+    assert bool(_run_main_loop_until(lambda: launched, timeout=0.5)) is starts
+    assert _run_main_loop_until(lambda: not t._restarting)
 
 
 def test_an_action_queued_before_quit_does_nothing_after_it(monkeypatch):

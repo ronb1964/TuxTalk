@@ -64,6 +64,42 @@ def test_one_handler_per_process_and_one_line_per_message(fresh_log):
     assert log_file.read_text().count("only once") == 1
 
 
+def _mode(path):
+    return os.stat(path).st_mode & 0o777
+
+
+def test_only_this_user_can_read_the_log(fresh_log):
+    """With "Log transcribed text" on, the log holds every dictation, and a
+    home folder is often open to every account: the log is 0600 from its
+    first line, after another process rolls it over, and when an earlier
+    version left it 0644."""
+    setup, log_file = fresh_log
+    folder = log_file.parent
+    old_umask = os.umask(0o022)
+    try:
+        for name in ("tuxtalk.log", "tuxtalk.log.old", "talktype.log"):
+            (folder / name).write_text("an earlier version's line\n")
+            os.chmod(folder / name, 0o644)
+        log = setup("test_private_log")
+        log.info("first")
+        for name in ("tuxtalk.log", "tuxtalk.log.old", "talktype.log"):
+            assert _mode(folder / name) == 0o600, name
+        os.replace(log_file, folder / "tuxtalk.log.old")
+        log.info("after the rollover")
+        assert "after the rollover" in log_file.read_text()
+        assert _mode(log_file) == 0o600
+    finally:
+        os.umask(old_umask)
+
+
+def test_a_new_log_folder_is_this_users_only(fresh_log, monkeypatch, tmp_path):
+    setup, _log_file = fresh_log
+    monkeypatch.setenv("TUXTALK_LOG_DIR", str(tmp_path / "new"))
+    setup("test_private_folder")
+    assert _mode(tmp_path / "new") == 0o700
+    assert _mode(tmp_path / "new" / "tuxtalk.log") == 0o600
+
+
 def test_package_loggers_reach_the_log_even_without_setup_logger():
     """config.py and others use plain logging.getLogger(__name__), and those
     lines must still reach tuxtalk.log."""

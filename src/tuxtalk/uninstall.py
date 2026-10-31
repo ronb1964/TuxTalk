@@ -524,6 +524,7 @@ class TrayParts(NamedTuple):
     resume: Callable        # the uninstall didn't happen: as before
     shut_down: Callable     # its D-Bus service and KWin script, once the service has gone
     preferences_open: Callable  # its Preferences still open (none told it to close)
+    dictation_on: Callable  # the user's Dictation switch; off while a stopped service types
 
 
 def _our_services():
@@ -985,7 +986,9 @@ def _remove_root_part(plan, leave_group, tray):
     what it holds first. Its Result, or None when nothing was removed (the
     service wouldn't stop, or the root step didn't run), with TuxTalk as it
     was before."""
-    was_running = bool(_our_services())
+    # A service still typing after Dictation off runs too; the tray knows
+    # whether the user wants one.
+    was_running = bool(_our_services()) and (tray is None or tray.dictation_on())
     if not _wait_for(_end_service):
         _tell(Gtk.MessageType.ERROR, "TuxTalk couldn't uninstall",
               "Nothing was removed: TuxTalk's dictation service wouldn't stop. "

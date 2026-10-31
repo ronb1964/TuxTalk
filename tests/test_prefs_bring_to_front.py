@@ -196,7 +196,7 @@ def test_the_tray_asks_again_when_preferences_is_starting_or_closing(monkeypatch
     monkeypatch.setattr(prefs_ipc, "running_pid", lambda: None)        # no pid yet
     monkeypatch.setattr(service_launcher, "launch_preferences",
                         lambda tab: launched.append(tab) or types.SimpleNamespace())
-    t.launch_preferences(tab="stats")
+    t.open_preferences(tab="stats")
     assert launched == ["stats"]
 
 

@@ -98,7 +98,7 @@ class TrayMenu:
         quit_item = Gtk.MenuItem(label="Quit TuxTalk")
         prefs_item.connect("activate", tray.open_preferences)
         voice_cmds_item.connect("activate", tray.show_voice_commands)
-        stats_item.connect("activate", tray.open_preferences_stats)
+        stats_item.connect("activate", tray.open_preferences, "stats")
         help_item.connect("activate", tray.show_help)
         about_item.connect("activate", tray.show_about_dialog)
         updates_item.connect("activate", tray.check_for_updates_clicked)
@@ -246,9 +246,9 @@ class TrayMenu:
         the history file, watched with a GIO file monitor (inotify; the file
         lives on tmpfs, see history.py). The monitor, or None."""
         from gi.repository import Gio
-        from .history import _history_path
+        from .history import history_path
         try:
-            monitor = Gio.File.new_for_path(_history_path()).monitor_file(
+            monitor = Gio.File.new_for_path(history_path()).monitor_file(
                 Gio.FileMonitorFlags.NONE, None)
             monitor.connect("changed", lambda *_: GLib.idle_add(self.refresh_history))
             return monitor
@@ -324,10 +324,11 @@ class TrayMenu:
         return submenu
 
     def _clear_history(self):
-        """Clear History: forget the recent dictations, and show none."""
-        from .history import clear
-        clear()
-        self.refresh_history()
+        """Clear History: forget the recent dictations, and show none. The
+        clear may wait for another change to the list, so it runs on a
+        thread of its own and the menu is redrawn once it's done."""
+        from .history import clear_in_background
+        clear_in_background(then=lambda: GLib.idle_add(self.refresh_history))
 
 
 def copy_dictation(text):

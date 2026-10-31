@@ -657,24 +657,22 @@ def test_voice_commands_grabs_are_released_even_if_the_tray_call_fails(key_env,
 
 # --- no unbounded blocking while the keyboard is grabbed --------------------
 
-class RecordingProxy:
-    """Stands in for the tray's D-Bus proxy, recording how it was called."""
+class RecordingBus:
+    """Stands in for the session bus, recording each call to the tray."""
 
     def __init__(self):
         self.calls = []
 
-    def __getattr__(self, name):
-        def method(*args, **kwargs):
-            self.calls.append((name, kwargs))
-        return method
+    def call_blocking(self, name, path, interface, method, signature, args, **kwargs):
+        self.calls.append((method, kwargs))
 
 
 @pytest.fixture
 def tray_proxy(monkeypatch):
-    proxy = RecordingProxy()
-    monkeypatch.setattr(tray_link, "_tray_dbus_proxy", proxy)
-    yield proxy
-    monkeypatch.setattr(tray_link, "_tray_dbus_proxy", None)
+    import dbus
+    bus = RecordingBus()
+    monkeypatch.setattr(dbus, "SessionBus", lambda: bus)
+    return bus
 
 
 def test_recording_state_notification_is_time_bounded(tray_proxy):

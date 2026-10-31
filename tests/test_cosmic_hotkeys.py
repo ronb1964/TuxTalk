@@ -256,12 +256,16 @@ def _tray_noticing(service_running):
     again by then or not."""
     from tuxtalk import tray
     stub = types.SimpleNamespace(is_service_running=lambda: service_running)
-    tray.DictationTray._release_desktop_hotkeys(stub)
+    released = tray.DictationTray._release_desktop_hotkeys(stub)
+    if released:
+        released.join(5)
 
 
-def test_a_crashed_service_gives_the_keys_back_on_cosmic(cosmic):
+def test_a_crashed_service_gives_the_keys_back_on_cosmic(cosmic, monkeypatch):
     """The service's exit hook never ran, so the tray hands the keys back,
     or F8 stays swallowed with dictation off."""
+    from tuxtalk import service_launcher
+    monkeypatch.setattr(service_launcher, "find_service_pids", lambda: [])
     _write_custom(USERS_OWN)
     ch.claim(_cfg())
     _tray_noticing(service_running=False)

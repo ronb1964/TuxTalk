@@ -659,7 +659,7 @@ def _no_real_history_or_stats(monkeypatch, tmp_path_factory):
     Dictations (it keeps 20) and add to their word count."""
     from tuxtalk import history, stats
     folder = tmp_path_factory.mktemp("history")
-    monkeypatch.setattr(history, "_history_path", lambda: str(folder / "history.json"))
+    monkeypatch.setattr(history, "history_path", lambda: str(folder / "history.json"))
     monkeypatch.setattr(stats, "stats_path", lambda: str(folder / "stats.json"))
 
 

@@ -50,6 +50,10 @@ class TrayAppInstance:
         """Restart service via tray."""
         self._later(self.tray.restart_service, None)
 
+    def restart_if_on(self):
+        """Restart the service onto new settings, unless Dictation is off."""
+        self._later(self.tray.restart_if_on, None)
+
     def toggle_recording(self):
         """Toggle recording in the service process via SIGUSR1,
         once it's ready: one still starting (just restarted)
@@ -121,19 +125,15 @@ class TrayAppInstance:
 
     def show_preferences_stats(self):
         """Open preferences to the Stats tab via tray."""
-        self._later(self.tray.open_preferences_stats, None)
+        self._later(self.tray.open_preferences, None, "stats")
 
     def show_preferences_updates(self):
         """Open preferences to Updates tab via tray."""
-        self._later(self.tray.open_preferences_updates, None)
+        self._later(self.tray.open_preferences, None, "updates")
 
     def set_performance_preset(self, preset_id: str):
         """Apply a performance preset via tray (called from GNOME extension D-Bus)."""
         self._later(self.tray.set_performance_preset, preset_id)
-
-    def set_model(self, model_name: str):
-        """Change the model via tray (called from GNOME extension D-Bus SetModel)."""
-        self._later(self.tray.set_model, model_name)
 
     def quit(self):
         """Quit via tray."""
@@ -150,14 +150,7 @@ class TrayAppInstance:
 
     @property
     def config(self):
-        """Get current config."""
-        try:
-            from .config import load_config
-            return load_config()
-        except Exception as e:
-            logger.info(f"Could not read the settings for D-Bus, using defaults: {e}")
-
-            class MinimalConfig:
-                model = 'large-v3'
-                device = 'cpu'
-            return MinimalConfig()
+        """The settings as saved now (load_config falls back to the defaults
+        itself when the file can't be read)."""
+        from .config import load_config
+        return load_config()

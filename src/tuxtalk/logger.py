@@ -112,6 +112,33 @@ class FailureNotes:
             return self._last.pop(what, None) is not None
 
 
+def _private_open(path, flags):
+    """os.open for the log: a new file only this user can read."""
+    return os.open(path, flags, 0o600)
+
+
+class _PrivateLogHandler(logging.handlers.WatchedFileHandler):
+    """The log's handler. Its file, and each one it reopens after another
+    process rolled the log over, is made 0600: with "Log transcribed text"
+    on the log holds every dictation, and a home folder is often readable
+    by every account on the computer."""
+
+    def _open(self):
+        return open(self.baseFilename, self.mode, encoding=self.encoding,
+                    errors=self.errors, opener=_private_open)
+
+
+def _make_private(log_dir: Path) -> None:
+    """Make the logs an earlier version left 0644 this user's only."""
+    for name in (LOG_FILE_NAME, LOG_FILE_NAME + ".old") + _LEGACY_LOG_NAMES:
+        try:
+            os.chmod(log_dir / name, 0o600)
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            logging.getLogger(__name__).warning(f"Couldn't make {name} private: {e}")
+
+
 def _shared_handler() -> logging.Handler:
     """The process's single log-file handler, created on first use.
 
@@ -129,8 +156,9 @@ def _shared_handler() -> logging.Handler:
 
     # Match config.py's dev/prod directory split
     log_dir = _log_dir()
-    log_dir.mkdir(parents=True, exist_ok=True)
+    log_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     log_file = log_dir / LOG_FILE_NAME
+    _make_private(log_dir)
 
     # Startup rollover: bound the log without a per-write rotation race.
     try:
@@ -141,7 +169,7 @@ def _shared_handler() -> logging.Handler:
     except OSError:
         pass
 
-    handler = logging.handlers.WatchedFileHandler(log_file)
+    handler = _PrivateLogHandler(log_file)
     handler.setLevel(logging.DEBUG)
     handler.setFormatter(logging.Formatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s'))

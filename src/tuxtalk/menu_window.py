@@ -99,7 +99,7 @@ class MenuWindow:
             None,
             ("Preferences...", t.open_preferences),
             ("Voice Commands...", t.show_voice_commands),
-            ("Your Stats...", t.open_preferences_stats),
+            ("Your Stats...", lambda b: t.open_preferences(b, "stats")),
             ("Help...", t.show_help),
             ("About TuxTalk...", t.show_about_dialog),
             ("Check for Updates...", t.check_for_updates_clicked),
@@ -129,7 +129,7 @@ class MenuWindow:
                                      "Install Extension puts TuxTalk's menu in GNOME's top bar")
                 add.set_halign(Gtk.Align.START)
                 add.set_margin_top(6)
-                add.connect("clicked", self._run, lambda _b: t.launch_preferences(tab="advanced"))
+                add.connect("clicked", self._run, lambda b: t.open_preferences(b, "advanced"))
                 box.pack_start(add, False, False, 0)
 
         self._failures = FailureNotes()     # refresh runs every second: logged once

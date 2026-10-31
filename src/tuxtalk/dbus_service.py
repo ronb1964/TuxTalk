@@ -53,6 +53,10 @@ DBUS_NAME = "io.github.ronb1964.TalkType"
 DBUS_PATH = "/io/github/ronb1964/TalkType"
 DBUS_INTERFACE = "io.github.ronb1964.TalkType"
 
+# The error a window or uninstall the command line asks for gets while the
+# tray quits (_dispatch_from_command_line).
+QUITTING_ERROR = DBUS_INTERFACE + ".Error.Quitting"
+
 
 def _version_or_unknown(version):
     """An extension version for the D-Bus signal: -1 when it isn't known
@@ -137,6 +141,17 @@ class TuxTalkDBusService(dbus.service.Object):
         if hasattr(self.app, method_name):
             GLib.idle_add(getattr(self.app, method_name), *args)
 
+    def _dispatch_from_command_line(self, method_name):
+        """_dispatch for a call tuxtalk --open or --uninstall makes too
+        (control.OPEN_METHODS). Refused while quitting with QUITTING_ERROR:
+        refused quietly, the command took the silence for done and exited
+        as if the window had opened or TuxTalk had been removed."""
+        if getattr(self.app, "quitting", False):
+            logger.info(f"D-Bus: {method_name} refused, TuxTalk is quitting")
+            raise dbus.exceptions.DBusException(
+                "TuxTalk is quitting; try again once it has gone", name=QUITTING_ERROR)
+        self._dispatch(method_name)
+
     # ==================== Status ====================
 
     def _current_model(self):
@@ -146,7 +161,7 @@ class TuxTalkDBusService(dbus.service.Object):
         if running:
             return running[0]
         if hasattr(self.app, 'config'):
-            return str(getattr(self.app.config, 'model', 'large-v3'))
+            return str(self.app.config.model)
         return 'unknown'
 
     def _device_type(self):
@@ -243,13 +258,15 @@ class TuxTalkDBusService(dbus.service.Object):
 
     @dbus.service.method(DBUS_INTERFACE)
     def RestartService(self):
-        """Restart the dictation service"""
+        """Restart the dictation service, as the user asked: with Dictation
+        off it turns it on."""
         self._dispatch('restart_service')
 
-    @dbus.service.method(DBUS_INTERFACE, in_signature='s')
-    def SetModel(self, model_name: str):
-        """Change the speech model"""
-        self._dispatch('set_model', model_name)
+    @dbus.service.method(DBUS_INTERFACE)
+    def RestartIfOn(self):
+        """Restart the dictation service onto new settings, as Preferences
+        asks after a change: only while Dictation is on."""
+        self._dispatch('restart_if_on')
 
     @dbus.service.method(DBUS_INTERFACE, in_signature='sss')
     def SetFocusedWindow(self, wm_class: str, window_id: str, geometry: str):
@@ -333,19 +350,20 @@ class TuxTalkDBusService(dbus.service.Object):
 
     @dbus.service.method(DBUS_INTERFACE)
     def ClearRecentDictations(self):
-        """Forget every recent dictation."""
-        from .history import clear
-        clear()
+        """Forget every recent dictation. It may wait for another change to
+        the list, so it runs on a thread of its own, not this D-Bus loop."""
+        from .history import clear_in_background
+        clear_in_background()
 
     @dbus.service.method(DBUS_INTERFACE)
     def FixWordInDictation(self):
         """Open the Fix a Word window on the newest recent dictation."""
-        self._dispatch('show_fix_word')
+        self._dispatch_from_command_line('show_fix_word')
 
     @dbus.service.method(DBUS_INTERFACE)
     def TranscribeFile(self):
         """Open the Transcribe a File window."""
-        self._dispatch('show_transcribe_file')
+        self._dispatch_from_command_line('show_transcribe_file')
 
     @dbus.service.method(DBUS_INTERFACE, out_signature='b')
     def ShowMenu(self):
@@ -360,7 +378,7 @@ class TuxTalkDBusService(dbus.service.Object):
     @dbus.service.method(DBUS_INTERFACE)
     def OpenPreferences(self):
         """Open the preferences window"""
-        self._dispatch('show_preferences')
+        self._dispatch_from_command_line('show_preferences')
 
     @dbus.service.method(DBUS_INTERFACE)
     def OpenPreferencesStats(self):
@@ -375,7 +393,7 @@ class TuxTalkDBusService(dbus.service.Object):
     @dbus.service.method(DBUS_INTERFACE)
     def ShowHelp(self):
         """Show the help dialog"""
-        self._dispatch('show_help')
+        self._dispatch_from_command_line('show_help')
 
     @dbus.service.method(DBUS_INTERFACE)
     def ShowVoiceCommands(self):
@@ -401,7 +419,7 @@ class TuxTalkDBusService(dbus.service.Object):
             # lets the caller do it itself instead of taking silence as done.
             raise dbus.exceptions.DBusException(
                 "This TuxTalk can't uninstall", name="org.freedesktop.DBus.Error.UnknownMethod")
-        self._dispatch('uninstall')
+        self._dispatch_from_command_line('uninstall')
 
     @dbus.service.method(DBUS_INTERFACE)
     def RestartApp(self):
