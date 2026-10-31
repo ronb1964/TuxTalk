@@ -256,7 +256,9 @@ def _tray_noticing(service_running):
     again by then or not."""
     from tuxtalk import tray
     stub = types.SimpleNamespace(is_service_running=lambda: service_running)
-    tray.DictationTray._release_desktop_hotkeys(stub)
+    released = tray.DictationTray._release_desktop_hotkeys(stub)
+    if released:
+        released.join(5)
 
 
 def test_a_crashed_service_gives_the_keys_back_on_cosmic(cosmic):

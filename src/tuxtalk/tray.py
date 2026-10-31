@@ -365,15 +365,20 @@ class DictationTray(ServiceLifecycle, Presets):
             logger.warning(f"Could not reach the dictation service: {e}")
 
     def _release_desktop_hotkeys(self):
-        """Give the hotkeys back to the desktop if no service is holding them.
+        """Give the hotkeys back to the desktop if no service is holding them,
+        on a thread of its own: KWin can take seconds to answer, and this
+        runs on GTK's thread after every stop. The thread, or None.
 
         Rechecked here because a service started in the meantime has claimed
         them for itself, and releasing would undo that.
         """
         if self.is_service_running():
-            return
+            return None
         from .service_launcher import release_desktop_hotkeys
-        release_desktop_hotkeys()
+        thread = threading.Thread(target=release_desktop_hotkeys, name="release-hotkeys",
+                                  daemon=True)
+        thread.start()
+        return thread
 
     def toggle_service(self, widget):
         """The Dictation item was clicked: start or stop the service. The

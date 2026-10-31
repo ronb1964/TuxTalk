@@ -184,6 +184,17 @@ def test_quit_returns_at_once_and_leaves_once_the_service_has_gone(slow_service)
     assert slow_service.waited_on[0] is not threading.main_thread()
 
 
+def test_the_desktop_gets_its_hotkeys_back_off_gtks_thread(monkeypatch):
+    """After every stop the tray hands KWin and COSMIC the hotkeys back. On
+    GTK's thread the menu froze while KWin took its time to answer."""
+    on = []
+    monkeypatch.setattr(service_launcher, "release_desktop_hotkeys",
+                        lambda: on.append(threading.current_thread()))
+    t = _bare_tray(is_service_running=lambda: False)
+    t._release_desktop_hotkeys().join(5)
+    assert on and on[0] is not threading.main_thread()
+
+
 def test_a_second_quit_while_quitting_does_nothing(slow_service):
     shut_downs = []
     t = _bare_tray(_leave_main_loop=lambda: None)
