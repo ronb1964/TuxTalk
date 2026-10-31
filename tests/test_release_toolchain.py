@@ -23,6 +23,10 @@ REQUIRED_IN_GIT = [
     "build-rpm.sh",            # step 10
     "packaging/checksums.sh",  # sourced by the three step 10 scripts
     "packaging/pinned-download.sh",  # sourced by container-build.sh
+    "packaging/collect-licenses.sh",  # run by container-build.sh
+    "packaging/stage-from-appimage.sh",  # sourced by build-deb.sh and build-rpm.sh
+    "packaging/before-remove.sh",  # handed to fpm by build-deb.sh and build-rpm.sh
+    "vulkan-engine-container.sh",  # run by build-vulkan-engine.sh (the Vulkan engine)
     "fresh-start-for-testing.sh",  # step 6
 ]
 
