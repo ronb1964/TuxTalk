@@ -27,13 +27,8 @@ import threading
 
 import numpy as np
 
-# Hands-free judges the audio in windows this long, whatever size of block
-# the microphone sends: how steady the noise is, and how long a sound lasts,
-# depend on the length they are measured over, so fixed windows measure them
-# the same with any block size. One decision still looks at the whole block:
-# speech anywhere in the block that reaches the nothing-said limit keeps the
-# recording (SilenceDetector.feed).
-_WINDOW_S = 0.02
+from .audio_windows import WINDOW_S, split_windows, window_length
+
 # Speech must be this much louder than the background noise (about +8 dB)...
 _SPEECH_OVER_NOISE = 2.5
 # ...and never quieter than this, so a silent room with a near-zero noise
@@ -271,7 +266,7 @@ class _Runs:
 
 class SilenceDetector:
     """Feed it audio blocks as they arrive; it says when the speaker is done.
-    It judges them in _WINDOW_S windows, whatever their size.
+    It judges them in WINDOW_S windows, whatever their size.
 
     In steady noise learned with bumps in it (NoiseFloor), the quiet that
     counts towards silence_seconds may have bumps in it: loud for under
@@ -319,7 +314,7 @@ class SilenceDetector:
         self._bump_s = min(_BUMP_S, self.silence_seconds * _BUMP_SHARE)
         self._runs = _Runs()
         self._tail = 0.0         # quiet seconds since the last loud window
-        self._window_len = max(1, int(_WINDOW_S * self.sample_rate))
+        self._window_len = window_length(self.sample_rate)
         self._pending = np.zeros(0, dtype=np.int16)     # less than a window
         self._recent = np.zeros(0, dtype=np.int16)      # the last window heard
         # A block reached NOTHING_SAID_S and was kept for the speech in it.
@@ -404,7 +399,7 @@ class SilenceDetector:
     def feed(self, block) -> bool:
         """Add one block of int16 samples, of any size. True exactly once:
         when the speaker has been silent for silence_seconds after having
-        talked, judged in _WINDOW_S windows, the rest of the block kept for
+        talked, judged in WINDOW_S windows, the rest of the block kept for
         the next.
 
         Nothing said for NOTHING_SAID_S is decided once the whole block is
@@ -414,16 +409,13 @@ class SilenceDetector:
         so clicks in later blocks can't put the drop off block after block."""
         samples = np.frombuffer(block, dtype=np.int16)
         with self._lock:
-            # New arrays: the audio system may reuse the block's memory.
-            pending = np.concatenate([self._pending, samples])
             size = self._window_len
+            windows, self._pending = split_windows(self._pending, samples, size)
             # Its own copy, so it doesn't keep the whole block's array.
             self._recent = np.array(np.concatenate([self._recent, samples])[-size:])
-            whole = pending.size - pending.size % size
-            self._pending = pending[whole:]
             verdicts = set()
-            for start in range(0, whole, size):
-                rms, duration = block_rms(pending[start:start + size], self.sample_rate)
+            for window in windows:
+                rms, duration = block_rms(window, self.sample_rate)
                 verdicts.add(self._window(rms, duration))
             if "nothing said" in verdicts and not self.fired:
                 if "speech" not in verdicts or self._past_nothing_said:
@@ -471,7 +463,7 @@ class SilenceDetector:
 
         The last samples, too few for a window, are a sound when they are
         _LEFTOVER_OVER times speech's threshold on their own, or when the
-        last _WINDOW_S heard is loud: then nothing is trimmed. A few samples
+        last WINDOW_S heard is loud: then nothing is trimmed. A few samples
         of room noise swing far more than a window does, so just over the
         threshold they are still the room; a word's onset in them, averaged
         into the last window, can fall under it, so they count on their own
@@ -497,7 +489,6 @@ class SilenceDetector:
 # is only transcribed if some of it is clearly louder than its own background.
 
 TAP_MAX_S = 0.6             # longer recordings are always transcribed, silent or not
-_TAP_BLOCK_S = 0.02
 # Tuned on 26 real taps from a Sennheiser Profile desk mic (noisy background,
 # int16 RMS 70-130; the key's thump reached 1.6-4.7x that for a few tens of
 # ms) and 5,039 real speech clips of 0.3-0.5 s, plus real words laid over that
@@ -520,8 +511,8 @@ def _room(rms):
 
 
 def _blocks_rms(audio_f32, sample_rate):
-    """The loudness (int16 RMS) of each whole _TAP_BLOCK_S block of *audio_f32*."""
-    block = max(1, int(_TAP_BLOCK_S * sample_rate))
+    """The loudness (int16 RMS) of each whole WINDOW_S block of *audio_f32*."""
+    block = window_length(sample_rate)
     count = len(audio_f32) // block
     blocks = np.asarray(audio_f32[:count * block], dtype=np.float64).reshape(count, block) * 32768.0
     return np.sqrt(np.mean(blocks * blocks, axis=1))
@@ -546,7 +537,7 @@ def _loud_seconds(audio_f32, sample_rate, ignoring_hz=None) -> float:
     if ignoring_hz is not None and loud.any():
         left = _blocks_rms(_without_tone(audio_f32, sample_rate, ignoring_hz), sample_rate)
         loud &= _share_left(rms, left) >= _TONE_SHARE_LEFT
-    return loud.sum() * _TAP_BLOCK_S
+    return loud.sum() * WINDOW_S
 
 
 # --- The start beep, picked up by the microphone ------------------------------------
@@ -694,17 +685,17 @@ def speech_over_room_db(audio_f32, sample_rate):
     like it hands-free stops by itself about half the time or less, and in
     steady noise it cuts the speaker off mid-sentence more often."""
     rms = _blocks_rms(audio_f32, sample_rate)
-    if len(rms) * _TAP_BLOCK_S < _SHORTEST_TAKE_S:
+    if len(rms) * WINDOW_S < _SHORTEST_TAKE_S:
         return None
     loud = rms >= max(_MIN_SPEECH_RMS, np.percentile(rms, 10) * _TALKING_OVER_ROOM)
-    run = max(1, round(_TALKING_RUN_S / _TAP_BLOCK_S))
+    run = max(1, round(_TALKING_RUN_S / WINDOW_S))
     starts = np.flatnonzero(np.convolve(loud, np.ones(run, dtype=int), "valid") == run)
     if starts.size == 0:
         return None
     first, last = starts[0], starts[-1] + run
     outside = np.concatenate([rms[:first], rms[last:]])
-    if ((last - first) * _TAP_BLOCK_S < _TALKING_TO_JUDGE_S
-            or len(outside) * _TAP_BLOCK_S < _ROOM_TO_JUDGE_S):
+    if ((last - first) * WINDOW_S < _TALKING_TO_JUDGE_S
+            or len(outside) * WINDOW_S < _ROOM_TO_JUDGE_S):
         return None
     room, talking = np.median(outside), rms[first:last]
     if room > np.percentile(talking, 10) * _ROOM_OVER_PAUSES:
