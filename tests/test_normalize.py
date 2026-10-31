@@ -132,6 +132,26 @@ def test_great_quote_preserved():
     s = "she said a great quote about life"
     assert normalize_text(s) == "She said a great quote about life."
 
+
+@pytest.mark.parametrize("said, written", [
+    ("I want to quote him on that", "I want to quote him on that."),
+    ("can you quote that", "Can you quote that."),
+    ("I'll quote you a price", "I'll quote you a price."),
+    ("quote me on that", "Quote me on that."),
+    ("quote of the day", "Quote of the day."),
+    ("quote unquote experts", "Quote unquote experts."),
+    ("to quote Einstein quote imagination is everything quote",
+     "To quote Einstein “imagination is everything.”"),
+])
+def test_quote_said_as_a_verb_or_a_noun_stays_a_word(said, written):
+    """Not 'I want to " him on that.': "quote" here isn't a quote mark."""
+    assert normalize_text(said) == written
+
+
+def test_a_quotation_starting_with_it_still_pairs():
+    assert normalize_text("he said quote it was fine quote") == \
+        "He said “it was fine.”"
+
 def test_comma_operator_preserved():
     """'comma operator' is a programming term, not a punctuation command."""
     s = "the comma operator in C is useful"

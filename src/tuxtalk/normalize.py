@@ -142,6 +142,19 @@ _CONTEXT_PROTECT_PATTERNS = [
         r"memorable|favorite|powerful|funny|inspiring)\s+quote\b",
         re.IGNORECASE,
     ), r"\1 __LIT_QUOTE__"),
+    # "to quote", "can you quote", "I'll quote": the verb, never the mark
+    # (without this, "I want to quote him on that" typed 'I want to " him').
+    (re.compile(
+        r"\b(to|will|would|can|could|shall|should|may|might|must|ll|never|not|"
+        r"please|did|didn't|don't|won't|can't)(\s+(?:i|you|he|she|we|they))?"
+        r"\s+quote\b",
+        re.IGNORECASE,
+    ), r"\1\2 __LIT_QUOTE__"),
+    # "quote him", "quote of the day", "quote unquote": a person quoted, the
+    # noun, or the idiom. Words that start a quotation ("quote it was")
+    # aren't here, so "he said quote it was fine quote" still pairs.
+    (re.compile(r"\bquote(\s+(?:him|her|them|me|us|of\s+the|unquote)\b)", re.IGNORECASE),
+     r"__LIT_QUOTE__\1"),
 
     # "ended with a question mark", "add a comma": with an article the mark
     # is being talked about, not dictated. Nobody dictates "a question mark"
