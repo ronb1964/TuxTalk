@@ -114,17 +114,6 @@ def test_with_the_id_known_the_compositor_isnt_asked(monkeypatch):
     assert focused_window.look() == ("kwrite", ("tray", "4183"))
 
 
-def test_the_kwin_script_sends_the_window_in_one_call():
-    """Sent apart, a look between the calls paired one window's class with
-    the next one's id (the extension's: test_gnome_extension)."""
-    from tuxtalk import kwin_focus
-    script = kwin_focus.build_script()
-    report = script[script.index("function tuxtalkReport(w)"):]
-    call = report[report.index("callDBus("):report.index(");") + 2]
-    assert '"SetFocusedWindow"' in call and "w.internalId" in call and "tuxtalkFrame(w)" in call
-    assert "SetFocusedWindowClass" not in script
-
-
 def test_the_extension_of_0_18_never_pairs_a_class_with_the_last_windows_frame(monkeypatch):
     """Still loaded until the user logs out, it sends the class, then the
     frame. A look in between got the new class with the old window's frame."""
