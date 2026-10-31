@@ -11,6 +11,7 @@ from tuxtalk import ai_download, hub_pins, model_helper as M, whisper_vulkan
 
 _COMMIT = "f" * 40
 _REPO = "org/model"
+_LOOK_IN_CACHE = huggingface_hub.hf_hub_download
 
 
 def test_every_repository_tuxtalk_downloads_from_is_held_to_a_commit():
@@ -104,6 +105,104 @@ def test_a_model_file_is_checked_against_its_checksum(pinned, monkeypatch, arriv
     if not ok:
         assert not list((pinned / "models--org--model" / "blobs").iterdir())
         assert "damaged" in reports[-1]
+
+
+def _in_cache(monkeypatch):
+    """Whether model.gguf counts as downloaded, asked of the real cache."""
+    from tuxtalk import download_utils
+    monkeypatch.setattr(huggingface_hub, "hf_hub_download", _LOOK_IN_CACHE)
+    return download_utils.cached_hub_file(_REPO, "model.gguf") is not None
+
+
+def _cached_hub(cache, content, checked):
+    """hf_hub_download that finds the file in the cache (or resumes it with
+    every byte already there): no progress reported."""
+    def download(repo_id, filename, tqdm_class, force_download, revision):
+        checked.append(filename)
+        link = cache / "models--org--model" / "snapshots" / revision / filename
+        return str(link if link.exists() else _snapshot(cache, revision, filename, content)[1])
+    return download
+
+
+class _CancelAtTheCheck(threading.Event):
+    """A cancel event set when the download says it's checking a file."""
+
+    def report(self, text, _percent):
+        if text.startswith("Checking"):
+            self.set()
+
+
+def test_a_check_cut_short_leaves_the_file_unused_until_it_is_checked(pinned, monkeypatch):
+    """Cancel while a 3 GB file is being checked, or TuxTalk stopping then:
+    the file is in the cache but unchecked, so it doesn't count as
+    downloaded. The next try checks it without downloading it again, and a
+    file already in the cache with no check owed isn't read again."""
+    import hashlib
+    monkeypatch.setitem(hub_pins.SHA256, (_REPO, "model.gguf"),
+                        hashlib.sha256(b"weights").hexdigest())
+    monkeypatch.setattr(huggingface_hub, "hf_hub_download", _fake_hub(pinned, b"weights", []))
+    cancel = _CancelAtTheCheck()
+    assert M._fetch_files(_REPO, "test", [("model.gguf", 7)], True, cancel.report,
+                          cancel) is False
+    assert not _in_cache(monkeypatch)
+
+    fetched = []
+    monkeypatch.setattr(huggingface_hub, "hf_hub_download",
+                        _cached_hub(pinned, b"weights", fetched))
+    assert M._fetch_files(_REPO, "test", [("model.gguf", 7)], True, lambda *a: None,
+                          threading.Event()) is True
+    assert fetched == ["model.gguf"]
+    assert _in_cache(monkeypatch)
+
+    reports = []
+    monkeypatch.setattr(huggingface_hub, "hf_hub_download",
+                        _cached_hub(pinned, b"weights", fetched))
+    assert M._fetch_files(_REPO, "test", [("model.gguf", 7)], True,
+                          lambda text, percent: reports.append(text), threading.Event()) is True
+    assert not any(text.startswith("Checking") for text in reports)
+
+
+def test_a_resumed_download_that_brings_no_new_bytes_is_still_checked(pinned, monkeypatch):
+    """Cancelled with every byte in: picked up again, Hugging Face finishes
+    the file without reporting any progress."""
+    import hashlib
+    monkeypatch.setitem(hub_pins.SHA256, (_REPO, "model.gguf"),
+                        hashlib.sha256(b"weights").hexdigest())
+
+    def cancelled(repo_id, filename, tqdm_class, force_download, revision):
+        raise InterruptedError("Download cancelled")
+    monkeypatch.setattr(huggingface_hub, "hf_hub_download", cancelled)
+    assert M._fetch_files(_REPO, "test", [("model.gguf", 8)], True, lambda *a: None,
+                          threading.Event()) is False
+    monkeypatch.setattr(huggingface_hub, "hf_hub_download", _cached_hub(pinned, b"tampered", []))
+    reports = []
+    assert M._fetch_files(_REPO, "test", [("model.gguf", 8)], True,
+                          lambda text, percent: reports.append(text), threading.Event()) is False
+    assert "damaged" in reports[-1]
+    assert not _in_cache(monkeypatch)
+
+
+def test_a_damaged_file_in_a_cache_without_links_is_removed_without_a_warning(
+        pinned, monkeypatch, caplog):
+    """With HF_HUB_DISABLE_SYMLINKS the snapshot holds the file itself."""
+    import logging
+    monkeypatch.setitem(hub_pins.SHA256, (_REPO, "model.gguf"), "0" * 64)
+    damaged = pinned / "model.gguf"
+    damaged.write_bytes(b"tampered")
+    with caplog.at_level(logging.WARNING), pytest.raises(M.ChecksumMismatch):
+        M._check_download(_REPO, "model.gguf", str(damaged), threading.Event())
+    assert not damaged.exists() and "Couldn't remove" not in caplog.text
+
+
+def test_a_whisper_model_with_its_check_owed_is_not_downloaded(pinned, monkeypatch):
+    """What the service checks at start, before it loads a model."""
+    from tuxtalk import download_utils
+    monkeypatch.setitem(M.MODEL_REPOS, "small", _REPO)
+    for name in (*M.ESSENTIAL_MODEL_FILES, "vocabulary.txt"):
+        _snapshot(pinned, _COMMIT, name)
+    assert M.is_model_cached_fast("small")
+    download_utils.set_check_owed(_REPO, "model.bin", True)
+    assert not M.is_model_cached_fast("small")
 
 
 def test_whisper_loads_from_the_commit_it_was_downloaded_at(monkeypatch):

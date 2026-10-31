@@ -129,7 +129,7 @@ def is_model_cached_fast(model_name):
     cancelled partway reports False. Safe to call on every Apply/OK click."""
     if is_parakeet(model_name):
         return _parakeet_cached_dir() is not None
-    from .download_utils import cached_hub_snapshot
+    from .download_utils import cached_hub_snapshot, check_owed
     repo_id = MODEL_REPOS.get(model_name)
     snapshot_path = cached_hub_snapshot(repo_id) if repo_id else None
     if snapshot_path is None:
@@ -137,9 +137,11 @@ def is_model_cached_fast(model_name):
     # Offline, snapshot_download does not check completeness: it returns a
     # snapshot holding only config.json just as happily. hf_hub_download
     # links a file into the snapshot only once it has fully downloaded, so
-    # the presence of the files faster-whisper loads means they are complete.
+    # the presence of the files faster-whisper loads means they are complete,
+    # unless the check of their checksum is still owed.
     def has(name):
-        return os.path.isfile(os.path.join(snapshot_path, name))
+        return (os.path.isfile(os.path.join(snapshot_path, name))
+                and not check_owed(repo_id, name))
     return (all(map(has, ESSENTIAL_MODEL_FILES)) and any(map(has, VOCABULARY_FILES))
             and (model_name != "large-v3" or has(PREPROCESSOR_FILE)))
 
@@ -267,7 +269,6 @@ def _fetch_files(repo, model_name, files, all_needed, progress_callback, cancel_
     from huggingface_hub import hf_hub_download
     from huggingface_hub.errors import RemoteEntryNotFoundError
     import tqdm as tqdm_lib
-    from .download_utils import with_retries
     total_bytes = sum(size for _, size in files)
     downloaded_bytes = [0]  # across all files
 
@@ -309,15 +310,12 @@ def _fetch_files(repo, model_name, files, all_needed, progress_callback, cancel_
                                    force_download=force, revision=_revision(repo))
 
         try:
-            path = with_retries(fetch, filename, cancel_event,
-                                give_up_on=(RemoteEntryNotFoundError,))
+            _fetch_and_check(repo, filename, fetch, cancel_event, report,
+                             arrived=lambda before=bytes_before: downloaded_bytes[0] != before)
             # No progress means the file was already cached; count it anyway.
             if downloaded_bytes[0] == bytes_before:
                 downloaded_bytes[0] += file_size
                 report(f"Loaded from cache: {filename}")
-            else:
-                report(f"Checking {filename}...")
-                _check_download(repo, filename, path, cancel_event)
         except InterruptedError:
             return False
         except Exception as e:
@@ -350,19 +348,39 @@ def _fetch_files(repo, model_name, files, all_needed, progress_callback, cancel_
     return True
 
 
+def _fetch_and_check(repo, filename, fetch, cancel_event, report, arrived):
+    """*fetch*() *filename* from *repo*, with retries, then check its SHA256
+    (_check_download) if hub_pins names one and the file *arrived*() now or
+    its check is owed from an earlier try cut short: its file may be in the
+    cache since, or arrive with no new bytes when it's resumed. Raises what
+    the fetch or the check raised."""
+    from huggingface_hub.errors import RemoteEntryNotFoundError
+    from .download_utils import check_owed, set_check_owed, with_retries
+    pinned = (repo, filename) in _HUB_SHA256
+    owed = pinned and check_owed(repo, filename)
+    if pinned:
+        set_check_owed(repo, filename, True)
+    path = with_retries(fetch, filename, cancel_event, give_up_on=(RemoteEntryNotFoundError,))
+    if pinned and (arrived() or owed):
+        report(f"Checking {filename}...")
+        _check_download(repo, filename, path, cancel_event)
+    if pinned:
+        set_check_owed(repo, filename, False)
+
+
 class ChecksumMismatch(Exception):
     """A downloaded file isn't the one its SHA256 in hub_pins names."""
 
 
 def _check_download(repo, filename, path, cancel_event):
-    """Raise ChecksumMismatch when *path*, *filename* just fetched from
-    *repo*, isn't the file hub_pins' SHA256 names, after taking it out of
-    the cache, so that it is never loaded and the next try fetches it
-    again. Files without a SHA256 there pass."""
+    """Raise ChecksumMismatch when *path*, *filename* fetched from *repo*,
+    isn't the file hub_pins' SHA256 names, after taking it out of the cache,
+    so that it is never loaded and the next try fetches it again. A check
+    cut short (InterruptedError, OSError) leaves the file and its owed mark
+    (download_utils.set_check_owed), so it isn't loaded either."""
     import hashlib
-    expected = _HUB_SHA256.get((repo, filename))
-    if expected is None:
-        return
+    from .download_utils import set_check_owed
+    expected = _HUB_SHA256[(repo, filename)]
     sha = hashlib.sha256()
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(1 << 20), b""):
@@ -371,12 +389,13 @@ def _check_download(repo, filename, path, cancel_event):
             sha.update(chunk)
     if sha.hexdigest() == expected:
         return
-    blob = os.path.realpath(path)
-    for gone in (path, blob):
+    # The same path twice without symlinks (HF_HUB_DISABLE_SYMLINKS).
+    for gone in dict.fromkeys((path, os.path.realpath(path))):
         try:
             os.remove(gone)
         except OSError as e:
             logger.warning(f"Couldn't remove the damaged download {gone}: {e}")
+    set_check_owed(repo, filename, False)
     raise ChecksumMismatch(f"{filename} arrived damaged (its checksum doesn't match)")
 
 

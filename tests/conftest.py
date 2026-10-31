@@ -355,6 +355,15 @@ def _no_hub_lookups(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _own_hub_cache(monkeypatch, tmp_path):
+    """An empty Hugging Face cache for each test: what one test's download
+    leaves there (a file, or the mark that its checksum check is owed) must
+    not change what the next one finds."""
+    import huggingface_hub.constants
+    monkeypatch.setattr(huggingface_hub.constants, "HF_HUB_CACHE", str(tmp_path / "hf-cache"))
+
+
+@pytest.fixture(autouse=True)
 def _no_real_kwin(monkeypatch):
     """Never let a test register or release hotkeys in the user's live KWin.
 

@@ -378,13 +378,15 @@ def _cached(lookup, repo, what):
 
 def cached_hub_file(repo: str, filename: str):
     """The local path of *filename* from Hugging Face *repo*, or None when it
-    isn't fully downloaded. Asks only the cache, never the network, for the
-    commit TuxTalk takes *repo* at (hub_pins)."""
+    isn't fully downloaded or its checksum check is still owed. Asks only
+    the cache, never the network, for the commit TuxTalk takes *repo* at
+    (hub_pins)."""
     from huggingface_hub import hf_hub_download
     from .hub_pins import revision
-    return _cached(lambda: hf_hub_download(repo, filename, revision=revision(repo),
-                                           local_files_only=True),
-                   repo, f"{repo}/{filename}")
+    found = _cached(lambda: hf_hub_download(repo, filename, revision=revision(repo),
+                                            local_files_only=True),
+                    repo, f"{repo}/{filename}")
+    return None if found is None or check_owed(repo, filename) else found
 
 
 def cached_hub_snapshot(repo: str):
@@ -428,12 +430,42 @@ def mend_damaged_ref(repo: str) -> None:
             _set_aside_ref(repo, e)
 
 
-def _set_aside_ref(repo, problem):
-    """_set_aside() for *repo*'s refs/main, the only revision TuxTalk asks for."""
+def _repo_folder(repo):
+    """*repo*'s folder in the Hugging Face cache."""
     from huggingface_hub import constants
     from huggingface_hub.file_download import repo_folder_name
-    folder = os.path.join(constants.HF_HUB_CACHE, repo_folder_name(repo_id=repo,
-                                                                   repo_type="model"))
+    return os.path.join(constants.HF_HUB_CACHE, repo_folder_name(repo_id=repo, repo_type="model"))
+
+
+# A mark beside a model file whose SHA256 check (model_helper) is still owed.
+# Hugging Face puts a file in the cache before it can be checked, so the mark
+# is made before the file is fetched and removed once it passes: a file whose
+# check was cut short (cancelled, a read error, TuxTalk stopped meanwhile)
+# then counts as not downloaded, and the next download checks it again.
+def _check_mark(repo, filename):
+    return os.path.join(_repo_folder(repo), "tuxtalk-unchecked", filename.replace("/", "%"))
+
+
+def set_check_owed(repo: str, filename: str, owed: bool) -> None:
+    """Mark *filename* from *repo* as waiting for its check, or as checked."""
+    mark = _check_mark(repo, filename)
+    if owed:
+        os.makedirs(os.path.dirname(mark), exist_ok=True)
+        with open(mark, "w"):
+            pass
+    else:
+        with contextlib.suppress(FileNotFoundError):
+            os.remove(mark)
+
+
+def check_owed(repo: str, filename: str) -> bool:
+    """Whether *filename* from *repo* arrived without its check finishing."""
+    return os.path.exists(_check_mark(repo, filename))
+
+
+def _set_aside_ref(repo, problem):
+    """_set_aside() for *repo*'s refs/main, the only revision TuxTalk asks for."""
+    folder = _repo_folder(repo)
     _set_aside(os.path.join(folder, "refs", "main"), os.path.join(folder, "damaged-refs"),
                problem)
 
