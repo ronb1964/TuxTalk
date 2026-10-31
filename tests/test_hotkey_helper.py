@@ -91,14 +91,14 @@ def setup(tmp_path, monkeypatch):
     def connect():
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         sock.connect(helper.socket_path)
-        sock.settimeout(0.05)
+        sock.settimeout(0)          # the helper answers before recv: no wait
         clients.append(sock)
         spin()
         return sock
 
     def spin(times=4):
         for _ in range(times):
-            helper.run_once(timeout=0.01)
+            helper.run_once(timeout=0)
 
     def say(sock, line):
         sock.sendall(line.encode() + b"\n")
@@ -365,7 +365,7 @@ def test_a_line_too_long_ends_the_connection(setup):
     sock = connect()
     sock.sendall(b"X" * (hh.MAX_LINE + 10))
     for _ in range(4):
-        helper.run_once(timeout=0.01)
+        helper.run_once(timeout=0)
     assert helper.clients == {}
 
 
@@ -556,7 +556,7 @@ def test_a_connection_that_never_says_hello_is_dropped(setup, monkeypatch):
     connect()
     assert len(helper.clients) == 1
     time.sleep(0.1)
-    helper.run_once(timeout=0.01)
+    helper.run_once(timeout=0)
     assert helper.clients == {}
 
 
@@ -985,7 +985,7 @@ def test_everyone_waiting_is_let_in_at_once(setup):
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         sock.connect(helper.socket_path)
         socks.append(sock)
-    helper.run_once(timeout=0.01)
+    helper.run_once(timeout=0)
     assert len(helper.clients) == 5
     for sock in socks:
         sock.close()

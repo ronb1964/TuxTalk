@@ -5,7 +5,9 @@ grab code around it) against a real helper over a real socket, with a fake
 keyboard underneath, to show the helper can stand in for the keyboards
 without changing what hold, Shift+hold and the safety nets do.
 """
+import os
 import socket
+import threading
 
 import pytest
 
@@ -43,7 +45,6 @@ def test_a_combo_the_helper_wont_report_is_named():
 @pytest.fixture
 def rig(tmp_path, monkeypatch):
     seat = tmp_path / "seat0"
-    import os
     seat.write_text(f"ACTIVE_UID={os.getuid()}\n")
     (tmp_path / "input").mkdir()
     helper = hh.Helper(socket_dir=str(tmp_path), seat_file=str(seat),
@@ -55,7 +56,6 @@ def rig(tmp_path, monkeypatch):
 
     client = HelperKeyboard(helper.socket_path)
     # connect() waits for HELLO's answer, which needs the helper to run.
-    import threading
     answered = threading.Event()
 
     def serve():
@@ -68,7 +68,7 @@ def rig(tmp_path, monkeypatch):
     t.join()
     client.watch(["66", "67", "1"])
     for _ in range(3):
-        helper.run_once(timeout=0.01)       # the helper takes the WATCH in
+        helper.run_once(timeout=0)          # the helper takes the WATCH in
     client.active_keys()                    # and TuxTalk its OK
 
     calls = []
@@ -99,8 +99,8 @@ def rig(tmp_path, monkeypatch):
     def loop(times=3, hold=F8):
         """What hotkeys.run does each pass, for the helper's one 'keyboard'."""
         for _ in range(times):
-            helper.run_once(timeout=0.01)
-            for dev in keyboard_devices.devices_with_events([client], 0.01):
+            helper.run_once(timeout=0)
+            for dev in keyboard_devices.devices_with_events([client], 0):
                 try:
                     events = list(dev.read())
                 except BlockingIOError:
@@ -115,6 +115,9 @@ def rig(tmp_path, monkeypatch):
     yield helper, kb, client, loop, calls
     client.close()
     helper.listener.close()
+    kb.close()
+    os.close(kb.w)
+    FakeKeyboard.made.remove(kb)
 
 
 def test_holding_the_dictation_key_records_and_hides_it(rig):
@@ -174,29 +177,15 @@ def test_if_the_helper_goes_away_a_held_key_is_let_go(rig):
     loop()
     for c in list(helper.clients.values()):
         helper.drop_client(c)            # helper restarted
-    for _ in range(3):
-        for dev in keyboard_devices.devices_with_events([client], 0.01):
-            try:
-                events = list(dev.read())
-            except BlockingIOError:
-                continue
-            for event in events:
-                if not keyboard_grab.is_own_injected_event(dev, event):
-                    hotkeys._handle_key_event(event, F8, F9, None, set(),
-                                          [client], type("C", (), {"beeps": True, "notify": True,
-                                                                    "smart_quotes": True, "language": "",
-                                                                    "auto_space": True, "auto_period": True,
-                                                                    "injection_mode": "type"}), None)
+    loop()
     assert calls == [("start", False), ("stop",)]
     assert helper.hide is None           # and the keyboards were given back
-
 
 
 def test_after_the_helper_restarts_the_dictation_keys_work_again(rig):
     """Updating the hotkey helper restarts it, and dictation isn't restarted
     with it (a dictation under way would be lost; update_offers.update_helper):
     the connection must come back by itself and watch its keys again."""
-    import threading
     helper, kb, client, loop, calls = rig
     for c in list(helper.clients.values()):
         helper.drop_client(c)                   # the helper restarted
@@ -231,7 +220,7 @@ def right_ctrl(rig, keyboard, monkeypatch):
     helper, kb, client, loop, calls = rig
     client.watch([str(RCTRL), "67", "1"])
     for _ in range(3):
-        helper.run_once(timeout=0.01)
+        helper.run_once(timeout=0)
     client.active_keys()
     for name, value in (("_noted", ([], frozenset())), ("_hidden", (frozenset(), ())),
                         ("_stuck", set()), ("time", keyboard.clock)):
@@ -278,7 +267,7 @@ def test_typing_waits_for_the_helper_to_say_the_hold_key_is_hidden(rig, right_ct
 
         def sleep(self, seconds):
             typed_while_waiting.append(list(keyboard.events))
-            helper.run_once(timeout=0.01)
+            helper.run_once(timeout=0)
             self.now += seconds
     monkeypatch.setattr(modifier_hotkeys, "time", HelperAnswersMeanwhile())
     assert right_ctrl()
@@ -290,7 +279,7 @@ def test_typing_waits_for_the_helper_to_say_the_hold_key_is_hidden(rig, right_ct
 def test_events_taken_in_early_are_read_without_waiting(rig):
     helper, kb, client, loop, calls = rig
     kb.press(F8)
-    helper.run_once(timeout=0.01)
+    helper.run_once(timeout=0)
     client.active_keys()                 # takes the DOWN in, as _grab_keyboards_hiding does
     assert client.needs_service()
     assert keyboard_devices.devices_with_events([client], 5.0) == [client]
@@ -365,14 +354,17 @@ def test_an_answer_out_of_step_isnt_taken_as_a_hide(tmp_path, caplog):
     must not let typing go on under a key the helper never hid."""
     from collections import deque
     client = HelperKeyboard(str(tmp_path / "helper.sock"))
-    client.asked = deque(["HIDE"])
-    with caplog.at_level("WARNING", logger="tuxtalk.hotkey_helper_client"):
-        client._handle(["OK", "WATCH"])
-    assert client.hidden is False
-    assert "answered OK WATCH to HIDE" in caplog.text
-    client.asked = deque(["HIDE"])
-    client._handle(["OK", "HIDE"])
-    assert client.hidden is True
+    try:
+        client.asked = deque(["HIDE"])
+        with caplog.at_level("WARNING", logger="tuxtalk.hotkey_helper_client"):
+            client._handle(["OK", "WATCH"])
+        assert client.hidden is False
+        assert "answered OK WATCH to HIDE" in caplog.text
+        client.asked = deque(["HIDE"])
+        client._handle(["OK", "HIDE"])
+        assert client.hidden is True
+    finally:
+        client.close()
 
 
 def test_a_grab_with_nothing_let_up_hides_nothing(tmp_path):
