@@ -471,7 +471,7 @@ class VulkanWhisperModel:
                     raise RuntimeError("the graphics engine stopped while starting"
                                        + engine_process.launch_failure(self._proc.returncode,
                                                                        output))
-                if engine_process.answers(self._port):
+                if engine_process.answers(self._port, self._proc.pid):
                     break
                 time.sleep(0.25)
             else:

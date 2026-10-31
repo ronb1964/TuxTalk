@@ -131,7 +131,7 @@ def test_a_warm_up_without_an_answer_is_logged(monkeypatch, caplog):
     import logging
     e = ai_server.AIServer(warm_up=ASKED)
     e._proc, e._port = _Proc(), 1234
-    monkeypatch.setattr(engine_process, "answers", lambda port: True)
+    monkeypatch.setattr(engine_process, "answers", lambda port, pid: True)
     monkeypatch.setattr(e, "_post", lambda *a, **k: None)
     with caplog.at_level(logging.INFO, logger=ai_server.logger.name):
         e._wait_until_ready(e._proc, _no_output(), limit=1)
@@ -146,7 +146,7 @@ def test_a_stop_during_the_warm_up_logs_no_warning(monkeypatch, caplog):
     e = ai_server.AIServer(warm_up=ASKED)
     starting = _Proc()
     e._proc, e._port = starting, 1234
-    monkeypatch.setattr(engine_process, "answers", lambda port: True)
+    monkeypatch.setattr(engine_process, "answers", lambda port, pid: True)
 
     def stopped_meanwhile(*a, **k):
         e._proc = None
@@ -194,7 +194,7 @@ def _failed_start(dead_engine, monkeypatch, starting):
     never answering."""
     dead_engine._proc = starting
     dead_engine._ready.clear()
-    monkeypatch.setattr(engine_process, "answers", lambda port: False)
+    monkeypatch.setattr(engine_process, "answers", lambda port, pid: False)
     ai_server.AIServer._wait_until_ready(dead_engine, starting, _no_output(), limit=0.3)
 
 

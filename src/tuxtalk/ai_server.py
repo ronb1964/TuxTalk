@@ -105,7 +105,7 @@ class AIServer:
                 self._start_failed(proc, "AI engine exited during startup"
                                    + engine_process.launch_failure(proc.returncode, output))
                 return
-            if not engine_process.answers(self._port):
+            if not engine_process.answers(self._port, proc.pid):
                 time.sleep(0.25)
                 continue
             started = time.time()

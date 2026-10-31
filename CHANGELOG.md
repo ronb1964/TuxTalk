@@ -453,6 +453,11 @@ before 0.15.0, so older entries use that name.
   weak graphics chip), AI corrections and voice editing stayed off for the
   rest of the session, while the AI kept its memory. TuxTalk now stops it
   and tries again a minute later, up to three times.
+- On a computer shared with other people, another user's program could
+  take the spot TuxTalk's graphics engine or AI was about to use, before
+  the engine got there. TuxTalk would then have sent it what you said, and
+  typed whatever it answered. TuxTalk now checks the engine it's talking to
+  is the one it started.
 
 ## [0.18.2] - 2026-10-23
 
