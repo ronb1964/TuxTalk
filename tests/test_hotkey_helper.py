@@ -746,6 +746,26 @@ def test_a_real_keyboard_given_uaccess_later_cant_lend_its_modifiers(setup):
     assert other.group == "own:13:70"
 
 
+def test_modifiers_pressed_while_writable_dont_count_once_it_turns_real(setup):
+    """A keyboard udev hadn't finished with (or whose "uaccess" rule went)
+    turns real: a Ctrl and Alt a program could have pressed on it before
+    mustn't unlock keys on the other real keyboards."""
+    helper, kb, connect, say, heard, _seat = setup
+    kb.group = "real"
+    other = FakeKeyboard("/dev/input/event-other")      # own:, writable
+    helper.keyboards[other.path] = other
+    sock = _ready(connect, say, heard, "CA:30")
+    other.press(LCTRL)
+    other.press(LALT)
+    assert heard(sock) == []
+    other.udev_says = "real"
+    helper.next_scan = 0
+    assert heard(sock) == []
+    assert other.group == "real"
+    kb.press(A)
+    assert heard(sock) == []
+
+
 def test_a_scan_lets_go_of_modifiers_from_a_keyboard_that_became_writable(setup):
     """Told of a shortcut with the real keyboards' Ctrl and Alt, then one of
     them gets "uaccess": the client hears them let go (or it would wait for

@@ -168,3 +168,15 @@ def test_the_helper_the_test_reads_through_answers_for_itself(monkeypatch):
     assert htk.service_hears([_Helper("1.4")], "Right Alt") is False
     assert htk.service_hears([_Helper("1.5")], "Right Alt") is True
     assert htk.service_hears([], "F8") is False
+
+
+def test_a_stopped_hotkey_helper_doesnt_let_the_test_say_working(tmp_path):
+    """Installed but stopped: the test reads through it (it keeps trying),
+    and GTK still sees F8, but the service hears nothing until it answers."""
+    from tuxtalk.hotkey_helper_client import HelperKeyboard
+    stopped = HelperKeyboard(str(tmp_path / "not-there.sock"))
+    try:
+        assert not stopped.connected
+        assert htk.service_hears([stopped], "F8") is False
+    finally:
+        stopped.close()

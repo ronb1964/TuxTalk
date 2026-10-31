@@ -262,6 +262,12 @@ class HelperKeyboard:
             self._pump()
             return sorted(self.held)
 
+    @property
+    def connected(self):
+        """Whether the helper is answering now; while it isn't, no key is
+        heard through it (it's tried again every second)."""
+        return self.sock is not None
+
     def held_now(self):
         """The keys the helper last said are down, without asking it again
         or reconnecting, so nothing waits: None while it isn't connected, or
@@ -329,18 +335,22 @@ class HelperKeyboard:
 
 
 def connect_helper(path=None):
-    """A HelperKeyboard when the helper is installed or running, or None
-    when neither (TuxTalk then reads the keyboards itself, as before).
+    """A HelperKeyboard when the helper is running, or installed and this
+    user can't open a keyboard; else None (TuxTalk then reads the keyboards
+    itself, as before).
 
     A helper that doesn't answer at once (restarting, stopped, or this
     session isn't the one at the screen yet) is still used: the
     HelperKeyboard keeps trying every second, so Update in System check
-    brings the hotkeys back without a restart. Falling back for good would
-    leave them dead until TuxTalk restarts: with the helper installed the
-    user is normally not in the input group, so no keyboard opens here."""
-    from . import secure_input
+    brings the hotkeys back without a restart. With the helper installed
+    the user is normally out of the input group, and reading the keyboards
+    here would leave the hotkeys dead until TuxTalk restarts. Someone still
+    in it (they kept the group when switching, or couldn't leave it) reads
+    them as before while the helper's socket isn't there."""
+    from . import secure_input, uinput_helper
     path = path or socket_path()
-    if not os.path.exists(path) and not secure_input.is_installed():
+    if not os.path.exists(path) and (not secure_input.is_installed()
+                                     or uinput_helper._readable_keyboards()):
         return None
     keyboard = HelperKeyboard(path)
     if not keyboard.connect():

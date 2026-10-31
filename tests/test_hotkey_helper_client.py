@@ -304,11 +304,23 @@ def test_an_installed_helper_whose_socket_isnt_there_yet_is_still_used(tmp_path,
     """Stopped, or restarting just as dictation starts: systemd removes its
     folder. Once System check's Update starts it again, the hotkeys work
     without a restart, as it says."""
-    from tuxtalk import secure_input
+    from tuxtalk import secure_input, uinput_helper
     monkeypatch.setattr(secure_input, "is_installed", lambda: True)
+    monkeypatch.setattr(uinput_helper, "_readable_keyboards", lambda: [])
     keyboard = connect_helper(str(tmp_path / "not-yet.sock"))
     assert keyboard is not None and keyboard.sock is None
     keyboard.close()
+
+
+def test_someone_still_in_the_input_group_reads_the_keyboards_while_the_helper_is_down(
+        tmp_path, monkeypatch):
+    """They kept the group when switching to the helper, or couldn't leave
+    it: their hotkeys work either way, as System check tells them, so a
+    stopped helper mustn't leave them with none."""
+    from tuxtalk import secure_input, uinput_helper
+    monkeypatch.setattr(secure_input, "is_installed", lambda: True)
+    monkeypatch.setattr(uinput_helper, "_readable_keyboards", lambda: ["/dev/input/event3"])
+    assert connect_helper(str(tmp_path / "not-yet.sock")) is None
 
 
 def test_a_helper_that_doesnt_answer_yet_is_tried_again(tmp_path):
