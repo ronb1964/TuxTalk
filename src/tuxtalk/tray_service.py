@@ -294,7 +294,8 @@ class ServiceLifecycle:
             done = uninstall.run(uninstall.TrayParts(
                 stop=self._stop_taking_actions, resume=self._resume_after_uninstall,
                 shut_down=self._shut_down_for_uninstall,
-                preferences_open=self._preferences_open))
+                preferences_open=self._preferences_open,
+                dictation_on=lambda: self._dictation_on))
         finally:
             self._uninstalling = False
         if done:

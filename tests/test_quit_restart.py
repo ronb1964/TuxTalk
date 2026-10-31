@@ -326,10 +326,12 @@ def test_uninstall_waits_for_the_service_while_its_window_draws(slow_service, mo
     assert len(ticks) >= 3 and slow_service.waited_on[0] is not threading.main_thread()
 
 
-def test_uninstall_stops_the_tray_and_service_before_the_root_step(monkeypatch):
+@pytest.mark.parametrize("dictation_on", [True, False])
+def test_uninstall_stops_the_tray_and_service_before_the_root_step(monkeypatch, dictation_on):
     """A restart queued in the tray started a new service while the package
     was being removed; cancelled at the password prompt, everything is as
-    it was, dictation included."""
+    it was, dictation included. A service still typing after Dictation off
+    isn't started again: that turned Dictation back on."""
     from tuxtalk import uninstall
     order = []
     monkeypatch.setattr(uninstall.installation, "get_install_type", lambda: "deb")
@@ -347,11 +349,12 @@ def test_uninstall_stops_the_tray_and_service_before_the_root_step(monkeypatch):
     tray = uninstall.TrayParts(stop=lambda: order.append("tray stops"),
                                resume=lambda: order.append("tray resumes"),
                                shut_down=lambda: order.append("tray shuts down"),
-                               preferences_open=lambda: False)
+                               preferences_open=lambda: False,
+                               dictation_on=lambda: dictation_on)
     monkeypatch.setattr(uninstall, "_close_preferences", lambda: True)
     assert uninstall.run(tray) is False
-    assert order == ["tray stops", "service ends", "root step", "tray resumes",
-                     "dictation back on"]
+    assert order == ["tray stops", "service ends", "root step", "tray resumes"] + (
+        ["dictation back on"] if dictation_on else [])
 
 
 def test_a_restart_finishing_after_dictation_off_starts_nothing(slow_service):
