@@ -600,7 +600,8 @@ def test_a_restarted_server_outlives_the_short_lived_thread_that_restarted_it(fa
         results = []
         t = threading.Thread(target=lambda: results.append(model.transcribe(np.zeros(16000, np.float32))))
         t.start()
-        t.join()                                   # restarted the server, then ended
+        t.join(30)                                # restarted the server, then ended
+        assert not t.is_alive()
         assert results == [("hello", 0.0)]
         restarted = model._proc
         time.sleep(0.3)

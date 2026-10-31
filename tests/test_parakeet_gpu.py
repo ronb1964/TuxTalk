@@ -194,7 +194,8 @@ def test_a_restart_on_a_short_lived_thread_outlives_that_thread(fake):
         results = []
         t = threading.Thread(target=lambda: results.append(model.recognize(_audio(2))))
         t.start()
-        t.join()                                  # restarted the helper, then ended
+        t.join(30)                                # restarted the helper, then ended
+        assert not t.is_alive()
         assert results == ["32000 samples"]
         assert model._proc.poll() is None         # still running
         assert model.recognize(_audio(3)) == "48000 samples"
