@@ -539,6 +539,13 @@ def test_typing_that_waited_goes_on_where_it_was_going(keyboard, no_hotkeys_note
     assert keyboard.typed_keys() == [ecodes.KEY_A]
 
 
+def _send_to_kwrite():
+    """A send counting down to Enter in KWrite, as send_countdown keeps it."""
+    return {"to": focused_window.Destination(*KWRITE), "why": "test",
+            "press": keyboard_output.press_key, "space": "", "mode": "type",
+            "timer": None, "ticks": []}
+
+
 def test_a_tap_while_a_due_send_waits_for_right_ctrl_still_holds_it(keyboard, no_hotkeys_noted,
                                                                     monkeypatch):
     """The send stays pending while it waits: the tap of a Right Ctrl toggle
@@ -553,8 +560,7 @@ def test_a_tap_while_a_due_send_waits_for_right_ctrl_still_holds_it(keyboard, no
             held.append(send_countdown.hold(announce=True))
         return look <= 3
     modifier_hotkeys.note([Keyboard(pressed)], ecodes.KEY_F8, RCTRL)
-    pending = {"to": focused_window.Destination(*KWRITE), "why": "test",
-               "press": keyboard_output.press_key, "space": "", "mode": "type", "timer": None, "ticks": []}
+    pending = _send_to_kwrite()
     monkeypatch.setattr(send_countdown, "_cancel_timers", lambda pending: None)
     send_countdown._pending = pending
     send_countdown._send(pending)
@@ -569,8 +575,7 @@ def due_send(keyboard, no_hotkeys_noted, monkeypatch):
     monkeypatch.setattr(focused_window, "look", lambda: KWRITE)
     monkeypatch.setattr(send_countdown, "_cancel_timers", lambda pending: None)
     monkeypatch.setattr("time.sleep", lambda s: None)
-    pending = {"to": focused_window.Destination(*KWRITE), "why": "test",
-               "press": keyboard_output.press_key, "space": "", "mode": "type", "timer": None, "ticks": []}
+    pending = _send_to_kwrite()
     send_countdown._pending = pending
 
     def fire(pressed):
