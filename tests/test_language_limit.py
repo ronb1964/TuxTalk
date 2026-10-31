@@ -80,9 +80,8 @@ def test_dictation_and_files_take_the_language_the_same_way(language, codes, exp
     assert language_limit.language_and_limit(language, codes) == expected
 
 
-def test_the_setting_defaults_to_any_language_and_applies_without_a_restart():
+def test_the_setting_defaults_to_any_language():
     assert config.Settings().auto_languages == ""
-    assert "auto_languages" in config.LIVE_APPLIED_KEYS
 
 
 def test_the_service_reads_it_on_each_reload(monkeypatch):

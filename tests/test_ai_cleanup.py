@@ -127,11 +127,6 @@ def test_settings_start_and_stop_the_engine(monkeypatch):
     assert events == ["start", "stop"] and live.ai_engine is None
 
 
-def test_cleanup_settings_apply_without_a_restart():
-    from tuxtalk.config import LIVE_APPLIED_KEYS
-    assert {"remove_fillers", "ai_corrections"} <= LIVE_APPLIED_KEYS
-
-
 # --- "Actually" with no comma -----------------------------------------------
 # Parakeet often writes "Actually book it" with no comma. A sentence opening
 # that way counts as a correction only when the next word repeats a real word

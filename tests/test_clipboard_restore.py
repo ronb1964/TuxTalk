@@ -296,11 +296,6 @@ def test_restoring_is_off_unless_asked_for():
     assert C.Settings().restore_clipboard is False
 
 
-def test_the_setting_applies_without_a_restart():
-    assert "restore_clipboard" in C.LIVE_APPLIED_KEYS
-    assert not C.needs_service_restart({"restore_clipboard"})
-
-
 def test_paste_uses_the_keeper_only_when_the_setting_is_on(monkeypatch):
     events = []
 

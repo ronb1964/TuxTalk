@@ -46,14 +46,14 @@ def test_pause_test_counts_the_cuts():
 
 
 def test_pause_test_at_48k():
-    """Review focus 3: the test runs at the mic's native rate."""
+    """The test runs at the mic's native rate, not only at 16 kHz."""
     from tuxtalk.chunk_meter import PauseTest
     test = PauseTest(48000, 0.8, 6.0)
     assert feed_all(test, two_pauses(48000), block=960) == 2
 
 
 def test_configure_mid_test_keeps_the_count_and_applies():
-    """Review focus 1: moving a slider rebuilds the detector at once; the count
+    """Moving a slider rebuilds the detector at once; the count
     carries on, and the new value is what decides from then on."""
     from tuxtalk.chunk_meter import PauseTest
     test = PauseTest(SR, 0.8, 6.0)

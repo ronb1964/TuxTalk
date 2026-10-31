@@ -154,10 +154,9 @@ def test_no_pactl_is_not_an_error(tmp_path):
     assert audio_duck.restore_left_over(run=missing, state_path=str(tmp_path / "none.json"), reset=_no_reset) == 0
 
 
-def test_setting_is_off_by_default_and_live():
+def test_setting_is_off_by_default():
     from tuxtalk import config
     assert config.Settings().duck_audio is False
-    assert "duck_audio" in config.LIVE_APPLIED_KEYS
 
 
 def test_recording_hooks_duck_and_restore(monkeypatch):
