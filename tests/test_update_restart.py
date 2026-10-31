@@ -14,6 +14,7 @@ truncated AppImage there after a quit or reboot mid-copy.
 import os
 import pathlib
 import shutil
+import time
 import types
 
 import pytest
@@ -364,17 +365,33 @@ def test_the_new_copy_starts_only_once_the_old_tray_has_gone(tmp_path):
     """The old tray waits for its service to finish typing (up to 40 s); the
     script started the new copy after 10 s regardless, which found the old
     lock, exited, and left nothing running. Run for real, against a stand-in
-    old tray."""
+    old tray that stays until the test lets it go, with a sleep that only
+    counts: 25 half-second waits are 12.5 s of the script's own time."""
     import subprocess
-    old = subprocess.Popen(["sleep", "11"])     # past the old script's 10 s
+    stubs = tmp_path / "bin"
+    stubs.mkdir()
+    waits = tmp_path / "waits"
+    (stubs / "sleep").write_text(f"#!/bin/sh\necho >> {waits}\n")
+    (stubs / "sleep").chmod(0o755)
     marker = tmp_path / "new-copy-started"
-    script = subprocess.Popen(["/bin/sh", "-c",
-                               update_install.handover_script(old.pid, f"touch {marker}")])
-    with pytest.raises(subprocess.TimeoutExpired):
-        script.wait(timeout=10.5)               # still waiting for the old tray
-    assert not marker.exists() and old.poll() is None
-    old.wait()
-    assert script.wait(timeout=5) == 0 and marker.exists()
+    old = subprocess.Popen(["/bin/sleep", "60"])
+    script = subprocess.Popen(
+        ["/bin/sh", "-c", update_install.handover_script(old.pid, f"touch {marker}")],
+        env={**os.environ, "PATH": f"{stubs}:{os.environ['PATH']}"})
+    try:
+        deadline = time.monotonic() + 10
+        while (not waits.exists() or len(waits.read_text()) < 25) \
+                and script.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert len(waits.read_text()) >= 25     # still waiting for the old tray
+        assert script.poll() is None and not marker.exists()
+        old.kill()
+        old.wait()
+        assert script.wait(timeout=5) == 0 and marker.exists()
+    finally:
+        for proc in (old, script):
+            proc.kill()
+            proc.wait()
 
 
 def test_restart_starts_the_appimage_after_this_process_exits(tmp_path, monkeypatch):
