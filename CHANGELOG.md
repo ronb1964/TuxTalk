@@ -5,6 +5,14 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- With Type at pause, a short word said after a pause, like "yes", was
+  lost if you stayed quiet for a moment before letting go of the key (or
+  before hands-free stopped). TuxTalk took it for a cough and threw it away.
+  It's typed now, though in a noisy room it can still be missed now and
+  then. The last word after a pause could also be lost when you let go of
+  the key just as you said it. The flip side: a cough or a creaking chair
+  after the last pause now reaches the speech engine too, and once in a
+  while it types a "Yeah." for it.
 - When the sound system stopped answering and a microphone stream couldn't
   be closed, the sound it kept sending also went into your next dictation,
   which could garble its start. Each dictation only takes its own

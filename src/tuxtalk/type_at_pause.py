@@ -35,9 +35,10 @@ from .window_classes import app_kind, is_document_window
 
 logger = setup_logger(__name__)
 
-# Chunked dictation (chunking.py). The audio callback adds blocks and cuts
-# chunks, and the stop takes the rest; this lock keeps a block or a cut from
-# landing in frames the stop has already taken.
+# Chunked dictation (chunking.py). The audio callback adds blocks, has the
+# pause detector hear them and cuts chunks, and the stop takes the rest; this
+# lock keeps a block or a cut from landing in frames the stop has already
+# taken, and the stop from reading the detector between a block and its count.
 chunk_lock = threading.Lock()
 
 # Transcribes and types a phrase: pipeline.transcribe_and_inject, handed over
@@ -57,29 +58,28 @@ def use_transcriber(step: Callable[..., None]) -> None:
 
 def cut_chunk(rec, chunker):
     """The speaker paused: hand the audio of recording *rec* so far to the
-    dictation worker.
+    dictation worker. *chunker* is its pause detector, which just heard it.
 
-    Runs on the audio thread, so it only swaps a list and queues a job; the
-    transcription happens on the worker."""
-    with chunk_lock:
-        if rec.chunker is not chunker:
-            return  # the recording ended while this block was arriving
-        frames, rec.frames = rec.frames, []
-        chunking.drop_tail_samples(frames, chunker.tail_samples())
-        rec.chunks_submitted += 1
-        number, rec_sr, message = rec.chunks_submitted, rec.samplerate, rec.message
-        pause = chunker.last_pause
-        # Hands-free's "stop when quiet" waits from now until the phrase is
-        # typed: it can wait its turn behind the last dictation, and an AI
-        # rewrite can take seconds, while the user reads rather than talks.
-        detector = rec.silence
-        if detector is not None:
-            detector.hold()
-        # Queued before the lock is let go: otherwise the stop could slip in
-        # between counting this chunk and queuing it, and queue the last chunk
-        # ahead of it. put() on the unbounded queue never blocks.
-        dictation_worker.submit(lambda: _transcribe_chunk(
-            frames, rec_sr, number, pause, message, detector))
+    Called with chunk_lock held, by the audio callback, which keeps it from
+    adding the block and hearing it until the cut is queued. So it only
+    swaps a list and queues a job, nothing that can wait; the transcription
+    happens on the worker."""
+    frames, rec.frames = rec.frames, []
+    chunking.drop_tail_samples(frames, chunker.tail_samples())
+    rec.chunks_submitted += 1
+    number, rec_sr, message = rec.chunks_submitted, rec.samplerate, rec.message
+    pause = chunker.last_pause
+    # Hands-free's "stop when quiet" waits from now until the phrase is
+    # typed: it can wait its turn behind the last dictation, and an AI
+    # rewrite can take seconds, while the user reads rather than talks.
+    detector = rec.silence
+    if detector is not None:
+        detector.hold()
+    # Queued before the lock is let go: otherwise the stop could slip in
+    # between counting this chunk and queuing it, and queue the last chunk
+    # ahead of it. put() on the unbounded queue never blocks.
+    dictation_worker.submit(lambda: _transcribe_chunk(
+        frames, rec_sr, number, pause, message, detector))
 
 
 def _transcribe_chunk(frames, rec_sr, number, pause, message, detector):

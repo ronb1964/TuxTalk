@@ -185,13 +185,37 @@ def trim_auto_stop_tail(rec, frames):
 
 
 def drop_speechless_rest(rec, frames):
-    """The audio after *rec*'s last cut, or none when the pause detector
-    heard no speech in it: room noise longer than the tap check would
-    otherwise reach the engine, which invents a word for it ("Yeah.")."""
-    if rec.last_chunk_speech == 0.0:
-        logger.info("No speech after the last chunk; the rest isn't transcribed")
-        return []
-    return frames
+    """The audio after *rec*'s last cut, *frames*, or none when the stop
+    found no speech in it (finish_capture, _rest_holds_speech)."""
+    if rec.rest_has_speech:
+        return frames
+    logger.info("No speech after the last chunk; the rest isn't transcribed")
+    return []
+
+
+def _rest_holds_speech(chunker, frames, rate) -> bool:
+    """Whether the audio after pause detector *chunker*'s last cut, *frames*
+    at *rate* as recorded, holds speech. Room noise there would otherwise
+    reach the engine, which invents a word for it ("Yeah.").
+
+    Talking the stop cut short (heard since the last pause) is kept, as it
+    always was, and so is a phrase's worth (chunking.MIN_SPEECH_S). Less,
+    with a pause after it, is a short word ("yes"), a click, a cough or a
+    creak: kept when it holds a word's worth of sound (silence.has_a_word,
+    the tap check), judged against the whole rest, so before hands-free's
+    quiet end is trimmed (that quiet is the room the word stands out from).
+    Simulated, that kept every short word in a quiet room and 98% or more
+    in a noisy one, and every rest the rule before it sent. In a quiet room
+    it left out two thirds of the clicks and half the knocks the detector
+    counted with hands-free, two fifths of each with the hotkey (a click
+    just before the key comes up counts as talking cut short). A cough, a
+    breath or a creak passes, and Parakeet types a word ("Yeah.", "Okay.")
+    for 2 to 3% of those in a quiet room, about 10% in a noisy one: a known
+    limit (CODE_HEALTH.md), as the hallucination filter can't take the
+    words a short answer is made of."""
+    if chunker.speech_time > 0.0 or chunker.speech_since_cut >= chunking.MIN_SPEECH_S:
+        return True
+    return chunker.speech_since_cut > 0.0 and silence.has_a_word(frames_f32(frames), rate)
 
 
 def frames_f32(frames):
@@ -247,11 +271,13 @@ def _sd_callback(rec, indata, frames_count, time_info, status):
         if rec.captured:
             return          # finish_capture has taken its audio
         rec.frames.append(block)
-
-    # Chunked dictation: at a pause, the phrase so far goes off to be typed.
-    chunker = rec.chunker
-    if chunker is not None and chunker.feed(indata):
-        type_at_pause.cut_chunk(rec, chunker)
+        # Type at pause: at a pause, the phrase so far goes off to be typed.
+        # The detector hears the block under the lock too, so a stop never
+        # takes a word's audio before its speech is counted: the rest would
+        # be thrown away as speechless (drop_speechless_rest).
+        chunker = rec.chunker
+        if chunker is not None and chunker.feed(indata):
+            type_at_pause.cut_chunk(rec, chunker)
 
     # Hands-free auto-stop: when the speaker has finished, ask the service
     # loop to stop it, exactly as a second press of the toggle key would.
@@ -448,9 +474,13 @@ def finish_capture(rec, beeps_on: bool, notify_on: bool):
         # and a callback still under way adds nothing to it.
         rec.captured = True
         chunker, rec.chunker = rec.chunker, None
-        rec.last_chunk_speech = chunker.speech_time if chunker is not None else None
         frames = rec.frames
-    if chunker is not None and not rec.chunks_submitted:
+    # The callback adds and hears nothing now, so the detector is read
+    # outside the lock; before the trim below, which would take the quiet
+    # the last word is judged against.
+    if chunker is not None and rec.chunks_submitted:
+        rec.rest_has_speech = _rest_holds_speech(chunker, frames, rec.samplerate)
+    elif chunker is not None:
         logger.info(f"Chunked dictation: no pause found ({chunker.describe()})")
     rs.state.is_recording = False
     stop_stream_safely(rec)
