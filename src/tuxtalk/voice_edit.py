@@ -156,14 +156,14 @@ def _format_selection(fmt, focused_class, window, beeps_on) -> bool:
     return True
 
 
-def _nothing_selected(get_instruction, spoken: bool, focused_class, beeps_on):
+def _nothing_selected(get_instruction, spoken: bool, where, beeps_on):
     """Nothing is selected. "select the last sentence" needs nothing
-    selected: it makes the selection the next edit works on. Anything else
-    says to select some text first. The clipboard is already back
-    (copy_selection does that)."""
+    selected: it makes the selection the next edit works on, in *where*,
+    the window the edit started in. Anything else says to select some text
+    first. The clipboard is already back (copy_selection does that)."""
     if live.voice_navigation and not spoken:
         said = get_instruction()
-        if said and voice_commands.handle_navigation(said, beeps_on, focused_class):
+        if said and voice_commands.handle_navigation(said, beeps_on, where):
             return
     notices.edit_problem("no_selection", beeps_on)
 
@@ -195,7 +195,7 @@ def _comparable(text: str) -> list:
     return text.translate(_PLAIN_MARKS).casefold().split()
 
 
-def _refused_selection(selected, expected, put_back, get_instruction, focused_class,
+def _refused_selection(selected, expected, put_back, get_instruction, where,
                        beeps_on) -> bool:
     """True, with the user told, when *selected* isn't text to change:
     nothing is selected, or "edit that" counted back over other words than
@@ -203,7 +203,7 @@ def _refused_selection(selected, expected, put_back, get_instruction, focused_cl
     dictated). Then the clipboard the selection was copied through is put
     back."""
     if not selected:
-        _nothing_selected(get_instruction, expected is not None, focused_class, beeps_on)
+        _nothing_selected(get_instruction, expected is not None, where, beeps_on)
         return True
     if expected is not None and _comparable(selected) != _comparable(expected):
         logger.info("Voice edit: the selection isn't the dictation any more")
@@ -346,8 +346,8 @@ def edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0,
     if copy_sent == [False]:
         _not_pressed(focused_class, window, beeps_on)
         return
-    if _refused_selection(selected, expected, put_back, get_instruction, focused_class,
-                          beeps_on):
+    if _refused_selection(selected, expected, put_back, get_instruction,
+                          (focused_class, window), beeps_on):
         return
     result = None
     try:
@@ -355,7 +355,7 @@ def edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0,
         if not instruction:
             notices.edit_problem("no_instruction", beeps_on)
             return
-        if voice_commands.handle_navigation(instruction, beeps_on, focused_class):
+        if voice_commands.handle_navigation(instruction, beeps_on, (focused_class, window)):
             return
         logger.info(f"Voice edit: {live.loggable(instruction)} ({len(selected)} characters)")
         keys = _edit_with_keys(instruction, focused_class, window, beeps_on)

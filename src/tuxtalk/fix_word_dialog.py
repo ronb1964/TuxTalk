@@ -412,30 +412,30 @@ def fix_in_text(typed, fix, window, where=None):
     # the dictation, then whatever followed the words in it.
     back = (len(typed) - len(typed.rstrip())) + (len(core) - end)
     backend = keyboard_output.output_backend()
-    keyboard_output.this_thread.into = (window, where)
     fixed = False
-    try:
-        if not backend.press_keys([((), "LEFT")] * back + [(("SHIFT",), "LEFT")] * (end - start)):
-            return _left_alone("keys")
-        selected = _selection_now(core[start:end])
-        # Moved since the dictation (a click, the arrow keys): the same count
-        # of keys selected other words. Or the focus moved while it was read.
-        why = ("unchecked" if selected is None else "moved" if selected != core[start:end]
-               else _not_here(window, where))
-        if why:
-            backend.press_keys([((), "RIGHT")] * (back + 1))      # the cursor back
-            return _left_alone(why)
-        fixed = backend.type_text(replacement)
-        done = fixed and backend.press_keys([((), "RIGHT")] * back)
-    except virtual_keyboard.GaveUp as stop:
-        if fixed:           # only the cursor's way back was stopped
+    with keyboard_output.only_into((window, where)):
+        try:
+            if not backend.press_keys([((), "LEFT")] * back
+                                      + [(("SHIFT",), "LEFT")] * (end - start)):
+                return _left_alone("keys")
+            selected = _selection_now(core[start:end])
+            # Moved since the dictation (a click, the arrow keys): the same
+            # count of keys selected other words. Or the focus moved while it
+            # was read.
+            why = ("unchecked" if selected is None else "moved" if selected != core[start:end]
+                   else _not_here(window, where))
+            if why:
+                backend.press_keys([((), "RIGHT")] * (back + 1))      # the cursor back
+                return _left_alone(why)
+            fixed = backend.type_text(replacement)
+            done = fixed and backend.press_keys([((), "RIGHT")] * back)
+        except virtual_keyboard.GaveUp as stop:
+            if fixed:           # only the cursor's way back was stopped
+                done = False
+            else:               # another window had the focus by then, or a key stayed down
+                return _left_alone("window" if stop.reason == "moved" else "keys")
+        except virtual_keyboard.StoppedPartway:
             done = False
-        else:               # another window had the focus by then, or a key stayed down
-            return _left_alone("window" if stop.reason == "moved" else "keys")
-    except virtual_keyboard.StoppedPartway:
-        done = False
-    finally:
-        keyboard_output.this_thread.into = None
     logger.info("Fix a Word: fixed it in the text" if done else "Fix a Word: couldn't fix the text")
     return bool(done)
 

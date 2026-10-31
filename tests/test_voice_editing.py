@@ -1369,6 +1369,27 @@ def test_the_edit_key_understands_select_commands_with_nothing_selected(edit_env
     assert len(pressed) == 1 and edit_env["notices"] == [] and edit_env["typed"] == []
 
 
+def test_select_with_the_edit_key_goes_only_into_the_window_it_was_said_in(
+        edit_env, monkeypatch, keyboard):
+    """Shift+F8 in KWrite with nothing selected, "select the line", and a
+    click into Konsole while it was transcribed: the selection keys went
+    into the terminal."""
+    from tuxtalk.output_backends import VirtualKeyboardOutputBackend
+    kwrite, konsole = ("org.kde.kwrite", ("tray", "{1}")), ("org.kde.konsole", ("tray", "{2}"))
+    focus = [kwrite]
+
+    def heard_while_the_user_clicks_away(audio, lang):
+        focus[0] = konsole
+        return "select the line"
+    monkeypatch.setattr(live, "voice_navigation", True)
+    monkeypatch.setattr(keyboard_output, "output_backend", VirtualKeyboardOutputBackend)
+    monkeypatch.setattr(focused_window, "look", lambda: focus[0])
+    monkeypatch.setattr(speech_engine, "transcribe", heard_while_the_user_clicks_away)
+    edit_env["selection"]["text"] = ""
+    run_edit(where=kwrite)
+    assert keyboard.events == [] and edit_env["typed"] == []
+
+
 def test_with_the_labs_switch_off_nothing_selected_still_says_select_first(edit_env, monkeypatch):
     monkeypatch.setattr(live, "voice_navigation", False)
     monkeypatch.setattr(speech_engine, "transcribe", lambda audio, lang: "select the last sentence")

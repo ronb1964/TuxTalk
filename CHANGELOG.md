@@ -5,6 +5,13 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- "Delete last word", "clear everything" and select and move by voice could
+  press their keys into another window if you clicked into it right after
+  saying them, while TuxTalk waited for a held Right Ctrl to come up. The
+  backspaces then deleted text you never dictated. So could "select the
+  line" said with Shift+F8. Those keys go only into the window you said them
+  in now, and if another one has the focus by then, nothing is pressed and
+  TuxTalk says the window changed.
 - With some microphones, hands-free never stopped by itself with a clothes
   dryer running nearby. Those microphones send the sound in very small
   pieces, and TuxTalk judged each piece on its own. With others, which send

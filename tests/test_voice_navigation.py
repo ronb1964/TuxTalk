@@ -162,6 +162,8 @@ def dictation(monkeypatch):
     monkeypatch.setattr(live, "voice_navigation", True)
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: backend)
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
+    # Of the window a test names by its class; which of its windows isn't told.
+    monkeypatch.setattr(focused_window, "look", lambda: (focused_window.window_class(), None))
     monkeypatch.setattr(notices, "edit_problem", lambda kind, beeps: seen["problems"].append(kind))
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda on, *a: seen.__setitem__("beeps", seen["beeps"] + 1))
     monkeypatch.setattr(rs.state, "last_inserted_text", " We finished early.")
@@ -202,6 +204,25 @@ def test_keys_that_could_not_be_pressed_say_so(dictation):
     dictation["backend"].ok = False
     assert voice_commands.handle_navigation("go to the end", False) is True
     assert dictation["problems"] == ["shortcut_failed"]
+
+
+@pytest.mark.parametrize("said", ["select the last word", "delete last word",
+                                  "clear everything"])
+def test_a_voice_command_presses_nothing_once_another_window_has_the_focus(
+        dictation, monkeypatch, keyboard, said):
+    """Said in KWrite, but the user clicked into Konsole before the keys
+    went out (a Right Ctrl dictation key still held): the keys went into the
+    terminal."""
+    from tuxtalk.output_backends import VirtualKeyboardOutputBackend
+    looks = iter([("org.kde.kwrite", ("tray", "{1}"))])
+    monkeypatch.setattr(focused_window, "look",
+                        lambda: next(looks, ("org.kde.konsole", ("tray", "{2}"))))
+    monkeypatch.setattr(keyboard_output, "output_backend", VirtualKeyboardOutputBackend)
+    assert (voice_commands.handle_undo(said, False, False)
+            or voice_commands.handle_navigation(said, False)) is True
+    assert keyboard.events == [] and dictation["problems"] == ["focus_moved"]
+    if said == "delete last word":       # nothing deleted: a second try still can
+        assert rs.state.last_inserted_text == " We finished early."
 
 
 def test_each_modifier_is_held_around_its_key(keyboard):

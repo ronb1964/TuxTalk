@@ -4,6 +4,7 @@ has none, wtype or xdotool; text through the clipboard and the paste
 shortcut the window takes. output_backends.HostBackend is how the rest of
 the service reaches this; a password field stops either at once
 (PasswordFieldNow)."""
+import contextlib
 import functools
 import os
 import shutil
@@ -163,6 +164,20 @@ class _ThisThread(threading.local):
 
 
 this_thread = _ThisThread()
+
+
+@contextlib.contextmanager
+def only_into(window):
+    """Keys sent on this thread inside go only into *window*, a look taken
+    when what they do was decided (this_thread.into): checked right before
+    the first goes down, after every wait, on the virtual keyboard and
+    through the Flatpak's portal alike, whose handshake can take minutes.
+    Another window by then: virtual_keyboard.GaveUp("moved"), nothing sent."""
+    before, this_thread.into = this_thread.into, window
+    try:
+        yield
+    finally:
+        this_thread.into = before
 
 
 def not_where_typed(focused, now=None) -> bool:
