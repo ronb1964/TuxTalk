@@ -338,7 +338,18 @@ class DictationTray(ServiceLifecycle, Presets):
         return status
 
     def service_ready(self, pid):
-        """The service loaded its model and acts on toggles from now on."""
+        """The service loaded its model and acts on toggles from now on.
+
+        *pid* comes over D-Bus, from any client on the session bus, and a
+        waiting --start sends it SIGUSR1 at once, which ends a process with
+        no handler for it. So a PID that isn't a running dictation service
+        (0 would signal the tray's own process group) is turned away before
+        it's kept or takes the waiting request. The sender's own PID isn't
+        compared: under Flatpak's D-Bus proxy the bus sees the proxy's.
+        """
+        if pid <= 0 or not self._check_pid_is_service(pid):
+            logger.info(f"Ignored a ready report for PID {pid}: not a dictation service")
+            return
         self._ready_pid = pid
         logger.info(f"Dictation service is ready (PID {pid})")
         if self._waiting_start.take():

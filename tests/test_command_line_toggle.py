@@ -276,6 +276,20 @@ def test_a_ready_report_from_a_stopped_service_counts_for_nothing(tray_ns):
     assert tray_ns.signals == []
 
 
+@pytest.mark.parametrize("pid", [12345, 0, -1])
+def test_a_ready_report_for_another_process_signals_nothing(tray_ns, pid):
+    """Any program on the session bus can call NotifyServiceReady. While a
+    --start waits, a PID that isn't a dictation service must not get the
+    SIGUSR1 (it would end that program; 0 is the tray's process group), and
+    the waiting request stays for the real service."""
+    assert tray_ns.control("start") == "waiting"
+    tray_ns.service_ready(pid)
+    assert tray_ns.signals == []
+    assert tray_ns._ready_pid is None
+    tray_ns.service_ready(4242)
+    assert tray_ns.signals == [4242], "the real service still gets the recording"
+
+
 def test_a_tray_started_after_the_service_reads_its_ready_file(tray_ns, monkeypatch):
     from tuxtalk import service_launcher
     monkeypatch.setattr(service_launcher, "read_ready_pid", lambda: 4242)
