@@ -11,13 +11,7 @@
  "src/tuxtalk/custom_words.py": {
   "B905": 1
  },
- "src/tuxtalk/extension_helper.py": {
-  "B904": 2
- },
  "src/tuxtalk/file_transcribe.py": {
-  "B905": 1
- },
- "src/tuxtalk/keyboard_layout.py": {
   "B905": 1
  },
  "src/tuxtalk/normalize.py": {

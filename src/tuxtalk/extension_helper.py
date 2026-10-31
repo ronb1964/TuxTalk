@@ -53,10 +53,10 @@ def _fetch_extension_sha256() -> str:
             # message says both, with the address.
             raise ChecksumUnavailableError(
                 f"No SHA256SUMS.txt at {EXTENSION_CHECKSUMS_URL} (404): either the "
-                "release publishes none, or the release can't be found")
-        raise ChecksumUnavailableError(f"Could not fetch extension checksums: {e}")
+                "release publishes none, or the release can't be found") from e
+        raise ChecksumUnavailableError(f"Could not fetch extension checksums: {e}") from e
     except Exception as e:
-        raise ChecksumUnavailableError(f"Could not fetch extension checksums: {e}")
+        raise ChecksumUnavailableError(f"Could not fetch extension checksums: {e}") from e
 
     digest = sums.get(EXTENSION_ZIP_NAME)
     if not digest:
