@@ -681,12 +681,12 @@ def _adopt_old_install():
     version needs. Outside a Flatpak, whose launchers its package owns."""
     # The folder move ran at package import, before any logger existed;
     # record what it did now (see rename_migration.py).
-    from . import MIGRATION_LOG
+    from . import MIGRATION_LOG, config, rename_migration
     for line in MIGRATION_LOG:
-        logger.info(f"Rename to TuxTalk: {line}")
+        failed = line.startswith(rename_migration.FAILED)
+        (logger.warning if failed else logger.info)(f"Rename to TuxTalk: {line}")
     if os.environ.get("FLATPAK_ID"):
         return
-    from . import config, rename_migration
     try:
         for line in rename_migration.adopt_old_install(dev=config.DEV_MODE):
             logger.info(f"Rename to TuxTalk: {line}")
