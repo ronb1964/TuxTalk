@@ -129,7 +129,7 @@ def test_the_kwin_script_reports_geometry_and_follows_moves():
     from tuxtalk import kwin_focus
     js = kwin_focus.build_script()
     assert "SetFocusedWindowGeometry" in js
-    assert "frameGeometryChanged" in js and "output" in js
+    assert "frameGeometryChanged" in js and "w.output" in js
     assert '"SetFocusedWindow"' in js              # still reports the class
 
 

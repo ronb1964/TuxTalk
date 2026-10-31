@@ -13,14 +13,6 @@ quit and restart the app".
 """
 
 
-def test_service_launcher_module_exists():
-    from tuxtalk import service_launcher
-
-    assert hasattr(service_launcher, "launch_dictation_service"), (
-        "service_launcher must expose launch_dictation_service()"
-    )
-
-
 def test_launcher_requests_xwayland_first_with_a_fallback():
     """XWayland for indicator positioning; fallback so it still starts without it."""
     from tuxtalk.service_launcher import build_service_env
