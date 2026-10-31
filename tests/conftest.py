@@ -576,11 +576,12 @@ def _no_real_hotkey_helper_or_pkexec(monkeypatch, tmp_path):
     pkexec through the hotkey helper's installer instead, and a password
     dialog sat on the desktop until it timed out. So: the helper's socket is
     a path nobody listens on, this machine counts as unable to run the
-    helper unless a test says otherwise, and running anything as root fails
-    the test outright."""
+    helper (nor as having it installed) unless a test says otherwise, and
+    running anything as root fails the test outright."""
     monkeypatch.setenv("TUXTALK_HOTKEYS_SOCKET", str(tmp_path / "no-helper.sock"))
     from tuxtalk import secure_input
     monkeypatch.setattr(secure_input, "can_install", lambda: (False, "tests"))
+    monkeypatch.setattr(secure_input, "is_installed", lambda: False)
 
     def refuse(*_a, **_k):
         pytest.fail("a test tried to run something as root through pkexec")

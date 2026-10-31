@@ -159,8 +159,9 @@ def check_input_read_permission():
         helper.close()
         if answering:
             return (True, "TuxTalk's hotkey helper reads the hotkeys. Hotkeys should work.")
-        # The service waits for an installed helper rather than reading
-        # the keyboards itself, so a silent one means no hotkeys.
+        # The service keeps trying an installed helper (connect_helper)
+        # rather than reading the keyboards itself, so a silent one means
+        # no hotkeys until it answers again.
         return (False, "TuxTalk's hotkey helper is installed but isn't answering, so "
                        "the hotkeys won't work. Fix Typing sets it up again.")
     if _readable_keyboards():

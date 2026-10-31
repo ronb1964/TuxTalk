@@ -300,6 +300,17 @@ def test_no_helper_means_none(tmp_path):
     assert connect_helper(str(tmp_path / "nothing.sock")) is None
 
 
+def test_an_installed_helper_whose_socket_isnt_there_yet_is_still_used(tmp_path, monkeypatch):
+    """Stopped, or restarting just as dictation starts: systemd removes its
+    folder. Once System check's Update starts it again, the hotkeys work
+    without a restart, as it says."""
+    from tuxtalk import secure_input
+    monkeypatch.setattr(secure_input, "is_installed", lambda: True)
+    keyboard = connect_helper(str(tmp_path / "not-yet.sock"))
+    assert keyboard is not None and keyboard.sock is None
+    keyboard.close()
+
+
 def test_a_helper_that_doesnt_answer_yet_is_tried_again(tmp_path):
     """Restarting, or this session not in front yet: keep trying rather than
     fall back for good, which would leave the hotkeys dead."""

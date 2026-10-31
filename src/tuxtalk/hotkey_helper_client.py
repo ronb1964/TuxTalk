@@ -320,15 +320,18 @@ class HelperKeyboard:
 
 
 def connect_helper(path=None):
-    """A HelperKeyboard when the helper is running, or None when it isn't
-    (TuxTalk then reads the keyboards itself, as before).
+    """A HelperKeyboard when the helper is installed or running, or None
+    when neither (TuxTalk then reads the keyboards itself, as before).
 
-    A running helper that doesn't answer at once (restarting, or this
+    A helper that doesn't answer at once (restarting, stopped, or this
     session isn't the one at the screen yet) is still used: the
-    HelperKeyboard keeps trying every second. Falling back for good would
-    leave the hotkeys dead until TuxTalk restarts."""
+    HelperKeyboard keeps trying every second, so Update in System check
+    brings the hotkeys back without a restart. Falling back for good would
+    leave them dead until TuxTalk restarts: with the helper installed the
+    user is normally not in the input group, so no keyboard opens here."""
+    from . import secure_input
     path = path or socket_path()
-    if not os.path.exists(path):
+    if not os.path.exists(path) and not secure_input.is_installed():
         return None
     keyboard = HelperKeyboard(path)
     if not keyboard.connect():
