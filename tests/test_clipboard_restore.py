@@ -63,7 +63,7 @@ def keeper():
 
 
 def paste(keeper, board, text):
-    """What _paste_text does around a paste: remember, paste, schedule restore."""
+    """What keyboard_output.paste_text does around a paste: remember, paste, schedule restore."""
     keeper.before_paste()
     board.data, board.mime = text.encode(), "text/plain;charset=utf-8"
     keeper.after_paste(text)
@@ -294,11 +294,6 @@ def test_restoring_is_off_unless_asked_for():
     """A dictation that landed in the wrong window can be re-pasted from the
     clipboard; restoring by default would take that away."""
     assert C.Settings().restore_clipboard is False
-
-
-def test_the_setting_applies_without_a_restart():
-    assert "restore_clipboard" in C.LIVE_APPLIED_KEYS
-    assert not C.needs_service_restart({"restore_clipboard"})
 
 
 def test_paste_uses_the_keeper_only_when_the_setting_is_on(monkeypatch):

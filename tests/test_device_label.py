@@ -62,7 +62,7 @@ def test_relabelling_the_cuda_entry_again_changes_nothing():
     SpeechSection._relabel_cuda_option(prefs, "small")
     assert prefs.device_combo.get_active_text() == "CUDA (NVIDIA)"
     assert len(writes) == 1
-    # Nor does a new label count as picking CUDA (review of 0.17): the Device
+    # Nor does a new label count as picking CUDA: the Device
     # handler is held back while it's written, whatever GTK signals.
     prefs.device_combo.get_model().connect(
         "row-changed", lambda *_: prefs.device_combo.emit("changed"))

@@ -1,6 +1,7 @@
 """Runs the GNOME extension's code under Node, with stand-ins for GNOME Shell
 (tests/gnome_shell), so its tests check what it does rather than how its
-source reads: a guard broken in effect but kept in form fails here.
+source reads: a guard broken in effect but kept in form fails here. KDE's
+focus script (kwin_focus.py) runs the same way, against tests/kwin.
 
 A test hands run() JavaScript that drives the extension through gnome.mjs's
 functions (imported as `t`) and ends with t.report(value); run() returns that
@@ -17,6 +18,7 @@ import textwrap
 import pytest
 
 STAND_INS = pathlib.Path(__file__).resolve().parent / "gnome_shell"
+KWIN_STAND_INS = pathlib.Path(__file__).resolve().parent / "kwin" / "workspace.js"
 
 
 @functools.cache
@@ -57,3 +59,15 @@ def run(scenario):
     assert done.returncode == 0, done.stderr
     reported = json.loads(done.stdout.strip().splitlines()[-1])
     return reported["value"], reported["logs"]
+
+
+def run_kwin_script(script, scenario):
+    """Run *scenario* (JavaScript using kwin/workspace.js, which calls load()
+    to load the KWin script *script*); the value it gave report()."""
+    source = "\n".join([KWIN_STAND_INS.read_text(),
+                        f"const KWIN_SCRIPT = {json.dumps(script)};",
+                        textwrap.dedent(scenario)])
+    done = subprocess.run([_node(), "--eval", source], capture_output=True, text=True,
+                          timeout=60)
+    assert done.returncode == 0, done.stderr
+    return json.loads(done.stdout.strip().splitlines()[-1])

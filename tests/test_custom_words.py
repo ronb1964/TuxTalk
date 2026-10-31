@@ -135,6 +135,8 @@ from tuxtalk import live_settings as live
 from tuxtalk import recording_state as rs
 from tuxtalk import whisper_vulkan as wv
 
+_load_words = cw.load     # the real one, before service_main replaces it
+
 
 class FakeVulkan(wv.VulkanWhisperModel):
     def __init__(self, reply="Thank you."):
@@ -163,40 +165,45 @@ def with_words(monkeypatch):
     monkeypatch.setattr(live, "commands", {})
 
 
-def test_the_service_starts_with_no_words():
-    assert live.words == []
+def test_the_service_starts_with_the_words_saved_in_preferences(words_file, service_main,
+                                                                 monkeypatch, caplog):
+    monkeypatch.setattr(cw, "load", _load_words)   # service_main stubs it out
+    cw.save(["TuxTalk", "BambuStudio"])
+    service_main()
+    assert live.words == ["TuxTalk", "BambuStudio"]
+    assert "Loaded your words (2)" in caplog.text
 
 
 def test_vulkan_whisper_is_told_the_words(with_words, monkeypatch):
     fake = FakeVulkan("I like TuxTalk.")
-    monkeypatch.setattr(engine, "model", fake, raising=False)
+    monkeypatch.setattr(engine, "model", fake)
     assert engine.transcribe(np.zeros(16000, dtype=np.float32), "en") == "I like TuxTalk."
     assert fake.prompts == ["TuxTalk, BambuStudio, ydotool."]
 
 
 def test_vulkan_whisper_without_words_gets_no_prompt(monkeypatch):
     fake = FakeVulkan("Hello.")
-    monkeypatch.setattr(engine, "model", fake, raising=False)
+    monkeypatch.setattr(engine, "model", fake)
     engine.transcribe(np.zeros(16000, dtype=np.float32), "en")
     assert fake.prompts == [None]
 
 
 def test_faster_whisper_gets_them_as_hotwords(with_words, monkeypatch):
     fake = FakeWhisper()
-    monkeypatch.setattr(engine, "model", fake, raising=False)
+    monkeypatch.setattr(engine, "model", fake)
     engine.transcribe(np.zeros(16000, dtype=np.float32), "en")
     assert fake.kwargs["hotwords"] == "TuxTalk, BambuStudio, ydotool."
 
 
 def test_faster_whisper_without_words_gets_no_hotwords(monkeypatch):
     fake = FakeWhisper()
-    monkeypatch.setattr(engine, "model", fake, raising=False)
+    monkeypatch.setattr(engine, "model", fake)
     engine.transcribe(np.zeros(16000, dtype=np.float32), "en")
     assert fake.kwargs["hotwords"] is None
 
 
 def test_whisper_reading_the_list_back_counts_as_nothing_said(with_words, monkeypatch):
-    monkeypatch.setattr(engine, "model", FakeVulkan("TuxTalk, BambuStudio, ydotool."), raising=False)
+    monkeypatch.setattr(engine, "model", FakeVulkan("TuxTalk, BambuStudio, ydotool."))
     assert engine.transcribe(np.zeros(16000, dtype=np.float32), "en") is None
 
 

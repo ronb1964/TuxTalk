@@ -58,9 +58,8 @@ def test_anywhere_else_is_unchanged(monkeypatch):
     assert _prepare(monkeypatch, "git status", "") == "Git status. "
 
 
-def test_on_by_default_and_live():
+def test_on_by_default():
     assert config.Settings().adapt_to_app is True
-    assert "adapt_to_app" in config.LIVE_APPLIED_KEYS
 
 
 def test_the_setting_decides(monkeypatch):

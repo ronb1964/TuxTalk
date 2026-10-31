@@ -17,14 +17,10 @@ Nothing here may be fatal. A missing KWin, a refused D-Bus call or a read-only
 data directory must cost the paste hint, never the tray.
 """
 
-import pathlib
-
 import pytest
 
+from gnome_extension_js import run_kwin_script
 from tuxtalk import kwin_focus as K
-
-EXTENSION_JS = (pathlib.Path(__file__).resolve().parent.parent / "gnome-extension"
-                / "talktype@ronb1964.github.io" / "extension.js").read_text()
 
 
 class FakeBus:
@@ -54,65 +50,119 @@ def on_kde(monkeypatch):
 
 
 class TestWhenItRuns:
-    def test_it_runs_on_kde(self, monkeypatch, on_kde):
+    def test_it_runs_on_kde(self, on_kde):
         assert K.should_provide() is True
 
     @pytest.mark.parametrize("desktop", ["gnome", "xfce", "cinnamon", "unknown"])
     def test_it_stays_out_of_the_way_elsewhere(self, monkeypatch, desktop):
+        """On GNOME the extension fills the cache already; two would fight."""
         monkeypatch.setattr(K.desktop_detect, "get_desktop_environment",
                             lambda: desktop)
         monkeypatch.delenv("FLATPAK_ID", raising=False)
         assert K.should_provide() is False
 
-    def test_gnome_keeps_its_own_provider(self, monkeypatch):
-        """The extension already fills the cache; two writers would fight."""
-        monkeypatch.setattr(K.desktop_detect, "get_desktop_environment",
-                            lambda: "gnome")
-        assert K.should_provide() is False
+
+KWRITE = 'makeWindow("kwrite", "{1a2b}", 100, 50, 800, 600)'
+KONSOLE = 'makeWindow("org.kde.konsole", "{3c4d}", 0, 0, 1920, 1080)'
+SCREEN = "|DP-1|0,0,1920,1080"
+
+
+def _focus_report(cls, window_id, frame):
+    """The call the script makes when *cls* gets the focus."""
+    from tuxtalk import dbus_service
+    return [dbus_service.DBUS_NAME, dbus_service.DBUS_PATH, dbus_service.DBUS_INTERFACE,
+            "SetFocusedWindow", cls, window_id, frame]
 
 
 class TestTheScript:
-    def test_it_targets_the_same_dbus_method_the_extension_uses(self):
+    """The script runs under Node, against tests/kwin's stand-in workspace."""
+
+    def test_it_reports_the_window_focused_when_it_loads(self):
+        """Otherwise the hint is wrong until the user switches windows once.
+        Class, which window and where go in one call: sent apart, a look
+        between the calls paired one window's class with the next one's id."""
         from tuxtalk import dbus_service
+        calls = run_kwin_script(K.build_script(), f"""
+            workspace.activeWindow = {KWRITE};
+            load();
+            report(dbusCalls);
+        """)
+        assert calls == [_focus_report("kwrite", "{1a2b}", "100,50,800,600" + SCREEN)]
+        assert hasattr(dbus_service.TuxTalkDBusService, "SetFocusedWindow")
 
-        script = K.build_script()
-
-        assert dbus_service.DBUS_INTERFACE in script
-        assert '"SetFocusedWindow"' in script
-        assert "SetFocusedWindowRemote" in EXTENSION_JS
-
-    def test_it_reports_the_window_class(self):
-        script = K.build_script()
-        assert "resourceClass" in script
-
-    def test_it_follows_focus_rather_than_reading_once(self):
+    def test_it_follows_the_focus_from_window_to_window(self):
         """Reading only at load time would freeze on whatever was focused then."""
-        script = K.build_script()
-        assert "windowActivated" in script
+        calls = run_kwin_script(K.build_script(), f"""
+            workspace.activeWindow = {KWRITE};
+            load();
+            activate({KONSOLE});
+            report(dbusCalls);
+        """)
+        assert calls[1:] == [_focus_report("org.kde.konsole", "{3c4d}",
+                                           "0,0,1920,1080" + SCREEN)]
 
-    def test_it_reports_the_window_focused_at_load_time_too(self):
-        """Otherwise the hint is wrong until the user switches windows once."""
-        script = K.build_script()
-        assert "activeWindow" in script
+    def test_no_window_focused_is_reported_as_none(self):
+        calls = run_kwin_script(K.build_script(), """
+            load();
+            report(dbusCalls);
+        """)
+        assert calls == [_focus_report("", "", "")]
+
+
+def _geometry_reports(scenario):
+    """The frames the script reported for the window KWrite after loading
+    with it focused and running *scenario* (`kwrite` is the window)."""
+    calls = run_kwin_script(K.build_script(), f"""
+        const kwrite = {KWRITE};
+        workspace.activeWindow = kwrite;
+        load();
+        {scenario}
+        report(dbusCalls);
+    """)
+    return [call[4] for call in calls if call[3] == "SetFocusedWindowGeometry"]
+
+
+def test_window_drags_are_reported_once_they_end():
+    """frameGeometryChanged fires on every frame of a drag: 60+ D-Bus calls a
+    second into the tray, for a value read only when a message is shown."""
+    assert _geometry_reports("""
+        kwrite.move = true;
+        for (const x of [110, 120, 130]) {
+            kwrite.frameGeometry.x = x;
+            kwrite.frameGeometryChanged.emit();
+        }
+        kwrite.move = false;
+        kwrite.interactiveMoveResizeFinished.emit();
+    """) == ["130,50,800,600" + SCREEN]
+
+
+def test_a_resize_by_the_desktop_is_reported_at_once():
+    """Maximizing isn't a drag: no 'finished' signal follows it."""
+    assert _geometry_reports("""
+        kwrite.frameGeometry = {x: 0, y: 0, width: 1920, height: 1080};
+        kwrite.frameGeometryChanged.emit();
+    """) == ["0,0,1920,1080" + SCREEN]
+
+
+def test_a_window_that_lost_the_focus_is_no_longer_followed():
+    assert _geometry_reports(f"""
+        activate({KONSOLE});
+        kwrite.frameGeometry.x = 300;
+        kwrite.frameGeometryChanged.emit();
+        kwrite.interactiveMoveResizeFinished.emit();
+    """) == []
 
 
 class TestStartAndStop:
     def test_starting_writes_the_script_and_loads_it(self, tmp_path, monkeypatch, on_kde):
+        """A stale copy goes first: KWin keeps a script loaded across tray
+        restarts, and two would double-report."""
         monkeypatch.setattr(K, "script_path", lambda: str(tmp_path / "focus.js"))
         bus = FakeBus()
 
         assert K.start(bus) is True
-        assert (tmp_path / "focus.js").exists()
+        assert (tmp_path / "focus.js").read_text() == K.build_script()
         assert bus.methods() == ["unloadScript", "unloadScript", "loadScript", "start"]
-
-    def test_a_stale_copy_is_unloaded_before_loading(self, tmp_path, monkeypatch, on_kde):
-        """KWin keeps a script loaded across tray restarts; two would double-report."""
-        monkeypatch.setattr(K, "script_path", lambda: str(tmp_path / "focus.js"))
-        bus = FakeBus()
-
-        K.start(bus)
-
-        assert bus.methods()[0] == "unloadScript"
 
     def test_it_does_not_start_off_kde(self, tmp_path, monkeypatch):
         monkeypatch.setattr(K.desktop_detect, "get_desktop_environment",
@@ -122,11 +172,6 @@ class TestStartAndStop:
 
         assert K.start(bus) is False
         assert bus.calls == []
-
-    def test_stopping_unloads_the_script(self, monkeypatch, on_kde):
-        bus = FakeBus()
-        K.stop(bus)
-        assert "unloadScript" in bus.methods()
 
 
 class TestItIsNeverFatal:
@@ -193,18 +238,6 @@ class TestRenameToTuxTalk:
         K.stop(bus)
         unloaded = [c[1][0] for c in bus.calls if c[0] == "unloadScript"]
         assert "talktype-focus" in unloaded and "tuxtalk-focus" in unloaded
-
-
-def test_window_drags_are_reported_once_they_end():
-    """frameGeometryChanged fires on every frame of a drag: 60+ D-Bus calls a
-    second into the tray, for a value read only when a message is shown."""
-    from tuxtalk import kwin_focus
-
-    script = kwin_focus.build_script()
-    assert "w.frameGeometryChanged.connect(tuxtalkGeometryChanged)" in script
-    assert "if (w && (w.move || w.resize))" in script
-    assert "w.interactiveMoveResizeFinished.connect(tuxtalkGeometry)" in script
-    assert "tuxtalkWatched.interactiveMoveResizeFinished.disconnect(tuxtalkGeometry)" in script
 
 
 def test_a_frozen_kwin_holds_tray_start_and_quit_only_seconds(monkeypatch):

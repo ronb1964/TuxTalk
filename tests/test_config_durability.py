@@ -8,6 +8,7 @@ that does nothing and no explanation.
 
 import os
 import pathlib
+import tomllib
 
 import pytest
 
@@ -376,12 +377,13 @@ def test_a_later_save_still_refreshes_the_backup_normally(config_path):
     config._config_mtime = 0.0
     config.load_config()
 
-    later = config.Settings()
-    later.model = "medium"
-    config.save_config(later)
+    for model in ("medium", "small"):
+        later = config.Settings()
+        later.model = model
+        config.save_config(later)
 
     backup = config_path.with_suffix(config_path.suffix + ".bak")
-    assert "garbage" not in backup.read_text()
+    assert tomllib.loads(backup.read_text())["model"] == "medium"
 
 
 def test_repair_failure_does_not_crash_the_app(config_path, monkeypatch):

@@ -217,13 +217,12 @@ def _key(dialog, keyval, signal="key-press-event"):
 def _run_dialog_with_f8_release(monkeypatch, evdev_paths, denied=()):
     """Run the real dialog; while it is up, release F8 through GTK and
     return the visible label texts."""
-    from gi.repository import Gdk, Gtk
+    from gi.repository import Gdk
     seen = {}
 
     def during(dialog):
         _key(dialog, Gdk.KEY_F8, "key-release-event")
-        seen["texts"] = [w.get_text() for w in widgets(dialog)
-                         if isinstance(w, Gtk.Label) and w.get_visible()]
+        seen["texts"] = _visible_texts(dialog)
     _run_dialog(monkeypatch, evdev_paths, during, denied)
     return seen["texts"]
 
@@ -282,8 +281,7 @@ def test_a_keyboard_plugged_in_during_the_test_is_heard(monkeypatch):
         while "texts" not in seen or ("✓ Working!" not in seen["texts"]
                                       and time.monotonic() < deadline):
             Gtk.main_iteration_do(False)
-            seen["texts"] = [w.get_text() for w in widgets(dialog)
-                             if isinstance(w, Gtk.Label) and w.get_visible()]
+            seen["texts"] = _visible_texts(dialog)
     _run_dialog(monkeypatch, paths, during, queued={plugged: f8})
     assert "✓ Working!" in seen["texts"]
 

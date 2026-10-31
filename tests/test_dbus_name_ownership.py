@@ -45,16 +45,21 @@ DRIVER = textwrap.dedent("""
         p.first_line = p.stdout.readline().strip()
         return p
 
-    def owner():
-        time.sleep(0.3)
-        try:
-            return bus.call_blocking("org.freedesktop.DBus", "/org/freedesktop/DBus",
-                "org.freedesktop.DBus", "GetConnectionUnixProcessID", "s", (NAME,))
-        except dbus.exceptions.DBusException:
-            return None
+    def owner(killed):
+        # The bus lets go of a killed process's name a moment after the kill.
+        deadline = time.monotonic() + 5
+        while True:
+            try:
+                pid = bus.call_blocking("org.freedesktop.DBus", "/org/freedesktop/DBus",
+                    "org.freedesktop.DBus", "GetConnectionUnixProcessID", "s", (NAME,))
+            except dbus.exceptions.DBusException:
+                pid = None
+            if pid not in {p.pid for p in killed} or time.monotonic() > deadline:
+                return pid
+            time.sleep(0.01)
 
-    def who(procs):
-        o = owner()
+    def who(procs, killed=()):
+        o = owner(killed)
         return next((name for name, p in procs.items() if p.pid == o), o)
 
     # 1. Normal start: tray first, then the service it launches.
@@ -63,22 +68,26 @@ DRIVER = textwrap.dedent("""
 
     # 2. The tray restarts while the service keeps running.
     tray.kill(); tray.wait()
-    print("tray_gone", who({"service": svc}))
+    print("tray_gone", who({"service": svc}, killed=[tray]))
     tray2 = start("tray")
     print("tray_back", who({"tray": tray2, "service": svc}))
     tray2.kill(); svc.kill()
+    tray2.wait(); svc.wait()
+    killed = [tray2, svc]
 
     # 3. No tray running: the service stands in, then a tray takes over.
     svc = start("service")
-    print("standalone", who({"service": svc}), svc.first_line)
+    print("standalone", who({"service": svc}, killed), svc.first_line)
     tray = start("tray")
     print("tray_takes_over", who({"tray": tray, "service": svc}))
     tray.kill(); svc.kill()
+    tray.wait(); svc.wait()
 """)
 
 
 # The tests' own bus configuration: nothing starts on it when asked for.
 CONFIG = os.path.join(os.path.dirname(__file__), "dbus-session.conf")
+
 
 def test_tray_owns_the_name_and_the_service_never_inherits_it(tmp_path):
     driver = tmp_path / "driver.py"

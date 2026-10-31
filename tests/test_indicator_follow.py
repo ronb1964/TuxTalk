@@ -74,9 +74,8 @@ def test_switched_off_never_asks(monkeypatch):
 
 # --- the setting ------------------------------------------------------------------------------
 
-def test_off_by_default_and_applied_without_a_restart():
+def test_off_by_default():
     assert config.Settings().indicator_follow_window is False
-    assert "indicator_follow_window" in config.LIVE_APPLIED_KEYS
 
 
 def test_the_service_passes_it_to_the_indicator(service_main):

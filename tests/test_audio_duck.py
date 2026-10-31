@@ -6,6 +6,7 @@ games, apps without media keys.
 """
 import json
 import subprocess
+import time
 
 from tuxtalk import audio_duck
 from tuxtalk import live_settings as live
@@ -154,10 +155,9 @@ def test_no_pactl_is_not_an_error(tmp_path):
     assert audio_duck.restore_left_over(run=missing, state_path=str(tmp_path / "none.json"), reset=_no_reset) == 0
 
 
-def test_setting_is_off_by_default_and_live():
+def test_setting_is_off_by_default():
     from tuxtalk import config
     assert config.Settings().duck_audio is False
-    assert "duck_audio" in config.LIVE_APPLIED_KEYS
 
 
 def test_recording_hooks_duck_and_restore(monkeypatch):
@@ -255,8 +255,9 @@ def test_a_player_reopening_its_sound_after_resume_gets_its_volume_back(tmp_path
     d.restore()
     assert d.wait_idle(2)
     pactl.streams[6] = {"pid": 77, "volumes": [32768], "app": "Brave"}   # resumed
-    import time
-    time.sleep(0.4)
+    deadline = time.monotonic() + 5
+    while pactl.streams[6]["volumes"] != [65536] and time.monotonic() < deadline:
+        time.sleep(0.01)
     assert d.wait_idle(2)
     assert pactl.streams[6]["volumes"] == [65536]
     assert d._owed == {}

@@ -1,7 +1,7 @@
 """Rule-type problems ("select works right after you dictate") open a small
-window explaining them, once per run; then the short label alone (Ron,
-2026-10-14: the label made little sense and the notification was gone
-before it could be read)."""
+window explaining them, each time they come up, until the user ticks "Don't
+explain this again"; then the short label alone. The label made little sense
+on its own, and the notification was gone before it could be read."""
 import pytest
 
 from tuxtalk import edit_notices, explain
@@ -27,7 +27,7 @@ def problems(monkeypatch):
 
 
 def test_the_window_explains_every_time(problems):
-    """Someone who makes the same mistake twice is told twice (Ron)."""
+    """Someone who makes the same mistake twice is told twice."""
     notices.edit_problem("nothing_said", False)
     notices.edit_problem("nothing_said", False)
     assert problems["windows"] == ["nothing_said", "nothing_said"]

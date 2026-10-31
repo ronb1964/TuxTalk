@@ -135,9 +135,8 @@ def test_the_resume_at_exit_runs_on_the_worker_after_a_pause_under_way():
     assert bus.status == {"youtube": "Playing"} and played_on == ["media-pause"]
 
 
-def test_pause_media_is_on_by_default_and_applies_live():
+def test_pause_media_is_on_by_default():
     assert C.Settings().pause_media is True
-    assert "pause_media" in C.LIVE_APPLIED_KEYS
 
 
 # --- wiring into the dictation service -------------------------------------

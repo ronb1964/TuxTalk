@@ -1,9 +1,8 @@
-"""New recording-indicator config keys: defaults, validation, live-apply.
+"""The recording indicator's settings: defaults, migration and validation.
 
 These settings drive the selectable indicator styles (waveform, bars, radial)
-alongside the orb, plus color and sensitivity. They must all apply
-live — the service reads them without a restart — so every one belongs in
-LIVE_APPLIED_KEYS.
+alongside the orb, plus color and sensitivity. That a change reaches the
+running indicator is tested in test_live_settings_reload.py.
 """
 from tuxtalk import config
 
@@ -46,13 +45,6 @@ def test_migration_leaves_a_real_custom_color_untouched():
     assert s.indicator_color == "#ff5522"
 
 
-def test_new_keys_are_live_applied_not_restart():
-    keys = {"indicator_style", "indicator_color_mode", "indicator_color",
-            "indicator_sensitivity"}
-    assert keys <= config.LIVE_APPLIED_KEYS
-    assert not (keys & config.RESTART_REQUIRED_KEYS)
-
-
 def test_invalid_style_is_reported():
     s = config.Settings()
     s.indicator_style = "bogus"
@@ -67,11 +59,12 @@ def test_sensitivity_out_of_range_is_reported():
     assert "indicator_sensitivity" in problems
 
 
-def test_float_sensitivity_round_trips_as_a_float():
-    """A float field must survive save/reload as a float, not a string: the
-    TOML writer writes it bare and the loader casts it back."""
-    assert config._toml_value(1.3) == "1.3"          # bare, not quoted
-    assert config._TYPE_CASTERS["float"] is float     # loader casts it back
+def test_float_sensitivity_round_trips_as_a_float(tmp_path, monkeypatch):
+    """A float field must survive save/reload as a float, not a string."""
+    monkeypatch.setattr(config, "CONFIG_PATH", str(tmp_path / "config.toml"))
+    config.save_config(config.Settings(indicator_sensitivity=1.3))
+    loaded = config.load_config().indicator_sensitivity
+    assert loaded == 1.3 and isinstance(loaded, float)
 
 
 def test_hand_edited_capitals_load_as_the_values_the_app_compares():

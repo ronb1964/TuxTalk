@@ -2,6 +2,7 @@
 import hashlib
 import os
 import pathlib
+import tarfile
 import threading
 import time
 
@@ -168,12 +169,10 @@ def test_two_downloads_of_one_engine_get_names_of_their_own(tmp_path):
 
 def test_a_failed_unpack_leaves_neither_archive_nor_folder(tmp_path):
     from tuxtalk.download_utils import download_area, unpack_tar
-    try:
-        with download_area(str(tmp_path), "engine") as (archive, folder):
-            pathlib.Path(archive).write_bytes(b"not a tar file")
-            unpack_tar(archive, folder)
-    except Exception:
-        pass
+    with (pytest.raises(tarfile.ReadError),
+          download_area(str(tmp_path), "engine") as (archive, folder)):
+        pathlib.Path(archive).write_bytes(b"not a tar file")
+        unpack_tar(archive, folder)
     assert list(tmp_path.iterdir()) == []
 
 
@@ -321,7 +320,6 @@ def test_a_folder_that_couldnt_be_removed_is_logged(tmp_path, monkeypatch, caplo
 
 
 def test_a_replace_whose_rename_fails_puts_the_old_folder_back(tmp_path, monkeypatch):
-    import os
     from tuxtalk import download_utils
     target, old, staging = (str(tmp_path / n) for n in ("lib", "lib.old", ".lib.new"))
     os.mkdir(target)

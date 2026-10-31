@@ -20,7 +20,7 @@ from tuxtalk import live_settings as live
 @pytest.fixture
 def commands(monkeypatch):
     def _install(mapping):
-        monkeypatch.setattr(live, "commands", mapping, raising=False)
+        monkeypatch.setattr(live, "commands", mapping)
     return _install
 
 

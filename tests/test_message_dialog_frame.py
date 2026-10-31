@@ -171,11 +171,14 @@ def test_markup_is_drawn_and_plain_text_is_shown_as_typed(Gtk, monkeypatch):
 
 def test_a_box_from_the_tray_opens_over_the_other_windows(Gtk, monkeypatch):
     from tuxtalk.ui_style import show_message
-    centred = []
+    centred, above = [], []
     monkeypatch.setattr(Gtk.Window, "set_position", lambda box, pos: centred.append(pos))
+    monkeypatch.setattr(Gtk.Window, "set_keep_above", lambda box, on: above.append(on))
     _answered(Gtk, monkeypatch, Gtk.ResponseType.OK)
     show_message(None, Gtk.MessageType.INFO, "Update installed", "", keep_above=True)
-    assert centred == [Gtk.WindowPosition.CENTER]
+    show_message(None, Gtk.MessageType.INFO, "Saved", "")
+    assert centred == [Gtk.WindowPosition.CENTER] * 2
+    assert above == [True]
 
 
 def test_a_box_that_doesnt_wait_closes_itself_when_answered(Gtk, monkeypatch):

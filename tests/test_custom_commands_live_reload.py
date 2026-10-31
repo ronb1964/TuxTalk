@@ -24,8 +24,8 @@ def commands_file(tmp_path, monkeypatch):
 
     path = tmp_path / "custom_commands.toml"
     monkeypatch.setattr(config_module, "CUSTOM_COMMANDS_PATH", str(path))
-    monkeypatch.setattr(live, "_last_commands_mtime", None, raising=False)
-    monkeypatch.setattr(live, "commands", {}, raising=False)
+    monkeypatch.setattr(live, "_last_commands_mtime", None)
+    monkeypatch.setattr(live, "commands", {})
     return path
 
 

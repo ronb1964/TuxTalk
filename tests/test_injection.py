@@ -258,7 +258,7 @@ def test_undo_shrinks_its_buffer_when_the_backspaces_land(monkeypatch, undo_env)
 
 def test_type_text_reports_failure_when_the_shift_enter_key_fails(monkeypatch):
     """A dictation containing "new line" is typed in parts with Shift+Enter
-    between them, so _type_text must check what the key returns as well as
+    between them, so keyboard_output.type_text must check what the key returns as well as
     the text parts. Otherwise the undo buffer counts a line break the
     document never got, and "undo that" backspaces into the user's own text."""
     monkeypatch.setattr(keyboard_output, "type_text_raw", lambda t: True)

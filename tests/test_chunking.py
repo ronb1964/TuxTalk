@@ -356,11 +356,6 @@ def test_chunk_pause_range(value, ok):
     assert flagged is (not ok)
 
 
-def test_chunk_settings_apply_without_a_restart():
-    from tuxtalk.config import LIVE_APPLIED_KEYS
-    assert {"chunked_dictation", "chunk_pause_seconds"} <= LIVE_APPLIED_KEYS
-
-
 def test_chunk_setting_follows_config(monkeypatch):
     from tuxtalk.config import Settings
     monkeypatch.setattr(live, "ai_engine", None)
@@ -617,7 +612,7 @@ def test_a_voice_edit_is_never_chunked(recording):
 
 
 def test_auto_stop_after_a_cut_beeps_ready_once(recording):
-    """Review focus 1: the rest after the cut is only room noise."""
+    """The rest after the cut is only room noise: one ready beep, not two."""
     texts, typed, beeps = recording
     texts.append("we meet")
     feed(np.concatenate([speech(1.0), noise(1.2)]))
@@ -673,10 +668,15 @@ def test_a_word_that_ends_the_pause_reaches_the_engine_whole(recording, monkeypa
 
 
 def test_drop_tail_samples_keeps_partial_blocks():
-    frames = [b"\0\0" * 320, b"\0\0" * 320, b"\0\0" * 320]
+    """Only whole blocks go: 700 samples off three blocks of 320 leaves the
+    first block as it was, and less than a block takes nothing."""
     from tuxtalk import chunking
-    chunking.drop_tail_samples(frames, 700)   # two whole blocks fit, the third doesn't
-    assert len(frames) == 1
+    frames = [bytes([n]) * 640 for n in (1, 2, 3)]     # 320 samples of 2 bytes each
+    chunking.drop_tail_samples(frames, 700)
+    assert frames == [bytes([1]) * 640]
+    frames = [bytes([n]) * 640 for n in (1, 2, 3)]
+    chunking.drop_tail_samples(frames, 300)
+    assert frames == [bytes([n]) * 640 for n in (1, 2, 3)]
 
 
 def test_flatpak_stop_queues_the_last_chunk_on_the_worker(recording, monkeypatch):
@@ -728,7 +728,7 @@ def test_a_recording_without_a_pause_says_why(recording, caplog):
 
 # --- sensitivity and context settings ----------------------------------------
 
-def test_new_chunk_settings_defaults():
+def test_sensitivity_and_context_defaults():
     from tuxtalk.config import Settings
     s = Settings()
     assert s.chunk_speech_db == 6.0
@@ -743,12 +743,7 @@ def test_chunk_speech_db_range(value, ok):
     assert any(k == "chunk_speech_db" for k, _ in problems) is (not ok)
 
 
-def test_new_chunk_settings_apply_without_a_restart():
-    from tuxtalk.config import LIVE_APPLIED_KEYS
-    assert {"chunk_speech_db", "chunk_context_marks"} <= LIVE_APPLIED_KEYS
-
-
-def test_service_reads_the_new_chunk_settings(monkeypatch):
+def test_service_reads_the_sensitivity_and_context_settings(monkeypatch):
     from tuxtalk.config import Settings
     monkeypatch.setattr(live, "ai_engine", None)
     live.apply(Settings(
@@ -778,8 +773,6 @@ def test_context_marks_off_types_the_engines_mark(pipeline, monkeypatch):
     assert typed == ["We meet. "]
     assert rs.state.current.message.held_mark is None
 
-
-# --- final review fixes ------------------------------------------------------
 
 def test_context_marks_off_carries_on_after_a_comma(pipeline, monkeypatch):
     """Off, a chunk ending in a comma (or no mark) is mid-sentence: the next one

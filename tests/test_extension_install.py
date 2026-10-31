@@ -12,9 +12,6 @@ def extensions(tmp_path, monkeypatch):
     """A gnome-shell/extensions folder of its own, and an extension to install."""
     ext_dir = tmp_path / "gnome-shell" / "extensions"
     monkeypatch.setattr(gnome_extensions, "get_extension_dir", lambda: str(ext_dir))
-    runtime = tmp_path / "run"                  # the install lock, never the real one
-    runtime.mkdir()
-    monkeypatch.setattr("tuxtalk.single_instance.runtime_dir", lambda: str(runtime))
     source = tmp_path / "source"
     source.mkdir()
     (source / "metadata.json").write_text('{"version": 2}')
@@ -95,6 +92,21 @@ def test_the_start_leaves_an_install_under_way_alone(extensions):
     with download_utils.install_turn("extension", "the GNOME extension"):
         eh.recover_cut_off_install()
     assert os.listdir(ext_dir) == [aside.name]
+
+
+def test_a_cut_off_install_whose_retry_fails_still_leaves_the_old_extension(extensions,
+                                                                             monkeypatch):
+    ext_dir, source = extensions
+    aside = ext_dir / f".{eh.EXTENSION_UUID}.old"
+    aside.mkdir(parents=True)
+    (aside / "extension.js").write_text("// old")
+
+    def full_disk(src, dst):
+        os.makedirs(dst)
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr(eh.shutil, "copytree", full_disk)
+    assert eh.install_extension_from_local(str(source), auto_enable=False) is False
+    assert (ext_dir / eh.EXTENSION_UUID / "extension.js").read_text() == "// old"
 
 
 def test_a_linked_extensions_folder_is_staged_where_it_really_is(tmp_path, extensions,

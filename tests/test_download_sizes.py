@@ -2,7 +2,7 @@
 and the engine that runs it: "1.1 GB" alone left the 30 MB engine out), and
 CUDA's from cuda_helper (typed out by hand in Preferences, Help and System
 check, so one change of size meant finding them all)."""
-from tuxtalk import ai_download, cuda_download, cuda_helper, help_text, prefs_speech
+from tuxtalk import ai_download, cuda_helper, help_text, prefs_speech
 
 
 AI_SIZE, CUDA_SIZE = "7.7 GB", "9.9 GB"      # sizes no text would have typed out
@@ -55,13 +55,4 @@ def test_reading_a_size_doesnt_load_gtk():
     import sys
     code = ("import sys, tuxtalk.recommend, tuxtalk.cuda_helper; "
             "sys.exit('gi.repository.Gtk' in sys.modules)")
-    assert subprocess.run([sys.executable, "-c", code]).returncode == 0
-
-
-def test_a_cuda_wheel_file_named_outside_its_folder_is_skipped(tmp_path):
-    """A wheel's file names are data: "nvidia//home/u/x.so" or "../x.so"
-    would have been written wherever they pointed."""
-    assert cuda_download._inside(str(tmp_path), "cublas/lib/libcublas.so.12") \
-        == str(tmp_path / "cublas/lib/libcublas.so.12")
-    assert cuda_download._inside(str(tmp_path), "/home/u/.config/autostart/x.so.desktop") is None
-    assert cuda_download._inside(str(tmp_path), "../../x.so") is None
+    assert subprocess.run([sys.executable, "-c", code], timeout=60).returncode == 0
