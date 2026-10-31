@@ -252,11 +252,11 @@ def _fake_tray(running=True):
         is_service_running=lambda: running,
         start_service=rec("start"), stop_service=rec("stop"),
         restart_service=rec("restart"), show_fix_word_dialog=rec("fix"),
-        open_transcribe_window=rec("transcribe"), open_preferences=rec("prefs"),
-        show_voice_commands=rec("voice"), open_preferences_stats=rec("stats"),
+        open_transcribe_window=rec("transcribe"),
+        open_preferences=lambda _b=None, tab=None: calls.append(f"prefs:{tab}" if tab else "prefs"),
+        show_voice_commands=rec("voice"),
         show_help=rec("help"), show_about_dialog=rec("about"),
         check_for_updates_clicked=rec("updates"), quit_app=rec("quit"),
-        _launch_preferences=lambda tab=None: calls.append(f"prefs:{tab}"),
         menu=types.SimpleNamespace(engine_item=Gtk.MenuItem(label="Parakeet on the processor")))
     return tray
 
@@ -294,9 +294,10 @@ def test_menu_window_buttons_run_the_tray_actions():
     try:
         by_label = {b.get_label(): b for b in _buttons(win)}
         by_label["Preferences..."].clicked()
+        by_label["Your Stats..."].clicked()
         by_label["Transcribe a File..."].clicked()
         by_label["Quit TuxTalk"].clicked()
-        assert tray.calls == ["prefs", "transcribe", "quit"]
+        assert tray.calls == ["prefs", "prefs:stats", "transcribe", "quit"]
     finally:
         win.window.destroy()
 

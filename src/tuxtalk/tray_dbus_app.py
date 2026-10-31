@@ -121,11 +121,11 @@ class TrayAppInstance:
 
     def show_preferences_stats(self):
         """Open preferences to the Stats tab via tray."""
-        self._later(self.tray.open_preferences_stats, None)
+        self._later(self.tray.open_preferences, None, "stats")
 
     def show_preferences_updates(self):
         """Open preferences to Updates tab via tray."""
-        self._later(self.tray.open_preferences_updates, None)
+        self._later(self.tray.open_preferences, None, "updates")
 
     def set_performance_preset(self, preset_id: str):
         """Apply a performance preset via tray (called from GNOME extension D-Bus)."""

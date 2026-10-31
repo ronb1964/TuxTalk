@@ -412,51 +412,26 @@ class DictationTray(ServiceLifecycle, Presets):
         except Exception as e:
             logger.error(f"Failed to emit model change: {e}")
 
-    def _launch_preferences(self, tab=None):
-        """Launch the preferences window subprocess.
-
-        Args:
-            tab: Optional tab name to open directly (e.g. "updates").
-        """
-        # Already open: bring it forward instead of opening a second one.
-        # Doing nothing here looked like Preferences failed to open when the
-        # window was hidden behind others.
-        if self.preferences_process and self.preferences_process.poll() is None:
-            from . import prefs_ipc
-            pid = prefs_ipc.running_pid()
-            if pid and prefs_ipc.bring_to_front(pid, tab):
-                logger.info("Preferences already open; brought it to the front")
-                return
-            # Still starting, or closing: a new one brings the starting window
-            # forward on *tab*, or opens once the closing one has gone
-            # (prefs._acquire_prefs_singleton). Doing nothing lost the click.
-
-        tab_desc = f" ({tab} tab)" if tab else ""
-
-        from .service_launcher import launch_preferences
-        self.preferences_process = launch_preferences(tab)
-        logger.info(f"Opened preferences{tab_desc}")
-
-    def open_preferences(self, _):
-        """Launch preferences window."""
+    def open_preferences(self, _=None, tab=None):
+        """Open Preferences, on *tab* if given ("stats", "updates",
+        "advanced"); the widget that asked, if any, comes first. Already
+        open, it's brought forward on *tab* instead: doing nothing looked
+        like Preferences failed to open when it was behind other windows."""
         try:
-            self._launch_preferences()
+            if self._preferences_open():
+                from . import prefs_ipc
+                pid = prefs_ipc.running_pid()
+                if pid and prefs_ipc.bring_to_front(pid, tab):
+                    logger.info("Preferences already open; brought it to the front")
+                    return
+                # Still starting, or closing: a new one brings the starting
+                # window forward on *tab*, or opens once the closing one has
+                # gone (prefs._acquire_prefs_singleton). Doing nothing lost the click.
+            from .service_launcher import launch_preferences
+            self.preferences_process = launch_preferences(tab)
+            logger.info("Opened preferences" + (f" ({tab} tab)" if tab else ""))
         except Exception as e:
             logger.error(f"Failed to open preferences: {e}")
-
-    def open_preferences_stats(self, _):
-        """Open Preferences on the Stats tab (tray menu "Your Stats...")."""
-        try:
-            self._launch_preferences(tab="stats")
-        except Exception as e:
-            logger.error(f"Failed to open preferences stats tab: {e}")
-
-    def open_preferences_updates(self, _):
-        """Launch preferences window directly to Updates tab."""
-        try:
-            self._launch_preferences(tab="updates")
-        except Exception as e:
-            logger.error(f"Failed to open preferences updates tab: {e}")
 
     def open_transcribe_window(self, _=None):
         """Open Transcribe a File (transcribe_window.py), its own process."""
@@ -782,7 +757,7 @@ def _start_normally(tray, command, open_window):
         logger.info(f"Started with --{command}: {status}")
         control.report(status)
     tray._auto_start_service(1000)
-    if open_window and open_window != "quit":
+    if open_window:
         # Started by --open (a launcher shortcut) with nothing running.
         GLib.timeout_add(1500, tray.open_window, open_window)
     # Check for updates after a delay (don't interfere with startup)

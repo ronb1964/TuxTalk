@@ -98,7 +98,7 @@ class TrayMenu:
         quit_item = Gtk.MenuItem(label="Quit TuxTalk")
         prefs_item.connect("activate", tray.open_preferences)
         voice_cmds_item.connect("activate", tray.show_voice_commands)
-        stats_item.connect("activate", tray.open_preferences_stats)
+        stats_item.connect("activate", tray.open_preferences, "stats")
         help_item.connect("activate", tray.show_help)
         about_item.connect("activate", tray.show_about_dialog)
         updates_item.connect("activate", tray.check_for_updates_clicked)
