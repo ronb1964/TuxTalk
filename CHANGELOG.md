@@ -440,8 +440,10 @@ before 0.15.0, so older entries use that name.
   wait, send it"), the AI could drop the second half and keep the first, so
   TuxTalk typed the opposite of what you meant. That answer is thrown away
   now and the sentence is typed as you said it. The same goes for an answer
-  that changes a fraction, a time or a range ("5/6" into "5-6"), or that
-  adds a line break, which in a chat box could send the message early.
+  that changes a fraction, a time or a range ("5/6" into "5-6"), that puts
+  both numbers side by side ("meet at 3 pm, no wait, 4 pm" typed as "meet
+  at 3 4 pm"), or that adds a line break, which in a chat box could send
+  the message early.
 - "Please do not hit the bell." was typed as "Please do not.", and a
   sentence ending in "please subscribe" lost those words. TuxTalk took them
   for the YouTube sign-offs Whisper sometimes makes up from silence. It
