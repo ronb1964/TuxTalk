@@ -817,6 +817,13 @@ def corrected_in_another_document(ai_on, monkeypatch):
     return focus, typed, erased, trimmed, ai
 
 
+def _typed_as_said(typed):
+    """A refused correction: the phrase before stays, the new one is typed
+    as said after it, once, and Recent Dictations keeps both."""
+    assert typed == ["Meet at three", ". ", "No wait, four"]
+    assert rs.state.current.message.said == "Meet at three. No wait, four"
+
+
 def test_a_correction_backspaces_nothing_in_a_document_clicked_into_meanwhile(
         corrected_in_another_document, monkeypatch):
     """The Flatpak's portal got its keyboard ready after the checks, and
@@ -834,7 +841,7 @@ def test_a_correction_backspaces_nothing_in_a_document_clicked_into_meanwhile(
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: Portal())
     call(frames_of(speech(1.0)), "middle")
     assert erased == [] and trimmed == []
-    assert "Meet at four" not in typed
+    _typed_as_said(typed)
 
 
 def test_a_correction_presses_no_backspace_in_a_document_clicked_into_meanwhile(
@@ -854,7 +861,7 @@ def test_a_correction_presses_no_backspace_in_a_document_clicked_into_meanwhile(
     monkeypatch.setattr(keyboard_output, "output_backend", VirtualKeyboardOutputBackend)
     call(frames_of(speech(1.0)), "middle")
     assert keyboard.events == [] and trimmed == []
-    assert "Meet at four" not in typed
+    _typed_as_said(typed)
 
 
 def test_correction_on_the_last_phrase(ai_on):
