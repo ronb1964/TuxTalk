@@ -727,6 +727,12 @@ def _toml_string(value: str) -> str:
     return '"' + "".join(out) + '"'
 
 
+# The name write_text_atomic's temp file has after the file's own, as a
+# regular expression (tempfile.mkstemp's eight characters): what a save
+# killed part-way leaves beside the file.
+ATOMIC_TEMP = r"\.[a-z0-9_]{8}\.tmp"
+
+
 def write_text_atomic(path: str, text: str | bytes, keep_backup: bool = True,
                       mode: int | None = None) -> None:
     """Replace *path* with *text* without ever leaving it half-written. The

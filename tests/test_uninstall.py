@@ -251,15 +251,17 @@ def test_every_file_tuxtalk_writes_in_its_folders_goes_with_them(home):
     (config / "backups").mkdir()
     for name in (*uninstall.CONFIG_NAMES[1:3], "kde-hotkeys.json", "explained.json",
                  ".launchers-renamed", ".rename-notice-pending", "tuxtalk.log.old",
-                 "talktype.log.old", "config.toml.bak", "config.toml.corrupt-20261020",
+                 "talktype.log.old", "config.toml.bak", "config.toml.corrupt-20261020-090000",
                  "config.toml.ab12cd_9.tmp", "custom_words.txt.before-words-tab",
                  "backups/settings-20261020-090000.zip", "backups/last-saved-backup",
                  "backups/backup-folder", "backups/restore-pending",
                  "backups/.talktype-backup-x1y2z3w4.tmp"):
         (config / name).write_text("")
     for name in ("stats.json.bak", ".stats-ab12cd34", "recent-transcripts.json.tmp",
-                 ".hotkey_test_mode", "remote_desktop_token", "updates"):
+                 ".hotkey_test_mode", "remote_desktop_token", "remote_desktop_token.k3j_9x0a.tmp",
+                 "gnome-keybindings-backup.json.0a1b2c3d.tmp"):
         (data / name).write_text("")
+    (data / "updates").mkdir()
     uninstall.remove_files(_find(home), delete_personal=True, delete_shared=False)
     assert not config.exists() and not data.exists()
 
@@ -577,16 +579,34 @@ def test_a_linked_folders_copies_are_only_the_ones_tuxtalk_writes(home, tmp_path
     config = home / ".config/tuxtalk"
     synced = tmp_path / "Sync"
     synced.mkdir()
-    for name in ("config.toml.bak", "config.toml.ab1_cd2z.tmp", "config.toml.corrupt-20261020-0900",
+    for name in ("config.toml.bak", "config.toml.ab1_cd2z.tmp", "config.toml.corrupt-20261020-090000",
                  "custom_words.txt.before-words-tab", "tuxtalk.log.old"):
         (synced / name).write_text("ours")
-    for name in ("config.toml.personal-notes", "config.toml.mine.tmp"):
+    theirs = ["config.toml.personal-notes", "config.toml.mine.tmp", "config.toml.tmp",
+              "config.toml.before-my-holiday", "config.toml.corrupt-notes",
+              "custom_words.txt.old", "kde-hotkeys.json.bak", ".stats-ab12cd34"]
+    for name in theirs:
         (synced / name).write_text("someone else's")
     shutil.rmtree(config)
     config.symlink_to(synced)
     uninstall.remove_files(_find(home), delete_personal=True, delete_shared=False)
-    assert sorted(p.name for p in synced.iterdir()) == ["config.toml.mine.tmp",
-                                                         "config.toml.personal-notes"]
+    assert sorted(p.name for p in synced.iterdir()) == sorted(theirs)
+
+
+def test_a_folder_named_like_a_tuxtalk_file_is_the_users(home):
+    """A folder named config.toml, or one in backups named like a copy, is
+    no file of TuxTalk's, and a file named cuda no download folder."""
+    config, data = home / ".config/tuxtalk", home / ".local/share/TuxTalk"
+    (config / "config.toml").unlink()
+    for folder in (config / "config.toml", config / "backups/settings-20261020-090000.zip"):
+        folder.mkdir(parents=True)
+        (folder / "notes.md").write_text("someone else's")
+    shutil.rmtree(data / "kwin")
+    (data / "kwin").write_text("someone else's")
+    uninstall.remove_files(_find(home), delete_personal=True, delete_shared=False)
+    assert (config / "config.toml/notes.md").exists()
+    assert (config / "backups/settings-20261020-090000.zip/notes.md").exists()
+    assert (data / "kwin").read_text() == "someone else's"
 
 
 def test_the_download_size_counts_files_and_never_follows_a_link(tmp_path):
