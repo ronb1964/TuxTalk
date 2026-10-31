@@ -135,27 +135,6 @@ _CONTEXT_PROTECT_PATTERNS = [
     # "dash of [word]"
     (re.compile(r"\bdash(\s+of\b)", re.IGNORECASE), r"__LIT_DASH__\1"),
 
-    # "[article/adj/possessive] quote"
-    (re.compile(
-        r"\b(a|an|the|this|that|my|his|her|its|our|their|your|every|each|"
-        r"any|some|famous|great|good|nice|important|brief|long|short|"
-        r"memorable|favorite|powerful|funny|inspiring)\s+quote\b",
-        re.IGNORECASE,
-    ), r"\1 __LIT_QUOTE__"),
-    # "to quote", "can you quote", "I'll quote": the verb, never the mark
-    # (without this, "I want to quote him on that" typed 'I want to " him').
-    (re.compile(
-        r"\b(to|will|would|can|could|shall|should|may|might|must|ll|never|not|"
-        r"please|did|didn't|don't|won't|can't)(\s+(?:i|you|he|she|we|they))?"
-        r"\s+quote\b",
-        re.IGNORECASE,
-    ), r"\1\2 __LIT_QUOTE__"),
-    # "quote him", "quote of the day", "quote unquote": a person quoted, the
-    # noun, or the idiom. Words that start a quotation ("quote it was")
-    # aren't here, so "he said quote it was fine quote" still pairs.
-    (re.compile(r"\bquote(\s+(?:him|her|them|me|us|of\s+the|unquote)\b)", re.IGNORECASE),
-     r"__LIT_QUOTE__\1"),
-
     # "ended with a question mark", "add a comma": with an article the mark
     # is being talked about, not dictated. Nobody dictates "a question mark"
     # to end a sentence (without this, "ended with a question mark" typed
@@ -593,12 +572,51 @@ def _join_spoken_addresses(text: str) -> str:
     return _RE_EMAIL_JOINED.sub(_join_email, text)
 
 
+# --- _protect_quote_words: "quote" the word, once the pairs are known ---
+# A bare "quote" is a command said in pairs ("he said quote hello quote").
+# After "to", a modal, "please" or an article ("a great quote"), or before
+# him, me, "of the" or "unquote", it's usually the word. The pairs come
+# first: "she said quote me too quote" and "he told me quote we won't quote"
+# are quotations. So one that reads as the word is kept as one only when
+# it leaves an even number to pair ("to quote Einstein quote ... quote"), or
+# when every one reads as the word.
+_RE_BARE_QUOTE = re.compile(r"\b((?:open|close)\s+)?quote\b", re.IGNORECASE)
+_RE_QUOTE_WORD_BEFORE = re.compile(
+    r"\b(?:(?:to|will|would|can|could|shall|should|may|might|must|ll|never|not|please|"
+    r"did|didn['’]t|don['’]t|won['’]t|can['’]t)"
+    r"(?:\s+(?:i|you|he|she|we|they))?"
+    r"|a|an|the|this|that|my|his|her|its|our|their|your|every|each|any|some|famous|"
+    r"great|good|nice|important|brief|long|short|memorable|favorite|powerful|funny|"
+    r"inspiring)\s+$",
+    re.IGNORECASE)
+_RE_QUOTE_WORD_AFTER = re.compile(r"\s+(?:him|her|them|me|us|of\s+the|unquote)\b",
+                                  re.IGNORECASE)
+
+
+def _protect_quote_words(text: str) -> str:
+    """*text* with each bare "quote" that is the word, not a quote mark,
+    swapped for its placeholder (see above)."""
+    bare = [m for m in _RE_BARE_QUOTE.finditer(text) if not m.group(1)]
+    word_like = [m for m in bare
+                 if _RE_QUOTE_WORD_BEFORE.search(text, 0, m.start())
+                 or _RE_QUOTE_WORD_AFTER.match(text, m.end())]
+    if len(word_like) == len(bare):
+        words = word_like
+    elif len(bare) % 2 and word_like:
+        words = word_like[:1]
+    else:
+        words = []
+    for m in reversed(words):
+        text = text[:m.start()] + LITERAL_REPLACEMENTS["quote"] + text[m.end():]
+    return text
+
+
 def _protect_command_words(text: str) -> str:
     """Placeholders for command words that are meant as words: "literal
     period", and nouns such as "period of time" or "a dash of salt"."""
     for pat, placeholder in (*_LITERAL_PATTERNS, *_CONTEXT_PROTECT_PATTERNS):
         text = pat.sub(placeholder, text)
-    return text
+    return _protect_quote_words(text)
 
 
 def _spoken_marks_to_symbols(text: str) -> str:
