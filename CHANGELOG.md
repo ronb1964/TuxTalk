@@ -71,15 +71,34 @@ before 0.15.0, so older entries use that name.
   Compose are typed right instead of coming out as a Compose sequence.
 - Pause isn't on the list. Most keyboards send it as let go the moment it's
   pressed, so you can't hold it.
-- The hotkey helper is version 1.10, because it has to report Right Ctrl and
-  Right Alt on their own now and hear keys through a key remapper (1.10 also
-  tidies its code after a review, and
-  limits how much another program can make it read, which you won't notice).
+- The hotkey helper is version 1.11, because it has to report Right Ctrl and
+  Right Alt on their own now and hear keys through a key remapper (1.11 also
+  tidies its code after a review, limits how much another program can make
+  it read, and keeps a keyboard apart from the others once a rule lets
+  programs press its keys, all of which you won't notice).
   TuxTalk asks about the update by itself a few seconds after it starts, and
   keeps asking each start until it's done. It takes your password once and no
   restart. Until then Right Ctrl and Right
   Alt do nothing, and if you pick one in Preferences it says so and offers
   the update right there.
+- Letting go of Alt+F8 (which resizes a window on KDE and GNOME) stopped a
+  dictation you'd started with F9. It keeps going now.
+- If the hotkey helper had stopped when TuxTalk started, the dictation key
+  did nothing, and it still did nothing after System check's Update brought
+  the helper back, though it said no restart was needed. The keys come back
+  by themselves within a second now.
+- Without the hotkey helper, letting go of the dictation key at the very
+  moment the recording started could leave TuxTalk recording, with your
+  keyboard held, until you pressed the key again. It stops when you let go.
+- With Right Ctrl or Right Alt as the dictation key, letting go of it while
+  Paste Last Dictation waited for its keys left the recording running.
+- Without the hotkey helper, the first-run hotkey test wrote a line to
+  TuxTalk's log for every key you typed anywhere while it was open. It only
+  notes the dictation keys now.
+- Where TuxTalk sets up its hotkey helper, the hotkey test and the "can't
+  type" notice no longer tell you to restart the computer after Fix Typing:
+  the helper doesn't need one. The hotkey test's tip no longer mentions
+  switching between push-to-talk and toggle, since both keys always work.
 - With "Send each dictation automatically" on, a dictation that ends on "and"
   or "the" isn't sent, because you probably let go of the key mid-sentence.
   It used to hold back in silence, so it looked like sending had stopped
