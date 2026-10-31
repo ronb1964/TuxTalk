@@ -437,6 +437,34 @@ def test_a_restore_cut_off_between_its_files_is_undone_at_the_next_start(home, m
     assert not os.path.exists(sb._pending_path())
 
 
+def test_a_cut_off_restore_takes_away_the_file_it_added(home, monkeypatch):
+    """No snippets before the restore: the commands it wrote before it was
+    killed go again."""
+    from tuxtalk import custom_words
+    backup = sb.read_backup(_saved(home))
+    backup.files["custom_words.txt"] = b"TuxTalk\n"
+    os.remove(config.CUSTOM_COMMANDS_PATH)
+    write = config.write_text_atomic
+
+    def killed_on_the_words(path, text, **kw):
+        if path == custom_words.path():
+            raise SystemExit("killed")
+        write(path, text, **kw)
+    monkeypatch.setattr(config, "write_text_atomic", killed_on_the_words)
+    with pytest.raises(SystemExit):
+        sb.restore(backup)
+    monkeypatch.setattr(config, "write_text_atomic", write)
+    assert os.path.exists(config.CUSTOM_COMMANDS_PATH)          # the mix
+    sb.recover_cut_off_restore()
+    assert not os.path.exists(config.CUSTOM_COMMANDS_PATH)
+
+
+def _saved(home):
+    dest = home / "b.zip"
+    sb.write_backup(str(dest))
+    return str(dest)
+
+
 def test_a_finished_restore_leaves_nothing_to_undo_at_start(home):
     dest = home / "b.zip"
     sb.write_backup(str(dest))

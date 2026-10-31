@@ -436,7 +436,8 @@ def restore(backup):
     try:
         _snapshot()
         copies = list_snapshots()
-        if copies:
+        # The newest copy is the current settings now, if there are any.
+        if copies and os.path.exists(config.CONFIG_PATH):
             config.write_text_atomic(_pending_path(), os.path.basename(copies[0].path),
                                      keep_backup=False)
     except Exception as e:
@@ -481,6 +482,9 @@ def recover_cut_off_restore():
         if not _COPY_NAME.match(name):
             raise BackupError(f"the note names no copy ({name!r})")
         copy = read_backup(os.path.join(snapshots_dir(), name))
+        # Taken from these very files just before: what it lacks wasn't
+        # there, whatever an older manifest says.
+        copy.absent = tuple(n for n in _OPTIONAL if n not in copy.files)
     except BackupError as e:
         logger.warning(f"A restore of the settings was cut off part-way, and the copy "
                        f"from before it can't be read: {e}")
