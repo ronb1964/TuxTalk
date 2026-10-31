@@ -326,6 +326,9 @@ def test_the_switch_stays_off_while_dictation_stops(monkeypatch):
         assert tray.calls == ["stop"]
         win.refresh()                       # the service still runs
         assert not win.switch.get_active()
+        now[0] += 30                        # a long paragraph still being typed
+        win.refresh()
+        assert not win.switch.get_active()
         assert "Dictation is off" in win.status_label.get_text()
         now[0] += menu_window.SWITCH_SETTLE_S + 1
         win.refresh()                       # it never stopped: say so

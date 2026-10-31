@@ -20,6 +20,7 @@ gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
 from .logger import FailureNotes  # noqa: E402
+from .service_launcher import KILL_WAIT_S, QUIT_WAIT_S  # noqa: E402
 
 
 logger = logging.getLogger(__name__)
@@ -27,9 +28,10 @@ logger = logging.getLogger(__name__)
 WINDOW_TITLE = "TuxTalk"
 
 # How long the switch keeps what was just asked while the service gets
-# there: stopping waits for what's still being typed, and the poll would
-# otherwise flip the switch back on meanwhile.
-SWITCH_SETTLE_S = 15
+# there: a stop types what's left first and is waited for up to this long
+# before the service is killed, and the poll would flip the switch back on
+# meanwhile.
+SWITCH_SETTLE_S = QUIT_WAIT_S + KILL_WAIT_S
 
 
 def no_tray_note(extension_installed):
