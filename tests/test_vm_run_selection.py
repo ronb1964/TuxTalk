@@ -54,3 +54,17 @@ def test_two_runs_started_in_the_same_second_get_folders_of_their_own(monkeypatc
     first, second = run.new_run_folder(at), run.new_run_folder(at)
     assert first != second and first.is_dir() and second.is_dir()
     assert first.name == "2026-10-31-120001"
+
+
+def test_the_harness_modules_dont_stay_importable_by_their_plain_names(monkeypatch):
+    """"run" and "report" are common names: another test's import must not
+    get the VM harness's, and an earlier module of that name stays."""
+    import sys
+    import types
+    earlier = types.ModuleType("report")
+    monkeypatch.setitem(sys.modules, "report", earlier)
+    again = import_vm_tool("run")
+    assert again.report is not earlier and again.report.build
+    assert sys.modules["report"] is earlier
+    assert "run" not in sys.modules and "harness" not in sys.modules
+

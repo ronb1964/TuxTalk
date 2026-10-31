@@ -1289,16 +1289,24 @@ def message_boxes(monkeypatch):
 
 def import_vm_tool(name):
     """A module of the VM harness in tests/vm, which imports its neighbours
-    by plain name: their folder is on sys.path only while it loads, so no
-    other test can import "run" or "report" from there by accident."""
+    by plain name ("run", "report", "harness"). Their folder is on sys.path,
+    and they are in sys.modules, only while it loads: no other test imports
+    them by accident, and a module of the same name loaded before is neither
+    used here nor replaced. The module returned keeps its neighbours."""
     import importlib
+    import pathlib
     import sys
-    folder = os.path.join(os.path.dirname(__file__), "vm")
-    sys.path.insert(0, folder)
+    folder = pathlib.Path(__file__).parent / "vm"
+    names = {path.stem for path in folder.glob("*.py")}
+    before = {n: sys.modules.pop(n) for n in names if n in sys.modules}
+    sys.path.insert(0, str(folder))
     try:
         return importlib.import_module(name)
     finally:
-        sys.path.remove(folder)
+        sys.path.remove(str(folder))
+        for n in names:
+            sys.modules.pop(n, None)
+        sys.modules.update(before)
 
 
 def unscoped_selectors(css, scope_class):
