@@ -856,12 +856,13 @@ class SpeechSection(Tab):
 
         Only these keys are undone; the user's other edits saved fine and
         stay. The dropdowns go back too, quietly: no model-picked dialogs, and
-        no device setup (Vulkan's starts a download).
+        no device setup (Vulkan's starts a download). Returns the keys now
+        saved as *previous* has them: none when that write failed.
         """
         undo = {k: v for k, v in previous.items()
                 if v is not None and self.config.get(k) != v}
-        if not undo:
-            return
         for key, value in undo.items():
             self.set_choice(key, value)
-        self.win.save_config()
+        if undo and not self.win.save_config():
+            return set()
+        return {k for k, v in previous.items() if v is not None}

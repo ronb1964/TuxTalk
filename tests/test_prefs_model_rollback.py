@@ -248,20 +248,26 @@ class TestADeviceChangeIsRolledBackToo:
         assert "device" in _changed_since_open(stub)
 
 
-class TrayChangedTheModel(StubPrefs):
-    """The tray switched to Parakeet while Preferences was open: the save
-    merges like the real one, keeping the tray's model unless this window
-    changed it too."""
+class MergingStub(StubPrefs):
+    """A save that merges like the real one: what the tray saved meanwhile
+    (.on_disk) is kept unless this window changed it too."""
 
     def save_config(self):
         from tuxtalk.config import merge_changed_keys
-        self.on_disk = {"model": "parakeet-v3"}
         base = {**self._config_at_open, **self.on_disk}
         merged = merge_changed_keys(self._config_at_open, self.config, dict(base))
         self._saved_before, self._config_at_open = base, dict(merged)
         self.config = dict(merged)
         self.saved_models.append(self.config["model"])
         return True
+
+
+class TrayChangedTheModel(MergingStub):
+    """The tray switched to Parakeet while Preferences was open."""
+
+    def save_config(self):
+        self.on_disk = {"model": "parakeet-v3"}
+        return super().save_config()
 
 
 class TestTheTraysChoiceSurvivesTheRollback:
@@ -368,3 +374,50 @@ class TestWhatsSavedButNotInForceStaysOwed:
         stub.download_result = True
         prefs_cls.on_apply(stub, None)      # nothing picked since
         assert asked == [{"recording_indicator"}]
+
+
+class TestWhatStillRunsIsForgottenOnceItChanges:
+    """After Uninstall's Apply and a cancelled uninstall, the model that
+    still runs is kept to go back to. Kept past the moment it stops running,
+    it undid the next model in use at a later cancelled download."""
+
+    @pytest.fixture(autouse=True)
+    def _no_messages(self, monkeypatch):
+        from tuxtalk import prefs
+        monkeypatch.setattr(prefs, "show_message", lambda *a, **k: None)
+
+    def _after_a_cancelled_uninstall_and_download(self, prefs_cls):
+        """Small runs; Medium was saved by Uninstall's Apply, and its
+        download cancelled at the next Apply."""
+        stub = MergingStub(on_disk_model="small", chosen_model="medium")
+        stub.window = None
+        stub.download_result = False
+        assert stub.save_before_restart() is True
+        prefs_cls.on_apply(stub, None)
+        assert stub.model_on_disk == "small"
+        return stub
+
+    def test_a_model_the_tray_switches_to_survives_a_later_cancelled_download(
+            self, prefs_cls):
+        stub = self._after_a_cancelled_uninstall_and_download(prefs_cls)
+        stub.on_disk = {"model": "parakeet-v3"}         # Performance, in the tray
+        stub.config["model"] = "base"
+        prefs_cls.on_apply(stub, None)                  # its download cancelled
+
+        assert stub.model_on_disk == "parakeet-v3"
+
+    def test_a_switch_to_cuda_survives_a_later_cancelled_download(self, prefs_cls,
+                                                                  monkeypatch):
+        """CUDA's download saves its model and device at once (save_now)."""
+        from tuxtalk import config
+        stub = MergingStub(on_disk_model="small", chosen_model="medium")
+        stub.window = None
+        stub.download_result = False
+        assert stub.save_before_restart() is True
+        monkeypatch.setattr(config, "load_config", config.Settings)
+        monkeypatch.setattr(config, "save_config", lambda cfg: None)
+        assert prefs_cls.save_now(stub, {"model": "large-v3", "device": "cuda"}) is True
+        stub.config["model"] = "base"
+        prefs_cls.on_apply(stub, None)                  # its download cancelled
+
+        assert stub.model_on_disk == "large-v3"

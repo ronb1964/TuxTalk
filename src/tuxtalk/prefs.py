@@ -517,6 +517,8 @@ class PreferencesWindow:
             logger.warning(f"Could not save {sorted(settings)}: {e}")
             return False
         self._config_at_open.update(settings)
+        for key in settings:    # downloaded already: nothing to go back to
+            self._still_running.pop(key, None)
         return True
 
     def save_before_restart(self):
@@ -773,12 +775,15 @@ class PreferencesWindow:
         self.general_tab.show_saved()
         speech = self.general_tab.speech
         if not speech.download_selected_model():
-            speech.rollback_download(previous)
+            restored = speech.rollback_download(previous)
             # The rest was saved but never put in force: the next Apply
             # restarts for it rather than say it's in effect. A model or
-            # device put back to what still runs isn't owed any more.
+            # device saved back to what still runs is neither owed nor kept:
+            # kept, it would undo a model the tray switches to later.
             self._restart_owed |= set(changed) - set(_DOWNLOAD_KEYS)
-            self._restart_owed -= set(self._still_running)
+            for key in restored & set(self._still_running):
+                self._restart_owed.discard(key)
+                del self._still_running[key]
             return None
         self._still_running = {}        # downloaded: nothing left to go back to
         return changed, saved_at
@@ -815,7 +820,10 @@ class PreferencesWindow:
 
     def on_ok(self, button):
         """Save, apply (restarting only if needed), and close; Apply is the
-        one that stays open, so OK closes after a download too."""
+        one that stays open, so OK closes after a download too. It stays
+        open when the snippets or the settings couldn't be saved, a download
+        didn't finish, or start at login couldn't be changed (its warning
+        says Apply tries again)."""
         if not self.words_tab.save():
             # Closing would throw away the edits the user was just told
             # weren't saved: any settings changed are applied, and the
