@@ -14,6 +14,8 @@ from typing import NamedTuple
 
 import numpy as np
 
+from .audio_windows import split_windows, window_length
+
 # Talking needed before a pause can end a chunk: a cough or a click is shorter.
 MIN_SPEECH_S = 0.3
 # Silence kept at the end of a chunk, so the last word's decay is never cut.
@@ -37,9 +39,6 @@ HIGH_PASS_HZ = 150
 ROOM_WINDOW_S = 5.0
 ROOM_PERCENTILE = 10
 ROOM_START_S = 1.0
-# Levels are measured over windows this long, whatever size of block the audio
-# callback delivers: on cbox it delivered ~6 ms blocks, too short to measure.
-WINDOW_S = 0.02
 # Loud for less than this is a click or a burst of hiss, not speech; it does not
 # start a pause over. A consonant lasts longer. Longer limits that let a
 # dryer's thumps through (0.07 s) cut phrases mid-sentence 10 to 19% more
@@ -63,11 +62,11 @@ class PauseDetector:
     at every pause and then waits for new speech before it can fire again.
 
     The room level is measured differently too. SilenceDetector's floor is
-    the quietest block heard, rising only slowly, so a room that gets noisier
-    while you talk is learned late. Here the audio is high-passed, measured
-    over fixed WINDOW_S windows, and the room is a low percentile of those
-    levels over the last ROOM_WINDOW_S, digital silence left out, which
-    follows the room within seconds.
+    the quietest window heard, rising only slowly, so a room that gets
+    noisier while you talk is learned late. Here the audio is high-passed,
+    and the room is a low percentile of its windows' levels (each
+    audio_windows.WINDOW_S long) over the last ROOM_WINDOW_S, digital silence
+    left out, which follows the room within seconds.
     """
 
     def __init__(self, pause_seconds: float, sample_rate: int,
@@ -90,7 +89,7 @@ class PauseDetector:
         # High-pass: the signal minus its moving average over 1/HIGH_PASS_HZ.
         self._hp_len = max(2, int(self.sample_rate / HIGH_PASS_HZ))
         self._hp_tail = np.zeros(self._hp_len - 1)
-        self._win_len = max(1, int(WINDOW_S * self.sample_rate))
+        self._win_len = window_length(self.sample_rate)
         self._pending = np.zeros(0)
         self._levels = collections.deque()   # (clock, level) over ROOM_WINDOW_S
         self._room = 0.0
@@ -146,18 +145,16 @@ class PauseDetector:
         if hp.size == 0:
             return False
         self.blocks += 1
-        self._pending = np.concatenate([self._pending, hp])
+        windows, self._pending = split_windows(self._pending, hp, self._win_len)
         fired = False
-        n = self._win_len
-        while self._pending.size >= n:
-            window, self._pending = self._pending[:n], self._pending[n:]
+        for window in windows:
             level = float(np.sqrt(np.mean(window ** 2)))
-            fired = self._window(level, n / self.sample_rate) or fired
+            fired = self._window(level, self._win_len / self.sample_rate) or fired
         return fired
 
     def _window(self, level: float, duration: float) -> bool:
-        """Count one WINDOW_S window of *level*: True when it ends a pause
-        long enough to cut a chunk."""
+        """Count one window of *level*, *duration* seconds long: True when
+        it ends a pause long enough to cut a chunk."""
         self.level = level
         self._learn_room(level, duration)
         self.loudest = max(self.loudest, level)
