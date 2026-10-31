@@ -28,7 +28,7 @@ from . import notify as notify_module
 from . import recording_state as rs
 from .beeps import READY_BEEP
 from .chunk_text import boundary_mark, word_count, words_in_context
-from .key_commands import split_key_command
+from .key_commands import log_held_back, split_key_command
 from .logger import setup_logger
 from .normalize import safe_to_lowercase_first_word
 from .window_classes import app_kind, is_document_window
@@ -391,7 +391,7 @@ def _cut_off(message) -> str:
     no period, as a whole dictation is (key_commands.auto_send)."""
     cut_off = message.ends_on if live.press_enter_after else ""
     if cut_off:
-        logger.info(f'Held back the Enter: the dictation ended on "{cut_off}"')
+        log_held_back(cut_off)
         if message.held_mark is not None:
             message.held_mark["mark"] = ""
     return cut_off

@@ -266,12 +266,10 @@ def _sd_callback(rec, indata, frames_count, time_info, status):
 
     # Hands-free auto-stop: when the speaker has finished, ask the service
     # loop to stop it, exactly as a second press of the toggle key would.
+    # Logged by the service tick that stops it, to keep file writes off
+    # the audio thread.
     detector = rec.silence
     if detector is not None and detector.feed(indata):
-        if detector.nothing_said:
-            logger.info("Auto-stop: nothing said, stopping without typing anything")
-        else:
-            logger.info("Auto-stop: speaker went quiet, stopping the recording")
         rec.went_quiet = True
 
     # Feed the recording indicator whatever its active style needs.

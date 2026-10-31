@@ -104,5 +104,12 @@ def auto_send(words: str, in_document: bool) -> tuple[bool, str]:
     if cut_off:
         # The key came up mid-sentence: type it, but don't send half a
         # message. Saying "press enter" always sends.
-        logger.info(f'Held back the Enter: the dictation ended on "{cut_off}"')
+        log_held_back(cut_off)
     return not cut_off, cut_off
+
+
+def log_held_back(cut_off: str) -> None:
+    """Say in the log that the automatic Enter waits: the dictation ended on
+    *cut_off* ("and"), a word from a fixed list, never the user's words.
+    The VM checks look for this line."""
+    logger.info(f'Held back the Enter: the dictation ended on "{cut_off}"')

@@ -239,10 +239,24 @@ def _take_stop_request(cfg, svc: ServiceState, now: float) -> None:
         recording.stop_requested.clear()
     if not (rs.state.is_recording and (asked or rs.state.current.went_quiet)):
         return
+    if not asked:
+        _log_auto_stop(rs.state.current)
     keyboard_grab.release_all()
     pipeline.stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
                             cfg.auto_space, cfg.auto_period, cfg.injection_mode)
     svc.last_activity = now
+
+
+def _log_auto_stop(rec) -> None:
+    """Say why hands-free is stopping recording *rec*."""
+    detector = rec.silence          # read once: a stop elsewhere clears it
+    if detector is None or not detector.nothing_said:
+        logger.info("Auto-stop: speaker went quiet, stopping the recording")
+    elif rec.chunks_submitted:
+        logger.info("Auto-stop: nothing said loud enough for hands-free, but Type at pause "
+                    "heard phrases; stopping and typing the rest")
+    else:
+        logger.info("Auto-stop: nothing said, stopping without typing anything")
 
 
 def _reload_if_changed(cfg, svc: ServiceState, now: float):
