@@ -232,8 +232,8 @@ fi
 # has 1.25. Without it wl-copy falls back to a window of its own, which can
 # take the keyboard focus, and the Ctrl+V right after lands in that window:
 # dictations lost on KDE (Ron, 2026-10-18). Pinned tarball, checked by SHA256,
-# kept in the project folder like appimagetool below, installed only for
-# this build.
+# kept in the project folder between builds like the AppImage tools below,
+# installed only for this build.
 source packaging/pinned-download.sh
 WAYLAND_PROTOCOLS_VERSION=1.45
 WAYLAND_PROTOCOLS_SHA256=4d2b2a9e3e099d017dc8107bf1c334d27bb87d9e4aff19a0c8d856d17cd41ef0
