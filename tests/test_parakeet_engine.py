@@ -40,7 +40,7 @@ def test_whisper_downloads_are_not_filtered(monkeypatch):
 
     monkeypatch.setattr(
         huggingface_hub, "list_repo_tree",
-        lambda repo_id, recursive=True: [SimpleNamespace(path="model.bin", size=10),
+        lambda repo_id, recursive=True, **k: [SimpleNamespace(path="model.bin", size=10),
                                          SimpleNamespace(path="README.md", size=1)],
     )
     files = model_helper._files_to_download("Systran/faster-whisper-small")

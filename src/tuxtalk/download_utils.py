@@ -378,17 +378,23 @@ def _cached(lookup, repo, what):
 
 def cached_hub_file(repo: str, filename: str):
     """The local path of *filename* from Hugging Face *repo*, or None when it
-    isn't fully downloaded. Asks only the cache, never the network."""
+    isn't fully downloaded. Asks only the cache, never the network, for the
+    commit TuxTalk takes *repo* at (hub_pins)."""
     from huggingface_hub import hf_hub_download
-    return _cached(lambda: hf_hub_download(repo, filename, local_files_only=True),
+    from .hub_pins import revision
+    return _cached(lambda: hf_hub_download(repo, filename, revision=revision(repo),
+                                           local_files_only=True),
                    repo, f"{repo}/{filename}")
 
 
 def cached_hub_snapshot(repo: str):
     """The local snapshot folder of Hugging Face *repo*, or None when there is
-    none. It may hold only some of the files (see is_model_cached_fast)."""
+    none. It may hold only some of the files (see is_model_cached_fast).
+    The snapshot of the commit TuxTalk takes *repo* at (hub_pins)."""
     from huggingface_hub import snapshot_download
-    return _cached(lambda: snapshot_download(repo, local_files_only=True), repo, repo)
+    from .hub_pins import revision
+    return _cached(lambda: snapshot_download(repo, revision=revision(repo),
+                                             local_files_only=True), repo, repo)
 
 
 # What Hugging Face writes in refs/main: the commit the snapshot is of.

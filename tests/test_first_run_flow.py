@@ -225,7 +225,7 @@ def hugging_face(monkeypatch):
     monkeypatch.setattr(huggingface_hub, "hf_hub_download",
                         lambda repo_id, filename, **k: fetched.append(filename))
     monkeypatch.setattr(huggingface_hub, "snapshot_download", snapshot)
-    monkeypatch.setattr(huggingface_hub, "try_to_load_from_cache", lambda repo, name: None)
+    monkeypatch.setattr(huggingface_hub, "try_to_load_from_cache", lambda repo, name, **k: None)
     monkeypatch.setattr(download_utils, "free_space_bytes", lambda path: 10 ** 12)
     monkeypatch.setattr(model_helper, "is_model_cached_fast",
                         lambda m: {"model.bin", "config.json", "tokenizer.json"} <= set(fetched))

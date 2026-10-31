@@ -18,7 +18,7 @@ def snapshot(tmp_path, monkeypatch):
     """A fake Hugging Face snapshot folder that is_model_cached_fast() finds."""
     import huggingface_hub
     monkeypatch.setattr(huggingface_hub, "snapshot_download",
-                        lambda repo_id, local_files_only=True: str(tmp_path))
+                        lambda repo_id, local_files_only=True, **k: str(tmp_path))
     for name in ("model.bin", "config.json", "tokenizer.json"):
         (tmp_path / name).write_text("x")
     return tmp_path
@@ -33,6 +33,15 @@ def test_whisper_needs_its_vocabulary_file(snapshot):
 def test_whisper_with_vocabulary_counts_as_downloaded(snapshot, vocab):
     (snapshot / vocab).write_text("x")
     assert M.is_model_cached_fast("small") is True
+
+
+def test_large_v3_without_its_preprocessor_file_isnt_downloaded(snapshot):
+    """Loaded without it, large-v3 gets 80 mel bins where it needs 128 and
+    every dictation fails; counted as downloaded, it was never fetched again."""
+    (snapshot / "vocabulary.json").write_text("x")
+    assert M.is_model_cached_fast("large-v3") is False
+    (snapshot / "preprocessor_config.json").write_text("x")
+    assert M.is_model_cached_fast("large-v3") is True
 
 
 def test_a_cached_model_is_loaded_once(monkeypatch):
@@ -119,13 +128,11 @@ def test_a_damaged_download_record_counts_as_not_downloaded_and_is_logged(
     assert "damaged" in caplog.text
 
 
-def test_a_damaged_download_record_is_set_aside_so_the_download_mends_it(
-        monkeypatch, tmp_path, caplog):
-    """huggingface_hub reads refs/main before it replaces it, and so does the
-    disk-space check: the damaged record is set aside (kept, renamed) when a
-    download starts, the download goes through, and the model then counts
-    as downloaded."""
-    import logging
+def test_a_damaged_download_record_doesnt_stop_a_download(monkeypatch, tmp_path):
+    """A crash can leave Hugging Face's record of the current snapshot
+    (refs/main) as garbage. A download held to its commit (hub_pins) never
+    reads that record, so it goes through, and the model then counts as
+    downloaded."""
     import threading
 
     import huggingface_hub
@@ -139,26 +146,18 @@ def test_a_damaged_download_record_is_set_aside_so_the_download_mends_it(
     (folder / "refs" / "main").write_bytes(b"\xff\xfe garbage")
     names = ("model.bin", "config.json", "tokenizer.json", "vocabulary.txt")
     monkeypatch.setattr(M, "_listed_files", lambda repo, model, only: [(n, 1) for n in names])
-    commit = "a" * 40
 
-    def hub_download(repo_id, filename, **kwargs):
-        """Writes into the cache as the Hub does, after reading the old ref."""
-        ref = folder / "refs" / "main"
-        if not ref.exists() or ref.read_text() != commit:     # file_download.py does this
-            ref.write_text(commit)
-        snapshot = folder / "snapshots" / commit
+    def hub_download(repo_id, filename, revision, **kwargs):
+        """Writes into the cache as the Hub does for a commit: no ref."""
+        snapshot = folder / "snapshots" / revision
         snapshot.mkdir(parents=True, exist_ok=True)
         (snapshot / filename).write_text("x")
         return str(snapshot / filename)
     monkeypatch.setattr(huggingface_hub, "hf_hub_download", hub_download)
 
-    with caplog.at_level(logging.WARNING):
-        done = M.make_model_download_func("small")(lambda text, percent: None,
-                                                   threading.Event())
+    done = M.make_model_download_func("small")(lambda text, percent: None, threading.Event())
     assert done is True
     assert M.is_model_cached_fast("small") is True
-    assert list((folder / "damaged-refs").glob("main-*")), "the damaged record wasn't kept"
-    assert "Set aside a damaged" in caplog.text
 
 
 def test_damage_that_comes_back_after_a_mended_download_is_logged_again(
@@ -170,7 +169,7 @@ def test_damage_that_comes_back_after_a_mended_download_is_logged_again(
     answers = iter([ValueError("Invalid pointer path"), str(tmp_path / "f"),
                     ValueError("Invalid pointer path")])
 
-    def lookup(repo, filename, local_files_only):
+    def lookup(repo, filename, local_files_only, **k):
         answer = next(answers)
         if isinstance(answer, Exception):
             raise answer

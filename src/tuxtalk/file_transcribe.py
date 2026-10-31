@@ -193,7 +193,7 @@ def load_engine(cfg):
     that's the device, the processor when the graphics chip can't be used.
     Raises NotDownloaded when the model isn't on this computer."""
     from . import custom_words, language_limit, whisper_vulkan
-    from .model_helper import is_model_cached_fast
+    from .model_helper import is_model_cached_fast, whisper_model
     from .parakeet_engine import is_parakeet, load_parakeet_model
     from .recommend import model_title
 
@@ -232,19 +232,18 @@ def load_engine(cfg):
 
     if not is_model_cached_fast(name):
         raise NotDownloaded(missing)
-    from faster_whisper import WhisperModel
     if device == "cuda":
         try:
             from .cuda_helper import has_cuda_libraries
             if has_cuda_libraries():
-                model = WhisperModel(name, device="cuda", compute_type="float16",
-                                     local_files_only=True)
+                model = whisper_model(name, device="cuda", compute_type="float16",
+                                      local_files_only=True)
                 return FileEngine(model, "whisper", f"{title} on the graphics card (CUDA)",
                                   **common)
         except Exception as e:
             logger.warning(f"File transcription: CUDA not used ({e}); using the processor")
-    model = WhisperModel(name, device="cpu", compute_type="int8",
-                         cpu_threads=os.cpu_count() or 4, local_files_only=True)
+    model = whisper_model(name, device="cpu", compute_type="int8",
+                          cpu_threads=os.cpu_count() or 4, local_files_only=True)
     return FileEngine(model, "whisper", f"{title} on the processor", **common)
 
 

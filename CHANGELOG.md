@@ -461,6 +461,14 @@ before 0.15.0, so older entries use that name.
 - A web page could tell TuxTalk's graphics engine (Vulkan) to drop its
   speech model or load another file in its place. Its controls now sit at
   a random address each time it starts, which a page can't guess.
+- The speech models and the AI model from Hugging Face now always come
+  from the same version of each model, and the model files are checked as
+  they arrive, the way the engines already were. If someone changed one of
+  those models upstream, or a download arrived damaged, TuxTalk won't use
+  it. Models you already have aren't downloaded again.
+- If Large-v3's download was cut off just before its last small file,
+  TuxTalk counted it as downloaded, and then every dictation with it
+  failed. It now downloads the missing file.
 
 ## [0.18.2] - 2026-10-23
 

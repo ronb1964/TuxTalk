@@ -122,6 +122,6 @@ def test_the_original_v3_keeps_working_until_the_update(data_dir, tmp_path, monk
     old = tmp_path / "hf"
     old.mkdir()
     monkeypatch.setattr("huggingface_hub.hf_hub_download",
-                        lambda repo, name, local_files_only: str(old / name))
+                        lambda repo, name, local_files_only, **k: str(old / name))
     assert parakeet_engine.cached_model_dir() == str(old)
     assert whisper_vulkan.model_path(PARAKEET_MODEL) == str(old / whisper_vulkan.MODEL_FILES[PARAKEET_MODEL][0])

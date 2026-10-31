@@ -9,6 +9,7 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk
 from .ui_style import show_message
+from .hub_pins import SHA256 as _HUB_SHA256, revision as _revision
 from .logger import setup_logger
 from .recommend import model_title
 from .parakeet_engine import (
@@ -55,7 +56,7 @@ def _files_to_download(repo_id):
     """(path, size) pairs to fetch: every file in the Hugging Face repo *repo_id*.
     Raises if the file list cannot be fetched (callers fall back)."""
     from huggingface_hub import list_repo_tree
-    files_info = list(list_repo_tree(repo_id, recursive=True))
+    files_info = list(list_repo_tree(repo_id, recursive=True, revision=_revision(repo_id)))
     return [(f.path, f.size) for f in files_info
             if getattr(f, 'size', None) is not None]
 
@@ -68,13 +69,15 @@ def load_model(model_name, device="cpu", compute_type="int8"):
     """
     if is_parakeet(model_name):
         return load_parakeet_model()
+    return whisper_model(model_name, device=device, compute_type=compute_type,
+                         cpu_threads=os.cpu_count() or 4)
+
+
+def whisper_model(model_name, **options):
+    """faster-whisper's WhisperModel for *model_name*, from the commit
+    TuxTalk downloads it at (hub_pins), with *options*."""
     from faster_whisper import WhisperModel
-    return WhisperModel(
-        model_name,
-        device=device,
-        compute_type=compute_type,
-        cpu_threads=os.cpu_count() or 4,
-    )
+    return WhisperModel(model_name, revision=_revision(MODEL_REPOS.get(model_name)), **options)
 
 
 # Hugging Face repository for each Whisper model. Parakeet comes from
@@ -111,9 +114,8 @@ def _loads_on_cpu(model_name):
     """Whether a cached Whisper model loads on the processor: after a load has
     failed, this tells broken files from a device or driver problem."""
     try:
-        from faster_whisper import WhisperModel
-        model = WhisperModel(model_name, device="cpu", compute_type="int8",
-                             local_files_only=True)
+        model = whisper_model(model_name, device="cpu", compute_type="int8",
+                              local_files_only=True)
         del model
         return True
     except Exception as e:      # any failure here means it doesn't load
@@ -138,7 +140,8 @@ def is_model_cached_fast(model_name):
     # the presence of the files faster-whisper loads means they are complete.
     def has(name):
         return os.path.isfile(os.path.join(snapshot_path, name))
-    return all(map(has, ESSENTIAL_MODEL_FILES)) and any(map(has, VOCABULARY_FILES))
+    return (all(map(has, ESSENTIAL_MODEL_FILES)) and any(map(has, VOCABULARY_FILES))
+            and (model_name != "large-v3" or has(PREPROCESSOR_FILE)))
 
 
 def _failure_text(error):
@@ -186,7 +189,8 @@ def _disk_space_problem(repo, files, force=False, cancel_event=None):
         missing = list(files)
     else:
         missing = [(name, size) for name, size in files
-                   if not isinstance(try_to_load_from_cache(repo, name), str)]
+                   if not isinstance(try_to_load_from_cache(repo, name, revision=_revision(repo)),
+                                     str)]
     needed = sum(size for _, size in missing) * 1.1
     if not force and free and free < needed:
         needed -= _partial_bytes(HF_HUB_CACHE, repo, missing, cancel_event) * 1.1
@@ -236,7 +240,8 @@ def _current_etag(repo, name):
     from huggingface_hub import get_hf_file_metadata, hf_hub_url
     from huggingface_hub.constants import HF_HUB_ETAG_TIMEOUT
     try:
-        return get_hf_file_metadata(hf_hub_url(repo, name), timeout=HF_HUB_ETAG_TIMEOUT).etag
+        return get_hf_file_metadata(hf_hub_url(repo, name, revision=_revision(repo)),
+                                    timeout=HF_HUB_ETAG_TIMEOUT).etag
     except Exception as e:
         logger.info(f"Couldn't look up {name} for a partial download: {e}")
         return None
@@ -301,14 +306,18 @@ def _fetch_files(repo, model_name, files, all_needed, progress_callback, cancel_
             # A retried file counts its bytes once.
             downloaded_bytes[0] = bytes_before
             return hf_hub_download(repo_id=repo, filename=filename, tqdm_class=ProgressTqdm,
-                                   force_download=force)
+                                   force_download=force, revision=_revision(repo))
 
         try:
-            with_retries(fetch, filename, cancel_event, give_up_on=(RemoteEntryNotFoundError,))
+            path = with_retries(fetch, filename, cancel_event,
+                                give_up_on=(RemoteEntryNotFoundError,))
             # No progress means the file was already cached; count it anyway.
             if downloaded_bytes[0] == bytes_before:
                 downloaded_bytes[0] += file_size
                 report(f"Loaded from cache: {filename}")
+            else:
+                report(f"Checking {filename}...")
+                _check_download(repo, filename, path, cancel_event)
         except InterruptedError:
             return False
         except Exception as e:
@@ -339,6 +348,36 @@ def _fetch_files(repo, model_name, files, all_needed, progress_callback, cancel_
                        f"could not be downloaded, model is still usable: {failed_files[:3]}")
     progress_callback("All files downloaded!", 100)
     return True
+
+
+class ChecksumMismatch(Exception):
+    """A downloaded file isn't the one its SHA256 in hub_pins names."""
+
+
+def _check_download(repo, filename, path, cancel_event):
+    """Raise ChecksumMismatch when *path*, *filename* just fetched from
+    *repo*, isn't the file hub_pins' SHA256 names, after taking it out of
+    the cache, so that it is never loaded and the next try fetches it
+    again. Files without a SHA256 there pass."""
+    import hashlib
+    expected = _HUB_SHA256.get((repo, filename))
+    if expected is None:
+        return
+    sha = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            if cancel_event.is_set():
+                raise InterruptedError("Download cancelled")
+            sha.update(chunk)
+    if sha.hexdigest() == expected:
+        return
+    blob = os.path.realpath(path)
+    for gone in (path, blob):
+        try:
+            os.remove(gone)
+        except OSError as e:
+            logger.warning(f"Couldn't remove the damaged download {gone}: {e}")
+    raise ChecksumMismatch(f"{filename} arrived damaged (its checksum doesn't match)")
 
 
 def make_model_download_func(model_name, repo_id=None, only_files=None, force=False):
