@@ -124,14 +124,13 @@ def test_a_wl_copy_that_stops_reading_doesnt_hold_up_the_dictation(monkeypatch):
     """The write of a long dictation came before the time limit: a wl-copy
     that stopped reading its input held the dictation worker, and every
     dictation after it, for good."""
-    import tempfile
     import time
     monkeypatch.setattr(keyboard_output, "WL_COPY_READY_TIMEOUT_S", 0.2)
     proc = subprocess.Popen(["sleep", "30"], stdin=subprocess.PIPE,
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda *a, **k: proc)
     started = time.monotonic()
-    with tempfile.TemporaryFile() as errors:
-        assert keyboard_output._hand_to_wl_copy(proc, "word " * 200_000, errors) is False
+    assert keyboard_output._wl_copy_dictation("word " * 200_000) is False
     assert time.monotonic() - started < 5
     assert proc.returncode is not None, "left running, to set the clipboard later"
 
