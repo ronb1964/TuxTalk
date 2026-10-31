@@ -280,8 +280,9 @@ before 0.15.0, so older entries use that name.
 - Help's Problems tab opens with a "Report a Problem…" button. It puts together
   what I'd ask for anyway: your TuxTalk version, distro, desktop, keyboard
   layout, graphics card, the settings that matter and the end of the log,
-  with your username taken out and no dictated words. You see all of it
-  first, then copy it, save it to a file, or open a GitHub issue with it
+  with your username taken out and no dictated words, not even ones from a
+  time you had TuxTalk log them. You see all of it first, then copy it,
+  save it to a file only you can read, or open a GitHub issue with it
   filled in. Nothing is sent anywhere unless you do that yourself.
 - Preferences' tabs each have a faint outline now. On Breeze dark the tabs
   you weren't on were just words in a row, and it was hard to see they were

@@ -3,35 +3,48 @@ helping with a TuxTalk problem asks for first, gathered on this computer.
 
 TuxTalk sends none of it anywhere. The person reads it all, then copies it,
 saves it or pastes it into a GitHub issue themselves. What they dictate is
-already kept out of the log (logger.redact_text) unless they turned that
-logging on, which the window warns about; their home folder and user name
-are taken out here.
+never in it: the log keeps it out (logger.redact_text) unless that logging
+was turned on, and the lines from then are hidden here the same way. Their
+home folder and user name are taken out too.
 """
+import ast
 import logging
 import os
 import platform
 import re
 from dataclasses import asdict
+from typing import NamedTuple
 
 logger = logging.getLogger(__name__)
 
 LOG_LINES = 300
 
 
-def build(layout, home=None, user=None) -> str:
+class Report(NamedTuple):
+    """The report's text, and whether dictated words were left out of its log."""
+    text: str
+    words_left_out: bool
+
+
+def build(layout, home=None, user=None) -> Report:
     """The whole report, scrubbed. *layout* is layout_text(), read on the
     GTK thread: on KDE it asks over the shared session D-Bus connection.
     Any one fact that can't be read says so instead of stopping the rest."""
     from .config import load_config
     cfg = load_config()
+    home = home or os.path.expanduser("~")
+    user = user or _user_name()
+    log, words_left_out = hide_dictations(_log_tail())
+    # The user name only where a person's own words can be: a user called
+    # "mint" or "ubuntu" mustn't take the distro's name out of the facts.
     sections = (
-        ("TuxTalk", _tuxtalk(cfg)),
-        ("This computer", _computer(cfg, layout)),
-        ("Settings", _settings(cfg)),
-        (f"Log, the last {LOG_LINES} lines", _log_tail()),
+        ("TuxTalk", scrub(_tuxtalk(cfg), home, None)),
+        ("This computer", scrub(_computer(cfg, layout), home, None)),
+        ("Settings", scrub(_settings(cfg), home, user)),
+        (f"Log, the last {LOG_LINES} lines", scrub(log, home, user)),
     )
     text = "\n\n".join(f"## {title}\n{body}" for title, body in sections)
-    return scrub(text, home or os.path.expanduser("~"), user or _user_name())
+    return Report(text, words_left_out)
 
 
 def scrub(text, home, user) -> str:
@@ -47,15 +60,39 @@ def scrub(text, home, user) -> str:
     return text
 
 
-# Log lines that show what was dictated, when logging it was on: the text in
-# quotes, where it's otherwise "[hidden, N chars]" (logger.redact_text).
-_DICTATED = re.compile(r"(Raw transcription \([^)]*\)|Normalized text): '")
+# Where each log line that can hold what was said (every live.loggable caller)
+# says so. With "Log transcribed text" on, the words follow as a Python repr,
+# in double quotes when they have an apostrophe; off, as "[hidden, N chars]".
+_SPOKEN = re.compile(r"Raw transcription \(|Normalized text: |Custom commands applied: "
+                     r"|Stripped a hallucination|keyboard layout can't type |Voice edit"
+                     r"|Heard \"press enter\" in context|Short phrase: |Chunk \([^)]*\): ")
+_QUOTED = re.compile(r"'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\"")
 
 
-def has_dictations(report) -> bool:
-    """Whether the report's log shows what was dictated: logging it may be off
-    now and the lines still there."""
-    return bool(_DICTATED.search(report))
+def _hidden(quoted):
+    """A repr'd text as the log writes it with that logging off."""
+    try:
+        return f"[hidden, {len(ast.literal_eval(quoted.group()))} chars]"
+    except (ValueError, SyntaxError):
+        return "[hidden]"
+
+
+def hide_dictations(log):
+    """*log* with every dictated text in it hidden, as logging it off would
+    have, and whether there was any: the lines from when it was on stay in
+    the log after it's turned off."""
+    hid = 0
+
+    def hide(line):
+        nonlocal hid
+        found = _SPOKEN.search(line)
+        if not found:
+            return line
+        rest, count = _QUOTED.subn(_hidden, line[found.end():])
+        hid += count
+        return line[:found.end()] + rest
+    log = "\n".join(hide(line) for line in log.split("\n"))
+    return log, hid > 0
 
 
 def _user_name():
@@ -77,20 +114,31 @@ def fact(read):
 
 
 def _tuxtalk(cfg):
-    from . import __version__, recommend, uinput_helper
+    from . import __version__, recommend
     from .installation import get_install_type
     lines = [
         f"Version: {__version__}",
         f"Installed as: {fact(get_install_type)}",
         f"Speech: {fact(lambda: recommend.engine_line(cfg.model, cfg.device))}",
         f"Hotkey helper: {fact(_helper_state)}",
-        f"Typing: {fact(lambda: uinput_helper.typing_blocked_reason() or 'can type')}",
+        f"Typing: {fact(_typing_state)}",
     ]
     return "\n".join(lines)
 
 
+def _typing_state():
+    from . import uinput_helper
+    if os.environ.get("FLATPAK_ID"):
+        return "through the desktop's portal (Flatpak)"
+    if not os.path.exists("/dev/uinput"):
+        return "can't: no /dev/uinput (the uinput module isn't loaded)"
+    return uinput_helper.typing_blocked_reason() or "can type"
+
+
 def _helper_state():
     from . import secure_input
+    if os.environ.get("FLATPAK_ID"):
+        return "not used (Flatpak: the desktop's shortcuts portal)"
     if not secure_input.is_installed():
         return "not installed (the input group is used instead)"
     version = secure_input.running_version()
