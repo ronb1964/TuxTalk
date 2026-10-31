@@ -613,9 +613,11 @@ def paste_text(text: str) -> bool:
             keeping = _keeping()
             if keeping:
                 _keeper(clipboard.WaylandBoard).before_paste()
+            handed_off = False
             try:
                 if not _wl_copy_dictation(text):
                     return False
+                handed_off = True
                 wl_copy_time = time.time() - paste_start
                 logger.info(f"TIMING: wl-copy set the clipboard in {wl_copy_time:.3f}s")
                 if not _send_paste(text, keeping):
@@ -625,9 +627,12 @@ def paste_text(text: str) -> bool:
                 return True
             finally:
                 # Restore even after a failed paste, so the user's clipboard
-                # isn't lost either way.
-                if keeping:
+                # isn't lost either way. A clipboard never set may still hold
+                # an earlier paste, whose restore before_paste() called off.
+                if keeping and handed_off:
                     _clipboard_keeper.after_paste(text)
+                elif keeping:
+                    _clipboard_keeper.paste_failed()
     except (virtual_keyboard.StoppedPartway, virtual_keyboard.GaveUp):
         raise       # the paste may have happened, or must not: nothing may deliver it now
     except subprocess.TimeoutExpired as e:

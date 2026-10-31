@@ -406,6 +406,42 @@ def test_a_pasted_line_after_a_kwrite_line_break_gives_the_clipboard_back_too(
     assert board.data == b"what I copied"
 
 
+class _WlCopyFailing(_WlCopyInto):
+    """A wl-copy that fails before the clipboard changes."""
+
+    returncode = 1
+
+    def communicate(self, input=None, timeout=None):
+        return b"", b""
+
+    def poll(self):
+        return 1
+
+
+def test_a_failed_paste_after_a_kwrite_line_break_still_gives_the_clipboard_back(
+        monkeypatch, board, typing_into_kwrite):
+    """The emoji line's wl-copy failed after the line break was pasted: the
+    restore waited on the emoji line, which never reached the clipboard,
+    and Ctrl+V pasted a newline instead of what the user had copied."""
+    from tuxtalk import keyboard_layout
+
+    def keys(text):
+        if "\U0001f389" in text:
+            raise keyboard_layout.UntypableText(("us", "", ""), "\U0001f389")
+        return [(30, 1), (30, 0)]
+    copies = iter([_WlCopyInto(board)])
+    monkeypatch.setattr(keyboard_layout, "layout_key_events", keys)
+    monkeypatch.setattr(keyboard_output.subprocess, "Popen",
+                        lambda cmd, **kw: next(copies, _WlCopyFailing(board)))
+    from tuxtalk.virtual_keyboard import StoppedPartway
+    with pytest.raises(StoppedPartway):         # the first line went in, the second didn't
+        keyboard_output.type_text("Dear Sam,\xa7SHIFT_ENTER\xa7Congratulations \U0001f389")
+    assert board.data == b"\n"
+    while typing_into_kwrite:
+        typing_into_kwrite.pop(0)()
+    assert board.data == b"what I copied"
+
+
 def test_a_typed_line_break_in_kwrite_on_x11_gives_the_clipboard_back(monkeypatch):
     """X11 types every dictation, so this is where KWrite's pasted line
     breaks are most: TuxTalk kept "\n" on the clipboard until it quit."""
