@@ -232,24 +232,21 @@ def restore_cut_off_swap(target: str, old: str) -> None:
         logger.info(f"Put back {target}: replacing it was cut off part-way")
 
 
-def recover_cut_off_swaps(folder: str, lock: str, what: str) -> None:
-    """Before a download: each copy in *folder* whose replace_folder was cut
-    off between its renames, so only its .<name>.old is left, put back with
-    *lock*, the install's lock, held. The engine then works even if the
-    download fails. Never raises: a lock that stays busy is another install
-    under way, which puts them back itself."""
-    try:
-        olds = [entry.name for entry in os.scandir(folder)
-                if entry.name.startswith(".") and entry.name.endswith(".old")]
-    except OSError:
-        return              # no folder yet: nothing to put back
+def recover_cut_off_swaps(folder: str, names, lock: str, what: str) -> None:
+    """Before a download: each of *names* in *folder* whose replace_folder
+    was cut off between its renames, so only the folder .<name>.old is
+    left, put back with *lock*, the install's lock, held. The engine then
+    works even if the download fails. Never raises: a lock that stays busy
+    is another install under way, which puts them back itself."""
+    olds = [name for name in names if os.path.isdir(os.path.join(folder, f".{name}.old"))
+            and not os.path.islink(os.path.join(folder, f".{name}.old"))]
     if not olds:
         return
     try:
         with install_turn(lock, what):
             for name in olds:
-                restore_cut_off_swap(os.path.join(folder, name[1:-len(".old")]),
-                                     os.path.join(folder, name))
+                restore_cut_off_swap(os.path.join(folder, name),
+                                     os.path.join(folder, f".{name}.old"))
     except OSError as e:
         logger.warning(f"Couldn't put back {what} after an update cut off part-way: {e}")
 
@@ -276,7 +273,7 @@ def replace_folder(staging: str, target: str, old: str) -> None:
 
 def remove_stale_files(directory: str, pattern: str, max_age_s: float,
                        folders: bool = False) -> None:
-    """Delete the files (and with *folders*, the folders) in *directory*
+    """Delete the files (with *folders*, the folders instead) in *directory*
     matching the glob *pattern* that have not been modified for *max_age_s*
     seconds. Temp names are random, so a copy cut off by a kill or a reboot
     is never overwritten by the next try; without this sweep each one stays
@@ -291,12 +288,11 @@ def remove_stale_files(directory: str, pattern: str, max_age_s: float,
         return
     for entry in entries:
         try:
-            if (not fnmatch.fnmatchcase(entry.name, pattern)
+            folder = entry.is_dir(follow_symlinks=False)
+            if (not fnmatch.fnmatchcase(entry.name, pattern) or folder != folders
                     or entry.stat(follow_symlinks=False).st_mtime >= cutoff):
                 continue
-            if entry.is_dir(follow_symlinks=False):
-                if not folders:
-                    continue
+            if folder:
                 shutil.rmtree(entry.path)
             else:
                 os.remove(entry.path)
@@ -317,10 +313,11 @@ def download_area(parent: str, name: str, old_names=()):
     neither is touched for long once the download ends. *old_names* are the
     fixed archive names older versions used, removed once seen."""
     os.makedirs(parent, exist_ok=True)
-    # Only names shaped like its own: replace_folder's .<name>.old beside
-    # them may be the only complete copy of an engine.
-    remove_stale_files(parent, f".{glob.escape(name)}.{'[0-9a-f]' * _AREA_DIGITS}.*",
-                       STALE_PARTIAL_S, folders=True)
+    # Only its own names, each as the kind it makes: replace_folder's
+    # .<name>.old beside them may be the only complete copy of an engine.
+    stem = f".{glob.escape(name)}.{'[0-9a-f]' * _AREA_DIGITS}"
+    remove_stale_files(parent, stem + ".tar", STALE_PARTIAL_S)
+    remove_stale_files(parent, stem + ".d", STALE_PARTIAL_S, folders=True)
     for old in old_names:
         _remove_quiet(os.path.join(parent, old))
     stem = os.path.join(parent, f".{name}.{secrets.token_hex(_AREA_DIGITS // 2)}")

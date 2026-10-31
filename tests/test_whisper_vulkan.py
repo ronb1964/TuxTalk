@@ -246,6 +246,17 @@ def test_an_engine_update_cut_off_part_way_is_put_back_though_the_download_fails
     assert wv.is_engine_installed("small")
 
 
+def test_only_the_engines_own_kept_copy_is_put_back(tmp_path, monkeypatch):
+    """Every hidden .old in the folder was renamed, a user's .notes.old to notes."""
+    engine = tmp_path / "1.9.5" / wv.ENGINE_NAME
+    engine.parent.mkdir()
+    (engine.parent / ".notes.old").mkdir()
+    monkeypatch.setattr(wv, "_engine_dir", lambda: str(engine))
+    monkeypatch.setattr("tuxtalk.download_utils.download_file", lambda *a, **k: False)
+    wv.make_engine_download_func("small")(lambda *a: None, None)
+    assert [p.name for p in engine.parent.iterdir()] == [".notes.old"]
+
+
 def test_each_engine_build_has_its_own_asset():
     """Released versions check their build's SHA256 (0.12.0-0.13.1: 1.9.4 b1,
     0.14.x-0.15.x: 1.9.4 b2), so a new build never reuses a published name.

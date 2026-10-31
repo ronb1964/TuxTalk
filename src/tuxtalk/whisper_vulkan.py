@@ -188,7 +188,8 @@ def make_engine_download_func(model_name=None):
                                      recover_cut_off_swaps, replace_folder,
                                      restore_cut_off_swap, unpack_tar)
         parent = os.path.dirname(_engine_dir())
-        recover_cut_off_swaps(parent, "vulkan-engine", "the graphics engine")
+        recover_cut_off_swaps(parent, (ENGINE_NAME,), "vulkan-engine",
+                              "the graphics engine")
         if is_engine_installed(model_name):
             progress_callback("Already downloaded", 100)
             return True

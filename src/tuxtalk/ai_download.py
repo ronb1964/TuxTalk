@@ -37,6 +37,10 @@ MODEL_SIZE_TEXT = _size_text(MODEL_SIZE_MB)
 DOWNLOAD_SIZE_TEXT = _size_text(MODEL_SIZE_MB + LLAMA_SIZE_MB)
 
 
+# The folder llama.cpp's archive unpacks to, in _engine_dir().
+_SERVER_FOLDER = f"llama-{LLAMA_TAG}"
+
+
 def _engine_dir():
     from .config import get_data_dir
     return os.path.join(get_data_dir(), "ai-engine", LLAMA_TAG)
@@ -44,7 +48,7 @@ def _engine_dir():
 
 def server_binary():
     """Where llama-server is once downloaded."""
-    return os.path.join(_engine_dir(), f"llama-{LLAMA_TAG}", "llama-server")
+    return os.path.join(_engine_dir(), _SERVER_FOLDER, "llama-server")
 
 
 def model_path():
@@ -68,7 +72,7 @@ def make_engine_download_func():
                                      recover_cut_off_swaps, replace_folder,
                                      restore_cut_off_swap, unpack_tar)
         engine_dir = _engine_dir()
-        recover_cut_off_swaps(engine_dir, "ai-engine", "the AI engine")
+        recover_cut_off_swaps(engine_dir, (_SERVER_FOLDER,), "ai-engine", "the AI engine")
         if os.access(server_binary(), os.X_OK):
             progress_callback("Already downloaded", 100)
             return True
