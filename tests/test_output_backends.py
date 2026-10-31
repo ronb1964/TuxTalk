@@ -583,6 +583,20 @@ def test_a_flatpak_dictation_goes_nowhere_once_the_cursor_is_in_a_password_field
     monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TalkType")
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: b)
     answers = iter([False])                 # a text box when the dictation was made
-    monkeypatch.setattr(focused_window, "is_password", lambda: next(answers, True))
+    monkeypatch.setattr(focused_window, "is_password", lambda **k: next(answers, True))
     assert delivery.inject_text("swordfish", "auto") == "password_field"
     assert keys == []
+
+
+def test_a_flatpak_dictation_stops_before_a_line_break_into_a_password_field(monkeypatch):
+    """Typed through the portal in one go, the lines were checked once: a
+    tab into a password box after the first line got the line break, which
+    can press a login form's button, and the next line."""
+    from tuxtalk import focused_window
+    b, keys = _libei_with_the_focus_moving(monkeypatch, focus_moves_while_the_device_is_away=False)
+    monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TalkType")
+    monkeypatch.setattr(keyboard_output, "output_backend", lambda: b)
+    answers = iter([False, False])          # when it was made, and before its first line
+    monkeypatch.setattr(focused_window, "is_password", lambda **k: next(answers, True))
+    assert delivery.inject_text("ab\ncd", "auto") == "password_field"
+    assert [code for code, down in keys if down] == [30, 48]      # a, b: no Enter, no c or d

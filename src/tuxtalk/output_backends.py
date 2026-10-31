@@ -77,7 +77,8 @@ class LibeiOutputBackend(OutputBackend):
     False rather than raise, so the recording core surfaces its usual
     "couldn't type" notice; only keys held to a window that has lost the
     focus, or a dictation's with the cursor in a password field now, raise
-    virtual_keyboard.GaveUp, typing nothing (_with_session)."""
+    virtual_keyboard.GaveUp, typing nothing, or StoppedPartway when earlier
+    lines went in (_with_session)."""
 
     IFACE = "org.freedesktop.portal.RemoteDesktop"
     KEYBOARD = 1  # RemoteDesktop DeviceType bitmask: KEYBOARD=1, POINTER=2
@@ -249,12 +250,14 @@ class LibeiOutputBackend(OutputBackend):
         (keyboard_output.checks_before_keys, as LibeiSession.before_keys):
         the handshake can take seconds, minutes with the approval dialog,
         and a paused device up to 2 s more. Another window has the focus by
-        then, or a password field: virtual_keyboard.GaveUp, nothing typed,
-        the one exception this raises."""
+        then, or a password field: virtual_keyboard.GaveUp, nothing typed;
+        or, for a line of a dictation after earlier ones went in,
+        virtual_keyboard.StoppedPartway (LibeiSession.type_string). The two
+        exceptions this raises."""
         import logging
         import os
         from . import keyboard_output
-        from .virtual_keyboard import GaveUp
+        from .virtual_keyboard import GaveUp, StoppedPartway
         logger = logging.getLogger(__name__)
         fd = None
         session_path = None
@@ -273,7 +276,7 @@ class LibeiOutputBackend(OutputBackend):
                     return False
                 session.before_keys = keyboard_output.checks_before_keys()
                 return bool(action(session))
-        except GaveUp:
+        except (GaveUp, StoppedPartway):
             raise
         except Exception as e:
             logger.error("libei session action failed: %s", e)

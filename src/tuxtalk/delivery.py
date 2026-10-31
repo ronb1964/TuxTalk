@@ -289,18 +289,18 @@ def _delivery_stopped(stop, typed_some: bool) -> str:
     """The outcome of a delivery that *stop* ended early, after forgetting
     what undo, "select that" and the next dictation's capital count on.
 
-    StoppedPartway: an unknown part of the text is in the app; typing or
-    pasting it again would double that part. GaveUp: the cursor is in a
-    password field now (keyboard_output.refuse_password_field), with the
-    lines before it in the app, in a form (pasted, typed after a failed
-    paste) that isn't tracked; a Right Ctrl or Right Alt dictation key
-    stayed down, the window changed while typing waited for it
+    Either, with the reason "password_field": the cursor is in a password
+    field now (keyboard_output.refuse_password_field), with the lines
+    before it in the app, in a form (pasted, typed after a failed paste)
+    that isn't tracked. StoppedPartway: an unknown part of the text is in
+    the app; typing or pasting it again would double that part. GaveUp: a
+    Right Ctrl or Right Alt dictation key stayed down, the window changed while typing waited for it
     (modifier_hotkeys), or it isn't the one the text had to go into
     (focused_window.claim_into); typing on any other way (wtype, the
     clipboard) would do what the wait was there to prevent. *typed_some*:
     earlier lines were typed before it gave up."""
     forget_typed()
-    if isinstance(stop, virtual_keyboard.GaveUp) and stop.reason == "password_field":
+    if stop.reason == "password_field":
         return "password_field"     # logged where it gave up
     if isinstance(stop, virtual_keyboard.GaveUp) and not typed_some:
         return stop.reason          # logged where it gave up

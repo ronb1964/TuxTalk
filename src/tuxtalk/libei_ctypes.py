@@ -156,6 +156,19 @@ def plan_keys(text: str):
     return keys
 
 
+def _lines_and_breaks(keys):
+    """plan_keys's *keys* cut into runs: the keys of each line, and each
+    line break (Enter, with Shift or not) on its own."""
+    runs, line = [], []
+    for key in keys:
+        if key[0] == KEY_ENTER:
+            runs += [line, [key]] if line else [[key]]
+            line = []
+        else:
+            line.append(key)
+    return runs + [line] if line else runs
+
+
 class LibeiSession:
     """Wraps an EIS connection (fd from the RemoteDesktop portal's ConnectToEIS)
     and types text through it.
@@ -314,18 +327,38 @@ class LibeiSession:
         """Type `text` via libei. Handles the §SHIFT_ENTER§ soft-break marker
         (Shift+Enter) and plain newlines (Enter). Returns False, typing
         nothing, if a character can't be typed (only a US layout's ASCII can)
-        or no device became ready, so the caller shows its usual notice."""
+        or no device became ready, so the caller shows its usual notice.
+
+        Each line and each line break goes out on its own, after its own
+        before_keys: the focus can move into a password field while the
+        lines before it go in, and a line break there can press the form's
+        button. Stopped after some went in, it raises
+        virtual_keyboard.StoppedPartway, with the reason a check gave."""
+        from .virtual_keyboard import GaveUp, StoppedPartway
         keys = plan_keys(text)
         if keys is None:
             _log.warning("[libei] text holds characters this keyboard path can't type; "
                          "nothing was typed")
             return False
+        runs = _lines_and_breaks(keys)
+        for done, run in enumerate(runs):
+            try:
+                went = self._run_emitting(lambda run=run: self._emit_keys(run))
+            except GaveUp as stop:
+                if done:
+                    raise StoppedPartway(f"{done} of {len(runs)} parts", stop.reason) from None
+                raise
+            if not went and done:
+                raise StoppedPartway(f"{done} of {len(runs)} parts",
+                                     "the portal's keyboard went away")
+            if not went:
+                return False
+        return True
 
-        def emit():
-            for keycode, shift in keys:
-                self._emit_key(keycode, shift)
-
-        return self._run_emitting(emit)
+    def _emit_keys(self, keys):
+        """Press each of *keys*, [(keycode, shift)], in order."""
+        for keycode, shift in keys:
+            self._emit_key(keycode, shift)
 
     def select_all_delete(self) -> bool:
         """Ctrl+A then Backspace — wipe the focused field. The libei counterpart
