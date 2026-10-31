@@ -3,13 +3,17 @@
 Two uses:
 - A backup file the user saves and loads from Preferences → Updates & Backup, to move
   to another computer or keep through a reinstall. It holds the settings, the
-  voice commands (Fix a Word saves its words there too) and the usage stats.
+  snippets and voice commands, Your Words (with the fixes Fix a Word saves
+  under them) and the usage stats.
 - Automatic copies, so a change or an update that went wrong can be undone.
   The tray takes one at startup when the settings changed since the last one,
-  and keeps the last KEEP. They hold the settings and commands, not the
-  stats: rolling back a setting mustn't take away today's word count.
+  and keeps the last KEEP. They hold the same but the stats: rolling back a
+  setting mustn't take away today's word count.
 
-Both are ordinary zip files with a small manifest, read by the same code.
+Both are ordinary zip files with a small manifest, read by the same code. The
+manifest lists the files there were none of, so restoring takes away the
+snippets or words added since; a backup from before 0.19 lists none, and
+leaves them be.
 Models and the CUDA / Vulkan files are not included: they are large and
 download again by themselves.
 """
@@ -38,6 +42,8 @@ _SETTINGS = "config.toml"
 _COMMANDS = "custom_commands.toml"
 _WORDS = "custom_words.txt"          # Your Words (custom_words.py)
 _STATS = "stats.json"
+# The settings files a computer may not have yet.
+_OPTIONAL = (_COMMANDS, _WORDS)
 _COPY_NAME = re.compile(r"^settings-(\d{8}-\d{6})\.zip$")
 _DEVICE_LINE = re.compile(r'^device\s*=.*$', re.MULTILINE)
 _DEVICE_NAMES = {"cuda": "CUDA", "vulkan": "Vulkan"}
@@ -64,6 +70,7 @@ class Backup:
     version: str                # the TuxTalk version that made it
     created: str                # ISO date and time
     files: dict                 # name in the zip -> bytes
+    absent: tuple = ()          # _OPTIONAL files there were none of when it was made
 
 
 @dataclass
@@ -133,13 +140,15 @@ def snapshots_dir():
 
 _LAST_SAVED = "last-saved-backup"
 _FOLDER = "backup-folder"
+# Names the copy taken just before a restore, while the restore writes.
+_PENDING = "restore-pending"
 
 
 def is_ours(name):
     """Whether the file *name* in snapshots_dir() is one this module writes:
     the uninstall deletes only these when the settings folder is a link
     into a folder that may hold a backups folder of its own."""
-    return name in (_LAST_SAVED, _FOLDER) or _COPY_NAME.match(name) is not None
+    return name in (_LAST_SAVED, _FOLDER, _PENDING) or _COPY_NAME.match(name) is not None
 
 
 def _read_bytes(path):
@@ -173,7 +182,8 @@ def _write_zip(path, files):
     folder = os.path.dirname(os.path.abspath(path))
     os.makedirs(folder, exist_ok=True)
     manifest = {"app": "TuxTalk", "version": __version__,
-                "created": _now().isoformat(timespec="seconds")}
+                "created": _now().isoformat(timespec="seconds"),
+                "absent": [name for name in _OPTIONAL if name not in files]}
     fd, tmp = tempfile.mkstemp(dir=folder, prefix=".talktype-backup-", suffix=".tmp")
     try:
         with os.fdopen(fd, "wb") as f, zipfile.ZipFile(f, "w", zipfile.ZIP_DEFLATED) as z:
@@ -264,7 +274,12 @@ def read_backup(path):
         # encrypted member, NotImplementedError for an unknown compression).
         raise BackupError(
             f"This file isn't a TuxTalk settings backup, or it's damaged ({e}).") from e
+    return _checked(manifest, files)
 
+
+def _checked(manifest, files):
+    """The Backup read_backup read, as *manifest* and *files*. Raises
+    BackupError when it isn't one of ours, or its settings are damaged."""
     if not isinstance(manifest, dict) or manifest.get("app") not in _OUR_APP_NAMES:
         raise BackupError("This file isn't a TuxTalk settings backup.")
     if _SETTINGS not in files:
@@ -280,8 +295,11 @@ def read_backup(path):
             files[_WORDS].decode("utf-8")
         except UnicodeDecodeError:
             raise BackupError(f"The settings in this backup are damaged ({_WORDS}).")
+    absent = manifest.get("absent")
+    absent = tuple(name for name in _OPTIONAL if name not in files
+                   and isinstance(absent, list) and name in absent)
     return Backup(version=str(manifest.get("version", "")),
-                  created=str(manifest.get("created", "")), files=files)
+                  created=str(manifest.get("created", "")), files=files, absent=absent)
 
 
 def _device_works_here(device):
@@ -340,12 +358,17 @@ def _merge_stats(data, notes):
                      "added to them. Reset Stats on the Stats tab starts them fresh.")
 
 
+class _HalfRestored(BackupError):
+    """A restore that failed part-way and couldn't put every file back."""
+
+
 def _write_all_or_none(writes):
-    """Write each (path, text) of *writes*; if one fails (a full disk), put
-    back the ones already written, so the settings are never half the
-    backup's and half the old ones, and raise BackupError, saying so when a
-    file couldn't be put back either. Every original is read first, as it
-    is, so one that can't be read changes nothing."""
+    """Write each (path, text) of *writes*, a text of None removing the
+    file; if one fails (a full disk), put back the ones already written, so
+    the settings are never half the backup's and half the old ones, and
+    raise BackupError (_HalfRestored when a file couldn't be put back
+    either). Every original is read first, as it is, so one that can't be
+    read changes nothing."""
     try:
         before = {path: _read_bytes(path) for path, _ in writes}
     except OSError as e:
@@ -354,12 +377,15 @@ def _write_all_or_none(writes):
     written = []
     try:
         for path, text in writes:
-            config.write_text_atomic(path, text)
+            if text is not None:
+                config.write_text_atomic(path, text)
+            elif before[path] is not None:
+                os.remove(path)
             written.append(path)
     except OSError as e:
         stuck = [path for path in reversed(written) if not _put_back(path, before[path])]
         if stuck:
-            raise BackupError(
+            raise _HalfRestored(
                 f"The backup couldn't be loaded ({e}), and {len(stuck)} of your settings files "
                 "couldn't be put back either. The copy saved just before is under Earlier "
                 "settings: restore it once there's room.") from e
@@ -381,31 +407,94 @@ def _put_back(path, old) -> bool:
         return False
 
 
+def _writes(backup, settings_text):
+    """What restoring *backup* writes, as (path, text or None to remove),
+    with *settings_text* for its settings."""
+    from . import custom_words
+    paths = {_COMMANDS: config.CUSTOM_COMMANDS_PATH, _WORDS: custom_words.path()}
+    return [(config.CONFIG_PATH, settings_text)] + [
+        (paths[name], backup.files[name].decode("utf-8") if name in backup.files else None)
+        for name in _OPTIONAL if name in backup.files or name in backup.absent]
+
+
+def _pending_path():
+    """The record of a restore under way (_PENDING)."""
+    return os.path.join(snapshots_dir(), _PENDING)
+
+
 def restore(backup):
     """Replace the settings and commands with *backup*'s, after saving the
     current ones as an automatic copy (so this can be undone). Stats, when
-    the backup has them, are merged rather than replaced.
+    the backup has them, are merged rather than replaced. While the files
+    are written, a record names that copy: a restore cut off between them
+    (killed, a power cut) is undone at the next start
+    (recover_cut_off_restore).
 
     Returns notes for the user, such as a device kept for this computer.
     """
     notes = []
     try:
         _snapshot()
+        copies = list_snapshots()
+        if copies:
+            config.write_text_atomic(_pending_path(), os.path.basename(copies[0].path),
+                                     keep_backup=False)
     except Exception as e:
         raise BackupError("Your current settings couldn't be saved as a copy first, "
                           f"so nothing was changed ({e}).") from e
-    from . import custom_words
-    writes = [(config.CONFIG_PATH, _fit_device(backup.files[_SETTINGS].decode("utf-8"), notes))]
-    writes += [(path, backup.files[name].decode("utf-8"))
-               for name, path in ((_COMMANDS, config.CUSTOM_COMMANDS_PATH),
-                                  (_WORDS, custom_words.path()))
-               if name in backup.files]
-    _write_all_or_none(writes)
+    writes = _writes(backup, _fit_device(backup.files[_SETTINGS].decode("utf-8"), notes))
+    try:
+        _write_all_or_none(writes)
+    except _HalfRestored:
+        raise           # the record stays: the next start puts the copy back
+    except BackupError:
+        _forget_pending()       # every file was put back
+        raise
+    _forget_pending()
     if _STATS in backup.files:
         _merge_stats(backup.files[_STATS], notes)
     logger.info(f"Settings restored from a backup made {backup.created} "
                 f"by TuxTalk {backup.version}")
     return notes
+
+
+def _forget_pending():
+    """Remove the record of a restore under way, now it's over."""
+    try:
+        os.remove(_pending_path())
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        logger.warning(f"Couldn't remove the note of a finished restore: {e}")
+
+
+def recover_cut_off_restore():
+    """At start, before anything reads the settings: a restore cut off
+    between its file writes left some files the backup's and the rest the
+    old ones. The copy taken just before it is put back whole; one that
+    can't be written now is tried again at the next start. Never raises."""
+    data = _read_bytes(_pending_path())
+    if data is None:
+        return
+    name = data.decode("utf-8", "replace").strip()
+    try:
+        if not _COPY_NAME.match(name):
+            raise BackupError(f"the note names no copy ({name!r})")
+        copy = read_backup(os.path.join(snapshots_dir(), name))
+    except BackupError as e:
+        logger.warning(f"A restore of the settings was cut off part-way, and the copy "
+                       f"from before it can't be read: {e}")
+        _forget_pending()
+        return
+    try:
+        _write_all_or_none(_writes(copy, copy.files[_SETTINGS].decode("utf-8")))
+    except BackupError as e:
+        logger.warning(f"A restore of the settings was cut off part-way; the settings "
+                       f"from before it couldn't be put back yet: {e}")
+        return
+    logger.info(f"Put back the settings from before a restore that was cut off part-way "
+                f"({name})")
+    _forget_pending()
 
 
 def list_snapshots():

@@ -44,9 +44,6 @@
   "rename_migration.py::repin_launchers": {
    "decisions": 19
   },
-  "settings_backup.py::read_backup": {
-   "decisions": 18
-  },
   "uninstall.py::_empty": {
    "decisions": 20
   },

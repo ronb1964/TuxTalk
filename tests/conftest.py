@@ -886,8 +886,8 @@ def tray_main(monkeypatch):
     import sys
     import dbus.mainloop.glib
     from tuxtalk import (autostart, control, cuda_download, cuda_helper, desktop_identity,
-                         desktop_launcher, first_run_marker, first_run_setup, gnome_keybindings,
-                         rename_migration, service_launcher, settings_backup, tray, ui_style,
+                         desktop_launcher, extension_helper, first_run_marker, first_run_setup,
+                         gnome_keybindings, rename_migration, service_launcher, settings_backup, tray, ui_style,
                          update_install, ydotoold_leftovers)
     done = _Steps()
 
@@ -920,6 +920,10 @@ def tray_main(monkeypatch):
     monkeypatch.setattr(desktop_launcher, "add_launcher_actions", step("adds launcher actions"))
     monkeypatch.setattr(update_install, "check_just_updated", lambda: None)
     monkeypatch.setattr(settings_backup, "snapshot_if_changed", step("snapshots the settings"))
+    monkeypatch.setattr(settings_backup, "recover_cut_off_restore",
+                        step("finishes a cut-off restore"))
+    monkeypatch.setattr(extension_helper, "recover_cut_off_install",
+                        step("puts back a cut-off extension install"))
     monkeypatch.setattr(ydotoold_leftovers, "retire_ydotoold", step("retires ydotoold"))
     monkeypatch.setattr(cuda_download, "recover_cut_off_install",
                         step("puts back a cut-off CUDA install"))

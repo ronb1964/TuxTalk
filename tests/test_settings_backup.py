@@ -399,6 +399,55 @@ def test_your_words_travel_with_the_backup(home):
     assert custom_words.load() == ["TuxTalk", "BambuStudio"]
 
 
+def test_restoring_an_early_copy_takes_away_snippets_and_words_added_since(home):
+    """The copy was taken before there were any: "restored" said done, and
+    the new snippet and word stayed."""
+    from tuxtalk import custom_words
+    os.remove(config.CUSTOM_COMMANDS_PATH)
+    early = sb._snapshot()
+    with open(config.CUSTOM_COMMANDS_PATH, "w") as f:
+        f.write(COMMANDS_TEXT)
+    custom_words.save(["TuxTalk"])
+    sb.restore(sb.read_backup(early))
+    assert not os.path.exists(config.CUSTOM_COMMANDS_PATH)
+    assert custom_words.load() == []
+
+
+def test_a_restore_cut_off_between_its_files_is_undone_at_the_next_start(home, monkeypatch):
+    """Killed after the settings and before the commands: the mix stayed."""
+    dest = home / "b.zip"
+    sb.write_backup(str(dest))
+    backup = sb.read_backup(str(dest))
+    backup.files["config.toml"] = b'hotkey = "F6"\n'
+    backup.files["custom_commands.toml"] = b"# the backup's commands\n"
+    write = config.write_text_atomic
+
+    def killed_on_the_commands(path, text, **kw):
+        if path == config.CUSTOM_COMMANDS_PATH:
+            raise SystemExit("killed")
+        write(path, text, **kw)
+    monkeypatch.setattr(config, "write_text_atomic", killed_on_the_commands)
+    with pytest.raises(SystemExit):
+        sb.restore(backup)
+    monkeypatch.setattr(config, "write_text_atomic", write)
+    assert read(config.CONFIG_PATH) == 'hotkey = "F6"\n'        # the mix
+    sb.recover_cut_off_restore()
+    assert read(config.CONFIG_PATH) == CONFIG_TEXT
+    assert read(config.CUSTOM_COMMANDS_PATH) == COMMANDS_TEXT
+    assert not os.path.exists(sb._pending_path())
+
+
+def test_a_finished_restore_leaves_nothing_to_undo_at_start(home):
+    dest = home / "b.zip"
+    sb.write_backup(str(dest))
+    with open(config.CONFIG_PATH, "w") as f:
+        f.write('hotkey = "F9"\n')
+    sb.restore(sb.read_backup(str(dest)))
+    sb.recover_cut_off_restore()
+    assert read(config.CONFIG_PATH) == CONFIG_TEXT
+    assert sb._PENDING not in os.listdir(sb.snapshots_dir())
+
+
 # --- damaged files and failed writes -----------------------------------------
 
 def _corrupt_member(path, name):
@@ -521,7 +570,7 @@ def test_a_file_that_cant_be_put_back_is_said_and_points_at_the_copy(home, monke
         if full["on"]:
             raise OSError(28, "No space left on device")
         write(path, text, **kw)
-        full["on"] = True                       # full from the second write on
+        full["on"] = path == config.CONFIG_PATH     # full from the second file on
     monkeypatch.setattr(config, "write_text_atomic", disk)
     with pytest.raises(sb.BackupError, match="couldn't be put back either.*Earlier settings"):
         sb.restore(backup)

@@ -616,7 +616,8 @@ def main():
 
     # A copy of the settings to roll back to (Preferences → Advanced →
     # Restore Earlier Settings), taken before this version touches them.
-    from .settings_backup import snapshot_if_changed
+    from .settings_backup import recover_cut_off_restore, snapshot_if_changed
+    recover_cut_off_restore()   # a restore killed between its files
     snapshot_if_changed()
 
     from .ydotoold_leftovers import retire_ydotoold
