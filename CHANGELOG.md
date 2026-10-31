@@ -5,6 +5,13 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- With some microphones, hands-free never stopped by itself with a clothes
+  dryer running nearby. Those microphones send the sound in very small
+  pieces, and TuxTalk judged each piece on its own. With others, which send
+  bigger pieces, it stopped in the middle of a sentence more often. It now
+  listens the same way whatever the microphone sends. The flip side: with
+  the microphones that send small pieces, in a loud room hands-free can now
+  stop during a long pause, as it always has with other microphones.
 - With Type at pause, a short word said after a pause, like "yes", was
   lost if you stayed quiet for a moment before letting go of the key (or
   before hands-free stopped). TuxTalk took it for a cough and threw it away.
