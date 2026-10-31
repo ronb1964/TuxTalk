@@ -33,6 +33,7 @@ import io
 import json
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import threading
@@ -436,6 +437,7 @@ class VulkanWhisperModel:
         self.threads = threads or max(1, (os.cpu_count() or 2) // 2)
         self._proc = None
         self._port = None
+        self._path = ""
         # Re-entrant: a restart inside transcribe() runs a warm-up transcribe().
         self._lock = threading.RLock()
         self._launcher = engine_process.Launcher("vulkan-whisper")
@@ -454,11 +456,17 @@ class VulkanWhisperModel:
                                     engine_process.is_talktype_process, "graphics engine")
         self._port = engine_process.free_port()
         # Unlike llama-server (ai_server.py), whisper-server has no API key
-        # option. It listens on 127.0.0.1 only and sends nothing of the user's
-        # back, so another local program could at most borrow the graphics chip.
+        # option, and its /load route loads any model file it is given the
+        # path of, or frees the model. A random path before every route
+        # keeps web pages, which can post a form to 127.0.0.1 and scan the
+        # ports, away from it. It doesn't stop another user, who can read the
+        # command line: engine build 2 drops /load
+        # (vulkan-engine-patches/server-no-load-route.patch).
+        self._path = "/" + secrets.token_hex(16)
         command, env = engine_process.parent_death_command(
             [_binary("whisper-server"), "-m", model_path(self.model_name),
              "--host", "127.0.0.1", "--port", str(self._port),
+             "--request-path", self._path,
              "-t", str(self.threads), "-dev", str(self.device_index)], _engine_env())
         self._proc = self._launcher.popen(command, stdout=subprocess.DEVNULL,
                                           stderr=subprocess.PIPE, env=env)
@@ -471,7 +479,7 @@ class VulkanWhisperModel:
                     raise RuntimeError("the graphics engine stopped while starting"
                                        + engine_process.launch_failure(self._proc.returncode,
                                                                        output))
-                if engine_process.answers(self._port, self._proc.pid):
+                if engine_process.answers(self._port, self._proc.pid, self._path):
                     break
                 time.sleep(0.25)
             else:
@@ -516,7 +524,7 @@ class VulkanWhisperModel:
                 logger.warning("Graphics engine had stopped; starting it again")
                 self._start()
             request = urllib.request.Request(
-                f"http://127.0.0.1:{self._port}/inference", data=body,
+                f"http://127.0.0.1:{self._port}{self._path}/inference", data=body,
                 headers={"Content-Type": content_type})
             with engine_process.open_local(request, timeout=timeout) as response:
                 return json.load(response)

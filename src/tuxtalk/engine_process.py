@@ -165,13 +165,14 @@ def open_local(request, timeout):
     return _LOCAL.open(request, timeout=timeout)
 
 
-def answers(port, pid) -> bool:
-    """Whether the engine *pid* answers its health check on *port* yet. While
-    it loads its model it refuses the connection, answers 503, takes too long
-    or drops the connection mid-reply: each only means "not yet". An answer
-    from a program that isn't the engine is "not yet" too (listens_on)."""
+def answers(port, pid, path="") -> bool:
+    """Whether the engine *pid* answers its health check on *port* (under
+    *path*, whisper-server's --request-path) yet. While it loads its model
+    it refuses the connection, answers 503, takes too long or drops the
+    connection mid-reply: each only means "not yet". An answer from a
+    program that isn't the engine is "not yet" too (listens_on)."""
     try:
-        with open_local(f"http://127.0.0.1:{port}/health", timeout=1):
+        with open_local(f"http://127.0.0.1:{port}{path}/health", timeout=1):
             pass
     except (OSError, http.client.HTTPException):
         return False

@@ -1,0 +1,71 @@
+diff --git a/examples/server/server.cpp b/examples/server/server.cpp
+index b745f4d..04f604f 100644
+--- a/examples/server/server.cpp
++++ b/examples/server/server.cpp
+@@ -779,13 +779,6 @@ int main(int argc, char ** argv) {
+     -F response_format="json"
+         </pre>
+ 
+-        <h2>/load</h2>
+-        <pre>
+-    curl 127.0.0.1:)" + std::to_string(sparams.port) + R"(/load \
+-    -H "Content-Type: multipart/form-data" \
+-    -F model="&lt;path-to-model-file&gt;"
+-        </pre>
+-
+         <div>
+             <h2>Try it out</h2>
+             <form action=")" + sparams.request_path + sparams.inference_path + R"(" method="POST" enctype="multipart/form-data">
+@@ -1172,48 +1165,10 @@ int main(int argc, char ** argv) {
+                             "application/json");
+         }
+     });
+-    svr->Post(sparams.request_path + "/load", [&](const Request &req, Response &res){
+-        std::lock_guard<std::mutex> lock(whisper_mutex);
+-        state.store(SERVER_STATE_LOADING_MODEL);
+-        if (!req.has_file("model"))
+-        {
+-            fprintf(stderr, "error: no 'model' field in the request\n");
+-            const std::string error_resp = "{\"error\":\"no 'model' field in the request\"}";
+-            res.status = 400;
+-            res.set_content(error_resp, "application/json");
+-            return;
+-        }
+-        std::string model = req.get_file_value("model").content;
+-        if (!is_file_exist(model.c_str()))
+-        {
+-            fprintf(stderr, "error: 'model': %s not found!\n", model.c_str());
+-            const std::string error_resp = "{\"error\":\"model not found!\"}";
+-            res.status = 400;
+-            res.set_content(error_resp, "application/json");
+-            return;
+-        }
+-
+-        // clean up
+-        whisper_free(ctx);
+-
+-        // whisper init
+-        ctx = whisper_init_from_file_with_params(model.c_str(), cparams);
+-
+-        // TODO perhaps load prior model here instead of exit
+-        if (ctx == nullptr) {
+-            fprintf(stderr, "error: model init  failed, no model loaded must exit\n");
+-            exit(1);
+-        }
+-
+-        // initialize openvino encoder. this has no effect on whisper.cpp builds that don't have OpenVINO configured
+-        whisper_ctx_init_openvino_encoder(ctx, nullptr, params.openvino_encode_device.c_str(), nullptr);
+-
+-        state.store(SERVER_STATE_READY);
+-        const std::string success = "Load was successful!";
+-        res.set_content(success, "application/text");
+-
+-        // check if the model is in the file system
+-    });
++    // TuxTalk: no /load route. It took a model path from any local program
++    // (or a web page posting a form to 127.0.0.1) without a key, freeing the
++    // model or loading any file the user can read. TuxTalk starts a new
++    // server for a new model instead.
+ 
+     svr->Get(sparams.request_path + "/health", [&](const Request &, Response &res){
+         server_state current_state = state.load();

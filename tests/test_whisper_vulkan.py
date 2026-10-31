@@ -551,11 +551,13 @@ def test_speed_check_remembers_which_won(monkeypatch, times, slower):
 # A stand-in whisper-server: /health answers once it is up, /inference
 # answers with fixed text, or with an error when started with FAKE_FAIL_INFERENCE
 # in its environment (so the warm-up fails); FAKE_FAIL_START makes it print
-# that and end at once.
+# that and end at once. Like whisper-server, it serves its routes only under
+# its --request-path.
 FAKE_SERVER = '''
 import json, os, sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 port = int(sys.argv[sys.argv.index("--port") + 1])
+prefix = sys.argv[sys.argv.index("--request-path") + 1]
 fail = os.environ.get("FAKE_FAIL_INFERENCE") == "1"
 if os.environ.get("FAKE_FAIL_START"):
     sys.exit(os.environ["FAKE_FAIL_START"])
@@ -563,9 +565,13 @@ class H(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
     def do_GET(self):
+        if self.path != prefix + "/health":
+            self.send_response(404); self.end_headers(); return
         self.send_response(200); self.end_headers(); self.wfile.write(b"ok")
     def do_POST(self):
         self.rfile.read(int(self.headers["Content-Length"]))
+        if self.path != prefix + "/inference":
+            self.send_response(404); self.end_headers(); return
         if fail:
             self.send_response(500); self.end_headers(); return
         body = json.dumps({"text": "hello", "segments": []}).encode()
@@ -625,6 +631,24 @@ def test_the_graphics_engine_starts_through_the_engine_launcher(fake_server, mon
         assert "preexec_fn" not in kwargs
     finally:
         model.close()
+
+
+def test_the_graphics_engines_routes_sit_behind_a_random_path(fake_server, monkeypatch):
+    """whisper-server's /load route loads any model file it's given the path
+    of, with no key. A web page can post a form to 127.0.0.1, but can't
+    guess a random path in front of every route."""
+    started = []
+    real_popen = wv.subprocess.Popen
+    monkeypatch.setattr(wv.subprocess, "Popen",
+                        lambda command, **k: started.append(command) or real_popen(command, **k))
+    paths = []
+    for _ in range(2):
+        model = wv.VulkanWhisperModel("small", 0, threads=1)     # its warm-up dictated
+        try:
+            paths.append(started[-1][started[-1].index("--request-path") + 1])
+        finally:
+            model.close()
+    assert all(len(path) > 30 for path in paths) and paths[0] != paths[1]
 
 
 def test_a_server_that_ends_at_start_says_what_it_printed(fake_server, monkeypatch):

@@ -458,6 +458,9 @@ before 0.15.0, so older entries use that name.
   the engine got there. TuxTalk would then have sent it what you said, and
   typed whatever it answered. TuxTalk now checks the engine it's talking to
   is the one it started.
+- A web page could tell TuxTalk's graphics engine (Vulkan) to drop its
+  speech model or load another file in its place. Its controls now sit at
+  a random address each time it starts, which a page can't guess.
 
 ## [0.18.2] - 2026-10-23
 
