@@ -114,6 +114,29 @@ def test_right_ctrl_held_with_left_ctrl_is_someone_elses_shortcut(service):
     assert "start" not in service
 
 
+def test_letting_go_of_alt_f8_leaves_a_toggle_recording_running(service):
+    """Alt+F8 resizes the window (KDE, GNOME): its press is the desktop's,
+    so its release mustn't stop what F9 is recording."""
+    held = set()
+    key(ecodes.KEY_F9, 1, held, toggle=ecodes.KEY_F9)
+    key(ecodes.KEY_F9, 0, held, toggle=ecodes.KEY_F9)
+    assert service == ["start"]
+    key(ecodes.KEY_LEFTALT, 1, held, toggle=ecodes.KEY_F9)
+    key(F8, 1, held, toggle=ecodes.KEY_F9)
+    key(F8, 0, held, toggle=ecodes.KEY_F9)
+    key(ecodes.KEY_LEFTALT, 0, held, toggle=ecodes.KEY_F9)
+    assert "stop" not in service and rs.state.is_recording
+
+
+def test_a_plain_f8_tap_still_stops_a_toggle_recording(service):
+    held = set()
+    key(ecodes.KEY_F9, 1, held, toggle=ecodes.KEY_F9)
+    key(ecodes.KEY_F9, 0, held, toggle=ecodes.KEY_F9)
+    key(F8, 1, held, toggle=ecodes.KEY_F9)
+    key(F8, 0, held, toggle=ecodes.KEY_F9)
+    assert service[-1] == "stop"
+
+
 def test_right_alt_presses_ctrl_before_hiding_so_no_menu_bar_opens(service):
     """A lone Alt tap puts Firefox's menu bar in focus, and the dictation
     would be typed into it."""

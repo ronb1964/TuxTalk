@@ -254,3 +254,25 @@ def test_a_hold_started_while_the_combo_is_pending_still_stops(keys, monkeypatch
     send(ecodes.KEY_F8, 1, held)
     send(ecodes.KEY_F8, 0, held)
     assert stopped, "the hold key's release was swallowed"
+
+
+def test_a_right_ctrl_hold_key_let_go_while_the_combo_is_pending_still_stops(keys, monkeypatch):
+    """Right Ctrl is a modifier, but as the hold key its release is the
+    dictation's end, not part of Ctrl+Alt+P."""
+    stopped = []
+    monkeypatch.setattr(recording, "start_recording",
+                        lambda *a, **k: setattr(rs.state, "is_recording", True) or rs.state.current)
+    monkeypatch.setattr(pipeline, "stop_recording",
+                        lambda *a, **k: stopped.append(True) or setattr(rs.state, "is_recording", False))
+    for name, value in (("smart_quotes", False), ("language", None), ("auto_period", True)):
+        monkeypatch.setattr(Cfg, name, value, raising=False)
+    rctrl = ecodes.KEY_RIGHTCTRL
+    held = set()
+    press_combo(held)
+    send(CTRL, 0, held)
+    send(ALT, 0, held)               # P still down: paste pending
+    for value in (1, 0):
+        (held.add if value else held.discard)(rctrl)
+        hotkeys._handle_key_event(KeyEvent(rctrl, value), rctrl, None, None, held, [], Cfg(),
+                                  0, paste_last_combo=COMBO)
+    assert stopped, "the Right Ctrl hold key's release was swallowed"

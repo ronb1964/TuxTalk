@@ -164,6 +164,11 @@ class RecordingState:
     # A Right Ctrl or Right Alt dictation key that's down and hidden from
     # the desktop (see hotkeys._hide_modifier_hotkey), or None.
     hidden_key: int | None = None
+    # The recording the hold key's last press may stop when it comes up:
+    # the one it started, or the one already running. None after a press
+    # refused as someone else's shortcut (Alt+F8 resizes the window), so
+    # its release leaves a toggle recording running.
+    hold_stops: object = None
     # The last Enter TuxTalk pressed: {"at", "automatic"}, or None
     # (last_dictation.forget_after_key). "edit that" just after it explains itself.
     sent: object = None
