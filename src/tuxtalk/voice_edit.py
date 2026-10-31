@@ -18,7 +18,6 @@ from . import (
     last_dictation,
     notices,
     recording,
-    resampling,
     silence,
     type_at_pause,
     voice_commands,
@@ -69,7 +68,7 @@ def transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode, mess
     if audio_f32.size == 0:
         return
     if rec_sr != engine.SAMPLE_RATE:
-        audio_f32 = resampling.resample(audio_f32, rec_sr, engine.SAMPLE_RATE)
+        audio_f32 = recording.resample(audio_f32, rec_sr, engine.SAMPLE_RATE)
     if silence.is_speechless_tap(audio_f32, engine.SAMPLE_RATE):
         return
 
