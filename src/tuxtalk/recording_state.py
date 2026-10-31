@@ -41,10 +41,10 @@ class Message:
     serial: int = 0
     # What Type at pause's next phrase of this recording picks up: the last
     # phrase's final mark, held back for it to decide
-    # (chunking.hold_back_boundary: {"mark", "audio", "raw", "typed",
+    # (chunk_text.hold_back_boundary: {"mark", "audio", "raw", "typed",
     # "where"}); a "No wait." said alone, whose corrected value comes next; a
     # "?" heard as mid-sentence, so the question ends with the next phrase
-    # (chunking.carry_question); and the text "edit that" said alone is to
+    # (chunk_text.carry_question); and the text "edit that" said alone is to
     # change. Kept out of the repr: they hold what the user said.
     held_mark: dict | None = field(default=None, repr=False)
     held_cue: str = field(default="", repr=False)
