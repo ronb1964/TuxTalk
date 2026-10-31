@@ -1299,3 +1299,17 @@ def import_vm_tool(name):
         return importlib.import_module(name)
     finally:
         sys.path.remove(folder)
+
+
+def unscoped_selectors(css, scope_class):
+    """The selectors of stylesheet *css* that don't carry .*scope_class*, a
+    bare `*` and each part of a selector list included: once the sheet is
+    installed screen-wide, any of them restyles every window in the process.
+    GTK reads the sheet, so a selector list comes back one rule a selector."""
+    import re
+    provider = Gtk.CssProvider()
+    provider.load_from_data(css.encode())
+    selectors = re.findall(r"^([^{}\s][^{}]*?)\s*\{", provider.to_string(), re.MULTILINE)
+    assert selectors, "the stylesheet has no rules"
+    scoped = re.compile(rf"\.{re.escape(scope_class)}(?![\w-])")
+    return [selector for selector in selectors if not scoped.search(selector)]
