@@ -50,10 +50,11 @@ class ServiceLifecycle:
                 return False
             from .service_launcher import (QUIT_WAIT_S, pre_rename_service_pids,
                                            stop_dictation_service)
-            if pre_rename_service_pids() and waited < 30:
+            old = pre_rename_service_pids()
+            if old and waited < 30:
                 if waited == 0:
                     logger.info("Stopping the pre-0.15.0 dictation service an update left")
-                    stop_dictation_service()
+                    stop_dictation_service(pids=old)
                 GLib.timeout_add(100, self._check_and_start, gen, waited + 1)
             elif not self.is_service_running():
                 logger.info("Auto-starting dictation service...")

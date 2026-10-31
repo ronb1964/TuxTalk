@@ -251,10 +251,12 @@ def find_service_pids():
     ]
 
 
-def stop_dictation_service(force: bool = False) -> None:
-    """Signal the dictation service, and only the dictation service, without
-    waiting: the pre-0.15.0 service at start. *force* sends SIGKILL instead
-    of SIGTERM: the welcome dialog, for a service started during setup.
+def stop_dictation_service(force: bool = False, pids=None) -> None:
+    """Signal the dictation services, and only those, without waiting: the
+    pre-0.15.0 one at start (its *pids* alone, so a TuxTalk service
+    Preferences started is left running) and, with *force*, the first-run
+    hotkey test, for one started during setup. *force* sends SIGKILL
+    instead of SIGTERM. Every service found now when *pids* is None.
 
     Never raises: every caller is a cleanup path, where a service left
     running is better than an exception. Waiting, and killing past the
@@ -262,7 +264,8 @@ def stop_dictation_service(force: bool = False) -> None:
     """
     sig = signal.SIGKILL if force else signal.SIGTERM
     try:
-        pids = find_service_pids()
+        if pids is None:
+            pids = find_service_pids()
     except Exception as e:
         logger.warning(f"Could not look for the dictation service: {e}")
         return

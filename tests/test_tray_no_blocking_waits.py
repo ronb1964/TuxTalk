@@ -45,13 +45,14 @@ def test_waiting_for_the_old_service_does_not_sleep(monkeypatch):
     monkeypatch.setattr("tuxtalk.service_launcher.pre_rename_service_pids",
                         lambda: old[0] if len(old) == 1 else old.pop(0))
     stops = []
-    monkeypatch.setattr("tuxtalk.service_launcher.stop_dictation_service", lambda: stops.append(1))
+    monkeypatch.setattr("tuxtalk.service_launcher.stop_dictation_service",
+                        lambda pids: stops.append(pids))
     started = []
     t = _tray(is_service_running=lambda: False, start_service=lambda _: started.append(1))
 
     t._auto_start_service(1000)
     _run_timers(loop)
-    assert stops == [1] and started == [1]
+    assert stops == [[111]] and started == [1], "only the pre-rename service is stopped"
 
 
 def test_an_old_service_that_wont_go_is_given_three_seconds(monkeypatch):
@@ -59,7 +60,7 @@ def test_an_old_service_that_wont_go_is_given_three_seconds(monkeypatch):
     monkeypatch.setattr(tray_service, "GLib", loop)
     old = {"pids": [111]}
     monkeypatch.setattr("tuxtalk.service_launcher.pre_rename_service_pids", lambda: old["pids"])
-    monkeypatch.setattr("tuxtalk.service_launcher.stop_dictation_service", lambda: None)
+    monkeypatch.setattr("tuxtalk.service_launcher.stop_dictation_service", lambda pids: None)
     started = []
     t = _tray(is_service_running=lambda: False, start_service=lambda _: started.append(1))
     t._auto_start_service(1000)
@@ -112,7 +113,7 @@ def test_dictation_turned_off_while_the_old_service_goes_stays_off(monkeypatch):
     monkeypatch.setattr(tray_service, "GLib", loop)
     old = {"pids": [111]}
     monkeypatch.setattr("tuxtalk.service_launcher.pre_rename_service_pids", lambda: old["pids"])
-    monkeypatch.setattr("tuxtalk.service_launcher.stop_dictation_service", lambda: None)
+    monkeypatch.setattr("tuxtalk.service_launcher.stop_dictation_service", lambda pids: None)
     started = []
     t = _tray(is_service_running=lambda: False, start_service=lambda _: started.append(1))
     t._auto_start_service(1000)
