@@ -189,6 +189,27 @@ def test_failed_recording_start_tells_the_user(monkeypatch, quiet_recording):
     assert "microphone" in " ".join(seen[0]).lower()
 
 
+def test_the_dictation_stream_leaves_other_streams_their_own_settings(monkeypatch,
+                                                                      quiet_recording):
+    """The microphone's rate and one channel go to its own stream, not into
+    sounddevice's defaults for every stream the process opens after it."""
+    opened = []
+
+    class FakeStream:
+        def __init__(self, **kwargs):
+            opened.append(kwargs)
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(mic_stream, "input_samplerate", lambda idx, rate: 44100)
+    monkeypatch.setattr(recording.sd, "InputStream", FakeStream)
+    defaults = (recording.sd.default.channels, recording.sd.default.samplerate)
+    assert recording.start_recording(beeps_on=False, notify_on=False, input_device_idx=0)
+    assert opened[0]["samplerate"] == 44100 and opened[0]["channels"] == 1
+    assert (recording.sd.default.channels, recording.sd.default.samplerate) == defaults
+
+
 def test_successful_recording_start_reports_success(monkeypatch, quiet_recording):
     class FakeStream:
         def start(self):

@@ -289,10 +289,9 @@ def open_input_stream(rec, device_idx) -> None:
         from .indicator_dsp import SpectrumProcessor
         spectrum_processor = SpectrumProcessor(sample_rate=rec.samplerate,
                                                bins=spectrum_processor.bins)
-    sd.default.channels = CHANNELS
-    sd.default.samplerate = rec.samplerate
     rec.stream = sd.InputStream(callback=functools.partial(_sd_callback, rec), dtype='int16',
-                                device=device_idx)
+                                device=device_idx, channels=CHANNELS,
+                                samplerate=rec.samplerate)
     rec.stream.start()
 
 
