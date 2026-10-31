@@ -345,7 +345,9 @@ def end_in_a_pause(message, beeps_on, auto_space, auto_period, injection_mode) -
         cue, message.held_cue = message.held_cue, ""
         if auto_period and cue[-1] not in ".?!":
             cue += "."
-        delivery.inject_text(cue + (" " if auto_space else ""), injection_mode, message=message)
+        # Only where the phrase before it went, as its mark (flush_boundary).
+        delivery.inject_text(cue + (" " if auto_space else ""), injection_mode,
+                             into=rs.state.last_inserted_where, message=message)
     cut_off = _cut_off(message)
     sends = _may_send(message)
     if sends and not cut_off:

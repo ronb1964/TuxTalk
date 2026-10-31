@@ -936,6 +936,28 @@ def test_a_bare_cue_said_last_is_typed(ai_on):
     assert erased == [] and rs.state.current.message.held_cue == ""
 
 
+def test_a_bare_cue_said_last_stays_in_its_window(ai_on, monkeypatch):
+    """"meet at three", a pause, "no wait", a pause, a click into another
+    window, and the key let go: "No wait. " was typed into that window."""
+    texts, typed, erased, _ = ai_on
+    focus = {"now": "kwrite"}
+    monkeypatch.setattr(focused_window, "look", lambda: (focus["now"], None))
+    typing = delivery.inject_text
+
+    def inject(text, mode, one_block=False, into=None, message=None):
+        if into is not None and focused_window.changed(into, focused_window.look()):
+            return "moved"
+        rs.state.last_inserted_where = focused_window.look()
+        return typing(text, mode, one_block, into, message)
+    monkeypatch.setattr(delivery, "inject_text", inject)
+    texts.extend(["meet at three.", "no wait.", "meet at three. No wait."])
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    focus["now"] = "konsole"
+    call([], "last", auto_period=True)
+    assert typed == ["Meet at three", ". "]
+
+
 def test_no_correction_types_the_phrase_as_said(ai_on):
     texts, typed, erased, ai = ai_on
     texts.extend(["meet at three.", "in the garden.", "meet at three in the garden."])
