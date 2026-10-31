@@ -387,6 +387,15 @@ def remember(path, pieces, total):
     return entry if _write(entries) else None
 
 
+def further_kept(path, pieces):
+    """The kept copy of *path* that reaches further into the file than
+    *pieces*, or None."""
+    def reach(some):
+        return some[-1].end if some else 0.0
+    return next((e for e in recent() if e.path == path and reach(e.pieces) > reach(pieces)),
+                None)
+
+
 def forget_all():
     """Clear the list. True when nothing is kept any more."""
     try:

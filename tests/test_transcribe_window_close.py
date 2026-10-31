@@ -342,3 +342,48 @@ def test_the_drop_hint_shows_only_while_empty(win):
 
 def test_a_screen_reader_names_the_transcript(win):
     assert win.view.get_accessible().get_name() == "Transcript"
+
+
+def test_a_rerun_stopped_early_keeps_the_whole_transcript_from_before(win):
+    """An hour transcribed and kept, the same file chosen again and stopped
+    five minutes in: the hour stays under Earlier Transcripts."""
+    hour = [ft.Piece(n * 10.0, n * 10.0 + 10.0, f"part {n}.") for n in range(360)]
+    ft.remember("/m/interview.mp3", hour, 3600.0)
+    win.path = "/m/interview.mp3"
+    win._on_done(hour[:30], 3600.0, 60.0, True)
+    kept = ft.recent()
+    assert len(kept) == 1 and len(kept[0].pieces) == 360
+    assert "The longer transcript from before is still under" in win.status.get_text()
+    assert win._on_close() is True          # the part shown isn't kept: closing asks
+
+
+def test_a_rerun_stopped_further_on_replaces_the_shorter_copy(win):
+    first = [ft.Piece(0.0, 10.0, "one.")]
+    ft.remember("/m/talk.mp3", first, 600.0)
+    win.path = "/m/talk.mp3"
+    win._on_done(first + [ft.Piece(10.0, 20.0, "two.")], 600.0, 5.0, True)
+    assert [p.text for p in ft.recent()[0].pieces] == ["one.", "two."]
+
+
+def test_a_web_link_dropped_says_only_files_can_be_transcribed(win, monkeypatch):
+    started = []
+    monkeypatch.setattr(win, "start", started.append)
+
+    class Data:
+        def get_uris(self):
+            return ["https://example.com/a.mp3"]
+
+    win._on_drop(win.view, None, 0, 0, Data(), 0, 0)
+    assert started == [] and win.asked == []
+    assert win.status.get_text() == "Only a file on this computer can be transcribed."
+
+
+def test_copy_all_outlives_the_window(win, monkeypatch):
+    """clipboard.copy_text hands the text to wl-copy or the clipboard
+    manager; GTK's own copy went when this window's process ended."""
+    from tuxtalk import clipboard
+    copied = []
+    monkeypatch.setattr(clipboard, "copy_text", lambda text: copied.append(text) or True)
+    done(win, "Keep me.")
+    win._on_copy(None)
+    assert copied == ["Keep me."] and win.copied

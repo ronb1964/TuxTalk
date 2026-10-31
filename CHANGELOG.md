@@ -454,6 +454,14 @@ before 0.15.0, so older entries use that name.
 - If you start your desktop with startx, TuxTalk now types for the keyboard
   layout you have switched on. It didn't recognise that kind of X11 session
   before, so it fell back to the system's default layout.
+- Transcribe a File: choosing a file again and pressing Stop partway used
+  to replace the whole transcript kept from before under Earlier
+  Transcripts with the short part. The longer one stays there now.
+- Copy All in Transcribe a File keeps the text on the clipboard after you
+  close the window, also on desktops with no clipboard manager (Sway,
+  Hyprland). It could come back empty there.
+- Dropping a web link on Transcribe a File says only a file on this computer
+  can be transcribed. Before, nothing happened.
 
 ## [0.18.2] - 2026-10-23
 
