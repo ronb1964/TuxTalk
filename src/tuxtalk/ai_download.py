@@ -6,7 +6,6 @@ made only when the user turns on a feature that needs them, so TuxTalk's
 package does not grow. ai_server runs them.
 """
 import os
-import shutil
 
 from . import engine_process
 from .logger import setup_logger
@@ -65,7 +64,8 @@ def make_engine_download_func():
         """Fetch, check and unpack llama.cpp's server into the engine folder,
         reporting progress; True once it's there. Another download finishing
         first is fine."""
-        from .download_utils import download_area, download_file, install_turn, unpack_tar
+        from .download_utils import (download_area, download_file, install_turn,
+                                     replace_folder, restore_cut_off_swap, unpack_tar)
         if os.access(server_binary(), os.X_OK):
             progress_callback("Already downloaded", 100)
             return True
@@ -86,11 +86,16 @@ def make_engine_download_func():
                 progress_callback("Unpacking...", 97)
                 unpack_tar(archive, folder)
                 with install_turn("ai-engine", "the AI engine"):
+                    # A complete engine at every moment: removed first, a
+                    # kill before the move left none.
+                    for name in os.listdir(folder):
+                        restore_cut_off_swap(os.path.join(engine_dir, name),
+                                             os.path.join(engine_dir, f".{name}.old"))
                     if not os.access(server_binary(), os.X_OK):    # or another download did it
                         for name in os.listdir(folder):
-                            target = os.path.join(engine_dir, name)
-                            shutil.rmtree(target, ignore_errors=True)
-                            os.replace(os.path.join(folder, name), target)
+                            replace_folder(os.path.join(folder, name),
+                                           os.path.join(engine_dir, name),
+                                           os.path.join(engine_dir, f".{name}.old"))
                     engine_process.remove_other_versions(os.path.dirname(engine_dir), LLAMA_TAG)
             except Exception as e:
                 logger.error(f"Could not unpack the AI engine: {e}")
