@@ -39,8 +39,8 @@ def test_a_notice_goes_to_the_desktops_notification_service(monkeypatch):
             calls.append((args, kwargs))
 
     class Bus:
-        def get_object(self, name, path):
-            calls.append((name, path))
+        def get_object(self, name, path, introspect=True):
+            calls.append((name, path, introspect))
             return Proxy()
 
     fake_dbus = types.SimpleNamespace(
@@ -57,7 +57,9 @@ def test_a_notice_goes_to_the_desktops_notification_service(monkeypatch):
         # The module as it was, so notify.notify is again the function
         # the service calls and _send is held back, whatever runs next.
         vars(notify).update(before)
-    assert calls[0] == ("org.freedesktop.Notifications", "/org/freedesktop/Notifications")
+    # Without introspection: its own call has no 2-second limit, and a hung
+    # notification service would hold the hotkey loop for 25 seconds.
+    assert calls[0] == ("org.freedesktop.Notifications", "/org/freedesktop/Notifications", False)
     args, kwargs = calls[1]
     assert args[3:5] == ("TuxTalk", "Heard only silence")
     assert kwargs["dbus_interface"] == "org.freedesktop.Notifications"
