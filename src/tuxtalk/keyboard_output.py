@@ -1,9 +1,9 @@
 """Typing and pasting into the focused window, outside the Flatpak: keys
 through TuxTalk's own virtual keyboard (virtual_keyboard.py) or, where it
-has none, wtype or xdotool; text through the clipboard and the paste
-shortcut the window takes. output_backends.HostBackend is how the rest of
-the service reaches this; a password field stops either at once
-(PasswordFieldNow)."""
+has none, wtype; text through the clipboard and the paste shortcut the
+window takes. output_backends.VirtualKeyboardOutputBackend is how the rest
+of the service reaches this. A dictation's keys never go into a password
+field (refuse_password_field)."""
 import contextlib
 import functools
 import os
@@ -94,8 +94,7 @@ def send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY_
     *right_before* runs with the keyboard held right before the first key
     goes down, after every check and wait.
     """
-    if claim is None and this_thread.into is not None:
-        claim = functools.partial(focused_window.claim_into, this_thread.into)
+    claim = _delivery_claim(claim)
     if this_thread.last_check is not None:
         claim = _then(claim, this_thread.last_check)
     if right_before is not None:
@@ -118,6 +117,42 @@ def send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY_
     else:
         this_thread.sends += 1
     return sent
+
+
+def _delivery_claim(claim):
+    """*claim*, else (None) the claim of the delivery on this thread
+    (_ThisThread): only into its window, and never into a password field,
+    asked first, as focused_window.destination does. Both are asked in the
+    claim, with the keyboard free (the accessibility bus has a quarter of a
+    second to answer), after the clipboard and the layout are ready, and
+    for every send: each line, line break and paste key of a dictation."""
+    if claim is None and this_thread.into is not None:
+        claim = functools.partial(focused_window.claim_into, this_thread.into)
+    if not this_thread.no_password_field:
+        return claim
+
+    def claimed():
+        refuse_password_field()
+        return claim() if claim is not None else lambda: None
+    return claimed
+
+
+def refuse_password_field() -> None:
+    """GaveUp("password_field") when the cursor is in a password field now:
+    a dictation's next line, its line break or its paste key goes nowhere.
+    A line break there could submit the form."""
+    if focused_window.is_password():
+        logger.warning("Stopped typing: a password field has the focus now")
+        raise virtual_keyboard.GaveUp("password_field")
+
+
+def checks_before_keys():
+    """The delivery's checks on this thread (_delivery_claim) as one call
+    that raises GaveUp, for keys that go out another way than send_keys:
+    the Flatpak's portal (output_backends._with_session). None when there
+    are none."""
+    claim = _delivery_claim(None)
+    return None if claim is None else lambda: claim()()
 
 
 def _then(claim, check):
@@ -154,12 +189,14 @@ class _ThisThread(threading.local):
     """What send_keys knows of the delivery on this thread (delivery.inject_text):
     how many sends went out whole, so a wait that gives up after earlier
     lines were typed stopped it partway, not before it began; the only
-    window it may go into, else None; and a last check its keys must pass
-    right before the first goes down, else None (a held send's space on its
-    own may not go out with Alt or a dictation key down:
+    window it may go into, else None; whether it's a dictation, which never
+    goes into a password field; and a last check its keys must pass right
+    before the first goes down, else None (a held send's space on its own
+    may not go out with Alt or a dictation key down:
     send_countdown.give_back_space)."""
     sends = 0
     into = None
+    no_password_field = False
     last_check = None
 
 
@@ -167,17 +204,32 @@ this_thread = _ThisThread()
 
 
 @contextlib.contextmanager
+def _on_this_thread(**values):
+    """this_thread's *values* while inside, then back as they were."""
+    before = {name: getattr(this_thread, name) for name in values}
+    for name, value in values.items():
+        setattr(this_thread, name, value)
+    try:
+        yield
+    finally:
+        for name, value in before.items():
+            setattr(this_thread, name, value)
+
+
 def only_into(window):
     """Keys sent on this thread inside go only into *window*, a look taken
     when what they do was decided (this_thread.into): checked right before
     the first goes down, after every wait, on the virtual keyboard and
     through the Flatpak's portal alike, whose handshake can take minutes.
     Another window by then: virtual_keyboard.GaveUp("moved"), nothing sent."""
-    before, this_thread.into = this_thread.into, window
-    try:
-        yield
-    finally:
-        this_thread.into = before
+    return _on_this_thread(into=window)
+
+
+def delivering(into):
+    """A dictation's delivery on this thread: none of its keys go into a
+    password field (refuse_password_field), and with *into*, a look, only
+    into that window (only_into)."""
+    return _on_this_thread(into=into, no_password_field=True)
 
 
 def not_where_typed(focused, now=None) -> bool:
@@ -250,16 +302,11 @@ def output_backend():
     return _OUTPUT_BACKEND
 
 
-class PasswordFieldNow(Exception):
-    """The focus moved into a password field partway through typing a
-    dictation of several lines. The lines before it are in the app."""
-
-
 class Delivered(NamedTuple):
     """How far deliver_lines got."""
     parts: int      # parts confirmed in the app, from the first
     breaks: int     # line breaks confirmed after them
-    stopped: str    # "" when all of it went in, else "password_field", "part" or "break"
+    stopped: str    # "" when all of it went in, else "part" or "break"
 
     def landed(self, parts) -> str:
         """What of *parts* reached the app, its line breaks as "\n" (one
@@ -275,12 +322,11 @@ def deliver_lines(parts, put, before_break_s: float, after_break_s: float,
     around each break.
 
     Stops at the first part or line break that fails: going on after a gap
-    would run the later lines into the earlier ones. Before each further
-    part the focus is asked again, and a password field there stops it."""
+    would run the later lines into the earlier ones. In a dictation, a
+    password field stops it right before the part or line break that would
+    go into it (refuse_password_field)."""
     done = breaks = 0
     for i, part in enumerate(parts):
-        if i and focused_window.is_password():
-            return Delivered(done, breaks, "password_field")
         if part and not put(part):
             return Delivered(done, breaks, "part")
         done = i + 1
@@ -296,13 +342,10 @@ def deliver_lines(parts, put, before_break_s: float, after_break_s: float,
 def type_text(text: str) -> bool:
     """Type text, its line-break markers as Shift+Enter, or in KDE's editors
     as a pasted newline (_paste_newline). Returns True if it was actually
-    typed into the focused app, False if injection failed (deliver_lines).
-    A password field before a further line raises PasswordFieldNow."""
+    typed into the focused app, False if injection failed (deliver_lines)."""
     in_kde_editor = (focused_window.window_class() or "").lower() in SMART_NEWLINE_CLASSES_LOWER
     stopped = deliver_lines(text.split(LINE_BREAK), type_text_raw, 0.05, 0.05,
                             send_break=_paste_newline if in_kde_editor else None).stopped
-    if stopped == "password_field":
-        raise PasswordFieldNow()
     # A failed line break is a partial injection too: the undo buffer must not count it.
     return not stopped
 
@@ -348,6 +391,8 @@ def type_text_raw(text: str) -> bool:
                         f"({delay} ms a key event)")
             return True
     if which("wtype"):
+        if this_thread.no_password_field:
+            refuse_password_field()     # no claim of send_keys's asks it here
         # The real exit code, so the undo buffer tracks only typed text; a
         # bounded wait, so a stalled compositor can't freeze dictation; the
         # text on stdin ("-"), as every user can read a command line. wtype

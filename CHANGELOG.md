@@ -5,6 +5,11 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- If you tabbed into a password box while a dictation of several lines was
+  going in, the line break before the next line still went into it, and in
+  a login form that can press its button. TuxTalk now checks for a password
+  box right before every line, line break and paste key, also after it has
+  got the clipboard ready, and stops there.
 - "Delete last word", "clear everything" and select and move by voice could
   press their keys into another window if you clicked into it right after
   saying them, while TuxTalk waited for a held Right Ctrl to come up. The

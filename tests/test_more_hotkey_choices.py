@@ -446,7 +446,7 @@ def test_a_key_stuck_after_the_first_line_says_only_part_was_typed(keyboard, stu
 
 def test_a_key_stuck_partway_isnt_blamed_on_the_keyboard(keyboard, stuck_right_ctrl,
                                                           typing_into_kwrite, caplog):
-    stuck_right_ctrl(start=2)
+    stuck_right_ctrl(start=3)       # a dictation's first key is looked at twice (its claim)
     with caplog.at_level("INFO", logger="tuxtalk.app"):
         assert delivery.inject_text("ab", "type") == "partial"
     assert keyboard.typed_keys() == [ecodes.KEY_A]

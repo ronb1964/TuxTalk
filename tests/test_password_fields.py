@@ -172,40 +172,68 @@ def test_paste_last_dictation_types_nothing_in_a_password_field(desktop, monkeyp
     assert desktop["typed"] == ["my secret is swordfish "]
 
 
-def test_delivery_stops_when_the_focus_moves_into_a_password_field(desktop, monkeypatch):
-    """Pasted line by line, a dictation is asked about again before each line."""
+def _pasted_with_real_keys(desktop):
+    """paste_text with the clipboard faked and the paste key really sent
+    (the recording keyboard), so the checks right before it are made."""
+    def paste(text):
+        desktop["pasted"].append(text)
+        return keyboard_output.send_paste_keystroke(focused_window.window_class())
+    return paste
+
+
+def _focus_moves_into_a_password_field_after_the_first_line(desktop, monkeypatch):
+    """The first wait after the first line (the paste settling, or the
+    pause before its line break) is when the user tabs into a password box."""
+    monkeypatch.setattr("time.sleep", lambda s: desktop.__setitem__("password", True))
+
+
+def test_delivery_stops_when_the_focus_moves_into_a_password_field(desktop, monkeypatch,
+                                                                    keyboard):
+    """Pasted line by line, the line break went into the password field
+    before it was asked about again: in a login form it can submit it."""
+    from evdev import ecodes
     monkeypatch.setattr(delivery, "determine_injection_method", lambda mode: ("paste", "test"))
-    monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: True)
-    monkeypatch.setattr("time.sleep", lambda s: None)
-    desktop["answers"], desktop["password"] = [False], True   # a text box, then a password field
+    monkeypatch.setattr(keyboard_output, "paste_text", _pasted_with_real_keys(desktop))
+    _focus_moves_into_a_password_field_after_the_first_line(desktop, monkeypatch)
     assert delivery.inject_text("first line\nsecond line", "auto") == "password_field"
     assert desktop["pasted"] == ["first line"] and desktop["typed"] == []
+    assert ecodes.KEY_ENTER not in keyboard.typed_keys()
 
 
-def test_a_paste_stopped_there_isnt_finished_by_typing(desktop, monkeypatch):
+def test_a_paste_stopped_there_isnt_finished_by_typing(desktop, monkeypatch, keyboard):
     """Not asked a second time: a slow app whose answer runs out of time says
     "no", and the rest of the dictation was then typed into the field."""
     monkeypatch.setattr(delivery, "determine_injection_method", lambda mode: ("paste", "test"))
-    monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: True)
+    monkeypatch.setattr(keyboard_output, "paste_text", _pasted_with_real_keys(desktop))
     monkeypatch.setattr("time.sleep", lambda s: None)
-    desktop["answers"] = [False, True]          # then "no" to any further question
+    # Before it, before the first paste key, then before the line break;
+    # then "no" to any further question.
+    desktop["answers"] = [False, False, True]
     assert delivery.inject_text("first line\nsecond line", "auto") == "password_field"
     assert desktop["pasted"] == ["first line"] and desktop["typed"] == []
 
 
-def test_typed_line_by_line_it_stops_there_too(desktop, monkeypatch):
-    """X11 types every dictation, and asks again before each line as the paste does."""
-    keys = []
-    monkeypatch.setattr(keyboard_output, "output_backend",
-                        lambda: types.SimpleNamespace(typeable=lambda t: t,
-                                                      type_text=keyboard_output.type_text))
-    monkeypatch.setattr(keyboard_output, "type_text_raw", lambda t: keys.append(t) or True)
-    monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: keys.append("SHIFT+ENTER") or True)
-    monkeypatch.setattr("time.sleep", lambda s: None)
-    desktop["answers"], desktop["password"] = [False], True
-    assert delivery.inject_text("first line\nsecond line", "auto") == "password_field"
-    assert keys == ["first line", "SHIFT+ENTER"]
+def test_typed_line_by_line_it_stops_there_too(desktop, monkeypatch, keyboard):
+    """X11 types every dictation, and its Shift+Enter went into the password
+    field before the next line was asked about."""
+    from evdev import ecodes
+    from tuxtalk.output_backends import VirtualKeyboardOutputBackend
+    monkeypatch.setattr(keyboard_output, "output_backend", VirtualKeyboardOutputBackend)
+    _focus_moves_into_a_password_field_after_the_first_line(desktop, monkeypatch)
+    assert delivery.inject_text("ab\ncd", "auto") == "password_field"
+    assert keyboard.typed_keys() == [ecodes.KEY_A, ecodes.KEY_B]
     assert rs.state.last_inserted_text == ""      # undo deletes nothing it can't count
+
+
+def test_the_first_line_is_refused_when_the_focus_moved_while_it_was_made_ready(
+        desktop, monkeypatch, keyboard):
+    """Asked before the clipboard and the keys were made ready, then not
+    again: the user tabbing into a password box meanwhile got the text."""
+    from tuxtalk.output_backends import VirtualKeyboardOutputBackend
+    monkeypatch.setattr(keyboard_output, "output_backend", VirtualKeyboardOutputBackend)
+    desktop["answers"], desktop["password"] = [False], True
+    assert delivery.inject_text("swordfish", "auto") == "password_field"
+    assert keyboard.events == []
 
 
 def test_a_dictation_refused_at_the_last_moment_leaves_recent_dictations(desktop, monkeypatch):

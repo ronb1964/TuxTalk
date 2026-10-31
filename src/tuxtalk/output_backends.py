@@ -76,7 +76,8 @@ class LibeiOutputBackend(OutputBackend):
     remembers it) and sends the keystrokes over it. Each action returns
     False rather than raise, so the recording core surfaces its usual
     "couldn't type" notice; only keys held to a window that has lost the
-    focus raise virtual_keyboard.GaveUp, typing nothing (_with_session)."""
+    focus, or a dictation's with the cursor in a password field now, raise
+    virtual_keyboard.GaveUp, typing nothing (_with_session)."""
 
     IFACE = "org.freedesktop.portal.RemoteDesktop"
     KEYBOARD = 1  # RemoteDesktop DeviceType bitmask: KEYBOARD=1, POINTER=2
@@ -242,17 +243,17 @@ class LibeiOutputBackend(OutputBackend):
         dialog appears only the first time. Returns action's bool result,
         or False if the handshake/device wasn't ready.
 
-        Keys that may only go into one window (keyboard_output.this_thread.into:
-        a dictation's, Fix a Word's) are held to it right before they go,
-        after every wait for the device (LibeiSession.before_keys): the
-        handshake can take seconds, minutes with the approval dialog, and a
-        paused device up to 2 s more. Another window has the focus by then:
-        virtual_keyboard.GaveUp("moved"), nothing typed, the one exception
-        this raises."""
-        import functools
+        A dictation's keys, and keys that may only go into one window
+        (keyboard_output.only_into: a voice command's, Fix a Word's), pass
+        its checks right before they go, after every wait for the device
+        (keyboard_output.checks_before_keys, as LibeiSession.before_keys):
+        the handshake can take seconds, minutes with the approval dialog,
+        and a paused device up to 2 s more. Another window has the focus by
+        then, or a password field: virtual_keyboard.GaveUp, nothing typed,
+        the one exception this raises."""
         import logging
         import os
-        from . import focused_window, keyboard_output
+        from . import keyboard_output
         from .virtual_keyboard import GaveUp
         logger = logging.getLogger(__name__)
         fd = None
@@ -270,8 +271,7 @@ class LibeiOutputBackend(OutputBackend):
                 if not session.pump_until_ready():
                     logger.warning("libei device did not become ready")
                     return False
-                if (into := keyboard_output.this_thread.into) is not None:
-                    session.before_keys = functools.partial(focused_window.claim_into, into)
+                session.before_keys = keyboard_output.checks_before_keys()
                 return bool(action(session))
         except GaveUp:
             raise

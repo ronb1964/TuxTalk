@@ -572,3 +572,17 @@ def test_a_flatpak_voice_command_goes_in_while_its_window_has_the_focus(
     assert (voice_commands.handle_undo(said, False, False)
             or voice_commands.handle_navigation(said, False)) is True
     assert keys and flatpak_commands == []
+
+
+def test_a_flatpak_dictation_goes_nowhere_once_the_cursor_is_in_a_password_field(monkeypatch):
+    """The portal's approval dialog and keyboard can take a while: a tab
+    into a password box meanwhile got the dictation, which may be the
+    password itself."""
+    from tuxtalk import focused_window
+    b, keys = _libei_with_the_focus_moving(monkeypatch, focus_moves_while_the_device_is_away=False)
+    monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TalkType")
+    monkeypatch.setattr(keyboard_output, "output_backend", lambda: b)
+    answers = iter([False])                 # a text box when the dictation was made
+    monkeypatch.setattr(focused_window, "is_password", lambda: next(answers, True))
+    assert delivery.inject_text("swordfish", "auto") == "password_field"
+    assert keys == []
