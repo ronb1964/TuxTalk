@@ -128,9 +128,9 @@ HF_REPOS = tuple(sorted({_hub_folder(repo) for repo in (
 # The runtime folder's files that hold dictated text, as glob patterns:
 # Recent Dictations, the temp file a save of it killed part-way leaves
 # (history.py's mkstemp), and Fix a Word's hand-overs
-# (voice_commands._hand_over, a name of its own each). Logging out empties the folder anyway; its lock
-# files stay, since a development copy running beside this one uses the
-# same names.
+# (voice_commands._hand_over, a name of its own each). Logging out empties
+# the folder anyway; its lock files stay, since a development copy running
+# beside this one uses the same names.
 RUNTIME_FILES = ("talktype-history.json", ".talktype-history-" + "?" * 8,
                  "tuxtalk-fix-word-*.json")
 
