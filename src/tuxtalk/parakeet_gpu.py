@@ -35,7 +35,8 @@ SAMPLE_RATE = 16000
 # The very first run on a chip compiles shaders (8 s on an RTX 4070 Super).
 START_TIMEOUT = 180
 MIN_SAMPLES = SAMPLE_RATE    # shorter recordings are padded with silence to one second
-REPLY_TIMEOUT = 60           # for one recording, plus a second per second of audio
+REPLY_TIMEOUT = 60           # for one recording, plus
+REPLY_PER_AUDIO_S = 1.0      # this many seconds per second of audio
 
 
 def _steer(model, words):
@@ -180,7 +181,7 @@ class ParakeetGpuModel:
             logger.warning("Parakeet graphics helper had stopped; starting it again")
             self._start()
         self._send_words()
-        timeout = REPLY_TIMEOUT + len(audio) / SAMPLE_RATE
+        timeout = REPLY_TIMEOUT + REPLY_PER_AUDIO_S * len(audio) / SAMPLE_RATE
         self._write(encode_request(audio), timeout)
         reply = self._read_reply(timeout)
         if "error" in reply:
