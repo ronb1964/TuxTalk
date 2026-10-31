@@ -5,13 +5,10 @@ import time
 import urllib.parse
 
 import pytest
+from gi.repository import GLib, Gtk
 
-gi = pytest.importorskip("gi")
-gi.require_version("Gtk", "3.0")
-from gi.repository import GLib, Gtk  # noqa: E402
-
-from tuxtalk import help_dialog, problem_report, problem_report_window  # noqa: E402
-from tuxtalk.config import Settings  # noqa: E402
+from tuxtalk import help_dialog, problem_report, problem_report_window
+from tuxtalk.config import Settings
 
 HOME = "/home/archer"
 
@@ -112,12 +109,14 @@ def test_the_bug_form_opens_with_what_tuxtalk_knows(monkeypatch):
 
 @pytest.fixture
 def window(monkeypatch):
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
+    """Report windows kept off screen, whose report is made up: any one
+    opened, from Help's button too, gathers it on a thread, and the real one
+    asks the graphics card, the keyboard layout and the hotkey helper."""
     from tuxtalk import config
     monkeypatch.setattr(Gtk.Window, "show_all", lambda self: None)   # never on screen
     monkeypatch.setattr(config, "load_config", lambda: Settings())
     monkeypatch.setattr(problem_report, "layout_text", lambda: "us")
+    monkeypatch.setattr(problem_report, "build", lambda layout: "the report")
 
     def make(report="the report"):
         monkeypatch.setattr(problem_report, "build", lambda layout: report)
@@ -175,8 +174,6 @@ def test_opening_an_issue_copies_the_report_and_opens_the_form(window, monkeypat
 
 
 def test_help_problems_opens_it(monkeypatch):
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
     shown, opened = [], []
     monkeypatch.setattr(Gtk.Window, "show_all", lambda self: shown.append(self))
     monkeypatch.setattr(Gtk.Window, "present", lambda self: None)
@@ -200,8 +197,6 @@ def test_help_problems_opens_it(monkeypatch):
 def test_the_problems_tab_opens_with_a_report_button(monkeypatch):
     """Report a Problem is a button at the top of Problems, not only a link
     near the bottom of its text, and it opens the report over Help."""
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
     from gtk_text import widgets
     shown, opened = [], []
     monkeypatch.setattr(Gtk.Window, "show_all", lambda self: shown.append(self))
