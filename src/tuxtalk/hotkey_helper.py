@@ -39,10 +39,13 @@ pools their modifiers, so their Ctrl and their letters may come from
 different devices, as they do on some keyboards. A real keyboard that the
 user's programs may write to (a udev rule gave it "uaccess", as some RGB and
 game-controller packages do) is kept apart like a virtual one: a program
-could press its Ctrl. "Two different keys" because a Ctrl+Alt left held
-(by a stuck key, or in a Windows virtual machine, where Ctrl+Alt is AltGr)
-would otherwise turn everything typed into shortcuts; a shortcut is one or
-two keys, typing is many.
+could press its Ctrl. That is looked at again before the real keyboards'
+modifiers count together, since a rule can give it "uaccess" later, and a
+keyboard udev hasn't finished with yet counts as writable meanwhile. "Two
+different keys" because a Ctrl+Alt left held (by a stuck key, or in a
+Windows virtual machine, where Ctrl+Alt is AltGr) would otherwise turn
+everything typed into shortcuts; a shortcut is one or two keys, typing is
+many.
 
 Everything goes only to the user at the screen: logind's active user on
 seat0, checked by user id (two sessions of the same user count as one), and
@@ -92,7 +95,9 @@ helper -> client
                                codes held with it, comma-separated, or "-"
   UP <code>                    a key reported DOWN (or one of its modifiers)
                                was let go
-  OK <what> / ERR <why>        answers to WATCH, HIDE and UNHIDE
+  OK <what> / ERR <why>        answers to WATCH, HIDE and UNHIDE; a HIDE of
+                               a key from a remapper's keyboard (never held)
+                               gets ERR listen-only keyboard
 Codes are Linux evdev key codes (linux/input-event-codes.h).
 """
 import errno
@@ -106,10 +111,11 @@ import sys
 import time
 
 PROTOCOL = 1
-VERSION = "1.10"
+VERSION = "1.11"
 
 DEFAULT_SOCKET_DIR = "/run/tuxtalk-hotkeys"
 SOCKET_NAME = "hotkeys.sock"
+SOCKET_PATH = os.path.join(DEFAULT_SOCKET_DIR, SOCKET_NAME)
 DEFAULT_SEAT_FILE = "/run/systemd/seats/seat0"
 INPUT_DIR = "/dev/input"
 UDEV_DATA_DIR = "/run/udev/data"
@@ -269,39 +275,55 @@ def read_active_uid(seat_file):
 
 
 def _udev_lines(rdev, data_dir):
+    """What udev keeps about the device *rdev*, or None when it keeps nothing."""
     try:
         with open(os.path.join(data_dir, f"c{os.major(rdev)}:{os.minor(rdev)}")) as f:
             return f.read().splitlines()
     except OSError:
-        return []
+        return None
 
 
 def udev_seat(rdev, data_dir=UDEV_DATA_DIR):
     """The seat udev put this input device on; seat0 unless it says otherwise."""
-    for line in _udev_lines(rdev, data_dir):
+    for line in _udev_lines(rdev, data_dir) or ():
         if line.startswith("E:ID_SEAT="):
             return line.split("=", 1)[1] or "seat0"
     return "seat0"
+
+
+def udev_tags(rdev, data_dir=UDEV_DATA_DIR):
+    """The tags udev gave the device *rdev*, or None when udev keeps nothing
+    about it (yet: a node just made, before udev has finished with it)."""
+    lines = _udev_lines(rdev, data_dir)
+    return None if lines is None else {line[2:] for line in lines if line[:2] in ("G:", "Q:")}
+
+
+def _writable_by_others(st, tags):
+    if "uaccess" in tags or st.st_mode & 0o002:
+        return True
+    return bool(st.st_mode & 0o020) and st.st_gid not in (0, *os.getgroups())
 
 
 def others_can_write(st, data_dir=UDEV_DATA_DIR):
     """Whether someone besides root and this helper's own group may write to
     the device node *st* (an os.stat result): udev's "uaccess" tag (the user
     at the screen gets it), writable by everyone, or by some other group.
-    Writing to a keyboard's node presses its keys."""
-    tags = {line[2:] for line in _udev_lines(st.st_rdev, data_dir) if line[:2] in ("G:", "Q:")}
-    if "uaccess" in tags or st.st_mode & 0o002:
-        return True
-    return bool(st.st_mode & 0o020) and st.st_gid not in (0, *os.getgroups())
+    Writing to a keyboard's node presses its keys. Without udev's data the
+    tags can't be known: that counts as writable, the safe side, until
+    Helper.reclassify looks again."""
+    tags = udev_tags(st.st_rdev, data_dir)
+    return tags is None or _writable_by_others(st, tags)
 
 
 def uhid_is_private(node=UHID_NODE, data_dir=UDEV_DATA_DIR):
-    """Whether only root can make keyboards through /dev/uhid."""
+    """Whether only root can make keyboards through /dev/uhid. It's there
+    from boot, so no udev data about it means no tags."""
     try:
         st = os.stat(node)
     except OSError:
         return True                 # no uhid: nobody can make one through it
-    return st.st_uid == 0 and not st.st_mode & 0o066 and not others_can_write(st, data_dir)
+    return (st.st_uid == 0 and not st.st_mode & 0o066
+            and not _writable_by_others(st, udev_tags(st.st_rdev, data_dir) or set()))
 
 
 def device_group(rdev, sys_dir=SYS_CHAR_DIR, writable=False, uhid_private=True):
@@ -319,6 +341,13 @@ def device_group(rdev, sys_dir=SYS_CHAR_DIR, writable=False, uhid_private=True):
     if not physical:
         return f"virtual:{number}"
     return f"own:{number}" if writable else "real"
+
+
+def node_group(st):
+    """device_group's answer for the device node *st* (an os.stat result),
+    from its permissions and udev's data as they are now."""
+    return device_group(st.st_rdev, writable=others_can_write(st),
+                        uhid_private=uhid_is_private())
 
 
 def node_identity(node):
@@ -365,6 +394,7 @@ class Keyboard:
         # remapper's, carrying the mouse's motion and the text TuxTalk types.
         # Holding it would freeze the one and swallow the other.
         self.listen_only = listen_only
+        self.said_listen_only = False      # logged once that it's never held
         self.down = set(down)
         # The modifiers the desktop saw go down on this keyboard: only these
         # unlock a key. One already down when it was opened, pressed while we
@@ -397,8 +427,7 @@ class Keyboard:
             fcntl.ioctl(fd, EVIOCGBIT(EV_REL, len(rel)), rel, True)
             pointer = REL_X in bits(rel) and BTN_LEFT in keys
             st = os.fstat(fd)
-            group = device_group(st.st_rdev, writable=others_can_write(st),
-                                 uhid_private=uhid_is_private())
+            group = node_group(st)
             name = bytearray(256)
             fcntl.ioctl(fd, EVIOCGNAME(len(name)), name, True)
             name = name.split(b"\0", 1)[0].decode("utf-8", "replace")
@@ -418,6 +447,11 @@ class Keyboard:
             return None
         keyboard.monotonic = monotonic
         return keyboard
+
+    def current_group(self):
+        """Its group as its node's permissions and udev's data say now
+        (node_group); raises OSError when the node can't be asked."""
+        return node_group(os.fstat(self.fd))
 
     def kernel_down(self):
         """The keys the kernel says are down on this keyboard right now, or
@@ -545,6 +579,8 @@ class Helper:
         for table in (self.not_keyboards, self.unreadable, self.too_many):
             for path in table.keys() - present:
                 del table[path]
+        for keyboard in list(self.keyboards.values()):
+            self.reclassify(keyboard)
         for path in paths:
             if path not in self.keyboards:
                 self.open_if_keyboard(path)
@@ -602,6 +638,40 @@ class Helper:
             self.deliver_up(keyboard, code)
         keyboard.down |= real
         self.end_combo_hold(keyboard.group)
+
+    def reclassify(self, keyboard):
+        """Look again at who may write to *keyboard*: a udev rule may have
+        given it "uaccess" since it was opened, or udev may only now have
+        finished with it. One a program may press keys on mustn't lend its
+        Ctrl and Alt to the real keyboards, so a change of group forgets
+        which of its modifiers were trusted, and lets go of the modifiers
+        clients were told of under the old group."""
+        try:
+            group = keyboard.current_group()
+        except OSError:
+            return                      # gone: its next read drops it
+        if group == keyboard.group:
+            return
+        old, keyboard.group = keyboard.group, group
+        keyboard.virtual = keyboard.virtual or group.startswith("virtual:")
+        keyboard.trusted.clear()
+        log(f"keyboard {keyboard.name!r} ({keyboard.path}) now counts as {group}")
+        for client in list(self.clients.values()):
+            for mod, owed in list(client.mods_owed.items()):
+                if owed == old and not self.held(mod, old):
+                    del client.mods_owed[mod]
+                    self.send(client, f"UP {mod}")
+        self.end_combo_hold(old)
+        self.end_combo_hold(group)
+
+    def recheck_pool(self, keyboard):
+        """Before the real keyboards' modifiers count together for a key on
+        *keyboard*, make sure none of them has become one a program can
+        write to since the last scan (reclassify)."""
+        if keyboard.group != "real":
+            return
+        for k in [k for k in self.keyboards.values() if k.group == "real"]:
+            self.reclassify(k)
 
     # -- state ------------------------------------------------------------------------
 
@@ -718,6 +788,7 @@ class Helper:
         active = read_active_uid(self.seat_file)
         if active is None:
             return
+        self.recheck_pool(keyboard)
         # Modifiers count only from this keyboard's group (all real keyboards,
         # or this one virtual keyboard), and only those the desktop saw go
         # down (see Keyboard.trusted). A Right Ctrl watched on its own isn't
@@ -742,9 +813,10 @@ class Helper:
             # Already held on another keyboard: no second DOWN. The press
             # stays with that keyboard, so a program's keyboard can't take
             # over the real press (or the grab). Only a real keyboard takes
-            # a press over from a virtual one, quietly: its release is the
-            # UP, so a program holding F8 can't swallow the real F8.
-            if prior.virtual and not keyboard.virtual:
+            # a press over from one a program may write to (virtual, or real
+            # with "uaccess"), quietly: its release is the UP, so a program
+            # holding F8 can't swallow the real F8.
+            if prior.group != "real" and keyboard.group == "real":
                 client.origin[code] = keyboard.path
             return False
         if code in client.bare:
@@ -793,6 +865,11 @@ class Helper:
         if held_on is None:
             return "ERR couldn't hide the keys"
         if not held_on:
+            if all(getattr(self.keyboards.get(path), "listen_only", False)
+                   for path, _ in presses):
+                # kanata's keyboard (issue #23): its keys reach the desktop
+                # as they are, which is how that setup works, not a fault.
+                return "ERR listen-only keyboard"
             return "ERR couldn't hold the keyboard"
         client.hideable.difference_update(c for _, c in presses)
         self.hide = {"client": client, "uid": client.uid, "presses": presses,
@@ -841,7 +918,10 @@ class Helper:
         listen-only keyboard is never held or written to: its keys reach the
         desktop as they are."""
         if keyboard.listen_only:
-            log(f"not holding keyboard {keyboard.name!r}: a program's keyboard and mouse in one")
+            if not keyboard.said_listen_only:
+                keyboard.said_listen_only = True
+                log(f"not holding keyboard {keyboard.name!r}: a program's keyboard and "
+                    "mouse in one")
             return False
         released = self.let_up(keyboard, codes)
         if released is None:
@@ -1153,17 +1233,15 @@ class Helper:
                 pass
 
 
-def main(argv=None):
-    """Run the service until SIGTERM or SIGINT (tuxtalk-hotkeys.service)."""
-    argv = sys.argv[1:] if argv is None else argv
-    # --socket-dir is for testing only; the service uses the default.
-    socket_dir = DEFAULT_SOCKET_DIR
-    if len(argv) == 2 and argv[0] == "--socket-dir":
-        socket_dir = argv[1]
-    elif argv:
-        print("usage: tuxtalk-hotkeys [--socket-dir DIR]", file=sys.stderr)
+def main():
+    """Run the service until SIGTERM or SIGINT (tuxtalk-hotkeys.service).
+    It takes no arguments: anything else on its command line is a mistake,
+    and starting anyway would take the socket from the running service."""
+    if sys.argv[1:]:
+        print("usage: tuxtalk-hotkeys (no arguments: tuxtalk-hotkeys.service runs it)",
+              file=sys.stderr)
         return 2
-    helper = Helper(socket_dir=socket_dir)
+    helper = Helper()
 
     def stop(*_args):
         helper.running = False

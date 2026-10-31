@@ -333,6 +333,21 @@ def test_the_service_uses_the_helper_when_it_is_there(monkeypatch):
     assert input_backends.get_input_backend(flatpak_id="").helper is None
 
 
+def test_a_remappers_keyboard_not_held_isnt_logged_as_a_fault(tmp_path, caplog):
+    """With kanata the helper never holds its keyboard: every dictation said
+    "refused HIDE" as a warning, which read as a fault in a problem report."""
+    import logging
+    from collections import deque
+    client = HelperKeyboard(str(tmp_path / "helper.sock"))
+    client.asked = deque(["HIDE"])
+    with caplog.at_level(logging.INFO):
+        client._handle(["ERR", "listen-only", "keyboard"])
+    assert not client.hidden
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert "didn't hide" in caplog.text
+    client.close()
+
+
 def test_an_answer_out_of_step_isnt_taken_as_a_hide(tmp_path, caplog):
     """Each OK names its command; an OK WATCH where HIDE's answer was due
     must not let typing go on under a key the helper never hid."""
@@ -346,3 +361,22 @@ def test_an_answer_out_of_step_isnt_taken_as_a_hide(tmp_path, caplog):
     client.asked = deque(["HIDE"])
     client._handle(["OK", "HIDE"])
     assert client.hidden is True
+
+
+def test_a_grab_with_nothing_let_up_hides_nothing(tmp_path):
+    """A quick tap already up when the grab came: the desktop was told
+    nothing, so a Right Ctrl dictation key held meanwhile with another
+    modifier (the user's own shortcut) isn't hidden either."""
+    ours, helpers = socket.socketpair()
+    client = HelperKeyboard(str(tmp_path / "helper.sock"))
+    client.sock = ours
+    client.held = {97}
+    client.grab()
+    helpers.setblocking(False)
+    with pytest.raises(BlockingIOError):
+        helpers.recv(100)
+    client.write(1, 66, 0)                  # F8 was let up for the desktop
+    client.grab()
+    assert helpers.recv(100) == b"HIDE 66\n"
+    helpers.close()
+    client.close()
