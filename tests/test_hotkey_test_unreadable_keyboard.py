@@ -126,14 +126,37 @@ def test_no_devices_when_listing_fails():
 
 
 def test_a_key_the_service_can_read_shows_working():
-    assert "Working!" in hkd._key_seen_markup(True)
+    assert "Working!" in hkd._key_seen(True)[0]
     assert hkd._hotkey_test_notice(True) is None
 
 
 def test_a_key_only_gtk_saw_does_not_claim_working():
-    markup = hkd._key_seen_markup(False)
-    assert "Working" not in markup
+    markup, words = hkd._key_seen(False)
+    assert "Working" not in markup and "Working" not in words
     assert "not active yet" in markup
+
+
+def test_with_the_hotkey_helper_the_notice_asks_for_no_restart(monkeypatch):
+    """Fix Typing installs the helper there, and its hotkeys work at once."""
+    from tuxtalk import secure_input
+    monkeypatch.setattr(uinput_helper, "input_group_pending_restart", lambda: False)
+    monkeypatch.setattr(secure_input, "can_install", lambda: (True, ""))
+    notice = hkd._hotkey_test_notice(False)
+    assert "Fix Typing Permissions" in notice and "restart" not in notice
+
+
+@pytest.mark.parametrize("keyname, logged", [("F8", True), ("Right Ctrl", True),
+                                             ("a", False), ("Return", False),
+                                             ("space", False), ("BackSpace", False)])
+def test_only_test_keys_are_logged(keyname, logged, caplog):
+    """Without the hotkey helper the test hears keys typed in any window: a
+    line per letter would put a password's length and timing in the log,
+    which Report a Problem shares."""
+    dialog = SimpleNamespace(ready=True, capturing=None, _mark_working=lambda key: None)
+    with caplog.at_level(logging.INFO):
+        for action in ("press", "release"):
+            hkd.HotkeyTestDialog._on_key(dialog, keyname, action)
+    assert ("Hotkey test:" in caplog.text) is logged
 
 
 def test_the_notice_asks_for_a_restart_when_setup_is_done(monkeypatch):
@@ -218,6 +241,24 @@ def test_dialog_with_only_a_game_controller_says_seen_not_working(monkeypatch):
     texts = _run_dialog_with_f8_release(monkeypatch, paths, denied=paths[1:])
     assert "✓ Seen, not active yet" in texts
     assert "✓ Working!" not in texts
+
+
+def test_a_screen_reader_is_told_how_a_key_tested(monkeypatch):
+    """The status beside each key is a plain label, which a screen reader
+    isn't told about when it changes: the row's Change Key button says it."""
+    from gi.repository import Gdk, Gtk
+    seen = {}
+
+    def during(dialog):
+        buttons = [w for w in widgets(dialog)
+                   if isinstance(w, Gtk.Button) and w.get_label() == "Change Key"]
+        _key(dialog, Gdk.KEY_F8, "key-release-event")
+        seen["after F8"] = buttons[0].get_accessible().get_description()
+        buttons[1].clicked()
+        seen["changing"] = buttons[1].get_accessible().get_description()
+    _run_dialog(monkeypatch, ["/dev/input/event3"], during)
+    assert seen["after F8"] == "Working"
+    assert "Esc to cancel" in seen["changing"]
 
 
 def test_dialog_with_keyboard_access_still_says_working(monkeypatch):

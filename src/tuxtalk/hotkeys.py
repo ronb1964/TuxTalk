@@ -25,10 +25,10 @@ from . import (
     notices,
     pipeline,
     recording,
-    secure_input,
     send_countdown,
     service_tick,
     tray_link,
+    uinput_helper,
 )
 from . import live_settings as live
 from . import recording_state as rs
@@ -310,7 +310,8 @@ def _on_test_or_combo(event, hold_key, toggle_key, voice_cmds_combo, paste_last_
     if event.value == 1 and _hotkey_test_active():
         _report_test_press(event.code, hold_key, toggle_key)
         return True
-    return (_on_paste_last(event, paste_last_combo, held_modifiers, devices, cfg)
+    return (_on_paste_last(event, paste_last_combo, held_modifiers, devices, cfg,
+                           (hold_key, toggle_key))
             or _on_voice_commands_combo(event, voice_cmds_combo, held_modifiers, devices))
 
 
@@ -320,21 +321,24 @@ def _stop_recording(cfg) -> None:
                             cfg.auto_space, cfg.auto_period, cfg.injection_mode)
 
 
-def _on_paste_last(event, combo, held_modifiers, devices, cfg) -> bool:
+def _on_paste_last(event, combo, held_modifiers, devices, cfg, dictation_keys) -> bool:
     """Paste Last Dictation's combo (e.g. Ctrl+Alt+P); True when *event* was
     its. Typed only once every key of the combo is let go: typing while Ctrl
-    and Alt are still down would turn each letter into a Ctrl+Alt shortcut."""
+    and Alt are still down would turn each letter into a Ctrl+Alt shortcut.
+    *dictation_keys* (hold, toggle) are never the combo's, even a Right Ctrl."""
     pending = rs.state.paste_last
+    combo_modifiers = MODIFIER_CODES - set(dictation_keys)
     if pending is not None:
         if time.time() - pending["at"] > PASTE_LAST_EXPIRY_S:
             rs.state.paste_last = None
-        elif event.value == 0 and (event.code == pending["key"] or event.code in MODIFIER_CODES):
+        elif event.value == 0 and (event.code == pending["key"]
+                                   or event.code in combo_modifiers):
             # Only the combo's own keys are waited for. Any other release
             # goes on to the handlers: swallowing it would lose a hold
             # key's key-up and leave that recording running.
             if event.code == pending["key"]:
                 pending["key_up"] = True
-            if pending["key_up"] and not held_modifiers:
+            if pending["key_up"] and not held_modifiers & combo_modifiers:
                 rs.state.paste_last = None
                 if not rs.state.is_recording:
                     # After what's still being typed, not into the middle of it.
@@ -376,17 +380,24 @@ def _on_voice_commands_combo(event, combo, held_modifiers, devices) -> bool:
 
 
 def _on_hold_key(event, hold_key, held_modifiers, devices, cfg, input_device_idx) -> None:
-    """Hold-to-talk: the hold key down records, let go stops and types."""
+    """Hold-to-talk: the hold key down records, let go stops and types. A
+    release stops only the recording its own press saw (rs.state.hold_stops),
+    so letting go of Alt+F8 doesn't end a recording F9 started."""
     if event.value == 0:
         _dictation_key_up(hold_key)
-    if (event.value == 1 and not rs.state.is_recording
-            and not _someone_elses_shortcut(held_modifiers - {hold_key})):
-        _start_hold_recording(hold_key, held_modifiers, devices, cfg, input_device_idx)
-    elif event.value == 0 and rs.state.is_recording:
-        # Let go of the keyboards before typing, so the user's own keys
-        # reach the app again
-        keyboard_grab.release_all()
-        _stop_recording(cfg)
+        stops, rs.state.hold_stops = rs.state.hold_stops, None
+        if rs.state.is_recording and stops is rs.state.current:
+            # Let go of the keyboards before typing, so the user's own keys
+            # reach the app again
+            keyboard_grab.release_all()
+            _stop_recording(cfg)
+    elif event.value == 1:
+        rs.state.hold_stops = None
+        if _someone_elses_shortcut(held_modifiers - {hold_key}):
+            return
+        if not rs.state.is_recording:
+            _start_hold_recording(hold_key, held_modifiers, devices, cfg, input_device_idx)
+        rs.state.hold_stops = rs.state.current
 
 
 def _dictation_key_up(key) -> None:
@@ -571,7 +582,7 @@ def _keys_to_watch(cfg: Settings, devices):
     # keypress is supposed to reach us. If no device could be opened, say so
     # now rather than running a poll loop over an empty device list forever.
     if not devices:
-        diagnosis = secure_input.input_access_diagnosis()
+        diagnosis = uinput_helper.input_access_diagnosis()
         logger.error(diagnosis)
         print(diagnosis, file=sys.stderr)
     if keys.voice_cmds_combo:

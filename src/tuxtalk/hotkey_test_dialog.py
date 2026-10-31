@@ -31,6 +31,7 @@ logger = setup_logger(__name__)
 _TITLES = {"hold": "Push-to-talk", "toggle": "Toggle mode"}
 _CAPTURE_PROMPT = ('<span background="#FFA500" color="white"> Press F1 to F12, Right Ctrl, '
                    'Right Alt or Scroll Lock to set the hotkey... (ESC to cancel) </span>')
+_CAPTURE_WORDS = "Press F1 to F12, Right Ctrl, Right Alt or Scroll Lock, or Esc to cancel."
 
 # A GTK key event with Alt (MOD1), Ctrl or Super held is not a dictation key:
 # GNOME delivers Alt+F8 (begin-resize binding) to focused windows, and
@@ -63,13 +64,14 @@ def _hotkey_test_row(title, key):
     return row, label, button, status
 
 
-def _key_seen_markup(service_can_read):
-    """A tested key's status. Only this dialog saw the key when the
-    dictation service can't read the keyboards, or reads them through a
-    hotkey helper too old for the key (hotkey_test_keys.service_hears)."""
+def _key_seen(service_can_read):
+    """A tested key's status, as (markup, words for a screen reader). Only
+    this dialog saw the key when the dictation service can't read the
+    keyboards, or reads them through a hotkey helper too old for the key
+    (hotkey_test_keys.service_hears)."""
     if service_can_read:
-        return '<span color="#4CAF50">✓ Working!</span>'
-    return '<span color="#FF9800">✓ Seen, not active yet</span>'
+        return '<span color="#4CAF50">✓ Working!</span>', "Working"
+    return '<span color="#FF9800">✓ Seen, not active yet</span>', "Seen, not active yet"
 
 
 def _hotkey_test_notice(service_can_read):
@@ -78,9 +80,14 @@ def _hotkey_test_notice(service_can_read):
     if service_can_read:
         return None
     from tuxtalk import uinput_helper
+    from tuxtalk import secure_input
     if uinput_helper.input_group_pending_restart():
         return ("TuxTalk can't read the keyboard yet. These keys will work "
                 "once you restart your computer to finish the typing setup.")
+    if secure_input.can_install()[0]:
+        # The hotkey helper: its hotkeys work as soon as it's installed.
+        return ("TuxTalk can't read the keyboard yet. These keys will work after "
+                "Preferences, Advanced, Fix Typing Permissions.")
     return ("TuxTalk can't read the keyboard yet. These keys will work after "
             "Preferences, Advanced, Fix Typing Permissions, and a restart of "
             "your computer.")
@@ -144,6 +151,7 @@ class HotkeyTestDialog:
         # repeated presses while a key is held, with no "is_repeat" flag.
         self._held_keycodes = set()
         self.rows = {}              # "hold"/"toggle": (label, Change Key button, status)
+        self.status_words = {"hold": "Not tested", "toggle": "Not tested"}
         self.dialog = self._build()
 
     def _build(self):
@@ -202,9 +210,8 @@ class HotkeyTestDialog:
 
         info_label = Gtk.Label()
         info_label.set_markup(
-            '<span><i>💡 Both hotkeys will be saved to your configuration.\n'
-            'You can change between Push-to-talk and Toggle mode anytime in '
-            'Preferences.</i></span>')
+            '<span><i>💡 Both keys work: hold one to talk, or tap the other to start '
+            'and stop. You can change them anytime in Preferences.</i></span>')
         info_label.set_line_wrap(True)
         info_label.set_xalign(0)
         info_label.set_margin_top(15)
@@ -228,16 +235,32 @@ class HotkeyTestDialog:
         """Change Key: the next key pressed becomes the *which* key."""
         self.capturing = which
         self.capture_instruction.show()
+        self._announce(which, _CAPTURE_WORDS)
         for _label, button, _status in self.rows.values():
             button.set_sensitive(False)
 
     def _end_capture(self):
         """Change Key is no longer waiting for a key."""
-        self.capturing = None
+        which, self.capturing = self.capturing, None
         self.capture_instruction.hide()
         self.capture_instruction.set_markup(_CAPTURE_PROMPT)
         for _label, button, _status in self.rows.values():
             button.set_sensitive(True)
+        if which is not None:
+            self._announce(which, self.status_words[which])
+
+    def _announce(self, which, words):
+        """Tell a screen reader what *which*'s row says now: the status and
+        the Change Key prompt are plain labels, which it isn't told about,
+        so they go in the row's button description, which it reads out."""
+        self.rows[which][1].get_accessible().set_description(words)
+
+    def _show_status(self, which, keyname):
+        """Show how *keyname*, *which*'s key, tested."""
+        markup, words = _key_seen(service_hears(self._reading_now, keyname))
+        self.rows[which][2].set_markup(markup)
+        self.status_words[which] = words
+        self._announce(which, words)
 
     def _on_key(self, keyname, action="press"):
         """A key pressed or released, on GTK's thread, where Change Key's
@@ -247,7 +270,11 @@ class HotkeyTestDialog:
         if not self.ready:
             return False
         is_capture = self.capturing is not None
-        logger.info(f"Hotkey test: {action} {loggable_key(keyname)}, capture={is_capture}")
+        if loggable_key(keyname) == keyname:
+            # Only test keys: without the hotkey helper this hears keys
+            # typed in any window, and a line per letter would give away a
+            # password's length and timing to the log.
+            logger.info(f"Hotkey test: {action} {keyname}, capture={is_capture}")
         if is_capture:
             if action == "press":
                 self._capture(keyname)
@@ -267,19 +294,19 @@ class HotkeyTestDialog:
             self.capture_instruction.set_markup(
                 f'<span background="#E57373" color="white"> '
                 f'{GLib.markup_escape_text(problem)} (ESC to cancel) </span>')
+            self._announce(self.capturing, f"{problem} Press another key, or Esc to cancel.")
             return
         self.keys[self.capturing] = keyname
-        label, _button, status = self.rows[self.capturing]
+        label = self.rows[self.capturing][0]
         label.set_markup(f'<b>{_TITLES[self.capturing]}:</b> {layout_label(keyname)}')
-        status.set_markup(_key_seen_markup(service_hears(self._reading_now, keyname)))
+        self._show_status(self.capturing, keyname)
         self._end_capture()
 
     def _mark_working(self, keyname):
         """Show *keyname*'s row as tested, if it is one of the two keys."""
         for which, key in self.keys.items():
             if keyname == key:
-                status = self.rows[which][2]
-                status.set_markup(_key_seen_markup(service_hears(self._reading_now, keyname)))
+                self._show_status(which, keyname)
                 return
 
     def _on_gtk_press(self, _widget, event):

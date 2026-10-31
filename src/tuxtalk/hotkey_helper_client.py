@@ -33,12 +33,11 @@ import threading
 import time
 from collections import deque, namedtuple
 
+from .hotkey_helper import PROTOCOL, SOCKET_PATH
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
 
-SOCKET_PATH = "/run/tuxtalk-hotkeys/hotkeys.sock"
-PROTOCOL = 1
 RECONNECT_S = 1.0
 
 EV_KEY, EV_SYN = 1, 0
@@ -227,7 +226,11 @@ class HelperKeyboard:
         if asked == "HIDE":
             # An UNHIDE sent since has undone it already.
             self.hidden = ok and named and "UNHIDE" not in self.asked
-        if not ok:
+        if not ok and args[:1] == ["listen-only"]:
+            # A remapper's keyboard (kanata), never held: its keys reach the
+            # desktop as they are, as that setup means them to.
+            logger.info(f"Hotkey helper didn't hide the key: {' '.join(args)}")
+        elif not ok:
             logger.warning(f"Hotkey helper refused {asked}: {' '.join(args)}")
 
     # -- what hotkeys.run calls -------------------------------------------------
@@ -259,6 +262,12 @@ class HelperKeyboard:
             self._pump()
             return sorted(self.held)
 
+    @property
+    def connected(self):
+        """Whether the helper is answering now; while it isn't, no key is
+        heard through it (it's tried again every second)."""
+        return self.sock is not None
+
     def held_now(self):
         """The keys the helper last said are down, without asking it again
         or reconnecting, so nothing waits: None while it isn't connected, or
@@ -286,12 +295,18 @@ class HelperKeyboard:
                 self.to_hide.append(code)
 
     def grab(self):
-        """Ask the helper to hide the keys; *hidden* turns True once it has."""
+        """Ask the helper to hide the keys the desktop was just told went up
+        (write); *hidden* turns True once it has. None of them, when they
+        were all up already: nothing is asked, so a held key nobody asked
+        to hide (a Right Ctrl dictation key held with another modifier)
+        stays the desktop's."""
         with self._lock:
-            codes, self.to_hide = self.to_hide or sorted(self.held), []
+            codes, self.to_hide = self.to_hide, []
             self.hidden = False
             if self.sock is None:
                 raise OSError("the hotkey helper isn't connected")
+            if not codes:
+                return
             if not self._send("HIDE " + " ".join(map(str, codes))):
                 raise OSError("the hotkey helper went away")
 
@@ -320,15 +335,22 @@ class HelperKeyboard:
 
 
 def connect_helper(path=None):
-    """A HelperKeyboard when the helper is running, or None when it isn't
-    (TuxTalk then reads the keyboards itself, as before).
+    """A HelperKeyboard when the helper is running, or installed and this
+    user can't open a keyboard; else None (TuxTalk then reads the keyboards
+    itself, as before).
 
-    A running helper that doesn't answer at once (restarting, or this
+    A helper that doesn't answer at once (restarting, stopped, or this
     session isn't the one at the screen yet) is still used: the
-    HelperKeyboard keeps trying every second. Falling back for good would
-    leave the hotkeys dead until TuxTalk restarts."""
+    HelperKeyboard keeps trying every second, so Update in System check
+    brings the hotkeys back without a restart. With the helper installed
+    the user is normally out of the input group, and reading the keyboards
+    here would leave the hotkeys dead until TuxTalk restarts. Someone still
+    in it (they kept the group when switching, or couldn't leave it) reads
+    them as before while the helper's socket isn't there."""
+    from . import secure_input, uinput_helper
     path = path or socket_path()
-    if not os.path.exists(path):
+    if not os.path.exists(path) and (not secure_input.is_installed()
+                                     or uinput_helper._readable_keyboards()):
         return None
     keyboard = HelperKeyboard(path)
     if not keyboard.connect():
@@ -339,15 +361,11 @@ def connect_helper(path=None):
 
 def refused_shortcut(text):
     """True when a shortcut written like "Ctrl+Shift+H" won't be reported by
-    the helper: a key that isn't an F-key needs two of Ctrl, Alt and Super.
-    (Text only, so Preferences needn't load the dictation service's code.)"""
-    parts = [p.strip().upper() for p in (text or "").split("+") if p.strip()]
-    if len(parts) < 2:
-        return False
-    key, mods = parts[-1], set(parts[:-1])
-    if key.startswith("F") and key[1:].isdigit():
-        return False
-    return len(mods & {"CTRL", "ALT", "SUPER"}) < 2
+    the helper (refused_combo). One the service can't read either is left
+    to the service to report."""
+    from .hotkey_keys import parse_hotkey_combo
+    combo = parse_hotkey_combo(text)
+    return bool(combo and refused_combo(*combo))
 
 
 def refused_combo(mods, key):

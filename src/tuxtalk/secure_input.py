@@ -27,6 +27,7 @@ import os
 import subprocess
 
 from . import pkexec_runner
+from .hotkey_helper import DEFAULT_SOCKET_DIR, SOCKET_PATH
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -67,7 +68,7 @@ TasksMax=4
 # A throwaway user whose only extra right is reading the keyboards.
 DynamicUser=yes
 SupplementaryGroups=input
-RuntimeDirectory=tuxtalk-hotkeys
+RuntimeDirectory={os.path.basename(DEFAULT_SOCKET_DIR)}
 RuntimeDirectoryMode=0755
 UMask=0077
 
@@ -152,13 +153,12 @@ systemctl enable {SERVICE}
 # restart, not start: a TuxTalk update brings a new helper with it
 systemctl restart {SERVICE}
 # Until uinput is loaded /dev/uinput is a bare static node the trigger can't
-# reach, and typing waited for a reboot (Fedora, 2026-10-22). The test VMs
-# didn't show it: their SPICE agent loads uinput at boot.
+# reach, and typing would wait for a reboot.
 modprobe uinput 2>/dev/null || true
 udevadm control --reload-rules
 udevadm trigger --action=change --sysname-match=uinput
 for i in $(seq 50); do
-    [ -S /run/tuxtalk-hotkeys/hotkeys.sock ] && exit 0
+    [ -S {SOCKET_PATH} ] && exit 0
     sleep 0.1
 done
 echo "The hotkey helper didn't start. See: journalctl -u {SERVICE}" >&2
@@ -217,8 +217,14 @@ TIMED_OUT = "That took too long. Please try again."
 
 # _pkexec()'s message, with ok=True, when the time ran out after the
 # password: the script, running as root, couldn't be stopped and was waited
-# for, but its output and exit status were lost.
+# for, but its output and exit status were lost, and it may have been cut
+# short (pkexec_runner.run). The caller judges by what's there.
 RAN_TOO_LONG = "TUXTALK_RAN_TOO_LONG"
+
+# install_with_pkexec()'s message when that happened and the helper this
+# TuxTalk brings isn't the one running.
+NOT_CONFIRMED = ("That took too long, and TuxTalk couldn't confirm the hotkey helper "
+                 "is set up. Please try again.")
 
 
 def _still_in_group_check():
@@ -406,58 +412,14 @@ def fallback_note():
 
 def install_with_pkexec(leave_group=False):
     """Install (or update) the helper and the typing rule, and with
-    *leave_group* leave the input group too. (ok, message)."""
-    return _run_as_root(install_script(leave_group), "installed")
-
-
-def input_access_diagnosis() -> str:
-    """Explain, in terms the user can act on, why no keyboards are readable.
-
-    evdev's list_devices() filters nodes with os.access(R_OK | W_OK) and returns
-    an empty list, never an exception, when the user can open none of them.
-    Without this message the service looks healthy while ignoring every
-    keypress.
-
-    The two cases need opposite advice, so they are reported separately:
-    not in the 'input' group (fixable with usermod + a re-login) versus in the
-    group already (so the device node permissions are what is wrong).
-    """
-    import grp
-    import pwd
-
-    head = ("No readable keyboard devices found - hotkeys cannot work. "
-            "TuxTalk reads keys from /dev/input, which needs the 'input' group. ")
-    try:
-        group = grp.getgrnam("input")
-    except KeyError:
-        return head + "This system has no 'input' group at all."
-
-    # os.getgroups() is this SESSION's group list, fixed at login; the group's
-    # member list is the SYSTEM's, updated the moment usermod runs. They
-    # disagree only when setup granted the group after this session started,
-    # which needs a restart rather than another usermod.
-    in_session = group.gr_gid in os.getgroups()
-    try:
-        username = pwd.getpwuid(os.getuid()).pw_name
-    except KeyError:    # no passwd entry for this uid (a container, say)
-        username = os.environ.get("USER", "")
-    in_system = username in group.gr_mem
-
-    if in_session:
-        return head + (
-            "This user IS in the 'input' group, so the device nodes themselves "
-            "are wrong: /dev/input/event* should be 'crw-rw---- root input'."
-        )
-    if in_system:
-        return head + (
-            f"Setup already added '{username}' to the 'input' group, but this "
-            "session started before that and is still using the old "
-            "permissions. RESTART the computer - logging out is often not "
-            "enough, because a lingering user session keeps the old group list."
-        )
-    return head + (
-        "This user is NOT in the 'input' group. Fix it with:\n"
-        "    sudo usermod -a -G input $USER\n"
-        "then RESTART the computer. Logging out and back in is often not "
-        "enough - a lingering user session keeps the old group list alive."
-    )
+    *leave_group* leave the input group too. (ok, message). When the time
+    ran out after the password, it worked only if this TuxTalk's helper is
+    the one running now."""
+    ok, message = _run_as_root(install_script(leave_group), "installed")
+    if ok and message == RAN_TOO_LONG:
+        from .hotkey_helper import VERSION
+        if not (is_installed() and running_version() == VERSION):
+            logger.warning("Hotkey helper install ran too long, and isn't running")
+            return False, NOT_CONFIRMED
+        return True, ""
+    return ok, message

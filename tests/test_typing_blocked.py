@@ -49,6 +49,17 @@ def test_never_granted_points_at_fix_typing(host):
     assert "Fix Typing Permissions" in reason and "restart" in reason.lower()
 
 
+def test_with_the_hotkey_helper_the_fix_needs_no_restart(host, monkeypatch):
+    """Fix Typing installs the helper's typing rule, which applies at once:
+    telling the user to restart after it sent them to do it for nothing."""
+    from tuxtalk import secure_input
+    monkeypatch.setattr(secure_input, "can_install", lambda: (True, ""))
+    host.writable = False
+    host.apply()
+    reason = U.typing_blocked_reason()
+    assert "Fix Typing Permissions" in reason and "restart" not in reason.lower()
+
+
 def test_nothing_wrong_returns_none(host):
     assert U.typing_blocked_reason() is None
 

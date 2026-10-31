@@ -22,7 +22,7 @@ DONE = "done"            # ran as root and exited 0
 DECLINED = "declined"    # the password prompt was cancelled or refused
 FAILED = "failed"        # ran, and failed
 TIMED_OUT = "timed out"  # stopped at the time limit; nothing ran as root
-UNKNOWN = "unknown"      # still running as root at the limit, so waited for; output lost
+UNKNOWN = "unknown"      # still running as root at the limit: see run(); judge by the result
 MISSING = "missing"      # pkexec isn't installed
 
 
@@ -64,7 +64,9 @@ def run(argv, timeout, script=None) -> Outcome:
         if time.monotonic() - started < timeout:
             raise
         # Killing pkexec at the time limit fails once it runs the command as
-        # root; subprocess then waits for the command to end.
+        # root. subprocess then closes the pipes before it waits for the
+        # command, so a script that writes again dies of SIGPIPE part way:
+        # the caller has to look at what's there, not assume it finished.
         return Outcome(UNKNOWN)
     except FileNotFoundError:
         return Outcome(MISSING)

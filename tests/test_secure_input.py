@@ -206,10 +206,12 @@ def _typing_prefs(monkeypatch, *, running, installed=True, in_group=False):
 
 
 def test_only_an_older_helper_needs_an_update():
-    """1.9, installed by test builds, is older than 1.10: the numbers after
-    the dot are compared as numbers, not as text."""
+    """1.9, installed by test builds, and 1.10 are older than 1.11: the
+    numbers after the dot are compared as numbers, not as text."""
+    assert hotkey_helper.VERSION == "1.11"
     for running, wanted in (("1.0", True), ("1.3", True), ("garbled", True), ("1.9", True),
-                            (hotkey_helper.VERSION, False), ("1.11", False), ("9.0", False)):
+                            ("1.10", True), (hotkey_helper.VERSION, False), ("1.12", False),
+                            ("9.0", False)):
         assert si.is_older(running) is wanted, running
 
 
@@ -261,6 +263,8 @@ def test_switching_leaves_the_input_group_in_the_same_password_prompt():
 @pytest.mark.parametrize("shortcut, refused", [
     ("Ctrl+Alt+P", False), ("Ctrl+Super+V", False), ("Ctrl+Shift+H", True),
     ("Alt+P", True), ("Super+V", True), ("Shift+F8", False), ("", False),
+    # The helper reports these keys on their own, whatever is held with them.
+    ("Ctrl+Scroll Lock", False), ("Ctrl+Right Ctrl", False),
 ])
 def test_which_shortcuts_the_helper_refuses(shortcut, refused):
     from tuxtalk.hotkey_helper_client import refused_shortcut
@@ -322,3 +326,19 @@ def test_the_still_in_the_group_check_reads_whole_group_names(tmp_path, groups, 
     ran = subprocess.run(["/bin/bash", "-c", "user=ron\n" + si._still_in_group_check()],
                          env={"PATH": str(tmp_path)}, capture_output=True, text=True)
     assert (si.STILL_IN_GROUP in ran.stdout) == still_in
+
+
+@pytest.mark.parametrize("running, result", [
+    ("1.10", (False, si.NOT_CONFIRMED)),      # cut short: the old helper still runs
+    (None, (False, si.NOT_CONFIRMED)),
+    (hotkey_helper.VERSION, (True, "")),
+])
+def test_an_install_that_ran_too_long_is_judged_by_the_helper_running(monkeypatch, running,
+                                                                      result):
+    """The time ran out after the password: the root script was waited for,
+    but with its pipes closed it can die part way. "Hotkey helper updated"
+    is said only if this TuxTalk's helper is the one running."""
+    monkeypatch.setattr(si, "_run_as_root", lambda script, what: (True, si.RAN_TOO_LONG))
+    monkeypatch.setattr(si, "is_installed", lambda: True)
+    monkeypatch.setattr(si, "running_version", lambda: running)
+    assert si.install_with_pkexec() == result

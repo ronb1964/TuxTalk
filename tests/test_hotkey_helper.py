@@ -33,6 +33,12 @@ class FakeKeyboard(hh.Keyboard):
         self.w = w
         self.kernel = set()
         self.calls = []
+        # What its node's permissions and udev say now (current_group):
+        # None while they say what they said when it was opened.
+        self.udev_says = None
+
+    def current_group(self):
+        return self.udev_says or self.group
 
     def _event(self, code, value):
         # Stamped like the kernel does after EVIOCSCLOCKID(CLOCK_MONOTONIC).
@@ -684,6 +690,7 @@ def test_a_virtual_keyboard_holding_the_hotkey_cant_swallow_the_real_one(setup):
     """A program holds F8 on its own virtual keyboard first: the real F8 is
     still reported, so it can't switch dictation (or Esc) off."""
     helper, kb, connect, say, heard, _seat = setup
+    kb.group = "real"
     virtual = FakeKeyboard("/dev/input/event-virtual")
     virtual.virtual = True
     helper.keyboards[virtual.path] = virtual
@@ -700,6 +707,86 @@ def test_a_virtual_keyboard_holding_the_hotkey_cant_swallow_the_real_one(setup):
     assert heard(tuxtalk) == ["UP 66"]
     virtual.press(F8, 0)
     assert heard(tuxtalk) == []
+
+
+def test_a_writable_real_keyboard_holding_the_hotkey_cant_swallow_the_real_one(setup):
+    """A real keyboard with "uaccess" (an RGB package's rule) is one a
+    program can press F8 on: the user's own F8 on another keyboard still
+    ends the press, so that program can't decide when dictation stops."""
+    helper, kb, connect, say, heard, _seat = setup
+    kb.group = "real"
+    writable = FakeKeyboard("/dev/input/event-rgb")       # own:..., not virtual
+    helper.keyboards[writable.path] = writable
+    tuxtalk = _ready(connect, say, heard)
+    writable.press(F8)
+    assert heard(tuxtalk) == ["DOWN 66 -"]
+    kb.press(F8)
+    kb.press(F8, 0)
+    assert heard(tuxtalk) == ["UP 66"]
+    writable.press(F8, 0)
+    assert heard(tuxtalk) == []
+
+
+def test_a_real_keyboard_given_uaccess_later_cant_lend_its_modifiers(setup):
+    """A udev rule gives a real keyboard "uaccess" after the helper opened
+    it: a program may now press its Ctrl and Alt, and that mustn't turn a
+    key typed on the other real keyboard into a shortcut it's told of."""
+    helper, kb, connect, say, heard, _seat = setup
+    kb.group = "real"
+    other = FakeKeyboard("/dev/input/event-other")
+    other.group = "real"
+    helper.keyboards[other.path] = other
+    sock = _ready(connect, say, heard, "CA:30")
+    other.udev_says = "own:13:70"
+    other.press(LCTRL)                   # the program, through the node it may write to now
+    other.press(LALT)
+    assert heard(sock) == []             # read before the key on the other keyboard
+    kb.press(A)
+    assert heard(sock) == []
+    assert other.group == "own:13:70"
+
+
+def test_modifiers_pressed_while_writable_dont_count_once_it_turns_real(setup):
+    """A keyboard udev hadn't finished with (or whose "uaccess" rule went)
+    turns real: a Ctrl and Alt a program could have pressed on it before
+    mustn't unlock keys on the other real keyboards."""
+    helper, kb, connect, say, heard, _seat = setup
+    kb.group = "real"
+    other = FakeKeyboard("/dev/input/event-other")      # own:, writable
+    helper.keyboards[other.path] = other
+    sock = _ready(connect, say, heard, "CA:30")
+    other.press(LCTRL)
+    other.press(LALT)
+    assert heard(sock) == []
+    other.udev_says = "real"
+    helper.next_scan = 0
+    assert heard(sock) == []
+    assert other.group == "real"
+    kb.press(A)
+    assert heard(sock) == []
+
+
+def test_a_scan_lets_go_of_modifiers_from_a_keyboard_that_became_writable(setup):
+    """Told of a shortcut with the real keyboards' Ctrl and Alt, then one of
+    them gets "uaccess": the client hears them let go (or it would wait for
+    them), and they no longer count."""
+    helper, kb, connect, say, heard, _seat = setup
+    kb.group = "real"
+    other = FakeKeyboard("/dev/input/event-other")
+    other.group = "real"
+    helper.keyboards[other.path] = other
+    sock = _ready(connect, say, heard, "CA:30")
+    other.press(LCTRL)
+    other.press(LALT)
+    assert heard(sock) == []
+    kb.press(A)
+    assert heard(sock) == ["DOWN 30 29,56"]   # a split keyboard: real, both
+    other.udev_says = "own:13:70"
+    helper.next_scan = 0
+    assert sorted(heard(sock)) == ["UP 29", "UP 56"]
+    kb.press(A, 0)
+    kb.press(A)
+    assert heard(sock) == ["UP 30"]
 
 
 def test_a_virtual_keyboard_cant_take_over_a_real_press(setup):
@@ -848,8 +935,11 @@ def test_a_keyboard_programs_can_write_to_is_kept_apart(tmp_path):
             st_mode, st_uid, st_gid = st.st_mode, st.st_uid, st.st_gid
         St.st_rdev = rdev
         return St
+    (data / "c13:68").write_text("E:ID_INPUT_KEYBOARD=1\nG:seat\n")
     assert hh.others_can_write(with_rdev(tagged, rdev), str(data))
     assert not hh.others_can_write(with_rdev(node, plain), str(data))
+    # udev not finished with it yet: its tags can't be known, so it's kept apart.
+    assert hh.others_can_write(with_rdev(node, os.makedev(13, 99)), str(data))
     everyone = os.stat_result((0o20666, 0, 0, 1, 0, 0, 0, 0, 0, 0))
     assert hh.others_can_write(with_rdev(everyone, plain), str(data))
 
@@ -1269,18 +1359,22 @@ def test_the_helper_knows_the_name_tuxtalk_types_with():
     assert hh.OWN_KEYBOARD_NAME == virtual_keyboard.NAME
 
 
-def test_a_remappers_keyboard_is_listened_to_but_never_held(setup):
+def test_a_remappers_keyboard_is_listened_to_but_never_held(setup, capsys):
     """kanata's keyboard carries the mouse's motion and the text TuxTalk
     types: held while the hotkey is down, the mouse froze and the dictation
     typed meanwhile was lost. Its keys reach the desktop as they are, and
-    the service is told the keyboard couldn't be held."""
+    the service is told that's how this keyboard works, with the journal
+    saying so once rather than at every dictation (issue #23)."""
     helper, kb, connect, say, heard, _seat = setup
     kb.listen_only = True
     sock = _ready(connect, say, heard)
-    kb.press(F8)
-    assert heard(sock) == ["DOWN 66 -"]
-    say(sock, "HIDE 66")
-    assert heard(sock) == ["ERR couldn't hold the keyboard"]
-    assert kb.calls == [] and helper.hide is None
-    kb.press(F8, 0)
-    assert heard(sock) == ["UP 66"]
+    capsys.readouterr()
+    for _ in range(2):
+        kb.press(F8)
+        assert heard(sock) == ["DOWN 66 -"]
+        say(sock, "HIDE 66")
+        assert heard(sock) == ["ERR listen-only keyboard"]
+        assert kb.calls == [] and helper.hide is None
+        kb.press(F8, 0)
+        assert heard(sock) == ["UP 66"]
+    assert capsys.readouterr().out.count("not holding keyboard") == 1

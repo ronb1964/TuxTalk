@@ -18,7 +18,8 @@ import grp
 import os
 import pytest
 
-from tuxtalk.secure_input import input_access_diagnosis
+from tuxtalk import secure_input
+from tuxtalk.uinput_helper import input_access_diagnosis
 
 
 def _input_gid():
@@ -48,20 +49,30 @@ def test_says_restart_when_setup_ran_but_session_is_stale(monkeypatch):
     assert "usermod" not in msg, "already in the group — do not re-run setup"
 
 
-def test_names_the_group_when_user_is_not_a_member(monkeypatch):
-    """The actionable case: not in the group, so say which group and what to run."""
-    # Empty gr_mem AND a session without the gid — a user nothing has granted.
+def test_sends_a_user_outside_the_group_to_fix_typing_and_a_restart(monkeypatch):
+    """No helper here (the input group is the fix): one place to go, and
+    the restart the group change needs."""
+    # Empty gr_mem AND a session without the gid: a user nothing has granted.
     fake = type("G", (), {"gr_gid": 999, "gr_mem": []})()
     monkeypatch.setattr(grp, "getgrnam", lambda name: fake)
     monkeypatch.setattr("os.getgroups", lambda: [1000])
     msg = input_access_diagnosis()
 
-    assert "input" in msg
-    assert "usermod" in msg, "must give the user a command they can actually run"
-    # A logout is NOT reliable — a lingering `systemd --user` session keeps the
+    assert "Fix Typing Permissions" in msg
+    assert "usermod" not in msg, "the fix does that, and the helper where it can"
+    # A logout is NOT reliable: a lingering `systemd --user` session keeps the
     # old group list alive. The advice has to be "restart", or users follow it
     # and nothing changes.
     assert "restart" in msg.lower(), "group changes need a restart to take effect"
+
+
+def test_with_the_helper_possible_it_leads_with_fix_typing_and_no_restart(monkeypatch):
+    """The input group lets every program read the keyboard: where the
+    helper can run, that's the advice, and it needs no restart."""
+    monkeypatch.setattr(secure_input, "can_install", lambda: (True, ""))
+    msg = input_access_diagnosis()
+    assert "Fix Typing Permissions" in msg and "hotkey helper" in msg
+    assert "with no restart" in msg and "usermod" not in msg
 
 
 def test_points_at_permissions_when_user_is_already_a_member(monkeypatch):

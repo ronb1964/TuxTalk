@@ -28,6 +28,17 @@ from tuxtalk import pipeline
 F8 = ecodes.KEY_F8
 
 
+class StampedEvent(KeyEvent):
+    """A key event with the kernel's time on it, as evdev's InputEvent has."""
+
+    def __init__(self, code, value, at):
+        super().__init__(code, value)
+        self.at = at
+
+    def timestamp(self):
+        return self.at
+
+
 class KernelKeyboard:
     """One keyboard with two readers: the desktop (libinput) and TuxTalk."""
 
@@ -39,16 +50,16 @@ class KernelKeyboard:
         self.talktype_queue = []
 
     # -- the kernel ------------------------------------------------------
-    def _deliver(self, code, value):
+    def _deliver(self, code, value, at=None):
         if (value == 1) == (code in self.down):
             return                    # no state change: the kernel drops it
         (self.down.add if value == 1 else self.down.discard)(code)
-        self.talktype_queue.append(KeyEvent(code, value))
+        self.talktype_queue.append(StampedEvent(code, value, time.time() if at is None else at))
         if not self.grabbed:
             self.desktop_count[code] = self.desktop_count.get(code, 0) + (1 if value == 1 else -1)
 
-    def physical(self, code, value):
-        self._deliver(code, value)
+    def physical(self, code, value, at=None):
+        self._deliver(code, value, at)
 
     # -- what python-evdev offers TuxTalk ------------------------------
     def write(self, etype, code, value):
@@ -146,8 +157,31 @@ def test_without_the_fix_the_desktop_is_left_holding_f8(kb, monkeypatch):
     assert kb.desktop_count[F8] == 1                  # stuck "held"
 
 
+def test_a_key_let_go_just_after_the_grab_looked_still_ends_the_recording(kb, monkeypatch):
+    """F8 comes up between the look at which keys are down and the release
+    sent for the desktop: the kernel drops that release, and the real one
+    was taken for it. The recording then never ended and the keyboard
+    stayed held."""
+    looked = kb.active_keys
+
+    def look_then_let_go():
+        down = looked()
+        kb.physical(F8, 0, at=time.time() - 0.001)   # stamped before our release
+        return down
+    monkeypatch.setattr(kb, "active_keys", look_then_let_go)
+    kb.physical(F8, 1)
+    pump(kb)
+    assert rs.state.is_recording
+    pump(kb)
+    pump(kb)
+    assert kb.stops == [1] and not rs.state.is_recording and not kb.grabbed
+    assert F8 not in kb.down                          # the next press is heard
+    assert kb.desktop_count.get(F8, 0) == 0
+
+
 def test_stale_injections_expire_and_never_swallow_real_keys(kb, monkeypatch):
-    keyboard_grab._injected_pending.append((kb.path, F8, 0, time.time() - 1))   # already expired
+    sent = time.time() - 3
+    keyboard_grab._injected_pending.append((kb.path, F8, 0, sent, sent + 2))   # already expired
     assert keyboard_grab.is_own_injected_event(kb, KeyEvent(F8, 0)) is False
 
 

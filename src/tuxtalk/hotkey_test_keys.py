@@ -110,8 +110,9 @@ def service_hears(keyboards, keyname):
     and Right Alt (secure_input.hears_key) won't report those, and the
     service reads the keys through a running helper even where the test
     could open the keyboards itself (input_backends.get_input_backend): an
-    older install still in the "input" group, say."""
-    if not keyboards:
+    older install still in the "input" group, say. An installed helper
+    that isn't answering (stopped) hears nothing, though it's in the list."""
+    if not keyboards or not all(getattr(k, "connected", True) for k in keyboards):
         return False
     if keyname not in secure_input.KEYS_SINCE:
         return True

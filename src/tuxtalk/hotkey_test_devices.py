@@ -32,8 +32,11 @@ def flush_pending_events(devices):
 
 
 def hotkey_test_helper(ecodes, connect=None):
-    """The hotkey helper as a keyboard for the hotkey test, or None when it
-    isn't running. It reports only the keys it's asked to watch, so ask for
+    """The hotkey helper as a keyboard for the hotkey test, or None when the
+    service won't read the keys through it (hotkey_helper_client.connect_helper).
+    One installed but not answering is returned too: it keeps trying, and
+    until it answers no key counts as working (service_hears). It reports
+    only the keys it's asked to watch, so ask for
     every key the test accepts on its own: F1 to F24, Esc, Pause, Scroll Lock,
     Right Ctrl and Right Alt (helper 1.5 and newer)."""
     try:
