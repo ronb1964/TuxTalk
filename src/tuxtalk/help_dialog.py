@@ -81,7 +81,7 @@ def text_page(markup_text):
     return scrolled
 
 
-def _problemstext_page(markup):
+def _problems_page(markup):
     """The Problems section, with a Report a Problem button above its text:
     the first thing seen there, not a link near the bottom of the page."""
     report = Gtk.Button(label="Report a Problem\u2026")
@@ -107,7 +107,7 @@ def _sections():
     """The notebook of sections, one tab each, in Help's order."""
     notebook = Gtk.Notebook()
     for title, markup in help_text.tabs():
-        page = _problemstext_page(markup) if title == PROBLEMS_TITLE else text_page(markup)
+        page = _problems_page(markup) if title == PROBLEMS_TITLE else text_page(markup)
         notebook.append_page(page, Gtk.Label(label=title))
     notebook.get_accessible().set_name("Help sections")
     return notebook

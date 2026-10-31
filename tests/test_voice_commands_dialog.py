@@ -116,7 +116,7 @@ def test_the_cheat_sheet_scrolls_from_the_keyboard(monkeypatch):
         dialog.destroy()
 
 
-def test_escape_and_close_shut_the_window_once(monkeypatch):
+def test_escape_and_close_shut_the_window(monkeypatch):
     from gi.repository import Gdk, Gtk
     dialog = _open_window(monkeypatch)
     destroyed = []

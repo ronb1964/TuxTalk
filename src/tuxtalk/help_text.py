@@ -59,9 +59,9 @@ def _keys(is_flatpak):
     assigns the two dictation keys and there is no Paste Last shortcut."""
     if is_flatpak:
         return "your Hold-to-talk key", "your Toggle key", ""
-    from .config import load_config
+    from .config import load_config, saved_hold_key
     cfg = load_config()
-    return (cfg.hotkey or "F8", cfg.toggle_hotkey or "F9",
+    return (saved_hold_key(), cfg.toggle_hotkey or "F9",
             getattr(cfg, "paste_last_hotkey", ""))
 
 
