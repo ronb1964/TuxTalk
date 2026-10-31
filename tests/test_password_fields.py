@@ -503,13 +503,65 @@ def test_the_focused_apps_own_password_field_still_counts(bus):
 
 
 @pytest.mark.parametrize("focused", [
-    "brave-browser",        # on the bus as "Brave": it may be the one
+    "com.brave.Browser",    # the Flatpak, on the bus as "Brave": it may be the one
     None,                   # the desktop can't say which window has the focus
 ])
 def test_a_password_field_counts_where_the_focused_app_cant_be_told_apart(bus, focused):
     bus.app("Brave", PASSWORD)
     bus.app("kwrite", TEXT)
     assert atspi_helper.focused_is_password(focused_class=lambda: focused) is True
+
+
+@pytest.mark.parametrize("budget", [atspi_helper.BUDGET_S, atspi_helper.RECHECK_BUDGET_S])
+def test_a_password_field_found_still_counts_when_later_apps_use_up_the_time(bus, budget):
+    """Brave's login box had the focus, and apps that hang after it used up
+    the time: the password field already found was forgotten, and the
+    dictation typed into it. Before the first line and before each line."""
+    bus.app("Chromium", PASSWORD)
+    for n in range(5):
+        bus.app(f"frozen{n}", TEXT, hang=True)
+    assert atspi_helper.focused_is_password(budget, lambda: "org.kde.kwrite") is True
+
+
+def test_the_focused_apps_no_still_clears_a_background_one_when_the_time_runs_out(bus):
+    bus.app("Firefox", PASSWORD)
+    bus.app("kwrite", TEXT)
+    for n in range(5):
+        bus.app(f"frozen{n}", TEXT, hang=True)
+    assert atspi_helper.focused_is_password(focused_class=lambda: "org.kde.kwrite") is False
+
+
+def test_a_focused_app_that_doesnt_answer_hasnt_said_no(bus):
+    """Only an answer clears another app's password field."""
+    bus.app("Firefox", PASSWORD)
+    bus.app("kwrite", TEXT, collection="slow")
+    assert atspi_helper.focused_is_password(focused_class=lambda: "org.kde.kwrite") is True
+
+
+def test_a_slow_tray_doesnt_hold_up_the_check_before_each_line(bus):
+    """Which app has the focus comes from the tray, which has 1.5 s when
+    its loop is busy: the 50 ms check before each line took that long."""
+    import threading
+    answered = threading.Event()
+
+    def slow_tray():
+        answered.wait(1.5)
+        return "org.kde.kwrite"
+    bus.app("Firefox", PASSWORD)
+    started = time.monotonic()
+    try:
+        # Not told in time: the password field may be in the focused app.
+        assert atspi_helper.focused_is_password(atspi_helper.RECHECK_BUDGET_S, slow_tray) is True
+        assert time.monotonic() - started < 0.5
+    finally:
+        answered.set()
+        atspi_helper._looks.submit(lambda: None).result()    # the next test's look goes first
+
+
+def test_brave_on_the_bus_is_the_brave_browser_window(bus):
+    bus.app("Brave", TEXT)
+    bus.app("Firefox", PASSWORD)
+    assert atspi_helper.focused_is_password(focused_class=lambda: "brave-browser") is False
 
 
 def test_the_shells_own_password_prompt_counts_over_any_app(bus):
