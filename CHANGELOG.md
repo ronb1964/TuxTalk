@@ -29,6 +29,28 @@ before 0.15.0, so older entries use that name.
 - With Type at pause, pressing Esc while the AI was still fixing a "no wait"
   in a phrase didn't stop that phrase: it was typed anyway. Now nothing more
   is typed once you press Esc.
+- With Type at pause, a word you started just as a pause ran out could lose
+  its first sound, and with some microphones the whole word. TuxTalk cut the
+  pause off in big pieces and the start of the word went with it. The word
+  now goes whole into the next phrase.
+- With Type at pause in hands-free and a soft voice (or a quiet microphone),
+  hands-free could decide after 10 seconds that nothing was said, while you
+  were still talking. It threw away the phrase being typed and everything
+  since the last pause, and said "Nothing heard". Now it stops and types what
+  you said. Hands-free on its own still stops after 10 seconds with a voice
+  that soft.
+- With Type at pause, Esc pressed while TuxTalk listened to two phrases
+  together could still type the period between them, run a command like
+  "delete last sentence" said after the pause, or press Enter and send the
+  message. Now nothing more happens once you press Esc.
+- A "no wait" held back at the end of a Type at pause dictation was typed
+  into whatever window you had clicked into. It only goes where the phrase
+  before it went now.
+- Your Stats counted the words twice when a "no wait" fixed the phrase
+  before a pause.
+- With "Turn other sounds down", a second browser tab could stay quiet after
+  a dictation, and a sound TuxTalk turned down right after it started could
+  stay quiet if TuxTalk then stopped.
 - "Edit that" said right after a Type at pause dictation changes all of it
   since its last Enter or Tab, the same text "fix that word" works on,
   instead of only its last phrase. If you tapped to hold an automatic send,
