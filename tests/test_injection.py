@@ -39,42 +39,27 @@ class FakePopen:
     """
 
     def __init__(self, returncode=None):
-        self._returncode = returncode
-        self.stdin = _FakeStdin()
-        self.stderr = _FakeStderr()
-        self.terminated = False
+        self.returncode = None
+        self._exits_with = returncode
+        self.written = b""
+        self.killed = False
+
+    def communicate(self, input=None, timeout=None):
+        self.written += input or b""
+        if self._exits_with is None:
+            raise subprocess.TimeoutExpired(cmd="wl-copy", timeout=timeout)
+        self.returncode = self._exits_with
+        return b"", b""
 
     def poll(self):
-        return self._returncode
+        return self.returncode
 
-    def terminate(self):
-        self.terminated = True
-        if self._returncode is None:
-            self._returncode = -15
+    def kill(self):
+        self.killed = True
+        self.returncode = -9
 
     def wait(self, timeout=None):
-        if self._returncode is None:
-            raise subprocess.TimeoutExpired(cmd="wl-copy", timeout=timeout)
-        return self._returncode
-
-
-class _FakeStderr:
-    def read(self):
-        return b"Failed to connect to a Wayland server"
-
-    def close(self):
-        pass
-
-
-class _FakeStdin:
-    def __init__(self):
-        self.written = b""
-
-    def write(self, data):
-        self.written += data
-
-    def close(self):
-        pass
+        return self.returncode
 
 
 @pytest.fixture
@@ -132,7 +117,23 @@ def test_paste_waits_for_wl_copy_to_set_the_clipboard(monkeypatch, wayland, keyb
 
     assert keyboard_output.paste_text("hello") is False
     assert not keyboard.events, "pasted before the clipboard held the dictation"
-    assert proc.terminated, "a stuck wl-copy was left running"
+    assert proc.killed and proc.returncode is not None, "a stuck wl-copy was left running"
+
+
+def test_a_wl_copy_that_stops_reading_doesnt_hold_up_the_dictation(monkeypatch):
+    """The write of a long dictation came before the time limit: a wl-copy
+    that stopped reading its input held the dictation worker, and every
+    dictation after it, for good."""
+    import tempfile
+    import time
+    monkeypatch.setattr(keyboard_output, "WL_COPY_READY_TIMEOUT_S", 0.2)
+    proc = subprocess.Popen(["sleep", "30"], stdin=subprocess.PIPE,
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    started = time.monotonic()
+    with tempfile.TemporaryFile() as errors:
+        assert keyboard_output._hand_to_wl_copy(proc, "word " * 200_000, errors) is False
+    assert time.monotonic() - started < 5
+    assert proc.returncode is not None, "left running, to set the clipboard later"
 
 
 def test_a_wl_copy_that_handed_off_is_not_killed(monkeypatch, wayland):
@@ -141,7 +142,7 @@ def test_a_wl_copy_that_handed_off_is_not_killed(monkeypatch, wayland):
     monkeypatch.setattr(keyboard_output.subprocess, "run", lambda *a, **k: FakeCompleted(returncode=0))
 
     assert keyboard_output.paste_text("hello") is True
-    assert not proc.terminated
+    assert not proc.killed
 
 
 def test_paste_is_refused_outside_a_wayland_session(monkeypatch, keyboard):

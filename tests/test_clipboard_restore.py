@@ -258,8 +258,8 @@ def test_the_unknown_window_paste_saves_the_primary_before_setting_it(monkeypatc
         def after_paste(self, text):
             done.append("puts them back")
 
-    wl_copy = types.SimpleNamespace(stdin=types.SimpleNamespace(write=len, close=lambda: None),
-                                    wait=lambda timeout: 0, poll=lambda: 0, stderr=None)
+    wl_copy = types.SimpleNamespace(communicate=lambda input, timeout: (b"", b""),
+                                    returncode=0, poll=lambda: 0)
     monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
     monkeypatch.setattr(keyboard_output, "which", lambda name: f"/usr/bin/{name}")
     monkeypatch.setattr(live, "restore_clipboard", True)
@@ -338,6 +338,45 @@ def test_paste_uses_the_keeper_only_when_the_setting_is_on(monkeypatch):
     monkeypatch.setattr(live, "restore_clipboard", True)
     assert keyboard_output.paste_text("hello") is True
     assert events == ["save", ("restore", "hello")]
+
+
+class _WlCopyInto:
+    """A wl-copy that puts what it's given on the fake clipboard *board*."""
+
+    returncode = 0
+    stderr = None
+
+    def __init__(self, board):
+        self.board = board
+
+    def communicate(self, input=None, timeout=None):
+        self.board.data, self.board.mime = input, "text/plain;charset=utf-8"
+        return b"", b""
+
+    def poll(self):
+        return 0
+
+
+def test_a_typed_line_break_in_kwrite_gives_the_clipboard_back(monkeypatch, board, keyboard):
+    """KWrite's line breaks are pasted newlines: with "Restore clipboard"
+    off, as it is unless asked for, the user's copied link was gone, and
+    Ctrl+V pasted a newline."""
+    pending = []
+    monkeypatch.setattr(keyboard_output, "_clipboard_keeper", cb.ClipboardKeeper(
+        schedule=lambda delay, fn: pending.append(fn) or (lambda: pending.remove(fn))))
+    monkeypatch.setattr(live, "restore_clipboard", False)
+    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
+    monkeypatch.setattr(keyboard_output, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(cb, "wl_copy_command", lambda: ["wl-copy", "--sensitive"])
+    monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda cmd, **kw: _WlCopyInto(board))
+    monkeypatch.setattr("tuxtalk.focused_window.look", lambda: ("org.kde.kwrite", None))
+    monkeypatch.setattr(keyboard_output, "type_text_raw", lambda text: True)
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    assert keyboard_output.type_text("Dear Sam,\xa7SHIFT_ENTER\xa7Thanks") is True
+    assert board.data == b"\n"         # for KWrite to read the paste
+    while pending:
+        pending.pop(0)()
+    assert board.data == b"what I copied"
 
 
 # --- a copied password stays a password ---------------------------------------------------

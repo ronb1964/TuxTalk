@@ -222,11 +222,10 @@ def test_a_paste_shortcut_cut_off_is_partial_and_not_typed_after(breaks_once, mo
     monkeypatch.setattr(keyboard_output, "which", lambda name: f"/usr/bin/{name}")
 
     class Copied:
-        stdin = type("In", (), {"write": lambda self, d: None, "close": lambda self: None})()
-        stderr = None
+        returncode = 0
 
-        def wait(self, timeout=None):
-            return 0
+        def communicate(self, input=None, timeout=None):
+            return b"", b""
 
         def poll(self):
             return 0

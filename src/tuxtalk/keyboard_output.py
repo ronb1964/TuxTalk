@@ -9,6 +9,7 @@ import functools
 import os
 import shutil
 import subprocess
+import tempfile
 import threading
 import time
 from typing import NamedTuple
@@ -354,8 +355,13 @@ def _paste_newline() -> bool:
     """A line break in KDE's editors, where Shift+Enter is Insert Smart
     Newline: "$45", new line, "$25" came out as "$$25". A plain Enter won't
     do either, since in Kate's terminal panel it runs the line; a pasted
-    newline is a plain one in both, as the paste path delivers it."""
-    return paste_text("\n") if is_wayland_session() else paste_text_x11("\n")
+    newline is a plain one in both, as the paste path delivers it. The
+    user's clipboard comes back after it whatever the "Restore clipboard"
+    setting: that's off so a dictation can be pasted again, and a lone
+    newline is nothing to paste again."""
+    if is_wayland_session():
+        return paste_text("\n", keep=True)
+    return paste_text_x11("\n", keep=True)
 
 
 def type_text_raw(text: str) -> bool:
@@ -486,18 +492,20 @@ def restore_clipboard_now() -> None:
         _clipboard_keeper.restore_now()
 
 
-def paste_text_x11(text: str) -> bool:
+def paste_text_x11(text: str, keep: bool | None = None) -> bool:
     """Paste on an X11 session, for text the keyboard layout can't type.
 
     paste_text needs wl-copy, which only talks to Wayland. Here the service
     puts the text on the X11 clipboard through its own GTK loop and then sends
     the same paste keystroke. It's only the fallback for untypable text
     (Latin words on a Ukrainian layout, an emoji); ordinary X11 dictation is
-    still typed. With restore_clipboard on, the user's clipboard comes back
-    afterwards, as in paste_text. True only if the text reached the app.
+    still typed. With restore_clipboard on, or *keep*, the user's clipboard
+    comes back afterwards, as in paste_text. True only if the text reached
+    the app.
     """
     from . import x11_clipboard
-    keeper = _keeper(x11_clipboard.X11Board) if live.restore_clipboard else None
+    keeping = live.restore_clipboard if keep is None else keep
+    keeper = _keeper(x11_clipboard.X11Board) if keeping else None
     if keeper is not None:
         keeper.before_paste()
     if not x11_clipboard.offer_dictation(text):
@@ -516,24 +524,31 @@ def paste_text_x11(text: str) -> bool:
             keeper.after_paste(text)
 
 
-def _hand_to_wl_copy(proc, text):
+def _hand_to_wl_copy(proc, text, errors):
     """Give *text* to the wl-copy process *proc* and wait until the clipboard
-    holds it: False when it doesn't, so nothing is pasted."""
-    proc.stdin.write(text.encode("utf-8"))
-    proc.stdin.close()
+    holds it: False when it doesn't, so nothing is pasted. Its stderr is
+    the file *errors*, not a pipe: the copy wl-copy leaves serving the
+    clipboard keeps stderr open, and reading a pipe to its end would wait
+    for that copy to quit."""
     # wl-copy forks a background copy to serve the clipboard once the
     # compositor has accepted the selection, and the process we started then
     # exits 0. Until it exits the clipboard may still hold the old contents,
-    # and pasting would insert those.
+    # and pasting would insert those. The time limit covers the writing too:
+    # a wl-copy that stopped reading would hold a long dictation's write.
     try:
-        status = proc.wait(timeout=WL_COPY_READY_TIMEOUT_S)
+        proc.communicate(text.encode("utf-8"), timeout=WL_COPY_READY_TIMEOUT_S)
     except subprocess.TimeoutExpired:
+        # Killed and reaped: let go later, it would set the clipboard after
+        # the paste was given up.
+        proc.kill()
+        proc.wait()
         logger.error(f"wl-copy did not set the clipboard within "
                      f"{WL_COPY_READY_TIMEOUT_S}s — skipping paste")
         return False
-    if status != 0:
-        err = proc.stderr.read().decode(errors="replace").strip() if proc.stderr else ""
-        logger.error(f"wl-copy failed (exit {status}): {err} — "
+    if proc.returncode != 0:
+        errors.seek(0)
+        err = errors.read().decode(errors="replace").strip()
+        logger.error(f"wl-copy failed (exit {proc.returncode}): {err} — "
                      "clipboard not set, skipping paste")
         return False
     return True
@@ -557,10 +572,11 @@ def _send_paste(text, keeping):
     return True
 
 
-def paste_text(text: str) -> bool:
+def paste_text(text: str, keep: bool | None = None) -> bool:
     """Wayland paste: put *text* on the clipboard with wl-copy, then send the
     paste keystroke (send_paste_keystroke picks Ctrl+V, Ctrl+Shift+V or
-    Shift+Insert).
+    Shift+Insert). *keep*: put the user's clipboard back afterwards, by
+    default as the "Restore clipboard" setting says.
 
     Returns True only when the text actually reached the focused app: the undo
     buffer records it, and a paste over an unset clipboard would insert
@@ -581,15 +597,16 @@ def paste_text(text: str) -> bool:
             # (issue #7). Off by default: a dictation left on the clipboard can
             # be re-pasted if it landed in the wrong window.
             from . import clipboard
-            keeping = live.restore_clipboard
+            keeping = live.restore_clipboard if keep is None else keep
             if keeping:
                 _keeper(clipboard.WaylandBoard).before_paste()
             # --sensitive keeps the dictation out of clipboard managers' history
             # (Klipper saves every entry to disk) where wl-copy supports it.
+            errors = tempfile.TemporaryFile()
             proc = subprocess.Popen(clipboard.wl_copy_command(), stdin=subprocess.PIPE,
-                                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                                    stdout=subprocess.DEVNULL, stderr=errors)
             try:
-                if not _hand_to_wl_copy(proc, text):
+                if not _hand_to_wl_copy(proc, text, errors):
                     return False
                 wl_copy_time = time.time() - paste_start
                 logger.info(f"TIMING: wl-copy set the clipboard in {wl_copy_time:.3f}s")
@@ -601,14 +618,10 @@ def paste_text(text: str) -> bool:
             finally:
                 # Only a wl-copy that never finished handing off is still ours
                 # to stop; the background copy serving the clipboard is not.
-                try:
-                    if proc.poll() is None:
-                        proc.terminate()
-                        proc.wait(timeout=0.3)
-                except Exception as e:
-                    logger.info(f"Could not stop wl-copy: {e}")
-                if proc.stderr is not None:
-                    proc.stderr.close()
+                if proc.poll() is None:
+                    proc.kill()
+                    proc.wait()
+                errors.close()
                 # Restore even after a failed paste, so the user's clipboard
                 # isn't lost either way.
                 if keeping:

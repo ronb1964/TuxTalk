@@ -505,21 +505,17 @@ def test_right_away_into_the_other_window_of_the_app_sends_nothing(chat, keyboar
 class WlCopy:
     """wl-copy setting the clipboard, during which the user clicks."""
 
+    returncode = 0
+
     def __init__(self, clicked):
-        self.stdin, self.stderr, self.clicked = self, None, clicked
-
-    def write(self, data):
-        pass
-
-    def close(self):
-        pass
+        self.clicked = clicked
 
     def poll(self):
         return 0
 
-    def wait(self, timeout=None):
+    def communicate(self, input=None, timeout=None):
         self.clicked()
-        return 0
+        return b"", b""
 
 
 def test_a_click_while_the_mark_is_put_on_the_clipboard_keeps_it_out_of_the_other_window(

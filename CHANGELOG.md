@@ -5,6 +5,15 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- In KWrite and Kate, typing a dictation of several lines (Keystroke Typing,
+  and always on X11) left a line break on your clipboard in place of what
+  you'd copied, since TuxTalk pastes the line breaks there. With "Restore
+  clipboard" off, as it is unless you turn it on, what you'd copied never
+  came back. It comes back after those line breaks now, whatever that
+  setting says.
+- A long dictation pasted while the clipboard tool had stopped answering
+  could hold up dictation until TuxTalk was restarted. It gives up after a
+  second now, as it always meant to.
 - If you tabbed into a password box while a dictation of several lines was
   going in, the line break before the next line still went into it, and in
   a login form that can press its button. TuxTalk now checks for a password
