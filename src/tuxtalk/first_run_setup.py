@@ -314,8 +314,10 @@ def show_welcome_and_install():
         dict: WelcomeDialog.run()'s result, or None when it failed
     """
     result = show_welcome_dialog()
-    if not result or not result.get('continue'):
-        logger.info("User cancelled welcome dialog")
+    if result is None:
+        return None                 # failed; show_welcome_dialog logged why
+    if not result.get('continue'):
+        logger.info("Welcome dialog closed before Set it up")
         return result
 
     # The GNOME extension is the welcome screen's only optional download; the

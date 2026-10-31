@@ -54,4 +54,4 @@ def test_closing_the_welcome_quits_and_says_how_to_finish(tray_main, monkeypatch
     assert "quits" in started
     assert "starts the service" not in started and "marks setup done" not in started
     assert told == [("TuxTalk setup isn't finished",
-                     "Open TuxTalk again from your apps to finish setting it up.")]
+                     "Open TuxTalk again to finish setting it up.")]

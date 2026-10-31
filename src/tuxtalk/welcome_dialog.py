@@ -367,7 +367,10 @@ class WelcomeDialog:
         self.dialog.set_keep_above(True)
         # Not closed (the X, Escape) while Fix Typing or an install runs:
         # its password prompt would come up with nothing to explain it, and
-        # its result would be lost.
+        # its result would be lost. GtkDialog answers a close with a response
+        # in its own delete-event handler, which runs before any of ours, so
+        # that response is stopped too; ours keeps the window from going.
+        self.dialog.connect("response", self._hold_while_busy)
         self.dialog.connect("delete-event", lambda *_a: self._busy > 0)
         _install_css(self.dialog.get_screen() or Gdk.Screen.get_default())
 
@@ -675,6 +678,12 @@ class WelcomeDialog:
             logger.error("Could not show the setup result", exc_info=True)
         return False
 
+    def _hold_while_busy(self, dialog, response):
+        """A close while a background job runs ends nothing: run() never
+        sees it. Connected before run() connects its own handler."""
+        if response == Gtk.ResponseType.DELETE_EVENT and self._busy > 0:
+            dialog.stop_emission_by_name("response")
+
     def _update_continue_button(self):
         """The "Set it up" button works only while no background job runs."""
         if self.continue_button is not None:
@@ -749,7 +758,7 @@ class WelcomeDialog:
                 self._continue_after_fix = True
                 self._on_fix_typing_clicked(button)
             else:
-                # No Fix Typing button to press: say what going on without means.
+                # No Fix Typing button to press: warn what skipping it means.
                 self._continue_without_typing()
         elif self.needs_portaudio_install:
             self._continue_without(
@@ -793,7 +802,7 @@ class WelcomeDialog:
             if self._typing_fix_pending():
                 self._continue_without_typing()
             else:
-                self.dialog.response(Gtk.ResponseType.OK)
+                self._on_set_it_up(None)    # what's left: PortAudio, then OK
 
     def _report_fix_typing(self, button, outcome):
         """Show the result of Fix Typing (GTK thread)."""
@@ -1225,7 +1234,8 @@ def show_welcome_dialog():
             result_container[0] = dialog.run()
         except Exception:
             # An error here would otherwise leave Gtk.main() below running for
-            # good with nothing on screen. None reads as a cancelled onboarding.
+            # good with nothing on screen. None is a failed onboarding: the
+            # tray starts the service anyway and shows the welcome next launch.
             logger.error("Welcome dialog failed", exc_info=True)
             result_container[0] = None
         finally:

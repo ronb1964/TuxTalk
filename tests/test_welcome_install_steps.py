@@ -11,7 +11,7 @@ import pytest
 
 gi = pytest.importorskip("gi")
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gdk, Gtk  # noqa: E402
+from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
 from tuxtalk import recommend as r  # noqa: E402
 from tuxtalk import secure_input  # noqa: E402
@@ -298,10 +298,44 @@ def test_set_it_up_after_installing_portaudio_goes_straight_on(needs_portaudio, 
 
 def test_the_welcome_cant_be_closed_while_an_install_runs(needs_portaudio):
     """Closed mid-install, the password prompt would still come up with
-    nothing to explain it, and the result would be lost."""
+    nothing to explain it, and TuxTalk would quit under it. Escape (the
+    dialog's "close") and the title bar's X go nowhere while a job runs;
+    once it's done, a close ends the dialog as before."""
     d = needs_portaudio
-    event = Gdk.Event.new(Gdk.EventType.DELETE)
+    seen = []
+
+    def delete():
+        event = Gdk.Event.new(Gdk.EventType.DELETE)
+        event.window = d.dialog.get_window()
+        d.dialog.event(event)
+
+    def after_both():
+        seen.append(d.dialog.get_visible())
+        d._busy = 0
+        d.dialog.emit("close")
     d._busy = 1
-    assert d.dialog.emit("delete-event", event) is True       # stays open
-    d._busy = 0
-    assert d.dialog.emit("delete-event", event) is False
+    GLib.timeout_add(100, lambda: d.dialog.emit("close") and False)
+    GLib.timeout_add(200, lambda: delete() and False)
+    GLib.timeout_add(500, lambda: after_both() and False)
+    GLib.timeout_add(5000, lambda: d.dialog.response(Gtk.ResponseType.OK) and False)  # no hang
+    assert d.dialog.run() == Gtk.ResponseType.DELETE_EVENT
+    assert seen == [True]
+
+
+def test_set_it_up_fixes_typing_then_says_portaudio_is_missing(monkeypatch):
+    """A computer missing both: after the typing fix "Set it up" started,
+    the PortAudio warning still comes, and Go Back stays on the screen."""
+    if not Gtk.init_check()[0]:
+        pytest.skip("no display")
+    monkeypatch.setattr(r, "detect_hardware", lambda cfg=None: r.Hardware(None, False))
+    monkeypatch.setattr(r, "system_language", lambda env=None: "en")
+    monkeypatch.setattr(wd, "detect_uinput_access", lambda: (False, "not in input group"))
+    monkeypatch.setattr(wd, "portaudio_installed", lambda: False)
+    d = wd.WelcomeDialog(force_gnome=False)
+    try:
+        monkeypatch.setattr(d, "_on_fix_typing_clicked",
+                            lambda button: d._finish_fix_typing(button, _fix_outcome(True)))
+        warned, responses = _set_it_up(d, monkeypatch, Gtk.ResponseType.CANCEL)
+        assert "Recording isn't set up yet" in warned and responses == []
+    finally:
+        d.destroy()

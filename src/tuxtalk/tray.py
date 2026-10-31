@@ -746,7 +746,7 @@ def _finish_first_run(tray, result):
         logger.info("Welcome closed before setup - quitting; it shows again next launch")
         from .notify import notify
         notify("TuxTalk setup isn't finished",
-               "Open TuxTalk again from your apps to finish setting it up.")
+               "Open TuxTalk again to finish setting it up.")
         tray.quit_app(None)
         return
 
