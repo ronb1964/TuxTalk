@@ -548,10 +548,15 @@ def test_a_block_after_the_stop_took_the_audio_adds_and_cuts_nothing(recording):
 
 
 def test_drop_tail_samples_keeps_partial_blocks():
-    frames = [b"\0\0" * 320, b"\0\0" * 320, b"\0\0" * 320]
+    """Only whole blocks go: 700 samples off three blocks of 320 leaves the
+    first block as it was, and less than a block takes nothing."""
     from tuxtalk import chunking
-    chunking.drop_tail_samples(frames, 700)   # two whole blocks fit, the third doesn't
-    assert len(frames) == 1
+    frames = [bytes([n]) * 640 for n in (1, 2, 3)]     # 320 samples of 2 bytes each
+    chunking.drop_tail_samples(frames, 700)
+    assert frames == [bytes([1]) * 640]
+    frames = [bytes([n]) * 640 for n in (1, 2, 3)]
+    chunking.drop_tail_samples(frames, 300)
+    assert frames == [bytes([n]) * 640 for n in (1, 2, 3)]
 
 
 def test_flatpak_stop_queues_the_last_chunk_on_the_worker(recording, monkeypatch):

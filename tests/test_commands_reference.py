@@ -8,8 +8,8 @@ import re
 
 import pytest
 
-from tuxtalk import (ai_cleanup, commands_reference, help_text, key_commands, normalize, undo,
-                     voice_commands, voice_edit_rules, voice_navigation)
+from tuxtalk import (ai_cleanup, commands_reference, explain, help_text, key_commands, normalize,
+                     undo, voice_commands, voice_edit_rules, voice_navigation)
 from tuxtalk.voice_commands_dialog import _build_markup
 
 PHRASES = [(c.kind, phrase) for s in commands_reference.SECTIONS for c in s.commands
@@ -21,7 +21,7 @@ def _plain(markup):
 
 
 @pytest.mark.parametrize("kind,phrase", PHRASES)
-def test_each_listed_phrase_is_recognised(kind, phrase):
+def test_each_listed_phrase_is_recognised(kind, phrase, monkeypatch):
     if kind == "inline":
         # Said mid-sentence, the words turn into punctuation or formatting.
         typed = normalize.normalize_text(f"apple {phrase} banana {phrase} cherry")
@@ -32,13 +32,17 @@ def test_each_listed_phrase_is_recognised(kind, phrase):
     elif kind == "undo":
         assert undo.detect_undo_command(phrase) is not None
     elif kind == "fix":
-        assert phrase in voice_commands._FIX_WORD_PHRASES
+        opened = []
+        monkeypatch.setattr(explain, "start_helper_window", lambda *args: opened.append(args))
+        # As the speech model writes it: a capital and a period.
+        assert voice_commands.handle_fix_word(f"{phrase.capitalize()}.", False)
+        assert opened[0][0] == "tuxtalk.fix_word_dialog"
     elif kind == "edit":
         assert voice_edit_rules.spoken_edit(phrase)
     elif kind == "select":
         assert voice_navigation.parse(phrase) is not None
     elif kind == "correction":
-        assert ai_cleanup._RE_CORRECTION.search(f"meet at 3, {phrase}, 4")
+        assert ai_cleanup.has_correction(f"Meet at 3, {phrase}, 4.")
     elif kind == "literal":
         word = re.sub(r"^(literal|the word) ", "", phrase)
         assert normalize.normalize_text(f"apple {phrase} banana") == f"Apple {word} banana."
