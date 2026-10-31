@@ -50,7 +50,8 @@ logger = setup_logger(__name__)
 
 # The files in the data folder that are the user's own: kept unless they
 # ask for them to go.
-PERSONAL_DATA = ("stats.json", "stats.json.bak", file_transcribe.RECENT_FILE)
+PERSONAL_DATA = ("stats.json", "stats.json.bak", file_transcribe.RECENT_FILE,
+                 file_transcribe.OLD_LAST_FILE)
 # The rest of what TuxTalk puts there, downloaded or rebuilt by itself
 # (tests/test_uninstall.py makes every name in the code pick one of the two).
 # .show_welcome_on_restart is only in an old TalkType's folder.
@@ -125,11 +126,13 @@ HF_REPOS = tuple(sorted({_hub_folder(repo) for repo in (
     *whisper_vulkan.MODEL_REPOS.values(), ai_download.MODEL_REPO)}))
 
 # The runtime folder's files that hold dictated text, as glob patterns:
-# Recent Dictations and Fix a Word's hand-overs (voice_commands._hand_over,
-# a name of its own each). Logging out empties the folder anyway; its lock
+# Recent Dictations, the temp file a save of it killed part-way leaves
+# (history.py's mkstemp), and Fix a Word's hand-overs
+# (voice_commands._hand_over, a name of its own each). Logging out empties the folder anyway; its lock
 # files stay, since a development copy running beside this one uses the
 # same names.
-RUNTIME_FILES = ("talktype-history.json", "tuxtalk-fix-word-*.json")
+RUNTIME_FILES = ("talktype-history.json", ".talktype-history-" + "?" * 8,
+                 "tuxtalk-fix-word-*.json")
 
 ICON_SIZES = ("256x256", "128x128", "64x64", "48x48", "32x32")
 

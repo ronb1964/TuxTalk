@@ -145,6 +145,9 @@ _FOLDER = "backup-folder"
 _PENDING = "restore-pending"
 # A zip being written (_write_zip); one stays if TuxTalk is killed meanwhile.
 _TEMP_PREFIX = ".talktype-backup-"
+# What a kill leaves of those, and of the record of a restore being written.
+_TEMP_NAME = re.compile(re.escape(_TEMP_PREFIX) + r"[a-z0-9_]{8}\.tmp"
+                        + "|" + re.escape(_PENDING) + config.ATOMIC_TEMP)
 
 
 def is_ours(name):
@@ -152,7 +155,7 @@ def is_ours(name):
     the uninstall deletes only these, since someone may keep files of their
     own in a folder named backups."""
     return (name in (_LAST_SAVED, _FOLDER, _PENDING) or _COPY_NAME.match(name) is not None
-            or (name.startswith(_TEMP_PREFIX) and name.endswith(".tmp")))
+            or _TEMP_NAME.fullmatch(name) is not None)
 
 
 def _read_bytes(path):

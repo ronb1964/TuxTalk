@@ -255,9 +255,12 @@ def test_every_file_tuxtalk_writes_in_its_folders_goes_with_them(home):
                  "config.toml.ab12cd_9.tmp", "custom_words.txt.before-words-tab",
                  "backups/settings-20261020-090000.zip", "backups/last-saved-backup",
                  "backups/backup-folder", "backups/restore-pending",
-                 "backups/.talktype-backup-x1y2z3w4.tmp"):
+                 "backups/.talktype-backup-x1y2z3w4.tmp", "backups/restore-pending.ab12cd34.tmp",
+                 "custom_commands.toml.bak", "custom_words.txt.bak",
+                 "custom_commands.toml.a1b2c3d4.tmp"):
         (config / name).write_text("")
     for name in ("stats.json.bak", ".stats-ab12cd34", "recent-transcripts.json.tmp",
+                 "last-transcript.json",
                  ".hotkey_test_mode", "remote_desktop_token", "remote_desktop_token.k3j_9x0a.tmp",
                  "gnome-keybindings-backup.json.0a1b2c3d.tmp"):
         (data / name).write_text("")
@@ -306,14 +309,31 @@ def test_a_moved_data_folder_keeps_what_isnt_tuxtalks(home, tmp_path):
     assert [p.name for p in big_disk.iterdir()] == ["my-own-model.gguf"]
 
 
-def test_a_link_inside_the_settings_folder_is_removed_not_followed(home, tmp_path):
+def test_a_linked_backups_folder_loses_only_tuxtalks_copies_through_the_link(home, tmp_path):
+    """Only the link went, and the automatic copies stayed where it led."""
     elsewhere = tmp_path / "Dropbox/backups"
     elsewhere.mkdir(parents=True)
     (elsewhere / "TuxTalk-settings.zip").write_text("a backup")
+    (elsewhere / "settings-20261020-090000.zip").write_text("an automatic copy")
+    (elsewhere / "last-saved-backup").write_text("ours")
     (home / ".config/tuxtalk/backups").symlink_to(elsewhere)
     uninstall.remove_files(_find(home), delete_personal=True, delete_shared=False)
     assert not (home / ".config/tuxtalk").exists()
     assert [p.name for p in elsewhere.iterdir()] == ["TuxTalk-settings.zip"]
+
+
+def test_a_backups_folder_that_cant_be_read_is_named_and_the_rest_still_goes(home):
+    """Its listing raised, and the uninstall stopped part-way."""
+    config, backups = home / ".config/tuxtalk", home / ".config/tuxtalk/backups"
+    backups.mkdir()
+    backups.chmod(0)
+    try:
+        failed = uninstall.remove_files(_find(home), delete_personal=True, delete_shared=False)
+    finally:
+        backups.chmod(0o700)
+    assert failed == [backups]
+    assert [p.name for p in config.iterdir()] == ["backups"]
+    assert not (home / ".local/share/TuxTalk").exists()
 
 
 def test_the_running_appimage_goes_but_the_aur_packages_copy_is_pacmans(home, tmp_path):
@@ -822,12 +842,13 @@ def test_dictated_text_in_the_runtime_folder_goes_and_the_locks_stay(home, monke
     run = home.parent / "run"
     run.mkdir(mode=0o700)
     (run / "talktype-history.json").write_text("[]")
+    (run / ".talktype-history-ab12cd_9").write_text("[]")      # a save killed part-way
     (run / "talktype.lock").write_text("")
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(run))
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     hand_over = voice_commands._hand_over(" some words ", ("org.kde.kwrite", None))
     plan = _find(home)
     assert sorted(p.name for p in plan.runtime) == sorted(
-        ["talktype-history.json", os.path.basename(hand_over)])
+        ["talktype-history.json", ".talktype-history-ab12cd_9", os.path.basename(hand_over)])
     uninstall.remove_files(plan, delete_personal=False, delete_shared=False)
     assert sorted(p.name for p in run.iterdir()) == ["talktype.lock"]
