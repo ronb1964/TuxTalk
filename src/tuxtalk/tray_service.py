@@ -148,7 +148,8 @@ class ServiceLifecycle:
         """Restart the dictation service: it types what it holds and quits,
         then a new one starts. The wait runs on a thread of its own, so the
         menu stays usable (this fires on every model and preset change, and
-        after a Parakeet Ultra download)."""
+        after a Parakeet Ultra download). With Dictation off nothing starts:
+        the user turned it off, and the change applies when it's turned on."""
         # CRITICAL: Never restart service during onboarding
         if self.onboarding_in_progress:
             logger.info("Onboarding in progress - refusing to restart service")
@@ -165,11 +166,15 @@ class ServiceLifecycle:
             logger.info("Restart already in progress - will restart again when it finishes")
             self._restart_pending = True
             return
+        from .service_launcher import end_in_background, find_service_pids
+        pids = find_service_pids()
+        if not pids:
+            logger.info("Restart: dictation is off, so it stays off until it's turned on")
+            return
         self._drop_pending_launches()
         self._restarting = True
         gen = self._service_gen
-        from .service_launcher import end_in_background, find_service_pids
-        end_in_background(lambda ended: self._relaunch(gen, ended), find_service_pids())
+        end_in_background(lambda ended: self._relaunch(gen, ended), pids)
 
     def _relaunch(self, gen, ended):
         """Restart Service's second half, on GTK's thread once the old service
@@ -188,7 +193,7 @@ class ServiceLifecycle:
             except Exception as e:
                 logger.error(f"Failed to restart service: {e}", exc_info=True)
             GLib.timeout_add_seconds(1, lambda: self.update_status_and_menu(repeat=False))
-        if pending:         # asked for after this one began (and after any Stop)
+        if pending:         # asked for after this one began; nothing if Dictation went off
             self.restart_service(None)
         return False
 

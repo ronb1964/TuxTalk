@@ -154,16 +154,19 @@ def _run_main_loop_until(done, timeout=5):
 
 @pytest.fixture
 def slow_service(monkeypatch):
-    """A service that takes until gone.set() to quit; where it was waited for."""
-    gone, waited_on = threading.Event(), []
+    """A service (PID 42) that takes until gone.set() to quit; where it was
+    waited for."""
+    gone, waited_on, running = threading.Event(), [], [42]
 
     def end(wait_s=None, pids=None):
         waited_on.append(threading.current_thread())
         assert gone.wait(10)
+        running.clear()
         return True
     monkeypatch.setattr(service_launcher, "end_dictation_service", end)
     monkeypatch.setattr(service_launcher, "stop_dictation_service", lambda force=False: None)
-    return types.SimpleNamespace(gone=gone, waited_on=waited_on)
+    monkeypatch.setattr(service_launcher, "find_service_pids", lambda: list(running))
+    return types.SimpleNamespace(gone=gone, waited_on=waited_on, running=running)
 
 
 def test_quit_returns_at_once_and_leaves_once_the_service_has_gone(slow_service):
@@ -336,9 +339,22 @@ def test_a_restart_finishing_after_dictation_off_starts_nothing(slow_service):
     assert t._restarting is False
 
 
-def test_restart_stop_restart_ends_with_dictation_on(slow_service):
-    """The last restart was queued behind the first, which the Stop made
-    obsolete: it was dropped with it, and dictation stayed off."""
+def test_a_restart_with_dictation_off_leaves_it_off(slow_service):
+    """A Performance preset, a Preferences change or the Parakeet Ultra
+    download restarts dictation; after the user turned Dictation off, it
+    turned it back on, hotkeys and all."""
+    slow_service.running.clear()            # Dictation off
+    launched = []
+    t = _bare_tray(_launch_service=lambda: launched.append(True),
+                   update_status_and_menu=lambda repeat=True: False)
+    t.restart_service(None)
+    assert not _run_main_loop_until(lambda: launched, timeout=0.3)
+    assert slow_service.waited_on == [] and t._restarting is False
+
+
+def test_restart_stop_restart_leaves_dictation_off(slow_service):
+    """Restart, Dictation off while it waits, and another restart behind it:
+    the last one finds nothing running and starts nothing."""
     launched = []
     t = _bare_tray(_launch_service=lambda: launched.append(True),
                    update_status_and_menu=lambda repeat=True: False)
@@ -346,7 +362,8 @@ def test_restart_stop_restart_ends_with_dictation_on(slow_service):
     t._drop_pending_launches()              # Dictation off
     t.restart_service(None)                 # and Restart again, while the first waits
     slow_service.gone.set()
-    assert _run_main_loop_until(lambda: launched)
+    assert not _run_main_loop_until(lambda: launched, timeout=0.5)
+    assert t._restarting is False
 
 
 def test_an_action_queued_before_quit_does_nothing_after_it(monkeypatch):

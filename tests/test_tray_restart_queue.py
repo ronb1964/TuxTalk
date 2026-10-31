@@ -41,6 +41,7 @@ def make_tray(monkeypatch, loop):
         t.kills += 1
         loop.idle_add(then, True)
     monkeypatch.setattr("tuxtalk.service_launcher.end_in_background", end_service)
+    monkeypatch.setattr("tuxtalk.service_launcher.find_service_pids", lambda: [42])
     t._launch_service = lambda: setattr(t, "launches", t.launches + 1)
     t.update_status_and_menu = lambda repeat=True: None
     return t
