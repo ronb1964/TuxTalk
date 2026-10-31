@@ -66,11 +66,11 @@ SHA256SUMS.txt
 # (attached to GitHub releases, not tracked)
 *.deb
 *.rpm
-appimage-builder
-appimagetool
-appimagetool-extracted/
-appimagetool-type2-extracted/
+# The pinned build tools container-build.sh keeps between builds, and the
+# .part file pinned_download leaves if a build stops while it keeps one.
+appimagetool-*.AppImage.part.*
 type2-runtime-*
+wayland-protocols-*.tar.xz*
 AppDir/
 squashfs-root/
 

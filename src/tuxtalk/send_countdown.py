@@ -132,7 +132,8 @@ def _why_not(sent_to, now, spoken: bool = False) -> str | None:
 
     Where the desktop can't say which window has the focus (COSMIC tells
     only the app, and so does GNOME's extension from 0.18 until the user
-    logs out and in; GNOME without the extension and Plasma 5.27 on Wayland
+    installs version 30 from Preferences → Updates & Backup, then logs out
+    and back in; GNOME without the extension and Plasma 5.27 on Wayland
     tell nothing, nor does a tray too busy to answer), an automatic Enter
     doesn't go: a message sent into the wrong chat can't be taken back, and
     the words stay for the user to send. A key *spoken* after the words

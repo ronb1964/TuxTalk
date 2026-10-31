@@ -17,7 +17,8 @@ def test_wayland_protocols_is_new_enough_and_pinned():
     assert version, "wayland-protocols is no longer built for wl-clipboard"
     assert (int(version.group(1)), int(version.group(2))) >= (1, 39)
     assert re.search(r"^WAYLAND_PROTOCOLS_SHA256=[0-9a-f]{64}$", SCRIPT, re.M)
-    assert "sha256sum -c" in SCRIPT
+    # Checked against it by pinned_download, before it's unpacked.
+    assert re.search(r'pinned_download \\\n.*\n\s+"\$WAYLAND_PROTOCOLS_SHA256"', SCRIPT)
 
 
 def test_wl_clipboard_is_built_against_it():

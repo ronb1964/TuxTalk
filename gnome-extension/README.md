@@ -6,7 +6,7 @@ It works on GNOME Shell 45 through 51.
 
 ## Installing it
 
-You normally don't have to. On GNOME, TuxTalk's first run offers to install it, and Preferences → Advanced → Install Extension does the same later. Both download `tuxtalk-gnome-extension.zip` from the latest release. GNOME only loads a new extension after you log out and back in.
+You normally don't have to. On GNOME, TuxTalk's first run offers to install it, and Preferences → Advanced → Show system check → Install Extension does the same later. Both download `tuxtalk-gnome-extension.zip` from the latest release. GNOME only loads a new extension after you log out and back in.
 
 To try a copy from this folder instead:
 

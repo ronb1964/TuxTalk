@@ -5,6 +5,11 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- On GNOME, an update to TuxTalk that came with a new extension only told
+  you about TuxTalk. Now you're also told the extension has an update, to
+  install from Preferences → Updates & Backup once TuxTalk is updated. That
+  goes for the check when TuxTalk starts and for Check for Updates in the
+  extension's menu.
 - With some microphones, hands-free never stopped by itself with a clothes
   dryer running nearby. Those microphones send the sound in very small
   pieces, and TuxTalk judged each piece on its own. With others, which send
@@ -28,7 +33,9 @@ before 0.15.0, so older entries use that name.
   started it right away, and what you said in it was lost.
 - With Type at pause, pressing Esc while the AI was still fixing a "no wait"
   in a phrase didn't stop that phrase: it was typed anyway. Now nothing more
-  is typed once you press Esc.
+  is typed once you press Esc, except a correction that has already taken
+  back the phrase before it: that one still goes in, so the phrase isn't
+  just gone with nothing in its place.
 - "Edit that" said right after a Type at pause dictation changes all of it
   since its last Enter or Tab, the same text "fix that word" works on,
   instead of only its last phrase. If you tapped to hold an automatic send,
@@ -159,10 +166,10 @@ before 0.15.0, so older entries use that name.
   Enter in that window. The Enter only goes where the text went now. On KDE
   and GNOME that tells two windows of one app apart too, so two maximized
   browser windows aren't mixed up, and moving a window while a send counts
-  down doesn't stop it any more. On GNOME that needs extension version 28,
-  which is loaded once you log out and back in after the update; until then
-  TuxTalk knows only which app has the focus there, as on COSMIC, and
-  doesn't send automatically.
+  down doesn't stop it any more. On GNOME that needs the new extension
+  (version 30): install it from Preferences → Updates & Backup, then log out
+  and back in. Until then TuxTalk knows only which app has the focus there,
+  as on COSMIC, and doesn't send automatically.
 - Sending automatically now checks where the Enter would go one last time,
   right before it goes, whatever it waited for first. Click into another
   window while a long dictation is still going in and the text stays where it
@@ -193,14 +200,14 @@ before 0.15.0, so older entries use that name.
   automatically" types your words and doesn't send them. You get "Not sent:
   TuxTalk can't tell which window has the focus. Press Enter when you're
   ready." over the window each time, and as a notification once. That's
-  COSMIC, GNOME without TuxTalk's extension or with the old one until you
-  log out and back in after the update, and Plasma 5.27 on Wayland. A
-  message sent into the wrong chat can't be taken back. Saying "..., press
-  enter" still presses it there, because you asked for it and you're
-  looking at the window. The space after your words still goes in; before,
-  the next dictation stuck to the last word ("noon.How"). A tray too busy to answer
-  for a moment no longer calls off a countdown; the last check before the
-  Enter decides.
+  COSMIC, GNOME without TuxTalk's extension or with the old one (install
+  version 30 from Preferences → Updates & Backup, then log out and back in),
+  and Plasma 5.27 on Wayland. A message sent into the wrong chat can't be
+  taken back. Saying "..., press enter" still presses it there, because you
+  asked for it and you're looking at the window. The space after your words
+  still goes in; before, the next dictation stuck to the last word
+  ("noon.How"). A tray too busy to answer for a moment no longer calls off a
+  countdown; the last check before the Enter decides.
 - When a send doesn't go, you get a notification as well as the note over
   the window, so a screen reader tells you. Holding a send with a tap of
   your hotkey says so in a notification too, and so does a hotkey press that

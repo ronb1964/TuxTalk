@@ -20,12 +20,18 @@ Other distros have the same packages under similar names. On Debian and Ubuntu i
 ```bash
 git clone https://github.com/ronb1964/TuxTalk.git
 cd TuxTalk
+python3 -m venv ~/.local/share/poetry-2.5.1
+~/.local/share/poetry-2.5.1/bin/pip install poetry==2.5.1
 python3 -m venv .venv
-.venv/bin/pip install poetry
-.venv/bin/poetry install
+VIRTUAL_ENV="$PWD/.venv" POETRY_VIRTUALENVS_CREATE=false \
+    ~/.local/share/poetry-2.5.1/bin/poetry install --no-root
 ```
 
+This is what CI does: the Poetry version it pins, in a venv of its own so Poetry's own packages stay out of the one TuxTalk runs and is tested in, and `poetry install` puts in `.venv` exactly the versions in `poetry.lock`, the dev group's included (pytest, ruff, fontTools for the emoji font and Pillow for the VM tests).
+
 Use your system's `python3` for the venv. The PyGObject your distro ships only works with that same Python version.
+
+After a pull that changed `poetry.lock`, run the last command again to bring `.venv` up to it.
 
 ## Running it
 
@@ -35,7 +41,7 @@ Use your system's `python3` for the venv. The PyGObject your distro ships only w
 
 That starts the tray with `DEV_MODE=1`, which keeps its settings and downloads apart from an installed copy (`~/.config/tuxtalk-dev/` and `~/.local/share/TuxTalk-dev/`) and shows the GTK tray icon even on GNOME, next to the extension's. The script points Python at `src/` and at your system's site-packages, so don't set PYTHONPATH yourself. If you'd rather have a menu entry, make a launcher that runs the same command `run-dev.sh` ends with.
 
-Don't use `poetry run dictate-tray`. Poetry's environment can't see the system PyGObject and it stops on `import gi`.
+Don't start it with `poetry run`: Poetry's environment can't see the system PyGObject and it stops on `import gi`.
 
 To stop it, use Quit TuxTalk in the tray menu. If something is stuck, this stops only TuxTalk's own Python processes and nothing else that happens to have "tuxtalk" in its command line:
 
@@ -69,18 +75,20 @@ The GNOME extension's tests run its JavaScript under Node (20.6 or newer, no
 npm packages), with stand-ins for GNOME Shell in `tests/gnome_shell`. Without
 Node they're skipped, and say so.
 
-CI also runs two linters, and they should pass before you push. These are the same versions CI uses (`poetry install` put the lock's ruff in the venv), and the shell check covers only the scripts git tracks, so a private script of your own in the folder doesn't trip it:
+CI also runs two linters, and they should pass before you push. The shell check covers only the scripts git tracks, so a private script of your own in the folder doesn't trip it:
 
 ```bash
 .venv/bin/ruff check src/tuxtalk tests
 git ls-files -z '*.sh' | xargs -0 uvx --from shellcheck-py==0.11.0.1 shellcheck -S warning
 ```
 
+Ruff has to be the version in `poetry.lock` (CI's), or its answer and the ruff count `tests/test_ruff_ratchet.py` keeps differ; that test skips with another version. `.venv/bin/ruff --version` shows the one you have. If it isn't the lock's, run the `poetry install` command from "Setting it up" again, or use that version without touching the venv, with the number from `pyproject.toml`'s dev group: `uvx ruff@0.17.0 check src/tuxtalk tests`.
+
 ## If the venv gets into a bad state
 
 ```bash
 rm -rf .venv
 python3 -m venv .venv
-.venv/bin/pip install poetry
-.venv/bin/poetry install
+VIRTUAL_ENV="$PWD/.venv" POETRY_VIRTUALENVS_CREATE=false \
+    ~/.local/share/poetry-2.5.1/bin/poetry install --no-root
 ```

@@ -471,6 +471,20 @@ def test_an_extension_update_opens_the_updates_tab():
                       "Opening Updates & Backup to install it."]]
 
 
+def test_an_extension_update_found_with_an_app_update_is_still_pointed_to():
+    """The app's Update Available window offers only the app: the extension
+    update is named in a notice for afterwards, not opened as a second window."""
+    shown, _logs = run(STARTED + """
+        t.item(button.menu, 'Check for Updates...').activate();
+        const before = tux.calls.length;
+        tux.signal('UpdateCheckComplete', true, '0.18.2', '0.19.0', true, 25, 30, true, '', '');
+        t.report([tux.calls.slice(before).map(c => c[0]), t.shell.notifications.at(-1)]);
+    """)
+    assert shown == [[], ["TuxTalk extension update available",
+                          "After updating TuxTalk, install it from Preferences → Updates"
+                          " & Backup, then log out and back in."]]
+
+
 # --- the stand-ins hold the extension to what GNOME Shell and TuxTalk accept ---------
 
 def test_an_import_of_a_module_without_a_stand_in_fails(tmp_path):

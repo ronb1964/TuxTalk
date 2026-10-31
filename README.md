@@ -263,8 +263,9 @@ rm -rf ~/.cache/huggingface/hub/models--Systran--faster-whisper-* ~/.cache/huggi
 gnome-extensions uninstall talktype@ronb1964.github.io
 ```
 
-The second-to-last line also deletes your settings and word list; leave out
-`~/.config/tuxtalk` to keep them. The last line only matters on GNOME.
+The `rm -rf ~/.local/share/TuxTalk ~/.config/tuxtalk` line also deletes your
+settings and word list; leave out `~/.config/tuxtalk` to keep them. The last
+line only matters on GNOME.
 
 Versions before 0.16 may also have set up a typing service and put you in the
 `input` group. 0.18 and later remove that service when they start; if it's
@@ -300,6 +301,8 @@ remapper, for instance). Log out and back in afterwards.
 | **F9** | Press once to start, press again to stop (tap-to-toggle) |
 | **Ctrl+Alt+P** | Types your last dictation again, wherever your cursor is |
 | **Shift+F8** | Voice editing: hold it and say how to change the selected text (turn it on in TuxTalk Labs first) |
+
+No easy F-keys on your keyboard? Preferences → General also lets you pick Right Ctrl, Right Alt or Scroll Lock. Right Ctrl and Right Alt then stop working as Ctrl and Alt.
 
 Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--stop`). For the AppImage, use the AppImage file, by its full path, e.g. `/home/you/AppImages/TuxTalk.AppImage --toggle` (GNOME runs a shortcut without a shell, so `~` doesn't work there; Help shows yours). It starts TuxTalk if it isn't running and waits for the speech model to load, so the toggle is never lost.
 
@@ -507,7 +510,7 @@ auto_period = true        # Add period at end of sentences
 On Wayland a normal program isn't allowed to see keys pressed in other
 windows, so TuxTalk needs a little help to notice F8.
 
-- Preferences → Advanced → Typing Setup → **Fix Typing Permissions**
+- Preferences → Advanced → Show system check → **Fix Typing Permissions**
 - On most systems that installs TuxTalk's hotkey helper. It's a small
   background service, and it's the only thing that reads the keyboard. It
   tells TuxTalk about its hotkeys and Right Ctrl or Right Alt going down,
@@ -561,7 +564,7 @@ sudo rm -r /etc/systemd/system/tuxtalk-hotkeys.service /etc/udev/rules.d/70-tuxt
 
 ### Tray icon not visible (GNOME)?
 - TuxTalk offers to install its GNOME extension on first run
-- Or manually: Preferences → Advanced → Install Extension
+- Or manually: Preferences → Advanced → Show system check → Install Extension
 
 </details>
 
