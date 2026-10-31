@@ -1,6 +1,6 @@
-""""fix that word" opens Fix a Word over the app, on the newest dictation
-(2026-10-14): learning from corrections, the way TuxTalk can, since it can't
-see a word retyped by hand."""
+""""fix that word" opens Fix a Word over the app, on the newest dictation:
+learning from corrections, the way TuxTalk can, since it can't see a word
+retyped by hand."""
 import pathlib
 import threading
 import time
@@ -14,9 +14,12 @@ from tuxtalk import recording_state as rs
 
 
 class _OpenWindow:
-    """Fix a Word's process, still open for the whole test."""
+    """Fix a Word's process, open until the test ends (the opened fixture
+    closes it, so no thread waits on it for the rest of the run)."""
+    closed = threading.Event()
+
     def wait(self):
-        threading.Event().wait()
+        self.closed.wait(30)
 
 
 @pytest.fixture
@@ -25,7 +28,9 @@ def opened(monkeypatch):
     monkeypatch.setattr(explain, "start_helper_window",
                         lambda module, *a: started.append(module) or _OpenWindow())
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a: None)
-    return started
+    _OpenWindow.closed.clear()
+    yield started
+    _OpenWindow.closed.set()
 
 
 @pytest.mark.parametrize("said", ["Fix that word.", "fix that", "Fix a word!", "fix the last word",

@@ -7,12 +7,17 @@ therefore never terminates: it spins a thread at 100% CPU and never reaches
 the monitoring loop below it, so the hotkey test detects nothing.
 """
 
-
 from tuxtalk.hotkey_test_devices import flush_pending_events, read_ready
 
 
+class Spinning(BaseException):
+    """Raised past the flush's own `except Exception`: it read for ever."""
+
+
 class FakeDevice:
-    """read() is a generator function, exactly like evdev's."""
+    """read() hands back a generator that raises only once iterated, exactly
+    like evdev's. Asked to read far more often than it has batches, it stops
+    the test instead of letting it spin."""
 
     def __init__(self, queued_batches):
         self.batches = list(queued_batches)
@@ -20,10 +25,14 @@ class FakeDevice:
 
     def read(self):
         self.read_calls += 1
+        if self.read_calls > 100:
+            raise Spinning
+        return self._events()
+
+    def _events(self):
         if not self.batches:
             raise BlockingIOError("no events queued")
-        for event in self.batches.pop(0):
-            yield event
+        yield from self.batches.pop(0)
 
 
 def test_flush_terminates_on_an_empty_queue():
@@ -31,7 +40,7 @@ def test_flush_terminates_on_an_empty_queue():
 
     flush_pending_events([dev])   # must return, not spin
 
-    assert dev.read_calls >= 1
+    assert dev.read_calls == 1
 
 
 def test_flush_drains_queued_events():
@@ -52,15 +61,6 @@ def test_flush_continues_past_a_broken_device():
     flush_pending_events([Broken(), good])
 
     assert good.batches == []
-
-
-def test_flush_returns_rather_than_spinning():
-    """The flush must return rather than spin."""
-    dev = FakeDevice([["one"], ["two"], ["three"]])
-
-    flush_pending_events([dev])
-
-    assert dev.batches == []
 
 
 def test_an_unplugged_keyboard_is_dropped_rather_than_read_forever():
