@@ -855,6 +855,10 @@ def test_dictated_text_in_the_runtime_folder_goes_and_the_locks_stay(home, monke
     (run / "talktype-history.json").write_text("[]")
     (run / ".talktype-history-ab12cd_9").write_text("[]")      # a save killed part-way
     (run / "talktype.lock").write_text("")
+    # Not TuxTalk's: another program's file and folder with lookalike names.
+    (run / ".talktype-history-My-Notes").write_text("mine")
+    (run / ".talktype-history-ab12cd_8").mkdir()
+    (run / ".talktype-history-ab12cd_8" / "kept.txt").write_text("mine")
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(run))
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     hand_over = voice_commands._hand_over(" some words ", ("org.kde.kwrite", None))
@@ -862,4 +866,6 @@ def test_dictated_text_in_the_runtime_folder_goes_and_the_locks_stay(home, monke
     assert sorted(p.name for p in plan.runtime) == sorted(
         ["talktype-history.json", ".talktype-history-ab12cd_9", os.path.basename(hand_over)])
     uninstall.remove_files(plan, delete_personal=False, delete_shared=False)
-    assert sorted(p.name for p in run.iterdir()) == ["talktype.lock"]
+    assert sorted(p.name for p in run.iterdir()) == [
+        ".talktype-history-My-Notes", ".talktype-history-ab12cd_8", "talktype.lock"]
+    assert (run / ".talktype-history-ab12cd_8" / "kept.txt").exists()

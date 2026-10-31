@@ -127,11 +127,12 @@ HF_REPOS = tuple(sorted({_hub_folder(repo) for repo in (
 
 # The runtime folder's files that hold dictated text, as glob patterns:
 # Recent Dictations, the temp file a save of it killed part-way leaves
-# (history.py's mkstemp), and Fix a Word's hand-overs
-# (voice_commands._hand_over, a name of its own each). Logging out empties
-# the folder anyway; its lock files stay, since a development copy running
-# beside this one uses the same names.
-RUNTIME_FILES = ("talktype-history.json", ".talktype-history-" + "?" * 8,
+# (history.py's mkstemp: eight lowercase letters, digits or underscores),
+# and Fix a Word's hand-overs (voice_commands._hand_over, a name of its own
+# each). Files only: a folder by one of these names isn't TuxTalk's.
+# Logging out empties the folder anyway; its lock files stay, since a
+# development copy running beside this one uses the same names.
+RUNTIME_FILES = ("talktype-history.json", ".talktype-history-" + "[a-z0-9_]" * 8,
                  "tuxtalk-fix-word-*.json")
 
 ICON_SIZES = ("256x256", "128x128", "64x64", "48x48", "32x32")
@@ -294,6 +295,13 @@ def _sort_data(plan, data_dir):
         plan.downloads += _contents(old_data, _owner(*_DOWNLOADED))
 
 
+def _runtime_files(runtime):
+    """The files in the session's runtime folder that hold dictated text
+    (RUNTIME_FILES), never a folder by one of those names."""
+    return sorted(path for pattern in RUNTIME_FILES for path in runtime.glob(pattern)
+                  if path.is_symlink() or not path.is_dir())
+
+
 def find(home, install_type, environ=os.environ, appimage=None):
     """The Plan for *home*: only what exists. *appimage* is the running
     AppImage's path, if any."""
@@ -318,8 +326,7 @@ def find(home, install_type, environ=os.environ, appimage=None):
     plan.folders = _folders_to_empty(home, config_dir, data_dir)
     _sort_data(plan, data_dir)
 
-    runtime = Path(single_instance.session_runtime_dir(environ))
-    plan.runtime = sorted(path for pattern in RUNTIME_FILES for path in runtime.glob(pattern))
+    plan.runtime = _runtime_files(Path(single_instance.session_runtime_dir(environ)))
 
     unit = ydotoold_leftovers.our_ydotoold_unit(home)
     if unit is not None:
