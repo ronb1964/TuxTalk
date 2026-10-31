@@ -350,9 +350,10 @@ class TuxTalkDBusService(dbus.service.Object):
 
     @dbus.service.method(DBUS_INTERFACE)
     def ClearRecentDictations(self):
-        """Forget every recent dictation."""
-        from .history import clear
-        clear()
+        """Forget every recent dictation. It may wait for another change to
+        the list, so it runs on a thread of its own, not this D-Bus loop."""
+        from .history import clear_in_background
+        clear_in_background()
 
     @dbus.service.method(DBUS_INTERFACE)
     def FixWordInDictation(self):

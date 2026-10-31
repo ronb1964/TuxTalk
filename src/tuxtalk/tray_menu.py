@@ -324,10 +324,11 @@ class TrayMenu:
         return submenu
 
     def _clear_history(self):
-        """Clear History: forget the recent dictations, and show none."""
-        from .history import clear
-        clear()
-        self.refresh_history()
+        """Clear History: forget the recent dictations, and show none. The
+        clear may wait for another change to the list, so it runs on a
+        thread of its own and the menu is redrawn once it's done."""
+        from .history import clear_in_background
+        clear_in_background(then=lambda: GLib.idle_add(self.refresh_history))
 
 
 def copy_dictation(text):

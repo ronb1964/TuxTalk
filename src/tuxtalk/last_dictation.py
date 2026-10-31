@@ -35,10 +35,7 @@ def unsay(message, before: str) -> None:
     password field."""
     from . import history
     said, message.said = message.said, before
-    if before:
-        history.add_entry(before, replaces=said)
-    else:
-        history.forget(said)
+    history.forget(said, put_back=before)
 
 
 def remember_shown(piece: str, chunked: bool, ok: bool, message) -> None:

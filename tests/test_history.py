@@ -233,12 +233,15 @@ def test_clear_history_is_not_undone_by_a_dictation_finishing_meanwhile(monkeypa
 
 def test_a_lock_that_fails_does_not_stop_the_dictation_being_typed(monkeypatch):
     """With the runtime folder full, writing the PID in the history lock
-    fails. Recent Dictations misses that one, and the words are still typed."""
+    fails. The words are still typed, and go into Recent Dictations once
+    the lock works again."""
     from tuxtalk import single_instance
+    real_claim = single_instance.claim
 
     def full_disk(lock, wait_s=0.0):
         raise OSError(28, "No space left on device")
     monkeypatch.setattr(single_instance, "claim", full_disk)
+    monkeypatch.setattr(history, "RETRY_EVERY_S", 0.05)
     typed = []
     monkeypatch.setattr(engine, "transcribe", lambda audio, language: "hello there")
     monkeypatch.setattr(dictation_text, "prepare_text", lambda raw, *a, **k: "Hello there. ")
@@ -251,24 +254,128 @@ def test_a_lock_that_fails_does_not_stop_the_dictation_being_typed(monkeypatch):
                                    message=rs.state.current.message)
 
     assert typed == ["Hello there. "]
-    assert history.get_entries() == []
+    monkeypatch.setattr(single_instance, "claim", real_claim)       # room again
+    assert _soon(lambda: history.get_entries() == ["Hello there."])
+    assert _soon(lambda: not history._retrying)
 
 
-def test_nothing_changes_the_list_while_another_change_holds_it(monkeypatch):
-    """A change made beside another one is how cleared entries came back.
-    When the lock isn't free within the wait, neither a dictation nor Clear
-    History touches the list; nothing goes ahead without the lock."""
+@pytest.fixture
+def stuck_change(monkeypatch):
+    """Another change to the list that doesn't end: the history lock, held
+    from another open file as another process holds it, until release()."""
     from tuxtalk import single_instance
-    history.add_entry("something private")
+    held = single_instance.open_lock("history.lock")
+    assert single_instance.claim(held)
     monkeypatch.setattr(history, "LOCK_WAIT_S", 0.1)
-    held = single_instance.open_lock("history.lock")   # a stuck change elsewhere
-    try:
-        assert single_instance.claim(held)
-        history.clear()
-        history.add_entry("the newest dictation")
-        history.forget("something private")
-        assert history.get_entries() == ["something private"]
-    finally:
-        held.close()
-    history.clear()
+    monkeypatch.setattr(history, "RETRY_EVERY_S", 0.05)
+    yield held
+    held.close()
+    assert _soon(lambda: not history._retrying)     # nothing left to run into the next test
+
+
+def _soon(check, timeout=5):
+    import time
+    deadline = time.monotonic() + timeout
+    while not check() and time.monotonic() < deadline:
+        time.sleep(0.02)
+    return check()
+
+
+def test_a_dictation_is_not_written_beside_a_change_that_doesnt_end(stuck_change):
+    """A change written beside another is how cleared entries came back, so
+    nothing is written without the lock; the dictation waits in memory and
+    goes in once the list is free."""
+    history.add_entry("something earlier")       # before the other change began
+    history.add_entry("the newest dictation")
     assert history.get_entries() == []
+    stuck_change.close()
+    assert _soon(lambda: history.get_entries() == ["the newest dictation",
+                                                    "something earlier"])
+
+
+def test_a_dictation_that_fails_to_type_behind_a_stuck_change_can_still_be_found(
+        stuck_change, monkeypatch):
+    """Recent Dictations is how words that didn't arrive are got back: with
+    the list held when they were added, they went missing too."""
+    def typing_fails(text, mode, **kw):
+        raise RuntimeError("no keyboard")
+    monkeypatch.setattr(engine, "transcribe", lambda audio, language: "hello there")
+    monkeypatch.setattr(dictation_text, "prepare_text", lambda raw, *a, **k: "Hello there. ")
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
+    monkeypatch.setattr(delivery, "inject_text", typing_fails)
+    frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
+    pipeline.transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False,
+                                   smart_quotes=False, notify_on=False,
+                                   message=rs.state.current.message)
+    stuck_change.close()
+    assert _soon(lambda: history.get_entries() == ["Hello there."])
+
+
+def test_a_refused_password_comes_out_though_the_list_is_held_for_seconds(monkeypatch):
+    """A dictation refused by a password field may be the password: taking
+    it back out waits for a change that takes seconds, where a dictation
+    would give up and carry on."""
+    import threading
+    from tuxtalk import single_instance
+    history.add_entry("swordfish")
+    held = single_instance.open_lock("history.lock")
+    assert single_instance.claim(held)
+    threading.Timer(3.0, held.close).start()
+    history.forget("swordfish")
+    assert history.get_entries() == []
+
+
+def test_a_refused_phrase_typed_at_a_pause_gives_back_the_entry_before_it():
+    history.add_entry("Meet at")
+    history.add_entry("Meet at noon", replaces="Meet at")
+    history.forget("Meet at noon", put_back="Meet at")
+    assert history.get_entries() == ["Meet at"]
+
+
+def test_a_clear_that_cant_get_the_list_in_time_still_clears_it(stuck_change, monkeypatch):
+    """Clear History returned as if done, with the private entries still
+    there; it says it isn't done yet and clears once the list is free."""
+    from tuxtalk import single_instance
+    stuck_change.close()
+    history.add_entry("something private")
+    held = single_instance.open_lock("history.lock")
+    assert single_instance.claim(held)
+    monkeypatch.setattr(history, "REMOVAL_WAIT_S", 0.1)
+    assert history.clear() is False
+    assert history.get_entries() == ["something private"]
+    held.close()
+    assert _soon(lambda: history.get_entries() == [])
+
+
+def test_a_dictation_waiting_from_before_a_clear_doesnt_come_back_after_it(stuck_change):
+    """The dictation waited for the list while Clear History, from the tray,
+    was made: added afterwards, it brought back what was asked to go."""
+    import time
+    history.add_entry("said before the clear")      # waits
+    history._remove_list(time.monotonic())          # the tray's Clear, holding the list
+    stuck_change.close()
+    time.sleep(0.5)                                 # the waiting dictation is tried again
+    assert history._waiting == [] and history.get_entries() == []
+
+
+def test_a_clear_from_the_menu_that_must_wait_says_so(stuck_change, monkeypatch):
+    import threading
+    said, done = [], threading.Event()
+    monkeypatch.setattr(history, "REMOVAL_WAIT_S", 0.1)
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: said.append(title))
+    history.clear_in_background(then=done.set)
+    assert done.wait(5)
+    assert said == ["Recent Dictations not cleared yet"]
+
+
+def test_clear_history_from_the_tray_waits_off_gtks_thread(monkeypatch):
+    """Clearing may wait seconds for the list: on GTK's thread the tray's
+    menu froze meanwhile."""
+    import threading
+    from types import SimpleNamespace
+    from tuxtalk.tray_menu import TrayMenu
+    ran_on = []
+    monkeypatch.setattr(history, "clear",
+                        lambda: ran_on.append(threading.current_thread()) or True)
+    TrayMenu._clear_history(SimpleNamespace(refresh_history=lambda: False))
+    assert _soon(lambda: ran_on) and ran_on[0] is not threading.main_thread()
