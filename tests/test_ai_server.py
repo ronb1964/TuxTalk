@@ -77,6 +77,12 @@ class _Proc:
     def poll(self):
         return self.returncode
 
+    def terminate(self):
+        self.returncode = -15
+
+    def wait(self, timeout=None):
+        return self.returncode
+
 
 @pytest.fixture
 def dead_engine(monkeypatch):
@@ -179,3 +185,52 @@ def test_a_stopped_engine_is_not_started_again(dead_engine):
     dead_engine.stop()
     dead_engine.start(_replacing=dead)
     assert dead_engine.started == []
+
+
+# --- an engine that never came up is stopped, and tried again later ---------------------------
+
+def _failed_start(dead_engine, monkeypatch, starting):
+    """*starting* given up on by the start-up wait, which found it gone or
+    never answering."""
+    dead_engine._proc = starting
+    dead_engine._ready.clear()
+    monkeypatch.setattr(engine_process, "answers", lambda port: False)
+    ai_server.AIServer._wait_until_ready(dead_engine, starting, _no_output(), limit=0.3)
+
+
+@pytest.mark.parametrize("starting", [_Proc, lambda: _Proc(code=1)],
+                         ids=["too slow", "ended while starting"])
+def test_an_engine_that_never_came_up_is_stopped_and_tried_again_later(
+        dead_engine, monkeypatch, starting):
+    """Past its 90 s, the engine was kept with its gigabyte of memory and
+    never counted as ready, and nothing started another: AI corrections and
+    voice edits stayed off until the option was turned off and on."""
+    slow = starting()
+    _failed_start(dead_engine, monkeypatch, slow)
+    assert slow.poll() is not None                  # stopped, not left holding memory
+    assert dead_engine.is_ready() is False and dead_engine.started == []   # not at once
+    dead_engine._failed_at -= ai_server._RETRY_AFTER_S
+    assert dead_engine.is_ready() is False          # starting again
+    assert len(dead_engine.started) == 1
+
+
+def test_an_engine_that_keeps_failing_to_start_is_given_up_on(dead_engine, monkeypatch):
+    for _ in range(ai_server._MAX_FAILED_STARTS):
+        _failed_start(dead_engine, monkeypatch, _Proc())
+        dead_engine._failed_at -= ai_server._RETRY_AFTER_S
+    dead_engine.is_ready()
+    assert dead_engine.started == []
+
+
+def test_turning_the_ai_off_ends_its_launcher_thread(dead_engine):
+    """Every off and on makes a new engine; each left one idle thread behind."""
+    import threading
+    before = set(threading.enumerate())
+    dead_engine.start(_replacing=dead_engine._proc)       # the launcher's thread runs
+    launcher = [t for t in threading.enumerate()
+                if t not in before and t.name.startswith("ai-engine")]
+    dead_engine.stop()
+    assert launcher
+    for thread in launcher:
+        thread.join(2)
+        assert not thread.is_alive()

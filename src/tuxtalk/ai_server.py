@@ -16,6 +16,12 @@ from .logger import setup_logger
 
 logger = setup_logger(__name__)
 
+# A server that doesn't come up in time, or ends while starting, is stopped
+# and tried again on a request at least this long after, a few times a
+# session: a model on a slow disk loads faster the second time, from memory.
+_RETRY_AFTER_S = 60
+_MAX_FAILED_STARTS = 3
+
 
 def _engine_processes():
     """(pid, parent pid) of every running llama-server from our engine folder."""
@@ -45,14 +51,18 @@ class AIServer:
         self._ready = threading.Event()
         self._lock = threading.Lock()
         self._launcher = engine_process.Launcher("ai-engine")
+        self._stopped = False
+        self._failed_starts = 0
+        self._failed_at = None          # time.monotonic() of the last failed start
 
     def start(self, _replacing=None):
         """Start the server in the background. Returns immediately.
         *_replacing* is a server that exited: started again only if it is
         still this engine's (not stopped, nor restarted, meanwhile)."""
         with self._lock:
-            if _replacing is not None and self._proc is not _replacing:
+            if self._stopped or (_replacing is not None and self._proc is not _replacing):
                 return
+            self._failed_at = None
             if self._proc and self._proc.poll() is None:
                 return
             if not ai_download.is_installed():
@@ -92,8 +102,8 @@ class AIServer:
             if self._proc is not proc:
                 return                  # turned off while starting
             if proc.poll() is not None:
-                logger.error("AI engine exited during startup"
-                             + engine_process.launch_failure(proc.returncode, output))
+                self._start_failed(proc, "AI engine exited during startup"
+                                   + engine_process.launch_failure(proc.returncode, output))
                 return
             if not engine_process.answers(self._port):
                 time.sleep(0.25)
@@ -109,26 +119,56 @@ class AIServer:
                                "may be slow")
             logger.info(f"AI engine ready (warm-up took {time.time() - started:.1f}s)")
             return
-        logger.error("AI engine did not become ready")
+        self._start_failed(proc, f"AI engine did not become ready within {limit} s")
+
+    def _start_failed(self, proc, why):
+        """Let go of *proc*, a server that didn't come up, unless it was
+        stopped or replaced meanwhile. Kept, it would hold its memory all
+        session and never count as ready, and nothing would start another."""
+        with self._lock:
+            if self._proc is not proc:
+                return
+            self._proc = None
+            self._failed_starts += 1
+            self._failed_at = time.monotonic()
+        engine_process.stop(proc)
+        if self._failed_starts < _MAX_FAILED_STARTS:
+            logger.error(f"{why}; stopped it, and a request from {_RETRY_AFTER_S} s on "
+                         "tries again")
+        else:
+            logger.error(f"{why}; not trying again until the AI is turned off and on")
 
     def stop(self):
-        """Stop the server; a start still under way gives up."""
+        """Stop the server for good; a start still under way gives up."""
         with self._lock:
             proc, self._proc = self._proc, None
+            self._stopped = True
             self._ready.clear()
         if engine_process.stop(proc):
             logger.info("AI engine stopped")
+        self._launcher.close()
 
     def _restart_if_exited(self):
         """A server that died after it was ready (out of memory, a graphics
-        driver reset) is started again; otherwise every request would fail
+        driver reset) is started again, and so, a while later, is one that
+        never came up (_start_failed); otherwise every request would fail
         until the option was turned off and on."""
         proc = self._proc
-        if proc is None or not self._ready.is_set() or proc.poll() is None:
+        if proc is None:
+            if self._retry_due():
+                logger.info("Starting the AI engine again after it failed to start")
+                self.start()
+            return
+        if not self._ready.is_set() or proc.poll() is None:
             return
         logger.warning(f"AI engine exited (code {proc.returncode}); starting it again")
         self._ready.clear()
         self.start(_replacing=proc)
+
+    def _retry_due(self) -> bool:
+        failed_at = self._failed_at
+        return (failed_at is not None and self._failed_starts < _MAX_FAILED_STARTS
+                and time.monotonic() - failed_at >= _RETRY_AFTER_S)
 
     def is_ready(self) -> bool:
         """True once the server has answered its warm-up and is still running."""

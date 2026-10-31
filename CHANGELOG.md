@@ -449,6 +449,10 @@ before 0.15.0, so older entries use that name.
 - If Parakeet's downloaded files got damaged, dictation didn't start at
   all. TuxTalk now uses another speech model you have downloaded for the
   time being, and says so, as it already did for Whisper.
+- When the AI took more than a minute and a half to start (a slow disk, a
+  weak graphics chip), AI corrections and voice editing stayed off for the
+  rest of the session, while the AI kept its memory. TuxTalk now stops it
+  and tries again a minute later, up to three times.
 
 ## [0.18.2] - 2026-10-23
 
