@@ -18,6 +18,7 @@ from . import (
     last_dictation,
     notices,
     recording,
+    resampling,
     send_countdown,
     silence,
     type_at_pause,
@@ -214,7 +215,7 @@ def _audio_to_hear(frames, rec_sr, job: _Job):
             logger.info("No audio captured, so nothing was typed")
         return None
     if rec_sr != engine.SAMPLE_RATE:
-        audio_f32 = recording.resample(audio_f32, rec_sr, engine.SAMPLE_RATE)
+        audio_f32 = resampling.resample(audio_f32, rec_sr, engine.SAMPLE_RATE)
 
     # A second or more of pure digital silence: the microphone is muted,
     # unplugged or dead, not a quiet room. Say so instead of typing nothing.

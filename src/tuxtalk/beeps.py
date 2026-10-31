@@ -34,6 +34,7 @@ import sounddevice as sd
 
 from . import mic_stream
 from .logger import setup_logger
+from .resampling import resample
 
 logger = setup_logger(__name__)
 
@@ -153,11 +154,7 @@ def play(samples, rate, finished=None, called_off=None):
 
     def job():
         device, device_rate = output_device(rate)
-        resampled = samples
-        if device_rate != rate:
-            positions = np.linspace(0, len(samples) - 1, int(len(samples) * device_rate / rate))
-            resampled = np.interp(positions, np.arange(len(samples)), samples).astype(np.float32)
-        _play(resampled, device_rate, device, called_off)
+        _play(resample(samples, rate, device_rate), device_rate, device, called_off)
     _submit(job, "a sound", threading.Event(), finished)
 
 
