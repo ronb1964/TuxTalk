@@ -37,11 +37,19 @@ STAND_INS = {"it", "them", "him", "her", "they", "one", "ones", "this", "that",
 _MAX_SWAPPED = 3
 
 
-# Numbers whole with their separators, so "2.5" changed to "2,5" is a
-# changed value; words in any script ("café", "Müller", "東京"); and the signs
-# that carry a value as words of their own: a currency, a percent, and a
-# minus or plus before a number (not a hyphen in "well-known" or "5-6").
-_TOKEN = re.compile(r"\d+(?:[.,]\d+)*|[\w']+|[€$£¥%]|(?<!\w)[-−+](?=\d)")
+# Numbers whole with their separators, so "2.5" changed to "2,5", "5/6" to
+# "5-6" or "4:15" to "4/15" is a changed value; words in any script ("café",
+# "Müller", "東京"); and the signs that carry a value as words of their own: a
+# currency, a percent, and a minus or plus before a number (not a hyphen in
+# "well-known").
+_TOKEN = re.compile(r"\d+(?:[.,/:–-]\d+)*|[\w']+|[€$£¥%]|(?<!\w)[-−+](?=\d)")
+# Words that turn a statement around. One left over from the wrong part of a
+# correction, when the corrected words don't say it, reverses the sentence:
+# "I will not, I mean I will, go" is not "I will not go".
+_NEGATIONS = {"not", "never", "no", "nothing", "nobody", "none", "neither", "nor"}
+# An answer that starts a new line or adds a tab inside a sentence types it:
+# in a chat box a line break can send the message half-written.
+_LAYOUT_CHARS = "\n\r\t"
 
 
 def words(text):
@@ -64,6 +72,18 @@ def _deleted_runs(src, out):
     if run:
         runs.append((len(src) - len(run), run))
     return runs if j == len(out) else None
+
+
+def _is_negation(word):
+    return word in _NEGATIONS or word.endswith("n't")
+
+
+def _without_trailing_cue_words(run):
+    """*run* without the correction-phrase words at its end ("send it no")."""
+    end = len(run)
+    while end and run[end - 1] in _CUE_WORDS:
+        end -= 1
+    return run[:end]
 
 
 def _without_fillers(run):
@@ -131,6 +151,9 @@ def _is_spliced_correction(src, out):
     Accepted only in exactly that shape: every word was spoken, the start and
     the right part are kept whole and in order, the leftover is the END of the
     wrong part, and at most _MAX_REPLACED words of the wrong part are dropped.
+    Something must really be replaced, and nothing that reverses the sentence
+    may survive from the wrong part: "do not send it, no wait, send it" must
+    never become "do not send it".
     """
     for c_start in range(len(src)):
         for cue in _CUES_LONGEST_FIRST:
@@ -139,27 +162,39 @@ def _is_spliced_correction(src, out):
             after = src[c_start + len(cue):]
             for w_start in range(max(0, c_start - _MAX_REPLACED - 4), c_start):
                 start, wrong = src[:w_start], src[w_start:c_start]
-                for keep in range(0, len(wrong)):          # keep < len: something is replaced
-                    leftover = wrong[len(wrong) - keep:] if keep else []
-                    if len(wrong) - keep > _MAX_REPLACED:
-                        continue
-                    # The replaced words must be a value, not the phrase itself:
-                    # "three no wait four" -> "three four" is not "no" -> "four".
-                    if set(wrong[:len(wrong) - keep]) <= _CUE_WORDS:
-                        continue
-                    for split in range(1, len(after) + 1):  # right part is not empty
-                        right, rest = after[:split], after[split:]
-                        # The correction replaces a like-sized piece ("two
-                        # boxes" -> "three boxes"), and what is carried over
-                        # must be new to it. Without these, "to 5 minutes,
-                        # actually 10 minutes" could pass as "... 10 minutes 5
-                        # minutes", smuggling the wrong value back in.
-                        if (abs((len(wrong) - keep) - len(right)) > 1
-                                or (set(leftover) & set(right)) - LINKING_WORDS):
-                            continue
-                        if out == start + right + leftover + rest:
-                            return True
+                # keep < len(wrong): something is replaced
+                if any(_splices(start, wrong, keep, after, out) for keep in range(len(wrong))):
+                    return True
             break   # longest cue at this position tried; move on
+    return False
+
+
+def _splices(start, wrong, keep, after, out):
+    """True if *out* is *start*, then the start of *after* (the right part),
+    then the last *keep* words of *wrong*, then the rest of *after*."""
+    leftover = wrong[len(wrong) - keep:] if keep else []
+    if len(wrong) - keep > _MAX_REPLACED:
+        return False
+    # The replaced words must be a value, not the phrase itself:
+    # "three no wait four" -> "three four" is not "no" -> "four".
+    replaced = _without_trailing_cue_words(wrong[:len(wrong) - keep])
+    # The answer going on with the very words it claims to replace has
+    # dropped the restatement and kept the wrong version.
+    if not replaced or out[len(start):len(start) + len(replaced)] == replaced:
+        return False
+    if any(_is_negation(w) and w not in after for w in leftover):
+        return False
+    for split in range(1, len(after) + 1):  # right part is not empty
+        right, rest = after[:split], after[split:]
+        # The correction replaces a like-sized piece ("two boxes" -> "three
+        # boxes"), and what is carried over must be new to it. Without these,
+        # "to 5 minutes, actually 10 minutes" could pass as "... 10 minutes 5
+        # minutes", smuggling the wrong value back in.
+        if (abs((len(wrong) - keep) - len(right)) > 1
+                or (set(leftover) & set(right)) - LINKING_WORDS):
+            continue
+        if out == start + right + leftover + rest:
+            return True
     return False
 
 
@@ -216,6 +251,8 @@ def _is_restated_correction(src, out):
 
 def edit_is_safe(said: str, edited: str) -> bool:
     """True only if *edited* is *said* with nothing but allowed edits."""
+    if any(c in edited and c not in said for c in _LAYOUT_CHARS):
+        return False
     src, out = words(said), words(edited)
     if not out:
         return False

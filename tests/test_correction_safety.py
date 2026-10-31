@@ -27,6 +27,14 @@ SAFE = [
     ("Book the room for Monday, actually, book it for Tuesday.", "Book the room for Tuesday."),
     ("Email the invoice to George, scratch that, text it to him.",
      "Text the invoice to George."),
+    # fractions, times and ranges corrected whole
+    ("Use 5/6 inch screws, no wait, 7/8 inch screws.", "Use 7/8 inch screws."),
+    ("Meet me at 3:15, no wait, 4:15.", "Meet me at 4:15."),
+    ("Cut 2-3 boards, no wait, 4-5 boards.", "Cut 4-5 boards."),
+    # the negation is in the corrected words, or before the wrong part
+    ("I will, I mean I won't, go.", "I won't go."),
+    ("Do not paint the van red, sorry, blue.", "Do not paint the van blue."),
+    ("Send it, no wait, send the files.", "Send the files."),
 ]
 
 UNSAFE = [
@@ -75,6 +83,18 @@ UNSAFE = [
     # a number's punctuation changed: a different value in many countries
     ("Set it to 1.5, no wait, 2.5.", "Set it to 2,5."),
     ("Order 1,000 bolts, no wait, 2,000 bolts.", "Order 2.000 bolts."),
+    # dropped the restatement and kept the wrong version: the opposite of what was meant
+    ("Do not delete the files, sorry, delete the files.", "Do not delete the files."),
+    ("I will not, I mean I will, go.", "I will not go."),
+    ("I will not, I mean I'll, go.", "I'll not go."),
+    ("Do not send it, no wait, send it.", "Do not send it."),
+    # a fraction, a time or a range changed into another
+    ("Use 5/6 inch screws, no wait, 7/8 inch screws.", "Use 7-8 inch screws."),
+    ("Meet me at 3:15, no wait, 4:15.", "Meet me at 4/15."),
+    ("Cut 2-3 boards, no wait, 4-5 boards.", "Cut 4/5 boards."),
+    # an added line break or tab, which a chat box could take as Send
+    ("Meet me at 3, no wait, 4.", "Meet me at\n4."),
+    ("Meet me at 3, no wait, 4.", "Meet me at\t4."),
     # "hmm" carries meaning; the AI isn't told to drop it
     ("Hmm, that sounds about right.", "That sounds about right."),
     # doubled for emphasis, which the plain filler rule keeps too
