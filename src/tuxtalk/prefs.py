@@ -724,8 +724,11 @@ class PreferencesWindow:
         it holds and quits (or is killed past its time), then a new one starts.
         A start that fails there calls *on_failed*(True) on GTK's thread,
         and one still not ready at the wait's end *on_failed*(False).
-        With Dictation off nothing starts, tray or not: the user turned it
-        off, and the service reads the new settings when it's turned on."""
+        With Dictation off nothing starts: the user turned it off, and the
+        service reads the new settings when it's turned on. With no tray,
+        "off" can only mean no service runs, so one turned off from the
+        GNOME extension and still typing what it held is restarted
+        (CODE_HEALTH row 60(d))."""
         from . import single_instance, tray_instance, update_ui
         from .service_launcher import find_service_pids
         if not find_service_pids():
