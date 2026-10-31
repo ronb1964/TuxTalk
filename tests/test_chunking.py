@@ -828,6 +828,19 @@ def test_correction_after_a_pause_fixes_the_phrase_before(ai_on):
     assert rs.state.current.message.held_mark["mark"] == "."
 
 
+def test_a_correction_after_a_pause_counts_its_words_once(ai_on, monkeypatch):
+    """Your Stats counted "Meet at four." as three more words, though it
+    only took the place of "Meet at three.", counted when it was typed."""
+    texts, _, _, _ = ai_on
+    counted = []
+    monkeypatch.setattr(live, "usage_stats", True)
+    monkeypatch.setattr("tuxtalk.stats.record", lambda words, seconds: counted.append(words))
+    texts.extend(["meet at three.", "no wait, four.", "meet at three. No wait, four."])
+    call(frames_of(speech(1.0)), "middle")
+    call(frames_of(speech(1.0)), "middle")
+    assert sum(counted) == 3
+
+
 def test_esc_while_the_ai_corrects_a_phrase_types_none_of_it(ai_on, monkeypatch):
     """Type at pause: Esc while the AI looked at a phrase's self-correction.
     Cancelled was checked only before, so the phrase was still typed."""

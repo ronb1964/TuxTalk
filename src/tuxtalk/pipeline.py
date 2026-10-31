@@ -422,9 +422,11 @@ def _deliver(words: _Words, audio_f32, job: _Job) -> None:
         _carry_on_after(words, text, audio_f32, job)
     if live.usage_stats:
         # After typing, so saving the counts never delays the text.
-        # Counts only (words, seconds dictating); see stats.py.
+        # Counts only (words, seconds dictating); see stats.py. A correction
+        # across a pause retypes the phrase before, counted when it went in.
         from .stats import count_words, record
-        record(count_words(text), len(audio_f32) / engine.SAMPLE_RATE)
+        record(count_words(text) - count_words(words.taken_back),
+               len(audio_f32) / engine.SAMPLE_RATE)
 
 
 def _carry_on_after(words: _Words, text: str, audio_f32, job: _Job) -> None:
