@@ -12,6 +12,7 @@ from tuxtalk import focused_window
 from tuxtalk import delivery
 from tuxtalk import keyboard_output
 from tuxtalk import recording_state as rs
+from tuxtalk import virtual_keyboard
 
 MARKER = "\xa7SHIFT_ENTER\xa7"
 
@@ -33,7 +34,8 @@ def test_typing_stops_at_the_first_part_that_fails(monkeypatch, quiet):
     monkeypatch.setattr(keyboard_output, "type_text_raw", lambda t: typed.append(t) or t != "two")
     monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: True)
 
-    assert keyboard_output.type_text(MARKER.join(["one", "two", "three"])) is False
+    with pytest.raises(virtual_keyboard.StoppedPartway):    # "one" is in: partway
+        keyboard_output.type_text(MARKER.join(["one", "two", "three"]))
     assert typed == ["one", "two"]
 
 
@@ -42,8 +44,24 @@ def test_typing_stops_when_a_line_break_fails(monkeypatch, quiet):
     monkeypatch.setattr(keyboard_output, "type_text_raw", lambda t: typed.append(t) or True)
     monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: False)
 
-    assert keyboard_output.type_text(MARKER.join(["one", "two"])) is False
+    with pytest.raises(virtual_keyboard.StoppedPartway):
+        keyboard_output.type_text(MARKER.join(["one", "two"]))
     assert typed == ["one"]
+
+
+def test_a_line_break_that_fails_after_the_first_line_says_only_part_was_typed(
+        monkeypatch, quiet):
+    """KWrite's line break is a paste, which can fail: the first line was
+    in, and "Couldn't type the dictation" had the user paste it all again
+    over it."""
+    monkeypatch.setattr(focused_window, "look", lambda: ("org.kde.kwrite", None))
+    monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
+    typed = []
+    monkeypatch.setattr(keyboard_output, "type_text_raw", lambda t: typed.append(t) or True)
+    monkeypatch.setattr(keyboard_output, "paste_text", lambda t, keep=None: False)
+    assert delivery.inject_text(MARKER.join(["Dear Sam,", "Thanks"]), "type") == "partial"
+    assert typed == ["Dear Sam,"]
+    assert rs.state.last_inserted_text == ""        # undo deletes nothing it can't count
 
 
 # --- a terminal's paste falling back to typing --------------------------------

@@ -264,7 +264,9 @@ def test_type_text_reports_failure_when_the_shift_enter_key_fails(monkeypatch):
     monkeypatch.setattr(keyboard_output, "type_text_raw", lambda t: True)
     monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: False)
 
-    assert keyboard_output.type_text("hello§SHIFT_ENTER§world") is False
+    from tuxtalk import virtual_keyboard
+    with pytest.raises(virtual_keyboard.StoppedPartway):     # "hello" is in
+        keyboard_output.type_text("hello§SHIFT_ENTER§world")
 
 
 def test_type_text_reports_success_when_every_part_lands(monkeypatch):

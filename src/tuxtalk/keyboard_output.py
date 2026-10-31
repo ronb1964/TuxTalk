@@ -343,12 +343,19 @@ def deliver_lines(parts, put, before_break_s: float, after_break_s: float,
 def type_text(text: str) -> bool:
     """Type text, its line-break markers as Shift+Enter, or in KDE's editors
     as a pasted newline (_paste_newline). Returns True if it was actually
-    typed into the focused app, False if injection failed (deliver_lines)."""
+    typed into the focused app, False if none of it was (deliver_lines).
+    Raises virtual_keyboard.StoppedPartway when a later line or a line
+    break failed after earlier lines went in: told "Couldn't type the
+    dictation", the user would paste it all again over them."""
     in_kde_editor = (focused_window.window_class() or "").lower() in SMART_NEWLINE_CLASSES_LOWER
-    stopped = deliver_lines(text.split(LINE_BREAK), type_text_raw, 0.05, 0.05,
-                            send_break=_paste_newline if in_kde_editor else None).stopped
-    # A failed line break is a partial injection too: the undo buffer must not count it.
-    return not stopped
+    lines = text.split(LINE_BREAK)
+    delivered = deliver_lines(lines, type_text_raw, 0.05, 0.05,
+                              send_break=_paste_newline if in_kde_editor else None)
+    if delivered.stopped and delivered.parts:
+        raise virtual_keyboard.StoppedPartway(
+            f"{delivered.parts} of {len(lines)} lines",
+            "a line break failed" if delivered.stopped == "break" else "a line failed")
+    return not delivered.stopped
 
 
 def _paste_newline() -> bool:

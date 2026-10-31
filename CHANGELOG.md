@@ -5,6 +5,11 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- When typing stopped after the first lines of a dictation were already in
+  (a line break or a later line that couldn't go in), TuxTalk said
+  "Couldn't type the dictation", and pasting it from Recent Dictations as
+  that told you to put those lines in twice. It says "Only part of the
+  dictation was typed" now.
 - In KWrite and Kate, typing a dictation of several lines (Keystroke Typing,
   and always on X11) left a line break on your clipboard in place of what
   you'd copied, since TuxTalk pastes the line breaks there. With "Restore
