@@ -142,6 +142,19 @@ def test_a_cut_drops_only_the_middle_of_the_pause(block, gap):
         assert resume >= min(end, onset - int(LEAD_KEEP_S * SR) - 320)
 
 
+def test_a_soft_sound_late_in_a_pause_nothing_ended_stays_with_its_phrase():
+    """A soft sound under speech's threshold half a second into the pause
+    after the last phrase, then nothing more: it stays in that phrase. A
+    lead taken without a word to start early moved it into the rest, which
+    is dropped as speechless when nothing more is said."""
+    t = np.arange(int(0.08 * SR)) / SR
+    soft = (np.sin(2 * np.pi * 220 * t) * 80 + noise(0.08)).astype(np.int16)
+    audio = np.concatenate([speech(1.0), noise(0.44), soft, noise(1.0)])
+    (_start, end, resume), = cut_at_each_pause(audio, 4096)
+    assert end >= int(1.52 * SR)
+    assert resume == end
+
+
 def test_works_at_48k():
     sr, block = 48000, 960
     audio = np.concatenate([speech(1.0, sr=sr), noise(1.5, sr=sr)])

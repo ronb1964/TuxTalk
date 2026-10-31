@@ -202,18 +202,29 @@ class PauseDetector:
         run too short to count as speech yet (_burst), which is the next
         word starting; never inside the TAIL_KEEP_S the phrase before keeps
         of its pause. Everything after it, the rest of the block included,
-        is the next phrase's, as the windows judged there count toward it."""
+        is the next phrase's, as the windows judged there count toward it.
+
+        With no sound at the cut there is no word to start early, so
+        nothing is noted and take_cut splits where the phrase before ends:
+        a lead would take the soft end of its last word away from it, lost
+        with the rest when nothing more is said."""
+        if self._burst == 0:
+            self._resume_at = None
+            return
         rate = self.sample_rate
         onset = self._judged - round(self._burst * rate)
         speech_end = self._judged - round(self.silence_time * rate)
         self._resume_at = min(onset, max(onset - int(LEAD_KEEP_S * rate),
                                          speech_end + int(TAIL_KEEP_S * rate)))
 
-    def cut_from_end(self) -> tuple[int, int]:
+    def cut_from_end(self) -> tuple[int, int | None]:
         """take_cut's *cut* for the last cut: (the pause's samples the phrase
-        may lose from its end, where the next phrase starts), each counted
-        back from the end of the audio fed so far."""
+        may lose from its end, where the next phrase starts or None when it
+        starts where the phrase ends), each counted back from the end of
+        the audio fed so far."""
         trim = max(0, int((self.last_pause - TAIL_KEEP_S) * self.sample_rate))
+        if self._resume_at is None:
+            return trim, None
         return trim, self._fed - self._resume_at
 
 
@@ -228,10 +239,14 @@ def take_cut(frames, cut):
     next phrase starts where the detector says, split to the sample, so
     the start of a word that ended the pause, in the trimmed blocks or
     later in the block the cut was heard in, is whole there, never in
-    neither phrase. Only the newest blocks are touched, as this runs on
-    the audio thread."""
+    neither phrase; with no such word it starts where the phrase ends.
+    Only the block the split falls in is copied, as this runs on the
+    audio thread."""
     trim, resume = cut
-    keep = max(resume, _whole_tail(frames, trim))
+    whole = _whole_tail(frames, trim)
+    if resume is None:
+        resume = whole
+    keep = max(resume, whole)
     phrase = _split_off(frames, keep)[0]
     return phrase, _split_off(frames, resume)[1]
 
