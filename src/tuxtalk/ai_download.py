@@ -65,11 +65,13 @@ def make_engine_download_func():
         reporting progress; True once it's there. Another download finishing
         first is fine."""
         from .download_utils import (download_area, download_file, install_turn,
-                                     replace_folder, restore_cut_off_swap, unpack_tar)
+                                     recover_cut_off_swaps, replace_folder,
+                                     restore_cut_off_swap, unpack_tar)
+        engine_dir = _engine_dir()
+        recover_cut_off_swaps(engine_dir, "ai-engine", "the AI engine")
         if os.access(server_binary(), os.X_OK):
             progress_callback("Already downloaded", 100)
             return True
-        engine_dir = _engine_dir()
 
         def hook(done, total):
             if total:

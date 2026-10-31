@@ -41,6 +41,8 @@ _CHUNK_SIZE = 65536
 # process never finished (killed, logged out, rebooted). A live download writes
 # every chunk, and a stalled one gives up after its socket timeout.
 STALE_PARTIAL_S = 10 * 60
+# download_area's names: .<name>.<this many random hex digits>.tar and .d.
+_AREA_DIGITS = 8
 
 
 class DownloadError(Exception):
@@ -230,6 +232,28 @@ def restore_cut_off_swap(target: str, old: str) -> None:
         logger.info(f"Put back {target}: replacing it was cut off part-way")
 
 
+def recover_cut_off_swaps(folder: str, lock: str, what: str) -> None:
+    """Before a download: each copy in *folder* whose replace_folder was cut
+    off between its renames, so only its .<name>.old is left, put back with
+    *lock*, the install's lock, held. The engine then works even if the
+    download fails. Never raises: a lock that stays busy is another install
+    under way, which puts them back itself."""
+    try:
+        olds = [entry.name for entry in os.scandir(folder)
+                if entry.name.startswith(".") and entry.name.endswith(".old")]
+    except OSError:
+        return              # no folder yet: nothing to put back
+    if not olds:
+        return
+    try:
+        with install_turn(lock, what):
+            for name in olds:
+                restore_cut_off_swap(os.path.join(folder, name[1:-len(".old")]),
+                                     os.path.join(folder, name))
+    except OSError as e:
+        logger.warning(f"Couldn't put back {what} after an update cut off part-way: {e}")
+
+
 def replace_folder(staging: str, target: str, old: str) -> None:
     """*staging* becomes *target*. The copy there waits as *old* until the
     new one is in place, and comes back if it can't be (the rename failed),
@@ -293,10 +317,13 @@ def download_area(parent: str, name: str, old_names=()):
     neither is touched for long once the download ends. *old_names* are the
     fixed archive names older versions used, removed once seen."""
     os.makedirs(parent, exist_ok=True)
-    remove_stale_files(parent, f".{glob.escape(name)}.*", STALE_PARTIAL_S, folders=True)
+    # Only names shaped like its own: replace_folder's .<name>.old beside
+    # them may be the only complete copy of an engine.
+    remove_stale_files(parent, f".{glob.escape(name)}.{'[0-9a-f]' * _AREA_DIGITS}.*",
+                       STALE_PARTIAL_S, folders=True)
     for old in old_names:
         _remove_quiet(os.path.join(parent, old))
-    stem = os.path.join(parent, f".{name}.{secrets.token_hex(4)}")
+    stem = os.path.join(parent, f".{name}.{secrets.token_hex(_AREA_DIGITS // 2)}")
     archive, folder = stem + ".tar", stem + ".d"
     try:
         yield archive, folder

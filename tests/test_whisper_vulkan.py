@@ -225,6 +225,27 @@ def test_an_engine_update_that_cant_move_in_keeps_the_old_engine(tmp_path, monke
     assert (engine / "whisper-server").read_text() == "old"
 
 
+def test_an_engine_update_cut_off_part_way_is_put_back_though_the_download_fails(
+        tmp_path, monkeypatch):
+    """Killed between its renames, an update left the old engine only as
+    .<name>.old; the next download swept it away before failing offline,
+    and there was no engine left at all."""
+    from tuxtalk.download_utils import STALE_PARTIAL_S
+    from tuxtalk.parakeet_engine import PARAKEET_MODEL
+    engine = tmp_path / "1.9.5" / wv.ENGINE_NAME
+    kept = tmp_path / "1.9.5" / f".{wv.ENGINE_NAME}.old"
+    kept.mkdir(parents=True)
+    (kept / "whisper-server").write_text("old")
+    (kept / "whisper-server").chmod(0o755)
+    aged = time.time() - STALE_PARTIAL_S - 60
+    os.utime(kept, (aged, aged))
+    monkeypatch.setattr(wv, "_engine_dir", lambda: str(engine))
+    monkeypatch.setattr("tuxtalk.download_utils.download_file", lambda *a, **k: False)
+    assert wv.make_engine_download_func(PARAKEET_MODEL)(lambda *a: None, None) is False
+    assert (engine / "whisper-server").read_text() == "old"
+    assert wv.is_engine_installed("small")
+
+
 def test_each_engine_build_has_its_own_asset():
     """Released versions check their build's SHA256 (0.12.0-0.13.1: 1.9.4 b1,
     0.14.x-0.15.x: 1.9.4 b2), so a new build never reuses a published name.

@@ -113,3 +113,20 @@ def test_an_engine_that_cant_move_in_leaves_the_folder_it_replaces(tmp_path, mon
     monkeypatch.setattr(os, "replace", fails_from_the_download(real_replace))
     assert ai.make_engine_download_func()(lambda *a: None, None) is False
     assert (there / "llama-server").read_text() == "not runnable"
+
+
+def test_an_engine_update_cut_off_part_way_is_put_back_without_a_download(tmp_path, monkeypatch):
+    """Killed between its renames, an update left the engine only as
+    .<name>.old: the AI stayed off until a download got through."""
+    monkeypatch.setattr("tuxtalk.config.get_data_dir", lambda: str(tmp_path))
+    kept = tmp_path / "ai-engine" / ai.LLAMA_TAG / f".llama-{ai.LLAMA_TAG}.old"
+    kept.mkdir(parents=True)
+    (kept / "llama-server").write_text("old")
+    (kept / "llama-server").chmod(0o755)
+    fetched = []
+    monkeypatch.setattr("tuxtalk.download_utils.download_file",
+                        lambda url, *a, **k: fetched.append(url) or False)
+    assert ai.make_engine_download_func()(lambda *a: None, None) is True
+    assert fetched == []
+    with open(ai.server_binary()) as f:
+        assert f.read() == "old"
