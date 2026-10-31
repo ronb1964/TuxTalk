@@ -59,8 +59,9 @@ ENGINE_VERSION = "1.9.5"                           # whisper.cpp release it is b
 # adds TuxTalk's patch (vulkan-engine-patches/): Your Words for Parakeet on
 # the graphics chip. Each build has its own asset and pre-release, because
 # released versions download theirs and check its SHA256, so a published
-# build must stay exactly as it is. The folder inside is named after the
-# whisper.cpp version, and a new version's folder replaces the old one.
+# build must stay exactly as it is. The archive's folder is named after the
+# whisper.cpp version alone; it unpacks into a folder per build
+# (_build_folder), and a new build's folder replaces the old one.
 ENGINE_BUILD = 1
 ENGINE_NAME = f"talktype-whisper-vulkan-{ENGINE_VERSION}"
 ENGINE_ASSET = f"{ENGINE_NAME}-b{ENGINE_BUILD}-x64.tar.gz"
@@ -143,9 +144,18 @@ def has_nvidia() -> bool:
 
 # --- Where things live ---------------------------------------------------------
 
+def _build_folder():
+    """The folder this build unpacks into. With the build in its name, an
+    installed older build doesn't count as this one, which is then
+    downloaded beside it and replaces it once it's there. Build 1 keeps the
+    version's name alone, the folder earlier versions installed it in, so
+    it isn't downloaded again."""
+    return ENGINE_VERSION if ENGINE_BUILD == 1 else f"{ENGINE_VERSION}-b{ENGINE_BUILD}"
+
+
 def _engine_dir():
     from .config import get_data_dir
-    return os.path.join(get_data_dir(), "whisper-vulkan", ENGINE_VERSION, ENGINE_NAME)
+    return os.path.join(get_data_dir(), "whisper-vulkan", _build_folder(), ENGINE_NAME)
 
 
 def _binary(name):
@@ -211,7 +221,8 @@ def make_engine_download_func(model_name=None):
                         target = _engine_dir()
                         shutil.rmtree(target, ignore_errors=True)
                         os.replace(os.path.join(folder, ENGINE_NAME), target)
-                    engine_process.remove_other_versions(os.path.dirname(parent), ENGINE_VERSION)
+                    engine_process.remove_other_versions(os.path.dirname(parent),
+                                                         _build_folder())
             except Exception as e:
                 logger.error(f"Could not unpack the graphics engine: {e}")
                 progress_callback("Could not unpack the download", 0)

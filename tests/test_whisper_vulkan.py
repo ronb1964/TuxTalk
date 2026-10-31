@@ -144,29 +144,67 @@ def test_a_download_that_fails_to_unpack_leaves_nothing_behind(tmp_path, monkeyp
     assert list((tmp_path / "1.9.5").iterdir()) == []
 
 
-def test_two_downloads_of_the_engine_at_once_both_end_installed(tmp_path, monkeypatch):
-    """The tray and Preferences finishing the same download together: one
-    removed the engine folder while the other moved its copy in, and that
-    window said "Could not unpack the download"."""
-    import io
-    import shutil
+def _packed_engine():
+    """The bytes of an engine archive holding a whisper-server."""
     import tarfile
-    import threading
-    import types
-    runtime = tmp_path / "run"
-    runtime.mkdir(mode=0o700)
-    monkeypatch.setenv("XDG_RUNTIME_DIR", str(runtime))
-    engine = tmp_path / "1.9.5" / wv.ENGINE_NAME
-    monkeypatch.setattr(wv, "_engine_dir", lambda: str(engine))
     packed = io.BytesIO()
     with tarfile.open(fileobj=packed, mode="w:gz") as tar:
         info = tarfile.TarInfo(f"{wv.ENGINE_NAME}/whisper-server")
         info.size, info.mode = 2, 0o755
         tar.addfile(info, io.BytesIO(b"#!"))
+    return packed.getvalue()
+
+
+def _runtime_dir(tmp_path, monkeypatch):
+    """A private runtime folder for the install lock."""
+    runtime = tmp_path / "run"
+    runtime.mkdir(mode=0o700)
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(runtime))
+
+
+def test_a_new_engine_build_replaces_the_installed_one_once_it_is_there(tmp_path, monkeypatch):
+    """With build 1 installed, a TuxTalk that brings build 2 doesn't take
+    build 1 for it: it downloads build 2, which then replaces build 1. A
+    failed download leaves build 1 as it was."""
+    from tuxtalk import config
+    _runtime_dir(tmp_path, monkeypatch)
+    monkeypatch.setattr(config, "get_data_dir", lambda: str(tmp_path / "data"))
+    monkeypatch.setattr(wv, "ENGINE_BUILD", 1)
+    build_1 = pathlib.Path(wv._engine_dir())
+    build_1.mkdir(parents=True)
+    (build_1 / "whisper-server").write_text("")
+    (build_1 / "whisper-server").chmod(0o755)
+    assert wv.is_engine_installed("small")
+
+    monkeypatch.setattr(wv, "ENGINE_BUILD", 2)
+    assert not wv.is_engine_installed("small")
+    monkeypatch.setattr("tuxtalk.download_utils.download_file", lambda *a, **k: False)
+    assert wv.make_engine_download_func("small")(lambda *a: None, None) is False
+    assert (build_1 / "whisper-server").exists()
+
+    def download(url, dest, **kwargs):
+        pathlib.Path(dest).write_bytes(_packed_engine())
+        return True
+    monkeypatch.setattr("tuxtalk.download_utils.download_file", download)
+    assert wv.make_engine_download_func("small")(lambda *a: None, None) is True
+    assert wv.is_engine_installed("small")
+    assert pathlib.Path(wv._engine_dir()) != build_1 and not build_1.parent.exists()
+
+
+def test_two_downloads_of_the_engine_at_once_both_end_installed(tmp_path, monkeypatch):
+    """The tray and Preferences finishing the same download together: one
+    removed the engine folder while the other moved its copy in, and that
+    window said "Could not unpack the download"."""
+    import shutil
+    import threading
+    _runtime_dir(tmp_path, monkeypatch)
+    engine = tmp_path / "1.9.5" / wv.ENGINE_NAME
+    monkeypatch.setattr(wv, "_engine_dir", lambda: str(engine))
+    packed = _packed_engine()
     both_downloaded = threading.Barrier(2)
 
     def download(url, dest, **kwargs):
-        pathlib.Path(dest).write_bytes(packed.getvalue())
+        pathlib.Path(dest).write_bytes(packed)
         both_downloaded.wait(5)
         return True
     monkeypatch.setattr("tuxtalk.download_utils.download_file", download)
