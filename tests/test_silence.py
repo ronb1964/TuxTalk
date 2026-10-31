@@ -38,12 +38,13 @@ def speech(seconds, level=3000.0, noise_level=60.0):
     return (tone + rng.normal(0, noise_level, t.size)).astype(np.int16)
 
 
-def run(audio, silence_seconds=1.5):
-    """Feed audio in blocks; return (seconds at which it fired or None, detector)."""
+def run(audio, silence_seconds=1.5, block=BLOCK):
+    """Feed audio in blocks of *block* samples; return (seconds at which it
+    fired or None, detector)."""
     det = SilenceDetector(silence_seconds, SR)
-    for i in range(0, len(audio), BLOCK):
-        if det.feed(audio[i:i + BLOCK].tobytes()):
-            return (i + BLOCK) / SR, det
+    for i in range(0, len(audio), block):
+        if det.feed(audio[i:i + block].tobytes()):
+            return (i + block) / SR, det
     return None, det
 
 
@@ -1083,3 +1084,43 @@ def test_judging_the_same_seconds_again_takes_nothing_back_twice():
     once = det.speech_time
     det._judge_again()
     assert det.speech_time == pytest.approx(once)
+
+
+# --- Blocks of any size ---------------------------------------------------------
+# Some microphones send blocks of 6 ms (96 samples at 16 kHz). Judged block by
+# block, a dryer's rumble never looked steady over blocks that short, so
+# hands-free never stopped in it. The audio is judged in 20 ms windows now,
+# whatever size of block arrives.
+
+@pytest.mark.parametrize("block", [96, 256, 512, 1024])
+@pytest.mark.parametrize("room", ROOM_NOISES)
+def test_the_same_recording_stops_at_the_same_moment_whatever_the_block_size(room, block):
+    """In a dryer or a fan, fed in 20 ms blocks or in *block*-sample ones:
+    it stops in the same window, so at most one block later, and trims
+    the same quiet within a block."""
+    audio = _in(room, np.concatenate([_three_words(), np.zeros(8 * SR)]))
+    at_20ms, in_20ms = run(audio, 1.5)
+    at, det = run(audio, 1.5, block)
+    assert at is not None, "it never stopped"
+    assert at_20ms <= at < at_20ms + block / SR
+    assert abs(det.tail_to_trim() - in_20ms.tail_to_trim()) < block
+
+
+def test_in_a_dryer_6_ms_blocks_stop_by_itself_after_the_last_word():
+    """The microphone that sends 96-sample blocks: it stops after the last
+    word, never during the words."""
+    said = _three_words()
+    at, det = run(_in("a dryer", np.concatenate([said, np.zeros(8 * SR)])), 1.5, 96)
+    assert at is not None, "it never stopped"
+    assert len(said) / SR + 1.5 - 0.2 <= at <= len(said) / SR + 3.0 + 1.5
+    assert not det.nothing_said
+
+
+def test_a_sound_in_the_last_few_samples_after_the_stop_is_never_trimmed():
+    """Samples too few for a window are judged on their own: a voice
+    starting in the last 100 samples keeps the whole tail."""
+    at, det = run(np.concatenate([speech(2.0), noise(3.0)]), 2.0)
+    assert at is not None
+    det.feed(noise(0.1).tobytes())
+    det.feed(speech(0.3)[:100].tobytes())
+    assert det.tail_to_trim() == 0
