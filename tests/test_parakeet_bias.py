@@ -121,7 +121,7 @@ def test_word_variants_and_spelling():
     assert pb.WordBooster(VOCAB, ["TuxTalk", "Zebra"], BLANK)
 
 
-def test_parakeet_model_switches_the_decoder_with_the_word_list(monkeypatch):
+def test_parakeet_model_switches_the_decoder_with_the_word_list():
     from tuxtalk import parakeet_engine
 
     asr = FakeAsr(tuck_talk(2, 3))
@@ -139,16 +139,18 @@ def test_parakeet_model_switches_the_decoder_with_the_word_list(monkeypatch):
     assert asr._decoding is plain
 
 
-def test_a_broken_onnx_asr_keeps_the_plain_decoder(monkeypatch):
+def test_a_broken_onnx_asr_keeps_the_plain_decoder():
     """A future onnx-asr without these internals must not break dictation."""
     from tuxtalk import parakeet_engine
 
     class Odd:
-        _decoding = "plain"
+        """An onnx-asr recognizer with no vocabulary to steer by."""
+    asr, plain = Odd(), object()
+    asr._decoding = plain
     model = parakeet_engine.ParakeetModel.__new__(parakeet_engine.ParakeetModel)
-    model._model = type("Adapter", (), {"asr": Odd()})()
+    model._model = type("Adapter", (), {"asr": asr})()
     model.set_words(["TuxTalk"])
-    assert Odd._decoding == "plain"
+    assert asr._decoding is plain
 
 
 def test_gpu_model_passes_words_to_its_processor_fallback():
