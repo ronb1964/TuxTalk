@@ -33,7 +33,9 @@ before 0.15.0, so older entries use that name.
   started it right away, and what you said in it was lost.
 - With Type at pause, pressing Esc while the AI was still fixing a "no wait"
   in a phrase didn't stop that phrase: it was typed anyway. Now nothing more
-  is typed once you press Esc.
+  is typed once you press Esc, except a correction that has already taken
+  back the phrase before it: that one still goes in, so the phrase isn't
+  just gone with nothing in its place.
 - "Edit that" said right after a Type at pause dictation changes all of it
   since its last Enter or Tab, the same text "fix that word" works on,
   instead of only its last phrase. If you tapped to hold an automatic send,
