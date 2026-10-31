@@ -227,6 +227,17 @@ def test_separate_old_talktype_folders_lose_only_tuxtalks_files(home):
         assert [p.name for p in data.iterdir()] == ["my-own-model.gguf"]
 
 
+def test_a_separate_old_talktype_data_folder_loses_its_downloads_too(home):
+    """Unticked, the gigabytes of engines in it stayed; its stats stay."""
+    old = home / ".local/share/TalkType"
+    (old / "whisper-vulkan/1.9.4").mkdir(parents=True)
+    (old / "stats.json").write_text("{}")
+    plan = _find(home)
+    assert old / "whisper-vulkan" in plan.downloads
+    uninstall.remove_files(plan, delete_personal=False, delete_shared=False)
+    assert [p.name for p in old.iterdir()] == ["stats.json"]
+
+
 def test_a_file_of_the_users_own_in_the_data_folder_stays_when_downloads_go(home):
     data = home / ".local/share/TuxTalk"
     (data / "my-own-model.gguf").write_text("someone else's")

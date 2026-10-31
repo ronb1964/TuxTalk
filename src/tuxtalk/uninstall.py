@@ -283,6 +283,17 @@ def _folders_to_empty(home, config_dir, data_dir):
     return folders
 
 
+def _sort_data(plan, data_dir):
+    """The data folder's files into plan.personal and plan.downloads. A
+    TalkType data folder the rename left as one of its own (it found both)
+    holds downloads too, which go like these. Runs after plan.folders."""
+    for entry in _contents(data_dir, _owner(*_PERSONAL, *_DOWNLOADED)):
+        (plan.personal if _known(entry, _PERSONAL) else plan.downloads).append(entry)
+    old_data = plan.home / ".local" / "share" / "TalkType"
+    if not old_data.is_symlink() and any(folder == old_data for folder, _ in plan.folders):
+        plan.downloads += _contents(old_data, _owner(*_DOWNLOADED))
+
+
 def find(home, install_type, environ=os.environ, appimage=None):
     """The Plan for *home*: only what exists. *appimage* is the running
     AppImage's path, if any."""
@@ -293,8 +304,6 @@ def find(home, install_type, environ=os.environ, appimage=None):
     def exists(path):
         return os.path.lexists(path)
 
-    for entry in _contents(data_dir, _owner(*_PERSONAL, *_DOWNLOADED)):
-        (plan.personal if _known(entry, _PERSONAL) else plan.downloads).append(entry)
     plan.hub = hf_hub_cache(home, environ)
     # A .locks that is a link leads somewhere else: deleting through it
     # would reach another folder's files.
@@ -307,6 +316,7 @@ def find(home, install_type, environ=os.environ, appimage=None):
         if exists(path) and path not in plan.leftovers:
             plan.leftovers.append(path)
     plan.folders = _folders_to_empty(home, config_dir, data_dir)
+    _sort_data(plan, data_dir)
 
     runtime = Path(single_instance.session_runtime_dir(environ))
     plan.runtime = sorted(path for pattern in RUNTIME_FILES for path in runtime.glob(pattern))
