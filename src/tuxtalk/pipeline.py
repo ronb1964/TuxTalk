@@ -146,7 +146,9 @@ def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         if raw is None or _cancelled(job):
             return
         raw, in_password = _before_the_words(raw, audio_f32, job)
-        if raw is None or _ran_as_command(raw, job):
+        # Again after the context pass, which can take seconds: no command
+        # runs and no key is pressed for a cancelled recording.
+        if raw is None or _cancelled(job) or _ran_as_command(raw, job):
             return
         raw, said = split_key_command(raw)
         key = _key_to_press(raw, said, job)

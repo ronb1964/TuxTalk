@@ -477,6 +477,56 @@ def test_a_command_after_a_pause_sees_the_finished_chunk(pipeline, monkeypatch):
     assert erased == [len("We meet. ")]
 
 
+def esc_during_the_context_pass(monkeypatch, texts):
+    """The engine's third pass, hearing the two phrases together, takes long
+    enough for the user to press Esc."""
+    calls = []
+
+    def transcribe(audio, lang):
+        calls.append(len(audio))
+        if len(calls) == 3:
+            rs.state.current.message.cancelled = True
+        return texts.pop(0)
+    monkeypatch.setattr(engine, "transcribe", transcribe)
+
+
+def test_esc_during_the_context_pass_types_no_mark(pipeline, monkeypatch):
+    texts, typed, _ = pipeline
+    texts.extend(["we meet.", "the end.", "we meet. The end."])
+    esc_during_the_context_pass(monkeypatch, texts)
+    call(frames_of(speech(1.0)), "middle")
+    call(frames_of(speech(1.0)), "middle")
+    assert typed == ["We meet"]
+
+
+def test_esc_during_the_context_pass_runs_no_command(pipeline, monkeypatch):
+    """"delete last sentence" after a pause, and Esc while the engine heard
+    both phrases: the sentence before was still deleted."""
+    from types import SimpleNamespace
+    texts, typed, _ = pipeline
+    erased = []
+    monkeypatch.setattr(keyboard_output, "output_backend",
+                        lambda: SimpleNamespace(backspaces=lambda n: (erased.append(n), True)[1]))
+    texts.extend(["we meet.", "delete last sentence", "we meet. Delete last sentence."])
+    esc_during_the_context_pass(monkeypatch, texts)
+    call(frames_of(speech(1.0)), "middle")
+    call(frames_of(speech(1.0)), "middle")
+    assert typed == ["We meet"] and erased == []
+
+
+def test_esc_during_the_context_pass_presses_no_enter(pipeline, monkeypatch):
+    """A short phrase the context pass hears as "press enter", and Esc
+    meanwhile: the Enter still went out and sent the message."""
+    texts, typed, _ = pipeline
+    pressed = []
+    monkeypatch.setattr(dictation_pipeline, "press_said", lambda *a, **k: pressed.append(a))
+    texts.extend(["we meet.", "press center.", "we meet. Press enter."])
+    esc_during_the_context_pass(monkeypatch, texts)
+    call(frames_of(speech(1.0)), "middle")
+    call(frames_of(speech(1.0)), "middle")
+    assert typed == ["We meet"] and pressed == []
+
+
 def test_silent_middle_chunk_is_dropped_without_a_sound(pipeline):
     texts, typed, beeps = pipeline
     call(frames_of(noise(0.4)), "middle")

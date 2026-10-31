@@ -245,6 +245,11 @@ def resolve_boundary(message, audio_f32, language, injection_mode, raw="",
         rs.state.continue_mid_sentence = False
         return raw
     mark, joint = _heard_in_context(pending, audio_f32, language)
+    if message.cancelled:
+        # Esc while the engine heard both phrases (a second pass, which can
+        # take seconds): nothing more goes in, the mark included.
+        logger.info("Chunk boundary not typed: the recording was cancelled")
+        return raw
     if (raw and len(raw.split()) <= ENTER_IN_CONTEXT_MAX_WORDS
             and not split_key_command(raw)[1] and split_key_command(joint)[1] == "ENTER"):
         logger.info(f"Heard \"press enter\" in context ({live.loggable(raw)} alone)")
