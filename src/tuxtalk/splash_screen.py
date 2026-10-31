@@ -12,12 +12,12 @@ gi.require_version('Gdk', '3.0')
 gi.require_version('GdkPixbuf', '2.0')
 from gi.repository import Gdk, GdkPixbuf, GLib, Gtk
 
+from .config import APP_ID
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
 
-_APP_ID = "io.github.ronb1964.TuxTalk"
-_SCALABLE = f"share/icons/hicolor/scalable/apps/{_APP_ID}.svg"
+_SCALABLE = f"share/icons/hicolor/scalable/apps/{APP_ID}.svg"
 
 # The glow's steps, one every 100 ms: (blur in px, opacity) of each shadow.
 # From step 9 a wider, fainter second shadow joins in.
@@ -77,8 +77,8 @@ def _icon_candidates():
     paths = []
     appdir = os.environ.get('APPDIR')       # a running AppImage, with a PNG at its root
     if appdir:
-        paths += [os.path.join(appdir, f"{_APP_ID}.png"),
-                  os.path.join(appdir, f"{_APP_ID}.svg"),
+        paths += [os.path.join(appdir, f"{APP_ID}.png"),
+                  os.path.join(appdir, f"{APP_ID}.svg"),
                   os.path.join(appdir, "usr", _SCALABLE)]
     # The project's own icons/, beside src/, when running from the source.
     project_icons = os.path.join(
@@ -90,8 +90,8 @@ def _icon_candidates():
         # pixmaps PNG. A packaged install has no $APPDIR and no project
         # icons/ folder, so without these the splash shows plain text.
         f"/usr/{_SCALABLE}",
-        f"/usr/share/icons/hicolor/256x256/apps/{_APP_ID}.png",
-        f"/usr/share/pixmaps/{_APP_ID}.png",
+        f"/usr/share/icons/hicolor/256x256/apps/{APP_ID}.png",
+        f"/usr/share/pixmaps/{APP_ID}.png",
         os.path.expanduser(f"~/.local/{_SCALABLE}"),
     ]
     return paths

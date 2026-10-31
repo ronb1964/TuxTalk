@@ -249,7 +249,7 @@ def _required_step(title, explain, status, action, details, button_label, toolti
 
 class WelcomeDialog:
     """
-    Adaptive welcome dialog that shows appropriate content based on system detection.
+    The first-run welcome screen, built for what this computer has.
 
     Every computer gets the recommended-setup card (language, model, graphics
     card). Setup sections for typing, PortAudio and the GNOME extension appear
@@ -386,7 +386,7 @@ class WelcomeDialog:
             # Always: it holds the recommended-setup card, which every computer
             # needs (language, model, graphics card). Its other parts check
             # their own conditions.
-            self._build_optional_features(vbox)
+            self._build_setup_steps(vbox)
 
         self._build_footer_area(content, scrolled)
         # Left to GTK, the focus went to the first button in the scrolling
@@ -428,25 +428,21 @@ class WelcomeDialog:
             False, False, 0)
 
     def _build_header(self, vbox):
-        """Build the header section."""
-        # Header
+        """The title, a subtitle and what TuxTalk does, for a first look."""
         header = Gtk.Label()
         header.set_markup('<span size="x-large"><b>🎙️ Welcome to TuxTalk!</b></span>')
         vbox.pack_start(header, False, False, 0)
 
-        # Subtitle
         subtitle = Gtk.Label()
         subtitle.set_markup('<span size="medium">Voice dictation for Linux</span>')
         subtitle.set_opacity(0.85)
         vbox.pack_start(subtitle, False, False, 0)
 
-        # Separator
         sep1 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
         vbox.pack_start(sep1, False, False, 10)
 
     def _build_base_content(self, vbox):
         """Build the base content (shown in all scenarios)."""
-        # Main description
         main_desc = Gtk.Label()
         main_desc.set_markup(
             '<span size="medium">Private dictation that runs entirely on your computer.</span>')
@@ -454,7 +450,6 @@ class WelcomeDialog:
         main_desc.set_justify(Gtk.Justification.CENTER)
         vbox.pack_start(main_desc, False, False, 10)
 
-        # Key Features section
         features_label = Gtk.Label()
         features_label.set_markup('<span size="large"><b>✨ Key Features</b></span>')
         features_label.set_halign(Gtk.Align.START)
@@ -484,7 +479,6 @@ class WelcomeDialog:
 
         vbox.pack_start(features_box, False, False, 0)
 
-        # Separator
         sep2 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
         sep2.set_margin_top(10)
         sep2.set_margin_bottom(10)
@@ -519,10 +513,9 @@ class WelcomeDialog:
 
         vbox.pack_start(quickstart_box, False, False, 0)
 
-    def _build_optional_features(self, vbox):
+    def _build_setup_steps(self, vbox):
         """The recommended-setup card, the setup steps this computer needs, and the
         optional GNOME extension."""
-        # Separator before optional features
         sep3 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
         sep3.set_margin_top(10)
         sep3.set_margin_bottom(10)
@@ -572,7 +565,6 @@ class WelcomeDialog:
 
             self._build_gnome_extension_option(vbox)
 
-            # Preferences note
             note = Gtk.Label()
             note.set_markup('<span>💡 <i>You can change these anytime in Preferences</i></span>')
             note.set_halign(Gtk.Align.START)
@@ -600,10 +592,9 @@ class WelcomeDialog:
         vbox.pack_start(step.box, False, False, 0)
 
     def _on_install_portaudio_clicked(self, button):
-        """Handle the Install PortAudio button click."""
+        """Install PortAudio in the background; the button waits meanwhile."""
         from tuxtalk.portaudio_setup import install_portaudio_with_pkexec
 
-        # Disable button while processing
         button.set_sensitive(False)
         button.set_label("Installing...")
         self.portaudio_status_label.set_markup('<span>Installing PortAudio...</span>')
@@ -633,7 +624,6 @@ class WelcomeDialog:
 
             self.needs_portaudio_install = False
 
-            # Show success message
             show_message(
                 self.dialog,
                 Gtk.MessageType.INFO,
@@ -788,7 +778,6 @@ class WelcomeDialog:
 
     def _on_fix_typing_clicked(self, button):
         """Handle the Fix Typing button click: the typing and hotkey permissions."""
-        # Disable button while processing
         button.set_sensitive(False)
         button.set_label("Setting up...")
         self.typing_status_label.set_markup('<span>Setting up typing...</span>')
@@ -833,7 +822,6 @@ class WelcomeDialog:
                 f'<span color="#4CAF50"><b>✓ Ready!</b> Permissions set.{restart_note}</span>'
             )
 
-            # Show success dialog
             show_message(self.dialog,
                          Gtk.MessageType.INFO,
                          "Typing Setup Complete!",
@@ -854,7 +842,6 @@ class WelcomeDialog:
         ext_box.set_margin_start(20)
         ext_box.set_margin_top(5)
 
-        # Checkbox with label
         self.extension_check = Gtk.CheckButton()
         self.extension_check.get_style_context().add_class('welcome-checkbox')
         ext_label = Gtk.Label()
@@ -890,14 +877,12 @@ class WelcomeDialog:
             no_tray.set_margin_bottom(4)
             ext_box.pack_start(no_tray, False, False, 0)
 
-        # GNOME detected badge
         gnome_badge = Gtk.Label()
         gnome_badge.set_markup('<b>GNOME Desktop Detected!</b>')
         gnome_badge.set_halign(Gtk.Align.START)
         gnome_badge.set_margin_start(30)
         ext_box.pack_start(gnome_badge, False, False, 0)
 
-        # Extension description
         ext_desc = Gtk.Label()
         ext_desc.set_markup('Add native desktop integration to your GNOME panel:')
         ext_desc.set_halign(Gtk.Align.START)
@@ -906,7 +891,6 @@ class WelcomeDialog:
         ext_desc.set_opacity(0.9)
         ext_box.pack_start(ext_desc, False, False, 0)
 
-        # Extension benefits
         ext_benefits = [
             "🔵 Panel indicator showing recording state",
             "🎮 Service start/stop controls",
@@ -925,7 +909,6 @@ class WelcomeDialog:
 
         ext_box.pack_start(ext_benefits_box, False, False, 0)
 
-        # Requires log out note
         logout_note = Gtk.Label()
         logout_note.set_markup(
             '<span style="italic">(Requires logging out and back in after installation)</span>')
@@ -1086,7 +1069,8 @@ class WelcomeDialog:
             self._syncing = False
 
     def _build_footer(self, vbox):
-        """Build the footer section."""
+        """The bottom row: "Set it up", or on a desktop TuxTalk can't work on,
+        only Quit TuxTalk."""
         button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         button_box.set_halign(Gtk.Align.CENTER)
         button_box.set_margin_top(15)
@@ -1131,7 +1115,6 @@ class WelcomeDialog:
         next_label.set_opacity(0.85)
         vbox.pack_start(next_label, False, False, 0)
 
-        # Centered "Set it up" button
         continue_btn = Gtk.Button(label="Set it up")
         continue_btn.set_size_request(200, 40)
         continue_btn.get_style_context().add_class("suggested-action")
@@ -1146,9 +1129,8 @@ class WelcomeDialog:
         "Required" warning box (red, via .tt-required). Often neither."""
         return [w for w in (self.extension_check, self.required_pulse_box) if w]
 
-    def _pulse_checkboxes(self):
+    def _pulse_step(self):
         """Advance the pulsing glow one step on each of _pulse_targets()."""
-
         targets = self._pulse_targets()
 
         # A sine wave from dim (0) to bright (4) and back.
@@ -1165,14 +1147,12 @@ class WelcomeDialog:
                 continue
             style_context = widget.get_style_context()
 
-            # Remove all pulse classes
             for i in range(5):
                 style_context.remove_class(f'pulse-{i}')
 
-            # Add the current pulse level class
             style_context.add_class(f'pulse-{pulse_level}')
 
-        return True  # Continue animation
+        return True
 
     def run(self):
         """
@@ -1187,7 +1167,6 @@ class WelcomeDialog:
                 - 'quit': bool (the unsupported desktop's Quit TuxTalk)
                 - 'needs_restart': bool (Fix Typing used the "input" group)
         """
-        # Show dialog and fade in
         self.dialog.set_opacity(0.0)
         self.dialog.show_all()
         fade_in(self.dialog)
@@ -1196,7 +1175,7 @@ class WelcomeDialog:
         # source_remove below warns "Source ID not found" for a timer that has
         # already stopped itself.
         self._pulse_phase = 0
-        pulse_timer = (GLib.timeout_add(50, self._pulse_checkboxes)
+        pulse_timer = (GLib.timeout_add(50, self._pulse_step)
                        if self._pulse_targets() else None)
 
         response = self.dialog.run()
@@ -1236,7 +1215,7 @@ class WelcomeDialog:
 def show_welcome_dialog():
     """The splash screen, then the welcome dialog; returns its result
     (WelcomeDialog.run), or None when it failed."""
-    result_container = [None]  # Use list to store result from callback
+    result_container = [None]     # set by the callback, inside the main loop below
 
     def show_dialog_after_splash():
         """Called after splash screen finishes."""
@@ -1257,11 +1236,9 @@ def show_welcome_dialog():
                     logger.warning("Could not close the welcome dialog", exc_info=True)
             Gtk.main_quit()
 
-    # Show splash screen first
     splash = SplashScreen()
     splash.show_and_fade(show_dialog_after_splash)
 
-    # Run GTK main loop until dialog closes
     Gtk.main()
 
     return result_container[0]

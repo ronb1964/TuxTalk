@@ -95,7 +95,7 @@ def test_no_pulse_timer_without_anything_to_pulse(dialog, monkeypatch):
     monkeypatch.setattr(wd, "fade_in", lambda window: None)
     assert dialog._pulse_targets() == []
     dialog.run()
-    assert not any(a[1] == dialog._pulse_checkboxes for a in started)
+    assert not any(a[1] == dialog._pulse_step for a in started)
     assert removed == []
 
 
