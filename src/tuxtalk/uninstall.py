@@ -198,6 +198,51 @@ def _contents(folder, names):
             if not linked or _known(entry, names)]
 
 
+def _program_files(home, install_type, appimage):
+    """Where the program, its launchers and icons may be, there or not."""
+    apps = home / "AppImages"
+    # The versioned files too: started at login, TuxTalk runs from the copy
+    # setup made, and the one the user downloaded here would stay behind.
+    candidates = [apps / "TuxTalk.AppImage", apps / "TalkType.AppImage",
+                  *sorted(apps.glob("TuxTalk-*.AppImage")),
+                  *sorted(apps.glob("TalkType-*.AppImage")),
+                  apps / ".tuxtalk_just_updated", apps / ".talktype_just_updated",
+                  *sorted(apps.glob(".TuxTalk.AppImage.*.part"))]
+    if appimage and install_type == "appimage":
+        candidates.insert(0, Path(appimage))
+    for name in ("tuxtalk.desktop", "talktype.desktop"):
+        candidates += [home / ".config" / "autostart" / name,
+                       home / ".local" / "share" / "applications" / name]
+    icons = home / ".local" / "share" / "icons" / "hicolor"
+    for size in ICON_SIZES:
+        apps = icons / size / "apps"
+        candidates += [apps / "tuxtalk.png", apps / "talktype.png"]
+    candidates.append(icons / "scalable" / "apps" / f"{config.APP_ID}.svg")
+    return candidates
+
+
+def _folders_to_empty(home, config_dir, data_dir, data_names):
+    """The settings and data folders, by both names, each with the names
+    that are TuxTalk's in it.
+
+    The names from before the 0.15.0 rename are links to the folders here,
+    or the real folders behind them when the rename couldn't move them (a
+    mount point). Then the new name is the link, and the folder is emptied
+    through it, by TuxTalk's names only: emptied again by its own name, it
+    would lose everything else in it too.
+    """
+    folders = []
+    for new, old, names in ((config_dir, home / ".config" / "talktype", CONFIG_NAMES),
+                            (data_dir, home / ".local" / "share" / "TalkType", data_names)):
+        behind_link = os.path.realpath(new) if new.is_symlink() else None
+        for folder in (new, old):
+            if not os.path.lexists(folder) or (folder == old and not old.is_symlink()
+                                               and os.path.realpath(old) == behind_link):
+                continue
+            folders.append((folder, names))
+    return folders
+
+
 def find(home, install_type, environ=os.environ, appimage=None):
     """The Plan for *home*: only what exists. *appimage* is the running
     AppImage's path, if any."""
@@ -219,36 +264,10 @@ def find(home, install_type, environ=os.environ, appimage=None):
     plan.shared = [folder / name for name in HF_REPOS for folder in folders
                    if exists(folder / name)]
 
-    apps = home / "AppImages"
-    # The versioned files too: started at login, TuxTalk runs from the copy
-    # setup made, and the one the user downloaded here would stay behind.
-    candidates = [apps / "TuxTalk.AppImage", apps / "TalkType.AppImage",
-                  *sorted(apps.glob("TuxTalk-*.AppImage")),
-                  *sorted(apps.glob("TalkType-*.AppImage")),
-                  apps / ".tuxtalk_just_updated", apps / ".talktype_just_updated",
-                  *sorted(apps.glob(".TuxTalk.AppImage.*.part"))]
-    if appimage and install_type == "appimage":
-        candidates.insert(0, Path(appimage))
-    for name in ("tuxtalk.desktop", "talktype.desktop"):
-        candidates += [home / ".config" / "autostart" / name,
-                       home / ".local" / "share" / "applications" / name]
-    icons = home / ".local" / "share" / "icons" / "hicolor"
-    for size in ICON_SIZES:
-        apps = icons / size / "apps"
-        candidates += [apps / "tuxtalk.png", apps / "talktype.png"]
-    candidates.append(icons / "scalable" / "apps" / f"{config.APP_ID}.svg")
-    for path in candidates:
+    for path in _program_files(home, install_type, appimage):
         if exists(path) and path not in plan.leftovers:
             plan.leftovers.append(path)
-
-    # The names from before the 0.15.0 rename are links to the folders here,
-    # or the real folders behind them when the rename couldn't move them.
-    for folder, names in ((config_dir, CONFIG_NAMES),
-                          (home / ".config" / "talktype", CONFIG_NAMES),
-                          (home / ".local" / "share" / "TalkType", data_names),
-                          (data_dir, data_names)):
-        if exists(folder):
-            plan.folders.append((folder, names))
+    plan.folders = _folders_to_empty(home, config_dir, data_dir, data_names)
 
     runtime = Path(single_instance.session_runtime_dir(environ))
     plan.runtime = sorted(path for pattern in RUNTIME_FILES for path in runtime.glob(pattern))

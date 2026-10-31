@@ -60,7 +60,7 @@
    "decisions": 16
   },
   "uninstall.py::find": {
-   "decisions": 22
+   "decisions": 16
   },
   "vocabulary.py::save_word": {
    "decisions": 16

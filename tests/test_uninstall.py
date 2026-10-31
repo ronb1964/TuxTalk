@@ -181,6 +181,28 @@ def test_a_linked_settings_folder_loses_only_tuxtalks_files(home, tmp_path):
     assert (synced / "backups.photos/beach.jpg").exists()
 
 
+def test_the_old_talktype_folder_behind_the_new_names_link_keeps_what_isnt_tuxtalks(home):
+    """When the 0.15.0 rename couldn't move ~/.config/talktype (a mount
+    point), the new name is a link to it. Emptied through the link it kept
+    the user's other files, and then a second pass by the old name deleted
+    them all."""
+    config = home / ".config/tuxtalk"
+    old = home / ".config/talktype"
+    old.mkdir()
+    for name in ("config.toml", "custom_words.txt", "talktype.log"):
+        (old / name).write_text("ours")
+    (old / "backups").mkdir()
+    (old / "backups/settings-20261020-090000.zip").write_text("ours")
+    (old / "backups/holiday.tar").write_text("someone else's")
+    (old / "notes.md").write_text("someone else's")
+    shutil.rmtree(config)
+    config.symlink_to(old)
+    uninstall.remove_files(_find(home), delete_personal=True, delete_shared=False)
+    assert not os.path.lexists(config)
+    assert sorted(str(p.relative_to(old)) for p in old.rglob("*")) == [
+        "backups", "backups/holiday.tar", "notes.md"]
+
+
 def test_a_synced_folders_own_backups_folder_keeps_its_files(home, tmp_path):
     """Settings linked into a dotfiles folder that had a backups folder
     before TuxTalk: only TuxTalk's copies go from it (review of 0.17)."""
