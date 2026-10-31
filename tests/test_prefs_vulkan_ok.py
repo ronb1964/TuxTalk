@@ -1,21 +1,17 @@
 """OK in Preferences closes the window, even right after a model download.
 
 Apply is the button that keeps the window open, so OK closes it after a
-download too instead of needing a second click. On Vulkan, files that are
-merely present must not count as a download, or OK would never close
-Preferences at all.
+download too instead of needing a second click. On Vulkan the download is
+the Vulkan setup's (the engine and the model's whisper.cpp file), and its
+success counts as one.
 """
 from types import SimpleNamespace
 
 
-from tuxtalk import whisper_vulkan as wv
-
-
-def test_a_vulkan_model_download_reports_success(prefs_cls, monkeypatch):
+def test_a_vulkan_model_download_reports_success(monkeypatch):
     from tuxtalk import vulkan_setup_dialogs
     from tuxtalk.prefs_speech import SpeechSection
     downloads = []
-    monkeypatch.setattr(wv, "is_installed", lambda m: bool(downloads))
     monkeypatch.setattr(vulkan_setup_dialogs, "ensure_files",
                         lambda parent, m, confirm: downloads.append(m) or True)
     stub = SimpleNamespace(config={"model": "parakeet-v3", "device": "vulkan"}, window=None)
