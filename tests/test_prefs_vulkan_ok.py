@@ -39,6 +39,7 @@ def test_ok_closes_after_a_model_download(prefs_cls, monkeypatch):
         save_config=lambda: True,
         _changed_since_open=lambda: {"model"},
         _apply_or_restart=lambda changed: True,
+        _autostart_pending=lambda: False,
         general_tab=SimpleNamespace(
             speech=SimpleNamespace(download_selected_model=lambda: True),  # downloaded fine
             show_saved=lambda: None,

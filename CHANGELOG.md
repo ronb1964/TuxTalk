@@ -453,7 +453,8 @@ before 0.15.0, so older entries use that name.
 - If turning "Launch TuxTalk at login" on or off didn't work (a read-only
   autostart folder, or the Flatpak's request turned down), Preferences said
   everything was applied. It now says start at login wasn't changed, and
-  Apply tries again.
+  each Apply tries again until it works. OK keeps the window open then,
+  so you can.
 - With the keyboard alone, the arrow keys on a dropdown in Preferences
   picked the next entry straight away, and some entries start a setup the
   moment they're picked: Up from Parakeet opened large-v3's CUDA setup, and

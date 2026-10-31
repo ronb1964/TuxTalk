@@ -141,16 +141,16 @@ def _saveable(tmp_path, monkeypatch, config, at_open=None):
 
 
 def _autostart(monkeypatch, works=True):
-    """autostart.set_autostart recording each call, done or failed (*works*);
-    the messages shown go to .told."""
+    """autostart.set_autostart recording each call, done or failed (*works*,
+    changeable later as .works); the messages shown go to .told."""
     from tuxtalk import autostart
-    calls = SimpleNamespace(applied=[], told=[])
+    calls = SimpleNamespace(applied=[], told=[], works=works)
 
     def set_autostart(enable):
         calls.applied.append(enable)
-        if isinstance(works, Exception):
-            raise works
-        return works
+        if isinstance(calls.works, Exception):
+            raise calls.works
+        return calls.works
     monkeypatch.setattr(autostart, "set_autostart", set_autostart)
     monkeypatch.setattr(P, "show_message", lambda parent, kind, title, text="", **k:
                         calls.told.append(title))
@@ -503,6 +503,52 @@ def test_a_failing_autostart_keeps_the_settings_says_so_and_is_tried_again(
     _autostart(monkeypatch, works=True)
     assert PreferencesWindow.save_config(d) is True     # Apply again
     assert d._config_at_open["launch_at_login"] is True
+
+
+@pytest.mark.parametrize("turning_on", [True, False], ids=["turning on", "turning off"])
+def test_start_at_login_stays_a_change_until_it_works(tmp_path, monkeypatch, turning_on):
+    """The second failed Apply took what the first had already written to the
+    settings file as done, so the third found nothing to do and start at
+    login never changed."""
+    calls = _autostart(monkeypatch, works=False)
+    d = _saveable(tmp_path, monkeypatch,
+                  {"launch_at_login": turning_on, "language_mode": "auto"},
+                  {"launch_at_login": not turning_on, "language_mode": "auto"})
+
+    for _apply in range(2):
+        assert PreferencesWindow.save_config(d) is True
+    calls.works = True
+    assert PreferencesWindow.save_config(d) is True
+
+    assert calls.applied == [turning_on] * 3
+    assert d._config_at_open["launch_at_login"] is turning_on
+
+
+def test_ok_stays_open_when_start_at_login_failed(tmp_path, monkeypatch):
+    """Its warning says Apply tries again, and OK closed the window: the
+    next Preferences opened with nothing to retry. The other settings are
+    still put in force."""
+    _autostart(monkeypatch, works=False)
+    d = _saveable(tmp_path, monkeypatch,
+                  {"launch_at_login": True, "beeps": False, "language_mode": "auto"},
+                  {"launch_at_login": False, "beeps": True, "language_mode": "auto"})
+    steps = []
+    vars(d).update(
+        _restart_owed=set(), words_tab=SimpleNamespace(save=lambda: True),
+        general_tab=SimpleNamespace(
+            speech=SimpleNamespace(download_selected_model=lambda: True),
+            show_saved=lambda: None, after_hotkey_change=lambda changed, since: False),
+        put_in_force=lambda changed: steps.append(("in force", set(changed))) or True,
+        _apply_or_restart=lambda changed: steps.append("closing restart") or True,
+        _release=lambda: steps.append("released"))
+    for name in ("save_config", "_save_and_download", "_changed_since_open",
+                 "_autostart_pending"):
+        setattr(d, name, getattr(PreferencesWindow, name).__get__(d))
+    monkeypatch.setattr(P.Gtk, "main_quit", lambda: steps.append("quit"))
+
+    PreferencesWindow.on_ok(d, None)
+
+    assert steps == [("in force", {"beeps", "launch_at_login"})]
 
 
 def test_saving_an_unrelated_change_leaves_autostart_alone(tmp_path, monkeypatch):

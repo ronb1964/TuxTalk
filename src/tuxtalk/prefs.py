@@ -276,6 +276,9 @@ class PreferencesWindow:
             # rewriting it on every save would undo the user turning TuxTalk
             # off in their desktop's own Autostart settings.
             autostart_changed = "launch_at_login" in changed_keys(self._config_at_open, self.config)
+            # What this window last put in force, not what's on disk: after a
+            # failed attempt the disk already holds the new value.
+            autostart_before = self._config_at_open.get("launch_at_login")
             merged = merge_changed_keys(self._config_at_open, self.config, base)
 
             # Same serialiser and atomic write as config.save_config(): one
@@ -293,7 +296,7 @@ class PreferencesWindow:
             # Settings that live outside the config file only now that the
             # save has happened, so Cancel never has anything to undo.
             if autostart_changed:
-                self._apply_launch_at_login(saved_before.get("launch_at_login"))
+                self._apply_launch_at_login(autostart_before)
             return True
         except Exception as e:
             logger.error(f"Could not save the config: {e}")
@@ -544,8 +547,8 @@ class PreferencesWindow:
         """Create or turn off the autostart entry, as onboarding does
         (tuxtalk.autostart). When that fails (a read-only autostart folder,
         the Flatpak's background request denied), it's said, and stays a
-        change, *before* being what it was, so Apply tries again; the
-        settings just saved are kept either way."""
+        change, *before* being what it was, so Apply tries again (OK stays
+        open for that); the settings just saved are kept either way."""
         from . import autostart
         enable = bool(self.config.get("launch_at_login", False))
         try:
@@ -560,6 +563,11 @@ class PreferencesWindow:
                      "Start at login wasn't " + ("turned on" if enable else "turned off"),
                      "Your other settings are saved. Apply tries this again; "
                      "TuxTalk's log says what went wrong.")
+
+    def _autostart_pending(self):
+        """True after a save whose start-at-login change failed: it's still
+        a change (_apply_launch_at_login)."""
+        return "launch_at_login" in changed_keys(self._config_at_open, self.config)
 
     def get_selected_device_idx(self):
         """The sound device of the microphone picked in the Audio tab
@@ -808,6 +816,12 @@ class PreferencesWindow:
         if saved is None:
             return
         changed, saved_at = saved
+        if self._autostart_pending():
+            # Its warning says Apply tries again, which a closed window
+            # can't: the rest is put in force as Apply would, and it stays.
+            if self.put_in_force(changed):
+                self.general_tab.after_hotkey_change(changed, saved_at)
+            return
         restarted = self._apply_or_restart(changed)
         if restarted:
             self.general_tab.after_hotkey_change(changed, saved_at)
