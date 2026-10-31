@@ -4,6 +4,8 @@ A service outlives a tray that crashed, and the tray opened again adopts it.
 Its link to the tray must follow the D-Bus name to the new tray: bound to
 the first one, the GNOME panel never showed recording again, the hotkey test
 heard no key and tuxtalk --start waited for a ready report that never came.
+The same happened for the whole run when a notification had made the shared
+session bus, without a main loop, before the first report to the tray.
 
 Runs real processes on a private bus (dbus-run-session), so it never touches
 the desktop session's TuxTalk.
@@ -41,8 +43,12 @@ TRAY = textwrap.dedent("""
 
 DRIVER = textwrap.dedent("""
     import select, subprocess, sys
+    import dbus
     from tuxtalk import tray_link
     TRAY = sys.argv[1]
+    # Made first, with no main loop, as an early notification makes it
+    # (guard_large_v3_without_cuda notifies before GTK starts).
+    dbus.SessionBus()
 
     def heard(p):
         if not select.select([p.stdout], [], [], 5)[0]:

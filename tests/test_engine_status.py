@@ -11,7 +11,6 @@ import pytest
 from tuxtalk.dbus_service import TuxTalkDBusService
 from tuxtalk.recommend import engine_status
 from tuxtalk.tray_presets import preset_notice
-from tuxtalk import tray_link
 from tuxtalk import engine
 
 
@@ -117,10 +116,11 @@ def test_the_service_tells_the_tray_once_the_model_is_loaded(service_main):
 def test_the_tray_is_told_what_was_loaded(monkeypatch):
     told = []
     monkeypatch.setattr(engine, "_running_engine", ("small", "cpu"))
-    monkeypatch.setattr(tray_link, "get_proxy", lambda: types.SimpleNamespace(
-        NotifyRunningEngine=lambda *engine, **k: told.append(engine)))
+    monkeypatch.setattr("dbus.SessionBus", lambda: types.SimpleNamespace(
+        call_blocking=lambda name, path, iface, method, sig, args, **k: told.append(
+            (method, *args))))
     engine.notify_tray()
-    assert told == [("small", "cpu")]
+    assert told == [("NotifyRunningEngine", "small", "cpu")]
 
 
 @pytest.mark.parametrize("cfg_model,cfg_device,running,expected", [

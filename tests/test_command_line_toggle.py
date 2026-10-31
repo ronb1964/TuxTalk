@@ -18,7 +18,6 @@ import pytest
 from tuxtalk import control
 from tuxtalk.control import WaitingStart, act_now, parse_action
 from tuxtalk import recording_state as rs
-from tuxtalk import tray_link
 from tuxtalk import recording
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -431,11 +430,11 @@ def service(monkeypatch):
     monkeypatch.setattr(service_launcher, "write_ready_pid", written.append)
     told = []
 
-    class Tray:
-        def NotifyServiceReady(self, pid, dbus_interface, timeout, signature=None):
-            told.append((int(pid), signature))
+    class Bus:
+        def call_blocking(self, name, path, interface, method, signature, args, timeout):
+            told.append((int(args[0]), signature))
 
-    monkeypatch.setattr(tray_link, "get_proxy", lambda: Tray())
+    monkeypatch.setattr("dbus.SessionBus", Bus)
     recording.start_requested.clear()
     recording.stop_requested.clear()
     yield types.SimpleNamespace(app=app, written=written, told=told)
@@ -456,7 +455,6 @@ def test_the_service_gets_ready_even_without_dbus(monkeypatch):
     import sys
     from tuxtalk import app, service_launcher
     monkeypatch.setitem(sys.modules, "dbus", None)    # "import dbus" raises
-    monkeypatch.setattr(tray_link, "_tray_dbus_proxy", None)
     monkeypatch.setattr(app, "_service_ready", False)
     monkeypatch.setattr(app, "_waiting_start", None)
     written = []
