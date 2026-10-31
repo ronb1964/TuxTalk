@@ -8,12 +8,13 @@ the model itself says the audio probably wasn't speech.
 import re
 
 
-# YouTube outro phrases Whisper invents from silence, which nobody says to a
-# text box. Stripped from the end of any transcription.
+# YouTube outro phrases Whisper invents from silence. People rarely dictate
+# them, but they do ("Please do not hit the bell."), so like the sign-offs
+# below they go only when Whisper itself says the audio was probably not
+# speech.
 _YOUTUBE_HALLUCINATION_PHRASES = [
     # NOT bare "subscribe": it is an ordinary verb, and stripping it would eat
-    # the last word of real sentences ("tell them to subscribe"). Whisper
-    # hallucinates the multi-word forms, which nobody dictates.
+    # the last word of real sentences ("tell them to subscribe").
     "like and subscribe",
     "please subscribe",
     "don't forget to subscribe",
@@ -57,7 +58,7 @@ _WHOLE_TEXT_HALLUCINATION_PHRASES = [
     "mhm",
     "mm",
     "uh-huh",
-] + _SIGN_OFF_PHRASES
+] + _SIGN_OFF_PHRASES + _YOUTUBE_HALLUCINATION_PHRASES
 
 # Phrases that Whisper hallucinates at the END of longer dictations.
 # Only stripped when trailing real speech AND no_speech_prob is very high (>0.8),
@@ -106,15 +107,17 @@ def _cut_tail(text: str, start: int) -> str:
 def strip(text: str, no_speech_prob: float = 0.0) -> str:
     """Remove phrases Whisper invents from silence, in three tiers:
 
-    1. A whole text that is only "thank you", "bye" or a sign-off, when
-       no_speech_prob (0-1) is above 0.6; an intentional "Thank you." stays.
-    2. YouTube outros ("like and subscribe") at the end, always.
+    1. A whole text that is only "thank you", "bye", a sign-off or an
+       outro, when no_speech_prob (0-1) is above 0.6; an intentional "Thank
+       you." stays.
+    2. YouTube outros ("like and subscribe") at the end, when no_speech_prob
+       is above 0.8.
     3. "thank you" or a sign-off trailing a longer dictation, when
        no_speech_prob is above 0.8.
 
-    Parakeet passes 0.0, so only tier 2 applies to it. The Vulkan engine passes
-    1.0 for a recording with no speech in it and 0.0 otherwise, since
-    whisper.cpp's own score can't be trusted.
+    Parakeet and the Vulkan engine pass 1.0 for a recording with no speech in
+    it and 0.0 otherwise: Parakeet has no score of its own, and whisper.cpp's
+    can't be trusted.
     """
     if not text:
         return text
@@ -132,7 +135,7 @@ def strip(text: str, no_speech_prob: float = 0.0) -> str:
 
     # Tier 2: Strip YouTube outros from the end of text, repeatedly, since
     # Whisper sometimes strings two together.
-    while text:
+    while text and no_speech_prob > 0.8:
         match = _YOUTUBE_TAIL_RE.search(text)
         if not match:
             break

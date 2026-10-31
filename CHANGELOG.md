@@ -442,6 +442,10 @@ before 0.15.0, so older entries use that name.
   now and the sentence is typed as you said it. The same goes for an answer
   that changes a fraction, a time or a range ("5/6" into "5-6"), or that
   adds a line break, which in a chat box could send the message early.
+- "Please do not hit the bell." was typed as "Please do not.", and a
+  sentence ending in "please subscribe" lost those words. TuxTalk took them
+  for the YouTube sign-offs Whisper sometimes makes up from silence. It
+  only takes them out now when Whisper says it heard no speech.
 
 ## [0.18.2] - 2026-10-23
 
