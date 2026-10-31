@@ -146,10 +146,24 @@ def _mark_service_ready():
                    what="tell the tray the service is ready")
 
 
+def _dbus_main_loop_first():
+    """Give every D-Bus connection made from here on GLib's main loop.
+    dbus-python shares one session-bus connection, and one made without a
+    main loop (an early notification: guard_large_v3_without_cuda notifies
+    before GTK starts) can't export the stand-in D-Bus service, so with no
+    tray the GNOME extension and the KWin script got no answer."""
+    try:
+        import dbus.mainloop.glib
+    except ImportError:
+        return      # no dbus-python: the stand-in says so when it's made
+    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+
+
 def main():
     """The dictation service: load the settings, start GTK (the stand-in
     D-Bus service and the recording indicator) and the speech model, then
     run the input loop for the life of the process."""
+    _dbus_main_loop_first()     # before anything can make the shared bus
     cfg = _load_settings()
     input_device_idx = recording.pick_input_device(cfg.mic)
     gtk_ok = _start_gtk(cfg)
