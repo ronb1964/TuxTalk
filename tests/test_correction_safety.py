@@ -35,6 +35,15 @@ SAFE = [
     ("I will, I mean I won't, go.", "I won't go."),
     ("Do not paint the van red, sorry, blue.", "Do not paint the van blue."),
     ("Send it, no wait, send the files.", "Send the files."),
+    ("Don't send it, no wait, send it today.", "Send it today."),
+    # a refinement: the corrected words start with the wrong ones
+    ("Call me Monday, sorry, Monday afternoon.", "Call me Monday afternoon."),
+    ("Meet at three, no wait, three thirty.", "Meet at three thirty."),
+    ("Paint it red, no wait, red and blue.", "Paint it red and blue."),
+    ("Order two boxes, no wait, two boxes and a bag.", "Order two boxes and a bag."),
+    # spaces around a range's dash or a fraction's slash
+    ("Set it to 3 - 4, no wait, 5 - 6.", "Set it to 5 - 6."),
+    ("Use 5 / 6 inch screws, no wait, 7 / 8 inch screws.", "Use 7 / 8 inch screws."),
 ]
 
 UNSAFE = [
@@ -67,6 +76,9 @@ UNSAFE = [
     ("Call Dave, I mean Steve.", "Call Dave Steve."),
     ("Turn left at the light, no, right.", "Turn left at the light, right."),
     ("Paint it red, make that blue.", "Paint it red, blue."),
+    # "no" said as a cue before another: the same words as "the answer is no,
+    # sorry, yes", which is why that one is typed as said
+    ("Paint it red, no, sorry, blue.", "Paint it red, blue."),
     # restated clause: kept both instructions, or the first one
     ("Email the invoice to George, scratch that, text it to him.",
      "Email the invoice to George. Text it to him."),
@@ -88,10 +100,17 @@ UNSAFE = [
     ("I will not, I mean I will, go.", "I will not go."),
     ("I will not, I mean I'll, go.", "I'll not go."),
     ("Do not send it, no wait, send it.", "Do not send it."),
+    # ... also when the restatement adds a word
+    ("Don't send it, no wait, send it today.", "Don't send it today."),
+    ("Do not delete the files, sorry, delete the files now.", "Do not delete the files now."),
+    ("Never call Bob, I mean call Bob tomorrow.", "Never call Bob tomorrow."),
     # a fraction, a time or a range changed into another
     ("Use 5/6 inch screws, no wait, 7/8 inch screws.", "Use 7-8 inch screws."),
     ("Meet me at 3:15, no wait, 4:15.", "Meet me at 4/15."),
     ("Cut 2-3 boards, no wait, 4-5 boards.", "Cut 4/5 boards."),
+    ("Set it to 3 - 4, no wait, 5 - 6.", "Set it to 5 / 6."),
+    ("Use 5 / 6 inch screws, no wait, 7 / 8 inch screws.", "Use 7 - 8 inch screws."),
+    ("Meet me at 3 : 15, no wait, 4 : 15.", "Meet me at 4 / 15."),
     # an added line break or tab, which a chat box could take as Send
     ("Meet me at 3, no wait, 4.", "Meet me at\n4."),
     ("Meet me at 3, no wait, 4.", "Meet me at\t4."),

@@ -38,11 +38,13 @@ _MAX_SWAPPED = 3
 
 
 # Numbers whole with their separators, so "2.5" changed to "2,5", "5/6" to
-# "5-6" or "4:15" to "4/15" is a changed value; words in any script ("café",
+# "5-6" or "4:15" to "4/15" is a changed value, also when spaces stand around
+# a slash, colon or dash ("3 - 4" into "3 / 4"; not a comma, which lists
+# numbers as often as it groups digits); words in any script ("café",
 # "Müller", "東京"); and the signs that carry a value as words of their own: a
 # currency, a percent, and a minus or plus before a number (not a hyphen in
 # "well-known").
-_TOKEN = re.compile(r"\d+(?:[.,/:–-]\d+)*|[\w']+|[€$£¥%]|(?<!\w)[-−+](?=\d)")
+_TOKEN = re.compile(r"\d+(?:[.,]\d+| *[/:–-] *\d+)*|[\w']+|[€$£¥%]|(?<!\w)[-−+](?=\d)")
 # Words that turn a statement around. One left over from the wrong part of a
 # correction, when the corrected words don't say it, reverses the sentence:
 # "I will not, I mean I will, go" is not "I will not go".
@@ -54,7 +56,7 @@ _LAYOUT_CHARS = "\n\r\t"
 
 def words(text):
     """The words and value signs of *text*, lower case, as the check compares them."""
-    return _TOKEN.findall(text.lower().replace("’", "'"))
+    return [token.replace(" ", "") for token in _TOKEN.findall(text.lower().replace("’", "'"))]
 
 
 def _deleted_runs(src, out):
@@ -178,9 +180,7 @@ def _splices(start, wrong, keep, after, out):
     # The replaced words must be a value, not the phrase itself:
     # "three no wait four" -> "three four" is not "no" -> "four".
     replaced = _without_trailing_cue_words(wrong[:len(wrong) - keep])
-    # The answer going on with the very words it claims to replace has
-    # dropped the restatement and kept the wrong version.
-    if not replaced or out[len(start):len(start) + len(replaced)] == replaced:
+    if not replaced:
         return False
     if any(_is_negation(w) and w not in after for w in leftover):
         return False
@@ -190,7 +190,10 @@ def _splices(start, wrong, keep, after, out):
         # boxes"), and what is carried over must be new to it. Without these,
         # "to 5 minutes, actually 10 minutes" could pass as "... 10 minutes 5
         # minutes", smuggling the wrong value back in.
-        if (abs((len(wrong) - keep) - len(right)) > 1
+        # A right part that is the replaced words themselves changes nothing
+        # and keeps the wrong version; one that goes on from them is a
+        # refinement: "call me Monday, sorry, Monday afternoon".
+        if (right == replaced or abs((len(wrong) - keep) - len(right)) > 1
                 or (set(leftover) & set(right)) - LINKING_WORDS):
             continue
         if out == start + right + leftover + rest:
@@ -249,12 +252,28 @@ def _is_restated_correction(src, out):
     return False
 
 
+def _keeps_a_dropped_negation(src, out):
+    """True if *out* keeps a negation the correction took out: the words
+    after a cue repeat the negated word without it ("don't send it, no wait,
+    send it today"), so the answer must not say "don't send it today"."""
+    for c_start in range(1, len(src)):
+        for cue in _CUES_LONGEST_FIRST:
+            if tuple(src[c_start:c_start + len(cue)]) != cue:
+                continue
+            first, after = src[:c_start], src[c_start + len(cue):]
+            if any(_is_negation(w) and w in out and w not in after and first[i + 1] in after
+                   for i, w in enumerate(first[:-1])):
+                return True
+            break   # longest cue at this position tried; move on
+    return False
+
+
 def edit_is_safe(said: str, edited: str) -> bool:
     """True only if *edited* is *said* with nothing but allowed edits."""
     if any(c in edited and c not in said for c in _LAYOUT_CHARS):
         return False
     src, out = words(said), words(edited)
-    if not out:
+    if not out or _keeps_a_dropped_negation(src, out):
         return False
     runs = _deleted_runs(src, out)
     if runs is not None and all(_deletion_allowed(run, src, start) for start, run in runs):
