@@ -115,14 +115,14 @@ def update_helper(done) -> None:
     threading.Thread(target=work, daemon=True, name="helper-update").start()
 
 
-def say_helper_updated(ok, message) -> None:
+def say_helper_updated(ok, message, source="from the offer at start") -> None:
     """An update nobody is waiting on is over (the offer's, or one that
     outlasted Preferences' wait): say so, or that it wasn't updated (a
     cancelled password prompt says nothing more: the offer comes back next
-    start)."""
+    start). *source* says in the log where it was asked for."""
     from .notify import notify
     if ok:
-        logger.info("Updated the hotkey helper from the offer at start")
+        logger.info(f"Updated the hotkey helper {source}")
         notify("Hotkey helper updated", "Your dictation keys use it straight away.")
     elif "cancelled" in message.lower():
         logger.info("Hotkey helper update: the password prompt was cancelled")

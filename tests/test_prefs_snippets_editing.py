@@ -98,22 +98,120 @@ def test_a_write_error_is_reported_not_raised(tmp_path, monkeypatch, shown):
     monkeypatch.setattr(W, "save_custom_commands", full_disk)
 
     d = _window([["talk type", "TalkType"]])
-    assert d.save() is None
+    assert d.save() is False
     assert shown == ["Your snippets weren't saved"]
 
 
-def test_ok_stays_open_when_the_snippets_could_not_be_written():
+@pytest.mark.parametrize("changed", [{"beeps"}, set()], ids=["settings changed", "none"])
+def test_ok_stays_open_when_the_snippets_could_not_be_written(changed):
     """Closing right after saying the snippets weren't saved would throw the
-    unsaved edits away."""
+    unsaved edits away. Settings changed are saved and applied all the
+    same, as Apply does."""
     steps = []
-    d = SimpleNamespace(words_tab=SimpleNamespace(save=lambda: None),
-                        _changed_since_open=lambda: steps.append("settings") or {},
-                        save_config=lambda: steps.append("save") or True,
+    d = SimpleNamespace(words_tab=SimpleNamespace(save=lambda: False),
+                        _changed_since_open=lambda: changed,
+                        _apply_settings=lambda: steps.append("settings applied"),
+                        _release=lambda: steps.append("released"),
                         window=SimpleNamespace(destroy=lambda: steps.append("destroy")))
 
     PreferencesWindow.on_ok(d, None)
 
-    assert steps == []
+    assert steps == (["settings applied"] if changed else [])
+
+
+# --- a snippets file that can't be read ---------------------------------------
+
+@pytest.fixture
+def broken_file(tmp_path, monkeypatch):
+    """custom_commands.toml broken by a hand edit, read once as the tab does
+    when it opens."""
+    from tuxtalk import config as C
+    path = tmp_path / "custom_commands.toml"
+    path.write_text('[commands]\n"my email" = "me@example.com\n')     # quote left open
+    monkeypatch.setattr(C, "CUSTOM_COMMANDS_PATH", str(path))
+    monkeypatch.setattr(C, "_commands_read_failed", False)
+    assert C.load_custom_commands() == {}
+    return path
+
+
+def _tab_on(rows):
+    """A Words tab showing *rows*, loaded from a file that couldn't be read."""
+    from gi.repository import Gtk
+    d = _window(rows)
+    d.read_problem = Gtk.Label()
+    return d
+
+
+def test_the_tab_says_when_the_snippets_file_cant_be_read(broken_file):
+    """The list just showed empty, as if every snippet were gone."""
+    d = _tab_on([])
+    d._show_read_problem()
+    assert d.read_problem.get_visible()
+    assert "can't be read" in d.read_problem.get_text()
+    assert str(broken_file) in d.read_problem.get_text()
+
+
+def test_the_warning_goes_once_the_file_is_fixed(broken_file):
+    from tuxtalk import config as C
+    d = _tab_on([])
+    d._show_read_problem()
+    broken_file.write_text('[commands]\n"my email" = "me@example.com"\n')
+    C.load_custom_commands()
+    d._show_read_problem()
+    assert not d.read_problem.get_visible()
+
+
+def test_an_edit_that_cant_be_saved_is_said_and_keeps_the_window_open(broken_file, shown):
+    """Saving was refused without a word, and OK closed: the new snippet
+    was gone."""
+    damaged = broken_file.read_text()
+    d = _tab_on([["sig", "Ron"]])
+
+    assert d.save() is False
+    assert shown == ["Your snippets weren't saved"]
+    assert broken_file.read_text() == damaged, "the snippets in the file were deleted"
+    assert d.changed(), "the edit was thrown away"
+
+
+def test_with_nothing_edited_an_unreadable_file_doesnt_hold_ok_back(broken_file, shown):
+    """The other settings save and the window closes: nothing of the
+    user's is lost."""
+    damaged = broken_file.read_text()
+    d = _tab_on([])
+
+    assert d.save() is True
+    assert shown == []
+    assert broken_file.read_text() == damaged
+
+
+def test_the_word_already_fixed_warning_shows_once_per_commit(monkeypatch, shown):
+    """Focus-out, Tab and "edited" each commit the same phrase, and the
+    warning stacked up two or three times."""
+    pending = []
+    monkeypatch.setattr(W.GLib, "idle_add", lambda fn, *a: pending.append(fn))
+    d = _window([["", ""]])
+    d._word_rows = [("TuxTalk", ["tux talk"])]
+
+    for _commit in range(3):
+        d._on_phrase_edited(None, "0", "tux talk")
+    for fn in pending:
+        fn()
+
+    assert shown == ["That phrase already fixes a word"]
+    assert d.commands_store[0][0] == ""
+
+
+def test_the_dialogs_fields_are_named_by_their_labels():
+    """A screen reader read the Snippet and Your Word windows' boxes with no
+    name: the label above each wasn't tied to it."""
+    from gi.repository import Atk, Gtk
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+    entry = Gtk.Entry()
+    label = W._field(box, "You say", entry)
+    relation = entry.get_accessible().ref_relation_set().get_relation_by_type(
+        Atk.RelationType.LABELLED_BY)
+    assert relation is not None
+    assert relation.get_target()[0] == label.get_accessible()
 
 
 # --- the Edit... window ------------------------------------------------------

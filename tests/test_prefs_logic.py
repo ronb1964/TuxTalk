@@ -1,7 +1,7 @@
 """Tests for prefs.py pure logic (no GTK windows are created).
 
 These cover the non-widget parts of the Preferences window: the
-update_config None guard, on-disk value type coercion, and that the
+update_config None guard, the settings it opens with, and that the
 window's own writer produces a file config.py can read back.
 """
 try:
@@ -13,7 +13,7 @@ from types import SimpleNamespace
 import pytest
 
 from tuxtalk import prefs as P
-from tuxtalk.prefs import PreferencesWindow, _coerce_config_types
+from tuxtalk.prefs import PreferencesWindow
 from tuxtalk.prefs_general import GeneralTab
 from tuxtalk.prefs_updates import UpdatesTab
 
@@ -40,78 +40,121 @@ def test_update_config_sets_real_values():
     assert d.config["model"] == "medium"
 
 
-# --- type coercion of on-disk values against Settings field types ---
+# --- the settings Preferences opens with: read as the service reads them ---
 
-def test_coerce_config_types_fixes_string_numbers():
-    """Configs written by the old hand-rolled parser can contain '5' instead
-    of 5, which would crash the window at build time."""
-    d = {"auto_timeout_minutes": "5", "indicator_offset_x": "0", "model": "small"}
-    out = _coerce_config_types(d)
-    assert out["auto_timeout_minutes"] == 5
-    assert out["indicator_offset_x"] == 0
+@pytest.fixture
+def opened(tmp_path, monkeypatch):
+    """The settings a Preferences window opens with, from config.toml holding
+    *text* (and its .bak holding *backup*, when given)."""
+    from tuxtalk import config as C
+    path = tmp_path / "config.toml"
+    for name, value in (("CONFIG_PATH", str(path)), ("_config_cache", None),
+                        ("_config_mtime", 0.0), ("_repair_attempted", False),
+                        ("_config_read_failed", False)):
+        monkeypatch.setattr(C, name, value)
+    monkeypatch.setattr(P, "CONFIG_PATH", str(path))
+
+    def open_with(text, backup=None):
+        path.write_text(text)
+        if backup is not None:
+            path.with_name("config.toml.bak").write_text(backup)
+        return PreferencesWindow.load_config(SimpleNamespace())
+    return open_with
+
+
+def test_numbers_and_switches_written_as_text_open_as_numbers_and_switches(opened):
+    """Configs written by the old hand-rolled parser can hold '5' for 5, and
+    "1.0" or "false" as text: Gtk.Adjustment(value='5') crashed the window."""
+    out = opened('auto_timeout_minutes = "5"\nindicator_offset_x = "0"\nmodel = "small"\n'
+                 'indicator_sensitivity = "1.5"\nauto_stop_seconds = 3\n'
+                 'beeps = "false"\nnotify = "true"\n')
+    assert out["auto_timeout_minutes"] == 5 and out["indicator_offset_x"] == 0
     assert out["model"] == "small"
-
-
-def test_coerce_config_types_fixes_string_floats():
-    """indicator_sensitivity = "1.0" must not reach Scale.set_value() as a
-    string (TypeError while the window is built), and "5.0" for an int field
-    must not stay a string."""
-    d = {"indicator_sensitivity": "1.5", "auto_stop_seconds": 3,
-         "auto_timeout_minutes": "5.0"}
-    out = _coerce_config_types(d)
     assert out["indicator_sensitivity"] == 1.5
     assert isinstance(out["auto_stop_seconds"], float)
-    assert out["auto_timeout_minutes"] == 5
+    assert out["beeps"] is False and out["notify"] is True
 
 
-def test_coerce_config_types_fixes_string_bools():
-    d = {"beeps": "false", "notify": "true"}
-    out = _coerce_config_types(d)
-    assert out["beeps"] is False
-    assert out["notify"] is True
-
-
-def test_coerce_config_types_leaves_correct_types_alone():
-    d = {"beeps": True, "auto_timeout_minutes": 7, "language": "es", "custom_key": [1]}
-    out = _coerce_config_types(d)
-    assert out["beeps"] is True
-    assert out["auto_timeout_minutes"] == 7
-    assert out["language"] == "es"
-    assert out["custom_key"] == [1]  # unknown keys untouched
-
-
-def test_a_setting_that_isnt_a_number_gets_its_default_so_preferences_opens():
+def test_a_setting_that_isnt_a_number_gets_its_default_so_preferences_opens(opened):
     """auto_stop_seconds = "oops" in a hand-edited config stayed a string,
     and building the spin button for it raised: Preferences didn't open."""
     from gi.repository import Gtk
     from tuxtalk.config import Settings
-    out = _coerce_config_types({"auto_stop_seconds": "oops", "auto_timeout_minutes": "five",
-                                "beeps": True})
+    out = opened('auto_stop_seconds = "oops"\nauto_timeout_minutes = "five"\nbeeps = true\n')
     assert out["auto_stop_seconds"] == Settings().auto_stop_seconds
     assert out["auto_timeout_minutes"] == Settings().auto_timeout_minutes
     assert out["beeps"] is True
     Gtk.Adjustment(value=float(out["auto_stop_seconds"]), lower=0.5, upper=10.0)
 
 
-def test_a_number_that_isnt_finite_gets_its_default_so_preferences_opens():
+def test_a_number_that_isnt_finite_gets_its_default_so_preferences_opens(opened):
     """press_enter_delay = nan is valid TOML and a float, and building the
     wait's dropdown raised on round(nan): Preferences didn't open."""
     from tuxtalk.config import Settings
-    for value in (float("nan"), float("inf")):
-        out = _coerce_config_types({"press_enter_delay": value, "auto_stop_seconds": value})
+    for value in ("nan", "inf"):
+        out = opened(f"press_enter_delay = {value}\nauto_stop_seconds = {value}\n")
         assert out["press_enter_delay"] == Settings().press_enter_delay
         assert out["auto_stop_seconds"] == Settings().auto_stop_seconds
         int(round(float(out["press_enter_delay"])))
 
 
+def test_an_empty_settings_file_opens_with_the_backups_settings(opened):
+    """An empty config.toml parsed as no settings at all: Preferences showed
+    defaults, and Apply wrote them over the file and its backup."""
+    out = opened("", backup='hotkey = "F6"\ntoggle_hotkey = "F7"\nmodel = "small"\n')
+    assert (out["hotkey"], out["toggle_hotkey"], out["model"]) == ("F6", "F7", "small")
+
+
+def test_a_damaged_settings_file_opens_with_the_backups_settings(opened):
+    """The file is repaired before anything is shown, so the hotkey fallback
+    can't put F8 over the user's own key."""
+    out = opened('hotkey = "F6\n', backup='hotkey = "F6"\nmodel = "small"\n')
+    assert out["hotkey"] == "F6"
+
+
+def test_apply_over_an_emptied_file_keeps_its_backup(tmp_path, monkeypatch):
+    """The file was emptied after Preferences opened: the save writes the
+    window's settings, and the backup keeps the last good copy."""
+    cfg, bak = tmp_path / "config.toml", tmp_path / "config.toml.bak"
+    cfg.write_text("")
+    bak.write_text('hotkey = "F6"\n')
+    monkeypatch.setattr(P, "CONFIG_PATH", str(cfg))
+    d = SimpleNamespace(config={"hotkey": "F6", "beeps": False, "language_mode": "auto"},
+                        _config_at_open={"hotkey": "F6", "beeps": True, "language_mode": "auto"})
+
+    assert PreferencesWindow.save_config(d) is True
+
+    assert tomllib.loads(cfg.read_text())["hotkey"] == "F6"
+    assert bak.read_text() == 'hotkey = "F6"\n'
+
+
 # --- save_config must emit TOML that can be read back ---
 
 def _saveable(tmp_path, monkeypatch, config, at_open=None):
-    """A stand-in window whose save_config() writes to a throwaway path."""
+    """A stand-in window whose save_config() writes to a throwaway path, and
+    whose start-at-login reaches autostart.set_autostart (_autostart)."""
     monkeypatch.setattr(P, "CONFIG_PATH", str(tmp_path / "config.toml"))
-    return SimpleNamespace(config=dict(config),
-                           _config_at_open=dict(at_open if at_open is not None else {}),
-                           _handle_autostart=lambda v: None)
+    d = SimpleNamespace(config=dict(config), window=None,
+                        _config_at_open=dict(at_open if at_open is not None else {}))
+    d._apply_launch_at_login = lambda before: PreferencesWindow._apply_launch_at_login(d, before)
+    return d
+
+
+def _autostart(monkeypatch, works=True):
+    """autostart.set_autostart recording each call, done or failed (*works*);
+    the messages shown go to .told."""
+    from tuxtalk import autostart
+    calls = SimpleNamespace(applied=[], told=[])
+
+    def set_autostart(enable):
+        calls.applied.append(enable)
+        if isinstance(works, Exception):
+            raise works
+        return works
+    monkeypatch.setattr(autostart, "set_autostart", set_autostart)
+    monkeypatch.setattr(P, "show_message", lambda parent, kind, title, text="", **k:
+                        calls.told.append(title))
+    return calls
 
 
 def test_save_config_escapes_double_quotes(tmp_path, monkeypatch):
@@ -168,9 +211,10 @@ def _commands_window(rows, loaded=None):
     import types
     from tuxtalk.prefs_words import WordsTab
     d = SimpleNamespace(commands_store=rows, _commands_loaded=loaded or {},
-                        words_store=P.Gtk.ListStore(str, str))
-    for name in ("_commands_from_store", "_fill_commands_store", "save",
-                 "_split_commands", "_fill_words_store"):
+                        words_store=P.Gtk.ListStore(str, str), window=None,
+                        read_problem=P.Gtk.Label())
+    for name in ("_commands_from_store", "_fill_commands_store", "save", "changed",
+                 "_split_commands", "_fill_words_store", "_show_read_problem"):
         setattr(d, name, types.MethodType(getattr(WordsTab, name), d))
     return d
 
@@ -182,6 +226,8 @@ def test_saving_commands_over_a_damaged_file_does_not_raise(tmp_path, monkeypatc
     window would not even close. It must degrade, not wedge.
     """
     from tuxtalk import config as C
+    from tuxtalk import prefs_words
+    monkeypatch.setattr(prefs_words, "show_message", lambda *a, **k: None)
 
     path = tmp_path / "custom_commands.toml"
     path.write_text('[commands]\nbroken {{{\n')
@@ -273,18 +319,32 @@ def test_save_config_still_writes_when_the_file_is_readable(tmp_path, monkeypatc
 class FakeCombo:
     """Minimal ComboBoxText stand-in: records the id set on it."""
 
-    def __init__(self):
+    def __init__(self, ids=("F8", "F9", "F10")):
         self.active_id = None
+        self.ids = list(ids)
         self._handlers = []
+        self.closed = 0
+
+    def append(self, key, text):
+        self.ids.append(key)
 
     def set_active_id(self, value):
+        if value not in self.ids:
+            return False
         self.active_id = value
+        for signal, handler, *args in list(self._handlers):
+            if signal == "changed":
+                handler(self, *args)
+        return True
+
+    def popdown(self):
+        self.closed += 1
 
     def get_active_id(self):
         return self.active_id
 
-    def connect(self, signal, handler):
-        self._handlers.append((signal, handler))
+    def connect(self, signal, handler, *args):
+        self._handlers.append((signal, handler, *args))
 
 
 def test_hotkey_fallback_is_written_into_the_config(monkeypatch):
@@ -319,76 +379,145 @@ def test_a_configured_hotkey_is_left_alone(monkeypatch):
     assert d.config["hotkey"] == "F10"
 
 
+def test_a_hand_edited_hotkey_is_shown_and_kept_not_replaced_by_f8():
+    """A saved key the list doesn't have was switched to F8, and the next
+    Apply saved F8 over it."""
+    d = SimpleNamespace(config={"hotkey": "F13", "toggle_hotkey": "F9"},
+                        hotkey_combo=FakeCombo(), toggle_combo=FakeCombo())
+
+    GeneralTab._apply_hotkey_fallbacks(d, ["F8", "F9", "F10"])
+
+    assert d.hotkey_combo.get_active_id() == "F13"
+    assert d.config["hotkey"] == "F13"
+
+
+def test_on_the_flatpak_a_blank_hotkey_is_not_a_change(monkeypatch):
+    """The desktop holds the Flatpak's keys and the dropdowns are hidden:
+    recording F8 made every close ask "Apply your changes before closing?"."""
+    monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TuxTalk")
+    d = SimpleNamespace(config={"hotkey": "", "toggle_hotkey": ""},
+                        hotkey_combo=FakeCombo(), toggle_combo=FakeCombo())
+
+    GeneralTab._apply_hotkey_fallbacks(d, ["F8", "F9", "F10"])
+
+    assert d.config == {"hotkey": "", "toggle_hotkey": ""}
+
+
+def _keys_tab(monkeypatch, hold="F8", toggle="F9"):
+    """The two dictation key dropdowns, connected as the General tab connects
+    them; the warnings shown go to .told."""
+    from tuxtalk import prefs_general
+    told = []
+    monkeypatch.setattr(prefs_general, "show_message",
+                        lambda parent, kind, title, text="", **k: told.append(title))
+    d = SimpleNamespace(config={"hotkey": hold, "toggle_hotkey": toggle}, window=None,
+                        hotkey_combo=FakeCombo(), toggle_combo=FakeCombo(), told=told)
+    d.update_config = d.config.__setitem__
+    d._on_key_picked = lambda *a: GeneralTab._on_key_picked(d, *a)
+    d.hotkey_combo.set_active_id(hold)
+    d.toggle_combo.set_active_id(toggle)
+    d.hotkey_combo.connect("changed", d._on_key_picked, "hotkey", d.toggle_combo)
+    d.toggle_combo.connect("changed", d._on_key_picked, "toggle_hotkey", d.hotkey_combo)
+    return d
+
+
+def test_the_hold_key_cant_also_be_the_toggle_key(monkeypatch):
+    """F8 for both was saved, and only one of them could ever start."""
+    d = _keys_tab(monkeypatch)
+
+    d.toggle_combo.set_active_id("F8")
+
+    assert d.told == ["F8 is already your hold key"]
+    assert d.toggle_combo.get_active_id() == "F9"
+    assert d.config == {"hotkey": "F8", "toggle_hotkey": "F9"}
+
+
+def test_another_key_for_the_toggle_is_taken(monkeypatch):
+    d = _keys_tab(monkeypatch)
+
+    d.toggle_combo.set_active_id("F10")
+    d.hotkey_combo.set_active_id("F10")
+
+    assert d.config == {"hotkey": "F8", "toggle_hotkey": "F10"}
+    assert d.told == ["F10 is already your toggle key"]
+
+
 # --- "Launch at login" must follow the save, not the click ------------------
 
-def test_toggling_launch_at_login_does_not_take_effect_immediately():
+def test_toggling_launch_at_login_does_not_take_effect_immediately(monkeypatch):
     """Writing the autostart .desktop file the moment the box is ticked would
     survive a Cancel that discards the config change, so the checkbox and
     reality would disagree from then on: the next open reads the checkbox
     state from the config."""
-    applied = []
-    d = SimpleNamespace(config={"launch_at_login": False},
-                        _handle_autostart=lambda v: applied.append(v))
+    calls = _autostart(monkeypatch)
+    d = SimpleNamespace(config={"launch_at_login": False})
 
     PreferencesWindow.update_config(d, "launch_at_login", True)
 
     assert d.config["launch_at_login"] is True      # staged
-    assert applied == [], "autostart was changed before the user saved"
+    assert calls.applied == [], "autostart was changed before the user saved"
 
 
 def test_saving_applies_launch_at_login(tmp_path, monkeypatch):
-    applied = []
+    calls = _autostart(monkeypatch)
     d = _saveable(tmp_path, monkeypatch,
                   {"launch_at_login": True, "language_mode": "auto"},
                   {"launch_at_login": False, "language_mode": "auto"})
-    d._handle_autostart = lambda v: applied.append(v)
 
     assert PreferencesWindow.save_config(d) is True
 
-    assert applied == [True], "autostart was not applied when the user saved"
+    assert calls.applied == [True], "autostart was not applied when the user saved"
+    assert calls.told == []
 
 
 def test_saving_with_it_off_applies_removal(tmp_path, monkeypatch):
-    applied = []
+    calls = _autostart(monkeypatch)
     d = _saveable(tmp_path, monkeypatch,
                   {"launch_at_login": False, "language_mode": "auto"},
                   {"launch_at_login": True, "language_mode": "auto"})
-    d._handle_autostart = lambda v: applied.append(v)
 
     assert PreferencesWindow.save_config(d) is True
 
-    assert applied == [False]
+    assert calls.applied == [False]
 
 
-def test_a_failing_autostart_does_not_break_saving(tmp_path, monkeypatch):
-    """Writing the .desktop file can fail (read-only home). The settings the
-    user just saved must still be saved."""
-    def boom(v):
-        raise OSError("read-only file system")
-
+@pytest.mark.parametrize("failure", [False, OSError("read-only file system")],
+                         ids=["refused", "raised"])
+def test_a_failing_autostart_keeps_the_settings_says_so_and_is_tried_again(
+        tmp_path, monkeypatch, failure):
+    """A read-only autostart folder, or the Flatpak's background request
+    denied: the settings just saved stay saved, the user hears that start at
+    login didn't change, and it's still a change, so Apply tries again
+    (before, it was called applied and Apply found nothing to do)."""
+    calls = _autostart(monkeypatch, works=failure)
     d = _saveable(tmp_path, monkeypatch,
                   {"launch_at_login": True, "language_mode": "auto"},
                   {"launch_at_login": False, "language_mode": "auto"})
-    d._handle_autostart = boom
 
     assert PreferencesWindow.save_config(d) is True
     assert tomllib.loads((tmp_path / "config.toml").read_text())["launch_at_login"] is True
+    assert calls.told == ["Start at login wasn't turned on"]
+    assert PreferencesWindow.has_unapplied_changes(
+        SimpleNamespace(**vars(d), words_tab=SimpleNamespace(changed=lambda: False)))
+
+    _autostart(monkeypatch, works=True)
+    assert PreferencesWindow.save_config(d) is True     # Apply again
+    assert d._config_at_open["launch_at_login"] is True
 
 
 def test_saving_an_unrelated_change_leaves_autostart_alone(tmp_path, monkeypatch):
     """Rewriting the autostart entry on every Apply would undo turning TuxTalk
     off in the desktop's own Autostart settings at the next unrelated change."""
+    calls = _autostart(monkeypatch)
     for launch in (True, False):
-        applied = []
         d = _saveable(tmp_path, monkeypatch,
                       {"launch_at_login": launch, "beeps": False, "language_mode": "auto"},
                       {"launch_at_login": launch, "beeps": True, "language_mode": "auto"})
-        d._handle_autostart = applied.append
 
         assert PreferencesWindow.save_config(d) is True
         assert PreferencesWindow.save_config(d) is True    # a second Apply
 
-        assert applied == [], "autostart was rewritten though launch at login did not change"
+    assert calls.applied == [], "autostart was rewritten though launch at login did not change"
 
 
 def test_a_failed_save_says_why(tmp_path, monkeypatch):
@@ -406,7 +535,7 @@ def test_a_failed_save_says_why(tmp_path, monkeypatch):
 
 def _window(**parts):
     """A stand-in window whose save_before_restart is the real one."""
-    win = SimpleNamespace(**parts)
+    win = SimpleNamespace(**{"_restart_owed": set(), "_changed_since_open": set, **parts})
     win.save_before_restart = lambda: PreferencesWindow.save_before_restart(win)
     return win
 

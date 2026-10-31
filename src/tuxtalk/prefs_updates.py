@@ -431,9 +431,9 @@ class UpdatesTab(Tab):
         (without restarting dictation, which is about to go) or thrown away.
         False when the user keeps editing, or saving failed."""
         win = self.win
-        if not win._has_unapplied_changes():
+        if not win.has_unapplied_changes():
             return True
-        answer = win._ask_apply_before_closing()
+        answer = win.ask_apply_before_closing()
         if answer == "apply":
             return win.save_before_restart()
         return answer == "discard"
@@ -475,10 +475,13 @@ class UpdatesTab(Tab):
 
         has_update = result.get("update_available", False)
         has_ext_update = result.get("extension_update", False)
-        current = result.get("current_version", "unknown")
+        # Versions from GitHub go into markup: a tag with & or < in it would
+        # blank the whole label.
+        esc = GLib.markup_escape_text
+        current = esc(str(result.get("current_version", "unknown")))
         latest = result.get("latest_version", "unknown")
         ext_current = result.get("extension_current")
-        ext_latest = result.get("extension_latest")
+        ext_latest = esc(str(result.get("extension_latest")))
         release = result.get("release", {})
 
         self._current_release = release
@@ -486,7 +489,7 @@ class UpdatesTab(Tab):
         if has_update:
             status_lines = [
                 "<span color='#4CAF50'><b>Update available!</b></span>",
-                f"TuxTalk: {current} → <b>{latest}</b>"
+                f"TuxTalk: {current} → <b>{esc(str(latest))}</b>"
             ]
         else:
             status_lines = [
@@ -497,11 +500,11 @@ class UpdatesTab(Tab):
         if ext_current is not None:
             if has_ext_update:
                 status_lines.append(
-                    f"Extension: {ext_current} → <b>{ext_latest}</b> (update available)")
+                    f"Extension: {esc(str(ext_current))} → <b>{ext_latest}</b> (update available)")
                 status_lines.append(
                     "<span size='small'>Note: Extension updates require logout/login</span>")
             else:
-                status_lines.append(f"Extension: Version {ext_current} (up to date)")
+                status_lines.append(f"Extension: Version {esc(str(ext_current))} (up to date)")
 
         self.update_status_label.set_markup("\n".join(status_lines))
 

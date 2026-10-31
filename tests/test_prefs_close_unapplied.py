@@ -14,8 +14,8 @@ def _window(unapplied, answer):
     calls = []
     w = SimpleNamespace(
         _busy=False,
-        _has_unapplied_changes=lambda: unapplied,
-        _ask_apply_before_closing=lambda: calls.append("asked") or answer,
+        has_unapplied_changes=lambda: unapplied,
+        ask_apply_before_closing=lambda: calls.append("asked") or answer,
         on_ok=lambda button: calls.append("ok"),
         _release=lambda: calls.extend(["stop", "release"]),
     )
@@ -57,7 +57,7 @@ def _changes(config_at_open, config, commands_same=True, owed=()):
         words_tab=SimpleNamespace(changed=lambda: not commands_same),
     )
     w._changed_since_open = lambda: prefs.PreferencesWindow._changed_since_open(w)
-    return prefs.PreferencesWindow._has_unapplied_changes(w)
+    return prefs.PreferencesWindow.has_unapplied_changes(w)
 
 
 def test_unapplied_changes_are_settings_commands_and_a_language_pick():

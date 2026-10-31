@@ -593,7 +593,7 @@ def test_uninstall_asks_about_changes_not_applied(answer, goes_ahead, saved):
     from tuxtalk.prefs_updates import UpdatesTab
     done = []
     win = types.SimpleNamespace(
-        _has_unapplied_changes=lambda: True, _ask_apply_before_closing=lambda: answer,
+        has_unapplied_changes=lambda: True, ask_apply_before_closing=lambda: answer,
         save_before_restart=lambda: done.append("saved") or True)
     tab = UpdatesTab.__new__(UpdatesTab)
     tab.win = win
@@ -680,7 +680,7 @@ def test_preferences_that_runs_the_uninstall_takes_no_edits_meanwhile(monkeypatc
     class Window:
         _busy = False
 
-        def _has_unapplied_changes(self):
+        def has_unapplied_changes(self):
             return False
 
         def busy(self):

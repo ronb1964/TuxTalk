@@ -193,9 +193,25 @@ def test_an_update_that_outlasts_the_wait_says_how_it_ended(right_ctrl_question,
     finish, told = [], []
     monkeypatch.setattr(update_offers, "update_helper", finish.append)
     monkeypatch.setattr(tab, "_while_drawn", lambda finished, seconds: False)
-    monkeypatch.setattr(update_offers, "say_helper_updated", lambda ok, message: told.append(ok))
+    monkeypatch.setattr(update_offers, "say_helper_updated",
+                        lambda ok, message, source: told.append((ok, source)))
     assert tab.after_hotkey_change({"hotkey"}, 0)
     [(title, text)] = warnings
-    assert title == "The update is taking a while" and "a notification says when" in text
+    # No notification is promised: after OK the window's process ends, and
+    # with it the wait for one.
+    assert title == "The update is taking a while" and "notification" not in text
     finish[0](True, "")                         # the update ends after all
-    assert told == [True] and "test" not in steps
+    assert told == [(True, "from the hotkey question")] and "test" not in steps
+
+
+def test_the_log_says_where_a_helper_update_was_asked_for(monkeypatch, caplog):
+    """An update from the hotkey question was logged as the offer at start's."""
+    import logging
+    from tuxtalk import notify, update_offers
+    monkeypatch.setattr(notify, "notify", lambda *a, **k: None)
+    with caplog.at_level(logging.INFO):
+        update_offers.say_helper_updated(True, "", "from the hotkey question")
+        update_offers.say_helper_updated(True, "")
+    assert [r.getMessage() for r in caplog.records if "Updated" in r.getMessage()] == [
+        "Updated the hotkey helper from the hotkey question",
+        "Updated the hotkey helper from the offer at start"]

@@ -27,21 +27,11 @@ from contextlib import contextmanager
 import dbus.mainloop.glib
 from dataclasses import asdict
 from . import prefs_ipc
-from .config import (CONFIG_PATH, Settings, apply_toml, changed_keys, merge_changed_keys,
-                     repaired, write_text_atomic, _load_toml_file, _toml_value)
+from . import config
+from .config import (CONFIG_PATH, changed_keys, merge_changed_keys, write_text_atomic,
+                     _load_toml_file, _toml_value)
 
 logger = setup_logger(__name__)
-
-
-def _coerce_config_types(config: dict) -> dict:
-    """*config* read as the service reads it (config.apply_toml, then
-    config.repaired): a hand-edited config can hold '5' for 5, and
-    Gtk.Adjustment(value='5') crashes the window. An unusable value ("oops"
-    or nan for a number) shows its default, which is what the service uses;
-    left as it was, Preferences didn't open. Unknown keys are kept."""
-    settings = Settings()
-    apply_toml(settings, config)
-    return {**config, **asdict(repaired(settings))}
 
 
 # One Preferences window (single_instance.claim_window).
@@ -207,21 +197,12 @@ class PreferencesWindow:
         use_tuxtalk_style(self.window)
 
     def load_config(self):
-        """Load config from TOML file.
-
-        Defaults come from config.py's Settings dataclass, shared with the
-        service and tray, so a missing key shows what the service really uses.
-        """
-        defaults = asdict(Settings())
-
-        if os.path.exists(CONFIG_PATH):
-            try:
-                config = _load_toml_file(CONFIG_PATH)
-                defaults.update(config)
-            except Exception as e:
-                logger.warning(f"Could not read the config: {e}")
-
-        return _coerce_config_types(defaults)
+        """The settings as the service reads them (config.load_config): a
+        damaged or empty file is recovered from its backup before anything
+        is shown or saved, a hand-edited value ('5' for 5, "oops" for a
+        number) shows what the service makes of it, and a missing key its
+        default."""
+        return asdict(config.load_config())
 
     def cuda_files_present(self):
         """Whether CUDA libraries (downloaded or system-wide) are present."""
@@ -304,21 +285,15 @@ class PreferencesWindow:
                 lines.append(f"{key} = {_toml_value(value)}")
             write_text_atomic(CONFIG_PATH, "\n".join(lines) + "\n")
 
-            # Apply settings that live outside the config file only now that
-            # the save has happened, so Cancel never has anything to undo.
-            if autostart_changed:
-                try:
-                    self._handle_autostart(bool(merged.get("launch_at_login", False)))
-                except Exception as e:
-                    # A read-only home must not cost the user the settings they
-                    # just saved — the file is already written at this point.
-                    logger.warning(f"Could not update autostart entry: {e}")
-
             # Future saves in this window diff against what we just wrote;
             # what it replaced is what a failed download goes back to.
             self._saved_before = saved_before
             self.config = dict(merged)
             self._config_at_open = dict(merged)
+            # Settings that live outside the config file only now that the
+            # save has happened, so Cancel never has anything to undo.
+            if autostart_changed:
+                self._apply_launch_at_login(saved_before.get("launch_at_login"))
             return True
         except Exception as e:
             logger.error(f"Could not save the config: {e}")
@@ -329,11 +304,7 @@ class PreferencesWindow:
         """The title, the tabs, the version and the button row."""
         main_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
 
-        # Main content column. Each notebook tab is individually wrapped in a
-        # ScrolledWindow (see _scrollable_tab) so a tab taller than the window scrolls
-        # instead of running off the bottom. NOTE: a notebook inside ONE outer
-        # ScrolledWindow does not scroll — the notebook clips its page rather than
-        # overflowing — which is why the scroll must be per-tab.
+        # Each tab scrolls on its own (_scrollable_tab).
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         vbox.set_margin_start(20)
         vbox.set_margin_end(20)
@@ -429,7 +400,7 @@ class PreferencesWindow:
 
         Every tab scrolls, so the window's minimum height is small and it can
         always fit the screen with the button row showing. The opening height
-        is the content's natural height: the whole Snippets tab, the tallest
+        is the content's natural height: the whole Words tab, the tallest
         page that is not expected to scroll.
         """
         from .ui_style import fit_dialog_to_screen
@@ -509,9 +480,9 @@ class PreferencesWindow:
         then writes launch_at_login's autostart file, so Cancel has nothing
         to undo)."""
         # GTK combos emit 'changed' with get_active_id()=None while being
-        # rebuilt (SpeechSection._fill_device_options). Writing that None
-        # would produce 'device = None' in the TOML file, invalid TOML that
-        # wipes all settings on the next load. Never a real user action.
+        # rebuilt (SpeechSection._fill_device_options). That None would be
+        # saved as the text "None", a device or model nothing can use. Never
+        # a real user action.
         if value is not None:
             self.config[key] = value
 
@@ -544,9 +515,13 @@ class PreferencesWindow:
 
     def save_before_restart(self):
         """Save the snippets and the settings, as something about to restart
-        TuxTalk (an update) must; False, having said why, when either failed."""
-        if self.words_tab.save() is None:
+        TuxTalk (an update, an uninstall) must; False, having said why, when
+        either failed. What's saved stays owed: if that restart never comes
+        (the uninstall is cancelled, the update's download fails), the next
+        Apply still downloads what it needs and restarts for it."""
+        if not self.words_tab.save():
             return False
+        self._restart_owed |= self._changed_since_open()
         if not self.save_config():
             self._show_save_error()
             return False
@@ -565,11 +540,26 @@ class PreferencesWindow:
             self._busy = False
             self.window.set_sensitive(True)
 
-    def _handle_autostart(self, enable):
-        """Create or remove the autostart desktop file. Delegates to
-        tuxtalk.autostart so onboarding and Preferences stay in lock-step."""
+    def _apply_launch_at_login(self, before):
+        """Create or turn off the autostart entry, as onboarding does
+        (tuxtalk.autostart). When that fails (a read-only autostart folder,
+        the Flatpak's background request denied), it's said, and stays a
+        change, *before* being what it was, so Apply tries again; the
+        settings just saved are kept either way."""
         from . import autostart
-        autostart.set_autostart(enable)
+        enable = bool(self.config.get("launch_at_login", False))
+        try:
+            done = autostart.set_autostart(enable)
+        except Exception as e:
+            logger.warning(f"Could not update the autostart entry: {e}")
+            done = False
+        if done:
+            return
+        self._config_at_open["launch_at_login"] = before
+        show_message(self.window, Gtk.MessageType.WARNING,
+                     "Start at login wasn't " + ("turned on" if enable else "turned off"),
+                     "Your other settings are saved. Apply tries this again; "
+                     "TuxTalk's log says what went wrong.")
 
     def get_selected_device_idx(self):
         """The sound device of the microphone picked in the Audio tab
@@ -625,8 +615,8 @@ class PreferencesWindow:
         # Closing with the X used to drop unapplied changes without a word.
         # Ask first, the way KDE's System Settings does. (Cancel still closes
         # without asking: clicking it already says "throw them away".)
-        if self._has_unapplied_changes():
-            answer = self._ask_apply_before_closing()
+        if self.has_unapplied_changes():
+            answer = self.ask_apply_before_closing()
             if answer == "apply":
                 self.on_ok(None)    # saves and closes; stays open if saving fails
                 return True
@@ -636,13 +626,13 @@ class PreferencesWindow:
         Gtk.main_quit()
         return False
 
-    def _has_unapplied_changes(self):
+    def has_unapplied_changes(self):
         """True when closing now would lose something: a setting changed since
         the last Apply, or an edited snippet. One saved whose restart failed
         isn't lost."""
         return bool(changed_keys(self._config_at_open, self.config)) or self.words_tab.changed()
 
-    def _ask_apply_before_closing(self):
+    def ask_apply_before_closing(self):
         """"apply", "discard", or "keep" (also when the question is closed)."""
         response = show_message(
             self.window, Gtk.MessageType.QUESTION, "Apply your changes before closing?",
@@ -768,12 +758,21 @@ class PreferencesWindow:
         speech = self.general_tab.speech
         if not speech.download_selected_model():
             speech.rollback_download(previous)
+            # The rest was saved but never put in force: the next Apply
+            # restarts for it rather than say it's in effect.
+            self._restart_owed |= set(changed) - set(_DOWNLOAD_KEYS)
             return None
         return changed, saved_at
 
     def on_apply(self, button):
-        """Apply changes, restarting the service only if something needs it."""
+        """Apply changes, restarting the service only if something needs it.
+        Snippets that can't be saved (they say why) don't hold the settings back."""
         self.words_tab.save()
+        self._apply_settings()
+
+    def _apply_settings(self):
+        """Save the settings, download what they need and put them in force,
+        saying how that went; the window stays open."""
         saved = self._save_and_download()
         if saved is None:
             return
@@ -798,9 +797,12 @@ class PreferencesWindow:
     def on_ok(self, button):
         """Save, apply (restarting only if needed), and close; Apply is the
         one that stays open, so OK closes after a download too."""
-        # If writing the snippets failed, closing would throw away the edits
-        # the user was just told weren't saved.
-        if self.words_tab.save() is None:
+        if not self.words_tab.save():
+            # Closing would throw away the edits the user was just told
+            # weren't saved: any settings changed are applied, and the
+            # window stays.
+            if self._changed_since_open():
+                self._apply_settings()
             return
         saved = self._save_and_download()
         if saved is None:

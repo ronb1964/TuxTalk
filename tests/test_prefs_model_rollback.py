@@ -18,6 +18,8 @@ returns before any dialog is built, so no display is needed.
 
 from types import SimpleNamespace
 
+import pytest
+
 
 class StubPrefs:
     """Only what the Apply/OK ordering touches.
@@ -59,6 +61,16 @@ class StubPrefs:
         from tuxtalk.prefs import PreferencesWindow
 
         return PreferencesWindow._save_and_download(self)
+
+    def _apply_settings(self):
+        from tuxtalk.prefs import PreferencesWindow
+
+        return PreferencesWindow._apply_settings(self)
+
+    def save_before_restart(self):
+        from tuxtalk.prefs import PreferencesWindow
+
+        return PreferencesWindow.save_before_restart(self)
 
     def _apply_or_restart(self, changed):
         self.restart_calls += 1
@@ -296,3 +308,46 @@ class TestAFailedRestartIsStillOwed:
 
         assert asked == [{"model"}, {"model"}, {"model"}]
         assert prefs_cls._changed_since_open(stub) == set()     # done now
+
+
+class TestWhatsSavedButNotInForceStaysOwed:
+    """A restart-only setting saved with a model whose download was then
+    cancelled was never restarted for: the next Apply found nothing changed
+    and said "already in effect"."""
+
+    @pytest.fixture(autouse=True)
+    def _no_messages(self, monkeypatch):
+        from tuxtalk import prefs
+        monkeypatch.setattr(prefs, "show_message", lambda *a, **k: None)
+
+    def _stub(self):
+        stub = StubPrefs(on_disk_model="small", chosen_model="medium")
+        stub.window = None
+        stub._config_at_open["recording_indicator"] = True
+        stub.config["recording_indicator"] = False
+        stub.download_result = False
+        asked = []
+        stub._apply_or_restart = lambda changed: asked.append(set(changed)) or True
+        return stub, asked
+
+    def test_after_a_cancelled_download_the_next_apply_restarts_for_the_rest(self, prefs_cls):
+        stub, asked = self._stub()
+        prefs_cls.on_apply(stub, None)
+        assert asked == []                  # nothing put in force yet
+
+        stub.download_result = True
+        prefs_cls.on_apply(stub, None)      # Apply again, the model as it was
+
+        assert asked == [{"recording_indicator"}]
+
+    def test_a_save_before_an_update_or_uninstall_stays_owed(self, prefs_cls):
+        """Uninstall's Apply, or an update whose download then fails, saved
+        the model without downloading or restarting for it."""
+        stub, asked = self._stub()
+        stub.download_result = True
+
+        assert stub.save_before_restart() is True
+        assert stub.saved_models == ["medium"]
+        prefs_cls.on_apply(stub, None)      # the restart never came; Apply
+
+        assert asked == [{"model", "recording_indicator"}]
