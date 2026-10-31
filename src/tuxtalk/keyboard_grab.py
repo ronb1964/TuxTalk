@@ -37,34 +37,58 @@ logger = setup_logger(__name__)
 grabbed_devices = []
 
 _INJECTED_TTL_S = 2.0
+# An event's kernel time is in whole microseconds; time.time() isn't.
+_STAMP_SLACK_S = 2e-6
 
-_injected_pending: list = []   # [(device path, code, value, expiry time)]
+_injected_pending: list = []   # [(device path, code, value, sent at, expiry time)]
 
 
 def inject_key(dev, code: int, value: int) -> bool:
     """Send a key event through *dev* and remember to skip it when it comes back."""
+    sent = time.time()      # before the write: the kernel stamps the event after it
     try:
         dev.write(ecodes.EV_KEY, code, value)
         dev.write(ecodes.EV_SYN, ecodes.SYN_REPORT, 0)
     except Exception as e:
         logger.warning(f"Could not inject key {code}={value} on {getattr(dev, 'name', dev)}: {e}")
         return False
-    expires = time.time() + _INJECTED_TTL_S
-    _injected_pending.append((getattr(dev, "path", None), code, value, expires))
+    _injected_pending.append((getattr(dev, "path", None), code, value, sent,
+                              sent + _INJECTED_TTL_S))
     return True
 
 
 def is_own_injected_event(dev, event) -> bool:
     """True (once) if *event* is one we injected. Stale entries expire, so a
-    lost injection can never swallow a real key event later."""
+    lost injection can never swallow a real key event later.
+
+    One the kernel stamped before we sent ours is real, whatever it looks
+    like: the key came up between grab_keyboards_hiding's look at the keys
+    and its release, and the kernel dropped our copy as saying nothing new.
+    Taken for ours, that release was lost and the recording never ended;
+    the "down again" we sent after it is then undone (_undo_down_again)."""
     now = time.time()
-    _injected_pending[:] = [p for p in _injected_pending if p[3] > now]
+    _injected_pending[:] = [p for p in _injected_pending if p[4] > now]
     path = getattr(dev, "path", None)
-    for i, (p, code, value, _) in enumerate(_injected_pending):
+    stamp = event.timestamp() if hasattr(event, "timestamp") else None
+    for i, (p, code, value, sent, _) in enumerate(_injected_pending):
         if p == path and code == event.code and value == event.value:
             del _injected_pending[i]
+            if stamp is not None and stamp < sent - _STAMP_SLACK_S:
+                if value == 0:
+                    _undo_down_again(dev, code)
+                return False
             return True
     return False
+
+
+def _undo_down_again(dev, code) -> None:
+    """*code* came up on *dev* just before our release, which the kernel
+    dropped. Our "down again" that followed it left the key down in the
+    kernel, which would drop the next real press too: put it up there
+    again, behind it. The keyboard is still held, so only we see that."""
+    path = getattr(dev, "path", None)
+    if any(p[:3] == (path, code, 1) for p in _injected_pending):
+        inject_key(dev, code, 0)
 
 
 def grab_keyboards_hiding(devices, codes) -> None:
