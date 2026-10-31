@@ -455,9 +455,10 @@ before 0.15.0, so older entries use that name.
 - TuxTalk's log could be read by other accounts on the same computer. That
   matters if you switched on "Log transcribed text", which puts what you
   dictate in it. Only you can read it now, an old log included.
-- Another program on your desktop could get TuxTalk to send a signal that
-  ends one of your programs, while a tuxtalk --start was waiting for the
-  speech model. TuxTalk now only signals its own dictation service.
+- A wrong "ready" report reaching the tray while a tuxtalk --start waited
+  for the speech model could make TuxTalk send a signal that ends one of
+  your other programs. TuxTalk now checks it's its own dictation service
+  first.
 - If the desktop's notification service hung, a notice from TuxTalk could
   hold up dictation for 25 seconds. It gives up after 2 now, as intended.
 - The tray menu no longer freezes for a moment on KDE when dictation stops.
