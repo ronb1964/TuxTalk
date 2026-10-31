@@ -238,6 +238,7 @@ def test_the_d_bus_method_opens_the_window():
     from tuxtalk.dbus_service import TuxTalkDBusService
     calls = []
     service = TuxTalkDBusService.__new__(TuxTalkDBusService)
+    service.app = object()                  # a tray that isn't quitting
     service._dispatch = lambda name, *args: calls.append(name)
     TuxTalkDBusService.TranscribeFile(service)
     assert calls == ["show_transcribe_file"]
