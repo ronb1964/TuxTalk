@@ -554,7 +554,10 @@ class SystemCheck(Tab):
 
     def _show_extension_status(self):
         """Show the GNOME extension's status; True unless it needs fixing.
-        Not installed is a choice (the tray works without it), not a problem."""
+        Not installed is a choice where the tray icon works without it, and
+        a problem where the desktop has no tray: there it's the only menu on
+        screen, and System check opens on Install Extension (the no-tray menu
+        window's "Add TuxTalk to the Top Bar" brings the user here)."""
         try:
             from . import extension_helper
             status = extension_helper.get_extension_status()
@@ -589,7 +592,8 @@ class SystemCheck(Tab):
             self.install_extension_button.set_sensitive(True)
             self.uninstall_extension_button.set_sensitive(False)
             self._set_restart_info_sensitive(True)
-            return True
+            from .desktop_detect import tray_host_available
+            return tray_host_available()
 
         except Exception as e:
             self.extension_status_label.set_text(f"Error checking extension: {e}")

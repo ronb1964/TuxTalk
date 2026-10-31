@@ -6,7 +6,7 @@ window the tray opens afterwards (Fix a Word, for one).
 """
 import pytest
 from conftest import unscoped_selectors
-from gi.repository import Gdk, Gtk
+from gi.repository import Gdk, GLib, Gtk
 
 from tuxtalk import splash_screen as ss
 
@@ -28,13 +28,33 @@ def test_the_splash_window_carries_its_class_and_hint(splash):
     assert splash.window.get_type_hint() == Gdk.WindowTypeHint.SPLASHSCREEN
 
 
+def _drain():
+    context = GLib.MainContext.default()
+    while context.pending():
+        context.iteration(False)
+
+
 def test_the_stylesheet_goes_with_the_splash(splash, monkeypatch):
     removed = []
     monkeypatch.setattr(ss.Gtk.StyleContext, "remove_provider_for_screen",
                         lambda screen, provider: removed.append(provider))
     monkeypatch.setattr(splash.window, "set_opacity", lambda o: None)
+    monkeypatch.setattr(splash.window, "show_all", lambda: None)
     done = []
-    splash._fade_out(0.05, lambda: done.append(True))
+    splash.show_and_fade(lambda: done.append(True))
+    splash._fade_out(0.05)
+    _drain()
     assert removed == [splash.css_provider]
     assert done == [True]
 
+
+def test_a_splash_closed_while_it_fades_in_still_opens_the_welcome(splash, monkeypatch):
+    """The welcome waits on the splash's callback: closed in its first half
+    second, first run hung with nothing on screen and the service never
+    started."""
+    monkeypatch.setattr(splash.window, "show_all", lambda: None)
+    done = []
+    splash.show_and_fade(lambda: done.append(True))
+    splash.window.destroy()
+    _drain()
+    assert done == [True]

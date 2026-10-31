@@ -377,6 +377,29 @@ def test_fixing_in_the_text_uses_the_users_speed_and_waits_for_the_last_keys(mon
     assert waits == [fw.LAST_KEYS_S]
 
 
+def test_the_flatpak_doesnt_offer_to_fix_it_in_the_text(monkeypatch, tmp_path):
+    """There the app's selection can't be read back, so a fix in place
+    selected words, gave up and said the text wasn't changed: the window
+    copies the corrected dictation instead."""
+    pytest.importorskip("gi")
+    import json
+    from tuxtalk import fix_word_dialog as fw
+    monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TuxTalk")
+    path = tmp_path / "fix.json"
+    path.write_text(json.dumps({"text": " Mary had a lamb. ", "window": "org.kde.kwrite"}))
+    made, typed = [], []
+
+    class Dialog:
+        def __init__(self, entries, index, copy_text, before_show=None, in_place=False):
+            made.append((entries, in_place))
+            self.fixed_for_text = None
+            self.window = type("W", (), {"connect": lambda *a: None, "present": lambda *a: None})()
+    monkeypatch.setattr(fw, "_FixWordDialog", Dialog)
+    monkeypatch.setattr(fw.Gtk, "main", lambda: None)
+    monkeypatch.setattr(fw, "fix_in_text", lambda *a: typed.append(a))
+    assert fw.main(["--in-place", str(path)]) == 0
+    assert made == [(["Mary had a lamb."], False)] and typed == []
+
 def test_a_fix_the_keyboard_dropped_partway_is_not_done(monkeypatch, keyboard):
     pytest.importorskip("gi")
     from tuxtalk import fix_word_dialog as fw

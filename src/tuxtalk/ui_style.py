@@ -581,6 +581,17 @@ def message_dialog(closable=True, **kwargs):
     return dialog
 
 
+def close_on_escape(window):
+    """Escape closes *window* at once, as it does a dialog: Help, Fix a Word,
+    Report a Problem and Voice Commands all close the same way."""
+    def on_key(_window, event):
+        if event.keyval != Gdk.KEY_Escape:
+            return False
+        window.destroy()
+        return True
+    window.connect("key-press-event", on_key)
+
+
 def show_message(parent, kind, title, text="", buttons=Gtk.ButtonsType.OK,
                  keep_above=False, *, default=None, destructive=None, markup=False,
                  wait=True):

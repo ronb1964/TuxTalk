@@ -11,6 +11,7 @@ Items and order follow the tray menu (and the GNOME extension's).
 """
 
 import logging
+from time import monotonic
 
 import gi
 
@@ -19,11 +20,18 @@ gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
 from .logger import FailureNotes  # noqa: E402
+from .service_launcher import KILL_WAIT_S, QUIT_WAIT_S  # noqa: E402
 
 
 logger = logging.getLogger(__name__)
 
 WINDOW_TITLE = "TuxTalk"
+
+# How long the switch keeps what was just asked while the service gets
+# there: a stop types what's left first and is waited for up to this long
+# before the service is killed, and the poll would flip the switch back on
+# meanwhile.
+SWITCH_SETTLE_S = QUIT_WAIT_S + KILL_WAIT_S
 
 
 def no_tray_note(extension_installed):
@@ -47,6 +55,7 @@ class MenuWindow:
         self.tray = tray
         self._updating = False      # set while the window moves the switch itself
         self._popup = None          # the open ▸ menu, kept so it isn't collected
+        self._asked = None          # (on or off, when) after a click on the switch
 
         win = Gtk.Window(title=WINDOW_TITLE)
         win.set_position(Gtk.WindowPosition.CENTER)
@@ -73,6 +82,7 @@ class MenuWindow:
         row.pack_start(text, True, True, 0)
         self.switch = Gtk.Switch(valign=Gtk.Align.CENTER)
         self.switch.set_tooltip_text("Turn the dictation service on or off")
+        self.switch.get_accessible().set_name("Dictation")
         self.switch.set_focus_on_click(False)
         self.switch.connect("notify::active", self._on_switch)
         row.pack_end(self.switch, False, False, 0)
@@ -119,7 +129,7 @@ class MenuWindow:
                                      "Install Extension puts TuxTalk's menu in GNOME's top bar")
                 add.set_halign(Gtk.Align.START)
                 add.set_margin_top(6)
-                add.connect("clicked", lambda _b: t._launch_preferences(tab="advanced"))
+                add.connect("clicked", self._run, lambda _b: t.launch_preferences(tab="advanced"))
                 box.pack_start(add, False, False, 0)
 
         self._failures = FailureNotes()     # refresh runs every second: logged once
@@ -179,7 +189,7 @@ class MenuWindow:
     def refresh(self):
         """Switch and status from the tray; runs every second while open."""
         try:
-            running = bool(self.tray.is_service_running())
+            running = self._shown_state(bool(self.tray.is_service_running()))
             self._updating = True
             self.switch.set_active(running)
             self._updating = False
@@ -195,9 +205,20 @@ class MenuWindow:
             logger.info("Menu window refresh works again")
         return True
 
+    def _shown_state(self, running):
+        """What the switch shows: what was just asked for, while the service
+        gets there; otherwise whether it runs."""
+        if self._asked is not None:
+            wanted, since = self._asked
+            if running != wanted and monotonic() - since < SWITCH_SETTLE_S:
+                return wanted
+            self._asked = None
+        return running
+
     def _on_switch(self, switch, _pspec):
         if self._updating:
             return
+        self._asked = (switch.get_active(), monotonic())
         if switch.get_active():
             self.tray.start_service(None)
         else:

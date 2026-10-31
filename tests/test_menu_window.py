@@ -243,7 +243,7 @@ def _fake_tray(running=True):
         show_voice_commands=rec("voice"), open_preferences_stats=rec("stats"),
         show_help=rec("help"), show_about_dialog=rec("about"),
         check_for_updates_clicked=rec("updates"), quit_app=rec("quit"),
-        _launch_preferences=lambda tab=None: calls.append(f"prefs:{tab}"),
+        launch_preferences=lambda tab=None: calls.append(f"prefs:{tab}"),
         menu=types.SimpleNamespace(engine_item=Gtk.MenuItem(label="Parakeet on the processor")))
     return tray
 
@@ -296,6 +296,39 @@ def test_menu_window_switch_follows_and_drives_the_service():
         assert tray.calls == []             # showing the state starts nothing
         win.switch.set_active(True)
         assert tray.calls == ["start"]
+    finally:
+        win.window.destroy()
+
+
+def test_the_switch_stays_off_while_dictation_stops(monkeypatch):
+    """Stopping waits for what's still being typed: the switch doesn't flip
+    back on meanwhile (a second click sent a second stop), and once the
+    service is gone, or a while has passed, it shows the truth again."""
+    from tuxtalk import menu_window
+    now = [100.0]
+    monkeypatch.setattr(menu_window, "monotonic", lambda: now[0])
+    tray, win = _menu_window(running=True)
+    try:
+        win.switch.set_active(False)
+        assert tray.calls == ["stop"]
+        win.refresh()                       # the service still runs
+        assert not win.switch.get_active()
+        now[0] += 30                        # a long paragraph still being typed
+        win.refresh()
+        assert not win.switch.get_active()
+        assert "Dictation is off" in win.status_label.get_text()
+        now[0] += menu_window.SWITCH_SETTLE_S + 1
+        win.refresh()                       # it never stopped: say so
+        assert win.switch.get_active()
+        assert tray.calls == ["stop"]
+    finally:
+        win.window.destroy()
+
+
+def test_a_screen_reader_names_the_switch():
+    _tray, win = _menu_window()
+    try:
+        assert win.switch.get_accessible().get_name() == "Dictation"
     finally:
         win.window.destroy()
 

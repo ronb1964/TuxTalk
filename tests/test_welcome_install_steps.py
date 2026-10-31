@@ -11,7 +11,7 @@ import pytest
 
 gi = pytest.importorskip("gi")
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk  # noqa: E402
+from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
 from tuxtalk import recommend as r  # noqa: E402
 from tuxtalk import secure_input  # noqa: E402
@@ -268,4 +268,74 @@ def test_an_installed_portaudio_updates_the_step(needs_portaudio):
     assert d.portaudio_initial_status.get_text() == "✅ PortAudio library installed"
     assert "PortAudio installed!" in d.portaudio_status_label.get_text()
     assert d.install_portaudio_button.get_label() == "✅ Installed!"
-    assert d.portaudio_fixed and not d.needs_portaudio_install   # what run() reports
+    assert not d.needs_portaudio_install       # "Set it up" doesn't warn any more
+
+
+def _set_it_up(d, monkeypatch, answer):
+    """Press "Set it up"; *answer* is the warning's. Returns (warnings, responses)."""
+    warned, responses = [], []
+    monkeypatch.setattr(wd, "show_message",
+                        lambda parent, kind, title, *a, **k: warned.append(title) or answer)
+    monkeypatch.setattr(d.dialog, "response", responses.append)
+    d._on_set_it_up(None)
+    return warned, responses
+
+
+def test_set_it_up_without_portaudio_says_recording_wont_work(needs_portaudio, monkeypatch):
+    """As it does for typing: before, setup went on with no microphone and no word."""
+    warned, responses = _set_it_up(needs_portaudio, monkeypatch, Gtk.ResponseType.CANCEL)
+    assert warned == ["Recording isn't set up yet"] and responses == []      # Go Back
+    warned, responses = _set_it_up(needs_portaudio, monkeypatch, Gtk.ResponseType.OK)
+    assert responses == [Gtk.ResponseType.OK]                                  # Continue Anyway
+
+
+def test_set_it_up_after_installing_portaudio_goes_straight_on(needs_portaudio, monkeypatch):
+    d = needs_portaudio
+    d._finish_install_portaudio(d.install_portaudio_button, (True, "installed"))
+    warned, responses = _set_it_up(d, monkeypatch, Gtk.ResponseType.CANCEL)
+    assert warned == [] and responses == [Gtk.ResponseType.OK]
+
+
+def test_the_welcome_cant_be_closed_while_an_install_runs(needs_portaudio):
+    """Closed mid-install, the password prompt would still come up with
+    nothing to explain it, and TuxTalk would quit under it. Escape (the
+    dialog's "close") and the title bar's X go nowhere while a job runs;
+    once it's done, a close ends the dialog as before."""
+    d = needs_portaudio
+    seen = []
+
+    def delete():
+        event = Gdk.Event.new(Gdk.EventType.DELETE)
+        event.window = d.dialog.get_window()
+        d.dialog.event(event)
+
+    def after_both():
+        seen.append(d.dialog.get_visible())
+        d._busy = 0
+        d.dialog.emit("close")
+    d._busy = 1
+    GLib.timeout_add(100, lambda: d.dialog.emit("close") and False)
+    GLib.timeout_add(200, lambda: delete() and False)
+    GLib.timeout_add(500, lambda: after_both() and False)
+    GLib.timeout_add(5000, lambda: d.dialog.response(Gtk.ResponseType.OK) and False)  # no hang
+    assert d.dialog.run() == Gtk.ResponseType.DELETE_EVENT
+    assert seen == [True]
+
+
+def test_set_it_up_fixes_typing_then_says_portaudio_is_missing(monkeypatch):
+    """A computer missing both: after the typing fix "Set it up" started,
+    the PortAudio warning still comes, and Go Back stays on the screen."""
+    if not Gtk.init_check()[0]:
+        pytest.skip("no display")
+    monkeypatch.setattr(r, "detect_hardware", lambda cfg=None: r.Hardware(None, False))
+    monkeypatch.setattr(r, "system_language", lambda env=None: "en")
+    monkeypatch.setattr(wd, "detect_uinput_access", lambda: (False, "not in input group"))
+    monkeypatch.setattr(wd, "portaudio_installed", lambda: False)
+    d = wd.WelcomeDialog(force_gnome=False)
+    try:
+        monkeypatch.setattr(d, "_on_fix_typing_clicked",
+                            lambda button: d._finish_fix_typing(button, _fix_outcome(True)))
+        warned, responses = _set_it_up(d, monkeypatch, Gtk.ResponseType.CANCEL)
+        assert "Recording isn't set up yet" in warned and responses == []
+    finally:
+        d.destroy()

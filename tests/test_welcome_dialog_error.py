@@ -33,10 +33,25 @@ def test_a_broken_welcome_dialog_quits_the_loop(monkeypatch):
 
 
 def test_the_tray_starts_the_service_after_an_onboarding_error(tray_main):
-    """The welcome comes back next launch: the error counts as a cancel."""
+    """The welcome comes back next launch, and TuxTalk runs meanwhile."""
     def broken():
         raise RuntimeError("missing icon")
     started = tray_main(first_run=True, welcome=broken)
     started.run_timers()
     assert "starts the service" in started
     assert "marks setup done" not in started
+
+
+def test_closing_the_welcome_quits_and_says_how_to_finish(tray_main, monkeypatch):
+    """No hotkey is listened for before setup is done: closed with the X or
+    Escape, TuxTalk used to keep running with dead hotkeys and no word why,
+    and opening it again showed its menu, not the welcome."""
+    from tuxtalk import notify
+    told = []
+    monkeypatch.setattr(notify, "notify", lambda title, body: told.append((title, body)))
+    started = tray_main(first_run=True, welcome=lambda: {"continue": False, "quit": False})
+    started.run_timers()
+    assert "quits" in started
+    assert "starts the service" not in started and "marks setup done" not in started
+    assert told == [("TuxTalk setup isn't finished",
+                     "Open TuxTalk again to finish setting it up.")]

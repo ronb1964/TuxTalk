@@ -26,12 +26,9 @@ def issue_url():
     """The bug form with what TuxTalk knows filled in; the report itself is
     too long for an address, so it's pasted into Log Output."""
     from . import __version__, desktop_detect
-    from .problem_report import os_name
-    fields = {"template": "bug_report.yml", "version": __version__}
-    try:
-        fields["distro"] = os_name() or ""
-    except OSError:
-        pass
+    from .problem_report import fact, os_name
+    fields = {"template": "bug_report.yml", "version": __version__,
+              "distro": fact(os_name)}
     desktop = _FORM_DESKTOPS.get(desktop_detect.get_desktop_environment())
     if desktop:
         fields["desktop"] = desktop
@@ -51,8 +48,9 @@ class ReportWindow:
         asking the graphics card and the hotkey helper takes a moment, and
         the window shows meanwhile."""
         from .problem_report import fact, layout_text
-        from .ui_style import WARNING_AMBER
+        from .ui_style import WARNING_AMBER, close_on_escape
         self.window = Gtk.Window(title="Report a Problem")
+        close_on_escape(self.window)
         # Not transient for Help: on KWin 6.7.5 closing this window as one
         # sent the compositor allocating gigabytes a second until the desktop
         # froze (a window of its own did not).
@@ -70,18 +68,19 @@ class ReportWindow:
                        "unless you copy it, save it or send it yourself, so read it first.")
         box.pack_start(intro, False, False, 0)
 
-        # Shown once the report is in, if its log holds dictated words.
+        # Shown once the report is in, if its log had dictated words.
         self.warning = Gtk.Label(xalign=0, no_show_all=True)
         self.warning.set_line_wrap(True)
         self.warning.set_markup(
-            f"<span foreground='{WARNING_AMBER}'><b>The log below has some of what you "
-            "dictated in it</b>, from when logging it was on (Preferences → Advanced). "
-            "Check it, or clear the log there first.</span>")
+            f"<span foreground='{WARNING_AMBER}'><b>TuxTalk's log had some of what you "
+            "dictated in it</b>, from when logging it was on (Preferences → Advanced → "
+            "Fine-tuning). It's left out of this report.</span>")
         box.pack_start(self.warning, False, False, 0)
 
         self.view = Gtk.TextView(editable=False, cursor_visible=False, monospace=True)
         self.view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
         self.view.get_buffer().set_text("Gathering…")
+        self.view.get_accessible().set_name("Report")
         scrolled = Gtk.ScrolledWindow()
         scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         scrolled.set_shadow_type(Gtk.ShadowType.IN)
@@ -117,15 +116,14 @@ class ReportWindow:
 
     def _gather(self, layout):
         from . import problem_report
-        text = problem_report.build(layout)
-        GLib.idle_add(self._show_report, text)
+        report = problem_report.build(layout)
+        GLib.idle_add(self._show_report, report)
 
-    def _show_report(self, text):
-        from .problem_report import has_dictations
+    def _show_report(self, report):
         if self.closed:
             return False
-        self.view.get_buffer().set_text(text)
-        self.warning.set_visible(has_dictations(text))
+        self.view.get_buffer().set_text(report.text)
+        self.warning.set_visible(report.words_left_out)
         for button in (self.issue_button, self.copy_button, self.save_button):
             button.set_sensitive(True)
         return False
@@ -135,14 +133,23 @@ class ReportWindow:
         return buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
 
     def _copy(self):
-        Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD).set_text(self._text(), -1)
+        """Copy the report, in a way that outlives this window (clipboard.py)."""
+        from .clipboard import copy_text
+        return copy_text(self._text())
 
     def _on_copy(self, _button):
-        self._copy()
+        if not self._copy():
+            self.status.set_text("Couldn't copy it. Save it to a file instead.")
+            return
         self.status.set_text("Copied. Paste it into a forum post, an email or a GitHub issue.")
 
     def _on_issue(self, _button):
-        self._copy()
+        """Copy the report and open GitHub's bug form with what TuxTalk knows
+        filled in: the report is pasted there by the user."""
+        if not self._copy():
+            self.status.set_text("Couldn't copy the report. Save it to a file, then attach "
+                                 "it to the issue.")
+            return
         url = issue_url()
         try:
             Gtk.show_uri_on_window(self.window, url, Gdk.CURRENT_TIME)
@@ -164,9 +171,11 @@ class ReportWindow:
         chooser.destroy()
         if not target:
             return
+        from .config import write_text_atomic
         try:
-            with open(target, "w", encoding="utf-8") as f:
-                f.write(self._text() + "\n")
+            # Private and atomic: the log can name the computer's people and
+            # files, and a failed save leaves an older file as it was.
+            write_text_atomic(target, self._text() + "\n", keep_backup=False)
         except OSError as e:
             self.status.set_text(f"Couldn't save it: {e}")
             return

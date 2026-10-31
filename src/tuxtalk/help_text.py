@@ -59,9 +59,9 @@ def _keys(is_flatpak):
     assigns the two dictation keys and there is no Paste Last shortcut."""
     if is_flatpak:
         return "your Hold-to-talk key", "your Toggle key", ""
-    from .config import load_config
+    from .config import load_config, saved_hold_key
     cfg = load_config()
-    return (cfg.hotkey or "F8", cfg.toggle_hotkey or "F9",
+    return (saved_hold_key(), cfg.toggle_hotkey or "F9",
             getattr(cfg, "paste_last_hotkey", ""))
 
 
@@ -213,22 +213,7 @@ down instead (Discord calls, games), do both, or leave them alone.
 • <b>Preferences → General</b>: your keys, and the speech setup. On first run TuxTalk
   recommends a setup for your computer (the speech model, on your graphics card if
   it's faster) for the language you speak. "Change model, device or language" is
-  there if you ever want something else.
-
-<span size="large">🧪 <b>Indicator Follows Your Window</b></span>
-The recording indicator shows up in the window you're dictating into, wherever
-that window is on the screen, instead of always in the same spot.
-
-  • Turn it on in <b>Preferences → Advanced → TuxTalk Labs</b>.
-  • It's placed each time you start talking, so it goes wherever your window is.
-  • The position you pick in <b>Preferences → Audio → Customize…</b> (bottom center, top
-    right, center…) applies inside the window. The offset there is for the whole screen,
-    so it's skipped.
-  • When TuxTalk can't tell where the window is, the indicator uses its usual
-    position from <b>Preferences → Audio → Customize…</b>.
-  • Works on KDE, on GNOME with the TuxTalk extension, on Sway and Hyprland,
-    and on X11 desktops like Cinnamon and XFCE. On a scaled screen it may sit
-    a little off.'''
+  there if you ever want something else.'''
 
 CHATTING = '''<span size="large"><b>Chats and Messages</b></span>
 
@@ -324,8 +309,8 @@ One box at a time, each box a dictation of its own:
 <b>TuxTalk Labs</b>
 Labs features are experimental: they work, but they're still being refined, may
 change, and won't always get it right. Turn them on in <b>Preferences → Advanced →
-TuxTalk Labs</b>. Voice editing and select and move are below; Type at pause is on
-in the Hands-free section, and the indicator that follows your window in Start Here. Your
+TuxTalk Labs</b>. Voice editing, select and move, and the indicator that follows your
+window are below; Type at pause is in the Hands-free section. Your
 feedback decides what gets finished: <a href="{FEEDBACK_URL}">TuxTalk Discussions</a>.
 
 <span size="large">🧪 <b>Voice Editing</b></span>
@@ -441,7 +426,22 @@ Counts go up to 10 ("three" or "3").
     they do what those keys do in each app.
   • It doesn't work in a terminal, where those keys mean other things.
   • After a select or move, <b>delete last word</b> won't run, since the cursor is
-    somewhere else now. Use Ctrl+Z in the app instead.'''
+    somewhere else now. Use Ctrl+Z in the app instead.
+
+<span size="large">🧪 <b>Indicator Follows Your Window</b></span>
+The recording indicator shows up in the window you're dictating into, wherever
+that window is on the screen, instead of always in the same spot.
+
+  • Turn it on in <b>Preferences → Advanced → TuxTalk Labs</b>.
+  • It's placed each time you start talking, so it goes wherever your window is.
+  • The position you pick in <b>Preferences → Audio → Customize…</b> (bottom center, top
+    right, center…) applies inside the window. The offset there is for the whole screen,
+    so it's skipped.
+  • When TuxTalk can't tell where the window is, the indicator uses its usual
+    position from <b>Preferences → Audio → Customize…</b>.
+  • Works on KDE, on GNOME with the TuxTalk extension, on Sway and Hyprland,
+    and on X11 desktops like Cinnamon and XFCE. On a scaled screen it may sit
+    a little off.'''
 
 TERMINALS = '''<span size="large"><b>Terminals and Code Editors</b></span>
 

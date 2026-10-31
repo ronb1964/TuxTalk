@@ -7,24 +7,27 @@ Designed to be glanceable: organized by category with clear formatting.
 
 import gi
 gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk, Gdk, GLib
+from gi.repository import Gtk, GLib
 
 from . import commands_reference
+from .help_dialog import text_page
 from .logger import setup_logger
+from .ui_style import close_on_escape
 
 logger = setup_logger(__name__)
 
-# Singleton guard — prevents multiple stacked dialogs
+# One window at a time: a second click brings the open one forward.
 _active_dialog = None
 
 
 def show_voice_commands_dialog():
-    """Show a compact, quick-reference popup of all voice commands."""
+    """Show the cheat sheet of every voice command, or bring the open one
+    forward. Returns the window (None when one was already open)."""
     global _active_dialog
     if _active_dialog is not None:
         from .raise_window import raise_window
         raise_window(_active_dialog)
-        return
+        return None
 
     dialog = Gtk.Dialog(title="Voice Commands — Quick Reference")
     dialog.set_default_size(520, 580)
@@ -32,34 +35,17 @@ def show_voice_commands_dialog():
     dialog.set_modal(False)
     dialog.set_position(Gtk.WindowPosition.CENTER)
     dialog.set_keep_above(True)
-
-    # Close on Escape key
-    dialog.connect("key-press-event", _on_key_press)
+    close_on_escape(dialog)
 
     content = dialog.get_content_area()
     content.set_margin_top(8)
     content.set_margin_bottom(8)
     content.set_margin_start(12)
     content.set_margin_end(12)
+    # Help's page: the text takes the focus, so the keys scroll it and a
+    # screen reader reads it; Close is the only other thing to focus.
+    content.pack_start(text_page(_build_markup()), True, True, 0)
 
-    # Scrollable content area
-    scrolled = Gtk.ScrolledWindow()
-    scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-
-    label = Gtk.Label()
-    label.set_markup(_build_markup())
-    label.set_line_wrap(True)
-    label.set_xalign(0)
-    label.set_valign(Gtk.Align.START)
-    label.set_margin_top(8)
-    label.set_margin_bottom(8)
-    label.set_margin_start(12)
-    label.set_margin_end(12)
-
-    scrolled.add(label)
-    content.pack_start(scrolled, True, True, 0)
-
-    # Hotkey hint at the bottom
     hint = Gtk.Label()
     hint.set_markup(f'<span size="small" color="#888888">{_hint_markup()}</span>')
     hint.set_xalign(0.5)
@@ -67,13 +53,9 @@ def show_voice_commands_dialog():
     hint.set_margin_bottom(4)
     content.pack_start(hint, False, False, 0)
 
-    # Close button
-    close_btn = Gtk.Button(label="Close")
-    close_btn.connect("clicked", lambda w: dialog.destroy())
-    dialog.add_action_widget(close_btn, Gtk.ResponseType.CLOSE)
+    dialog.add_action_widget(Gtk.Button(label="Close"), Gtk.ResponseType.CLOSE)
     dialog.connect("response", lambda d, r: d.destroy())
 
-    # Clear singleton reference when dialog is closed
     def _on_destroy(widget):
         global _active_dialog
         _active_dialog = None
@@ -82,6 +64,7 @@ def show_voice_commands_dialog():
     _active_dialog = dialog
     dialog.show_all()
     dialog.present()
+    return dialog
 
 
 def _hint_markup():
@@ -95,14 +78,6 @@ def _hint_markup():
     if hotkey:
         return f"Tip: Press <b>{GLib.markup_escape_text(hotkey)}</b> anytime to open this reference"
     return "Tip: Set a hotkey in Preferences → General to open this with a keypress"
-
-
-def _on_key_press(dialog, event):
-    """Close dialog on Escape key."""
-    if event.keyval == Gdk.KEY_Escape:
-        dialog.destroy()
-        return True
-    return False
 
 
 def _build_markup():

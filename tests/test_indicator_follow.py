@@ -110,7 +110,7 @@ def test_the_labs_help_page_explains_it():
     from gi.repository import Gtk
     from gtk_text import find, shown_text
     from tuxtalk import help_dialog
-    dialog = help_dialog.show_help_dialog(tab="start")
+    dialog = help_dialog.show_help_dialog(tab="writing")
     try:
         notebook = find(dialog, Gtk.Notebook)
         page = notebook.get_nth_page(notebook.get_current_page())

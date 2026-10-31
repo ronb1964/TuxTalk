@@ -12,12 +12,12 @@ gi.require_version('Gdk', '3.0')
 gi.require_version('GdkPixbuf', '2.0')
 from gi.repository import Gdk, GdkPixbuf, GLib, Gtk
 
+from .config import APP_ID
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
 
-_APP_ID = "io.github.ronb1964.TuxTalk"
-_SCALABLE = f"share/icons/hicolor/scalable/apps/{_APP_ID}.svg"
+_SCALABLE = f"share/icons/hicolor/scalable/apps/{APP_ID}.svg"
 
 # The glow's steps, one every 100 ms: (blur in px, opacity) of each shadow.
 # From step 9 a wider, fainter second shadow joins in.
@@ -77,8 +77,8 @@ def _icon_candidates():
     paths = []
     appdir = os.environ.get('APPDIR')       # a running AppImage, with a PNG at its root
     if appdir:
-        paths += [os.path.join(appdir, f"{_APP_ID}.png"),
-                  os.path.join(appdir, f"{_APP_ID}.svg"),
+        paths += [os.path.join(appdir, f"{APP_ID}.png"),
+                  os.path.join(appdir, f"{APP_ID}.svg"),
                   os.path.join(appdir, "usr", _SCALABLE)]
     # The project's own icons/, beside src/, when running from the source.
     project_icons = os.path.join(
@@ -90,8 +90,8 @@ def _icon_candidates():
         # pixmaps PNG. A packaged install has no $APPDIR and no project
         # icons/ folder, so without these the splash shows plain text.
         f"/usr/{_SCALABLE}",
-        f"/usr/share/icons/hicolor/256x256/apps/{_APP_ID}.png",
-        f"/usr/share/pixmaps/{_APP_ID}.png",
+        f"/usr/share/icons/hicolor/256x256/apps/{APP_ID}.png",
+        f"/usr/share/pixmaps/{APP_ID}.png",
         os.path.expanduser(f"~/.local/{_SCALABLE}"),
     ]
     return paths
@@ -188,23 +188,32 @@ class SplashScreen:
         return False
 
     def show_and_fade(self, callback):
-        """Show the splash, then fade it out and call *callback* (no arguments)."""
+        """Show the splash, then fade it out and call *callback* (no arguments)
+        once it has gone. A splash closed early (Alt+F4 under some window
+        managers) calls it too: the welcome screen waits on it."""
+        self.window.connect("destroy", self._on_destroy, callback)
         self.window.set_opacity(0.0)
         self.window.show_all()
         GLib.timeout_add(100, self._animate_glow)
         # Held for 2.5 s at full while the glow grows, then faded out.
         fade_in(self.window,
-                lambda: GLib.timeout_add(2500, lambda: self._fade_out(1.0, callback)))
+                lambda: GLib.timeout_add(2500, lambda: self._fade_out(1.0)))
 
-    def _fade_out(self, opacity, callback):
+    def _fade_out(self, opacity):
         """Lower the opacity a step at the fade-in's pace; at nothing, close
-        the splash and call *callback*."""
+        the splash."""
+        if self._stop_glow:         # closed already
+            return
         opacity -= 0.05
         self.window.set_opacity(opacity)
         if opacity > 0.0:
-            GLib.timeout_add(25, lambda: self._fade_out(opacity, callback))
+            GLib.timeout_add(25, lambda: self._fade_out(opacity))
             return
+        self.window.destroy()
+
+    def _on_destroy(self, _window, callback):
+        """The splash has gone, faded out or closed: its stylesheet goes too,
+        and *callback* runs once its window is out of the way."""
         self._stop_glow = True      # the glow's timer stops at its next step
         Gtk.StyleContext.remove_provider_for_screen(self._screen, self.css_provider)
-        self.window.destroy()
-        callback()
+        GLib.idle_add(callback)

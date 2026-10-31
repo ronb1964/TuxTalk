@@ -329,8 +329,14 @@ class TranscribeWindow:
 
     def _on_drop(self, _widget, _context, _x, _y, data, _info, _time):
         uris = data.get_uris() or []
-        if uris and not self.busy and self._may_discard("new"):
+        if not uris or self.busy:
+            return
+        try:
             path, _host = GLib.filename_from_uri(uris[0])
+        except GLib.Error:      # a web address, dragged from a browser
+            self.status.set_text("Only a file on this computer can be transcribed.")
+            return
+        if self._may_discard("new"):
             self.start(path)
 
     # --- the work, on its own thread ---------------------------------------------------------
@@ -402,7 +408,11 @@ class TranscribeWindow:
         keeping it under Earlier Transcripts. On GTK's thread."""
         self.pieces = pieces
         self.kept = self.copied = False
-        self.remembered = bool(pieces) and ft.remember(self.path, pieces, total) is not None
+        # A re-run stopped early doesn't replace the copy kept of a run that
+        # got further: a whole transcript isn't lost to a second try.
+        longer = ft.further_kept(self.path, pieces) if stopped else None
+        self.remembered = (bool(pieces) and longer is None
+                           and ft.remember(self.path, pieces, total) is not None)
         self._refresh_earlier()
         self._set_busy(False)
         self._show_text()
@@ -412,7 +422,9 @@ class TranscribeWindow:
             self.status.set_text("Stopped.")
         elif stopped:
             self.status.set_text(f"Stopped at about {_duration(pieces[-1].end)}. "
-                                 "What was done so far is below.")
+                                 "What was done so far is below."
+                                 + (" The longer transcript from before is still under "
+                                    "Earlier Transcripts." if longer else ""))
         elif not pieces:
             self.status.set_text("Nobody seems to talk in this file.")
         else:
@@ -485,9 +497,13 @@ class TranscribeWindow:
     # --- copy and save --------------------------------------------------------------------
 
     def _on_copy(self, _button):
+        # clipboard.py's copy outlives this window, which is a process of
+        # its own: GTK's alone went with it where no clipboard manager runs.
+        from .clipboard import copy_text
         buf = self.view.get_buffer()
-        text = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
-        Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD).set_text(text, -1)
+        if not copy_text(buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)):
+            self.status.set_text("Couldn't copy it. Save it as text instead.")
+            return
         self.copied = True
         self.status.set_text("Copied. Paste it wherever you like.")
 

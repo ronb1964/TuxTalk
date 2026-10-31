@@ -351,8 +351,9 @@ before 0.15.0, so older entries use that name.
 - Help's Problems tab opens with a "Report a Problem…" button. It puts together
   what I'd ask for anyway: your TuxTalk version, distro, desktop, keyboard
   layout, graphics card, the settings that matter and the end of the log,
-  with your username taken out and no dictated words. You see all of it
-  first, then copy it, save it to a file, or open a GitHub issue with it
+  with your username taken out and no dictated words, not even ones from a
+  time you had TuxTalk log them. You see all of it first, then copy it,
+  save it to a file only you can read, or open a GitHub issue with it
   filled in. Nothing is sent anywhere unless you do that yourself.
 - Preferences' tabs each have a faint outline now. On Breeze dark the tabs
   you weren't on were just words in a row, and it was hard to see they were
@@ -606,6 +607,41 @@ before 0.15.0, so older entries use that name.
 - With a screen reader, each download's Cancel button and progress bar are
   named after the download, so two downloads in one window can be told
   apart, and the update window's command box has a name too.
+- Transcribe a File: choosing a file again and pressing Stop partway used
+  to replace the whole transcript kept from before under Earlier
+  Transcripts with the short part. The longer one stays there now.
+- Copy All in Transcribe a File keeps the text on the clipboard after you
+  close the window, also on desktops with no clipboard manager (Sway,
+  Hyprland). It could come back empty there.
+- Dropping a web link on Transcribe a File says only a file on this computer
+  can be transcribed. Before, nothing happened.
+- The Voice Commands window scrolls from the keyboard now (Page Down, the
+  arrows, Home and End), and a screen reader can read it, as in Help.
+  Before, a keyboard could only reach its Close button, so you saw the
+  first third of the list.
+- In TuxTalk's menu window (the one you get on a desktop with no system
+  tray), turning dictation off while a long dictation was still being typed
+  flipped the switch back on for several seconds. It stays off now.
+- "Add TuxTalk to the Top Bar..." in that window opened Preferences with
+  Install Extension tucked away in a closed section that said everything
+  was set up. On a desktop with no tray, a missing GNOME extension now
+  counts as something to fix, so System check opens on it.
+- Closing the welcome screen before "Set it up" (the X or Esc) left
+  TuxTalk running with a tray icon and a dictation key that did nothing,
+  and nothing said why. TuxTalk now quits and a notification says to open
+  it again to finish setting it up; the welcome screen comes back then.
+- The welcome screen can't be closed any more while Fix Typing or the
+  PortAudio install is still working. Closed then, the password prompt
+  still came up with nothing on screen to explain it.
+- "Set it up" on the welcome screen says so when PortAudio isn't
+  installed yet, as it already did for typing: without it TuxTalk can't
+  hear the microphone.
+- Closing the splash screen in its first half second (Alt+F4 under some
+  window managers) left first-run setup stuck with nothing on screen until
+  TuxTalk was restarted. The welcome screen comes up now.
+- A screen reader now names the dictation switch in TuxTalk's menu window
+  and the release notes in About and Update Available. Before, it read
+  them as an unnamed switch and an unnamed text box.
 
 ## [0.18.2] - 2026-10-23
 

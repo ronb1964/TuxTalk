@@ -23,6 +23,7 @@ class NotesView:
         # A cursor, though read-only, so the keyboard can move onto a link.
         self.view = Gtk.TextView(editable=False, cursor_visible=True, wrap_mode=Gtk.WrapMode.WORD,
                                  left_margin=10, right_margin=10, top_margin=10)
+        self.view.get_accessible().set_name("Release notes")
         self.links = {}             # a link's tag name -> its address
         self.view.connect("button-release-event", self._on_click)
         self.view.connect("key-press-event", self._on_key)
