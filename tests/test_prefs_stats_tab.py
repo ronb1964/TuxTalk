@@ -1,14 +1,12 @@
 """Preferences, Stats tab: the counts from the stats file, time saved at the
 user's typing speed, and Reset Stats."""
+import os
 from types import SimpleNamespace
 
 import pytest
+from gi.repository import Gtk
 
-gi = pytest.importorskip("gi")
-gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk  # noqa: E402
-
-from tuxtalk import prefs_stats, stats  # noqa: E402
+from tuxtalk import prefs_stats, stats
 
 
 @pytest.fixture
@@ -51,8 +49,13 @@ def test_a_reset_that_cannot_delete_the_file_says_so(tab, monkeypatch, message_b
     nothing on screen, with the counts silently still there."""
     t, _ = tab
 
+    remove = os.remove
+
     def refuse(path):
-        raise PermissionError(13, "Permission denied", path)
+        """The stats file alone: other threads remove their files as usual."""
+        if path.startswith(stats.stats_path()):
+            raise PermissionError(13, "Permission denied", path)
+        remove(path)
     monkeypatch.setattr(stats.os, "remove", refuse)
     message_boxes.answer = Gtk.ResponseType.OK
     t._on_reset(None)

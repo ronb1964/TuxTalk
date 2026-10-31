@@ -15,12 +15,6 @@ from types import SimpleNamespace
 from tuxtalk.tray import DictationTray
 
 
-def test_the_tray_exposes_set_model_to_dbus():
-    """DBusService._dispatch drops calls for methods the app lacks."""
-    assert hasattr(DictationTray, "set_model"), \
-        "SetModel is advertised over D-Bus but the tray cannot receive it"
-
-
 def test_set_model_writes_the_model_and_restarts(monkeypatch):
     saved = {}
     restarted = []

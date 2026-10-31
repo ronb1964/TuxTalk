@@ -20,6 +20,7 @@ repaint unrelated windows.
 import pathlib
 
 import pytest
+from conftest import unscoped_selectors
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 CSS = ROOT / "src/tuxtalk/prefs_style.css"
@@ -27,29 +28,26 @@ CSS = ROOT / "src/tuxtalk/prefs_style.css"
 SCOPE_CLASS = "talktype-prefs"
 
 
-def _top_level_selectors():
-    """Yield (line_number, selector) for each top-level rule in the stylesheet."""
-    depth = 0
-    for n, line in enumerate(CSS.read_text().splitlines(), start=1):
-        stripped = line.strip()
-        if (depth == 0 and stripped.endswith("{")
-                and not stripped.startswith(("/*", "*", "@"))):
-            yield n, stripped[:-1].strip()
-        depth += line.count("{") - line.count("}")
-
-
 def test_every_selector_is_scoped_to_the_prefs_window():
     """An unscoped selector would repaint unrelated windows in this process."""
-    unscoped = [
-        f"line {n}: {sel}"
-        for n, sel in _top_level_selectors()
-        if SCOPE_CLASS not in sel
-    ]
+    unscoped = unscoped_selectors(CSS.read_text(), SCOPE_CLASS)
     assert not unscoped, (
         f"These selectors are not scoped to .{SCOPE_CLASS}, so once the "
         f"provider is installed screen-wide they would restyle every GTK "
         f"window in the process: {unscoped}"
     )
+
+
+@pytest.mark.parametrize("css, unscoped", [
+    (".talktype-prefs label, button { color: red; }", ["button"]),
+    ("* { color: red; }", ["*"]),
+    (".talktype-prefs-old label { color: red; }", [".talktype-prefs-old label"]),
+    ("window:not(.talktype-prefs) { color: red; }", ["window:not(.talktype-prefs)"]),
+    ("window.talktype-prefs { color: red; }", []),
+    ("window.talktype-prefs:not(.dialog) label { color: red; }", []),
+])
+def test_the_scope_check_catches_each_unscoped_selector(css, unscoped):
+    assert unscoped_selectors(css, SCOPE_CLASS) == unscoped
 
 
 def test_stylesheet_reaches_the_widgets_inside_the_window(prefs_window):

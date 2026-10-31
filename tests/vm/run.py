@@ -10,10 +10,11 @@
                                VM as it is now (no revert, no first run)
   run.py report RUN_FOLDER     rebuild a run's report.html
 
-VMs: silverblue, ubuntu, mint, kde, zorin (see vmlib.VMS). Runs are kept in
-~/.local/share/talktype-vm-tools/runs/. See README.md.
+VMs: silverblue, ubuntu, mint, kde, zorin, pop, suse, debian (see vmlib.VMS).
+Runs are kept in ~/.local/share/talktype-vm-tools/runs/. See README.md.
 """
 import argparse
+import itertools
 import json
 import subprocess
 import sys
@@ -66,7 +67,7 @@ def set_up_vm(vm, appimage):
     if vm.ssh("command -v pactl", check=False).returncode:
         # Zorin ships without pactl. The pretend microphones need it, and so
         # does TuxTalk's "turn other sounds down", so a stock Zorin can't do
-        # that: a finding of its own (2026-10-20), not tested here.
+        # that: a finding of its own, not tested here.
         vm.ssh("sudo -n DEBIAN_FRONTEND=noninteractive apt-get install -y -q pulseaudio-utils",
                timeout=600)
     vm.ssh("mkdir -p ~/AppImages")
@@ -94,16 +95,46 @@ def safe_shot(run, name):
         return None
 
 
-def run_checks(run, info, results, save, only=None):
-    tags = set(run.vm.spec.tags)
+def selected(spec, only=None):
+    """The checks that run on the VM of *spec*, in run order: of *only*
+    alone when it's given, and only those for that VM's desktop."""
     ordered = sorted(CHECKS, key=lambda c: SECTION_ORDER.index(c.section))
-    if only:
-        ordered = [c for c in ordered if c.id in only]
-    stopped = None
-    for chk in ordered:
-        base = dict(id=chk.id, name=chk.name, section=chk.section, vm=run.vm.spec.key)
-        if chk.desktops and not tags & set(chk.desktops):
+    return [c for c in ordered if (not only or c.id in only)
+            and (not c.desktops or set(spec.tags) & set(c.desktops))]
+
+
+def selection_problem(keys, only):
+    """Why --only can't be run on the VMs of *keys*, or None. Asked before
+    any VM is touched: a mistyped id would otherwise run nothing and pass."""
+    if not only:
+        return None
+    unknown = only - {c.id for c in CHECKS}
+    if unknown:
+        return f"no check called {', '.join(sorted(unknown))}"
+    idle = [key for key in keys if not selected(VMS[key], only)]
+    if idle:
+        return f"{', '.join(sorted(only))} doesn't run on {', '.join(idle)}"
+    return None
+
+
+def new_run_folder(started):
+    """A folder of this run's own, named after when it started: a quick
+    rerun never mixes its results and screenshots with the last one's."""
+    base = RUNS / started.strftime("%Y-%m-%d-%H%M%S")
+    RUNS.mkdir(parents=True, exist_ok=True)
+    for n in itertools.count(1):
+        folder = base if n == 1 else base.with_name(f"{base.name}-{n}")
+        try:
+            folder.mkdir()
+        except FileExistsError:
             continue
+        return folder
+
+
+def run_checks(run, info, results, save, only=None):
+    stopped = None
+    for chk in selected(run.vm.spec, only):
+        base = dict(id=chk.id, name=chk.name, section=chk.section, vm=run.vm.spec.key)
         if stopped:
             results.append(Result(status="skip", detail=stopped, **base))
             continue
@@ -132,8 +163,7 @@ def run_checks(run, info, results, save, only=None):
 
 def test(keys, appimage, keep_running, as_is=False, only=None):
     started = datetime.now()
-    out_dir = RUNS / started.strftime("%Y-%m-%d-%H%M")
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = new_run_folder(started)
     results, vms, voices_used = [], [], set()
 
     def save():
@@ -182,14 +212,18 @@ def main():
     r = sub.add_parser("report")
     r.add_argument("folder", type=Path)
     args = parser.parse_args()
+    if args.command == "test" and (problem := selection_problem(args.vms, args.only)):
+        parser.error(problem)
     if args.command == "prepare":
         prepare(args.vm)
     elif args.command == "test":
         results = test(args.vms, args.appimage.expanduser().resolve(),
                        args.keep_running or args.as_is, args.as_is, args.only)
         # Whoever started the run (a person or an agent) sees a failure in
-        # the exit status too, not only in the report.
-        sys.exit(1 if any(r.status in ("fail", "error") for r in results) else 0)
+        # the exit status too, not only in the report; so does a run that
+        # ran nothing.
+        sys.exit(1 if not results or any(r.status in ("fail", "error") for r in results)
+                 else 0)
     else:
         print(report.build(args.folder))
 

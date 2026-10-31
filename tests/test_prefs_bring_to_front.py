@@ -125,12 +125,18 @@ def test_two_quick_launches_open_one_window(one_window, monkeypatch):
         return True
     monkeypatch.setattr(prefs.prefs_ipc, "bring_to_front", front)
     monkeypatch.setattr(prefs.prefs_ipc, "is_prefs_pid", lambda pid: True)
+    # Waited for as long as a busy computer needs: the pid ends the wait.
+    monkeypatch.setattr(single_instance, "FRONT_WAIT_S", 10)
     import threading                                  # ...which it writes a moment later
-    threading.Timer(0.1, lambda: pidfile.write_text("4242")).start()
-    with pytest.raises(SystemExit):
-        prefs._acquire_prefs_singleton(None)
-    assert sent == [4242]
-    first.close()
+    writes = threading.Timer(0.1, lambda: pidfile.write_text("4242"))
+    writes.start()
+    try:
+        with pytest.raises(SystemExit):
+            prefs._acquire_prefs_singleton(None)
+        assert sent == [4242]
+    finally:
+        writes.join(10)
+        first.close()
 
 
 def test_a_window_that_has_just_closed_doesnt_stop_the_next_from_opening(one_window,
@@ -214,15 +220,14 @@ def test_a_request_written_while_the_last_is_read_isnt_lost(tmp_path, monkeypatc
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
     monkeypatch.setattr(prefs_ipc.os, "kill", lambda pid, sig: None)
     prefs_ipc.bring_to_front(42, "stats")
-    real_open = open
 
     def open_and_get_another_request(path, *args, **kwargs):
-        f = real_open(path, *args, **kwargs)
+        f = open(path, *args, **kwargs)  # noqa: SIM115 (take_tab_request closes it)
         prefs_ipc.bring_to_front(42, "updates")       # the next click, meanwhile
         return f
-    monkeypatch.setattr("builtins.open", open_and_get_another_request)
-    assert prefs_ipc.take_tab_request() == "stats"
-    monkeypatch.setattr("builtins.open", real_open)
+    with monkeypatch.context() as reading:            # prefs_ipc's open alone
+        reading.setattr(prefs_ipc, "open", open_and_get_another_request, raising=False)
+        assert prefs_ipc.take_tab_request() == "stats"
     assert prefs_ipc.take_tab_request() == "updates"
 
 

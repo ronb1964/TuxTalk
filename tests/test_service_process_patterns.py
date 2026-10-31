@@ -21,6 +21,7 @@ process that doesn't handle them.
 
 import os
 import pathlib
+import re
 import signal
 
 import pytest
@@ -195,7 +196,8 @@ class TestStopDictationService:
 class TestNobodyHandRollsItAnyMore:
     def test_nobody_pkills_or_pgreps_for_the_service(self):
         """Separate patterns at each call site drift apart, and the substring
-        matching pkill/pgrep -f do is wrong in its own right."""
+        matching pkill/pgrep -f do is wrong in its own right, whatever name
+        they look for: "tuxtalk.app" matches a shell that mentions it too."""
         offenders = []
         for path in (ROOT / "src" / "tuxtalk").rglob("*.py"):
             if path.name == "service_launcher.py":
@@ -203,8 +205,7 @@ class TestNobodyHandRollsItAnyMore:
             for line in path.read_text().splitlines():
                 if line.lstrip().startswith("#"):
                     continue  # history lessons in comments are fine
-                if "pkill" in line and "talktype" in line or \
-                        '"pgrep"' in line and "talktype" in line:
+                if re.search(r"\bp(?:kill|grep)\b", line):
                     offenders.append(f"{path.name}: {line.strip()}")
 
         assert offenders == [], (

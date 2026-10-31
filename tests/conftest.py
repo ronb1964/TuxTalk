@@ -1293,3 +1293,41 @@ def message_boxes(monkeypatch):
     boxes = types.SimpleNamespace(shown=[], answer=None)
     monkeypatch.setattr(ui_style, "message_dialog", lambda **k: _MessageBox(boxes, **k))
     return boxes
+
+
+def import_vm_tool(name):
+    """A module of the VM harness in tests/vm, which imports its neighbours
+    by plain name ("run", "report", "harness"). Their folder is on sys.path,
+    and they are in sys.modules, only while it loads: no other test imports
+    them by accident, and a module of the same name loaded before is neither
+    used here nor replaced. The module returned keeps its neighbours."""
+    import importlib
+    import pathlib
+    import sys
+    folder = pathlib.Path(__file__).parent / "vm"
+    names = {path.stem for path in folder.glob("*.py")}
+    before = {n: sys.modules.pop(n) for n in names if n in sys.modules}
+    sys.path.insert(0, str(folder))
+    try:
+        return importlib.import_module(name)
+    finally:
+        sys.path.remove(str(folder))
+        for n in names:
+            sys.modules.pop(n, None)
+        sys.modules.update(before)
+
+
+def unscoped_selectors(css, scope_class):
+    """The selectors of stylesheet *css* that don't carry .*scope_class*, a
+    bare `*` and each part of a selector list included: once the sheet is
+    installed screen-wide, any of them restyles every window in the process.
+    GTK reads the sheet, so a selector list comes back one rule a selector."""
+    import re
+    provider = Gtk.CssProvider()
+    provider.load_from_data(css.encode())
+    selectors = re.findall(r"^([^{}\s][^{}]*?)\s*\{", provider.to_string(), re.MULTILINE)
+    assert selectors, "the stylesheet has no rules"
+    scoped = re.compile(rf"\.{re.escape(scope_class)}(?![\w-])")
+    # Inside :not() the class picks every window *without* it.
+    return [selector for selector in selectors
+            if not scoped.search(re.sub(r":not\([^)]*\)", "", selector))]

@@ -1,5 +1,8 @@
-"""The virtual-keyboard backend must keep delegating to keyboard_output.type_text so the non-Flatpak
-typing path is behaviorally unchanged."""
+"""Where the keys TuxTalk sends go: the virtual keyboard outside the Flatpak
+(delegating to keyboard_output, so that path is unchanged), and inside it
+libei through the RemoteDesktop portal, with its handshake, restore token and
+a fresh session per job. Typing, editing keys and undo all go through the
+backend."""
 import os
 
 import pytest
@@ -56,10 +59,6 @@ def test_libei_backend_types_via_fresh_session(monkeypatch):
     closed = []
 
     class FakeSession(_FakeSessionBase):
-        def __init__(self, fd):
-            super().__init__(fd)
-            self.fd = fd
-
         def pump_until_ready(self):
             return True
 
@@ -84,7 +83,7 @@ def test_save_token_creates_missing_data_dir(tmp_path, monkeypatch):
     # dictation. It must create its parent dir like every other data-dir writer.
     from tuxtalk.output_backends import LibeiOutputBackend
     b = LibeiOutputBackend()
-    token_path = tmp_path / "TalkType" / "remote_desktop_token"  # parent missing
+    token_path = tmp_path / "TuxTalk" / "remote_desktop_token"  # parent missing
     monkeypatch.setattr(b, "_token_path", lambda: str(token_path))
 
     b._save_token("restore-token-abc")
@@ -117,7 +116,7 @@ def test_the_restore_token_is_readable_by_its_user_only(tmp_path, monkeypatch):
 def test_output_backend_accessor_returns_the_virtual_keyboard_on_host(monkeypatch):
     # No FLATPAK_ID on the host -> the virtual-keyboard backend.
     monkeypatch.delenv("FLATPAK_ID", raising=False)
-    keyboard_output._OUTPUT_BACKEND = None  # reset the process cache for the test
+    monkeypatch.setattr(keyboard_output, "_OUTPUT_BACKEND", None)   # the process cache
     from tuxtalk.output_backends import VirtualKeyboardOutputBackend
     assert isinstance(keyboard_output.output_backend(), VirtualKeyboardOutputBackend)
 
@@ -150,10 +149,6 @@ def test_libei_backend_select_all_delete_via_fresh_session(monkeypatch):
     called, closed = [], []
 
     class FakeSession(_FakeSessionBase):
-        def __init__(self, fd):
-            super().__init__(fd)
-            pass
-
         def pump_until_ready(self):
             return True
 
@@ -177,10 +172,6 @@ def test_libei_backend_backspaces_via_fresh_session(monkeypatch):
     got, closed = [], []
 
     class FakeSession(_FakeSessionBase):
-        def __init__(self, fd):
-            super().__init__(fd)
-            pass
-
         def pump_until_ready(self):
             return True
 
@@ -230,7 +221,7 @@ def test_handle_undo_char_undo_routes_backspaces_through_backend(monkeypatch):
 
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: FakeBackend())
     assert voice_commands.handle_undo("undo that", False, False) is True
-    assert got and got[0] > 0  # deleted a positive number of characters
+    assert got == [len("world")]                  # "undo that" took the last word
 
 
 def test_flatpak_electron_app_types_via_libei_not_the_virtual_keyboard(monkeypatch, keyboard):
@@ -238,7 +229,7 @@ def test_flatpak_electron_app_types_via_libei_not_the_virtual_keyboard(monkeypat
     # use the virtual keyboard (no /dev/uinput in the sandbox). It types through
     # the libei backend directly, keeping only the tab→spaces safety (a real Tab
     # jumps focus to Claude Desktop's Send button).
-    monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TalkType")
+    monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TuxTalk")
     from tuxtalk import focused_window
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "Claude")
     monkeypatch.setattr(focused_window, "look", lambda: ("Claude", None))
@@ -335,7 +326,7 @@ def test_a_portal_that_never_answers_times_out(monkeypatch):
 def test_flatpak_typing_records_what_libei_types_for_undo(monkeypatch):
     """libei types "…" as "..." (three keys), so undo must count three."""
     from tuxtalk.output_backends import LibeiOutputBackend
-    monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TalkType")
+    monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TuxTalk")
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
     typed = []
 

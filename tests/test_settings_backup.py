@@ -383,7 +383,7 @@ def test_talktype_backups_are_listed_with_the_others(home, monkeypatch):
 
 
 def test_your_words_travel_with_the_backup(home):
-    """custom_words.txt (Preferences > Snippets > Your Words) is in the backup
+    """custom_words.txt (Preferences → Words → Your Words) is in the backup
     and comes back with it. A backup from before Your Words leaves them be."""
     from tuxtalk import custom_words
     custom_words.save(["TuxTalk", "BambuStudio"])
@@ -748,18 +748,18 @@ def test_an_original_that_cant_be_read_changes_nothing(home, monkeypatch):
     backup = sb.read_backup(str(dest))
     with open(config.CONFIG_PATH, "w") as f:
         f.write('hotkey = "F9"\n')
-    real_open = open
     monkeypatch.setattr(sb, "_snapshot", lambda: None)     # the copy before is made
 
     def unreadable_commands(path, mode="r", *a, **k):
         if path == config.CUSTOM_COMMANDS_PATH and "w" not in mode:
             raise PermissionError(13, "Permission denied")
-        return real_open(path, mode, *a, **k)
-    monkeypatch.setattr("builtins.open", unreadable_commands)
-    with pytest.raises(sb.BackupError, match="nothing was changed"):
-        sb.restore(backup)
-    monkeypatch.setattr("builtins.open", real_open)
+        return open(path, mode, *a, **k)
+    with monkeypatch.context() as reading:              # settings_backup's open alone
+        reading.setattr(sb, "open", unreadable_commands, raising=False)
+        with pytest.raises(sb.BackupError, match="nothing was changed"):
+            sb.restore(backup)
     assert read(config.CONFIG_PATH) == 'hotkey = "F9"\n'
+
 
 @pytest.mark.parametrize("problem", [sb.BackupError("This isn't a TuxTalk backup."),
                                      OSError(28, "No space left on device")])

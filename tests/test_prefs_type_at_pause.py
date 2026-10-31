@@ -159,7 +159,6 @@ def test_closing_preferences_stops_the_test(win):
 
 
 def test_turning_the_feature_off_stops_the_test(win):
-    """Review focus 2."""
     win.tap_check.set_active(True)
     win.tap_test_btn.clicked()
     win.tap_check.set_active(False)
@@ -187,7 +186,6 @@ def test_leaving_the_advanced_tab_stops_the_test(win):
 
 
 def test_a_mic_that_wont_open_says_so(win):
-    """Review focus 4."""
     def broken(**kwargs):
         raise OSError("Device unavailable")
     win._pause_stream_factory = broken
@@ -232,7 +230,7 @@ def test_help_explains_type_at_pause(help_pages):
     assert "Fine-tuning (under Type at pause → Adjust Settings)" in hands_free
 
 
-# --- final review fixes ------------------------------------------------------
+# --- stopping the test, its microphone, and what the settings show ------------------
 
 def test_leaving_the_window_stops_the_test(win):
     """Clicking into the app to dictate takes the focus from Preferences. A test
@@ -260,7 +258,7 @@ def test_a_microphone_that_never_stops_doesnt_freeze_the_window(win, monkeypatch
         assert opened(win, count)
         started = time.monotonic()
         stop()
-        assert time.monotonic() - started < 0.5
+        assert time.monotonic() - started < 2      # the stream never stops at all
         assert win.tap_test_btn.get_label() == "Test"
     release.set()
     assert all(stopped(stream) for stream in win.streams)

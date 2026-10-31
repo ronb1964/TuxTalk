@@ -69,8 +69,8 @@ def test_select_the_last_sentence():
     ("select the last two words", 14), ("select the last 2 words", 14),
 ])
 def test_select_the_last_words(said, n):
-    """The period after the last word is stepped over, not selected (Ron,
-    2026-10-18): the word is what gets replaced or fixed."""
+    """The period after the last word is stepped over, not selected: the
+    word is what gets replaced or fixed."""
     assert keys(said, "We finished early.") == [((), "LEFT")] + [((S,), "LEFT")] * n
 
 
@@ -144,11 +144,10 @@ def test_every_command_has_a_name_for_the_log():
     assert nav.parse("Select the last sentence.").name == "select the last sentence"
 
 
-# --- in dictation (app.py) ----------------------------------------------------------------
+# --- in dictation (voice_commands) ----------------------------------------------------------------
 
 @pytest.fixture
 def dictation(monkeypatch):
-    from tuxtalk import app
     seen = {"pressed": [], "problems": [], "beeps": 0}
 
     class Backend:
@@ -167,7 +166,7 @@ def dictation(monkeypatch):
     monkeypatch.setattr(notices, "edit_problem", lambda kind, beeps: seen["problems"].append(kind))
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda on, *a: seen.__setitem__("beeps", seen["beeps"] + 1))
     monkeypatch.setattr(rs.state, "last_inserted_text", " We finished early.")
-    seen["app"], seen["backend"] = app, backend
+    seen["backend"] = backend
     return seen
 
 
@@ -232,15 +231,15 @@ def test_each_modifier_is_held_around_its_key(keyboard):
 
 
 def test_shift_is_held_once_across_a_run_of_keys(keyboard):
-    """Selecting a sentence crawled across the line: forty Shift presses at
-    ydotool's typing speed (Ron, 2026-10-14)."""
+    """Selecting a sentence crawled across the line: forty Shift presses,
+    each at typing speed."""
     keyboard_output.send_chords([((), "LEFT")] + [((S,), "LEFT")] * 3)
     assert keyboard.events == [(105, 1), (105, 0), (42, 1), (105, 1), (105, 0), (105, 1),
                                (105, 0), (105, 1), (105, 0), (42, 0)]
 
 
 def test_what_i_said_is_only_trusted_in_the_window_it_went_to(dictation, monkeypatch):
-    """Ron dictated a chat message, then said "select the last sentence" in
+    """A chat message dictated, then "select the last sentence" said in
     Writer: it selected the chat sentence's length of Writer's text."""
     monkeypatch.setattr(rs.state, "last_inserted_window", "claude")
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "libreoffice-writer")
@@ -263,7 +262,7 @@ def test_the_setting_is_off_by_default_and_live():
     assert "voice_navigation" in config.LIVE_APPLIED_KEYS
 
 
-# --- exact word moves in what TuxTalk typed (Ron, 2026-10-14) -----------------------------
+# --- exact word moves in what TuxTalk typed -----------------------------
 
 def test_go_back_three_words_counts_the_period_with_its_word():
     """KWrite's Ctrl+Left stops at the period, so three presses went two words."""
@@ -406,7 +405,7 @@ def test_delete_last_word_in_its_own_window_still_works(dictation, monkeypatch):
 
 def test_delete_everything_in_a_terminal_clears_the_line_the_shells_way(dictation, monkeypatch):
     """Ctrl+A in Konsole jumped to the start of the line and Backspace
-    deleted nothing (Ron, 2026-10-14)."""
+    deleted nothing."""
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.konsole")
     dictation["backend"].select_all_delete = lambda: pytest.fail("Ctrl+A in a terminal")
     assert voice_commands.handle_undo("delete everything", False, False) is True

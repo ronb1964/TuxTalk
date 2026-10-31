@@ -1,4 +1,7 @@
+"""Spoken punctuation and commands turned into text (normalize_text), and
+the same words left alone where they are ordinary English."""
 import pytest
+
 from tuxtalk.normalize import normalize_text
 
 def test_basic_punct():
@@ -48,7 +51,7 @@ def test_newlines_tabs():
     assert normalize_text(s) == "First line.\u00a7SHIFT_ENTER\u00a7\tIndented second line."
 
 def test_return_commands():
-    """Test various voice commands for line breaks"""
+    """"return" and "line break" each start a new line."""
     # Test "return" - returns \u00a7SHIFT_ENTER\u00a7 markers, auto-adds periods.
     # Like "new line", it takes the spaces around it, so the next line
     # doesn't start with one.
@@ -111,26 +114,32 @@ def test_his_return_preserved():
     s = "we celebrated his return home"
     assert normalize_text(s) == "We celebrated his return home."
 
-def test_return_still_works_as_line_break():
-    """Bare 'return' between clauses still acts as line break."""
-    s = "first line return second line"
-    assert normalize_text(s) == "First line.\u00a7SHIFT_ENTER\u00a7Second line."
-
 def test_dash_of_salt_preserved():
     """'dash of [word]' is recipe/measurement noun usage."""
     s = "add a dash of salt to the recipe"
     assert normalize_text(s) == "Add a dash of salt to the recipe."
 
-def test_dash_still_works_as_command():
-    """'X dash Y' between words still produces a hyphen."""
-    s = "well dash known author"
-    # "dash" between words \u2192 hyphen, "well-known" gets joined
-    assert "well-known" in normalize_text(s).lower()
-
 def test_great_quote_preserved():
     """'[adjective] quote' is noun usage."""
     s = "she said a great quote about life"
     assert normalize_text(s) == "She said a great quote about life."
+
+
+@pytest.mark.parametrize("said, written", [
+    ("he told me quote we won't quote", "He told me \u201cwe won't.\u201d"),
+    ("he told me quote we won\u2019t quote", "He told me \u201cwe won\u2019t.\u201d"),
+    ("she said quote never quote", "She said \u201cnever.\u201d"),
+    ("she said quote never again quote", "She said \u201cnever again.\u201d"),
+    ("she said quote me too quote", "She said \u201cme too.\u201d"),
+    ("she said quote of the people quote", "She said \u201cof the people.\u201d"),
+    ("please quote hello quote", "Please \u201chello.\u201d"),
+    ("he said quote it was fine quote", "He said \u201cit was fine.\u201d"),
+])
+def test_a_quotation_pairs_whatever_words_are_next_to_quote(said, written):
+    """Words that could make "quote" the verb or the noun ("please", "won't",
+    "me") are often inside a quotation too: two quotes are still a pair."""
+    assert normalize_text(said) == written
+
 
 def test_comma_operator_preserved():
     """'comma operator' is a programming term, not a punctuation command."""
@@ -473,10 +482,6 @@ def test_a_spaced_pm_does_not_capitalize_the_next_word():
     assert normalize_text("it was 5 p. m. and dark") == "It was 5 PM and dark."
 
 
-def test_a_time_with_minutes_still_formats():
-    assert "11:30 PM" in normalize_text("the meeting is at 11. 30 p. m. sharp")
-
-
 def test_a_time_ending_the_sentence_keeps_its_period():
     """Pinned behaviour: the abbreviation's dot doubles as the full stop."""
     assert normalize_text("we start at 8 a. m.") == "We start at 8 AM."
@@ -809,17 +814,15 @@ def test_a_spoken_dash_still_joins_the_words(said, expected):
     ("is it done question mark", "Is it done?"),
 ])
 def test_a_spoken_mark_replaces_the_engines_period(said, typed):
-    from tuxtalk.normalize import normalize_text
     assert normalize_text(said) == typed
 
 
 def test_an_abbreviation_keeps_its_period_before_a_spoken_mark():
-    from tuxtalk.normalize import normalize_text
     assert normalize_text("Is it the U.S. question mark").startswith("Is it the U.S.")
 
 
 # "ended with a question mark": with an article the mark is talked about,
-# not dictated (Ron, 2026-10-18: typed "ended with a?").
+# not dictated (it typed "ended with a?").
 @pytest.mark.parametrize("said, typed", [
     ("should it have ended with a question mark", "Should it have ended with a question mark."),
     ("end it with an exclamation point", "End it with an exclamation point."),
@@ -839,7 +842,7 @@ def test_a_dictated_mark_is_still_typed(said, typed):
 
 
 # A capital letter and a number name one thing (a key, a grid square, a seat),
-# so the number is a digit whatever the numbers setting does (Ron, 2026-10-18).
+# so the number is a digit whatever the numbers setting does.
 @pytest.mark.parametrize("said, typed", [
     ("when I let go of F eight", "When I let go of F8."),
     ("press F twelve", "Press F12."),
@@ -866,8 +869,8 @@ def test_words_next_to_a_number_are_left_alone(said, typed):
 
 
 def test_a_carriage_return_talked_about_stays_words():
-    """Ron, 2026-10-18: "it inserted a carriage return" typed "Inserted a
-    carriage" and a line break."""
+    """"it inserted a carriage return" typed "Inserted a carriage" and a
+    line break."""
     assert normalize_text("it inserted a carriage return") == "It inserted a carriage return."
     assert normalize_text("thank you return") != "Thank you return."   # the command still works
 

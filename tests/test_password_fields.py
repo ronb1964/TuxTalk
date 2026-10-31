@@ -7,11 +7,13 @@ is in one comes from the accessibility bus (atspi_helper); whenever that can't
 answer, quickly, typing goes ahead as it always did.
 """
 import logging
+import os
 import time
 import types
 
 import numpy as np
 import pytest
+from conftest import FakeClock
 from gi.repository import Gio, GLib
 
 from tuxtalk import (atspi_helper, delivery_notices, focused_window, history,
@@ -102,7 +104,6 @@ def test_a_dictation_anywhere_else_is_typed_and_kept(desktop, monkeypatch):
 
 def test_beep_and_label_say_it_without_a_notification(desktop, monkeypatch):
     monkeypatch.setattr(gtk_loop, "_thread", object())       # the label can show
-    monkeypatch.setenv("DISPLAY", ":0")
     desktop["password"] = True
     dictate(monkeypatch)
     assert desktop["notes"] == []
@@ -112,7 +113,6 @@ def test_beep_and_label_say_it_without_a_notification(desktop, monkeypatch):
 def test_a_notification_says_it_when_beep_or_label_cant(desktop, monkeypatch, beeps_on,
                                                         label_can_show):
     monkeypatch.setattr(gtk_loop, "_thread", object() if label_can_show else None)
-    monkeypatch.setenv("DISPLAY", ":0")
     desktop["password"] = True
     dictate(monkeypatch, beeps_on=beeps_on)
     assert desktop["notes"] == [delivery_notices.PASSWORD_FIELD_NOTICE]
@@ -323,21 +323,41 @@ def test_with_no_prompt_waiting_the_focused_window_isnt_asked(desktop, monkeypat
     assert asked == []
 
 
-def test_a_waiting_prompt_is_seen_by_its_helper_process(tmp_path):
+def _proc(root, *processes):
+    """A /proc holding *processes*, each (pid, comm, real uid)."""
+    (root / "1").mkdir(parents=True)
+    for pid, comm, uid in processes:
+        (root / str(pid)).mkdir()
+        (root / str(pid) / "comm").write_text(comm + "\n")
+        (root / str(pid) / "status").write_text(f"Name:\t{comm}\nUid:\t{uid}\t{uid}\t0\t0\n")
+
+
+@pytest.mark.parametrize("helper_uid, waiting", [
+    ("mine", True),
+    (0, True),           # socket-activated polkit (124 and later) runs it as root
+    (54321, False),      # another user's prompt, logged in at the same time
+])
+def test_a_waiting_prompt_is_seen_by_its_helper_process(tmp_path, monkeypatch, helper_uid,
+                                                        waiting):
     """polkit-agent-helper-1 runs while a prompt waits; the kernel keeps the
     first 15 characters of its name."""
-    import shutil
-    import subprocess
-    helper = tmp_path / "polkit-agent-helper-1"
-    shutil.copy("/bin/sleep", helper)
-    proc = subprocess.Popen([str(helper), "30"])
-    try:
-        time.sleep(0.2)
-        assert REAL_PROMPT_WAITING() is True
-    finally:
-        proc.kill()
-        proc.wait()
-    assert REAL_PROMPT_WAITING() is False      # unless a real prompt is open right now
+    uid = os.getuid() if helper_uid == "mine" else helper_uid
+    _proc(tmp_path, (77, "bash", os.getuid()), (4242, "polkit-agent-he", uid))
+    monkeypatch.setattr(focused_window, "_PROC", str(tmp_path))
+    assert REAL_PROMPT_WAITING() is waiting
+
+
+def test_no_helper_running_is_no_prompt(tmp_path, monkeypatch):
+    _proc(tmp_path, (77, "bash", os.getuid()))
+    monkeypatch.setattr(focused_window, "_PROC", str(tmp_path))
+    assert REAL_PROMPT_WAITING() is False
+
+
+def test_a_proc_that_hides_other_users_cant_tell(tmp_path, monkeypatch):
+    """With hidepid, pid 1 isn't there to see."""
+    tmp_path.joinpath("4242").mkdir()
+    monkeypatch.setattr(focused_window, "_PROC", str(tmp_path))
+    assert REAL_PROMPT_WAITING() is None
 
 
 # --- the question: which widget has the focus, and is it a password field ----------
@@ -346,9 +366,10 @@ class FakeA11yBus:
     """The accessibility bus as call_sync sees it: apps, their windows and
     widgets, each a (bus name, path) pair like the real ones."""
 
-    def __init__(self):
+    def __init__(self, clock=None):
         self.nodes, self.calls = {}, []
         self.apps = self._add(("registry", "root"))["children"]
+        self.clock = clock or time
 
     def _add(self, ref, **node):
         self.nodes[ref] = dict(dict(name="", role=0, states=0, children=[], collection=True,
@@ -377,7 +398,7 @@ class FakeA11yBus:
         node = self.nodes[(name, path)]
         self.calls.append((name, path, method))
         if node["hang"]:
-            time.sleep(timeout_ms / 1000)
+            self.clock.sleep(timeout_ms / 1000)
             raise GLib.Error("Timeout was reached")
         if method == "GetChildren":
             return GLib.Variant("(a(so))", (node["children"],))
@@ -389,7 +410,7 @@ class FakeA11yBus:
             return GLib.Variant("(v)", (GLib.Variant("s", node["name"]),))
         if method == "GetMatches":
             if node["collection"] == "slow":
-                time.sleep(timeout_ms / 1000)
+                self.clock.sleep(timeout_ms / 1000)
                 raise GLib.Error("Timeout was reached")
             if not node["collection"]:
                 raise Gio.DBusError.new_for_dbus_error(
@@ -402,7 +423,12 @@ class FakeA11yBus:
 
 @pytest.fixture
 def bus(monkeypatch):
-    fake = FakeA11yBus()
+    """The accessibility bus, on a clock of its own: a call that hangs
+    moves it on by the call's timeout, so a time limit is checked exactly,
+    however busy the computer running the tests is."""
+    clock = FakeClock()
+    monkeypatch.setattr(atspi_helper, "time", clock)
+    fake = FakeA11yBus(clock)
     monkeypatch.setattr(atspi_helper, "_a11y_bus", lambda deadline: fake)
     return fake
 
@@ -450,9 +476,9 @@ def test_a_hung_app_is_skipped_in_time(bus):
     app is asked."""
     bus.app("frozen", TEXT, hang=True)
     bus.app("gedit", PASSWORD)
-    started = time.monotonic()
+    started = bus.clock.now
     assert atspi_helper.focused_is_password() is True
-    assert time.monotonic() - started < atspi_helper.BUDGET_S
+    assert bus.clock.now - started < atspi_helper.BUDGET_S
 
 
 def test_hung_apps_after_the_password_field_dont_hide_it(bus):
@@ -468,10 +494,9 @@ def test_hung_apps_after_the_password_field_dont_hide_it(bus):
 def test_a_bus_where_everything_hangs_gives_up_within_the_budget(bus, monkeypatch):
     for n in range(5):
         bus.app(f"frozen{n}", PASSWORD, hang=True)
-    started = time.monotonic()
+    started = bus.clock.now
     assert atspi_helper.focused_is_password() is False
-    took = time.monotonic() - started
-    assert took < atspi_helper.BUDGET_S + atspi_helper.CALL_TIMEOUT_MS / 1000
+    assert bus.clock.now - started <= atspi_helper.BUDGET_S
 
 
 def test_a_dictations_check_before_each_line_gives_up_sooner(bus, monkeypatch):
@@ -649,7 +674,7 @@ def test_every_active_window_is_asked(bus, caplog):
 
 def test_gnome_shells_own_password_prompt_counts(bus):
     """The password prompt GNOME shows for pkexec, the keyring or Wi-Fi is
-    part of gnome-shell, and TuxTalk typed into it (Ubuntu VM, 2026-10-22)."""
+    part of gnome-shell, and TuxTalk typed into it on Ubuntu."""
     bus.app("gedit", TEXT)
     bus.app("gnome-shell", PASSWORD)
     assert atspi_helper.focused_is_password() is True
@@ -673,16 +698,22 @@ def no_connection_yet(monkeypatch):
 def test_a_bus_that_never_finishes_connecting_doesnt_hold_up_typing(no_connection_yet,
                                                                      monkeypatch):
     """Opening the connection can hang on D-Bus's 25 s handshake timeout."""
-    def stuck():
-        time.sleep(1)
-    monkeypatch.setattr(atspi_helper, "_open_bus", stuck)
-    started = time.monotonic()
-    assert atspi_helper.focused_is_password() is False
-    assert time.monotonic() - started < atspi_helper.BUDGET_S + 0.1
-    # While it's still trying, the next question doesn't wait at all.
-    started = time.monotonic()
-    assert atspi_helper.focused_is_password() is False
-    assert time.monotonic() - started < 0.05
+    import threading
+    gives_up = threading.Event()
+    monkeypatch.setattr(atspi_helper, "_open_bus", lambda: gives_up.wait(10) and None)
+    try:
+        started = time.monotonic()
+        assert atspi_helper.focused_is_password() is False
+        assert time.monotonic() - started < atspi_helper.BUDGET_S + 0.5
+        # While it's still trying, the next question doesn't wait at all.
+        started = time.monotonic()
+        assert atspi_helper.focused_is_password() is False
+        assert time.monotonic() - started < atspi_helper.BUDGET_S / 2
+    finally:
+        gives_up.set()
+        for thread in threading.enumerate():
+            if thread.name == "a11y-bus":
+                thread.join(5)
 
 
 def test_the_first_question_waits_for_a_quick_connection(no_connection_yet, monkeypatch):

@@ -6,19 +6,17 @@ measures each beep. A detector that reads every beep as whole passes a
 TuxTalk that still cuts them short, the bug of issue #21.
 """
 import re
-import sys
-from pathlib import Path
 
 import numpy as np
 import pytest
+from conftest import import_vm_tool
+
+from tuxtalk import beeps
 
 # The VM harness the detector lives in reads its settings with tomllib, new in
 # Python 3.11; the AppImage's 3.10 (CI's Ubuntu 22.04) never runs the harness.
 pytest.importorskip("tomllib", reason="the VM harness needs Python 3.11 or newer")
-sys.path.insert(0, str(Path(__file__).parent / "vm"))
-import checks_dictation as check  # noqa: E402  (the VM checks' own folder, added above)
-
-from tuxtalk import beeps  # noqa: E402
+check = import_vm_tool("checks_dictation")
 
 RATE = 16000      # the VM's recording of its speakers is 48 kHz; the detector works at either
 SLOW_LOG = "Double-tap: this recording will stop by itself\nBeeps: the output's latency is 0.174s\n"

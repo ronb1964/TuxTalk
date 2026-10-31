@@ -39,7 +39,7 @@ def tracked_files():
 @pytest.mark.parametrize("path", REQUIRED_IN_GIT)
 def test_release_toolchain_is_tracked(path):
     assert path in tracked_files(), (
-        f"{path} is needed to build or release TalkType but is not in git. "
+        f"{path} is needed to build or release TuxTalk but is not in git. "
         f"A fresh clone cannot ship a release without it."
     )
 

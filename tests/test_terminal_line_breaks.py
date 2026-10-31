@@ -26,18 +26,6 @@ from tuxtalk import delivery
 from tuxtalk import keyboard_output
 
 
-@pytest.fixture
-def paste_spy(monkeypatch):
-    """Capture what reaches the clipboard and how many keystrokes were sent."""
-    pasted = []
-    breaks = []
-
-    monkeypatch.setattr(keyboard_output, "paste_text", lambda t: pasted.append(t) or True)
-    monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: breaks.append(1) or True)
-    monkeypatch.setattr(keyboard_output, "type_text", lambda t: pasted.append(("typed", t)) or True)
-    return pasted, breaks
-
-
 class TestDeliveryPlan:
     """The decision, isolated from the injection machinery."""
 
@@ -69,26 +57,14 @@ class TestDeliveryPlan:
         assert delivery.plan_line_breaks("a\nb", one_paste=False) == ["a", "b"]
 
 
-class TestNoKeystrokesInATerminal:
-    def test_a_terminal_receives_no_shift_enter_at_all(self, paste_spy):
-        """The keystroke is inert there; sending it is pure noise."""
-        pasted, breaks = paste_spy
-        plan = delivery.plan_line_breaks("one\xa7SHIFT_ENTER\xa7two", one_paste=True)
-
-        assert len(plan) == 1, "a terminal must not be split into chunks"
-        assert "\n" in plan[0]
-
-    def test_a_chat_app_still_needs_one_break_between_chunks(self):
-        plan = delivery.plan_line_breaks("one\xa7SHIFT_ENTER\xa7two", one_paste=False)
-        assert len(plan) - 1 == 1
-
-
-@pytest.mark.parametrize("window", ["org.kde.kwrite", "org.kde.kate"])
-def test_new_line_in_kwrite_is_pasted_not_a_shift_enter(window, monkeypatch):
+@pytest.mark.parametrize("window", ["org.kde.kwrite", "org.kde.kate",
+                                    "org.kde.konsole", "kitty"])
+def test_new_line_in_kwrite_or_a_terminal_is_pasted_not_a_shift_enter(window, monkeypatch):
     """KWrite and Kate take Shift+Enter as Insert Smart Newline, which copies
     the symbols the line above starts with: "$45", new line, "$25" came out
-    as "$$25". A newline inside the paste is a plain one. A plain Enter
-    would not do: in Kate's terminal panel it runs the line."""
+    as "$$25". A terminal ignores Shift+Enter, so the lines ran together. A
+    newline inside the paste is a plain one in both. A plain Enter would
+    not do: in a terminal, and Kate's terminal panel, it runs the line."""
     monkeypatch.setattr("time.sleep", lambda s: None)
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     monkeypatch.setattr(delivery, "determine_injection_method", lambda m: ("paste", "test"))

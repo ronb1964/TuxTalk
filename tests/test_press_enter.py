@@ -108,18 +108,16 @@ def test_a_cut_off_dictation_is_typed_but_not_sent(monkeypatch):
     # next carries it on in lowercase.
     assert events == [("typed", "You can go ahead and add that. And ")]
     assert rs.state.continue_mid_sentence is True
-    rs.state.continue_mid_sentence = False
 
 
 def test_a_cut_off_dictation_gets_no_period_in_a_text_editor_either(monkeypatch):
-    """Ron, 2026-10-20: KWrite got "Meet me at noon and." The text-editor rule
-    turned the send off before the "and" was looked at."""
+    """KWrite got "Meet me at noon and." when the text-editor rule turned the
+    send off before the "and" was looked at."""
     monkeypatch.setattr(live, "press_enter_after", True)
     events = _dictate(monkeypatch, "Meet me at noon and", prepared=lambda r: r + ". ",
                       window="org.kde.kwrite")
     assert events == [("typed", "Meet me at noon and ")]
     assert rs.state.continue_mid_sentence is True
-    rs.state.continue_mid_sentence = False
 
 
 @pytest.mark.parametrize("window, typed", [
@@ -132,8 +130,8 @@ def test_a_cut_off_dictation_gets_no_period_in_a_text_editor_either(monkeypatch)
 ])
 def test_a_cut_off_sentence_goes_on_in_lowercase_only_in_its_own_window(monkeypatch, window,
                                                                          typed):
-    """Ron, 2026-10-20: "meet me at noon and" in KWrite, then a message in
-    another window began with a small letter."""
+    """After "meet me at noon and" in KWrite, a message in another window
+    began with a small letter."""
     monkeypatch.setattr(live, "press_enter_after", False)
     monkeypatch.setattr(rs.state, "continue_mid_sentence", True)
     monkeypatch.setattr(rs.state, "last_inserted_window", "org.kde.kwrite")
@@ -212,7 +210,7 @@ def test_setting_is_off_by_default_and_applies_live():
     assert live.press_enter_after is False
 
 
-# --- The wait before an automatic send, and holding it (Ron, 2026-10-18) ---
+# --- The wait before an automatic send, and holding it ---
 
 class FakeTimer:
     """threading.Timer that fires only when the test says so."""
@@ -387,7 +385,7 @@ def test_a_new_send_replaces_one_still_counting(countdown):
 
 
 def test_the_label_counts_down_each_second(countdown, monkeypatch):
-    """Ron, 2026-10-18: "Sending in 4 s", then 3, 2, 1."""
+    """'Sending in 4 s', then 3, 2, 1."""
     _, labels = countdown
     from tuxtalk import screen_message
     relabels = []
@@ -456,9 +454,9 @@ def test_the_wait_is_a_setting_applied_live():
 
 
 def test_a_held_send_types_its_space_once_the_key_is_up(countdown, monkeypatch):
-    """Ron, 2026-10-18: held a send, kept talking, got "delay.All right". The
-    space waits for the hotkey to come up: typed while it's down, GNOME
-    without the extension swallowed it (VM release test, 2026-10-18)."""
+    """A held send, then more talking, gave "delay.All right". The space waits
+    for the hotkey to come up: typed while it's down, GNOME without the
+    extension swallowed it."""
     monkeypatch.setattr(rs.state, "last_inserted_text", "Testing the delay.")
     monkeypatch.setattr(send_countdown, "_owed", None)
     start_send("test", " ", "type")
@@ -503,20 +501,22 @@ def test_a_short_tap_types_the_space_when_released(countdown, monkeypatch):
 
 
 def test_typing_the_space_doesnt_turn_a_tap_into_a_dictation(countdown, monkeypatch):
-    """Zorin VM, 2026-10-20: a 183 ms tap plus the time ydotool took to type
-    the space came to over MIN_HOLD_MS, so the held send got no "Not sent"
-    notice. How long the key was down is what counts."""
+    """A 150 ms tap plus the 100 ms typing the space took came to over
+    MIN_HOLD_MS, so the held send got no "Not sent" notice. How long the key
+    was down is what counts, so the hold is measured before the space."""
+    clock = _Clock()
+    monkeypatch.setattr(recording, "time", clock)
     reasons = []
     monkeypatch.setattr(recording, "cancel_recording",
                         lambda rec, beeps, notify, reason="": reasons.append(reason))
     monkeypatch.setattr(delivery, "inject_text",
-                        lambda text, mode, **kw: time.sleep(0.1) or TYPED.append(text) or "ok")
+                        lambda text, mode, **kw: clock.sleep(0.1) or TYPED.append(text) or "ok")
     monkeypatch.setattr(send_countdown, "_owed", None)
     start_send("test", " ", "type")
     monkeypatch.setattr(rs.state.current, "held_send", send_countdown.hold(announce=False))
     monkeypatch.setattr(rs.state.current, "silence", None)
     monkeypatch.setattr(rs.state.current, "chunks_submitted", 0)
-    monkeypatch.setattr(rs.state.current, "press_t0", time.time() - 0.15)
+    monkeypatch.setattr(rs.state.current, "press_t0", clock.now - 0.15)
     assert recording.finish_capture(rs.state.current, False, False) is None
     assert TYPED == [" "] and reasons == [send_countdown.HELD_NOTICE]
 
@@ -566,13 +566,13 @@ class _Clock:
 
 
 @pytest.mark.parametrize("start_s, still_down, outcome", [
-    (0.25, False, "held"),          # the Pop VM: a quick tap, a slow start
+    (0.25, False, "held"),          # a quick tap, a slow start
     (0.45, False, "dictated"),      # too slow to tell: the hold time decides
     (0.25, True, "dictated"),       # still down: dictating more onto it
 ])
 def test_a_quick_tap_holds_the_send_even_when_recording_starts_slowly(
         countdown, monkeypatch, start_s, still_down, outcome):
-    """Pop!_OS VM, 2026-10-21: starting the recording took about 0.2 s, so a
+    """When starting the recording took about 0.2 s (seen on Pop!_OS), a
     0.08 s tap of F8 was read as a 0.2 s hold and recorded instead of holding
     the send. A key already up after a start that quick was a tap; after a
     slower start, or still down, it's a dictation added to the message."""
@@ -669,7 +669,7 @@ def test_the_wait_goes_up_to_four_seconds():
 
 
 def test_switching_windows_stops_the_countdown_at_once(countdown, monkeypatch):
-    """Ron, 2026-10-18: clicked another window; nothing was sent, but the
+    """After a click into another window nothing was sent, but the
     label kept counting down to a send that wasn't going to happen."""
     pressed, _ = countdown
     from tuxtalk import screen_message
@@ -698,7 +698,7 @@ def test_switching_in_the_last_second_says_not_sent(countdown, monkeypatch):
 
 
 def test_no_automatic_send_in_a_text_editor(monkeypatch):
-    """Ron, 2026-10-18: in KWrite every dictation ended with a new line."""
+    """Without this, in KWrite every dictation ended with a new line."""
     monkeypatch.setattr(live, "press_enter_after", True)
     events = _dictate(monkeypatch, "Hello there", prepared=lambda r: r + ". ",
                       window="org.kde.kwrite")

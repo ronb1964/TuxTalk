@@ -258,12 +258,14 @@ def test_only_the_engines_own_kept_copy_is_put_back(tmp_path, monkeypatch):
 
 
 def test_each_engine_build_has_its_own_asset():
-    """Released versions check their build's SHA256 (0.12.0-0.13.1: 1.9.4 b1,
-    0.14.x-0.15.x: 1.9.4 b2), so a new build never reuses a published name.
-    1.9.5 b1 adds Your Words for Parakeet (vulkan-engine-patches/)."""
-    assert wv.ENGINE_ASSET == "talktype-whisper-vulkan-1.9.5-b1-x64.tar.gz"
-    assert wv.ENGINE_TAG == "whisper-vulkan-1.9.5-b1"
-    assert wv.ENGINE_NAME == "talktype-whisper-vulkan-1.9.5"
+    """Released versions check their build's SHA256, so a new build never
+    reuses a published name: the version and build are in the file's name
+    and the release tag. The names keep the talktype- prefix they were
+    published under."""
+    build = f"{wv.ENGINE_VERSION}-b{wv.ENGINE_BUILD}"
+    assert wv.ENGINE_ASSET == f"talktype-whisper-vulkan-{build}-x64.tar.gz"
+    assert wv.ENGINE_TAG == f"whisper-vulkan-{build}"
+    assert wv.ENGINE_URL.endswith(f"/{wv.ENGINE_TAG}/{wv.ENGINE_ASSET}")
 
 
 def test_wav_is_16_bit_mono_and_keeps_the_samples():
@@ -664,7 +666,8 @@ def test_a_restarted_server_outlives_the_short_lived_thread_that_restarted_it(fa
         results = []
         t = threading.Thread(target=lambda: results.append(model.transcribe(np.zeros(16000, np.float32))))
         t.start()
-        t.join()                                   # restarted the server, then ended
+        t.join(30)                                # restarted the server, then ended
+        assert not t.is_alive()
         assert results == [("hello", 0.0)]
         restarted = model._proc
         time.sleep(0.3)

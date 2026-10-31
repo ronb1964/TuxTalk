@@ -18,8 +18,11 @@ from tuxtalk import parakeet_gpu_worker as worker
 # A stand-in helper. Behaviour is picked by its first argument:
 #   ok      answers "<n> samples" for each request
 #   refuse  reports an error instead of becoming ready
+#   crash   exits with an engine error before becoming ready
 #   die     becomes ready, then exits on the first request
+#   chatty  becomes ready, writes to stderr, then exits on the first request
 #   once    answers the first request, then exits
+#   old     answers Your Words as a helper too old to take them would
 #   silent  never answers at all
 #   half    becomes ready, then freezes halfway through its first reply
 #   deaf    becomes ready, then stops reading its requests
@@ -191,7 +194,8 @@ def test_a_restart_on_a_short_lived_thread_outlives_that_thread(fake):
         results = []
         t = threading.Thread(target=lambda: results.append(model.recognize(_audio(2))))
         t.start()
-        t.join()                                  # restarted the helper, then ended
+        t.join(30)                                # restarted the helper, then ended
+        assert not t.is_alive()
         assert results == ["32000 samples"]
         assert model._proc.poll() is None         # still running
         assert model.recognize(_audio(3)) == "48000 samples"
@@ -225,6 +229,7 @@ def test_a_helper_frozen_mid_request_gives_way_to_the_processor(fake, monkeypatc
             return "from the processor"
 
     monkeypatch.setattr(parakeet_gpu, "REPLY_TIMEOUT", 0.5)
+    monkeypatch.setattr(parakeet_gpu, "REPLY_PER_AUDIO_S", 0)
     monkeypatch.setattr(parakeet_gpu, "load_parakeet_model", lambda: Cpu())
     model = parakeet_gpu.ParakeetGpuModel(0, command=fake(mode))
     try:
