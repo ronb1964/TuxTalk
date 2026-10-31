@@ -722,8 +722,14 @@ class PreferencesWindow:
         With no tray it's done here, on a thread: the old service types what
         it holds and quits (or is killed past its time), then a new one starts.
         A start that fails there calls *on_failed*(True) on GTK's thread,
-        and one still not ready at the wait's end *on_failed*(False)."""
+        and one still not ready at the wait's end *on_failed*(False).
+        With Dictation off nothing starts, tray or not: the user turned it
+        off, and the service reads the new settings when it's turned on."""
         from . import single_instance, tray_instance, update_ui
+        from .service_launcher import find_service_pids
+        if not find_service_pids():
+            logger.info("Dictation is off; the new settings apply when it's turned on")
+            return True
         if single_instance.held_elsewhere(tray_instance.TRAY_LOCK):
             try:
                 update_ui.tray_interface().RestartService()

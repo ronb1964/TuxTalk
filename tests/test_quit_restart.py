@@ -350,31 +350,46 @@ def test_a_restart_finishing_after_dictation_off_starts_nothing(slow_service):
     assert t._restarting is False
 
 
-def test_a_restart_with_dictation_off_leaves_it_off(slow_service):
-    """A Performance preset, a Preferences change or the Parakeet Ultra
-    download restarts dictation; after the user turned Dictation off, it
-    turned it back on, hotkeys and all."""
+def test_an_automatic_restart_with_dictation_off_leaves_it_off(slow_service):
+    """A Performance preset or the Parakeet Ultra download restarts
+    dictation; after the user turned Dictation off, it turned it back on,
+    hotkeys and all."""
     slow_service.running.clear()            # Dictation off
     launched = []
     t = _bare_tray(_launch_service=lambda: launched.append(True),
                    update_status_and_menu=lambda repeat=True: False)
-    t.restart_service(None)
+    t.restart_if_running()
     assert not _run_main_loop_until(lambda: launched, timeout=0.3)
     assert slow_service.waited_on == [] and t._restarting is False
 
 
-def test_restart_stop_restart_leaves_dictation_off(slow_service):
-    """Restart, Dictation off while it waits, and another restart behind it:
-    the last one finds nothing running and starts nothing."""
+def test_restart_service_with_dictation_off_turns_it_on(slow_service):
+    """The user's own Restart Service (the menu, the GNOME extension) is a
+    request to have dictation running."""
+    slow_service.running.clear()            # Dictation off
+    slow_service.gone.set()                 # nothing to wait for
+    launched = []
+    t = _bare_tray(_launch_service=lambda: launched.append(True),
+                   update_status_and_menu=lambda repeat=True: False)
+    t.restart_service(None)
+    assert _run_main_loop_until(lambda: launched)
+
+
+@pytest.mark.parametrize("second, starts", [("restart_service", True),
+                                            ("restart_if_running", False)])
+def test_a_restart_queued_after_dictation_off(slow_service, second, starts):
+    """Restart, Dictation off while it waits, then another restart queued
+    behind the first. The user's Restart Service turns dictation on; an
+    automatic one (a preset chosen meanwhile) leaves it off."""
     launched = []
     t = _bare_tray(_launch_service=lambda: launched.append(True),
                    update_status_and_menu=lambda repeat=True: False)
     t.restart_service(None)
     t._drop_pending_launches()              # Dictation off
-    t.restart_service(None)                 # and Restart again, while the first waits
+    getattr(t, second)()                    # queued, while the first waits
     slow_service.gone.set()
-    assert not _run_main_loop_until(lambda: launched, timeout=0.5)
-    assert t._restarting is False
+    assert bool(_run_main_loop_until(lambda: launched, timeout=0.5)) is starts
+    assert _run_main_loop_until(lambda: not t._restarting)
 
 
 def test_an_action_queued_before_quit_does_nothing_after_it(monkeypatch):

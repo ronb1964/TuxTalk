@@ -9,6 +9,7 @@ exercise the real logic without constructing a GTK window.
 """
 
 
+import pytest
 from types import SimpleNamespace
 
 
@@ -89,8 +90,9 @@ class TestApplyOrRestart:
         assert stub._restart_owed == {"model"} and said == []
 
     def test_the_restart_thread_reports_a_failed_start(self, prefs_cls, monkeypatch):
-        from tuxtalk import prefs, single_instance
+        from tuxtalk import prefs, service_launcher, single_instance
         failed = []
+        monkeypatch.setattr(service_launcher, "find_service_pids", lambda: [42])
 
         class InlineThread:
             def __init__(self, target, name):
@@ -104,6 +106,24 @@ class TestApplyOrRestart:
         monkeypatch.setattr(prefs.GLib, "idle_add", lambda fn, *args: fn(*args))
         assert prefs_cls.restart_service(None, on_failed=failed.append) is True
         assert failed == [True]
+
+    @pytest.mark.parametrize("tray_running", [True, False])
+    def test_with_dictation_off_a_change_starts_nothing(self, prefs_cls, monkeypatch,
+                                                        tray_running):
+        """An Apply that needs a restart, a backup loaded or Fix Typing:
+        with Dictation off they turned it on, through the tray or, with no
+        tray, by starting a service here. Nothing is owed: the service reads
+        the settings when it starts."""
+        from tuxtalk import prefs, service_launcher, single_instance, update_ui
+        asked = []
+        monkeypatch.setattr(service_launcher, "find_service_pids", lambda: [])
+        monkeypatch.setattr(single_instance, "held_elsewhere", lambda lock: tray_running)
+        monkeypatch.setattr(update_ui, "tray_interface", lambda: asked.append("the tray"))
+        monkeypatch.setattr(prefs, "_restart_without_tray", lambda: asked.append("started"))
+        monkeypatch.setattr(prefs.threading, "Thread",
+                            lambda target, name: SimpleNamespace(start=target))
+        assert prefs_cls.restart_service(None) is True
+        assert asked == []
 
     def test_mixed_change_restarts(self, prefs_cls):
         stub = StubPrefs({}, {})

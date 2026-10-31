@@ -90,6 +90,7 @@ class DictationTray(ServiceLifecycle, Presets):
         self._install_thread = None     # an update going in (Download & Install)
         self._restarting = False    # Restart Service waits for the old service
         self._restart_pending = False   # another restart asked for meanwhile
+        self._pending_starts_dictation = False  # and it may start dictation that's off
 
         # Cached PID of the dictation service (for fast /proc-based status checks)
         self._service_pid = None
@@ -126,7 +127,7 @@ class DictationTray(ServiceLifecycle, Presets):
 
         # After updating: the recommended setup, and the hotkey helper or
         # Parakeet Ultra this TuxTalk brings.
-        update_offers.start(self.restart_service)
+        update_offers.start(self.restart_if_running)
 
     def _check_tray_visibility(self) -> bool:
         """
