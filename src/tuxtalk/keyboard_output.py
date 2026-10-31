@@ -242,12 +242,17 @@ def not_where_typed(focused, now=None) -> bool:
     "edit that", "fix that word" and the lowercase carry-on. By the desktop's
     window id where it gives one, so two KWrite documents aren't taken for
     one, else by the class (focused_window.same_window). *now* is a look
-    already taken, else one is taken here."""
-    if focused_window.same_window((focused, None),
-                                  (rs.state.last_inserted_window, None)) is False:
-        return True
+    already taken, else one is taken here.
+
+    The whole looks first: one window by its id may be named two ways
+    ("org.kde.kate", "kate"), which the classes alone would take for two
+    apps. Only when the ids can't tell is *focused* compared by class."""
     now = focused_window.look() if now is None else now
-    return focused_window.same_window(rs.state.last_inserted_where, now) is False
+    same = focused_window.same_window(rs.state.last_inserted_where, now)
+    if same is not None:
+        return not same
+    return focused_window.same_window((focused, None),
+                                      (rs.state.last_inserted_window, None)) is False
 
 
 def press_key(key: str, why: str, claim=None) -> bool:

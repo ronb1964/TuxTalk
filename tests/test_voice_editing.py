@@ -1381,14 +1381,14 @@ def test_the_edit_key_understands_select_commands_with_nothing_selected(edit_env
 def test_select_with_the_edit_key_goes_only_into_the_window_it_was_said_in(
         edit_env, monkeypatch, keyboard):
     """Shift+F8 in KWrite with nothing selected, "select the line", and a
-    click into Konsole while it was transcribed: the selection keys went
-    into the terminal."""
+    click into another document while it was transcribed: the selection
+    keys went into that one."""
     from tuxtalk.output_backends import VirtualKeyboardOutputBackend
-    kwrite, konsole = ("org.kde.kwrite", ("tray", "{1}")), ("org.kde.konsole", ("tray", "{2}"))
+    kwrite, other = ("org.kde.kwrite", ("tray", "{1}")), ("org.kde.kwrite", ("tray", "{2}"))
     focus = [kwrite]
 
     def heard_while_the_user_clicks_away(audio, lang):
-        focus[0] = konsole
+        focus[0] = other
         return "select the line"
     monkeypatch.setattr(live, "voice_navigation", True)
     monkeypatch.setattr(keyboard_output, "output_backend", VirtualKeyboardOutputBackend)

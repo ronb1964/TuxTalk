@@ -366,6 +366,36 @@ def test_undo_in_the_same_window_by_its_id_still_works(dictation, monkeypatch):
     assert deleted and dictation["problems"] == []
 
 
+def test_undo_where_kate_names_its_window_another_way_still_works(dictation, monkeypatch):
+    """The dictation's look named Kate "org.kde.kate", the undo's "kate",
+    for one window by its id: undo said it was another window."""
+    deleted = []
+    dictation["backend"].backspaces = lambda n: deleted.append(n) or True
+    monkeypatch.setattr(rs.state, "last_inserted_window", "org.kde.kate")
+    monkeypatch.setattr(rs.state, "last_inserted_where", ("org.kde.kate", ("tray", "{1}")))
+    monkeypatch.setattr(focused_window, "look", lambda: ("kate", ("tray", "{1}")))
+    assert voice_commands.handle_undo("delete last word", False, False) is True
+    assert deleted == [6] and dictation["problems"] == []
+    # And a voice move still counts on what was dictated there.
+    monkeypatch.setattr(rs.state, "last_inserted_text", " We finished early.")
+    voice_commands.handle_navigation("select the last word", False)
+    assert dictation["pressed"] == [[((), "LEFT")] + [((S,), "LEFT")] * 5]
+
+
+@pytest.mark.parametrize("now", [
+    ("org.kde.kwrite", ("tray", "{1}")),        # another app under the same id
+    ("kate", ("compositor", "{1}")),            # an id from another source
+])
+def test_undo_where_the_window_cant_be_trusted_deletes_nothing(dictation, monkeypatch, now):
+    deleted = []
+    dictation["backend"].backspaces = lambda n: deleted.append(n) or True
+    monkeypatch.setattr(rs.state, "last_inserted_window", "org.kde.kate")
+    monkeypatch.setattr(rs.state, "last_inserted_where", ("org.kde.kate", ("tray", "{1}")))
+    monkeypatch.setattr(focused_window, "look", lambda: now)
+    assert voice_commands.handle_undo("delete last word", False, False) is True
+    assert deleted == [] and dictation["problems"] == ["undo_other_window"]
+
+
 def test_delete_last_word_in_its_own_window_still_works(dictation, monkeypatch):
     deleted = []
     dictation["backend"].backspaces = lambda n: deleted.append(n) or True
