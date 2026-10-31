@@ -308,7 +308,11 @@ def _type_rewrite(result, injection_mode, message, beeps_on, into):
         message.add(outcome, None)      # what's in the box isn't known now
     if outcome == "password_field":
         history.forget(result)
-    if outcome in delivery_notices.NOTICES:
+    if outcome == "moved":
+        # The window changed between the last look and the keys: the
+        # dictation's notice would blame a Right Ctrl the user may not use.
+        notices.edit_problem("window_changed", beeps_on)
+    elif outcome in delivery_notices.NOTICES:
         notices.report_undelivered(outcome, beeps_on)
     else:
         beeps.beep(beeps_on, *READY_BEEP)

@@ -524,6 +524,15 @@ def test_a_rewrite_goes_only_into_the_window_the_edit_started_in(edit_env, monke
     run_edit(where=first)
     assert into == [first]
 
+def test_a_rewrite_kept_out_of_another_window_says_the_window_changed(edit_env, monkeypatch):
+    """Its notice was the dictation's, about waiting for Right Ctrl or Right
+    Alt to come up, to an F8 user who never pressed either."""
+    monkeypatch.setattr(delivery, "inject_text", lambda text, mode, **kw: "moved")
+    run_edit()
+    from tuxtalk import edit_notices
+    assert edit_env["notices"] == [edit_notices.NOTICES["window_changed"]]
+
+
 def test_an_edit_replaces_the_selection(edit_env):
     run_edit()
     assert edit_env["engine"].asked == [("We finished the electrical today.", "make it more professional")]
