@@ -62,18 +62,23 @@ def test_a_dictation_sends_into_the_window_it_went_to(chat, keyboard):
     assert keyboard.typed_keys() == [ENTER] and notices == []
 
 
+def clicked_away_while_the_words_went_in(monkeypatch, focus, to=SECOND):
+    """The user clicks into window *to* while the words are delivered."""
+    deliver = delivery.deliver_text
+
+    def deliver_then_switch(*a, **k):
+        outcome = deliver(*a, **k)
+        focus[:] = to
+        return outcome
+    monkeypatch.setattr(delivery, "deliver_text", deliver_then_switch)
+
+
 def test_a_window_switch_while_the_words_go_in_sends_nothing(chat, keyboard, monkeypatch):
     """A long dictation, or a slow paste: the user clicked into the other
     Brave window while it went in. The look taken after it said the second
     window, and the Enter went there."""
     focus, heard, typed, notices = chat
-    deliver = delivery.deliver_text
-
-    def clicked_away_meanwhile(*a, **k):
-        outcome = deliver(*a, **k)
-        focus[:] = SECOND
-        return outcome
-    monkeypatch.setattr(delivery, "deliver_text", clicked_away_meanwhile)
+    clicked_away_while_the_words_went_in(monkeypatch, focus)
     heard.append("see you at noon")
     dictate()
     assert typed == [("See you at noon.", FIRST[1])]                 # the words stay
@@ -86,13 +91,7 @@ def test_no_countdown_after_a_switch_while_the_words_went_in(chat, keyboard, mon
     monkeypatch.setattr(send_countdown, "_delay", 2.0)
     monkeypatch.setattr(send_countdown.threading, "Timer",
                         lambda *a, **k: started.append(a) or pytest.fail("a countdown"))
-    deliver = delivery.deliver_text
-
-    def clicked_away_meanwhile(*a, **k):
-        outcome = deliver(*a, **k)
-        focus[:] = SECOND
-        return outcome
-    monkeypatch.setattr(delivery, "deliver_text", clicked_away_meanwhile)
+    clicked_away_while_the_words_went_in(monkeypatch, focus)
     heard.append("see you at noon")
     dictate()
     assert started == [] and notices == [send_countdown.MOVED_NOTICE]
@@ -196,13 +195,7 @@ def test_held_back_after_the_focus_moved_says_that_instead(chat, keyboard, monke
     """Enter wouldn't have gone into the window the focus moved to either:
     "press Enter when you're ready" there would send someone else's text."""
     focus, heard, typed, notices = chat
-    deliver = delivery.deliver_text
-
-    def clicked_away_meanwhile(*a, **k):
-        outcome = deliver(*a, **k)
-        focus[:] = SECOND
-        return outcome
-    monkeypatch.setattr(delivery, "deliver_text", clicked_away_meanwhile)
+    clicked_away_while_the_words_went_in(monkeypatch, focus)
     heard.append("Meet me at noon and")
     dictate()
     assert keyboard.typed_keys() == [] and notices == [send_countdown.MOVED_NOTICE]
@@ -756,15 +749,6 @@ def test_a_known_window_still_gets_its_automatic_enter(chat, keyboard):
 
 
 # --- "... press enter" said after the words: the same rule ---------------------------------
-
-def clicked_away_while_the_words_went_in(monkeypatch, focus, to=SECOND):
-    deliver = delivery.deliver_text
-
-    def deliver_then_switch(*a, **k):
-        outcome = deliver(*a, **k)
-        focus[:] = to
-        return outcome
-    monkeypatch.setattr(delivery, "deliver_text", deliver_then_switch)
 
 
 @pytest.mark.parametrize("key", ["enter", "tab"])
