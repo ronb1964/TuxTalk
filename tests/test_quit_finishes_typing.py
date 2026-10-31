@@ -33,8 +33,12 @@ def worker(monkeypatch):
     worker = DictationWorker()
     monkeypatch.setattr(dictation_worker, "_instance", worker)
     yield worker
-    worker.submit(sys.exit)     # the job loop catches Exception only: the thread ends
-    worker.thread.join(5)
+    # The job loop catches Exception only, so SystemExit ends the thread;
+    # Python's own hook lets that pass quietly, where pytest's reports it.
+    with monkeypatch.context() as ending:
+        ending.setattr(threading, "excepthook", threading.__excepthook__)
+        worker.submit(sys.exit)
+        worker.thread.join(5)
 
 
 @pytest.fixture
