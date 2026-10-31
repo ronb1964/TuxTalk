@@ -44,10 +44,13 @@ os.environ.update({
 # The desktop and session a test runs under are the test's choice, not the
 # computer's: left to the developer's KDE Wayland session, code that reads
 # the keyboard layout from X11 never runs here while it does on CI's bare X
-# display. A test that needs a desktop names it itself.
+# display. A test that needs a desktop names it itself. The compositors'
+# sockets go too: on Sway, i3 or niri the focused window and the keyboard
+# layout would otherwise come from the developer's real compositor.
 for _name in ("XDG_SESSION_TYPE", "XDG_CURRENT_DESKTOP", "XDG_SESSION_DESKTOP",
               "DESKTOP_SESSION", "KDE_FULL_SESSION", "KDE_SESSION_VERSION",
-              "KDE_SESSION_UID", "GNOME_DESKTOP_SESSION_ID", "GNOME_SHELL_SESSION_MODE"):
+              "KDE_SESSION_UID", "GNOME_DESKTOP_SESSION_ID", "GNOME_SHELL_SESSION_MODE",
+              "SWAYSOCK", "I3SOCK", "NIRI_SOCKET", "HYPRLAND_INSTANCE_SIGNATURE"):
     os.environ.pop(_name, None)
 
 # Every window a test builds must open on xvfb-run's hidden display, never on
