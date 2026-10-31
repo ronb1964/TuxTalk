@@ -423,7 +423,8 @@ def _optional_paths():
 def _holds_entries(name, data):
     """Whether *data*, the bytes of the _OPTIONAL file *name* (None: no
     file), holds a snippet or a word. One that can't be read counts as
-    holding some, so the note never misses a loss."""
+    holding some: here, this computer's, so the note never misses a loss
+    (a backup's own files were read already, by _checked)."""
     from . import custom_words
     if data is None:
         return False

@@ -446,9 +446,11 @@ before 0.15.0, so older entries use that name.
   command.
 - Uninstalling deleted any file of yours you'd put in TuxTalk's data
   folder, and with "Also delete my settings" ticked, in its settings folder
-  or an old TalkType folder the 0.15 rename left in place. Only TuxTalk's
-  own files go from them now, and a folder with something of yours still in
-  it stays.
+  or an old TalkType folder the 0.15 rename left in place. Only what
+  TuxTalk wrote there goes now (a download folder of its own, like cuda,
+  still goes whole), and a folder with something of yours still in it
+  stays. The downloads in such an old TalkType folder go too now, and so
+  does the single transcript older versions kept.
 - An update, or the GNOME extension, from a release that was published
   without its checksums file is refused now, with a message saying so. It
   used to go in unchecked, and a .deb or .rpm update installs as root.
@@ -462,9 +464,10 @@ before 0.15.0, so older entries use that name.
   and Your Words added since, so it really puts things back the way they
   were. Loading a backup saved on a computer with no Your Words or snippets
   removes the ones on this computer, and TuxTalk says so before you say OK
-  and again after, from Load Backup and from Earlier settings alike. Earlier settings can bring them back. A restore cut off
-  part-way, by a crash or a power cut, is undone when TuxTalk next starts,
-  instead of leaving half the old settings and half the new.
+  and again after, from Load Backup and from Earlier settings alike.
+  Earlier settings can bring them back. A restore cut off part-way, by a
+  crash or a power cut, is undone when TuxTalk next starts, instead of
+  leaving half the old settings and half the new.
 - A GNOME extension update cut off part-way left GNOME with no TuxTalk menu
   until you installed the extension again. TuxTalk puts it back when it
   starts. The Vulkan and AI engines keep the old engine now until the new
