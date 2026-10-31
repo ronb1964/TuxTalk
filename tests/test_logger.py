@@ -1,113 +1,67 @@
-"""Tests for logger module"""
-import os
+"""TuxTalk's log: what a line says, which lines are kept, and one file shared
+by the tray and the dictation service."""
 import logging
-from tuxtalk.logger import setup_logger
+import os
+import re
+
+import pytest
 
 
-def test_logger_creation():
-    """Test that setup_logger creates a logger"""
-    logger = setup_logger("test_module")
-    assert logger is not None
-    assert isinstance(logger, logging.Logger)
-    assert logger.name == "test_module"
-
-
-def test_logger_level():
-    """Test that logger is set to INFO level by default"""
-    logger = setup_logger("test_level")
-    assert logger.level == logging.INFO
-
-
-def test_logger_has_handlers():
-    """Test that logger has file handler"""
-    logger = setup_logger("test_handlers")
-    # Should have at least one handler (file handler)
-    assert len(logger.handlers) >= 1
-
-
-def test_logger_file_handler_level():
-    """Test that file handler is set to DEBUG level"""
-    logger = setup_logger("test_file_level")
-    file_handlers = [h for h in logger.handlers if isinstance(h, logging.FileHandler)]
-    assert len(file_handlers) > 0
-    # File handler should be DEBUG level for detailed logs
-    assert file_handlers[0].level == logging.DEBUG
-
-
-def test_logger_singleton_behavior():
-    """Test that requesting same logger name returns same instance"""
-    logger1 = setup_logger("test_singleton")
-    logger2 = setup_logger("test_singleton")
-    # Python's logging.getLogger() returns same instance for same name
-    assert logger1 is logger2
-
-
-def test_logger_different_names():
-    """Test that different logger names create different loggers"""
-    logger1 = setup_logger("test_module_1")
-    logger2 = setup_logger("test_module_2")
-    assert logger1.name != logger2.name
-
-
-def test_logger_can_log_messages():
-    """Test that logger can actually log messages"""
-    logger = setup_logger("test_logging")
-    # These should not raise exceptions
-    logger.debug("Debug message")
-    logger.info("Info message")
-    logger.warning("Warning message")
-    logger.error("Error message")
-
-
-def test_logger_format_includes_name():
-    """Test that log format includes logger name"""
-    logger = setup_logger("test_format")
-    # Get the formatter from one of the handlers
-    for handler in logger.handlers:
-        if handler.formatter:
-            format_str = handler.formatter._fmt
-            # Should include module name in format
-            assert "%(name)s" in format_str or "name" in format_str.lower()
-            break
-
-
-def _fresh_handler(monkeypatch, tmp_path):
+@pytest.fixture
+def fresh_log(monkeypatch, tmp_path):
+    """(setup_logger writing to a log file of the test's own, that file)."""
     from tuxtalk import logger as tlog
     monkeypatch.setenv("TUXTALK_LOG_DIR", str(tmp_path))
     monkeypatch.setattr(tlog, "_handler", None)
-    return tlog
+    made = []
+
+    def setup(name, level=logging.INFO):
+        made.append(tlog.setup_logger(name, level))
+        return made[-1]
+    yield setup, tmp_path / "tuxtalk.log"
+    for log in made:
+        for handler in list(log.handlers):
+            log.removeHandler(handler)
+    tlog._handler.close()
 
 
-def test_lines_follow_the_log_after_another_process_rolls_it_over(monkeypatch, tmp_path):
+def test_a_line_says_when_which_module_and_how_bad(fresh_log):
+    setup, log_file = fresh_log
+    setup("test_format").warning("the microphone went away")
+    assert re.fullmatch(r"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d,\d{3} - test_format - WARNING - "
+                        r"the microphone went away\n", log_file.read_text())
+
+
+def test_info_lines_are_kept_and_debug_lines_only_when_asked_for(fresh_log):
+    setup, log_file = fresh_log
+    usual = setup("test_usual")
+    usual.info("kept")
+    usual.debug("left out")
+    setup("test_detailed", logging.DEBUG).debug("asked for")
+    written = log_file.read_text()
+    assert "kept" in written and "asked for" in written
+    assert "left out" not in written
+
+
+def test_lines_follow_the_log_after_another_process_rolls_it_over(fresh_log):
     """After the service rolls the log over, the tray's lines go into the new
     tuxtalk.log, not into tuxtalk.log.old or a deleted file."""
-    tlog = _fresh_handler(monkeypatch, tmp_path)
-    log = tlog.setup_logger("test_rollover_follow")
-    try:
-        log.info("before")
-        os.replace(tmp_path / "tuxtalk.log", tmp_path / "tuxtalk.log.old")
-        log.info("after")
-        assert "after" in (tmp_path / "tuxtalk.log").read_text()
-        assert "after" not in (tmp_path / "tuxtalk.log.old").read_text()
-    finally:
-        for h in list(log.handlers):
-            log.removeHandler(h)
-            h.close()
+    setup, log_file = fresh_log
+    log = setup("test_rollover_follow")
+    log.info("before")
+    os.replace(log_file, log_file.with_name("tuxtalk.log.old"))
+    log.info("after")
+    assert "after" in log_file.read_text()
+    assert "after" not in log_file.with_name("tuxtalk.log.old").read_text()
 
 
-def test_one_handler_per_process_and_one_line_per_message(monkeypatch, tmp_path):
-    tlog = _fresh_handler(monkeypatch, tmp_path)
-    a = tlog.setup_logger("test_shared_a")
-    b = tlog.setup_logger("test_shared_b")
-    try:
-        assert a.handlers == b.handlers and len(a.handlers) == 1
-        a.info("only once")
-        assert (tmp_path / "tuxtalk.log").read_text().count("only once") == 1
-    finally:
-        for log in (a, b):
-            for h in list(log.handlers):
-                log.removeHandler(h)
-        tlog._handler.close()
+def test_one_handler_per_process_and_one_line_per_message(fresh_log):
+    setup, log_file = fresh_log
+    a = setup("test_shared_a")
+    b = setup("test_shared_b")
+    assert a.handlers == b.handlers and len(a.handlers) == 1
+    a.info("only once")
+    assert log_file.read_text().count("only once") == 1
 
 
 def test_package_loggers_reach_the_log_even_without_setup_logger():
