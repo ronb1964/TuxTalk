@@ -11,7 +11,14 @@ its positioning maths, so the window must be scaled the same way. An unscaled
 positions roughly 80px away from where they belong.
 """
 
+import types
+
+import cairo
+import numpy as np
 import pytest
+
+from tuxtalk import indicator_styles
+from tuxtalk.recording_indicator import RecordingIndicator
 
 
 def _apply(indicator, *args, **kwargs):
@@ -24,16 +31,8 @@ def _apply(indicator, *args, **kwargs):
 
 @pytest.fixture
 def indicator():
-    """A real RecordingIndicator, skipping when there is no display."""
-    gi = pytest.importorskip("gi")
-    gi.require_version("Gtk", "3.0")
+    """A real RecordingIndicator, on xvfb-run's display."""
     from gi.repository import Gtk
-
-    if not Gtk.init_check(None)[0]:
-        pytest.skip("no display available")
-
-    from tuxtalk.recording_indicator import RecordingIndicator
-
     ind = RecordingIndicator(position="center", offset_x=0, offset_y=0, size="medium")
     yield ind
     ind.destroy()
@@ -74,6 +73,16 @@ class TestApplySettings:
         _apply(indicator, "center", "medium", 0, 0, sensitivity=2.0)
         assert indicator._orb_level == pytest.approx(0.6)
 
+    def test_style_and_animation_response_change_live(self, indicator):
+        _apply(indicator, "center", "medium", 0, 0, style="radial", sensitivity=1.5)
+        assert (indicator.style, indicator.sensitivity) == ("radial", 1.5)
+
+    def test_position_alone_leaves_the_style_as_it_was(self, indicator):
+        """Callers that pass only the four position settings keep the style."""
+        _apply(indicator, "center", "medium", 0, 0, style="bars")
+        _apply(indicator, "top-left", "large", 10, 10)
+        assert indicator.style == "bars"
+
     def test_unknown_size_falls_back_to_medium(self, indicator):
         """Matches __init__'s behaviour rather than crashing the service loop."""
         _apply(indicator, "center", "enormous", 0, 0)
@@ -87,15 +96,6 @@ class TestWindowSizeMatchesPositioningMaths:
         "size,expected_scale", [("small", 0.6), ("medium", 1.0), ("large", 1.4)]
     )
     def test_window_size_tracks_scale_at_construction(self, size, expected_scale):
-        gi = pytest.importorskip("gi")
-        gi.require_version("Gtk", "3.0")
-        from gi.repository import Gtk
-
-        if not Gtk.init_check(None)[0]:
-            pytest.skip("no display available")
-
-        from tuxtalk.recording_indicator import RecordingIndicator
-
         ind = RecordingIndicator(size=size)
         try:
             width, height = ind.get_size_request()
@@ -165,3 +165,34 @@ def test_the_indicator_never_takes_the_focus_on_cosmic(monkeypatch, desktop, pop
         assert (ind.get_property("type") == Gtk.WindowType.POPUP) is popup
     finally:
         ind.destroy()
+
+
+# What each style's renderer is handed: the fed data it draws, and the
+# animation response. The orb draws itself.
+_RENDERERS = {"waveform": "draw_waveform", "bars": "draw_bars", "radial": "draw_radial"}
+
+
+@pytest.mark.parametrize("style", ["waveform", "bars", "radial", "orb"])
+def test_each_style_is_drawn_by_its_own_renderer(indicator, monkeypatch, style):
+    """A style whose renderer isn't called shows a blank indicator."""
+    drawn = []
+    for name in _RENDERERS.values():
+        monkeypatch.setattr(indicator_styles, name,
+                            lambda *args, name=name, **_k: drawn.append((name, args)))
+    monkeypatch.setattr(indicator, "draw_orb", lambda *args: drawn.append(("draw_orb", args)))
+    _apply(indicator, "center", "medium", 0, 0, style=style, sensitivity=1.5)
+    bands = [0.25, 0.5, 0.75]
+    indicator.set_spectrum(bands)
+    indicator.set_waveform(np.full(64, 0.5, dtype=np.float32))
+    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, 200, 180)
+    widget = types.SimpleNamespace(get_allocated_width=lambda: 200,
+                                   get_allocated_height=lambda: 180)
+
+    indicator.on_draw(widget, cairo.Context(surface))
+
+    assert [name for name, _args in drawn] == [_RENDERERS.get(style, "draw_orb")]
+    args = drawn[0][1]
+    if style == "bars":
+        assert args[3] == bands and args[5] == 1.5
+    elif style != "orb":
+        assert args[3] and set(args[3]) == {0.5} and args[6] == 1.5
