@@ -200,22 +200,25 @@ def _password_prompt_has_focus() -> bool:
     return focused is not None and any(word in focused.lower() for word in ("polkit", "policykit"))
 
 
+_PROC = "/proc"
+
+
 def _polkit_prompt_waiting() -> bool | None:
     """Whether a polkit prompt waits for this user's password: while one
     does, polkit-agent-helper-1 runs, on every desktop. Another user's,
     logged in at the same time, doesn't count. None when /proc hides other
     users' processes (hidepid), so it can't be told."""
-    if not os.path.exists("/proc/1"):
+    if not os.path.exists(f"{_PROC}/1"):
         return None
-    with os.scandir("/proc") as entries:
+    with os.scandir(_PROC) as entries:
         for entry in entries:
             if not entry.name.isdigit():
                 continue
             try:
-                with open(f"/proc/{entry.name}/comm") as f:
+                with open(f"{_PROC}/{entry.name}/comm") as f:
                     if f.read().strip() != "polkit-agent-he":   # comm keeps 15 characters
                         continue
-                with open(f"/proc/{entry.name}/status") as f:
+                with open(f"{_PROC}/{entry.name}/status") as f:
                     uid = next(int(line.split()[1]) for line in f if line.startswith("Uid:"))
             except (OSError, StopIteration, ValueError):
                 continue    # a process that ended meanwhile
