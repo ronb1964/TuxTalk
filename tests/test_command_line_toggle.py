@@ -387,6 +387,30 @@ def test_control_dictation_refuses_anything_else():
     assert make_service(object()).ControlDictation("toggle") == "unknown"
 
 
+@pytest.mark.parametrize("method, name", [
+    ("Uninstall", "uninstall"), ("OpenPreferences", "preferences"),
+    ("TranscribeFile", "transcribe"), ("FixWordInDictation", "fix-word"), ("ShowHelp", "help")])
+def test_uninstall_or_a_window_while_quitting_says_it_failed(monkeypatch, method, name):
+    """Refused quietly, tuxtalk --uninstall exited 0 with nothing removed,
+    and --open as if the window had opened."""
+    import dbus
+    from tuxtalk import dbus_service, tray_instance
+    monkeypatch.setattr(dbus_service.GLib, "idle_add", lambda f, *a: pytest.fail("ran"))
+    app = types.SimpleNamespace(quitting=True, uninstall=lambda: None)
+    s = make_service(app)
+    with pytest.raises(dbus.exceptions.DBusException) as refused:
+        getattr(s, method)()
+    assert refused.value.get_dbus_name() == dbus_service.QUITTING_ERROR
+    assert control.OPEN_METHODS[name] == method
+
+    def ask_running(*_a, **_k):
+        raise refused.value
+    monkeypatch.setattr(control, "open_in_running", ask_running)
+    with pytest.raises(SystemExit) as exited:
+        tray_instance.open_from_command_line(name)
+    assert exited.value.code == 1
+
+
 def test_notify_service_ready_reaches_the_tray(monkeypatch):
     from tuxtalk import dbus_service
     monkeypatch.setattr(dbus_service.GLib, "idle_add", lambda f, *a: f(*a))
