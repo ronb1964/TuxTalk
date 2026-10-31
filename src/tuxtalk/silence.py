@@ -626,7 +626,8 @@ _SHORTEST_TAKE_S = _TALKING_TO_JUDGE_S + _ROOM_TO_JUDGE_S
 # The room outside the talking is heard in the pauses between its words too.
 # When those pauses are much quieter (+15 dB), what is outside is soft words
 # at the start or end, not the room. In the recorded and made rooms the room
-# never stood more than 14 dB over the pauses (17,000 takes).
+# stood at most 13.75 dB over the pauses, in all 16,180 takes with a second
+# of talking and of room around it, at every level.
 _ROOM_OVER_PAUSES = 10 ** (15 / 20)
 
 

@@ -94,7 +94,7 @@ def send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY_
     if this_thread.last_check is not None:
         claim = _then(claim, this_thread.last_check)
     if right_before is not None:
-        claim = _then(claim, right_before)
+        claim = _last(claim, right_before)
     before_press = modifier_hotkeys.wait_while_held(focused_window.destination)
     try:
         sent = virtual_keyboard.send(events, delay_ms, before_press, claim)
@@ -128,6 +128,20 @@ def _then(claim, check):
             if take is not None:
                 take()
         return checked_take
+    return claimed
+
+
+def _last(claim, fn):
+    """*claim* (None for none), then *fn* once the claim's take has let the
+    keys go ahead, right before the first key: never for keys it stopped."""
+    def claimed():
+        take = claim() if claim is not None else None
+
+        def take_then_fn():
+            if take is not None:
+                take()
+            fn()
+        return take_then_fn
     return claimed
 
 

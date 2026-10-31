@@ -986,6 +986,31 @@ def test_soft_words_at_the_start_and_end_of_a_quiet_take_are_not_its_room():
     assert silence.speech_over_room_db(take.astype(np.float32) / 32768, SR) is None
 
 
+def _blocks(*runs):
+    """Audio made of 20 ms blocks, each as loud as given (int16 RMS):
+    *runs* of (level, how many blocks)."""
+    return np.concatenate([np.full(320 * count, float(level)) for level, count in runs])
+
+
+@pytest.mark.parametrize("room_over_pauses_db, verdict", [(14.99, True), (15.01, False)])
+def test_the_room_may_stand_up_to_15_db_over_the_pauses_between_words(room_over_pauses_db,
+                                                                      verdict):
+    """Rooms never stood more than 14 dB over the pauses; past 15 dB what is
+    outside the talking is taken for soft words and given no verdict."""
+    room = 20.0 * 10 ** (room_over_pauses_db / 20)
+    talking = [(3000.0, 9), (20.0, 4)] * 7 + [(3000.0, 9)]
+    take = _blocks((room, 60), *talking, (room, 60)) / 32768
+    assert (silence.speech_over_room_db(take.astype(np.float32), SR) is not None) is verdict
+
+
+def test_soft_words_around_talking_with_no_pauses_still_look_like_steady_noise():
+    """A limit kept on purpose: soft words each side of talking that never
+    pauses can't be told from steady noise 20 dB under the voice by level
+    alone, so that warns (a voice detector could tell them apart)."""
+    take = _blocks((200.0, 50), (2000.0, 100), (200.0, 50)) / 32768
+    assert silence.speech_over_room_db(take.astype(np.float32), SR) < silence.NOISY_ROOM_DB
+
+
 def _mic_test_take(room):
     """A microphone test: a second of *room* (a function of seconds giving
     int16-scale audio), 2.5 s of talking over it, then 1.5 s more; the

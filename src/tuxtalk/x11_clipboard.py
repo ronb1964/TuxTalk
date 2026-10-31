@@ -340,8 +340,10 @@ def _put_back(saved, at=None):
     if saved is EMPTY:
         _offer = None
         now = at or GdkX11.x11_get_server_time(_owner.get_window())
-        Gtk.selection_owner_set(None, Gdk.SELECTION_CLIPBOARD, now)
-        return Gdk.selection_owner_get(Gdk.SELECTION_CLIPBOARD) is None
+        # False when the X server kept another app's copy: GDK only knows
+        # this process's windows, so asking it who owns the clipboard
+        # can't tell that from an empty one.
+        return Gtk.selection_owner_set(None, Gdk.SELECTION_CLIPBOARD, now)
     data, mime, sensitive, more = saved
     if mime in TEXT_TYPES:
         return _own(_Offer(data.decode("utf-8", "replace"), None, sensitive, None), at)

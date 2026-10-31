@@ -37,7 +37,7 @@ print(repr((board.wait_for_text(), hint and hint.get_data())), flush=True)
 """
 # An app that offers argv[1] (a JSON object of type: text) until its input closes.
 _OFFER_AND_STAY = """
-import json, sys
+import json, signal, sys
 import gi
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
@@ -50,6 +50,14 @@ owner.connect("selection-get", lambda _w, data, _i, _t: data.set(
     data.get_target(), 8, offer[data.get_target().name()].encode()))
 Gtk.selection_owner_set(owner, Gdk.SELECTION_CLIPBOARD,
                         GdkX11.x11_get_server_time(owner.get_window()))
+
+# The same app copies again on SIGUSR1: the same owner, a new copy.
+def copy_again():
+    Gtk.selection_owner_set(owner, Gdk.SELECTION_CLIPBOARD,
+                            GdkX11.x11_get_server_time(owner.get_window()))
+    print("again", flush=True)
+    return True
+GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR1, copy_again)
 GLib.io_add_watch(sys.stdin, GLib.IO_IN | GLib.IO_HUP, lambda *a: Gtk.main_quit())
 GLib.timeout_add_seconds(20, Gtk.main_quit)
 GLib.idle_add(lambda: print("ready", flush=True))
@@ -149,9 +157,29 @@ def board(monkeypatch):
         monkeypatch.setattr(x11, name, value)
     monkeypatch.setattr(gtk_loop, "_thread", threading.Thread())
     Gtk.selection_owner_set(None, Gdk.SELECTION_CLIPBOARD, Gdk.CURRENT_TIME)
+    _pump_until(lambda: False, seconds=0.1)     # its news, before a test reads
     yield
     if x11._owner is not None:
         x11._owner.destroy()
+
+
+def test_a_clear_the_x_server_refused_isnt_called_a_restore(board, monkeypatch, caplog):
+    """The clipboard was empty before the paste; another app copies right
+    before the restore, unheard of yet. The X server keeps its copy, and the
+    log mustn't say the clipboard was restored. First of the tests with
+    other apps: GDK then knows no other app's window, as it would, and asked
+    who owns the clipboard says nobody."""
+    pending = []
+    _paste_keeping("dictated words", schedule=lambda delay, fn: pending.append(fn) or (
+        lambda: None))
+    with _app_offering({"UTF8_STRING": "copied just now"}):
+        monkeypatch.setattr(gtk_loop, "_thread", None)     # GTK work right here, unpumped
+        with caplog.at_level("INFO"):
+            pending[0]()
+        assert "Clipboard changed after the paste" in caplog.text
+        assert "Clipboard restored" not in caplog.text
+        monkeypatch.setattr(gtk_loop, "_thread", threading.Thread())
+        assert _what_it_read(_start_reading()) == repr(("copied just now", None))
 
 
 # --- The dictation, offered --------------------------------------------------------
@@ -267,6 +295,56 @@ def test_a_copy_the_service_hasnt_heard_of_yet_is_not_replaced(board):
         assert x11._put_back_over((b"what I copied", "UTF8_STRING", False, ()),
                                   "dictated words") is False
         assert _what_it_read(_start_reading()) == repr(("copied just now", None))
+
+
+def test_the_same_app_copying_again_while_it_is_read_isnt_saved(board, monkeypatch):
+    """The owner stays the same app, but its copy changed between the
+    types and the text: that read is thrown away too."""
+    from gi.repository import Gtk
+    request_text = Gtk.Clipboard.request_text
+    with _app_offering(_TEXT) as app:
+        def copied_again_first(self, callback):
+            app.send_signal(signal.SIGUSR1)
+            assert app.stdout.readline().strip() == "again"
+            request_text(self, callback)
+        monkeypatch.setattr(Gtk.Clipboard, "request_text", copied_again_first)
+        assert _in_the_service(x11.X11Board.read) is cb.NOTHING
+
+
+def test_a_copy_made_between_the_file_types_isnt_saved(board, monkeypatch):
+    """Files are asked for in each of their types in turn: a password copied
+    between two of them throws the read away."""
+    from gi.repository import Gtk
+    request_contents = Gtk.Clipboard.request_contents
+    password_manager = contextlib.ExitStack()
+
+    def password_copied_midway(self, target, callback):
+        if target.name() == "x-special/gnome-copied-files":
+            password_manager.enter_context(_app_offering(
+                {"UTF8_STRING": "hunter2", "x-kde-passwordManagerHint": "secret"}))
+        request_contents(self, target, callback)
+    monkeypatch.setattr(Gtk.Clipboard, "request_contents", password_copied_midway)
+    uris = "file:///home/me/photo.jpg"
+    with password_manager, _app_offering({"x-special/gnome-copied-files": f"copy\n{uris}",
+                                          "text/uri-list": uris}):
+        assert _in_the_service(x11.X11Board.read) is cb.NOTHING
+
+
+def test_the_read_is_forgotten_only_for_a_paste_key_that_goes_out(keyboard):
+    """reads_from_now's place: after the last check lets the key go ahead,
+    never for a key it stopped (the read would be forgotten for nothing)."""
+    from tuxtalk import virtual_keyboard
+    order = []
+
+    def refuse():
+        raise virtual_keyboard.GaveUp("another window has the focus")
+    assert keyboard_output.send_keys(keyboard_output.ctrl_keys("v"), claim=lambda: refuse,
+                                     right_before=lambda: order.append("forgot")) is False
+    assert order == [] and keyboard.events == []
+    assert keyboard_output.send_keys(
+        keyboard_output.ctrl_keys("v"), claim=lambda: lambda: order.append("checked"),
+        right_before=lambda: order.append("forgot")) is True
+    assert order == ["checked", "forgot"] and keyboard.events
 
 
 def test_a_copy_made_while_it_is_read_is_not_saved_as_the_first(board, monkeypatch):
@@ -471,4 +549,3 @@ def test_gtk_too_busy_to_read_or_restore_is_logged(board, monkeypatch, caplog):
         assert x11.X11Board.read() is cb.NOTHING
         assert x11.X11Board.put_back(cb.EMPTY, "dictated words") is False
     assert caplog.text.count("GTK's thread was busy") == 2
-
