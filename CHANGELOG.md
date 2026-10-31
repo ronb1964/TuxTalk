@@ -437,6 +437,32 @@ before 0.15.0, so older entries use that name.
 - If you start your desktop with startx, TuxTalk now types for the keyboard
   layout you have switched on. It didn't recognise that kind of X11 session
   before, so it fell back to the system's default layout.
+- If TuxTalk's tray icon crashed and you opened TuxTalk again, the
+  dictation that was still running couldn't reach the new one: the GNOME
+  panel stopped showing when you were recording, Test Hotkeys never heard a
+  key, tuxtalk --start never started, and on GNOME F8 could leak into the
+  app you were typing in. That lasted until dictation restarted. Now it
+  finds the new tray straight away.
+- If you turned Dictation off, picking a Performance preset, applying a
+  Preferences change that needs a restart, or the Parakeet Ultra download
+  turned it back on. Now it stays off, and the change is used when you
+  turn Dictation on.
+- Clearing Recent Dictations at the same moment a dictation finished could
+  bring the cleared ones back. Not any more.
+- TuxTalk's log could be read by other accounts on the same computer. That
+  matters if you switched on "Log transcribed text", which puts what you
+  dictate in it. Only you can read it now, an old log included.
+- Another program on your desktop could get TuxTalk to send a signal that
+  ends one of your programs, while a tuxtalk --start was waiting for the
+  speech model. TuxTalk now only signals its own dictation service.
+- If the desktop's notification service hung, a notice from TuxTalk could
+  hold up dictation for 25 seconds. It gives up after 2 now, as intended.
+- The tray menu no longer freezes for a moment on KDE when dictation stops.
+- The KDE "turn off the notification" guide closes with Escape, Enter or
+  Space now.
+- tuxtalk --uninstall run while TuxTalk was quitting said nothing and did
+  nothing, as if it had worked. It says it couldn't now. --open does the
+  same.
 
 ## [0.18.2] - 2026-10-23
 
