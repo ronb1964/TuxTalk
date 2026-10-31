@@ -714,9 +714,8 @@ def _start_first_run(tray, command):
 
 def _show_first_run_setup(tray):
     """The welcome screens with all setup options, then what their answer
-    asks for. An error in onboarding counts as a cancel, so the service
-    still starts and the welcome comes back next launch. False, for its
-    GLib timer."""
+    asks for. An error in onboarding still starts the service, and the
+    welcome comes back next launch. False, for its GLib timer."""
     try:
         from tuxtalk.first_run_setup import show_welcome_and_install
         result = show_welcome_and_install()
@@ -730,13 +729,24 @@ def _show_first_run_setup(tray):
 def _finish_first_run(tray, result):
     """After the welcome screens (*result*, None when they failed): setup
     marked done if it was finished, the menu rebuilt and the service
-    started; or quit, on a desktop TuxTalk's hotkey can't work on."""
+    started; or quit, when the welcome was closed or the desktop can't
+    give TuxTalk a hotkey."""
     # Unsupported desktop (no GlobalShortcuts portal): the user can only
     # quit — the app cannot function here, so exit instead of starting a
     # dead service. First run is left unmarked so a later install on a
     # supported desktop still onboards.
     if result and result.get('quit'):
         logger.info("Onboarding: dictation hotkey unsupported on this desktop - quitting")
+        tray.quit_app(None)
+        return
+    # Closed (the X, Escape) before "Set it up": no hotkey is listened for
+    # until setup is done, so a TuxTalk left running would only look broken,
+    # and opening it again would show its menu, not the welcome.
+    if result is not None and not result.get('continue'):
+        logger.info("Welcome closed before setup - quitting; it shows again next launch")
+        from .notify import notify
+        notify("TuxTalk setup isn't finished",
+               "Open TuxTalk again from your apps to finish setting it up.")
         tray.quit_app(None)
         return
 
@@ -751,7 +761,7 @@ def _finish_first_run(tray, result):
         # the user would see no menu at all.
         GLib.timeout_add(2500, tray.show_menu_window_if_no_tray)
     else:
-        logger.info("User cancelled onboarding - will show again next launch")
+        logger.info("Onboarding failed - starting anyway; it shows again next launch")
 
     # Refresh menu after installations
     tray.refresh_menu()

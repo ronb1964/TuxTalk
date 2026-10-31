@@ -474,6 +474,19 @@ before 0.15.0, so older entries use that name.
   Install Extension tucked away in a closed section that said everything
   was set up. On a desktop with no tray, a missing GNOME extension now
   counts as something to fix, so System check opens on it.
+- Closing the welcome screen before "Set it up" (the X or Esc) left
+  TuxTalk running with a tray icon and a dictation key that did nothing,
+  and nothing said why. TuxTalk now quits and a notification says to open
+  it again to finish setting it up; the welcome screen comes back then.
+- The welcome screen can't be closed any more while Fix Typing or the
+  PortAudio install is still working. Closed then, the password prompt
+  still came up with nothing on screen to explain it.
+- "Set it up" on the welcome screen says so when PortAudio isn't
+  installed yet, as it already did for typing: without it TuxTalk can't
+  hear the microphone.
+- Closing the splash screen in its first half second (Alt+F4 under some
+  window managers) left first-run setup stuck with nothing on screen until
+  TuxTalk was restarted. The welcome screen comes up now.
 
 ## [0.18.2] - 2026-10-23
 

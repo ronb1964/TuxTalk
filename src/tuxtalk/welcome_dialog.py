@@ -19,7 +19,7 @@ gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
 from gi.repository import Gtk, Gdk, GLib
 from . import config, extension_helper
-from .ui_style import Fold, more_below_bar, show_message
+from .ui_style import WARNING_AMBER, Fold, more_below_bar, show_message
 
 from .flatpak_welcome import (build_shortcut_setup_section, build_unsupported_desktop_section,
                               shortcut_support)
@@ -256,15 +256,9 @@ class WelcomeDialog:
     only when this computer needs them.
     """
 
-    def __init__(self, parent=None, force_gnome=None):
-        """
-        Initialize the welcome dialog.
-
-        Args:
-            parent: Parent window (optional)
-            force_gnome: Override GNOME detection for testing (None/True/False)
-        """
-        self.parent = parent
+    def __init__(self, force_gnome=None):
+        """Detect what this computer needs and build the dialog.
+        *force_gnome* overrides GNOME detection for tests (None/True/False)."""
         self._detect(force_gnome)
         self.height = self._height()
         logger.info(f"Welcome dialog: GNOME={self.has_gnome}, "
@@ -289,7 +283,6 @@ class WelcomeDialog:
         self._continue_after_fix = False  # "Set it up" started Fix Typing: go on after it
         self.install_portaudio_button = None
         self.portaudio_status_label = None
-        self.portaudio_fixed = False  # Track if user installed PortAudio during this dialog
         self._syncing = False  # True while _refresh_recommendation sets the model radios
         self._busy = 0  # installs running in the background (_run_in_background)
         self._job_lock = threading.Lock()  # one background install at a time
@@ -372,9 +365,10 @@ class WelcomeDialog:
         self.dialog.set_modal(True)
         self.dialog.set_position(Gtk.WindowPosition.CENTER)
         self.dialog.set_keep_above(True)
-
-        if self.parent:
-            self.dialog.set_transient_for(self.parent)
+        # Not closed (the X, Escape) while Fix Typing or an install runs:
+        # its password prompt would come up with nothing to explain it, and
+        # its result would be lost.
+        self.dialog.connect("delete-event", lambda *_a: self._busy > 0)
         _install_css(self.dialog.get_screen() or Gdk.Screen.get_default())
 
         content = self.dialog.get_content_area()
@@ -637,8 +631,6 @@ class WelcomeDialog:
                 'Audio recording is now available.</span>'
             )
 
-            # Update internal state
-            self.portaudio_fixed = True
             self.needs_portaudio_install = False
 
             # Show success message
@@ -759,25 +751,37 @@ class WelcomeDialog:
 
     def _on_set_it_up(self, _button):
         """"Set it up" does the typing setup first when it's needed, so a user
-        who never scrolls to Fix Typing doesn't end up with no hotkey."""
-        if not self._typing_fix_pending():
-            self.dialog.response(Gtk.ResponseType.OK)
-            return
-        button = self.fix_typing_button
-        if button is not None and button.get_sensitive():
-            self._continue_after_fix = True
-            self._on_fix_typing_clicked(button)
+        who never scrolls to Fix Typing doesn't end up with no hotkey; and
+        says so when the microphone can't be used yet (no PortAudio)."""
+        if self._typing_fix_pending():
+            button = self.fix_typing_button
+            if button is not None and button.get_sensitive():
+                self._continue_after_fix = True
+                self._on_fix_typing_clicked(button)
+            else:
+                # No Fix Typing button to press: say what going on without means.
+                self._continue_without_typing()
+        elif self.needs_portaudio_install:
+            self._continue_without(
+                "Recording isn't set up yet",
+                "Without PortAudio TuxTalk can't hear your microphone. Go back and "
+                "click Install PortAudio, or continue and install it later.")
         else:
-            # Fix Typing is still running.
-            self._continue_without_typing()
+            self.dialog.response(Gtk.ResponseType.OK)
 
     def _continue_without_typing(self):
         """Warn that the hotkey and typing won't work; continue if the user
         says so, otherwise stay on this screen."""
-        answer = show_message(
-            self.dialog, Gtk.MessageType.WARNING, "Typing isn't set up yet",
+        self._continue_without(
+            "Typing isn't set up yet",
             "Without it your dictation key and typing won't work. Go back and "
-            "click Fix Typing, or continue and set it up later in Preferences.",
+            "click Fix Typing, or continue and set it up later in Preferences.")
+
+    def _continue_without(self, title, text):
+        """Warn that a required step was skipped: Continue Anyway goes on,
+        Go Back stays on this screen."""
+        answer = show_message(
+            self.dialog, Gtk.MessageType.WARNING, title, text,
             [("Go Back", Gtk.ResponseType.CANCEL), ("Continue Anyway", Gtk.ResponseType.OK)])
         if answer == Gtk.ResponseType.OK:
             self.dialog.response(Gtk.ResponseType.OK)
@@ -873,7 +877,7 @@ class WelcomeDialog:
             self.extension_check.set_active(True)
             no_tray = Gtk.Label(xalign=0)
             no_tray.set_markup(
-                '<span color="#e6aa3c"><b>⚠️ Recommended here: this desktop has no '
+                f'<span color="{WARNING_AMBER}"><b>⚠️ Recommended here: this desktop has no '
                 'system tray.</b>\n'
                 'Without the extension, TuxTalk has no menu on screen. Its menu '
                 '(Preferences, Transcribe a File and more) then opens only when you '
@@ -1180,6 +1184,8 @@ class WelcomeDialog:
                 - 'model', 'device', 'dictation_language': the setup the
                   recommendation card shows (absent on an unsupported desktop)
                 - 'continue': bool (True if user clicked "Set it up")
+                - 'quit': bool (the unsupported desktop's Quit TuxTalk)
+                - 'needs_restart': bool (Fix Typing used the "input" group)
         """
         # Show dialog and fade in
         self.dialog.set_opacity(0.0)
@@ -1213,14 +1219,8 @@ class WelcomeDialog:
             result['device'] = setup.device
             result['dictation_language'] = self._language()
 
-        # Include typing setup status
-        result['uinput_fixed'] = self.uinput_fixed
+        # Fix Typing on the "input" group path: Setup Complete offers a restart.
         result['needs_restart'] = self.restart_needed
-        result['needs_uinput_fix'] = self.needs_uinput_fix and not self.uinput_fixed
-
-        # Include PortAudio status
-        result['portaudio_installed'] = not self.needs_portaudio_install or self.portaudio_fixed
-        result['needs_portaudio'] = self.needs_portaudio_install and not self.portaudio_fixed
 
         logger.info(f"Welcome dialog result: {result}")
 
@@ -1233,23 +1233,16 @@ class WelcomeDialog:
             self.dialog.destroy()
 
 
-def show_welcome_dialog(parent=None):
-    """
-    Convenience function to show the welcome dialog with splash screen.
-
-    Args:
-        parent: Parent window (optional)
-
-    Returns:
-        dict: User selections from the dialog
-    """
+def show_welcome_dialog():
+    """The splash screen, then the welcome dialog; returns its result
+    (WelcomeDialog.run), or None when it failed."""
     result_container = [None]  # Use list to store result from callback
 
     def show_dialog_after_splash():
         """Called after splash screen finishes."""
         dialog = None
         try:
-            dialog = WelcomeDialog(parent=parent)
+            dialog = WelcomeDialog()
             result_container[0] = dialog.run()
         except Exception:
             # An error here would otherwise leave Gtk.main() below running for

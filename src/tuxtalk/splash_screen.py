@@ -188,23 +188,32 @@ class SplashScreen:
         return False
 
     def show_and_fade(self, callback):
-        """Show the splash, then fade it out and call *callback* (no arguments)."""
+        """Show the splash, then fade it out and call *callback* (no arguments)
+        once it has gone. A splash closed early (Alt+F4 under some window
+        managers) calls it too: the welcome screen waits on it."""
+        self.window.connect("destroy", self._on_destroy, callback)
         self.window.set_opacity(0.0)
         self.window.show_all()
         GLib.timeout_add(100, self._animate_glow)
         # Held for 2.5 s at full while the glow grows, then faded out.
         fade_in(self.window,
-                lambda: GLib.timeout_add(2500, lambda: self._fade_out(1.0, callback)))
+                lambda: GLib.timeout_add(2500, lambda: self._fade_out(1.0)))
 
-    def _fade_out(self, opacity, callback):
+    def _fade_out(self, opacity):
         """Lower the opacity a step at the fade-in's pace; at nothing, close
-        the splash and call *callback*."""
+        the splash."""
+        if self._stop_glow:         # closed already
+            return
         opacity -= 0.05
         self.window.set_opacity(opacity)
         if opacity > 0.0:
-            GLib.timeout_add(25, lambda: self._fade_out(opacity, callback))
+            GLib.timeout_add(25, lambda: self._fade_out(opacity))
             return
+        self.window.destroy()
+
+    def _on_destroy(self, _window, callback):
+        """The splash has gone, faded out or closed: its stylesheet goes too,
+        and *callback* runs once its window is out of the way."""
         self._stop_glow = True      # the glow's timer stops at its next step
         Gtk.StyleContext.remove_provider_for_screen(self._screen, self.css_provider)
-        self.window.destroy()
-        callback()
+        GLib.idle_add(callback)

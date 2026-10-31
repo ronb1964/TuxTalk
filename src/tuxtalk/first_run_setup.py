@@ -338,14 +338,13 @@ def show_welcome_and_install():
     from tuxtalk import appimage_copy
     appimage_installed, launcher_created = appimage_copy.put_in_place()
 
-    # needs_restart carries the deferred restart reminder here: if the user fixed
-    # device permissions during setup (uinput_fixed), typing/hotkeys won't work
-    # until a reboot, so the final screen offers "Restart computer now" instead of an
-    # interrupting popup earlier in the flow.
+    # Fix Typing on the "input" group path needs a reboot before the hotkeys
+    # and typing work (the hotkey helper doesn't): the last screen offers
+    # "Restart computer now" rather than a popup earlier in the flow.
     show_setup_complete_dialog(
         appimage_installed=appimage_installed,
         launcher_created=launcher_created,
-        needs_restart=bool(result.get('needs_restart', result.get('uinput_fixed'))),
+        needs_restart=bool(result.get('needs_restart')),
         extension_installed=extension_installed,
         model_ready=model_ready,
     )
