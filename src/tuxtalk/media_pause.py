@@ -105,7 +105,8 @@ class MediaPauser:
                            "it may stay paused")
 
     def wait_idle(self, timeout):
-        """Wait for queued jobs to finish. True if they did."""
+        """Wait for queued jobs to finish. True if they did. Only the tests
+        need it: they wait on the worker without reaching into its queue."""
         done = threading.Event()
         self._submit(done.set)
         return done.wait(timeout)

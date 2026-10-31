@@ -207,7 +207,7 @@ class AudioDucker:
         self._submit(self._duck_now)
 
     def restore(self):
-        self._submit(self._restore_now)
+        self._submit(self._restore_and_follow_up)
 
     def close(self, timeout=EXIT_WAIT_S):
         """For exit: put back what was turned down, as the worker's last job.
@@ -230,7 +230,8 @@ class AudioDucker:
                            "the next start puts them back")
 
     def wait_idle(self, timeout):
-        """Wait for queued jobs to finish. True if they did."""
+        """Wait for queued jobs to finish. True if they did. Only the tests
+        need it: they wait on the worker without reaching into its queue."""
         done = threading.Event()
         self._submit(done.set)
         return done.wait(timeout)
@@ -313,6 +314,13 @@ class AudioDucker:
         if ducked:
             logger.info(f"Put {put_back} sound(s) back to their volume")
         self._save()
+
+    def _restore_and_follow_up(self):
+        """After a dictation: restore, then look again for a while for apps
+        still owed their volume (_follow_up). Not at exit, nor for the
+        restore at start (restore_left_over), whose follow-ups would write
+        the record from a second ducker over the one the dictations use."""
+        self._restore_now()
         if self._owed:
             self._follow_up(self._round, 0)
 
@@ -365,18 +373,22 @@ class AudioDucker:
     def _settle_owed(self, streams):
         """Put back an app owed its volume, playing now at the lowered level;
         its streams are then counted at their real volume. How many."""
-        fixed = 0
+        fixed, seen, failed = 0, set(), set()
         for st in streams:
             owed = self._owed.get(st["app"])
             if owed is None or st["index"] in self._ducked:
                 continue
+            seen.add(st["app"])
             if st["volumes"] == owed["lowered"]:
                 if not _set_volume(st["index"], owed["original"], self._run):
-                    continue    # still owed: the next look tries again
+                    failed.add(st["app"])   # still owed: the next look tries again
+                    continue
                 st["volumes"] = list(owed["original"])
                 fixed += 1
-            # Put back, or at a level the user set: it's settled.
-            del self._owed[st["app"]]
+        # Each of its streams put back, or at a level the user set: settled.
+        # Per app, not at its first stream: a second tab may still be lowered.
+        for app in seen - failed:
+            del self._owed[app]
         if fixed:
             logger.info(f"Put {fixed} app(s) back to the volume a dictation turned down")
         return fixed

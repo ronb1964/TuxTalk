@@ -252,13 +252,54 @@ def test_a_player_reopening_its_sound_after_resume_gets_its_volume_back(tmp_path
     d = _ducker(tmp_path, pactl)
     d._duck_now()
     del pactl.streams[5]                            # paused: Brave closed its sound
-    d._restore_now()
+    d.restore()
+    assert d.wait_idle(2)
     pactl.streams[6] = {"pid": 77, "volumes": [32768], "app": "Brave"}   # resumed
     import time
     time.sleep(0.4)
     assert d.wait_idle(2)
     assert pactl.streams[6]["volumes"] == [65536]
     assert d._owed == {}
+
+
+def test_a_second_stream_of_an_owed_app_is_put_back_too(tmp_path):
+    """Two Brave tabs come back after Brave's sound ended while turned down:
+    one at a level the user set, one at the lowered level. The app was
+    taken as settled at its first stream, and the second tab stayed quiet."""
+    pactl = FakePactl({5: {"pid": 77, "volumes": [65536], "app": "Brave"}})
+    d = _ducker(tmp_path, pactl)
+    d._duck_now()
+    del pactl.streams[5]
+    d._restore_now()
+    assert d._owed
+    pactl.streams[6] = {"pid": 77, "volumes": [40000], "app": "Brave"}    # set by hand
+    pactl.streams[7] = {"pid": 77, "volumes": [32768], "app": "Brave"}    # still lowered
+    d._restore_now()
+    assert pactl.streams[6]["volumes"] == [40000]
+    assert pactl.streams[7]["volumes"] == [65536]
+    assert d._owed == {}
+
+
+def test_the_restore_at_start_leaves_the_record_to_the_dictations(tmp_path, monkeypatch):
+    """At start, an app still owed its volume whose reset failed: the
+    ducker that put things back went on looking for it, and its look wrote
+    its own record over the one the first dictation's turn-down had just
+    saved. Had the service then stopped, that sound stayed quiet."""
+    import time
+    monkeypatch.setattr(audio_duck, "FOLLOW_UP_S", (0.05, 0.1, 0.2))
+    pactl = FakePactl({5: {"pid": 77, "volumes": [50000], "app": "Brave"}})
+    path = str(tmp_path / "ducked.json")
+    d = _ducker(tmp_path, pactl)
+    d._duck_now()
+    del pactl.streams[5]
+    d._restore_now()                                # Brave owed, in the record
+    audio_duck.restore_left_over(run=pactl, state_path=path, reset=_no_reset)
+    pactl.streams[7] = {"pid": 100, "volumes": [65536], "app": "Discord"}
+    dictation = _ducker(tmp_path, pactl)
+    dictation._duck_now()                           # Discord turned down, on record
+    time.sleep(0.4)
+    with open(path, encoding="utf-8") as f:
+        assert "7" in json.load(f)
 
 
 def test_a_paused_player_isnt_turned_down(tmp_path):
