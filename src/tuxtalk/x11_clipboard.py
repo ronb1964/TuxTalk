@@ -5,8 +5,10 @@ user's copy back afterwards (X11Board, for clipboard.ClipboardKeeper).
 
 X11 has no wl-copy to lean on: the service owns the clipboard itself, through
 an invisible GTK window on its GTK loop's thread (gtk_loop), and answers the
-app's paste from there. Everything that touches GTK runs on that thread; the
-module's state is only changed there.
+app's paste from there. Everything that touches GTK runs on that thread, and
+the clipboard's state (what is offered) is only changed there; the typing
+thread that offers a dictation keeps the Event its read sets
+(_dictation_read), which only it replaces and clears.
 """
 import collections
 import threading
@@ -26,7 +28,7 @@ _Offer = collections.namedtuple("_Offer", "text data sensitive read")
 
 _owner = None                       # the invisible window owning the clipboard, made once
 _offer = None                       # what it offers now, or None
-_dictation_read = threading.Event()     # the latest dictation's read, for X11Board.schedule
+_dictation_read = threading.Event()     # set when an app reads the latest dictation
 _dictation_at = float("-inf")       # time.monotonic() of the latest dictation offered
 
 # The owner of the user's copy is another app, answering through the X
@@ -36,8 +38,9 @@ _dictation_at = float("-inf")       # time.monotonic() of the latest dictation o
 # Wayland's two wl-paste calls of a second each.
 READ_WAIT_S = 1.0
 # The restore waits for the app to read the dictation, at least
-# RESTORE_DELAY_S (a clipboard manager reads it at once, before the app),
-# and at most this, for an app that never asks.
+# RESTORE_DELAY_S, and at most this, for an app that never asks. Only a
+# read after the paste key counts (reads_from_now): a clipboard manager
+# reads each new copy at once.
 RESTORE_CAP_S = 2.0
 # Quitting waits at most this for a clipboard manager to take the user's
 # copy.
@@ -70,6 +73,13 @@ def offer_dictation(text, timeout=1.0):
     if offered:
         _dictation_read = read
     return offered
+
+
+def reads_from_now() -> None:
+    """Just before the paste key: forget reads of the dictation so far, a
+    clipboard manager's (Clipman, CopyQ before 8) at the offer, so the
+    restore waits for the app's own. Called by the thread that offered it."""
+    _dictation_read.clear()
 
 
 def wait_for_paste() -> None:
@@ -211,16 +221,27 @@ class X11Board:
         dictation and *delay* has passed, or after RESTORE_CAP_S; returns
         its cancel(). The service answers the paste itself, so a slow app
         isn't handed the user's copy instead of the dictation."""
-        read, cancelled = _dictation_read, threading.Event()
+        read, cancelled, pasted_at = _dictation_read, threading.Event(), time.monotonic()
 
         def wait():
-            if cancelled.wait(delay):
-                return
-            read.wait(max(0.0, RESTORE_CAP_S - delay))
-            if not cancelled.is_set():
+            if _wait_for_read(read, pasted_at, delay, cancelled):
                 fn()
         threading.Thread(target=wait, daemon=True, name="tt-clipboard-restore").start()
         return cancelled.set
+
+    @staticmethod
+    def wait_for_read(pasted_at, delay):
+        """Wait as schedule() would for a paste made at *pasted_at*."""
+        _wait_for_read(_dictation_read, pasted_at, delay, threading.Event())
+
+
+def _wait_for_read(read, pasted_at, delay, cancelled):
+    """Wait until *delay* after *pasted_at* and *read* is set, or until
+    RESTORE_CAP_S after it; False if *cancelled* meanwhile."""
+    if cancelled.wait(max(0.0, pasted_at + delay - time.monotonic())):
+        return False
+    read.wait(max(0.0, pasted_at + RESTORE_CAP_S - time.monotonic()))
+    return not cancelled.is_set()
 
 
 def _offers_dictation(text):
@@ -254,7 +275,9 @@ def _ask_owner(done):
             board.request_text(lambda _board, text: done(_saved(
                 None if text is None else text.encode("utf-8"), TEXT_TYPES[0], sensitive)))
             return
-        more = [t for t in FILE_MANAGER_TYPES if t in types] if wanted == "text/uri-list" else []
+        # With the file manager's own types, and the paths as text for an editor.
+        files = (*FILE_MANAGER_TYPES, *TEXT_TYPES)
+        more = [t for t in files if t in types] if wanted == "text/uri-list" else []
         _ask_for_types(board, [wanted, *more], {}, lambda got: done(_saved(
             got.get(wanted), wanted, sensitive, tuple((t, got[t]) for t in more if t in got))))
     board.request_contents(Gdk.Atom.intern("TARGETS", False), got_types)
@@ -290,7 +313,7 @@ def _saved(data, mime, sensitive, more=()):
 
 def _put_back(saved):
     """On GTK's thread: offer the user's copy *saved* again, as it came
-    (text in every text type, files in each file-manager type they came in),
+    (text in every text type, files in each type they came in),
     or leave the clipboard empty if it was."""
     global _offer
     from gi.repository import Gdk, GdkX11, Gtk

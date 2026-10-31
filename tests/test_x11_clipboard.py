@@ -208,7 +208,7 @@ def test_quitting_right_after_a_paste_waits_for_the_app_to_read_it(monkeypatch):
 def test_a_paste_keeps_the_clipboard_only_when_the_setting_is_on(monkeypatch):
     """Off by default, as on Wayland; on, the user's copy is saved before the
     dictation is offered and put back after. An offer that failed left the
-    clipboard as it was: nothing to put back."""
+    clipboard as it was: only an earlier dictation's restore is left to do."""
     events = []
 
     class Keeper:
@@ -220,6 +220,9 @@ def test_a_paste_keeps_the_clipboard_only_when_the_setting_is_on(monkeypatch):
 
         def after_paste(self, text):
             events.append(("restore", text))
+
+        def paste_failed(self):
+            events.append("failed")
     monkeypatch.setattr(cb, "ClipboardKeeper", Keeper)
     monkeypatch.setattr(keyboard_output, "_clipboard_keeper", None)
     monkeypatch.setattr(x11, "offer_dictation", lambda text: events.append(("offer", text)) or True)
@@ -237,7 +240,7 @@ def test_a_paste_keeps_the_clipboard_only_when_the_setting_is_on(monkeypatch):
     monkeypatch.setattr(x11, "offer_dictation", lambda text: False)
     assert keyboard_output.paste_text_x11("again") is False
     assert events == [("made for", x11.X11Board), "save", ("offer", "hello"),
-                      ("restore", "hello"), "save"]
+                      ("restore", "hello"), "save", "failed"]
 
 
 def test_something_copied_after_the_paste_is_not_replaced(monkeypatch):
@@ -289,8 +292,8 @@ def test_a_copied_picture_comes_back_as_a_picture(board):
 @pytest.mark.parametrize("how", ["copy", "cut"])
 def test_files_copied_in_a_file_manager_come_back_for_it_to_paste(board, how):
     """Nemo and Caja paste only x-special/gnome-copied-files, which also says
-    whether the files were cut; they offer the paths as text too, and put
-    back as that text the files pasted only into a text editor."""
+    whether the files were cut; put back as their paths in text, the files
+    pasted only into a text editor. The paths still paste there as text."""
     from gi.repository import Gdk, Gtk
     uris = "file:///home/me/photo.jpg"
     offer = {"x-special/gnome-copied-files": f"{how}\n{uris}", "text/uri-list": uris,
@@ -305,11 +308,12 @@ def test_files_copied_in_a_file_manager_come_back_for_it_to_paste(board, how):
     _pump_until(lambda: len(got) == 2)
     assert got == {"text/uri-list": uris.encode(),
                    "x-special/gnome-copied-files": f"{how}\n{uris}".encode()}
+    assert _what_it_read(_start_reading()) == repr(("/home/me/photo.jpg", None))
 
 
 def test_a_slow_app_gets_the_dictation_not_the_copy_put_back(board):
     """The restore waits for the app to read the dictation: one that asks a
-    second and a half after the Ctrl+V still gets it (with the fixed half
+    second after the Ctrl+V still gets it (with the fixed half
     second, it got the user's copy), and the copy comes back after."""
     with _app_offering(_TEXT):
         reader = []
@@ -318,12 +322,77 @@ def test_a_slow_app_gets_the_dictation_not_the_copy_put_back(board):
             keeper = cb.ClipboardKeeper(x11.X11Board)
             keeper.before_paste()
             assert x11.offer_dictation("dictated words")
-            reader.append(_start_reading(after_s=1.5))
+            reader.append(_start_reading(after_s=1.0))
             keeper.after_paste("dictated words")
             return True
         _in_the_service(paste)
         assert _what_it_read(reader[0]) == repr(("dictated words", b"secret"))
         _pump_until(lambda: x11._offer is not None and x11._offer.read is None, seconds=3)
+    assert _what_it_read(_start_reading()) == repr(("Grüße, what I copied", None))
+
+
+@pytest.fixture
+def pasting(monkeypatch):
+    """keyboard_output's X11 paste with restore_clipboard on and a fresh
+    keeper; the paste key is *on_paste_key*, which a test may replace."""
+    monkeypatch.setattr(keyboard_output, "_clipboard_keeper", None)
+    monkeypatch.setattr(live, "restore_clipboard", True)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "xed")
+    keys = {"on_paste_key": lambda: True}
+    monkeypatch.setattr(keyboard_output, "send_paste_keystroke",
+                        lambda *a: keys["on_paste_key"]())
+    return keys
+
+
+def test_a_clipboard_manager_reading_first_doesnt_hurry_the_restore(board, pasting,
+                                                                     monkeypatch):
+    """Clipman and CopyQ before 8 read each new copy at once; that read used
+    to count as the app's, and an app pasting a second later got the user's
+    copy. Only a read after the paste key counts now."""
+    offer = x11.offer_dictation
+
+    def offered_and_read_by_a_manager(text):
+        ok = offer(text)
+        manager = _start_reading()
+        manager.wait(timeout=10)
+        return ok
+    monkeypatch.setattr(x11, "offer_dictation", offered_and_read_by_a_manager)
+    app = []
+    pasting["on_paste_key"] = lambda: app.append(_start_reading(after_s=1.0)) or True
+    with _app_offering(_TEXT):
+        assert _in_the_service(lambda: keyboard_output.paste_text_x11("dictated words"))
+        assert _what_it_read(app[0]) == repr(("dictated words", b"secret"))
+
+
+def test_quitting_right_after_a_paste_still_puts_the_copy_back_and_keeps_it(
+        board, pasting, monkeypatch):
+    """Quitting or restarting within two seconds of a paste ended the service
+    before the restore ran, and the user's copy went with it. Now the
+    restore runs first, and the clipboard manager keeps the copy."""
+    from gi.repository import Gdk, Gtk
+    from tuxtalk import service_tick
+    stored = []
+    monkeypatch.setattr(Gdk.Display, "supports_clipboard_persistence", lambda self: True)
+    monkeypatch.setattr(Gtk.Clipboard, "store", lambda self: stored.append(self.wait_for_text()))
+    with _app_offering(_TEXT):
+        assert _in_the_service(lambda: keyboard_output.paste_text_x11("dictated words"))
+    _in_the_service(lambda: service_tick._leave_the_clipboard() or True)
+    assert stored == ["Grüße, what I copied"]
+
+
+def test_a_failed_paste_still_lets_the_earlier_dictations_restore_run(board, pasting,
+                                                                       monkeypatch):
+    """A paste whose offer failed called off the restore of the dictation
+    before it, which then stayed on the clipboard for good."""
+    pending = []
+    monkeypatch.setattr(keyboard_output, "_clipboard_keeper", cb.ClipboardKeeper(
+        x11.X11Board, schedule=lambda delay, fn: pending.append(fn) or (
+            lambda: pending.remove(fn))))
+    with _app_offering(_TEXT):
+        assert _in_the_service(lambda: keyboard_output.paste_text_x11("first"))
+    monkeypatch.setattr(x11, "offer_dictation", lambda text: False)
+    assert _in_the_service(lambda: keyboard_output.paste_text_x11("second")) is False
+    _in_the_service(lambda: [fn() for fn in pending])
     assert _what_it_read(_start_reading()) == repr(("Grüße, what I copied", None))
 
 

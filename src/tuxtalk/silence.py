@@ -619,7 +619,7 @@ _TALKING_TO_JUDGE_S = 1.0
 # With less than this outside the talking (talking from Start to Stop), what
 # is outside is mostly the soft start and end of the words, not the room: a
 # quiet room was called noisy in 33 of 41 such takes, and half a second still
-# left 7. With a second, 1 (as the quietest moments did).
+# left 7. With a second, 1 or 2 (the quietest moments, 0 or 1).
 _ROOM_TO_JUDGE_S = 1.0
 # A shorter take can't hold both.
 _SHORTEST_TAKE_S = _TALKING_TO_JUDGE_S + _ROOM_TO_JUDGE_S

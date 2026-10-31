@@ -6,6 +6,7 @@ Wayland, with "Restore clipboard after pasting" on, whatever the user had
 copied comes back after the paste. X11: test_x11_clipboard.py.
 """
 import subprocess
+import time
 
 import pytest
 
@@ -102,6 +103,16 @@ def test_something_copied_between_two_quick_dictations_is_what_comes_back(keeper
     paste(keeper, board, "second")
     run_pending(keeper)
     assert board.data == b"copied in between"
+
+
+def test_quitting_with_a_restore_pending_puts_the_clipboard_back_first(keeper, board):
+    """The restore's timer would end with the service: restore_now() runs it
+    before quitting, once the app has had its half second."""
+    paste(keeper, board, "dictated words")
+    started = time.monotonic()
+    keeper.restore_now()
+    assert board.data == b"what I copied" and keeper.pending == []
+    assert time.monotonic() - started >= cb.RESTORE_DELAY_S - 0.05
 
 
 def test_an_empty_clipboard_stays_empty(keeper, board):

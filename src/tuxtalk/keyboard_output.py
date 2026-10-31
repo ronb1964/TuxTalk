@@ -396,6 +396,13 @@ def _keeper(board):
     return _clipboard_keeper
 
 
+def restore_clipboard_now() -> None:
+    """Before the service exits: put the user's clipboard back now if a
+    restore is still pending (clipboard.ClipboardKeeper.restore_now)."""
+    if _clipboard_keeper is not None:
+        _clipboard_keeper.restore_now()
+
+
 def paste_text_x11(text: str) -> bool:
     """Paste on an X11 session, for text the keyboard layout can't type.
 
@@ -411,11 +418,15 @@ def paste_text_x11(text: str) -> bool:
     if keeper is not None:
         keeper.before_paste()
     if not x11_clipboard.offer_dictation(text):
-        # The clipboard never changed, so there is nothing to put back.
+        # The clipboard never changed: only an earlier dictation's restore,
+        # called off by before_paste(), is left to do.
         logger.error("X11 paste: couldn't put the text on the clipboard; nothing was inserted")
+        if keeper is not None:
+            keeper.paste_failed()
         return False
     try:
         time.sleep(0.08)    # let the selection settle before the app asks for it
+        x11_clipboard.reads_from_now()
         return send_paste_keystroke(focused_window.window_class())
     finally:
         if keeper is not None:

@@ -1000,7 +1000,7 @@ def test_a_room_that_clatters_most_of_the_time_is_noisy_despite_its_quiet_moment
 
 
 @pytest.mark.parametrize("under_db, noisy", [(40, False), (30, False), (20, True)])
-def test_a_steady_hum_20_db_under_the_voice_is_noisy_and_30_db_under_is_not(under_db, noisy):
+def test_steady_noise_20_db_under_the_voice_is_noisy_and_30_db_under_is_not(under_db, noisy):
     """In steady noise 20 dB under the voice hands-free still stops by
     itself, but cuts the speaker off mid-sentence in about half the runs,
     against about one in seven at 30 dB; the test warns at 20 dB only."""

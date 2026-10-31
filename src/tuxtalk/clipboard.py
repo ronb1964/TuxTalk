@@ -8,9 +8,11 @@ ClipboardKeeper putting the user's clipboard back afterwards (on Wayland
 here, on X11 through x11_clipboard), and the primary selection voice editing
 reads.
 """
+import functools
 import os
 import shutil
 import subprocess
+import threading
 import time
 
 from .logger import setup_logger
@@ -52,9 +54,6 @@ def copy_text(text):
 # once the app has had time to read the paste, on Wayland (WaylandBoard) and
 # X11 (x11_clipboard.X11Board). It's off by default because some people
 # re-paste a dictation that landed in the wrong window.
-
-import functools
-import threading
 
 RESTORE_DELAY_S = 0.5           # apps read the clipboard asynchronously after Ctrl+V
 MAX_SAVED_BYTES = 20 * 1024 * 1024
@@ -190,6 +189,11 @@ class WaylandBoard:
     schedule = staticmethod(_timer)
 
     @staticmethod
+    def wait_for_read(pasted_at, delay):
+        """Wait as schedule() would for a paste made at *pasted_at*."""
+        time.sleep(max(0.0, pasted_at + delay - time.monotonic()))
+
+    @staticmethod
     def read():
         """What it holds: (bytes, type, sensitive), EMPTY or NOTHING."""
         return _read_clipboard()
@@ -235,6 +239,7 @@ class ClipboardKeeper:
         self._last_text = None      # the dictation the pending restore waits on
         self._cancel = None
         self._generation = 0
+        self._pasted_at = float("-inf")
 
     def before_paste(self):
         """Save the user's clipboard before a dictation replaces it."""
@@ -272,7 +277,30 @@ class ClipboardKeeper:
             if self._saved is NOTHING and self._primary is NOTHING:
                 return
             generation, self._last_text = self._generation, text
+            self._pasted_at = time.monotonic()
             self._cancel = self._schedule(self._delay, lambda: self._restore(text, generation))
+
+    def paste_failed(self):
+        """The dictation never reached the clipboard: an earlier one may
+        still be on it, whose restore before_paste() called off, so it is
+        scheduled again."""
+        with self._lock:
+            text = self._last_text
+        if text is not None:
+            self.after_paste(text)
+
+    def restore_now(self):
+        """Run a pending restore now, once the app has had its chance to
+        read the paste, as the board waits for it: for quitting, as the
+        restore's thread would end with the service."""
+        with self._lock:
+            cancel, self._cancel = self._cancel, None
+            text, generation, pasted_at = self._last_text, self._generation, self._pasted_at
+        if cancel is None:
+            return
+        cancel()
+        self._board.wait_for_read(pasted_at, self._delay)
+        self._restore(text, generation)
 
     def _restore(self, text, generation):
         """Put back what the clipboard held before the paste, but only while it
