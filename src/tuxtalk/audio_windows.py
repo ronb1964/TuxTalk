@@ -1,6 +1,6 @@
 """The fixed windows that loudness is judged over: hands-free auto-stop
-(silence.SilenceDetector), Type at pause (chunking.PauseDetector), and the
-checks for a tap of the hold key and a noisy room (silence.py).
+(silence.SilenceDetector), Type at pause (chunking.PauseDetector), and
+silence.py's checks of a whole recording.
 
 A microphone sends blocks of whatever size its driver picks, about 6 ms on
 some onboard inputs. How steady a noise is, and how long a sound lasts, depend
@@ -11,9 +11,14 @@ It is a module of its own so that neither detector imports the other's.
 """
 import numpy as np
 
-# The window's length. Every threshold and duration the detectors and the
-# tap and noisy-room checks use was measured with windows this long:
-# changing it means measuring them again.
+# The window's length. Every threshold and duration these decisions use was
+# measured with windows this long, so changing it means measuring them all
+# again: when hands-free stops and when Type at pause cuts a phrase; and
+# silence.py's whole-recording checks: a tap of the hold key with no word
+# in it, a word before a double-tap's second tap, a word in what is left
+# after Type at pause's last cut (has_a_word), nothing said, which the
+# engine's filter for invented phrases asks (has_no_speech), and a noisy
+# room in the mic test.
 WINDOW_S = 0.02
 
 

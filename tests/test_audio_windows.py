@@ -30,7 +30,7 @@ def test_each_sample_lands_in_one_window_in_order_and_the_rest_waits():
 def test_a_block_shorter_than_a_window_is_kept_whole_for_the_next():
     windows, rest = split_windows(np.array([1, 2], np.int16), np.array([3], np.int16), 4)
     assert windows.shape == (0, 4) and rest.tolist() == [1, 2, 3]
-    assert rest.dtype == np.int16
+    assert windows.dtype == rest.dtype == np.int16
 
 
 def test_scribbling_over_the_microphone_buffer_changes_nothing_kept():
@@ -44,7 +44,10 @@ def test_scribbling_over_the_microphone_buffer_changes_nothing_kept():
     assert rest.base is None and not np.shares_memory(windows, buffer)
 
 
-def test_the_high_passed_audio_keeps_its_float_samples():
-    """Type at pause windows its high-passed audio, which is float."""
-    windows, rest = split_windows(np.array([0.5]), np.array([1.25, -2.0, 3.5]), 2)
-    assert windows.tolist() == [[0.5, 1.25], [-2.0, 3.5]] and rest.size == 0
+def test_the_high_passed_audio_keeps_its_float_samples_exactly():
+    """Type at pause windows its high-passed audio, which is float64: a
+    sample float32 can't hold (1 + 2**-30) comes back as it went in."""
+    fine = 1 + 2 ** -30
+    windows, rest = split_windows(np.array([0.5]), np.array([fine, -2.0, 3.5, fine]), 2)
+    assert windows.tolist() == [[0.5, fine], [-2.0, 3.5]] and rest.tolist() == [fine]
+    assert windows.dtype == rest.dtype == np.float64
