@@ -68,6 +68,31 @@ def test_a_short_last_word_is_typed_when_hands_free_stops(heard):
     assert "".join(typed) == "We meet yes "
 
 
+def test_a_soft_voice_in_hands_free_keeps_its_phrases(heard):
+    """A voice too soft for hands-free (it needs int16 RMS 300) that Type at
+    pause hears: at 10 s hands-free decided nothing was said and cancelled
+    the recording while the user talked on, dropping the phrase in the
+    works and all since the last cut, with "Nothing heard". It stops instead
+    and types the rest, none of it trimmed as quiet."""
+    texts, typed, beeps, lengths = heard
+    texts.extend(["hello"] * 9)              # each phrase, then each with the one before
+    rec = rs.state.current
+    rec.silence = silence.SilenceDetector(2.0, SR)
+    phrase = np.concatenate([speech(1.5, level=300.0, noise_level=4.0), noise(1.0, level=4.0)])
+    audio = np.tile(phrase, 6)[int(0.7 * SR):]      # at 10 s, mid-phrase
+    for i in range(0, len(audio), 320):
+        feed_block(audio[i:i + 320])
+        if rec.went_quiet:
+            break
+    assert rec.silence.nothing_said and rec.chunks_submitted == 4
+    rest = sum(len(f) for f in rec.frames) // 2
+    stop()
+    assert not rec.message.cancelled
+    assert "".join(typed).lower().count("hello") == 5      # four phrases and the rest
+    assert beeps == [READY_BEEP]
+    assert lengths[-2] * SR >= rest - 1     # the rest alone, none of it trimmed
+
+
 def test_hands_free_judges_a_short_last_word_against_the_whole_rest(heard, monkeypatch):
     """The quiet hands-free waited through is the room the word stands out
     from. Judged after that quiet was trimmed, in a noisy room the room

@@ -480,8 +480,13 @@ def finish_capture(rec, beeps_on: bool, notify_on: bool):
 def _dropped_as_silent(rec, beeps_on: bool, notify_on: bool) -> bool:
     """Hands-free with nothing said: cancel *rec*, and say so if the mic is
     dead. Transcribing room noise can type a stray "Thank you." (see
-    silence.is_speechless_tap)."""
-    if rec.silence is None or not rec.silence.nothing_said:
+    silence.is_speechless_tap).
+
+    Not once Type at pause has cut a phrase: it heard talking hands-free
+    didn't (a soft voice, under hands-free's threshold), so the recording
+    stops as usual, its phrases and the rest typed. Cancelled, the phrases
+    still queued and the audio since the last cut were thrown away."""
+    if rec.silence is None or not rec.silence.nothing_said or rec.chunks_submitted:
         return False
     rec.silence = None
     dead_mic = frames_are_dead_mic(rec.frames, rec.samplerate)
