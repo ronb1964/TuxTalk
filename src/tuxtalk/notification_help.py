@@ -51,6 +51,30 @@ def _install_css_once():
         logger.info(f"The notification help window's style didn't load: {e}")
 
 
+def _footer(win):
+    """The note that it can be reopened, and Close: (the row, the button)."""
+    footer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+    note = Gtk.Label()
+    note.set_markup(
+        '<span size="small">Optional — reopen any time from Preferences.</span>')
+    note.set_halign(Gtk.Align.START)
+    note.set_opacity(0.8)
+    footer.pack_start(note, True, True, 0)
+    close_btn = Gtk.Button(label="Close")
+    close_btn.set_can_default(True)
+    close_btn.connect("clicked", lambda _b: win.destroy())
+    footer.pack_start(close_btn, False, False, 0)
+    return footer, close_btn
+
+
+def _close_on_escape(win, event):
+    """Escape closes the guide, as it does a dialog."""
+    if event.keyval == Gdk.KEY_Escape:
+        win.destroy()
+        return True
+    return False
+
+
 def show_notification_help_window(parent=None):
     """Show (or re-present) the floating 'turn off the KDE notification' guide.
 
@@ -115,19 +139,11 @@ def show_notification_help_window(parent=None):
             steps_box.pack_start(row, False, False, 0)
         outer.pack_start(steps_box, False, False, 0)
 
-        footer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        note = Gtk.Label()
-        note.set_markup(
-            '<span size="small">Optional — reopen any time from Preferences.</span>')
-        note.set_halign(Gtk.Align.START)
-        note.set_opacity(0.8)
-        footer.pack_start(note, True, True, 0)
-        close_btn = Gtk.Button(label="Close")
-        close_btn.connect("clicked", lambda _b: win.destroy())
-        footer.pack_start(close_btn, False, False, 0)
+        footer, close_btn = _footer(win)
         outer.pack_start(footer, False, False, 0)
 
         win.add(outer)
+        win.connect("key-press-event", _close_on_escape)
 
         def _on_destroy(*_a):
             global _window
@@ -135,6 +151,9 @@ def show_notification_help_window(parent=None):
         win.connect("destroy", _on_destroy)
 
         win.show_all()
+        # Enter and Space close it from the keyboard at once, as Escape does.
+        close_btn.grab_default()
+        close_btn.grab_focus()
         _window = win
         return win
     except Exception as e:
