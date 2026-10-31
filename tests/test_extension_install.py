@@ -74,6 +74,29 @@ def test_an_install_cut_off_between_the_renames_is_recovered(extensions):
     assert os.listdir(ext_dir) == [eh.EXTENSION_UUID]
 
 
+def test_an_install_cut_off_between_the_renames_is_put_back_at_the_next_start(extensions):
+    """Only another install put it back: until then GNOME had no TuxTalk
+    menu, logging out and in included."""
+    ext_dir, _source = extensions
+    aside = ext_dir / f".{eh.EXTENSION_UUID}.old"
+    aside.mkdir(parents=True)
+    (aside / "extension.js").write_text("// old")
+    eh.recover_cut_off_install()
+    assert (ext_dir / eh.EXTENSION_UUID / "extension.js").read_text() == "// old"
+    assert os.listdir(ext_dir) == [eh.EXTENSION_UUID]
+
+
+def test_the_start_leaves_an_install_under_way_alone(extensions):
+    """Its old copy is set aside on purpose; that install finishes the job."""
+    from tuxtalk import download_utils
+    ext_dir, _source = extensions
+    aside = ext_dir / f".{eh.EXTENSION_UUID}.old"
+    aside.mkdir(parents=True)
+    with download_utils.install_turn("extension", "the GNOME extension"):
+        eh.recover_cut_off_install()
+    assert os.listdir(ext_dir) == [aside.name]
+
+
 def test_a_linked_extensions_folder_is_staged_where_it_really_is(tmp_path, extensions,
                                                                   monkeypatch):
     """Staged beside a linked extensions folder, the rename crossed

@@ -100,22 +100,25 @@ def get_extension_status() -> dict:
 INSTALL_WAIT_S = 60
 
 
-def _swap_in(source_dir, target_dir):
-    """Put a copy of *source_dir* at *target_dir*, the old one going only
-    once the new one is in its place: removed first, a copy that failed
-    partway (a full disk) left GNOME with no TuxTalk menu at all. Both are
-    kept, hidden, in the extensions folder itself (its real place, if it's a
-    link), so the renames never cross filesystems; GNOME skips a folder whose
-    name isn't its extension's id. Installs take turns (Preferences and
-    first run at once used each other's folders)."""
-    from . import download_utils, single_instance
-    ext_dir = os.path.realpath(os.path.dirname(target_dir))
-    target = os.path.join(ext_dir, EXTENSION_UUID)
-    old = os.path.join(ext_dir, f".{EXTENSION_UUID}.old")
-    staging = os.path.join(ext_dir, f".{EXTENSION_UUID}.new")
-    with single_instance.open_lock("extension-install.lock") as lock:
-        if not single_instance.claim(lock, wait_s=INSTALL_WAIT_S):
-            raise OSError("another install of the GNOME extension didn't finish")
+def _swap_paths():
+    """(the extension's folder, its old copy, the new copy being made). The
+    copies are kept, hidden, in the extensions folder itself (its real
+    place, if it's a link), so the renames never cross filesystems; GNOME
+    skips a folder whose name isn't its extension's id."""
+    ext_dir = os.path.realpath(os.path.dirname(gnome_extensions.extension_folder(EXTENSION_UUID)))
+    return (os.path.join(ext_dir, EXTENSION_UUID), os.path.join(ext_dir, f".{EXTENSION_UUID}.old"),
+            os.path.join(ext_dir, f".{EXTENSION_UUID}.new"))
+
+
+def _swap_in(source_dir):
+    """Put a copy of *source_dir* in the extension's place, the old one going
+    only once the new one is in its place: removed first, a copy that failed
+    partway (a full disk) left GNOME with no TuxTalk menu at all. Installs
+    take turns (Preferences and first run at once used each other's
+    folders)."""
+    from . import download_utils
+    target, old, staging = _swap_paths()
+    with download_utils.install_turn("extension", "the GNOME extension", wait_s=INSTALL_WAIT_S):
         # GNOME keeps its menu even if this copy fails.
         download_utils.restore_cut_off_swap(target, old)
         download_utils.remove_tree(staging)
@@ -124,6 +127,23 @@ def _swap_in(source_dir, target_dir):
             download_utils.replace_folder(staging, target, old)
         finally:
             download_utils.remove_tree(staging)
+
+
+def recover_cut_off_install():
+    """At start: an install killed between moving the old extension aside
+    and moving the new one in left GNOME no TuxTalk menu, the complete copy
+    hidden, until the next install. It is put back here, with nothing
+    downloaded, unless another install is running now (that one puts it
+    back). Never raises."""
+    from . import download_utils
+    target, old, _staging = _swap_paths()
+    if not os.path.lexists(old):
+        return
+    try:
+        with download_utils.install_turn("extension", "the GNOME extension", wait_s=0):
+            download_utils.restore_cut_off_swap(target, old)
+    except OSError as e:        # busy, or the lock can't be made: next start
+        logger.info(f"The GNOME extension's folder wasn't checked this time: {e}")
 
 
 def install_extension_from_local(source_dir: str, auto_enable: bool = True) -> bool:
@@ -141,7 +161,7 @@ def install_extension_from_local(source_dir: str, auto_enable: bool = True) -> b
     try:
         target_dir = gnome_extensions.extension_folder(EXTENSION_UUID)
         os.makedirs(os.path.dirname(target_dir), exist_ok=True)
-        _swap_in(source_dir, target_dir)
+        _swap_in(source_dir)
         logger.info(f"Extension installed to {target_dir}")
 
         if auto_enable and not enable_extension():
