@@ -33,6 +33,13 @@ logger = setup_logger(__name__)
 KEY_CODES = {"CTRL": 29, "SHIFT": 42, "LEFT": 105, "RIGHT": 106, "UP": 103,
              "DOWN": 108, "HOME": 102, "END": 107, "ENTER": 28, "TAB": 15}
 
+# Where the letters sit on a US keyboard: the Flatpak's keyboard types them
+# there (libei_ctypes), and a shortcut's letter goes there on a layout without
+# Latin letters (keyboard_layout.shortcut_keycode).
+US_LETTER_KEYS = dict(zip("abcdefghijklmnopqrstuvwxyz",
+                          (30, 48, 46, 32, 18, 33, 34, 35, 23, 36, 37, 38, 50,
+                           49, 24, 25, 16, 19, 31, 20, 22, 47, 17, 45, 21, 44), strict=True))
+
 # "press enter", "hit enter", "press the enter key", "press return", "press
 # tab". Speech engines often capitalise and punctuate it ("... noon. Press
 # Enter."). "literal" or "the word" before it types the words.

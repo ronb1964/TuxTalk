@@ -249,7 +249,8 @@ def send_automatically(why: str, message: Message, press, type_more, space: str 
                        injection_mode: str = "type") -> bool:
     """Press Enter for *message*, just delivered, after the wait (hold),
     through the one claim. *press*(key, why, claim=None) presses it, as
-    delivery.press_key; *type_more*(text, mode) types onto the dictation.
+    delivery.press_key; *type_more*(text, mode, into=...) types onto the
+    dictation, only into the window *into* names.
 
     *space* is the auto-space left off so it wouldn't be sent; a held send
     types it, or what's said next sticks to the last word ("delay.All").

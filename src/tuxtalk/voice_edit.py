@@ -28,7 +28,7 @@ from . import live_settings as live
 from . import recording_state as rs
 from .beeps import READY_BEEP
 from .logger import setup_logger
-from .normalize import swiss_spelling
+from .normalize import PLAIN_LOOKALIKES, swiss_spelling
 from .window_classes import is_terminal_class, is_word_processor
 
 logger = setup_logger(__name__)
@@ -180,19 +180,12 @@ def _put_clipboard_back(put_back, result):
         put_back(also=also)
 
 
-# Marks an app's autocorrect (LibreOffice Writer's, say) or TuxTalk's own
-# smart quotes may put in place of the plain ones typed.
-_PLAIN_MARKS = str.maketrans({"\u2018": "'", "\u2019": "'", "\u201a": "'", "\u2032": "'",
-                              "\u201c": '"', "\u201d": '"', "\u201e": '"', "\u2033": '"',
-                              "\u2013": "-", "\u2014": "-", "\u2026": "..."})
-
-
 def _comparable(text: str) -> list:
     """*text*'s words as "edit that" compares a selection with what was
     dictated: an app may have changed how they look, not what they say
     (Writer turns ' into a curly one and capitalises a sentence start, and
     keeps its own line ends and spaces)."""
-    return text.translate(_PLAIN_MARKS).casefold().split()
+    return text.translate(PLAIN_LOOKALIKES).casefold().split()
 
 
 def _refused_selection(selected, expected, put_back, get_instruction, where,

@@ -38,7 +38,7 @@ from .logger import setup_logger
 logger = setup_logger(__name__)
 
 # How long any call to the tray may take: these questions, and the
-# dictation service's notices to it (app.py). The tray answers from a cache
+# dictation service's notices to it (tray_link.py). The tray answers from a cache
 # in a millisecond; this is for one whose loop is busy (Preferences opening,
 # a Whisper model loading), which would otherwise leave the class unknown
 # and pick the wrong paste shortcut. dbus-python's default is 25 seconds, and

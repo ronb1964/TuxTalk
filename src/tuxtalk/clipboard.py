@@ -329,13 +329,30 @@ def _holds(saved, text):
     return isinstance(saved, tuple) and text is not None and saved[0] == text.encode("utf-8")
 
 
-def _wl_copy_primary(text):
-    """Put *text* on the primary selection, or clear it when *text* is None."""
+def _wl_copy_primary(text, timeout=3):
+    """Put *text* on the primary selection, marked sensitive as dictations
+    are, or clear it when *text* is None. Raises OSError when wl-copy
+    failed (a desktop without a primary selection), or SubprocessError."""
     if text is None:
-        subprocess.run(["wl-copy", "--primary", "--clear"], timeout=3, check=True)
+        command, data = ["wl-copy", "--primary", "--clear"], None
     else:
-        subprocess.run(wl_copy_command() + ["--primary"], input=text.encode("utf-8"),
-                       timeout=3, check=True)
+        command, data = wl_copy_command() + ["--primary"], text.encode("utf-8")
+    result = subprocess.run(command, input=data, stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL, timeout=timeout)
+    if result.returncode != 0:
+        raise OSError(f"wl-copy exited {result.returncode}")
+
+
+def copy_to_primary(text: str, timeout: float) -> bool:
+    """Put the dictation *text* on the primary selection as well, within
+    *timeout* seconds. True once wl-copy has handed it to the compositor;
+    False if the desktop has no primary selection or wl-copy failed."""
+    try:
+        _wl_copy_primary(text, timeout)
+    except (OSError, subprocess.SubprocessError) as e:
+        logger.info(f"Could not set the primary selection: {e}")
+        return False
+    return True
 
 
 def _restore_primary(saved, text):

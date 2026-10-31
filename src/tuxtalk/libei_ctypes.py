@@ -13,15 +13,14 @@ import select
 import time
 import unicodedata
 
-from .key_commands import KEY_CODES
+from .key_commands import KEY_CODES, US_LETTER_KEYS
 from .logger import setup_logger
-from .normalize import LINE_BREAK
+from .normalize import LINE_BREAK, PLAIN_LOOKALIKES
 
 _log = setup_logger(__name__)
 
 # --- libei enums (from upstream libei.h) ---
 EI_EVENT_SEAT_ADDED = 3
-EI_EVENT_DEVICE_ADDED = 5
 EI_EVENT_DEVICE_PAUSED = 7
 EI_EVENT_DEVICE_RESUMED = 8
 EI_DEVICE_CAP_KEYBOARD = 1 << 2  # = 4
@@ -30,19 +29,12 @@ EI_DEVICE_CAP_KEYBOARD = 1 << 2  # = 4
 KEY_LEFTSHIFT = 42
 KEY_LEFTCTRL = 29
 KEY_BACKSPACE = 14
-KEY_A = 30
+KEY_A = US_LETTER_KEYS["a"]
 KEY_SPACE = 57
 KEY_ENTER = 28
 # Names voice_navigation and key_commands use -> key codes, for press_chords;
 # letters at their places on a US keyboard, like all typing here.
-_CHORD_KEYS = {**KEY_CODES, "A": KEY_A, "E": 18, "U": 22}
-
-_LETTERS = {
-    "a": 30, "b": 48, "c": 46, "d": 32, "e": 18, "f": 33, "g": 34, "h": 35,
-    "i": 23, "j": 36, "k": 37, "l": 38, "m": 50, "n": 49, "o": 24, "p": 25,
-    "q": 16, "r": 19, "s": 31, "t": 20, "u": 22, "v": 47, "w": 17, "x": 45,
-    "y": 21, "z": 44,
-}
+_CHORD_KEYS = {**KEY_CODES, **{c.upper(): k for c, k in US_LETTER_KEYS.items()}}
 _DIGITS = {"1": 2, "2": 3, "3": 4, "4": 5, "5": 6,
            "6": 7, "7": 8, "8": 9, "9": 10, "0": 11}
 # Unshifted punctuation (US layout) + space.
@@ -59,22 +51,16 @@ _SHIFTED = {
 
 # char -> base evdev keycode, for the printable ASCII a US layout types.
 CHAR_TO_KEYCODE: dict[str, int] = {}
-CHAR_TO_KEYCODE.update(_LETTERS)
+CHAR_TO_KEYCODE.update(US_LETTER_KEYS)
 CHAR_TO_KEYCODE.update(_DIGITS)
 CHAR_TO_KEYCODE.update(_PUNCT)
 CHAR_TO_KEYCODE.update(_SHIFTED)
-for _c, _k in list(_LETTERS.items()):
+for _c, _k in list(US_LETTER_KEYS.items()):
     CHAR_TO_KEYCODE[_c.upper()] = _k  # uppercase shares the lowercase keycode
 
 # Characters that require holding Shift while the base key is pressed.
-SHIFT_CHARS: set[str] = set(_SHIFTED) | {c.upper() for c in _LETTERS}
+SHIFT_CHARS: set[str] = set(_SHIFTED) | {c.upper() for c in US_LETTER_KEYS}
 
-# Typographic characters dictation produces (smart quotes are on by default,
-# and "..." becomes an ellipsis), typed as their plain look-alikes.
-_PLAIN_LOOKALIKE = {
-    "\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"',
-    "\u2013": "-", "\u2014": "-", "\u00a0": " ", "\u2026": "...",
-}
 
 
 def load_libei() -> C.CDLL:
@@ -134,8 +120,8 @@ def typeable_text(text: str) -> str:
     for ch in text:
         if ch in CHAR_TO_KEYCODE or ch in "\n\t":
             out.append(ch)
-        elif ch in _PLAIN_LOOKALIKE:
-            out.append(_PLAIN_LOOKALIKE[ch])
+        elif ord(ch) in PLAIN_LOOKALIKES:
+            out.append(PLAIN_LOOKALIKES[ord(ch)])
         else:
             # Canonical decomposition only, so "²" stays "²" rather than
             # silently becoming "2".

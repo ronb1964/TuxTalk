@@ -78,7 +78,7 @@ def test_sway_reports_the_focused_window(tmp_path, monkeypatch, focused, expecte
     path = tmp_path / "sway.sock"
     done = _serve(path, _i3_server(_tree(focused)))
     monkeypatch.setenv("SWAYSOCK", str(path))
-    assert cf.focused_class() == expected
+    assert cf.focused_window()[0] == expected
     done.join(1)
 
 
@@ -97,7 +97,7 @@ def test_i3_uses_the_same_protocol(tmp_path, monkeypatch):
     path = tmp_path / "i3.sock"
     done = _serve(path, _i3_server(_tree("foot")))
     monkeypatch.setenv("I3SOCK", str(path))
-    assert cf.focused_class() == "foot"
+    assert cf.focused_window()[0] == "foot"
     done.join(1)
 
 
@@ -134,7 +134,7 @@ def test_hyprland_with_nothing_focused(tmp_path, monkeypatch):
     done = _serve(folder / ".socket.sock", lambda conn: (conn.recv(100), conn.sendall(b"{}")))
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
     monkeypatch.setenv("HYPRLAND_INSTANCE_SIGNATURE", "sig")
-    assert cf.focused_class() is None
+    assert cf.focused_window()[0] is None
     done.join(1)
 
 
@@ -163,7 +163,7 @@ def test_niri_with_nothing_focused(tmp_path, monkeypatch):
     done = _serve(path, lambda conn: (conn.recv(100),
                                       conn.sendall(b'{"Ok":{"FocusedWindow":null}}\n')))
     monkeypatch.setenv("NIRI_SOCKET", str(path))
-    assert cf.focused_class() is None
+    assert cf.focused_window()[0] is None
     done.join(1)
 
 
@@ -171,13 +171,13 @@ def test_niri_with_nothing_focused(tmp_path, monkeypatch):
 
 def test_no_compositor_socket_means_unknown(monkeypatch):
     _clear_env(monkeypatch)
-    assert cf.focused_class() is None
+    assert cf.focused_window()[0] is None
 
 
 def test_a_dead_socket_means_unknown(tmp_path, monkeypatch):
     _clear_env(monkeypatch)
     monkeypatch.setenv("SWAYSOCK", str(tmp_path / "gone.sock"))
-    assert cf.focused_class() is None
+    assert cf.focused_window()[0] is None
 
 
 def test_a_compositor_that_never_answers_is_given_up_on_quickly(tmp_path, monkeypatch):
@@ -188,7 +188,7 @@ def test_a_compositor_that_never_answers_is_given_up_on_quickly(tmp_path, monkey
     done = _serve(path, lambda conn: release.wait(5))
     monkeypatch.setenv("SWAYSOCK", str(path))
     started = time.monotonic()
-    assert cf.focused_class() is None
+    assert cf.focused_window()[0] is None
     assert time.monotonic() - started < 1.0
     release.set()
     done.join(1)
@@ -236,7 +236,7 @@ def test_an_x11_session_asks_the_x_server(monkeypatch):
     monkeypatch.setenv("XDG_SESSION_TYPE", "x11")
     monkeypatch.setenv("DISPLAY", ":0")
     monkeypatch.setattr(cf, "_from_x11", lambda: ("Xfce4-terminal", 0x1e00007))
-    assert cf.focused_class() == "Xfce4-terminal"
+    assert cf.focused_window()[0] == "Xfce4-terminal"
     assert cf.focused_window() == ("Xfce4-terminal", 0x1e00007)
 
 
@@ -249,7 +249,7 @@ def test_a_wayland_session_never_asks_xwayland(monkeypatch):
     monkeypatch.setenv("DISPLAY", ":0")
     monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
     monkeypatch.setattr(cf, "_from_x11", lambda: pytest.fail("asked XWayland"))
-    assert cf.focused_class() is None
+    assert cf.focused_window()[0] is None
 
 
 def test_without_a_session_type_x11_is_used_only_with_no_wayland(monkeypatch):
@@ -258,10 +258,10 @@ def test_without_a_session_type_x11_is_used_only_with_no_wayland(monkeypatch):
     monkeypatch.setenv("DISPLAY", ":0")
     monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
     monkeypatch.setattr(cf, "_from_x11", lambda: pytest.fail("asked XWayland"))
-    assert cf.focused_class() is None
+    assert cf.focused_window()[0] is None
     monkeypatch.delenv("WAYLAND_DISPLAY")
     monkeypatch.setattr(cf, "_from_x11", lambda: ("XTerm", 0x2a00003))
-    assert cf.focused_class() == "XTerm"
+    assert cf.focused_window()[0] == "XTerm"
 
 
 def test_i3_on_x11_uses_its_own_socket_first(tmp_path, monkeypatch):
@@ -272,7 +272,7 @@ def test_i3_on_x11_uses_its_own_socket_first(tmp_path, monkeypatch):
     done = _serve(path, _i3_server(_tree("foot")))
     monkeypatch.setenv("I3SOCK", str(path))
     monkeypatch.setattr(cf, "_from_x11", lambda: pytest.fail("asked X11 first"))
-    assert cf.focused_class() == "foot"
+    assert cf.focused_window()[0] == "foot"
     done.join(1)
 
 
@@ -285,7 +285,7 @@ def test_an_x_server_problem_means_unknown(monkeypatch):
         raise OSError("cannot connect")
 
     monkeypatch.setattr(cf, "_from_x11", broken)
-    assert cf.focused_class() is None
+    assert cf.focused_window()[0] is None
 
 
 def test_no_x_server_at_all_is_unknown_not_an_error(monkeypatch):
@@ -293,7 +293,7 @@ def test_no_x_server_at_all_is_unknown_not_an_error(monkeypatch):
     _clear_env(monkeypatch)
     monkeypatch.setenv("XDG_SESSION_TYPE", "x11")
     monkeypatch.setenv("DISPLAY", ":987")
-    assert cf.focused_class() is None
+    assert cf.focused_window()[0] is None
 
 
 @pytest.mark.parametrize("wm_class", ["Guake", "Tilda", "Roxterm", "cool-retro-term", "Mate-terminal"])
@@ -425,14 +425,14 @@ def cosmic(tmp_path, monkeypatch):
 def _wait_for(expected):
     import time
     deadline = time.monotonic() + 2
-    while cf.focused_class() != expected and time.monotonic() < deadline:
+    while cf.focused_window()[0] != expected and time.monotonic() < deadline:
         time.sleep(0.01)
-    return cf.focused_class()
+    return cf.focused_window()[0]
 
 
 def test_cosmic_names_the_activated_window(cosmic):
     cosmic("org.mozilla.firefox", "gnome-terminal-server", active="gnome-terminal-server")
-    assert cf.focused_class() == "gnome-terminal-server"
+    assert cf.focused_window()[0] == "gnome-terminal-server"
 
 
 def test_cosmic_answers_at_once_after_the_first_question(cosmic):
@@ -440,9 +440,9 @@ def test_cosmic_answers_at_once_after_the_first_question(cosmic):
     mustn't wait for them every time."""
     import time
     cosmic("org.gnome.TextEditor", active="org.gnome.TextEditor")
-    cf.focused_class()
+    cf.focused_window()[0]
     started = time.monotonic()
-    assert cf.focused_class() == "org.gnome.TextEditor"
+    assert cf.focused_window()[0] == "org.gnome.TextEditor"
     assert time.monotonic() - started < 0.01
 
 
@@ -450,7 +450,7 @@ def test_cosmic_follows_a_switch_to_another_window(cosmic):
     """What the send countdown needs: switching windows during the wait."""
     compositor = cosmic("org.gnome.TextEditor", "gnome-terminal-server",
                         active="org.gnome.TextEditor")
-    assert cf.focused_class() == "org.gnome.TextEditor"
+    assert cf.focused_window()[0] == "org.gnome.TextEditor"
     compositor.focus("gnome-terminal-server")
     assert _wait_for("gnome-terminal-server") == "gnome-terminal-server"
 
@@ -458,7 +458,7 @@ def test_cosmic_follows_a_switch_to_another_window(cosmic):
 def test_cosmic_with_the_focused_window_closed_is_unknown(cosmic):
     compositor = cosmic("org.gnome.TextEditor", "gnome-terminal-server",
                         active="gnome-terminal-server")
-    assert cf.focused_class() == "gnome-terminal-server"
+    assert cf.focused_window()[0] == "gnome-terminal-server"
     compositor.close_window("gnome-terminal-server")
     assert _wait_for(None) is None
 
@@ -467,7 +467,7 @@ def test_cosmic_with_no_windows_is_unknown_without_waiting(cosmic):
     import time
     cosmic()
     started = time.monotonic()
-    assert cf.focused_class() is None
+    assert cf.focused_window()[0] is None
     assert time.monotonic() - started < 0.5
 
 
@@ -477,7 +477,7 @@ def test_a_cosmic_without_window_states_is_unknown(cosmic):
     import time
     cosmic("org.gnome.TextEditor", active="org.gnome.TextEditor", info_version=1)
     started = time.monotonic()
-    assert cf.focused_class() is None
+    assert cf.focused_window()[0] is None
     assert time.monotonic() - started < 0.5
 
 
@@ -485,10 +485,10 @@ def test_a_cosmic_without_window_states_is_asked_only_once(cosmic):
     """Every paste asks which window has focus; a cosmic-comp that can't say
     isn't connected to again each time."""
     cosmic("org.gnome.TextEditor", active="org.gnome.TextEditor", info_version=1)
-    assert cf.focused_class() is None
+    assert cf.focused_window()[0] is None
     asked = cf._cosmic
     asked.join(1)
-    assert cf.focused_class() is None
+    assert cf.focused_window()[0] is None
     assert cf._cosmic is asked
 
 
@@ -497,15 +497,15 @@ def test_a_cosmic_that_never_sends_the_states_costs_one_wait_only(cosmic, monkey
     monkeypatch.setattr(cf, "COSMIC_FIRST_ANSWER", 0.2)
     monkeypatch.setattr(FakeCosmic, "send_states", lambda self: None)
     cosmic("org.gnome.TextEditor", active="org.gnome.TextEditor")
-    assert cf.focused_class() is None
+    assert cf.focused_window()[0] is None
     started = time.monotonic()
-    assert cf.focused_class() is None
+    assert cf.focused_window()[0] is None
     assert time.monotonic() - started < 0.05
 
 
 def test_cosmic_is_asked_again_after_the_compositor_restarts(cosmic, tmp_path):
     first = cosmic("org.gnome.TextEditor", active="org.gnome.TextEditor")
-    assert cf.focused_class() == "org.gnome.TextEditor"
+    assert cf.focused_window()[0] == "org.gnome.TextEditor"
     first.stop()
     (tmp_path / "wayland-1").unlink()
     assert _wait_for(None) is None

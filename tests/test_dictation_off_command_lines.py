@@ -84,7 +84,7 @@ def test_wtype_reads_the_dictation_as_utf8_under_any_locale(recorder, monkeypatc
     lambda text: clipboard.copy_text(text),
     lambda text: clipboard._wl_copy_sensitive(text),
     lambda text: clipboard._wl_copy_primary(text),
-    lambda text: keyboard_output.copy_to_primary(text),
+    lambda text: clipboard.copy_to_primary(text, 1.0),
 ], ids=["copy", "copy marked sensitive", "primary selection", "primary before a paste"])
 def test_wl_copy_gets_the_dictation_on_stdin(recorder, monkeypatch, copy):
     monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")

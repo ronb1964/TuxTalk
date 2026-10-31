@@ -457,24 +457,6 @@ def send_paste_keystroke(focused_class: str | None, primary_holds_text: bool = F
     return True
 
 
-def copy_to_primary(text: str) -> bool:
-    """Put *text* on the primary selection as well (wl-copy --primary). True
-    once wl-copy has handed it to the compositor; False if the desktop has no
-    primary selection or wl-copy failed."""
-    from . import clipboard
-    try:
-        result = subprocess.run(clipboard.wl_copy_command() + ["--primary"],
-                                input=text.encode("utf-8"), stdout=subprocess.DEVNULL,
-                                stderr=subprocess.DEVNULL, timeout=WL_COPY_READY_TIMEOUT_S)
-    except Exception as e:
-        logger.info(f"Could not set the primary selection: {e}")
-        return False
-    if result.returncode != 0:
-        logger.info(f"Could not set the primary selection (wl-copy exit {result.returncode})")
-        return False
-    return True
-
-
 def _keeper(board):
     """The clipboard.ClipboardKeeper, made by the first paste that keeps the
     user's clipboard, on *board*: a session pastes on one kind for its life."""
@@ -575,12 +557,13 @@ def _send_paste(text, keeping):
     """With the clipboard set, the paste key. Where the window is unknown the
     primary selection gets the text too, so the key works in a terminal as
     well. *keeping*: the user's clipboard is being kept to put back."""
+    from . import clipboard
     focused_class = focused_window.window_class()
     primary_holds_text = False
     if focused_class is None:
         if keeping:
             _clipboard_keeper.before_primary()
-        primary_holds_text = copy_to_primary(text)
+        primary_holds_text = clipboard.copy_to_primary(text, WL_COPY_READY_TIMEOUT_S)
     keystroke_start = time.time()
     if not send_paste_keystroke(focused_class, primary_holds_text):
         return False

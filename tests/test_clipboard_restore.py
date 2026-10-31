@@ -267,7 +267,7 @@ def test_the_unknown_window_paste_saves_the_primary_before_setting_it(monkeypatc
     monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda *a, **k: wl_copy)
     monkeypatch.setattr(cb, "_sensitive_supported", lambda: False)     # it would run the fake
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
-    monkeypatch.setattr(keyboard_output, "copy_to_primary", lambda text: done.append("sets the primary") or True)
+    monkeypatch.setattr(cb, "copy_to_primary", lambda text, timeout: done.append("sets the primary") or True)
     monkeypatch.setattr(keyboard_output, "send_paste_keystroke", lambda cls, primary: done.append("pastes") or True)
     assert keyboard_output.paste_text("dictated words") is True
     assert done == ["keeps the clipboard", "keeps the primary", "sets the primary", "pastes",

@@ -1,5 +1,5 @@
 """Select and move by voice (TuxTalk Labs): which phrases are commands, and
-the keys each one presses. See docs/superpowers/specs/2026-10-14-select-and-move-by-voice-design.md."""
+the keys each one presses."""
 import pytest
 
 from tuxtalk import voice_navigation as nav

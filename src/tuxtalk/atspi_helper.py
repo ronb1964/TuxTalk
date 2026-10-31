@@ -6,7 +6,7 @@ AppImage doesn't ship libatspi's typelib, and libatspi shares one bus
 connection with GTK's own accessibility bridge, which the GTK thread of the
 dictation service dispatches while this runs on another thread.
 
-Which apps answer (tried 2026-10-20): GTK 3 and GTK 4 apps, unless their
+Which apps answer, as tried in the test VMs: GTK 3 and GTK 4 apps, unless their
 accessibility is switched off (GTK_A11Y=none, NO_AT_BRIDGE=1). Qt (KDE
 apps) and Firefox only while accessibility is switched on, by a screen reader
 or the desktop's accessibility setting. Chromium-based browsers and Electron
