@@ -1,8 +1,8 @@
-"""Tests for prefs.py pure logic (no GTK windows are created).
-
-These cover the non-widget parts of the Preferences window: the
-update_config None guard, on-disk value type coercion, and that the
-window's own writer produces a file config.py can read back.
+"""Preferences' logic, with no window built: the update_config None
+guard, on-disk value type coercion, the window's own writer (a file
+config.py can read back, and one it refuses to overwrite when damaged),
+saving Snippets and a word fixed from the tray, the hotkey fallback, start
+at login, and what Updates does when the changes couldn't be saved.
 """
 try:
     import tomllib

@@ -166,9 +166,9 @@ def board(monkeypatch):
 def test_a_clear_the_x_server_refused_isnt_called_a_restore(board, monkeypatch, caplog):
     """The clipboard was empty before the paste; another app copies right
     before the restore, unheard of yet. The X server keeps its copy, and the
-    log mustn't say the clipboard was restored. First of the tests with
-    other apps: GDK then knows no other app's window, as it would, and asked
-    who owns the clipboard says nobody."""
+    log mustn't say the clipboard was restored. GDK knows no other app's
+    window here, as it wouldn't, and asked who owns the clipboard says
+    nobody."""
     pending = []
     _paste_keeping("dictated words", schedule=lambda delay, fn: pending.append(fn) or (
         lambda: None))

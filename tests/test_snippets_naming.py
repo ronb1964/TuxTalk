@@ -1,8 +1,9 @@
-"""Custom voice commands are called Snippets wherever users read about them.
+"""Your Words and the Snippets share one Preferences tab, called Words.
 
-"Commands" was easy to confuse with the built-in voice commands ("period",
-"new line", "undo last word"). The saved file and the code keep their old
-names; only the words on screen say Snippets.
+Snippets were once "Commands", easy to confuse with the built-in voice
+commands ("period", "new line", "undo last word"). Every old tab name still
+opens Words; Help and the quick reference say Words too. The saved files and
+the code keep their old names.
 """
 import types
 

@@ -160,7 +160,7 @@ def test_cancel_falls_back_to_a_downloaded_model_and_saves_it(monkeypatch):
 
 def test_a_cancelled_cpu_retry_is_a_missing_model_not_a_crash(monkeypatch):
     """CUDA failed, then the processor copy was cancelled. That must reach
-    _build_model_or_exit as ModelUnavailable, which it handles by using a
+    engine.build_or_exit as ModelUnavailable, which it handles by using a
     downloaded model, not as a bare Exception that crashes the service."""
     def load(*a, **k):
         if k.get("device") == "cuda":

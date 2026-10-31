@@ -1,9 +1,9 @@
-"""Backend B (the portal/Flatpak path) runs ONLY service_tick.tick — never the evdev
-main loop. The evdev loop is where settings changed in Preferences get picked up
-without a restart (live.config_file_changed -> _reload_live_settings). If service_tick.tick
-doesn't do the same, the recording indicator's style/position and every other live
-setting never update in the Flatpak, even though Preferences reports "Applied
-without restart". This test pins the reload into service_tick.tick.
+"""Settings changed in Preferences reach the running service through
+service_tick.tick, which both the evdev hotkey loop and the Flatpak's portal
+path call: it reloads them when the config file changed
+(live.config_file_changed, then _reload_live_settings). Without it the
+recording indicator's style and position, and every other live setting,
+would stay as they were though Preferences says "Applied without restart".
 """
 
 import types

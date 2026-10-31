@@ -134,7 +134,7 @@ def test_on_by_default_and_applied_without_a_restart():
     assert "paste_last_hotkey" in config.LIVE_APPLIED_KEYS
 
 
-def test_kde_and_gnome_hold_it_back_from_the_focused_app():
+def test_kde_holds_it_back_from_the_focused_app():
     cfg = config.Settings(hotkey="F8", toggle_hotkey="F9")
     names = [name for name, _what, _key in kwin_hotkeys.wanted_shortcuts(cfg)]
     assert any("paste-last" in n for n in names)

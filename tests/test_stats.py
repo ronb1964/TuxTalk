@@ -200,7 +200,7 @@ def test_preferences_finds_tabs_by_name_not_position():
     from tuxtalk.prefs import PreferencesWindow
 
     notebook = Gtk.Notebook()
-    for name in ("General", "Audio", "Advanced", "Commands", "Stats", "Updates & Backup"):
+    for name in ("General", "Audio", "Advanced", "Words", "Stats", "Updates & Backup"):
         page = Gtk.Box()
         page.show()          # GtkNotebook won't switch to a hidden page
         notebook.append_page(page, Gtk.Label(label=name))

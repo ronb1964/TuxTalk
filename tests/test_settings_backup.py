@@ -383,7 +383,7 @@ def test_talktype_backups_are_listed_with_the_others(home, monkeypatch):
 
 
 def test_your_words_travel_with_the_backup(home):
-    """custom_words.txt (Preferences > Snippets > Your Words) is in the backup
+    """custom_words.txt (Preferences → Words → Your Words) is in the backup
     and comes back with it. A backup from before Your Words leaves them be."""
     from tuxtalk import custom_words
     custom_words.save(["TuxTalk", "BambuStudio"])

@@ -2,7 +2,8 @@
 main loop.
 
 * Replacing a pre-rename service can wait up to 3 s for it to exit.
-* Quit and Restart Service wait for the service off it (test_quit_restart.py).
+* Quit and Restart Service wait for the service to go, off the GTK thread
+  (test_quit_restart.py).
 * After onboarding, KDE's menu cache rebuild (kbuildsycoca) can take up to 15 s.
 """
 

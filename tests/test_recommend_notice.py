@@ -47,7 +47,7 @@ def test_never_on_first_run_or_flatpak(env, monkeypatch):
     monkeypatch.setattr("tuxtalk.first_run_marker.is_first_run", lambda: True)
     update_offers.maybe_show_recommend_notice()
     monkeypatch.setattr("tuxtalk.first_run_marker.is_first_run", lambda: False)
-    monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TalkType")
+    monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TuxTalk")
     update_offers.maybe_show_recommend_notice()
     assert notes == []
 
