@@ -23,6 +23,8 @@ class TestKnownTerminalsAreRecognized:
         "gnome-terminal-server",   # measured on Zorin OS 18.1 (GNOME 46), from the extension
         "Alacritty",
         "foot",
+        "org.kde.yakuake",
+        "yakuake",
     ])
     def test_it_is_a_terminal(self, wm_class):
         assert window_classes.is_terminal_class(wm_class) is True

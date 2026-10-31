@@ -2,6 +2,8 @@
 change it ("make this more formal"), and the selection is rewritten by the
 local AI model.
 """
+import threading
+
 import pytest
 
 from conftest import KeyEvent
@@ -194,16 +196,18 @@ from tuxtalk import recording_state as rs
 
 
 class FakeEngine:
+    """The AI engine: counts its starts, and says when it's stopped (on a
+    thread of its own, as live_settings stops it)."""
     started = 0
 
     def __init__(self):
-        self.stopped = False
+        self.stopped = threading.Event()
 
     def start(self):
         FakeEngine.started += 1
 
     def stop(self):
-        self.stopped = True
+        self.stopped.set()
 
 
 @pytest.fixture
@@ -240,14 +244,15 @@ def test_the_engine_stops_when_both_are_off(no_engine):
     live.apply(config.Settings(voice_editing=True, ai_corrections=True))
     engine = live.ai_engine
     live.apply(config.Settings(voice_editing=False, ai_corrections=False))
-    assert engine.stopped and live.ai_engine is None
+    assert live.ai_engine is None
+    assert engine.stopped.wait(5)
 
 
 def test_turning_one_off_keeps_the_engine_for_the_other(no_engine):
     live.apply(config.Settings(voice_editing=True, ai_corrections=True))
     engine = live.ai_engine
     live.apply(config.Settings(voice_editing=True, ai_corrections=False))
-    assert live.ai_engine is engine and not engine.stopped
+    assert live.ai_engine is engine and not engine.stopped.is_set()
 
 
 # --- 4. Shift + the dictation key, and the edit itself --------------------------------
@@ -883,11 +888,6 @@ def test_no_edit_in_a_terminal(edit_env, monkeypatch):
     assert edit_env["typed"] == [] and "terminal" in edit_env["notices"][0]
 
 
-def test_yakuake_counts_as_a_terminal():
-    from tuxtalk.window_classes import is_terminal_class
-    assert is_terminal_class("org.kde.yakuake") and is_terminal_class("yakuake")
-
-
 def test_a_window_change_while_the_ai_works_keeps_the_rewrite_safe(edit_env, monkeypatch):
     classes = iter(["org.kde.kwrite", "org.mozilla.firefox"])
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: next(classes))
@@ -1042,9 +1042,9 @@ def test_voice_editing_is_in_labs_not_with_the_cleanup_options(prefs_window):
 
 
 def test_the_labs_tips_name_your_own_key_and_the_writing_page(prefs_window):
-    from gi.repository import Gtk
     """With F6 as the hold key, "hold Shift+F8" sent people to the wrong key,
     and Help has no "TuxTalk Labs" page: the list is under Writing."""
+    from gi.repository import Gtk
     window = prefs_window(hotkey="F6")
     tips = [w.get_tooltip_text() or "" for w in _labs(window)
             if isinstance(w, Gtk.CheckButton)]
