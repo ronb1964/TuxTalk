@@ -2,12 +2,12 @@
 
 A packaged install ships python at /opt/talktype/usr/bin/python3, but that
 interpreter has no PYTHONPATH/LD_LIBRARY_PATH/GI_TYPELIB_PATH of its own — the
-/usr/bin/talktype wrapper (via AppRun) sets those before launching. Writing the
+/usr/bin/tuxtalk wrapper (via AppRun) sets those before launching. Writing the
 raw `python3 -m tuxtalk.tray` into the autostart .desktop therefore produces a
-command that dies silently at login while a terminal `talktype` works.
+command that dies silently at login while a terminal `tuxtalk` works.
 
 The launcher must resolve to the wrapper the package actually installed. It is
-looked up by KNOWN ABSOLUTE PATH, not `which`, so a stray ~/.local/bin/talktype
+looked up by KNOWN ABSOLUTE PATH, not `which`, so a stray ~/.local/bin/tuxtalk
 earlier in PATH can never be written into autostart in place of ours.
 """
 
@@ -33,8 +33,8 @@ def _make_prefs(
     from tuxtalk import config as config_mod
 
     # `from . import config` inside get_launch_command resolves to the real module.
-    monkeypatch.setattr(config_mod, "DEV_MODE", dev_mode, raising=False)
-    monkeypatch.setattr(mod.sys, "executable", executable, raising=False)
+    monkeypatch.setattr(config_mod, "DEV_MODE", dev_mode)
+    monkeypatch.setattr(mod.sys, "executable", executable)
     if appimage is None:
         monkeypatch.delenv("APPIMAGE", raising=False)
     else:
@@ -57,15 +57,16 @@ def _make_prefs(
     return mod
 
 
-def test_prefers_usr_bin_talktype(monkeypatch):
+def test_a_deb_or_rpm_starts_through_usr_bin_tuxtalk(monkeypatch):
+    """The packages ship /usr/bin/tuxtalk, and /usr/bin/talktype beside it
+    for the command before the rename."""
+    mod = _make_prefs(monkeypatch, exists={"/usr/bin/tuxtalk", "/usr/bin/talktype",
+                                           "/usr/bin/dictate-tray"})
+    assert mod.get_launch_command() == "/usr/bin/tuxtalk"
+
+
+def test_a_package_from_before_the_rename_starts_through_talktype(monkeypatch):
     mod = _make_prefs(monkeypatch, exists={"/usr/bin/talktype", "/usr/bin/dictate-tray"})
-    cmd = mod.get_launch_command()
-    assert cmd == "/usr/bin/talktype"
-    assert "python3 -m tuxtalk.tray" not in cmd
-
-
-def test_talktype_wins_over_dictate_tray(monkeypatch):
-    mod = _make_prefs(monkeypatch, exists={"/usr/bin/dictate-tray", "/usr/bin/talktype"})
     assert mod.get_launch_command() == "/usr/bin/talktype"
 
 
@@ -75,27 +76,27 @@ def test_falls_back_to_dictate_tray_when_no_talktype(monkeypatch):
 
 
 def test_poisoned_path_does_not_win_over_packaged_launcher(monkeypatch):
-    """A stray ~/.local/bin/talktype earlier in PATH must NOT be chosen.
+    """A stray ~/.local/bin/tuxtalk earlier in PATH must NOT be chosen.
 
     This is the whole reason for looking up an absolute path instead of `which`:
     autostart would otherwise launch an unrelated binary at login.
     """
     mod = _make_prefs(
         monkeypatch,
-        exists={"/usr/bin/talktype", "/home/ron/.local/bin/talktype"},
-        which_map={"talktype": "/home/ron/.local/bin/talktype"},
+        exists={"/usr/bin/tuxtalk", "/home/ron/.local/bin/tuxtalk"},
+        which_map={"tuxtalk": "/home/ron/.local/bin/tuxtalk"},
     )
-    assert mod.get_launch_command() == "/usr/bin/talktype"
+    assert mod.get_launch_command() == "/usr/bin/tuxtalk"
 
 
 def test_which_fallback_only_for_nonstandard_layout(monkeypatch):
     """No launcher at /usr/bin, but one on PATH — the fallback still finds it."""
     mod = _make_prefs(
         monkeypatch,
-        exists={"/opt/custom/talktype"},
-        which_map={"talktype": "/opt/custom/talktype"},
+        exists={"/opt/custom/tuxtalk"},
+        which_map={"tuxtalk": "/opt/custom/tuxtalk"},
     )
-    assert mod.get_launch_command() == "/opt/custom/talktype"
+    assert mod.get_launch_command() == "/opt/custom/tuxtalk"
 
 
 def test_appimage_env_takes_precedence_over_usr_bin(monkeypatch):
@@ -104,8 +105,8 @@ def test_appimage_env_takes_precedence_over_usr_bin(monkeypatch):
     Guards against the absolute-path check being reordered above the AppImage
     case, which would make an installed .deb hijack an AppImage run.
     """
-    app = "/home/ron/AppImages/TalkType-v0.7.0-x86_64.AppImage"
-    mod = _make_prefs(monkeypatch, exists={app, "/usr/bin/talktype"}, appimage=app)
+    app = "/home/ron/AppImages/TuxTalk-v0.19.0-x86_64.AppImage"
+    mod = _make_prefs(monkeypatch, exists={app, "/usr/bin/tuxtalk"}, appimage=app)
     assert mod.get_launch_command() == app
 
 
@@ -115,7 +116,7 @@ def test_raw_python_only_as_last_resort(monkeypatch):
     assert mod.get_launch_command() == "/opt/talktype/usr/bin/python3 -m tuxtalk.tray"
 
 
-DOWNLOAD = "/home/ron/Downloads/TalkType-v0.10.0-x86_64.AppImage"
+DOWNLOAD = "/home/ron/Downloads/TuxTalk-v0.19.0-x86_64.AppImage"
 
 
 def test_autostart_uses_the_installed_appimage_not_the_download(monkeypatch):
