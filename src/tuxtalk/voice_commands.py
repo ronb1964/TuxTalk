@@ -46,10 +46,10 @@ def handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
     # Backspacing the last dictation's length in a different window would
     # delete text there that TuxTalk never typed. Unknown windows go ahead,
     # as before.
-    focused = focused_window.window_class()
-    if keyboard_output.not_where_typed(focused):
+    where = focused_window.look()
+    if keyboard_output.not_where_typed(where[0], where):
         logger.info(f"Undo refused: the last dictation went to {rs.state.last_inserted_window!r}, "
-                    f"not {focused!r}")
+                    f"not {where[0]!r}")
         notices.edit_problem("undo_other_window", beeps_on)
         return True
 
@@ -57,7 +57,7 @@ def handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
     logger.info(f"Undo: deleting {delete_count} characters (last text was "
                 f"{len(rs.state.last_inserted_text)} chars, count={count})")
     if delete_count > 0:
-        _backspace_last(delete_count, label, beeps_on, notify_on)
+        _backspace_last(delete_count, label, beeps_on, notify_on, where)
     else:
         logger.info("Nothing to undo for this scope")
         beeps.beep(beeps_on, *CANCEL_BEEP)
@@ -71,11 +71,15 @@ def _clear_text_box(beeps_on, notify_on):
     shell's way: Ctrl+E to its end, Ctrl+U back to the prompt (bash, zsh,
     fish; Ctrl+A is also screen's prefix key)."""
     backend = keyboard_output.output_backend()
-    if is_terminal_class(focused_window.window_class()):
-        cleared = backend.press_keys([(("CTRL",), "E"), (("CTRL",), "U")])
+    where = focused_window.look()
+    if is_terminal_class(where[0]):
+        cleared = _sent_into(where, lambda: backend.press_keys([(("CTRL",), "E"),
+                                                                (("CTRL",), "U")]))
     else:
-        cleared = backend.select_all_delete()
-    if cleared:
+        cleared = _sent_into(where, backend.select_all_delete)
+    if cleared == "moved":
+        notices.edit_problem("focus_moved", beeps_on)
+    elif cleared:
         rs.state.last_inserted_text = ""
         last_dictation.forget_shown()
         rs.state.continue_mid_sentence = False
@@ -89,13 +93,30 @@ def _clear_text_box(beeps_on, notify_on):
             notify_module.notify("Couldn't clear the text box", "")
 
 
-def _backspace_last(delete_count, label, beeps_on, notify_on):
-    """Delete the last *delete_count* characters of the last dictation, and
-    shrink the undo buffer only once the deletion is confirmed; otherwise it
-    falls out of step with the document and the next undo backspaces over
-    the user's own text."""
+def _sent_into(where, send):
+    """*send*(), a call of the output backend, with its keys going only into
+    *where*, the look the command was checked against (keyboard_output.only_into):
+    True when they went in, "moved" when another window had the focus by
+    the time they would have, else False."""
     try:
-        deleted = keyboard_output.output_backend().backspaces(delete_count)
+        with keyboard_output.only_into(where):
+            if send():
+                return True
+    except virtual_keyboard.GaveUp as stop:
+        # The portal's way of saying it (output_backends._with_session).
+        return "moved" if stop.reason == "moved" else False
+    # The virtual keyboard's: it doesn't say why nothing was sent.
+    return "moved" if focused_window.changed(where, focused_window.look()) else False
+
+
+def _backspace_last(delete_count, label, beeps_on, notify_on, where):
+    """Delete the last *delete_count* characters of the last dictation in
+    *where*, the window undo was checked in, and shrink the undo buffer only
+    once the deletion is confirmed; otherwise it falls out of step with the
+    document and the next undo backspaces over the user's own text."""
+    try:
+        deleted = _sent_into(where, lambda: keyboard_output.output_backend()
+                             .backspaces(delete_count))
     except virtual_keyboard.StoppedPartway:
         # Some of the text is gone and some isn't, by an unknown amount, so
         # the buffer no longer matches the document. Forgetting it is the
@@ -108,6 +129,9 @@ def _backspace_last(delete_count, label, beeps_on, notify_on):
         beeps.beep(beeps_on, *CANCEL_BEEP)
         if notify_on:
             notify_module.notify("Undo stopped partway", "Some of the text may still be there.")
+        return
+    if deleted == "moved":
+        notices.edit_problem("focus_moved", beeps_on)
         return
     if not deleted:
         logger.error("Undo failed: backspaces were not delivered; buffer left unchanged")
@@ -232,13 +256,11 @@ def _remove_when_closed(window, path):
     threading.Thread(target=wait, daemon=True, name="fix-word-handoff").start()
 
 
-_UNKNOWN_WINDOW = object()
-
-
-def handle_navigation(raw: str, beeps_on: bool, focused_class=_UNKNOWN_WINDOW) -> bool:
+def handle_navigation(raw: str, beeps_on: bool, where=None) -> bool:
     """Select and move by voice (TuxTalk Labs). True when the whole dictation
     was one of voice_navigation's commands, done or refused with a notice;
-    False to type it as text."""
+    False to type it as text. *where* is the window the keys may go into, a
+    look (a voice edit's, taken when it started), else the one looked at here."""
     if not live.voice_navigation:
         return False
     from . import voice_navigation as nav
@@ -246,16 +268,16 @@ def handle_navigation(raw: str, beeps_on: bool, focused_class=_UNKNOWN_WINDOW) -
     if command is None:
         return False
     logger.info(f"Voice command: {command.name}")
-    if focused_class is _UNKNOWN_WINDOW:
-        focused_class = focused_window.window_class()
-    if is_terminal_class(focused_class):
+    if where is None:
+        where = focused_window.look()
+    if is_terminal_class(where[0]):
         notices.edit_problem("nav_terminal", beeps_on)
         return True
     # Right after a dictation the cursor is at its end; after an exact move,
     # nav_context says where in it. Only in the window it was typed into:
     # dictating into a chat, then saying "select the last sentence" in Writer
     # would otherwise select the chat message's length of Writer's text.
-    if keyboard_output.not_where_typed(focused_class):
+    if keyboard_output.not_where_typed(where[0], where):
         left, right = None, ""
     elif rs.state.last_inserted_text:
         left, right = rs.state.last_inserted_text, ""
@@ -268,7 +290,8 @@ def handle_navigation(raw: str, beeps_on: bool, focused_class=_UNKNOWN_WINDOW) -
         notices.edit_problem("nothing_said", beeps_on)
         return True
     try:
-        pressed = keyboard_output.output_backend().press_keys(plan.chords)
+        pressed = _sent_into(where, lambda: keyboard_output.output_backend()
+                             .press_keys(plan.chords))
     except Exception as e:
         logger.error(f"Voice command: pressing the keys failed: {e}")
         pressed = False
@@ -276,11 +299,13 @@ def handle_navigation(raw: str, beeps_on: bool, focused_class=_UNKNOWN_WINDOW) -
     # matches the document, and "delete last word" would eat the wrong text.
     rs.state.last_inserted_text = ""
     last_dictation.forget_shown()
-    rs.state.nav_context = (plan.left, plan.right) if pressed and plan.left is not None else None
-    if pressed:
+    rs.state.nav_context = ((plan.left, plan.right) if pressed is True and plan.left is not None
+                            else None)
+    if pressed is True:
         beeps.beep(beeps_on, *READY_BEEP)
     else:
-        notices.edit_problem("shortcut_failed", beeps_on)
+        notices.edit_problem("focus_moved" if pressed == "moved" else "shortcut_failed",
+                             beeps_on)
     return True
 
 

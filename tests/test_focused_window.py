@@ -157,6 +157,10 @@ def test_one_window_named_by_kwin_and_by_x11_is_still_one_app(monkeypatch):
     (("kwrite", ("tray", "{a}")), ("kwrite", ("tray", "{a}")), True),
     (("kwrite", ("tray", "{a}")), ("kwrite", ("tray", "{b}")), False),
     (("kwrite", ("tray", "{a}")), ("konsole", ("tray", "{a}")), False),
+    # Kate by its app id and by its name: undo and voice moves refused it.
+    (("org.kde.kate", ("tray", "{a}")), ("kate", ("tray", "{a}")), True),
+    (("org.kde.kate", ("tray", "{a}")), ("kate", ("tray", "{b}")), False),
+    (("org.kde.kate", ("compositor", 7)), ("kate", ("tray", "7")), False),
     (("kwrite", None), ("kwrite", None), None),                       # COSMIC: only the app
     ((None, None), ("kwrite", ("tray", "{a}")), None),                # a look that timed out
     (("kwrite", ("tray", "{a}")), (None, ("own", ("tray", "{t}"))), False),   # Preferences

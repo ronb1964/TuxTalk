@@ -28,8 +28,8 @@ from . import live_settings as live
 from . import recording_state as rs
 from .beeps import READY_BEEP
 from .logger import setup_logger
-from .normalize import swiss_spelling
-from .window_classes import is_terminal_class
+from .normalize import PLAIN_LOOKALIKES, swiss_spelling
+from .window_classes import is_terminal_class, is_word_processor
 
 logger = setup_logger(__name__)
 
@@ -138,7 +138,7 @@ def _format_selection(fmt, focused_class, window, beeps_on) -> bool:
     """Bold, italic or underline (*fmt*, voice_edit_rules.formatting) with
     the app's own shortcut on the selection, still selected. True when it
     was pressed."""
-    if not voice_edit_rules.has_formatting_shortcuts(focused_class):
+    if not is_word_processor(focused_class):
         logger.info(f"Voice edit: no formatting shortcuts in {focused_class!r}")
         notices.edit_problem("no_shortcuts", beeps_on)
         return False
@@ -156,14 +156,14 @@ def _format_selection(fmt, focused_class, window, beeps_on) -> bool:
     return True
 
 
-def _nothing_selected(get_instruction, spoken: bool, focused_class, beeps_on):
+def _nothing_selected(get_instruction, spoken: bool, where, beeps_on):
     """Nothing is selected. "select the last sentence" needs nothing
-    selected: it makes the selection the next edit works on. Anything else
-    says to select some text first. The clipboard is already back
-    (copy_selection does that)."""
+    selected: it makes the selection the next edit works on, in *where*,
+    the window the edit started in. Anything else says to select some text
+    first. The clipboard is already back (copy_selection does that)."""
     if live.voice_navigation and not spoken:
         said = get_instruction()
-        if said and voice_commands.handle_navigation(said, beeps_on, focused_class):
+        if said and voice_commands.handle_navigation(said, beeps_on, where):
             return
     notices.edit_problem("no_selection", beeps_on)
 
@@ -180,22 +180,15 @@ def _put_clipboard_back(put_back, result):
         put_back(also=also)
 
 
-# Marks an app's autocorrect (LibreOffice Writer's, say) or TuxTalk's own
-# smart quotes may put in place of the plain ones typed.
-_PLAIN_MARKS = str.maketrans({"\u2018": "'", "\u2019": "'", "\u201a": "'", "\u2032": "'",
-                              "\u201c": '"', "\u201d": '"', "\u201e": '"', "\u2033": '"',
-                              "\u2013": "-", "\u2014": "-", "\u2026": "..."})
-
-
 def _comparable(text: str) -> list:
     """*text*'s words as "edit that" compares a selection with what was
     dictated: an app may have changed how they look, not what they say
     (Writer turns ' into a curly one and capitalises a sentence start, and
     keeps its own line ends and spaces)."""
-    return text.translate(_PLAIN_MARKS).casefold().split()
+    return text.translate(PLAIN_LOOKALIKES).casefold().split()
 
 
-def _refused_selection(selected, expected, put_back, get_instruction, focused_class,
+def _refused_selection(selected, expected, put_back, get_instruction, where,
                        beeps_on) -> bool:
     """True, with the user told, when *selected* isn't text to change:
     nothing is selected, or "edit that" counted back over other words than
@@ -203,7 +196,7 @@ def _refused_selection(selected, expected, put_back, get_instruction, focused_cl
     dictated). Then the clipboard the selection was copied through is put
     back."""
     if not selected:
-        _nothing_selected(get_instruction, expected is not None, focused_class, beeps_on)
+        _nothing_selected(get_instruction, expected is not None, where, beeps_on)
         return True
     if expected is not None and _comparable(selected) != _comparable(expected):
         logger.info("Voice edit: the selection isn't the dictation any more")
@@ -308,7 +301,11 @@ def _type_rewrite(result, injection_mode, message, beeps_on, into):
         message.add(outcome, None)      # what's in the box isn't known now
     if outcome == "password_field":
         history.forget(result)
-    if outcome in delivery_notices.NOTICES:
+    if outcome == "moved":
+        # The window changed between the last look and the keys: the
+        # dictation's notice would blame a Right Ctrl the user may not use.
+        notices.edit_problem("window_changed", beeps_on)
+    elif outcome in delivery_notices.NOTICES:
         notices.report_undelivered(outcome, beeps_on)
     else:
         beeps.beep(beeps_on, *READY_BEEP)
@@ -346,8 +343,8 @@ def edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0,
     if copy_sent == [False]:
         _not_pressed(focused_class, window, beeps_on)
         return
-    if _refused_selection(selected, expected, put_back, get_instruction, focused_class,
-                          beeps_on):
+    if _refused_selection(selected, expected, put_back, get_instruction,
+                          (focused_class, window), beeps_on):
         return
     result = None
     try:
@@ -355,7 +352,7 @@ def edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0,
         if not instruction:
             notices.edit_problem("no_instruction", beeps_on)
             return
-        if voice_commands.handle_navigation(instruction, beeps_on, focused_class):
+        if voice_commands.handle_navigation(instruction, beeps_on, (focused_class, window)):
             return
         logger.info(f"Voice edit: {live.loggable(instruction)} ({len(selected)} characters)")
         keys = _edit_with_keys(instruction, focused_class, window, beeps_on)

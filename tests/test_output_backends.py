@@ -1,6 +1,8 @@
 """The virtual-keyboard backend must keep delegating to keyboard_output.type_text so the non-Flatpak
 typing path is behaviorally unchanged."""
 import os
+
+import pytest
 from tuxtalk import recording_state as rs
 from tuxtalk import keyboard_output
 from tuxtalk import voice_commands
@@ -484,9 +486,17 @@ def test_a_portal_session_that_wont_close_is_logged(monkeypatch, caplog):
 
 
 def _libei_typing_into(monkeypatch, focus_moves_while_the_device_is_away):
+    """_libei_with_the_focus_moving, with the typing held to KWrite, where it began."""
+    b, keys = _libei_with_the_focus_moving(monkeypatch, focus_moves_while_the_device_is_away)
+    monkeypatch.setattr(keyboard_output.this_thread, "into", ("org.kde.kwrite", ("tray", "{1}")))
+    return b, keys
+
+
+def _libei_with_the_focus_moving(monkeypatch, focus_moves_while_the_device_is_away):
     """A Libei backend over a fake libei whose keyboard device goes away
     (paused) right before typing and comes back; while it's away, the focus
-    moves to a chat or doesn't. Returns the backend and the keys libei got."""
+    moves from KWrite to a chat or doesn't. Returns the backend and the keys
+    libei got."""
     from tuxtalk import focused_window, libei_ctypes
     from tuxtalk.output_backends import LibeiOutputBackend
     focus = [("org.kde.kwrite", ("tray", "{1}"))]
@@ -502,7 +512,6 @@ def _libei_typing_into(monkeypatch, focus_moves_while_the_device_is_away):
     monkeypatch.setattr(focused_window, "look", lambda: focus[0])
     b = LibeiOutputBackend()
     monkeypatch.setattr(b, "_run_handshake", lambda: (_portal_fd(), None))
-    monkeypatch.setattr(keyboard_output.this_thread, "into", ("org.kde.kwrite", ("tray", "{1}")))
     return b, libei.keys
 
 
@@ -522,3 +531,72 @@ def test_flatpak_typing_held_to_a_window_goes_in_while_it_has_the_focus(monkeypa
     b, keys = _libei_typing_into(monkeypatch, focus_moves_while_the_device_is_away=False)
     assert b.type_text("fixed") is True
     assert len(keys) == 2 * len("fixed")
+
+
+@pytest.fixture
+def flatpak_commands(monkeypatch):
+    """Voice commands said right after "hello world" was dictated into KWrite,
+    in the Flatpak: the problems they reported."""
+    from tuxtalk import notices
+    from tuxtalk import live_settings as live
+    problems = []
+    monkeypatch.setattr(notices, "edit_problem", lambda kind, beeps: problems.append(kind))
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
+    monkeypatch.setattr(live, "voice_navigation", True)
+    monkeypatch.setattr(rs.state, "last_inserted_text", "hello world")
+    monkeypatch.setattr(rs.state, "last_inserted_window", "org.kde.kwrite")
+    monkeypatch.setattr(rs.state, "last_inserted_where", ("org.kde.kwrite", ("tray", "{1}")))
+    return problems
+
+
+@pytest.mark.parametrize("said", ["delete last word", "clear everything", "select the last word"])
+def test_a_flatpak_voice_command_presses_nothing_once_another_window_has_the_focus(
+        monkeypatch, flatpak_commands, said):
+    """The portal's keyboard took a moment to come back after "delete last
+    word", and the user clicked into a chat meanwhile: the backspaces went
+    into the chat, deleting what was there."""
+    b, keys = _libei_with_the_focus_moving(monkeypatch, focus_moves_while_the_device_is_away=True)
+    monkeypatch.setattr(keyboard_output, "output_backend", lambda: b)
+    assert (voice_commands.handle_undo(said, False, False)
+            or voice_commands.handle_navigation(said, False)) is True
+    assert keys == [] and flatpak_commands == ["focus_moved"]
+    if said == "delete last word":       # nothing deleted: a second try still can
+        assert rs.state.last_inserted_text == "hello world"     # nothing was deleted
+
+
+@pytest.mark.parametrize("said", ["delete last word", "clear everything", "select the last word"])
+def test_a_flatpak_voice_command_goes_in_while_its_window_has_the_focus(
+        monkeypatch, flatpak_commands, said):
+    b, keys = _libei_with_the_focus_moving(monkeypatch, focus_moves_while_the_device_is_away=False)
+    monkeypatch.setattr(keyboard_output, "output_backend", lambda: b)
+    assert (voice_commands.handle_undo(said, False, False)
+            or voice_commands.handle_navigation(said, False)) is True
+    assert keys and flatpak_commands == []
+
+
+def test_a_flatpak_dictation_goes_nowhere_once_the_cursor_is_in_a_password_field(monkeypatch):
+    """The portal's approval dialog and keyboard can take a while: a tab
+    into a password box meanwhile got the dictation, which may be the
+    password itself."""
+    from tuxtalk import focused_window
+    b, keys = _libei_with_the_focus_moving(monkeypatch, focus_moves_while_the_device_is_away=False)
+    monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TalkType")
+    monkeypatch.setattr(keyboard_output, "output_backend", lambda: b)
+    answers = iter([False])                 # a text box when the dictation was made
+    monkeypatch.setattr(focused_window, "is_password", lambda **k: next(answers, True))
+    assert delivery.inject_text("swordfish", "auto") == "password_field"
+    assert keys == []
+
+
+def test_a_flatpak_dictation_stops_before_a_line_break_into_a_password_field(monkeypatch):
+    """Typed through the portal in one go, the lines were checked once: a
+    tab into a password box after the first line got the line break, which
+    can press a login form's button, and the next line."""
+    from tuxtalk import focused_window
+    b, keys = _libei_with_the_focus_moving(monkeypatch, focus_moves_while_the_device_is_away=False)
+    monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TalkType")
+    monkeypatch.setattr(keyboard_output, "output_backend", lambda: b)
+    answers = iter([False, False])          # when it was made, and before its first line
+    monkeypatch.setattr(focused_window, "is_password", lambda **k: next(answers, True))
+    assert delivery.inject_text("ab\ncd", "auto") == "password_field"
+    assert [code for code, down in keys if down] == [30, 48]      # a, b: no Enter, no c or d

@@ -93,6 +93,19 @@ def feed(audio):
         feed_block(b)
 
 
+def frames_of(audio):
+    """*audio* as the one frame a phrase hands the pipeline."""
+    return [audio.tobytes()]
+
+
+def type_chunk(frames, role, auto_period=False):
+    """One Type at pause phrase through the real pipeline, as *role*
+    ("first", "middle", "last")."""
+    dictation_pipeline.transcribe_and_inject(frames, SR, True, True, False, None, True,
+                                             auto_period, "type", chunk_role=role,
+                                             message=rs.state.current.message)
+
+
 def stop(auto_period=False):
     dictation_pipeline.stop_recording(beeps_on=True, smart_quotes=True, notify_on=False,
                                       language=None, auto_space=True,

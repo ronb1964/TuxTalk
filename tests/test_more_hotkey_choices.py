@@ -385,7 +385,7 @@ def test_a_dictation_stopped_by_a_stuck_key_stays_in_recent_dictations(
     monkeypatch.setattr(delivery, "determine_injection_method", lambda mode: ("type", "test"))
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
     monkeypatch.setattr(focused_window, "look", lambda: (None, None))
-    monkeypatch.setattr(focused_window, "is_password", lambda: False)
+    monkeypatch.setattr(focused_window, "is_password", lambda **k: False)
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: notes.append(body))
     monkeypatch.setattr(live, "press_enter_after", False)
@@ -400,17 +400,14 @@ def test_a_dictation_stopped_by_a_stuck_key_stays_in_recent_dictations(
 
 def test_a_stuck_key_types_nothing_another_way(keyboard, stuck_right_ctrl, monkeypatch):
     """wtype would type the text as the shortcuts the wait was there to
-    prevent (and put it in a process's arguments); the clipboard fallback
-    would overwrite what the user had copied."""
+    prevent (and put it in a process's arguments)."""
     import subprocess
 
-    import pyperclip
     stuck_right_ctrl()
     monkeypatch.setenv("XDG_SESSION_TYPE", "wayland")   # KWrite on KDE, as below
     ran = []
     monkeypatch.setattr(keyboard_output, "which", lambda name: f"/usr/bin/{name}")
     monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: ran.append(a) or 1 / 0)
-    monkeypatch.setattr(pyperclip, "copy", lambda text: ran.append(text))
     monkeypatch.setattr(delivery, "determine_injection_method", lambda mode: ("type", "test"))
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "kwrite")
     monkeypatch.setattr(focused_window, "look", lambda: KWRITE)
@@ -469,7 +466,7 @@ def test_a_key_stuck_after_the_first_line_says_only_part_was_typed(keyboard, stu
 
 def test_a_key_stuck_partway_isnt_blamed_on_the_keyboard(keyboard, stuck_right_ctrl,
                                                           typing_into_kwrite, caplog):
-    stuck_right_ctrl(start=2)
+    stuck_right_ctrl(start=3)       # a dictation's first key is looked at twice (its claim)
     with caplog.at_level("INFO", logger="tuxtalk.app"):
         assert delivery.inject_text("ab", "type") == "partial"
     assert keyboard.typed_keys() == [ecodes.KEY_A]
@@ -477,16 +474,23 @@ def test_a_key_stuck_partway_isnt_blamed_on_the_keyboard(keyboard, stuck_right_c
     assert "Typing stopped partway through the dictation (key_held)" in caplog.text
 
 
-def test_a_clipboard_fallback_that_fails_says_why_in_the_log(monkeypatch, caplog):
-    """With no virtual keyboard and no wtype, the last way out is the
-    clipboard; when that failed too, the log said only that nothing worked."""
-    import pyperclip
+def test_typing_that_cant_go_in_leaves_the_clipboard_alone(monkeypatch):
+    """With no virtual keyboard and no wtype, the dictation went on the
+    clipboard, over what the user had copied and without the mark that keeps
+    it out of clipboard managers. Recent Dictations has it, as the notice says."""
+    import subprocess
+    import sys
+    import types
+    ran = []
+    # pyperclip, the clipboard library that fallback used, and wl-copy itself.
+    monkeypatch.setitem(sys.modules, "pyperclip", types.SimpleNamespace(copy=ran.append))
+    monkeypatch.setattr("tuxtalk.keyboard_layout.layout_key_events", lambda text: [(35, 1), (35, 0)])
     monkeypatch.setattr(keyboard_output, "send_keys", lambda *a, **k: False)
     monkeypatch.setattr(keyboard_output, "which", lambda name: name == "wl-copy" and "/usr/bin/wl-copy")
-    monkeypatch.setattr(pyperclip, "copy", lambda text: 1 / 0)
-    with caplog.at_level("WARNING", logger="tuxtalk.app"):
-        assert keyboard_output.type_text_raw("hello") is False
-    assert "clipboard" in caplog.text and "division by zero" in caplog.text
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: ran.append(a) or 1 / 0)
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: ran.append(a) or 1 / 0)
+    assert keyboard_output.type_text_raw("hello") is False
+    assert ran == []
 
 
 def test_undo_under_a_stuck_key_deletes_nothing_and_says_so(keyboard, stuck_right_ctrl):
@@ -514,7 +518,7 @@ def test_typing_that_waited_stops_if_another_window_of_the_app_has_the_focus(
     """Two KWrite windows: the class is the same, the window isn't."""
     windows = iter([("tray", "{4b1e}"), ("tray", "{9c07}")])
     monkeypatch.setattr(focused_window, "look", lambda: ("kwrite", next(windows)))
-    monkeypatch.setattr(focused_window, "is_password", lambda: False)
+    monkeypatch.setattr(focused_window, "is_password", lambda **k: False)
     modifier_hotkeys.note([Keyboard(lambda look: look <= 3)], RCTRL, None)
     with pytest.raises(virtual_keyboard.GaveUp) as stop:
         keyboard_output.send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a", raise_if_partial=True)
@@ -647,7 +651,7 @@ def test_a_tap_during_the_focus_questions_holds_the_send(keyboard, due_send, mon
         return "kwrite"
     monkeypatch.setattr("tuxtalk.focused_window.window_class", focused)
     monkeypatch.setattr(focused_window, "look", lambda: named(focused()))
-    monkeypatch.setattr(focused_window, "is_password", lambda: False)
+    monkeypatch.setattr(focused_window, "is_password", lambda **k: False)
     due_send(lambda look: False)
     assert held[0] is True and keyboard.events == []
 
@@ -660,7 +664,7 @@ def test_a_tap_while_the_enter_waits_for_the_keyboard_holds_the_send(keyboard, d
     import threading
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "kwrite")
     monkeypatch.setattr(focused_window, "look", lambda: KWRITE)
-    monkeypatch.setattr(focused_window, "is_password", lambda: False)
+    monkeypatch.setattr(focused_window, "is_password", lambda **k: False)
     held, typing, checked = [], threading.Event(), threading.Event()
 
     def other_typing():
@@ -722,7 +726,7 @@ def test_a_right_ctrl_pressed_during_the_focus_questions_makes_the_enter_wait(
     board_looks = [0]
     monkeypatch.setattr("tuxtalk.focused_window.window_class", focused)
     monkeypatch.setattr(focused_window, "look", lambda: named(focused()))
-    monkeypatch.setattr(focused_window, "is_password", lambda: False)
+    monkeypatch.setattr(focused_window, "is_password", lambda **k: False)
     due_send(pressed)
     assert written_while_down and set(written_while_down) == {0}
     assert keyboard.typed_keys() == [ecodes.KEY_ENTER]

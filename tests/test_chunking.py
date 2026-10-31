@@ -24,8 +24,9 @@ from tuxtalk import dictation_worker
 from tuxtalk import pipeline as dictation_pipeline
 from tuxtalk.beeps import CANCEL_BEEP, READY_BEEP
 from tuxtalk import service_tick
-from type_at_pause_rig import (BLOCK, SR, blocks, fake_pipeline, feed, feed_block, noise, rng,
-                               speech, start_chunked_recording, stop)
+from type_at_pause_rig import (BLOCK, SR, blocks, fake_pipeline, feed, feed_block, frames_of,
+                               noise, rng, speech, start_chunked_recording, stop,
+                               type_chunk)
 
 
 
@@ -386,19 +387,10 @@ def pipeline(monkeypatch):
     return fake_pipeline(monkeypatch)
 
 
-def frames_of(audio):
-    return [audio.tobytes()]
-
-
-def call(frames, role, auto_period=False):
-    dictation_pipeline.transcribe_and_inject(frames, SR, True, True, False, None, True, auto_period,
-                               "type", chunk_role=role, message=rs.state.current.message)
-
-
 def test_middle_chunk_types_without_the_ready_beep(pipeline):
     texts, typed, beeps = pipeline
     texts.append("we meet")
-    call(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
     assert typed == ["We meet"]
     assert READY_BEEP not in beeps
 
@@ -408,7 +400,7 @@ def test_middle_chunk_holds_back_its_final_mark(pipeline):
     guess, so it is not typed yet (nor the space after it)."""
     texts, typed, _ = pipeline
     texts.append("we meet.")
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "middle", auto_period=True)
     assert typed == ["We meet"]
     assert rs.state.current.message.held_mark["mark"] == "."
 
@@ -416,48 +408,48 @@ def test_middle_chunk_holds_back_its_final_mark(pipeline):
 def test_context_without_a_period_carries_the_sentence_on(pipeline):
     texts, typed, _ = pipeline
     texts.extend(["we meet.", "at three.", "we meet at three."])
-    call(frames_of(speech(1.0)), "middle")
-    call(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
     assert typed == ["We meet", " ", "at three"]
 
 
 def test_context_with_a_period_ends_the_sentence(pipeline):
     texts, typed, _ = pipeline
     texts.extend(["we meet.", "the end.", "we meet. The end."])
-    call(frames_of(speech(1.0)), "middle")
-    call(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
     assert typed == ["We meet", ". ", "The end"]
 
 
 def test_context_with_a_comma_types_the_comma(pipeline):
     texts, typed, _ = pipeline
     texts.extend(["we meet.", "at three.", "we meet, at three."])
-    call(frames_of(speech(1.0)), "middle")
-    call(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
     assert typed == ["We meet", ", ", "at three"]
 
 
 def test_no_verdict_keeps_the_engines_mark(pipeline):
     texts, typed, _ = pipeline
     texts.extend(["we meet.", "the end.", "something else entirely"])
-    call(frames_of(speech(1.0)), "middle")
-    call(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
     assert typed == ["We meet", ". ", "The end"]
 
 
 def test_last_chunk_gets_the_auto_period(pipeline):
     texts, typed, _ = pipeline
     texts.extend(["we meet", "at three", "we meet at three"])
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    call(frames_of(speech(1.0)), "last", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "middle", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "last", auto_period=True)
     assert typed == ["We meet", " ", "at three. "]
 
 
 def test_stop_after_a_pause_types_the_held_mark(pipeline):
     texts, typed, beeps = pipeline
     texts.append("are you there?")
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    call([], "last", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "middle", auto_period=True)
+    type_chunk([], "last", auto_period=True)
     assert typed == ["Are you there", "? "]
     assert rs.state.last_inserted_text == "Are you there? "
     assert beeps == [READY_BEEP]
@@ -466,8 +458,8 @@ def test_stop_after_a_pause_types_the_held_mark(pipeline):
 def test_stop_after_a_pause_adds_the_auto_period(pipeline):
     texts, typed, _ = pipeline
     texts.append("we meet")
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    call([], "last", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "middle", auto_period=True)
+    type_chunk([], "last", auto_period=True)
     assert typed == ["We meet", ". "]
 
 
@@ -479,8 +471,8 @@ def test_a_command_after_a_pause_sees_the_finished_chunk(pipeline, monkeypatch):
     monkeypatch.setattr(keyboard_output, "output_backend",
                         lambda: SimpleNamespace(backspaces=lambda n: (erased.append(n), True)[1]))
     texts.extend(["we meet.", "delete last sentence", "we meet. Delete last sentence."])
-    call(frames_of(speech(1.0)), "middle")
-    call(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
     assert typed == ["We meet", ". "]
     assert erased == [len("We meet. ")]
 
@@ -502,8 +494,8 @@ def test_esc_during_the_context_pass_types_no_mark(pipeline, monkeypatch):
     texts, typed, _ = pipeline
     texts.extend(["we meet.", "the end.", "we meet. The end."])
     esc_during_the_context_pass(monkeypatch, texts)
-    call(frames_of(speech(1.0)), "middle")
-    call(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
     assert typed == ["We meet"]
 
 
@@ -517,8 +509,8 @@ def test_esc_during_the_context_pass_runs_no_command(pipeline, monkeypatch):
                         lambda: SimpleNamespace(backspaces=lambda n: (erased.append(n), True)[1]))
     texts.extend(["we meet.", "delete last sentence", "we meet. Delete last sentence."])
     esc_during_the_context_pass(monkeypatch, texts)
-    call(frames_of(speech(1.0)), "middle")
-    call(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
     assert typed == ["We meet"] and erased == []
 
 
@@ -530,44 +522,44 @@ def test_esc_during_the_context_pass_presses_no_enter(pipeline, monkeypatch):
     monkeypatch.setattr(dictation_pipeline, "press_said", lambda *a, **k: pressed.append(a))
     texts.extend(["we meet.", "press center.", "we meet. Press enter."])
     esc_during_the_context_pass(monkeypatch, texts)
-    call(frames_of(speech(1.0)), "middle")
-    call(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
     assert typed == ["We meet"] and pressed == []
 
 
 def test_silent_middle_chunk_is_dropped_without_a_sound(pipeline):
     texts, typed, beeps = pipeline
-    call(frames_of(noise(0.4)), "middle")
+    type_chunk(frames_of(noise(0.4)), "middle")
     assert typed == [] and beeps == []
 
 
 def test_last_chunk_with_no_speech_still_beeps_ready(pipeline):
     _, typed, beeps = pipeline
-    call(frames_of(noise(0.4)), "last")
+    type_chunk(frames_of(noise(0.4)), "last")
     assert typed == []
     assert beeps == [READY_BEEP]
 
 
 def test_last_chunk_with_no_audio_beeps_ready(pipeline):
     _, typed, beeps = pipeline
-    call([], "last")
+    type_chunk([], "last")
     assert typed == [] and beeps == [READY_BEEP]
 
 
 def test_whole_dictation_is_unchanged(pipeline):
     """chunk_role=None: today's behaviour, a silent tap gets the cancel beep."""
     _, typed, beeps = pipeline
-    call(frames_of(noise(0.4)), None)
+    type_chunk(frames_of(noise(0.4)), None)
     assert typed == [] and beeps == [CANCEL_BEEP]
 
 
 def test_held_mark_never_reaches_the_next_recording(pipeline):
     texts, typed, _ = pipeline
     texts.extend(["we meet.", "hello there"])
-    call(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
     next_recording(SR)            # the next recording starts
     assert rs.state.current.message.held_mark is None
-    call(frames_of(speech(1.0)), None)
+    type_chunk(frames_of(speech(1.0)), None)
     assert typed[1].strip() == "Hello there"
 
 
@@ -769,7 +761,7 @@ def test_context_marks_off_types_the_engines_mark(pipeline, monkeypatch):
     monkeypatch.setattr(live, "chunk_context_marks", False)
     texts, typed, _ = pipeline
     texts.append("we meet.")
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "middle", auto_period=True)
     assert typed == ["We meet. "]
     assert rs.state.current.message.held_mark is None
 
@@ -780,8 +772,8 @@ def test_context_marks_off_carries_on_after_a_comma(pipeline, monkeypatch):
     monkeypatch.setattr(live, "chunk_context_marks", False)
     texts, typed, _ = pipeline
     texts.extend(["we meet,", "at the station"])
-    call(frames_of(speech(1.0)), "middle")
-    call(frames_of(speech(1.0)), "last")
+    type_chunk(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "last")
     assert typed[1].strip().startswith("at the station")
 
 
@@ -789,8 +781,8 @@ def test_context_marks_off_does_not_carry_past_the_recording(pipeline, monkeypat
     monkeypatch.setattr(live, "chunk_context_marks", False)
     texts, typed, _ = pipeline
     texts.append("we meet,")
-    call(frames_of(speech(1.0)), "middle")
-    call([], "last")
+    type_chunk(frames_of(speech(1.0)), "middle")
+    type_chunk([], "last")
     assert rs.state.continue_mid_sentence is False
 
 
@@ -827,8 +819,8 @@ def test_correction_after_a_pause_fixes_the_phrase_before(ai_on):
     phrase is backspaced and the fixed sentence typed in its place."""
     texts, typed, erased, _ = ai_on
     texts.extend(["meet at three.", "no wait, four.", "meet at three. No wait, four."])
-    call(frames_of(speech(1.0)), "middle")
-    call(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
     assert erased == [len("Meet at three. ")]
     assert typed[-1] == "Meet at four"
     assert rs.state.current.message.held_mark["mark"] == "."
@@ -846,8 +838,8 @@ def test_a_correction_after_a_pause_counts_its_words_once(ai_on, monkeypatch, tm
     monkeypatch.setattr(stats, "stats_path", lambda: str(tmp_path / "stats.json"))
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
     texts.extend([before, "no wait, four.", f"{before} No wait, four."])
-    call(frames_of(speech(1.0)), "middle")
-    call(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
     (today,) = stats.load().values()
     assert today == {"dictations": 2, "words": 3, "seconds": 2.0}
 
@@ -862,7 +854,7 @@ def test_esc_while_the_ai_corrects_a_phrase_types_none_of_it(ai_on, monkeypatch)
         rs.state.current.message.cancelled = True
         return FakeAI.correct(ai, text)
     monkeypatch.setattr(ai, "correct", esc_meanwhile)
-    call(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
     assert typed == [] and erased == []
 
 
@@ -871,13 +863,13 @@ def test_esc_while_the_ai_corrects_across_a_pause_takes_nothing_back(ai_on, monk
     the phrase before was backspaced and the correction typed all the same."""
     texts, typed, erased, ai = ai_on
     texts.extend(["meet at three.", "no wait, four.", "meet at three. No wait, four."])
-    call(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
 
     def esc_meanwhile(text):
         rs.state.current.message.cancelled = True
         return FakeAI.correct(ai, text)
     monkeypatch.setattr(ai, "correct", esc_meanwhile)
-    call(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
     assert typed[0] == "Meet at three" and erased == []
     assert not any("four" in text for text in typed)
 
@@ -902,10 +894,10 @@ def test_esc_while_a_correction_backspaces_still_types_the_correction(ai_on, mon
     and its correction dropped as cancelled, so neither was on screen."""
     texts, typed, _, _ = ai_on
     texts.extend(["meet at three.", "no wait, four.", "meet at three. No wait, four."])
-    call(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
     erased = _erase_then(monkeypatch,
                          lambda: setattr(rs.state.current.message, "cancelled", True))
-    call(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
     assert erased == [len("Meet at three. ")] and typed[-1] == "Meet at four"
 
 
@@ -916,23 +908,90 @@ def test_a_password_field_after_a_correction_backspaced_says_to_check_the_text(a
     gone, which was said nowhere."""
     texts, typed, _, _ = ai_on
     texts.extend(["meet at three.", "no wait, four.", "meet at three. No wait, four."])
-    call(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
     password = []
-    monkeypatch.setattr("tuxtalk.focused_window.is_password", lambda: bool(password))
+    monkeypatch.setattr("tuxtalk.focused_window.is_password", lambda **k: bool(password))
     said = []
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body="": said.append(title))
     erased = _erase_then(monkeypatch, lambda: password.append(True))
-    call(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
     assert erased == [len("Meet at three. ")] and typed[0] == "Meet at three"
     assert not any("four" in text for text in typed)
     assert "A correction wasn't typed" in said
 
 
+FIRST_DOC = ("org.kde.kwrite", ("tray", "{first}"))
+SECOND_DOC = ("org.kde.kwrite", ("tray", "{second}"))
+
+
+@pytest.fixture
+def corrected_in_another_document(ai_on, monkeypatch):
+    """"meet at three" in one KWrite document, then "no wait, four" with a
+    click into another one while the correction's backspaces waited. The
+    focus: switch it by setting [0]. (typed, erased, trimmed: what Recent
+    Dictations was told was taken back), and the AI."""
+    texts, typed, erased, ai = ai_on
+    texts.extend(["meet at three.", "no wait, four.", "meet at three. No wait, four."])
+    focus = [FIRST_DOC]
+    monkeypatch.setattr(focused_window, "look", lambda: focus[0])
+    type_chunk(frames_of(speech(1.0)), "middle")
+    trimmed = []
+    monkeypatch.setattr(last_dictation, "trim_shown", lambda *a: trimmed.append(a))
+    return focus, typed, erased, trimmed, ai
+
+
+def _typed_as_said(typed):
+    """A refused correction: the phrase before stays, the new one is typed
+    as said after it, once, and Recent Dictations keeps both."""
+    assert typed == ["Meet at three", ". ", "No wait, four"]
+    assert rs.state.current.message.said == "Meet at three. No wait, four"
+
+
+def test_a_correction_backspaces_nothing_in_a_document_clicked_into_meanwhile(
+        corrected_in_another_document, monkeypatch):
+    """The Flatpak's portal got its keyboard ready after the checks, and
+    the backspaces deleted the other document's text."""
+    focus, typed, erased, trimmed, _ = corrected_in_another_document
+
+    class Portal:
+        def backspaces(self, count):
+            focus[0] = SECOND_DOC                   # the click, while the keyboard got ready
+            check = keyboard_output.checks_before_keys()
+            if check is not None:
+                check()                             # as output_backends._with_session
+            erased.append(count)
+            return True
+    monkeypatch.setattr(keyboard_output, "output_backend", lambda: Portal())
+    type_chunk(frames_of(speech(1.0)), "middle")
+    assert erased == [] and trimmed == []
+    _typed_as_said(typed)
+
+
+def test_a_correction_presses_no_backspace_in_a_document_clicked_into_meanwhile(
+        corrected_in_another_document, monkeypatch, keyboard):
+    """The same on TuxTalk's own keyboard, with the click during the
+    password-field question before the backspaces."""
+    from tuxtalk.output_backends import VirtualKeyboardOutputBackend
+    focus, typed, _, trimmed, ai = corrected_in_another_document
+    corrected = []
+    monkeypatch.setattr(ai, "correct", lambda text: corrected.append(1) or FakeAI.correct(ai, text))
+
+    def asked(budget=None):
+        if corrected:                               # the correction's own question
+            focus[0] = SECOND_DOC
+        return False
+    monkeypatch.setattr(focused_window, "is_password", asked)
+    monkeypatch.setattr(keyboard_output, "output_backend", VirtualKeyboardOutputBackend)
+    type_chunk(frames_of(speech(1.0)), "middle")
+    assert keyboard.events == [] and trimmed == []
+    _typed_as_said(typed)
+
+
 def test_correction_on_the_last_phrase(ai_on):
     texts, typed, erased, _ = ai_on
     texts.extend(["meet at three.", "no wait, four.", "meet at three. No wait, four."])
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    call(frames_of(speech(1.0)), "last", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "middle", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "last", auto_period=True)
     assert erased == [len("Meet at three. ")]
     assert typed[-1] == "Meet at four. "
 
@@ -942,10 +1001,10 @@ def test_a_bare_cue_waits_for_the_value(ai_on):
     alone; the value after it makes the correction."""
     texts, typed, erased, ai = ai_on
     texts.extend(["meet at three.", "no wait.", "meet at three. No wait.", "four."])
-    call(frames_of(speech(1.0)), "middle")
-    call(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
     assert typed == ["Meet at three", ". "]          # the cue is held
-    call(frames_of(speech(1.0)), "last", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "last", auto_period=True)
     assert erased == [len("Meet at three. ")]
     assert typed[-1] == "Meet at four. "
 
@@ -953,9 +1012,9 @@ def test_a_bare_cue_waits_for_the_value(ai_on):
 def test_a_bare_cue_said_last_is_typed(ai_on):
     texts, typed, erased, _ = ai_on
     texts.extend(["meet at three.", "no wait.", "meet at three. No wait."])
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    call([], "last", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "middle", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "middle", auto_period=True)
+    type_chunk([], "last", auto_period=True)
     assert typed == ["Meet at three", ". ", "No wait. "]
     assert erased == [] and rs.state.current.message.held_cue == ""
 
@@ -975,18 +1034,18 @@ def test_a_bare_cue_said_last_stays_in_its_window(ai_on, monkeypatch):
         return typing(text, mode, one_block, into, message)
     monkeypatch.setattr(delivery, "inject_text", inject)
     texts.extend(["meet at three.", "no wait.", "meet at three. No wait."])
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "middle", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "middle", auto_period=True)
     focus["now"] = "konsole"
-    call([], "last", auto_period=True)
+    type_chunk([], "last", auto_period=True)
     assert typed == ["Meet at three", ". "]
 
 
 def test_no_correction_types_the_phrase_as_said(ai_on):
     texts, typed, erased, ai = ai_on
     texts.extend(["meet at three.", "in the garden.", "meet at three in the garden."])
-    call(frames_of(speech(1.0)), "middle")
-    call(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
     assert erased == [] and ai.asked == []
     assert typed == ["Meet at three", " ", "in the garden"]
 
@@ -995,8 +1054,8 @@ def test_ai_unchanged_types_the_phrase_as_said(ai_on):
     """The AI found nothing to fix: nothing is erased."""
     texts, typed, erased, _ = ai_on
     texts.extend(["we meet.", "no wait, four.", "we meet. No wait, four."])
-    call(frames_of(speech(1.0)), "middle")
-    call(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
     assert erased == []
     assert typed[-1] == "No wait, four"
 
@@ -1004,10 +1063,10 @@ def test_ai_unchanged_types_the_phrase_as_said(ai_on):
 def test_correction_never_reaches_into_another_window(ai_on, monkeypatch):
     texts, typed, erased, _ = ai_on
     texts.extend(["meet at three.", "no wait, four.", "meet at three. No wait, four."])
-    call(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
     rs.state.last_inserted_window = "kwrite"
-    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "konsole")
-    call(frames_of(speech(1.0)), "middle")
+    monkeypatch.setattr(focused_window, "look", lambda: ("konsole", None))
+    type_chunk(frames_of(speech(1.0)), "middle")
     assert erased == []
     assert typed[-1] == "No wait, four"
 
@@ -1017,7 +1076,7 @@ def test_correction_never_reaches_into_the_dictation_before(ai_on):
     texts, typed, erased, _ = ai_on
     rs.state.last_inserted_text = "Meet at three. "
     texts.append("no wait, four.")
-    call(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
     assert erased == []
 
 
@@ -1025,8 +1084,8 @@ def test_ai_off_leaves_a_correction_after_a_pause_alone(ai_on, monkeypatch):
     monkeypatch.setattr(live, "ai_corrections", False)
     texts, typed, erased, _ = ai_on
     texts.extend(["meet at three.", "no wait, four.", "meet at three. No wait, four."])
-    call(frames_of(speech(1.0)), "middle")
-    call(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "middle")
     assert erased == []
     assert typed[-1] == "No wait, four"
 
@@ -1039,8 +1098,8 @@ def test_the_context_pass_hears_only_the_seconds_around_the_pause(pipeline, monk
     monkeypatch.setattr(engine, "transcribe",
                         lambda audio, lang: (heard.append(len(audio) / SR), real(audio, lang))[1])
     texts.extend(["we meet.", "at three.", "we meet at three."])
-    call(frames_of(speech(20.0)), "middle")
-    call(frames_of(speech(20.0)), "middle")
+    type_chunk(frames_of(speech(20.0)), "middle")
+    type_chunk(frames_of(speech(20.0)), "middle")
     assert heard[:2] == [20.0, 20.0]
     assert heard[2] == pytest.approx(2 * type_at_pause.CONTEXT_S + type_at_pause.JOINT_GAP_S)
     assert typed == ["We meet", " ", "at three"]
@@ -1075,13 +1134,13 @@ def test_a_recording_is_one_recent_dictation(recent):
     from tuxtalk import history
     texts, typed, _ = recent
     texts.extend(["we meet.", "the end.", "we meet. The end."])
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    call(frames_of(speech(1.0)), "last", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "middle", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "last", auto_period=True)
     assert typed == ["We meet", ". ", "The end. "]
     assert history.get_entries() == ["We meet. The end."]
     next_recording(SR)            # the next recording is an entry of its own
     texts.append("hello there.")
-    call(frames_of(speech(1.0)), None, auto_period=True)
+    type_chunk(frames_of(speech(1.0)), None, auto_period=True)
     assert history.get_entries() == ["Hello there.", "We meet. The end."]
 
 
@@ -1089,8 +1148,8 @@ def test_a_correction_across_a_pause_leaves_one_entry(recent, ai_on):
     from tuxtalk import history
     texts, typed, erased, _ = ai_on
     texts.extend(["meet at three.", "no wait, four.", "meet at three. No wait, four."])
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    call(frames_of(speech(1.0)), "last", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "middle", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "last", auto_period=True)
     assert typed[-1] == "Meet at four. "
     assert history.get_entries() == ["Meet at four."]
 
@@ -1120,14 +1179,14 @@ def fix_word(recent, monkeypatch):
 def say_fix_that_word(texts):
     next_recording(SR)
     texts.append("fix that word")
-    call(frames_of(speech(1.0)), None)
+    type_chunk(frames_of(speech(1.0)), None)
 
 
 def test_fix_that_word_gets_the_whole_recording(fix_word):
     texts, typed, opened = fix_word
     texts.extend(["we meet.", "the end.", "we meet. The end."])
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    call(frames_of(speech(1.0)), "last", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "middle", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "last", auto_period=True)
     say_fix_that_word(texts)
     assert opened[0]["text"] == "We meet. The end. "
 
@@ -1138,11 +1197,11 @@ def test_fix_that_word_after_a_delete_gets_what_is_left(fix_word, monkeypatch):
     monkeypatch.setattr(keyboard_output, "output_backend",
                         lambda: SimpleNamespace(backspaces=lambda n: True))
     texts.extend(["we meet.", "the end is near.", "we meet. The end is near."])
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    call(frames_of(speech(1.0)), "last", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "middle", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "last", auto_period=True)
     next_recording(SR)
     texts.append("delete last word")
-    call(frames_of(speech(1.0)), None)
+    type_chunk(frames_of(speech(1.0)), None)
     left = rs.state.last_inserted_text
     assert left and "near" not in left
     say_fix_that_word(texts)
@@ -1163,8 +1222,8 @@ def test_fix_that_word_after_a_window_change_gets_the_last_phrase(fix_word, monk
 
     monkeypatch.setattr(delivery, "inject_text", fake_inject)
     texts.extend(["we meet.", "the end.", "we meet. The end."])
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    call(frames_of(speech(1.0)), "last", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "middle", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "last", auto_period=True)
     say_fix_that_word(texts)
     assert opened[0]["text"] == "The end. "
 
@@ -1174,139 +1233,14 @@ def test_fix_that_word_after_a_voice_move_gets_the_last_phrase(fix_word, monkeyp
     before isn't beside the cursor any more."""
     texts, typed, opened = fix_word
     texts.extend(["we meet.", "the end.", "we meet. The end."])
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "middle", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "middle", auto_period=True)
     rs.state.last_inserted_text = ""       # what a voice move does
     last_dictation.forget_shown()
     texts.extend(["at noon.", "the end. At noon."])
-    call(frames_of(speech(1.0)), "last", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "last", auto_period=True)
     say_fix_that_word(texts)
     assert opened[0]["text"] == "At noon. "
-
-
-# --- "press enter" with Type at pause -------------------------------------------------
-
-@pytest.fixture
-def enter(pipeline, monkeypatch):
-    """The pipeline, with Enter presses recorded among the typing as "<ENTER>"."""
-    texts, typed, beeps = pipeline
-
-    def fake_enter(key, why, claim=None):
-        typed.append(f"<{key}>")
-        rs.state.last_inserted_text = ""
-        return True
-    monkeypatch.setattr(keyboard_output, "press_key", fake_enter)
-    monkeypatch.setattr(live, "press_enter_after", False)
-    monkeypatch.setattr(rs.state.current.message, "held_cue", "")
-    return texts, typed, beeps
-
-
-def test_press_enter_at_the_end_of_a_phrase_sends_it(enter):
-    """Hands-free: "see you at noon, press enter", then a pause. The sentence
-    is finished (no mark held back for later) and sent at once, and what's
-    said next starts a new message."""
-    texts, typed, _ = enter
-    texts.extend(["see you at noon, press enter", "how are you"])
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    assert typed == ["See you at noon.", "<ENTER>"]
-    assert rs.state.current.message.held_mark is None and not rs.state.current.message.has_words
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    assert typed[2:] == ["How are you"]
-
-
-def test_an_enter_that_couldnt_be_pressed_leaves_the_message_open(enter, monkeypatch):
-    """A Right Ctrl stuck down stopped the Enter: the phrase is still in the
-    box, so "edit that" must still reach all of it, not start afresh."""
-    texts, typed, _ = enter
-    monkeypatch.setattr(keyboard_output, "press_key", lambda key, why, claim=None: False)
-    texts.extend(["see you at noon, press enter", "press enter"])
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    assert typed == ["See you at noon."]
-    assert rs.state.current.message.shown == "See you at noon."
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    assert rs.state.current.message.shown == "See you at noon."
-
-
-def test_press_enter_after_a_pause_ends_the_phrase_before_it(enter):
-    """ "we meet at three" ... pause ... "press enter": the held-back end of
-    the phrase is typed (the auto-period, no space) before Enter, with no
-    context pass deciding a mark against the words "press enter"."""
-    texts, typed, beeps = enter
-    texts.extend(["we meet at three", "press enter"])
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    assert typed == ["We meet at three", ".", "<ENTER>"]
-    assert texts == []                       # transcribed once each, no joint pass
-    assert READY_BEEP not in beeps       # mid-recording: no beep
-    assert rs.state.current.message.held_mark is None
-
-
-def test_press_tab_at_the_end_of_a_phrase_leaves_the_box_without_a_mark(enter):
-    """Hands-free in a form: "john, press tab", a pause, "smith": no period
-    or space in the first box, and the next one starts afresh."""
-    texts, typed, _ = enter
-    texts.extend(["john, press tab", "smith"])
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    assert typed == ["John", "<TAB>"]
-    assert rs.state.current.message.held_mark is None and not rs.state.current.message.has_words
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    assert typed[2:] == ["Smith"]
-
-
-def test_press_tab_after_a_pause_types_no_mark_before_it(enter):
-    texts, typed, _ = enter
-    texts.extend(["john", "press tab"])
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    assert typed == ["John", "<TAB>"]
-    assert texts == []                       # no context pass against "press tab"
-    assert rs.state.current.message.held_mark is None
-
-
-def test_press_enter_after_each_dictation_waits_for_the_end(enter, monkeypatch):
-    texts, typed, _ = enter
-    monkeypatch.setattr(live, "press_enter_after", True)
-    texts.extend(["we meet", "at three", "we meet at three"])
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    assert "<ENTER>" not in typed
-    call(frames_of(speech(1.0)), "last", auto_period=True)
-    assert typed == ["We meet", " ", "at three.", "<ENTER>"]
-
-
-def test_press_enter_after_each_dictation_when_it_ends_in_a_pause(enter, monkeypatch):
-    texts, typed, _ = enter
-    monkeypatch.setattr(live, "press_enter_after", True)
-    texts.append("we meet")
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    call([], "last", auto_period=True)
-    assert typed == ["We meet", ".", "<ENTER>"]
-
-
-def test_a_press_enter_misheard_alone_is_caught_by_the_context_pass(enter):
-    """Alone, the short phrase came out "Press center.", heard
-    with the end of the one before it was "... to say. Press enter."."""
-    texts, typed, _ = enter
-    texts.extend(["we meet at three", "Press center.", "We meet at three. Press enter."])
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    assert typed == ["We meet at three", ".", "<ENTER>"]
-
-
-def test_words_the_context_pass_doesnt_hear_as_press_enter_stay_words(enter):
-    texts, typed, _ = enter
-    texts.extend(["we meet at three", "press center.", "We meet at three. Press center."])
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    assert "<ENTER>" not in typed and typed[-1] == "Press center"
-
-
-def test_a_longer_phrase_is_never_turned_into_press_enter(enter):
-    texts, typed, _ = enter
-    texts.extend(["we meet at three", "then go to the press center",
-                  "We meet at three. Then go to the press enter."])
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    assert "<ENTER>" not in typed
 
 
 def test_a_sentence_made_up_for_a_short_phrase_gives_way_to_the_context(pipeline):
@@ -1316,8 +1250,8 @@ def test_a_sentence_made_up_for_a_short_phrase_gives_way_to_the_context(pipeline
     texts, typed, _ = pipeline
     texts.extend(["then let the timer run out", "It's a little bit more than a little bit.",
                   "then let the timer run out it"])
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    call(frames_of(speech(1.7)), "middle", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "middle", auto_period=True)
+    type_chunk(frames_of(speech(1.7)), "middle", auto_period=True)
     assert "".join(typed) == "Then let the timer run out it"
 
 
@@ -1325,8 +1259,8 @@ def test_a_longer_phrase_keeps_the_words_it_was_heard_with(pipeline):
     texts, typed, _ = pipeline
     texts.extend(["then let the timer run out", "and it inserted a carriage return.",
                   "then let the timer run out and it inserted"])
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    call(frames_of(speech(3.0)), "middle", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "middle", auto_period=True)
+    type_chunk(frames_of(speech(3.0)), "middle", auto_period=True)
     assert "".join(typed) == "Then let the timer run out and it inserted a carriage return"
 
 
@@ -1336,8 +1270,8 @@ def test_a_short_phrase_the_context_hears_differently_keeps_its_own_words(pipeli
     texts, typed, _ = pipeline
     texts.extend(["we meet at three", "at the press center.",
                   "we meet at three at the press enter"])
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    call(frames_of(speech(1.5)), "middle", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "middle", auto_period=True)
+    type_chunk(frames_of(speech(1.5)), "middle", auto_period=True)
     assert "".join(typed) == "We meet at three at the press center"
 
 
@@ -1377,10 +1311,10 @@ def test_a_held_mark_stays_in_the_window_its_phrase_went_to(pipeline, monkeypatc
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: focus["now"])
     monkeypatch.setattr(focused_window, "look", lambda: (focus["now"], None))
     texts.extend(["what's next?", "what's next?"])
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "middle", auto_period=True)
     rs.state.current.message.held_mark["where"] = ("brave-browser", None)
     focus["now"] = "com.anthropic.Claude"             # the click into the chat
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "middle", auto_period=True)
     assert typed == ["What's next", "What's next"]
     assert texts == []                                # no context pass across windows
 
@@ -1393,8 +1327,8 @@ def test_a_question_goes_on_across_a_pause(pipeline):
     texts, typed, _ = pipeline
     texts.extend(["do you think we need a setting?", "to make it work better.",
                   "do you think we need a setting to make it work better."])
-    call(frames_of(speech(1.0)), "middle")
-    call(frames_of(speech(1.0)), "last", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "last", auto_period=True)
     assert typed[:2] == ["Do you think we need a setting", " "]
     assert typed[2].rstrip() == "to make it work better?"
     assert rs.state.current.message.question_open is False
@@ -1403,8 +1337,8 @@ def test_a_question_goes_on_across_a_pause(pipeline):
 def test_a_question_that_ended_at_the_pause_is_not_carried(pipeline):
     texts, typed, _ = pipeline
     texts.extend(["is it ready?", "yes it is.", "is it ready? Yes it is."])
-    call(frames_of(speech(1.0)), "middle")
-    call(frames_of(speech(1.0)), "last", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "last", auto_period=True)
     assert typed[1] == "? "
     assert typed[2].rstrip() == "Yes it is."
 
@@ -1414,8 +1348,8 @@ def test_a_carried_question_skips_a_phrase_with_two_sentences(pipeline):
     texts, typed, _ = pipeline
     texts.extend(["do you think we should", "go now. I do.",
                   "do you think we should go now. I do."])
-    call(frames_of(speech(1.0)), "middle")
-    call(frames_of(speech(1.0)), "last", auto_period=True)
+    type_chunk(frames_of(speech(1.0)), "middle")
+    type_chunk(frames_of(speech(1.0)), "last", auto_period=True)
     assert typed[-1].rstrip() == "go now. I do."
 
 

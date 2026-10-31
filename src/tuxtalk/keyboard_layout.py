@@ -53,6 +53,7 @@ import subprocess
 import unicodedata
 
 from . import compositor_ipc, desktop_detect
+from .key_commands import US_LETTER_KEYS
 from .logger import FailureNotes, setup_logger
 
 logger = setup_logger(__name__)
@@ -679,12 +680,6 @@ def altgr_characters():
     return None if found is None else tuple(found[:2])
 
 
-# Where the letters sit on a US keyboard (evdev key codes).
-_US_LETTER_KEYS = dict(zip("abcdefghijklmnopqrstuvwxyz",
-                           (30, 48, 46, 32, 18, 33, 34, 35, 23, 36, 37, 38, 50,
-                            49, 24, 25, 16, 19, 31, 20, 22, 47, 17, 45, 21, 44)))
-
-
 def shortcut_keycode(letter):
     """The key that is *letter* on the active layout, for a shortcut: one
     TuxTalk presses, or a hotkey letter it listens for, since the desktops
@@ -703,12 +698,12 @@ def shortcut_keycode(letter):
             # falls back to US there too.
             if _failures.failed("shortcut keys", e):
                 logger.info(f"Shortcut keys use the US letters: {e}")
-            return _US_LETTER_KEYS[letter]
+            return US_LETTER_KEYS[letter]
         if _failures.worked("shortcut keys"):
             logger.info(f"Shortcut keys follow the {layout[0]} layout again")
         if entry and not entry[1] and not entry[2]:     # no Shift, no AltGr
             return entry[0]
-    return _US_LETTER_KEYS[letter]
+    return US_LETTER_KEYS[letter]
 
 
 class UntypableText(Exception):

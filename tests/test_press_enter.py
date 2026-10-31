@@ -712,6 +712,17 @@ def test_saying_press_enter_still_works_in_a_text_editor(monkeypatch):
     assert events[-1] == ("enter", 'said "press enter"')
 
 
+@pytest.mark.parametrize("window", sorted(window_classes._WORD_PROCESSOR_CLASSES_LOWER)
+                         + ["org.onlyoffice.DesktopEditors", "com.abisource.AbiWord"])
+def test_no_automatic_send_in_any_word_processor(monkeypatch, window):
+    """OnlyOffice, AbiWord and LibreOffice by its Flatpak id were word
+    processors to voice editing but not documents: each dictation there
+    ended with a new line."""
+    monkeypatch.setattr(live, "press_enter_after", True)
+    events = _dictate(monkeypatch, "Hello there", prepared=lambda r: r + ". ", window=window)
+    assert events == [("typed", "Hello there. ")]
+
+
 @pytest.mark.parametrize("window, document", [
     ("org.kde.kwrite", True), ("libreoffice-writer", True), ("obsidian", True),
     ("code", True), ("Gedit", True),

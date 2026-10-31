@@ -524,6 +524,15 @@ def test_a_rewrite_goes_only_into_the_window_the_edit_started_in(edit_env, monke
     run_edit(where=first)
     assert into == [first]
 
+def test_a_rewrite_kept_out_of_another_window_says_the_window_changed(edit_env, monkeypatch):
+    """Its notice was the dictation's, about waiting for Right Ctrl or Right
+    Alt to come up, to an F8 user who never pressed either."""
+    monkeypatch.setattr(delivery, "inject_text", lambda text, mode, **kw: "moved")
+    run_edit()
+    from tuxtalk import edit_notices
+    assert edit_env["notices"] == [edit_notices.NOTICES["window_changed"]]
+
+
 def test_an_edit_replaces_the_selection(edit_env):
     run_edit()
     assert edit_env["engine"].asked == [("We finished the electrical today.", "make it more professional")]
@@ -565,7 +574,7 @@ def test_without_the_ai_downloaded_it_says_where_to_turn_it_on(edit_env, monkeyp
 
 def test_in_a_password_field_the_selection_isnt_even_read(edit_env, monkeypatch):
     from tuxtalk import atspi_helper
-    monkeypatch.setattr(atspi_helper, "focused_is_password", lambda: True)
+    monkeypatch.setattr(atspi_helper, "focused_is_password", lambda *a, **k: True)
     monkeypatch.setattr(cb, "copy_selection", lambda send_copy: pytest.fail("read the selection"))
     run_edit()
     assert edit_env["typed"] == [] and edit_env["history"] == []
@@ -577,7 +586,7 @@ def test_a_rewrite_is_not_typed_or_kept_if_the_focus_moved_to_a_password_field(e
     from tuxtalk import atspi_helper
     answers = [False]       # a text box at the start, a password field by the end
     monkeypatch.setattr(atspi_helper, "focused_is_password",
-                        lambda: answers.pop(0) if answers else True)
+                        lambda *a, **k: answers.pop(0) if answers else True)
     run_edit()
     assert edit_env["typed"] == [] and edit_env["history"] == []
     assert edit_env["beeps"] == [CANCEL_BEEP] and edit_env["put_back"] == 1
@@ -1367,6 +1376,27 @@ def test_the_edit_key_understands_select_commands_with_nothing_selected(edit_env
     edit_env["selection"]["text"] = ""
     run_edit()
     assert len(pressed) == 1 and edit_env["notices"] == [] and edit_env["typed"] == []
+
+
+def test_select_with_the_edit_key_goes_only_into_the_window_it_was_said_in(
+        edit_env, monkeypatch, keyboard):
+    """Shift+F8 in KWrite with nothing selected, "select the line", and a
+    click into another document while it was transcribed: the selection
+    keys went into that one."""
+    from tuxtalk.output_backends import VirtualKeyboardOutputBackend
+    kwrite, other = ("org.kde.kwrite", ("tray", "{1}")), ("org.kde.kwrite", ("tray", "{2}"))
+    focus = [kwrite]
+
+    def heard_while_the_user_clicks_away(audio, lang):
+        focus[0] = other
+        return "select the line"
+    monkeypatch.setattr(live, "voice_navigation", True)
+    monkeypatch.setattr(keyboard_output, "output_backend", VirtualKeyboardOutputBackend)
+    monkeypatch.setattr(focused_window, "look", lambda: focus[0])
+    monkeypatch.setattr(speech_engine, "transcribe", heard_while_the_user_clicks_away)
+    edit_env["selection"]["text"] = ""
+    run_edit(where=kwrite)
+    assert keyboard.events == [] and edit_env["typed"] == []
 
 
 def test_with_the_labs_switch_off_nothing_selected_still_says_select_first(edit_env, monkeypatch):

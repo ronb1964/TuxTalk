@@ -53,19 +53,32 @@ _CODE_EDITOR_CLASSES_LOWER = frozenset({
 })
 
 
+# Word processors, where Ctrl+B, Ctrl+I and Ctrl+U are bold, italics and
+# underline (voice editing's formatting). Window classes and Wayland app ids.
+_WORD_PROCESSOR_CLASSES_LOWER = frozenset({
+    "libreoffice", "libreoffice-writer", "libreoffice-calc", "libreoffice-impress",
+    "libreoffice-draw", "soffice", "org.libreoffice.libreoffice",
+    "onlyoffice-desktopeditors", "desktopeditors", "org.onlyoffice.desktopeditors",
+    "abiword", "com.abisource.abiword", "calligrawords", "org.kde.calligrawords",
+})
+
+
+def is_word_processor(wm_class: str | None) -> bool:
+    """Whether the focused app is a word processor, where Ctrl+B/I/U format text."""
+    return bool(wm_class) and wm_class.lower() in _WORD_PROCESSOR_CLASSES_LOWER
+
+
 # Text editors, word processors and note apps, where Enter only starts a new
 # line: "Send each dictation automatically" leaves them alone, as it does code
 # editors (KWrite got a new line after every dictation).
 # Saying "press enter" still presses it.
-_DOCUMENT_CLASSES_LOWER = frozenset({
+_DOCUMENT_CLASSES_LOWER = _WORD_PROCESSOR_CLASSES_LOWER | {
     "org.kde.kwrite", "kwrite", "org.kde.kate", "kate",
     "org.gnome.texteditor", "gnome-text-editor", "org.gnome.gedit", "gedit",
     "org.xfce.mousepad", "mousepad", "xed", "pluma", "featherpad", "notepadqq",
-    "libreoffice-writer", "libreoffice-calc", "libreoffice-impress", "soffice",
-    "abiword", "org.kde.calligrawords", "calligrawords", "org.kde.ghostwriter",
-    "ghostwriter", "org.gnome.gitlab.somas.apostrophe", "obsidian", "joplin",
-    "typora", "marktext", "desktopeditors", "wps", "wpp", "et",
-})
+    "org.kde.ghostwriter", "ghostwriter", "org.gnome.gitlab.somas.apostrophe",
+    "obsidian", "joplin", "typora", "marktext", "wps", "wpp", "et",
+}
 
 
 def is_document_window(wm_class: str | None) -> bool:

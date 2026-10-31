@@ -5,11 +5,9 @@ and keeps it while it runs. Every key press goes to the kernel, which hands
 it to the desktop like a press on a real keyboard, and the desktop reads it
 with the user's own layout (keyboard_layout.py works out which keys to press).
 
-Until 0.18 the keys went through ydotool: a daemon, ydotoold, that TuxTalk had
-to start, watch and restart ("TuxTalk's typing helper had stopped"), and a
-ydotool program started for every piece of text and every shortcut. Writing
-to our own device needs the same /dev/uinput access ydotoold needed, and
-nothing else.
+A device of its own needs nothing running beside TuxTalk: no daemon to
+start, watch and restart, and no program started for every piece of text and
+every shortcut. It needs only /dev/uinput access.
 
 Who may open /dev/uinput is set up outside this module: the hotkey helper's
 udev rule gives it to the user at the screen (secure_input.py), the older
@@ -32,9 +30,9 @@ NAME = "TuxTalk virtual keyboard"
 # while the desktop isn't reading, so the wait also sets how long a freeze of
 # the desktop typing survives: 64 times it. Frozen on purpose mid-text, KWin
 # lost letters after 100 ms at 1 ms and after 200 ms at 2 ms, none at 4 ms.
-# ydotool's 12 ms (24 ms a letter) came from letters arriving out of order at
-# 5 ms, in December 2025, with ydotoold in between. The key_delay setting
-# raises it for a computer that loses letters.
+# The 12 ms TuxTalk once typed at came from letters arriving out of order at
+# 5 ms through ydotoold, a daemon in between that this keyboard doesn't
+# have. The key_delay setting raises it for a computer that loses letters.
 KEY_DELAY_MS = 2
 
 # The desktop opens a new keyboard a moment after it appears, and presses sent

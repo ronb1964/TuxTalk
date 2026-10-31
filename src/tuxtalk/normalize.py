@@ -11,6 +11,16 @@ LINE_BREAK = "\xa7SHIFT_ENTER\xa7"
 # which would make them one.
 _SOFT_BREAK = "\xa7SOFT_BREAK\xa7"
 
+# Typographic marks and their plain look-alikes: TuxTalk's smart quotes and
+# ellipsis, and the ones an app's autocorrect puts in (LibreOffice Writer's).
+# Where only plain ASCII can be typed (the Flatpak's keyboard), and where text
+# is compared for its words (voice editing's "edit that").
+PLAIN_LOOKALIKES = str.maketrans({
+    "\u2018": "'", "\u2019": "'", "\u201a": "'", "\u2032": "'",
+    "\u201c": '"', "\u201d": '"', "\u201e": '"', "\u2033": '"',
+    "\u2013": "-", "\u2014": "-", "\u00a0": " ", "\u2026": "...",
+})
+
 # =====================================================================
 # The patterns, each under the step of normalize_text that uses it.
 # =====================================================================

@@ -38,7 +38,7 @@ from .logger import setup_logger
 logger = setup_logger(__name__)
 
 # How long any call to the tray may take: these questions, and the
-# dictation service's notices to it (app.py). The tray answers from a cache
+# dictation service's notices to it (tray_link.py). The tray answers from a cache
 # in a millisecond; this is for one whose loop is busy (Preferences opening,
 # a Whisper model loading), which would otherwise leave the class unknown
 # and pick the wrong paste shortcut. dbus-python's default is 25 seconds, and
@@ -117,17 +117,26 @@ def same_window(before, after) -> bool | None:
     other not), None when it can't be told: a part one look didn't get, or
     ids from two sources."""
     (class_a, window_a), (class_b, window_b) = before[:2], after[:2]
+    id_a, id_b = _id(window_a), _id(window_b)
     # KWin lowercases the class ("google-chrome"); X11 has it as the app
     # set it ("Google-chrome"), and on Plasma's X11 session a look can come
-    # from either.
-    if class_a is not None and class_b is not None and class_a.casefold() != class_b.casefold():
+    # from either. One window, by its id from one source, may also be named
+    # with and without its app's domain ("org.kde.kate", "kate"); another
+    # app under the same id is a report torn between two windows.
+    if (class_a is not None and class_b is not None and class_a.casefold() != class_b.casefold()
+            and not (id_a is not None and id_a == id_b
+                     and _app_part(class_a) == _app_part(class_b))):
         return False
     if is_own(before) != is_own(after) and None not in (window_a or class_a, window_b or class_b):
         return False
-    id_a, id_b = _id(window_a), _id(window_b)
     if id_a is None or id_b is None or id_a[0] != id_b[0]:
         return None
     return id_a == id_b
+
+
+def _app_part(wm_class: str) -> str:
+    """The app's own name in a class: "kate" in "org.kde.kate", without case."""
+    return wm_class.casefold().rsplit(".", 1)[-1]
 
 
 def _id(window):
@@ -175,11 +184,14 @@ def destination() -> Destination:
     return Destination(*look(), password)
 
 
-def is_password() -> bool:
+def is_password(budget: float | None = None) -> bool:
     """Whether the cursor is in a password field: one the accessibility bus
-    knows (atspi_helper), or the desktop's own password prompt."""
+    knows (atspi_helper), in the app that has the focus where that can be
+    told, or the desktop's own password prompt. *budget* is how long the bus
+    may take, atspi_helper.BUDGET_S unless given."""
     from . import atspi_helper
-    return atspi_helper.focused_is_password() or _password_prompt_has_focus()
+    return (atspi_helper.focused_is_password(budget or atspi_helper.BUDGET_S, window_class)
+            or _password_prompt_has_focus())
 
 
 def _password_prompt_has_focus() -> bool:

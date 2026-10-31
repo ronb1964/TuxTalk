@@ -101,8 +101,8 @@ def _from_niri(path):
 # XML (cosmic-protocols, wayland-protocols).
 #
 # Unlike the others, this isn't asked afresh each time: cosmic-comp sends the
-# states on a later pass, about 0.3 s after they're asked for (cosmic-comp
-# 2026-10, Pop!_OS 24.04), which every paste would wait for. One connection
+# states on a later pass, about 0.3 s after they're asked for (the
+# cosmic-comp of Pop!_OS 24.04), which every paste would wait for. One connection
 # stays open instead and follows focus as it changes.
 
 _WL_DISPLAY = 1
@@ -363,12 +363,6 @@ def _from_x11():
     finally:
         if conn:
             lib.xcb_disconnect(conn)
-
-
-def focused_class():
-    """The focused window's class or app_id, or None if this isn't one of
-    these desktops or it didn't answer."""
-    return focused_window()[0] or None
 
 
 def _ask_focused_window(env):

@@ -130,7 +130,8 @@ def test_wording_requests_are_not_formatting(said):
     ("org.kde.kwrite", False), ("firefox", False), ("betterbird", False), (None, False),
 ])
 def test_shortcuts_are_sent_only_to_word_processors(cls, ok):
-    assert r.has_formatting_shortcuts(cls) is ok
+    from tuxtalk.window_classes import is_word_processor
+    assert is_word_processor(cls) is ok
 
 
 # --- which instructions may change the lines -----------------------------------------

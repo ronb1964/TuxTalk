@@ -1,13 +1,15 @@
 """Typing and pasting into the focused window, outside the Flatpak: keys
 through TuxTalk's own virtual keyboard (virtual_keyboard.py) or, where it
-has none, wtype or xdotool; text through the clipboard and the paste
-shortcut the window takes. output_backends.HostBackend is how the rest of
-the service reaches this; a password field stops either at once
-(PasswordFieldNow)."""
+has none, wtype; text through the clipboard and the paste shortcut the
+window takes. output_backends.VirtualKeyboardOutputBackend is how the rest
+of the service reaches this. A dictation's keys never go into a password
+field (refuse_password_field)."""
+import contextlib
 import functools
 import os
 import shutil
 import subprocess
+import tempfile
 import threading
 import time
 from typing import NamedTuple
@@ -93,8 +95,7 @@ def send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY_
     *right_before* runs with the keyboard held right before the first key
     goes down, after every check and wait.
     """
-    if claim is None and this_thread.into is not None:
-        claim = functools.partial(focused_window.claim_into, this_thread.into)
+    claim = _delivery_claim(claim)
     if this_thread.last_check is not None:
         claim = _then(claim, this_thread.last_check)
     if right_before is not None:
@@ -117,6 +118,43 @@ def send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY_
     else:
         this_thread.sends += 1
     return sent
+
+
+def _delivery_claim(claim):
+    """*claim*, else (None) the claim of the delivery on this thread
+    (_ThisThread): only into its window, and never into a password field,
+    asked first, as focused_window.destination does. Both are asked in the
+    claim, with the keyboard free (the accessibility bus has a quarter of a
+    second to answer), after the clipboard and the layout are ready, and
+    for every send: each line, line break and paste key of a dictation."""
+    if claim is None and this_thread.into is not None:
+        claim = functools.partial(focused_window.claim_into, this_thread.into)
+    if not this_thread.no_password_field:
+        return claim
+
+    def claimed():
+        refuse_password_field()
+        return claim() if claim is not None else lambda: None
+    return claimed
+
+
+def refuse_password_field() -> None:
+    """GaveUp("password_field") when the cursor is in a password field now:
+    a dictation's next line, its line break or its paste key goes nowhere.
+    A line break there could submit the form."""
+    from . import atspi_helper
+    if focused_window.is_password(budget=atspi_helper.RECHECK_BUDGET_S):
+        logger.warning("Stopped typing: a password field has the focus now")
+        raise virtual_keyboard.GaveUp("password_field")
+
+
+def checks_before_keys():
+    """The delivery's checks on this thread (_delivery_claim) as one call
+    that raises GaveUp, for keys that go out another way than send_keys:
+    the Flatpak's portal (output_backends._with_session). None when there
+    are none."""
+    claim = _delivery_claim(None)
+    return None if claim is None else lambda: claim()()
 
 
 def _then(claim, check):
@@ -153,16 +191,49 @@ class _ThisThread(threading.local):
     """What send_keys knows of the delivery on this thread (delivery.inject_text):
     how many sends went out whole, so a wait that gives up after earlier
     lines were typed stopped it partway, not before it began; the only
-    window it may go into, else None; and a last check its keys must pass
-    right before the first goes down, else None (a held send's space on its
-    own may not go out with Alt or a dictation key down:
+    window it may go into, else None; whether it's a dictation, which never
+    goes into a password field; whether its pastes keep the user's clipboard
+    (_keeping); and a last check its keys must pass right
+    before the first goes down, else None (a held send's space on its own
+    may not go out with Alt or a dictation key down:
     send_countdown.give_back_space)."""
     sends = 0
     into = None
+    no_password_field = False
+    keep_clipboard = False
     last_check = None
 
 
 this_thread = _ThisThread()
+
+
+@contextlib.contextmanager
+def _on_this_thread(**values):
+    """this_thread's *values* while inside, then back as they were."""
+    before = {name: getattr(this_thread, name) for name in values}
+    for name, value in values.items():
+        setattr(this_thread, name, value)
+    try:
+        yield
+    finally:
+        for name, value in before.items():
+            setattr(this_thread, name, value)
+
+
+def only_into(window):
+    """Keys sent on this thread inside go only into *window*, a look taken
+    when what they do was decided (this_thread.into): checked right before
+    the first goes down, after every wait, on the virtual keyboard and
+    through the Flatpak's portal alike, whose handshake can take minutes.
+    Another window by then: virtual_keyboard.GaveUp("moved"), nothing sent."""
+    return _on_this_thread(into=window)
+
+
+def delivering(into):
+    """A dictation's delivery on this thread: none of its keys go into a
+    password field (refuse_password_field), and with *into*, a look, only
+    into that window (only_into)."""
+    return _on_this_thread(into=into, no_password_field=True)
 
 
 def not_where_typed(focused, now=None) -> bool:
@@ -171,12 +242,17 @@ def not_where_typed(focused, now=None) -> bool:
     "edit that", "fix that word" and the lowercase carry-on. By the desktop's
     window id where it gives one, so two KWrite documents aren't taken for
     one, else by the class (focused_window.same_window). *now* is a look
-    already taken, else one is taken here."""
-    if focused_window.same_window((focused, None),
-                                  (rs.state.last_inserted_window, None)) is False:
-        return True
+    already taken, else one is taken here.
+
+    The whole looks first: one window by its id may be named two ways
+    ("org.kde.kate", "kate"), which the classes alone would take for two
+    apps. Only when the ids can't tell is *focused* compared by class."""
     now = focused_window.look() if now is None else now
-    return focused_window.same_window(rs.state.last_inserted_where, now) is False
+    same = focused_window.same_window(rs.state.last_inserted_where, now)
+    if same is not None:
+        return not same
+    return focused_window.same_window((focused, None),
+                                      (rs.state.last_inserted_window, None)) is False
 
 
 def press_key(key: str, why: str, claim=None) -> bool:
@@ -235,16 +311,16 @@ def output_backend():
     return _OUTPUT_BACKEND
 
 
-class PasswordFieldNow(Exception):
-    """The focus moved into a password field partway through typing a
-    dictation of several lines. The lines before it are in the app."""
-
-
 class Delivered(NamedTuple):
     """How far deliver_lines got."""
     parts: int      # parts confirmed in the app, from the first
     breaks: int     # line breaks confirmed after them
-    stopped: str    # "" when all of it went in, else "password_field", "part" or "break"
+    stopped: str    # "" when all of it went in, else "part" or "break"
+
+    def went_in(self, parts) -> bool:
+        """Whether any of *parts* or a line break between them reached the
+        app: an empty first part ("new line" said first) counts as done."""
+        return bool(self.breaks or any(parts[:self.parts]))
 
     def landed(self, parts) -> str:
         """What of *parts* reached the app, its line breaks as "\n" (one
@@ -260,12 +336,11 @@ def deliver_lines(parts, put, before_break_s: float, after_break_s: float,
     around each break.
 
     Stops at the first part or line break that fails: going on after a gap
-    would run the later lines into the earlier ones. Before each further
-    part the focus is asked again, and a password field there stops it."""
+    would run the later lines into the earlier ones. In a dictation, a
+    password field stops it right before the part or line break that would
+    go into it (refuse_password_field)."""
     done = breaks = 0
     for i, part in enumerate(parts):
-        if i and focused_window.is_password():
-            return Delivered(done, breaks, "password_field")
         if part and not put(part):
             return Delivered(done, breaks, "part")
         done = i + 1
@@ -281,15 +356,24 @@ def deliver_lines(parts, put, before_break_s: float, after_break_s: float,
 def type_text(text: str) -> bool:
     """Type text, its line-break markers as Shift+Enter, or in KDE's editors
     as a pasted newline (_paste_newline). Returns True if it was actually
-    typed into the focused app, False if injection failed (deliver_lines).
-    A password field before a further line raises PasswordFieldNow."""
+    typed into the focused app, False if none of it was (deliver_lines).
+    Raises virtual_keyboard.StoppedPartway when a later line or a line
+    break failed after earlier lines went in: told "Couldn't type the
+    dictation", the user would paste it all again over them."""
     in_kde_editor = (focused_window.window_class() or "").lower() in SMART_NEWLINE_CLASSES_LOWER
-    stopped = deliver_lines(text.split(LINE_BREAK), type_text_raw, 0.05, 0.05,
-                            send_break=_paste_newline if in_kde_editor else None).stopped
-    if stopped == "password_field":
-        raise PasswordFieldNow()
-    # A failed line break is a partial injection too: the undo buffer must not count it.
-    return not stopped
+    lines = text.split(LINE_BREAK)
+    # The line breaks there are pastes, and so is a line holding an emoji:
+    # the user's clipboard is kept from the first and comes back after the
+    # last, whatever the "Restore clipboard" setting. That's off so a pasted
+    # dictation can be pasted again, and these pastes are only parts of one.
+    with _on_this_thread(keep_clipboard=in_kde_editor and len(lines) > 1):
+        delivered = deliver_lines(lines, type_text_raw, 0.05, 0.05,
+                                  send_break=_paste_newline if in_kde_editor else None)
+    if delivered.stopped and delivered.went_in(lines):
+        raise virtual_keyboard.StoppedPartway(
+            f"{delivered.parts} of {len(lines)} lines",
+            "a line break failed" if delivered.stopped == "break" else "a line failed")
+    return not delivered.stopped
 
 
 def _paste_newline() -> bool:
@@ -333,6 +417,8 @@ def type_text_raw(text: str) -> bool:
                         f"({delay} ms a key event)")
             return True
     if which("wtype"):
+        if this_thread.no_password_field:
+            refuse_password_field()     # no claim of send_keys's asks it here
         # The real exit code, so the undo buffer tracks only typed text; a
         # bounded wait, so a stalled compositor can't freeze dictation; the
         # text on stdin ("-"), as every user can read a command line. wtype
@@ -350,17 +436,10 @@ def type_text_raw(text: str) -> bool:
             logger.error(f"wtype timed out after {WTYPE_TIMEOUT_S}s; killed the process")
             return False
         return proc.returncode == 0
-    if which("wl-copy"):
-        try:
-            import pyperclip
-            pyperclip.copy(text)
-            logger.info("Text copied to clipboard (fallback mode)")
-            # Nothing was actually typed into the field — report failure so
-            # the undo buffer doesn't track text the user must paste manually.
-            return False
-        except Exception as e:      # pyperclip missing, or no clipboard it can use
-            logger.warning(f"Couldn't copy the text to the clipboard either: {e}")
-    logger.error("Could not type text: no virtual keyboard, wtype or wl-copy")
+    # Not put on the clipboard instead: that would replace what the user
+    # copied, unmarked for clipboard managers to keep. The failure notice
+    # points to Recent Dictations, which holds it.
+    logger.error("Could not type text: no virtual keyboard or wtype")
     return False
 
 
@@ -391,22 +470,11 @@ def send_paste_keystroke(focused_class: str | None, primary_holds_text: bool = F
     return True
 
 
-def copy_to_primary(text: str) -> bool:
-    """Put *text* on the primary selection as well (wl-copy --primary). True
-    once wl-copy has handed it to the compositor; False if the desktop has no
-    primary selection or wl-copy failed."""
-    from . import clipboard
-    try:
-        result = subprocess.run(clipboard.wl_copy_command() + ["--primary"],
-                                input=text.encode("utf-8"), stdout=subprocess.DEVNULL,
-                                stderr=subprocess.DEVNULL, timeout=WL_COPY_READY_TIMEOUT_S)
-    except Exception as e:
-        logger.info(f"Could not set the primary selection: {e}")
-        return False
-    if result.returncode != 0:
-        logger.info(f"Could not set the primary selection (wl-copy exit {result.returncode})")
-        return False
-    return True
+def _keeping() -> bool:
+    """Whether a paste keeps the user's clipboard to put back: with
+    "Restore clipboard" on, and in a dictation typed into KDE's editors
+    (type_text)."""
+    return live.restore_clipboard or this_thread.keep_clipboard
 
 
 def _keeper(board):
@@ -433,11 +501,11 @@ def paste_text_x11(text: str) -> bool:
     puts the text on the X11 clipboard through its own GTK loop and then sends
     the same paste keystroke. It's only the fallback for untypable text
     (Latin words on a Ukrainian layout, an emoji); ordinary X11 dictation is
-    still typed. With restore_clipboard on, the user's clipboard comes back
-    afterwards, as in paste_text. True only if the text reached the app.
+    still typed. The user's clipboard comes back afterwards as in
+    paste_text (_keeping). True only if the text reached the app.
     """
     from . import x11_clipboard
-    keeper = _keeper(x11_clipboard.X11Board) if live.restore_clipboard else None
+    keeper = _keeper(x11_clipboard.X11Board) if _keeping() else None
     if keeper is not None:
         keeper.before_paste()
     if not x11_clipboard.offer_dictation(text):
@@ -456,24 +524,48 @@ def paste_text_x11(text: str) -> bool:
             keeper.after_paste(text)
 
 
-def _hand_to_wl_copy(proc, text):
-    """Give *text* to the wl-copy process *proc* and wait until the clipboard
-    holds it: False when it doesn't, so nothing is pasted."""
-    proc.stdin.write(text.encode("utf-8"))
-    proc.stdin.close()
+def _wl_copy_dictation(text) -> bool:
+    """Put *text* on the clipboard with wl-copy and wait until it holds it:
+    False when it doesn't, so nothing is pasted. --sensitive keeps the
+    dictation out of clipboard managers' history (Klipper saves every entry
+    to disk) where wl-copy supports it.
+
+    Its stderr goes to a file, not a pipe: the copy wl-copy leaves serving
+    the clipboard keeps stderr open, and reading a pipe to its end would
+    wait for that copy to quit."""
+    from . import clipboard
+    with tempfile.TemporaryFile() as errors:
+        proc = subprocess.Popen(clipboard.wl_copy_command(), stdin=subprocess.PIPE,
+                                stdout=subprocess.DEVNULL, stderr=errors)
+        try:
+            return _hand_to_wl_copy(proc, text, errors)
+        finally:
+            # Only a wl-copy that never finished handing off is still ours to
+            # stop, and reaped: let go, it would set the clipboard after the
+            # paste was given up. The background copy serving it is not ours.
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
+
+
+def _hand_to_wl_copy(proc, text, errors):
+    """Give *text* to the wl-copy process *proc*, whose stderr is the file
+    *errors*, and wait until the clipboard holds it: False when it doesn't."""
     # wl-copy forks a background copy to serve the clipboard once the
     # compositor has accepted the selection, and the process we started then
     # exits 0. Until it exits the clipboard may still hold the old contents,
-    # and pasting would insert those.
+    # and pasting would insert those. The time limit covers the writing too:
+    # a wl-copy that stopped reading would hold a long dictation's write.
     try:
-        status = proc.wait(timeout=WL_COPY_READY_TIMEOUT_S)
+        proc.communicate(text.encode("utf-8"), timeout=WL_COPY_READY_TIMEOUT_S)
     except subprocess.TimeoutExpired:
         logger.error(f"wl-copy did not set the clipboard within "
                      f"{WL_COPY_READY_TIMEOUT_S}s — skipping paste")
         return False
-    if status != 0:
-        err = proc.stderr.read().decode(errors="replace").strip() if proc.stderr else ""
-        logger.error(f"wl-copy failed (exit {status}): {err} — "
+    if proc.returncode != 0:
+        errors.seek(0)
+        err = errors.read().decode(errors="replace").strip()
+        logger.error(f"wl-copy failed (exit {proc.returncode}): {err} — "
                      "clipboard not set, skipping paste")
         return False
     return True
@@ -483,12 +575,13 @@ def _send_paste(text, keeping):
     """With the clipboard set, the paste key. Where the window is unknown the
     primary selection gets the text too, so the key works in a terminal as
     well. *keeping*: the user's clipboard is being kept to put back."""
+    from . import clipboard
     focused_class = focused_window.window_class()
     primary_holds_text = False
     if focused_class is None:
         if keeping:
             _clipboard_keeper.before_primary()
-        primary_holds_text = copy_to_primary(text)
+        primary_holds_text = clipboard.copy_to_primary(text, WL_COPY_READY_TIMEOUT_S)
     keystroke_start = time.time()
     if not send_paste_keystroke(focused_class, primary_holds_text):
         return False
@@ -500,7 +593,8 @@ def _send_paste(text, keeping):
 def paste_text(text: str) -> bool:
     """Wayland paste: put *text* on the clipboard with wl-copy, then send the
     paste keystroke (send_paste_keystroke picks Ctrl+V, Ctrl+Shift+V or
-    Shift+Insert).
+    Shift+Insert), and put the user's clipboard back afterwards where it's
+    kept (_keeping).
 
     Returns True only when the text actually reached the focused app: the undo
     buffer records it, and a paste over an unset clipboard would insert
@@ -521,16 +615,14 @@ def paste_text(text: str) -> bool:
             # (issue #7). Off by default: a dictation left on the clipboard can
             # be re-pasted if it landed in the wrong window.
             from . import clipboard
-            keeping = live.restore_clipboard
+            keeping = _keeping()
             if keeping:
                 _keeper(clipboard.WaylandBoard).before_paste()
-            # --sensitive keeps the dictation out of clipboard managers' history
-            # (Klipper saves every entry to disk) where wl-copy supports it.
-            proc = subprocess.Popen(clipboard.wl_copy_command(), stdin=subprocess.PIPE,
-                                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+            handed_off = False
             try:
-                if not _hand_to_wl_copy(proc, text):
+                if not _wl_copy_dictation(text):
                     return False
+                handed_off = True
                 wl_copy_time = time.time() - paste_start
                 logger.info(f"TIMING: wl-copy set the clipboard in {wl_copy_time:.3f}s")
                 if not _send_paste(text, keeping):
@@ -539,20 +631,13 @@ def paste_text(text: str) -> bool:
                 logger.info(f"TIMING: Total paste operation time: {total_paste_time:.3f}s")
                 return True
             finally:
-                # Only a wl-copy that never finished handing off is still ours
-                # to stop; the background copy serving the clipboard is not.
-                try:
-                    if proc.poll() is None:
-                        proc.terminate()
-                        proc.wait(timeout=0.3)
-                except Exception as e:
-                    logger.info(f"Could not stop wl-copy: {e}")
-                if proc.stderr is not None:
-                    proc.stderr.close()
                 # Restore even after a failed paste, so the user's clipboard
-                # isn't lost either way.
-                if keeping:
+                # isn't lost either way. A clipboard never set may still hold
+                # an earlier paste, whose restore before_paste() called off.
+                if keeping and handed_off:
                     _clipboard_keeper.after_paste(text)
+                elif keeping:
+                    _clipboard_keeper.paste_failed()
     except (virtual_keyboard.StoppedPartway, virtual_keyboard.GaveUp):
         raise       # the paste may have happened, or must not: nothing may deliver it now
     except subprocess.TimeoutExpired as e:

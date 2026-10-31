@@ -113,15 +113,15 @@ def inject_text(text: str, injection_mode: str, one_block: bool = False, into=No
     """
     before = focused_window.destination()
     sends_before, landed = keyboard_output.this_thread.sends, None
-    keyboard_output.this_thread.into = into
     try:
-        # Checked again right before each key, after the waits for the paste
-        # (wl-copy) or a dictation key held (keyboard_output.send_keys).
-        if into is not None:
-            focused_window.claim_into(into, before)
-        outcome = deliver_text(text, injection_mode, one_block, where=before)
-    except (virtual_keyboard.StoppedPartway, virtual_keyboard.GaveUp,
-            keyboard_output.PasswordFieldNow) as stop:
+        # Checked again right before each line, line break and paste key,
+        # after the waits for the paste (wl-copy) or a dictation key held
+        # (keyboard_output.send_keys), and so is the password field.
+        with keyboard_output.delivering(into):
+            if into is not None:
+                focused_window.claim_into(into, before)
+            outcome = deliver_text(text, injection_mode, one_block, where=before)
+    except (virtual_keyboard.StoppedPartway, virtual_keyboard.GaveUp) as stop:
         typed_some = keyboard_output.this_thread.sends != sends_before
         outcome = _delivery_stopped(stop, typed_some=typed_some)
     except Exception:
@@ -130,8 +130,6 @@ def inject_text(text: str, injection_mode: str, one_block: bool = False, into=No
         # reports it.
         forget_typed()
         raise
-    finally:
-        keyboard_output.this_thread.into = None
     if outcome in ("ok", "partial"):
         after = focused_window.look()
         if after[0]:
@@ -165,9 +163,10 @@ def deliver_text(text: str, injection_mode: str, one_block: bool = False, *, whe
     never arrived doesn't fail silently.
 
     The focus may have moved into a password field since the text was made:
-    *where* (focused_window.destination, asked right before) says, and so
-    does a check before each further chunk of a multi-part delivery. No check
-    closes the milliseconds between the last answer and the keys after it.
+    *where* (focused_window.destination, asked right before) says, and in
+    inject_text a check right before each line, line break and paste key
+    stops it there (keyboard_output.refuse_password_field). No check closes
+    the milliseconds between the last answer and the keys after it.
 
     *one_block* (voice editing) pastes text with line breaks in one go, real
     newlines and all. Line by line with Enter in between, an editor continues
@@ -290,19 +289,19 @@ def _delivery_stopped(stop, typed_some: bool) -> str:
     """The outcome of a delivery that *stop* ended early, after forgetting
     what undo, "select that" and the next dictation's capital count on.
 
-    StoppedPartway: an unknown part of the text is in the app; typing or
-    pasting it again would double that part. PasswordFieldNow: the lines
-    before it are in the app, but in which form (pasted, typed after a
-    failed paste) isn't tracked. GaveUp: a Right Ctrl or Right Alt dictation
-    key stayed down, the window changed while typing waited for it
+    Either, with the reason "password_field": the cursor is in a password
+    field now (keyboard_output.refuse_password_field), with the lines
+    before it in the app, in a form (pasted, typed after a failed paste)
+    that isn't tracked. StoppedPartway: an unknown part of the text is in
+    the app; typing or pasting it again would double that part. GaveUp: a
+    Right Ctrl or Right Alt dictation key stayed down, the window changed while typing waited for it
     (modifier_hotkeys), or it isn't the one the text had to go into
-    (focused_window.claim_into); typing on any other way (wtype, the clipboard) would
-    do what the wait was there to prevent. *typed_some*: earlier lines were
-    typed before it gave up."""
+    (focused_window.claim_into); typing on any other way (wtype, the
+    clipboard) would do what the wait was there to prevent. *typed_some*:
+    earlier lines were typed before it gave up."""
     forget_typed()
-    if isinstance(stop, keyboard_output.PasswordFieldNow):
-        logger.warning("Stopped typing: a password field has the focus now")
-        return "password_field"
+    if stop.reason == "password_field":
+        return "password_field"     # logged where it gave up
     if isinstance(stop, virtual_keyboard.GaveUp) and not typed_some:
         return stop.reason          # logged where it gave up
     if stop.reason:
@@ -355,7 +354,7 @@ def _type_for_electron(text, focused_class, injection_start):
         rs.state.last_inserted_text = "\n".join(parts)
         logger.debug(f"Kept {len(rs.state.last_inserted_text)} chars for undo (typed)")
         return "ok"
-    if not delivered.parts:
+    if not delivered.went_in(parts):
         # Nothing landed, so the normal injection path can safely try again.
         logger.warning("Typing failed, falling through to normal injection")
         return None
@@ -364,7 +363,7 @@ def _type_for_electron(text, focused_class, injection_start):
     rs.state.last_inserted_text = delivered.landed(parts)
     logger.warning(f"Typing stopped after {delivered.parts} chunk(s) — "
                    "not re-injecting, undo buffer holds only what landed")
-    return "password_field" if delivered.stopped == "password_field" else "partial"
+    return "partial"
 
 
 def _paste_part(part) -> bool:
@@ -391,15 +390,6 @@ def _paste_in_parts(text, focused_class):
     if not delivered.stopped:
         logger.info(f"Smart hybrid paste completed: {len(parts)} chunks")
         return None
-    if delivered.stopped == "password_field":
-        # Not asked again: a second answer that comes back "no" (a slow
-        # app, out of time) would type the rest into the password field.
-        # The chunks before reached the document, and so did the line
-        # break after the last of them: the check comes after it.
-        rs.state.last_inserted_text = delivered.landed(parts)
-        logger.warning(f"Stopped after {delivered.parts}/{len(parts)} chunks: a password field "
-                       "has the focus now")
-        return "password_field"
     # Only the rest is typed: delivering the whole text again would
     # duplicate the chunks that landed, which undo can't clean up.
     if delivered.stopped == "part":

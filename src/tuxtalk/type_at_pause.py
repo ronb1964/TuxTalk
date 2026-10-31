@@ -146,9 +146,15 @@ def corrects_across_pause(raw: str, chunk_role, message) -> bool:
 
 def _erase_typed(text: str) -> bool:
     """Backspace over *text*, just typed by the phrase before the pause. False
-    when it can't be done safely; then nothing more is erased."""
-    focused = focused_window.window_class()
-    if keyboard_output.not_where_typed(focused):
+    when it can't be done safely; then nothing more is erased.
+
+    The backspaces go only into the window checked here, and never into a
+    password field, as a dictation's keys (keyboard_output.delivering): the
+    Flatpak's portal can take a while to get its keyboard ready, and a
+    Right Ctrl dictation key held makes them wait, time enough to click
+    into another document, whose text they would delete."""
+    where = focused_window.look()
+    if keyboard_output.not_where_typed(where[0], where):
         logger.info("Correction across a pause skipped: the phrase is in another window")
         return False
     # The AI that found the correction can take seconds, time enough to
@@ -157,7 +163,11 @@ def _erase_typed(text: str) -> bool:
         logger.info("Correction across a pause skipped: a password field has the focus")
         return False
     try:
-        deleted = keyboard_output.output_backend().backspaces(len(text))
+        with keyboard_output.delivering(where):
+            deleted = keyboard_output.output_backend().backspaces(len(text))
+    except virtual_keyboard.GaveUp as stop:
+        logger.info(f"Correction across a pause skipped before its backspaces: {stop.reason}")
+        return False
     except virtual_keyboard.StoppedPartway:
         logger.error("Correction across a pause stopped partway; typing the phrase as said")
         rs.state.last_inserted_text = ""

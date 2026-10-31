@@ -82,20 +82,13 @@ def test_a_tuxtalk_window_from_the_compositor_gets_no_paste_class(monkeypatch):
 class _Copy:
     def __init__(self, returncode=0):
         self.returncode = returncode
-        self.stdin = self
-        self.stderr = None
         self.written = b""
 
-    def write(self, data):
-        self.written += data
-
-    def close(self):
-        pass
+    def communicate(self, input=None, timeout=None):
+        self.written += input
+        return b"", b""
 
     def poll(self):
-        return self.returncode
-
-    def wait(self, timeout=None):
         return self.returncode
 
 
@@ -179,9 +172,9 @@ class _CopyReportingItsWindow(_Copy):
         super().__init__()
         self.tray = tray
 
-    def wait(self, timeout=None):
+    def communicate(self, input=None, timeout=None):
         self.tray.report(WL_COPY, WL_COPY_AT)
-        return super().wait(timeout)
+        return super().communicate(input, timeout)
 
 
 @pytest.fixture

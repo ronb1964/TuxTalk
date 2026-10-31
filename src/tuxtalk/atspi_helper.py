@@ -6,7 +6,7 @@ AppImage doesn't ship libatspi's typelib, and libatspi shares one bus
 connection with GTK's own accessibility bridge, which the GTK thread of the
 dictation service dispatches while this runs on another thread.
 
-Which apps answer (tried 2026-10-20): GTK 3 and GTK 4 apps, unless their
+Which apps answer, as tried in the test VMs: GTK 3 and GTK 4 apps, unless their
 accessibility is switched off (GTK_A11Y=none, NO_AT_BRIDGE=1). Qt (KDE
 apps) and Firefox only while accessibility is switched on, by a screen reader
 or the desktop's accessibility setting. Chromium-based browsers and Electron
@@ -16,7 +16,9 @@ a restart. An app that doesn't answer, a slow bus or none at all counts as
 "not a password field", so typing goes ahead as it always did.
 """
 
+import functools
 import logging
+import re
 import threading
 import time
 
@@ -27,6 +29,11 @@ logger = logging.getLogger(__name__)
 # The whole question is given this long, each D-Bus call a part of it: an
 # app that hangs must not hold up the dictation waiting to be typed.
 BUDGET_S = 0.25
+# A dictation's checks again right before each line, line break and paste
+# key (keyboard_output.refuse_password_field): a slow bus there would hold
+# up every line by the whole budget. Asked afresh each time, never taken from
+# an earlier answer: the focus is what may have moved.
+RECHECK_BUDGET_S = 0.05
 CALL_TIMEOUT_MS = 100
 
 _ROOT = "/org/a11y/atspi/accessible/root"
@@ -63,32 +70,19 @@ class _OutOfTime(Exception):
     pass
 
 
-def focused_is_password() -> bool:
+def focused_is_password(budget: float = BUDGET_S, focused_class=lambda: None) -> bool:
     """True when the focused widget of an active window is a password field.
-    False when it isn't, and whenever that can't be found out in BUDGET_S."""
+    False when it isn't, and whenever that can't be found out in *budget*
+    seconds, unless one was found before the time ran out. *focused_class*()
+    is the window class the desktop says has the focus, None when not known:
+    which app's answer counts (_password_focus)."""
     started = time.monotonic()
-    deadline = started + BUDGET_S
+    deadline = started + budget
     try:
         bus = _a11y_bus(deadline)
-        if bus is None:
-            return False
-        # Every active window is asked, not the first: a desktop shell other
-        # than GNOME's may call its own window active too. Each as soon as
-        # it's found, so apps that hang further down the list can't use up
-        # the time before a password field already found is seen. The
-        # shell's tree is the biggest: its turn comes after the apps'.
-        apps, shells = [], []
-        for app, window in _active_windows(bus, deadline):
-            apps.append(app)
-            if app in _SHELLS:
-                shells.append(window)
-            elif _has_password_focus(bus, window, deadline):
-                _log_several_active(apps)
-                return True
-        _log_several_active(apps)
-        return any(_has_password_focus(bus, window, deadline) for window in shells)
+        return bus is not None and _password_focus(bus, focused_class, deadline)
     except _OutOfTime:
-        logger.info(f"Password field check: no answer in {BUDGET_S}s, typing as usual")
+        logger.info(f"Password field check: no answer in {budget}s, typing as usual")
         return False
     except GLib.Error as e:
         logger.debug(f"Password field check: the accessibility bus didn't answer: {e.message}")
@@ -99,7 +93,130 @@ def focused_is_password() -> bool:
         logger.warning(f"Password field check failed, typing as usual: {e!r}")
         return False
     finally:
-        logger.debug(f"Password field check took {time.monotonic() - started:.3f}s")
+        took = time.monotonic() - started
+        # Said in the log where it starts to show: half its time or more.
+        (logger.info if took >= budget / 2 else logger.debug)(
+            f"Password field check took {took:.3f}s")
+
+
+def _password_focus(bus, focused_class, deadline) -> bool:
+    """Whether a password field has the focus in an active window.
+
+    Every active window is asked, not the first: a desktop shell other than
+    GNOME's may call its own window active too. Each as soon as it's found,
+    so apps that hang further down the list can't use up the time before a
+    password field already found is seen. The shell's tree is the biggest:
+    its turn comes last.
+
+    An app left in the background can still say a window of its own is
+    active, with a password field focused in it, and refuse the dictation
+    for nothing. So a password field counts at once only in the app that
+    has the focus, by *focused_class*() (asked only then: a look each time
+    would slow every line), or when that can't be told in time. Another
+    app's counts unless the focused app's window said no: an app not on the
+    bus, there by another name or not answering may be the one. A password
+    field found stays found when the time runs out or a later app answers
+    in a shape nobody expected."""
+    focused = functools.lru_cache(maxsize=1)(lambda: _in_time(focused_class, deadline))
+    apps, shells, suspects, said_no = [], [], [], []
+    try:
+        for app, window in _active_windows(bus, deadline):
+            apps.append(app)
+            if app in _SHELLS:
+                shells.append(window)
+                continue
+            answer = _has_password_focus(bus, window, deadline)
+            if answer is False:
+                said_no.append(app)
+            elif answer and (focused() is None or _names_the_app(app, focused())):
+                return True
+            elif answer:
+                suspects.append(app)
+        if _still_counts(suspects, said_no, focused):
+            return True
+        return any(_has_password_focus(bus, window, deadline) for window in shells)
+    except Exception:
+        if not _still_counts(suspects, said_no, focused):
+            raise
+        logger.info("Password field check cut short after it found a password field")
+        return True
+    finally:
+        _log_several_active(apps)
+
+
+def _still_counts(suspects, said_no, focused) -> bool:
+    """Whether a password field in an app the desktop doesn't say has the
+    focus (*suspects*) counts: unless the focused app is one whose window
+    said no (*said_no*). *focused*() is known by then: an unknown one made
+    the first password field count at once."""
+    return bool(suspects) and not any(_names_the_app(app, focused()) for app in said_no)
+
+
+# The look at the focused app (_in_time) runs on a daemon thread of its
+# own, one at a time: a look that hangs (an X server that stopped answering
+# XCB, which has no time limit) must hold up neither the dictation nor
+# TuxTalk quitting, which an executor's worker would, joined at exit.
+_look_lock = threading.Lock()
+_looking = False
+
+
+def _in_time(focused_class, deadline):
+    """*focused_class*(), or None when it has no answer by *deadline*. It
+    asks the tray, which has 1.5 s to answer when its loop is busy, and the
+    check before each line of a dictation has 50 ms in all: a slow tray
+    must not hold up every line by seconds. While an earlier look is still
+    running, this one is None at once; a late answer is thrown away."""
+    global _looking
+    left = deadline - time.monotonic()
+    with _look_lock:
+        if left <= 0 or _looking:
+            return None
+        _looking = True
+    answer, done = [], threading.Event()
+    threading.Thread(target=_look, args=(focused_class, answer, done),
+                     name="password-look", daemon=True).start()
+    if not done.wait(left):
+        logger.debug("Password field check: which app has the focus wasn't told in time")
+        return None
+    return answer[0] if answer else None
+
+
+def _look(focused_class, answer, done):
+    """_in_time's thread: *focused_class*() into *answer*, then *done*."""
+    global _looking
+    try:
+        answer.append(focused_class())
+    except Exception as e:
+        # Not known, as when it's late: a password field found still counts.
+        logger.info(f"Password field check: couldn't tell which app has the focus: {e!r}")
+    finally:
+        with _look_lock:
+            _looking = False
+        done.set()
+
+
+# Apps whose name on the accessibility bus is in neither their window class
+# nor its last part: the class and the name, as _plain has them. Brave
+# names itself "Brave" there, and its windows "brave-browser". Only known
+# pairs: a name like a class's first word ("Code", "code-oss") may be
+# another app, whose stale password field would then refuse the dictation.
+_BUS_NAMES = {"bravebrowser": "brave"}
+
+
+def _plain(text: str) -> str:
+    """*text*'s letters and digits, without case."""
+    return re.sub(r"[^0-9a-z]", "", text.casefold())
+
+
+def _names_the_app(name: str, wm_class: str) -> bool:
+    """Whether the accessibility bus's app *name* ("kwrite", "Text Editor",
+    "Brave") is the app of the window class *wm_class* ("org.kde.kwrite",
+    "org.gnome.TextEditor", "brave-browser"): the same letters and digits,
+    ignoring case, as the whole class or its last part, or a known pair
+    (_BUS_NAMES)."""
+    said, whole = _plain(name), _plain(wm_class)
+    return bool(said) and said in {whole, _plain(wm_class.rsplit(".", 1)[-1]),
+                                   _BUS_NAMES.get(whole)}
 
 
 def _a11y_bus(deadline):
@@ -186,8 +303,8 @@ def _active_windows(bus, deadline):
                 continue
 
 
-def _has_password_focus(bus, window, deadline) -> bool:
-    """Whether the focused widget in *window* is a password field; False
+def _has_password_focus(bus, window, deadline) -> bool | None:
+    """Whether the focused widget in *window* is a password field; None
     when the window doesn't answer."""
     try:
         focused = _focused_in(bus, window, deadline)
@@ -195,7 +312,7 @@ def _has_password_focus(bus, window, deadline) -> bool:
                                              None, deadline)[0] == _ROLE_PASSWORD_TEXT
     except GLib.Error as e:
         logger.debug(f"Password field check: a window didn't answer: {e.message}")
-        return False
+        return None
 
 
 def _log_several_active(apps):

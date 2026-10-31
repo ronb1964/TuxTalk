@@ -326,7 +326,7 @@ def _no_real_password_check(monkeypatch, request):
     from tuxtalk import atspi_helper, focused_window
     monkeypatch.setattr(focused_window, "_polkit_prompt_waiting", lambda: False)
     if request.module.__name__.rpartition(".")[2] != "test_password_fields":
-        monkeypatch.setattr(atspi_helper, "focused_is_password", lambda: False)
+        monkeypatch.setattr(atspi_helper, "focused_is_password", lambda *a, **k: False)
         # It asks which window has the focus, which tests script answer by answer.
         monkeypatch.setattr(focused_window, "_password_prompt_has_focus", lambda: False)
 

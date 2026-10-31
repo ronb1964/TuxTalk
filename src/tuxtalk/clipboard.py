@@ -120,8 +120,13 @@ def _wl_copy_sensitive(text):
 
 def _read_clipboard():
     """(bytes, mime, sensitive) of what is on the clipboard now, EMPTY, or
-    NOTHING when it can't be read or is too big to keep. *sensitive* is
-    whether a password manager marked it, so it goes back marked too."""
+    NOTHING when it can't be read or is too big to keep.
+
+    It always goes back marked sensitive, for clipboard managers to skip:
+    the types and the contents come from two wl-paste runs, and a password
+    copied between them would be read with the types of what was there
+    before, without a password manager's mark. What the user copied is in
+    their clipboard manager's history from when they copied it."""
     try:
         types = _wl_paste_types()
         if not types:
@@ -131,7 +136,7 @@ def _read_clipboard():
         if len(data) > MAX_SAVED_BYTES:
             logger.info("Clipboard contents too large to keep; not restoring them")
             return NOTHING
-        return data, mime, PASSWORD_HINT in types
+        return data, mime, True
     except Exception as e:
         logger.info(f"Couldn't read the clipboard to restore it later: {e}")
         return NOTHING
@@ -324,13 +329,30 @@ def _holds(saved, text):
     return isinstance(saved, tuple) and text is not None and saved[0] == text.encode("utf-8")
 
 
-def _wl_copy_primary(text):
-    """Put *text* on the primary selection, or clear it when *text* is None."""
+def _wl_copy_primary(text, timeout=3):
+    """Put *text* on the primary selection, marked sensitive as dictations
+    are, or clear it when *text* is None. Raises OSError when wl-copy
+    failed (a desktop without a primary selection), or SubprocessError."""
     if text is None:
-        subprocess.run(["wl-copy", "--primary", "--clear"], timeout=3, check=True)
+        command, data = ["wl-copy", "--primary", "--clear"], None
     else:
-        subprocess.run(wl_copy_command() + ["--primary"], input=text.encode("utf-8"),
-                       timeout=3, check=True)
+        command, data = wl_copy_command() + ["--primary"], text.encode("utf-8")
+    result = subprocess.run(command, input=data, stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL, timeout=timeout)
+    if result.returncode != 0:
+        raise OSError(f"wl-copy exited {result.returncode}")
+
+
+def copy_to_primary(text: str, timeout: float) -> bool:
+    """Put the dictation *text* on the primary selection as well, within
+    *timeout* seconds. True once wl-copy has handed it to the compositor;
+    False if the desktop has no primary selection or wl-copy failed."""
+    try:
+        _wl_copy_primary(text, timeout)
+    except (OSError, subprocess.SubprocessError) as e:
+        logger.info(f"Could not set the primary selection: {e}")
+        return False
+    return True
 
 
 def _restore_primary(saved, text):

@@ -2,13 +2,14 @@
 "go to the end", "unselect".
 
 Pure logic, like undo.py: which dictations are commands, and the keys each
-one presses. app.py presses them through the output backend, so the host
-(the virtual keyboard) and the Flatpak (libei) do the same.
+one presses. voice_commands.handle_navigation presses them through the
+output backend, so the host (the virtual keyboard) and the Flatpak (libei)
+do the same.
 
 A dictation is a command only when the WHOLE of it is one of the phrases
-here, so "I want to select the last sentence" is typed as text. Plain F8
-never rewrites anything: rewording stays on the voice-edit key. See
-docs/superpowers/specs/2026-10-14-select-and-move-by-voice-design.md.
+here, so "I want to select the last sentence" is typed as text. These only
+select and move: changing the words is voice editing's (Shift with the
+dictation key, or a dictation that starts with "edit that").
 
 Keys are named, not numbered ("CTRL", "LEFT", "A"); the backend turns them
 into key codes, the letter A for the active keyboard layout.
@@ -16,14 +17,12 @@ into key codes, the letter A for the active keyboard layout.
 import re
 from dataclasses import dataclass
 
-from .undo import calculate_undo_length
+from .undo import NUMBER_WORDS, calculate_undo_length
 
 C, S = "CTRL", "SHIFT"
 MAX_COUNT = 10
 
-_NUMBER_WORDS = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
-                 "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10}
-_N = r"(?:(?P<n>\d+|" + "|".join(_NUMBER_WORDS) + r")\s+)?"
+_N = r"(?:(?P<n>\d+|" + "|".join(NUMBER_WORDS) + r")\s+)?"
 
 
 @dataclass(frozen=True)
@@ -102,7 +101,7 @@ def parse(text: str):
             continue
         groups = m.groupdict()
         raw = groups.get("n")
-        count = 1 if raw is None else (int(raw) if raw.isdigit() else _NUMBER_WORDS[raw])
+        count = 1 if raw is None else (int(raw) if raw.isdigit() else NUMBER_WORDS[raw])
         if not 1 <= count <= MAX_COUNT:
             return None
         args = (count, groups["u"]) if "u" in groups and groups["u"] else (count,)

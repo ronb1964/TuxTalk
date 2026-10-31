@@ -305,21 +305,6 @@ def formatting(instruction: str):
     return list(dict.fromkeys(keys))
 
 
-# Word processors, where Ctrl+B, Ctrl+I and Ctrl+U are bold, italics and
-# underline. Window classes and Wayland app ids, matched whole and ignoring case.
-_WORD_PROCESSORS = {
-    "libreoffice", "libreoffice-writer", "libreoffice-calc", "libreoffice-impress",
-    "libreoffice-draw", "soffice", "org.libreoffice.libreoffice",
-    "onlyoffice-desktopeditors", "desktopeditors", "org.onlyoffice.desktopeditors",
-    "abiword", "com.abisource.abiword", "calligrawords", "org.kde.calligrawords",
-}
-
-
-def has_formatting_shortcuts(window_class) -> bool:
-    """Whether the focused app is a word processor, where Ctrl+B/I/U format text."""
-    return bool(window_class) and window_class.lower() in _WORD_PROCESSORS
-
-
 # --- two changes at once --------------------------------------------------------------
 
 # Words a change starts with. A piece of an instruction is a change of its own

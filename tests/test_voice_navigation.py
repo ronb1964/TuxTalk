@@ -1,5 +1,5 @@
 """Select and move by voice (TuxTalk Labs): which phrases are commands, and
-the keys each one presses. See docs/superpowers/specs/2026-10-14-select-and-move-by-voice-design.md."""
+the keys each one presses."""
 import pytest
 
 from tuxtalk import voice_navigation as nav
@@ -162,6 +162,8 @@ def dictation(monkeypatch):
     monkeypatch.setattr(live, "voice_navigation", True)
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: backend)
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
+    # Of the window a test names by its class; which of its windows isn't told.
+    monkeypatch.setattr(focused_window, "look", lambda: (focused_window.window_class(), None))
     monkeypatch.setattr(notices, "edit_problem", lambda kind, beeps: seen["problems"].append(kind))
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda on, *a: seen.__setitem__("beeps", seen["beeps"] + 1))
     monkeypatch.setattr(rs.state, "last_inserted_text", " We finished early.")
@@ -202,6 +204,25 @@ def test_keys_that_could_not_be_pressed_say_so(dictation):
     dictation["backend"].ok = False
     assert voice_commands.handle_navigation("go to the end", False) is True
     assert dictation["problems"] == ["shortcut_failed"]
+
+
+@pytest.mark.parametrize("said", ["select the last word", "delete last word",
+                                  "clear everything"])
+def test_a_voice_command_presses_nothing_once_another_window_has_the_focus(
+        dictation, monkeypatch, keyboard, said):
+    """Said in KWrite, but the user clicked into Konsole before the keys
+    went out (a Right Ctrl dictation key still held): the keys went into the
+    terminal."""
+    from tuxtalk.output_backends import VirtualKeyboardOutputBackend
+    looks = iter([("org.kde.kwrite", ("tray", "{1}"))])
+    monkeypatch.setattr(focused_window, "look",
+                        lambda: next(looks, ("org.kde.konsole", ("tray", "{2}"))))
+    monkeypatch.setattr(keyboard_output, "output_backend", VirtualKeyboardOutputBackend)
+    assert (voice_commands.handle_undo(said, False, False)
+            or voice_commands.handle_navigation(said, False)) is True
+    assert keyboard.events == [] and dictation["problems"] == ["focus_moved"]
+    if said == "delete last word":       # nothing deleted: a second try still can
+        assert rs.state.last_inserted_text == " We finished early."
 
 
 def test_each_modifier_is_held_around_its_key(keyboard):
@@ -343,6 +364,36 @@ def test_undo_in_the_same_window_by_its_id_still_works(dictation, monkeypatch):
     monkeypatch.setattr(focused_window, "look", lambda: ("org.kde.kwrite", ("tray", "{first}")))
     assert voice_commands.handle_undo("delete last word", False, False) is True
     assert deleted and dictation["problems"] == []
+
+
+def test_undo_where_kate_names_its_window_another_way_still_works(dictation, monkeypatch):
+    """The dictation's look named Kate "org.kde.kate", the undo's "kate",
+    for one window by its id: undo said it was another window."""
+    deleted = []
+    dictation["backend"].backspaces = lambda n: deleted.append(n) or True
+    monkeypatch.setattr(rs.state, "last_inserted_window", "org.kde.kate")
+    monkeypatch.setattr(rs.state, "last_inserted_where", ("org.kde.kate", ("tray", "{1}")))
+    monkeypatch.setattr(focused_window, "look", lambda: ("kate", ("tray", "{1}")))
+    assert voice_commands.handle_undo("delete last word", False, False) is True
+    assert deleted == [6] and dictation["problems"] == []
+    # And a voice move still counts on what was dictated there.
+    monkeypatch.setattr(rs.state, "last_inserted_text", " We finished early.")
+    voice_commands.handle_navigation("select the last word", False)
+    assert dictation["pressed"] == [[((), "LEFT")] + [((S,), "LEFT")] * 5]
+
+
+@pytest.mark.parametrize("now", [
+    ("org.kde.kwrite", ("tray", "{1}")),        # another app under the same id
+    ("kate", ("compositor", "{1}")),            # an id from another source
+])
+def test_undo_where_the_window_cant_be_trusted_deletes_nothing(dictation, monkeypatch, now):
+    deleted = []
+    dictation["backend"].backspaces = lambda n: deleted.append(n) or True
+    monkeypatch.setattr(rs.state, "last_inserted_window", "org.kde.kate")
+    monkeypatch.setattr(rs.state, "last_inserted_where", ("org.kde.kate", ("tray", "{1}")))
+    monkeypatch.setattr(focused_window, "look", lambda: now)
+    assert voice_commands.handle_undo("delete last word", False, False) is True
+    assert deleted == [] and dictation["problems"] == ["undo_other_window"]
 
 
 def test_delete_last_word_in_its_own_window_still_works(dictation, monkeypatch):

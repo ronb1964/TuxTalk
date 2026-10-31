@@ -190,7 +190,7 @@ def test_fix_in_text_swaps_only_the_word(monkeypatch):
     monkeypatch.setattr(fw, "_REFOCUS_S", 0)
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: Backend())
     monkeypatch.setattr(focused_window, "look", lambda: ("org.kde.kwrite", None))
-    monkeypatch.setattr(focused_window, "is_password", lambda: False)
+    monkeypatch.setattr(focused_window, "is_password", lambda **k: False)
     monkeypatch.setattr(fw, "_read_primary_selection", lambda: "fleas")
     old = " Whose fleas was white. "                  # as typed, outer spaces and all
     core = old.strip()
@@ -222,7 +222,7 @@ def selection(monkeypatch):
     monkeypatch.setattr(fw, "SELECTION_WAIT_S", 0)
     monkeypatch.setattr(keyboard_output, "output_backend", lambda: Backend())
     monkeypatch.setattr(focused_window, "look", lambda: ("org.kde.kwrite", None))
-    monkeypatch.setattr(focused_window, "is_password", lambda: False)
+    monkeypatch.setattr(focused_window, "is_password", lambda **k: False)
     monkeypatch.setattr(fw, "_read_primary_selection", lambda: reads["text"])
     monkeypatch.setattr("tuxtalk.notify.notify", lambda t, m: reads.setdefault("notice", m))
     return pressed, typed_text, reads

@@ -258,8 +258,8 @@ def test_the_unknown_window_paste_saves_the_primary_before_setting_it(monkeypatc
         def after_paste(self, text):
             done.append("puts them back")
 
-    wl_copy = types.SimpleNamespace(stdin=types.SimpleNamespace(write=len, close=lambda: None),
-                                    wait=lambda timeout: 0, poll=lambda: 0, stderr=None)
+    wl_copy = types.SimpleNamespace(communicate=lambda input, timeout: (b"", b""),
+                                    returncode=0, poll=lambda: 0)
     monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
     monkeypatch.setattr(keyboard_output, "which", lambda name: f"/usr/bin/{name}")
     monkeypatch.setattr(live, "restore_clipboard", True)
@@ -267,7 +267,7 @@ def test_the_unknown_window_paste_saves_the_primary_before_setting_it(monkeypatc
     monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda *a, **k: wl_copy)
     monkeypatch.setattr(cb, "_sensitive_supported", lambda: False)     # it would run the fake
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
-    monkeypatch.setattr(keyboard_output, "copy_to_primary", lambda text: done.append("sets the primary") or True)
+    monkeypatch.setattr(cb, "copy_to_primary", lambda text, timeout: done.append("sets the primary") or True)
     monkeypatch.setattr(keyboard_output, "send_paste_keystroke", lambda cls, primary: done.append("pastes") or True)
     assert keyboard_output.paste_text("dictated words") is True
     assert done == ["keeps the clipboard", "keeps the primary", "sets the primary", "pastes",
@@ -335,6 +335,132 @@ def test_paste_uses_the_keeper_only_when_the_setting_is_on(monkeypatch):
     assert events == ["save", ("restore", "hello")]
 
 
+class _WlCopyInto:
+    """A wl-copy that puts what it's given on the fake clipboard *board*."""
+
+    returncode = 0
+    stderr = None
+
+    def __init__(self, board):
+        self.board = board
+
+    def communicate(self, input=None, timeout=None):
+        self.board.data, self.board.mime = input, "text/plain;charset=utf-8"
+        return b"", b""
+
+    def poll(self):
+        return 0
+
+
+@pytest.fixture
+def typing_into_kwrite(monkeypatch, board, keyboard):
+    """Keystroke Typing into KWrite on Wayland with "Restore clipboard" off,
+    as it is unless asked for, over the fake clipboard *board*. Returns the
+    restores waiting to run."""
+    pending = []
+    monkeypatch.setattr(keyboard_output, "_clipboard_keeper", cb.ClipboardKeeper(
+        schedule=lambda delay, fn: pending.append(fn) or (lambda: pending.remove(fn))))
+    monkeypatch.setattr(live, "restore_clipboard", False)
+    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
+    monkeypatch.setattr(keyboard_output, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(cb, "wl_copy_command", lambda: ["wl-copy", "--sensitive"])
+    monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda cmd, **kw: _WlCopyInto(board))
+    monkeypatch.setattr("tuxtalk.focused_window.look", lambda: ("org.kde.kwrite", None))
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    return pending
+
+
+def test_a_typed_line_break_in_kwrite_gives_the_clipboard_back(monkeypatch, board,
+                                                               typing_into_kwrite):
+    """KWrite's line breaks are pasted newlines: the user's copied link was
+    gone, and Ctrl+V pasted a newline."""
+    monkeypatch.setattr(keyboard_output, "type_text_raw", lambda text: True)
+    assert keyboard_output.type_text("Dear Sam,\xa7SHIFT_ENTER\xa7Thanks") is True
+    assert board.data == b"\n"         # for KWrite to read the paste
+    while typing_into_kwrite:
+        typing_into_kwrite.pop(0)()
+    assert board.data == b"what I copied"
+
+
+def test_a_pasted_line_after_a_kwrite_line_break_gives_the_clipboard_back_too(
+        monkeypatch, board, typing_into_kwrite):
+    """A line the layout can't type (an emoji) is pasted: pasted before the
+    line break's restore ran, it took the clipboard, and the restore, seeing
+    it changed, left the line there instead of what the user had copied."""
+    from tuxtalk import keyboard_layout
+
+    def keys(text):
+        if "\U0001f389" in text:
+            raise keyboard_layout.UntypableText(("us", "", ""), "\U0001f389")
+        return [(30, 1), (30, 0)]
+    monkeypatch.setattr(keyboard_layout, "layout_key_events", keys)
+    assert keyboard_output.type_text("Dear Sam,\xa7SHIFT_ENTER\xa7Congratulations \U0001f389") is True
+    assert board.data == "Congratulations \U0001f389".encode()
+    while typing_into_kwrite:
+        typing_into_kwrite.pop(0)()
+    assert board.data == b"what I copied"
+
+
+class _WlCopyFailing(_WlCopyInto):
+    """A wl-copy that fails before the clipboard changes."""
+
+    returncode = 1
+
+    def communicate(self, input=None, timeout=None):
+        return b"", b""
+
+    def poll(self):
+        return 1
+
+
+def test_a_failed_paste_after_a_kwrite_line_break_still_gives_the_clipboard_back(
+        monkeypatch, board, typing_into_kwrite):
+    """The emoji line's wl-copy failed after the line break was pasted: the
+    restore waited on the emoji line, which never reached the clipboard,
+    and Ctrl+V pasted a newline instead of what the user had copied."""
+    from tuxtalk import keyboard_layout
+
+    def keys(text):
+        if "\U0001f389" in text:
+            raise keyboard_layout.UntypableText(("us", "", ""), "\U0001f389")
+        return [(30, 1), (30, 0)]
+    copies = iter([_WlCopyInto(board)])
+    monkeypatch.setattr(keyboard_layout, "layout_key_events", keys)
+    monkeypatch.setattr(keyboard_output.subprocess, "Popen",
+                        lambda cmd, **kw: next(copies, _WlCopyFailing(board)))
+    from tuxtalk.virtual_keyboard import StoppedPartway
+    with pytest.raises(StoppedPartway):         # the first line went in, the second didn't
+        keyboard_output.type_text("Dear Sam,\xa7SHIFT_ENTER\xa7Congratulations \U0001f389")
+    assert board.data == b"\n"
+    while typing_into_kwrite:
+        typing_into_kwrite.pop(0)()
+    assert board.data == b"what I copied"
+
+
+def test_a_typed_line_break_in_kwrite_on_x11_gives_the_clipboard_back(monkeypatch):
+    """X11 types every dictation, so this is where KWrite's pasted line
+    breaks are most: TuxTalk kept "\n" on the clipboard until it quit."""
+    from tuxtalk import x11_clipboard
+    done = []
+
+    class Keeper:
+        def before_paste(self):
+            done.append("keeps it")
+
+        def after_paste(self, text):
+            done.append(("puts it back over", text))
+    monkeypatch.setattr(keyboard_output, "_keeper", lambda board: done.append(board) or Keeper())
+    monkeypatch.setattr(live, "restore_clipboard", False)
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    monkeypatch.setattr(x11_clipboard, "offer_dictation", lambda text: True)
+    monkeypatch.setattr(keyboard_output, "send_paste_keystroke", lambda *a, **k: True)
+    monkeypatch.setattr("tuxtalk.focused_window.look", lambda: ("kate", None))
+    monkeypatch.setattr(keyboard_output, "type_text_raw", lambda text: True)
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    assert keyboard_output.type_text("one\xa7SHIFT_ENTER\xa7two") is True
+    assert done == [x11_clipboard.X11Board, "keeps it", ("puts it back over", "\n")]
+
+
 # --- a copied password stays a password ---------------------------------------------------
 
 def test_a_password_comes_back_marked_for_clipboard_managers_to_skip(keeper, board):
@@ -342,6 +468,25 @@ def test_a_password_comes_back_marked_for_clipboard_managers_to_skip(keeper, boa
     board.data, board.password = b"hunter2", True
     paste(keeper, board, "dictated words")
     board.password = False
+    run_pending(keeper)
+    assert board.restores == [(b"hunter2", "text/plain;charset=utf-8", "sensitive")]
+
+
+def test_a_password_copied_while_the_clipboard_is_read_goes_back_marked(keeper, board,
+                                                                       monkeypatch):
+    """The types and the contents are two wl-paste runs: a password copied
+    from KeePassXC between them was read with the plain text's types, and
+    put back unmarked, for Klipper to save to disk."""
+    read = board.read
+
+    def password_copied_meanwhile(mime):
+        board.data, board.password = b"hunter2", True
+        return read(mime)
+    monkeypatch.setattr(cb, "_wl_paste", password_copied_meanwhile)
+    keeper.before_paste()
+    monkeypatch.setattr(cb, "_wl_paste", read)
+    board.data, board.password = b"dictated words", False
+    keeper.after_paste("dictated words")
     run_pending(keeper)
     assert board.restores == [(b"hunter2", "text/plain;charset=utf-8", "sensitive")]
 

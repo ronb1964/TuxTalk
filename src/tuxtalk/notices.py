@@ -33,8 +33,7 @@ SILENT_MIC_NOTICE = ("TuxTalk heard only silence. If you spoke, check that the m
 def warn_silent_mic():
     """The microphone sent nothing at all (silence.is_dead_mic). Always
     said, like a dictation that didn't arrive: a dead wireless mic otherwise
-    looks like TuxTalk ignoring you (asked for in Handy, Wispr Flow added it
-    Oct 2026)."""
+    looks like TuxTalk ignoring you."""
     logger.warning("The microphone sent only silence (muted, unplugged or the wrong one?)")
     notify_module.notify(SILENT_MIC_TITLE, SILENT_MIC_NOTICE)
 
@@ -51,8 +50,8 @@ def device_name(idx) -> str:
 def warn_mic_switched(old_idx, new_idx):
     """The microphone wouldn't open and TuxTalk is recording from another one.
     Always said: otherwise you talk into a jack with nothing plugged in and
-    get silence or room noise with no idea why (Ron, 2026-10-18: a USB
-    headset stopped answering and TuxTalk quietly used the motherboard input)."""
+    get silence or room noise with no idea why (a USB headset that stopped
+    answering had TuxTalk record from the motherboard's input, unsaid)."""
     old, new = device_name(old_idx), device_name(new_idx)
     notice = (f"{old or 'Your microphone'} didn't respond, so TuxTalk is recording from "
               f"{new or 'another input'} instead. Unplugging the microphone and plugging it "

@@ -68,7 +68,8 @@ def desktop(monkeypatch):
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
     monkeypatch.setattr(live, "usage_stats", False, raising=False)
     monkeypatch.setattr(atspi_helper, "focused_is_password",
-                        lambda: seen["answers"].pop(0) if seen["answers"] else seen["password"])
+                        lambda *a, **k: (seen["answers"].pop(0) if seen["answers"]
+                                         else seen["password"]))
     return seen
 
 
@@ -172,40 +173,68 @@ def test_paste_last_dictation_types_nothing_in_a_password_field(desktop, monkeyp
     assert desktop["typed"] == ["my secret is swordfish "]
 
 
-def test_delivery_stops_when_the_focus_moves_into_a_password_field(desktop, monkeypatch):
-    """Pasted line by line, a dictation is asked about again before each line."""
+def _pasted_with_real_keys(desktop):
+    """paste_text with the clipboard faked and the paste key really sent
+    (the recording keyboard), so the checks right before it are made."""
+    def paste(text):
+        desktop["pasted"].append(text)
+        return keyboard_output.send_paste_keystroke(focused_window.window_class())
+    return paste
+
+
+def _focus_moves_into_a_password_field_after_the_first_line(desktop, monkeypatch):
+    """The first wait after the first line (the paste settling, or the
+    pause before its line break) is when the user tabs into a password box."""
+    monkeypatch.setattr("time.sleep", lambda s: desktop.__setitem__("password", True))
+
+
+def test_delivery_stops_when_the_focus_moves_into_a_password_field(desktop, monkeypatch,
+                                                                    keyboard):
+    """Pasted line by line, the line break went into the password field
+    before it was asked about again: in a login form it can submit it."""
+    from evdev import ecodes
     monkeypatch.setattr(delivery, "determine_injection_method", lambda mode: ("paste", "test"))
-    monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: True)
-    monkeypatch.setattr("time.sleep", lambda s: None)
-    desktop["answers"], desktop["password"] = [False], True   # a text box, then a password field
+    monkeypatch.setattr(keyboard_output, "paste_text", _pasted_with_real_keys(desktop))
+    _focus_moves_into_a_password_field_after_the_first_line(desktop, monkeypatch)
     assert delivery.inject_text("first line\nsecond line", "auto") == "password_field"
     assert desktop["pasted"] == ["first line"] and desktop["typed"] == []
+    assert ecodes.KEY_ENTER not in keyboard.typed_keys()
 
 
-def test_a_paste_stopped_there_isnt_finished_by_typing(desktop, monkeypatch):
+def test_a_paste_stopped_there_isnt_finished_by_typing(desktop, monkeypatch, keyboard):
     """Not asked a second time: a slow app whose answer runs out of time says
     "no", and the rest of the dictation was then typed into the field."""
     monkeypatch.setattr(delivery, "determine_injection_method", lambda mode: ("paste", "test"))
-    monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: True)
+    monkeypatch.setattr(keyboard_output, "paste_text", _pasted_with_real_keys(desktop))
     monkeypatch.setattr("time.sleep", lambda s: None)
-    desktop["answers"] = [False, True]          # then "no" to any further question
+    # Before it, before the first paste key, then before the line break;
+    # then "no" to any further question.
+    desktop["answers"] = [False, False, True]
     assert delivery.inject_text("first line\nsecond line", "auto") == "password_field"
     assert desktop["pasted"] == ["first line"] and desktop["typed"] == []
 
 
-def test_typed_line_by_line_it_stops_there_too(desktop, monkeypatch):
-    """X11 types every dictation, and asks again before each line as the paste does."""
-    keys = []
-    monkeypatch.setattr(keyboard_output, "output_backend",
-                        lambda: types.SimpleNamespace(typeable=lambda t: t,
-                                                      type_text=keyboard_output.type_text))
-    monkeypatch.setattr(keyboard_output, "type_text_raw", lambda t: keys.append(t) or True)
-    monkeypatch.setattr(keyboard_output, "send_shift_enter", lambda: keys.append("SHIFT+ENTER") or True)
-    monkeypatch.setattr("time.sleep", lambda s: None)
-    desktop["answers"], desktop["password"] = [False], True
-    assert delivery.inject_text("first line\nsecond line", "auto") == "password_field"
-    assert keys == ["first line", "SHIFT+ENTER"]
+def test_typed_line_by_line_it_stops_there_too(desktop, monkeypatch, keyboard):
+    """X11 types every dictation, and its Shift+Enter went into the password
+    field before the next line was asked about."""
+    from evdev import ecodes
+    from tuxtalk.output_backends import VirtualKeyboardOutputBackend
+    monkeypatch.setattr(keyboard_output, "output_backend", VirtualKeyboardOutputBackend)
+    _focus_moves_into_a_password_field_after_the_first_line(desktop, monkeypatch)
+    assert delivery.inject_text("ab\ncd", "auto") == "password_field"
+    assert keyboard.typed_keys() == [ecodes.KEY_A, ecodes.KEY_B]
     assert rs.state.last_inserted_text == ""      # undo deletes nothing it can't count
+
+
+def test_the_first_line_is_refused_when_the_focus_moved_while_it_was_made_ready(
+        desktop, monkeypatch, keyboard):
+    """Asked before the clipboard and the keys were made ready, then not
+    again: the user tabbing into a password box meanwhile got the text."""
+    from tuxtalk.output_backends import VirtualKeyboardOutputBackend
+    monkeypatch.setattr(keyboard_output, "output_backend", VirtualKeyboardOutputBackend)
+    desktop["answers"], desktop["password"] = [False], True
+    assert delivery.inject_text("swordfish", "auto") == "password_field"
+    assert keyboard.events == []
 
 
 def test_a_dictation_refused_at_the_last_moment_leaves_recent_dictations(desktop, monkeypatch):
@@ -443,6 +472,162 @@ def test_a_bus_where_everything_hangs_gives_up_within_the_budget(bus, monkeypatc
     assert atspi_helper.focused_is_password() is False
     took = time.monotonic() - started
     assert took < atspi_helper.BUDGET_S + atspi_helper.CALL_TIMEOUT_MS / 1000
+
+
+def test_a_dictations_check_before_each_line_gives_up_sooner(bus, monkeypatch):
+    """Asked again before every line, line break and paste key, a bus that
+    hangs held each of them up by the whole quarter second: 20 lines of a
+    dictation took 10 s more."""
+    for n in range(5):
+        bus.app(f"frozen{n}", PASSWORD, hang=True)
+    monkeypatch.setattr(focused_window, "window_class", lambda: "org.kde.kwrite")
+    started = time.monotonic()
+    keyboard_output.refuse_password_field()          # no answer in time: typing as usual
+    took = time.monotonic() - started
+    assert took < atspi_helper.RECHECK_BUDGET_S + atspi_helper.CALL_TIMEOUT_MS / 1000
+    assert atspi_helper.RECHECK_BUDGET_S <= atspi_helper.BUDGET_S / 4
+
+
+def test_a_password_field_left_in_a_background_app_doesnt_refuse_the_dictation(bus):
+    """A browser behind KWrite still said its window was active, with its
+    login box focused: every dictation into KWrite was refused."""
+    bus.app("Firefox", PASSWORD)
+    bus.app("kwrite", TEXT)
+    assert atspi_helper.focused_is_password(focused_class=lambda: "org.kde.kwrite") is False
+
+
+def test_the_focused_apps_own_password_field_still_counts(bus):
+    bus.app("kwrite", TEXT)
+    bus.app("Firefox", PASSWORD)
+    assert atspi_helper.focused_is_password(focused_class=lambda: "firefox") is True
+
+
+@pytest.mark.parametrize("focused", [
+    "com.brave.Browser",    # the Flatpak, on the bus as "Brave": it may be the one
+    None,                   # the desktop can't say which window has the focus
+])
+def test_a_password_field_counts_where_the_focused_app_cant_be_told_apart(bus, focused):
+    bus.app("Brave", PASSWORD)
+    bus.app("kwrite", TEXT)
+    assert atspi_helper.focused_is_password(focused_class=lambda: focused) is True
+
+
+@pytest.mark.parametrize("budget", [atspi_helper.BUDGET_S, atspi_helper.RECHECK_BUDGET_S])
+def test_a_password_field_found_still_counts_when_later_apps_use_up_the_time(bus, budget):
+    """Brave's login box had the focus, and apps that hang after it used up
+    the time: the password field already found was forgotten, and the
+    dictation typed into it. Before the first line and before each line."""
+    bus.app("Chromium", PASSWORD)
+    for n in range(5):
+        bus.app(f"frozen{n}", TEXT, hang=True)
+    assert atspi_helper.focused_is_password(budget, lambda: "org.kde.kwrite") is True
+
+
+def test_the_focused_apps_no_still_clears_a_background_one_when_the_time_runs_out(bus):
+    bus.app("Firefox", PASSWORD)
+    bus.app("kwrite", TEXT)
+    for n in range(5):
+        bus.app(f"frozen{n}", TEXT, hang=True)
+    assert atspi_helper.focused_is_password(focused_class=lambda: "org.kde.kwrite") is False
+
+
+def test_a_focused_app_that_doesnt_answer_hasnt_said_no(bus):
+    """Only an answer clears another app's password field."""
+    bus.app("Firefox", PASSWORD)
+    bus.app("kwrite", TEXT, collection="slow")
+    assert atspi_helper.focused_is_password(focused_class=lambda: "org.kde.kwrite") is True
+
+
+def test_a_slow_tray_doesnt_hold_up_the_check_before_each_line(bus):
+    """Which app has the focus comes from the tray, which has 1.5 s when
+    its loop is busy: the 50 ms check before each line took that long."""
+    import threading
+    answered = threading.Event()
+
+    def slow_tray():
+        answered.wait(1.5)
+        return "org.kde.kwrite"
+    bus.app("Firefox", PASSWORD)
+    started = time.monotonic()
+    try:
+        # Not told in time: the password field may be in the focused app.
+        assert atspi_helper.focused_is_password(atspi_helper.RECHECK_BUDGET_S, slow_tray) is True
+        assert time.monotonic() - started < 0.5
+    finally:
+        answered.set()
+        _wait_for_the_look_to_end()
+
+
+def _wait_for_the_look_to_end():
+    """For the next test's look, which an earlier one still running makes None."""
+    for _ in range(200):
+        if not atspi_helper._looking:
+            return
+        time.sleep(0.01)
+    raise AssertionError("the focused-app look never ended")
+
+
+def test_a_look_that_never_answers_doesnt_hold_up_quitting():
+    """A look at the focused app that hangs (an X server that stopped
+    answering) kept TuxTalk from quitting: Python waited for its thread."""
+    import subprocess
+    import sys
+    code = ("import threading, time\n"
+            "from tuxtalk import atspi_helper\n"
+            "never = threading.Event()\n"
+            "assert atspi_helper._in_time(never.wait, time.monotonic() + 0.05) is None\n"
+            "print('unknown', flush=True)\n")
+    child = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, text=True)
+    try:
+        out, _ = child.communicate(timeout=10)
+        assert child.returncode == 0 and out.strip() == "unknown"
+    finally:
+        child.kill()
+        child.wait()
+
+
+def test_a_password_field_counts_when_asking_for_the_focused_app_fails(bus):
+    def broken():
+        raise RuntimeError("an odd answer from the desktop")
+    bus.app("Firefox", PASSWORD)
+    assert atspi_helper.focused_is_password(focused_class=broken) is True
+
+
+@pytest.mark.parametrize("background_first", [True, False])
+def test_code_behind_code_oss_doesnt_refuse_the_dictation(bus, background_first):
+    """Code's stale login box counted as Code - OSS's own, since "Code" is
+    the first word of the class code-oss: dictation into Code - OSS was refused."""
+    apps = [("Code", PASSWORD), ("Code OSS", TEXT)]
+    for name, role in apps if background_first else apps[::-1]:
+        bus.app(name, role)
+    assert atspi_helper.focused_is_password(focused_class=lambda: "code-oss") is False
+
+
+def test_an_app_named_like_the_classs_first_word_cant_clear_a_password_field(bus):
+    bus.app("Firefox", PASSWORD)
+    bus.app("Code", TEXT)
+    assert atspi_helper.focused_is_password(focused_class=lambda: "code-oss") is True
+
+
+def test_brave_on_the_bus_is_the_brave_browser_window(bus):
+    bus.app("Brave", TEXT)
+    bus.app("Firefox", PASSWORD)
+    assert atspi_helper.focused_is_password(focused_class=lambda: "brave-browser") is False
+
+
+def test_the_shells_own_password_prompt_counts_over_any_app(bus):
+    bus.app("gedit", TEXT)
+    bus.app("gnome-shell", PASSWORD)
+    assert atspi_helper.focused_is_password(focused_class=lambda: "org.gnome.gedit") is True
+
+
+def test_the_focused_window_is_asked_only_once_a_password_field_is_found(bus):
+    """A look at it for every check would slow every line down for nothing."""
+    looks = []
+    bus.app("gedit", TEXT)
+    bus.app("kwrite", TEXT)
+    assert atspi_helper.focused_is_password(focused_class=lambda: looks.append(1)) is False
+    assert looks == []
 
 
 def test_a_slow_search_isnt_followed_by_a_walk_of_the_same_app(bus):

@@ -344,7 +344,7 @@ def space_to_give_back(monkeypatch, keyboard, keys_held):
     before its key (focused_window.claim_into, which asks the desktop)."""
     chat_window = focused_window.Destination("brave-browser", ("tray", "{1}"))
     monkeypatch.setattr(focused_window, "look", lambda: chat_window[:2])
-    monkeypatch.setattr(focused_window, "is_password", lambda: False)
+    monkeypatch.setattr(focused_window, "is_password", lambda **k: False)
     monkeypatch.setattr("time.sleep", lambda s: None)
     claim_into = focused_window.claim_into
     send_countdown._owe_space({"space": " ", "to": chat_window, "mode": "type",
@@ -389,7 +389,7 @@ def test_alt_going_down_as_the_space_goes_out_keeps_it_owed(keyboard, monkeypatc
     monkeypatch.setattr(modifier_hotkeys, "_noted", ([AltFromTheSecondLook()], frozenset()))
     chat_window = focused_window.Destination("brave-browser", ("tray", "{1}"))
     monkeypatch.setattr(focused_window, "look", lambda: chat_window[:2])
-    monkeypatch.setattr(focused_window, "is_password", lambda: False)
+    monkeypatch.setattr(focused_window, "is_password", lambda **k: False)
     monkeypatch.setattr("time.sleep", lambda s: None)
     send_countdown._owe_space({"space": " ", "to": chat_window, "mode": "type",
                                "type": delivery.type_onto_dictation})
