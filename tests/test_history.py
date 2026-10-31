@@ -229,3 +229,46 @@ def test_clear_history_is_not_undone_by_a_dictation_finishing_meanwhile(monkeypa
     monkeypatch.setattr(history, "get_entries", read_list)
     assert cleared.wait(5)
     assert "something private" not in history.get_entries()
+
+
+def test_a_lock_that_fails_does_not_stop_the_dictation_being_typed(monkeypatch):
+    """With the runtime folder full, writing the PID in the history lock
+    fails. Recent Dictations misses that one, and the words are still typed."""
+    from tuxtalk import single_instance
+
+    def full_disk(lock, wait_s=0.0):
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr(single_instance, "claim", full_disk)
+    typed = []
+    monkeypatch.setattr(engine, "transcribe", lambda audio, language: "hello there")
+    monkeypatch.setattr(dictation_text, "prepare_text", lambda raw, *a, **k: "Hello there. ")
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
+    monkeypatch.setattr(delivery, "inject_text", lambda text, mode, **kw: typed.append(text))
+
+    frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
+    pipeline.transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False,
+                                   smart_quotes=False, notify_on=False,
+                                   message=rs.state.current.message)
+
+    assert typed == ["Hello there. "]
+    assert history.get_entries() == []
+
+
+def test_nothing_changes_the_list_while_another_change_holds_it(monkeypatch):
+    """A change made beside another one is how cleared entries came back.
+    When the lock isn't free within the wait, neither a dictation nor Clear
+    History touches the list; nothing goes ahead without the lock."""
+    from tuxtalk import single_instance
+    history.add_entry("something private")
+    monkeypatch.setattr(history, "LOCK_WAIT_S", 0.1)
+    held = single_instance.open_lock("history.lock")   # a stuck change elsewhere
+    try:
+        assert single_instance.claim(held)
+        history.clear()
+        history.add_entry("the newest dictation")
+        history.forget("something private")
+        assert history.get_entries() == ["something private"]
+    finally:
+        held.close()
+    history.clear()
+    assert history.get_entries() == []

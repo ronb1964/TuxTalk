@@ -28,7 +28,8 @@ _no_folder = FailureNotes()
 
 MAX_ENTRIES = 20
 PREVIEW_CHARS = 50
-# Behind another change to the list, then go ahead: a dictation waits for this.
+# Behind another change to the list, then that change is left out: a
+# dictation waits this long at most.
 LOCK_WAIT_S = 2.0
 
 
@@ -53,24 +54,40 @@ def history_path():
 @contextlib.contextmanager
 def _one_change_at_a_time():
     """Held around each change to the list, across processes: a dictation
-    finishing as Clear History ran wrote the cleared entries back. Behind a
-    change that doesn't end in LOCK_WAIT_S, or with no lock to be had, it
-    goes ahead anyway: Recent Dictations must not hold up a dictation.
-    Nothing is locked when no list is kept (history_path)."""
-    from . import single_instance
-    if history_path() is None:
-        yield
+    finishing as Clear History ran wrote the cleared entries back. Yields
+    whether the change may be made: not without the lock, since a change
+    made beside another one can bring cleared entries back, and not without
+    a list kept (history_path). The lock is waited for LOCK_WAIT_S at most:
+    Recent Dictations must not hold up a dictation, so a stuck holder costs
+    that one change, logged."""
+    lock = _take_lock() if history_path() is not None else None
+    if lock is None:
+        yield False
         return
+    with lock:
+        yield True
+
+
+def _take_lock():
+    """The history lock file, held by this process, or None (logged) when
+    it can't be had. Every error is caught here, before the change runs: a
+    full runtime folder makes writing the PID in the lock fail, and that
+    must not stop the dictation being typed."""
+    from . import single_instance
     try:
         lock = single_instance.open_lock("history.lock")
     except OSError as e:
-        logger.warning(f"Recent Dictations: no lock, changing them anyway ({e})")
-        yield
-        return
-    with lock:
-        if not single_instance.claim(lock, wait_s=LOCK_WAIT_S):
-            logger.warning("Recent Dictations: another change doesn't end; going ahead")
-        yield
+        logger.warning(f"Recent Dictations not changed: no lock to be had ({e})")
+        return None
+    try:
+        if single_instance.claim(lock, wait_s=LOCK_WAIT_S):
+            return lock
+        logger.warning("Recent Dictations not changed: another change to them doesn't end")
+    except OSError as e:
+        logger.warning(f"Recent Dictations not changed: could not lock them ({e})")
+    with contextlib.suppress(OSError):    # a PID that couldn't be written fails again here
+        lock.close()
+    return None
 
 
 def get_entries():
@@ -101,17 +118,18 @@ def add_entry(text, replaces=None):
     if not text:
         return
     old = _clean(replaces)
-    with _one_change_at_a_time():
-        _save([text] + [e for e in get_entries() if e != text and e != old])
+    with _one_change_at_a_time() as allowed:
+        if allowed:
+            _save([text] + [e for e in get_entries() if e != text and e != old])
 
 
 def forget(text):
     """Take *text* back out: it went in first, then wasn't typed after all
     (a password field), so it may be the password itself. Never raises."""
     text = _clean(text)
-    with _one_change_at_a_time():
+    with _one_change_at_a_time() as allowed:
         entries = get_entries()
-        if text in entries:
+        if allowed and text in entries:
             _save([e for e in entries if e != text])
 
 
@@ -138,9 +156,9 @@ def _save(entries):
 def clear():
     """Forget every recent dictation."""
     path = history_path()
-    if path is None:
-        return
-    with _one_change_at_a_time():
+    with _one_change_at_a_time() as allowed:
+        if not allowed:
+            return
         try:
             os.remove(path)
         except FileNotFoundError:
