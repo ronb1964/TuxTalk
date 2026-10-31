@@ -558,6 +558,13 @@ def test_a_slow_tray_doesnt_hold_up_the_check_before_each_line(bus):
         atspi_helper._looks.submit(lambda: None).result()    # the next test's look goes first
 
 
+def test_a_password_field_counts_when_asking_for_the_focused_app_fails(bus):
+    def broken():
+        raise RuntimeError("an odd answer from the desktop")
+    bus.app("Firefox", PASSWORD)
+    assert atspi_helper.focused_is_password(focused_class=broken) is True
+
+
 def test_brave_on_the_bus_is_the_brave_browser_window(bus):
     bus.app("Brave", TEXT)
     bus.app("Firefox", PASSWORD)

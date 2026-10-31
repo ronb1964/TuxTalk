@@ -174,6 +174,10 @@ def _in_time(focused_class, deadline):
         look.cancel()       # not started yet: it never needs to be
         logger.debug("Password field check: which app has the focus wasn't told in time")
         return None
+    except Exception as e:
+        # Not known, as when it's late: a password field found still counts.
+        logger.info(f"Password field check: couldn't tell which app has the focus: {e!r}")
+        return None
 
 
 def _names_the_app(name: str, wm_class: str) -> bool:
