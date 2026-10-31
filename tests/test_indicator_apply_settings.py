@@ -149,15 +149,8 @@ def test_the_settings_change_on_the_gtk_thread_only(indicator, monkeypatch):
 @pytest.mark.parametrize("desktop, popup", [("COSMIC", True), ("KDE", False), ("GNOME", False)])
 def test_the_indicator_never_takes_the_focus_on_cosmic(monkeypatch, desktop, popup):
     """COSMIC focused the ordinary indicator window, and the dictation's
-    target lost the keyboard while it showed (Pop!_OS VM, 2026-10-21)."""
-    gi = pytest.importorskip("gi")
-    gi.require_version("Gtk", "3.0")
+    target lost the keyboard while it showed (Pop!_OS VM)."""
     from gi.repository import Gtk
-
-    if not Gtk.init_check(None)[0]:
-        pytest.skip("no display available")
-    from tuxtalk.recording_indicator import RecordingIndicator
-
     monkeypatch.setenv("XDG_CURRENT_DESKTOP", desktop)
     monkeypatch.delenv("DESKTOP_SESSION", raising=False)
     ind = RecordingIndicator(position="center", size="medium")
