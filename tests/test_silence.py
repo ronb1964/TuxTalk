@@ -975,6 +975,17 @@ def test_talking_from_start_to_stop_in_a_quiet_room_gives_no_verdict():
     assert silence.speech_over_room_db(take.astype(np.float32) / 32768, SR) is None
 
 
+def test_soft_words_at_the_start_and_end_of_a_quiet_take_are_not_its_room():
+    """A second of soft words (RMS 200) each side of two seconds at 2000, in
+    a room at 6: taken for the room, the voice stood 20 dB over it and the
+    test said the room was noisy. The pauses between the loud words are far
+    quieter than that "room", so it gives no verdict."""
+    t = np.arange(SR) / SR
+    soft = np.sin(2 * np.pi * 220 * t) * 200.0 * np.sqrt(2) + rng.normal(0, 6.0, t.size)
+    take = np.concatenate([soft, speech(2.0, level=2000.0 * np.sqrt(2), noise_level=6.0), soft])
+    assert silence.speech_over_room_db(take.astype(np.float32) / 32768, SR) is None
+
+
 def _mic_test_take(room):
     """A microphone test: a second of *room* (a function of seconds giving
     int16-scale audio), 2.5 s of talking over it, then 1.5 s more; the

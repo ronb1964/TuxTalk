@@ -68,7 +68,7 @@ def key_delay() -> int:
 
 
 def send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY_MS,
-              raise_if_partial: bool = False, claim=None) -> bool:
+              raise_if_partial: bool = False, claim=None, right_before=None) -> bool:
     """Press keys [(evdev code, 1 down / 0 up)] on TuxTalk's virtual keyboard.
     True only if all of them were sent: keystrokes that never happened must
     not reach the undo buffer.
@@ -86,11 +86,15 @@ def send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY_
     not go out another way (wtype, the clipboard) either. *claim* is
     virtual_keyboard.send's; in a delivery that may only go into one window
     (delivery.inject_text's *into*), the claim checks it's still that one.
+    *right_before* runs with the keyboard held right before the first key
+    goes down, after every check and wait.
     """
     if claim is None and this_thread.into is not None:
         claim = functools.partial(focused_window.claim_into, this_thread.into)
     if this_thread.last_check is not None:
         claim = _then(claim, this_thread.last_check)
+    if right_before is not None:
+        claim = _then(claim, right_before)
     before_press = modifier_hotkeys.wait_while_held(focused_window.destination)
     try:
         sent = virtual_keyboard.send(events, delay_ms, before_press, claim)
@@ -342,7 +346,8 @@ def type_text_raw(text: str) -> bool:
     return False
 
 
-def send_paste_keystroke(focused_class: str | None, primary_holds_text: bool = False) -> bool:
+def send_paste_keystroke(focused_class: str | None, primary_holds_text: bool = False,
+                         right_before=None) -> bool:
     """Send the paste shortcut for *focused_class*. True if it was sent.
 
     A terminal gets Ctrl+Shift+V (Ctrl+V is readline's quoted-insert there and
@@ -350,7 +355,7 @@ def send_paste_keystroke(focused_class: str | None, primary_holds_text: bool = F
     Shift+Insert when the primary selection holds the text too: GUI toolkits
     paste the clipboard on Shift+Insert and terminals paste the primary
     selection, so it lands either way. Without that, Ctrl+V, which suits most
-    apps."""
+    apps. *right_before* as for send_keys."""
     if is_terminal_class(focused_class):
         keys = ctrl_keys("v", shift=True)
         logger.info(f"Paste: Ctrl+Shift+V (terminal class={focused_class!r})")
@@ -360,7 +365,7 @@ def send_paste_keystroke(focused_class: str | None, primary_holds_text: bool = F
     else:
         keys = ctrl_keys("v")
         logger.info(f"Paste: Ctrl+V (class={focused_class!r})")
-    if not send_keys(keys, what="paste", raise_if_partial=True):
+    if not send_keys(keys, what="paste", raise_if_partial=True, right_before=right_before):
         # The keystroke never reached the desktop: the text is sitting on the
         # clipboard but never made it into the app.
         logger.error("Paste keystroke failed — text was not inserted")
@@ -426,8 +431,8 @@ def paste_text_x11(text: str) -> bool:
         return False
     try:
         time.sleep(0.08)    # let the selection settle before the app asks for it
-        x11_clipboard.reads_from_now()
-        return send_paste_keystroke(focused_window.window_class())
+        return send_paste_keystroke(focused_window.window_class(),
+                                    right_before=x11_clipboard.reads_from_now)
     finally:
         if keeper is not None:
             keeper.after_paste(text)

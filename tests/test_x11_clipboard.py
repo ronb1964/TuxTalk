@@ -226,7 +226,7 @@ def test_a_paste_keeps_the_clipboard_only_when_the_setting_is_on(monkeypatch):
     monkeypatch.setattr(cb, "ClipboardKeeper", Keeper)
     monkeypatch.setattr(keyboard_output, "_clipboard_keeper", None)
     monkeypatch.setattr(x11, "offer_dictation", lambda text: events.append(("offer", text)) or True)
-    monkeypatch.setattr(keyboard_output, "send_paste_keystroke", lambda *a: True)
+    monkeypatch.setattr(keyboard_output, "send_paste_keystroke", lambda *a, **k: True)
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "xed")
     monkeypatch.setattr("time.sleep", lambda s: None)
 
@@ -243,13 +243,51 @@ def test_a_paste_keeps_the_clipboard_only_when_the_setting_is_on(monkeypatch):
                       ("restore", "hello"), "save", "failed"]
 
 
-def test_something_copied_after_the_paste_is_not_replaced(monkeypatch):
-    """Another app owning the clipboard now: the dictation is no longer what
-    it holds, so the restore leaves it alone."""
-    monkeypatch.setattr(x11, "_offer", x11._Offer("dictated words", None, True, threading.Event()))
-    assert x11.X11Board.holds("dictated words") is True
-    x11._taken_over(None, None)
-    assert x11.X11Board.holds("dictated words") is False
+def test_something_copied_after_the_paste_is_not_replaced(board):
+    """Another app has copied since the paste, and this process has heard
+    of it: the restore leaves its copy alone."""
+    with _app_offering(_TEXT):
+        _paste_keeping("dictated words", schedule=lambda delay, fn: lambda: None)
+    with _app_offering({"UTF8_STRING": "copied just now"}):
+        _pump_until(lambda: x11._offer is None)
+        assert _in_the_service(lambda: x11.X11Board.put_back(
+            (b"what I copied", "UTF8_STRING", False, ()), "dictated words")) is False
+        assert _what_it_read(_start_reading()) == repr(("copied just now", None))
+
+
+def test_a_copy_the_service_hasnt_heard_of_yet_is_not_replaced(board):
+    """Another app copies right before the restore, and the news of it
+    hasn't reached the service: the X server refuses the restore, as it is
+    asked with the time the dictation was offered."""
+    with _app_offering(_TEXT):
+        _paste_keeping("dictated words", schedule=lambda delay, fn: lambda: None)
+    with _app_offering({"UTF8_STRING": "copied just now"}):
+        # Not pumped: the service hasn't heard that it lost the clipboard.
+        assert x11._offer.text == "dictated words"
+        assert x11._put_back_over((b"what I copied", "UTF8_STRING", False, ()),
+                                  "dictated words") is False
+        assert _what_it_read(_start_reading()) == repr(("copied just now", None))
+
+
+def test_a_copy_made_while_it_is_read_is_not_saved_as_the_first(board, monkeypatch):
+    """The types and the copy are two questions. A password manager copying
+    in between had its password saved as the plain text before it, put back
+    without the mark, and handed to the clipboard manager at quit."""
+    from gi.repository import Gtk
+    request_text = Gtk.Clipboard.request_text
+    password_manager = []
+
+    def password_copied_first(self, callback):
+        password_manager.append(contextlib.ExitStack())
+        password_manager[0].enter_context(_app_offering(
+            {"UTF8_STRING": "hunter2", "x-kde-passwordManagerHint": "secret"}))
+        request_text(self, callback)
+    monkeypatch.setattr(Gtk.Clipboard, "request_text", password_copied_first)
+    with _app_offering(_TEXT):
+        try:
+            assert _in_the_service(x11.X11Board.read) is cb.NOTHING
+        finally:
+            password_manager[0].close()
 
 
 @pytest.mark.parametrize("dictations", [["dictated words"], ["first", "second"]],
@@ -334,31 +372,29 @@ def test_a_slow_app_gets_the_dictation_not_the_copy_put_back(board):
 @pytest.fixture
 def pasting(monkeypatch):
     """keyboard_output's X11 paste with restore_clipboard on and a fresh
-    keeper; the paste key is *on_paste_key*, which a test may replace."""
+    keeper, its keys on the suite's recording keyboard; the window it finds
+    is *looked_up*'s, which a test may replace."""
     monkeypatch.setattr(keyboard_output, "_clipboard_keeper", None)
     monkeypatch.setattr(live, "restore_clipboard", True)
-    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "xed")
-    keys = {"on_paste_key": lambda: True}
-    monkeypatch.setattr(keyboard_output, "send_paste_keystroke",
-                        lambda *a: keys["on_paste_key"]())
-    return keys
+    window = {"looked_up": lambda: "xed"}
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: window["looked_up"]())
+    return window
 
 
 def test_a_clipboard_manager_reading_first_doesnt_hurry_the_restore(board, pasting,
                                                                      monkeypatch):
     """Clipman and CopyQ before 8 read each new copy at once; that read used
     to count as the app's, and an app pasting a second later got the user's
-    copy. Only a read after the paste key counts now."""
-    offer = x11.offer_dictation
+    copy. A manager reading as late as the window lookup before the paste
+    key doesn't count either."""
+    app = []
 
-    def offered_and_read_by_a_manager(text):
-        ok = offer(text)
+    def manager_reads_then_window():
         manager = _start_reading()
         manager.wait(timeout=10)
-        return ok
-    monkeypatch.setattr(x11, "offer_dictation", offered_and_read_by_a_manager)
-    app = []
-    pasting["on_paste_key"] = lambda: app.append(_start_reading(after_s=1.0)) or True
+        app.append(_start_reading(after_s=1.0))
+        return "xed"
+    pasting["looked_up"] = manager_reads_then_window
     with _app_offering(_TEXT):
         assert _in_the_service(lambda: keyboard_output.paste_text_x11("dictated words"))
         assert _what_it_read(app[0]) == repr(("dictated words", b"secret"))
@@ -425,3 +461,14 @@ def test_quitting_hands_the_copy_put_back_to_the_clipboard_manager(board, monkey
         assert x11._put_back((b"copied", "UTF8_STRING", what == "a password", ()))
     _in_the_service(x11.keep_copy_at_quit)
     assert stored == (["copied"] if kept else [])
+
+
+def test_gtk_too_busy_to_read_or_restore_is_logged(board, monkeypatch, caplog):
+    """A GTK thread that doesn't get to the read or the restore in time:
+    the restore is lost, and the log says why."""
+    monkeypatch.setattr(x11, "READ_WAIT_S", 0.05)      # nothing pumps this thread's loop
+    with caplog.at_level("INFO", logger="tuxtalk.x11_clipboard"):
+        assert x11.X11Board.read() is cb.NOTHING
+        assert x11.X11Board.put_back(cb.EMPTY, "dictated words") is False
+    assert caplog.text.count("GTK's thread was busy") == 2
+

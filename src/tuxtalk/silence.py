@@ -623,11 +623,17 @@ _TALKING_TO_JUDGE_S = 1.0
 _ROOM_TO_JUDGE_S = 1.0
 # A shorter take can't hold both.
 _SHORTEST_TAKE_S = _TALKING_TO_JUDGE_S + _ROOM_TO_JUDGE_S
+# The room outside the talking is heard in the pauses between its words too.
+# When those pauses are much quieter (+15 dB), what is outside is soft words
+# at the start or end, not the room. In the recorded and made rooms the room
+# never stood more than 14 dB over the pauses (17,000 takes).
+_ROOM_OVER_PAUSES = 10 ** (15 / 20)
 
 
 def speech_over_room_db(audio_f32, sample_rate):
     """How much louder a recording's speech is than its room, in dB, or None
-    without a second of clear talking and a second of the room around it.
+    without a second of clear talking and a second of the room around it,
+    or when what is around it is louder than the pauses between the words.
     Under NOISY_ROOM_DB the room is noisy for that voice: in recorded rooms
     like it hands-free stops by itself about half the time or less, and in
     steady noise it cuts the speaker off mid-sentence more often."""
@@ -644,5 +650,7 @@ def speech_over_room_db(audio_f32, sample_rate):
     if ((last - first) * _TAP_BLOCK_S < _TALKING_TO_JUDGE_S
             or len(outside) * _TAP_BLOCK_S < _ROOM_TO_JUDGE_S):
         return None
-    speech = np.percentile(rms[first:last], 90)
-    return float(20 * np.log10(max(speech, 1.0) / max(np.median(outside), 1.0)))
+    room, talking = np.median(outside), rms[first:last]
+    if room > np.percentile(talking, 10) * _ROOM_OVER_PAUSES:
+        return None
+    return float(20 * np.log10(max(np.percentile(talking, 90), 1.0) / max(room, 1.0)))

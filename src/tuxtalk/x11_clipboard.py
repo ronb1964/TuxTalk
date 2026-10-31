@@ -28,6 +28,7 @@ _Offer = collections.namedtuple("_Offer", "text data sensitive read")
 
 _owner = None                       # the invisible window owning the clipboard, made once
 _offer = None                       # what it offers now, or None
+_owned_at = None                    # the X server's time when it took the clipboard
 _dictation_read = threading.Event()     # set when an app reads the latest dictation
 _dictation_at = float("-inf")       # time.monotonic() of the latest dictation offered
 
@@ -76,9 +77,10 @@ def offer_dictation(text, timeout=1.0):
 
 
 def reads_from_now() -> None:
-    """Just before the paste key: forget reads of the dictation so far, a
-    clipboard manager's (Clipman, CopyQ before 8) at the offer, so the
-    restore waits for the app's own. Called by the thread that offered it."""
+    """Right before the paste key goes down, after every check and wait:
+    forget reads of the dictation so far, a clipboard manager's (Clipman,
+    CopyQ before 8), so the restore waits for the app's own. Called by the
+    thread that offered it."""
     _dictation_read.clear()
 
 
@@ -122,10 +124,13 @@ def _offer_dictation(text, read):
     return owned
 
 
-def _own(offer):
-    """On GTK's thread: own the clipboard, offering *offer*. GTK's selection
-    API, since PyGObject can't reach set_with_data."""
-    global _owner, _offer
+def _own(offer, at=None):
+    """On GTK's thread: own the clipboard, offering *offer*; True if it
+    does. With *at*, the X server time it took the clipboard before: the
+    server then refuses if another app has copied since, even if this
+    process hasn't heard of it yet. GTK's selection API, since PyGObject
+    can't reach set_with_data."""
+    global _owner, _offer, _owned_at
     from gi.repository import Gdk, GdkX11, Gtk
     if _owner is None:
         _owner = Gtk.Invisible()
@@ -139,8 +144,12 @@ def _own(offer):
                                  Gdk.Atom.intern(name, False), info)
     # A real time, not CurrentTime, which ICCCM rules out for taking a
     # selection: apps compare it to tell the newest copy.
-    now = GdkX11.x11_get_server_time(_owner.get_window())
-    return Gtk.selection_owner_set(_owner, Gdk.SELECTION_CLIPBOARD, now)
+    now = at or GdkX11.x11_get_server_time(_owner.get_window())
+    if not Gtk.selection_owner_set(_owner, Gdk.SELECTION_CLIPBOARD, now):
+        _offer = None
+        return False
+    _owned_at = now
+    return True
 
 
 def _answer_paste(_owner, selection_data, _info, _time):
@@ -187,6 +196,7 @@ class X11Board:
         try:
             gtk_loop.call(_ask_owner, done, timeout=READ_WAIT_S)
         except TimeoutError:
+            logger.warning("Couldn't read the clipboard to restore it later: GTK's thread was busy")
             return NOTHING
         if not answered.wait(READ_WAIT_S):
             logger.info("The app that owns the clipboard didn't answer; not restoring it")
@@ -194,23 +204,12 @@ class X11Board:
         return got[0]
 
     @staticmethod
-    def holds(text):
-        """Whether the service still offers the dictation *text*: nothing
-        has been copied since."""
+    def put_back(saved, over):
+        """Put a read() result back, but only over the dictation *over*:
+        something copied since stays. True if it was put back."""
         from . import gtk_loop
         try:
-            return gtk_loop.call(_offers_dictation, text, timeout=READ_WAIT_S)
-        except TimeoutError:
-            return False
-
-    @staticmethod
-    def write_back(saved):
-        """Put a read() result back; True if it was."""
-        from . import gtk_loop
-        if saved is NOTHING:
-            return False
-        try:
-            return bool(gtk_loop.call(_put_back, saved, timeout=READ_WAIT_S))
+            return bool(gtk_loop.call(_put_back_over, saved, over, timeout=READ_WAIT_S))
         except TimeoutError:
             logger.warning("Couldn't restore the clipboard: GTK's thread was busy")
             return False
@@ -244,9 +243,16 @@ def _wait_for_read(read, pasted_at, delay, cancelled):
     return not cancelled.is_set()
 
 
-def _offers_dictation(text):
-    """On GTK's thread: whether the dictation *text* is offered still."""
-    return _offer is not None and _offer.read is not None and _offer.text == text
+def _put_back_over(saved, over):
+    """On GTK's thread: X11Board.put_back(). Looked at and done in one go,
+    so nothing this process hears of can come in between, and with the
+    time the dictation was offered, so the X server refuses it over a copy
+    made since that this process hasn't heard of yet."""
+    if not (_offer is not None and _offer.read is not None and _offer.text == over
+            and _put_back(saved, at=_owned_at)):
+        logger.info("Clipboard changed after the paste; leaving it as it is")
+        return False
+    return True
 
 
 def _ask_owner(done):
@@ -258,6 +264,18 @@ def _ask_owner(done):
     answers that question (ICCCM)."""
     from gi.repository import Gdk, Gtk
     board = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
+    # The types and the copy are separate questions: an app copying in
+    # between (a password manager, or the same app copying again) would have
+    # its copy saved as the first one's, say not marked as a password.
+    changed = []
+    watch = board.connect("owner-change", lambda *_args: changed.append(True))
+
+    def done_reading(saved):
+        board.disconnect(watch)
+        if changed and saved is not NOTHING:
+            logger.info("The clipboard changed while it was read; not restoring it")
+            saved = NOTHING
+        done(saved)
 
     def got_types(_board, answer):
         """The owner's types are in *answer*: ask for its copy in the best."""
@@ -266,19 +284,19 @@ def _ask_owner(done):
         names = [atom.name() for atom in atoms] if found else []
         types = [name for name in names if name not in _META_TYPES]
         if not types:
-            done(EMPTY)
+            done_reading(EMPTY)
             return
         sensitive = PASSWORD_HINT in names
         wanted = best_type(types)
         # Files copied in a file manager are offered as text too (their paths).
         if wanted != "text/uri-list" and Gtk.targets_include_text(atoms):
-            board.request_text(lambda _board, text: done(_saved(
+            board.request_text(lambda _board, text: done_reading(_saved(
                 None if text is None else text.encode("utf-8"), TEXT_TYPES[0], sensitive)))
             return
         # With the file manager's own types, and the paths as text for an editor.
         files = (*FILE_MANAGER_TYPES, *TEXT_TYPES)
         more = [t for t in files if t in types] if wanted == "text/uri-list" else []
-        _ask_for_types(board, [wanted, *more], {}, lambda got: done(_saved(
+        _ask_for_types(board, [wanted, *more], {}, lambda got: done_reading(_saved(
             got.get(wanted), wanted, sensitive, tuple((t, got[t]) for t in more if t in got))))
     board.request_contents(Gdk.Atom.intern("TARGETS", False), got_types)
 
@@ -311,20 +329,23 @@ def _saved(data, mime, sensitive, more=()):
     return data, mime, sensitive, more
 
 
-def _put_back(saved):
+def _put_back(saved, at=None):
     """On GTK's thread: offer the user's copy *saved* again, as it came
-    (text in every text type, files in each type they came in),
-    or leave the clipboard empty if it was."""
+    (text in every text type, files in each type they came in), or leave
+    the clipboard empty if it was; *at* as for _own(). True if it was."""
     global _offer
     from gi.repository import Gdk, GdkX11, Gtk
+    if saved is NOTHING:
+        return False
     if saved is EMPTY:
         _offer = None
-        now = GdkX11.x11_get_server_time(_owner.get_window())
-        return Gtk.selection_owner_set(None, Gdk.SELECTION_CLIPBOARD, now)
+        now = at or GdkX11.x11_get_server_time(_owner.get_window())
+        Gtk.selection_owner_set(None, Gdk.SELECTION_CLIPBOARD, now)
+        return Gdk.selection_owner_get(Gdk.SELECTION_CLIPBOARD) is None
     data, mime, sensitive, more = saved
     if mime in TEXT_TYPES:
-        return _own(_Offer(data.decode("utf-8", "replace"), None, sensitive, None))
-    return _own(_Offer(None, {mime: data, **dict(more)}, sensitive, None))
+        return _own(_Offer(data.decode("utf-8", "replace"), None, sensitive, None), at)
+    return _own(_Offer(None, {mime: data, **dict(more)}, sensitive, None), at)
 
 
 def _store_copy(stored):

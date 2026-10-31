@@ -199,18 +199,17 @@ class WaylandBoard:
         return _read_clipboard()
 
     @staticmethod
-    def holds(text):
-        """Whether it still holds the dictation *text*; unreadable, it isn't
-        known to, so it is left alone."""
+    def put_back(saved, over):
+        """Put a read() result back, but only while the clipboard holds the
+        dictation *over*: something copied since, or a clipboard that can't
+        be read, is left alone. True if it was put back."""
         try:
             current = _wl_paste(best_type(_wl_paste_types()) or "text/plain")
         except (OSError, subprocess.SubprocessError):
+            current = None
+        if current != over.encode("utf-8"):
+            logger.info("Clipboard changed after the paste; leaving it as it is")
             return False
-        return current == text.encode("utf-8")
-
-    @staticmethod
-    def write_back(saved):
-        """Put a read() result back; True if it was."""
         return _write_back(saved)
 
 
@@ -316,12 +315,7 @@ class ClipboardKeeper:
             primary, self._primary = self._primary, NOTHING
             if primary not in (NOTHING, _UNREADABLE):
                 _restore_primary(primary, text)
-            if saved is NOTHING:
-                return
-            if not self._board.holds(text):
-                logger.info("Clipboard changed after the paste; leaving it as it is")
-                return
-            if self._board.write_back(saved):
+            if saved is not NOTHING and self._board.put_back(saved, text):
                 logger.info("Clipboard restored after paste")
 
 
