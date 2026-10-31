@@ -4,8 +4,8 @@ wrong place, voice editing in a terminal, bold in a plain-text app.
 
 The floating label is glanced at, and the notification is gone in seconds,
 too quickly to read a whole explanation. So each time one of these comes
-up, this window opens over the app and stays until "Got it" (Ron: someone
-who makes the same mistake twice should be told twice). Ticking "Don't
+up, this window opens over the app and stays until "Got it": someone who
+makes the same mistake twice should be told twice. Ticking "Don't
 explain this again" leaves that one at the short floating label for good
 (explained.json, next to the settings), until Preferences' "Show tips
 again" brings them all back.
@@ -128,12 +128,9 @@ def start_helper_window(module, *args):
     opens over the app being dictated into: on XWayland first, where it may
     be placed (plain Wayland if there's none, centred on the screen). Shared
     by these explanations and "fix that word". Returns the Popen."""
+    from .service_launcher import SERVICE_GDK_BACKEND
     env = os.environ.copy()
-    env["GDK_BACKEND"] = "x11,wayland"
-    from .service_launcher import dev_pythonpath
-    pythonpath = dev_pythonpath()
-    if pythonpath:
-        env["PYTHONPATH"] = pythonpath
+    env["GDK_BACKEND"] = SERVICE_GDK_BACKEND
     return subprocess.Popen([sys.executable, "-m", module, *args], env=env,
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                             start_new_session=True)

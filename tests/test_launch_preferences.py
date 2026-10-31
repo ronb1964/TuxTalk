@@ -19,20 +19,21 @@ class _Popen:
 def test_preferences_runs_the_module_and_keeps_the_callers_backend(monkeypatch):
     _Popen.calls = []
     monkeypatch.setattr(sl.subprocess, "Popen", _Popen)
-    monkeypatch.setattr(sl, "dev_pythonpath", lambda: "/src:/site")
     monkeypatch.setenv("GDK_BACKEND", "wayland")
     sl.launch_preferences("updates")
     (argv, env), = _Popen.calls
     assert argv == [sys.executable, "-m", "tuxtalk.prefs", "--tab=updates"]
-    assert env["PYTHONPATH"] == "/src:/site"
     assert env["GDK_BACKEND"] == "wayland"     # Preferences runs natively
 
 
-def test_preferences_outside_a_checkout_inherits_pythonpath(monkeypatch):
+def test_preferences_and_the_service_inherit_the_launchers_pythonpath(monkeypatch):
+    """The tray's launcher (dictate-tray, run-dev.sh) sets PYTHONPATH; the
+    windows and the service it starts must find the same TuxTalk."""
     _Popen.calls = []
     monkeypatch.setattr(sl.subprocess, "Popen", _Popen)
-    monkeypatch.setattr(sl, "dev_pythonpath", lambda: None)
     monkeypatch.setenv("PYTHONPATH", "/appimage/usr/src")
+    sl.launch_dictation_service()
+    assert _Popen.calls.pop()[1]["PYTHONPATH"] == "/appimage/usr/src"
     sl.launch_preferences()
     (argv, env), = _Popen.calls
     assert argv == [sys.executable, "-m", "tuxtalk.prefs"]
