@@ -10,10 +10,10 @@ before 0.15.0, so older entries use that name.
   login box of its own had the focus. Now only the app you're in counts,
   wherever TuxTalk can tell which one that is, and the desktop's own
   password prompts always do.
-- With "Send each dictation automatically" on, OnlyOffice, AbiWord and the
-  Flatpak of LibreOffice got a new line after every dictation, as if they
-  were a chat. They're left alone now, like LibreOffice and KWrite already
-  were.
+- With "Send each dictation automatically" on, the Flatpaks of LibreOffice,
+  OnlyOffice and AbiWord, and LibreOffice Draw, got a new line after every
+  dictation, as if they were a chat. They're left alone now, like the other
+  word processors and KWrite already were.
 - On a computer where TuxTalk couldn't type at all (no access to its
   virtual keyboard, and no wtype), a dictation was put on the clipboard in
   place of what you'd copied, without the mark that keeps it out of
@@ -22,35 +22,24 @@ before 0.15.0, so older entries use that name.
 - With "Restore clipboard" on, on Wayland, a password copied from your
   password manager at the very moment TuxTalk read the clipboard could be
   put back without its "secret" mark, and Klipper would then save it in its
-  history. What TuxTalk puts back always carries that mark now, so it's
-  never saved there again; it's in your clipboard history already from when
-  you copied it.
+  history. What TuxTalk puts back always carries that mark now. Anything
+  else you'd copied is in your clipboard history already, from when you
+  copied it.
 - When typing stopped after the first lines of a dictation were already in
   (a line break or a later line that couldn't go in), TuxTalk said
   "Couldn't type the dictation", and pasting it from Recent Dictations as
-  that told you to put those lines in twice. It says "Only part of the
+  that notice told you put those lines in twice. It says "Only part of the
   dictation was typed" now.
-- In KWrite and Kate, typing a dictation of several lines (Keystroke Typing,
-  and always on X11) left a line break on your clipboard in place of what
-  you'd copied, since TuxTalk pastes the line breaks there. With "Restore
-  clipboard" off, as it is unless you turn it on, what you'd copied never
-  came back. It comes back after those line breaks now, whatever that
-  setting says.
-- A long dictation pasted while the clipboard tool had stopped answering
-  could hold up dictation until TuxTalk was restarted. It gives up after a
-  second now, as it always meant to.
 - If you tabbed into a password box while a dictation of several lines was
   going in, the line break before the next line still went into it, and in
   a login form that can press its button. TuxTalk now checks for a password
   box right before every line, line break and paste key, also after it has
   got the clipboard ready, and stops there.
-- "Delete last word", "clear everything" and select and move by voice could
-  press their keys into another window if you clicked into it right after
-  saying them, while TuxTalk waited for a held Right Ctrl to come up. The
-  backspaces then deleted text you never dictated. So could "select the
-  line" said with Shift+F8. Those keys go only into the window you said them
-  in now, and if another one has the focus by then, nothing is pressed and
-  TuxTalk says the window changed.
+- With nothing selected, "select the line" said with Shift+F8 pressed its
+  keys into whatever window had the focus once it was understood, so a
+  click into another window meanwhile selected text there. Those keys go
+  only into the window you said it in now, and if another one has the focus
+  by then, nothing is pressed and TuxTalk says the window changed.
 - With some microphones, hands-free never stopped by itself with a clothes
   dryer running nearby. Those microphones send the sound in very small
   pieces, and TuxTalk judged each piece on its own. With others, which send
@@ -372,7 +361,8 @@ before 0.15.0, so older entries use that name.
   as "$$25". Pasting already got around it, but with Keystroke Typing (or
   when a paste failed and TuxTalk typed instead) it still happened. Typed
   line breaks there are a pasted newline now, so they go through the
-  clipboard, even with Keystroke Typing.
+  clipboard, even with Keystroke Typing, and what you'd copied comes back
+  afterwards.
 - With "Turn everything down" picked for other sounds, if putting an app's
   volume back failed even once when you finished dictating, TuxTalk forgot
   about it, and the app stayed at half volume (your desktop remembers each
