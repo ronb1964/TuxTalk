@@ -5,6 +5,12 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- With "Restore clipboard" on, on Wayland, a password copied from your
+  password manager at the very moment TuxTalk read the clipboard could be
+  put back without its "secret" mark, and Klipper would then save it in its
+  history. What TuxTalk puts back always carries that mark now, so it's
+  never saved there again; it's in your clipboard history already from when
+  you copied it.
 - When typing stopped after the first lines of a dictation were already in
   (a line break or a later line that couldn't go in), TuxTalk said
   "Couldn't type the dictation", and pasting it from Recent Dictations as

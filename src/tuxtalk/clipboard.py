@@ -120,8 +120,13 @@ def _wl_copy_sensitive(text):
 
 def _read_clipboard():
     """(bytes, mime, sensitive) of what is on the clipboard now, EMPTY, or
-    NOTHING when it can't be read or is too big to keep. *sensitive* is
-    whether a password manager marked it, so it goes back marked too."""
+    NOTHING when it can't be read or is too big to keep.
+
+    It always goes back marked sensitive, for clipboard managers to skip:
+    the types and the contents come from two wl-paste runs, and a password
+    copied between them would be read with the types of what was there
+    before, without a password manager's mark. What the user copied is in
+    their clipboard manager's history from when they copied it."""
     try:
         types = _wl_paste_types()
         if not types:
@@ -131,7 +136,7 @@ def _read_clipboard():
         if len(data) > MAX_SAVED_BYTES:
             logger.info("Clipboard contents too large to keep; not restoring them")
             return NOTHING
-        return data, mime, PASSWORD_HINT in types
+        return data, mime, True
     except Exception as e:
         logger.info(f"Couldn't read the clipboard to restore it later: {e}")
         return NOTHING

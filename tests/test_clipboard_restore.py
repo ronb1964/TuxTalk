@@ -390,6 +390,25 @@ def test_a_password_comes_back_marked_for_clipboard_managers_to_skip(keeper, boa
     assert board.restores == [(b"hunter2", "text/plain;charset=utf-8", "sensitive")]
 
 
+def test_a_password_copied_while_the_clipboard_is_read_goes_back_marked(keeper, board,
+                                                                       monkeypatch):
+    """The types and the contents are two wl-paste runs: a password copied
+    from KeePassXC between them was read with the plain text's types, and
+    put back unmarked, for Klipper to save to disk."""
+    read = board.read
+
+    def password_copied_meanwhile(mime):
+        board.data, board.password = b"hunter2", True
+        return read(mime)
+    monkeypatch.setattr(cb, "_wl_paste", password_copied_meanwhile)
+    keeper.before_paste()
+    monkeypatch.setattr(cb, "_wl_paste", read)
+    board.data, board.password = b"dictated words", False
+    keeper.after_paste("dictated words")
+    run_pending(keeper)
+    assert board.restores == [(b"hunter2", "text/plain;charset=utf-8", "sensitive")]
+
+
 def test_the_sensitive_restore_uses_wl_copy_sensitive(monkeypatch):
     runs = []
     monkeypatch.setattr(cb, "_sensitive_supported", lambda: True)
