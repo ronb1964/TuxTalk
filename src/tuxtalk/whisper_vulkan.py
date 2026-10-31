@@ -471,7 +471,7 @@ class VulkanWhisperModel:
         # path of, or frees the model. A random path before every route
         # keeps web pages, which can post a form to 127.0.0.1 and scan the
         # ports, away from it. It doesn't stop another user, who can read the
-        # command line: engine build 2 drops /load
+        # command line: engine build 2 will drop /load
         # (vulkan-engine-patches/server-no-load-route.patch).
         self._path = "/" + secrets.token_hex(16)
         command, env = engine_process.parent_death_command(

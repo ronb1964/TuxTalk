@@ -95,8 +95,9 @@ def _engine(tmp_path, monkeypatch, *names):
 
 
 def test_parakeet_needs_an_engine_built_with_parakeet(tmp_path, monkeypatch):
-    """Engine build 1 (TalkType 0.12.0 to 0.13.1) has no Parakeet in it. It
-    still counts as installed for Whisper, so nobody re-downloads it."""
+    """whisper.cpp 1.9.4's engine build 1 (TalkType 0.12.0 to 0.13.1) has no
+    Parakeet in it. It still counts as installed for Whisper, so nobody
+    re-downloads it."""
     from tuxtalk.parakeet_engine import PARAKEET_MODEL
     _engine(tmp_path, monkeypatch, "whisper-server")
     assert wv.is_engine_installed() and wv.is_engine_installed("small")
@@ -515,7 +516,8 @@ def test_first_run_model_download_is_skipped_when_already_there(monkeypatch):
 
 
 def test_first_run_parakeet_on_vulkan_fetches_an_engine_that_can_run_it(monkeypatch):
-    """Engine build 1 can't run Parakeet, so it's fetched again with the model."""
+    """An engine without Parakeet (whisper.cpp 1.9.4's build 1) is fetched
+    again with the model."""
     from tuxtalk import first_run_setup as fr
     import tuxtalk.download_progress_dialog as dpd
     added = []
