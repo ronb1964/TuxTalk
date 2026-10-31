@@ -151,7 +151,7 @@ def test_the_daily_check_records_its_time_on_gtks_thread(monkeypatch):
     queued, recorded = [], []
     monkeypatch.setattr(config, "load_config",
                         lambda: config.Settings(auto_check_updates=True, last_update_check=""))
-    monkeypatch.setattr(update_checker, "check_for_updates", lambda: {"success": False})
+    monkeypatch.setattr(update_checker, "check_for_updates", lambda: {"success": True})
     monkeypatch.setattr(config, "record_update_check",
                         lambda ts: recorded.append(threading.current_thread()))
     monkeypatch.setattr(update_ui.GLib, "idle_add", lambda fn, *a: queued.append((fn, a)))
@@ -165,3 +165,43 @@ def test_the_daily_check_records_its_time_on_gtks_thread(monkeypatch):
     for fn, args in queued:                     # GTK's loop, here
         fn(*args)
     assert recorded == [threading.current_thread()]
+
+
+def test_a_daily_check_that_failed_isnt_todays_and_tries_again_later(monkeypatch):
+    """At login the Wi-Fi often isn't up yet: the failed check counted as
+    the day's, at every login, and the update window never opened."""
+    import threading
+    from tuxtalk import config, update_checker, update_ui
+    recorded, timers, checks = [], [], []
+    monkeypatch.setattr(config, "load_config",
+                        lambda: config.Settings(auto_check_updates=True, last_update_check=""))
+    monkeypatch.setattr(config, "record_update_check", recorded.append)
+    monkeypatch.setattr(update_checker, "check_for_updates", lambda: checks.append(1) or {
+        "success": False, "error": "Could not connect to GitHub."})
+    monkeypatch.setattr(update_ui.GLib, "timeout_add_seconds",
+                        lambda seconds, fn: timers.append((seconds, fn)))
+
+    class Now(threading.Thread):
+        """The check's thread, run at once."""
+        def start(self):
+            self.run()
+    monkeypatch.setattr(update_ui.threading, "Thread", lambda target, daemon: Now(target=target))
+    update_ui.auto_check_for_updates(lambda result: None)
+    while timers:
+        seconds, again = timers.pop()
+        assert seconds == update_ui.RETRY_S
+        again()
+    assert recorded == []
+    assert len(checks) == 1 + update_ui.RETRIES
+
+
+def test_a_screen_reader_can_name_the_update_command():
+    import gi
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import Gtk
+    from tuxtalk import update_ui
+    box = Gtk.Box()
+    update_ui._how_to_update(box, {"message": "Update with dnf:",
+                                   "command": "sudo dnf upgrade tuxtalk"})
+    entry = next(child for child in box.get_children() if isinstance(child, Gtk.Entry))
+    assert entry.get_accessible().get_name() == "Command to update TuxTalk"
