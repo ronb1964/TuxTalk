@@ -44,9 +44,6 @@
   "rename_migration.py::repin_launchers": {
    "decisions": 19
   },
-  "uninstall.py::_empty": {
-   "decisions": 20
-  },
   "uninstall.py::done_text": {
    "decisions": 16
   },

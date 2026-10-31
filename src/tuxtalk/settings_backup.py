@@ -143,13 +143,16 @@ _LAST_SAVED = "last-saved-backup"
 _FOLDER = "backup-folder"
 # Names the copy taken just before a restore, while the restore writes.
 _PENDING = "restore-pending"
+# A zip being written (_write_zip); one stays if TuxTalk is killed meanwhile.
+_TEMP_PREFIX = ".talktype-backup-"
 
 
 def is_ours(name):
     """Whether the file *name* in snapshots_dir() is one this module writes:
-    the uninstall deletes only these when the settings folder is a link
-    into a folder that may hold a backups folder of its own."""
-    return name in (_LAST_SAVED, _FOLDER, _PENDING) or _COPY_NAME.match(name) is not None
+    the uninstall deletes only these, since someone may keep files of their
+    own in a folder named backups."""
+    return (name in (_LAST_SAVED, _FOLDER, _PENDING) or _COPY_NAME.match(name) is not None
+            or (name.startswith(_TEMP_PREFIX) and name.endswith(".tmp")))
 
 
 def _read_bytes(path):
@@ -185,7 +188,7 @@ def _write_zip(path, files):
     manifest = {"app": "TuxTalk", "version": __version__,
                 "created": _now().isoformat(timespec="seconds"),
                 "absent": [name for name in _OPTIONAL if name not in files]}
-    fd, tmp = tempfile.mkstemp(dir=folder, prefix=".talktype-backup-", suffix=".tmp")
+    fd, tmp = tempfile.mkstemp(dir=folder, prefix=_TEMP_PREFIX, suffix=".tmp")
     try:
         with os.fdopen(fd, "wb") as f, zipfile.ZipFile(f, "w", zipfile.ZIP_DEFLATED) as z:
             z.writestr(MANIFEST, json.dumps(manifest, indent=1))

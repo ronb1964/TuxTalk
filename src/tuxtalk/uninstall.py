@@ -53,9 +53,10 @@ logger = setup_logger(__name__)
 PERSONAL_DATA = ("stats.json", "stats.json.bak", file_transcribe.RECENT_FILE)
 # The rest of what TuxTalk puts there, downloaded or rebuilt by itself
 # (tests/test_uninstall.py makes every name in the code pick one of the two).
+# .show_welcome_on_restart is only in an old TalkType's folder.
 DOWNLOADED_DATA = ("cuda", "ai-engine", "parakeet-ultra", "whisper-vulkan", "kwin", "updates",
                    ".first_run_done", ".hotkey_test_mode", "remote_desktop_token",
-                   gnome_keybindings.BACKUP_NAME)
+                   gnome_keybindings.BACKUP_NAME, ".show_welcome_on_restart")
 # The folders in it whose programs TuxTalk runs, stopped before deleting.
 ENGINE_FOLDERS = ("whisper-vulkan", "ai-engine", "parakeet-ultra", "cuda")
 # What TuxTalk keeps in its settings folder (tests/test_uninstall.py again).
@@ -64,12 +65,14 @@ CONFIG_NAMES = ("config.toml", "custom_commands.toml", custom_words.FILE_NAME, "
                 rename_migration.NOTICE_FILE, LOG_FILE_NAME, "talktype.log")
 
 # The copies TuxTalk writes beside its own files: config.toml.bak and
-# .before-words-tab, tuxtalk.log.old, config.toml.corrupt-<time>, and a
-# save's config.toml.<random>.tmp (config.write_text_atomic, through
-# tempfile.mkstemp's eight characters).
-_COPY_SUFFIXES = ("bak", "old")
+# .before-words-tab, tuxtalk.log.old, config.toml.corrupt-<time>, a save's
+# config.toml.<random>.tmp (config.write_text_atomic, through
+# tempfile.mkstemp's eight characters) and recent-transcripts.json.tmp.
+_COPY_SUFFIXES = ("bak", "old", "tmp")
 _COPY_PREFIXES = ("before-", "corrupt-")
 _SAVE_TEMP = re.compile(r"[a-z0-9_]{8}\.tmp")
+# What a save of stats.json killed part-way leaves (stats._write's mkstemp).
+_STATS_TEMP = re.compile(r"\.stats-[a-z0-9_]{8}")
 
 
 def _hub_folder(repo):
@@ -175,7 +178,7 @@ def _known(entry, names):
     those files (_COPY_SUFFIXES). Not config.toml.notes or a folder named
     backups.photos: those are someone else's."""
     name = entry.name
-    if name in names:
+    if name in names or _STATS_TEMP.fullmatch(name):
         return True
     if entry.is_dir() and not entry.is_symlink():
         return False
@@ -188,14 +191,12 @@ def _known(entry, names):
 
 
 def _contents(folder, names):
-    """What's in *folder*. When the folder is a link to somewhere else (the
-    models moved to a bigger disk, the settings kept in a synced folder),
-    only what TuxTalk knows by *names*: the rest there isn't ours."""
+    """What in *folder* is TuxTalk's by *names*. Only that: a file of the
+    user's own may sit beside TuxTalk's, in its own folder as much as in a
+    synced folder or on another disk that the folder is a link to."""
     if not folder.is_dir():
         return []
-    linked = folder.is_symlink()
-    return [entry for entry in sorted(folder.iterdir())
-            if not linked or _known(entry, names)]
+    return [entry for entry in sorted(folder.iterdir()) if _known(entry, names)]
 
 
 def _program_files(home, install_type, appimage):
@@ -227,9 +228,9 @@ def _folders_to_empty(home, config_dir, data_dir, data_names):
 
     The names from before the 0.15.0 rename are links to the folders here,
     or the real folders behind them when the rename couldn't move them (a
-    mount point). Then the new name is the link, and the folder is emptied
-    through it, by TuxTalk's names only: emptied again by its own name, it
-    would lose everything else in it too.
+    mount point): then the new name is the link, and the folder is emptied
+    once, through it. When the rename found both there, the old one is a
+    folder of its own, emptied by the same names.
     """
     folders = []
     for new, old, names in ((config_dir, home / ".config" / "talktype", CONFIG_NAMES),
@@ -354,10 +355,28 @@ def _remove(path):
     return True
 
 
+def _rmdir(folder):
+    """Remove *folder* if it's empty: what's left in it isn't TuxTalk's."""
+    try:
+        folder.rmdir()
+    except OSError:
+        pass        # gone already, or something else is in it
+
+
+def _empty_backups(folder):
+    """Remove the automatic copies and records settings_backup writes from
+    the backups *folder*, then the folder once empty: someone may keep
+    files of their own in a folder by that name. What it couldn't remove."""
+    failed = [copy for copy in sorted(folder.iterdir())
+              if settings_backup.is_ours(copy.name) and not _remove(copy)]
+    _rmdir(folder)
+    return failed
+
+
 def _empty(folder, names, kept=()):
-    """Remove what's in *folder* (through a link, only what's TuxTalk's by
-    *names*) but what's *kept* (real paths), then the folder, or the link and the folder it led
-    to if that's empty now. What it couldn't remove."""
+    """Remove what's TuxTalk's by *names* in *folder* but what's *kept* (real
+    paths), then the folder once empty, or the link and the folder it led
+    to. Never the folder with what's left in it. What it couldn't remove."""
     target = folder.resolve() if folder.is_symlink() else None
     failed = []
     entries = _contents(folder, names)
@@ -365,24 +384,16 @@ def _empty(folder, names, kept=()):
     for entry in entries:
         if entry in held:
             continue
-        if (target is not None and entry.name == "backups" and entry.is_dir()
-                and not entry.is_symlink()):
-            # A synced folder may keep a backups folder of its own.
-            failed += [copy for copy in sorted(entry.iterdir())
-                       if settings_backup.is_ours(copy.name) and not _remove(copy)]
-            try:
-                entry.rmdir()
-            except OSError:
-                pass        # not only TuxTalk's
+        if entry.name == "backups" and entry.is_dir() and not entry.is_symlink():
+            failed += _empty_backups(entry)
         elif not _remove(entry):
             failed.append(entry)
+    if target is None:
+        _rmdir(folder)
+        return failed
     if not failed and not held and not _remove(folder):
         failed.append(folder)
-    if target is not None:
-        try:
-            target.rmdir()
-        except OSError:
-            pass        # gone already, or something else is in it
+    _rmdir(target)
     return failed
 
 
@@ -407,10 +418,7 @@ def remove_files(plan, delete_personal, delete_shared):
     if plan.hub.parent.name == "huggingface":
         folders.append(plan.hub.parent)
     for folder in folders:
-        try:
-            folder.rmdir()
-        except OSError:
-            pass        # not empty, or not there
+        _rmdir(folder)
     # A download that wouldn't go may have gone with its folder after all,
     # and one that stays may be listed again through the old TalkType link.
     left = {}

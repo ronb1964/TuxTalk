@@ -203,6 +203,67 @@ def test_the_old_talktype_folder_behind_the_new_names_link_keeps_what_isnt_tuxta
         "backups", "backups/holiday.tar", "notes.md"]
 
 
+def test_separate_old_talktype_folders_lose_only_tuxtalks_files(home):
+    """When the 0.15.0 rename found both the old and the new folder, it left
+    the old one alone, and the uninstall emptied it whole: a file of the
+    user's own in it, or in its backups folder, went too. The new folders
+    are emptied by name as well."""
+    old_config, old_data = home / ".config/talktype", home / ".local/share/TalkType"
+    new_config, new_data = home / ".config/tuxtalk", home / ".local/share/TuxTalk"
+    for config in (old_config, new_config):
+        (config / "backups").mkdir(parents=True, exist_ok=True)
+        for name in ("config.toml", "talktype.log", "notes.md", "backups/holiday.tar",
+                     "backups/settings-20261020-090000.zip", "backups/last-saved-backup"):
+            (config / name).write_text("")
+    (old_data / "cuda").mkdir(parents=True)
+    for data in (old_data, new_data):
+        for name in ("stats.json", ".show_welcome_on_restart", "my-own-model.gguf"):
+            (data / name).write_text("")
+    uninstall.remove_files(_find(home), delete_personal=True, delete_shared=False)
+    for config in (old_config, new_config):
+        assert sorted(str(p.relative_to(config)) for p in config.rglob("*")) == [
+            "backups", "backups/holiday.tar", "notes.md"]
+    for data in (old_data, new_data):
+        assert [p.name for p in data.iterdir()] == ["my-own-model.gguf"]
+
+
+def test_a_file_of_the_users_own_in_the_data_folder_stays_when_downloads_go(home):
+    data = home / ".local/share/TuxTalk"
+    (data / "my-own-model.gguf").write_text("someone else's")
+    uninstall.remove_files(_find(home), delete_personal=False, delete_shared=False)
+    assert (data / "my-own-model.gguf").exists()
+
+
+def test_a_migrated_old_name_is_removed_and_the_folder_keeps_the_users_files(home):
+    """The usual rename: the old name is a link to the new folder."""
+    config = home / ".config/tuxtalk"
+    (home / ".config/talktype").symlink_to("tuxtalk")
+    (config / "notes.md").write_text("someone else's")
+    uninstall.remove_files(_find(home), delete_personal=True, delete_shared=False)
+    assert not os.path.lexists(home / ".config/talktype")
+    assert [p.name for p in config.iterdir()] == ["notes.md"]
+
+
+def test_every_file_tuxtalk_writes_in_its_folders_goes_with_them(home):
+    """Its copies and the temp files a save killed part-way leaves too, so
+    nothing of TuxTalk's keeps its folder there."""
+    config, data = home / ".config/tuxtalk", home / ".local/share/TuxTalk"
+    (config / "backups").mkdir()
+    for name in (*uninstall.CONFIG_NAMES[1:3], "kde-hotkeys.json", "explained.json",
+                 ".launchers-renamed", ".rename-notice-pending", "tuxtalk.log.old",
+                 "talktype.log.old", "config.toml.bak", "config.toml.corrupt-20261020",
+                 "config.toml.ab12cd_9.tmp", "custom_words.txt.before-words-tab",
+                 "backups/settings-20261020-090000.zip", "backups/last-saved-backup",
+                 "backups/backup-folder", "backups/restore-pending",
+                 "backups/.talktype-backup-x1y2z3w4.tmp"):
+        (config / name).write_text("")
+    for name in ("stats.json.bak", ".stats-ab12cd34", "recent-transcripts.json.tmp",
+                 ".hotkey_test_mode", "remote_desktop_token", "updates"):
+        (data / name).write_text("")
+    uninstall.remove_files(_find(home), delete_personal=True, delete_shared=False)
+    assert not config.exists() and not data.exists()
+
+
 def test_a_synced_folders_own_backups_folder_keeps_its_files(home, tmp_path):
     """Settings linked into a dotfiles folder that had a backups folder
     before TuxTalk: only TuxTalk's copies go from it (review of 0.17)."""
