@@ -154,7 +154,8 @@ def _binary(name):
 
 def is_engine_installed(model_name=None) -> bool:
     """The engine is downloaded, and can run *model_name* if one is given.
-    Build 1 has no Parakeet in it but still serves every Whisper model."""
+    whisper.cpp 1.9.4's first build, in a folder of its own that an update
+    removes, had no Parakeet in it."""
     if not os.access(_binary("whisper-server"), os.X_OK):
         return False
     return not is_parakeet(model_name) or os.access(_binary("parakeet-cli"), os.X_OK)
@@ -387,19 +388,18 @@ _MARKER = re.compile(r"\[[A-Z][A-Z _]*\]")
 
 
 def parse_result(reply):
-    """(text, highest no-speech probability) from a verbose_json reply, with
-    whisper.cpp's non-speech markers removed.
+    """The text of a verbose_json reply, with whisper.cpp's non-speech
+    markers removed.
 
-    The no-speech probability is reported but not to be trusted: on the same
-    audio it reads 0.90 for clear speech with the language set and 0.00 for
-    pure silence, so the service doesn't use it."""
+    Its segments' no-speech probability is left out: on the same audio it
+    reads 0.90 for clear speech with the language set and 0.00 for pure
+    silence, so the recording's own loudness stands in for it
+    (engine._transcribe_vulkan)."""
     segments = reply.get("segments") or []
     text = " ".join((s.get("text") or "").strip() for s in segments).strip()
     if not segments:
         text = (reply.get("text") or "").strip()
-    text = " ".join(_MARKER.sub(" ", text).split())
-    no_speech = max((float(s.get("no_speech_prob", 0.0)) for s in segments), default=0.0)
-    return text, no_speech
+    return " ".join(_MARKER.sub(" ", text).split())
 
 
 def request_fields(language=None, prompt=None, scores=False):
@@ -496,7 +496,7 @@ class VulkanWhisperModel:
         logger.info(f"Graphics engine ready (warm-up took {time.time() - started:.1f}s)")
 
     def transcribe(self, audio_f32, language=None, timeout=120, prompt=None, limit_to=()):
-        """(text, highest no-speech probability) for *audio_f32*. *prompt*
+        """The text of *audio_f32*. *prompt*
         is Your Words (custom_words.prompt), to steer Whisper's spelling.
 
         *limit_to* holds auto-detect to those languages (language_limit.py):

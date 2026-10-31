@@ -19,10 +19,14 @@ The rest of TuxTalk treats "parakeet-v3" as just another model name, so the
 model pickers, config validation and download dialogs all work unchanged.
 
 With the device set to "Vulkan (any GPU)", Parakeet runs on the graphics chip
-instead, through whisper.cpp (parakeet_gpu.py). This processor version stays
-downloaded as the fallback.
+instead, through whisper.cpp (parakeet_gpu.py), and this processor version
+is its fallback when it is downloaded too.
 """
 import os
+
+from .logger import setup_logger
+
+logger = setup_logger(__name__)
 
 # The 25 languages Parakeet TDT 0.6B v3 knows (ISO 639-1), from NVIDIA's model
 # card. It detects which one is spoken by itself and ignores TuxTalk's
@@ -31,10 +35,6 @@ PARAKEET_LANGUAGES = frozenset({
     "bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it",
     "lv", "lt", "mt", "pl", "pt", "ro", "sk", "sl", "es", "sv", "ru", "uk",
 })
-
-from .logger import setup_logger
-
-logger = setup_logger(__name__)
 
 # The name stored in config.toml and shown in the model pickers.
 PARAKEET_MODEL = "parakeet-v3"
@@ -58,6 +58,17 @@ PARAKEET_ATTRIBUTION = (
     "Parakeet Ultra speech model by Moondream, post-trained from Parakeet TDT 0.6B v3 "
     "by NVIDIA; ONNX export by Olicorne. All licensed under CC-BY-4.0."
 )
+
+
+def steer(model, words):
+    """Hand *model* Your Words if it takes them (Parakeet on the processor or
+    the graphics chip); never in the way of a dictation."""
+    set_words = getattr(model, "set_words", None)
+    if set_words is not None:
+        try:
+            set_words(words)
+        except Exception as e:
+            logger.warning(f"Couldn't hand Parakeet your words: {e}")
 
 
 def is_parakeet(model_name) -> bool:

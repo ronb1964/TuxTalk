@@ -1021,6 +1021,11 @@ def load_custom_commands() -> dict[str, str]:
             _commands_read_failed = True
     return commands
 
+def commands_read_failed() -> bool:
+    """Whether the last load_custom_commands() couldn't read the file that
+    is there, so what it returned must not be written back."""
+    return _commands_read_failed
+
 def _text_snippets(table) -> dict[str, str]:
     """The snippets of a hand-editable table that can be typed: a number
     as its text (`answer = 42`), anything else (a list, a table) left out,

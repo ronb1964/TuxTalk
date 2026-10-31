@@ -224,6 +224,20 @@ def test_whisper_text_honours_the_language_list():
     assert model.languages == [None, "es"]
 
 
+def test_whisper_on_a_file_has_dictations_guards_against_repeating_itself():
+    """Whisper gets stuck repeating one phrase most in a file's 30 s pieces,
+    and Transcribe a File decoded them without dictation's guards."""
+    class Whisper:
+        def transcribe(self, audio, language=None, **options):
+            self.options = options
+            info = type("Info", (), {"language": "en", "all_language_probs": None})()
+            return iter([type("Seg", (), {"text": " hello "})()]), info
+    model = Whisper()
+    ft.FileEngine(model, "whisper", "Whisper").text(_speech(1))
+    assert model.options["repetition_penalty"] > 1
+    assert model.options["no_repeat_ngram_size"] > 0
+
+
 def test_a_model_that_is_not_downloaded_says_so(monkeypatch):
     from tuxtalk import model_helper, whisper_vulkan
     monkeypatch.setattr(whisper_vulkan, "is_installed", lambda name: False)

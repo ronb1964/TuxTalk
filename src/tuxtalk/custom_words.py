@@ -1,19 +1,21 @@
 """Your Words: names and terms TuxTalk should spell the user's way.
 
 Set in Preferences > Words and kept in custom_words.txt, one per line, next
-to the snippets file. They are used twice:
+to the snippets file. Every engine uses them, before and after it listens:
 
 - Whisper models are told about them before they listen: faster-whisper's
   `hotwords` and whisper.cpp's `prompt`. That steers Whisper towards the
   user's spelling of a name it would otherwise guess at.
-- Parakeet on the processor leans toward them while it decodes
-  (parakeet_bias.py): a word is written whole where the audio fits it.
-  Parakeet on the graphics card (whisper.cpp) can't be steered yet.
-- Every engine then gets a spelling pass (fix_spelling). It only fixes a word that came out
-  split up, hyphenated or with the wrong capitals ("tux talk", "Tux-Talk",
-  "tuxtalk" -> "TuxTalk"). Nothing fuzzy: a word heard as something else
-  entirely ("bamboo studio") is Fix a Word's job, and guessing at
-  sound-alikes would rewrite ordinary speech.
+- Parakeet leans toward them while it decodes, on the processor
+  (parakeet_bias.py) and on the graphics card (TuxTalk's patch to
+  whisper.cpp, parakeet_gpu_worker.py): a word is written whole where the
+  audio fits it.
+- Every engine then gets a spelling pass (fix_spelling). It only fixes a
+  word that came out split up, hyphenated, with the wrong capitals or in a
+  spelling that sounds the same ("tux talk", "Tux-Talk", "Tuck's talk" ->
+  "TuxTalk"; _SOUND_FOLDS lists the spellings). A word heard as something
+  else entirely ("bamboo studio") is Fix a Word's job: guessing at words
+  that only sound a bit like it would rewrite ordinary speech.
 """
 import os
 import re

@@ -150,15 +150,17 @@ class FileEngine:
         with the user's words steered and spelled as dictation does."""
         from . import custom_words, language_limit
         if self.kind == "parakeet":
-            from .parakeet_gpu import _steer
-            _steer(self.model, self.words)      # as dictation does (engine._transcribe_parakeet)
+            from .parakeet_engine import steer
+            steer(self.model, self.words)       # as dictation does (engine._transcribe_parakeet)
             text = self.model.recognize(audio)
         elif self.kind == "vulkan":
-            text, _ = self.model.transcribe(audio, self.language, timeout=600,
-                                            prompt=custom_words.prompt(self.words) or None,
-                                            limit_to=self.limit_to)
+            text = self.model.transcribe(audio, self.language, timeout=600,
+                                         prompt=custom_words.prompt(self.words) or None,
+                                         limit_to=self.limit_to)
         else:
-            options = dict(beam_size=5, vad_filter=False, hotwords=custom_words.prompt(self.words))
+            from .engine import REPETITION_GUARDS
+            options = dict(beam_size=5, vad_filter=False, **REPETITION_GUARDS,
+                           hotwords=custom_words.prompt(self.words))
             segments, _ = language_limit.whisper_held_to(
                 self.model.transcribe, audio, self.language, self.limit_to, **options)
             text = " ".join(s.text.strip() for s in segments)

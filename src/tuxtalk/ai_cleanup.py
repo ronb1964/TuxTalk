@@ -5,10 +5,11 @@ becomes "meet at 4". Also what voice editing asks the same AI.
 Filler words and stutters are handled by plain rules (cleanup.py). Only a
 correction needs something that understands the sentence, so this module
 sends the local AI (ai_server, downloaded by ai_download) just the sentences
-that contain a correction phrase, and nothing else is ever sent to it. Its
+of a dictation that contain a correction phrase, and none of the rest. Its
 answer replaces a sentence only when correction_safety says it is safe;
-otherwise the sentence is typed exactly as spoken. Everything runs on this
-machine.
+otherwise the sentence is typed exactly as spoken. Voice editing sends the
+AI the selected text and the instruction (CorrectionEngine.edit).
+Everything runs on this machine.
 """
 import re
 

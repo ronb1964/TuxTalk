@@ -217,12 +217,12 @@ def test_multipart_carries_fields_and_the_file():
     assert body.endswith(f"--{boundary}--\r\n".encode())
 
 
-def test_reads_text_and_no_speech_from_the_reply():
+def test_reads_the_text_from_the_reply():
     reply = {"text": " Hello there. Bye.", "segments": [
         {"text": " Hello there.", "no_speech_prob": 0.02},
         {"text": " Bye.", "no_speech_prob": 0.4}]}
-    assert wv.parse_result(reply) == ("Hello there. Bye.", 0.4)
-    assert wv.parse_result({"text": " Just text "}) == ("Just text", 0.0)
+    assert wv.parse_result(reply) == "Hello there. Bye."
+    assert wv.parse_result({"text": " Just text "}) == "Just text"
 
 
 @pytest.mark.parametrize("gpu, cpu, worth_it", [
@@ -321,7 +321,7 @@ def test_a_finished_run_gives_its_exit_code_and_stderr(monkeypatch):
 ])
 def test_non_speech_markers_are_never_typed(text, cleaned):
     reply = {"text": text, "segments": [{"text": text, "no_speech_prob": 0.0}]}
-    assert wv.parse_result(reply)[0] == cleaned
+    assert wv.parse_result(reply) == cleaned
 
 
 # --- the dictation service ----------------------------------------------------
@@ -331,7 +331,7 @@ class FakeEngine(wv.VulkanWhisperModel):
         self.model_name, self.device_index = model_name, device_index
 
     def transcribe(self, audio, language=None, prompt=None, limit_to=()):
-        return "Thank you.", 0.95          # a high, untrustworthy no-speech score
+        return "Thank you."
 
 
 class SignOffEngine(wv.VulkanWhisperModel):
@@ -340,7 +340,7 @@ class SignOffEngine(wv.VulkanWhisperModel):
         pass
 
     def transcribe(self, audio, language=None, prompt=None, limit_to=()):
-        return "Thanks for watching!", 0.0
+        return "Thanks for watching!"
 
 
 def _audio(voiced):
@@ -459,9 +459,10 @@ def test_parakeet_on_the_graphics_chip_transcribes(monkeypatch):
     assert engine.transcribe(np.zeros(16000, dtype=np.float32), None) == "Hello there."
 
 
-def test_transcription_ignores_the_engines_no_speech_score(monkeypatch):
-    """A real "Thank you." must survive even though the engine scored it 0.95.
-    Real means the recording has speech in it; silence has its own test."""
+def test_a_thank_you_said_aloud_is_kept(monkeypatch):
+    """whisper.cpp's no-speech score read 0.95 for a real "Thank you.", so
+    it's never used: the recording has speech in it, and the words stay.
+    Silence has its own test."""
     monkeypatch.setattr(engine, "model", FakeEngine("small", 1), raising=False)
     assert engine.transcribe(_audio(voiced=True), "en") == "Thank you."
 
@@ -605,11 +606,11 @@ def test_a_restarted_server_outlives_the_short_lived_thread_that_restarted_it(fa
         t = threading.Thread(target=lambda: results.append(model.transcribe(np.zeros(16000, np.float32))))
         t.start()
         t.join()                                   # restarted the server, then ended
-        assert results == [("hello", 0.0)]
+        assert results == ["hello"]
         restarted = model._proc
         time.sleep(0.3)
         assert restarted.poll() is None            # still running
-        assert model.transcribe(np.zeros(16000, np.float32)) == ("hello", 0.0)
+        assert model.transcribe(np.zeros(16000, np.float32)) == "hello"
         assert model._proc is restarted            # no second restart
     finally:
         model.close()

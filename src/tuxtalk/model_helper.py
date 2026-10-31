@@ -64,8 +64,8 @@ def _files_to_download(repo_id):
 def load_model(model_name, device="cpu", compute_type="int8"):
     """Load an already-downloaded model, Whisper or Parakeet.
 
-    Parakeet always runs on the CPU (see parakeet_engine), so *device* and
-    *compute_type* only apply to Whisper.
+    Parakeet loads here only for the processor (on the graphics card it is
+    parakeet_gpu's), so *device* and *compute_type* only apply to Whisper.
     """
     if is_parakeet(model_name):
         return load_parakeet_model()
