@@ -11,7 +11,11 @@ looked up by KNOWN ABSOLUTE PATH, not `which`, so a stray ~/.local/bin/talktype
 earlier in PATH can never be written into autostart in place of ours.
 """
 
+import pathlib
 import types
+
+# Set as APPDIR: this code runs from inside the AppImage APPIMAGE names.
+CODE = str(pathlib.Path(__file__).resolve().parent.parent / "src" / "tuxtalk")
 
 
 def _make_prefs(
@@ -37,8 +41,10 @@ def _make_prefs(
     monkeypatch.setattr(mod.sys, "executable", executable, raising=False)
     if appimage is None:
         monkeypatch.delenv("APPIMAGE", raising=False)
+        monkeypatch.delenv("APPDIR", raising=False)
     else:
         monkeypatch.setenv("APPIMAGE", appimage)
+        monkeypatch.setenv("APPDIR", CODE)
 
     exists = set(exists)
     which_map = which_map or {}
@@ -123,19 +129,34 @@ def test_autostart_uses_the_installed_appimage_not_the_download(monkeypatch):
     there and not at ~/Downloads, or tidying Downloads silently stops TuxTalk
     starting at login."""
     mod = _make_prefs(monkeypatch, exists={DOWNLOAD}, appimage=DOWNLOAD)
-    installed = mod.INSTALLED_APPIMAGE
+    installed = mod.installation.APPIMAGE_PATH
     mod = _make_prefs(monkeypatch, exists={DOWNLOAD, installed}, appimage=DOWNLOAD)
     assert mod.get_launch_command() == installed
 
 
 def test_setup_can_point_at_the_installed_copy_before_it_finishes_copying(monkeypatch):
     mod = _make_prefs(monkeypatch, exists={DOWNLOAD}, appimage=DOWNLOAD)
-    assert mod.get_launch_command(prefer_installed_appimage=True) == mod.INSTALLED_APPIMAGE
+    assert mod.get_launch_command(prefer_installed_appimage=True) == mod.installation.APPIMAGE_PATH
 
 
 def test_without_an_installed_copy_the_running_appimage_is_used(monkeypatch):
     mod = _make_prefs(monkeypatch, exists={DOWNLOAD}, appimage=DOWNLOAD)
     assert mod.get_launch_command() == DOWNLOAD
+
+
+def test_the_aur_package_starts_at_login_through_its_own_command(monkeypatch):
+    """Not through a copy in ~/AppImages, which pacman never updates."""
+    aur = "/opt/tuxtalk/TuxTalk.AppImage"
+    mod = _make_prefs(monkeypatch, exists={aur, "/usr/bin/tuxtalk"}, appimage=aur)
+    assert mod.get_launch_command(prefer_installed_appimage=True) == "/usr/bin/tuxtalk"
+
+
+def test_a_package_started_from_another_appimage_starts_itself_at_login(monkeypatch):
+    """APPIMAGE was the editor's that opened TuxTalk, and login started that."""
+    editor = "/home/u/Applications/Cursor.AppImage"
+    mod = _make_prefs(monkeypatch, exists={editor, "/usr/bin/tuxtalk"}, appimage=editor)
+    monkeypatch.setenv("APPDIR", "/tmp/.mount_CursorAb12")
+    assert mod.get_launch_command() == "/usr/bin/tuxtalk"
 
 
 def test_onboarding_asks_for_the_installed_copy(first_run):

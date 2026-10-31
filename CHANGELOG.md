@@ -522,6 +522,48 @@ before 0.15.0, so older entries use that name.
   each "Show ..." button. They no longer read the light bulb beside a
   setting's name aloud ("Model light bulb").
 
+- A .deb or .rpm TuxTalk opened from a program that is itself an AppImage
+  (an editor or a terminal) took that program for TuxTalk. First run copied
+  it into ~/AppImages, and from then on it started at every login instead
+  of TuxTalk. On the AUR, first run also made a copy of TuxTalk in
+  ~/AppImages that pacman never updated and that stayed after the package
+  was removed. Now first run copies only a TuxTalk AppImage you downloaded
+  yourself, and the AUR package starts at login through its own tuxtalk
+  command.
+- Uninstalling deleted any file of yours you'd put in TuxTalk's data
+  folder, and with "Also delete my settings" ticked, in its settings folder
+  or an old TalkType folder the 0.15 rename left in place. Only what
+  TuxTalk wrote there goes now (a download folder of its own, like cuda,
+  still goes whole), and a folder with something of yours still in it
+  stays. The downloads in such an old TalkType folder go too now, and so
+  does the single transcript older versions kept.
+- An update, or the GNOME extension, from a release that was published
+  without its checksums file is refused now, with a message saying so. It
+  used to go in unchecked, and a .deb or .rpm update installs as root.
+- When the daily update check ran before the Wi-Fi was up, it still counted
+  as the day's check, so you might never hear about an update. It tries
+  again an hour later now, up to three times.
+- A failed update download says why ("HTTP 404 Not Found", a lost
+  connection) instead of only "Download failed or file was corrupted", and
+  the bar no longer jumps back from 100 % to 50 % when the install starts.
+- Going back to an earlier copy of your settings now takes away snippets
+  and Your Words added since, so it really puts things back the way they
+  were. Loading a backup saved on a computer with no Your Words or snippets
+  removes the ones on this computer, and TuxTalk says so before you say OK
+  and again after, from Load Backup and from Earlier settings alike.
+  Earlier settings can bring them back. A restore cut off part-way, by a
+  crash or a power cut, is undone when TuxTalk next starts, instead of
+  leaving half the old settings and half the new.
+- A GNOME extension update cut off part-way left GNOME with no TuxTalk menu
+  until you installed the extension again. TuxTalk puts it back when it
+  starts. The Vulkan and AI engines keep the old engine now until the new
+  one is in place, so a failed update can't leave you with none.
+- Launch at login and the menu entry are written whole now, so a full disk
+  can't leave an empty one that starts nothing.
+- With a screen reader, each download's Cancel button and progress bar are
+  named after the download, so two downloads in one window can be told
+  apart, and the update window's command box has a name too.
+
 ## [0.18.2] - 2026-10-23
 
 - Hands-free: on a computer where starting a recording takes a moment

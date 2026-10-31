@@ -616,13 +616,16 @@ def main():
 
     # A copy of the settings to roll back to (Preferences → Advanced →
     # Restore Earlier Settings), taken before this version touches them.
-    from .settings_backup import snapshot_if_changed
+    from .settings_backup import recover_cut_off_restore, snapshot_if_changed
+    recover_cut_off_restore()   # a restore killed between its files
     snapshot_if_changed()
 
     from .ydotoold_leftovers import retire_ydotoold
     retire_ydotoold()       # what TuxTalk typed through until 0.18
     from .cuda_download import recover_cut_off_install
     recover_cut_off_install()   # before the service loads CUDA
+    from . import extension_helper
+    extension_helper.recover_cut_off_install()     # GNOME's menu, cut off mid-update
     from .cuda_helper import remove_pytorch_link, remove_unused_cudnn
     remove_unused_cudnn()   # downloaded with CUDA until 0.19
     remove_pytorch_link()   # made with the CUDA preload until 0.19
@@ -678,20 +681,21 @@ def _adopt_old_install():
     version needs. Outside a Flatpak, whose launchers its package owns."""
     # The folder move ran at package import, before any logger existed;
     # record what it did now (see rename_migration.py).
-    from . import MIGRATION_LOG
-    for line in MIGRATION_LOG:
-        logger.info(f"Rename to TuxTalk: {line}")
+    from . import MIGRATION_LOG, config, rename_migration
+
+    def log(lines):
+        for line in lines:
+            failed = line.startswith(rename_migration.FAILED)
+            (logger.warning if failed else logger.info)(f"Rename to TuxTalk: {line}")
+    log(MIGRATION_LOG)
     if os.environ.get("FLATPAK_ID"):
         return
-    from . import config, rename_migration
     try:
-        for line in rename_migration.adopt_old_install(dev=config.DEV_MODE):
-            logger.info(f"Rename to TuxTalk: {line}")
+        log(rename_migration.adopt_old_install(dev=config.DEV_MODE))
         # A dock or favourites list that pinned the old menu entry would
         # show a blank icon; rename those once (a marker file records it).
         marker = os.path.join(os.path.dirname(config.CONFIG_PATH), ".launchers-renamed")
-        for line in rename_migration.repin_launchers(marker):
-            logger.info(f"Rename to TuxTalk: {line}")
+        log(rename_migration.repin_launchers(marker))
     except Exception as e:      # never stop the tray from starting
         logger.warning(f"Rename to TuxTalk: could not move the launchers: {e}")
     # After the rename, which treats an existing tuxtalk.desktop as done.
@@ -779,7 +783,9 @@ def _start_normally(tray, command, open_window):
     try:
         from .autostart import (repair_stale_appimage_autostart,
                                 refresh_autostart_comment)
+        from .desktop_launcher import repair_stale_launcher
         repair_stale_appimage_autostart()
+        repair_stale_launcher()     # first run's copy failed, an update put it there
         refresh_autostart_comment()
     except Exception as e:
         logger.info(f"Could not check the login entry: {e}")

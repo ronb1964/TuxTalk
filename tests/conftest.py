@@ -887,9 +887,9 @@ def tray_main(monkeypatch):
     import sys
     import dbus.mainloop.glib
     from tuxtalk import (autostart, control, cuda_download, cuda_helper, desktop_identity,
-                         desktop_launcher, first_run_marker, first_run_setup, gnome_keybindings,
-                         rename_migration, service_launcher, settings_backup, tray, ui_style,
-                         update_install, ydotoold_leftovers)
+                         desktop_launcher, extension_helper, first_run_marker, first_run_setup,
+                         gnome_keybindings, rename_migration, service_launcher, settings_backup,
+                         tray, ui_style, update_install, ydotoold_leftovers)
     done = _Steps()
 
     def step(name, result=None):
@@ -921,6 +921,10 @@ def tray_main(monkeypatch):
     monkeypatch.setattr(desktop_launcher, "add_launcher_actions", step("adds launcher actions"))
     monkeypatch.setattr(update_install, "check_just_updated", lambda: None)
     monkeypatch.setattr(settings_backup, "snapshot_if_changed", step("snapshots the settings"))
+    monkeypatch.setattr(settings_backup, "recover_cut_off_restore",
+                        step("finishes a cut-off restore"))
+    monkeypatch.setattr(extension_helper, "recover_cut_off_install",
+                        step("puts back a cut-off extension install"))
     monkeypatch.setattr(ydotoold_leftovers, "retire_ydotoold", step("retires ydotoold"))
     monkeypatch.setattr(cuda_download, "recover_cut_off_install",
                         step("puts back a cut-off CUDA install"))
@@ -929,6 +933,7 @@ def tray_main(monkeypatch):
     monkeypatch.setattr(gnome_keybindings, "restore_left_over",
                         step("restores GNOME keybindings"))
     monkeypatch.setattr(autostart, "repair_stale_appimage_autostart", lambda: False)
+    monkeypatch.setattr(desktop_launcher, "repair_stale_launcher", lambda: False)
     monkeypatch.setattr(autostart, "refresh_autostart_comment", lambda: False)
     # The wait for it runs at once here, not on a thread of its own.
     monkeypatch.setattr(service_launcher, "end_in_background",
@@ -1115,7 +1120,7 @@ def first_run(monkeypatch):
                         lambda result: done.append("downloads the speech model") or True)
     monkeypatch.setattr(first_run_setup, "show_setup_complete_dialog",
                         lambda **k: done.append("setup complete"))
-    monkeypatch.setattr(installation, "is_running_from_appimage", lambda: True)
+    monkeypatch.setattr(installation, "get_install_type", lambda **kwargs: "appimage")
     monkeypatch.setattr(installation, "running_appimage_location",
                         lambda: (False, "/home/u/Downloads/TuxTalk.AppImage"))
     monkeypatch.setattr(desktop_launcher, "desktop_launcher_exists", lambda: True)

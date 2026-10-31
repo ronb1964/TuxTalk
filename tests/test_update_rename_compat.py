@@ -29,8 +29,8 @@ def test_old_client_picks_every_tuxtalk_asset(monkeypatch):
                         lambda *a, **k: UrlResponse(json.dumps(RELEASE).encode()))
     r = uc.fetch_latest_release()
     assert r["appimage_url"] == "A" and r["appimage_name"] == "TuxTalk-v0.15.0-x86_64.AppImage"
-    urls = (r["deb_url"], r["rpm_url"], r["extension_url"], r["checksums_url"])
-    assert urls == ("D", "R", "E", "S")
+    urls = (r["deb_url"], r["rpm_url"], r["checksums_url"])
+    assert urls == ("D", "R", "S")
 
 
 def test_old_client_finds_the_tuxtalk_checksum(monkeypatch):

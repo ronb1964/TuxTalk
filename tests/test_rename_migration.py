@@ -128,6 +128,50 @@ def test_package_import_runs_the_migration_before_anything_else(tmp_path):
     assert os.path.islink(f"{h}/.config/talktype")
 
 
+def test_a_migration_that_failed_is_told_to_the_tray_to_log(tmp_path, monkeypatch):
+    """Its warning came before any log file was open, so it reached only
+    the terminal, never the log a user sends with a problem report."""
+    def fails(home=None, dev=False):
+        raise PermissionError(13, "Permission denied")
+    monkeypatch.setattr(rm, "migrate", fails)
+    assert rm.run_at_startup({}, home=str(tmp_path)) == [
+        "could not move the folders: [Errno 13] Permission denied"]
+
+
+def test_importing_the_migration_makes_no_settings_folder(tmp_path):
+    """It opened the log file at import, making ~/.config/tuxtalk before it
+    moved the old folder there."""
+    import subprocess
+    import sys
+    env = {k: v for k, v in os.environ.items()
+           if k not in ("TUXTALK_LOG_DIR", "DEV_MODE") and not k.startswith("XDG_")}
+    env.update(HOME=str(tmp_path), TUXTALK_NO_MIGRATE="1")
+    subprocess.run([sys.executable, "-c", "import tuxtalk.rename_migration"],
+                   env=env, check=True, timeout=60)
+    assert not os.path.lexists(f"{tmp_path}/.config/tuxtalk")
+
+
+def test_settings_on_another_disk_are_found_after_a_start_wrote_its_log(tmp_path, monkeypatch):
+    """~/.config/talktype on another disk, and a log already in the new
+    folder: moving the log across raised, the move stopped, and TuxTalk
+    started on default settings at every start."""
+    import errno
+    h = str(tmp_path)
+    old, new = f"{h}/.config/talktype", f"{h}/.config/tuxtalk"
+    _mk(old, "config.toml")
+    _mk(new, "tuxtalk.log")
+    real_rename = os.rename
+
+    def rename(src, dst):
+        if src.startswith(old + "/") != dst.startswith(old + "/") or src == old:
+            raise OSError(errno.EXDEV, "Invalid cross-device link")
+        real_rename(src, dst)
+    monkeypatch.setattr(rm.os, "rename", rename)
+    rm.migrate(home=h)
+    assert os.path.islink(new) and os.path.realpath(new) == os.path.realpath(old)
+    assert {"config.toml", "tuxtalk.log"} <= set(os.listdir(new))
+
+
 # --- the one-time "TalkType is now TuxTalk" notice ----------------------------
 # Shown once by the tray when this start converted an old TalkType install, on
 # whichever TuxTalk version that happens to be (users skip releases).

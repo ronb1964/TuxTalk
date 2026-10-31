@@ -17,9 +17,9 @@ logger = logging.getLogger(__name__)
 
 
 EXTENSION_UUID = 'talktype@ronb1964.github.io'
-# Every release publishes the zip under this TalkType name and as
-# tuxtalk-gnome-extension.zip, so older installs find it too.
-EXTENSION_ZIP_NAME = 'talktype-gnome-extension.zip'
+# Every release since 0.15.0 also publishes it as talktype-gnome-extension.zip,
+# for TalkType installs, which look for that name.
+EXTENSION_ZIP_NAME = 'tuxtalk-gnome-extension.zip'
 _LATEST_RELEASE = 'https://github.com/ronb1964/TuxTalk/releases/latest/download'
 EXTENSION_DOWNLOAD_URL = f'{_LATEST_RELEASE}/{EXTENSION_ZIP_NAME}'
 # The release publishes SHA256SUMS.txt alongside the zip. The extension
@@ -29,24 +29,17 @@ EXTENSION_CHECKSUMS_URL = f'{_LATEST_RELEASE}/SHA256SUMS.txt'
 
 
 class ChecksumUnavailableError(Exception):
-    """The release publishes checksums, but the extension's could not be read.
-
-    Distinct from "this release publishes no checksums at all", which is a
-    supported state (every release up to v0.5.16) and returns None instead.
-    """
+    """The extension's checksum in the release could not be read."""
 
 
-def _fetch_extension_sha256() -> Optional[str]:
-    """Fetch the expected sha256 of the extension zip from the release.
+def _fetch_extension_sha256() -> str:
+    """Fetch the expected sha256 of the extension zip from the latest release.
 
-    Returns None when the release publishes no SHA256SUMS.txt at all (a 404),
-    which is true of every release up to and including v0.5.16 — those must
-    keep installing, verified by the size/truncation check only.
-
-    Raises ChecksumUnavailableError when the checksums file exists but the
-    extension is not listed in it, or when the fetch fails for any other
-    reason: an unverifiable zip must not be treated like a release that never
-    published checksums, or the check would miss the very cases it exists for.
+    Raises ChecksumUnavailableError when the release has no SHA256SUMS.txt
+    (every release since 0.5.17 has one: without it, one was published by
+    mistake), when the file doesn't list the extension, or when the fetch
+    fails for any other reason: the zip is JavaScript that runs in GNOME
+    Shell, and isn't installed unchecked.
     """
     from .download_utils import parse_sha256sums
     try:
@@ -56,15 +49,11 @@ def _fetch_extension_sha256() -> Optional[str]:
             sums = parse_sha256sums(response.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         if e.code == 404:
-            # A 404 is also what a release that can't be found at all gives
-            # (the 0.15.0 test run, before the repo was renamed), so the log
-            # says both, with the address, rather than blaming the release.
-            logger.info(
+            # Also what a release that can't be found at all gives, so the
+            # message says both, with the address.
+            raise ChecksumUnavailableError(
                 f"No SHA256SUMS.txt at {EXTENSION_CHECKSUMS_URL} (404): either the "
-                "release publishes none, or the release can't be found. Installing "
-                "the extension with size verification only"
-            )
-            return None
+                "release publishes none, or the release can't be found")
         raise ChecksumUnavailableError(f"Could not fetch extension checksums: {e}")
     except Exception as e:
         raise ChecksumUnavailableError(f"Could not fetch extension checksums: {e}")
@@ -111,22 +100,25 @@ def get_extension_status() -> dict:
 INSTALL_WAIT_S = 60
 
 
-def _swap_in(source_dir, target_dir):
-    """Put a copy of *source_dir* at *target_dir*, the old one going only
-    once the new one is in its place: removed first, a copy that failed
-    partway (a full disk) left GNOME with no TuxTalk menu at all. Both are
-    kept, hidden, in the extensions folder itself (its real place, if it's a
-    link), so the renames never cross filesystems; GNOME skips a folder whose
-    name isn't its extension's id. Installs take turns (Preferences and
-    first run at once used each other's folders)."""
-    from . import download_utils, single_instance
-    ext_dir = os.path.realpath(os.path.dirname(target_dir))
-    target = os.path.join(ext_dir, EXTENSION_UUID)
-    old = os.path.join(ext_dir, f".{EXTENSION_UUID}.old")
-    staging = os.path.join(ext_dir, f".{EXTENSION_UUID}.new")
-    with single_instance.open_lock("extension-install.lock") as lock:
-        if not single_instance.claim(lock, wait_s=INSTALL_WAIT_S):
-            raise OSError("another install of the GNOME extension didn't finish")
+def _swap_paths():
+    """(the extension's folder, its old copy, the new copy being made). The
+    copies are kept, hidden, in the extensions folder itself (its real
+    place, if it's a link), so the renames never cross filesystems; GNOME
+    skips a folder whose name isn't its extension's id."""
+    ext_dir = os.path.realpath(os.path.dirname(gnome_extensions.extension_folder(EXTENSION_UUID)))
+    return (os.path.join(ext_dir, EXTENSION_UUID), os.path.join(ext_dir, f".{EXTENSION_UUID}.old"),
+            os.path.join(ext_dir, f".{EXTENSION_UUID}.new"))
+
+
+def _swap_in(source_dir):
+    """Put a copy of *source_dir* in the extension's place, the old one going
+    only once the new one is in its place: removed first, a copy that failed
+    partway (a full disk) left GNOME with no TuxTalk menu at all. Installs
+    take turns (Preferences and first run at once used each other's
+    folders)."""
+    from . import download_utils
+    target, old, staging = _swap_paths()
+    with download_utils.install_turn("extension", "the GNOME extension", wait_s=INSTALL_WAIT_S):
         # GNOME keeps its menu even if this copy fails.
         download_utils.restore_cut_off_swap(target, old)
         download_utils.remove_tree(staging)
@@ -135,6 +127,23 @@ def _swap_in(source_dir, target_dir):
             download_utils.replace_folder(staging, target, old)
         finally:
             download_utils.remove_tree(staging)
+
+
+def recover_cut_off_install():
+    """At start: an install killed between moving the old extension aside
+    and moving the new one in left GNOME no TuxTalk menu, the complete copy
+    hidden, until the next install. It is put back here, with nothing
+    downloaded, unless another install is running now (that one puts it
+    back). Never raises."""
+    from . import download_utils
+    target, old, _staging = _swap_paths()
+    if not os.path.lexists(old):
+        return
+    try:
+        with download_utils.install_turn("extension", "the GNOME extension", wait_s=0):
+            download_utils.restore_cut_off_swap(target, old)
+    except OSError as e:        # busy, or the lock can't be made: next start
+        logger.info(f"The GNOME extension's folder wasn't checked this time: {e}")
 
 
 def install_extension_from_local(source_dir: str, auto_enable: bool = True) -> bool:
@@ -152,7 +161,7 @@ def install_extension_from_local(source_dir: str, auto_enable: bool = True) -> b
     try:
         target_dir = gnome_extensions.extension_folder(EXTENSION_UUID)
         os.makedirs(os.path.dirname(target_dir), exist_ok=True)
-        _swap_in(source_dir, target_dir)
+        _swap_in(source_dir)
         logger.info(f"Extension installed to {target_dir}")
 
         if auto_enable and not enable_extension():
@@ -246,16 +255,12 @@ def download_and_install_extension(progress_callback: Optional[Callable] = None)
                     report(f"Downloading... {int((downloaded / total_size) * 100)}%", percent)
 
             # Download extension zip. The timeout keeps a stalled connection
-            # from hanging the install dialog forever. The sha256 (when the
-            # release publishes it) verifies the JS bundle before install.
+            # from hanging the install dialog forever. The sha256 verifies
+            # the JS bundle before install.
             from .download_utils import download_file
             try:
                 expected_sha256 = _fetch_extension_sha256()
             except ChecksumUnavailableError as e:
-                # The release publishes checksums but this zip's could not be
-                # established. Installing unverified JavaScript into the user's
-                # GNOME Shell on the strength of "the check didn't work" is
-                # exactly what the check exists to prevent.
                 logger.error(f"Refusing to install an unverified extension: {e}")
                 report("Could not verify the extension download", 0)
                 return False

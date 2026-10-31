@@ -180,7 +180,7 @@ def test_a_failed_unpack_leaves_neither_archive_nor_folder(tmp_path):
 def test_what_a_killed_download_left_is_swept_next_time(tmp_path):
     from tuxtalk.download_utils import STALE_PARTIAL_S, download_area
     old = time.time() - STALE_PARTIAL_S - 60
-    archive, folder = tmp_path / ".engine.dead.tar", tmp_path / ".engine.dead.d"
+    archive, folder = tmp_path / ".engine.0a1b2c3d.tar", tmp_path / ".engine.0a1b2c3d.d"
     archive.write_bytes(b"half")
     folder.mkdir()
     (folder / "bin").write_bytes(b"x")
@@ -189,6 +189,39 @@ def test_what_a_killed_download_left_is_swept_next_time(tmp_path):
     with download_area(str(tmp_path), "engine"):
         pass
     assert list(tmp_path.iterdir()) == []
+
+
+def test_an_old_engine_kept_beside_the_download_is_never_swept(tmp_path):
+    """An update cut off between its renames leaves the only complete
+    engine as .<name>.old, and the next download's sweep deleted it."""
+    from tuxtalk.download_utils import STALE_PARTIAL_S, download_area
+    kept = tmp_path / ".engine.old"
+    kept.mkdir()
+    (kept / "server").write_bytes(b"x")
+    old = time.time() - STALE_PARTIAL_S - 60
+    os.utime(kept, (old, old))
+    with download_area(str(tmp_path), "engine"):
+        pass
+    assert (kept / "server").exists()
+
+
+def test_only_the_download_areas_own_names_are_swept(tmp_path):
+    """Its .tar files and .d folders, not another name or kind that starts
+    the same way."""
+    from tuxtalk.download_utils import STALE_PARTIAL_S, download_area
+    folders = (".engine.0123abcd.notes", ".engine.0123abcd.tar")
+    files = (".engine.0123abcd.txt", ".engine.0123abcd.d")
+    for name in folders:
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "notes.md").write_text("someone else's")
+    for name in files:
+        (tmp_path / name).write_text("someone else's")
+    old = time.time() - STALE_PARTIAL_S - 60
+    for name in folders + files:
+        os.utime(tmp_path / name, (old, old))
+    with download_area(str(tmp_path), "engine"):
+        pass
+    assert sorted(p.name for p in tmp_path.iterdir()) == sorted(folders + files)
 
 
 def test_an_archive_older_versions_left_is_removed(tmp_path):

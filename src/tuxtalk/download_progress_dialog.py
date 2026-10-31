@@ -230,6 +230,10 @@ class UnifiedDownloadDialog:
         cancel_btn.set_size_request(80, -1)
         cancel_btn.connect("clicked", lambda w: self._cancel_task(task))
         cancel_btn.set_sensitive(task.can_stop)
+        # With several downloads in the window, a screen reader would read
+        # only "Cancel" for each: named after its download.
+        cancel_btn.get_accessible().set_name(
+            f"Cancel {task.name}" if task.can_stop else f"{task.name} can't be stopped")
         header_box.pack_end(cancel_btn, False, False, 0)
 
         vbox.pack_start(header_box, False, False, 0)
@@ -248,6 +252,7 @@ class UnifiedDownloadDialog:
         progress_bar = Gtk.ProgressBar()
         progress_bar.set_show_text(True)
         progress_bar.set_text("0%")
+        progress_bar.get_accessible().set_name(task.name)
         vbox.pack_start(progress_bar, False, False, 0)
 
         frame.add(vbox)
@@ -273,6 +278,7 @@ class UnifiedDownloadDialog:
         widgets['status'].set_markup('<span size="small" color="#ff6b6b">❌ Cancelled</span>')
         widgets['cancel_btn'].set_sensitive(False)
         widgets['cancel_btn'].set_label("Cancelled")
+        widgets['cancel_btn'].get_accessible().set_name(f"{task.name} cancelled")
         # Not left to the download: it notices the Cancel only once its
         # request or its wait before a retry returns.
         self._check_all_complete()

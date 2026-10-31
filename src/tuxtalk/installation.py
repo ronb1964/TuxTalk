@@ -17,27 +17,24 @@ APPIMAGE_NAME = "TuxTalk.AppImage"
 APPIMAGE_PATH = os.path.join(APPIMAGE_DIR, APPIMAGE_NAME)
 
 
-def is_running_from_appimage() -> bool:
-    """
-    Check if currently running from an AppImage.
-
-    Returns:
-        bool: True if running from AppImage, False otherwise
-    """
-    import sys
-    # AppImages run from /tmp/.mount_* or use APPIMAGE env var
-    appimage_env = os.environ.get("APPIMAGE", "")
-    return bool(appimage_env) or "/tmp/.mount_" in sys.executable
+def _own_appimage(appimage_env, appdir_env, module_path) -> str:
+    """*appimage_env* (APPIMAGE) when it names the AppImage this code runs
+    from, else "". APPIMAGE is inherited by everything an AppImage starts: a
+    .deb TuxTalk opened from an AppImage terminal or editor sees that
+    program's. It is ours only when this code runs from inside the AppImage,
+    mounted or extracted."""
+    in_appdir = bool(appdir_env) and module_path.startswith(
+        os.path.realpath(appdir_env).rstrip("/") + "/")
+    if "/.mount_" not in module_path and not in_appdir:
+        return ""
+    return appimage_env
 
 
 def get_running_appimage_path() -> Optional[str]:
-    """
-    Get the path to the currently running AppImage.
-
-    Returns:
-        str: Path to AppImage, or None if not running from AppImage
-    """
-    return os.environ.get("APPIMAGE")
+    """The AppImage this TuxTalk runs from (the AUR's, under /opt, too), or
+    None when it isn't running from one."""
+    return _own_appimage(os.environ.get("APPIMAGE", ""), os.environ.get("APPDIR", ""),
+                         os.path.realpath(__file__)) or None
 
 
 @functools.lru_cache(maxsize=None)
@@ -93,13 +90,7 @@ def get_install_type(*, appimage_env=None, flatpak_env=None, appdir_env=None,
         module_path = os.path.realpath(__file__)
     if pkg_query is None:
         pkg_query = _detect_system_package_manager
-    # APPIMAGE is inherited by everything an AppImage starts: a .deb TuxTalk
-    # opened from an AppImage terminal sees that terminal's. It is ours only
-    # when this code runs from inside the AppImage.
-    in_appdir = bool(appdir_env) and module_path.startswith(
-        os.path.realpath(appdir_env).rstrip("/") + "/")
-    if "/.mount_" not in module_path and not in_appdir:
-        appimage_env = ""
+    appimage_env = _own_appimage(appimage_env, appdir_env, module_path)
 
     if flatpak_env:
         return "flatpak"

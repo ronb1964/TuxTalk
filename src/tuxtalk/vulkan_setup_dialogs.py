@@ -14,6 +14,7 @@ from gi.repository import Gtk, GLib
 from .ui_style import show_message
 
 from . import whisper_vulkan as wv
+from .download_utils import failure_reason
 from .cuda_helper import DOWNLOAD_SIZE_TEXT as CUDA_SIZE_TEXT
 from .logger import setup_logger
 from .recommend import model_title
@@ -95,8 +96,11 @@ def ensure_files(parent, model, confirm):
             buttons=Gtk.ButtonsType.OK_CANCEL)
         if answer != Gtk.ResponseType.OK:
             return False
-    ok, cancelled = _download(parent, [task for task, _what in missing], model)
-    if not ok and not cancelled:
+    tasks = [task for task, _what in missing]
+    ok, cancelled = _download(parent, tasks, model)
+    # A download that said why showed it in its window, which waited for Close.
+    explained = any(failure_reason(*task.last_report) for task in tasks)
+    if not ok and not cancelled and not explained:
         message(parent, Gtk.MessageType.ERROR, "The download did not finish",
                 "Check your internet connection and try again.")
     return ok

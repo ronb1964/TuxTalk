@@ -17,6 +17,7 @@ import sys
 import glob
 import subprocess
 
+from . import installation
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -26,10 +27,6 @@ def _project_root() -> str:
     """Repo root, for dev-mode paths. autostart.py is src/tuxtalk/autostart.py."""
     return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-
-# Where setup installs the AppImage; the Applications-menu launcher points here
-# too (desktop_launcher.create_desktop_launcher).
-INSTALLED_APPIMAGE = os.path.expanduser("~/AppImages/TuxTalk.AppImage")
 
 # How long the Flatpak waits for the Background portal's answer. Long enough
 # for the user to read and answer the desktop's question.
@@ -56,9 +53,10 @@ def desktop_exec_program(path: str) -> str:
 def get_launch_command(prefer_installed_appimage: bool = False) -> str:
     """Return the most portable command to launch the tray.
 
-    Order: dev script → AppImage path → packaged launcher (absolute) → PATH
-    lookup → bare interpreter (last resort). See the module docstring for why the
-    packaged launcher must win over a bare-Python invocation.
+    Order: dev script → self-managed AppImage path → packaged launcher
+    (absolute; the AUR's too) → PATH lookup → bare interpreter (last
+    resort). See the module docstring for why the packaged launcher must win
+    over a bare-Python invocation.
 
     From an AppImage, the installed copy (~/AppImages/TuxTalk.AppImage) wins
     over the file actually running, which on first run is usually the one in
@@ -80,24 +78,9 @@ def get_launch_command(prefer_installed_appimage: bool = False) -> str:
                 f'PYTHONPATH=./src:/usr/lib64/python3.13/site-packages:'
                 f'/usr/lib/python3.13/site-packages {sys.executable} -m tuxtalk.tray"')
 
-    # Running from an AppImage: relaunch the AppImage itself (defaults to tray).
-    appimage_path = os.environ.get('APPIMAGE')
-    if appimage_path and os.path.isfile(appimage_path) and os.access(appimage_path, os.X_OK):
-        if prefer_installed_appimage or os.path.isfile(INSTALLED_APPIMAGE):
-            return desktop_exec_program(INSTALLED_APPIMAGE)
-        return desktop_exec_program(appimage_path)
-
-    # Inside an AppImage mount but APPIMAGE unset: find the AppImage on disk.
-    if '/tmp/.mount_' in sys.executable or 'squashfs-root' in sys.executable:
-        for pattern in (os.path.expanduser('~/AppImages/TuxTalk-*.AppImage'),
-                        os.path.expanduser('~/Downloads/TuxTalk-*.AppImage'),
-                        os.path.expanduser('~/AppImages/TalkType-*.AppImage'),
-                        os.path.expanduser('~/Downloads/TalkType-*.AppImage')):
-            matches = glob.glob(pattern)
-            if matches:
-                latest = max(matches, key=os.path.getmtime)
-                if os.access(latest, os.X_OK):
-                    return desktop_exec_program(latest)
+    appimage_command = _appimage_command(prefer_installed_appimage)
+    if appimage_command:
+        return appimage_command
 
     # Installed .deb/.rpm: prefer the KNOWN ABSOLUTE launcher, not `which`
     # (a stray ~/.local/bin/tuxtalk must never be written into autostart).
@@ -119,6 +102,33 @@ def get_launch_command(prefer_installed_appimage: bool = False) -> str:
 
     # Last resort — may lack the bundled environment.
     return f'{sys.executable} -m tuxtalk.tray'
+
+
+def _appimage_command(prefer_installed_appimage):
+    """get_launch_command's answer for a self-managed AppImage, or None:
+    the AUR's is pacman's, started by its /usr/bin/tuxtalk."""
+    install_type = installation.get_install_type()
+    # Relaunch the AppImage itself (defaults to tray).
+    appimage_path = installation.get_running_appimage_path()
+    if (install_type == "appimage" and appimage_path and os.path.isfile(appimage_path)
+            and os.access(appimage_path, os.X_OK)):
+        if prefer_installed_appimage or os.path.isfile(installation.APPIMAGE_PATH):
+            return desktop_exec_program(installation.APPIMAGE_PATH)
+        return desktop_exec_program(appimage_path)
+
+    # Inside an AppImage mount but APPIMAGE unset: find the AppImage on disk.
+    if install_type != "aur" and ('/.mount_' in sys.executable
+                                  or 'squashfs-root' in sys.executable):
+        for pattern in (os.path.expanduser('~/AppImages/TuxTalk-*.AppImage'),
+                        os.path.expanduser('~/Downloads/TuxTalk-*.AppImage'),
+                        os.path.expanduser('~/AppImages/TalkType-*.AppImage'),
+                        os.path.expanduser('~/Downloads/TalkType-*.AppImage')):
+            matches = glob.glob(pattern)
+            if matches:
+                latest = max(matches, key=os.path.getmtime)
+                if os.access(latest, os.X_OK):
+                    return desktop_exec_program(latest)
+    return None
 
 
 def get_icon_path() -> str:
@@ -145,7 +155,7 @@ def _in_running_appimage(path) -> bool:
     naming it has no icon at login."""
     if "/.mount_" in path:
         return True
-    appdir = os.environ.get("APPDIR", "") if os.environ.get("APPIMAGE") else ""
+    appdir = os.environ.get("APPDIR", "") if installation.get_running_appimage_path() else ""
     return bool(appdir) and path.startswith(appdir.rstrip("/") + "/")
 
 
@@ -294,8 +304,8 @@ StartupWMClass=TuxTalk
 X-GNOME-Autostart-enabled=true
 {path_line}"""
         try:
-            with open(desktop_file, "w") as f:
-                f.write(content)
+            # Whole or not at all: a half-written entry starts nothing at login.
+            config.write_text_atomic(desktop_file, content, keep_backup=False, mode=0o644)
             logger.info(f"Autostart enabled: {desktop_file} (Exec={exec_cmd})")
             return True
         except Exception as e:
@@ -304,8 +314,9 @@ X-GNOME-Autostart-enabled=true
 
     # Disable: Hidden=true stub.
     try:
-        with open(desktop_file, "w") as f:
-            f.write("[Desktop Entry]\nType=Application\nName=TuxTalk\nHidden=true\n")
+        config.write_text_atomic(desktop_file,
+                                 "[Desktop Entry]\nType=Application\nName=TuxTalk\nHidden=true\n",
+                                 keep_backup=False, mode=0o644)
         logger.info(f"Autostart disabled: {desktop_file}")
         return True
     except Exception as e:
@@ -379,6 +390,19 @@ def _exec_program(exec_cmd):
     return "".join(program), True
 
 
+def stale_appimage_target(exec_cmd):
+    """The TuxTalk AppImage the Exec= value *exec_cmd* starts, when that
+    isn't the installed copy in ~/AppImages (or can't be run as written);
+    None when it starts the installed copy, or something else."""
+    target, runnable = _exec_program(exec_cmd)
+    name = os.path.basename(target).lower()
+    if not (name.endswith(".appimage") and ("tuxtalk" in name or "talktype" in name)):
+        return None
+    if runnable and os.path.realpath(target) == os.path.realpath(installation.APPIMAGE_PATH):
+        return None
+    return target
+
+
 def repair_stale_appimage_autostart() -> bool:
     """Point an existing launch-at-login entry at the installed AppImage.
 
@@ -392,24 +416,21 @@ def repair_stale_appimage_autostart() -> bool:
     entries, the dev version, .deb/.rpm and Flatpak installs are never
     touched. Returns True if the entry was rewritten.
     """
-    if os.environ.get("FLATPAK_ID") or not os.environ.get("APPIMAGE"):
-        return False
     from . import config
-    if config.DEV_MODE or not os.path.isfile(INSTALLED_APPIMAGE):
+    if installation.get_install_type() != "appimage":
+        return False
+    if config.DEV_MODE or not os.path.isfile(installation.APPIMAGE_PATH):
         return False
     lines = _enabled_entry()
     if lines is None:
         return False
     exec_cmd = next((line[len("Exec="):] for line in lines if line.startswith("Exec=")), "")
-    target, runnable = _exec_program(exec_cmd)
-    name = os.path.basename(target).lower()
-    if not (name.endswith(".appimage") and ("tuxtalk" in name or "talktype" in name)):
-        return False
-    if runnable and os.path.realpath(target) == os.path.realpath(INSTALLED_APPIMAGE):
+    target = stale_appimage_target(exec_cmd)
+    if target is None:
         return False
     if set_autostart(True, prefer_installed_appimage=True):
         logger.info(f"Repaired launch at login: it pointed at {target}, "
-                    f"now {INSTALLED_APPIMAGE}")
+                    f"now {installation.APPIMAGE_PATH}")
         return True
     return False
 

@@ -5,6 +5,7 @@ hand on an RTX 4070 Super and a Ryzen 7800X3D's built-in Radeon; these cover
 everything around them.
 """
 import io
+import os
 import pathlib
 import time
 import types
@@ -149,10 +150,9 @@ def test_two_downloads_of_the_engine_at_once_both_end_installed(tmp_path, monkey
     removed the engine folder while the other moved its copy in, and that
     window said "Could not unpack the download"."""
     import io
-    import shutil
     import tarfile
     import threading
-    import types
+    from tuxtalk import download_utils
     runtime = tmp_path / "run"
     runtime.mkdir(mode=0o700)
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(runtime))
@@ -170,17 +170,18 @@ def test_two_downloads_of_the_engine_at_once_both_end_installed(tmp_path, monkey
         both_downloaded.wait(5)
         return True
     monkeypatch.setattr("tuxtalk.download_utils.download_file", download)
-    # The bad timing, made certain: both clear the folder before either
-    # moves its copy in, unless the second waits its turn and skips it.
-    both_cleared = threading.Barrier(2)
+    # The bad timing, made likely: both inside the swap at once, unless the
+    # second waits its turn and skips it.
+    both_swapping = threading.Barrier(2)
+    replace_folder = download_utils.replace_folder
 
-    def rmtree(path, **kwargs):
-        shutil.rmtree(path, **kwargs)
+    def swap(staging, target, old):
         try:
-            both_cleared.wait(0.5)
+            both_swapping.wait(0.5)
         except threading.BrokenBarrierError:
             pass
-    monkeypatch.setattr(wv, "shutil", types.SimpleNamespace(rmtree=rmtree))
+        replace_folder(staging, target, old)
+    monkeypatch.setattr(download_utils, "replace_folder", swap)
     results = []
     runs = [threading.Thread(target=lambda: results.append(
         wv.make_engine_download_func("small")(lambda *a: None, None))) for _ in range(2)]
@@ -189,6 +190,71 @@ def test_two_downloads_of_the_engine_at_once_both_end_installed(tmp_path, monkey
     for run in runs:
         run.join(10)
     assert results == [True, True] and wv.is_engine_installed("small")
+
+
+def test_an_engine_update_that_cant_move_in_keeps_the_old_engine(tmp_path, monkeypatch):
+    """The old engine was deleted before the new one moved in: a move that
+    failed (or a kill between the two) left no engine at all."""
+    import io
+    import tarfile
+    from tuxtalk.parakeet_engine import PARAKEET_MODEL
+    engine = tmp_path / "1.9.5" / wv.ENGINE_NAME
+    engine.mkdir(parents=True)
+    (engine / "whisper-server").write_text("old")
+    (engine / "whisper-server").chmod(0o755)
+    monkeypatch.setattr(wv, "_engine_dir", lambda: str(engine))
+    packed = io.BytesIO()
+    with tarfile.open(fileobj=packed, mode="w:gz") as tar:
+        for name in ("whisper-server", "parakeet-cli", "libparakeet.so"):
+            info = tarfile.TarInfo(f"{wv.ENGINE_NAME}/{name}")
+            info.size, info.mode = 3, 0o755
+            tar.addfile(info, io.BytesIO(b"new"))
+    monkeypatch.setattr("tuxtalk.download_utils.download_file",
+                        lambda url, dest, **k: pathlib.Path(dest).write_bytes(packed.getvalue()))
+    real_rename, real_replace = os.rename, os.replace
+
+    def fails_from_the_download(move):
+        def moved(src, dst):
+            if ".d" + os.sep in str(src):
+                raise OSError(5, "Input/output error")
+            move(src, dst)
+        return moved
+    monkeypatch.setattr(os, "rename", fails_from_the_download(real_rename))
+    monkeypatch.setattr(os, "replace", fails_from_the_download(real_replace))
+    assert wv.make_engine_download_func(PARAKEET_MODEL)(lambda *a: None, None) is False
+    assert (engine / "whisper-server").read_text() == "old"
+
+
+def test_an_engine_update_cut_off_part_way_is_put_back_though_the_download_fails(
+        tmp_path, monkeypatch):
+    """Killed between its renames, an update left the old engine only as
+    .<name>.old; the next download swept it away before failing offline,
+    and there was no engine left at all."""
+    from tuxtalk.download_utils import STALE_PARTIAL_S
+    from tuxtalk.parakeet_engine import PARAKEET_MODEL
+    engine = tmp_path / "1.9.5" / wv.ENGINE_NAME
+    kept = tmp_path / "1.9.5" / f".{wv.ENGINE_NAME}.old"
+    kept.mkdir(parents=True)
+    (kept / "whisper-server").write_text("old")
+    (kept / "whisper-server").chmod(0o755)
+    aged = time.time() - STALE_PARTIAL_S - 60
+    os.utime(kept, (aged, aged))
+    monkeypatch.setattr(wv, "_engine_dir", lambda: str(engine))
+    monkeypatch.setattr("tuxtalk.download_utils.download_file", lambda *a, **k: False)
+    assert wv.make_engine_download_func(PARAKEET_MODEL)(lambda *a: None, None) is False
+    assert (engine / "whisper-server").read_text() == "old"
+    assert wv.is_engine_installed("small")
+
+
+def test_only_the_engines_own_kept_copy_is_put_back(tmp_path, monkeypatch):
+    """Every hidden .old in the folder was renamed, a user's .notes.old to notes."""
+    engine = tmp_path / "1.9.5" / wv.ENGINE_NAME
+    engine.parent.mkdir()
+    (engine.parent / ".notes.old").mkdir()
+    monkeypatch.setattr(wv, "_engine_dir", lambda: str(engine))
+    monkeypatch.setattr("tuxtalk.download_utils.download_file", lambda *a, **k: False)
+    wv.make_engine_download_func("small")(lambda *a: None, None)
+    assert [p.name for p in engine.parent.iterdir()] == [".notes.old"]
 
 
 def test_each_engine_build_has_its_own_asset():

@@ -11,11 +11,14 @@ the same settings and models. Nothing is ever deleted, copied or overwritten:
 - other disk (EXDEV) -> point the NEW name at the old folder instead of moving
 """
 import errno
+import logging
 import os
+import shutil
 
-from .logger import setup_logger
-
-logger = setup_logger(__name__)
+# Not setup_logger: that opens the log file, and so makes the new settings
+# folder before the move below. Lines reach the file through the package
+# logger once a later module sets it up.
+logger = logging.getLogger(__name__)
 
 # Files TuxTalk creates on its own the moment it starts (the logger writes its
 # log before anything else). A new folder holding only these is not "in use".
@@ -66,6 +69,31 @@ def PAIRS(dev=False):
             (f".local/share/TalkType{s}", f".local/share/TuxTalk{s}")]
 
 
+def _fold_log(new, old, done):
+    """Put the log a TuxTalk start already wrote in *new* into *old*, so the
+    move below keeps it, and remove *new*. Copied when *old* is on another
+    disk, where a rename can't go: left there, it stopped the move, and
+    TuxTalk started on default settings."""
+    for n in os.listdir(new):
+        src, dst = os.path.join(new, n), os.path.join(old, n)
+        if os.path.exists(dst):
+            continue
+        try:
+            try:
+                os.rename(src, dst)
+            except OSError as e:
+                if e.errno not in (errno.EXDEV, errno.EBUSY):
+                    raise
+                shutil.copy2(src, dst)
+                os.remove(src)
+        except OSError as e:
+            done.append(f"could not move {src} into {old}: {e}")
+    try:
+        os.rmdir(new)
+    except OSError:
+        pass        # the log stayed: "both exist" below says so
+
+
 def migrate(home=None, dev=False):
     """Move the old folders; return one line per thing done, for the log.
 
@@ -95,14 +123,7 @@ def migrate(home=None, dev=False):
         if not os.path.isdir(old):
             continue                      # nothing old
         if (os.path.isdir(new) and not os.path.islink(new) and _only_auto_created(new)):
-            # Fold the fresh log into the old folder, so the move below keeps it.
-            for n in os.listdir(new):
-                if not os.path.exists(os.path.join(old, n)):
-                    os.rename(os.path.join(new, n), os.path.join(old, n))
-            try:
-                os.rmdir(new)
-            except OSError:
-                pass
+            _fold_log(new, old, done)
         if os.path.islink(new) and os.path.realpath(new) == os.path.realpath(old):
             continue                      # the other-disk link from an earlier run
         if os.path.lexists(new):
@@ -133,18 +154,23 @@ def migrate(home=None, dev=False):
     return done
 
 
+# How every line for a failure starts, which the tray logs as a warning.
+FAILED = "could not"
+
+
 def run_at_startup(environ=None, home=None):
     """The package-import entry point. Off in the test suite
     (TUXTALK_NO_MIGRATE) and in the Flatpak, whose folders live in its own
-    sandbox and never had the old names on the host."""
+    sandbox and never had the old names on the host. Its lines are logged
+    by the tray, a failure's too: at import, no log file is open yet."""
     environ = os.environ if environ is None else environ
     if environ.get("TUXTALK_NO_MIGRATE") or environ.get("FLATPAK_ID"):
         return []
     try:
         return migrate(home=home, dev=environ.get("DEV_MODE") == "1")
     except Exception as e:      # never stop the app from starting
-        logger.warning(f"Rename to TuxTalk: moving the folders failed: {e}")
-        return []
+        logger.warning(f"Rename to TuxTalk: {FAILED} move the folders: {e}")
+        return [f"{FAILED} move the folders: {e}"]
 
 
 # Where an old TalkType AppImage path now lives, best match first: the AUR

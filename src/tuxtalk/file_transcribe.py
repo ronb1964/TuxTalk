@@ -295,7 +295,7 @@ def transcribe(audio, engine, progress=None, cancelled=None):
 
 RECENT_FILE = "recent-transcripts.json"
 MAX_RECENT = 10
-_OLD_LAST_FILE = "last-transcript.json"     # one kept transcript, before the list
+OLD_LAST_FILE = "last-transcript.json"     # one kept transcript, before the list
 
 
 class Kept:
@@ -339,7 +339,7 @@ def recent():
         entries = _read_list(target)
     except FileNotFoundError:
         # The one transcript kept before there was a list comes along once.
-        old = os.path.join(os.path.dirname(target), _OLD_LAST_FILE)
+        old = os.path.join(os.path.dirname(target), OLD_LAST_FILE)
         try:
             entries = _read_list(old)
             kept = [e for e in (_entry(d) for d in entries) if e]

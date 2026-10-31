@@ -113,11 +113,19 @@ def check_from_menu(show_result, quitting=lambda: False):
     threading.Thread(target=check, daemon=True).start()
 
 
-def auto_check_for_updates(show_result, quitting=lambda: False):
+# A daily check that failed (Wi-Fi not up yet at login, GitHub limiting
+# checks) tries again this much later, at most this many times.
+RETRY_S = 60 * 60
+RETRIES = 3
+
+
+def auto_check_for_updates(show_result, quitting=lambda: False, retries=RETRIES):
     """The once-a-day check at start-up, when it's on, on a thread: an app
     update opens *show_result(result)*, the same window as Check for
     Updates, and an extension update a notification, also when it comes
-    with an app update. False, for its GLib timer."""
+    with an app update. Only a check that got an answer counts as today's;
+    one that didn't tries again in an hour, *retries* times. False, for its
+    GLib timer."""
     from .config import load_config, record_update_check
     config = load_config()
     if not config.auto_check_updates:
@@ -133,17 +141,27 @@ def auto_check_for_updates(show_result, quitting=lambda: False):
             show_result(result)
         return False
 
+    def try_again():
+        if not quitting():
+            auto_check_for_updates(show_result, quitting, retries - 1)
+        return False
+
     def check():
         """On its own thread: ask GitHub, note when, and hand on what's new."""
         try:
             result = update_checker.check_for_updates()
+            if not (result and result.get("success")):
+                error = (result or {}).get("error", "unknown")
+                if retries > 0 and not quitting():
+                    logger.info(f"Update check failed ({error}); trying again in an hour")
+                    GLib.timeout_add_seconds(RETRY_S, try_again)
+                else:
+                    logger.info(f"Update check failed: {error}")
+                return
             # Saved against a fresh read (`config` is from before the ~30 s
             # check) and on GTK's thread, where the tray saves its own
             # settings: neither undoes a change made meanwhile.
             GLib.idle_add(record_update_check, update_checker.get_current_timestamp())
-            if not (result and result.get("success")):
-                logger.debug(f"Update check failed: {result.get('error', 'unknown')}")
-                return
             if result.get("update_available", False):
                 # The window a manual check opens, not a surprise Preferences.
                 GLib.idle_add(show, result)
@@ -255,6 +273,8 @@ def _how_to_update(content, guidance):
         cmd_entry.set_text(guidance["command"])
         cmd_entry.set_editable(False)
         cmd_entry.get_style_context().add_class("monospace")
+        # A screen reader names it by this: no label sits beside it.
+        cmd_entry.get_accessible().set_name("Command to update TuxTalk")
         content.pack_start(cmd_entry, False, False, 0)
 
 
@@ -279,7 +299,7 @@ def _update_buttons(dialog, method, release):
 def run_appimage_update(release, restart, *, parent=None, failed=None,
                         quitting=lambda: False, run_install=None):
     """Download *release*'s AppImage (checked against the release's
-    SHA256SUMS.txt when it publishes one) and install it, behind a progress
+    SHA256SUMS.txt) and install it, behind a progress
     window over *parent* (None: from the tray) that can't be closed
     meanwhile; then *restart()* onto it, or say why it didn't go in, also to
     *failed(message)*. Nothing is installed once *quitting()*, and nothing
@@ -290,8 +310,9 @@ def run_appimage_update(release, restart, *, parent=None, failed=None,
         said = [""]
 
         def reporting(message, percent):
+            # The download fills the bar to 90 %, the install the rest.
             said[0] = message
-            progress(message, percent)
+            progress(message, percent * 9 // 10)
         path = update_install.download_update(
             release["appimage_url"], release.get("appimage_name", "TuxTalk-update.AppImage"),
             reporting, checksums_url=release.get("checksums_url"))
@@ -299,7 +320,6 @@ def run_appimage_update(release, restart, *, parent=None, failed=None,
             return False, download_failure(said[0])
         if quitting():
             return False, None
-        progress("Installing update...", 90)
 
         def install():
             return update_install.install_appimage_update(path, progress)

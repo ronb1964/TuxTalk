@@ -146,3 +146,27 @@ def test_the_icon_goes_in_every_size_even_without_the_cache_tools(tmp_path, monk
     assert sorted(p.parent.parent.name for p in icons.glob("*/apps/tuxtalk.png")) == [
         "128x128", "256x256", "32x32", "48x48", "64x64"]
     assert desktop_launcher.installed_app_icon() == "tuxtalk"
+
+
+def _launcher(home, program):
+    (home / "apps").mkdir(exist_ok=True)
+    (home / "apps" / "tuxtalk.desktop").write_text(
+        f"[Desktop Entry]\nName=TuxTalk\nExec={program}\nType=Application\n")
+
+
+def test_a_launcher_left_on_the_download_moves_to_the_installed_copy(home):
+    """First run's copy failed, so the menu started the AppImage in
+    Downloads; an update put the copy in ~/AppImages, and the menu kept
+    starting the old download."""
+    installed = home / "AppImages" / "TuxTalk.AppImage"
+    installed.parent.mkdir()
+    installed.write_text("")
+    _launcher(home, home / "Downloads" / "TuxTalk-v0.18.0-x86_64.AppImage")
+    assert desktop_launcher.repair_stale_launcher()
+    assert f"Exec={installed}\n" in (home / "apps" / "tuxtalk.desktop").read_text()
+    assert not desktop_launcher.repair_stale_launcher()         # once
+
+
+def test_a_launcher_is_left_alone_until_the_installed_copy_is_there(home):
+    _launcher(home, home / "Downloads" / "TuxTalk-v0.18.0-x86_64.AppImage")
+    assert not desktop_launcher.repair_stale_launcher()

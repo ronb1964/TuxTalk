@@ -7,7 +7,6 @@ from tuxtalk import (autostart, config, desktop_identity, desktop_launcher, inst
 
 def test_appimage_and_launchers_use_the_new_name(monkeypatch):
     assert installation.APPIMAGE_NAME == "TuxTalk.AppImage"
-    assert autostart.INSTALLED_APPIMAGE.endswith("/AppImages/TuxTalk.AppImage")
     assert desktop_launcher.DESKTOP_FILE_PATH.endswith("/applications/tuxtalk.desktop")
     monkeypatch.setattr(config, "DEV_MODE", False)
     assert autostart._autostart_desktop_path().endswith("/autostart/tuxtalk.desktop")

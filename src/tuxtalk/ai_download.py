@@ -6,7 +6,6 @@ made only when the user turns on a feature that needs them, so TuxTalk's
 package does not grow. ai_server runs them.
 """
 import os
-import shutil
 
 from . import engine_process
 from .logger import setup_logger
@@ -38,6 +37,10 @@ MODEL_SIZE_TEXT = _size_text(MODEL_SIZE_MB)
 DOWNLOAD_SIZE_TEXT = _size_text(MODEL_SIZE_MB + LLAMA_SIZE_MB)
 
 
+# The folder llama.cpp's archive unpacks to, in _engine_dir().
+_SERVER_FOLDER = f"llama-{LLAMA_TAG}"
+
+
 def _engine_dir():
     from .config import get_data_dir
     return os.path.join(get_data_dir(), "ai-engine", LLAMA_TAG)
@@ -45,7 +48,7 @@ def _engine_dir():
 
 def server_binary():
     """Where llama-server is once downloaded."""
-    return os.path.join(_engine_dir(), f"llama-{LLAMA_TAG}", "llama-server")
+    return os.path.join(_engine_dir(), _SERVER_FOLDER, "llama-server")
 
 
 def model_path():
@@ -65,11 +68,14 @@ def make_engine_download_func():
         """Fetch, check and unpack llama.cpp's server into the engine folder,
         reporting progress; True once it's there. Another download finishing
         first is fine."""
-        from .download_utils import download_area, download_file, install_turn, unpack_tar
+        from .download_utils import (download_area, download_file, install_turn,
+                                     recover_cut_off_swaps, replace_folder,
+                                     restore_cut_off_swap, unpack_tar)
+        engine_dir = _engine_dir()
+        recover_cut_off_swaps(engine_dir, (_SERVER_FOLDER,), "ai-engine", "the AI engine")
         if os.access(server_binary(), os.X_OK):
             progress_callback("Already downloaded", 100)
             return True
-        engine_dir = _engine_dir()
 
         def hook(done, total):
             if total:
@@ -86,11 +92,16 @@ def make_engine_download_func():
                 progress_callback("Unpacking...", 97)
                 unpack_tar(archive, folder)
                 with install_turn("ai-engine", "the AI engine"):
+                    # A complete engine at every moment: removed first, a
+                    # kill before the move left none.
+                    for name in os.listdir(folder):
+                        restore_cut_off_swap(os.path.join(engine_dir, name),
+                                             os.path.join(engine_dir, f".{name}.old"))
                     if not os.access(server_binary(), os.X_OK):    # or another download did it
                         for name in os.listdir(folder):
-                            target = os.path.join(engine_dir, name)
-                            shutil.rmtree(target, ignore_errors=True)
-                            os.replace(os.path.join(folder, name), target)
+                            replace_folder(os.path.join(folder, name),
+                                           os.path.join(engine_dir, name),
+                                           os.path.join(engine_dir, f".{name}.old"))
                     engine_process.remove_other_versions(os.path.dirname(engine_dir), LLAMA_TAG)
             except Exception as e:
                 logger.error(f"Could not unpack the AI engine: {e}")

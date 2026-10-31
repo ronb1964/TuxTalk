@@ -162,3 +162,9 @@ def test_the_dev_launchers_are_left_alone(tmp_path, monkeypatch):
 def test_tray_puts_back_a_cut_off_cuda_install_before_the_service_loads_cuda(tray_main):
     started = tray_main()
     assert started.index("puts back a cut-off CUDA install") < started.index("makes the tray")
+
+
+def test_tray_finishes_cut_off_installs_and_restores_before_the_settings_are_copied(tray_main):
+    started = tray_main()
+    assert started.index("finishes a cut-off restore") < started.index("snapshots the settings")
+    assert started.index("puts back a cut-off extension install") < started.index("makes the tray")

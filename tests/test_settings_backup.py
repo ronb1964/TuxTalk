@@ -399,6 +399,219 @@ def test_your_words_travel_with_the_backup(home):
     assert custom_words.load() == ["TuxTalk", "BambuStudio"]
 
 
+def test_restoring_an_early_copy_takes_away_snippets_and_words_added_since(home):
+    """The copy was taken before there were any: "restored" said done, and
+    the new snippet and word stayed."""
+    from tuxtalk import custom_words
+    os.remove(config.CUSTOM_COMMANDS_PATH)
+    early = sb._snapshot()
+    with open(config.CUSTOM_COMMANDS_PATH, "w") as f:
+        f.write(COMMANDS_TEXT)
+    custom_words.save(["TuxTalk"])
+    sb.restore(sb.read_backup(early))
+    assert not os.path.exists(config.CUSTOM_COMMANDS_PATH)
+    assert custom_words.load() == []
+
+
+def test_a_restore_cut_off_between_its_files_is_undone_at_the_next_start(home, monkeypatch):
+    """Killed after the settings and before the commands: the mix stayed."""
+    dest = home / "b.zip"
+    sb.write_backup(str(dest))
+    backup = sb.read_backup(str(dest))
+    backup.files["config.toml"] = b'hotkey = "F6"\n'
+    backup.files["custom_commands.toml"] = b"# the backup's commands\n"
+    write = config.write_text_atomic
+
+    def killed_on_the_commands(path, text, **kw):
+        if path == config.CUSTOM_COMMANDS_PATH:
+            raise SystemExit("killed")
+        write(path, text, **kw)
+    monkeypatch.setattr(config, "write_text_atomic", killed_on_the_commands)
+    with pytest.raises(SystemExit):
+        sb.restore(backup)
+    monkeypatch.setattr(config, "write_text_atomic", write)
+    assert read(config.CONFIG_PATH) == 'hotkey = "F6"\n'        # the mix
+    sb.recover_cut_off_restore()
+    assert read(config.CONFIG_PATH) == CONFIG_TEXT
+    assert read(config.CUSTOM_COMMANDS_PATH) == COMMANDS_TEXT
+    assert not os.path.exists(sb._pending_path())
+
+
+def test_a_cut_off_restore_takes_away_the_file_it_added(home, monkeypatch):
+    """No snippets before the restore: the commands it wrote before it was
+    killed go again."""
+    from tuxtalk import custom_words
+    backup = sb.read_backup(_saved(home))
+    backup.files["custom_words.txt"] = b"TuxTalk\n"
+    os.remove(config.CUSTOM_COMMANDS_PATH)
+    write = config.write_text_atomic
+
+    def killed_on_the_words(path, text, **kw):
+        if path == custom_words.path():
+            raise SystemExit("killed")
+        write(path, text, **kw)
+    monkeypatch.setattr(config, "write_text_atomic", killed_on_the_words)
+    with pytest.raises(SystemExit):
+        sb.restore(backup)
+    monkeypatch.setattr(config, "write_text_atomic", write)
+    assert os.path.exists(config.CUSTOM_COMMANDS_PATH)          # the mix
+    sb.recover_cut_off_restore()
+    assert not os.path.exists(config.CUSTOM_COMMANDS_PATH)
+
+
+def _saved(home):
+    dest = home / "b.zip"
+    sb.write_backup(str(dest))
+    return str(dest)
+
+
+def test_a_backup_without_your_words_says_it_removes_this_computers(home):
+    """Loaded from a computer with no Your Words or snippets, it deleted
+    this one's and said nothing."""
+    from tuxtalk import custom_words
+    os.remove(config.CUSTOM_COMMANDS_PATH)
+    backup = sb.read_backup(_saved(home))        # a computer with neither
+    with open(config.CUSTOM_COMMANDS_PATH, "w") as f:
+        f.write(COMMANDS_TEXT)
+    custom_words.save(["TuxTalk", "BambuStudio"])
+    assert sb.removal_note(backup) == (
+        "This backup has no snippets and voice commands or Your Words, so the ones on "
+        "this computer are removed. Earlier settings, on the Updates & Backup tab, can "
+        "bring them back.")
+    notes = sb.restore(backup)
+    assert any("so the ones on this computer were removed" in note for note in notes)
+
+
+def test_a_backup_with_your_words_removes_nothing_and_says_nothing(home):
+    from tuxtalk import custom_words
+    custom_words.save(["TuxTalk"])
+    backup = sb.read_backup(_saved(home))
+    assert sb.removal_note(backup) == ""
+    assert not any("removed" in note for note in sb.restore(backup))
+
+
+def test_a_backup_saved_with_empty_words_and_snippets_says_it_removes_this_computers(home):
+    """Preferences writes Your Words with only its header when there are
+    none, so every backup it saves has the file: the words went, and the
+    note said nothing."""
+    from tuxtalk import custom_words
+    custom_words.save([])
+    config.save_custom_commands({})
+    backup = sb.read_backup(_saved(home))      # a computer with neither, as Preferences saves
+    with open(config.CUSTOM_COMMANDS_PATH, "w") as f:
+        f.write(COMMANDS_TEXT)
+    custom_words.save(["TuxTalk", "BambuStudio"])
+    assert sb.removal_note(backup).startswith(
+        "This backup has no snippets and voice commands or Your Words, so the ones")
+    notes = sb.restore(backup)
+    assert any("so the ones on this computer were removed" in note for note in notes)
+    assert custom_words.load() == [] and config.load_custom_commands() == {}
+
+
+def test_nothing_is_said_removed_when_this_computer_has_none(home):
+    """Files with only their header here: there was nothing to remove, and
+    the note warned all the same."""
+    from tuxtalk import custom_words
+    os.remove(config.CUSTOM_COMMANDS_PATH)
+    backup = sb.read_backup(_saved(home))      # made without either file
+    custom_words.save([])
+    config.save_custom_commands({})
+    assert sb.removal_note(backup) == ""
+
+
+def test_an_unreadable_restore_note_doesnt_stop_tuxtalk_starting(home):
+    """It raised IsADirectoryError, and the tray died at every start."""
+    os.makedirs(sb._pending_path())
+    sb.recover_cut_off_restore()
+    assert read(config.CONFIG_PATH) == CONFIG_TEXT
+
+
+def test_a_cut_off_restore_goes_back_to_the_copy_it_took_not_a_newer_named_one(home, monkeypatch):
+    """Copies are named by local time: in the hour repeated when the clocks
+    go back, an older copy sorts newer, and the restore went back to it."""
+    backup = sb.read_backup(_saved(home))
+    backup.files["config.toml"] = b'hotkey = "F6"\n'
+    backup.files["custom_commands.toml"] = b"# the backup's commands\n"
+    os.makedirs(sb.snapshots_dir(), exist_ok=True)
+    later = datetime.datetime.now() + datetime.timedelta(minutes=30)
+    sb._write_zip(os.path.join(sb.snapshots_dir(), f"settings-{later:%Y%m%d-%H%M%S}.zip"),
+                  {"config.toml": b'hotkey = "F2"\n'})
+    with open(config.CONFIG_PATH, "w") as f:
+        f.write('hotkey = "F9"\n')
+    write = config.write_text_atomic
+
+    def killed_on_the_commands(path, text, **kw):
+        if path == config.CUSTOM_COMMANDS_PATH:
+            raise SystemExit("killed")
+        write(path, text, **kw)
+    monkeypatch.setattr(config, "write_text_atomic", killed_on_the_commands)
+    with pytest.raises(SystemExit):
+        sb.restore(backup)
+    monkeypatch.setattr(config, "write_text_atomic", write)
+    sb.recover_cut_off_restore()
+    assert read(config.CONFIG_PATH) == 'hotkey = "F9"\n'
+
+
+def _copies_from_the_future():
+    """KEEP automatic copies named after now, as when the clock is set back
+    behind them (a flat CMOS battery before the network sets it)."""
+    os.makedirs(sb.snapshots_dir(), exist_ok=True)
+    ahead = datetime.datetime.now() + datetime.timedelta(hours=1)
+    for i in range(sb.KEEP):
+        when = ahead + datetime.timedelta(minutes=i)
+        sb._write_zip(os.path.join(sb.snapshots_dir(), f"settings-{when:%Y%m%d-%H%M%S}.zip"),
+                      {"config.toml": f'hotkey = "F{i}"\n'.encode()})
+
+
+def test_with_the_clock_behind_the_copies_the_new_copy_is_kept(home):
+    """It sorted oldest and was trimmed the moment it was written."""
+    _copies_from_the_future()
+    path = sb._snapshot()
+    assert os.path.exists(path)
+    assert len(sb.list_snapshots()) == sb.KEEP
+
+
+def test_a_cut_off_restore_with_the_clock_behind_the_copies_is_undone(home, monkeypatch):
+    """The copy the restore took was trimmed at once, so the next start
+    couldn't put the settings back; nor may a copy taken at a start whose
+    putting back failed trim it."""
+    from tuxtalk import custom_words
+    backup = sb.read_backup(_saved(home))
+    backup.files["config.toml"] = b'hotkey = "F6"\n'
+    backup.files["custom_words.txt"] = b"TuxTalk\n"
+    os.remove(config.CUSTOM_COMMANDS_PATH)
+    backup.files["custom_commands.toml"] = b"# the backup's commands\n"
+    _copies_from_the_future()
+    write = config.write_text_atomic
+
+    def killed_on_the_words(path, text, **kw):
+        if path == custom_words.path():
+            raise SystemExit("killed")
+        write(path, text, **kw)
+    monkeypatch.setattr(config, "write_text_atomic", killed_on_the_words)
+    with pytest.raises(SystemExit):
+        sb.restore(backup)
+    monkeypatch.setattr(config, "write_text_atomic", write)
+    assert sb.snapshot_if_changed() is not None         # the mix, copied at a start
+    assert len(sb.list_snapshots()) == sb.KEEP
+    sb.recover_cut_off_restore()
+    assert read(config.CONFIG_PATH) == CONFIG_TEXT
+    assert not os.path.exists(config.CUSTOM_COMMANDS_PATH)
+    assert not os.path.exists(custom_words.path())
+    assert not os.path.exists(sb._pending_path())
+
+
+def test_a_finished_restore_leaves_nothing_to_undo_at_start(home):
+    dest = home / "b.zip"
+    sb.write_backup(str(dest))
+    with open(config.CONFIG_PATH, "w") as f:
+        f.write('hotkey = "F9"\n')
+    sb.restore(sb.read_backup(str(dest)))
+    sb.recover_cut_off_restore()
+    assert read(config.CONFIG_PATH) == CONFIG_TEXT
+    assert sb._PENDING not in os.listdir(sb.snapshots_dir())
+
+
 # --- damaged files and failed writes -----------------------------------------
 
 def _corrupt_member(path, name):
@@ -521,7 +734,7 @@ def test_a_file_that_cant_be_put_back_is_said_and_points_at_the_copy(home, monke
         if full["on"]:
             raise OSError(28, "No space left on device")
         write(path, text, **kw)
-        full["on"] = True                       # full from the second write on
+        full["on"] = path == config.CONFIG_PATH     # full from the second file on
     monkeypatch.setattr(config, "write_text_atomic", disk)
     with pytest.raises(sb.BackupError, match="couldn't be put back either.*Earlier settings"):
         sb.restore(backup)
@@ -607,3 +820,46 @@ def test_the_backup_folder_can_be_chosen_outright(home, monkeypatch):
     UpdatesTab._on_change_backup_folder_clicked(window, None)
     assert sb.backup_folder() == str(folder)
     assert refreshed == ["folder", "list"]
+
+
+def test_load_backup_asks_saying_this_computers_words_go(home, prefs_window, monkeypatch):
+    import gi
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import Gtk
+    from gtk_text import tree_text
+    from tuxtalk import custom_words
+    os.remove(config.CUSTOM_COMMANDS_PATH)
+    path = _saved(home)
+    custom_words.save(["TuxTalk"])
+    asked = []
+    monkeypatch.setattr(Gtk.Dialog, "run",
+                        lambda d: asked.append("\n".join(tree_text(d))) or Gtk.ResponseType.CANCEL)
+    window = prefs_window()
+    monkeypatch.setattr(window.updates_tab, "_pick_file", lambda title: path)
+    window.updates_tab._on_load_backup_clicked(None)
+    assert len(asked) == 1 and "This backup has no Your Words" in asked[0]
+    assert custom_words.load() == ["TuxTalk"]          # asked, nothing done
+
+
+def test_earlier_settings_asks_saying_this_computers_words_go(home, prefs_window, monkeypatch):
+    """Going back to a backup file from another computer said only after OK
+    that this computer's Your Words were gone."""
+    import gi
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import Gtk
+    from gtk_text import tree_text
+    from tuxtalk import custom_words
+    os.remove(config.CUSTOM_COMMANDS_PATH)
+    folder = home / "Backups"
+    folder.mkdir()
+    sb.write_backup(str(folder / "TuxTalk-settings.zip"))
+    sb.set_backup_folder(str(folder))
+    custom_words.save(["TuxTalk"])
+    asked = []
+    monkeypatch.setattr(Gtk.Dialog, "run",
+                        lambda d: asked.append("\n".join(tree_text(d))) or Gtk.ResponseType.CANCEL)
+    tab = prefs_window().updates_tab
+    tab.earlier_combo.set_active_id(str(folder / "TuxTalk-settings.zip"))
+    tab._on_restore_earlier_clicked(None)
+    assert len(asked) == 1 and "This backup has no Your Words" in asked[0]
+    assert custom_words.load() == ["TuxTalk"]          # asked, nothing done

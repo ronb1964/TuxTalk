@@ -42,6 +42,11 @@ def test_closing_the_window_leaves_finished_tasks_alone():
     assert done.success is True
 
 
+class _Accessible:
+    def set_name(self, name):
+        pass
+
+
 class _Widget:
     def __init__(self):
         self.markup = []
@@ -58,6 +63,9 @@ class _Widget:
 
     def set_tooltip_text(self, text):
         pass
+
+    def get_accessible(self):
+        return _Accessible()
 
     def set_fraction(self, value):
         pass
@@ -338,3 +346,18 @@ def test_a_cuda_failure_the_window_couldnt_explain_says_where_to_try_again(monke
     assert said[0][0] == "Download Failed"
     assert said[0][1].startswith("Could not download CUDA libraries.")
     assert "Preferences → General" in said[0][1]
+
+
+def test_a_screen_reader_can_tell_each_downloads_bar_and_cancel_apart():
+    """Two downloads in one window read as "Cancel", "Cancel" and two bare
+    percentages."""
+    dlg = UnifiedDownloadDialog.__new__(UnifiedDownloadDialog)
+    dlg.task_widgets = {}
+    engine, model = _task("Graphics engine"), _task("Speech model")
+    for task in (engine, model):
+        dlg._create_task_widget(task)
+    names = [(dlg.task_widgets[t]["cancel_btn"].get_accessible().get_name(),
+              dlg.task_widgets[t]["progress"].get_accessible().get_name())
+             for t in (engine, model)]
+    assert names == [("Cancel Graphics engine", "Graphics engine"),
+                     ("Cancel Speech model", "Speech model")]
