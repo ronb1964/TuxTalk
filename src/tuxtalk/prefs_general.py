@@ -34,6 +34,9 @@ PASTE_LAST_KEYS = [
     ("Ctrl+Super+P", "Ctrl+Super+P"),
 ]
 
+# What the hold and toggle dropdowns show for a blank key (_apply_hotkey_fallbacks).
+_KEY_SHOWN_WHEN_BLANK = {"hotkey": "F8", "toggle_hotkey": "F9"}
+
 
 def _needs(keys):
     """"Right Ctrl needs" or "Right Ctrl and Right Alt need"."""
@@ -391,10 +394,8 @@ class GeneralTab(Tab):
         list doesn't have (a hand edit) is added to it, as _shortcut_combo
         does: it's the key in use, never replaced unasked. On the Flatpak the
         desktop holds the keys, so the fallback is shown only."""
-        for key, combo, default in (
-            ("hotkey", self.hotkey_combo, "F8"),
-            ("toggle_hotkey", self.toggle_combo, "F9"),
-        ):
+        for key, combo in (("hotkey", self.hotkey_combo), ("toggle_hotkey", self.toggle_combo)):
+            default = _KEY_SHOWN_WHEN_BLANK[key]
             saved = self.config.get(key) or ""
             if saved and saved not in hotkeys:
                 combo.append(saved, saved)
@@ -405,15 +406,20 @@ class GeneralTab(Tab):
     def _on_key_picked(self, combo, setting, other):
         """A hold or toggle key picked. The one the other dropdown has is
         refused, and the dropdown goes back: one key can't both hold and
-        toggle, and the hotkey test could light only one of the two."""
+        toggle, and the hotkey test could light only one of the two. A
+        blank key (kept blank on the Flatpak) goes back to the key shown for
+        it, which isn't recorded as picked."""
         key = combo.get_active_id()
+        shown = self.config.get(setting) or _KEY_SHOWN_WHEN_BLANK[setting]
+        if key == shown:
+            return      # put back after a refusal: nothing new picked
         if key is not None and key == other.get_active_id():
             combo.popdown()     # not left drawn over the message
             role = "toggle" if setting == "hotkey" else "hold"
             show_message(self.window, Gtk.MessageType.WARNING,
                          f"{key} is already your {role} key",
                          f"Pick another key, or give the {role} key another one first.")
-            combo.set_active_id(self.config.get(setting))
+            combo.set_active_id(shown)
             return
         self.update_config(setting, key)
 

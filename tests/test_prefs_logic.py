@@ -414,8 +414,7 @@ def _keys_tab(monkeypatch, hold="F8", toggle="F9"):
                         hotkey_combo=FakeCombo(), toggle_combo=FakeCombo(), told=told)
     d.update_config = d.config.__setitem__
     d._on_key_picked = lambda *a: GeneralTab._on_key_picked(d, *a)
-    d.hotkey_combo.set_active_id(hold)
-    d.toggle_combo.set_active_id(toggle)
+    GeneralTab._apply_hotkey_fallbacks(d, ["F8", "F9", "F10"])     # as the tab is built
     d.hotkey_combo.connect("changed", d._on_key_picked, "hotkey", d.toggle_combo)
     d.toggle_combo.connect("changed", d._on_key_picked, "toggle_hotkey", d.hotkey_combo)
     return d
@@ -440,6 +439,20 @@ def test_another_key_for_the_toggle_is_taken(monkeypatch):
 
     assert d.config == {"hotkey": "F8", "toggle_hotkey": "F10"}
     assert d.told == ["F10 is already your toggle key"]
+
+
+def test_on_the_flatpak_a_refused_key_goes_back_to_the_key_shown(monkeypatch):
+    """Both keys blank, shown as F8 and F9: picking F8 for the toggle was
+    refused, but its dropdown kept showing F8, since a blank key matches no
+    entry to go back to. It shows F9 again, and the blank stays blank."""
+    monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TuxTalk")
+    d = _keys_tab(monkeypatch, hold="", toggle="")
+
+    d.toggle_combo.set_active_id("F8")
+
+    assert d.told == ["F8 is already your hold key"]
+    assert d.toggle_combo.get_active_id() == "F9"
+    assert d.config == {"hotkey": "", "toggle_hotkey": ""}
 
 
 # --- "Launch at login" must follow the save, not the click ------------------
