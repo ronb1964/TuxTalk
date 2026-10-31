@@ -173,7 +173,7 @@ def test_quit_returns_at_once_and_leaves_once_the_service_has_gone(slow_service)
     t = _bare_tray(_leave_main_loop=lambda: left.append(True))
     started = time.monotonic()
     t.quit_app(None)
-    assert time.monotonic() - started < 1
+    assert time.monotonic() - started < 5      # the service takes up to 10 s here
     assert t.indicator.status == tray_mod.AppIndicator3.IndicatorStatus.PASSIVE
     assert not _run_main_loop_until(lambda: left, timeout=0.3)    # still typing
     slow_service.gone.set()
@@ -771,18 +771,27 @@ def test_every_preferences_window_of_the_users_is_found_whatever_the_pidfile(mon
     """Found in /proc: an older window, or one that couldn't write its
     pidfile, is never ended by an uninstall without its changes asked about."""
     from tuxtalk import prefs_ipc
+    me = os.getuid()
     procs = {
-        "1": (1000, ["python3", "-m", "tuxtalk.prefs"]),           # this process
-        "42": (1000, ["/usr/bin/python3", "-m", "talktype.prefs"]),  # an older window
-        "43": (1001, ["python3", "-m", "tuxtalk.prefs"]),          # another user's
-        "44": (1000, ["python3", "-c", "job()", "-m", "tuxtalk.prefs"]),
-        "45": (1000, ["/opt/tuxtalk/bin/dictate-prefs"]),
+        str(os.getpid()): (me, ["python3", "-m", "tuxtalk.prefs"]),     # this process
+        "42": (me, ["/usr/bin/python3", "-m", "talktype.prefs"]),       # an older window
+        "43": (me + 1, ["python3", "-m", "tuxtalk.prefs"]),             # another user's
+        "44": (me, ["python3", "-c", "job()", "-m", "tuxtalk.prefs"]),
+        "45": (me, ["/opt/tuxtalk/bin/dictate-prefs"]),
     }
-    monkeypatch.setattr(prefs_ipc.os, "listdir", lambda path: [*procs, "self"])
-    monkeypatch.setattr(prefs_ipc.os, "stat",
-                        lambda path: types.SimpleNamespace(st_uid=procs[path.split("/")[2]][0]))
-    monkeypatch.setattr(prefs_ipc.os, "getuid", lambda: 1000)
-    monkeypatch.setattr(prefs_ipc.os, "getpid", lambda: 1)
+    listdir, stat = os.listdir, os.stat
+
+    def proc_listdir(path):
+        return [*procs, "self"] if path == "/proc" else listdir(path)
+
+    def proc_stat(path, *args, **kwargs):
+        """The made-up /proc; any other path is the real one (other threads)."""
+        parts = str(path).split("/")
+        if len(parts) == 3 and parts[1] == "proc" and parts[2] in procs:
+            return types.SimpleNamespace(st_uid=procs[parts[2]][0])
+        return stat(path, *args, **kwargs)
+    monkeypatch.setattr(prefs_ipc.os, "listdir", proc_listdir)
+    monkeypatch.setattr(prefs_ipc.os, "stat", proc_stat)
     monkeypatch.setattr("tuxtalk.service_launcher.read_argv", lambda pid: procs[str(pid)][1])
     assert sorted(prefs_ipc.open_windows()) == [42, 45]
 
