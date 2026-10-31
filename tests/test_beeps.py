@@ -169,7 +169,7 @@ def test_beep_returns_before_the_tone_has_played(sound):
     system = sound(0.279, 4096)
     asked = time.monotonic()
     beeps.beep(True, *beeps.START_BEEP)
-    assert time.monotonic() - asked < 0.05
+    assert time.monotonic() - asked < 0.2       # playing it takes over 0.4 s here
     beeps.wait_until_played(5)
     assert len(tones(system.speakers())) == 1
 
@@ -315,20 +315,27 @@ def test_sounds_behind_a_stuck_output_never_pile_up(sound, monkeypatch):
     only the newest few; asking never blocks, and a replay that is dropped
     says so (Preferences then lets Replay be clicked again)."""
     sound()
-    release = threading.Event()
+    release, playing = threading.Event(), threading.Event()
     played = []
-    monkeypatch.setattr(beeps, "_play", lambda *a: played.append(1) or release.wait(5))
-    beeps.beep(True, *beeps.START_BEEP)                 # the output hangs on this one
-    while not played:
-        time.sleep(0.01)
-    told = []
-    beeps.play(np.zeros(100, np.float32), RATE, finished=told.append)
-    asked = time.monotonic()
-    for _ in range(beeps.MAX_WAITING):
-        beeps.beep(True, *beeps.CANCEL_BEEP)
-    assert time.monotonic() - asked < 0.05
-    assert told == ["the sound output is held up"]
-    release.set()
+
+    def hangs(*_args):
+        played.append(1)
+        playing.set()
+        release.wait(5)
+    monkeypatch.setattr(beeps, "_play", hangs)
+    try:
+        beeps.beep(True, *beeps.START_BEEP)             # the output hangs on this one
+        assert playing.wait(5)
+        told = []
+        beeps.play(np.zeros(100, np.float32), RATE, finished=told.append)
+        asked = time.monotonic()
+        for _ in range(beeps.MAX_WAITING):
+            beeps.beep(True, *beeps.CANCEL_BEEP)
+        # Blocking here would wait out the stuck sound: up to 5 s.
+        assert time.monotonic() - asked < 0.5
+        assert told == ["the sound output is held up"]
+    finally:
+        release.set()
     assert beeps.wait_until_played(5)
     assert len(played) == 1 + beeps.MAX_WAITING
 
@@ -402,6 +409,7 @@ def test_a_sound_asked_for_as_the_sound_thread_ends_still_plays(sound, monkeypat
     assert heard_in_full(tones(system.speakers())[0], *beeps.START_BEEP)
 
 
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")  # SystemExit
 def test_a_sound_thread_that_couldnt_start_doesnt_hold_up_later_sounds(sound, monkeypatch):
     """With no threads left, or as Python shuts down, starting the sound
     thread fails. Counted as started all the same, it kept every sound after

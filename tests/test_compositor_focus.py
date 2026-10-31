@@ -443,7 +443,9 @@ def test_cosmic_answers_at_once_after_the_first_question(cosmic):
     cf.focused_class()
     started = time.monotonic()
     assert cf.focused_class() == "org.gnome.TextEditor"
-    assert time.monotonic() - started < 0.01
+    # FakeCosmic takes one connection only, so asking anew fails the answer;
+    # waiting for the states again would cost up to COSMIC_FIRST_ANSWER.
+    assert time.monotonic() - started < cf.COSMIC_FIRST_ANSWER / 2
 
 
 def test_cosmic_follows_a_switch_to_another_window(cosmic):
@@ -494,13 +496,13 @@ def test_a_cosmic_without_window_states_is_asked_only_once(cosmic):
 
 def test_a_cosmic_that_never_sends_the_states_costs_one_wait_only(cosmic, monkeypatch):
     import time
-    monkeypatch.setattr(cf, "COSMIC_FIRST_ANSWER", 0.2)
+    monkeypatch.setattr(cf, "COSMIC_FIRST_ANSWER", 0.4)
     monkeypatch.setattr(FakeCosmic, "send_states", lambda self: None)
     cosmic("org.gnome.TextEditor", active="org.gnome.TextEditor")
     assert cf.focused_class() is None
     started = time.monotonic()
     assert cf.focused_class() is None
-    assert time.monotonic() - started < 0.05
+    assert time.monotonic() - started < 0.2
 
 
 def test_cosmic_is_asked_again_after_the_compositor_restarts(cosmic, tmp_path):
