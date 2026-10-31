@@ -265,7 +265,6 @@ def test_without_hugging_faces_file_list_the_model_is_still_not_loaded(settings,
 def test_cancel_stops_a_download_without_the_file_list(hugging_face, monkeypatch):
     """The window closes at once on Cancel; the download fetched by name
     behind it must stop too, not run on unseen for gigabytes."""
-    import threading
     from tuxtalk import model_helper
 
     def no_list(repo):
