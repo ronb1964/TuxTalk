@@ -6,14 +6,10 @@ replace that backup without asking.
 """
 from types import SimpleNamespace
 
-import pytest
+from gi.repository import Gtk
 
-gi = pytest.importorskip("gi")
-gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk  # noqa: E402
-
-from tuxtalk import settings_backup  # noqa: E402
-from tuxtalk.prefs_updates import UpdatesTab  # noqa: E402
+from tuxtalk import settings_backup
+from tuxtalk.prefs_updates import UpdatesTab
 
 
 def _window(monkeypatch, typed, answer):
@@ -47,6 +43,7 @@ def test_ok_replaces_it(tmp_path, monkeypatch):
 
     UpdatesTab._on_save_backup_clicked(d, None)
 
+    assert asked == ["Replace the existing backup?", "Backup saved"]
     assert written == [str(tmp_path / "mybackup.zip")]
 
 
