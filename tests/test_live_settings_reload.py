@@ -18,7 +18,7 @@ import dis
 
 import pytest
 
-from tuxtalk import ai_download, config, hotkey_keys, service_tick
+from tuxtalk import ai_download, config, hotkey_keys, recommend, service_tick
 from tuxtalk import live_settings as live
 
 
@@ -163,6 +163,8 @@ _MIRRORED = [
 def test_a_change_in_preferences_is_in_force_after_the_reload(app, monkeypatch,
                                                               changed, name, expected):
     monkeypatch.setattr(ai_download, "is_installed", lambda: False)  # no AI engine starts
+    # The numbers' language follows the desktop's until one is picked.
+    monkeypatch.setattr(recommend, "system_language", lambda env=None: "en")
     cfg = _settings(swiss_spelling=False)     # its default follows the locale
     live.apply(cfg)
     assert getattr(live, name) != expected

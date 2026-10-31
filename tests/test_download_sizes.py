@@ -56,4 +56,3 @@ def test_reading_a_size_doesnt_load_gtk():
     code = ("import sys, tuxtalk.recommend, tuxtalk.cuda_helper; "
             "sys.exit('gi.repository.Gtk' in sys.modules)")
     assert subprocess.run([sys.executable, "-c", code], timeout=60).returncode == 0
-

@@ -43,18 +43,24 @@ def test_a_combo_the_helper_wont_report_is_named():
 
 
 @pytest.fixture
-def rig(tmp_path, monkeypatch):
+def rig(tmp_path, monkeypatch, request):
+    """A real helper with one fake keyboard, and TuxTalk's client connected
+    to it and watching F8, F9 and Esc. Each part is closed afterwards, also
+    when setting up a later one fails."""
     seat = tmp_path / "seat0"
     seat.write_text(f"ACTIVE_UID={os.getuid()}\n")
     (tmp_path / "input").mkdir()
     helper = hh.Helper(socket_dir=str(tmp_path), seat_file=str(seat),
                        input_dir=str(tmp_path / "input"))
     helper.listen()
+    request.addfinalizer(helper.listener.close)
     kb = FakeKeyboard()
+    request.addfinalizer(lambda: (kb.close(), os.close(kb.w), FakeKeyboard.made.remove(kb)))
     helper.keyboards[kb.path] = kb
     helper.next_scan = float("inf")
 
     client = HelperKeyboard(helper.socket_path)
+    request.addfinalizer(client.close)
     # connect() waits for HELLO's answer, which needs the helper to run.
     answered = threading.Event()
 
@@ -63,9 +69,12 @@ def rig(tmp_path, monkeypatch):
             helper.run_once(timeout=0.01)
     t = threading.Thread(target=serve)
     t.start()
-    assert client.connect()
-    answered.set()
-    t.join()
+    try:
+        assert client.connect()
+    finally:
+        answered.set()
+        t.join(5)
+    assert not t.is_alive(), "the helper's serving thread didn't stop"
     client.watch(["66", "67", "1"])
     for _ in range(3):
         helper.run_once(timeout=0)          # the helper takes the WATCH in
@@ -112,12 +121,7 @@ def rig(tmp_path, monkeypatch):
                     hotkeys._handle_key_event(event, hold, F9, None, held,
                                           [client], Cfg, None)
 
-    yield helper, kb, client, loop, calls
-    client.close()
-    helper.listener.close()
-    kb.close()
-    os.close(kb.w)
-    FakeKeyboard.made.remove(kb)
+    return helper, kb, client, loop, calls
 
 
 def test_holding_the_dictation_key_records_and_hides_it(rig):
