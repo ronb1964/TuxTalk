@@ -377,17 +377,14 @@ def test_a_dictation_stopped_by_a_stuck_key_stays_in_recent_dictations(
 
 def test_a_stuck_key_types_nothing_another_way(keyboard, stuck_right_ctrl, monkeypatch):
     """wtype would type the text as the shortcuts the wait was there to
-    prevent (and put it in a process's arguments); the clipboard fallback
-    would overwrite what the user had copied."""
+    prevent (and put it in a process's arguments)."""
     import subprocess
 
-    import pyperclip
     stuck_right_ctrl()
     monkeypatch.setenv("XDG_SESSION_TYPE", "wayland")   # KWrite on KDE, as below
     ran = []
     monkeypatch.setattr(keyboard_output, "which", lambda name: f"/usr/bin/{name}")
     monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: ran.append(a) or 1 / 0)
-    monkeypatch.setattr(pyperclip, "copy", lambda text: ran.append(text))
     monkeypatch.setattr(delivery, "determine_injection_method", lambda mode: ("type", "test"))
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "kwrite")
     monkeypatch.setattr(focused_window, "look", lambda: KWRITE)
@@ -454,16 +451,23 @@ def test_a_key_stuck_partway_isnt_blamed_on_the_keyboard(keyboard, stuck_right_c
     assert "Typing stopped partway through the dictation (key_held)" in caplog.text
 
 
-def test_a_clipboard_fallback_that_fails_says_why_in_the_log(monkeypatch, caplog):
-    """With no virtual keyboard and no wtype, the last way out is the
-    clipboard; when that failed too, the log said only that nothing worked."""
-    import pyperclip
+def test_typing_that_cant_go_in_leaves_the_clipboard_alone(monkeypatch):
+    """With no virtual keyboard and no wtype, the dictation went on the
+    clipboard, over what the user had copied and without the mark that keeps
+    it out of clipboard managers. Recent Dictations has it, as the notice says."""
+    import subprocess
+    import sys
+    import types
+    ran = []
+    # pyperclip, the clipboard library that fallback used, and wl-copy itself.
+    monkeypatch.setitem(sys.modules, "pyperclip", types.SimpleNamespace(copy=ran.append))
+    monkeypatch.setattr("tuxtalk.keyboard_layout.layout_key_events", lambda text: [(35, 1), (35, 0)])
     monkeypatch.setattr(keyboard_output, "send_keys", lambda *a, **k: False)
     monkeypatch.setattr(keyboard_output, "which", lambda name: name == "wl-copy" and "/usr/bin/wl-copy")
-    monkeypatch.setattr(pyperclip, "copy", lambda text: 1 / 0)
-    with caplog.at_level("WARNING", logger="tuxtalk.app"):
-        assert keyboard_output.type_text_raw("hello") is False
-    assert "clipboard" in caplog.text and "division by zero" in caplog.text
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: ran.append(a) or 1 / 0)
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: ran.append(a) or 1 / 0)
+    assert keyboard_output.type_text_raw("hello") is False
+    assert ran == []
 
 
 def test_undo_under_a_stuck_key_deletes_nothing_and_says_so(keyboard, stuck_right_ctrl):

@@ -5,6 +5,11 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- On a computer where TuxTalk couldn't type at all (no access to its
+  virtual keyboard, and no wtype), a dictation was put on the clipboard in
+  place of what you'd copied, without the mark that keeps it out of
+  clipboard managers. It's left alone now; the dictation is in Recent
+  Dictations, as the notice says.
 - With "Restore clipboard" on, on Wayland, a password copied from your
   password manager at the very moment TuxTalk read the clipboard could be
   put back without its "secret" mark, and Klipper would then save it in its

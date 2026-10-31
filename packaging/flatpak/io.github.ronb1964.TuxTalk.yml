@@ -69,7 +69,7 @@ modules:
       # service <-> GNOME extension). It is a system package on host installs but
       # must be bundled here (builds against the SDK's libdbus + glib).
       - pip3 install --prefix=/app --no-warn-script-location
-          faster-whisper onnx-asr sounddevice evdev pyperclip toml dbus-python
+          faster-whisper onnx-asr sounddevice evdev toml dbus-python
 
   # The app itself: source + launcher + AppStream metadata + icon + desktop file.
   - name: tuxtalk

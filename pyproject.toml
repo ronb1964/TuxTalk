@@ -23,7 +23,6 @@ onnxruntime = [
 sounddevice = "*"
 evdev = "*"
 numpy = "*"
-pyperclip = "*"
 toml = "*"
 # "Write numbers as digits" (numbers.py): twenty-five -> 25 in eight languages.
 # A small Rust-built wheel (~380 KB) with wheels for every Python we support.

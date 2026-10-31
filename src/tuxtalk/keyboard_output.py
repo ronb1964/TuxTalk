@@ -423,17 +423,10 @@ def type_text_raw(text: str) -> bool:
             logger.error(f"wtype timed out after {WTYPE_TIMEOUT_S}s; killed the process")
             return False
         return proc.returncode == 0
-    if which("wl-copy"):
-        try:
-            import pyperclip
-            pyperclip.copy(text)
-            logger.info("Text copied to clipboard (fallback mode)")
-            # Nothing was actually typed into the field — report failure so
-            # the undo buffer doesn't track text the user must paste manually.
-            return False
-        except Exception as e:      # pyperclip missing, or no clipboard it can use
-            logger.warning(f"Couldn't copy the text to the clipboard either: {e}")
-    logger.error("Could not type text: no virtual keyboard, wtype or wl-copy")
+    # Not put on the clipboard instead: that would replace what the user
+    # copied, unmarked for clipboard managers to keep. The failure notice
+    # points to Recent Dictations, which holds it.
+    logger.error("Could not type text: no virtual keyboard or wtype")
     return False
 
 
