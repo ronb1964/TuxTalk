@@ -170,14 +170,26 @@ def trim_auto_stop_tail(rec, frames):
 
 
 def drop_speechless_rest(rec, frames):
-    """The audio after *rec*'s last cut, or none when the pause detector
-    heard no speech in it: room noise longer than the tap check would
-    otherwise reach the engine, which invents a word for it ("Yeah."). A word
-    too short to cut a phrase of its own ("yes") is speech here."""
-    if rec.last_chunk_speech == 0.0:
-        logger.info("No speech after the last chunk; the rest isn't transcribed")
-        return []
-    return frames
+    """The audio after *rec*'s last cut, *frames*, or none when nothing in
+    it is speech: room noise longer than the tap check would otherwise
+    reach the engine, which invents a word for it ("Yeah.").
+
+    Less talking than a phrase needs (chunking.MIN_SPEECH_S) is kept only
+    when it also holds a word's worth of sound (silence.has_a_word), the
+    check a tap of the key gets. Simulated, that kept every short word said
+    after a pause in a quiet room and 96% or more in a noisy one, and left
+    out about two thirds of the clicks and half to two thirds of the knocks
+    the detector counted. A cough, a breath or a creak passes, and Parakeet
+    types a word ("Yeah.", "Okay.") for 2 to 3% of those in a quiet room,
+    about 10% in a noisy one: a known limit (CODE_HEALTH.md), as the
+    hallucination filter can't take the words a short answer is made of."""
+    heard = rec.last_chunk_speech
+    if heard is None or heard >= chunking.MIN_SPEECH_S:
+        return frames
+    if heard > 0.0 and silence.has_a_word(frames_f32(frames), rec.samplerate):
+        return frames
+    logger.info("No speech after the last chunk; the rest isn't transcribed")
+    return []
 
 
 def frames_f32(frames):
@@ -233,11 +245,13 @@ def _sd_callback(rec, indata, frames_count, time_info, status):
         if rec.captured:
             return          # finish_capture has taken its audio
         rec.frames.append(block)
-
-    # Chunked dictation: at a pause, the phrase so far goes off to be typed.
-    chunker = rec.chunker
-    if chunker is not None and chunker.feed(indata):
-        type_at_pause.cut_chunk(rec, chunker)
+        # Type at pause: at a pause, the phrase so far goes off to be typed.
+        # The detector hears the block under the lock too, so a stop never
+        # takes a word's audio before its speech is counted: the rest would
+        # be thrown away as speechless (drop_speechless_rest).
+        chunker = rec.chunker
+        if chunker is not None and chunker.feed(indata):
+            type_at_pause.cut_chunk(rec, chunker)
 
     # Hands-free auto-stop: when the speaker has finished, ask the service
     # loop to stop it, exactly as a second press of the toggle key would.

@@ -1353,8 +1353,8 @@ def test_a_phrase_cut_at_a_pause_takes_its_recordings_message_to_the_queue(chat,
     monkeypatch.setattr(rs.state.current, "chunker", pause)
     monkeypatch.setattr(rs.state.current, "frames",
                         [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()])
-    type_at_pause.cut_chunk(rs.state.current,
-                            pause)                           # "see you at noon", then a pause
+    with type_at_pause.chunk_lock:                   # "see you at noon", then a pause
+        type_at_pause.cut_chunk(rs.state.current, pause)
     next_recording(engine.SAMPLE_RATE)               # recording B starts
     heard.append("See you at noon.")
     jobs[0]()

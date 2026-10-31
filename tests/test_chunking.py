@@ -1,8 +1,6 @@
 """Chunked dictation: the pause detector and dictation worker on synthetic audio,
-and the app's chunk pipeline with a fake engine and fake typing.
-
-Audio is built like test_silence.py: quiet room noise and louder "speech"
-(noise plus a tone, with syllable gaps), fed in 20 ms blocks.
+and the app's chunk pipeline with a fake engine and fake typing
+(type_at_pause_rig.py).
 """
 
 import time
@@ -17,7 +15,6 @@ from tuxtalk import recording_state as rs
 from tuxtalk import live_settings as live
 from tuxtalk import keyboard_grab
 from tuxtalk import keyboard_output
-from tuxtalk import tray_link
 from tuxtalk import engine
 from tuxtalk import last_dictation
 from tuxtalk import recording as capture
@@ -27,27 +24,9 @@ from tuxtalk import dictation_worker
 from tuxtalk import pipeline as dictation_pipeline
 from tuxtalk.beeps import CANCEL_BEEP, READY_BEEP
 from tuxtalk import service_tick
+from type_at_pause_rig import (BLOCK, SR, blocks, fake_pipeline, feed, noise, rng, speech,
+                               start_chunked_recording, stop)
 
-SR = 16000
-BLOCK = 320   # 20 ms at 16 kHz
-rng = np.random.default_rng(1)
-
-
-def noise(seconds, level=60.0, sr=SR):
-    return (rng.normal(0, level, int(seconds * sr))).astype(np.int16)
-
-
-def speech(seconds, level=3000.0, noise_level=60.0, sr=SR):
-    """Syllables: 180 ms of voice, then a 70 ms gap where only the room is heard."""
-    t = np.arange(int(seconds * sr)) / sr
-    voiced = (t % 0.25) < 0.18
-    tone = np.sin(2 * np.pi * 220 * t) * level * voiced
-    return (tone + rng.normal(0, noise_level, t.size)).astype(np.int16)
-
-
-def blocks(audio, block=BLOCK):
-    for i in range(0, len(audio), block):
-        yield audio[i:i + block]
 
 
 # --- the shared noise floor ---------------------------------------------------
@@ -385,33 +364,9 @@ def test_words_in_context(prev, joint, heard):
 
 @pytest.fixture
 def pipeline(monkeypatch):
-    """A fake engine and fake typing around the real pipeline.transcribe_and_inject.
-    texts: what the engine 'hears', one per call, in call order (a chunk after
-    a held-back one is transcribed alone, then together with it).
-    Returns (texts, typed, beeps)."""
-    from tuxtalk import history
-    texts, typed, beeps = [], [], []
-    monkeypatch.setattr(engine, "transcribe", lambda audio, lang: texts.pop(0))
-
-    def fake_inject(text, mode, one_block=False, into=None, message=None):
-        typed.append(text)
-        rs.state.last_inserted_text = text
-        if message is not None:
-            rs.state.last_message = message
-            message.add("ok", message.to)       # into the window its words went to
-        return "ok"
-
-    monkeypatch.setattr(delivery, "inject_text", fake_inject)
-    monkeypatch.setattr("tuxtalk.beeps.beep", lambda enabled, *tone: beeps.append(tone))
-    monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
-    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
-    monkeypatch.setattr(live, "adapt_to_app", False)
-    monkeypatch.setattr(live, "usage_stats", False)
-    monkeypatch.setattr(history, "add_entry", lambda text, replaces=None: None)
-    monkeypatch.setattr(rs.state, "continue_mid_sentence", False)
-    monkeypatch.setattr(rs.state.current.message, "held_mark", None)
-    monkeypatch.setattr(rs.state, "last_inserted_text", "")
-    return texts, typed, beeps
+    """The fake engine and typing (type_at_pause_rig.fake_pipeline): texts,
+    what the engine 'hears' in call order. Returns (texts, typed, beeps)."""
+    return fake_pipeline(monkeypatch)
 
 
 def frames_of(audio):
@@ -575,30 +530,9 @@ def test_held_mark_never_reaches_the_next_recording(pipeline):
 def recording(monkeypatch, pipeline):
     """A recording in progress at 16 kHz with chunking on, no real stream, a
     worker that runs each job at once and the fake engine/typing from `pipeline`."""
-    from types import SimpleNamespace
-    monkeypatch.setattr(live, "chunk_pause_seconds", 0.8)
-    monkeypatch.setattr(live, "chunk_cfg", SimpleNamespace(
-        beeps=True, smart_quotes=True, notify=False, language=None,
-        auto_space=True, auto_period=False, injection_mode="type"))
-    monkeypatch.setattr(capture, "indicator", None)
-    monkeypatch.setattr(capture, "stop_stream_safely", lambda rec: None)
-    monkeypatch.setattr(capture, "resume_media_players", lambda: None)
-    monkeypatch.setattr(tray_link, "notify_recording_state", lambda *a: None)
-    rs.state.is_recording = True
-    next_recording(SR)
+    start_chunked_recording(monkeypatch)
     yield pipeline
     rs.state.is_recording = False
-
-
-def feed(audio):
-    for b in blocks(audio):
-        capture._sd_callback(rs.state.current, b.reshape(-1, 1), len(b), None, None)
-
-
-def stop(auto_period=False):
-    dictation_pipeline.stop_recording(beeps_on=True, smart_quotes=True, notify_on=False,
-                       language=None, auto_space=True, auto_period=auto_period,
-                       injection_mode="type")
 
 
 def test_two_pauses_give_three_chunks_in_order(recording):
@@ -652,16 +586,17 @@ def test_a_silent_rest_never_reaches_the_engine(recording):
     assert beeps == [READY_BEEP]
 
 
-def test_cut_after_stop_snapshot_hands_nothing_on(recording):
-    """Review focus 2: a block arriving after the stop took its snapshot must
-    not cut a chunk from frames the stop already owns."""
+def test_a_block_after_the_stop_took_the_audio_adds_and_cuts_nothing(recording):
+    """A callback still under way when the stop takes the audio must not add
+    its block to frames the stop already owns, nor cut a chunk from them."""
     feed(speech(1.0))
-    chunker = rs.state.current.chunker
     cap = capture.finish_capture(rs.state.current, beeps_on=False, notify_on=False)
     assert cap is not None
-    type_at_pause.cut_chunk(rs.state.current, chunker)
+    frames = list(cap[0])
+    rs.state.is_recording = True            # the stream still delivering
+    feed(noise(1.0))                        # a pause: it would cut
+    assert cap[0] == frames
     assert rs.state.current.chunks_submitted == 0
-    assert dictation_worker.worker().drain(1)
 
 
 def test_drop_tail_samples_keeps_partial_blocks():
@@ -1320,7 +1255,8 @@ def test_a_phrase_waiting_its_turn_holds_hands_free_open(monkeypatch):
     monkeypatch.setattr(dictation_worker, "_instance", SimpleNamespace(submit=jobs.append))
     pause = SimpleNamespace(tail_samples=lambda: 0, last_pause=1.0)
     rec = rs.Recording(silence=Detector(), chunker=pause, frames=[b"\0\0"], samplerate=SR)
-    type_at_pause.cut_chunk(rec, pause)
+    with type_at_pause.chunk_lock:
+        type_at_pause.cut_chunk(rec, pause)
     assert events == ["hold"]                    # queued, not typed yet
     jobs[0]()
     assert events == ["hold", "work", "release"]

@@ -1,29 +1,31 @@
 """Type at pause: what is said after the last pause, through the real
-recording and pipeline with a fake engine and fake typing.
+recording and pipeline with a fake engine and fake typing (type_at_pause_rig).
 
 A word too short to cut a phrase of its own ("yes", 0.2 s) said after a
 pause is still the dictation's last word: it must reach the engine, whether
-the hotkey or hands-free ends the recording. A click too brief to be speech
-is still left out, so the engine can't invent a word for it.
+the hotkey or hands-free ends the recording, and however the stop falls
+against the audio callback. A click too brief to hold a word is still left
+out, so the engine can't invent one for it.
 """
+import threading
+
 import numpy as np
 import pytest
 
-# pipeline and recording are test_chunking's fixtures: pytest finds them by name.
-from test_chunking import feed, noise, pipeline, recording, speech, stop  # noqa: F401
 from tuxtalk import engine, silence
 from tuxtalk import recording as capture
 from tuxtalk import recording_state as rs
 from tuxtalk.beeps import READY_BEEP
-
-SR = 16000
+from type_at_pause_rig import (SR, fake_pipeline, feed, feed_block, noise, speech,
+                               start_chunked_recording, stop)
 
 
 @pytest.fixture
-def heard(recording, monkeypatch):  # noqa: F811
-    """The `recording` rig, with the length in seconds of each piece of audio
-    the engine was given. Returns (texts, typed, beeps, lengths)."""
-    texts, typed, beeps = recording
+def heard(monkeypatch):
+    """A Type at pause recording under way, with the fake engine and typing,
+    and the length in seconds of each piece of audio the engine was given.
+    Returns (texts, typed, beeps, lengths)."""
+    texts, typed, beeps = fake_pipeline(monkeypatch)
     lengths = []
 
     def transcribe(audio, lang):
@@ -31,11 +33,13 @@ def heard(recording, monkeypatch):  # noqa: F811
         return texts.pop(0)
 
     monkeypatch.setattr(engine, "transcribe", transcribe)
-    return texts, typed, beeps, lengths
+    start_chunked_recording(monkeypatch)
+    yield texts, typed, beeps, lengths
+    rs.state.is_recording = False
 
 
 def click():
-    """A key click: loud for 10 ms, under the MIN_BURST_S a consonant lasts."""
+    """A key click: loud for 10 ms, shorter than any word."""
     return speech(0.01)
 
 
@@ -47,6 +51,7 @@ def test_a_short_last_word_after_a_pause_is_typed(heard):
     assert rs.state.current.chunks_submitted == 1
     assert texts == []
     assert len(lengths) == 3                    # the phrase, the "yes", the two together
+    assert lengths[1] >= 1.2                    # the whole rest, the word and the quiet
     assert "".join(typed) == "We meet yes "
     assert beeps == [READY_BEEP]
 
@@ -63,24 +68,50 @@ def test_a_short_last_word_is_typed_when_hands_free_stops(heard):
     assert "".join(typed) == "We meet yes "
 
 
-def test_a_cough_after_a_pause_cuts_no_phrase_but_is_heard(heard):
-    """A cough is as loud and as long as a short word, so it can't be told
-    from one here: the engine hears it (and types nothing for a cough). It
-    never cuts a phrase of its own, though, however long the quiet after it."""
-    texts, typed, _, lengths = heard
+def test_a_stop_while_the_last_word_arrives_still_types_it(heard, monkeypatch):
+    """The key is let go while the audio callback takes in the word's block.
+    The stop waits until the pause detector has heard that block: taking
+    the audio before, it found no speech counted and threw the word away."""
+    texts, typed, _, _ = heard
+    texts.extend(["we meet", "yes", "we meet yes"])
+    feed(np.concatenate([speech(1.0), noise(1.0)]))
+    detector = rs.state.current.chunker
+    hear = detector.feed
+    stopper = threading.Thread(target=stop)
+
+    def stop_meanwhile(block):
+        stopper.start()
+        stopper.join(0.5)           # it waits for this block, or it's done already
+        return hear(block)
+
+    monkeypatch.setattr(detector, "feed", stop_meanwhile)
+    feed_block(speech(0.2))         # the whole word in one block
+    stopper.join(5)
+    assert not stopper.is_alive()
+    assert "".join(typed) == "We meet yes "
+
+
+def test_a_cough_after_a_pause_cuts_no_phrase(heard):
+    """Where a cough goes, only: however long the quiet after it, it never
+    cuts a phrase of its own. Whether its sound reaches the engine isn't
+    pinned. Today it does, as it can't be told from a short word by level
+    and length; a better filter may keep it out."""
+    texts, typed, _, _ = heard
     texts.extend(["we meet", ""])
     feed(np.concatenate([speech(1.0), noise(1.0), speech(0.2), noise(3.0)]))
     stop()
     assert rs.state.current.chunks_submitted == 1
-    assert texts == []
-    assert len(lengths) == 2
     assert "".join(typed) == "We meet "
 
 
-def test_a_click_after_a_pause_never_reaches_the_engine(heard):
+@pytest.mark.parametrize("offset", [0.0, 0.015])
+def test_a_click_after_a_pause_never_reaches_the_engine(heard, offset):
+    """At 15 ms the click straddles two of the pause detector's 20 ms
+    windows, which count it as a moment of speech; the rest is still left
+    out, as it holds no word's worth of sound."""
     texts, typed, _, lengths = heard
     texts.extend(["we meet", "yeah"])
-    feed(np.concatenate([speech(1.0), noise(1.0), click(), noise(1.0)]))
+    feed(np.concatenate([speech(1.0), noise(1.0), noise(offset), click(), noise(1.0)]))
     stop()
     assert rs.state.current.chunks_submitted == 1
     assert texts == ["yeah"]
@@ -89,6 +120,8 @@ def test_a_click_after_a_pause_never_reaches_the_engine(heard):
 
 
 def test_esc_after_a_short_last_word_types_none_of_it(heard):
+    """A guard, not this fix: Esc after a pause and a short word drops the
+    rest, word included, as Esc drops anything not yet typed."""
     texts, typed, _, _ = heard
     texts.extend(["we meet", "yes", "we meet yes"])
     feed(np.concatenate([speech(1.0), noise(1.0), speech(0.2), noise(0.5)]))
