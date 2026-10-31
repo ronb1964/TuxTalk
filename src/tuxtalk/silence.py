@@ -28,12 +28,9 @@ import threading
 import numpy as np
 
 # Hands-free judges the audio in windows this long, whatever size of block
-# the microphone sends, so it behaves the same with all of them. The noise
-# floor's steadiness and its bumps are measured window by window: judged by
-# the block, a dryer's rumble in 6 ms blocks (96 samples at 16 kHz, as some
-# devices send) spread 4.4 to 4.8 dB from their 10th to their 75th
-# percentile, over the _STEADY_BLOCKS_DB allowed, and hands-free never
-# stopped; in 64 ms blocks it cut the speaker off three times as often.
+# the microphone sends: how steady the noise is, and how long a sound lasts,
+# depend on the length they are measured over, so fixed windows make every
+# decision the same with any block size.
 _WINDOW_S = 0.02
 # Speech must be this much louder than the background noise (about +8 dB)...
 _SPEECH_OVER_NOISE = 2.5
@@ -50,23 +47,23 @@ _TAIL_KEEP_S = 0.3
 _NOISE_RISE_PER_S = 1.5
 # Steady noise: over the last _STEADY_S, the 10th and 75th percentile of
 # the levels of 50 ms frames lie within _STEADY_DB of each other, and those
-# of the 20 ms windows within _STEADY_BLOCKS_DB. No 3 s of the 125
-# readers' speech came within 3.3 dB by frames or 4.4 dB by blocks, alone
+# of the 20 ms windows within _STEADY_WINDOWS_DB. No 3 s of the 125
+# readers' speech came within 3.3 dB by frames or 4.4 dB by windows, alone
 # or with pink noise 10 and 5 dB under the voice; a fan, a dryer, white
 # noise and a gusty fan stayed within 3.3 dB either way, pink noise mostly
-# not. Frames smooth out a voice that swings every few blocks (a held note
-# with a tremolo); blocks alone let a gusty fan be learned so often that
+# not. Frames smooth out a voice that swings every few windows (a held note
+# with a tremolo); windows alone let a gusty fan be learned so often that
 # the next sentence's soft start was cut off twice as often. The margins
-# are thin, set by one reader (0.3 dB by frames, 1 dB by blocks; the next
+# are thin, set by one reader (0.3 dB by frames, 1 dB by windows; the next
 # closest came within 6.4 and 8.9 dB), so a voice held steadier than that,
 # a sung note, is taken for the room.
 _STEADY_S = 3.0
 _FRAME_S = 0.05
 _STEADY_DB = 3.0
-_STEADY_BLOCKS_DB = 3.4
+_STEADY_WINDOWS_DB = 3.4
 _STEADY_LOW, _STEADY_HIGH = 10, 75
 # Speech then has to be this much louder (+3 dB) than the noise's loud end,
-# the 98th percentile of its blocks in frames no louder than the 75th.
+# the 98th percentile of its windows in frames no louder than the 75th.
 _NOISE_TOP = 98
 _OVER_NOISE_TOP = 1.4
 # Steady noise is learned only once something this much louder than it (22
@@ -74,7 +71,7 @@ _OVER_NOISE_TOP = 1.4
 # the voice, its quiet words drown in the noise, and learning it ended the
 # recording during them.
 _CLEAR_OF_NOISE_DB = 22.0
-# A block this much quieter than the steady noise (6 dB) means it stopped.
+# A window this much quieter than the steady noise (6 dB) means it stopped.
 _NOISE_GONE = 0.5
 # Steady noise that raises speech's threshold this many times over (6 dB)
 # was misjudged until then, and the last _STEADY_S is judged again.
@@ -105,7 +102,7 @@ def block_rms(block, sample_rate: int):
 
 
 class NoiseFloor:
-    """The room's background noise, learned as blocks arrive, and the loudness
+    """The room's background noise, learned window by window, and the loudness
     that counts as speech over it.
 
     The floor is the quietest level heard so far, allowed to rise slowly
@@ -119,7 +116,7 @@ class NoiseFloor:
     must then be louder than its loud end. Speech is never that steady: on
     125 recorded readers (Ron's sentences, LibriSpeech, FLEURS), alone and
     with pink noise 10 and 5 dB under the voice, no 3 s of speech came within
-    3.3 dB by frames or 4.4 dB by blocks; white noise, a fan, a dryer and a
+    3.3 dB by frames or 4.4 dB by windows; white noise, a fan, a dryer and a
     gusty fan did in 80 to 100% of windows. It is learned only once a sound
     _CLEAR_OF_NOISE_DB louder was heard, the voice: steady noise heard alone
     keeps counting as speech, so hands-free with nothing said in a loud room
@@ -140,9 +137,9 @@ class NoiseFloor:
         # counted as speech until now: it raised the threshold by _MISJUDGED
         # or more, or its bumps are to be taken for bumps from now on.
         self.changed = False
-        self._frames = collections.deque()      # (level, seconds, its blocks)
+        self._frames = collections.deque()      # (level, seconds, its windows)
         self._span = 0.0                        # seconds in _frames
-        self._blocks = []                       # the frame being gathered
+        self._windows = []                      # the frame being gathered
         self._energy = 0.0
         self._gathered = 0.0
         self._loudest = 0.0                     # the loudest frame heard
@@ -159,7 +156,7 @@ class NoiseFloor:
         return self.top is not None and self._bumps
 
     def update(self, rms: float, duration: float) -> bool:
-        """Learn from one block; True if the block is speech."""
+        """Learn from one window; True if the window is speech."""
         self.changed = False
         if rms < 1.0:
             # Digital silence (many streams open with a block of zeros) says
@@ -168,7 +165,7 @@ class NoiseFloor:
             # hands-free never stopped by itself.
             return False
         if self.level is None:
-            # The first block may already be speech (talking the instant the
+            # The first window may already be speech (talking the instant the
             # key goes down), so the first guess is capped at a quiet level;
             # in a noisier room it rises to the real noise within a second.
             self.level = min(rms, _MIN_SPEECH_RMS)
@@ -182,18 +179,18 @@ class NoiseFloor:
         return rms >= self.threshold()
 
     def _gather(self, rms: float, duration: float) -> None:
-        """Add a block to the frame being gathered; a whole frame joins the
+        """Add a window to the frame being gathered; a whole frame joins the
         last _STEADY_S of them, which may show steady noise to learn."""
-        self._blocks.append(rms)
+        self._windows.append(rms)
         self._energy += rms * rms * duration
         self._gathered += duration
         if self._gathered < _FRAME_S:
             return
         frame = float(np.sqrt(self._energy / self._gathered))
-        self._frames.append((frame, self._gathered, self._blocks))
+        self._frames.append((frame, self._gathered, self._windows))
         self._span += self._gathered
         self._loudest = max(self._loudest, frame)
-        self._blocks, self._energy, self._gathered = [], 0.0, 0.0
+        self._windows, self._energy, self._gathered = [], 0.0, 0.0
         while self._span - self._frames[0][1] >= _STEADY_S:
             self._span -= self._frames.popleft()[1]
         if self._span >= _STEADY_S:
@@ -206,24 +203,24 @@ class NoiseFloor:
         give that end, so a word or a thump among them doesn't."""
         levels = [level for level, _, _ in self._frames]
         low, usual = np.percentile(levels, (_STEADY_LOW, _STEADY_HIGH))
-        blocks = [rms for _, _, frame_blocks in self._frames for rms in frame_blocks]
-        block_low, block_high = np.percentile(blocks, (_STEADY_LOW, _STEADY_HIGH))
+        windows = [rms for _, _, in_frame in self._frames for rms in in_frame]
+        window_low, window_high = np.percentile(windows, (_STEADY_LOW, _STEADY_HIGH))
         median = float(np.median(levels))
         if (usual > low * 10 ** (_STEADY_DB / 20)
-                or block_high > block_low * 10 ** (_STEADY_BLOCKS_DB / 20)
+                or window_high > window_low * 10 ** (_STEADY_WINDOWS_DB / 20)
                 or self._loudest < median * 10 ** (_CLEAR_OF_NOISE_DB / 20)):
             return
         before, was_bumpy = self.threshold(), self.bumpy()
-        noise = [rms for level, _, frame_blocks in self._frames if level <= usual
-                 for rms in frame_blocks]
+        noise = [rms for level, _, in_frame in self._frames if level <= usual
+                 for rms in in_frame]
         self.level = self.steady_level = median
         self.top = float(np.percentile(noise, _NOISE_TOP))
-        self._bumps = _bumps_throughout(blocks, self.threshold(), self._span / len(blocks))
+        self._bumps = _bumps_throughout(windows, self.threshold(), self._span / len(windows))
         self.changed = self.threshold() >= before * _MISJUDGED or self.bumpy() > was_bumpy
 
 
 def _bumps_throughout(levels, threshold: float, seconds_each: float) -> bool:
-    """Whether *levels* (blocks *seconds_each* long) have runs at or over
+    """Whether *levels* (windows *seconds_each* long) have runs at or over
     *threshold* starting in each of their _BUMP_THIRDS parts, all shorter
     than _BUMP_S. A run cut off by either end of *levels* may be part of a
     word (the last sentence's final syllable), so it shows nothing."""
@@ -243,14 +240,14 @@ def _bumps_throughout(levels, threshold: float, seconds_each: float) -> bool:
 
 
 class _Runs:
-    """Each block judged as speech, a bump of the room, or quiet. Loud
-    blocks make a run, which a quiet gap of _BUMP_GAP_S ends; a run is
+    """Each window judged as speech, a bump of the room, or quiet. Loud
+    windows make a run, which a quiet gap of _BUMP_GAP_S ends; a run is
     speech once it has been loud for the bump length asked, all of it, so a
     short word still counts in full. Shorter runs are bumps."""
 
     def __init__(self):
         self.run = 0.0          # loud seconds in the latest run
-        self.gap = 0.0          # quiet seconds since its last loud block
+        self.gap = 0.0          # quiet seconds since its last loud window
         self.counted = 0.0      # of run, seconds already counted as speech
 
     def judge(self, loud: bool, duration: float, bump_s: float):
@@ -271,11 +268,12 @@ class _Runs:
 
 class SilenceDetector:
     """Feed it audio blocks as they arrive; it says when the speaker is done.
+    It judges them in _WINDOW_S windows, whatever their size.
 
     In steady noise learned with bumps in it (NoiseFloor), the quiet that
     counts towards silence_seconds may have bumps in it: loud for under
     _BUMP_S, or a tenth of silence_seconds if that is shorter, pauses the
-    count instead of starting it over. Elsewhere every loud block starts it
+    count instead of starting it over. Elsewhere every loud window starts it
     over, as the start of a quiet word after a pause can be that short.
 
     Measured with three of 125 recorded readers' clips joined by pauses of
@@ -320,6 +318,7 @@ class SilenceDetector:
         self._tail = 0.0         # quiet seconds since the last loud window
         self._window_len = max(1, int(_WINDOW_S * self.sample_rate))
         self._pending = np.zeros(0, dtype=np.int16)     # less than a window
+        self._recent = np.zeros(0, dtype=np.int16)      # the last window heard
         self._heard = collections.deque()   # (rms, seconds, speech added), last _STEADY_S
         self._heard_s = 0.0
         self._said_before = False
@@ -368,7 +367,7 @@ class SilenceDetector:
         return self._bump_s if self._floor.bumpy() else 0.0
 
     def _remember(self, rms: float, duration: float, added: float) -> None:
-        """Keep the last _STEADY_S of blocks, for _judge_again."""
+        """Keep the last _STEADY_S of windows, for _judge_again."""
         self._heard.append((rms, duration, added))
         self._heard_s += duration
         while self._heard_s - self._heard[0][1] >= _STEADY_S:
@@ -401,29 +400,41 @@ class SilenceDetector:
         """Add one block of int16 samples, of any size. True exactly once:
         when the speaker has been silent for silence_seconds after having
         talked, judged in _WINDOW_S windows, the rest of the block kept for
-        the next."""
+        the next.
+
+        Nothing said for NOTHING_SAID_S is decided once the whole block is
+        heard: speech in a later window of it means something was said."""
         samples = np.frombuffer(block, dtype=np.int16)
         with self._lock:
-            # A new array: the audio system may reuse the block's memory.
+            # New arrays: the audio system may reuse the block's memory.
             pending = np.concatenate([self._pending, samples])
             size = self._window_len
+            self._recent = np.concatenate([self._recent, samples])[-size:]
             whole = pending.size - pending.size % size
             self._pending = pending[whole:]
-            fired = False
+            fired = nothing_said = False
             for start in range(0, whole, size):
                 rms, duration = block_rms(pending[start:start + size], self.sample_rate)
-                fired = self._window(rms, duration) or fired
+                verdict = self._window(rms, duration)
+                if verdict == "stop":
+                    fired = True
+                elif verdict is not None:
+                    nothing_said = verdict == "nothing said"
+            if nothing_said and not self.fired:
+                self.fired = self.nothing_said = fired = True
             return fired
 
-    def _window(self, rms: float, duration: float) -> bool:
-        """Count one window of loudness *rms*: True when it ends the
-        recording. Called with the lock held."""
+    def _window(self, rms: float, duration: float):
+        """Count one window of loudness *rms*: "stop" when it ends the
+        recording, "nothing said" when nothing has been said for
+        NOTHING_SAID_S, "speech" when it is talking, else None. Called with
+        the lock held."""
         self.elapsed += duration
         if self.fired:
             # A few blocks still arrive before the recording actually stops.
             # Keep measuring them so tail_to_trim() covers the whole silent end.
             self._tail = self._tail + duration if rms < self._threshold() else 0.0
-            return False
+            return None
 
         loud = self._floor.update(rms, duration)
         if self._floor.changed:
@@ -434,33 +445,34 @@ class SilenceDetector:
         self._tail = 0.0 if loud else self._tail + duration
         if kind == "speech" or self._busy:
             self.silence_time = 0.0
-            return False
+            return "speech" if kind == "speech" else None
 
         if not self.armed:
-            if self.elapsed >= self.NOTHING_SAID_S:
-                self.fired = self.nothing_said = True
-                return True
-            return False
+            return "nothing said" if self.elapsed >= self.NOTHING_SAID_S else None
         if kind == "bump":
-            return False        # a bump of the room: the count waits
+            return None         # a bump of the room: the count waits
         self.silence_time += duration
         if self.silence_time >= self.silence_seconds:
             self.fired = True
-            return True
-        return False
+            return "stop"
+        return None
 
     def tail_to_trim(self) -> int:
         """Samples of measured silence to drop from the end once it fired:
         the quiet since the last loud window, less _TAIL_KEEP_S. The last
-        samples, too few for a window, are judged on their own, so a sound
-        starting in them is never trimmed."""
-        if not self.fired:
-            return 0
-        tail = self._tail
-        if self._pending.size:
-            rms, duration = block_rms(self._pending, self.sample_rate)
-            tail = tail + duration if rms < self._threshold() else 0.0
-        return max(0, int((tail - _TAIL_KEEP_S) * self.sample_rate))
+        samples, too few for a window, count as quiet when the last
+        _WINDOW_S heard is, so a sound starting in them is never trimmed.
+        Judged alone, a few samples of room noise often read as loud, and
+        the whole silent tail went to the engine."""
+        with self._lock:
+            if not self.fired:
+                return 0
+            tail = self._tail
+            if self._pending.size:
+                rms, _ = block_rms(self._recent, self.sample_rate)
+                quiet = rms < self._threshold()
+                tail = tail + self._pending.size / self.sample_rate if quiet else 0.0
+            return max(0, int((tail - _TAIL_KEEP_S) * self.sample_rate))
 
 
 # --- An accidental tap of the hold key ---------------------------------------------

@@ -664,14 +664,14 @@ def test_a_quiet_microphone_saying_a_sign_off_is_speech():
     assert not has_no_speech(f32(audio), SR)
 
 
-# --- A microphone that sends nothing at all (2026-10-17) ---------------------
+# --- A microphone that sends nothing at all --------------------------------
 
 def test_dead_mic_is_digital_silence_only():
     from tuxtalk.silence import is_dead_mic
     sr = 16000
     assert is_dead_mic(np.zeros(sr * 2, dtype=np.float32), sr)
     assert is_dead_mic(np.full(sr * 2, 1 / 32768, dtype=np.float32), sr)    # one bit of hum
-    # A quiet room still has the mic's own hiss (Ron's: RMS ~0.003).
+    # A quiet room still has the mic's own hiss (a desk mic: RMS ~0.003).
     rng = np.random.default_rng(0)
     room = (rng.standard_normal(sr * 2) * 0.003).astype(np.float32)
     assert not is_dead_mic(room, sr)
@@ -703,10 +703,10 @@ def _feed(det, audio):
 
 
 def test_the_quiet_waits_while_tuxtalk_works_on_a_phrase():
-    """Ron, 2026-10-17: "edit that, make it more formal", and hands-free
-    stopped 2 s after the rewrite appeared, before he could say "press
-    enter". While a phrase is worked on the quiet doesn't count; once it's on
-    screen, the full silence time starts."""
+    """After "edit that, make it more formal", hands-free stopped 2 s after
+    the rewrite appeared, before there was time to say "press enter". While
+    a phrase is worked on the quiet doesn't count; once it's on screen, the
+    full silence time starts."""
     det = SilenceDetector(1.5, SR)
     assert _feed(det, np.concatenate([noise(0.5), speech(2.0), noise(1.0)])) is None
     det.hold()                                   # the AI rewrite takes 4 s
@@ -1046,7 +1046,7 @@ def test_steady_noise_20_db_under_the_voice_is_noisy_and_30_db_under_is_not(unde
 
 
 def test_a_voice_swinging_every_50_ms_isnt_learned_as_the_room():
-    """Codex's case: a loud opening, then a voice alternating between two
+    """A loud opening, then a voice alternating between two
     levels 3.5 dB apart every 50 ms. Its 50 ms frames smooth that out and
     look as steady as a fan; its blocks don't. Learned, it ended the
     recording at 3.8 s while the voice went on to 7.5 s."""
@@ -1117,10 +1117,124 @@ def test_in_a_dryer_6_ms_blocks_stop_by_itself_after_the_last_word():
 
 
 def test_a_sound_in_the_last_few_samples_after_the_stop_is_never_trimmed():
-    """Samples too few for a window are judged on their own: a voice
-    starting in the last 100 samples keeps the whole tail."""
+    """Samples too few for a window count as quiet only when the last 20 ms
+    is: a voice starting in the last 100 samples keeps the whole tail."""
     at, det = run(np.concatenate([speech(2.0), noise(3.0)]), 2.0)
     assert at is not None
     det.feed(noise(0.1).tobytes())
     det.feed(speech(0.3)[:100].tobytes())
     assert det.tail_to_trim() == 0
+
+
+RATES = [16000, 44100, 48000]
+
+
+def _room_at(rate, seconds):
+    """Quiet room noise (int16 RMS about 60) at *rate*, as float."""
+    return rng.normal(0, 60.0, int(round(seconds * rate)))
+
+
+def _voice_at(rate, samples):
+    """A held voice, *samples* long at *rate*, as float: every window loud."""
+    return np.sin(2 * np.pi * 220 * np.arange(samples) / rate) * 3000.0
+
+
+@pytest.mark.parametrize("ending", ["room noise", "a crest of room noise", "a voice"])
+@pytest.mark.parametrize("rate", RATES)
+def test_the_trim_keeps_exactly_0_3_s_after_the_last_word(rate, ending):
+    """Half a second of room, a second of voice ending on a window's edge,
+    then quiet, fed in blocks of one and a half windows plus one sample, so
+    a few samples are left over at the end. 0.3 s after the voice is kept
+    and the rest of the quiet trimmed, to the sample, unless the last few
+    samples are a voice: then nothing is. A few samples of room noise that
+    peak (a crest of 400 against a threshold of 300) are still the room."""
+    window = int(0.02 * rate)
+    last_word_ends = 75 * window
+    audio = np.concatenate([_room_at(rate, 0.5)[:25 * window], _voice_at(rate, 50 * window),
+                            _room_at(rate, 2.0)]).astype(np.int16)
+    det = SilenceDetector(1.0, rate)
+    block = window * 3 // 2 + 1
+    fed = 0
+    while not det.feed(audio[fed:fed + block].tobytes()):
+        fed += block
+    fed += block
+    leftover = window // 10
+    final = audio[fed:fed + 3 * window + leftover - (fed + 3 * window) % window].astype(float)
+    if ending == "a crest of room noise":
+        final[-leftover:] = 400.0 * (-1.0) ** np.arange(leftover)
+    elif ending == "a voice":
+        final[-leftover:] = _voice_at(rate, leftover)
+    det.feed(final.astype(np.int16).tobytes())
+    end = fed + final.size
+    assert det._pending.size == leftover
+    kept = end - det.tail_to_trim()
+    if ending == "a voice":
+        assert kept == end
+    else:
+        assert abs(kept - (last_word_ends + 0.3 * rate)) <= 1
+
+
+@pytest.mark.parametrize("rate", RATES)
+def test_a_voice_starting_in_the_block_that_reaches_the_nothing_said_limit_is_kept(rate):
+    """Nothing said for 9.9 s, then one block that crosses 10 s in silence
+    and ends with a voice starting: the recording goes on and the voice
+    counts. Judged window by window, the quiet part dropped it as nothing
+    said before the voice in the same block was heard."""
+    window = int(0.02 * rate)
+    det = SilenceDetector(1.5, rate)
+    for _ in range(495):
+        assert not det.feed(np.zeros(window, np.int16).tobytes())
+    block = np.concatenate([np.zeros(10 * window), _voice_at(rate, window)])
+    assert det.feed(block.astype(np.int16).tobytes()) is False
+    for _ in range(25):
+        assert not det.feed(_voice_at(rate, window).astype(np.int16).tobytes())
+    assert det.armed and not det.nothing_said
+
+
+def test_the_trim_waits_for_a_block_being_judged():
+    """The audio thread can still be judging a block when the recording
+    stops (a stream that wouldn't close in time): a voice in that block
+    must not be trimmed away, so the trim waits until the block is judged."""
+    import threading
+    at, det = run(np.concatenate([speech(1.0), noise(3.0)]), 2.0)
+    assert at is not None and det.tail_to_trim() > 0
+    judging, go_on = threading.Event(), threading.Event()
+    threshold = det._threshold
+
+    def judge_slowly():
+        judging.set()
+        go_on.wait(5)
+        return threshold()
+    det._threshold = judge_slowly
+    feeding = threading.Thread(target=det.feed, args=(speech(0.02).tobytes(),))
+    feeding.start()
+    assert judging.wait(5)
+    trimmed = []
+    trim = threading.Thread(target=lambda: trimmed.append(det.tail_to_trim()))
+    trim.start()
+    trim.join(0.3)
+    go_on.set()
+    feeding.join(5)
+    trim.join(5)
+    assert trimmed == [0]
+
+
+def test_the_audio_system_reusing_its_buffers_changes_nothing_heard():
+    """sounddevice hands each block in an (n, 1) array it reuses once the
+    callback returns. The leftover samples are kept as a copy, so the stop
+    and the trim are the same as with fresh blocks, even when each buffer
+    is scribbled over while the next one is heard."""
+    audio = np.concatenate([speech(2.0), noise(3.0)])
+    audio = audio[:len(audio) - len(audio) % 96]
+    fresh_at, fresh = run(audio, 2.0, 96)
+    det, at = SilenceDetector(2.0, SR), None
+    buffers = [np.zeros((96, 1), np.int16), np.zeros((96, 1), np.int16)]
+    for n, i in enumerate(range(0, len(audio), 96)):
+        buffer = buffers[n % 2]
+        buffer[:, 0] = audio[i:i + 96]
+        fired = det.feed(buffer)
+        buffer[:] = 32000
+        if fired:
+            at = (i + 96) / SR
+            break
+    assert at == fresh_at and det.tail_to_trim() == fresh.tail_to_trim()
