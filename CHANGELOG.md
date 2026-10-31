@@ -448,9 +448,6 @@ before 0.15.0, so older entries use that name.
   files of yours in ~/.config/talktype, when that folder couldn't be moved
   at the 0.15 rename (a mount point, say). Only TuxTalk's own files go from
   it now.
-- TalkType settings kept on another disk weren't found at the first start
-  of TuxTalk, and it started on default settings every time. They're found
-  again.
 - An update, or the GNOME extension, from a release that was published
   without its checksums file is refused now, with a message saying so. It
   used to go in unchecked, and a .deb or .rpm update installs as root.
@@ -460,23 +457,20 @@ before 0.15.0, so older entries use that name.
 - A failed update download says why ("HTTP 404 Not Found", a lost
   connection) instead of only "Download failed or file was corrupted", and
   the bar no longer jumps back from 100 % to 50 % when the install starts.
-- Restoring a backup or an earlier copy of your settings now takes away
-  snippets and Your Words added since it was made, so it really puts things
-  back the way they were. Backups saved before this version leave them
-  alone. A restore cut off part-way, by a crash or a power cut, is undone
-  when TuxTalk next starts, instead of leaving half the old settings and
-  half the new.
+- Going back to an earlier copy of your settings now takes away snippets
+  and Your Words added since, so it really puts things back the way they
+  were. The same goes for loading a backup: one saved on a computer with no
+  Your Words or snippets removes the ones on this computer, and TuxTalk
+  says so before you say OK and again after. Earlier settings can bring
+  them back. Backups saved before this version leave them alone. A restore
+  cut off part-way, by a crash or a power cut, is undone when TuxTalk next
+  starts, instead of leaving half the old settings and half the new.
 - A GNOME extension update cut off part-way left GNOME with no TuxTalk menu
   until you installed the extension again. TuxTalk puts it back when it
   starts. The Vulkan and AI engines keep the old engine now until the new
   one is in place, so a failed update can't leave you with none.
-- When first run couldn't copy TuxTalk into ~/AppImages (a full disk), the
-  menu entry kept starting the file in Downloads, even after an update had
-  put the copy there. It moves to the installed copy now. Launch at login
-  and the menu entry are also written whole, so a full disk can't leave an
-  empty one that starts nothing.
-- A Vulkan download that failed showed why in its window, then a second box
-  that only said it didn't finish. Now just the first.
+- Launch at login and the menu entry are written whole now, so a full disk
+  can't leave an empty one that starts nothing.
 - With a screen reader, each download's Cancel button and progress bar are
   named after the download, so two downloads in one window can be told
   apart, and the update window's command box has a name too.

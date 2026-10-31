@@ -157,7 +157,8 @@ def migrate(home=None, dev=False):
 def run_at_startup(environ=None, home=None):
     """The package-import entry point. Off in the test suite
     (TUXTALK_NO_MIGRATE) and in the Flatpak, whose folders live in its own
-    sandbox and never had the old names on the host."""
+    sandbox and never had the old names on the host. Its lines are logged
+    by the tray, a failure's too: at import, no log file is open yet."""
     environ = os.environ if environ is None else environ
     if environ.get("TUXTALK_NO_MIGRATE") or environ.get("FLATPAK_ID"):
         return []
@@ -165,7 +166,7 @@ def run_at_startup(environ=None, home=None):
         return migrate(home=home, dev=environ.get("DEV_MODE") == "1")
     except Exception as e:      # never stop the app from starting
         logger.warning(f"Rename to TuxTalk: moving the folders failed: {e}")
-        return []
+        return [f"moving the folders failed: {e}"]
 
 
 # Where an old TalkType AppImage path now lives, best match first: the AUR

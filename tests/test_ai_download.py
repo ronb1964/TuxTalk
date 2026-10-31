@@ -83,3 +83,33 @@ def test_an_old_engine_version_that_couldnt_be_removed_isnt_logged_as_removed(
     monkeypatch.setattr(engine_process.shutil, "rmtree", lambda path, ignore_errors: None)
     engine_process.remove_other_versions(str(tmp_path), "1.9.4")
     assert said == [("warning", f"Couldn't remove an older engine version: {tmp_path / '1.9.3'}")]
+
+
+def test_an_engine_that_cant_move_in_leaves_the_folder_it_replaces(tmp_path, monkeypatch):
+    """The folder there was deleted before the new one moved in: a move that
+    failed (or a kill between the two) left nothing in its place."""
+    import tarfile
+    monkeypatch.setattr("tuxtalk.config.get_data_dir", lambda: str(tmp_path))
+    there = tmp_path / "ai-engine" / ai.LLAMA_TAG / f"llama-{ai.LLAMA_TAG}"
+    there.mkdir(parents=True)
+    (there / "llama-server").write_text("not runnable")        # what a new download replaces
+
+    def download_file(url, dest, **kw):
+        with tarfile.open(dest, "w:gz") as tar:
+            info = tarfile.TarInfo(f"llama-{ai.LLAMA_TAG}/llama-server")
+            info.size, info.mode = 3, 0o755
+            tar.addfile(info, io.BytesIO(b"new"))
+        return True
+    monkeypatch.setattr("tuxtalk.download_utils.download_file", download_file)
+    real_rename, real_replace = os.rename, os.replace
+
+    def fails_from_the_download(move):
+        def moved(src, dst):
+            if ".d" + os.sep in str(src):
+                raise OSError(5, "Input/output error")
+            move(src, dst)
+        return moved
+    monkeypatch.setattr(os, "rename", fails_from_the_download(real_rename))
+    monkeypatch.setattr(os, "replace", fails_from_the_download(real_replace))
+    assert ai.make_engine_download_func()(lambda *a: None, None) is False
+    assert (there / "llama-server").read_text() == "not runnable"

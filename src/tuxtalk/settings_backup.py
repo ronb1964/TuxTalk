@@ -42,8 +42,9 @@ _SETTINGS = "config.toml"
 _COMMANDS = "custom_commands.toml"
 _WORDS = "custom_words.txt"          # Your Words (custom_words.py)
 _STATS = "stats.json"
-# The settings files a computer may not have yet.
+# The settings files a computer may not have yet, in words.
 _OPTIONAL = (_COMMANDS, _WORDS)
+_OPTIONAL_WORDS = {_COMMANDS: "snippets and voice commands", _WORDS: "Your Words"}
 _COPY_NAME = re.compile(r"^settings-(\d{8}-\d{6})\.zip$")
 _DEVICE_LINE = re.compile(r'^device\s*=.*$', re.MULTILINE)
 _DEVICE_NAMES = {"cuda": "CUDA", "vulkan": "Vulkan"}
@@ -407,11 +408,36 @@ def _put_back(path, old) -> bool:
         return False
 
 
+def _optional_paths():
+    """Where each of _OPTIONAL is on this computer."""
+    from . import custom_words
+    return {_COMMANDS: config.CUSTOM_COMMANDS_PATH, _WORDS: custom_words.path()}
+
+
+def removed_here(backup):
+    """What restoring *backup* takes away from this computer, in words: the
+    _OPTIONAL files it was made without that this computer has. A backup
+    from a computer with no Your Words removes this one's, and the question
+    before it and the note after it say so."""
+    paths = _optional_paths()
+    return [_OPTIONAL_WORDS[name] for name in backup.absent if os.path.exists(paths[name])]
+
+
+def removal_note(backup, done=False):
+    """The sentence saying what restoring *backup* removes here (or, once
+    *done*, removed), or ""."""
+    removed = " or ".join(removed_here(backup))
+    if not removed:
+        return ""
+    return (f"This backup has no {removed}, so the ones on this computer "
+            f"{'were' if done else 'are'} removed. Earlier settings, on the "
+            "Updates & Backup tab, can bring them back.")
+
+
 def _writes(backup, settings_text):
     """What restoring *backup* writes, as (path, text or None to remove),
     with *settings_text* for its settings."""
-    from . import custom_words
-    paths = {_COMMANDS: config.CUSTOM_COMMANDS_PATH, _WORDS: custom_words.path()}
+    paths = _optional_paths()
     return [(config.CONFIG_PATH, settings_text)] + [
         (paths[name], backup.files[name].decode("utf-8") if name in backup.files else None)
         for name in _OPTIONAL if name in backup.files or name in backup.absent]
@@ -434,16 +460,22 @@ def restore(backup):
     """
     notes = []
     try:
-        _snapshot()
+        # The copy just taken, or when none was needed the newest, which
+        # holds these very files. Not simply the newest by name: names are
+        # local times, and in the hour repeated when the clocks go back an
+        # older copy can sort newer.
+        undo = _snapshot()
         copies = list_snapshots()
-        # The newest copy is the current settings now, if there are any.
-        if copies and os.path.exists(config.CONFIG_PATH):
-            config.write_text_atomic(_pending_path(), os.path.basename(copies[0].path),
+        if undo is None and copies and os.path.exists(config.CONFIG_PATH):
+            undo = copies[0].path
+        if undo is not None:
+            config.write_text_atomic(_pending_path(), os.path.basename(undo),
                                      keep_backup=False)
     except Exception as e:
         raise BackupError("Your current settings couldn't be saved as a copy first, "
                           f"so nothing was changed ({e}).") from e
     writes = _writes(backup, _fit_device(backup.files[_SETTINGS].decode("utf-8"), notes))
+    removing = removal_note(backup, done=True)
     try:
         _write_all_or_none(writes)
     except _HalfRestored:
@@ -452,6 +484,8 @@ def restore(backup):
         _forget_pending()       # every file was put back
         raise
     _forget_pending()
+    if removing:
+        notes.append(removing)
     if _STATS in backup.files:
         _merge_stats(backup.files[_STATS], notes)
     logger.info(f"Settings restored from a backup made {backup.created} "
@@ -473,7 +507,17 @@ def recover_cut_off_restore():
     """At start, before anything reads the settings: a restore cut off
     between its file writes left some files the backup's and the rest the
     old ones. The copy taken just before it is put back whole; one that
-    can't be written now is tried again at the next start. Never raises."""
+    can't be written now is tried again at the next start. Never raises: it
+    runs before the tray exists, and an unreadable note must not stop
+    TuxTalk starting."""
+    try:
+        _recover_cut_off_restore()
+    except Exception as e:
+        logger.warning(f"Could not check for a restore of the settings cut off part-way: {e}")
+
+
+def _recover_cut_off_restore():
+    """recover_cut_off_restore's work, which may raise."""
     data = _read_bytes(_pending_path())
     if data is None:
         return

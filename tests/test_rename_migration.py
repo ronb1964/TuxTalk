@@ -128,6 +128,16 @@ def test_package_import_runs_the_migration_before_anything_else(tmp_path):
     assert os.path.islink(f"{h}/.config/talktype")
 
 
+def test_a_migration_that_failed_is_told_to_the_tray_to_log(tmp_path, monkeypatch):
+    """Its warning came before any log file was open, so it reached only
+    the terminal, never the log a user sends with a problem report."""
+    def fails(home=None, dev=False):
+        raise PermissionError(13, "Permission denied")
+    monkeypatch.setattr(rm, "migrate", fails)
+    assert rm.run_at_startup({}, home=str(tmp_path)) == [
+        "moving the folders failed: [Errno 13] Permission denied"]
+
+
 def test_importing_the_migration_makes_no_settings_folder(tmp_path):
     """It opened the log file at import, making ~/.config/tuxtalk before it
     moved the old folder there."""

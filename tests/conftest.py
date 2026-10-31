@@ -887,8 +887,8 @@ def tray_main(monkeypatch):
     import dbus.mainloop.glib
     from tuxtalk import (autostart, control, cuda_download, cuda_helper, desktop_identity,
                          desktop_launcher, extension_helper, first_run_marker, first_run_setup,
-                         gnome_keybindings, rename_migration, service_launcher, settings_backup, tray, ui_style,
-                         update_install, ydotoold_leftovers)
+                         gnome_keybindings, rename_migration, service_launcher, settings_backup,
+                         tray, ui_style, update_install, ydotoold_leftovers)
     done = _Steps()
 
     def step(name, result=None):

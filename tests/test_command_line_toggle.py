@@ -450,17 +450,26 @@ def test_ready_is_said_after_stale_toggles_are_cleared(service_main):
     assert started.index(("says it is ready", False)) < started.index("listens for hotkeys")
 
 
-@pytest.mark.parametrize("appimage,expected", [
-    ("/home/u/AppImages/TuxTalk.AppImage", "/home/u/AppImages/TuxTalk.AppImage --toggle"),
+# Set as APPDIR: this code runs from inside the AppImage APPIMAGE names.
+CODE = str(ROOT / "src" / "tuxtalk")
+
+
+@pytest.mark.parametrize("appimage,appdir,expected", [
+    ("/home/u/AppImages/TuxTalk.AppImage", CODE,
+     "/home/u/AppImages/TuxTalk.AppImage --toggle"),
     # Quoted, or the shortcut runs "/home/Jo" (GNOME splits it like a shell);
     # and never "~": GNOME starts a custom shortcut without a shell to expand it.
-    ("/home/Jo Ann/AppImages/TuxTalk.AppImage",
+    ("/home/Jo Ann/AppImages/TuxTalk.AppImage", CODE,
      "'/home/Jo Ann/AppImages/TuxTalk.AppImage' --toggle"),
-    ("/opt/tuxtalk/TuxTalk.AppImage", "tuxtalk --toggle"),      # AUR: its launcher
-    ("", "tuxtalk --toggle"),                                    # .deb / .rpm
+    ("/opt/tuxtalk/TuxTalk.AppImage", CODE, "tuxtalk --toggle"),    # AUR: its launcher
+    ("", "", "tuxtalk --toggle"),                                    # .deb / .rpm
+    # A .deb started from another AppImage's terminal: that one's APPIMAGE.
+    ("/home/u/Applications/Cursor.AppImage", "/tmp/.mount_CursorAb12", "tuxtalk --toggle"),
 ])
-def test_help_names_the_command_for_this_install(appimage, expected):
-    assert control.shortcut_command(appimage_env=appimage) == expected
+def test_help_names_the_command_for_this_install(monkeypatch, appimage, appdir, expected):
+    monkeypatch.setenv("APPIMAGE", appimage)
+    monkeypatch.setenv("APPDIR", appdir)
+    assert control.shortcut_command() == expected
 
 
 def test_help_mentions_the_command(help_pages):

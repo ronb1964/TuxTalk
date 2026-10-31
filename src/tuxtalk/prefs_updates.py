@@ -243,7 +243,7 @@ class UpdatesTab(Tab):
         self._show_last_backup()
         self._fill_restore_list()       # saved into the backup folder: listed now
         show_message(self.window, Gtk.MessageType.INFO, "Backup saved",
-                     f"Your settings, voice commands and stats are in:\n{path}")
+                     f"Your settings, snippets, Your Words and stats are in:\n{path}")
 
     def _on_load_backup_clicked(self, _button):
         """Load Backup…: after saying when and by which version it was made,
@@ -262,13 +262,15 @@ class UpdatesTab(Tab):
             made = settings_backup.when_label(datetime.datetime.fromisoformat(made))
         except ValueError:
             pass
+        removing = settings_backup.removal_note(backup)
         if show_message(
                 self.window, Gtk.MessageType.QUESTION, "Load these settings?",
                 f"This backup was made {made} by TuxTalk "
                 f"{backup.version or '(unknown version)'}.\n\n"
-                "It replaces your settings, voice commands and Fix a Word words. Its stats "
-                "are added to yours. Your current settings are kept as a copy first, so "
-                "Earlier settings, on this tab, can undo this.",
+                "It replaces your settings, snippets and voice commands, and Your Words. "
+                "Its stats are added to yours. Your current settings are kept as a copy "
+                "first, so Earlier settings, on this tab, can undo this."
+                + (f"\n\n{removing}" if removing else ""),
                 buttons=Gtk.ButtonsType.OK_CANCEL) == Gtk.ResponseType.OK:
             self._restore_backup(backup)
 
@@ -284,9 +286,9 @@ class UpdatesTab(Tab):
                       else "Your stats stay as they are")
         if show_message(
                 self.window, Gtk.MessageType.QUESTION, "Go back to these settings?",
-                f"Your settings, voice commands and Fix a Word words go back to how they "
-                f"were {settings_backup.when_label(point.when)}. {stats_note}, and your "
-                f"current settings are kept as a copy first.",
+                f"Your settings, snippets and voice commands, and Your Words go back to "
+                f"how they were {settings_backup.when_label(point.when)}. {stats_note}, "
+                f"and your current settings are kept as a copy first.",
                 buttons=Gtk.ButtonsType.OK_CANCEL) != Gtk.ResponseType.OK:
             return
         path = point.path
