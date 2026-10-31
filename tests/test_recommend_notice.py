@@ -22,7 +22,23 @@ def env(monkeypatch):
     monkeypatch.setattr("tuxtalk.service_launcher.find_service_pids", lambda: [4242])
     monkeypatch.setattr(r, "detect_hardware", lambda cfg=None: NVIDIA)
     monkeypatch.delenv("FLATPAK_ID", raising=False)
+    # The hardware is looked at on a thread, and the notice given on GTK's:
+    # both at once here.
+    monkeypatch.setattr(update_offers, "threading", types.SimpleNamespace(Thread=_RunNow))
+    monkeypatch.setattr(update_offers.GLib, "idle_add", lambda fn, *a: fn(*a))
     return cfg, notes, saved
+
+
+class _RunNow:
+    """A thread run at once, noting that it was one."""
+    started = []
+
+    def __init__(self, target, **kwargs):
+        self.target = target
+
+    def start(self):
+        self.started.append(self.target)
+        self.target()
 
 
 def test_shown_once_when_the_setup_differs(env):
@@ -68,3 +84,14 @@ def test_waits_for_the_dictation_service(env, monkeypatch):
     monkeypatch.setattr("tuxtalk.service_launcher.find_service_pids", lambda: [4242])
     assert update_offers.maybe_show_recommend_notice() is False
     assert len(notes) == 1
+
+
+def test_the_hardware_is_looked_at_off_gtks_thread(env, monkeypatch):
+    """nvidia-smi can take its full 5 seconds: on GTK's thread, the tray
+    froze while it ran."""
+    _RunNow.started.clear()
+    looked = []
+    monkeypatch.setattr(r, "detect_hardware",
+                        lambda cfg=None: looked.append(list(_RunNow.started)) or NVIDIA)
+    update_offers.maybe_show_recommend_notice()
+    assert looked and looked[0], "looked at the hardware before any thread started"

@@ -65,7 +65,9 @@ def preload_cuda_libraries():
     # decided between the processor and the system's CUDA.
     lib_path = _cuda_lib_dir()
 
-    # Globs, not fixed sonames, so any CUDA major version loads.
+    # Globs, not one soname each: a library may also come under its full
+    # version (libcublas.so.12.4.5.8). Only CUDA 12's are of use, though
+    # (cuda_helper.REQUIRED_CUDA_LIBS).
     lib_patterns = [
         ("cuda_runtime", "lib", "libcudart.so.*"),
         ("cublas", "lib", "libcublas.so.*"),

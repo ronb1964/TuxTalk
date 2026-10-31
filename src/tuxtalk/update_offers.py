@@ -12,9 +12,12 @@ prompt.
 import os
 import threading
 
-from gi.repository import GLib, Gtk
+import gi
 
-from .logger import setup_logger
+gi.require_version("Gtk", "3.0")
+from gi.repository import GLib, Gtk  # noqa: E402
+
+from .logger import setup_logger  # noqa: E402
 
 logger = setup_logger(__name__)
 
@@ -202,24 +205,50 @@ def maybe_show_recommend_notice():
     (first run sets recommend_notice_shown) or the Flatpak. Runs as a GLib
     timeout: True (ask again) until the dictation service is up, then False."""
     try:
-        from . import recommend
-        from .config import load_config, save_config
+        from .config import load_config
         from .first_run_marker import is_first_run
         if os.environ.get("FLATPAK_ID") or is_first_run():
             return False
         from .service_launcher import find_service_pids
         if not find_service_pids():
             return True        # the service isn't up yet: ask again next tick
-        cfg = load_config()
-        if cfg.recommend_notice_shown:
+        if load_config().recommend_notice_shown:
             return False
+        # Looking at the hardware runs nvidia-smi and the Vulkan probe,
+        # seconds when a driver is slow: not on GTK's thread.
+        threading.Thread(target=_compare_with_recommendation, daemon=True,
+                         name="recommend-notice").start()
+    except Exception as e:      # a nicety: never worth breaking the tray's timer
+        logger.info(f"Recommended-setup notice skipped: {e}")
+    return False
+
+
+def _compare_with_recommendation():
+    """On its own thread: the recommended setup, when it differs from the
+    one in use, handed to GTK's thread to tell."""
+    from . import recommend
+    from .config import load_config
+    try:
+        cfg = load_config()
         better = recommend.differs_from_recommendation(cfg, recommend.detect_hardware(cfg))
+    except Exception as e:      # a nicety, as above
+        logger.info(f"Recommended-setup notice skipped: {e}")
+        return
+    GLib.idle_add(_tell_about_recommendation, better)
+
+
+def _tell_about_recommendation(better):
+    """On GTK's thread, where the tray saves its settings: the notice, if
+    *better* is a setup, and that it's been given."""
+    from .config import load_config, save_config
+    try:
         if better is not None:
             from .notify import notify as _notify
             _notify("A better setup for this computer", recommend_notice_text(better))
             logger.info(f"Told the user about the recommended setup: {better.title}")
+        cfg = load_config()
         cfg.recommend_notice_shown = True
         save_config(cfg)
-    except Exception as e:      # a nicety: never worth breaking the tray's timer
-        logger.info(f"Recommended-setup notice skipped: {e}")
+    except Exception as e:      # a nicety, as above
+        logger.info(f"Recommended-setup notice not recorded: {e}")
     return False
