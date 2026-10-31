@@ -56,11 +56,11 @@ def test_tray_logs_a_failed_migration_as_a_warning(tray_main, monkeypatch):
     import tuxtalk
     from tuxtalk import tray
     warned = []
-    monkeypatch.setattr(tuxtalk, "MIGRATION_LOG", ["moving the folders failed: [Errno 13] no"])
+    monkeypatch.setattr(tuxtalk, "MIGRATION_LOG", ["could not move .config/talktype: [Errno 13] no"])
     monkeypatch.setattr(tray, "logger", types.SimpleNamespace(
         info=lambda m: None, warning=warned.append, debug=lambda m: None, error=lambda m: None))
     tray_main()
-    assert "Rename to TuxTalk: moving the folders failed: [Errno 13] no" in warned
+    assert "Rename to TuxTalk: could not move .config/talktype: [Errno 13] no" in warned
 
 
 def test_clearing_the_log_also_removes_the_pre_rename_logs(tmp_path):

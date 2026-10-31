@@ -682,19 +682,20 @@ def _adopt_old_install():
     # The folder move ran at package import, before any logger existed;
     # record what it did now (see rename_migration.py).
     from . import MIGRATION_LOG, config, rename_migration
-    for line in MIGRATION_LOG:
-        failed = line.startswith(rename_migration.FAILED)
-        (logger.warning if failed else logger.info)(f"Rename to TuxTalk: {line}")
+
+    def log(lines):
+        for line in lines:
+            failed = line.startswith(rename_migration.FAILED)
+            (logger.warning if failed else logger.info)(f"Rename to TuxTalk: {line}")
+    log(MIGRATION_LOG)
     if os.environ.get("FLATPAK_ID"):
         return
     try:
-        for line in rename_migration.adopt_old_install(dev=config.DEV_MODE):
-            logger.info(f"Rename to TuxTalk: {line}")
+        log(rename_migration.adopt_old_install(dev=config.DEV_MODE))
         # A dock or favourites list that pinned the old menu entry would
         # show a blank icon; rename those once (a marker file records it).
         marker = os.path.join(os.path.dirname(config.CONFIG_PATH), ".launchers-renamed")
-        for line in rename_migration.repin_launchers(marker):
-            logger.info(f"Rename to TuxTalk: {line}")
+        log(rename_migration.repin_launchers(marker))
     except Exception as e:      # never stop the tray from starting
         logger.warning(f"Rename to TuxTalk: could not move the launchers: {e}")
     # After the rename, which treats an existing tuxtalk.desktop as done.

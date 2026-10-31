@@ -154,8 +154,8 @@ def migrate(home=None, dev=False):
     return done
 
 
-# How run_at_startup's line for a failure starts, which the tray logs as a warning.
-FAILED = "moving the folders failed"
+# How every line for a failure starts, which the tray logs as a warning.
+FAILED = "could not"
 
 
 def run_at_startup(environ=None, home=None):
@@ -169,8 +169,8 @@ def run_at_startup(environ=None, home=None):
     try:
         return migrate(home=home, dev=environ.get("DEV_MODE") == "1")
     except Exception as e:      # never stop the app from starting
-        logger.warning(f"Rename to TuxTalk: {FAILED}: {e}")
-        return [f"{FAILED}: {e}"]
+        logger.warning(f"Rename to TuxTalk: {FAILED} move the folders: {e}")
+        return [f"{FAILED} move the folders: {e}"]
 
 
 # Where an old TalkType AppImage path now lives, best match first: the AUR

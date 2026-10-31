@@ -135,7 +135,7 @@ def test_a_migration_that_failed_is_told_to_the_tray_to_log(tmp_path, monkeypatc
         raise PermissionError(13, "Permission denied")
     monkeypatch.setattr(rm, "migrate", fails)
     assert rm.run_at_startup({}, home=str(tmp_path)) == [
-        "moving the folders failed: [Errno 13] Permission denied"]
+        "could not move the folders: [Errno 13] Permission denied"]
 
 
 def test_importing_the_migration_makes_no_settings_folder(tmp_path):
