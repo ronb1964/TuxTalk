@@ -383,12 +383,18 @@ class DictationTray(ServiceLifecycle, Presets):
         runs on GTK's thread after every stop. The thread, or None.
 
         Rechecked here because a service started in the meantime has claimed
-        them for itself, and releasing would undo that.
+        them for itself, and releasing would undo that; and again on the
+        thread, right before the release, since a service can start (a quick
+        Dictation on, a restart's launch) while the thread waits to run.
         """
         if self.is_service_running():
             return None
-        from .service_launcher import release_desktop_hotkeys
-        thread = threading.Thread(target=release_desktop_hotkeys, name="release-hotkeys",
+        from .service_launcher import find_service_pids, release_desktop_hotkeys
+
+        def release_unless_claimed():
+            if not find_service_pids():
+                release_desktop_hotkeys()
+        thread = threading.Thread(target=release_unless_claimed, name="release-hotkeys",
                                   daemon=True)
         thread.start()
         return thread

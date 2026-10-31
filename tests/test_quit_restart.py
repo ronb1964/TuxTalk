@@ -191,9 +191,23 @@ def test_the_desktop_gets_its_hotkeys_back_off_gtks_thread(monkeypatch):
     on = []
     monkeypatch.setattr(service_launcher, "release_desktop_hotkeys",
                         lambda: on.append(threading.current_thread()))
+    monkeypatch.setattr(service_launcher, "find_service_pids", lambda: [])
     t = _bare_tray(is_service_running=lambda: False)
     t._release_desktop_hotkeys().join(5)
     assert on and on[0] is not threading.main_thread()
+
+
+def test_a_service_started_before_the_release_keeps_its_hotkeys(monkeypatch):
+    """Dictation off, then on again before the release thread ran: handing
+    KWin or COSMIC the keys back then undid the new service's claim, and F8
+    typed stray characters in terminals until the next start."""
+    released = []
+    monkeypatch.setattr(service_launcher, "release_desktop_hotkeys",
+                        lambda: released.append(True))
+    monkeypatch.setattr(service_launcher, "find_service_pids", lambda: [43])  # the new one
+    t = _bare_tray(is_service_running=lambda: False)     # none, when the tray looked
+    t._release_desktop_hotkeys().join(5)
+    assert released == []
 
 
 def test_a_second_quit_while_quitting_does_nothing(slow_service):
