@@ -32,13 +32,17 @@ from .tray_service import ServiceLifecycle
 warnings.filterwarnings("ignore", message=r"Gtk\.ImageMenuItem\.", category=DeprecationWarning)
 logger = setup_logger(__name__)
 
-# D-Bus service import (optional - only needed for GNOME extension)
+# The tray's D-Bus service: the dictation service reaches the tray through
+# it, and so do the GNOME extension, KDE's focus reports, tuxtalk --toggle,
+# TuxTalk opened again and Preferences. Without dbus-python the tray still
+# starts and dictates, with none of those.
 try:
     from .dbus_service import TuxTalkDBusService
     DBUS_AVAILABLE = True
 except ImportError:
     DBUS_AVAILABLE = False
-    logger.warning("D-Bus service not available - GNOME extension integration disabled")
+    logger.warning("D-Bus service not available: no GNOME extension, focus reports "
+                   "or command-line control")
 
 
 class DictationTray(ServiceLifecycle, Presets):
@@ -53,6 +57,8 @@ class DictationTray(ServiceLifecycle, Presets):
         # match Preferences and onboarding.
         ui_style.prefer_dark_theme()
 
+        # The pre-rename id, kept: KDE remembers by it where the user put the
+        # icon (shown always, or hidden in the tray's arrow).
         self.indicator = AppIndicator3.Indicator.new(
             "talktype",
             "microphone-sensitivity-muted",  # start with muted icon
@@ -97,7 +103,7 @@ class DictationTray(ServiceLifecycle, Presets):
         self._ready_pid = None
         self._waiting_start = WaitingStart()
 
-        # Initialize D-Bus service (optional - for GNOME extension integration)
+        # The tray's D-Bus service (see DBUS_AVAILABLE above)
         self.dbus_service = None
         self._init_dbus_service()
 
@@ -147,7 +153,8 @@ class DictationTray(ServiceLifecycle, Presets):
         return True
 
     def _init_dbus_service(self):
-        """Initialize D-Bus service for GNOME extension integration (optional)."""
+        """Offer the tray's D-Bus service (see DBUS_AVAILABLE), then KDE's
+        focus reporter, which reports to it."""
         if not DBUS_AVAILABLE:
             return
 
@@ -155,7 +162,7 @@ class DictationTray(ServiceLifecycle, Presets):
             from .tray_dbus_app import TrayAppInstance
             app_instance = TrayAppInstance(self)
             self.dbus_service = TuxTalkDBusService(app_instance)
-            logger.info("D-Bus service initialized for GNOME extension integration")
+            logger.info("D-Bus service initialized")
         except Exception as e:
             logger.warning(f"Failed to initialize D-Bus service: {e}")
             self.dbus_service = None

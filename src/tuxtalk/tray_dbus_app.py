@@ -146,14 +146,7 @@ class TrayAppInstance:
 
     @property
     def config(self):
-        """Get current config."""
-        try:
-            from .config import load_config
-            return load_config()
-        except Exception as e:
-            logger.info(f"Could not read the settings for D-Bus, using defaults: {e}")
-
-            class MinimalConfig:
-                model = 'large-v3'
-                device = 'cpu'
-            return MinimalConfig()
+        """The settings as saved now (load_config falls back to the defaults
+        itself when the file can't be read)."""
+        from .config import load_config
+        return load_config()

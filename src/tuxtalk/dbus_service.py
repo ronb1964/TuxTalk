@@ -146,7 +146,7 @@ class TuxTalkDBusService(dbus.service.Object):
         if running:
             return running[0]
         if hasattr(self.app, 'config'):
-            return str(getattr(self.app.config, 'model', 'large-v3'))
+            return str(self.app.config.model)
         return 'unknown'
 
     def _device_type(self):

@@ -356,7 +356,7 @@ class TuxTalkIndicator extends PanelMenu.Button {
     }
 
     _buildMenu() {
-        // The same items, in the same order, as the tray's menu (tray.py).
+        // The same items, in the same order, as the tray's menu (tray_menu.py).
         this._serviceItem = new PopupMenu.PopupSwitchMenuItem('Dictation on/off', false);
         this._updatingToggle = false;
         this._serviceItem.connect('toggled', item => {
