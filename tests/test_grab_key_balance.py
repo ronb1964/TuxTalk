@@ -47,14 +47,14 @@ class KernelKeyboard:
         self.down = set()
         self.grabbed = False
         self.desktop_count = {}       # libinput: presses minus releases per key
-        self.talktype_queue = []
+        self.unread = []              # what TuxTalk hasn't read yet
 
     # -- the kernel ------------------------------------------------------
     def _deliver(self, code, value, at=None):
         if (value == 1) == (code in self.down):
             return                    # no state change: the kernel drops it
         (self.down.add if value == 1 else self.down.discard)(code)
-        self.talktype_queue.append(StampedEvent(code, value, time.time() if at is None else at))
+        self.unread.append(StampedEvent(code, value, time.time() if at is None else at))
         if not self.grabbed:
             self.desktop_count[code] = self.desktop_count.get(code, 0) + (1 if value == 1 else -1)
 
@@ -76,7 +76,7 @@ class KernelKeyboard:
         self.grabbed = False
 
     def read(self):
-        q, self.talktype_queue = self.talktype_queue, []
+        q, self.unread = self.unread, []
         return q
 
 
@@ -149,7 +149,7 @@ def test_a_tap_released_before_the_grab_needs_no_balancing(kb):
 
 
 def test_without_the_fix_the_desktop_is_left_holding_f8(kb, monkeypatch):
-    """A plain grab, without _grab_keyboards_hiding, leaves F8 held."""
+    """A plain grab, without keyboard_grab.grab_keyboards_hiding, leaves F8 held."""
     monkeypatch.setattr(keyboard_grab, "grab_keyboards_hiding",
                         lambda devices, codes: keyboard_grab.grab_all_devices(devices))
     kb.physical(F8, 1); pump(kb)
@@ -179,7 +179,7 @@ def test_a_key_let_go_just_after_the_grab_looked_still_ends_the_recording(kb, mo
     assert kb.desktop_count.get(F8, 0) == 0
 
 
-def test_stale_injections_expire_and_never_swallow_real_keys(kb, monkeypatch):
+def test_stale_injections_expire_and_never_swallow_real_keys(kb):
     sent = time.time() - 3
     keyboard_grab._injected_pending.append((kb.path, F8, 0, sent, sent + 2))   # already expired
     assert keyboard_grab.is_own_injected_event(kb, KeyEvent(F8, 0)) is False

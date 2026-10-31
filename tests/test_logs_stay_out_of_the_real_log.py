@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 from tuxtalk import config
-from tuxtalk import logger as talktype_logger
+from tuxtalk import logger as tuxtalk_logger
 
 # The account's home folder, whatever HOME says.
 REAL_HOME = Path(pwd.getpwuid(os.getuid()).pw_dir)
@@ -21,7 +21,7 @@ REAL_HOME = Path(pwd.getpwuid(os.getuid()).pw_dir)
 
 def test_log_file_is_not_in_the_users_config():
     real_config = REAL_HOME / ".config"
-    log_dir = talktype_logger._log_dir()
+    log_dir = tuxtalk_logger._log_dir()
     assert log_dir != real_config and real_config not in log_dir.parents
 
 

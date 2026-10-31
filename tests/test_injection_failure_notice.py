@@ -4,7 +4,7 @@ Transcription can work perfectly (Recent Dictations holds the text word for
 word) while nothing reaches the window, for example when paste is unavailable
 on X11 and typing fails too. Without a notice the app simply seems not to work.
 
-_inject_text reports how it went ("ok", "partial" or "failed"), and
+delivery.inject_text reports how it went ("ok", "partial" or "failed"), and
 pipeline.transcribe_and_inject tells the user about anything but "ok": always with a
 desktop notification, like a missing microphone, and with the low cancel beep
 when beeps are on. The notification points at Recent Dictations, where the text
@@ -40,7 +40,7 @@ def _paste_mode(monkeypatch):
     monkeypatch.setattr(delivery, "determine_injection_method", lambda m: ("paste", "test"))
 
 
-# --- _inject_text reports its outcome ------------------------------------------
+# --- delivery.inject_text reports its outcome ----------------------------------
 
 def test_a_paste_that_lands_is_ok(monkeypatch, quiet):
     _paste_mode(monkeypatch)

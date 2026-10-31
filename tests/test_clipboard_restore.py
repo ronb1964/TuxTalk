@@ -63,7 +63,7 @@ def keeper():
 
 
 def paste(keeper, board, text):
-    """What _paste_text does around a paste: remember, paste, schedule restore."""
+    """What keyboard_output.paste_text does around a paste: remember, paste, schedule restore."""
     keeper.before_paste()
     board.data, board.mime = text.encode(), "text/plain;charset=utf-8"
     keeper.after_paste(text)

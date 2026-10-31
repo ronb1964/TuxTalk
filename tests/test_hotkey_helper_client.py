@@ -11,6 +11,7 @@ import threading
 
 import pytest
 
+from hotkey_helper_fakes import FakeKeyboard
 from tuxtalk import focused_window, hotkey_helper as hh
 from tuxtalk import hotkeys, keyboard_devices
 from tuxtalk import keyboard_output
@@ -18,7 +19,6 @@ from tuxtalk import keyboard_grab
 from tuxtalk import recording_state as rs
 from tuxtalk.hotkey_helper_client import HelperKeyboard, connect_helper, watch_specs
 from tuxtalk.hotkey_keys import track_modifier
-from test_hotkey_helper import FakeKeyboard
 from tuxtalk import live_settings as live
 from tuxtalk import recording
 from tuxtalk import pipeline
@@ -280,7 +280,7 @@ def test_events_taken_in_early_are_read_without_waiting(rig):
     helper, kb, client, loop, calls = rig
     kb.press(F8)
     helper.run_once(timeout=0)
-    client.active_keys()                 # takes the DOWN in, as _grab_keyboards_hiding does
+    client.active_keys()                 # takes the DOWN in, as grab_keyboards_hiding does
     assert client.needs_service()
     assert keyboard_devices.devices_with_events([client], 5.0) == [client]
 

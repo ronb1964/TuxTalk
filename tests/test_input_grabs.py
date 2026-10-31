@@ -594,7 +594,7 @@ def test_voice_commands_hotkey_does_not_grab_the_mouse(key_env, monkeypatch):
 
 def test_voice_commands_grabs_are_visible_to_the_recovery_backstop(key_env,
                                                                    monkeypatch):
-    """The grabs go in the shared registry, so _release_all_grabs() and the
+    """The grabs go in the shared registry, so keyboard_grab.release_all() and the
     stranded-grab backstop can see and recover them."""
     kb = keyboard()
     during = {}
@@ -657,7 +657,7 @@ def tray_proxy(monkeypatch):
 
 
 def test_recording_state_notification_is_time_bounded(tray_proxy):
-    """_notify_tray_recording_state runs inside start_recording — after every
+    """tray_link.notify_recording_state runs inside start_recording — after every
     keyboard has been exclusively grabbed. dbus-python's default reply
     timeout is 25s, and building the proxy adds a 25s introspect on top, so
     an unresponsive tray could freeze every keyboard system-wide for ~50
@@ -698,7 +698,7 @@ def test_dropping_a_device_mid_hold_ends_the_recording(key_env):
     a resume from suspend — the release event is unreachable and
     state.is_recording stays True forever.
 
-    That is not a cosmetic leak: _release_grabs_if_not_recording() is gated
+    That is not a cosmetic leak: keyboard_grab.release_if_not_recording() is gated
     on `not is_recording`, so the backstop is disabled and every OTHER
     keyboard stays exclusively grabbed indefinitely. The auto-timeout is
     gated the same way, so the process never exits either.

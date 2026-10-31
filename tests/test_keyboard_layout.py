@@ -611,7 +611,7 @@ def test_untypable_text_is_pasted_instead(typing, keyboard, monkeypatch, caplog)
 
 
 def test_untypable_text_on_x11_uses_the_x11_clipboard(typing, monkeypatch):
-    """wl-copy can't reach an X11 display, so _paste_text refuses there."""
+    """wl-copy can't reach an X11 display, so paste_text refuses there."""
     app, calls = typing
     monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: False)
     monkeypatch.setattr(kl, "active_layout", lambda: ("ua", "", ""))
