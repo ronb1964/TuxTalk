@@ -84,7 +84,11 @@ class PauseDetector:
         self.speech_over_room = 10 ** (float(speech_db) / 20)
         self.cuts = 0
         self.level = 0.0
+        # Talking toward the next cut; a cough before a pause is forgotten.
         self.speech_time = 0.0
+        # Talking since the last cut, never forgotten: whether the rest of
+        # the recording holds a word ("yes" is too short to cut a phrase).
+        self.speech_since_cut = 0.0
         self.silence_time = 0.0
         self.last_pause = 0.0
         self._tail_s = 0.0
@@ -166,6 +170,7 @@ class PauseDetector:
             self._burst += duration
             if self._burst >= MIN_BURST_S:
                 self.speech_time += duration
+                self.speech_since_cut += duration
                 self.silence_time = 0.0
                 return False
         else:
@@ -177,11 +182,12 @@ class PauseDetector:
             return False
         if self.speech_time < MIN_SPEECH_S:
             # Too little talking for a chunk (a cough in a long silence).
-            # Forget it, so two coughs a minute apart don't add up to speech.
+            # Forget it for the next cut, so two coughs a minute apart don't
+            # add up to speech; speech_since_cut keeps it, as it may be a word.
             self.speech_time = 0.0
             return False
         self.last_pause = self._tail_s = self.silence_time
-        self.speech_time = 0.0
+        self.speech_time = self.speech_since_cut = 0.0
         self.silence_time = 0.0
         self.cuts += 1
         return True

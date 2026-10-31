@@ -187,7 +187,8 @@ def trim_auto_stop_tail(rec, frames):
 def drop_speechless_rest(rec, frames):
     """The audio after *rec*'s last cut, or none when the pause detector
     heard no speech in it: room noise longer than the tap check would
-    otherwise reach the engine, which invents a word for it ("Yeah.")."""
+    otherwise reach the engine, which invents a word for it ("Yeah."). A word
+    too short to cut a phrase of its own ("yes") is speech here."""
     if rec.last_chunk_speech == 0.0:
         logger.info("No speech after the last chunk; the rest isn't transcribed")
         return []
@@ -448,7 +449,7 @@ def finish_capture(rec, beeps_on: bool, notify_on: bool):
         # and a callback still under way adds nothing to it.
         rec.captured = True
         chunker, rec.chunker = rec.chunker, None
-        rec.last_chunk_speech = chunker.speech_time if chunker is not None else None
+        rec.last_chunk_speech = chunker.speech_since_cut if chunker is not None else None
         frames = rec.frames
     if chunker is not None and not rec.chunks_submitted:
         logger.info(f"Chunked dictation: no pause found ({chunker.describe()})")
