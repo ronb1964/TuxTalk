@@ -16,6 +16,9 @@ LABS_INDENT = 20
 _PICKING_KEYS = {getattr(Gdk, f"KEY_{name}") for name in (
     "Up", "Down", "Page_Up", "Page_Down", "Home", "End",
     "KP_Up", "KP_Down", "KP_Page_Up", "KP_Page_Down", "KP_Home", "KP_End")}
+# With these held the key is someone else's: Ctrl+Page Down changes tab,
+# Alt+Down is GTK's own way to open the list.
+_PASSED_ON_MODIFIERS = Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.MOD1_MASK
 
 
 def section_header(grid, row, title):
@@ -89,12 +92,13 @@ def dropdown(combo):
 
 
 def _open_on_arrow(combo, event):
-    """An arrow, Page or Home/End key on a closed dropdown opens its list.
-    GTK would pick the next entry at once, and some entries start a setup
-    or a download the moment they're picked (large-v3, CUDA, Several
-    languages), each putting the old choice back: with the keyboard alone
-    the entries past them couldn't be reached."""
-    if event.keyval not in _PICKING_KEYS or combo.get_property("popup-shown"):
+    """An arrow, Page or Home/End key, without Ctrl or Alt, on a closed
+    dropdown opens its list. GTK would pick the next entry at once, and
+    some entries start a setup or a download the moment they're picked
+    (large-v3, CUDA, Several languages), each putting the old choice back:
+    with the keyboard alone the entries past them couldn't be reached."""
+    if (event.keyval not in _PICKING_KEYS or event.state & _PASSED_ON_MODIFIERS
+            or combo.get_property("popup-shown")):
         return False
     combo.popup()
     return True
