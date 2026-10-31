@@ -20,6 +20,10 @@ from .audio_windows import split_windows, window_length
 MIN_SPEECH_S = 0.3
 # Silence kept at the end of a chunk, so the last word's decay is never cut.
 TAIL_KEEP_S = 0.3
+# Silence kept at the start of the chunk after a cut, before the sound that
+# ended the pause: a word's soft first sound ("h", "f", "s") can be under
+# speech's threshold there (take_cut).
+LEAD_KEEP_S = 0.3
 # The quietest level (int16 RMS, about -58 dBFS) that can count as speech.
 # Measured on a Beyerdynamic M 70 PRO X into a MiniFuse 2 in a quiet room: the
 # room at 1-6, speech at 50-600. Auto-stop's 300 never heard that as speech.
@@ -85,7 +89,12 @@ class PauseDetector:
         self.speech_since_cut = 0.0
         self.silence_time = 0.0
         self.last_pause = 0.0
-        self._tail_s = 0.0
+        # Samples fed, and those judged in whole windows, since the first
+        # block; where the phrase after the last cut starts, counted the
+        # same way (_mark_cut).
+        self._fed = 0
+        self._judged = 0
+        self._resume_at = 0
         # High-pass: the signal minus its moving average over 1/HIGH_PASS_HZ.
         self._hp_len = max(2, int(self.sample_rate / HIGH_PASS_HZ))
         self._hp_tail = np.zeros(self._hp_len - 1)
@@ -145,9 +154,11 @@ class PauseDetector:
         if hp.size == 0:
             return False
         self.blocks += 1
+        self._fed += hp.size
         windows, self._pending = split_windows(self._pending, hp, self._win_len)
         fired = False
         for window in windows:
+            self._judged += self._win_len
             level = float(np.sqrt(np.mean(window ** 2)))
             fired = self._window(level, self._win_len / self.sample_rate) or fired
         return fired
@@ -178,23 +189,88 @@ class PauseDetector:
             # add up to speech; speech_since_cut keeps it, as it may be a word.
             self.speech_time = 0.0
             return False
-        self.last_pause = self._tail_s = self.silence_time
+        self._mark_cut()
+        self.last_pause = self.silence_time
         self.speech_time = self.speech_since_cut = 0.0
         self.silence_time = 0.0
         self.cuts += 1
         return True
 
-    def tail_samples(self) -> int:
-        """Samples of measured silence to drop from the chunk just cut."""
-        return max(0, int((self._tail_s - TAIL_KEEP_S) * self.sample_rate))
+    def _mark_cut(self) -> None:
+        """Note where the phrase after the cut starts, at the window just
+        judged: LEAD_KEEP_S before the sound that ended the pause, a loud
+        run too short to count as speech yet (_burst), which is the next
+        word starting; never inside the TAIL_KEEP_S the phrase before keeps
+        of its pause. Everything after it, the rest of the block included,
+        is the next phrase's, as the windows judged there count toward it."""
+        rate = self.sample_rate
+        onset = self._judged - round(self._burst * rate)
+        speech_end = self._judged - round(self.silence_time * rate)
+        self._resume_at = min(onset, max(onset - int(LEAD_KEEP_S * rate),
+                                         speech_end + int(TAIL_KEEP_S * rate)))
+
+    def cut_from_end(self) -> tuple[int, int]:
+        """take_cut's *cut* for the last cut: (the pause's samples the phrase
+        may lose from its end, where the next phrase starts), each counted
+        back from the end of the audio fed so far."""
+        trim = max(0, int((self.last_pause - TAIL_KEEP_S) * self.sample_rate))
+        return trim, self._fed - self._resume_at
+
+
+def take_cut(frames, cut):
+    """(the phrase, the audio after it) from *frames*, a recording's int16
+    mono blocks since the last cut, the newest last, at *cut*
+    (PauseDetector.cut_from_end, read before another block is added).
+
+    The phrase loses the end of its pause in whole blocks, as many as the
+    pause holds after TAIL_KEEP_S. Trimmed to the sample, the cut took a
+    soft last sound or a click that block-sized trimming had kept. But the
+    next phrase starts where the detector says, split to the sample, so
+    the start of a word that ended the pause, in the trimmed blocks or
+    later in the block the cut was heard in, is whole there, never in
+    neither phrase. Only the newest blocks are touched, as this runs on
+    the audio thread."""
+    trim, resume = cut
+    keep = max(resume, _whole_tail(frames, trim))
+    phrase = _split_off(frames, keep)[0]
+    return phrase, _split_off(frames, resume)[1]
+
+
+def _split_off(frames, samples):
+    """(the blocks before the last *samples* samples of *frames*, those
+    samples as blocks): the block the split falls in is cut in two."""
+    before, after = list(frames), []
+    while before and samples > 0:
+        block = before.pop()
+        size = len(block) // 2                  # int16 mono
+        if size > samples:
+            split = (size - samples) * 2
+            before.append(block[:split])
+            after.append(block[split:])
+            break
+        after.append(block)
+        samples -= size
+    after.reverse()
+    return before, after
+
+
+def _whole_tail(frames, to_trim) -> int:
+    """Samples in the trailing blocks (int16 mono) of *frames* that fit
+    whole in *to_trim*."""
+    whole = 0
+    for block in reversed(frames):
+        size = len(block) // 2
+        if whole + size > to_trim:
+            break
+        whole += size
+    return whole
 
 
 def drop_tail_samples(frames, to_trim):
     """Remove whole trailing blocks (int16 mono) holding at most *to_trim*
-    samples. A block is never split, so speech is never touched."""
-    while frames and to_trim > 0:
-        block_samples = len(frames[-1]) // 2          # int16 mono
-        if block_samples > to_trim:
-            break
-        frames.pop()
-        to_trim -= block_samples
+    samples: the silence hands-free's auto-stop measured at the end
+    (recording.trim_auto_stop_tail). A block is never split, so nothing
+    past what was measured is removed."""
+    whole = _whole_tail(frames, to_trim)
+    while whole > 0:
+        whole -= len(frames.pop()) // 2

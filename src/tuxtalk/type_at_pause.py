@@ -62,10 +62,10 @@ def cut_chunk(rec, chunker):
 
     Called with chunk_lock held, by the audio callback, which keeps it from
     adding the block and hearing it until the cut is queued. So it only
-    swaps a list and queues a job, nothing that can wait; the transcription
-    happens on the worker."""
-    frames, rec.frames = rec.frames, []
-    chunking.drop_tail_samples(frames, chunker.tail_samples())
+    splits the newest blocks and queues a job, nothing that can wait; the
+    transcription happens on the worker. What the detector heard after the
+    pause stays in rec.frames, the start of the next phrase."""
+    frames, rec.frames = chunking.take_cut(rec.frames, chunker.cut_from_end())
     rec.chunks_submitted += 1
     number, rec_sr, message = rec.chunks_submitted, rec.samplerate, rec.message
     pause = chunker.last_pause

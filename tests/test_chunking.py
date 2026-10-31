@@ -24,8 +24,8 @@ from tuxtalk import dictation_worker
 from tuxtalk import pipeline as dictation_pipeline
 from tuxtalk.beeps import CANCEL_BEEP, READY_BEEP
 from tuxtalk import service_tick
-from type_at_pause_rig import (BLOCK, SR, blocks, fake_pipeline, feed, noise, rng, speech,
-                               start_chunked_recording, stop)
+from type_at_pause_rig import (BLOCK, SR, blocks, fake_pipeline, feed, feed_block, noise, rng,
+                               speech, start_chunked_recording, stop)
 
 
 
@@ -98,12 +98,48 @@ def test_cough_in_a_long_silence_is_forgotten():
     assert len(fired) == 1
 
 
-def test_tail_keeps_the_last_words_decay():
-    from tuxtalk.chunking import TAIL_KEEP_S
-    fired, det = run_pauses(np.concatenate([speech(1.0), noise(1.5)]))
-    assert fired
-    expected = int((det.last_pause - TAIL_KEEP_S) * SR)
-    assert abs(det.tail_samples() - expected) <= BLOCK
+def cut_at_each_pause(audio, block, pause=0.8):
+    """Feed *audio* in blocks of *block* samples and split the blocks at
+    each cut as the audio callback does (type_at_pause.cut_chunk). Returns
+    the cuts, each (phrase start, phrase end, next phrase start) in samples,
+    with every phrase's samples checked to be the audio's at those places."""
+    from tuxtalk.chunking import PauseDetector, take_cut
+    det = PauseDetector(pause, SR)
+    frames, start, cuts = [], 0, []
+    for i in range(0, len(audio), block):
+        frames.append(audio[i:i + block].tobytes())
+        if det.feed(frames[-1]):
+            fed = min(len(audio), i + block)
+            phrase, frames = take_cut(frames, det.cut_from_end())
+            phrase, rest = b"".join(phrase), b"".join(frames)
+            end, resume = start + len(phrase) // 2, fed - len(rest) // 2
+            assert phrase == audio[start:end].tobytes()
+            assert rest == audio[resume:fed].tobytes()
+            cuts.append((start, end, resume))
+            start = resume
+    return cuts
+
+
+@pytest.mark.parametrize("block", [96, 320, 1024, 4096])
+@pytest.mark.parametrize("gap", [0.70, 0.72, 0.73, 0.74, 0.76, 0.8, 1.2])
+def test_a_cut_drops_only_the_middle_of_the_pause(block, gap):
+    """Every sample around a cut lands in one phrase or the next, but for
+    the middle of the pause. Whole blocks were trimmed before, so a word
+    starting as the pause filled up, or later in the block the cut was
+    heard in (a 4096-sample block is a quarter second), lost its start, or
+    all of it, from both phrases."""
+    from tuxtalk.chunking import LEAD_KEEP_S, TAIL_KEEP_S
+    # The first phrase's last syllable ends at 0.93 s; the next starts after the gap.
+    audio = np.concatenate([speech(1.0), noise(gap), speech(1.0), noise(1.5)])
+    last_sound, onset = int(0.93 * SR), int((1.0 + gap) * SR)
+    cuts = cut_at_each_pause(audio, block)
+    assert cuts, "the pause after the last phrase is always cut"
+    for _start, end, resume in cuts:
+        if resume > onset + SR:
+            continue                        # the cut after the last phrase
+        assert end >= last_sound + int(TAIL_KEEP_S * SR) - 320
+        assert end <= resume <= onset
+        assert resume >= min(end, onset - int(LEAD_KEEP_S * SR) - 320)
 
 
 def test_works_at_48k():
@@ -550,6 +586,27 @@ def test_a_block_after_the_stop_took_the_audio_adds_and_cuts_nothing(recording):
     feed(noise(1.0))                        # a pause: it would cut
     assert cap[0] == frames
     assert rs.state.current.chunks_submitted == 0
+
+
+@pytest.mark.parametrize("block", [320, 4096])
+def test_a_word_that_ends_the_pause_reaches_the_engine_whole(recording, monkeypatch, block):
+    """The next word starts 20 ms before the pause would have filled, and
+    the microphone sends 4096-sample blocks: the block the cut is heard in
+    holds the word's start. It was trimmed with the pause, and the engine
+    heard the phrase without its first sound."""
+    heard = []
+    monkeypatch.setattr(type_at_pause, "transcribe_phrase",
+                        lambda frames, *a, **k: heard.append(b"".join(frames)))
+    monkeypatch.setattr(dictation_pipeline, "transcribe_and_inject",
+                        lambda frames, *a, **k: heard.append(b"".join(frames)))
+    gap = 0.72                              # the quiet: 0.07 + 0.72 s, a window short of 0.8
+    audio = np.concatenate([speech(1.0), noise(gap), speech(1.0), noise(0.3)])
+    onset = int((1.0 + gap) * SR)
+    for i in range(0, len(audio), block):
+        feed_block(audio[i:i + block])
+    stop()
+    assert rs.state.current.chunks_submitted == 1
+    assert audio[onset:onset + SR].tobytes() in heard[-1], "the word lost its start"
 
 
 def test_drop_tail_samples_keeps_partial_blocks():
@@ -1206,7 +1263,7 @@ def test_a_phrase_waiting_its_turn_holds_hands_free_open(monkeypatch):
     monkeypatch.setattr(live, "chunk_cfg", Settings())
     monkeypatch.setattr(type_at_pause, "transcribe_phrase", lambda *a, **k: events.append("work"))
     monkeypatch.setattr(dictation_worker, "_instance", SimpleNamespace(submit=jobs.append))
-    pause = SimpleNamespace(tail_samples=lambda: 0, last_pause=1.0)
+    pause = SimpleNamespace(cut_from_end=lambda: (0, 0), last_pause=1.0)
     rec = rs.Recording(silence=Detector(), chunker=pause, frames=[b"\0\0"], samplerate=SR)
     with type_at_pause.chunk_lock:
         type_at_pause.cut_chunk(rec, pause)

@@ -1349,7 +1349,7 @@ def test_a_phrase_cut_at_a_pause_takes_its_recordings_message_to_the_queue(chat,
         auto_period=True, injection_mode="type"))
     next_recording(engine.SAMPLE_RATE)               # recording A
     first = rs.state.current.message
-    pause = types.SimpleNamespace(tail_samples=lambda: 0, last_pause=1.0)
+    pause = types.SimpleNamespace(cut_from_end=lambda: (0, 0), last_pause=1.0)
     monkeypatch.setattr(rs.state.current, "chunker", pause)
     monkeypatch.setattr(rs.state.current, "frames",
                         [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()])
