@@ -1,15 +1,6 @@
 """The GNOME extension is JavaScript that runs inside the user's shell, so a
-tampered or truncated zip matters. Its checksum lookup must not fail open, with
-any problem returning None and the install going ahead.
-
-Two cases are told apart, because they are not the same risk:
-
-  * the release publishes no SHA256SUMS.txt at all (404) — true of every
-    release up to and including v0.5.16, so failing here would break the
-    extension install for every existing user. Proceed, but say so.
-  * the checksums file exists but the extension is not listed in it, or it
-    could not be read for some other reason — that is a real integrity
-    failure and must abort.
+tampered or truncated zip matters. Its checksum lookup must not fail open: any
+problem, a release without SHA256SUMS.txt included, stops the install.
 """
 
 import urllib.error
@@ -24,12 +15,15 @@ def _http_error(code):
     return urllib.error.HTTPError("url", code, "err", {}, None)
 
 
-def test_no_checksums_published_is_backward_compatible(monkeypatch):
-    """A 404 means this release predates checksums — keep working."""
+def test_a_release_without_checksums_aborts(monkeypatch):
+    """Every release since 0.5.17 has SHA256SUMS.txt, and the extension comes
+    from the latest: a 404 is a publishing mistake, and its JavaScript went
+    into GNOME Shell unchecked."""
     monkeypatch.setattr(E.urllib.request, "urlopen",
                         lambda *a, **k: (_ for _ in ()).throw(_http_error(404)))
 
-    assert E._fetch_extension_sha256() is None
+    with pytest.raises(E.ChecksumUnavailableError, match="404"):
+        E._fetch_extension_sha256()
 
 
 def test_a_checksums_file_missing_our_entry_aborts(monkeypatch):

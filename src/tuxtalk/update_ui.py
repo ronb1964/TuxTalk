@@ -276,7 +276,7 @@ def _update_buttons(dialog, method, release):
 def run_appimage_update(release, restart, *, parent=None, failed=None,
                         quitting=lambda: False, run_install=None):
     """Download *release*'s AppImage (checked against the release's
-    SHA256SUMS.txt when it publishes one) and install it, behind a progress
+    SHA256SUMS.txt) and install it, behind a progress
     window over *parent* (None: from the tray) that can't be closed
     meanwhile; then *restart()* onto it, or say why it didn't go in, also to
     *failed(message)*. Nothing is installed once *quitting()*, and nothing
@@ -287,8 +287,9 @@ def run_appimage_update(release, restart, *, parent=None, failed=None,
         said = [""]
 
         def reporting(message, percent):
+            # The download fills the bar to 90 %, the install the rest.
             said[0] = message
-            progress(message, percent)
+            progress(message, percent * 9 // 10)
         path = update_install.download_update(
             release["appimage_url"], release.get("appimage_name", "TuxTalk-update.AppImage"),
             reporting, checksums_url=release.get("checksums_url"))
@@ -296,7 +297,6 @@ def run_appimage_update(release, restart, *, parent=None, failed=None,
             return False, download_failure(said[0])
         if quitting():
             return False, None
-        progress("Installing update...", 90)
 
         def install():
             return update_install.install_appimage_update(path, progress)

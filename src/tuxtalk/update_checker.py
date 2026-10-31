@@ -201,9 +201,9 @@ def fetch_latest_release() -> Optional[dict]:
             - tag_name: Version tag (e.g., "v0.5.0")
             - body: Release notes markdown
             - html_url: URL to release page
-            - assets: List of downloadable assets
-            - appimage_url: Direct download URL for AppImage (if found)
-            - extension_url: Direct download URL for extension (if found)
+            - appimage_url, appimage_name: the AppImage (if found)
+            - deb_url, deb_name, rpm_url, rpm_name: the packages (if found)
+            - checksums_url: the release's SHA256SUMS.txt (if found)
         None: If fetch failed
     """
     try:
@@ -226,16 +226,14 @@ def fetch_latest_release() -> Optional[dict]:
                 "body": data.get("body", ""),
                 "html_url": data.get("html_url", ""),
                 "published_at": data.get("published_at", ""),
-                "assets": data.get("assets", []),
                 "appimage_url": None,
-                "extension_url": None,
                 "checksums_url": None,
                 "rpm_url": None,
                 "deb_url": None,
             }
 
-            # Find AppImage, package, extension, and checksums URLs in assets
-            for asset in result["assets"]:
+            # Find the AppImage, package and checksums URLs in the assets
+            for asset in data.get("assets", []):
                 name = asset.get("name", "").lower()
                 url = asset.get("browser_download_url", "")
 
@@ -250,8 +248,6 @@ def fetch_latest_release() -> Optional[dict]:
                 elif name.endswith(".deb"):
                     result["deb_url"] = url
                     result["deb_name"] = asset.get("name", "")
-                elif "extension" in name and name.endswith(".zip"):
-                    result["extension_url"] = url
 
             return result
 

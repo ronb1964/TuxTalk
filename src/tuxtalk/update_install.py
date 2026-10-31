@@ -11,13 +11,14 @@ import threading
 import urllib.request
 from typing import Optional, Callable, Tuple
 
-from . import installation
+from . import config, installation
 
 
 logger = logging.getLogger(__name__)
 
-# Download directory for updates
-UPDATE_DIR = os.path.expanduser("~/.local/share/TuxTalk/updates")
+# Where updates are downloaded to: the data folder's (the development
+# version's own, or the Flatpak's), so the uninstall finds them.
+UPDATE_DIR = os.path.join(config.get_data_dir(), "updates")
 
 # Anything in UPDATE_DIR this old is left over from an earlier update. An hour
 # is far longer than any installer takes to open its package.
@@ -27,8 +28,7 @@ STALE_UPDATE_S = 60 * 60
 def fetch_expected_sha256(checksums_url: str, filename: str) -> Optional[str]:
     """Fetch the release's SHA256SUMS.txt and return the hash for *filename*.
 
-    Returns None when the file can't be fetched or doesn't list the filename
-    (e.g. releases published before checksums were added).
+    Returns None when the file can't be fetched or doesn't list the filename.
     """
     from .download_utils import parse_sha256sums
     try:
@@ -54,15 +54,17 @@ def download_update(
     Download an update file with progress tracking and integrity checks.
 
     The file is downloaded to a temp name and only renamed into place after
-    the size matches Content-Length and — when the release publishes a
-    SHA256SUMS.txt — the sha256 matches. A truncated or corrupted download
-    can therefore never be handed to the installer.
+    the size matches Content-Length and the sha256 matches the release's
+    SHA256SUMS.txt. A truncated, corrupted or unchecked download can
+    therefore never be handed to the installer. Why one failed is said last
+    to *progress_callback*, at 0 %.
 
     Args:
         url: Download URL
         filename: Name for saved file
         progress_callback: Optional function(message, percent) for progress updates
-        checksums_url: Optional URL of the release's SHA256SUMS.txt asset
+        checksums_url: URL of the release's SHA256SUMS.txt asset; without
+            one nothing is downloaded
 
     Returns:
         str: Path to downloaded file, or None if failed
@@ -79,25 +81,26 @@ def download_update(
         if progress_callback:
             progress_callback("Starting download...", 0)
 
-        # Look up the expected hash. Releases published before checksums
-        # existed pass checksums_url=None, and only those may skip the hash.
-        #
-        # If the release DOES publish a checksums file and we still cannot get
-        # a hash for this filename, that is a failure, not a licence to
-        # proceed: the asset may be truncated, malformed, or serving someone
-        # else's content, which are exactly the cases the check exists for.
-        expected_sha256 = None
-        if checksums_url:
-            expected_sha256 = fetch_expected_sha256(checksums_url, filename)
-            if not expected_sha256:
-                logger.error(
-                    f"{filename} is not listed in the release's SHA256SUMS.txt — "
-                    f"refusing to install an unverified update"
-                )
-                if progress_callback:
-                    progress_callback("Could not verify the update's integrity", 0)
-                return None
-            logger.info(f"Verifying download against published sha256 for {filename}")
+        # Every release since 0.5.17 publishes SHA256SUMS.txt, and only one
+        # newer than this TuxTalk is offered, so one without it was published
+        # by mistake. Its update isn't installed unchecked: a .deb or .rpm
+        # goes in as root. A checksums file that can't be read, or that
+        # doesn't list this file, may be truncated or someone else's: the
+        # same refusal.
+        if not checksums_url:
+            logger.error(f"The release publishes no SHA256SUMS.txt; refusing to install "
+                         f"{filename} unchecked")
+            if progress_callback:
+                progress_callback("This release has no checksums to check the update against", 0)
+            return None
+        expected_sha256 = fetch_expected_sha256(checksums_url, filename)
+        if not expected_sha256:
+            logger.error(f"{filename} is not listed in the release's SHA256SUMS.txt — "
+                         f"refusing to install an unverified update")
+            if progress_callback:
+                progress_callback("Could not verify the update's integrity", 0)
+            return None
+        logger.info(f"Verifying download against published sha256 for {filename}")
 
         # Each 64 KB chunk calls this; only a new whole percent is passed on,
         # since every callback queues GTK redraws on the main loop.
@@ -122,9 +125,8 @@ def download_update(
             progress_hook=progress_hook,
             expected_sha256=expected_sha256,
             user_agent="TuxTalk-UpdateChecker",
+            report=progress_callback,
         ):
-            if progress_callback:
-                progress_callback("Download failed or file was corrupted", 0)
             return None
 
         if progress_callback:
@@ -224,6 +226,7 @@ def install_package_update(package_path: str, install_type: str) -> Tuple[bool, 
         try:
             proc = subprocess.Popen(argv, stdout=output, stderr=subprocess.STDOUT)
         except FileNotFoundError:
+            _remove_package(package_path)
             return (False, "pkexec (PolicyKit) is not available. Please install the "
                            "update through your package manager.")
 
@@ -382,7 +385,7 @@ def install_appimage_update(
     """
     try:
         if progress_callback:
-            progress_callback("Installing update...", 50)
+            progress_callback("Installing update...", 90)
 
         space_problem = _not_enough_space(downloaded_path, installation.APPIMAGE_DIR)
         if space_problem:
@@ -391,11 +394,11 @@ def install_appimage_update(
             return (False, msg)
 
         if progress_callback:
-            progress_callback("Copying to AppImages folder...", 60)
+            progress_callback("Copying to AppImages folder...", 95)
         _install_appimage_file(downloaded_path, installation.APPIMAGE_PATH)
 
         if progress_callback:
-            progress_callback("Update installed!", 90)
+            progress_callback("Update installed!", 100)
 
         # Only this download: the folder is shared, and the tray and
         # Preferences may each be downloading an update into it.

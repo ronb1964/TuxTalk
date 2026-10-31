@@ -53,7 +53,7 @@ logger = setup_logger(__name__)
 PERSONAL_DATA = ("stats.json", "stats.json.bak", file_transcribe.RECENT_FILE)
 # The rest of what TuxTalk puts there, downloaded or rebuilt by itself
 # (tests/test_uninstall.py makes every name in the code pick one of the two).
-DOWNLOADED_DATA = ("cuda", "ai-engine", "parakeet-ultra", "whisper-vulkan", "kwin",
+DOWNLOADED_DATA = ("cuda", "ai-engine", "parakeet-ultra", "whisper-vulkan", "kwin", "updates",
                    ".first_run_done", ".hotkey_test_mode", "remote_desktop_token",
                    gnome_keybindings.BACKUP_NAME)
 # The folders in it whose programs TuxTalk runs, stopped before deleting.

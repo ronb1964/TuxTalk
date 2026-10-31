@@ -6,8 +6,8 @@ against it. fetch_expected_sha256() returns None for *any* problem — the asset
 download_update() must not treat None as "no checksum published, carry on" and
 install the file after only a length check.
 
-Releases genuinely published before checksums existed pass checksums_url=None.
-That is the only case where skipping the hash is legitimate.
+A release without SHA256SUMS.txt (checksums_url=None) isn't installed either:
+every release since 0.5.17 has one, so its absence is a publishing mistake.
 """
 
 import pytest
@@ -78,13 +78,36 @@ def test_a_published_checksum_is_passed_through_to_the_downloader(no_real_downlo
     assert no_real_downloads[0]["expected_sha256"] == "a" * 64
 
 
-def test_a_release_with_no_checksums_asset_still_updates(no_real_downloads):
-    """Backward compatibility: releases published before SHA256SUMS existed."""
+def test_a_release_without_a_checksums_file_isnt_installed(no_real_downloads):
+    """Every release since 0.5.17 publishes SHA256SUMS.txt and only a newer
+    one is offered, so one without it was published by mistake: its .deb or
+    .rpm went in as root unchecked."""
+    said = []
     result = update_install.download_update(
-        "https://example.invalid/TalkType.AppImage",
-        "TalkType.AppImage",
+        "https://example.invalid/tuxtalk_9.9.9_amd64.deb",
+        "tuxtalk_9.9.9_amd64.deb",
+        lambda message, percent: said.append((message, percent)),
         checksums_url=None,
     )
 
-    assert result is not None
-    assert no_real_downloads[0]["expected_sha256"] is None
+    assert result is None
+    assert not no_real_downloads
+    assert said[-1] == ("This release has no checksums to check the update against", 0)
+
+
+def test_a_failed_download_says_why(monkeypatch, tmp_path):
+    """It said only "Download failed or file was corrupted", whatever the
+    reason the log had."""
+    from tuxtalk import download_utils
+
+    def not_found(url, dest, **kwargs):
+        raise download_utils.DownloadError("HTTP 404 Not Found")
+    monkeypatch.setattr(download_utils, "fetch_file", not_found)
+    monkeypatch.setattr(update_install, "UPDATE_DIR", str(tmp_path))
+    monkeypatch.setattr(update_install, "fetch_expected_sha256", lambda url, filename: "a" * 64)
+    said = []
+    assert update_install.download_update(
+        "https://example.invalid/TuxTalk.AppImage", "TuxTalk.AppImage",
+        lambda message, percent: said.append((message, percent)),
+        checksums_url="https://example.invalid/SHA256SUMS.txt") is None
+    assert said[-1] == ("Download failed: HTTP 404 Not Found", 0)

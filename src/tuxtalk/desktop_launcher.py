@@ -10,7 +10,7 @@ import threading
 from pathlib import Path
 from typing import Optional, Tuple
 
-from . import installation, menu_cache, update_checker
+from . import __version__, installation, menu_cache
 from .autostart import desktop_exec_program
 from .logger import setup_logger
 
@@ -124,7 +124,7 @@ def create_desktop_launcher(appimage_exec_path: Optional[str] = None) -> Tuple[b
     try:
         os.makedirs(os.path.dirname(DESKTOP_FILE_PATH), exist_ok=True)
         icon_name = install_app_icon() or "audio-input-microphone"
-        version = update_checker.get_current_version()
+        version = __version__
         appimage_exec_path = appimage_exec_path or installation.APPIMAGE_PATH
         logger.info(f"Desktop launcher Exec path: {appimage_exec_path}")
         # Quoted where it must be: a download named "TuxTalk (1).AppImage"

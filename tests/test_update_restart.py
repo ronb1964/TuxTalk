@@ -521,6 +521,29 @@ def test_the_tray_says_why_an_appimage_update_didnt_go_in(monkeypatch, idle_queu
     assert told.pop().startswith(update_ui.UNEXPECTED)
 
 
+def test_the_update_bar_never_goes_backwards(monkeypatch, tmp_path):
+    """It filled to 100 % with the download, then fell to 50 % to install."""
+    from tuxtalk import update_ui
+    monkeypatch.setattr(installation, "APPIMAGE_DIR", str(tmp_path / "AppImages"))
+    monkeypatch.setattr(installation, "APPIMAGE_PATH", str(tmp_path / "AppImages/TuxTalk.AppImage"))
+    download = tmp_path / "TuxTalk.AppImage"
+
+    def downloads(url, name, progress, **k):
+        for percent in (0, 40, 100):
+            progress("Downloading...", percent)
+        download.write_bytes(b"x" * 1000)
+        return str(download)
+    monkeypatch.setattr(update_install, "download_update", downloads)
+    seen = []
+    monkeypatch.setattr(update_ui, "run_with_progress",
+                        lambda parent, title, text, work, finish:
+                        finish(work(lambda message, percent: seen.append(percent))))
+    update_ui.run_appimage_update({"appimage_url": "https://x/TuxTalk.AppImage"},
+                                  restart=lambda: seen.append("restarted"))
+    assert seen[-1] == "restarted"
+    assert seen[:-1] == sorted(seen[:-1]) and seen[-2] == 100
+
+
 # ---- Preferences asks the tray ------------------------------------------
 
 def test_dbus_restart_app_reaches_the_tray():
@@ -678,6 +701,21 @@ def test_the_package_is_deleted_once_installed_or_refused(tmp_path, monkeypatch,
     assert not package.exists(), "a package hundreds of MB big was left behind"
 
 
+def test_the_package_is_deleted_when_pkexec_is_missing(tmp_path, monkeypatch):
+    package = _package(tmp_path)
+
+    def no_pkexec(*a, **k):
+        raise FileNotFoundError("pkexec")
+    monkeypatch.setattr(update_install, "package_install_argv",
+                        lambda t, p: ["pkexec", "dpkg", "-i", p])
+    monkeypatch.setattr(uc.subprocess, "Popen", no_pkexec)
+
+    ok, message = update_install.install_package_update(str(package), "deb")
+
+    assert not ok and "pkexec" in message
+    assert not package.exists()
+
+
 def test_a_slow_installer_keeps_its_package_until_it_finishes(tmp_path, monkeypatch):
     import subprocess
     import threading
@@ -787,10 +825,12 @@ def test_download_progress_is_passed_on_once_per_percent(tmp_path, monkeypatch):
         pathlib.Path(dest).write_bytes(b"")
         return True
     monkeypatch.setattr("tuxtalk.download_utils.download_file", fake_download)
+    monkeypatch.setattr(update_install, "fetch_expected_sha256", lambda url, name: "a" * 64)
     seen = []
 
     update_install.download_update("https://example.invalid/x", "x.deb",
-                       lambda msg, pct: seen.append(pct))
+                                   lambda msg, pct: seen.append(pct),
+                                   checksums_url="https://example.invalid/SHA256SUMS.txt")
 
     downloading = [p for p in seen if 0 <= p <= 100]
     assert len(downloading) <= 103, f"{len(seen)} progress callbacks for one download"

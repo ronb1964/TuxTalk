@@ -17,9 +17,9 @@ logger = logging.getLogger(__name__)
 
 
 EXTENSION_UUID = 'talktype@ronb1964.github.io'
-# Every release publishes the zip under this TalkType name and as
-# tuxtalk-gnome-extension.zip, so older installs find it too.
-EXTENSION_ZIP_NAME = 'talktype-gnome-extension.zip'
+# Every release since 0.15.0 also publishes it as talktype-gnome-extension.zip,
+# for TalkType installs, which look for that name.
+EXTENSION_ZIP_NAME = 'tuxtalk-gnome-extension.zip'
 _LATEST_RELEASE = 'https://github.com/ronb1964/TuxTalk/releases/latest/download'
 EXTENSION_DOWNLOAD_URL = f'{_LATEST_RELEASE}/{EXTENSION_ZIP_NAME}'
 # The release publishes SHA256SUMS.txt alongside the zip. The extension
@@ -29,24 +29,17 @@ EXTENSION_CHECKSUMS_URL = f'{_LATEST_RELEASE}/SHA256SUMS.txt'
 
 
 class ChecksumUnavailableError(Exception):
-    """The release publishes checksums, but the extension's could not be read.
-
-    Distinct from "this release publishes no checksums at all", which is a
-    supported state (every release up to v0.5.16) and returns None instead.
-    """
+    """The extension's checksum in the release could not be read."""
 
 
-def _fetch_extension_sha256() -> Optional[str]:
-    """Fetch the expected sha256 of the extension zip from the release.
+def _fetch_extension_sha256() -> str:
+    """Fetch the expected sha256 of the extension zip from the latest release.
 
-    Returns None when the release publishes no SHA256SUMS.txt at all (a 404),
-    which is true of every release up to and including v0.5.16 — those must
-    keep installing, verified by the size/truncation check only.
-
-    Raises ChecksumUnavailableError when the checksums file exists but the
-    extension is not listed in it, or when the fetch fails for any other
-    reason: an unverifiable zip must not be treated like a release that never
-    published checksums, or the check would miss the very cases it exists for.
+    Raises ChecksumUnavailableError when the release has no SHA256SUMS.txt
+    (every release since 0.5.17 has one: without it, one was published by
+    mistake), when the file doesn't list the extension, or when the fetch
+    fails for any other reason: the zip is JavaScript that runs in GNOME
+    Shell, and isn't installed unchecked.
     """
     from .download_utils import parse_sha256sums
     try:
@@ -56,15 +49,11 @@ def _fetch_extension_sha256() -> Optional[str]:
             sums = parse_sha256sums(response.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         if e.code == 404:
-            # A 404 is also what a release that can't be found at all gives
-            # (the 0.15.0 test run, before the repo was renamed), so the log
-            # says both, with the address, rather than blaming the release.
-            logger.info(
+            # Also what a release that can't be found at all gives, so the
+            # message says both, with the address.
+            raise ChecksumUnavailableError(
                 f"No SHA256SUMS.txt at {EXTENSION_CHECKSUMS_URL} (404): either the "
-                "release publishes none, or the release can't be found. Installing "
-                "the extension with size verification only"
-            )
-            return None
+                "release publishes none, or the release can't be found")
         raise ChecksumUnavailableError(f"Could not fetch extension checksums: {e}")
     except Exception as e:
         raise ChecksumUnavailableError(f"Could not fetch extension checksums: {e}")
@@ -246,16 +235,12 @@ def download_and_install_extension(progress_callback: Optional[Callable] = None)
                     report(f"Downloading... {int((downloaded / total_size) * 100)}%", percent)
 
             # Download extension zip. The timeout keeps a stalled connection
-            # from hanging the install dialog forever. The sha256 (when the
-            # release publishes it) verifies the JS bundle before install.
+            # from hanging the install dialog forever. The sha256 verifies
+            # the JS bundle before install.
             from .download_utils import download_file
             try:
                 expected_sha256 = _fetch_extension_sha256()
             except ChecksumUnavailableError as e:
-                # The release publishes checksums but this zip's could not be
-                # established. Installing unverified JavaScript into the user's
-                # GNOME Shell on the strength of "the check didn't work" is
-                # exactly what the check exists to prevent.
                 logger.error(f"Refusing to install an unverified extension: {e}")
                 report("Could not verify the extension download", 0)
                 return False
