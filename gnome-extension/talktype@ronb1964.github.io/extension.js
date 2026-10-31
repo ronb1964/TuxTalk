@@ -20,7 +20,7 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 const TuxTalkIface = `
 <node>
   <interface name="io.github.ronb1964.TalkType">
-    <!-- Properties/Status -->
+    <!-- Status -->
     <method name="GetStatus">
       <arg type="a{sv}" direction="out" name="status"/>
     </method>
@@ -214,8 +214,10 @@ class TuxTalkIndicator extends PanelMenu.Button {
                 this._handleUpdateCheckResult(params);
             }));
 
-            // Track focused window class so TuxTalk can pick the right
-            // paste keystroke (Ctrl+V for normal apps, Ctrl+Shift+V for terminals).
+            // Tell TuxTalk which window has the focus: its class picks the
+            // paste keystroke (Ctrl+Shift+V in terminals), and its id and frame
+            // keep a send, an undo or "edit that" in the window the words went
+            // into, and place the floating messages over it.
             this._setupFocusTracking();
             // TuxTalk may already be on the bus: watch_name's appeared
             // callback can run before the proxy is ready.
@@ -468,9 +470,17 @@ class TuxTalkIndicator extends PanelMenu.Button {
             return;
         }
 
-        // The app shows its own result window for the app itself. Only an
-        // extension update, which that window can't offer, needs the Updates tab.
-        if (!updateAvailable && extUpdate) {
+        // The app shows its own result window for the app itself, which can't
+        // offer the extension. With an app update in that window, the Updates
+        // tab opening too would be a second window at once: the notice stays
+        // in the message list for after the app's update.
+        if (!extUpdate)
+            return;
+        if (updateAvailable) {
+            Main.notify('TuxTalk extension update available',
+                'After updating TuxTalk, install it from Preferences → Updates & Backup, '
+                + 'then log out and back in.');
+        } else {
             Main.notify('TuxTalk extension update available', 'Opening Updates & Backup to install it.');
             this._proxy?.OpenPreferencesUpdatesRemote();
         }

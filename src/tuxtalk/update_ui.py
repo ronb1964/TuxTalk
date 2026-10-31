@@ -116,8 +116,8 @@ def check_from_menu(show_result, quitting=lambda: False):
 def auto_check_for_updates(show_result, quitting=lambda: False):
     """The once-a-day check at start-up, when it's on, on a thread: an app
     update opens *show_result(result)*, the same window as Check for
-    Updates, and an extension update only a notification. False, for its
-    GLib timer."""
+    Updates, and an extension update a notification, also when it comes
+    with an app update. False, for its GLib timer."""
     from .config import load_config, record_update_check
     config = load_config()
     if not config.auto_check_updates:
@@ -143,12 +143,15 @@ def auto_check_for_updates(show_result, quitting=lambda: False):
             GLib.idle_add(record_update_check, update_checker.get_current_timestamp())
             if not (result and result.get("success")):
                 logger.debug(f"Update check failed: {result.get('error', 'unknown')}")
-            elif result.get("update_available", False):
+                return
+            if result.get("update_available", False):
                 # The window a manual check opens, not a surprise Preferences.
                 GLib.idle_add(show, result)
-            elif result.get("extension_update", False):
+            # Its own check: that window offers only the app, and an update
+            # from an older release usually brings both.
+            if result.get("extension_update", False):
                 GLib.idle_add(extension_update_notice)
-            else:
+            if not (result.get("update_available") or result.get("extension_update")):
                 logger.info("No updates available")
         except Exception as e:
             logger.error(f"Error in auto-update check: {e}")
