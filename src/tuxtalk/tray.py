@@ -421,7 +421,7 @@ class DictationTray(ServiceLifecycle, Presets):
         except Exception as e:
             logger.error(f"SetModel failed: {e}", exc_info=True)
 
-    def _launch_preferences(self, tab=None):
+    def launch_preferences(self, tab=None):
         """Launch the preferences window subprocess.
 
         Args:
@@ -449,21 +449,21 @@ class DictationTray(ServiceLifecycle, Presets):
     def open_preferences(self, _):
         """Launch preferences window."""
         try:
-            self._launch_preferences()
+            self.launch_preferences()
         except Exception as e:
             logger.error(f"Failed to open preferences: {e}")
 
     def open_preferences_stats(self, _):
         """Open Preferences on the Stats tab (tray menu "Your Stats...")."""
         try:
-            self._launch_preferences(tab="stats")
+            self.launch_preferences(tab="stats")
         except Exception as e:
             logger.error(f"Failed to open preferences stats tab: {e}")
 
     def open_preferences_updates(self, _):
         """Launch preferences window directly to Updates tab."""
         try:
-            self._launch_preferences(tab="updates")
+            self.launch_preferences(tab="updates")
         except Exception as e:
             logger.error(f"Failed to open preferences updates tab: {e}")
 

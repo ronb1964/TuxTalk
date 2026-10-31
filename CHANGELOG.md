@@ -467,6 +467,13 @@ before 0.15.0, so older entries use that name.
   arrows, Home and End), and a screen reader can read it, as in Help.
   Before, a keyboard could only reach its Close button, so you saw the
   first third of the list.
+- In TuxTalk's menu window (the one you get on a desktop with no system
+  tray), turning dictation off while a long dictation was still being typed
+  flipped the switch back on for several seconds. It stays off now.
+- "Add TuxTalk to the Top Bar..." in that window opened Preferences with
+  Install Extension tucked away in a closed section that said everything
+  was set up. On a desktop with no tray, a missing GNOME extension now
+  counts as something to fix, so System check opens on it.
 
 ## [0.18.2] - 2026-10-23
 
