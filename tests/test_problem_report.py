@@ -1,6 +1,7 @@
 """Report a Problem: one place that gathers what helps find a problem, shown
 in full before the person shares it anywhere. TuxTalk sends nothing itself.
 """
+import threading
 import time
 import urllib.parse
 
@@ -132,6 +133,12 @@ def window(monkeypatch):
     yield make
     for win in made:
         win.window.destroy()
+    # Before the patches go: a report still being gathered would look up
+    # the real build() once they had.
+    for thread in threading.enumerate():
+        if thread.name == "problem-report":
+            thread.join(5)
+            assert not thread.is_alive()
 
 
 def _labels(widget):
