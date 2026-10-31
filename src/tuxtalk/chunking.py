@@ -14,7 +14,6 @@ from typing import NamedTuple
 
 import numpy as np
 
-
 # Talking needed before a pause can end a chunk: a cough or a click is shorter.
 MIN_SPEECH_S = 0.3
 # Silence kept at the end of a chunk, so the last word's decay is never cut.
