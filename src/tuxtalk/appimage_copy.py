@@ -7,9 +7,12 @@ import subprocess
 import threading
 import time
 
-from gi.repository import GLib, Gtk
+import gi
 
-from .logger import setup_logger
+gi.require_version("Gtk", "3.0")
+from gi.repository import GLib, Gtk  # noqa: E402
+
+from .logger import setup_logger  # noqa: E402
 
 logger = setup_logger(__name__)
 
@@ -21,18 +24,20 @@ _thread = None
 
 
 def put_in_place():
-    """First run, from an AppImage: the menu launcher, start at login (on
-    for new users: a dictation tool is only useful when it's already
-    running), and the copy into ~/AppImages, which both point at. Returns
-    whether TuxTalk is (or will be) in ~/AppImages and whether a launcher
-    was made, for the Ready screen."""
+    """First run: start at login (on for new users: a dictation tool is only
+    useful when it's already running) and, from a self-managed AppImage, the
+    menu launcher and the copy into ~/AppImages, which both point at. A
+    package's launcher, the AUR's included, is the package manager's: a copy
+    of the AUR's AppImage would override it and never be updated by pacman.
+    Returns whether TuxTalk is (or will be) in ~/AppImages and whether a
+    launcher was made, for the Ready screen."""
+    from . import installation
     from .desktop_launcher import create_desktop_launcher, desktop_launcher_exists
-    from .installation import is_running_from_appimage, running_appimage_location
     installed = launcher_created = False
     copy_from = None
     try:
-        if is_running_from_appimage():
-            installed, current_path = running_appimage_location()
+        if installation.get_install_type() == "appimage":
+            installed, current_path = installation.running_appimage_location()
             if not installed and current_path:
                 copy_from, installed = current_path, True       # it will be, once copied
             if not desktop_launcher_exists():
@@ -148,6 +153,7 @@ def reboot_when_copied(parent, button) -> None:
     """Restart computer now, once the copy is done: *button* (the one
     clicked) says so meanwhile; *parent* is the window messages go over."""
     from .ui_style import show_message
+    label = button.get_label()
     if copying():
         button.set_label("Finishing install…")
         button.set_sensitive(False)
@@ -160,6 +166,7 @@ def reboot_when_copied(parent, button) -> None:
 
     def too_slow():
         logger.warning("The AppImage copy is still going after two minutes; not restarting")
+        button.set_label(label)
         button.set_sensitive(True)
         show_message(parent, Gtk.MessageType.WARNING, "TuxTalk is still being copied",
                      "Your disk is taking a while. Wait a minute, then restart your "

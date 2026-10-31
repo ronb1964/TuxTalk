@@ -36,7 +36,7 @@ def _icon_source() -> Optional[str]:
     """The PNG to install: the running AppImage's own, else the project's
     (running from the source); None when there is neither."""
     candidates = []
-    appdir = os.environ.get("APPDIR", "") if os.environ.get("APPIMAGE") else ""
+    appdir = os.environ.get("APPDIR", "") if installation.get_running_appimage_path() else ""
     if appdir:
         candidates += [os.path.join(appdir, "io.github.ronb1964.TuxTalk.png"),
                        os.path.join(appdir, "tuxtalk.png"),

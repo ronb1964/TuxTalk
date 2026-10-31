@@ -152,6 +152,7 @@ def test_first_run_copy_is_atomic(tmp_path, appimages, monkeypatch):
     running.parent.mkdir()
     running.write_bytes(b"x" * 1000)
     monkeypatch.setenv("APPIMAGE", str(running))
+    monkeypatch.setenv("APPDIR", os.path.dirname(installation.__file__))
 
     def half_copy(src, dst):
         pathlib.Path(dst).write_bytes(b"x" * 10)
@@ -169,6 +170,7 @@ def test_first_run_copy_succeeds(tmp_path, appimages, monkeypatch):
     running = tmp_path / "TuxTalk-v9.9.9-x86_64.AppImage"
     running.write_bytes(b"x" * 1000)
     monkeypatch.setenv("APPIMAGE", str(running))
+    monkeypatch.setenv("APPDIR", os.path.dirname(installation.__file__))
 
     ok, _ = update_install.copy_appimage_to_standard_location()
 

@@ -8,9 +8,6 @@
   "ai_cleanup.py::fix_self_corrections": {
    "decisions": 24
   },
-  "autostart.py::get_launch_command": {
-   "decisions": 22
-  },
   "compositor_focus.py::_CosmicWindows._on_event": {
    "decisions": 16
   },
@@ -25,9 +22,6 @@
   },
   "custom_words.py::fix_spelling": {
    "decisions": 28
-  },
-  "installation.py::get_install_type": {
-   "decisions": 16
   },
   "kwin_hotkeys.py::_app_shortcut_clashes": {
    "decisions": 19

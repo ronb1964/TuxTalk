@@ -75,8 +75,9 @@ def test_an_extracted_appimage_s_own_icon_isnt_named_either(tmp_path, monkeypatc
     extracted = tmp_path / "appimage_extracted_ab12" / "squashfs-root"
     (extracted / "AppDir").mkdir(parents=True)
     (extracted / "AppDir/io.github.ronb1964.TuxTalk.svg").write_text("<svg/>")
-    monkeypatch.setenv("APPIMAGE", str(tmp_path / "TuxTalk.AppImage"))
     monkeypatch.setenv("APPDIR", str(extracted))
+    monkeypatch.setattr(autostart.installation, "get_running_appimage_path",
+                        lambda: str(tmp_path / "TuxTalk.AppImage"))
     monkeypatch.setattr(autostart, "_project_root", lambda: str(extracted))
     monkeypatch.setattr(autostart.sys, "executable", str(extracted / "usr/bin/python3"))
     monkeypatch.setattr(autostart.os.path, "expanduser", lambda p: p.replace("~", str(home), 1))

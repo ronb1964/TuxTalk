@@ -5,9 +5,14 @@ to run setup from (usually ~/Downloads). Such an entry keeps launching that old
 copy, which may need libfuse2 and then silently never starts at login on
 systems without it, so the installed AppImage repairs it on startup.
 """
+import pathlib
+
 import pytest
 
 from tuxtalk import autostart, config
+
+# Set as APPDIR: this code runs from inside the AppImage APPIMAGE names.
+CODE = str(pathlib.Path(autostart.__file__).resolve().parent)
 
 
 @pytest.fixture
@@ -28,6 +33,7 @@ def _env(home, monkeypatch):
     monkeypatch.setattr(config, "DEV_MODE", False)
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     monkeypatch.setenv("APPIMAGE", str(installed))
+    monkeypatch.setenv("APPDIR", CODE)
     return home, installed, entry
 
 
@@ -70,6 +76,8 @@ def test_only_the_appimage_repairs(env, monkeypatch):
     home, _installed, entry = env
     _entry(entry, str(home / "Downloads" / "TalkType-v0.10.0-x86_64.AppImage"))
 
+    monkeypatch.delenv("APPDIR")              # a .deb started by another AppImage
+    assert autostart.repair_stale_appimage_autostart() is False
     monkeypatch.delenv("APPIMAGE")                         # dev, .deb, .rpm
     assert autostart.repair_stale_appimage_autostart() is False
     monkeypatch.setenv("APPIMAGE", "/x/TalkType.AppImage")

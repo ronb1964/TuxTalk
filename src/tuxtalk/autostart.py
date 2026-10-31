@@ -17,6 +17,7 @@ import sys
 import glob
 import subprocess
 
+from . import installation
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -56,9 +57,10 @@ def desktop_exec_program(path: str) -> str:
 def get_launch_command(prefer_installed_appimage: bool = False) -> str:
     """Return the most portable command to launch the tray.
 
-    Order: dev script → AppImage path → packaged launcher (absolute) → PATH
-    lookup → bare interpreter (last resort). See the module docstring for why the
-    packaged launcher must win over a bare-Python invocation.
+    Order: dev script → self-managed AppImage path → packaged launcher
+    (absolute; the AUR's too) → PATH lookup → bare interpreter (last
+    resort). See the module docstring for why the packaged launcher must win
+    over a bare-Python invocation.
 
     From an AppImage, the installed copy (~/AppImages/TuxTalk.AppImage) wins
     over the file actually running, which on first run is usually the one in
@@ -80,24 +82,9 @@ def get_launch_command(prefer_installed_appimage: bool = False) -> str:
                 f'PYTHONPATH=./src:/usr/lib64/python3.13/site-packages:'
                 f'/usr/lib/python3.13/site-packages {sys.executable} -m tuxtalk.tray"')
 
-    # Running from an AppImage: relaunch the AppImage itself (defaults to tray).
-    appimage_path = os.environ.get('APPIMAGE')
-    if appimage_path and os.path.isfile(appimage_path) and os.access(appimage_path, os.X_OK):
-        if prefer_installed_appimage or os.path.isfile(INSTALLED_APPIMAGE):
-            return desktop_exec_program(INSTALLED_APPIMAGE)
-        return desktop_exec_program(appimage_path)
-
-    # Inside an AppImage mount but APPIMAGE unset: find the AppImage on disk.
-    if '/tmp/.mount_' in sys.executable or 'squashfs-root' in sys.executable:
-        for pattern in (os.path.expanduser('~/AppImages/TuxTalk-*.AppImage'),
-                        os.path.expanduser('~/Downloads/TuxTalk-*.AppImage'),
-                        os.path.expanduser('~/AppImages/TalkType-*.AppImage'),
-                        os.path.expanduser('~/Downloads/TalkType-*.AppImage')):
-            matches = glob.glob(pattern)
-            if matches:
-                latest = max(matches, key=os.path.getmtime)
-                if os.access(latest, os.X_OK):
-                    return desktop_exec_program(latest)
+    appimage_command = _appimage_command(prefer_installed_appimage)
+    if appimage_command:
+        return appimage_command
 
     # Installed .deb/.rpm: prefer the KNOWN ABSOLUTE launcher, not `which`
     # (a stray ~/.local/bin/tuxtalk must never be written into autostart).
@@ -119,6 +106,33 @@ def get_launch_command(prefer_installed_appimage: bool = False) -> str:
 
     # Last resort — may lack the bundled environment.
     return f'{sys.executable} -m tuxtalk.tray'
+
+
+def _appimage_command(prefer_installed_appimage):
+    """get_launch_command's answer for a self-managed AppImage, or None:
+    the AUR's is pacman's, started by its /usr/bin/tuxtalk."""
+    install_type = installation.get_install_type()
+    # Relaunch the AppImage itself (defaults to tray).
+    appimage_path = installation.get_running_appimage_path()
+    if (install_type == "appimage" and appimage_path and os.path.isfile(appimage_path)
+            and os.access(appimage_path, os.X_OK)):
+        if prefer_installed_appimage or os.path.isfile(INSTALLED_APPIMAGE):
+            return desktop_exec_program(INSTALLED_APPIMAGE)
+        return desktop_exec_program(appimage_path)
+
+    # Inside an AppImage mount but APPIMAGE unset: find the AppImage on disk.
+    if install_type != "aur" and ('/.mount_' in sys.executable
+                                  or 'squashfs-root' in sys.executable):
+        for pattern in (os.path.expanduser('~/AppImages/TuxTalk-*.AppImage'),
+                        os.path.expanduser('~/Downloads/TuxTalk-*.AppImage'),
+                        os.path.expanduser('~/AppImages/TalkType-*.AppImage'),
+                        os.path.expanduser('~/Downloads/TalkType-*.AppImage')):
+            matches = glob.glob(pattern)
+            if matches:
+                latest = max(matches, key=os.path.getmtime)
+                if os.access(latest, os.X_OK):
+                    return desktop_exec_program(latest)
+    return None
 
 
 def get_icon_path() -> str:
@@ -145,7 +159,7 @@ def _in_running_appimage(path) -> bool:
     naming it has no icon at login."""
     if "/.mount_" in path:
         return True
-    appdir = os.environ.get("APPDIR", "") if os.environ.get("APPIMAGE") else ""
+    appdir = os.environ.get("APPDIR", "") if installation.get_running_appimage_path() else ""
     return bool(appdir) and path.startswith(appdir.rstrip("/") + "/")
 
 
@@ -392,9 +406,9 @@ def repair_stale_appimage_autostart() -> bool:
     entries, the dev version, .deb/.rpm and Flatpak installs are never
     touched. Returns True if the entry was rewritten.
     """
-    if os.environ.get("FLATPAK_ID") or not os.environ.get("APPIMAGE"):
-        return False
     from . import config
+    if installation.get_install_type() != "appimage":
+        return False
     if config.DEV_MODE or not os.path.isfile(INSTALLED_APPIMAGE):
         return False
     lines = _enabled_entry()
