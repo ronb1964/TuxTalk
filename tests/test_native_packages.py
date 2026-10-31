@@ -162,7 +162,8 @@ def test_without_the_appimage_it_says_to_build_it_first(project, script):
 def test_the_package_gets_its_checksum_for_the_updater(project, script, package):
     assert _build(project, script).returncode == 0
     sums = (project[0] / "SHA256SUMS.txt").read_text()
-    assert sums.split()[1] == package
+    digest = hashlib.sha256((project[0] / package).read_bytes()).hexdigest()
+    assert sums.split() == [digest, package]
 
 
 def _listing(tree, license_folder):
