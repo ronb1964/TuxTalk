@@ -195,17 +195,28 @@ def _look(focused_class, answer, done):
         done.set()
 
 
+# Apps whose name on the accessibility bus is in neither their window class
+# nor its last part: the class and the name, as _plain has them. Brave
+# names itself "Brave" there, and its windows "brave-browser". Only known
+# pairs: a name like a class's first word ("Code", "code-oss") may be
+# another app, whose stale password field would then refuse the dictation.
+_BUS_NAMES = {"bravebrowser": "brave"}
+
+
+def _plain(text: str) -> str:
+    """*text*'s letters and digits, without case."""
+    return re.sub(r"[^0-9a-z]", "", text.casefold())
+
+
 def _names_the_app(name: str, wm_class: str) -> bool:
     """Whether the accessibility bus's app *name* ("kwrite", "Text Editor",
     "Brave") is the app of the window class *wm_class* ("org.kde.kwrite",
     "org.gnome.TextEditor", "brave-browser"): the same letters and digits,
-    ignoring case, as the whole class, its last part or that part's first
-    word before a dash."""
-    def plain(text):
-        return re.sub(r"[^0-9a-z]", "", text.casefold())
-    last = wm_class.rsplit(".", 1)[-1]
-    return bool(plain(name)) and plain(name) in {plain(wm_class), plain(last),
-                                                  plain(last.split("-", 1)[0])}
+    ignoring case, as the whole class or its last part, or a known pair
+    (_BUS_NAMES)."""
+    said, whole = _plain(name), _plain(wm_class)
+    return bool(said) and said in {whole, _plain(wm_class.rsplit(".", 1)[-1]),
+                                   _BUS_NAMES.get(whole)}
 
 
 def _a11y_bus(deadline):

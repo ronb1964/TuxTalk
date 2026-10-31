@@ -593,6 +593,22 @@ def test_a_password_field_counts_when_asking_for_the_focused_app_fails(bus):
     assert atspi_helper.focused_is_password(focused_class=broken) is True
 
 
+@pytest.mark.parametrize("background_first", [True, False])
+def test_code_behind_code_oss_doesnt_refuse_the_dictation(bus, background_first):
+    """Code's stale login box counted as Code - OSS's own, since "Code" is
+    the first word of the class code-oss: dictation into Code - OSS was refused."""
+    apps = [("Code", PASSWORD), ("Code OSS", TEXT)]
+    for name, role in apps if background_first else apps[::-1]:
+        bus.app(name, role)
+    assert atspi_helper.focused_is_password(focused_class=lambda: "code-oss") is False
+
+
+def test_an_app_named_like_the_classs_first_word_cant_clear_a_password_field(bus):
+    bus.app("Firefox", PASSWORD)
+    bus.app("Code", TEXT)
+    assert atspi_helper.focused_is_password(focused_class=lambda: "code-oss") is True
+
+
 def test_brave_on_the_bus_is_the_brave_browser_window(bus):
     bus.app("Brave", TEXT)
     bus.app("Firefox", PASSWORD)
