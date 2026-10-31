@@ -266,12 +266,10 @@ def _sd_callback(rec, indata, frames_count, time_info, status):
 
     # Hands-free auto-stop: when the speaker has finished, ask the service
     # loop to stop it, exactly as a second press of the toggle key would.
+    # Logged by the service tick that stops it, to keep file writes off
+    # the audio thread.
     detector = rec.silence
     if detector is not None and detector.feed(indata):
-        if detector.nothing_said:
-            logger.info("Auto-stop: nothing said, stopping without typing anything")
-        else:
-            logger.info("Auto-stop: speaker went quiet, stopping the recording")
         rec.went_quiet = True
 
     # Feed the recording indicator whatever its active style needs.
@@ -291,10 +289,9 @@ def open_input_stream(rec, device_idx) -> None:
         from .indicator_dsp import SpectrumProcessor
         spectrum_processor = SpectrumProcessor(sample_rate=rec.samplerate,
                                                bins=spectrum_processor.bins)
-    sd.default.channels = CHANNELS
-    sd.default.samplerate = rec.samplerate
     rec.stream = sd.InputStream(callback=functools.partial(_sd_callback, rec), dtype='int16',
-                                device=device_idx)
+                                device=device_idx, channels=CHANNELS,
+                                samplerate=rec.samplerate)
     rec.stream.start()
 
 
@@ -329,9 +326,11 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     try:
         open_input_stream(rec, input_device_idx)
     except Exception as first_error:
-        # The mic is stored as a device NUMBER, resolved once at startup. Unplug
-        # a USB device and the numbering shifts, leaving that number pointing at
-        # nothing. Re-resolve by name and try once more before giving up.
+        # The mic is stored as a device number, resolved at startup. PortAudio's
+        # device list is fixed when it starts, so a mic chosen by name maps to
+        # the same entry again (a second try still helps one busy for a
+        # moment); on System Default the desktop may name another default now,
+        # on another listed device. Resolve again and try once more.
         logger.warning(f"Microphone {input_device_idx} failed ({first_error}); re-resolving")
         stop_stream_safely(rec)
         try:
@@ -480,8 +479,13 @@ def finish_capture(rec, beeps_on: bool, notify_on: bool):
 def _dropped_as_silent(rec, beeps_on: bool, notify_on: bool) -> bool:
     """Hands-free with nothing said: cancel *rec*, and say so if the mic is
     dead. Transcribing room noise can type a stray "Thank you." (see
-    silence.is_speechless_tap)."""
-    if rec.silence is None or not rec.silence.nothing_said:
+    silence.is_speechless_tap).
+
+    Not once Type at pause has cut a phrase: it heard talking hands-free
+    didn't (a soft voice, under hands-free's threshold), so the recording
+    stops as usual, its phrases and the rest typed. Cancelled, the phrases
+    still queued and the audio since the last cut were thrown away."""
+    if rec.silence is None or not rec.silence.nothing_said or rec.chunks_submitted:
         return False
     rec.silence = None
     dead_mic = frames_are_dead_mic(rec.frames, rec.samplerate)

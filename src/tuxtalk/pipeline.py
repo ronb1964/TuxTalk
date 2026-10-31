@@ -146,7 +146,9 @@ def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         if raw is None or _cancelled(job):
             return
         raw, in_password = _before_the_words(raw, audio_f32, job)
-        if raw is None or _ran_as_command(raw, job):
+        # Again after the context pass, which can take seconds: no command
+        # runs and no key is pressed for a cancelled recording.
+        if raw is None or _cancelled(job) or _ran_as_command(raw, job):
             return
         raw, said = split_key_command(raw)
         key = _key_to_press(raw, said, job)
@@ -420,9 +422,11 @@ def _deliver(words: _Words, audio_f32, job: _Job) -> None:
         _carry_on_after(words, text, audio_f32, job)
     if live.usage_stats:
         # After typing, so saving the counts never delays the text.
-        # Counts only (words, seconds dictating); see stats.py.
+        # Counts only (words, seconds dictating); see stats.py. A correction
+        # across a pause retypes the phrase before, counted when it went in.
         from .stats import count_words, record
-        record(count_words(text), len(audio_f32) / engine.SAMPLE_RATE)
+        record(count_words(text), len(audio_f32) / engine.SAMPLE_RATE,
+               taken_back=count_words(words.taken_back))
 
 
 def _carry_on_after(words: _Words, text: str, audio_f32, job: _Job) -> None:

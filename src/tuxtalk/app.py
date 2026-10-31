@@ -1,8 +1,8 @@
 """The dictation service's shell: one process that loads the speech model,
 reads the hotkeys (hotkeys.py) and runs each dictation through the pipeline
-(pipeline.py). Here are its single-instance lock and signals, the tick both
-input backends run each pass (start and stop requests, Power Saving, live
-settings), the command-line toggle when no tray runs, and main()."""
+(pipeline.py). Here are its single-instance lock and signals, the
+command-line toggle when no tray runs, and main(); the tick both input
+backends run each pass is service_tick.py's."""
 import os
 # CRITICAL: Disable HuggingFace XET downloads BEFORE any imports
 # XET bypasses tqdm_class progress tracking, breaking our download progress UI
@@ -22,7 +22,7 @@ from . import live_settings as live
 from . import recording_state as rs
 from .config import load_config, load_custom_commands
 from .logger import setup_logger
-from .recording_indicator import RecordingIndicator
+from .recording_indicator import RecordingIndicator, settings_in
 from .service_launcher import QUIT_LIMIT_S, QUIT_WAIT_S
 
 logger = setup_logger(__name__)
@@ -285,17 +285,7 @@ def _start_dbus_stand_in(cfg):
 def _make_indicator(cfg) -> None:
     """The recording indicator, with its spectrum for the bars style."""
     try:
-        recording.indicator = RecordingIndicator(
-            position=cfg.indicator_position,
-            offset_x=cfg.indicator_offset_x,
-            offset_y=cfg.indicator_offset_y,
-            size=cfg.indicator_size,
-            style=cfg.indicator_style,
-            color_mode=cfg.indicator_color_mode,
-            custom_color=cfg.indicator_color,
-            sensitivity=cfg.indicator_sensitivity,
-            follow_window=getattr(cfg, "indicator_follow_window", False),
-        )
+        recording.indicator = RecordingIndicator(**settings_in(cfg))
         # Spectrum processor for the bars style; recording.feed_indicator uses it.
         from .indicator_dsp import SpectrumProcessor
         recording.spectrum_processor = SpectrumProcessor(bins=20)

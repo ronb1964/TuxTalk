@@ -24,8 +24,8 @@ from tuxtalk import dictation_worker
 from tuxtalk import pipeline as dictation_pipeline
 from tuxtalk.beeps import CANCEL_BEEP, READY_BEEP
 from tuxtalk import service_tick
-from type_at_pause_rig import (BLOCK, SR, blocks, fake_pipeline, feed, noise, rng, speech,
-                               start_chunked_recording, stop)
+from type_at_pause_rig import (BLOCK, SR, blocks, fake_pipeline, feed, feed_block, noise, rng,
+                               speech, start_chunked_recording, stop)
 
 
 
@@ -98,12 +98,61 @@ def test_cough_in_a_long_silence_is_forgotten():
     assert len(fired) == 1
 
 
-def test_tail_keeps_the_last_words_decay():
-    from tuxtalk.chunking import TAIL_KEEP_S
-    fired, det = run_pauses(np.concatenate([speech(1.0), noise(1.5)]))
-    assert fired
-    expected = int((det.last_pause - TAIL_KEEP_S) * SR)
-    assert abs(det.tail_samples() - expected) <= BLOCK
+def cut_at_each_pause(audio, block, pause=0.8):
+    """Feed *audio* in blocks of *block* samples and split the blocks at
+    each cut as the audio callback does (type_at_pause.cut_chunk). Returns
+    the cuts, each (phrase start, phrase end, next phrase start) in samples,
+    with every phrase's samples checked to be the audio's at those places."""
+    from tuxtalk.chunking import PauseDetector, take_cut
+    det = PauseDetector(pause, SR)
+    frames, start, cuts = [], 0, []
+    for i in range(0, len(audio), block):
+        frames.append(audio[i:i + block].tobytes())
+        if det.feed(frames[-1]):
+            fed = min(len(audio), i + block)
+            phrase, frames = take_cut(frames, det.cut_from_end())
+            phrase, rest = b"".join(phrase), b"".join(frames)
+            end, resume = start + len(phrase) // 2, fed - len(rest) // 2
+            assert phrase == audio[start:end].tobytes()
+            assert rest == audio[resume:fed].tobytes()
+            cuts.append((start, end, resume))
+            start = resume
+    return cuts
+
+
+@pytest.mark.parametrize("block", [96, 320, 1024, 4096])
+@pytest.mark.parametrize("gap", [0.70, 0.72, 0.73, 0.74, 0.76, 0.8, 1.2])
+def test_a_cut_drops_only_the_middle_of_the_pause(block, gap):
+    """Every sample around a cut lands in one phrase or the next, but for
+    the middle of the pause. Whole blocks were trimmed before, so a word
+    starting as the pause filled up, or later in the block the cut was
+    heard in (a 4096-sample block is a quarter second), lost its start, or
+    all of it, from both phrases."""
+    from tuxtalk.chunking import LEAD_KEEP_S, TAIL_KEEP_S
+    # The first phrase's last syllable ends at 0.93 s; the next starts after the gap.
+    audio = np.concatenate([speech(1.0), noise(gap), speech(1.0), noise(1.5)])
+    last_sound, onset = int(0.93 * SR), int((1.0 + gap) * SR)
+    cuts = cut_at_each_pause(audio, block)
+    assert cuts, "the pause after the last phrase is always cut"
+    for _start, end, resume in cuts:
+        if resume > onset + SR:
+            continue                        # the cut after the last phrase
+        assert end >= last_sound + int(TAIL_KEEP_S * SR) - 320
+        assert end <= resume <= onset
+        assert resume >= min(end, onset - int(LEAD_KEEP_S * SR) - 320)
+
+
+def test_a_soft_sound_late_in_a_pause_nothing_ended_stays_with_its_phrase():
+    """A soft sound under speech's threshold half a second into the pause
+    after the last phrase, then nothing more: it stays in that phrase. A
+    lead taken without a word to start early moved it into the rest, which
+    is dropped as speechless when nothing more is said."""
+    t = np.arange(int(0.08 * SR)) / SR
+    soft = (np.sin(2 * np.pi * 220 * t) * 80 + noise(0.08)).astype(np.int16)
+    audio = np.concatenate([speech(1.0), noise(0.44), soft, noise(1.0)])
+    (_start, end, resume), = cut_at_each_pause(audio, 4096)
+    assert end >= int(1.52 * SR)
+    assert resume == end
 
 
 def test_works_at_48k():
@@ -313,24 +362,24 @@ def test_chunk_settings_apply_without_a_restart():
 
 
 def test_chunk_setting_follows_config(monkeypatch):
-    from types import SimpleNamespace
+    from tuxtalk.config import Settings
     monkeypatch.setattr(live, "ai_engine", None)
-    on = SimpleNamespace(chunked_dictation=True, chunk_pause_seconds=1.0)
+    on = Settings(chunked_dictation=True, chunk_pause_seconds=1.0)
     live.apply(on)
     assert live.chunk_pause_seconds == 1.0
     assert live.chunk_cfg is on
-    live.apply(SimpleNamespace(chunked_dictation=False, chunk_pause_seconds=1.0))
+    live.apply(Settings(chunked_dictation=False, chunk_pause_seconds=1.0))
     assert live.chunk_pause_seconds == 0.0
 
 
 def test_chunk_pause_stays_below_auto_stop(monkeypatch):
-    from types import SimpleNamespace
+    from tuxtalk.config import Settings
     monkeypatch.setattr(live, "ai_engine", None)
-    live.apply(SimpleNamespace(
+    live.apply(Settings(
         chunked_dictation=True, chunk_pause_seconds=1.5,
         auto_stop_silence=True, auto_stop_seconds=1.0))
     assert live.chunk_pause_seconds == pytest.approx(0.8)
-    live.apply(SimpleNamespace(chunked_dictation=False))
+    live.apply(Settings(chunked_dictation=False))
 
 
 # --- chunk roles in the pipeline ---------------------------------------------
@@ -439,6 +488,56 @@ def test_a_command_after_a_pause_sees_the_finished_chunk(pipeline, monkeypatch):
     call(frames_of(speech(1.0)), "middle")
     assert typed == ["We meet", ". "]
     assert erased == [len("We meet. ")]
+
+
+def esc_during_the_context_pass(monkeypatch, texts):
+    """The engine's third pass, hearing the two phrases together, takes long
+    enough for the user to press Esc."""
+    calls = []
+
+    def transcribe(audio, lang):
+        calls.append(len(audio))
+        if len(calls) == 3:
+            rs.state.current.message.cancelled = True
+        return texts.pop(0)
+    monkeypatch.setattr(engine, "transcribe", transcribe)
+
+
+def test_esc_during_the_context_pass_types_no_mark(pipeline, monkeypatch):
+    texts, typed, _ = pipeline
+    texts.extend(["we meet.", "the end.", "we meet. The end."])
+    esc_during_the_context_pass(monkeypatch, texts)
+    call(frames_of(speech(1.0)), "middle")
+    call(frames_of(speech(1.0)), "middle")
+    assert typed == ["We meet"]
+
+
+def test_esc_during_the_context_pass_runs_no_command(pipeline, monkeypatch):
+    """"delete last sentence" after a pause, and Esc while the engine heard
+    both phrases: the sentence before was still deleted."""
+    from types import SimpleNamespace
+    texts, typed, _ = pipeline
+    erased = []
+    monkeypatch.setattr(keyboard_output, "output_backend",
+                        lambda: SimpleNamespace(backspaces=lambda n: (erased.append(n), True)[1]))
+    texts.extend(["we meet.", "delete last sentence", "we meet. Delete last sentence."])
+    esc_during_the_context_pass(monkeypatch, texts)
+    call(frames_of(speech(1.0)), "middle")
+    call(frames_of(speech(1.0)), "middle")
+    assert typed == ["We meet"] and erased == []
+
+
+def test_esc_during_the_context_pass_presses_no_enter(pipeline, monkeypatch):
+    """A short phrase the context pass hears as "press enter", and Esc
+    meanwhile: the Enter still went out and sent the message."""
+    texts, typed, _ = pipeline
+    pressed = []
+    monkeypatch.setattr(dictation_pipeline, "press_said", lambda *a, **k: pressed.append(a))
+    texts.extend(["we meet.", "press center.", "we meet. Press enter."])
+    esc_during_the_context_pass(monkeypatch, texts)
+    call(frames_of(speech(1.0)), "middle")
+    call(frames_of(speech(1.0)), "middle")
+    assert typed == ["We meet"] and pressed == []
 
 
 def test_silent_middle_chunk_is_dropped_without_a_sound(pipeline):
@@ -552,6 +651,27 @@ def test_a_block_after_the_stop_took_the_audio_adds_and_cuts_nothing(recording):
     assert rs.state.current.chunks_submitted == 0
 
 
+@pytest.mark.parametrize("block", [320, 4096])
+def test_a_word_that_ends_the_pause_reaches_the_engine_whole(recording, monkeypatch, block):
+    """The next word starts 20 ms before the pause would have filled, and
+    the microphone sends 4096-sample blocks: the block the cut is heard in
+    holds the word's start. It was trimmed with the pause, and the engine
+    heard the phrase without its first sound."""
+    heard = []
+    monkeypatch.setattr(type_at_pause, "transcribe_phrase",
+                        lambda frames, *a, **k: heard.append(b"".join(frames)))
+    monkeypatch.setattr(dictation_pipeline, "transcribe_and_inject",
+                        lambda frames, *a, **k: heard.append(b"".join(frames)))
+    gap = 0.72                              # the quiet: 0.07 + 0.72 s, a window short of 0.8
+    audio = np.concatenate([speech(1.0), noise(gap), speech(1.0), noise(0.3)])
+    onset = int((1.0 + gap) * SR)
+    for i in range(0, len(audio), block):
+        feed_block(audio[i:i + block])
+    stop()
+    assert rs.state.current.chunks_submitted == 1
+    assert audio[onset:onset + SR].tobytes() in heard[-1], "the word lost its start"
+
+
 def test_drop_tail_samples_keeps_partial_blocks():
     frames = [b"\0\0" * 320, b"\0\0" * 320, b"\0\0" * 320]
     from tuxtalk import chunking
@@ -629,13 +749,13 @@ def test_new_chunk_settings_apply_without_a_restart():
 
 
 def test_service_reads_the_new_chunk_settings(monkeypatch):
-    from types import SimpleNamespace
+    from tuxtalk.config import Settings
     monkeypatch.setattr(live, "ai_engine", None)
-    live.apply(SimpleNamespace(
+    live.apply(Settings(
         chunked_dictation=True, chunk_speech_db=9.0, chunk_context_marks=False))
     assert live.chunk_speech_db == 9.0
     assert live.chunk_context_marks is False
-    live.apply(SimpleNamespace(chunked_dictation=False))
+    live.apply(Settings(chunked_dictation=False))
     assert live.chunk_speech_db == 6.0
     assert live.chunk_context_marks is True
 
@@ -719,6 +839,24 @@ def test_correction_after_a_pause_fixes_the_phrase_before(ai_on):
     assert erased == [len("Meet at three. ")]
     assert typed[-1] == "Meet at four"
     assert rs.state.current.message.held_mark["mark"] == "."
+
+
+@pytest.mark.parametrize("before", ["meet at three.", "um, meet at three."])
+def test_a_correction_after_a_pause_counts_its_words_once(ai_on, monkeypatch, tmp_path, before):
+    """Your Stats counted "Meet at four." as three more words, though it
+    only took the place of the phrase before, counted when it was typed;
+    and taking that back, a correction adding no more words than it
+    replaced lost its seconds as well."""
+    from tuxtalk import stats
+    texts, _, _, _ = ai_on
+    monkeypatch.setattr(live, "usage_stats", True)
+    monkeypatch.setattr(stats, "stats_path", lambda: str(tmp_path / "stats.json"))
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    texts.extend([before, "no wait, four.", f"{before} No wait, four."])
+    call(frames_of(speech(1.0)), "middle")
+    call(frames_of(speech(1.0)), "middle")
+    (today,) = stats.load().values()
+    assert today == {"dictations": 2, "words": 3, "seconds": 2.0}
 
 
 def test_esc_while_the_ai_corrects_a_phrase_types_none_of_it(ai_on, monkeypatch):
@@ -827,6 +965,28 @@ def test_a_bare_cue_said_last_is_typed(ai_on):
     call([], "last", auto_period=True)
     assert typed == ["Meet at three", ". ", "No wait. "]
     assert erased == [] and rs.state.current.message.held_cue == ""
+
+
+def test_a_bare_cue_said_last_stays_in_its_window(ai_on, monkeypatch):
+    """"meet at three", a pause, "no wait", a pause, a click into another
+    window, and the key let go: "No wait. " was typed into that window."""
+    texts, typed, erased, _ = ai_on
+    focus = {"now": "kwrite"}
+    monkeypatch.setattr(focused_window, "look", lambda: (focus["now"], None))
+    typing = delivery.inject_text
+
+    def inject(text, mode, one_block=False, into=None, message=None):
+        if into is not None and focused_window.changed(into, focused_window.look()):
+            return "moved"
+        rs.state.last_inserted_where = focused_window.look()
+        return typing(text, mode, one_block, into, message)
+    monkeypatch.setattr(delivery, "inject_text", inject)
+    texts.extend(["meet at three.", "no wait.", "meet at three. No wait."])
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    focus["now"] = "konsole"
+    call([], "last", auto_period=True)
+    assert typed == ["Meet at three", ". "]
 
 
 def test_no_correction_types_the_phrase_as_said(ai_on):
@@ -1206,7 +1366,7 @@ def test_a_phrase_waiting_its_turn_holds_hands_free_open(monkeypatch):
     monkeypatch.setattr(live, "chunk_cfg", Settings())
     monkeypatch.setattr(type_at_pause, "transcribe_phrase", lambda *a, **k: events.append("work"))
     monkeypatch.setattr(dictation_worker, "_instance", SimpleNamespace(submit=jobs.append))
-    pause = SimpleNamespace(tail_samples=lambda: 0, last_pause=1.0)
+    pause = SimpleNamespace(cut_from_end=lambda: (0, 0), last_pause=1.0)
     rec = rs.Recording(silence=Detector(), chunker=pause, frames=[b"\0\0"], samplerate=SR)
     with type_at_pause.chunk_lock:
         type_at_pause.cut_chunk(rec, pause)

@@ -25,13 +25,8 @@ def test_turning_the_ai_off_does_not_block_the_caller(monkeypatch):
 
     monkeypatch.setattr(live, "ai_engine", SlowEngine())
 
-    class Cfg:
-        auto_stop_silence = False
-        remove_fillers = False
-        ai_corrections = False
-        voice_editing = False
-
-    live.apply(Cfg())
+    from tuxtalk.config import Settings
+    live.apply(Settings())
 
     assert live.ai_engine is None
     assert not stopped.is_set(), "the caller waited for the engine to stop"

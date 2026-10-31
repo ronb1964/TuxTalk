@@ -470,7 +470,9 @@ class SilenceDetector:
         into the last window, can fall under it, so they count on their own
         once clearly louder."""
         with self._lock:
-            if not self.fired:
+            # Nothing said: what it took for quiet may be a voice under its
+            # threshold, which Type at pause heard (recording._dropped_as_silent).
+            if not self.fired or self.nothing_said:
                 return 0
             tail = self._tail
             if self._pending.size:

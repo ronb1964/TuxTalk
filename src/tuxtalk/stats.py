@@ -157,10 +157,13 @@ def merge_days(theirs):
     return True
 
 
-def record(words, seconds, today=None):
-    """Add one dictation to today's counts. Never raises: stats must not get
-    in the way of the dictation itself. A file that can't be read is left
-    alone rather than replaced, so a glitch can't wipe the history."""
+def record(words, seconds, today=None, taken_back=0):
+    """Add one dictation to today's counts. *taken_back*: words already
+    counted that it was typed over (a correction across a pause retypes
+    the phrase before), so today's words grow by the difference, or shrink,
+    while its seconds still count. Never raises: stats must not get in the
+    way of the dictation itself. A file that can't be read is left alone
+    rather than replaced, so a glitch can't wipe the history."""
     if words <= 0:
         return
     try:
@@ -171,7 +174,7 @@ def record(words, seconds, today=None):
             day = (today or datetime.date.today()).isoformat()
             counts = days.setdefault(day, _clean_day({}))
             counts["dictations"] += 1
-            counts["words"] += int(words)
+            counts["words"] = max(0, counts["words"] + int(words) - int(taken_back))
             counts["seconds"] = round(counts["seconds"] + float(seconds), 1)
             _write(days)
     except Exception as e:

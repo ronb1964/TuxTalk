@@ -135,6 +135,16 @@ def _monitor_rect_at(x, y):
     return Rect(g.x, g.y, g.width, g.height)
 
 
+def settings_in(cfg) -> dict:
+    """The indicator's settings in *cfg* (config.Settings), as
+    RecordingIndicator and its apply_settings take them."""
+    return {"position": cfg.indicator_position, "size": cfg.indicator_size,
+            "offset_x": cfg.indicator_offset_x, "offset_y": cfg.indicator_offset_y,
+            "style": cfg.indicator_style, "color_mode": cfg.indicator_color_mode,
+            "custom_color": cfg.indicator_color, "sensitivity": cfg.indicator_sensitivity,
+            "follow_window": cfg.indicator_follow_window}
+
+
 def window_type():
     """A popup on COSMIC, an ordinary window elsewhere.
 

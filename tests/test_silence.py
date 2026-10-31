@@ -156,6 +156,29 @@ def test_a_double_tap_switches_to_hands_free_and_it_stops_itself(monkeypatch):
     rs.state.is_recording = False
 
 
+def test_the_service_says_why_hands_free_stopped(monkeypatch, caplog):
+    """The release checks in the VMs wait for this line. It's written where
+    the stop is taken, not by the audio callback, whose thread must never
+    wait on the log file."""
+    import logging
+    from types import SimpleNamespace
+    from tuxtalk import keyboard_grab, service_tick
+    caplog.set_level(logging.INFO)
+    stopped = []
+    monkeypatch.setattr(pipeline, "stop_recording", lambda *a: stopped.append(a))
+    monkeypatch.setattr(keyboard_grab, "release_all", lambda: None)
+    _start(monkeypatch)
+    assert recording.toggle_pressed_while_recording(beeps_on=False) is True
+    _speak_then_go_quiet()
+    assert not any("Auto-stop" in r.getMessage() for r in caplog.records)
+    cfg = SimpleNamespace(beeps=False, smart_quotes=True, notify=False, language=None,
+                          auto_space=True, auto_period=True, injection_mode="type")
+    service_tick._take_stop_request(cfg, SimpleNamespace(last_activity=0.0), time.time())
+    assert stopped
+    assert any("Auto-stop: speaker went quiet" in r.getMessage() for r in caplog.records)
+    rs.state.is_recording = False
+
+
 def test_a_double_tap_at_a_relaxed_pace_still_switches_to_hands_free(monkeypatch):
     """Issue #21: taps about half a second apart, a normal pace for someone
     whose hands are slow, stopped the recording instead."""
@@ -520,11 +543,11 @@ def test_auto_stop_settings_apply_without_a_restart():
 
 
 def test_setting_follows_config(monkeypatch):
-    from types import SimpleNamespace
+    from tuxtalk.config import Settings
     monkeypatch.setattr(live, "ai_engine", None)
-    live.apply(SimpleNamespace(auto_stop_silence=True, auto_stop_seconds=3.0))
+    live.apply(Settings(auto_stop_silence=True, auto_stop_seconds=3.0))
     assert live.auto_stop_seconds == 3.0
-    live.apply(SimpleNamespace(auto_stop_silence=False, auto_stop_seconds=3.0))
+    live.apply(Settings(auto_stop_silence=False, auto_stop_seconds=3.0))
     assert live.auto_stop_seconds == 0.0
 
 

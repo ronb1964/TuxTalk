@@ -28,7 +28,7 @@ from . import notify as notify_module
 from . import recording_state as rs
 from .beeps import READY_BEEP
 from .chunk_text import boundary_mark, word_count, words_in_context
-from .key_commands import split_key_command
+from .key_commands import log_held_back, split_key_command
 from .logger import setup_logger
 from .normalize import safe_to_lowercase_first_word
 from .window_classes import app_kind, is_document_window
@@ -62,10 +62,10 @@ def cut_chunk(rec, chunker):
 
     Called with chunk_lock held, by the audio callback, which keeps it from
     adding the block and hearing it until the cut is queued. So it only
-    swaps a list and queues a job, nothing that can wait; the transcription
-    happens on the worker."""
-    frames, rec.frames = rec.frames, []
-    chunking.drop_tail_samples(frames, chunker.tail_samples())
+    splits the newest blocks and queues a job, nothing that can wait; the
+    transcription happens on the worker. What the detector heard after the
+    pause stays in rec.frames, the start of the next phrase."""
+    frames, rec.frames = chunking.take_cut(rec.frames, chunker.cut_from_end())
     rec.chunks_submitted += 1
     number, rec_sr, message = rec.chunks_submitted, rec.samplerate, rec.message
     pause = chunker.last_pause
@@ -245,6 +245,11 @@ def resolve_boundary(message, audio_f32, language, injection_mode, raw="",
         rs.state.continue_mid_sentence = False
         return raw
     mark, joint = _heard_in_context(pending, audio_f32, language)
+    if message.cancelled:
+        # Esc while the engine heard both phrases (a second pass, which can
+        # take seconds): nothing more goes in, the mark included.
+        logger.info("Chunk boundary not typed: the recording was cancelled")
+        return raw
     if (raw and len(raw.split()) <= ENTER_IN_CONTEXT_MAX_WORDS
             and not split_key_command(raw)[1] and split_key_command(joint)[1] == "ENTER"):
         logger.info(f"Heard \"press enter\" in context ({live.loggable(raw)} alone)")
@@ -340,7 +345,9 @@ def end_in_a_pause(message, beeps_on, auto_space, auto_period, injection_mode) -
         cue, message.held_cue = message.held_cue, ""
         if auto_period and cue[-1] not in ".?!":
             cue += "."
-        delivery.inject_text(cue + (" " if auto_space else ""), injection_mode, message=message)
+        # Only where the phrase before it went, as its mark (flush_boundary).
+        delivery.inject_text(cue + (" " if auto_space else ""), injection_mode,
+                             into=rs.state.last_inserted_where, message=message)
     cut_off = _cut_off(message)
     sends = _may_send(message)
     if sends and not cut_off:
@@ -384,7 +391,7 @@ def _cut_off(message) -> str:
     no period, as a whole dictation is (key_commands.auto_send)."""
     cut_off = message.ends_on if live.press_enter_after else ""
     if cut_off:
-        logger.info(f'Held back the Enter: the dictation ended on "{cut_off}"')
+        log_held_back(cut_off)
         if message.held_mark is not None:
             message.held_mark["mark"] = ""
     return cut_off
