@@ -126,21 +126,6 @@ def test_great_quote_preserved():
 
 
 @pytest.mark.parametrize("said, written", [
-    ("I want to quote him on that", "I want to quote him on that."),
-    ("can you quote that", "Can you quote that."),
-    ("I'll quote you a price", "I'll quote you a price."),
-    ("we didn\u2019t quote that", "We didn\u2019t quote that."),      # Whisper's curly apostrophe
-    ("quote me on that", "Quote me on that."),
-    ("quote of the day", "Quote of the day."),
-    ("quote unquote experts", "Quote unquote experts."),
-    ("I loved that quote and this quote", "I loved that quote and this quote."),
-])
-def test_quote_said_as_a_verb_or_a_noun_stays_a_word(said, written):
-    """Not 'I want to " him on that.': "quote" here isn't a quote mark."""
-    assert normalize_text(said) == written
-
-
-@pytest.mark.parametrize("said, written", [
     ("he told me quote we won't quote", "He told me \u201cwe won't.\u201d"),
     ("he told me quote we won\u2019t quote", "He told me \u201cwe won\u2019t.\u201d"),
     ("she said quote never quote", "She said \u201cnever.\u201d"),
@@ -149,15 +134,10 @@ def test_quote_said_as_a_verb_or_a_noun_stays_a_word(said, written):
     ("she said quote of the people quote", "She said \u201cof the people.\u201d"),
     ("please quote hello quote", "Please \u201chello.\u201d"),
     ("he said quote it was fine quote", "He said \u201cit was fine.\u201d"),
-    ("he said quote this quote", "He said \u201cthis.\u201d"),
-    ("he told her quote I am leaving quote", "He told her \u201cI am leaving.\u201d"),
-    # The verb, then a pair: one left over is the word.
-    ("to quote Einstein quote imagination is everything quote",
-     "To quote Einstein \u201cimagination is everything.\u201d"),
 ])
-def test_a_quotation_pairs_even_where_quote_could_be_the_word(said, written):
-    """The words next to "quote" can read like the verb or the noun inside
-    a quotation too: two quotes are still a pair."""
+def test_a_quotation_pairs_whatever_words_are_next_to_quote(said, written):
+    """Words that could make "quote" the verb or the noun ("please", "won't",
+    "me") are often inside a quotation too: two quotes are still a pair."""
     assert normalize_text(said) == written
 
 

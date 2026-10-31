@@ -5,12 +5,6 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
-- Saying "quote" as a word typed a quote mark: "I want to quote him on
-  that" came out as I want to " him on that. "To quote", "can you quote",
-  "quote me", "quote of the day" and "quote unquote" keep the word now,
-  while "he said quote hello quote" still puts hello in quotes. A quotation
-  that started or ended next to such a word works now too: "he said quote
-  this quote" used to type He said " this quote.
 - With some microphones, hands-free never stopped by itself with a clothes
   dryer running nearby. Those microphones send the sound in very small
   pieces, and TuxTalk judged each piece on its own. With others, which send
