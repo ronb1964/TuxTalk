@@ -1139,15 +1139,18 @@ def _voice_at(rate, samples):
     return np.sin(2 * np.pi * 220 * np.arange(samples) / rate) * 3000.0
 
 
-@pytest.mark.parametrize("ending", ["room noise", "a crest of room noise", "a voice"])
+@pytest.mark.parametrize("ending", ["room noise", "a crest of room noise", "a voice",
+                                    "a word's first millisecond"])
 @pytest.mark.parametrize("rate", RATES)
 def test_the_trim_keeps_exactly_0_3_s_after_the_last_word(rate, ending):
     """Half a second of room, a second of voice ending on a window's edge,
     then quiet, fed in blocks of one and a half windows plus one sample, so
     a few samples are left over at the end. 0.3 s after the voice is kept
     and the rest of the quiet trimmed, to the sample, unless the last few
-    samples are a voice: then nothing is. A few samples of room noise that
-    peak (a crest of 400 against a threshold of 300) are still the room."""
+    samples are a sound: then nothing is. A few samples of room noise that
+    peak (a crest of 400 against a threshold of 300) are still the room; a
+    word's first millisecond at 1000 is a sound, though averaged into the
+    last 20 ms it would be quieter than the threshold."""
     window = int(0.02 * rate)
     last_word_ends = 75 * window
     audio = np.concatenate([_room_at(rate, 0.5)[:25 * window], _voice_at(rate, 50 * window),
@@ -1158,37 +1161,57 @@ def test_the_trim_keeps_exactly_0_3_s_after_the_last_word(rate, ending):
     while not det.feed(audio[fed:fed + block].tobytes()):
         fed += block
     fed += block
-    leftover = window // 10
+    leftover = window // 20 if ending == "a word's first millisecond" else window // 10
     final = audio[fed:fed + 3 * window + leftover - (fed + 3 * window) % window].astype(float)
     if ending == "a crest of room noise":
         final[-leftover:] = 400.0 * (-1.0) ** np.arange(leftover)
     elif ending == "a voice":
         final[-leftover:] = _voice_at(rate, leftover)
+    elif ending == "a word's first millisecond":
+        final[-leftover:] = 1000.0
     det.feed(final.astype(np.int16).tobytes())
     end = fed + final.size
     assert det._pending.size == leftover
     kept = end - det.tail_to_trim()
-    if ending == "a voice":
+    if ending in ("a voice", "a word's first millisecond"):
         assert kept == end
     else:
         assert abs(kept - (last_word_ends + 0.3 * rate)) <= 1
 
 
+@pytest.mark.parametrize("where", ["at its end", "in its middle"])
 @pytest.mark.parametrize("rate", RATES)
-def test_a_voice_starting_in_the_block_that_reaches_the_nothing_said_limit_is_kept(rate):
+def test_a_voice_in_the_block_that_reaches_the_nothing_said_limit_is_kept(rate, where):
     """Nothing said for 9.9 s, then one block that crosses 10 s in silence
-    and ends with a voice starting: the recording goes on and the voice
-    counts. Judged window by window, the quiet part dropped it as nothing
-    said before the voice in the same block was heard."""
+    with a voice starting in it, at its end or with quiet after: the
+    recording goes on and the voice counts. Judged window by window, a
+    quiet window of that block dropped it as nothing said."""
     window = int(0.02 * rate)
     det = SilenceDetector(1.5, rate)
     for _ in range(495):
         assert not det.feed(np.zeros(window, np.int16).tobytes())
-    block = np.concatenate([np.zeros(10 * window), _voice_at(rate, window)])
+    after = np.zeros(window if where == "in its middle" else 0)
+    block = np.concatenate([np.zeros(10 * window), _voice_at(rate, window), after])
     assert det.feed(block.astype(np.int16).tobytes()) is False
     for _ in range(25):
         assert not det.feed(_voice_at(rate, window).astype(np.int16).tobytes())
     assert det.armed and not det.nothing_said
+
+
+@pytest.mark.parametrize("block", [1024, 4096])
+def test_clicks_after_the_nothing_said_limit_put_the_drop_off_one_block_at_most(block):
+    """A quiet room, and from 10 s on a 10 ms click at the end of every
+    block: the block that reaches 10 s is kept for its click, the next one
+    is dropped as nothing said. Kept for each click, 15 of them added up to
+    talking and the room went to the engine."""
+    audio = rng.normal(0, 60, 20 * SR)
+    crossing = int(10 * SR) // block * block
+    for end in range(crossing + block, len(audio), block):
+        window_end = end // BLOCK * BLOCK
+        audio[window_end - 160:window_end] += rng.normal(0, 3000, 160)
+    at, det = run(audio.astype(np.int16), 1.5, block)
+    assert det.nothing_said
+    assert at <= (crossing + 2 * block) / SR
 
 
 def test_the_trim_waits_for_a_block_being_judged():

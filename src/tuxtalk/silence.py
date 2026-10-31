@@ -42,21 +42,21 @@ _SPEECH_TO_ARM_S = 0.3
 # Keep this much of the silent tail when trimming, so the last word's natural
 # decay is never cut.
 _TAIL_KEEP_S = 0.3
+# The last few samples heard, too few for a window, are a sound on their own
+# when this many times speech's threshold (6 dB): room noise over so few
+# samples swings well past the threshold, a word's onset stands further out.
+_LEFTOVER_OVER = 2.0
 # How fast the learned noise floor may rise per second (x1.5/s), so it follows
 # a room that gets noisier without ever chasing the speaker's own voice up.
 _NOISE_RISE_PER_S = 1.5
 # Steady noise: over the last _STEADY_S, the 10th and 75th percentile of
 # the levels of 50 ms frames lie within _STEADY_DB of each other, and those
-# of the 20 ms windows within _STEADY_WINDOWS_DB. No 3 s of the 125
-# readers' speech came within 3.3 dB by frames or 4.4 dB by windows, alone
-# or with pink noise 10 and 5 dB under the voice; a fan, a dryer, white
-# noise and a gusty fan stayed within 3.3 dB either way, pink noise mostly
-# not. Frames smooth out a voice that swings every few windows (a held note
-# with a tremolo); windows alone let a gusty fan be learned so often that
-# the next sentence's soft start was cut off twice as often. The margins
-# are thin, set by one reader (0.3 dB by frames, 1 dB by windows; the next
-# closest came within 6.4 and 8.9 dB), so a voice held steadier than that,
-# a sung note, is taken for the room.
+# of the 20 ms windows within _STEADY_WINDOWS_DB. Speech doesn't stay that
+# steady for 3 s; a fan, a dryer, white noise and a gusty fan do. Both are
+# asked: frames alone smooth out a voice that swings every few windows (a
+# held note with a tremolo), and windows alone take a gusty fan for the
+# room so often that a sentence's soft start gets cut off. The margins are
+# thin, so a voice held steadier still, a sung note, is taken for the room.
 _STEADY_S = 3.0
 _FRAME_S = 0.05
 _STEADY_DB = 3.0
@@ -114,15 +114,16 @@ class NoiseFloor:
     dryer, a loud hiss): none of it is quiet enough to rise through. So noise
     that stays steady for _STEADY_S is learned whatever its level, and speech
     must then be louder than its loud end. Speech is never that steady: on
-    125 recorded readers (Ron's sentences, LibriSpeech, FLEURS), alone and
-    with pink noise 10 and 5 dB under the voice, no 3 s of speech came within
-    3.3 dB by frames or 4.4 dB by windows; white noise, a fan, a dryer and a
-    gusty fan did in 80 to 100% of windows. It is learned only once a sound
-    _CLEAR_OF_NOISE_DB louder was heard, the voice: steady noise heard alone
-    keeps counting as speech, so hands-free with nothing said in a loud room
-    goes on until the hotkey ends it, as it did before. A note held steady
-    for three seconds after something much louder (sung, hummed, a long
-    "mmm") is taken for the room, and counts as a pause that long.
+    125 recorded readers (TuxTalk's test sentences, LibriSpeech, FLEURS),
+    alone and with pink noise 10 and 5 dB under the voice, no 3 s of speech
+    came within 3.3 dB by frames or 4.4 dB by windows; white noise, a fan, a
+    dryer and a gusty fan did in 80 to 100% of windows. It is learned only
+    once a sound _CLEAR_OF_NOISE_DB louder was heard, the voice: steady noise
+    heard alone keeps counting as speech, so hands-free with nothing said in
+    a loud room goes on until the hotkey ends it, as it did before. A note
+    held steady for three seconds after something much louder (sung,
+    hummed, a long "mmm") is taken for the room, and counts as a pause that
+    long.
     """
 
     def __init__(self):
@@ -319,6 +320,8 @@ class SilenceDetector:
         self._window_len = max(1, int(_WINDOW_S * self.sample_rate))
         self._pending = np.zeros(0, dtype=np.int16)     # less than a window
         self._recent = np.zeros(0, dtype=np.int16)      # the last window heard
+        # A block reached NOTHING_SAID_S and was kept for the speech in it.
+        self._past_nothing_said = False
         self._heard = collections.deque()   # (rms, seconds, speech added), last _STEADY_S
         self._heard_s = 0.0
         self._said_before = False
@@ -403,26 +406,29 @@ class SilenceDetector:
         the next.
 
         Nothing said for NOTHING_SAID_S is decided once the whole block is
-        heard: speech in a later window of it means something was said."""
+        heard: speech in any window of the block that reaches it means
+        something was said. Only that block: from the next one on, nothing
+        said stops the recording unless the speech has armed the detector,
+        so clicks in later blocks can't put the drop off block after block."""
         samples = np.frombuffer(block, dtype=np.int16)
         with self._lock:
             # New arrays: the audio system may reuse the block's memory.
             pending = np.concatenate([self._pending, samples])
             size = self._window_len
-            self._recent = np.concatenate([self._recent, samples])[-size:]
+            # Its own copy, so it doesn't keep the whole block's array.
+            self._recent = np.array(np.concatenate([self._recent, samples])[-size:])
             whole = pending.size - pending.size % size
             self._pending = pending[whole:]
-            fired = nothing_said = False
+            verdicts = set()
             for start in range(0, whole, size):
                 rms, duration = block_rms(pending[start:start + size], self.sample_rate)
-                verdict = self._window(rms, duration)
-                if verdict == "stop":
-                    fired = True
-                elif verdict is not None:
-                    nothing_said = verdict == "nothing said"
-            if nothing_said and not self.fired:
-                self.fired = self.nothing_said = fired = True
-            return fired
+                verdicts.add(self._window(rms, duration))
+            if "nothing said" in verdicts and not self.fired:
+                if "speech" not in verdicts or self._past_nothing_said:
+                    self.fired = self.nothing_said = True
+                    return True
+                self._past_nothing_said = True
+            return "stop" in verdicts
 
     def _window(self, rms: float, duration: float):
         """Count one window of loudness *rms*: "stop" when it ends the
@@ -459,18 +465,24 @@ class SilenceDetector:
 
     def tail_to_trim(self) -> int:
         """Samples of measured silence to drop from the end once it fired:
-        the quiet since the last loud window, less _TAIL_KEEP_S. The last
-        samples, too few for a window, count as quiet when the last
-        _WINDOW_S heard is, so a sound starting in them is never trimmed.
-        Judged alone, a few samples of room noise often read as loud, and
-        the whole silent tail went to the engine."""
+        the quiet since the last loud window, less _TAIL_KEEP_S.
+
+        The last samples, too few for a window, are a sound when they are
+        _LEFTOVER_OVER times speech's threshold on their own, or when the
+        last _WINDOW_S heard is loud: then nothing is trimmed. A few samples
+        of room noise swing far more than a window does, so just over the
+        threshold they are still the room; a word's onset in them, averaged
+        into the last window, can fall under it, so they count on their own
+        once clearly louder."""
         with self._lock:
             if not self.fired:
                 return 0
             tail = self._tail
             if self._pending.size:
-                rms, _ = block_rms(self._recent, self.sample_rate)
-                quiet = rms < self._threshold()
+                threshold = self._threshold()
+                alone, _ = block_rms(self._pending, self.sample_rate)
+                last, _ = block_rms(self._recent, self.sample_rate)
+                quiet = alone < threshold * _LEFTOVER_OVER and last < threshold
                 tail = tail + self._pending.size / self.sample_rate if quiet else 0.0
             return max(0, int((tail - _TAIL_KEEP_S) * self.sample_rate))
 
