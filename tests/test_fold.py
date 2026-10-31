@@ -36,6 +36,14 @@ def test_showing_the_window_leaves_it_closed():
     window.destroy()
 
 
+def test_a_screen_reader_hears_the_summary_with_the_button():
+    """The dim line beside the button ("⚠ something needs your attention")
+    wasn't tied to it, so a screen reader never said it."""
+    fold = Fold("Show system check", "Hide system check")
+    fold.set_summary("<b>cheat sheet</b> Ctrl+Alt+V")
+    assert fold.button.get_accessible().get_description() == "cheat sheet Ctrl+Alt+V"
+
+
 def test_a_warning_beside_the_button_is_not_dimmed():
     fold = Fold("Show system check", "Hide system check")
     fold.set_summary("✓ everything is set up")

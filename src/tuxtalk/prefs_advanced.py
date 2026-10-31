@@ -8,7 +8,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 
 from .prefs_system_check import SystemCheck
-from .prefs_tab import LABS_INDENT, Tab, dropdown, fold, subheading
+from .prefs_tab import LABS_INDENT, Tab, dropdown, fold, subheading, tip_label
 from .prefs_type_at_pause import TypeAtPause
 from .ui_style import show_message
 
@@ -206,8 +206,8 @@ class AdvancedTab(Tab):
 
     def _fine_inserting(self, fine, frow):
         """How text is put in (not on the Flatpak, which always types); returns the next row."""
-        inject_label = Gtk.Label(label="Text Injection 💡:", xalign=0)
-        inject_label.set_tooltip_text(
+        inject_label = tip_label(
+            "Text Injection",
             "How to insert transcribed text:\n"
             "• Auto (Smart Detection): chooses paste or typing based on the focused app\n"
             "• Keystroke Typing: simulates typing character-by-character (most reliable)\n"
@@ -477,14 +477,14 @@ class AdvancedTab(Tab):
                 self.update_config("numbers_small_as_words", small)
         combo.connect("changed", changed)
 
-        label = Gtk.Label(label="Numbers 💡:", xalign=0)
-        label.set_mnemonic_widget(combo)
-        label.set_tooltip_text(
+        label = tip_label(
+            "Numbers",
             "Digits: \"twenty-five chickens\" becomes \"25 chickens\", \"october fifteenth\"\n"
             "becomes \"october 15th\" and \"seven thirty\" after at becomes \"7:30\".\n"
             "\"One\" and \"two\" on their own stay words (\"one of them\"), and so do fractions.\n"
             "Many writing styles spell out one to nine and use digits from 10 up.\n"
             "Works in English, German, Spanish, French, Italian, Portuguese, Dutch and Danish.")
+        label.set_mnemonic_widget(combo)
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         box.pack_start(label, False, False, 0)
         box.pack_start(combo, False, False, 0)

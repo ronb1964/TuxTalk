@@ -10,7 +10,7 @@ from . import mic_volume
 from .logger import setup_logger
 from .mic_test import MicTest
 from .prefs_indicator import IndicatorSettings
-from .prefs_tab import Tab, dropdown, section_header
+from .prefs_tab import Tab, dropdown, section_header, tip_label
 from .ui_style import show_message
 
 logger = setup_logger(__name__)
@@ -72,7 +72,9 @@ class AudioTab(Tab):
 
     def _mic_dropdown(self):
         """System Default and each microphone plugged in now, showing the
-        saved one."""
+        saved one: one not plugged in is listed as such, since it's still
+        the setting, and shown as System Default, picking System Default
+        would change nothing."""
         combo = dropdown(Gtk.ComboBoxText())
         combo.append("", "System Default")
         self._input_device_names = []
@@ -86,10 +88,10 @@ class AudioTab(Tab):
                 name = device.get("name", f"Device {i}")
                 self._input_device_names.append(name)
                 combo.append(name, name)    # the name is the setting
-        # The saved microphone, or System Default when it isn't plugged in now.
-        combo.set_active_id(self.config["mic"])
-        if combo.get_active_id() is None:
-            combo.set_active_id("")
+        saved = self.config["mic"]
+        if not combo.set_active_id(saved):
+            combo.append(saved, f"{saved} (not plugged in)")
+            combo.set_active_id(saved)
         combo.connect("changed", self._on_mic_changed)
         return combo
 
@@ -197,8 +199,8 @@ class AudioTab(Tab):
     def _other_sound_row(self):
         """What happens to other sound while you talk: one question, one
         dropdown over the two settings (sound_choice), which keep their meaning."""
-        sound_label = Gtk.Label(label="Other sound while you dictate 💡:", xalign=0)
-        sound_label.set_tooltip_text(
+        sound_label = tip_label(
+            "Other sound while you dictate",
             "Pause: YouTube, Spotify and other players pause while you talk, so the\n"
             "microphone hears only you. Only what TuxTalk paused starts again.\n\n"
             "Turn down: every other app's sound goes down while you talk (to half on\n"

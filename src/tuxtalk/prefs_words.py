@@ -5,11 +5,12 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk
 
+from . import config
 from .config import (ConfigNotLoadedError, load_custom_commands, merge_custom_command_edits,
                      save_custom_commands)
 from .logger import setup_logger
 from .prefs_tab import Tab
-from .ui_style import show_message
+from .ui_style import WARNING_AMBER, show_message
 
 logger = setup_logger(__name__)
 
@@ -37,6 +38,15 @@ def _table(vbox, store, height):
     return tree
 
 
+def _field(box, text, widget):
+    """*text* above *widget* in a dialog's *box*, as its label: a screen
+    reader names *widget* by it."""
+    label = Gtk.Label(label=text, xalign=0)
+    label.set_mnemonic_widget(widget)
+    box.pack_start(label, False, False, 0)
+    return label
+
+
 def _buttons(vbox, *specs):
     """A row of buttons: (label, tooltip, handler, at the right end)."""
     box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
@@ -55,7 +65,7 @@ class WordsTab(Tab):
     def __init__(self, win):
         super().__init__(win)
         self._word_rows = []        # (word, its mishearings), as on disk
-        self._duplicate_warning_pending = False
+        self._warning_pending = False
 
     def build(self):
         """The tab's page: Your Words, each with the mishearings fixed to it,
@@ -86,6 +96,7 @@ class WordsTab(Tab):
         # Load both lists, and follow the files while this window is open:
         # Fix a Word (tray or the button above) writes to them directly.
         self._fill_commands_store(load_custom_commands())
+        self._show_read_problem()
         self._watch_custom_commands_file()
 
         tips = Gtk.Label(xalign=0)
@@ -132,6 +143,12 @@ class WordsTab(Tab):
         _section(vbox, "Snippets",
                  'Say a short phrase and TuxTalk types the full text. For example, '
                  'say "my email" and it types user@example.com.')
+        # Shown while custom_commands.toml can't be read (_show_read_problem).
+        self.read_problem = Gtk.Label(xalign=0)
+        self.read_problem.set_line_wrap(True)
+        self.read_problem.set_max_width_chars(90)
+        self.read_problem.set_no_show_all(True)
+        vbox.pack_start(self.read_problem, False, False, 0)
         self.commands_store = Gtk.ListStore(str, str)   # phrase, replacement
         self.commands_tree = _table(vbox, self.commands_store, 140)   # about four snippets
         # The hints are drawn only in an empty cell, never stored, so a row
@@ -212,34 +229,33 @@ class WordsTab(Tab):
             return
         for word, phrases in self._word_rows:
             if phrase in phrases:
-                show_message(self.window, Gtk.MessageType.WARNING,
-                             "That phrase already fixes a word",
-                             f"\u201c{phrase}\u201d is how TuxTalk hears {word}, under "
-                             "Your Words. Change it there, or pick a different phrase.")
+                self._warn_once("That phrase already fixes a word",
+                                f"\u201c{phrase}\u201d is how TuxTalk hears {word}, under "
+                                "Your Words. Change it there, or pick a different phrase.")
                 return
         row_index = int(str(path))
         for i, row in enumerate(self.commands_store):
             if i != row_index and row[0].strip().lower() == phrase:
-                self._warn_duplicate_phrase(phrase)
+                self._warn_once("That phrase is already a snippet",
+                                f"You already have a snippet for \u201c{phrase}\u201d. "
+                                "Change that one, or pick a different phrase.")
                 return
         self.commands_store[path][0] = phrase
 
-    def _warn_duplicate_phrase(self, phrase):
-        """Say once that *phrase* already has a snippet.
+    def _warn_once(self, title, text):
+        """Say once why a phrase was refused.
 
-        Focus-out and "edited" both commit the same edit, so the warning
-        waits for the idle loop and a second call while it is pending adds
-        nothing.
+        Focus-out, Tab and "edited" all commit the same edit, and the message
+        box itself takes the focus away, so the warning waits for the idle
+        loop and a second call while it is pending adds nothing.
         """
-        if self._duplicate_warning_pending:
+        if self._warning_pending:
             return
-        self._duplicate_warning_pending = True
+        self._warning_pending = True
 
         def show():
-            self._duplicate_warning_pending = False
-            show_message(self.window, Gtk.MessageType.WARNING, "That phrase is already a snippet",
-                         f"You already have a snippet for \u201c{phrase}\u201d. "
-                         "Change that one, or pick a different phrase.")
+            self._warning_pending = False
+            show_message(self.window, Gtk.MessageType.WARNING, title, text)
             return False
         GLib.idle_add(show)
 
@@ -286,8 +302,8 @@ class WordsTab(Tab):
         entries = []
         for label, value, hint in (("You say", model[it][0], "my email"),
                                    ("TuxTalk types", model[it][1], "user@example.com")):
-            box.pack_start(Gtk.Label(label=label, xalign=0), False, False, 0)
             entry = Gtk.Entry(text=value)
+            _field(box, label, entry)
             entry.set_placeholder_text(hint)
             entry.set_width_chars(48)
             entry.set_activates_default(True)
@@ -343,6 +359,7 @@ class WordsTab(Tab):
         (save()), so nothing on disk is lost either way.
         """
         on_disk = load_custom_commands()
+        self._show_read_problem()
         rows, _snippets = self._split_commands(on_disk)
         if self._commands_from_store() == self._commands_loaded:
             self._fill_commands_store(on_disk)
@@ -407,17 +424,16 @@ class WordsTab(Tab):
             getattr(box, f"set_margin_{side}")(16)
         box.set_spacing(8)
 
-        box.pack_start(Gtk.Label(label="Spelled", xalign=0), False, False, 0)
         entry = Gtk.Entry(text=old or "")
+        _field(box, "Spelled", entry)
         entry.set_placeholder_text("TuxTalk")
         entry.set_activates_default(True)
         box.pack_start(entry, False, False, 0)
 
-        heard = Gtk.Label(xalign=0)
+        view = Gtk.TextView()
+        heard = _field(box, "", view)
         heard.set_markup("What TuxTalk hears instead, <b>one per line</b> (if anything)")
         heard.set_margin_top(6)
-        box.pack_start(heard, False, False, 0)
-        view = Gtk.TextView()
         view.set_left_margin(6)
         view.get_buffer().set_text("\n".join(phrases))
         scrolled = Gtk.ScrolledWindow()
@@ -494,34 +510,50 @@ class WordsTab(Tab):
             self.commands_store.append([phrase, replacement])
         self._commands_loaded = self._commands_from_store()
 
+    def _show_read_problem(self):
+        """Say on the tab, while it's so, that custom_commands.toml can't be
+        read: the list is empty because of that, not because the snippets
+        are gone, and edits to it can't be saved."""
+        unreadable = config.custom_commands_unreadable()
+        if unreadable:
+            path = GLib.markup_escape_text(config.CUSTOM_COMMANDS_PATH)
+            self.read_problem.set_markup(
+                f'<span color="{WARNING_AMBER}" weight="bold">⚠ Your snippets file '
+                f"can't be read, so its snippets don't show here and nothing can be saved "
+                f"to it.</span> Fix or move {path} and they come back.")
+        self.read_problem.set_visible(unreadable)
+
     def save(self):
-        """Save custom commands from the list store.
+        """Save the snippets: only the user's edits, on top of what is on
+        disk right now, so a word fixed from the tray meanwhile is kept.
 
-        Only the user's edits are applied, on top of what is on disk right
-        now, so a word fixed from the tray in the meantime is kept.
-
-        Returns True if they were written; False if the existing file could
-        not be read (the list on screen is then empty because of that, and
-        writing it would delete every snippet); None if writing failed, which
-        the user has been told about.
+        True when they're saved, or there was nothing of the user's to save.
+        False when edits weren't saved, which the user has been told: the
+        window then stays open, so they aren't thrown away.
         """
         commands = merge_custom_command_edits(
             self._commands_loaded, self._commands_from_store(), load_custom_commands())
         try:
             save_custom_commands(commands)
-            self._fill_commands_store(commands)
-            return True
-        except ConfigNotLoadedError as e:
-            # Runs first in both on_apply and on_ok — letting this propagate
-            # would abort the whole save and leave the window stuck open.
-            logger.warning(f"Custom commands not saved: {e}")
+        except ConfigNotLoadedError:
+            # The file can't be read, and writing over it would delete every
+            # snippet in it. With no edits here, nothing is lost by waiting.
+            self._show_read_problem()
+            if not self.changed():
+                return True
+            logger.warning("Snippets not saved: custom_commands.toml can't be read")
+            show_message(self.window, Gtk.MessageType.ERROR, "Your snippets weren't saved",
+                         f"TuxTalk can't read {config.CUSTOM_COMMANDS_PATH}, and saving over "
+                         "it would delete the snippets in it. Fix or move that file, then "
+                         "click Apply again. Your edits stay here until then.")
             return False
         except OSError as e:
-            # A full disk or read-only config folder: say so. Apply saves the
-            # settings anyway; OK stays open so the edits aren't thrown away.
-            logger.warning(f"Custom commands not saved: {e}")
+            # A full disk or read-only config folder: say so.
+            logger.warning(f"Snippets not saved: {e}")
             show_message(self.window, Gtk.MessageType.ERROR, "Your snippets weren't saved", str(e))
-            return None
+            return False
+        self._fill_commands_store(commands)
+        return True
 
     def changed(self):
         """Whether the snippets were edited since they were loaded or saved."""

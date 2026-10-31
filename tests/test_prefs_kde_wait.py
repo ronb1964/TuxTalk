@@ -60,7 +60,7 @@ def test_the_title_bar_close_waits_too(monkeypatch):
     monkeypatch.setattr(P.Gtk, "main_quit", lambda: closed.append("quit"))
     d = SimpleNamespace(window=SimpleNamespace(set_sensitive=lambda v: None),
                         _busy=False,
-                        _has_unapplied_changes=lambda: False,
+                        has_unapplied_changes=lambda: False,
                         _release=lambda: closed.extend(["mic", "pidfile"]))
 
     def close_now():

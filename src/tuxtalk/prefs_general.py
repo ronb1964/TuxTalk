@@ -14,7 +14,7 @@ from .logger import setup_logger
 from .prefs_hotkey_test import run_hotkey_test
 from .prefs_speech import SpeechSection
 from .prefs_system_check import UPDATE_HELPER_LABEL
-from .prefs_tab import Tab, dropdown, fold, scroll_into_view, section_header
+from .prefs_tab import Tab, dropdown, fold, scroll_into_view, section_header, tip_label
 from .ui_style import WARNING_AMBER, message_dialog, show_message
 
 logger = setup_logger(__name__)
@@ -33,6 +33,9 @@ PASTE_LAST_KEYS = [
     ("Ctrl+Alt+P", "Ctrl+Alt+P (recommended)"),
     ("Ctrl+Super+P", "Ctrl+Super+P"),
 ]
+
+# What the hold and toggle dropdowns show for a blank key (_apply_hotkey_fallbacks).
+_KEY_SHOWN_WHEN_BLANK = {"hotkey": "F8", "toggle_hotkey": "F9"}
 
 
 def _needs(keys):
@@ -142,8 +145,8 @@ class GeneralTab(Tab):
     def _build_keys(self, grid, row):
         """The hold and toggle keys, hands-free and Test Hotkeys; returns the
         next free row."""
-        self.hotkey_label = Gtk.Label(label="Hold Hotkey 💡:", xalign=0)
-        self.hotkey_label.set_tooltip_text(
+        self.hotkey_label = tip_label(
+            "Hold Hotkey",
             "Hold this key while speaking — release to stop and transcribe.\n"
             "Both hotkeys are always active simultaneously.\n"
             "Recommended: F8 (default). Avoid: F1, F5, F11, F12.\n"
@@ -153,8 +156,8 @@ class GeneralTab(Tab):
         grid.attach(self.hotkey_label, 0, row, 1, 1)
         grid.attach(self.hotkey_combo, 1, row, 1, 1)
 
-        self.toggle_label = Gtk.Label(label="Toggle Hotkey 💡:", xalign=0)
-        self.toggle_label.set_tooltip_text(
+        self.toggle_label = tip_label(
+            "Toggle Hotkey",
             "Press once to start recording, press again to stop.\n"
             "Double-tap it for hands-free (the option under this row):\n"
             "the recording stops by itself when you stop talking.\n"
@@ -164,10 +167,9 @@ class GeneralTab(Tab):
         grid.attach(self.toggle_combo, 1, row + 1, 1, 1)
         # Both combos exist now, so set their selections together.
         self._apply_hotkey_fallbacks(HOTKEY_CHOICES)
-        self.hotkey_combo.connect(
-            "changed", lambda c: self.update_config("hotkey", c.get_active_id()))
-        self.toggle_combo.connect(
-            "changed", lambda c: self.update_config("toggle_hotkey", c.get_active_id()))
+        self.hotkey_combo.connect("changed", self._on_key_picked, "hotkey", self.toggle_combo)
+        self.toggle_combo.connect("changed", self._on_key_picked, "toggle_hotkey",
+                                  self.hotkey_combo)
 
         grid.attach(self._hands_free_row(), 0, row + 2, 2, 1)
 
@@ -204,9 +206,11 @@ class GeneralTab(Tab):
             spin.set_sensitive(x.get_active())))
         spin.connect("value-changed",
                      lambda x: self.update_config("auto_stop_seconds", round(x.get_value(), 1)))
+        seconds = Gtk.Label(label="seconds of silence")
+        seconds.set_mnemonic_widget(spin)       # what a screen reader names it by
         box.pack_start(check, False, False, 0)
         box.pack_start(spin, False, False, 0)
-        box.pack_start(Gtk.Label(label="seconds of silence"), False, False, 0)
+        box.pack_start(seconds, False, False, 0)
         box.set_tooltip_text(
             "Double-tap your toggle key (two quick taps), talk, and when you stop\n"
             "talking the recording ends and your text is typed by itself. A short\n"
@@ -340,6 +344,7 @@ class GeneralTab(Tab):
         self.timeout_spin.set_tooltip_text(
             "Minutes without dictating before the speech model rests.")
         self.timeout_minutes_label = Gtk.Label(label="minutes without dictating", xalign=0)
+        self.timeout_minutes_label.set_mnemonic_widget(self.timeout_spin)
         minutes = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         minutes.set_margin_start(28)
         minutes.pack_start(self.timeout_label, False, False, 0)
@@ -382,21 +387,41 @@ class GeneralTab(Tab):
         return combo
 
     def _apply_hotkey_fallbacks(self, hotkeys):
-        """Select the configured hotkeys, falling back to F8/F9, and record
-        that fallback in the settings, so what the dropdown shows is what OK
-        saves.
+        """Select the saved hotkeys. A blank one (first run closed early)
+        shows F8 or F9 and is recorded in the settings, so what the dropdown
+        shows is what OK saves: a blank key doesn't dictate, and picking the
+        key already shown emits no 'changed' to correct it. A saved key the
+        list doesn't have (a hand edit) is added to it, as _shortcut_combo
+        does: it's the key in use, never replaced unasked. On the Flatpak the
+        desktop holds the keys, so the fallback is shown only."""
+        for key, combo in (("hotkey", self.hotkey_combo), ("toggle_hotkey", self.toggle_combo)):
+            default = _KEY_SHOWN_WHEN_BLANK[key]
+            saved = self.config.get(key) or ""
+            if saved and saved not in hotkeys:
+                combo.append(saved, saved)
+            combo.set_active_id(saved or default)
+            if not saved and not os.environ.get("FLATPAK_ID"):
+                self.config[key] = default
 
-        A blank hotkey (first run closed early) would otherwise show F8 but
-        save the blank, and picking F8 again emits no 'changed' to correct it.
-        """
-        for key, combo, default in (
-            ("hotkey", self.hotkey_combo, "F8"),
-            ("toggle_hotkey", self.toggle_combo, "F9"),
-        ):
-            current = self.config.get(key, default)
-            chosen = current if current in hotkeys else default
-            combo.set_active_id(chosen)
-            self.config[key] = chosen
+    def _on_key_picked(self, combo, setting, other):
+        """A hold or toggle key picked. The one the other dropdown has is
+        refused, and the dropdown goes back: one key can't both hold and
+        toggle, and the hotkey test could light only one of the two. A
+        blank key (kept blank on the Flatpak) goes back to the key shown for
+        it, which isn't recorded as picked."""
+        key = combo.get_active_id()
+        shown = self.config.get(setting) or _KEY_SHOWN_WHEN_BLANK[setting]
+        if key == shown:
+            return      # put back after a refusal: nothing new picked
+        if key is not None and key == other.get_active_id():
+            combo.popdown()     # not left drawn over the message
+            role = "toggle" if setting == "hotkey" else "hold"
+            show_message(self.window, Gtk.MessageType.WARNING,
+                         f"{key} is already your {role} key",
+                         f"Pick another key, or give the {role} key another one first.")
+            combo.set_active_id(shown)
+            return
+        self.update_config(setting, key)
 
     def _update_shortcuts_summary(self):
         """The two keys beside the More shortcuts button, as they are now."""
@@ -456,7 +481,7 @@ class GeneralTab(Tab):
         def done(ok, message):
             answer.update(ok=ok, message=message)
             if gave_up:             # the window stopped waiting: a notification says it
-                update_offers.say_helper_updated(ok, message)
+                update_offers.say_helper_updated(ok, message, "from the hotkey question")
         update_offers.update_helper(done)
         finished = self._while_drawn(lambda: answer, pkexec_runner.SCRIPT_TIMEOUT_S + 10)
         if answer.get("ok"):
@@ -468,9 +493,8 @@ class GeneralTab(Tab):
             # Past pkexec's own time-out the script can still be running as root.
             gave_up.append(True)
             show_message(self.window, Gtk.MessageType.WARNING, "The update is taking a while",
-                         "It may still finish by itself, and a notification says when. "
-                         f"If not, update it later: Advanced tab, Show system check, "
-                         f"{UPDATE_HELPER_LABEL}.")
+                         "It may still finish by itself. If it doesn't, update it later: "
+                         f"Advanced tab, Show system check, {UPDATE_HELPER_LABEL}.")
             return False
         message = answer["message"]
         show_message(self.window, Gtk.MessageType.WARNING, "The hotkey helper wasn't updated",

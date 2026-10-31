@@ -2,6 +2,8 @@
 device does when it needs something set up first, and what the dropdowns
 show afterwards. Every question and download is answered by a stand-in, so
 no real dialog opens and nothing is downloaded."""
+from contextlib import nullcontext
+
 import pytest
 
 gi = pytest.importorskip("gi")
@@ -131,6 +133,29 @@ def test_use_recommended_falls_back_to_the_processor_when_it_is_faster(speech, m
     assert section.model_combo.get_active_id() == section.config["model"]
 
 
+def test_an_interrupted_speed_check_isnt_taken_for_a_slower_graphics_chip(speech, monkeypatch):
+    """Stop, or an error: nothing was measured, so the processor is kept
+    this time, and the row may still recommend the graphics card."""
+    section = speech("amd")
+    monkeypatch.setattr(vulkan_setup_dialogs, "ensure_files",
+                        lambda parent, model, confirm: True)
+    monkeypatch.setattr(vulkan_setup_dialogs, "run_speed_check", lambda parent, model: None)
+    section.use_recommended_btn.clicked()
+    assert section.config["device"] == "cpu"
+    assert section._shown_language().vulkan_slower is False
+
+
+def test_a_download_on_apply_keeps_the_window_busy(speech, monkeypatch):
+    """As CUDA's download does: an uninstall's close, or a second Apply,
+    can't act on the window while the download window runs."""
+    section = speech(None)
+    busy = []
+    monkeypatch.setattr(prefs_speech, "fetch_model",
+                        lambda parent, model: busy.append(section.win._busy) or True)
+    assert section.download_selected_model() is True
+    assert busy == [True] and section.win._busy is False
+
+
 def test_a_cancelled_download_on_apply_says_nothing(monkeypatch):
     """Cancel in the download window: Apply stops quietly, with no
     "Model download failed!" box."""
@@ -139,7 +164,8 @@ def test_a_cancelled_download_on_apply_says_nothing(monkeypatch):
     monkeypatch.setattr(prefs_speech, "show_message",
                         lambda *a, **k: shown.append(a[2]))
     from types import SimpleNamespace
-    stub = SimpleNamespace(config={"model": "small", "device": "cpu"}, window=None)
+    stub = SimpleNamespace(config={"model": "small", "device": "cpu"}, window=None,
+                           win=SimpleNamespace(busy=nullcontext))
     assert prefs_speech.SpeechSection.download_selected_model(stub) is False
     assert shown == []
 
@@ -150,7 +176,8 @@ def test_a_failed_download_on_apply_says_so(monkeypatch):
     monkeypatch.setattr(prefs_speech, "show_message",
                         lambda *a, **k: shown.append(a[2]))
     from types import SimpleNamespace
-    stub = SimpleNamespace(config={"model": "small", "device": "cpu"}, window=None)
+    stub = SimpleNamespace(config={"model": "small", "device": "cpu"}, window=None,
+                           win=SimpleNamespace(busy=nullcontext))
     assert prefs_speech.SpeechSection.download_selected_model(stub) is False
     assert shown == ["Model download failed!"]
 

@@ -454,6 +454,44 @@ before 0.15.0, so older entries use that name.
 - If you start your desktop with startx, TuxTalk now types for the keyboard
   layout you have switched on. It didn't recognise that kind of X11 session
   before, so it fell back to the system's default layout.
+- If your snippets file was broken by a hand edit, the Words tab showed no
+  snippets and didn't say why, and a snippet you added there was thrown
+  away without a word when you clicked OK. The tab now says the file can't
+  be read and where it is, and OK tells you the snippet wasn't saved and
+  stays open, so you don't lose it. Your other settings still save.
+- If your settings file was ever left empty, Preferences opened with
+  everything at its default, and Apply saved those defaults over the backup
+  of your real settings. It now opens with the settings from the backup.
+  A dictation key Preferences doesn't list (one you typed into the file
+  yourself) is kept instead of being switched back to F8.
+- A setting that needs dictation to restart, saved together with a model
+  whose download you then cancelled, never took effect, and the next Apply
+  said "Your changes are already in effect". The same happened after
+  Uninstall's Apply when you then cancelled the uninstall, or when an
+  update's download failed. Apply now restarts dictation for them, and if
+  you cancel a model's download then, Preferences goes back to the model
+  dictation is still using.
+- If turning "Launch TuxTalk at login" on or off didn't work (a read-only
+  autostart folder, or the Flatpak's request turned down), Preferences said
+  everything was applied. It now says start at login wasn't changed, and
+  each Apply tries again until it works. OK keeps the window open then,
+  so you can.
+- With the keyboard alone, the arrow keys on a dropdown in Preferences
+  picked the next entry straight away, and some entries start a setup the
+  moment they're picked: Up from Parakeet opened large-v3's CUDA setup, and
+  the models and devices past it couldn't be reached. The arrow keys now
+  open the list, where you move with them and pick with Enter.
+- The hold key and the toggle key can't be set to the same key any more.
+  Only one of the two could ever work.
+- A microphone you picked that isn't plugged in now shows in the list as
+  "(not plugged in)" instead of System Default, so you can switch to System
+  Default.
+- A speed check you stopped, or one that failed, no longer counts as the
+  graphics chip losing, so Preferences still recommends your graphics card.
+- Screen readers now name the hands-free seconds and Power Saving minutes,
+  the boxes in the Snippet and Your Word windows, and hear the line beside
+  each "Show ..." button. They no longer read the light bulb beside a
+  setting's name aloud ("Model light bulb").
 
 ## [0.18.2] - 2026-10-23
 

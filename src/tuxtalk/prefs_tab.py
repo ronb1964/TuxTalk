@@ -3,13 +3,22 @@ of the warnings, and the pieces every tab is built from (section headings,
 folds, dropdowns). The window a download or install runs in is
 progress_window.run_with_progress, shared with the tray."""
 import gi
+gi.require_version("Gdk", "3.0")
 gi.require_version("Gtk", "3.0")
-from gi.repository import GLib, Gtk
+from gi.repository import Gdk, GLib, Gtk
 
 from .ui_style import Fold, forward_combo_scroll
 
 # How far a Labs feature's options sit in under its heading.
 LABS_INDENT = 20
+
+# The keys a closed GTK dropdown answers by picking another entry at once.
+_PICKING_KEYS = {getattr(Gdk, f"KEY_{name}") for name in (
+    "Up", "Down", "Page_Up", "Page_Down", "Home", "End",
+    "KP_Up", "KP_Down", "KP_Page_Up", "KP_Page_Down", "KP_Home", "KP_End")}
+# With these held the key is someone else's: Ctrl+Page Down changes tab,
+# Alt+Down is GTK's own way to open the list.
+_PASSED_ON_MODIFIERS = Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.MOD1_MASK
 
 
 def section_header(grid, row, title):
@@ -72,12 +81,27 @@ def scroll_into_view(widget, delay_ms=60):
 
 def dropdown(combo):
     """Set *combo* up as a Preferences dropdown, and return it: a click
-    gives it the keyboard focus, and the mouse wheel over it scrolls the page
-    instead of changing the choice (ui_style.forward_combo_scroll)."""
+    gives it the keyboard focus, the mouse wheel over it scrolls the page
+    instead of changing the choice (ui_style.forward_combo_scroll), and the
+    arrow keys open its list instead (_open_on_arrow)."""
     combo.set_can_focus(True)
     combo.connect("button-press-event", _focus_on_press)
+    combo.connect("key-press-event", _open_on_arrow)
     forward_combo_scroll(combo)
     return combo
+
+
+def _open_on_arrow(combo, event):
+    """An arrow, Page or Home/End key, without Ctrl or Alt, on a closed
+    dropdown opens its list. GTK would pick the next entry at once, and
+    some entries start a setup or a download the moment they're picked
+    (large-v3, CUDA, Several languages), each putting the old choice back:
+    with the keyboard alone the entries past them couldn't be reached."""
+    if (event.keyval not in _PICKING_KEYS or event.state & _PASSED_ON_MODIFIERS
+            or combo.get_property("popup-shown")):
+        return False
+    combo.popup()
+    return True
 
 
 def _focus_on_press(widget, _event):
@@ -85,6 +109,17 @@ def _focus_on_press(widget, _event):
     if not widget.has_focus():
         widget.grab_focus()
     return False
+
+
+def tip_label(name, tooltip):
+    """The name of a setting with the light bulb that says hovering over it
+    explains the setting (*tooltip*). A screen reader gets the name without
+    the bulb: it read the emoji aloud as "light bulb", in the label and in
+    the name of the control the label is for."""
+    label = Gtk.Label(label=f"{name} 💡:", xalign=0)
+    label.get_accessible().set_name(f"{name}:")
+    label.set_tooltip_text(tooltip)
+    return label
 
 
 def subheading(text):

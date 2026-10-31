@@ -58,7 +58,7 @@ def test_an_interrupted_check_keeps_the_processor(monkeypatch):
     monkeypatch.setattr(vsd, "_wait_dialog", lambda parent, work: None)
     monkeypatch.setattr(vsd, "message",
                         lambda parent, kind, title, text, **k: shown.append(title))
-    assert vsd.run_speed_check(None, "parakeet-v3") is False
+    assert vsd.run_speed_check(None, "parakeet-v3") is None     # nothing measured
     assert shown == ["Keeping the processor"]
 
 
@@ -119,6 +119,6 @@ def test_stop_ends_the_check_still_running_behind_it(monkeypatch):
     monkeypatch.setattr(vsd, "_wait_dialog", stopped_at_once)
     monkeypatch.setattr(vsd, "message", lambda *a, **k: None)
 
-    assert vsd.run_speed_check(None, "small") is False
+    assert vsd.run_speed_check(None, "small") is None
     ran["thread"].join(3)
     assert ran["stopped"] is True

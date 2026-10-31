@@ -309,10 +309,9 @@ def _load_toml_file(path: str) -> dict:
 
 
 def _parse_toml_text(text: str) -> dict:
-    """Parse TOML from a string. Raises if *text* is not valid TOML."""
-    if _USE_TOMLLIB:
-        return tomllib.loads(text)
-    return tomllib.loads(text)  # the toml fallback exposes loads() too
+    """Parse TOML from a string (tomllib, or the toml fallback's loads() on
+    Python 3.10). Raises if *text* is not valid TOML."""
+    return tomllib.loads(text)
 
 
 # Set once a repair has been attempted in this process, so the tray's
@@ -762,7 +761,9 @@ def write_text_atomic(path: str, text: str | bytes, keep_backup: bool = True,
             if mode is not None:
                 os.fchmod(f.fileno(), mode)
 
-        if keep_backup and os.path.exists(path):
+        # An empty file is no backup: copied, it would replace the last good
+        # copy with nothing, the one thing that could still recover it.
+        if keep_backup and os.path.exists(path) and os.path.getsize(path) > 0:
             try:
                 shutil.copy2(path, f"{path}.bak")
             except OSError as e:
@@ -1021,6 +1022,13 @@ def load_custom_commands() -> dict[str, str]:
             _commands_read_failed = True
     return commands
 
+
+def custom_commands_unreadable() -> bool:
+    """Whether the last load_custom_commands() found the file but couldn't
+    read it (a hand edit that broke it, say): the empty list it gave is not
+    the user's, and saving is refused until the file is fixed."""
+    return _commands_read_failed and os.path.exists(CUSTOM_COMMANDS_PATH)
+
 def _text_snippets(table) -> dict[str, str]:
     """The snippets of a hand-editable table that can be typed: a number
     as its text (`answer = 42`), anything else (a list, a table) left out,
@@ -1068,7 +1076,7 @@ def save_custom_commands(commands: dict[str, str]) -> None:
             caller is holding is an empty list produced by that failure, not
             the user's commands, and writing it would delete all of them.
     """
-    if _commands_read_failed and os.path.exists(CUSTOM_COMMANDS_PATH):
+    if custom_commands_unreadable():
         raise ConfigNotLoadedError(
             f"Refusing to overwrite {CUSTOM_COMMANDS_PATH}: it could not be read, "
             f"so the commands in memory are empty rather than the user's own."
