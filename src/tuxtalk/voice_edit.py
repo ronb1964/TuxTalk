@@ -29,7 +29,7 @@ from . import recording_state as rs
 from .beeps import READY_BEEP
 from .logger import setup_logger
 from .normalize import swiss_spelling
-from .window_classes import is_terminal_class
+from .window_classes import is_terminal_class, is_word_processor
 
 logger = setup_logger(__name__)
 
@@ -138,7 +138,7 @@ def _format_selection(fmt, focused_class, window, beeps_on) -> bool:
     """Bold, italic or underline (*fmt*, voice_edit_rules.formatting) with
     the app's own shortcut on the selection, still selected. True when it
     was pressed."""
-    if not voice_edit_rules.has_formatting_shortcuts(focused_class):
+    if not is_word_processor(focused_class):
         logger.info(f"Voice edit: no formatting shortcuts in {focused_class!r}")
         notices.edit_problem("no_shortcuts", beeps_on)
         return False

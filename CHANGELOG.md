@@ -5,6 +5,10 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- With "Send each dictation automatically" on, OnlyOffice, AbiWord and the
+  Flatpak of LibreOffice got a new line after every dictation, as if they
+  were a chat. They're left alone now, like LibreOffice and KWrite already
+  were.
 - On a computer where TuxTalk couldn't type at all (no access to its
   virtual keyboard, and no wtype), a dictation was put on the clipboard in
   place of what you'd copied, without the mark that keeps it out of
