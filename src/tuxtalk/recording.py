@@ -148,21 +148,6 @@ def follow_system_default(input_device_idx):
     return idx
 
 
-def resample(audio, orig_sr, target_sr):
-    """Resample audio from orig_sr to target_sr using linear interpolation.
-
-    Good enough for speech audio going to Whisper. No extra dependencies needed.
-    """
-    if orig_sr == target_sr:
-        return audio
-    # Calculate new length and interpolate
-    duration = len(audio) / orig_sr
-    target_len = int(duration * target_sr)
-    orig_indices = np.linspace(0, len(audio) - 1, target_len)
-    resampled = np.interp(orig_indices, np.arange(len(audio)), audio.astype(np.float64))
-    return resampled.astype(audio.dtype)
-
-
 def stop_stream_safely(rec):
     """Stop and close recording *rec*'s microphone stream. An audio system
     that stops answering costs mic_stream.STOP_TIMEOUT_S, not the whole
