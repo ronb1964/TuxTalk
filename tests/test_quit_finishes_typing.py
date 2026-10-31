@@ -27,6 +27,17 @@ def alarms(monkeypatch):
 
 
 @pytest.fixture
+def worker(monkeypatch):
+    """A dictation worker of the test's own, ended with the test: its thread
+    would otherwise wait for jobs for the rest of the run."""
+    worker = DictationWorker()
+    monkeypatch.setattr(dictation_worker, "_instance", worker)
+    yield worker
+    worker.submit(sys.exit)     # the job loop catches Exception only: the thread ends
+    worker.thread.join(5)
+
+
+@pytest.fixture
 def quitting(monkeypatch):
     monkeypatch.setattr(recording, "quit_asked", True)
     cfg = types.SimpleNamespace(beeps=False, smart_quotes=False, notify=False, language=None,
@@ -34,10 +45,8 @@ def quitting(monkeypatch):
     return cfg, types.SimpleNamespace(last_activity=0.0)
 
 
-def test_quitting_types_what_the_worker_still_holds_first(quitting, monkeypatch):
+def test_quitting_types_what_the_worker_still_holds_first(quitting, worker):
     cfg, svc = quitting
-    worker = DictationWorker()
-    monkeypatch.setattr(dictation_worker, "_instance", worker)
     typing, may_finish, typed = threading.Event(), threading.Event(), []
 
     def dictation():
@@ -46,19 +55,21 @@ def test_quitting_types_what_the_worker_still_holds_first(quitting, monkeypatch)
         typed.append("See you at noon.")
     worker.submit(dictation)
     assert typing.wait(5)
-    threading.Timer(0.2, may_finish.set).start()
+    finishes = threading.Timer(0.2, may_finish.set)
+    finishes.start()
     with pytest.raises(SystemExit):
         service_tick.tick(cfg, svc)
+    finishes.join(5)
     assert typed == ["See you at noon."]
 
 
-def test_a_recording_under_way_is_transcribed_before_the_quit_ends(quitting, monkeypatch):
+def test_a_recording_under_way_is_transcribed_before_the_quit_ends(quitting, worker,
+                                                                    monkeypatch):
     """Hands-free still listening when Quit was clicked: what was said goes
     through the real stop (pipeline.stop_recording) to transcription, typing
     and Recent Dictations (transcribe_and_inject) before the process ends,
     as letting go of the key would, instead of dying with it."""
     cfg, svc = quitting
-    monkeypatch.setattr(dictation_worker, "_instance", DictationWorker())
     monkeypatch.setattr(rs.state, "is_recording", True)
     monkeypatch.setattr("tuxtalk.keyboard_grab.release_all", lambda: None)
     monkeypatch.setattr(recording, "finish_capture", lambda rec, beeps,
