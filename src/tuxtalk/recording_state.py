@@ -111,9 +111,9 @@ class Recording:
     # and how many phrases it has cut so far.
     chunker: object = None
     chunks_submitted: int = 0
-    # Speech the pause detector heard after its last cut, taken at the stop:
-    # 0.0 means the rest of the recording is room noise only.
-    last_chunk_speech: float | None = None
+    # Whether the audio after the last cut holds speech, judged at the stop
+    # (recording._rest_holds_speech); without it the rest isn't transcribed.
+    rest_has_speech: bool = True
     # Hands-free auto-stop (a silence.SilenceDetector), or None unless a
     # double-tap of the toggle key armed it.
     silence: object = None

@@ -68,6 +68,40 @@ def test_a_short_last_word_is_typed_when_hands_free_stops(heard):
     assert "".join(typed) == "We meet yes "
 
 
+def test_hands_free_judges_a_short_last_word_against_the_whole_rest(heard, monkeypatch):
+    """The quiet hands-free waited through is the room the word stands out
+    from. Judged after that quiet was trimmed, in a noisy room the room
+    looked louder and real short words were thrown away."""
+    texts, typed, _, _ = heard
+    texts.extend(["we meet", "yes", "we meet yes"])
+    judged = []
+
+    def has_a_word(audio, rate, ignoring_hz=None):
+        judged.append(len(audio) / rate)
+        return real_has_a_word(audio, rate, ignoring_hz)
+
+    real_has_a_word = silence.has_a_word
+    monkeypatch.setattr(silence, "has_a_word", has_a_word)
+    rec = rs.state.current
+    rec.silence = silence.SilenceDetector(2.0, SR)
+    feed(np.concatenate([speech(1.0), noise(1.0), speech(0.2), noise(2.5)]))
+    stop()
+    assert judged and judged[0] >= 2.4          # the word and all the quiet after it
+    assert "".join(typed) == "We meet yes "
+
+
+def test_a_word_cut_short_by_the_key_still_reaches_the_engine(heard):
+    """Let go while still talking: the rest goes to the engine whatever it
+    holds, as it always did, even a word's first 30 ms."""
+    texts, typed, _, lengths = heard
+    texts.extend(["we meet", "we", "we meet we"])
+    feed(np.concatenate([speech(1.0), noise(1.0), noise(0.315), speech(0.03)]))
+    stop()
+    assert texts == []
+    assert len(lengths) == 3
+    assert "".join(typed) == "We meet we "
+
+
 def test_a_stop_while_the_last_word_arrives_still_types_it(heard, monkeypatch):
     """The key is let go while the audio callback takes in the word's block.
     The stop waits until the pause detector has heard that block: taking
