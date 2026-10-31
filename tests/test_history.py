@@ -21,12 +21,12 @@ from tuxtalk import pipeline
 
 # Saved before conftest points every test at a throwaway file: these tests
 # check where the real one goes.
-_REAL_HISTORY_PATH = history._history_path
+_REAL_HISTORY_PATH = history.history_path
 
 
 @pytest.fixture(autouse=True)
 def runtime_dir(tmp_path, monkeypatch):
-    monkeypatch.setattr(history, "_history_path", _REAL_HISTORY_PATH)
+    monkeypatch.setattr(history, "history_path", _REAL_HISTORY_PATH)
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     return tmp_path
@@ -206,3 +206,26 @@ def test_dictation_is_named_for_what_a_click_does(monkeypatch):
         assert asked == ["stop", "start"]
     finally:
         t.menu.widget.destroy()
+
+
+def test_clear_history_is_not_undone_by_a_dictation_finishing_meanwhile(monkeypatch):
+    """A dictation read the list, Clear History ran (the tray or the GNOME
+    extension, another process), then the dictation wrote the list back with
+    the cleared texts in it. People clear the list for privacy."""
+    import threading
+    import time
+    history.add_entry("something private")
+    read_list = history.get_entries
+    cleared = threading.Event()
+
+    def read_while_someone_clears():
+        entries = read_list()
+        clearing = threading.Thread(target=lambda: (history.clear(), cleared.set()))
+        clearing.start()
+        time.sleep(0.2)             # Clear History, while the dictation is saved
+        return entries
+    monkeypatch.setattr(history, "get_entries", read_while_someone_clears)
+    history.add_entry("the newest dictation")
+    monkeypatch.setattr(history, "get_entries", read_list)
+    assert cleared.wait(5)
+    assert "something private" not in history.get_entries()

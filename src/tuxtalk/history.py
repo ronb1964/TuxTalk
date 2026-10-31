@@ -14,6 +14,7 @@ The dictation service writes the list; the tray and the GNOME extension (via
 D-Bus) read it. A small file is the simplest way to share it between those
 separate processes.
 """
+import contextlib
 import json
 import os
 import tempfile
@@ -27,9 +28,11 @@ _no_folder = FailureNotes()
 
 MAX_ENTRIES = 20
 PREVIEW_CHARS = 50
+# Behind another change to the list, then go ahead: a dictation waits for this.
+LOCK_WAIT_S = 2.0
 
 
-def _history_path():
+def history_path():
     """The history file, in the user's (or the Flatpak's) private runtime
     folder, so a host install and the Flatpak keep separate lists. None when
     the session has no private runtime folder: the locks' /tmp fallback may
@@ -42,12 +45,37 @@ def _history_path():
             logger.info("Recent Dictations keeps nothing: this session has no private "
                         "runtime folder")
         return None
+    # The pre-rename name, kept: the list is for getting lost text back, and
+    # an update's restart within the session mustn't empty it.
     return os.path.join(base, "talktype-history.json")
+
+
+@contextlib.contextmanager
+def _one_change_at_a_time():
+    """Held around each change to the list, across processes: a dictation
+    finishing as Clear History ran wrote the cleared entries back. Behind a
+    change that doesn't end in LOCK_WAIT_S, or with no lock to be had, it
+    goes ahead anyway: Recent Dictations must not hold up a dictation.
+    Nothing is locked when no list is kept (history_path)."""
+    from . import single_instance
+    if history_path() is None:
+        yield
+        return
+    try:
+        lock = single_instance.open_lock("history.lock")
+    except OSError as e:
+        logger.warning(f"Recent Dictations: no lock, changing them anyway ({e})")
+        yield
+        return
+    with lock:
+        if not single_instance.claim(lock, wait_s=LOCK_WAIT_S):
+            logger.warning("Recent Dictations: another change doesn't end; going ahead")
+        yield
 
 
 def get_entries():
     """Recent dictations, newest first. Never raises."""
-    path = _history_path()
+    path = history_path()
     if path is None:
         return []
     try:
@@ -73,22 +101,24 @@ def add_entry(text, replaces=None):
     if not text:
         return
     old = _clean(replaces)
-    _save([text] + [e for e in get_entries() if e != text and e != old])
+    with _one_change_at_a_time():
+        _save([text] + [e for e in get_entries() if e != text and e != old])
 
 
 def forget(text):
     """Take *text* back out: it went in first, then wasn't typed after all
     (a password field), so it may be the password itself. Never raises."""
     text = _clean(text)
-    entries = get_entries()
-    if text in entries:
-        _save([e for e in entries if e != text])
+    with _one_change_at_a_time():
+        entries = get_entries()
+        if text in entries:
+            _save([e for e in entries if e != text])
 
 
 def _save(entries):
     """Write *entries* (newest first, cut to MAX_ENTRIES) as the list, whole
     or not at all; nothing without a private runtime folder. Never raises."""
-    path = _history_path()
+    path = history_path()
     if path is None:
         return
     try:
@@ -107,15 +137,16 @@ def _save(entries):
 
 def clear():
     """Forget every recent dictation."""
-    path = _history_path()
+    path = history_path()
     if path is None:
         return
-    try:
-        os.remove(path)
-    except FileNotFoundError:
-        pass
-    except OSError as e:
-        logger.warning(f"Could not clear dictation history: {e}")
+    with _one_change_at_a_time():
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            logger.warning(f"Could not clear dictation history: {e}")
 
 
 def paste_last_hint(hotkey):

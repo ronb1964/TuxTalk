@@ -246,9 +246,9 @@ class TrayMenu:
         the history file, watched with a GIO file monitor (inotify; the file
         lives on tmpfs, see history.py). The monitor, or None."""
         from gi.repository import Gio
-        from .history import _history_path
+        from .history import history_path
         try:
-            monitor = Gio.File.new_for_path(_history_path()).monitor_file(
+            monitor = Gio.File.new_for_path(history_path()).monitor_file(
                 Gio.FileMonitorFlags.NONE, None)
             monitor.connect("changed", lambda *_: GLib.idle_add(self.refresh_history))
             return monitor
