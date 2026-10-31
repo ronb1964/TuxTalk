@@ -149,13 +149,28 @@ def test_a_slower_graphics_chip_means_the_processor(monkeypatch):
 
 
 def test_flatpak_has_no_usable_graphics(monkeypatch):
-    monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TalkType")
+    monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TuxTalk")
     assert not r.detect_hardware().gpu
 
 
-def test_hardware_facts_are_cached():
-    """The tray asks every second; nvidia-smi must run once."""
-    assert hasattr(r._nvidia_name, "cache_info") and hasattr(r._vulkan_facts, "cache_info")
+def test_hardware_facts_are_cached(monkeypatch):
+    """The tray asks every second; nvidia-smi and the Vulkan probe must run once."""
+    from tuxtalk import cuda_helper
+    from tuxtalk import whisper_vulkan as wv
+    asked = []
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    monkeypatch.setattr(cuda_helper, "detect_nvidia_gpu", lambda: asked.append("nvidia-smi"))
+    monkeypatch.setattr(wv, "is_offered", lambda: asked.append("vulkan") or True)
+    monkeypatch.setattr(wv, "graphics_vendors", lambda: [wv.AMD_VENDOR])
+    r._nvidia_name.cache_clear()
+    r._vulkan_facts.cache_clear()
+    try:
+        for _ in range(3):
+            assert r.detect_hardware().gpu_name == "AMD graphics"
+    finally:
+        r._nvidia_name.cache_clear()
+        r._vulkan_facts.cache_clear()
+    assert sorted(asked) == ["nvidia-smi", "vulkan"]
 
 
 def test_new_settings_exist_and_are_live():
