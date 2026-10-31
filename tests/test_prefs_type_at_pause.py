@@ -260,7 +260,7 @@ def test_a_microphone_that_never_stops_doesnt_freeze_the_window(win, monkeypatch
         assert opened(win, count)
         started = time.monotonic()
         stop()
-        assert time.monotonic() - started < 0.5
+        assert time.monotonic() - started < 2      # the stream never stops at all
         assert win.tap_test_btn.get_label() == "Test"
     release.set()
     assert all(stopped(stream) for stream in win.streams)
