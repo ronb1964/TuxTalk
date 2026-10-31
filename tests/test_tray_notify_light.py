@@ -33,7 +33,7 @@ SCRIPT = textwrap.dedent("""
     tray_presets.preset_in_use = lambda: "recommended"
     class Tray(tray_presets.Presets):
         _applying_preset = False
-        update_menu_display = _emit_model_changed = restart_if_running = (
+        update_menu_display = _emit_model_changed = restart_if_on = (
             lambda self, *a: None)
     Tray().set_performance_preset("lightest")
 

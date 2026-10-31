@@ -258,8 +258,15 @@ class TuxTalkDBusService(dbus.service.Object):
 
     @dbus.service.method(DBUS_INTERFACE)
     def RestartService(self):
-        """Restart the dictation service"""
+        """Restart the dictation service, as the user asked: with Dictation
+        off it turns it on."""
         self._dispatch('restart_service')
+
+    @dbus.service.method(DBUS_INTERFACE)
+    def RestartIfOn(self):
+        """Restart the dictation service onto new settings, as Preferences
+        asks after a change: only while Dictation is on."""
+        self._dispatch('restart_if_on')
 
     @dbus.service.method(DBUS_INTERFACE, in_signature='sss')
     def SetFocusedWindow(self, wm_class: str, window_id: str, geometry: str):

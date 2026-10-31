@@ -50,6 +50,10 @@ class TrayAppInstance:
         """Restart service via tray."""
         self._later(self.tray.restart_service, None)
 
+    def restart_if_on(self):
+        """Restart the service onto new settings, unless Dictation is off."""
+        self._later(self.tray.restart_if_on, None)
+
     def toggle_recording(self):
         """Toggle recording in the service process via SIGUSR1,
         once it's ready: one still starting (just restarted)

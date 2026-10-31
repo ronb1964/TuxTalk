@@ -446,8 +446,9 @@ before 0.15.0, so older entries use that name.
 - If you turned Dictation off, picking a Performance preset, applying a
   Preferences change that needs a restart, or the Parakeet Ultra download
   turned it back on. So did loading a settings backup and Fix Typing. Now
-  it stays off, and the change is used when you turn Dictation on. Restart
-  Service in the menu still turns it on, since you asked for it.
+  it stays off, even while your last dictation is still being typed, and
+  the change is used when you turn Dictation on. Restart Service in the
+  menu still turns it on, since you asked for it.
 - Clearing Recent Dictations at the same moment a dictation finished could
   bring the cleared ones back. Now one waits for the other, so cleared ones
   stay gone.

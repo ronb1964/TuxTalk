@@ -134,6 +134,7 @@ def _bare_tray(**attrs):
     t._install_thread = None
     t._uninstalling = False
     t._waiting_start = WaitingStart()
+    t._dictation_on = True
     t._menu_window = None
     t.preferences_process = None
     t.dbus_service = None
@@ -358,7 +359,7 @@ def test_an_automatic_restart_with_dictation_off_leaves_it_off(slow_service):
     launched = []
     t = _bare_tray(_launch_service=lambda: launched.append(True),
                    update_status_and_menu=lambda repeat=True: False)
-    t.restart_if_running()
+    t.restart_if_on()
     assert not _run_main_loop_until(lambda: launched, timeout=0.3)
     assert slow_service.waited_on == [] and t._restarting is False
 
@@ -375,8 +376,58 @@ def test_restart_service_with_dictation_off_turns_it_on(slow_service):
     assert _run_main_loop_until(lambda: launched)
 
 
+def _tray_with_dbus(slow_service):
+    """A bare tray and the D-Bus service Preferences reaches it through."""
+    from tuxtalk.dbus_service import TuxTalkDBusService
+    from tuxtalk.tray_dbus_app import TrayAppInstance
+    launched = []
+    t = _bare_tray(_launch_service=lambda: launched.append(True),
+                   update_status_and_menu=lambda repeat=True: False)
+    bus_side = TuxTalkDBusService.__new__(TuxTalkDBusService)
+    bus_side.app = TrayAppInstance(t)
+    return t, bus_side, launched
+
+
+def test_an_automatic_restart_while_the_stopped_service_types_leaves_dictation_off(
+        slow_service):
+    """Dictation off while the old service still typed a long paragraph,
+    then a Performance preset or a Preferences change: the restart saw that
+    service still running, waited for it and started a new one, so Dictation
+    came back on by itself."""
+    from tuxtalk.dbus_service import TuxTalkDBusService
+    t, bus_side, launched = _tray_with_dbus(slow_service)
+    t.stop_service(None)                    # PID 42 is still typing
+    t.restart_if_on()                       # a Performance preset
+    TuxTalkDBusService.RestartIfOn(bus_side)    # Preferences after a change
+    _run_main_loop_until(lambda: False, timeout=0.2)
+    slow_service.gone.set()
+    assert not _run_main_loop_until(lambda: launched, timeout=0.5)
+    assert len(slow_service.waited_on) == 1     # the Stop's wait, no other
+    assert t._restarting is False
+
+
+def test_preferences_restart_restarts_while_dictation_is_on(slow_service):
+    from tuxtalk.dbus_service import TuxTalkDBusService
+    t, bus_side, launched = _tray_with_dbus(slow_service)
+    TuxTalkDBusService.RestartIfOn(bus_side)
+    _run_main_loop_until(lambda: slow_service.waited_on, timeout=2)
+    slow_service.gone.set()
+    assert _run_main_loop_until(lambda: launched)
+
+
+def test_restart_service_after_dictation_off_turns_it_on_again(slow_service):
+    """The user's own Restart Service still means "have dictation running"."""
+    t, _bus_side, launched = _tray_with_dbus(slow_service)
+    t.stop_service(None)
+    slow_service.gone.set()
+    _run_main_loop_until(lambda: len(slow_service.waited_on) == 1, timeout=2)
+    t.restart_service(None)
+    assert _run_main_loop_until(lambda: launched)
+    assert t._dictation_on is True
+
+
 @pytest.mark.parametrize("second, starts", [("restart_service", True),
-                                            ("restart_if_running", False)])
+                                            ("restart_if_on", False)])
 def test_a_restart_queued_after_dictation_off(slow_service, second, starts):
     """Restart, Dictation off while it waits, then another restart queued
     behind the first. The user's Restart Service turns dictation on; an

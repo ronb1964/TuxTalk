@@ -84,6 +84,11 @@ class DictationTray(ServiceLifecycle, Presets):
         self._menu_window = None    # menu_window.MenuWindow while it's open
         self._uninstalling = False  # the uninstall's question is up, or it's running
         self._quitting = False      # Quit began: waiting for the service to go
+        # The user's Dictation switch: off from Dictation off until it's
+        # turned on or Restart Service is chosen. An automatic restart
+        # (restart_if_on) doesn't go by a service still running: one turned
+        # off types what it holds before it goes.
+        self._dictation_on = True
         # Counts the user's decisions about the service (Stop, Quit, Restart,
         # uninstall); a launch scheduled under an older one is dropped.
         self._service_gen = 0
@@ -127,7 +132,7 @@ class DictationTray(ServiceLifecycle, Presets):
 
         # After updating: the recommended setup, and the hotkey helper or
         # Parakeet Ultra this TuxTalk brings.
-        update_offers.start(self.restart_if_running)
+        update_offers.start(self.restart_if_on)
 
     def _check_tray_visibility(self) -> bool:
         """

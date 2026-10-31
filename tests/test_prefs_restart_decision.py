@@ -125,6 +125,21 @@ class TestApplyOrRestart:
         assert prefs_cls.restart_service(None) is True
         assert asked == []
 
+    def test_with_a_tray_the_change_restarts_only_while_dictation_is_on(self, prefs_cls,
+                                                                         monkeypatch):
+        """Dictation off while the old service still types: Preferences saw
+        that service and asked for the user's Restart Service, which turns
+        Dictation on. It asks for the restart that leaves it off."""
+        from tuxtalk import service_launcher, single_instance, update_ui
+        asked = []
+        monkeypatch.setattr(service_launcher, "find_service_pids", lambda: [42])
+        monkeypatch.setattr(single_instance, "held_elsewhere", lambda lock: True)
+        monkeypatch.setattr(update_ui, "tray_interface", lambda: SimpleNamespace(
+            RestartService=lambda: asked.append("Restart Service"),
+            RestartIfOn=lambda: asked.append("restart if on")))
+        assert prefs_cls.restart_service(None) is True
+        assert asked == ["restart if on"]
+
     def test_mixed_change_restarts(self, prefs_cls):
         stub = StubPrefs({}, {})
         prefs_cls._apply_or_restart(stub, {"beeps", "device"})

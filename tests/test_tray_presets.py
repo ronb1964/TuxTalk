@@ -42,7 +42,7 @@ class FakeTray(tray_presets.Presets):
     def _emit_model_changed(self, model):
         pass
 
-    def restart_if_running(self):
+    def restart_if_on(self):
         self.restarted += 1
 
 

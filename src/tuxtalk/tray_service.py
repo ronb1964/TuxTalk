@@ -23,7 +23,7 @@ logger = setup_logger(__name__)
 
 class ServiceLifecycle:
     """DictationTray's methods for starting, stopping and quitting. They use
-    its state: _service_gen, _restarting, _restart_pending,
+    its state: _dictation_on, _service_gen, _restarting, _restart_pending,
     _pending_starts_dictation, _quitting,
     _waiting_start, onboarding_in_progress, preferences_process,
     dbus_service, indicator and _menu_window."""
@@ -115,6 +115,7 @@ class ServiceLifecycle:
             return
         if self._quitting:
             return
+        self._dictation_on = True
 
         try:
             self._launch_service()
@@ -131,6 +132,7 @@ class ServiceLifecycle:
         for (and killed past its time) on a thread of its own."""
         if self._quitting:
             return
+        self._dictation_on = False
         self._drop_pending_launches()
         self._waiting_start.take()          # a --start waiting for the model is off too
         from .service_launcher import end_in_background, find_service_pids
@@ -152,23 +154,30 @@ class ServiceLifecycle:
         window, the GNOME extension): with Dictation off it starts it."""
         self._restart(starts_dictation=True)
 
-    def restart_if_running(self, _=None):
+    def restart_if_on(self, _=None):
         """A restart onto new settings no one asked to start dictation for:
-        a Performance preset, the Parakeet Ultra download. With Dictation
-        off nothing starts: the user turned it off, and the service reads
-        the new settings when it's turned on."""
+        a Performance preset, the Parakeet Ultra download, Preferences after
+        a change. With Dictation off nothing starts, though the service it
+        stopped may still be typing what it held: the user turned it off,
+        and the service reads the new settings when it's turned on."""
         self._restart(starts_dictation=False)
 
     def _restart(self, starts_dictation):
         """Restart the dictation service: it types what it holds and quits,
         then a new one starts. The wait runs on a thread of its own, so the
-        menu stays usable. With none running, one starts only if
-        *starts_dictation*."""
+        menu stays usable. *starts_dictation* (the user's Restart Service)
+        turns Dictation on; without it nothing happens while Dictation is
+        off or no service runs."""
         # CRITICAL: Never restart service during onboarding
         if self.onboarding_in_progress:
             logger.info("Onboarding in progress - refusing to restart service")
             return
         if self._quitting:
+            return
+        if starts_dictation:
+            self._dictation_on = True
+        elif not self._dictation_on:
+            logger.info("Restart: Dictation is off, so it stays off until it's turned on")
             return
 
         # Re-entrancy guard: a second restart overlapping this one could kill
@@ -184,7 +193,7 @@ class ServiceLifecycle:
         from .service_launcher import end_in_background, find_service_pids
         pids = find_service_pids()
         if not pids and not starts_dictation:
-            logger.info("Restart: dictation is off, so it stays off until it's turned on")
+            logger.info("Restart: no dictation service runs; the next one reads the settings")
             return
         self._drop_pending_launches()
         self._restarting = True

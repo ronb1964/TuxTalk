@@ -52,7 +52,7 @@ class Presets:
     """Applying a Performance preset, for the tray's menu, the menu window and
     the GNOME extension (a mixin of tray.DictationTray). It uses the tray's
     menu (to put the dot back when a preset isn't applied), _applying_preset,
-    update_menu_display, _emit_model_changed and restart_if_running."""
+    update_menu_display, _emit_model_changed and restart_if_on."""
 
     def set_performance_preset(self, preset_id: str):
         """Apply a Performance preset: Recommended, Lightest or Battery saver.
@@ -104,7 +104,7 @@ class Presets:
                    preset_notice(cfg.model, cfg.device, _gpu_offered()))
             self.update_menu_display()
             self._emit_model_changed(cfg.model)
-            self.restart_if_running()
+            self.restart_if_on()
         except Exception as e:
             logger.error(f"Failed to apply performance preset: {e}", exc_info=True)
             self.menu.put_dot_back_soon()     # on the setup still in use
