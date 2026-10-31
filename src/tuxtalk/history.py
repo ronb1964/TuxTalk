@@ -12,16 +12,14 @@ TuxTalk's promise that dictated text stays out of the log.
 
 The dictation service writes the list; the tray and the GNOME extension (via
 D-Bus) read it. A small file is the simplest way to share it between those
-separate processes. Each change to it is made holding a lock they share;
-one that can't have the lock in time waits in memory, never on disk, and
-is tried again (_change).
+separate processes. Each change to it is made holding a lock they share
+(_change).
 """
 import contextlib
 import json
 import os
 import tempfile
 import threading
-import time
 
 from .logger import FailureNotes, setup_logger
 from .normalize import LINE_BREAK
@@ -32,21 +30,12 @@ _no_folder = FailureNotes()
 
 MAX_ENTRIES = 20
 PREVIEW_CHARS = 50
-# Behind another change to the list, a dictation goes on after this, and
-# its entry goes in once the list is free.
+# Behind another change to the list, a dictation goes on without its entry
+# after this.
 LOCK_WAIT_S = 2.0
 # A removal (a refused password, Clear History) waits longer: it never runs
 # while words are being typed.
 REMOVAL_WAIT_S = 10.0
-# Changes still waiting for the lock are tried again this often, this long.
-RETRY_EVERY_S = 2.0
-RETRY_FOR_S = 600.0
-
-# Changes not made yet for want of the lock, oldest first, each with the
-# time it was asked for (time.monotonic, the same clock in every process).
-_waiting = []
-_waiting_guard = threading.Lock()
-_retrying = False       # a thread tries the waiting changes again (_retry)
 
 
 def history_path():
@@ -67,130 +56,28 @@ def history_path():
     return os.path.join(base, "talktype-history.json")
 
 
-def _cleared_marker():
-    """The file Clear History writes the time it was asked for into, next to
-    the list, so a dictation asked for before it can't come back after it."""
-    return os.path.join(os.path.dirname(history_path()), "tuxtalk-history-cleared")
+def _change(make, wait_s, removal=False):
+    """Run *make*() holding the lock the processes sharing the list take
+    for each change: a dictation finishing as Clear History ran wrote the
+    cleared entries back. Nothing when no list is kept (history_path).
 
-
-def _change(change, wait_s):
-    """Make *change* (see _apply) after every change still waiting, in the
-    order they were asked for, holding the cross-process lock: a dictation
-    finishing as Clear History ran wrote the cleared entries back. True when
-    it's made. Without the lock within *wait_s* nothing is written, since a
-    change made beside another can bring cleared entries back: it waits in
-    memory, and a thread tries again (_retry). A Clear drops the changes
-    waiting before it, which it would undo anyway. Nothing is kept, or
-    waits, when no list is kept (history_path)."""
+    Without the lock within *wait_s*, a stuck holder (a frozen tray): an
+    addition is left out, so history is best-effort then; a *removal* (a
+    refused password, Clear History) is made anyway. Privacy wins over the
+    rare case of the frozen holder waking and writing its old list back
+    (CODE_HEALTH row 60).
+    """
     if history_path() is None:
-        return True
-    with _waiting_guard:
-        if change[0] == "clear":
-            _waiting.clear()
-        _waiting.append((change, time.monotonic()))
-        adds = [i for i, (waiting, _) in enumerate(_waiting) if waiting[0] == "add"]
-        for i in reversed(adds[:-MAX_ENTRIES]):     # never more than the list holds
-            del _waiting[i]
-    if _make_waiting(wait_s):
-        return True
-    _retry_in_background()
-    return False
-
-
-def _make_waiting(wait_s):
-    """Every change waiting, in order, under the lock; False when the lock
-    wasn't had within *wait_s* (they wait on)."""
-    lock = _take_lock(wait_s)
-    if lock is None:
-        return False
-    with lock:
-        with _waiting_guard:
-            batch = _waiting[:]
-            _waiting.clear()
-        for change, asked_at in batch:
-            _apply(change, asked_at)
-    return True
-
-
-def _apply(change, asked_at):
-    """One change to the list, with the lock held: ("add", text, the entry
-    it replaces), ("forget", text, the entry to put back in its place) or
-    ("clear",). An entry asked for before the last Clear History, which
-    another process made while this one waited, isn't put in."""
-    kind, *args = change
-    if kind == "clear":
-        _remove_list(asked_at)
         return
-    text, other = args
-    entries = get_entries()
-    if kind == "forget":
-        if text not in entries:
-            return
-        entries = [e for e in entries if e != text]
-        new, old = other, ""            # what goes back in its place, if anything
+    lock = _take_lock(wait_s)
+    if lock is not None:
+        with lock:
+            make()
+    elif removal:
+        logger.warning("Recent Dictations: removing without the lock, which is held elsewhere")
+        make()
     else:
-        new, old = text, other
-    if new and asked_at >= _cleared_at():
-        entries = [new] + [e for e in entries if e != new and e != old]
-    elif kind == "add":
-        return          # dictated before a Clear another process made meanwhile
-    _save(entries)
-
-
-def _cleared_at():
-    """When the last Clear History was asked for, as time.monotonic; 0 when
-    it can't be read (never cleared this session)."""
-    try:
-        with open(_cleared_marker(), encoding="utf-8") as f:
-            return float(f.read())
-    except (OSError, ValueError):
-        return 0.0
-
-
-def _remove_list(asked_at):
-    """Clear History, with the lock held: the list goes, and the time it was
-    asked for is kept for _apply."""
-    try:
-        with open(_cleared_marker(), "w", encoding="utf-8") as f:
-            f.write(repr(asked_at))
-    except OSError as e:
-        logger.warning(f"Could not note when dictation history was cleared: {e}")
-    try:
-        os.remove(history_path())
-    except FileNotFoundError:
-        pass
-    except OSError as e:
-        logger.warning(f"Could not clear dictation history: {e}")
-
-
-def _retry_in_background():
-    """Start _retry, unless it runs already."""
-    global _retrying
-    with _waiting_guard:
-        if _retrying:
-            return
-        _retrying = True
-    threading.Thread(target=_retry, name="history-retry", daemon=True).start()
-
-
-def _retry():
-    """Try the waiting changes again every RETRY_EVERY_S until they're all
-    made, for RETRY_FOR_S at most: a refused password or a Clear must not
-    be lost because something held the list for a while. Any still waiting
-    after that go in with the next change."""
-    global _retrying
-    deadline = time.monotonic() + RETRY_FOR_S
-    while True:
-        time.sleep(RETRY_EVERY_S)
-        made = _make_waiting(LOCK_WAIT_S)
-        with _waiting_guard:
-            left = len(_waiting)
-            if (made and not left) or time.monotonic() >= deadline:
-                _retrying = False
-                break
-    if left:
-        logger.warning(f"Recent Dictations: {left} change(s) still not made; "
-                       "they go in with the next one")
+        logger.warning("Recent Dictations: this dictation isn't kept; the list is held elsewhere")
 
 
 def _take_lock(wait_s):
@@ -202,14 +89,14 @@ def _take_lock(wait_s):
     try:
         lock = single_instance.open_lock("history.lock")
     except OSError as e:
-        logger.warning(f"Recent Dictations not changed yet: no lock to be had ({e})")
+        logger.warning(f"Recent Dictations: no lock to be had ({e})")
         return None
     try:
         if single_instance.claim(lock, wait_s=wait_s):
             return lock
-        logger.warning("Recent Dictations not changed yet: another change to them doesn't end")
+        logger.warning("Recent Dictations: another change to them doesn't end")
     except OSError as e:
-        logger.warning(f"Recent Dictations not changed yet: could not lock them ({e})")
+        logger.warning(f"Recent Dictations: could not lock them ({e})")
     with contextlib.suppress(OSError):    # a PID that couldn't be written fails again here
         lock.close()
     return None
@@ -238,19 +125,31 @@ def add_entry(text, replaces=None):
     """Remember *text* as the newest dictation. *replaces* is an entry it grew
     out of (Type at pause: the same recording, a phrase shorter), which goes.
     Never raises, and waits LOCK_WAIT_S at most: history is a convenience and
-    must not get in the way of the dictation itself. Behind a change that
-    doesn't end, the entry goes in once it has (_change)."""
+    must not get in the way of the dictation itself."""
     text = _clean(text)
-    if text:
-        _change(("add", text, _clean(replaces)), LOCK_WAIT_S)
+    if not text:
+        return
+    old = _clean(replaces)
+    _change(lambda: _save([text] + [e for e in get_entries() if e != text and e != old]),
+            LOCK_WAIT_S)
 
 
 def forget(text, put_back=""):
     """Take *text* back out: it went in first, then wasn't typed after all
     (a password field), so it may be the password itself. *put_back* is the
     entry it grew out of (Type at pause), which goes back in its place.
-    Waits REMOVAL_WAIT_S, then keeps trying in the background. Never raises."""
-    _change(("forget", _clean(text), _clean(put_back)), REMOVAL_WAIT_S)
+    A removal (_change): it waits REMOVAL_WAIT_S, then goes ahead. Never raises."""
+    text, put_back = _clean(text), _clean(put_back)
+
+    def make():
+        entries = get_entries()
+        if text not in entries:
+            return
+        entries = [e for e in entries if e != text]
+        if put_back:
+            entries = [put_back] + [e for e in entries if e != put_back]
+        _save(entries)
+    _change(make, REMOVAL_WAIT_S, removal=True)
 
 
 def _save(entries):
@@ -274,23 +173,33 @@ def _save(entries):
 
 
 def clear():
-    """Forget every recent dictation. True when they're gone; False when
-    another change held the list past REMOVAL_WAIT_S, and the clear is made
-    in the background once it lets go. It waits: never on GTK's thread
-    (clear_in_background)."""
-    return _change(("clear",), REMOVAL_WAIT_S)
+    """Forget every recent dictation; False when the list couldn't be
+    deleted. A removal (_change): it waits REMOVAL_WAIT_S, so never on GTK's
+    thread (clear_in_background)."""
+    gone = [True]
+
+    def make():
+        try:
+            os.remove(history_path())
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            logger.warning(f"Could not clear dictation history: {e}")
+            gone[0] = False
+    _change(make, REMOVAL_WAIT_S, removal=True)
+    return gone[0]
 
 
 def clear_in_background(then=None):
     """Clear History from a menu (the tray's, the GNOME extension's): clear()
-    on a thread of its own, then *then*() on that thread. A clear that has
-    to wait for a stuck change is said in a notification, since the list
-    still shows what was asked to go."""
+    on a thread of its own, then *then*() on that thread. A clear that
+    failed is said in a notification, since the list still shows what was
+    asked to go."""
     def run():
         if not clear():
             from .notify import notify
-            notify("Recent Dictations not cleared yet",
-                   "Another change to them hasn't finished. They're cleared as soon as it has.")
+            notify("Recent Dictations not cleared",
+                   "TuxTalk couldn't delete the list. Try Clear History again.")
         if then is not None:
             then()
     # Not a daemon: quitting the tray meanwhile must not drop the clear.

@@ -656,8 +656,6 @@ def _no_real_history_or_stats(monkeypatch, tmp_path_factory):
     from tuxtalk import history, stats
     folder = tmp_path_factory.mktemp("history")
     monkeypatch.setattr(history, "history_path", lambda: str(folder / "history.json"))
-    monkeypatch.setattr(history, "_waiting", [])    # nothing waits over from another test
-    monkeypatch.setattr(history, "_retrying", False)
     monkeypatch.setattr(stats, "stats_path", lambda: str(folder / "stats.json"))
 
 
