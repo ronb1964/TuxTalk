@@ -38,6 +38,7 @@ class StubPrefs:
         self.words_tab = SimpleNamespace(save=lambda: True)     # snippets saved
         self.on_disk = {}           # what the tray saved meanwhile
         self._restart_owed = set()
+        self._still_running = {}
         self.speech = _speech(self, chosen_model, chosen_device)
         self.general_tab = SimpleNamespace(speech=self.speech, show_saved=lambda: None,
                                            after_hotkey_change=lambda changed, since: False)
@@ -351,3 +352,19 @@ class TestWhatsSavedButNotInForceStaysOwed:
         prefs_cls.on_apply(stub, None)      # the restart never came; Apply
 
         assert asked == [{"model", "recording_indicator"}]
+
+    def test_a_cancelled_download_after_a_cancelled_uninstall_goes_back_to_the_running_model(
+            self, prefs_cls):
+        """Uninstall's Apply saved Medium, the uninstall was cancelled, then
+        Apply's download of Medium was too: the settings went "back" to
+        Medium, which isn't downloaded, while dictation still ran Small."""
+        stub, asked = self._stub()
+
+        assert stub.save_before_restart() is True
+        prefs_cls.on_apply(stub, None)      # its download is cancelled
+
+        assert stub.model_on_disk == "small"
+        assert stub.speech.model_combo.active == "small"
+        stub.download_result = True
+        prefs_cls.on_apply(stub, None)      # nothing picked since
+        assert asked == [{"recording_indicator"}]

@@ -166,6 +166,9 @@ class PreferencesWindow:
         self.config = self.load_config()
         self._config_at_open = dict(self.config)
         self._restart_owed = set()      # keys saved whose restart failed
+        # The model and device dictation still runs, for those saved without
+        # a download (save_before_restart): what a cancelled download goes back to.
+        self._still_running = {}
         self._restarts_asked = 0        # the latest restart's number (_apply_or_restart)
         # Set while busy() (Apply waiting for KDE's verdict on a new hotkey).
         self._busy = False
@@ -521,13 +524,17 @@ class PreferencesWindow:
         TuxTalk (an update, an uninstall) must; False, having said why, when
         either failed. What's saved stays owed: if that restart never comes
         (the uninstall is cancelled, the update's download fails), the next
-        Apply still downloads what it needs and restarts for it."""
+        Apply still downloads what it needs and restarts for it, and a
+        download cancelled then goes back to the model that still runs."""
         if not self.words_tab.save():
             return False
+        unsaved = changed_keys(self._config_at_open, self.config)
         self._restart_owed |= self._changed_since_open()
         if not self.save_config():
             self._show_save_error()
             return False
+        for key in unsaved & set(_DOWNLOAD_KEYS):
+            self._still_running.setdefault(key, self._saved_before.get(key))
         return True
 
     @contextmanager
@@ -761,15 +768,19 @@ class PreferencesWindow:
             return None
         # Only what this window changed is undone, and to what was saved
         # until now: a model the tray switched to meanwhile stays.
-        previous = {k: self._saved_before.get(k) for k in _DOWNLOAD_KEYS if k in changed}
+        previous = {k: self._still_running.get(k, self._saved_before.get(k))
+                    for k in _DOWNLOAD_KEYS if k in changed}
         self.general_tab.show_saved()
         speech = self.general_tab.speech
         if not speech.download_selected_model():
             speech.rollback_download(previous)
             # The rest was saved but never put in force: the next Apply
-            # restarts for it rather than say it's in effect.
+            # restarts for it rather than say it's in effect. A model or
+            # device put back to what still runs isn't owed any more.
             self._restart_owed |= set(changed) - set(_DOWNLOAD_KEYS)
+            self._restart_owed -= set(self._still_running)
             return None
+        self._still_running = {}        # downloaded: nothing left to go back to
         return changed, saved_at
 
     def on_apply(self, button):

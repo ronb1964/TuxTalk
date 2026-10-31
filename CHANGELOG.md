@@ -449,7 +449,9 @@ before 0.15.0, so older entries use that name.
   whose download you then cancelled, never took effect, and the next Apply
   said "Your changes are already in effect". The same happened after
   Uninstall's Apply when you then cancelled the uninstall, or when an
-  update's download failed. Apply now restarts dictation for them.
+  update's download failed. Apply now restarts dictation for them, and if
+  you cancel a model's download then, Preferences goes back to the model
+  dictation is still using.
 - If turning "Launch TuxTalk at login" on or off didn't work (a read-only
   autostart folder, or the Flatpak's request turned down), Preferences said
   everything was applied. It now says start at login wasn't changed, and

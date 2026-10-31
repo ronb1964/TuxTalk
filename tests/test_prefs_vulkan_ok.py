@@ -36,6 +36,7 @@ def test_ok_closes_after_a_model_download(prefs_cls, monkeypatch):
         _config_at_open={"model": "parakeet-v3"},
         config={"model": "small"},
         _saved_before={"model": "parakeet-v3"},     # what the save replaced
+        _still_running={},
         save_config=lambda: True,
         _changed_since_open=lambda: {"model"},
         _apply_or_restart=lambda changed: True,

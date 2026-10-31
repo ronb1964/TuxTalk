@@ -581,7 +581,8 @@ def test_a_failed_save_says_why(tmp_path, monkeypatch):
 
 def _window(**parts):
     """A stand-in window whose save_before_restart is the real one."""
-    win = SimpleNamespace(**{"_restart_owed": set(), "_changed_since_open": set, **parts})
+    win = SimpleNamespace(**{"_restart_owed": set(), "_changed_since_open": set,
+                             "_config_at_open": {}, "config": {}, **parts})
     win.save_before_restart = lambda: PreferencesWindow.save_before_restart(win)
     return win
 
