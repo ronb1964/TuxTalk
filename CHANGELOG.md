@@ -5,6 +5,11 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- An app behind the one you're dictating into could stop every dictation
+  with "TuxTalk doesn't type into password fields", when it still said a
+  login box of its own had the focus. Now only the app you're in counts,
+  wherever TuxTalk can tell which one that is, and the desktop's own
+  password prompts always do.
 - With "Send each dictation automatically" on, OnlyOffice, AbiWord and the
   Flatpak of LibreOffice got a new line after every dictation, as if they
   were a chat. They're left alone now, like LibreOffice and KWrite already

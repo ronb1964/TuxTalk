@@ -142,7 +142,8 @@ def refuse_password_field() -> None:
     """GaveUp("password_field") when the cursor is in a password field now:
     a dictation's next line, its line break or its paste key goes nowhere.
     A line break there could submit the form."""
-    if focused_window.is_password():
+    from . import atspi_helper
+    if focused_window.is_password(budget=atspi_helper.RECHECK_BUDGET_S):
         logger.warning("Stopped typing: a password field has the focus now")
         raise virtual_keyboard.GaveUp("password_field")
 

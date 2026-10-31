@@ -574,7 +574,7 @@ def test_without_the_ai_downloaded_it_says_where_to_turn_it_on(edit_env, monkeyp
 
 def test_in_a_password_field_the_selection_isnt_even_read(edit_env, monkeypatch):
     from tuxtalk import atspi_helper
-    monkeypatch.setattr(atspi_helper, "focused_is_password", lambda: True)
+    monkeypatch.setattr(atspi_helper, "focused_is_password", lambda *a, **k: True)
     monkeypatch.setattr(cb, "copy_selection", lambda send_copy: pytest.fail("read the selection"))
     run_edit()
     assert edit_env["typed"] == [] and edit_env["history"] == []
@@ -586,7 +586,7 @@ def test_a_rewrite_is_not_typed_or_kept_if_the_focus_moved_to_a_password_field(e
     from tuxtalk import atspi_helper
     answers = [False]       # a text box at the start, a password field by the end
     monkeypatch.setattr(atspi_helper, "focused_is_password",
-                        lambda: answers.pop(0) if answers else True)
+                        lambda *a, **k: answers.pop(0) if answers else True)
     run_edit()
     assert edit_env["typed"] == [] and edit_env["history"] == []
     assert edit_env["beeps"] == [CANCEL_BEEP] and edit_env["put_back"] == 1

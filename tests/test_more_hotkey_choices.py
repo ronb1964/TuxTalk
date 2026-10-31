@@ -362,7 +362,7 @@ def test_a_dictation_stopped_by_a_stuck_key_stays_in_recent_dictations(
     monkeypatch.setattr(delivery, "determine_injection_method", lambda mode: ("type", "test"))
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
     monkeypatch.setattr(focused_window, "look", lambda: (None, None))
-    monkeypatch.setattr(focused_window, "is_password", lambda: False)
+    monkeypatch.setattr(focused_window, "is_password", lambda **k: False)
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body: notes.append(body))
     monkeypatch.setattr(live, "press_enter_after", False)
@@ -495,7 +495,7 @@ def test_typing_that_waited_stops_if_another_window_of_the_app_has_the_focus(
     """Two KWrite windows: the class is the same, the window isn't."""
     windows = iter([("tray", "{4b1e}"), ("tray", "{9c07}")])
     monkeypatch.setattr(focused_window, "look", lambda: ("kwrite", next(windows)))
-    monkeypatch.setattr(focused_window, "is_password", lambda: False)
+    monkeypatch.setattr(focused_window, "is_password", lambda **k: False)
     modifier_hotkeys.note([Keyboard(lambda look: look <= 3)], RCTRL, None)
     with pytest.raises(virtual_keyboard.GaveUp) as stop:
         keyboard_output.send_keys([(ecodes.KEY_A, 1), (ecodes.KEY_A, 0)], what="a", raise_if_partial=True)
@@ -623,7 +623,7 @@ def test_a_tap_during_the_focus_questions_holds_the_send(keyboard, due_send, mon
         return "kwrite"
     monkeypatch.setattr("tuxtalk.focused_window.window_class", focused)
     monkeypatch.setattr(focused_window, "look", lambda: named(focused()))
-    monkeypatch.setattr(focused_window, "is_password", lambda: False)
+    monkeypatch.setattr(focused_window, "is_password", lambda **k: False)
     due_send(lambda look: False)
     assert held[0] is True and keyboard.events == []
 
@@ -636,7 +636,7 @@ def test_a_tap_while_the_enter_waits_for_the_keyboard_holds_the_send(keyboard, d
     import threading
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "kwrite")
     monkeypatch.setattr(focused_window, "look", lambda: KWRITE)
-    monkeypatch.setattr(focused_window, "is_password", lambda: False)
+    monkeypatch.setattr(focused_window, "is_password", lambda **k: False)
     held, typing, checked = [], threading.Event(), threading.Event()
 
     def other_typing():
@@ -698,7 +698,7 @@ def test_a_right_ctrl_pressed_during_the_focus_questions_makes_the_enter_wait(
     board_looks = [0]
     monkeypatch.setattr("tuxtalk.focused_window.window_class", focused)
     monkeypatch.setattr(focused_window, "look", lambda: named(focused()))
-    monkeypatch.setattr(focused_window, "is_password", lambda: False)
+    monkeypatch.setattr(focused_window, "is_password", lambda **k: False)
     due_send(pressed)
     assert written_while_down and set(written_while_down) == {0}
     assert keyboard.typed_keys() == [ecodes.KEY_ENTER]

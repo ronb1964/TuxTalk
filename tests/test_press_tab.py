@@ -187,7 +187,7 @@ def test_press_tab_alone_in_a_claude_desktop_password_box_presses_the_key(monkey
     """Spaces would be refused there, so the Tab is the real key, as in any
     password field."""
     from tuxtalk import focused_window
-    monkeypatch.setattr(focused_window, "is_password", lambda: True)
+    monkeypatch.setattr(focused_window, "is_password", lambda **k: True)
     assert _dictate(monkeypatch, "Press tab.", window="com.anthropic.Claude") == [
         ("TAB", 'said "press tab"')]
 

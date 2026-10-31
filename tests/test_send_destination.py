@@ -339,7 +339,7 @@ def test_right_away_a_tap_the_hotkey_loop_reads_holds_the_enter(chat, keyboard, 
         return outcome
     monkeypatch.setattr(delivery, "deliver_text", deliver_then_note)
     monkeypatch.setattr(atspi_helper, "focused_is_password",
-                        lambda: words_in.is_set() and tap_read.wait(2) and False)
+                        lambda *a, **k: words_in.is_set() and tap_read.wait(2) and False)
     heard.append("see you at noon")
     dictate()
     tap = types.SimpleNamespace(type=ecodes.EV_KEY, code=F9, value=1)
@@ -470,7 +470,7 @@ def test_a_click_during_the_password_check_sends_nothing(chat, keyboard, monkeyp
     meanwhile: the window looked at before the check got the Enter."""
     focus, _, _, notices = chat
 
-    def slow_check():
+    def slow_check(*args, **kwargs):
         focus[:] = SECOND
         return False
     monkeypatch.setattr(atspi_helper, "focused_is_password", slow_check)
@@ -485,7 +485,7 @@ def test_a_click_back_during_the_password_check_sends_nothing(chat, keyboard, mo
     focus, _, _, notices = chat
     focus[:] = SECOND
 
-    def slow_check():
+    def slow_check(*args, **kwargs):
         focus[:] = FIRST
         return False
     monkeypatch.setattr(atspi_helper, "focused_is_password", slow_check)
@@ -862,7 +862,7 @@ def test_a_pause_then_press_enter_alone_in_a_password_field_logs_in(chat, keyboa
     heard.append("See you at noon.")
     dictate("middle")
     focus[:] = SECOND
-    monkeypatch.setattr(focused_window, "is_password", lambda: True)
+    monkeypatch.setattr(focused_window, "is_password", lambda **k: True)
     heard.append("press enter")
     dictate("last")
     assert keyboard.typed_keys() == [ENTER] and notices == []

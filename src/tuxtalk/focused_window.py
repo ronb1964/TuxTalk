@@ -175,11 +175,14 @@ def destination() -> Destination:
     return Destination(*look(), password)
 
 
-def is_password() -> bool:
+def is_password(budget: float | None = None) -> bool:
     """Whether the cursor is in a password field: one the accessibility bus
-    knows (atspi_helper), or the desktop's own password prompt."""
+    knows (atspi_helper), in the app that has the focus where that can be
+    told, or the desktop's own password prompt. *budget* is how long the bus
+    may take, atspi_helper.BUDGET_S unless given."""
     from . import atspi_helper
-    return atspi_helper.focused_is_password() or _password_prompt_has_focus()
+    return (atspi_helper.focused_is_password(budget or atspi_helper.BUDGET_S, window_class)
+            or _password_prompt_has_focus())
 
 
 def _password_prompt_has_focus() -> bool:

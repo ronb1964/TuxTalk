@@ -787,7 +787,7 @@ def test_a_password_field_after_a_correction_backspaced_says_to_check_the_text(a
     texts.extend(["meet at three.", "no wait, four.", "meet at three. No wait, four."])
     call(frames_of(speech(1.0)), "middle")
     password = []
-    monkeypatch.setattr("tuxtalk.focused_window.is_password", lambda: bool(password))
+    monkeypatch.setattr("tuxtalk.focused_window.is_password", lambda **k: bool(password))
     said = []
     monkeypatch.setattr("tuxtalk.notify.notify", lambda title, body="": said.append(title))
     erased = _erase_then(monkeypatch, lambda: password.append(True))

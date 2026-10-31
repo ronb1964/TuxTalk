@@ -68,7 +68,8 @@ def desktop(monkeypatch):
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: None)
     monkeypatch.setattr(live, "usage_stats", False, raising=False)
     monkeypatch.setattr(atspi_helper, "focused_is_password",
-                        lambda: seen["answers"].pop(0) if seen["answers"] else seen["password"])
+                        lambda *a, **k: (seen["answers"].pop(0) if seen["answers"]
+                                         else seen["password"]))
     return seen
 
 
@@ -471,6 +472,59 @@ def test_a_bus_where_everything_hangs_gives_up_within_the_budget(bus, monkeypatc
     assert atspi_helper.focused_is_password() is False
     took = time.monotonic() - started
     assert took < atspi_helper.BUDGET_S + atspi_helper.CALL_TIMEOUT_MS / 1000
+
+
+def test_a_dictations_check_before_each_line_gives_up_sooner(bus, monkeypatch):
+    """Asked again before every line, line break and paste key, a bus that
+    hangs held each of them up by the whole quarter second: 20 lines of a
+    dictation took 10 s more."""
+    for n in range(5):
+        bus.app(f"frozen{n}", PASSWORD, hang=True)
+    monkeypatch.setattr(focused_window, "window_class", lambda: "org.kde.kwrite")
+    started = time.monotonic()
+    keyboard_output.refuse_password_field()          # no answer in time: typing as usual
+    took = time.monotonic() - started
+    assert took < atspi_helper.RECHECK_BUDGET_S + atspi_helper.CALL_TIMEOUT_MS / 1000
+    assert atspi_helper.RECHECK_BUDGET_S <= atspi_helper.BUDGET_S / 4
+
+
+def test_a_password_field_left_in_a_background_app_doesnt_refuse_the_dictation(bus):
+    """A browser behind KWrite still said its window was active, with its
+    login box focused: every dictation into KWrite was refused."""
+    bus.app("Firefox", PASSWORD)
+    bus.app("kwrite", TEXT)
+    assert atspi_helper.focused_is_password(focused_class=lambda: "org.kde.kwrite") is False
+
+
+def test_the_focused_apps_own_password_field_still_counts(bus):
+    bus.app("kwrite", TEXT)
+    bus.app("Firefox", PASSWORD)
+    assert atspi_helper.focused_is_password(focused_class=lambda: "firefox") is True
+
+
+@pytest.mark.parametrize("focused", [
+    "brave-browser",        # on the bus as "Brave": it may be the one
+    None,                   # the desktop can't say which window has the focus
+])
+def test_a_password_field_counts_where_the_focused_app_cant_be_told_apart(bus, focused):
+    bus.app("Brave", PASSWORD)
+    bus.app("kwrite", TEXT)
+    assert atspi_helper.focused_is_password(focused_class=lambda: focused) is True
+
+
+def test_the_shells_own_password_prompt_counts_over_any_app(bus):
+    bus.app("gedit", TEXT)
+    bus.app("gnome-shell", PASSWORD)
+    assert atspi_helper.focused_is_password(focused_class=lambda: "org.gnome.gedit") is True
+
+
+def test_the_focused_window_is_asked_only_once_a_password_field_is_found(bus):
+    """A look at it for every check would slow every line down for nothing."""
+    looks = []
+    bus.app("gedit", TEXT)
+    bus.app("kwrite", TEXT)
+    assert atspi_helper.focused_is_password(focused_class=lambda: looks.append(1)) is False
+    assert looks == []
 
 
 def test_a_slow_search_isnt_followed_by_a_walk_of_the_same_app(bus):
