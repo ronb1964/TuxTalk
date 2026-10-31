@@ -12,7 +12,7 @@ typed exactly as spoken.
 """
 import re
 
-from .cleanup import LEGIT_DOUBLES
+from .cleanup import LEGIT_DOUBLES, NUMBER_WORDS
 
 # The fillers the AI is told it may delete (ai_cleanup's prompt), and no others: "hmm"
 # carries meaning ("hmm, that sounds right"). A "like" it drops isn't always a
@@ -39,16 +39,16 @@ _MAX_SWAPPED = 3
 
 # Numbers whole with their separators, so "2.5" changed to "2,5", "5/6" to
 # "5-6" or "4:15" to "4/15" is a changed value, also when spaces stand around
-# a slash, colon or dash ("3 - 4" into "3 / 4"; not a comma, which lists
-# numbers as often as it groups digits); words in any script ("café",
-# "Müller", "東京"); and the signs that carry a value as words of their own: a
-# currency, a percent, and a minus or plus before a number (not a hyphen in
-# "well-known").
-_TOKEN = re.compile(r"\d+(?:[.,]\d+| *[/:–-] *\d+)*|[\w']+|[€$£¥%]|(?<!\w)[-−+](?=\d)")
+# a slash or dash ("3 - 4" into "3 / 4"; not a comma or colon, which stand
+# between two numbers as often as inside one: "1, 2", "step 2: 3 cups");
+# words in any script ("café", "Müller", "東京"); and the signs that carry a
+# value as words of their own: a currency, a percent, and a minus or plus
+# before a number (not a hyphen in "well-known").
+_TOKEN = re.compile(r"\d+(?:[.,:]\d+| *[/–-] *\d+)*|[\w']+|[€$£¥%]|(?<!\w)[-−+](?=\d)")
 # Words that turn a statement around. One left over from the wrong part of a
 # correction, when the corrected words don't say it, reverses the sentence:
 # "I will not, I mean I will, go" is not "I will not go".
-_NEGATIONS = {"not", "never", "no", "nothing", "nobody", "none", "neither", "nor"}
+_NEGATIONS = {"not", "never", "no", "nothing", "nobody", "none", "neither", "nor", "cannot"}
 # An answer that starts a new line or adds a tab inside a sentence types it:
 # in a chat box a line break can send the message half-written.
 _LAYOUT_CHARS = "\n\r\t"
@@ -138,7 +138,26 @@ def _deletion_allowed(run, src, start):
     wrong = len(stripped)
     if wrong == 0:
         return False    # only the phrase went, leaving both values: "5, actually 10" -> "5 10"
-    return wrong <= _MAX_REPLACED and wrong <= following + 1
+    return (wrong <= min(_MAX_REPLACED, following + 1)
+            and not _merges_two_numbers(src[:start], stripped, src[start + len(run):]))
+
+
+def _is_number(word):
+    return word[0].isdigit() or word in NUMBER_WORDS
+
+
+def _merges_two_numbers(kept, dropped, restated):
+    """True if an answer that keeps the words *kept*, drops *dropped* (and
+    the cue) and goes on with *restated* puts two numbers side by side: the
+    last kept word is a number, and the restatement says one again and then
+    the dropped words. "Meet at 3 pm, no wait, 4 pm" -> "Meet at 3 4 pm"
+    drops only "pm, no wait". A kept word that isn't a number is the
+    sentence's own, so "It's red, no wait, dark red" -> "It's dark red"
+    stays a fix."""
+    if not kept or not _is_number(kept[-1]):
+        return False
+    return any(restated[d:d + len(dropped)] == dropped and any(map(_is_number, restated[:d]))
+               for d in (1, 2))
 
 
 def _is_spliced_correction(src, out):
@@ -183,6 +202,8 @@ def _splices(start, wrong, keep, after, out):
     if not replaced:
         return False
     if any(_is_negation(w) and w not in after for w in leftover):
+        return False
+    if _merges_two_numbers(start, replaced, after):
         return False
     for split in range(1, len(after) + 1):  # right part is not empty
         right, rest = after[:split], after[split:]
@@ -255,15 +276,26 @@ def _is_restated_correction(src, out):
 def _keeps_a_dropped_negation(src, out):
     """True if *out* keeps a negation the correction took out: the words
     after a cue repeat the negated word without it ("don't send it, no wait,
-    send it today"), so the answer must not say "don't send it today"."""
+    send it today"), so the answer must not say "don't send it today".
+    Expects the fillers taken out ("don't, uh, send it")."""
     for c_start in range(1, len(src)):
+        if src[c_start] == "no" and src[c_start - 1] in _CUE_WORDS:
+            continue    # "sorry, no more than 6": the "no" starts the restatement
         for cue in _CUES_LONGEST_FIRST:
             if tuple(src[c_start:c_start + len(cue)]) != cue:
                 continue
             first, after = src[:c_start], src[c_start + len(cue):]
-            if any(_is_negation(w) and w in out and w not in after and first[i + 1] in after
-                   for i, w in enumerate(first[:-1])):
-                return True
+            for i, w in enumerate(first):
+                if not _is_negation(w) or w not in out or w in after:
+                    continue
+                # The negated word is one of the next two: an adverb may come
+                # first ("don't ever send it"). A small word ("not the red
+                # one, no wait, the blue one") or one said again before the
+                # cue ("don't call Bob, call Jim, sorry, call Sue") isn't
+                # what was restated.
+                if any(v in after and v not in LINKING_WORDS and v not in first[j + 1:]
+                       for j, v in enumerate(first[i + 1:i + 3], start=i + 1)):
+                    return True
             break   # longest cue at this position tried; move on
     return False
 
@@ -273,7 +305,7 @@ def edit_is_safe(said: str, edited: str) -> bool:
     if any(c in edited and c not in said for c in _LAYOUT_CHARS):
         return False
     src, out = words(said), words(edited)
-    if not out or _keeps_a_dropped_negation(src, out):
+    if not out or _keeps_a_dropped_negation(_without_fillers(src), _without_fillers(out)):
         return False
     runs = _deleted_runs(src, out)
     if runs is not None and all(_deletion_allowed(run, src, start) for start, run in runs):

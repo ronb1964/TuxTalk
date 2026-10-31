@@ -26,8 +26,9 @@ LEGIT_DOUBLES = {"that", "had", "is", "do", "very", "so", "bye", "no", "yeah", "
                  "far", "long"}
 
 # Numbers are read out digit by digit ("five five five", "4 4 7 1"), so a
-# repeated number is a phone number or PIN, never a stutter.
-_NUMBER_WORDS = {
+# repeated number is a phone number or PIN, never a stutter. The AI's
+# corrections may not put two of them side by side (correction_safety).
+NUMBER_WORDS = {
     "zero", "oh", "one", "two", "three", "four", "five", "six", "seven",
     "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen",
     "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty",
@@ -99,7 +100,7 @@ def _collapse_repeats(text: str) -> str:
         if phrase.lower() in LEGIT_DOUBLES:
             return m.group(0)
         words = phrase.lower().split()
-        if any(c.isdigit() for c in phrase) or any(w in _NUMBER_WORDS for w in words):
+        if any(c.isdigit() for c in phrase) or any(w in NUMBER_WORDS for w in words):
             return m.group(0)
         if _is_name(m):
             return m.group(0)
