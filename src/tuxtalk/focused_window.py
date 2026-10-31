@@ -117,17 +117,26 @@ def same_window(before, after) -> bool | None:
     other not), None when it can't be told: a part one look didn't get, or
     ids from two sources."""
     (class_a, window_a), (class_b, window_b) = before[:2], after[:2]
+    id_a, id_b = _id(window_a), _id(window_b)
     # KWin lowercases the class ("google-chrome"); X11 has it as the app
     # set it ("Google-chrome"), and on Plasma's X11 session a look can come
-    # from either.
-    if class_a is not None and class_b is not None and class_a.casefold() != class_b.casefold():
+    # from either. One window, by its id from one source, may also be named
+    # with and without its app's domain ("org.kde.kate", "kate"); another
+    # app under the same id is a report torn between two windows.
+    if (class_a is not None and class_b is not None and class_a.casefold() != class_b.casefold()
+            and not (id_a is not None and id_a == id_b
+                     and _app_part(class_a) == _app_part(class_b))):
         return False
     if is_own(before) != is_own(after) and None not in (window_a or class_a, window_b or class_b):
         return False
-    id_a, id_b = _id(window_a), _id(window_b)
     if id_a is None or id_b is None or id_a[0] != id_b[0]:
         return None
     return id_a == id_b
+
+
+def _app_part(wm_class: str) -> str:
+    """The app's own name in a class: "kate" in "org.kde.kate", without case."""
+    return wm_class.casefold().rsplit(".", 1)[-1]
 
 
 def _id(window):
