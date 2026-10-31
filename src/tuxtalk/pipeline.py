@@ -425,8 +425,8 @@ def _deliver(words: _Words, audio_f32, job: _Job) -> None:
         # Counts only (words, seconds dictating); see stats.py. A correction
         # across a pause retypes the phrase before, counted when it went in.
         from .stats import count_words, record
-        record(count_words(text) - count_words(words.taken_back),
-               len(audio_f32) / engine.SAMPLE_RATE)
+        record(count_words(text), len(audio_f32) / engine.SAMPLE_RATE,
+               taken_back=count_words(words.taken_back))
 
 
 def _carry_on_after(words: _Words, text: str, audio_f32, job: _Job) -> None:

@@ -69,6 +69,14 @@ def test_record_ignores_empty_dictations(stats_file):
     assert not stats_file.exists()
 
 
+def test_a_dictation_typed_over_words_counts_only_the_difference(stats_file):
+    """A correction across a pause retypes the phrase before: its words take
+    the place of those, counted already, and its seconds still count."""
+    stats.record(5, 2.0, today=D(2026, 10, 2))
+    stats.record(3, 1.0, today=D(2026, 10, 2), taken_back=5)
+    assert stats.load() == {"2026-10-02": {"dictations": 2, "words": 3, "seconds": 3.0}}
+
+
 def test_record_never_raises_and_keeps_a_damaged_file(stats_file):
     stats_file.write_text("{not json")
     stats.record(5, 2.0, today=D(2026, 10, 2))      # must not raise
@@ -243,7 +251,7 @@ def test_stats_are_saved_after_the_text_is_typed(stats_file, monkeypatch):
     monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.history.add_entry", lambda text: None)
     monkeypatch.setattr(delivery, "inject_text", lambda text, mode, **kw: order.append("typed"))
-    monkeypatch.setattr(stats, "record", lambda words, seconds: order.append("counted"))
+    monkeypatch.setattr(stats, "record", lambda *a, **k: order.append("counted"))
     # A full second: a near-silent 0.1 s would be dropped as an accidental tap
     # (silence.is_speechless_tap) before reaching the engine.
     frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]

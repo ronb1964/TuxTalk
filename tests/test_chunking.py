@@ -828,17 +828,22 @@ def test_correction_after_a_pause_fixes_the_phrase_before(ai_on):
     assert rs.state.current.message.held_mark["mark"] == "."
 
 
-def test_a_correction_after_a_pause_counts_its_words_once(ai_on, monkeypatch):
+@pytest.mark.parametrize("before", ["meet at three.", "um, meet at three."])
+def test_a_correction_after_a_pause_counts_its_words_once(ai_on, monkeypatch, tmp_path, before):
     """Your Stats counted "Meet at four." as three more words, though it
-    only took the place of "Meet at three.", counted when it was typed."""
+    only took the place of the phrase before, counted when it was typed;
+    and taking that back, a correction adding no more words than it
+    replaced lost its seconds as well."""
+    from tuxtalk import stats
     texts, _, _, _ = ai_on
-    counted = []
     monkeypatch.setattr(live, "usage_stats", True)
-    monkeypatch.setattr("tuxtalk.stats.record", lambda words, seconds: counted.append(words))
-    texts.extend(["meet at three.", "no wait, four.", "meet at three. No wait, four."])
+    monkeypatch.setattr(stats, "stats_path", lambda: str(tmp_path / "stats.json"))
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    texts.extend([before, "no wait, four.", f"{before} No wait, four."])
     call(frames_of(speech(1.0)), "middle")
     call(frames_of(speech(1.0)), "middle")
-    assert sum(counted) == 3
+    (today,) = stats.load().values()
+    assert today == {"dictations": 2, "words": 3, "seconds": 2.0}
 
 
 def test_esc_while_the_ai_corrects_a_phrase_types_none_of_it(ai_on, monkeypatch):
