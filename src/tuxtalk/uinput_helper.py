@@ -38,73 +38,38 @@ UDEV_RULE_PATH = "/etc/udev/rules.d/99-talktype-uinput.rules"
 
 
 def check_uinput_exists():
-    """
-    Check if /dev/uinput device exists.
-    
-    Returns:
-        bool: True if /dev/uinput exists, False otherwise
-    """
+    """Whether /dev/uinput exists (the uinput module is loaded)."""
     exists = os.path.exists("/dev/uinput")
     logger.debug(f"/dev/uinput exists: {exists}")
     return exists
 
 
 def check_uinput_readable():
-    """
-    Check if current user can read /dev/uinput.
-    
-    Returns:
-        bool: True if readable, False otherwise
-    """
-    try:
-        readable = os.access("/dev/uinput", os.R_OK)
-        logger.debug(f"/dev/uinput readable: {readable}")
-        return readable
-    except Exception as e:
-        logger.warning(f"Error checking /dev/uinput read access: {e}")
-        return False
+    """Whether this user may read /dev/uinput."""
+    readable = os.access("/dev/uinput", os.R_OK)
+    logger.debug(f"/dev/uinput readable: {readable}")
+    return readable
 
 
 def check_uinput_writable():
-    """
-    Check if current user can write to /dev/uinput.
-    
-    Returns:
-        bool: True if writable, False otherwise
-    """
-    try:
-        writable = os.access("/dev/uinput", os.W_OK)
-        logger.debug(f"/dev/uinput writable: {writable}")
-        return writable
-    except Exception as e:
-        logger.warning(f"Error checking /dev/uinput write access: {e}")
-        return False
+    """Whether this user may write to /dev/uinput, which typing needs."""
+    writable = os.access("/dev/uinput", os.W_OK)
+    logger.debug(f"/dev/uinput writable: {writable}")
+    return writable
 
 
 def check_uinput_permission():
-    """
-    Check if current user has full access to /dev/uinput.
-    
-    Returns:
-        tuple: (has_access: bool, reason: str)
-            - has_access: True if user can use uinput for keystroke injection
-            - reason: Human-readable explanation of the status
-    """
-    # Check if device exists
+    """(has_access, reason): whether TuxTalk's virtual keyboard can type
+    through /dev/uinput, and why not in words."""
     if not check_uinput_exists():
         return (False, "The /dev/uinput device does not exist. "
                        "The uinput kernel module may not be loaded.")
-    
-    # Check read access
     if not check_uinput_readable():
         return (False, "Cannot read /dev/uinput. "
                        "You need permission to access this device for typing.")
-    
-    # Check write access
     if not check_uinput_writable():
         return (False, "Cannot write to /dev/uinput. "
                        "You need write permission for keystroke injection.")
-    
     return (True, "You have full access to /dev/uinput. Typing should work.")
 
 
@@ -146,12 +111,8 @@ def _readable_keyboards():
 
 
 def check_input_read_permission():
-    """
-    Check whether TuxTalk can read hotkeys from /dev/input.
-
-    Returns:
-        tuple: (has_access: bool, reason: str)
-    """
+    """(has_access, reason): whether the dictation service will hear the
+    hotkeys, through the hotkey helper or from /dev/input itself."""
     from .hotkey_helper_client import connect_helper
     helper = connect_helper()
     if helper is not None:
@@ -167,25 +128,18 @@ def check_input_read_permission():
     if _readable_keyboards():
         return (True, "You can read input devices. Hotkeys should work.")
     return (False, "Cannot read any keyboard under /dev/input, so hotkeys "
-                   "cannot work. This usually means you are not in the "
-                   "'input' group.")
+                   "cannot work. Fix Typing Permissions sets that up.")
 
 
 def check_all_device_permissions():
-    """
-    Check BOTH device permissions TuxTalk needs, not just one.
+    """(has_access, reason) for both permissions TuxTalk needs: typing
+    through /dev/uinput, and the hotkeys (the helper, or /dev/input).
 
-    Typing keystrokes needs /dev/uinput; reading hotkeys needs /dev/input.
-    They are granted by different mechanisms — logind hands out a per-user ACL
-    on /dev/uinput, while /dev/input relies on 'input' group membership — so on
-    some distributions (Fedora) one works while the other does not.
-
-    Checking uinput alone would skip setup on Fedora, and with it the
-    `usermod -a -G input` that grants hotkey access: typing would work, but no
+    They are granted by different mechanisms (logind can hand out an ACL on
+    /dev/uinput while /dev/input needs the helper or the 'input' group), so
+    on some distributions (Fedora) one works while the other does not.
+    Checking uinput alone would skip setup there: typing would work, but no
     hotkey could ever be read.
-
-    Returns:
-        tuple: (has_access: bool, reason: str)
     """
     ok_uinput, uinput_reason = check_uinput_permission()
     ok_input, input_reason = check_input_read_permission()
@@ -215,22 +169,22 @@ def check_user_in_input_group():
 
 
 def check_udev_rule_exists():
-    """
-    Check if our udev rule is already installed.
-    
-    Returns:
-        bool: True if the rule file exists, False otherwise
-    """
+    """Whether the input group's udev rule for /dev/uinput is installed."""
     exists = os.path.exists(UDEV_RULE_PATH)
     logger.debug(f"Udev rule exists at {UDEV_RULE_PATH}: {exists}")
     return exists
 
 
 # Why a dictation couldn't be typed, for the "didn't reach the window" notice.
+# A restart is only owed where the fix is the input group: the hotkey
+# helper's typing rule applies at once.
 TYPING_RESTART_PENDING = ("TuxTalk can't type yet: restart your computer to finish "
                           "the typing setup.")
 TYPING_NO_PERMISSION = ("TuxTalk doesn't have permission to type. Open Preferences, "
-                        "Advanced, Fix Typing Permissions, then restart your computer.")
+                        "Advanced, Fix Typing Permissions.")
+TYPING_NO_PERMISSION_RESTART = ("TuxTalk doesn't have permission to type. Open Preferences, "
+                                "Advanced, Fix Typing Permissions, then restart your "
+                                "computer.")
 
 
 def _username():
@@ -260,18 +214,41 @@ def typing_blocked_reason():
     if not check_uinput_writable():
         if input_group_pending_restart():
             return TYPING_RESTART_PENDING
-        return TYPING_NO_PERMISSION
+        from .secure_input import can_install
+        return TYPING_NO_PERMISSION if can_install()[0] else TYPING_NO_PERMISSION_RESTART
     return None
 
 
+def input_access_diagnosis() -> str:
+    """Why no keyboard is readable, as advice the user can act on, for the
+    service's log and the terminal it was started from. evdev's
+    list_devices() skips the nodes this user can't open, rather than
+    raising, so without this the service looks healthy while ignoring
+    every key."""
+    from .secure_input import can_install
+    head = "No readable keyboard found, so the hotkeys can't work. "
+    if can_install()[0]:
+        return head + ("Open Preferences, Advanced, Fix Typing Permissions: it installs "
+                       "TuxTalk's hotkey helper, with no restart.")
+    try:
+        group = grp.getgrnam("input")
+    except KeyError:
+        return head + "This system has no 'input' group at all."
+    if group.gr_gid in os.getgroups():
+        return head + ("This user is in the 'input' group, so the device nodes themselves "
+                       "are wrong: /dev/input/event* should be 'crw-rw---- root input'.")
+    if input_group_pending_restart():
+        # A new login isn't always enough: a lingering user session keeps
+        # the old group list.
+        return head + ("Setup already put you in the 'input' group: restart the computer "
+                       "to finish it.")
+    return head + ("Open Preferences, Advanced, Fix Typing Permissions, then restart "
+                   "the computer.")
+
+
 def get_fix_script_content():
-    """
-    Get the shell script content that fixes uinput permissions.
-    This script is run with pkexec (admin privileges).
-    
-    Returns:
-        str: Shell script content
-    """
+    """The script pkexec runs as root for the input group's fix: the udev
+    rule for /dev/uinput, and this user in the 'input' group."""
     # This script runs as ROOT via pkexec. The name comes from the passwd
     # database (or $USER when this uid has no entry), so shlex.quote is what
     # keeps any name from turning into shell commands.

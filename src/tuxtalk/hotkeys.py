@@ -25,10 +25,10 @@ from . import (
     notices,
     pipeline,
     recording,
-    secure_input,
     send_countdown,
     service_tick,
     tray_link,
+    uinput_helper,
 )
 from . import live_settings as live
 from . import recording_state as rs
@@ -582,7 +582,7 @@ def _keys_to_watch(cfg: Settings, devices):
     # keypress is supposed to reach us. If no device could be opened, say so
     # now rather than running a poll loop over an empty device list forever.
     if not devices:
-        diagnosis = secure_input.input_access_diagnosis()
+        diagnosis = uinput_helper.input_access_diagnosis()
         logger.error(diagnosis)
         print(diagnosis, file=sys.stderr)
     if keys.voice_cmds_combo:
