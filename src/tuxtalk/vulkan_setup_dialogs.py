@@ -177,7 +177,9 @@ def _remember_speed_result(processor_won):
 
 def run_speed_check(parent, model):
     """Time the graphics chip against the processor on a short sample, tell
-    the user the result, and return True if the graphics chip should be used."""
+    the user the result, and return True if the graphics chip should be used,
+    False if the processor won, or None when nothing was measured (Stop, an
+    error, no graphics chip): the processor is kept then too."""
     result = {}
     cancel = threading.Event()
 
@@ -199,7 +201,7 @@ def run_speed_check(parent, model):
     if times is None:
         message(parent, Gtk.MessageType.WARNING, "Keeping the processor",
                 result.get("error") or "The speed check was interrupted.")
-        return False
+        return None
     gpu, cpu = times
     if wv.graphics_is_worth_it(gpu, cpu):
         _remember_speed_result(False)

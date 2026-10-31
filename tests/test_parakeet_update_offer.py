@@ -1,6 +1,7 @@
 """Someone still on the original Parakeet v3 is offered Parakeet Ultra once,
 and their Parakeet keeps working whatever they answer."""
 import os
+from contextlib import nullcontext
 import types
 
 import pytest
@@ -121,7 +122,8 @@ def prefs_row(monkeypatch):
     from types import SimpleNamespace
     from tuxtalk.prefs_speech import SpeechSection
     w = SpeechSection.__new__(SpeechSection)
-    w.win = SimpleNamespace(window=None, restart_service=lambda: w.restarts.append(True))
+    w.win = SimpleNamespace(window=None, restart_service=lambda: w.restarts.append(True),
+                            busy=nullcontext)
     w.device_combo = offers.Gtk.ComboBoxText()
     w.device_combo.append("vulkan", "Vulkan")
     w.device_combo.set_active_id("vulkan")

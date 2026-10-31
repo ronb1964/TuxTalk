@@ -156,7 +156,7 @@ window.talktype-prefs {
 }
 
 /* Links, in Help's text and as buttons: the theme's link blue was nearly
-   invisible on these dark backgrounds (Help's feedback link, 0.19). */
+   invisible on these dark backgrounds (Help's feedback link). */
 .talktype-prefs *:link,
 .talktype-prefs *:visited,
 .talktype-prefs button.link > label {
@@ -164,7 +164,7 @@ window.talktype-prefs {
 }
 
 /* Links (GtkLinkButton) are text, not boxes. The button rule above drew
-   "Full changelog" as a bordered button around underlined text (Ron, 0.14.6). */
+   "Full changelog" as a bordered button around underlined text. */
 .talktype-prefs button.link,
 .talktype-prefs button.link:hover {
     background: transparent;
@@ -205,29 +205,6 @@ window.talktype-prefs {
     border-color: @theme_selected_bg_color;
 }
 
-/* Switches */
-.talktype-prefs switch {
-    background: #3a3a3a;
-    border: 1px solid #505050;
-    border-radius: 14px;
-    min-width: 48px;
-    min-height: 28px;
-}
-
-.talktype-prefs switch:checked {
-    background: @theme_selected_bg_color;
-    border-color: shade(@theme_selected_bg_color, 1.15);
-}
-
-.talktype-prefs switch slider {
-    background: white;
-    border-radius: 50%;
-    margin: 2px;
-    min-width: 22px;
-    min-height: 22px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-}
-
 /* Checkboxes */
 .talktype-prefs checkbutton check {
     background: #2a2a2a;
@@ -244,25 +221,6 @@ window.talktype-prefs {
 }
 
 .talktype-prefs checkbutton check:hover {
-    border-color: @theme_selected_bg_color;
-}
-
-/* Radio buttons */
-.talktype-prefs radiobutton radio {
-    background: #2a2a2a;
-    border: 2px solid #505050;
-    border-radius: 50%;
-    min-width: 20px;
-    min-height: 20px;
-}
-
-.talktype-prefs radiobutton radio:checked {
-    background: @theme_selected_bg_color;
-    border-color: shade(@theme_selected_bg_color, 1.15);
-    -gtk-icon-source: -gtk-icontheme("object-select-symbolic");
-}
-
-.talktype-prefs radiobutton radio:hover {
     border-color: @theme_selected_bg_color;
 }
 
@@ -350,108 +308,9 @@ window.talktype-prefs {
     min-height: 1px;
 }
 
-/* Tooltips */
-.talktype-prefs tooltip {
-    background: #2a2a2a;
-    color: #d4d4d4;
-    border: 1px solid #505050;
-    border-radius: 4px;
-    padding: 6px 10px;
-    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5);
-}
-
-.talktype-prefs tooltip * {
-    background: transparent;
-    color: inherit;
-}
-
-/* Info bars */
-.talktype-prefs infobar {
-    border-radius: 6px;
-    padding: 12px;
-    margin: 8px;
-}
-
-.talktype-prefs infobar.info {
-    background: rgba(90, 143, 184, 0.15);
-    border: 1px solid rgba(90, 143, 184, 0.3);
-}
-
-.talktype-prefs infobar.warning {
-    background: rgba(230, 170, 60, 0.15);
-    border: 1px solid rgba(230, 170, 60, 0.3);
-}
-
-.talktype-prefs infobar.error {
-    background: rgba(194, 75, 75, 0.15);
-    border: 1px solid rgba(194, 75, 75, 0.3);
-}
-
-/* List boxes */
-.talktype-prefs list {
-    background: #2a2a2a;
-    border: 1px solid #454545;
-    border-radius: 6px;
-}
-
-.talktype-prefs list row {
-    padding: 8px;
-    border-radius: 4px;
-    color: #d4d4d4;
-}
-
-.talktype-prefs list row:hover {
-    background: rgba(90, 143, 184, 0.15);
-}
-
-.talktype-prefs list row:selected {
-    background: @theme_selected_bg_color;
-    color: @theme_selected_fg_color;
-}
-
-/* Message dialogs */
-.talktype-prefs messagedialog {
-    background: #1e1e1e;
-}
-
-.talktype-prefs messagedialog .dialog-action-area button {
-    margin: 4px;
-}
-
-/* Accent text (headers, important info) */
-.talktype-prefs .accent {
-    color: shade(@theme_selected_bg_color, 1.4);
-    font-weight: 600;
-}
-
-/* Success messages */
-.talktype-prefs .success {
-    color: #6db896;
-}
-
-/* Warning text */
-.talktype-prefs .warning {
-    color: #e6aa3c;
-}
-
-/* Error text */
-.talktype-prefs .error {
-    color: #d25b5b;
-}
-
 /* Dim text */
 .talktype-prefs .dim-label {
     opacity: 0.7;
-}
-
-/* Section headers within tabs */
-.talktype-prefs label {
-    color: #d4d4d4;
-}
-
-/* Style bold section headers */
-.talktype-prefs grid > label {
-    color: #d4d4d4;
 }
 
 /* Section headers should stand out more */
@@ -479,13 +338,13 @@ window.talktype-prefs {
 
 /* "More below": GTK draws a scrolled page's undershoot at an edge that has
    more content past it, and only then. A fade into the page colour there,
-   so a page that happens to end on a row boundary doesn't look finished
-   (Ron, 0.14.6). Drawing only: the controls under it still take clicks. */
+   so a page that happens to end on a row boundary doesn't look finished.
+   Drawing only: the controls under it still take clicks. */
 .talktype-prefs scrolledwindow undershoot.bottom {
     background-color: transparent;
-    /* Strong enough to notice, never solid. Tuned with Ron on 0.14.6: 36 px
-       of light fade went unnoticed, 80 px solid at the edge hid the last row,
-       70 px at 85% leaves it readable but clearly slipping under the edge.
+    /* Strong enough to notice, never solid: 36 px of light fade went
+       unnoticed, 80 px solid at the edge hid the last row, 70 px at 85%
+       leaves it readable but clearly slipping under the edge.
        Preferences always uses its own dark colours, so one tuning fits all. */
     background-image: linear-gradient(to top, rgba(30, 30, 30, 0.85) 0%,
                                       rgba(30, 30, 30, 0.55) 40%, rgba(30, 30, 30, 0) 100%);

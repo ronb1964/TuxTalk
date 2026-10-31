@@ -5,6 +5,7 @@ download too instead of needing a second click. On Vulkan, files that are
 merely present must not count as a download, or OK would never close
 Preferences at all.
 """
+from contextlib import nullcontext
 from types import SimpleNamespace
 
 
@@ -18,7 +19,8 @@ def test_a_vulkan_model_download_reports_success(prefs_cls, monkeypatch):
     monkeypatch.setattr(wv, "is_installed", lambda m: bool(downloads))
     monkeypatch.setattr(vulkan_setup_dialogs, "ensure_files",
                         lambda parent, m, confirm: downloads.append(m) or True)
-    stub = SimpleNamespace(config={"model": "parakeet-v3", "device": "vulkan"}, window=None)
+    stub = SimpleNamespace(config={"model": "parakeet-v3", "device": "vulkan"}, window=None,
+                           win=SimpleNamespace(busy=nullcontext))
     assert SpeechSection.download_selected_model(stub) is True
     assert downloads == ["parakeet-v3"]
 

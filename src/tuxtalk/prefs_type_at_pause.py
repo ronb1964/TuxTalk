@@ -97,20 +97,20 @@ class TypeAtPause(Tab):
         self.tap_fine = self.tap_fold.content
         r = self._build_settings(self.tap_fine)
         self._build_test(self.tap_fine, r)
-        self._tap_update_title()
+        self._tap_update_summary()
 
         self.tap_check.connect("toggled", lambda c: (
             self.update_config("chunked_dictation", c.get_active()),
             self._tap_sync_sensitivity()))
         self.tap_pause_spin.connect("value-changed", lambda sp: (
             self.update_config("chunk_pause_seconds", round(sp.get_value(), 1)),
-            self._tap_reconfigure(), self._tap_update_title()))
+            self._tap_reconfigure(), self._tap_update_summary()))
         self.tap_db_spin.connect("value-changed", lambda sp: (
             self.update_config("chunk_speech_db", float(round(sp.get_value()))),
-            self._tap_reconfigure(), self._tap_update_title()))
+            self._tap_reconfigure(), self._tap_update_summary()))
         self.tap_context_check.connect("toggled", lambda c: (
             self.update_config("chunk_context_marks", c.get_active()),
-            self._tap_update_title()))
+            self._tap_update_summary()))
         self.tap_test_btn.connect("clicked", self._tap_toggle_test)
         self._tap_sync_sensitivity()
         return row
@@ -190,7 +190,7 @@ class TypeAtPause(Tab):
         self.tap_status.set_opacity(0.7)
         fine.attach(self.tap_status, 0, r, 2, 1)
 
-    def _tap_update_title(self):
+    def _tap_update_summary(self):
         """The values beside the Adjust Settings button, as they are now."""
         context = "on" if self.tap_context_check.get_active() else "off"
         self.tap_fold.set_summary(

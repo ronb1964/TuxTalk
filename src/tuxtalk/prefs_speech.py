@@ -406,7 +406,8 @@ class SpeechSection(Tab):
         device = self._parakeet_update_device(model)
         if device is None:
             return
-        updated = download_parakeet_update(device, self.window)
+        with self.win.busy():       # as CUDA's download (_download_cuda_and_large_v3)
+            updated = download_parakeet_update(device, self.window)
         if updated is None:
             show_message(self.window, Gtk.MessageType.ERROR, "The download did not finish",
                          "Check your internet connection and try again.")
@@ -424,12 +425,15 @@ class SpeechSection(Tab):
         _hw, rec = self._recommendation()
         model, device = rec.model, rec.device
         if device == "vulkan":
-            if not ensure_files(self.window, model, confirm=True):
-                return                      # cancelled: nothing changes
-            if not run_speed_check(self.window, model):
-                # The speed check saved this itself; the row's recommendation
-                # needs it too, or it keeps offering the graphics card.
-                self._vulkan_slower_now = True
+            with self.win.busy():           # as CUDA's download
+                if not ensure_files(self.window, model, confirm=True):
+                    return                  # cancelled: nothing changes
+                faster = run_speed_check(self.window, model)
+            if not faster:
+                # A processor that won was saved by the speed check itself;
+                # the row's recommendation needs it too, or it keeps offering
+                # the graphics card. A check stopped or failed measured nothing.
+                self._vulkan_slower_now = faster is False
                 device = "cpu"
                 model = recommend.recommend(recommend.effective_language(
                     self._shown_language()), recommend.Hardware(None), model=model).model
@@ -718,7 +722,8 @@ class SpeechSection(Tab):
         """Download and speed-check Vulkan for *model* (vulkan_setup_dialogs).
         True if TuxTalk should use the graphics chip."""
         from .vulkan_setup_dialogs import set_up
-        return set_up(self.window, model, confirm=confirm)
+        with self.win.busy():           # as CUDA's download
+            return set_up(self.window, model, confirm=confirm)
 
     def _switch_to_vulkan_for_model(self, model, confirm=True):
         """Set up Vulkan for *model* (download plus speed check). If it's kept,
@@ -828,12 +833,13 @@ class SpeechSection(Tab):
         model = self.config.get("model")
         if not model:
             return True
-        if self.config.get("device") == "vulkan":
-            from . import whisper_vulkan
-            if whisper_vulkan.supports_model(model):
-                from .vulkan_setup_dialogs import ensure_files
-                return ensure_files(self.window, model, False)
-        return fetch_model(self.window, model)
+        with self.win.busy():           # as CUDA's download
+            if self.config.get("device") == "vulkan":
+                from . import whisper_vulkan
+                if whisper_vulkan.supports_model(model):
+                    from .vulkan_setup_dialogs import ensure_files
+                    return ensure_files(self.window, model, False)
+            return fetch_model(self.window, model)
 
     def rollback_download(self, previous):
         """Undo a model or device change whose download never completed.

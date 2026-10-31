@@ -36,9 +36,14 @@ def test_the_microphone_list_holds_only_inputs_and_saves_the_choice(audio):
     assert window.config["mic"] == "Sennheiser Profile"
 
 
-def test_a_microphone_not_plugged_in_shows_as_system_default(audio):
-    _window, page = audio(mic="USB Mic Unplugged")
-    assert beside(find(page, Gtk.Label, "Microphone:")).get_active_id() == ""
+def test_a_microphone_not_plugged_in_is_listed_as_such_and_system_default_can_be_picked(audio):
+    """It showed as System Default while the setting stayed that mic, and
+    picking System Default then changed nothing."""
+    window, page = audio(mic="USB Mic Unplugged")
+    mics = beside(find(page, Gtk.Label, "Microphone:"))
+    assert mics.get_active_text() == "USB Mic Unplugged (not plugged in)"
+    mics.set_active_id("")
+    assert window.config["mic"] == ""
 
 
 def test_other_sound_saves_both_settings_behind_it(audio):

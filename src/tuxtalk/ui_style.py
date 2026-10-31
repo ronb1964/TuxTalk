@@ -249,10 +249,10 @@ def _usable_height(monitor):
 def _monitor_for(near):
     """The monitor showing window *near* (it has to be on screen). Without
     one, the shortest monitor: a window with no parent may open on any of
-    them, and Wayland says which only once it's shown, after it's sized
-    (Sway with two monitors, 2026-10-22: Setup Complete opened sized for the
-    taller one, its buttons below the shorter one's edge). None when there's
-    no monitor."""
+    them, and Wayland says which only once it's shown, after it's sized (on
+    Sway with two monitors, Setup Complete opened sized for the taller one,
+    its buttons below the shorter one's edge). None when there's no
+    monitor."""
     display = Gdk.Display.get_default()
     if display is None:
         return None
@@ -485,7 +485,7 @@ scrolledwindow.tt-more-scroll undershoot.bottom {
     background-repeat: no-repeat;
 }
 /* The theme's own text colour: accent-blue text on the accent tint was
-   unreadable on GNOME's dark theme (Ron, Silverblue, 2026-10-16). */
+   unreadable on GNOME's dark theme. */
 button.tt-more-below,
 button.tt-more-below label {
     color: @theme_fg_color;
@@ -512,7 +512,7 @@ def more_below_bar(scrolled, label="More below: scroll down to see everything",
 
     GTK's scrollbar hides until the mouse moves over it, so an onboarding
     screen that ends neatly at the window's edge looks finished, and people
-    clicked "Set it up" without seeing what was below (Ron, 2026-10-16). So:
+    clicked "Set it up" without seeing what was below. So:
     the scrollbar is always shown, the bottom edge fades while there's more,
     and the bar shows only while there's more. Clicking it scrolls down most
     of a page. It keeps its height when hidden, so nothing jumps around.
@@ -630,8 +630,8 @@ class Fold(Gtk.Box):
     them, with a short dim summary beside it. The button opens them right
     below and turns into *hide_label*.
 
-    GTK's expander puts a small arrow by the title, and people missed it
-    (Ron, 2026-10-18), so every fold in TuxTalk is one of these. Put the
+    GTK's expander puts a small arrow by the title, which is easy to miss,
+    so every fold in TuxTalk is one of these. Put the
     settings in .content (a Gtk.Grid). on_toggle(opening) runs after each
     open or close, for scrolling the settings into view.
     """
@@ -675,6 +675,8 @@ class Fold(Gtk.Box):
             self._on_toggle(opening)
 
     def set_summary(self, markup, dim=True):
-        """*dim* False for a warning, which must not fade into the background."""
+        """*dim* False for a warning, which must not fade into the background.
+        A screen reader hears it with the button, as its description."""
         self.summary.set_markup(markup)
         self.summary.set_opacity(0.65 if dim else 1.0)
+        self.button.get_accessible().set_description(self.summary.get_text())
