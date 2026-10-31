@@ -490,6 +490,35 @@ def test_a_backup_with_your_words_removes_nothing_and_says_nothing(home):
     assert not any("removed" in note for note in sb.restore(backup))
 
 
+def test_a_backup_saved_with_empty_words_and_snippets_says_it_removes_this_computers(home):
+    """Preferences writes Your Words with only its header when there are
+    none, so every backup it saves has the file: the words went, and the
+    note said nothing."""
+    from tuxtalk import custom_words
+    custom_words.save([])
+    config.save_custom_commands({})
+    backup = sb.read_backup(_saved(home))      # a computer with neither, as Preferences saves
+    with open(config.CUSTOM_COMMANDS_PATH, "w") as f:
+        f.write(COMMANDS_TEXT)
+    custom_words.save(["TuxTalk", "BambuStudio"])
+    assert sb.removal_note(backup).startswith(
+        "This backup has no snippets and voice commands or Your Words, so the ones")
+    notes = sb.restore(backup)
+    assert any("so the ones on this computer were removed" in note for note in notes)
+    assert custom_words.load() == [] and config.load_custom_commands() == {}
+
+
+def test_nothing_is_said_removed_when_this_computer_has_none(home):
+    """Files with only their header here: there was nothing to remove, and
+    the note warned all the same."""
+    from tuxtalk import custom_words
+    os.remove(config.CUSTOM_COMMANDS_PATH)
+    backup = sb.read_backup(_saved(home))      # made without either file
+    custom_words.save([])
+    config.save_custom_commands({})
+    assert sb.removal_note(backup) == ""
+
+
 def test_an_unreadable_restore_note_doesnt_stop_tuxtalk_starting(home):
     """It raised IsADirectoryError, and the tray died at every start."""
     os.makedirs(sb._pending_path())
@@ -807,5 +836,29 @@ def test_load_backup_asks_saying_this_computers_words_go(home, prefs_window, mon
     window = prefs_window()
     monkeypatch.setattr(window.updates_tab, "_pick_file", lambda title: path)
     window.updates_tab._on_load_backup_clicked(None)
+    assert len(asked) == 1 and "This backup has no Your Words" in asked[0]
+    assert custom_words.load() == ["TuxTalk"]          # asked, nothing done
+
+
+def test_earlier_settings_asks_saying_this_computers_words_go(home, prefs_window, monkeypatch):
+    """Going back to a backup file from another computer said only after OK
+    that this computer's Your Words were gone."""
+    import gi
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import Gtk
+    from gtk_text import tree_text
+    from tuxtalk import custom_words
+    os.remove(config.CUSTOM_COMMANDS_PATH)
+    folder = home / "Backups"
+    folder.mkdir()
+    sb.write_backup(str(folder / "TuxTalk-settings.zip"))
+    sb.set_backup_folder(str(folder))
+    custom_words.save(["TuxTalk"])
+    asked = []
+    monkeypatch.setattr(Gtk.Dialog, "run",
+                        lambda d: asked.append("\n".join(tree_text(d))) or Gtk.ResponseType.CANCEL)
+    tab = prefs_window().updates_tab
+    tab.earlier_combo.set_active_id(str(folder / "TuxTalk-settings.zip"))
+    tab._on_restore_earlier_clicked(None)
     assert len(asked) == 1 and "This backup has no Your Words" in asked[0]
     assert custom_words.load() == ["TuxTalk"]          # asked, nothing done

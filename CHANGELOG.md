@@ -459,12 +459,11 @@ before 0.15.0, so older entries use that name.
   the bar no longer jumps back from 100 % to 50 % when the install starts.
 - Going back to an earlier copy of your settings now takes away snippets
   and Your Words added since, so it really puts things back the way they
-  were. The same goes for loading a backup: one saved on a computer with no
-  Your Words or snippets removes the ones on this computer, and TuxTalk
-  says so before you say OK and again after. Earlier settings can bring
-  them back. Backups saved before this version leave them alone. A restore
-  cut off part-way, by a crash or a power cut, is undone when TuxTalk next
-  starts, instead of leaving half the old settings and half the new.
+  were. Loading a backup saved on a computer with no Your Words or snippets
+  removes the ones on this computer, and TuxTalk says so before you say OK
+  and again after, from Load Backup and from Earlier settings alike. Earlier settings can bring them back. A restore cut off
+  part-way, by a crash or a power cut, is undone when TuxTalk next starts,
+  instead of leaving half the old settings and half the new.
 - A GNOME extension update cut off part-way left GNOME with no TuxTalk menu
   until you installed the extension again. TuxTalk puts it back when it
   starts. The Vulkan and AI engines keep the old engine now until the new

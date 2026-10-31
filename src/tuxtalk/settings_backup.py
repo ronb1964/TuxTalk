@@ -417,19 +417,44 @@ def _optional_paths():
     return {_COMMANDS: config.CUSTOM_COMMANDS_PATH, _WORDS: custom_words.path()}
 
 
-def removed_here(backup):
+def _holds_entries(name, data):
+    """Whether *data*, the bytes of the _OPTIONAL file *name* (None: no
+    file), holds a snippet or a word. One that can't be read counts as
+    holding some, so the note never misses a loss."""
+    from . import custom_words
+    if data is None:
+        return False
+    try:
+        text = data.decode("utf-8")
+        if name == _WORDS:
+            return bool(custom_words.parse(text))
+        return bool(_parse_toml(text).get("commands"))
+    except (UnicodeDecodeError, ValueError):
+        return True
+
+
+def _held_here(name):
+    """Whether this computer's _OPTIONAL file *name* holds a snippet or a word."""
+    try:
+        return _holds_entries(name, _read_bytes(_optional_paths()[name]))
+    except OSError:
+        return True             # can't be read: it may
+
+
+def _removed_here(backup):
     """What restoring *backup* takes away from this computer, in words: the
-    _OPTIONAL files it was made without that this computer has. A backup
-    from a computer with no Your Words removes this one's, and the question
-    before it and the note after it say so."""
-    paths = _optional_paths()
-    return [_OPTIONAL_WORDS[name] for name in backup.absent if os.path.exists(paths[name])]
+    snippets or Your Words this computer has and the backup has none of.
+    Preferences writes both files with only their header when there are
+    none, so a file in the backup can be as empty as one it lacks."""
+    return [_OPTIONAL_WORDS[name] for name in _OPTIONAL
+            if (name in backup.files or name in backup.absent)
+            and not _holds_entries(name, backup.files.get(name)) and _held_here(name)]
 
 
 def removal_note(backup, done=False):
     """The sentence saying what restoring *backup* removes here (or, once
     *done*, removed), or ""."""
-    removed = " or ".join(removed_here(backup))
+    removed = " or ".join(_removed_here(backup))
     if not removed:
         return ""
     return (f"This backup has no {removed}, so the ones on this computer "
