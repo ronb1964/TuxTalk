@@ -400,38 +400,6 @@ class DictationTray(ServiceLifecycle, Presets):
         except Exception as e:
             logger.error(f"Failed to emit model change: {e}")
 
-    def set_model(self, model_name: str):
-        """Change the speech model. Reachable over D-Bus as SetModel.
-
-        Follows the same sequence as applying a performance preset: persist,
-        tell the extension, restart.
-        """
-        from .config import VALID_MODELS, load_config, save_config
-
-        if model_name not in VALID_MODELS:
-            logger.error(
-                f"SetModel: refusing unknown model {model_name!r}. "
-                f"Valid: {', '.join(sorted(VALID_MODELS))}"
-            )
-            return
-
-        try:
-            cfg = load_config()
-            if cfg.model == model_name:
-                logger.info(f"SetModel: already using {model_name}")
-                return
-            cfg.model = model_name
-            save_config(cfg)
-            logger.info(f"SetModel: switched to {model_name}")
-
-            self.update_menu_display()
-            # The tray owns the D-Bus name the extension listens on, so the
-            # change notification has to be emitted from here.
-            self._emit_model_changed(model_name)
-            self.restart_service(None)
-        except Exception as e:
-            logger.error(f"SetModel failed: {e}", exc_info=True)
-
     def _launch_preferences(self, tab=None):
         """Launch the preferences window subprocess.
 

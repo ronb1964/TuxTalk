@@ -246,11 +246,6 @@ class TuxTalkDBusService(dbus.service.Object):
         """Restart the dictation service"""
         self._dispatch('restart_service')
 
-    @dbus.service.method(DBUS_INTERFACE, in_signature='s')
-    def SetModel(self, model_name: str):
-        """Change the speech model"""
-        self._dispatch('set_model', model_name)
-
     @dbus.service.method(DBUS_INTERFACE, in_signature='sss')
     def SetFocusedWindow(self, wm_class: str, window_id: str, geometry: str):
         """The focused window, from the KWin script or the GNOME extension on

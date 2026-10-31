@@ -131,10 +131,6 @@ class TrayAppInstance:
         """Apply a performance preset via tray (called from GNOME extension D-Bus)."""
         self._later(self.tray.set_performance_preset, preset_id)
 
-    def set_model(self, model_name: str):
-        """Change the model via tray (called from GNOME extension D-Bus SetModel)."""
-        self._later(self.tray.set_model, model_name)
-
     def quit(self):
         """Quit via tray."""
         self._later(self.tray.quit_app, None)

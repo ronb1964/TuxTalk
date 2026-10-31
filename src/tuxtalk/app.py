@@ -265,7 +265,6 @@ def _start_dbus_stand_in(cfg):
         # A stand-in only: the tray owns the bus name (see
         # TuxTalkDBusService). This succeeds only with no tray running.
         service = TuxTalkDBusService(app_instance, primary=False)
-        app_instance.dbus_service = service
 
         # Emit initial state so extension syncs properly
         service.emit_service_state(True)
