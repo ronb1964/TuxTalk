@@ -389,8 +389,7 @@ def fix_in_text(typed, fix, window, where=None):
     (_selection_now) is the replacement typed and the cursor stepped forward
     again, nothing else retyped. The keys go only into *window* (its class)
     and, where the desktop says, *where* (its id, focused_window.look's),
-    checked right before each batch of them goes down, in the Flatpak too.
-    Not before each key, as no typing in TuxTalk is: a look asks the
+    checked right before each batch of them goes down. Not before each key, as no typing in TuxTalk is: a look asks the
     desktop, and a batch's keys follow each other at the typing delay.
     Never in a terminal, where Shift+Left selects nothing, nor a password
     field. True if done."""
@@ -525,8 +524,10 @@ def main(argv=None):
     if not entries:
         show_fix_word_dialog(0, copy_text=copy_text)    # says there's nothing yet
         return 0
-    in_place = bool(typed and typed.strip())
-    if in_place and not os.environ.get("FLATPAK_ID"):
+    # Not in the Flatpak: with no wl-paste there, the app's selection can't
+    # be read back, so every fix in place would end unchecked.
+    in_place = bool(typed and typed.strip()) and not os.environ.get("FLATPAK_ID")
+    if in_place:
         # This process types the fix on a virtual keyboard of its own. Made
         # now, the desktop has taken it on (and, on X11, given it the user's
         # layout) long before the window closes. The service sets the user's

@@ -64,3 +64,7 @@ def test_notes_shown_again_replace_the_first_and_their_links():
     notes.show(NOTES)
     assert text_of(notes).startswith("Using TuxTalk")
     assert "https://old.example/" not in notes.links.values()
+
+
+def test_a_screen_reader_names_the_release_notes():
+    assert notes_text.NotesView(NOTES).view.get_accessible().get_name() == "Release notes"

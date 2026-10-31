@@ -487,6 +487,9 @@ before 0.15.0, so older entries use that name.
 - Closing the splash screen in its first half second (Alt+F4 under some
   window managers) left first-run setup stuck with nothing on screen until
   TuxTalk was restarted. The welcome screen comes up now.
+- A screen reader now names the dictation switch in TuxTalk's menu window
+  and the release notes in About and Update Available. Before, it read
+  them as an unnamed switch and an unnamed text box.
 
 ## [0.18.2] - 2026-10-23
 
