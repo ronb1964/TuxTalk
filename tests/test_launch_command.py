@@ -129,14 +129,14 @@ def test_autostart_uses_the_installed_appimage_not_the_download(monkeypatch):
     there and not at ~/Downloads, or tidying Downloads silently stops TuxTalk
     starting at login."""
     mod = _make_prefs(monkeypatch, exists={DOWNLOAD}, appimage=DOWNLOAD)
-    installed = mod.INSTALLED_APPIMAGE
+    installed = mod.installation.APPIMAGE_PATH
     mod = _make_prefs(monkeypatch, exists={DOWNLOAD, installed}, appimage=DOWNLOAD)
     assert mod.get_launch_command() == installed
 
 
 def test_setup_can_point_at_the_installed_copy_before_it_finishes_copying(monkeypatch):
     mod = _make_prefs(monkeypatch, exists={DOWNLOAD}, appimage=DOWNLOAD)
-    assert mod.get_launch_command(prefer_installed_appimage=True) == mod.INSTALLED_APPIMAGE
+    assert mod.get_launch_command(prefer_installed_appimage=True) == mod.installation.APPIMAGE_PATH
 
 
 def test_without_an_installed_copy_the_running_appimage_is_used(monkeypatch):

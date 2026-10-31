@@ -28,7 +28,7 @@ def _env(home, monkeypatch):
     installed.chmod(0o755)
     entry = home / ".config" / "autostart" / "talktype.desktop"
     entry.parent.mkdir(parents=True)
-    monkeypatch.setattr(autostart, "INSTALLED_APPIMAGE", str(installed))
+    monkeypatch.setattr(autostart.installation, "APPIMAGE_PATH", str(installed))
     monkeypatch.setattr(autostart, "_autostart_desktop_path", lambda: str(entry))
     monkeypatch.setattr(config, "DEV_MODE", False)
     monkeypatch.delenv("FLATPAK_ID", raising=False)

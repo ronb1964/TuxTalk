@@ -28,10 +28,6 @@ def _project_root() -> str:
     return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-# Where setup installs the AppImage; the Applications-menu launcher points here
-# too (desktop_launcher.create_desktop_launcher).
-INSTALLED_APPIMAGE = os.path.expanduser("~/AppImages/TuxTalk.AppImage")
-
 # How long the Flatpak waits for the Background portal's answer. Long enough
 # for the user to read and answer the desktop's question.
 _PORTAL_TIMEOUT_S = 60
@@ -116,8 +112,8 @@ def _appimage_command(prefer_installed_appimage):
     appimage_path = installation.get_running_appimage_path()
     if (install_type == "appimage" and appimage_path and os.path.isfile(appimage_path)
             and os.access(appimage_path, os.X_OK)):
-        if prefer_installed_appimage or os.path.isfile(INSTALLED_APPIMAGE):
-            return desktop_exec_program(INSTALLED_APPIMAGE)
+        if prefer_installed_appimage or os.path.isfile(installation.APPIMAGE_PATH):
+            return desktop_exec_program(installation.APPIMAGE_PATH)
         return desktop_exec_program(appimage_path)
 
     # Inside an AppImage mount but APPIMAGE unset: find the AppImage on disk.
@@ -308,8 +304,8 @@ StartupWMClass=TuxTalk
 X-GNOME-Autostart-enabled=true
 {path_line}"""
         try:
-            with open(desktop_file, "w") as f:
-                f.write(content)
+            # Whole or not at all: a half-written entry starts nothing at login.
+            config.write_text_atomic(desktop_file, content, keep_backup=False, mode=0o644)
             logger.info(f"Autostart enabled: {desktop_file} (Exec={exec_cmd})")
             return True
         except Exception as e:
@@ -318,8 +314,9 @@ X-GNOME-Autostart-enabled=true
 
     # Disable: Hidden=true stub.
     try:
-        with open(desktop_file, "w") as f:
-            f.write("[Desktop Entry]\nType=Application\nName=TuxTalk\nHidden=true\n")
+        config.write_text_atomic(desktop_file,
+                                 "[Desktop Entry]\nType=Application\nName=TuxTalk\nHidden=true\n",
+                                 keep_backup=False, mode=0o644)
         logger.info(f"Autostart disabled: {desktop_file}")
         return True
     except Exception as e:
@@ -393,6 +390,19 @@ def _exec_program(exec_cmd):
     return "".join(program), True
 
 
+def stale_appimage_target(exec_cmd):
+    """The TuxTalk AppImage the Exec= value *exec_cmd* starts, when that
+    isn't the installed copy in ~/AppImages (or can't be run as written);
+    None when it starts the installed copy, or something else."""
+    target, runnable = _exec_program(exec_cmd)
+    name = os.path.basename(target).lower()
+    if not (name.endswith(".appimage") and ("tuxtalk" in name or "talktype" in name)):
+        return None
+    if runnable and os.path.realpath(target) == os.path.realpath(installation.APPIMAGE_PATH):
+        return None
+    return target
+
+
 def repair_stale_appimage_autostart() -> bool:
     """Point an existing launch-at-login entry at the installed AppImage.
 
@@ -409,21 +419,18 @@ def repair_stale_appimage_autostart() -> bool:
     from . import config
     if installation.get_install_type() != "appimage":
         return False
-    if config.DEV_MODE or not os.path.isfile(INSTALLED_APPIMAGE):
+    if config.DEV_MODE or not os.path.isfile(installation.APPIMAGE_PATH):
         return False
     lines = _enabled_entry()
     if lines is None:
         return False
     exec_cmd = next((line[len("Exec="):] for line in lines if line.startswith("Exec=")), "")
-    target, runnable = _exec_program(exec_cmd)
-    name = os.path.basename(target).lower()
-    if not (name.endswith(".appimage") and ("tuxtalk" in name or "talktype" in name)):
-        return False
-    if runnable and os.path.realpath(target) == os.path.realpath(INSTALLED_APPIMAGE):
+    target = stale_appimage_target(exec_cmd)
+    if target is None:
         return False
     if set_autostart(True, prefer_installed_appimage=True):
         logger.info(f"Repaired launch at login: it pointed at {target}, "
-                    f"now {INSTALLED_APPIMAGE}")
+                    f"now {installation.APPIMAGE_PATH}")
         return True
     return False
 

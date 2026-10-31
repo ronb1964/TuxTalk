@@ -141,9 +141,8 @@ Keywords=dictation;speech;voice;transcription;whisper;
 StartupNotify=true
 Terminal=false
 {desktop_actions(program)}"""
-        with open(DESKTOP_FILE_PATH, "w") as f:
-            f.write(desktop_content)
-        os.chmod(DESKTOP_FILE_PATH, 0o755)
+        from .config import write_text_atomic
+        write_text_atomic(DESKTOP_FILE_PATH, desktop_content, keep_backup=False, mode=0o755)
         # The menu cache (KDE's above all) is refreshed in the background, as
         # add_launcher_actions does: it takes seconds, and Setup Complete waits.
         threading.Thread(target=menu_cache.refresh_menu_cache, daemon=True).start()
@@ -191,6 +190,33 @@ def add_launcher_actions() -> bool:
     except Exception as e:
         logger.warning(f"Could not add the launcher's right-click shortcuts: {e}")
         return False
+
+
+def repair_stale_launcher() -> bool:
+    """Point the menu launcher at the AppImage in ~/AppImages once it's
+    there. When first run's copy failed, the launcher was pointed at the
+    AppImage running then (point_at_running_appimage), usually in
+    Downloads; a later update puts the copy in place, but the menu kept
+    starting the old download. Only a self-managed AppImage's own launcher,
+    and only one that starts another TuxTalk AppImage. True if rewritten."""
+    from . import config
+    from .autostart import stale_appimage_target
+    if (config.DEV_MODE or not os.path.isfile(installation.APPIMAGE_PATH)
+            or installation.get_install_type(pkg_query=lambda: "package") != "appimage"):
+        return False
+    try:
+        with open(DESKTOP_FILE_PATH) as f:
+            text = f.read()
+    except OSError:
+        return False            # no launcher yet
+    exec_cmd = next((l[len("Exec="):] for l in text.splitlines() if l.startswith("Exec=")), "")
+    target = None if _HIDDEN_ENTRY_MARK in text else stale_appimage_target(exec_cmd)
+    if target is None:
+        return False
+    ok, msg = create_desktop_launcher()
+    logger.info(f"Repaired the menu launcher: it started {target}" if ok
+                else f"Could not repair the menu launcher: {msg}")
+    return ok
 
 
 def desktop_launcher_exists() -> bool:

@@ -782,7 +782,9 @@ def _start_normally(tray, command, open_window):
     try:
         from .autostart import (repair_stale_appimage_autostart,
                                 refresh_autostart_comment)
+        from .desktop_launcher import repair_stale_launcher
         repair_stale_appimage_autostart()
+        repair_stale_launcher()     # first run's copy failed, an update put it there
         refresh_autostart_comment()
     except Exception as e:
         logger.info(f"Could not check the login entry: {e}")

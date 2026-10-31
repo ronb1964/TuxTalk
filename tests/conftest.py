@@ -932,6 +932,7 @@ def tray_main(monkeypatch):
     monkeypatch.setattr(gnome_keybindings, "restore_left_over",
                         step("restores GNOME keybindings"))
     monkeypatch.setattr(autostart, "repair_stale_appimage_autostart", lambda: False)
+    monkeypatch.setattr(desktop_launcher, "repair_stale_launcher", lambda: False)
     monkeypatch.setattr(autostart, "refresh_autostart_comment", lambda: False)
     # The wait for it runs at once here, not on a thread of its own.
     monkeypatch.setattr(service_launcher, "end_in_background",

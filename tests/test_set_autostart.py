@@ -97,3 +97,40 @@ def test_the_icon_lookup_only_looks(tmp_path, monkeypatch):
     monkeypatch.setattr(autostart.sys, "executable", str(tmp_path / "none/bin/python3"))
     monkeypatch.setattr(autostart.os.path, "isfile", lambda p: False)
     assert autostart.get_icon_path() in ("tuxtalk", "audio-input-microphone")
+
+
+def test_a_full_disk_leaves_the_login_entry_as_it_was(desktop, monkeypatch):
+    """Written in place, the entry was emptied first, and TuxTalk silently
+    stopped starting at login."""
+    import builtins
+    import os
+    autostart.set_autostart(True)
+    before = desktop.read_text()
+
+    class Full:
+        """A file on a full disk: opening works, writing doesn't."""
+        def __init__(self, f):
+            self.f = f
+
+        def write(self, _text):
+            raise OSError(28, "No space left on device")
+
+        def __getattr__(self, name):
+            return getattr(self.f, name)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            self.f.close()
+
+    def full(opener):
+        def opened(*args, **kwargs):
+            f = opener(*args, **kwargs)
+            return Full(f) if "w" in str(args[1:2] or kwargs.get("mode", "")) else f
+        return opened
+    monkeypatch.setattr(builtins, "open", full(builtins.open))
+    monkeypatch.setattr(os, "fdopen", full(os.fdopen))
+    assert autostart.set_autostart(False) is False
+    monkeypatch.undo()
+    assert desktop.read_text() == before
