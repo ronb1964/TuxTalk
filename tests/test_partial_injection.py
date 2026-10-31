@@ -58,10 +58,39 @@ def test_a_line_break_that_fails_after_the_first_line_says_only_part_was_typed(
     monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
     typed = []
     monkeypatch.setattr(keyboard_output, "type_text_raw", lambda t: typed.append(t) or True)
-    monkeypatch.setattr(keyboard_output, "paste_text", lambda t, keep=None: False)
+    monkeypatch.setattr(keyboard_output, "paste_text", lambda t: False)
     assert delivery.inject_text(MARKER.join(["Dear Sam,", "Thanks"]), "type") == "partial"
     assert typed == ["Dear Sam,"]
     assert rs.state.last_inserted_text == ""        # undo deletes nothing it can't count
+
+
+def test_a_dictation_starting_with_a_line_break_that_fails_was_not_typed_at_all(
+        monkeypatch, quiet):
+    """"New line, thanks": the line break failed first, and nothing was in
+    the app, but it said only part of the dictation was typed."""
+    monkeypatch.setattr(focused_window, "look", lambda: ("org.kde.kwrite", None))
+    monkeypatch.setattr(keyboard_output, "is_wayland_session", lambda: True)
+    typed = []
+    monkeypatch.setattr(keyboard_output, "type_text_raw", lambda t: typed.append(t) or True)
+    monkeypatch.setattr(keyboard_output, "paste_text", lambda t: False)
+    assert delivery.inject_text(MARKER + "Thanks", "type") == "failed"
+    assert typed == []
+
+
+def test_wtype_isnt_run_into_a_password_field(monkeypatch, quiet):
+    """Without TuxTalk's keyboard, wtype types the dictation, and no claim
+    of the virtual keyboard's asks about the password field first."""
+    from tuxtalk import virtual_keyboard
+    ran = []
+    monkeypatch.setattr(virtual_keyboard, "_open", lambda: None)
+    monkeypatch.setattr(keyboard_output, "which", lambda name: name == "wtype" and "/usr/bin/wtype")
+    monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda *a, **k: ran.append(a) or 1 / 0)
+    monkeypatch.setattr("tuxtalk.keyboard_layout.layout_key_events", lambda t: [(30, 1), (30, 0)])
+    monkeypatch.setattr(focused_window, "look", lambda: ("org.kde.kwrite", None))
+    answers = iter([False])                 # a text box when the dictation was made
+    monkeypatch.setattr(focused_window, "is_password", lambda **k: next(answers, True))
+    assert delivery.inject_text("swordfish", "type") == "password_field"
+    assert ran == []
 
 
 # --- a terminal's paste falling back to typing --------------------------------

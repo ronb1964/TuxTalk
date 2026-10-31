@@ -192,13 +192,15 @@ class _ThisThread(threading.local):
     how many sends went out whole, so a wait that gives up after earlier
     lines were typed stopped it partway, not before it began; the only
     window it may go into, else None; whether it's a dictation, which never
-    goes into a password field; and a last check its keys must pass right
+    goes into a password field; whether its pastes keep the user's clipboard
+    (_keeping); and a last check its keys must pass right
     before the first goes down, else None (a held send's space on its own
     may not go out with Alt or a dictation key down:
     send_countdown.give_back_space)."""
     sends = 0
     into = None
     no_password_field = False
+    keep_clipboard = False
     last_check = None
 
 
@@ -310,6 +312,11 @@ class Delivered(NamedTuple):
     breaks: int     # line breaks confirmed after them
     stopped: str    # "" when all of it went in, else "part" or "break"
 
+    def went_in(self, parts) -> bool:
+        """Whether any of *parts* or a line break between them reached the
+        app: an empty first part ("new line" said first) counts as done."""
+        return bool(self.breaks or any(parts[:self.parts]))
+
     def landed(self, parts) -> str:
         """What of *parts* reached the app, its line breaks as "\n" (one
         Shift+Enter, one character for undo to backspace)."""
@@ -350,9 +357,14 @@ def type_text(text: str) -> bool:
     dictation", the user would paste it all again over them."""
     in_kde_editor = (focused_window.window_class() or "").lower() in SMART_NEWLINE_CLASSES_LOWER
     lines = text.split(LINE_BREAK)
-    delivered = deliver_lines(lines, type_text_raw, 0.05, 0.05,
-                              send_break=_paste_newline if in_kde_editor else None)
-    if delivered.stopped and delivered.parts:
+    # The line breaks there are pastes, and so is a line holding an emoji:
+    # the user's clipboard is kept from the first and comes back after the
+    # last, whatever the "Restore clipboard" setting. That's off so a pasted
+    # dictation can be pasted again, and these pastes are only parts of one.
+    with _on_this_thread(keep_clipboard=in_kde_editor and len(lines) > 1):
+        delivered = deliver_lines(lines, type_text_raw, 0.05, 0.05,
+                                  send_break=_paste_newline if in_kde_editor else None)
+    if delivered.stopped and delivered.went_in(lines):
         raise virtual_keyboard.StoppedPartway(
             f"{delivered.parts} of {len(lines)} lines",
             "a line break failed" if delivered.stopped == "break" else "a line failed")
@@ -363,13 +375,8 @@ def _paste_newline() -> bool:
     """A line break in KDE's editors, where Shift+Enter is Insert Smart
     Newline: "$45", new line, "$25" came out as "$$25". A plain Enter won't
     do either, since in Kate's terminal panel it runs the line; a pasted
-    newline is a plain one in both, as the paste path delivers it. The
-    user's clipboard comes back after it whatever the "Restore clipboard"
-    setting: that's off so a dictation can be pasted again, and a lone
-    newline is nothing to paste again."""
-    if is_wayland_session():
-        return paste_text("\n", keep=True)
-    return paste_text_x11("\n", keep=True)
+    newline is a plain one in both, as the paste path delivers it."""
+    return paste_text("\n") if is_wayland_session() else paste_text_x11("\n")
 
 
 def type_text_raw(text: str) -> bool:
@@ -458,6 +465,13 @@ def send_paste_keystroke(focused_class: str | None, primary_holds_text: bool = F
     return True
 
 
+def _keeping() -> bool:
+    """Whether a paste keeps the user's clipboard to put back: with
+    "Restore clipboard" on, and in a dictation typed into KDE's editors
+    (type_text)."""
+    return live.restore_clipboard or this_thread.keep_clipboard
+
+
 def _keeper(board):
     """The clipboard.ClipboardKeeper, made by the first paste that keeps the
     user's clipboard, on *board*: a session pastes on one kind for its life."""
@@ -475,20 +489,18 @@ def restore_clipboard_now() -> None:
         _clipboard_keeper.restore_now()
 
 
-def paste_text_x11(text: str, keep: bool | None = None) -> bool:
+def paste_text_x11(text: str) -> bool:
     """Paste on an X11 session, for text the keyboard layout can't type.
 
     paste_text needs wl-copy, which only talks to Wayland. Here the service
     puts the text on the X11 clipboard through its own GTK loop and then sends
     the same paste keystroke. It's only the fallback for untypable text
     (Latin words on a Ukrainian layout, an emoji); ordinary X11 dictation is
-    still typed. With restore_clipboard on, or *keep*, the user's clipboard
-    comes back afterwards, as in paste_text. True only if the text reached
-    the app.
+    still typed. The user's clipboard comes back afterwards as in
+    paste_text (_keeping). True only if the text reached the app.
     """
     from . import x11_clipboard
-    keeping = live.restore_clipboard if keep is None else keep
-    keeper = _keeper(x11_clipboard.X11Board) if keeping else None
+    keeper = _keeper(x11_clipboard.X11Board) if _keeping() else None
     if keeper is not None:
         keeper.before_paste()
     if not x11_clipboard.offer_dictation(text):
@@ -573,11 +585,11 @@ def _send_paste(text, keeping):
     return True
 
 
-def paste_text(text: str, keep: bool | None = None) -> bool:
+def paste_text(text: str) -> bool:
     """Wayland paste: put *text* on the clipboard with wl-copy, then send the
     paste keystroke (send_paste_keystroke picks Ctrl+V, Ctrl+Shift+V or
-    Shift+Insert). *keep*: put the user's clipboard back afterwards, by
-    default as the "Restore clipboard" setting says.
+    Shift+Insert), and put the user's clipboard back afterwards where it's
+    kept (_keeping).
 
     Returns True only when the text actually reached the focused app: the undo
     buffer records it, and a paste over an unset clipboard would insert
@@ -598,7 +610,7 @@ def paste_text(text: str, keep: bool | None = None) -> bool:
             # (issue #7). Off by default: a dictation left on the clipboard can
             # be re-pasted if it landed in the wrong window.
             from . import clipboard
-            keeping = live.restore_clipboard if keep is None else keep
+            keeping = _keeping()
             if keeping:
                 _keeper(clipboard.WaylandBoard).before_paste()
             try:

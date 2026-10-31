@@ -357,10 +357,11 @@ class _WlCopyInto:
         return 0
 
 
-def test_a_typed_line_break_in_kwrite_gives_the_clipboard_back(monkeypatch, board, keyboard):
-    """KWrite's line breaks are pasted newlines: with "Restore clipboard"
-    off, as it is unless asked for, the user's copied link was gone, and
-    Ctrl+V pasted a newline."""
+@pytest.fixture
+def typing_into_kwrite(monkeypatch, board, keyboard):
+    """Keystroke Typing into KWrite on Wayland with "Restore clipboard" off,
+    as it is unless asked for, over the fake clipboard *board*. Returns the
+    restores waiting to run."""
     pending = []
     monkeypatch.setattr(keyboard_output, "_clipboard_keeper", cb.ClipboardKeeper(
         schedule=lambda delay, fn: pending.append(fn) or (lambda: pending.remove(fn))))
@@ -370,13 +371,63 @@ def test_a_typed_line_break_in_kwrite_gives_the_clipboard_back(monkeypatch, boar
     monkeypatch.setattr(cb, "wl_copy_command", lambda: ["wl-copy", "--sensitive"])
     monkeypatch.setattr(keyboard_output.subprocess, "Popen", lambda cmd, **kw: _WlCopyInto(board))
     monkeypatch.setattr("tuxtalk.focused_window.look", lambda: ("org.kde.kwrite", None))
-    monkeypatch.setattr(keyboard_output, "type_text_raw", lambda text: True)
     monkeypatch.setattr("time.sleep", lambda s: None)
+    return pending
+
+
+def test_a_typed_line_break_in_kwrite_gives_the_clipboard_back(monkeypatch, board,
+                                                               typing_into_kwrite):
+    """KWrite's line breaks are pasted newlines: the user's copied link was
+    gone, and Ctrl+V pasted a newline."""
+    monkeypatch.setattr(keyboard_output, "type_text_raw", lambda text: True)
     assert keyboard_output.type_text("Dear Sam,\xa7SHIFT_ENTER\xa7Thanks") is True
     assert board.data == b"\n"         # for KWrite to read the paste
-    while pending:
-        pending.pop(0)()
+    while typing_into_kwrite:
+        typing_into_kwrite.pop(0)()
     assert board.data == b"what I copied"
+
+
+def test_a_pasted_line_after_a_kwrite_line_break_gives_the_clipboard_back_too(
+        monkeypatch, board, typing_into_kwrite):
+    """A line the layout can't type (an emoji) is pasted: pasted before the
+    line break's restore ran, it took the clipboard, and the restore, seeing
+    it changed, left the line there instead of what the user had copied."""
+    from tuxtalk import keyboard_layout
+
+    def keys(text):
+        if "\U0001f389" in text:
+            raise keyboard_layout.UntypableText(("us", "", ""), "\U0001f389")
+        return [(30, 1), (30, 0)]
+    monkeypatch.setattr(keyboard_layout, "layout_key_events", keys)
+    assert keyboard_output.type_text("Dear Sam,\xa7SHIFT_ENTER\xa7Congratulations \U0001f389") is True
+    assert board.data == "Congratulations \U0001f389".encode()
+    while typing_into_kwrite:
+        typing_into_kwrite.pop(0)()
+    assert board.data == b"what I copied"
+
+
+def test_a_typed_line_break_in_kwrite_on_x11_gives_the_clipboard_back(monkeypatch):
+    """X11 types every dictation, so this is where KWrite's pasted line
+    breaks are most: TuxTalk kept "\n" on the clipboard until it quit."""
+    from tuxtalk import x11_clipboard
+    done = []
+
+    class Keeper:
+        def before_paste(self):
+            done.append("keeps it")
+
+        def after_paste(self, text):
+            done.append(("puts it back over", text))
+    monkeypatch.setattr(keyboard_output, "_keeper", lambda board: done.append(board) or Keeper())
+    monkeypatch.setattr(live, "restore_clipboard", False)
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    monkeypatch.setattr(x11_clipboard, "offer_dictation", lambda text: True)
+    monkeypatch.setattr(keyboard_output, "send_paste_keystroke", lambda *a, **k: True)
+    monkeypatch.setattr("tuxtalk.focused_window.look", lambda: ("kate", None))
+    monkeypatch.setattr(keyboard_output, "type_text_raw", lambda text: True)
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    assert keyboard_output.type_text("one\xa7SHIFT_ENTER\xa7two") is True
+    assert done == [x11_clipboard.X11Board, "keeps it", ("puts it back over", "\n")]
 
 
 # --- a copied password stays a password ---------------------------------------------------

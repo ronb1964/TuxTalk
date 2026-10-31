@@ -354,7 +354,7 @@ def _type_for_electron(text, focused_class, injection_start):
         rs.state.last_inserted_text = "\n".join(parts)
         logger.debug(f"Kept {len(rs.state.last_inserted_text)} chars for undo (typed)")
         return "ok"
-    if not delivered.parts:
+    if not delivered.went_in(parts):
         # Nothing landed, so the normal injection path can safely try again.
         logger.warning("Typing failed, falling through to normal injection")
         return None
