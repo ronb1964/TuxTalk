@@ -12,9 +12,6 @@ logger = setup_logger(__name__)
 # The tray owns the D-Bus name and relays signals to the GNOME extension.
 _tray_dbus_proxy = None
 
-# The tray's D-Bus name and interface.
-_INTERFACE = "io.github.ronb1964.TalkType"
-
 
 def call(method: str, *args, what: str, signature: str | None = None) -> None:
     """Call the tray's D-Bus *method* with *args*. A failure, dbus itself
@@ -24,7 +21,8 @@ def call(method: str, *args, what: str, signature: str | None = None) -> None:
     (get_proxy), arguments that aren't plain strings or booleans need their
     D-Bus *signature* ("u" for a process id, "as" for a list of strings)."""
     try:
-        getattr(get_proxy(), method)(*args, dbus_interface=_INTERFACE, signature=signature,
+        from .dbus_service import DBUS_INTERFACE
+        getattr(get_proxy(), method)(*args, dbus_interface=DBUS_INTERFACE, signature=signature,
                                      timeout=focused_window.TRAY_TIMEOUT_S)
     except Exception as e:
         logger.info(f"Could not {what}: {e}")
@@ -43,18 +41,21 @@ def get_proxy():
     reply timeout, so it would double the worst-case stall on a busy tray.
     Without it dbus-python guesses argument types from the Python values, so
     call() is given the signature for anything that isn't a plain str or bool.
+
+    follow_name_owner_changes: the calls go to whoever holds the name now.
+    Bound to the first holder instead, a service that outlived a crashed
+    tray kept calling the dead one after TuxTalk was opened again, and the
+    GNOME panel, the hotkey test and tuxtalk --start heard nothing from it.
     """
     global _tray_dbus_proxy
     import dbus
     if _tray_dbus_proxy is None:
         import dbus.mainloop.glib
+        from .dbus_service import DBUS_NAME, DBUS_PATH
         dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
         bus = dbus.SessionBus()
-        _tray_dbus_proxy = bus.get_object(
-            _INTERFACE,
-            '/io/github/ronb1964/TalkType',
-            introspect=False,
-        )
+        _tray_dbus_proxy = bus.get_object(DBUS_NAME, DBUS_PATH, introspect=False,
+                                          follow_name_owner_changes=True)
     return _tray_dbus_proxy
 
 
