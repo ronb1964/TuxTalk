@@ -451,6 +451,13 @@ def _pending_path():
     return os.path.join(snapshots_dir(), _PENDING)
 
 
+def _pending_name():
+    """The copy the record of a restore under way names, or None. Raises
+    OSError when the record is there but can't be read."""
+    data = _read_bytes(_pending_path())
+    return None if data is None else data.decode("utf-8", "replace").strip()
+
+
 def restore(backup):
     """Replace the settings and commands with *backup*'s, after saving the
     current ones as an automatic copy (so this can be undone). Stats, when
@@ -521,10 +528,9 @@ def recover_cut_off_restore():
 
 def _recover_cut_off_restore():
     """recover_cut_off_restore's work, which may raise."""
-    data = _read_bytes(_pending_path())
-    if data is None:
+    name = _pending_name()
+    if name is None:
         return
-    name = data.decode("utf-8", "replace").strip()
     try:
         if not _COPY_NAME.match(name):
             raise BackupError(f"the note names no copy ({name!r})")
@@ -638,8 +644,16 @@ def _snapshot():
     _write_zip(path, files)
     logger.info(f"Saved a copy of the settings: {os.path.basename(path)}")
     # Once the new copy exists the undo point is there; failing to trim the
-    # old ones is only untidy.
-    for old in list_snapshots()[KEEP:]:
+    # old ones is only untidy. Never the new copy, nor the one a restore
+    # under way names, by sorting: with the clock behind the newest copies
+    # (a flat CMOS battery before the network sets it) both sort oldest.
+    try:
+        pending = _pending_name()
+    except OSError:
+        pending = None      # recover_cut_off_restore says why at start
+    keep = (os.path.basename(path), pending)
+    others = [copy for copy in list_snapshots() if os.path.basename(copy.path) not in keep]
+    for old in others[KEEP - 1:]:
         try:
             os.remove(old.path)
         except OSError as e:

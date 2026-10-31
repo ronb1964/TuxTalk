@@ -523,6 +523,54 @@ def test_a_cut_off_restore_goes_back_to_the_copy_it_took_not_a_newer_named_one(h
     assert read(config.CONFIG_PATH) == 'hotkey = "F9"\n'
 
 
+def _copies_from_the_future():
+    """KEEP automatic copies named after now, as when the clock is set back
+    behind them (a flat CMOS battery before the network sets it)."""
+    os.makedirs(sb.snapshots_dir(), exist_ok=True)
+    ahead = datetime.datetime.now() + datetime.timedelta(hours=1)
+    for i in range(sb.KEEP):
+        when = ahead + datetime.timedelta(minutes=i)
+        sb._write_zip(os.path.join(sb.snapshots_dir(), f"settings-{when:%Y%m%d-%H%M%S}.zip"),
+                      {"config.toml": f'hotkey = "F{i}"\n'.encode()})
+
+
+def test_with_the_clock_behind_the_copies_the_new_copy_is_kept(home):
+    """It sorted oldest and was trimmed the moment it was written."""
+    _copies_from_the_future()
+    path = sb._snapshot()
+    assert os.path.exists(path)
+    assert len(sb.list_snapshots()) == sb.KEEP
+
+
+def test_a_cut_off_restore_with_the_clock_behind_the_copies_is_undone(home, monkeypatch):
+    """The copy the restore took was trimmed at once, so the next start
+    couldn't put the settings back; nor may a copy taken at a start whose
+    putting back failed trim it."""
+    from tuxtalk import custom_words
+    backup = sb.read_backup(_saved(home))
+    backup.files["config.toml"] = b'hotkey = "F6"\n'
+    backup.files["custom_words.txt"] = b"TuxTalk\n"
+    os.remove(config.CUSTOM_COMMANDS_PATH)
+    backup.files["custom_commands.toml"] = b"# the backup's commands\n"
+    _copies_from_the_future()
+    write = config.write_text_atomic
+
+    def killed_on_the_words(path, text, **kw):
+        if path == custom_words.path():
+            raise SystemExit("killed")
+        write(path, text, **kw)
+    monkeypatch.setattr(config, "write_text_atomic", killed_on_the_words)
+    with pytest.raises(SystemExit):
+        sb.restore(backup)
+    monkeypatch.setattr(config, "write_text_atomic", write)
+    assert sb.snapshot_if_changed() is not None         # the mix, copied at a start
+    sb.recover_cut_off_restore()
+    assert read(config.CONFIG_PATH) == CONFIG_TEXT
+    assert not os.path.exists(config.CUSTOM_COMMANDS_PATH)
+    assert not os.path.exists(custom_words.path())
+    assert not os.path.exists(sb._pending_path())
+
+
 def test_a_finished_restore_leaves_nothing_to_undo_at_start(home):
     dest = home / "b.zip"
     sb.write_backup(str(dest))
