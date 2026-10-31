@@ -593,6 +593,7 @@ def test_a_cut_off_restore_with_the_clock_behind_the_copies_is_undone(home, monk
         sb.restore(backup)
     monkeypatch.setattr(config, "write_text_atomic", write)
     assert sb.snapshot_if_changed() is not None         # the mix, copied at a start
+    assert len(sb.list_snapshots()) == sb.KEEP
     sb.recover_cut_off_restore()
     assert read(config.CONFIG_PATH) == CONFIG_TEXT
     assert not os.path.exists(config.CUSTOM_COMMANDS_PATH)

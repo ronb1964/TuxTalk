@@ -647,7 +647,8 @@ def restore_points():
 
 def _snapshot():
     """Save the settings and commands as an automatic copy, unless they are
-    the same as in the newest copy. Keeps the last KEEP. Returns the new
+    the same as in the newest copy. Keeps the last KEEP, the new one and
+    the one a restore under way names among them. Returns the new
     copy's path, or None when nothing needed saving. Raises when the copy
     could not be written."""
     files = _current_files(with_stats=False)
@@ -680,8 +681,9 @@ def _snapshot():
     except OSError:
         pending = None      # recover_cut_off_restore says why at start
     keep = (os.path.basename(path), pending)
-    others = [copy for copy in list_snapshots() if os.path.basename(copy.path) not in keep]
-    for old in others[KEEP - 1:]:
+    copies = list_snapshots()
+    others = [copy for copy in copies if os.path.basename(copy.path) not in keep]
+    for old in others[KEEP - (len(copies) - len(others)):]:
         try:
             os.remove(old.path)
         except OSError as e:
