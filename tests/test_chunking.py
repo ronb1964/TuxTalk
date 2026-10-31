@@ -797,6 +797,66 @@ def test_a_password_field_after_a_correction_backspaced_says_to_check_the_text(a
     assert "A correction wasn't typed" in said
 
 
+FIRST_DOC = ("org.kde.kwrite", ("tray", "{first}"))
+SECOND_DOC = ("org.kde.kwrite", ("tray", "{second}"))
+
+
+@pytest.fixture
+def corrected_in_another_document(ai_on, monkeypatch):
+    """"meet at three" in one KWrite document, then "no wait, four" with a
+    click into another one while the correction's backspaces waited. The
+    focus: switch it by setting [0]. (typed, erased, trimmed: what Recent
+    Dictations was told was taken back), and the AI."""
+    texts, typed, erased, ai = ai_on
+    texts.extend(["meet at three.", "no wait, four.", "meet at three. No wait, four."])
+    focus = [FIRST_DOC]
+    monkeypatch.setattr(focused_window, "look", lambda: focus[0])
+    call(frames_of(speech(1.0)), "middle")
+    trimmed = []
+    monkeypatch.setattr(last_dictation, "trim_shown", lambda *a: trimmed.append(a))
+    return focus, typed, erased, trimmed, ai
+
+
+def test_a_correction_backspaces_nothing_in_a_document_clicked_into_meanwhile(
+        corrected_in_another_document, monkeypatch):
+    """The Flatpak's portal got its keyboard ready after the checks, and
+    the backspaces deleted the other document's text."""
+    focus, typed, erased, trimmed, _ = corrected_in_another_document
+
+    class Portal:
+        def backspaces(self, count):
+            focus[0] = SECOND_DOC                   # the click, while the keyboard got ready
+            check = keyboard_output.checks_before_keys()
+            if check is not None:
+                check()                             # as output_backends._with_session
+            erased.append(count)
+            return True
+    monkeypatch.setattr(keyboard_output, "output_backend", lambda: Portal())
+    call(frames_of(speech(1.0)), "middle")
+    assert erased == [] and trimmed == []
+    assert "Meet at four" not in typed
+
+
+def test_a_correction_presses_no_backspace_in_a_document_clicked_into_meanwhile(
+        corrected_in_another_document, monkeypatch, keyboard):
+    """The same on TuxTalk's own keyboard, with the click during the
+    password-field question before the backspaces."""
+    from tuxtalk.output_backends import VirtualKeyboardOutputBackend
+    focus, typed, _, trimmed, ai = corrected_in_another_document
+    corrected = []
+    monkeypatch.setattr(ai, "correct", lambda text: corrected.append(1) or FakeAI.correct(ai, text))
+
+    def asked(budget=None):
+        if corrected:                               # the correction's own question
+            focus[0] = SECOND_DOC
+        return False
+    monkeypatch.setattr(focused_window, "is_password", asked)
+    monkeypatch.setattr(keyboard_output, "output_backend", VirtualKeyboardOutputBackend)
+    call(frames_of(speech(1.0)), "middle")
+    assert keyboard.events == [] and trimmed == []
+    assert "Meet at four" not in typed
+
+
 def test_correction_on_the_last_phrase(ai_on):
     texts, typed, erased, _ = ai_on
     texts.extend(["meet at three.", "no wait, four.", "meet at three. No wait, four."])
@@ -853,7 +913,7 @@ def test_correction_never_reaches_into_another_window(ai_on, monkeypatch):
     texts.extend(["meet at three.", "no wait, four.", "meet at three. No wait, four."])
     call(frames_of(speech(1.0)), "middle")
     rs.state.last_inserted_window = "kwrite"
-    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "konsole")
+    monkeypatch.setattr(focused_window, "look", lambda: ("konsole", None))
     call(frames_of(speech(1.0)), "middle")
     assert erased == []
     assert typed[-1] == "No wait, four"
