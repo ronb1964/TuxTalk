@@ -389,8 +389,9 @@ def fix_in_text(typed, fix, window, where=None):
     (_selection_now) is the replacement typed and the cursor stepped forward
     again, nothing else retyped. The keys go only into *window* (its class)
     and, where the desktop says, *where* (its id, focused_window.look's),
-    checked right before each batch of them goes down. Not before each key, as no typing in TuxTalk is: a look asks the
-    desktop, and a batch's keys follow each other at the typing delay.
+    checked right before each batch of them goes down. Not before each key,
+    as no typing in TuxTalk is: a look asks the desktop, and a batch's keys
+    follow each other at the typing delay.
     Never in a terminal, where Shift+Left selects nothing, nor a password
     field. True if done."""
     from . import keyboard_output, virtual_keyboard
