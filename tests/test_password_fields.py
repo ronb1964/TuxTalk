@@ -555,7 +555,35 @@ def test_a_slow_tray_doesnt_hold_up_the_check_before_each_line(bus):
         assert time.monotonic() - started < 0.5
     finally:
         answered.set()
-        atspi_helper._looks.submit(lambda: None).result()    # the next test's look goes first
+        _wait_for_the_look_to_end()
+
+
+def _wait_for_the_look_to_end():
+    """For the next test's look, which an earlier one still running makes None."""
+    for _ in range(200):
+        if not atspi_helper._looking:
+            return
+        time.sleep(0.01)
+    raise AssertionError("the focused-app look never ended")
+
+
+def test_a_look_that_never_answers_doesnt_hold_up_quitting():
+    """A look at the focused app that hangs (an X server that stopped
+    answering) kept TuxTalk from quitting: Python waited for its thread."""
+    import subprocess
+    import sys
+    code = ("import threading, time\n"
+            "from tuxtalk import atspi_helper\n"
+            "never = threading.Event()\n"
+            "assert atspi_helper._in_time(never.wait, time.monotonic() + 0.05) is None\n"
+            "print('unknown', flush=True)\n")
+    child = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, text=True)
+    try:
+        out, _ = child.communicate(timeout=10)
+        assert child.returncode == 0 and out.strip() == "unknown"
+    finally:
+        child.kill()
+        child.wait()
 
 
 def test_a_password_field_counts_when_asking_for_the_focused_app_fails(bus):

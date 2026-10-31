@@ -16,7 +16,6 @@ a restart. An app that doesn't answer, a slow bus or none at all counts as
 "not a password field", so typing goes ahead as it always did.
 """
 
-import concurrent.futures
 import functools
 import logging
 import re
@@ -153,31 +152,47 @@ def _still_counts(suspects, said_no, focused) -> bool:
     return bool(suspects) and not any(_names_the_app(app, focused()) for app in said_no)
 
 
-# One look at the focused app at a time (_in_time): one that outlives the
-# check that asked finishes here on its own, and the next check doesn't
-# start another behind it.
-_looks = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="password-look")
+# The look at the focused app (_in_time) runs on a daemon thread of its
+# own, one at a time: a look that hangs (an X server that stopped answering
+# XCB, which has no time limit) must hold up neither the dictation nor
+# TuxTalk quitting, which an executor's worker would, joined at exit.
+_look_lock = threading.Lock()
+_looking = False
 
 
 def _in_time(focused_class, deadline):
     """*focused_class*(), or None when it has no answer by *deadline*. It
     asks the tray, which has 1.5 s to answer when its loop is busy, and the
     check before each line of a dictation has 50 ms in all: a slow tray
-    must not hold up every line by seconds."""
+    must not hold up every line by seconds. While an earlier look is still
+    running, this one is None at once; a late answer is thrown away."""
+    global _looking
     left = deadline - time.monotonic()
-    if left <= 0:
-        return None
-    look = _looks.submit(focused_class)
-    try:
-        return look.result(timeout=left)
-    except concurrent.futures.TimeoutError:
-        look.cancel()       # not started yet: it never needs to be
+    with _look_lock:
+        if left <= 0 or _looking:
+            return None
+        _looking = True
+    answer, done = [], threading.Event()
+    threading.Thread(target=_look, args=(focused_class, answer, done),
+                     name="password-look", daemon=True).start()
+    if not done.wait(left):
         logger.debug("Password field check: which app has the focus wasn't told in time")
         return None
+    return answer[0] if answer else None
+
+
+def _look(focused_class, answer, done):
+    """_in_time's thread: *focused_class*() into *answer*, then *done*."""
+    global _looking
+    try:
+        answer.append(focused_class())
     except Exception as e:
         # Not known, as when it's late: a password field found still counts.
         logger.info(f"Password field check: couldn't tell which app has the focus: {e!r}")
-        return None
+    finally:
+        with _look_lock:
+            _looking = False
+        done.set()
 
 
 def _names_the_app(name: str, wm_class: str) -> bool:
