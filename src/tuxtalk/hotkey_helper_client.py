@@ -33,6 +33,7 @@ import threading
 import time
 from collections import deque, namedtuple
 
+from . import modifier_hotkeys
 from .hotkey_helper import PROTOCOL, SOCKET_PATH
 from .logger import setup_logger
 
@@ -224,6 +225,10 @@ class HelperKeyboard:
         if ok and not named:
             logger.warning(f"Hotkey helper answered OK {' '.join(args)} to {asked}")
         if asked == "HIDE":
+            if ok and named:
+                # The desktop was told it's up. The OK names no key: the
+                # press it confirms is the one waiting, normally its own.
+                modifier_hotkeys.note_compose_hidden()
             # An UNHIDE sent since has undone it already.
             self.hidden = ok and named and "UNHIDE" not in self.asked
         if not ok and args[:1] == ["listen-only"]:

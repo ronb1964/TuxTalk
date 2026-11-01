@@ -1019,3 +1019,28 @@ def test_reopening_the_same_mic_says_nothing(monkeypatch, quiet_recording):
                                      input_device_idx=14) is not None
     assert notices == []
     keyboard_grab.release_all()
+
+
+@pytest.mark.parametrize("through_kanata", [False, True])
+def test_only_a_compose_key_caught_down_on_a_real_keyboard_is_ours_to_end(monkeypatch,
+                                                                          through_kanata):
+    """Pop!_OS makes Right Ctrl Compose. Held on a real keyboard, the grab
+    hides it and TuxTalk ends the compose its press began; through kanata it
+    can't, since kanata would hand Compose pressed again back as the key."""
+    from tuxtalk import modifier_hotkeys
+    monkeypatch.setattr(keyboard_devices, "is_uinput_device",
+                        lambda path: path == "/dev/input/event18")
+    monkeypatch.setattr(modifier_hotkeys, "_compose_begun", ecodes.KEY_RIGHTCTRL)
+    monkeypatch.setattr(modifier_hotkeys, "_compose_hidden", False)
+    if through_kanata:
+        board = _HeldKeyboard("kanata", _kanata()._caps, "/dev/input/event18",
+                              held=[ecodes.KEY_RIGHTCTRL])
+    else:
+        board = _HeldKeyboard("USB Keyboard", keyboard()._caps, "/dev/input/event3",
+                              held=[ecodes.KEY_RIGHTCTRL])
+    try:
+        keyboard_grab.grab_keyboards_hiding([board], {ecodes.KEY_RIGHTCTRL})
+        assert modifier_hotkeys._compose_hidden is not through_kanata
+    finally:
+        keyboard_grab.release_all()
+        keyboard_grab._injected_pending.clear()

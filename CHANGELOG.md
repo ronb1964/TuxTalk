@@ -135,6 +135,11 @@ before 0.15.0, so older entries use that name.
   (German, French and most of Europe) the list says which characters you'd
   lose, like @ and €. TuxTalk hides the key from your apps the moment it goes
   down, so nothing it types while you hold it turns into a Ctrl shortcut.
+- Pop!_OS makes Right Ctrl the Compose key, and so can your own keyboard
+  settings (Right Alt too). There the list says "your Compose key", and
+  when you dictate with it TuxTalk ends the compose its press begins, so the
+  start of a dictation isn't swallowed. Through a key remapper like kanata
+  it can't, so with one, pick a key that isn't Compose.
 - TuxTalk reads your desktop's keyboard options now, not just the layout.
   If you've set Right Alt to be AltGr on a US keyboard, or Compose or plain
   Alt on a German one, the Right Alt choice in the hotkey list says so

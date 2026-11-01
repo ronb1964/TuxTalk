@@ -353,6 +353,23 @@ def test_a_remappers_keyboard_not_held_isnt_logged_as_a_fault(tmp_path, caplog):
     client.close()
 
 
+def test_only_a_hide_the_helper_said_ok_to_ends_a_compose(tmp_path, monkeypatch):
+    """A remapper's key (kanata) is never hidden: Compose pressed again would
+    come back through the remapper as the dictation key, so its compose is
+    left. One the helper hid is TuxTalk's to end."""
+    from collections import deque
+    from tuxtalk import modifier_hotkeys
+    monkeypatch.setattr(modifier_hotkeys, "_compose_begun", 97)
+    monkeypatch.setattr(modifier_hotkeys, "_compose_hidden", False)
+    client = HelperKeyboard(str(tmp_path / "helper.sock"))
+    client.asked = deque(["HIDE"])
+    client._handle(["ERR", "listen-only", "keyboard"])
+    assert not modifier_hotkeys._compose_hidden
+    client.asked = deque(["HIDE", "UNHIDE"])        # a toggle's stop tap lets go at once
+    client._handle(["OK", "HIDE"])
+    assert modifier_hotkeys._compose_hidden
+    client.close()
+
 def test_an_answer_out_of_step_isnt_taken_as_a_hide(tmp_path, caplog):
     """Each OK names its command; an OK WATCH where HIDE's answer was due
     must not let typing go on under a key the helper never hid."""

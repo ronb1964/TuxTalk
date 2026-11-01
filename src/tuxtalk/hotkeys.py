@@ -21,6 +21,7 @@ from . import (
     hotkey_keys,
     keyboard_devices,
     keyboard_grab,
+    keyboard_layout,
     modifier_hotkeys,
     notices,
     pipeline,
@@ -280,6 +281,7 @@ def _handle_key_event(event, hold_key, toggle_key, voice_cmds_combo, held_modifi
     """
     if modifier_hotkeys.right_alt_alone(event, (hold_key, toggle_key), held_modifiers):
         modifier_hotkeys.guard_alt_tap()
+    modifier_hotkeys.note_compose_key(event, (hold_key, toggle_key))
 
     if _on_test_or_combo(event, hold_key, toggle_key, voice_cmds_combo, paste_last_combo,
                          held_modifiers, devices, cfg):
@@ -593,11 +595,15 @@ def _keys_to_watch(cfg: Settings, devices):
 def _watch(cfg: Settings, devices, keys: "hotkey_keys.Hotkeys") -> None:
     """Have the desktop hold *keys* back from the focused app (see
     _claim_desktop_hotkeys), and tell the hotkey helper and the modifier-key
-    check which keys to look for."""
+    check which keys to look for, and which of them the keyboard options
+    make Compose (read now, not on each press: the desktop can be slow)."""
     _claim_desktop_hotkeys(cfg)
     _helper_watch(devices, keys.hold_key, keys.toggle_key, keys.voice_cmds_combo,
                   keys.paste_last_combo)
     modifier_hotkeys.note(devices, keys.hold_key, keys.toggle_key)
+    modifier = {keys.hold_key, keys.toggle_key} & {ecodes.KEY_RIGHTCTRL, ecodes.KEY_RIGHTALT}
+    # Only asked when it can matter: the desktop can take a moment to answer.
+    modifier_hotkeys.note_compose_keys(keyboard_layout.compose_keys() if modifier else ())
 
 
 def _read_key_events(devices, keys: "hotkey_keys.Hotkeys", held_modifiers, cfg: Settings, svc,

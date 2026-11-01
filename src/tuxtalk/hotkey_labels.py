@@ -26,29 +26,43 @@ def hands_free_label(toggle_key):
     return f"Double-tap {key} for hands-free: stop after"
 
 
-def hotkey_label(key, altgr_types=None):
+def hotkey_label(key, altgr_types=None, compose=False):
     """'F5 (reloads the page in browsers)', or just the key. *altgr_types*:
     when the keyboard layout's Right Alt is AltGr, the characters it types
-    that picking it takes away ("@", "€"; keyboard_layout.altgr_characters)."""
+    that picking it takes away ("@", "€"; keyboard_layout.altgr_characters).
+    *compose*: the keyboard options make *key* the Compose key."""
     clash = HOTKEY_CLASHES.get(key)
     if key == "Right Alt" and altgr_types is not None:
         clash = "your AltGr key"
         if altgr_types:
             clash += f": stops typing {' and '.join(altgr_types)}"
+    elif compose:
+        clash = "your Compose key: stops working as Compose"
     return f"{key} ({clash})" if clash else key
+
+
+def _compose_names():
+    """The dictation keys the keyboard options make Compose, by name."""
+    from .keyboard_layout import compose_keys
+    from evdev import ecodes
+    codes = compose_keys()
+    return {name for name, code in HOTKEY_CHOICES.items() if ecodes.ecodes[code] in codes}
 
 
 def layout_label(key):
     """hotkey_label for *key* on the active keyboard layout, for the
-    first-run hotkey test: picking Right Alt there takes AltGr away too."""
+    first-run hotkey test: picking Right Alt there takes AltGr away too,
+    and a Compose key stops composing."""
     from .keyboard_layout import altgr_characters
-    return hotkey_label(key, altgr_characters() if key == "Right Alt" else None)
+    return hotkey_label(key, altgr_characters() if key == "Right Alt" else None,
+                        key in _compose_names())
 
 
 def dropdown_entries():
     """[(key, label)] for the hold and toggle dropdowns, in the order
-    config.HOTKEY_CHOICES gives, with Right Alt saying what the active
-    keyboard layout loses with it."""
+    config.HOTKEY_CHOICES gives, with Right Alt and Right Ctrl saying what
+    the active keyboard layout loses with them."""
     from .keyboard_layout import altgr_characters
     altgr_types = altgr_characters()
-    return [(key, hotkey_label(key, altgr_types)) for key in HOTKEY_CHOICES]
+    compose = _compose_names()
+    return [(key, hotkey_label(key, altgr_types, key in compose)) for key in HOTKEY_CHOICES]

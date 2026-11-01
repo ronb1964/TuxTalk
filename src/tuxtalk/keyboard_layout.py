@@ -105,6 +105,7 @@ _KEY_102ND = 86                 # evdev; the <> key of ISO keyboards
 _KEY_F12 = 88                   # evdev; past it: the keypad's and extra keys
 _X11_MAX_KEYCODE = 255          # xkb; X11 and XWayland carry no key past it
 _ISO_LEVEL3_SHIFT = 0xfe03      # keysym AltGr produces
+_MULTI_KEY = 0xff20             # keysym the Compose key produces
 _KEYPAD_KEYSYMS = range(0xff80, 0xffbe)     # KP_Space .. KP_Equal
 _INVALID_MOD = 0xffffffff
 
@@ -182,6 +183,7 @@ class KeyPlanner:
         # also put € on KEY_EURO (435), which few keyboards have.
         self._without_altgr = set()
         self._altgr = None
+        self.compose_keys = set()   # evdev keycodes that are Compose with no modifier
         self._index()
 
     def _index(self):
@@ -210,8 +212,8 @@ class KeyPlanner:
                     mask = masks[i]
                     if mask & ~allowed:
                         continue        # needs Caps Lock, Level5 or the like: skip
-                    if sym == _ISO_LEVEL3_SHIFT and mask == 0:
-                        altgr_keys.append(kc - _EVDEV_OFFSET)
+                    if mask == 0:
+                        self._note_bare(sym, kc - _EVDEV_OFFSET, altgr_keys)
                     self._add(sym, (kc - _EVDEV_OFFSET, bool(mask & shift_bit),
                                     bool(mask & altgr_bit)))
         # A character can have two keysyms (€ is 0x20ac and 0x13a4): Ubuntu
@@ -225,6 +227,14 @@ class KeyPlanner:
                     and (char not in self._by_char or _cost(entry) < _cost(self._by_char[char]))):
                 self._by_char[char] = entry
         self._altgr = _altgr_key(altgr_keys)
+
+    def _note_bare(self, sym, keycode, altgr_keys):
+        """Note a key that types *sym* with no modifier held, when that
+        makes it AltGr (added to *altgr_keys*) or Compose."""
+        if sym == _ISO_LEVEL3_SHIFT:
+            altgr_keys.append(keycode)
+        elif sym == _MULTI_KEY:
+            self.compose_keys.add(keycode)
 
     def _add(self, sym, entry):
         """Note that key *entry* types keysym *sym*: kept when it's the
@@ -673,11 +683,23 @@ def altgr_characters():
     types nothing listed here (US with lv3:ralt_switch)."""
     try:
         planner = planner_for(active_layout() or US)
-    except (OSError, ValueError) as e:
+    except (OSError, ValueError, AttributeError) as e:     # AttributeError: libxkbcommon < 1.0
         logger.debug(f"Could not tell whether Right Alt is AltGr: {e}")
         return None
     found = planner.altgr_only("@€{}[]\\|~")
     return None if found is None else tuple(found[:2])
+
+
+def compose_keys():
+    """The keys (evdev codes) the active keyboard's options make its Compose
+    key: Right Ctrl on every Pop!_OS install (compose:rctrl), Right Alt with
+    compose:ralt. Empty when the layout can't be read."""
+    try:
+        planner = planner_for(active_layout() or US)
+    except (OSError, ValueError, AttributeError) as e:     # AttributeError: libxkbcommon < 1.0
+        logger.info(f"Could not tell which key is Compose: {e}")
+        return frozenset()
+    return frozenset(planner.compose_keys)
 
 
 def shortcut_keycode(letter):
