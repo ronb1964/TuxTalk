@@ -202,6 +202,11 @@
         <h3>Voice editing <span class="tag">Labs</span></h3>
         <p>Select some text, hold it and say what to change, like "make this more formal". It's off until you turn it on.</p>
       </li>
+      <li class="wide">
+        <span class="chord"><kbd class="k">Right Ctrl</kbd><span class="plus">or</span><kbd class="k">Right Alt</kbd><span class="plus">or</span><kbd class="k">Scroll Lock</kbd></span>
+        <h3>Keys that don't need Fn</h3>
+        <p>On a lot of laptops the F-keys only work while you hold Fn, which makes holding F8 a two-handed job. Pick one of these in Preferences, General and you don't need Fn. Right Ctrl and Right Alt stop working as Ctrl and Alt once they're TuxTalk's, and if Right Alt is your AltGr key the list tells you which characters you'd lose, like @ and €. TuxTalk may ask to update its hotkey helper first. That's your password once and no restart.</p>
+      </li>
     </ul>
   </div>
 </section>
@@ -379,6 +384,8 @@
       <div><h3>Pauses your music</h3><p>Music and videos pause while you dictate and pick back up when you're done. I had a YouTube video going once and it turned "isn't it" into "Venezuela".</p></div>
       <div><h3>Turns other sounds down</h3><p>For what pausing can't reach, like a Discord call or a game. It's off until you turn it on, and it only changes what you hear. A call still hears your mic.</p></div>
       <div><h3>Says when the mic is silent</h3><p>Muted mic, unplugged headset, wrong input picked? TuxTalk tells you it heard nothing but silence instead of just typing nothing.</p></div>
+      <div><h3>Sends the message for you</h3><p>Turn on Send each dictation automatically in Preferences, Advanced and TuxTalk presses Enter after a short countdown, so a chat message just goes. Tap F8 during the countdown if you want to fix something first. It won't send in a text editor, where Enter only starts a new line, and if you switch windows before it's done counting nothing gets sent.</p></div>
+      <div><h3>Takes out the ums</h3><p>There's a setting in Preferences, Advanced that drops "um" and "uh" and the words you say twice by accident, so "um, so the the van is ready" comes out "So the van is ready." It leaves the ones you mean alone, like "no, no, no".</p></div>
       <div><h3>Easy on a laptop battery</h3><p>On a laptop it lets go of the speech model when you haven't dictated for a while. F8 still works, the first dictation after just takes a few seconds longer. On a desktop that's off.</p></div>
       <div><h3>Recent Dictations</h3><p>Your last 20 are in the tray menu, one click to copy. They're only kept in memory and they're gone when you log out.</p></div>
       <div><h3>Your Stats</h3><p>How many words you've dictated and about how much typing that saved you. Only the numbers get kept, never what you said.</p></div>
@@ -387,6 +394,7 @@
       <div><h3>Only the languages you speak</h3><p>Whisper picks from 99 languages and on a short dictation it sometimes guesses wrong. Tick the ones you actually speak and it sticks to those.</p></div>
       <div><h3>Stays out of password boxes</h3><p>If your cursor is in a password field, TuxTalk types nothing and says why. That works in most GTK apps, in KDE apps and Firefox with accessibility on, and in your desktop's own admin password prompt.</p></div>
       <div><h3>It tells you why</h3><p>If a dictation can't be typed into a window, TuxTalk says why and what fixes it instead of just doing nothing.</p></div>
+      <div><h3>Report a Problem</h3><p>Help, Problems has a button that puts together what I'd ask you for anyway, your system and settings and the end of TuxTalk's log. Your username's taken out and none of what you dictated is in it. You see all of it first, then you can copy it or save it, or open a GitHub issue with it already filled in. Nothing gets sent unless you do that yourself.</p></div>
       <div><h3>No tray? Still works</h3><p>On a desktop with no system tray, like plain GNOME, opening TuxTalk from your apps brings up its menu in a small window.</p></div>
       <div><h3>A command for your own shortcut</h3><p><code>tuxtalk --toggle</code>, plus <code>--start</code> and <code>--stop</code>, if you'd rather use your desktop's shortcuts or a script.</p></div>
     </div>
