@@ -414,7 +414,8 @@ def toggle_pressed_while_recording(beeps_on: bool) -> bool:
 
     A single tap keeps the toggle a plain on/off switch. Only a double-tap,
     with the option on, arms auto-stop. A word said before the second tap
-    counts as speech; the start beep the mic may pick up first does not.
+    counts as speech; the start beep the mic may pick up first isn't speech
+    to the voice detector.
     """
     rec = rs.state.current
     started = rec.toggle_started_at
@@ -422,8 +423,7 @@ def toggle_pressed_while_recording(beeps_on: bool) -> bool:
             or time.time() - started > DOUBLE_TAP_S):
         return False
     detector = silence.SilenceDetector(live.auto_stop_seconds, rec.samplerate)
-    beep_hz = START_BEEP[0] if rec.start_beep is not None else None
-    if silence.has_a_word(frames_f32(list(rec.frames)), rec.samplerate, ignoring_hz=beep_hz):
+    if silence.has_a_word(frames_f32(list(rec.frames)), rec.samplerate):
         detector.heard_speech()
     rec.silence = detector
     logger.info("Double-tap: this recording will stop by itself when you go quiet")

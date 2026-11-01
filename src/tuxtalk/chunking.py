@@ -58,7 +58,7 @@ class PauseDetector:
     a phrase can lose from its end without losing a word (_mark_cut).
 
     Measured on 125 recorded readers in nine noises from 40 to 10 dB under the
-    voice, with a 0.8 s pause (3,024 recordings; .superpowers/vad-2026-11-01,
+    voice, with a 0.8 s pause (3,024 recordings; .superpowers/voice-detector,
     sim_vad.py tap and tapw): of the pauses between sentences that loudness
     missed, as next to a dryer (458 of 1,008) or a gusty fan (503), it misses
     about a quarter; noise after the last phrase reached the engine in 260

@@ -230,6 +230,14 @@ def test_a_word_said_before_the_second_tap_is_kept(monkeypatch):
 # How these limits were measured, and where the recorded words come from:
 # tests/data/README.md.
 
+def _yes(gain=1.0):
+    """A quick "Yes" said by a person, at *gain*: the first word of the test
+    reading (tests/data/README.md), 0.26 to 0.70 s."""
+    with wave.open(str(Path(__file__).with_name("data") / "librispeech-7902-96591-0018.wav")) as w:
+        audio = np.frombuffer(w.readframes(w.getnframes()), np.int16).astype(np.float64)
+    return audio[int(0.26 * SR):int(0.70 * SR)] * gain
+
+
 def _real_word(name, gain=1.0, rate=SR):
     """A quick word said by a person, at *gain*, at *rate*: "ask" or "not",
     cut from whisper.cpp's sample of John F. Kennedy's inaugural address."""
@@ -324,45 +332,17 @@ def test_the_start_beep_is_not_a_word_wherever_it_falls_in_a_block(monkeypatch, 
 ROOMS = {"silent room": 6.0, "quiet room": 60.0, "noisy room": 300.0, "loud room": 450.0}
 
 
-@pytest.mark.parametrize("rate", [16000, 44100, 48000])
-@pytest.mark.parametrize("room", ROOMS.values(), ids=ROOMS.keys())
-@pytest.mark.parametrize("name", BEEP_HEARD)
-def test_of_a_start_beep_one_block_at_most_counts(name, room, rate):
-    """Wherever it falls in a 20 ms block, and at the rate a microphone that
-    only takes its own records at (often 48 kHz, where the beep has more
-    harmonics): a quarter of the shortest word, so a key click with it is
-    still not one. In a loud room a faint beep is loud only with the room's
-    help, and a share of 0.4 let it count for two blocks."""
-    for ms in range(20):
-        heard = _recording([(_picked_up_beep(*BEEP_HEARD[name], rate=rate), 0.4 + ms / 1000)],
-                           room, rate=rate) / 32768.0
-        assert silence._loud_seconds(heard, rate, beeps.START_BEEP[0]) <= 0.02, f"{ms} ms"
-
-
-@pytest.mark.parametrize("rate", [16000, 44100, 48000])
-@pytest.mark.parametrize("room", ROOMS.values(), ids=ROOMS.keys())
-def test_the_room_on_its_own_is_no_word(room, rate):
-    """Up to just under speaking level, steady room noise is no word, with
-    the start beep's pitch filtered out or not."""
-    heard = _recording([], room, rate=rate) / 32768.0
-    assert not silence.has_a_word(heard, rate)
-    assert not silence.has_a_word(heard, rate, ignoring_hz=beeps.START_BEEP[0])
-
-
-# (where the word starts, where the beep starts), in seconds
 WORD_AND_BEEP = {"word before the beep": (0.02, 0.6), "word after the beep": (0.3, 0.0),
                  "word over the beep": (0.25, 0.3)}
 
 
 @pytest.mark.parametrize("gain", [1.0, 0.1], ids=["spoken", "spoken softly"])
-@pytest.mark.parametrize("word", ["ask", "not"])
 @pytest.mark.parametrize("word_at,beep_at", WORD_AND_BEEP.values(), ids=WORD_AND_BEEP.keys())
-def test_a_quick_word_said_with_the_start_beep_is_kept(monkeypatch, word_at, beep_at, word,
-                                                       gain):
+def test_a_quick_word_said_with_the_start_beep_is_kept(monkeypatch, word_at, beep_at, gain):
     """A real word said before the second tap counts, wherever the beep the
     mic picked up falls: going quiet after it types it."""
     heard = _recording([(_picked_up_beep(1.0, "distorted"), beep_at),
-                        (_real_word(word, gain), word_at)], room=60.0)
+                        (_yes(gain), word_at)], room=60.0)
     _start(monkeypatch, beeps_on=True)
     _say(heard)
     assert recording.toggle_pressed_while_recording(beeps_on=False) is True
@@ -373,52 +353,14 @@ def test_a_quick_word_said_with_the_start_beep_is_kept(monkeypatch, word_at, bee
                          ids=["beep not picked up", "beep picked up", "beeps off"])
 def test_a_word_said_very_softly_counts_with_the_start_beep_or_without(
         monkeypatch, beeps_on, beep_heard):
-    """A soft "not" on a quiet microphone in a silent room is only just loud
-    enough: a filter that took a third of every pitch away made it nothing."""
-    sounds = [(_real_word("not", 0.01), 0.3)]
+    """A soft "Yes" on a quiet microphone in a silent room (about -55 dBFS)
+    still counts, beep picked up or not. A loud beep just before it costs
+    about 3 dB: at 0.02 of this level the word alone counts, after the beep
+    not."""
+    sounds = [(_yes(0.03), 0.3)]
     if beep_heard:
         sounds.append((_picked_up_beep(1.0, "clean"), 0.0))
     assert not _nothing_said(monkeypatch, _recording(sounds, room=6.0), beeps_on=beeps_on)
-
-
-# How much louder a word must be to count with the start beep's pitch filtered
-# out, in dB, as measured: in a loud room the room's own unevenness is as loud
-# as a soft word over it.
-FILTER_COST_DB = {6.0: 0.5, 60.0: 0.5, 300.0: 0.5, 450.0: 2.0}
-
-
-@pytest.mark.parametrize("beep_heard", [False, True], ids=["no beep heard", "beep heard"])
-@pytest.mark.parametrize("rate", [16000, 44100, 48000])
-@pytest.mark.parametrize("room", ROOMS.values(), ids=ROOMS.keys())
-@pytest.mark.parametrize("word", ["ask", "not"])
-def test_a_word_only_just_loud_enough_still_counts_with_the_filter(word, room, rate, beep_heard):
-    """Said ever more softly, a quick word counts with the start beep's pitch
-    filtered out down to within FILTER_COST_DB of where it stops counting
-    without the filter, picked up with the beep or not. Measured against the
-    room as recorded, the part of the room's noise the filter takes looked
-    like lost speech: in a room of 450 these two words had to be 4 dB
-    louder (up to 16 dB over all the recordings tests/data/README.md
-    describes)."""
-    def heard(db, beep):
-        sounds = [(_real_word(word, 10 ** (db / 20), rate), 0.3)]
-        if beep:
-            sounds.append((_picked_up_beep(1.0, "clean", rate), 0.0))
-        return _recording(sounds, room, rate=rate) / 32768.0
-
-    softest = 0.0
-    while silence.has_a_word(heard(softest - 0.5, False), rate):
-        softest -= 0.5
-    assert softest < -20, "the word should count when said softly"
-    for db in np.arange(softest + FILTER_COST_DB[room], 0.25, 0.5):
-        assert silence.has_a_word(heard(db, beep_heard), rate, ignoring_hz=beeps.START_BEEP[0]), \
-            f"{db} dB"
-
-
-def test_with_beeps_off_nothing_is_taken_for_the_start_beep(monkeypatch):
-    """No start beep played, so a sound at its pitch is a sound like any
-    other: someone whistling, or another app's alert."""
-    heard = _recording([(_picked_up_beep(1.0, "clean"), 0.4)], room=6.0)
-    assert not _nothing_said(monkeypatch, heard, beeps_on=False)
 
 
 def test_a_word_kept_with_the_start_beep_is_transcribed(monkeypatch):
@@ -599,11 +541,8 @@ def test_a_quick_quiet_word_is_kept_too():
 
 
 def test_a_word_that_fills_the_whole_tap_is_kept():
-    """Real speech has no neat gaps; a plain 4x ratio drops 224 of 510 real
-    half-second clips, because the clip's quietest blocks are speech."""
-    t = np.arange(int(0.45 * SR)) / SR
-    voice = np.sin(2 * np.pi * 180 * t) * (2000 + 800 * np.sin(2 * np.pi * 4 * t))
-    assert not is_speechless_tap(f32((voice + rng.normal(0, 60, t.size)).astype(np.int16)), SR)
+    """Speech from the first to the last sample of a 0.45 s tap."""
+    assert not is_speechless_tap(f32(speech(0.45)), SR)
 
 
 def test_anything_longer_than_a_tap_is_never_judged():

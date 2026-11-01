@@ -452,11 +452,15 @@ class SignOffEngine(wv.VulkanWhisperModel):
 
 
 def _audio(voiced):
+    """3 s of a quiet room, with a second of a person reading in the middle
+    when *voiced* (tests/data/README.md)."""
     rng = np.random.default_rng(1)
-    t = np.arange(3 * 16000) / 16000
-    audio = rng.normal(0, 60, t.size)
-    if voiced:   # a second of speech in the middle
-        audio += np.sin(2 * np.pi * 220 * t) * 3000 * ((t > 1) & (t < 2))
+    audio = rng.normal(0, 60, 3 * 16000)
+    if voiced:
+        with wave.open(str(pathlib.Path(__file__).with_name("data")
+                           / "librispeech-7902-96591-0018.wav")) as w:
+            reading = np.frombuffer(w.readframes(w.getnframes()), np.int16)
+        audio[16000:32000] += reading[8000:24000]
     return (audio / 32768.0).astype(np.float32)
 
 

@@ -25,7 +25,7 @@ import threading
 import numpy as np
 
 from .audio_windows import WINDOW_S, RoomLoudness, window_length
-from .voice_detector import FRAME_S, VoiceDetector
+from .voice_detector import FRAME_S, VoiceDetector, speech_seconds
 
 # How much talking arms hands-free: a cough or a click is shorter than this.
 _SPEECH_TO_ARM_S = 0.3
@@ -48,7 +48,7 @@ class SilenceDetector:
 
     Measured on 125 recorded readers in seven noises (six of them recorded
     rooms and a dryer) from 40 to 10 dB under the voice, with a 2 s wait and
-    sentences 1.2 s apart (.superpowers/vad-2026-11-01, sim_vad.py hf):
+    sentences 1.2 s apart (.superpowers/voice-detector, sim_vad.py hf):
     where the loudness rules it replaces never stopped by themselves (236
     of 2,268 recordings, as next to a dryer or in a kitchen), it stops; noise
     sent to the engine after the last word fell from up to 4 s to under 0.9
@@ -171,33 +171,24 @@ class SilenceDetector:
             return max(0, int((tail - _TAIL_KEEP_S) * self.sample_rate))
 
 
-# --- An accidental tap of the hold key ---------------------------------------------
-# A tap just over MIN_HOLD_MS records a fraction of a second of room noise and
-# the key's click, and Parakeet can "hear" a word in it ("Thank you.", or
-# "Yeah." from the processor engine for 0.4 s of loud hiss). Whisper has a
-# no-speech score to catch this; Parakeet has none. So a recording this short
-# is only transcribed if some of it is clearly louder than its own background.
+# --- Was a word said? --------------------------------------------------------------
+# An accidental tap of the hold key records a fraction of a second of room
+# noise and the key's click, and Parakeet can "hear" a word in it ("Thank you.",
+# "Yeah."). Whisper has a no-speech score to catch this; Parakeet has none. So
+# the voice detector says whether a word was said, which loudness couldn't:
+# measured on real everyday sounds (ESC-50, 40 each of coughs, sneezes,
+# breaths, laughs, claps, knocks, mouse clicks and typing) and real short words
+# (English and German, said normally and fast), at two levels in a quiet and a
+# noisy room (.superpowers/voice-detector/word_checks.py), every word counted;
+# clicks, typing and claps 0 to 3% of the time, where loudness counted every
+# one; knocks and breaths 5 to 20%; laughs up to 40%; coughs 45 to 70% and
+# sneezes 52 to 80%, voiced as they are. TuxTalk's start beep, which the
+# microphone may pick up before a double-tap's second tap, never counts.
 
 TAP_MAX_S = 0.6             # longer recordings are always transcribed, silent or not
-# Tuned on 26 real taps from a Sennheiser Profile desk mic (noisy background,
-# int16 RMS 70-130; the key's thump reached 1.6-4.7x that for a few tens of
-# ms) and 5,039 real speech clips of 0.3-0.5 s, plus real words laid over that
-# mic's own background. At 2.5x: all 26 taps dropped, no speech
-# at normal or loud level dropped, 3 of 138 very soft single words dropped.
-# 1.5x let 10 of the 26 taps through, and Parakeet on the processor typed
-# "Yeah." for them. A ratio needs the second route below: when a short clip is
-# all speech, its quietest blocks are speech too (4x alone dropped 224 of 510
-# half-second speech windows).
-_TAP_SPEECH_OVER_NOISE = 2.5    # over the clip's quietest blocks
-_TAP_MIN_SPEECH_RMS = 60.0      # int16 RMS, about -55 dBFS: far below any voice
-_TAP_VOICE_RMS = 500.0          # about -36 dBFS: normal speaking level, speech on its own
-_TAP_MIN_SPEECH_S = 0.08    # a key click is ~10 ms, a desk thump ~50; a word is longer
-
-
-def _room(rms):
-    """The loudness of a clip's room: that of its quietest blocks (the 20th
-    percentile), which a quick word doesn't reach."""
-    return np.percentile(rms, 20)
+# A word's worth of speech: three of the voice detector's frames (the loudness
+# rule before it asked for 0.08 s).
+_WORD_S = 0.09
 
 
 def _windows_rms(audio_f32, sample_rate):
@@ -207,76 +198,6 @@ def _windows_rms(audio_f32, sample_rate):
     windows = np.asarray(audio_f32[:count * size], dtype=np.float64).reshape(count, size)
     windows = windows * 32768.0
     return np.sqrt(np.mean(windows * windows, axis=1))
-
-
-def _loud_seconds(audio_f32, sample_rate, ignoring_hz=None) -> float:
-    """Seconds of *audio_f32* clearly louder than its own background, not
-    counting what is mostly a tone of *ignoring_hz* Hz (the start beep).
-
-    Loudness is judged against the clip's own background (its quietest
-    blocks), so a quiet microphone saying a quick word still counts, and
-    normal speaking volume counts on its own, so a word that fills the whole
-    clip does too. So does a steady room that loud (int16 RMS about 480 and
-    up: a fan right by the microphone): by loudness alone it can't be told
-    from such a word, and asking each block to stand a quarter above the
-    room as well dropped 6% of 0.3 to 0.5 s stretches of real speech."""
-    rms = _windows_rms(audio_f32, sample_rate)
-    if len(rms) < 3:
-        return 0.0                  # under 60 ms: nothing to say in that
-    loud = ((rms > max(_room(rms) * _TAP_SPEECH_OVER_NOISE, _TAP_MIN_SPEECH_RMS))
-            | (rms > _TAP_VOICE_RMS))
-    if ignoring_hz is not None and loud.any():
-        left = _windows_rms(_without_tone(audio_f32, sample_rate, ignoring_hz), sample_rate)
-        loud &= _share_left(rms, left) >= _TONE_SHARE_LEFT
-    return loud.sum() * WINDOW_S
-
-
-# --- The start beep, picked up by the microphone ------------------------------------
-# A microphone near the speakers records the start beep, and before the second
-# tap of a double-tap TuxTalk asks whether a word was said. When the beep
-# reached the recording can't be known (an output or a microphone can be
-# slower than it reports), so it is told apart by its pitch: a block is the
-# beep where filtering out the beep's pitch and harmonics takes away most of
-# what makes the block louder than the room. Whether a block is loud is still
-# judged on what was recorded.
-#
-# The beep is one exact pitch that fades in and out over 5 ms (beeps.FADE_S):
-# 99% of its energy lies within 40 Hz of it, and all but 0.2% within 100 Hz.
-# The harmonics a small speaker or an overloaded microphone adds sit on
-# multiples of it: clipped at 1.6 times full scale, 2.8% of the beep is in
-# them and under 0.2% lies more than 160 Hz from a multiple, at 16, 44.1 and
-# 48 kHz. A narrower notch rings on as the beep starts and stops. Measured as
-# tests/data/README.md describes, in rooms of int16 RMS 6 to 450 and at those
-# three rates: a beep from faint to clipped at 4 times full scale adds one
-# 20 ms block at most, a quarter of a word, and the filter raises how loud a
-# word must be to count by at most 0.5 dB, or 2 dB in a room of 450, where
-# the room's own unevenness is as loud as a soft word over it. A share of
-# 0.48 let a beep add two blocks; 0.54 cost a soft word more.
-_TONE_STOP_HZ = 80          # either side of the pitch and each harmonic: taken out
-_TONE_EASE_HZ = 80          # beyond that: faded back in
-_TONE_SHARE_LEFT = 0.5      # of a block's loudness over the room, left: not the beep
-
-
-def _without_tone(audio_f32, sample_rate, hz):
-    """*audio_f32* with a tone of *hz* Hz and its harmonics filtered out. It
-    is padded with silence, at least 50 ms, so what the filter smears past
-    its end doesn't wrap round to its start."""
-    size = 1 << (len(audio_f32) + sample_rate // 20 - 1).bit_length()
-    pitches = np.fft.rfftfreq(size, 1 / sample_rate)
-    from_harmonic = np.abs((pitches + hz / 2) % hz - hz / 2)
-    gain = 0.5 - 0.5 * np.cos(np.pi * np.clip((from_harmonic - _TONE_STOP_HZ) / _TONE_EASE_HZ,
-                                              0, 1))
-    gain[pitches < hz / 2] = 1.0    # what lies nearest 0 Hz is no harmonic
-    return np.fft.irfft(np.fft.rfft(audio_f32, size) * gain, size)[:len(audio_f32)]
-
-
-def _share_left(raw, left):
-    """For each block, of its loudness over the room as recorded (*raw*),
-    the share still over the room once the beep is filtered out (*left*), as
-    amplitude. Each is measured against its own room: the filter takes part
-    of the room's noise too, and that is no part of a word."""
-    over_room = np.maximum(raw * raw - _room(raw) ** 2, 1.0)
-    return np.sqrt(np.clip(left * left - _room(left) ** 2, 0.0, None) / over_room)
 
 
 # A working microphone is never this quiet: even in a silent room its own
@@ -303,24 +224,21 @@ def is_speechless_tap(audio_f32, sample_rate) -> bool:
     return not has_a_word(audio_f32, sample_rate)
 
 
-def has_a_word(audio_f32, sample_rate, ignoring_hz=None) -> bool:
-    """Whether *audio_f32* holds at least a word's worth of speech; a key
-    click or a desk thump is too short to count. With *ignoring_hz*, the
-    pitch of a beep that played into the recording, the beep isn't speech
-    either; without it nothing is filtered."""
-    return _loud_seconds(audio_f32, sample_rate, ignoring_hz) >= _TAP_MIN_SPEECH_S
+def has_a_word(audio_f32, sample_rate) -> bool:
+    """Whether *audio_f32* holds at least a word's worth of speech."""
+    return speech_seconds(audio_f32, sample_rate) >= _WORD_S
 
 
 def has_no_speech(audio_f32, sample_rate) -> bool:
     """True for a recording of any length in which nobody talked: less than a
-    moment of it is louder than its background, so a cough or a key click
-    still counts as nothing said.
+    moment of it is speech, so a cough or a key click still counts as nothing
+    said.
 
     It stands in for a no-speech score where the engine's own can't be
     trusted. It only decides whether stock phrases were invented, never
     whether a recording is transcribed: a long clip's background can be the
     speaker's own voice, so it is too blunt to drop real dictation on."""
-    return _loud_seconds(audio_f32, sample_rate) < _SPEECH_TO_ARM_S
+    return speech_seconds(audio_f32, sample_rate) < _SPEECH_TO_ARM_S
 
 
 # --- A noisy room, for the microphone test ------------------------------------
