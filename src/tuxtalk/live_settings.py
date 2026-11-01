@@ -84,7 +84,6 @@ chunk_pause_seconds = 0.0
 chunk_cfg = None
 
 # Type at pause fine-tuning (Preferences → Advanced → TuxTalk Labs).
-chunk_speech_db = 6.0
 chunk_context_marks = True
 
 
@@ -94,7 +93,7 @@ def apply(cfg):
     global remove_fillers, ai_engine, auto_stop_seconds, ai_corrections, voice_editing
     global swiss_spelling, numbers_mode, numbers_language, voice_navigation, adapt_to_app
     global auto_languages, press_enter_after
-    global chunk_pause_seconds, chunk_cfg, chunk_speech_db, chunk_context_marks
+    global chunk_pause_seconds, chunk_cfg, chunk_context_marks
     global log_transcripts, usage_stats, restore_clipboard, pause_media, duck_audio
     global paste_last_hotkey
     log_transcripts = cfg.log_transcripts
@@ -105,7 +104,6 @@ def apply(cfg):
     paste_last_hotkey = cfg.paste_last_hotkey
     auto_stop_seconds = float(cfg.auto_stop_seconds) if cfg.auto_stop_silence else 0.0
     chunk_cfg = cfg
-    chunk_speech_db = float(cfg.chunk_speech_db)
     chunk_context_marks = bool(cfg.chunk_context_marks)
     pause = float(cfg.chunk_pause_seconds) if cfg.chunked_dictation else 0.0
     if pause > 0 and auto_stop_seconds > 0 and pause >= auto_stop_seconds:

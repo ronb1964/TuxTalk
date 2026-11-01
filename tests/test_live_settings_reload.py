@@ -141,7 +141,6 @@ _MIRRORED = [
     ({"paste_last_hotkey": "Ctrl+Alt+V"}, "paste_last_hotkey", "Ctrl+Alt+V"),
     ({"auto_stop_silence": True, "auto_stop_seconds": 7.0}, "auto_stop_seconds", 7.0),
     ({"chunked_dictation": True, "chunk_pause_seconds": 1.5}, "chunk_pause_seconds", 1.5),
-    ({"chunk_speech_db": 9.0}, "chunk_speech_db", 9.0),
     ({"chunk_context_marks": False}, "chunk_context_marks", False),
     ({"remove_fillers": True}, "remove_fillers", True),
     ({"swiss_spelling": True}, "swiss_spelling", True),

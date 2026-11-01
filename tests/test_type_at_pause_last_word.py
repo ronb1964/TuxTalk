@@ -78,7 +78,7 @@ def test_a_soft_voice_in_hands_free_keeps_its_phrases(heard):
     texts.extend(["hello"] * 9)              # each phrase, then each with the one before
     rec = rs.state.current
     rec.silence = silence.SilenceDetector(2.0, SR)
-    phrase = np.concatenate([speech(1.5, level=300.0, noise_level=4.0), noise(1.0, level=4.0)])
+    phrase = np.concatenate([speech(1.5, level=150.0, noise_level=4.0), noise(1.0, level=4.0)])
     audio = np.tile(phrase, 6)[int(0.7 * SR):]      # at 10 s, mid-phrase
     for i in range(0, len(audio), 320):
         feed_block(audio[i:i + 320])
@@ -91,28 +91,6 @@ def test_a_soft_voice_in_hands_free_keeps_its_phrases(heard):
     assert "".join(typed).lower().count("hello") == 5      # four phrases and the rest
     assert beeps == [READY_BEEP]
     assert lengths[-2] * SR >= rest - 1     # the rest alone, none of it trimmed
-
-
-def test_hands_free_judges_a_short_last_word_against_the_whole_rest(heard, monkeypatch):
-    """The quiet hands-free waited through is the room the word stands out
-    from. Judged after that quiet was trimmed, in a noisy room the room
-    looked louder and real short words were thrown away."""
-    texts, typed, _, _ = heard
-    texts.extend(["we meet", "yes", "we meet yes"])
-    judged = []
-
-    def has_a_word(audio, rate, ignoring_hz=None):
-        judged.append(len(audio) / rate)
-        return real_has_a_word(audio, rate, ignoring_hz)
-
-    real_has_a_word = silence.has_a_word
-    monkeypatch.setattr(silence, "has_a_word", has_a_word)
-    rec = rs.state.current
-    rec.silence = silence.SilenceDetector(2.0, SR)
-    feed(np.concatenate([speech(1.0), noise(1.0), speech(0.2), noise(2.5)]))
-    stop()
-    assert judged and judged[0] >= 2.4          # the word and all the quiet after it
-    assert "".join(typed) == "We meet yes "
 
 
 def test_a_word_cut_short_by_the_key_still_reaches_the_engine(heard):

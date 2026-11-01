@@ -6,7 +6,7 @@ with synthetic audio, without a display or a microphone.
 """
 import math
 
-from .chunking import MIN_SPEECH_RMS, MIN_SPEECH_S, PauseDetector, PauseSnapshot
+from .chunking import MIN_SPEECH_S, PauseDetector, PauseSnapshot
 
 # The meter's scale, in dBFS: a quiet dynamic mic (room near -80, speech from
 # -55) and a hissing onboard input (room near -38) both read clearly.
@@ -21,12 +21,6 @@ def level_to_fraction(rms: float) -> float:
     return max(0.0, min(1.0, (db - METER_FLOOR_DB) / -METER_FLOOR_DB))
 
 
-def threshold_fraction(room: float, speech_db: float) -> float:
-    """Where speech starts on the meter for this room level and sensitivity,
-    the same rule PauseDetector.threshold() applies."""
-    return level_to_fraction(max(MIN_SPEECH_RMS, room * 10 ** (speech_db / 20)))
-
-
 class PauseTest:
     """A PauseDetector fed by the live test, rebuilt whenever a setting changes.
 
@@ -36,16 +30,16 @@ class PauseTest:
     replaced could still cut once in the feed() that holds it.
     """
 
-    def __init__(self, sample_rate: int, pause_seconds: float, speech_db: float):
+    def __init__(self, sample_rate: int, pause_seconds: float):
         self.sample_rate = int(sample_rate)
         self._cuts = 0
         self._cuts_flashed = 0
         self._heard_speech = False
-        self._detector = PauseDetector(pause_seconds, self.sample_rate, speech_db=speech_db)
+        self._detector = PauseDetector(pause_seconds, self.sample_rate)
 
-    def configure(self, pause_seconds: float, speech_db: float) -> None:
-        """Apply new settings from now on, keeping the cut count."""
-        self._detector = PauseDetector(pause_seconds, self.sample_rate, speech_db=speech_db)
+    def configure(self, pause_seconds: float) -> None:
+        """Apply a new pause length from now on, keeping the cut count."""
+        self._detector = PauseDetector(pause_seconds, self.sample_rate)
 
     def feed(self, block) -> bool:
         fired = self._detector.feed(block)
@@ -73,7 +67,7 @@ class PauseTest:
         mean nothing to most people."""
         snap = self.snapshot()
         detector = self._detector
-        if snap.level >= snap.threshold:
+        if snap.talking:
             now = "Hearing you talk"
         elif detector.speech_time >= MIN_SPEECH_S:
             now = (f"Quiet for {snap.silence_s:.1f} s. At {detector.pause_seconds:.1f} s "
@@ -92,10 +86,10 @@ class PauseTest:
             phrases = "1 phrase" if cuts == 1 else f"{cuts} phrases"
             return (f"Test done: {_pauses(cuts)} found, so TuxTalk would have typed "
                     f"{phrases} while you talked. If one came while you were still "
-                    "talking, lower the noise filter or make the pause longer.")
+                    "talking, make the pause longer.")
         if self._heard_speech:
             return ("Test done: no pauses found, so everything would have been typed "
-                    "at the end. If you did pause, raise the noise filter.")
+                    "at the end. If you did pause, make the pause shorter.")
         return "Test stopped. It didn't hear you talk."
 
 

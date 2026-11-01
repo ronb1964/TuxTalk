@@ -8,7 +8,7 @@ from gi.repository import GLib, Gtk
 import sounddevice as sd
 
 from . import mic_stream
-from .chunk_meter import PauseTest, level_to_fraction, threshold_fraction
+from .chunk_meter import PauseTest, level_to_fraction
 from .mic_test import MicReopen, SegmentedVUMeter
 from .logger import setup_logger
 from .prefs_tab import LABS_INDENT, Tab, fold, subheading
@@ -17,21 +17,19 @@ logger = setup_logger(__name__)
 
 
 class PauseMeter(SegmentedVUMeter):
-    """The mic test's meter for Type at pause (TuxTalk Labs): the level, with
-    the speech threshold marked on it in green, and a green frame flashing
-    where the pause detector would cut. The room needs no mark: in silence the
-    meter itself shows it. Both are 0-1 positions (chunk_meter)."""
+    """The mic test's meter for Type at pause (TuxTalk Labs): the level, as a
+    0-1 position (chunk_meter), and a green frame flashing where the pause
+    detector would cut. What counts as speech is the voice detector's call,
+    not a level, so no line is marked on it."""
 
     FLASH_S = 0.3
 
     def __init__(self, num_segments=20):
         super().__init__(num_segments=num_segments)
-        self.threshold = 0.0
         self._flash_until = 0.0
         self.set_size_request(300, 20)
 
-    def show_snapshot(self, level, threshold, cut=False):
-        self.threshold = max(0.0, min(1.0, threshold))
+    def show_snapshot(self, level, cut=False):
         if cut:
             self._flash_until = time.monotonic() + self.FLASH_S
         self.set_value(level)
@@ -45,11 +43,6 @@ class PauseMeter(SegmentedVUMeter):
         return False
 
     def _draw_marks(self, cr, width, height):
-        if self.threshold > 0:
-            x = round(self.threshold * width)
-            cr.set_source_rgb(0x04 / 255, 0xB5 / 255, 0x03 / 255)
-            cr.rectangle(max(0, x - 1), 0, 3, height)
-            cr.fill()
         if self.flashing():
             # A cut: a green frame round the whole meter, easy to catch from
             # the corner of the eye while speaking.
@@ -68,7 +61,6 @@ class TypeAtPause(Tab):
         self._pause_test = None             # the test running now, if any
         self._pause_test_stream = None
         self._tap_redraw_pending = False
-        self._tap_last_room = None          # the room the last test measured
 
     def build(self, grid, row):
         """The Labs entry: the switch, and under it the fine-tuning with a live
@@ -105,9 +97,6 @@ class TypeAtPause(Tab):
         self.tap_pause_spin.connect("value-changed", lambda sp: (
             self.update_config("chunk_pause_seconds", round(sp.get_value(), 1)),
             self._tap_reconfigure(), self._tap_update_summary()))
-        self.tap_db_spin.connect("value-changed", lambda sp: (
-            self.update_config("chunk_speech_db", float(round(sp.get_value()))),
-            self._tap_reconfigure(), self._tap_update_summary()))
         self.tap_context_check.connect("toggled", lambda c: (
             self.update_config("chunk_context_marks", c.get_active()),
             self._tap_update_summary()))
@@ -116,8 +105,8 @@ class TypeAtPause(Tab):
         return row
 
     def _build_settings(self, fine):
-        """Punctuation from context, the pause length and the noise filter;
-        returns the next row of *fine*."""
+        """Punctuation from context and the pause length; returns the next
+        row of *fine*."""
         r = 0
         self.tap_context_check = Gtk.CheckButton(
             label="Punctuation from context: decide the mark at a pause by hearing "
@@ -143,27 +132,6 @@ class TypeAtPause(Tab):
         pause_box.pack_start(self.tap_pause_spin, False, False, 0)
         pause_box.pack_start(Gtk.Label(label="s"), False, False, 0)
         fine.attach(pause_box, 1, r, 1, 1)
-        r += 1
-
-        noise_label = Gtk.Label(label="Noise filter:", xalign=0)
-        fine.attach(noise_label, 0, r, 1, 1)
-        self.tap_db_spin = Gtk.SpinButton(
-            adjustment=Gtk.Adjustment(value=float(self.config.get("chunk_speech_db", 6.0)),
-                                      lower=3, upper=12, step_increment=1, page_increment=3),
-            digits=0)
-        self.tap_db_spin.connect("scroll-event", lambda *a: True)
-        noise_label.set_mnemonic_widget(self.tap_db_spin)
-        # The value is how many dB louder than the room speech must be
-        # (chunk_speech_db): higher ignores more room noise.
-        self.tap_db_spin.set_tooltip_text(
-            "Raise it if the bar never flashes green when you pause: your room's\n"
-            "noise is being taken for talking. Lower it if it flashes while you're\n"
-            "still talking: your softer words are being taken for quiet.")
-        db_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        db_box.pack_start(self.tap_db_spin, False, False, 0)
-        db_box.pack_start(Gtk.Label(label="higher ignores more background noise"),
-                          False, False, 0)
-        fine.attach(db_box, 1, r, 1, 1)
         return r + 1
 
     def _build_test(self, fine, r):
@@ -171,8 +139,8 @@ class TypeAtPause(Tab):
         it heard, at row *r* of *fine*."""
         self.tap_test_btn = Gtk.Button(label="Test")
         self.tap_test_btn.set_tooltip_text(
-            "Try your settings without typing anything. Talk, and stop now and then:\n"
-            "the bar moves with your voice and flashes green wherever a phrase\n"
+            "Try the pause length without typing anything. Talk, and stop now and\n"
+            "then: the bar moves with your voice and flashes green wherever a phrase\n"
             "would be typed. It uses the microphone from the Audio tab.")
         self.tap_meter = PauseMeter(num_segments=20)
         self._pause_reopen = MicReopen()
@@ -183,8 +151,8 @@ class TypeAtPause(Tab):
         r += 1
 
         self.tap_status = Gtk.Label(
-            label="Press Test, then talk and stop now and then. Your voice should go "
-                  "past the green line, and a green flash means a phrase would be typed.",
+            label="Press Test, then talk and stop now and then. A green flash means a "
+                  "phrase would be typed.",
             xalign=0)
         self.tap_status.set_line_wrap(True)
         self.tap_status.set_opacity(0.7)
@@ -195,7 +163,6 @@ class TypeAtPause(Tab):
         context = "on" if self.tap_context_check.get_active() else "off"
         self.tap_fold.set_summary(
             f"pause {self.tap_pause_spin.get_value():.1f} s"
-            f" \u00b7 noise filter {self.tap_db_spin.get_value():.0f}"
             f" \u00b7 punctuation from context {context}")
 
     def _tap_sync_sensitivity(self):
@@ -224,8 +191,7 @@ class TypeAtPause(Tab):
         try:
             device_idx = self.win.get_selected_device_idx()
             sample_rate = mic_stream.input_samplerate(device_idx, 16000)
-            self._pause_test = test = PauseTest(sample_rate, self.tap_pause_spin.get_value(),
-                                                self.tap_db_spin.get_value())
+            self._pause_test = test = PauseTest(sample_rate, self.tap_pause_spin.get_value())
             self._tap_redraw_pending = False
 
             def callback(indata, frames, time_info, status):
@@ -256,24 +222,14 @@ class TypeAtPause(Tab):
         self._tap_redraw_pending = False
         if test is not self._pause_test:
             return False
-        snap = test.snapshot()
-        self._tap_last_room = snap.room   # the mark keeps following the noise filter after Stop
-        self.tap_meter.show_snapshot(level_to_fraction(snap.level),
-                                     level_to_fraction(snap.threshold),
+        self.tap_meter.show_snapshot(level_to_fraction(test.snapshot().level),
                                      cut=test.take_cut())
         self.tap_status.set_text(test.status_text())
         return False
 
     def _tap_reconfigure(self):
-        test = self._pause_test
-        if test is not None:
-            test.configure(self.tap_pause_spin.get_value(), self.tap_db_spin.get_value())
-            return
-        room = self._tap_last_room
-        if room is not None:
-            # Not testing: place the mark from the room the last test measured.
-            self.tap_meter.show_snapshot(
-                0.0, threshold_fraction(room, self.tap_db_spin.get_value()))
+        if self._pause_test is not None:
+            self._pause_test.configure(self.tap_pause_spin.get_value())
 
     def stop_test(self, wait=False):
         """Stop Type at pause's live test, or call off one still waiting to
@@ -291,4 +247,4 @@ class TypeAtPause(Tab):
         self._pause_reopen.call_off()
         self.tap_test_btn.set_label("Test")
         self.tap_test_btn.set_sensitive(True)
-        self.tap_meter.show_snapshot(0.0, self.tap_meter.threshold)
+        self.tap_meter.show_snapshot(0.0)

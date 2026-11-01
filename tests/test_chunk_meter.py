@@ -1,6 +1,9 @@
-"""Type at pause: the live test's logic in Preferences, without GTK or a mic."""
+"""Type at pause: the live test's logic in Preferences, without GTK or a mic.
+Speech is a person reading (type_at_pause_rig.speech)."""
 import numpy as np
 import pytest
+
+from type_at_pause_rig import speech as reading
 
 SR = 16000
 BLOCK = 320
@@ -12,9 +15,8 @@ def room(seconds, sr=SR):
 
 
 def speech(seconds, sr=SR):
-    t = np.arange(int(seconds * sr)) / sr
-    tone = np.sin(2 * np.pi * 220 * t) * 2000 * ((t % 0.25) < 0.18)
-    return np.clip(tone + rng.normal(0, 380, t.size), -32768, 32767).astype(np.int16)
+    """The reader in the hiss room() makes."""
+    return reading(seconds, level=2000.0, noise_level=380.0, sr=sr)
 
 
 def two_pauses(sr=SR):
@@ -40,7 +42,7 @@ def test_level_to_fraction(rms, fraction):
 
 def test_pause_test_counts_the_cuts():
     from tuxtalk.chunk_meter import PauseTest
-    test = PauseTest(SR, 0.8, 6.0)
+    test = PauseTest(SR, 0.8)
     assert feed_all(test, two_pauses()) == 2
     assert test.snapshot().cuts == 2
 
@@ -48,7 +50,7 @@ def test_pause_test_counts_the_cuts():
 def test_pause_test_at_48k():
     """The test runs at the mic's native rate, not only at 16 kHz."""
     from tuxtalk.chunk_meter import PauseTest
-    test = PauseTest(48000, 0.8, 6.0)
+    test = PauseTest(48000, 0.8)
     assert feed_all(test, two_pauses(48000), block=960) == 2
 
 
@@ -56,12 +58,12 @@ def test_configure_mid_test_keeps_the_count_and_applies():
     """Moving a slider rebuilds the detector at once; the count
     carries on, and the new value is what decides from then on."""
     from tuxtalk.chunk_meter import PauseTest
-    test = PauseTest(SR, 0.8, 6.0)
+    test = PauseTest(SR, 0.8)
     audio = two_pauses()
     half = int(4.5 * SR)                     # just after the first pause
     feed_all(test, audio[:half])
     assert test.snapshot().cuts == 1
-    test.configure(3.0, 6.0)                 # pauses now need 3 s: the second one is too short
+    test.configure(3.0)                 # pauses now need 3 s: the second one is too short
     feed_all(test, audio[half:])
     assert test.snapshot().cuts == 1
 
@@ -72,16 +74,16 @@ def test_a_cut_while_a_slider_moves_is_still_counted():
     from tuxtalk.chunk_meter import PauseTest
     audio = two_pauses()
     blocks = [audio[i:i + BLOCK].tobytes() for i in range(0, len(audio), BLOCK)]
-    first_cut = next(n for n, fired in enumerate(map(PauseTest(SR, 0.8, 6.0).feed, blocks))
+    first_cut = next(n for n, fired in enumerate(map(PauseTest(SR, 0.8).feed, blocks))
                      if fired)
-    test = PauseTest(SR, 0.8, 6.0)
+    test = PauseTest(SR, 0.8)
     for block in blocks[:first_cut]:
         test.feed(block)
     old = test._detector
     feed_old = old.feed
 
     def slider_moved_meanwhile(block):
-        test.configure(0.8, 6.0)            # the GTK thread
+        test.configure(0.8)            # the GTK thread
         return feed_old(block)
     old.feed = slider_moved_meanwhile
 
@@ -91,7 +93,7 @@ def test_a_cut_while_a_slider_moves_is_still_counted():
 
 def test_take_cut_reports_each_cut_once():
     from tuxtalk.chunk_meter import PauseTest
-    test = PauseTest(SR, 0.8, 6.0)
+    test = PauseTest(SR, 0.8)
     audio = two_pauses()
     feed_all(test, audio[:int(4.5 * SR)])
     assert test.take_cut() is True
@@ -100,7 +102,7 @@ def test_take_cut_reports_each_cut_once():
 
 def test_status_text():
     from tuxtalk.chunk_meter import PauseTest
-    test = PauseTest(SR, 0.8, 6.0)
+    test = PauseTest(SR, 0.8)
     feed_all(test, two_pauses())
     text = test.status_text()
     assert text.endswith(" · 2 pauses so far")
@@ -111,11 +113,11 @@ def test_status_text():
 
 def test_status_text_in_plain_words():
     from tuxtalk.chunk_meter import PauseTest
-    test = PauseTest(SR, 0.8, 6.0)
+    test = PauseTest(SR, 0.8)
     feed_all(test, room(1.5))
     assert test.status_text() == "Waiting for you to talk"
     assert test.result_text() == "Test stopped. It didn't hear you talk."
-    feed_all(test, speech(0.9))                 # ends mid-syllable
+    feed_all(test, speech(0.9))                 # ends mid-word
     assert test.status_text() == "Hearing you talk"
     feed_all(test, room(0.4))
     assert test.status_text().startswith("Quiet for 0.")
@@ -124,10 +126,3 @@ def test_status_text_in_plain_words():
     feed_all(test, room(0.6))
     assert test.status_text().endswith(" · 1 pause so far")
     assert "1 pause found, so TuxTalk would have typed 1 phrase" in test.result_text()
-
-
-def test_threshold_fraction_follows_the_sensitivity():
-    from tuxtalk.chunk_meter import level_to_fraction, threshold_fraction
-    assert threshold_fraction(400.0, 6.0) == pytest.approx(level_to_fraction(400 * 10 ** (6 / 20)))
-    assert threshold_fraction(400.0, 12.0) > threshold_fraction(400.0, 6.0)
-    assert threshold_fraction(1.0, 6.0) == pytest.approx(level_to_fraction(40.0))   # the floor

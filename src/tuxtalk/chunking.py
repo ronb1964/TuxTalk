@@ -8,6 +8,11 @@ natural pauses, never words appearing and changing mid-sentence (upstream's
 
 Off unless chunked_dictation is set in config.toml; see type_at_pause.arm_chunker.
 How the phrases' text is joined at each pause is chunk_text.py's job.
+
+What is speech is voice_detector's verdict, not loudness: by loudness a
+dryer's thumps were talking, and a phrase said next to one wasn't typed
+until the recording ended. Loudness still decides what a phrase may lose
+from its end (cut_from_end).
 """
 import collections
 from typing import NamedTuple
@@ -15,24 +20,27 @@ from typing import NamedTuple
 import numpy as np
 
 from .audio_windows import split_windows, window_length
+from .voice_detector import FRAME_S, VoiceDetector
 
 # Talking needed before a pause can end a chunk: a cough or a click is shorter.
 MIN_SPEECH_S = 0.3
-# Silence kept at the end of a chunk, so the last word's decay is never cut.
-TAIL_KEEP_S = 0.3
-# Silence kept at the start of the chunk after a cut, before the sound that
-# ended the pause: a word's soft first sound ("h", "f", "s") can be under
-# speech's threshold there (take_cut).
+# Kept at the end of a chunk after the last speech, or after the last sound
+# loud enough to be a word, so the last word's decay is never cut. The voice
+# detector ends speech before a soft last sound has faded: keeping 0.3 s
+# after it, 132 of 3,024 simulated recordings lost speech loudness kept.
+TAIL_KEEP_S = 0.5
+# The chunk after a cut starts this long before it: a word that ended the
+# pause is speech to the voice detector only some 0.1 s in, and its soft
+# first sound ("h", "f", "s") may be under that.
 LEAD_KEEP_S = 0.3
-# The quietest level (int16 RMS, about -58 dBFS) that can count as speech.
-# Measured on a Beyerdynamic M 70 PRO X into a MiniFuse 2 in a quiet room: the
-# room at 1-6, speech at 50-600. Auto-stop's 300 never heard that as speech.
+# Loud enough that trimming it could take a word: the quietest level (int16
+# RMS, about -58 dBFS) that can be one, measured on a Beyerdynamic M 70 PRO X
+# into a MiniFuse 2 in a quiet room (the room at 1-6, speech at 50-600)...
 MIN_SPEECH_RMS = 40.0
-# Speech must be at least this much louder than the room, in dB (Preferences →
-# Advanced → TuxTalk Labs → Type at pause → Noise filter). Measured on cbox
+# ...and at least this much louder than the room, in dB. Measured on cbox
 # (onboard ALC887 at +50 dB gain): the room's hiss at 370-410, speech at
-# 600-4000, so auto-stop's +8 dB would take the quieter words for pauses.
-DEFAULT_SPEECH_DB = 6.0
+# 600-4000.
+SPEECH_OVER_ROOM_DB = 6.0
 # Rumble below this is filtered out before measuring: it is loud on an onboard
 # mic input and carries no speech.
 HIGH_PASS_HZ = 150
@@ -43,18 +51,16 @@ HIGH_PASS_HZ = 150
 ROOM_WINDOW_S = 5.0
 ROOM_PERCENTILE = 10
 ROOM_START_S = 1.0
-# Loud for less than this is a click or a burst of hiss, not speech; it does not
-# start a pause over. A consonant lasts longer. Longer limits that let a
-# dryer's thumps through (0.07 s) cut phrases mid-sentence 10 to 19% more
-# often in a quiet room, measured on 125 recorded readers.
+# Speech for less than this (two of the voice detector's frames) doesn't start
+# a pause over: one uncertain frame in a long quiet is no word yet.
 MIN_BURST_S = 0.04
 
 
 class PauseSnapshot(NamedTuple):
-    """What a PauseDetector hears right now (int16 RMS after the high-pass)."""
+    """What a PauseDetector hears right now: the loudness (int16 RMS after the
+    high-pass) and whether the voice detector hears speech."""
     level: float
-    room: float
-    threshold: float
+    talking: bool
     silence_s: float
     cuts: int
 
@@ -65,21 +71,32 @@ class PauseDetector:
     Unlike silence.SilenceDetector (which ends the recording once), this fires
     at every pause and then waits for new speech before it can fire again.
 
-    The room level is measured differently too. SilenceDetector's floor is
-    the quietest window heard, rising only slowly, so a room that gets
-    noisier while you talk is learned late. Here the audio is high-passed,
-    and the room is a low percentile of its windows' levels (each
-    audio_windows.WINDOW_S long) over the last ROOM_WINDOW_S, digital silence
-    left out, which follows the room within seconds.
+    The voice detector says what is speech, frame by frame. Loudness is
+    measured beside it, to know what a phrase can lose from its end without
+    losing a word (cut_from_end): the audio is high-passed, and the room is a
+    low percentile of its windows' levels (each audio_windows.WINDOW_S long)
+    over the last ROOM_WINDOW_S, digital silence left out, which follows the
+    room within seconds.
+
+    Measured on 125 recorded readers in nine noises from 40 to 10 dB under the
+    voice, with a 0.8 s pause (3,024 recordings; .superpowers/vad-2026-11-01,
+    sim_vad.py tap and tapw): of the pauses between sentences that loudness
+    missed, as next to a dryer (458 of 1,008) or a gusty fan (503), it misses
+    about a quarter; noise after the last phrase reached the engine in 260
+    recordings instead of 1,476, none in a quiet room; trimming lost 1.9 s of
+    speech in all, where loudness lost 38.6 s. Other people talking near the
+    speaker is speech to it: there it misses more pauses (287 of 1,008, 215 by
+    loudness).
     """
 
-    def __init__(self, pause_seconds: float, sample_rate: int,
-                 speech_db: float = DEFAULT_SPEECH_DB):
+    def __init__(self, pause_seconds: float, sample_rate: int):
         """A detector for one recording at *sample_rate*: a pause of
-        *pause_seconds* ends a chunk, and speech is *speech_db* over the room."""
+        *pause_seconds* ends a chunk."""
         self.pause_seconds = float(pause_seconds)
         self.sample_rate = int(sample_rate)
-        self.speech_over_room = 10 ** (float(speech_db) / 20)
+        self.speech_over_room = 10 ** (SPEECH_OVER_ROOM_DB / 20)
+        self._voice = VoiceDetector(self.sample_rate)
+        self.talking = False
         self.cuts = 0
         self.level = 0.0
         # Talking toward the next cut; a cough before a pause is forgotten.
@@ -89,12 +106,19 @@ class PauseDetector:
         self.speech_since_cut = 0.0
         self.silence_time = 0.0
         self.last_pause = 0.0
-        # Samples fed, and those judged in whole windows, since the first
-        # block; where the phrase after the last cut starts, counted the
-        # same way (_mark_cut).
+        # Samples fed and the seconds of them the voice detector has judged,
+        # since the first block; where the phrase before the last cut ends
+        # and the one after it starts, in samples fed (_mark_cut).
         self._fed = 0
-        self._judged = 0
-        self._resume_at = 0
+        self._judged_s = 0.0
+        self._phrase_end = 0
+        self._next_start = 0
+        # Loudness: samples measured in whole windows, where the windows
+        # loud enough to be a word ended over the last pause and a second,
+        # and whether the last one was.
+        self._measured = 0
+        self._sounds = collections.deque()
+        self._sounding = False
         # High-pass: the signal minus its moving average over 1/HIGH_PASS_HZ.
         self._hp_len = max(2, int(self.sample_rate / HIGH_PASS_HZ))
         self._hp_tail = np.zeros(self._hp_len - 1)
@@ -112,15 +136,14 @@ class PauseDetector:
 
     def describe(self) -> str:
         """The levels it is working with, for the log."""
-        return (f"room {self._room:.0f}, speech from {self.threshold():.0f}, "
+        return (f"room {self._room:.0f}, a sound from {self.threshold():.0f}, "
                 f"loudest {self.loudest:.0f} (int16 RMS after the high-pass), "
                 f"{self.blocks} blocks at {self.sample_rate} Hz, longest quiet "
                 f"{self.longest_quiet:.2f}s of the {self.pause_seconds:.2f}s a pause needs")
 
     def snapshot(self) -> PauseSnapshot:
-        """The levels it is working with now, for the live test in Preferences."""
-        return PauseSnapshot(self.level, self._room, self.threshold(), self.silence_time,
-                             self.cuts)
+        """What it hears now, for the live test in Preferences."""
+        return PauseSnapshot(self.level, self.talking, self.silence_time, self.cuts)
 
     def _high_pass(self, block):
         samples = np.frombuffer(block, dtype=np.int16).astype(np.float64)
@@ -132,8 +155,14 @@ class PauseDetector:
         self._hp_tail = buf[-(self._hp_len - 1):]
         return samples - average
 
+    def sounding(self) -> bool:
+        """Whether a sound that could be a word was going on in the last
+        loudness window: a stop now would cut it short."""
+        return self._sounding
+
     def threshold(self) -> float:
-        """The level (int16 RMS) that counts as speech in this room right now."""
+        """The level (int16 RMS) at which a sound in this room right now could
+        be a word, so trimming it could lose one."""
         return max(MIN_SPEECH_RMS, self._room * self.speech_over_room)
 
     def _learn_room(self, level: float, duration: float) -> None:
@@ -156,20 +185,32 @@ class PauseDetector:
         self.blocks += 1
         self._fed += hp.size
         windows, self._pending = split_windows(self._pending, hp, self._win_len)
-        fired = False
         for window in windows:
-            self._judged += self._win_len
-            level = float(np.sqrt(np.mean(window ** 2)))
-            fired = self._window(level, self._win_len / self.sample_rate) or fired
+            self._measure(float(np.sqrt(np.mean(window ** 2))), self._win_len / self.sample_rate)
+        fired = False
+        for talking, _ in self._voice.feed(block):
+            self._judged_s += FRAME_S
+            self.talking = talking
+            fired = self._frame(talking, FRAME_S) or fired
         return fired
 
-    def _window(self, level: float, duration: float) -> bool:
-        """Count one window of *level*, *duration* seconds long: True when
-        it ends a pause long enough to cut a chunk."""
+    def _measure(self, level: float, duration: float) -> None:
+        """Count one loudness window of *level*, *duration* seconds long."""
         self.level = level
         self._learn_room(level, duration)
         self.loudest = max(self.loudest, level)
-        if level >= self.threshold():
+        self._measured += self._win_len
+        self._sounding = level >= self.threshold()
+        if self._sounding:
+            self._sounds.append(self._measured)
+        oldest = self._measured - int((self.pause_seconds + 1.0) * self.sample_rate)
+        while self._sounds and self._sounds[0] < oldest:
+            self._sounds.popleft()
+
+    def _frame(self, talking: bool, duration: float) -> bool:
+        """Count one frame the voice detector judged, *duration* seconds
+        long: True when it ends a pause long enough to cut a chunk."""
+        if talking:
             self._burst += duration
             if self._burst >= MIN_BURST_S:
                 self.speech_time += duration
@@ -197,35 +238,31 @@ class PauseDetector:
         return True
 
     def _mark_cut(self) -> None:
-        """Note where the phrase after the cut starts, at the window just
-        judged: LEAD_KEEP_S before the sound that ended the pause, a loud
-        run too short to count as speech yet (_burst), which is the next
-        word starting; never inside the TAIL_KEEP_S the phrase before keeps
-        of its pause. Everything after it, the rest of the block included,
-        is the next phrase's, as the windows judged there count toward it.
+        """Note where the phrases either side of the cut, at the frame just
+        judged, end and start: the next one LEAD_KEEP_S before it, and
+        everything after that, the rest of the block included, is its.
 
-        With no sound at the cut there is no word to start early, so
-        nothing is noted and take_cut splits where the phrase before ends:
-        a lead would take the soft end of its last word away from it, lost
-        with the rest when nothing more is said."""
-        if self._burst == 0:
-            self._resume_at = None
-            return
+        The one before keeps TAIL_KEEP_S of its pause after its last speech,
+        or after the last sound loudness heard in the pause before the next
+        one's lead, the end of a soft last word the voice detector had taken
+        for quiet; never past where the next one starts. So only what both
+        took for quiet is dropped, between the two. A dryer's thumps in the
+        pause are kept with the phrase they follow: by loudness alone the
+        phrase never ended, and at a pause of 0.8 s or less nothing is
+        dropped at all."""
         rate = self.sample_rate
-        onset = self._judged - round(self._burst * rate)
-        speech_end = self._judged - round(self.silence_time * rate)
-        self._resume_at = min(onset, max(onset - int(LEAD_KEEP_S * rate),
-                                         speech_end + int(TAIL_KEEP_S * rate)))
+        cut_at = round(self._judged_s * rate)
+        speech_end = cut_at - round(self.silence_time * rate)
+        self._next_start = cut_at - round(LEAD_KEEP_S * rate)
+        soft_end = max((end for end in self._sounds if speech_end < end <= self._next_start),
+                       default=speech_end)
+        self._phrase_end = min(soft_end + round(TAIL_KEEP_S * rate), self._next_start)
 
-    def cut_from_end(self) -> tuple[int, int | None]:
-        """take_cut's *cut* for the last cut: (the pause's samples the phrase
-        may lose from its end, where the next phrase starts or None when it
-        starts where the phrase ends), each counted back from the end of
-        the audio fed so far."""
-        trim = max(0, int((self.last_pause - TAIL_KEEP_S) * self.sample_rate))
-        if self._resume_at is None:
-            return trim, None
-        return trim, self._fed - self._resume_at
+    def cut_from_end(self) -> tuple[int, int]:
+        """take_cut's *cut* for the last cut: (where the phrase ends, where
+        the next phrase starts), each in samples counted back from the end
+        of the audio fed so far."""
+        return self._fed - self._phrase_end, self._fed - self._next_start
 
 
 def take_cut(frames, cut):
@@ -233,20 +270,15 @@ def take_cut(frames, cut):
     mono blocks since the last cut, the newest last, at *cut*
     (PauseDetector.cut_from_end, read before another block is added).
 
-    The phrase loses the end of its pause in whole blocks, as many as the
-    pause holds after TAIL_KEEP_S. Trimmed to the sample, the cut took a
-    soft last sound or a click that block-sized trimming had kept. But the
-    next phrase starts where the detector says, split to the sample, so
-    the start of a word that ended the pause, in the trimmed blocks or
-    later in the block the cut was heard in, is whole there, never in
-    neither phrase; with no such word it starts where the phrase ends.
-    Only the block the split falls in is copied, as this runs on the
-    audio thread."""
+    The phrase loses the end of its pause in whole blocks, as many as lie
+    after where it ends. Trimmed to the sample, the cut took a soft last
+    sound or a click that block-sized trimming had kept. But the next phrase
+    starts where the detector says, split to the sample, so the start of a
+    word that ended the pause, in the trimmed blocks or later in the block
+    the cut was heard in, is whole there, never in neither phrase. Only the
+    block the split falls in is copied, as this runs on the audio thread."""
     trim, resume = cut
-    whole = _whole_tail(frames, trim)
-    if resume is None:
-        resume = whole
-    keep = max(resume, whole)
+    keep = max(resume, _whole_tail(frames, trim))
     phrase = _split_off(frames, keep)[0]
     return phrase, _split_off(frames, resume)[1]
 

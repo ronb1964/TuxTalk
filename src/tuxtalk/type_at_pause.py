@@ -105,8 +105,7 @@ def arm_chunker(rec):
     Never for a voice edit: its instruction needs the whole recording."""
     if live.chunk_pause_seconds > 0 and not rec.edit_mode:
         from .chunking import PauseDetector
-        rec.chunker = PauseDetector(live.chunk_pause_seconds, rec.samplerate,
-                                    speech_db=live.chunk_speech_db)
+        rec.chunker = PauseDetector(live.chunk_pause_seconds, rec.samplerate)
     # Started here, so the audio callback never has to start it.
     dictation_worker.worker()
 

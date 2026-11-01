@@ -1,16 +1,19 @@
-"""Synthetic audio and a fake engine and typing around the real recording and
+"""Audio and a fake engine and typing around the real recording and
 pipeline, for the Type at pause tests (test_chunking.py and the files split
 from it). Each test file wraps these in its own fixtures.
 
-Audio is built like test_silence.py's: quiet room noise and louder "speech"
-(noise plus a tone, with syllable gaps), fed in 20 ms blocks.
+Audio is quiet room noise and a person reading (tests/data/README.md), fed in
+20 ms blocks: what is speech is a voice detector's call, so it has to be a
+voice.
 """
+import wave
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 
 from conftest import next_recording
-from tuxtalk import delivery, engine, tray_link
+from tuxtalk import delivery, engine, resampling, tray_link
 from tuxtalk import live_settings as live
 from tuxtalk import pipeline as dictation_pipeline
 from tuxtalk import recording as capture
@@ -25,12 +28,30 @@ def noise(seconds, level=60.0, sr=SR):
     return (rng.normal(0, level, int(seconds * sr))).astype(np.int16)
 
 
-def speech(seconds, level=3000.0, noise_level=60.0, sr=SR):
-    """Syllables: 180 ms of voice, then a 70 ms gap where only the room is heard."""
-    t = np.arange(int(seconds * sr)) / sr
-    voiced = (t % 0.25) < 0.18
-    tone = np.sin(2 * np.pi * 220 * t) * level * voiced
-    return (tone + rng.normal(0, noise_level, t.size)).astype(np.int16)
+def _reading():
+    """The test sentence without the quiet before and after it, as floats
+    at its own loudness 1: from its first to its last 32 ms that is within
+    26 dB of its loud part."""
+    with wave.open(str(Path(__file__).with_name("data") / "librispeech-7902-96591-0018.wav")) as w:
+        x = np.frombuffer(w.readframes(w.getnframes()), np.int16).astype(np.float64)
+    n = len(x) // 512
+    r = np.sqrt(np.mean(x[:n * 512].reshape(n, 512) ** 2, axis=1))
+    on = np.nonzero(r > np.percentile(r, 95) / 20)[0]
+    x = x[on[0] * 512:(on[-1] + 1) * 512]
+    return x / np.sqrt(np.mean(x ** 2))
+
+
+READING = _reading()
+
+
+def speech(seconds, level=1800.0, noise_level=60.0, sr=SR):
+    """*seconds* of a person reading, over and over, at int16 RMS *level*,
+    in room noise of *noise_level*. It never stops for longer than a
+    breath, so a pause is only where a test puts one."""
+    n = int(seconds * sr)
+    voice = READING if sr == SR else resampling.resample(READING, SR, sr)
+    reading = np.tile(voice, n // len(voice) + 1)[:n] * level
+    return np.clip(reading + rng.normal(0, noise_level, n), -32768, 32767).astype(np.int16)
 
 
 def blocks(audio, block=BLOCK):

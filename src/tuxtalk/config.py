@@ -271,8 +271,6 @@ class Settings:
     chunked_dictation: bool = False
     # seconds of silence that end a chunk (0.3-3.0; kept below auto_stop_seconds)
     chunk_pause_seconds: float = 0.8
-    # how much louder than the room speech must be, in dB (3-12)
-    chunk_speech_db: float = 6.0
     # decide the mark at a pause by hearing both chunks together
     chunk_context_marks: bool = True
     # count words/dictations/speaking time per day (stats.py; numbers only, never text)
@@ -381,9 +379,6 @@ def _validation_problems(s: Settings) -> list[tuple[str, str]]:
         problems.append(("chunk_pause_seconds",
                          f"Invalid chunk_pause_seconds '{s.chunk_pause_seconds}'. "
                          "Must be between 0.3 and 3.0"))
-    if not (3.0 <= s.chunk_speech_db <= 12.0):
-        problems.append(("chunk_speech_db", f"Invalid chunk_speech_db '{s.chunk_speech_db}'. "
-                                            "Must be between 3 and 12"))
     if not (1 <= s.key_delay <= 50):
         problems.append(("key_delay", f"Invalid key_delay '{s.key_delay}'. "
                                       "Must be between 1 and 50"))
@@ -940,7 +935,6 @@ LIVE_APPLIED_KEYS = {
     # Chunked dictation; read when each recording starts.
     "chunked_dictation",
     "chunk_pause_seconds",
-    "chunk_speech_db",
     "chunk_context_marks",
     # Usage stats; read into a module global on each reload, checked per dictation.
     "usage_stats",

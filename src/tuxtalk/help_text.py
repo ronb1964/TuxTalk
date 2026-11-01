@@ -491,15 +491,15 @@ you can go on talking.
   • "delete last sentence" and the other commands work on the phrase before them.
 
 <b>Fine-tuning</b> (under Type at pause → Adjust Settings)
-  • <b>Pause length</b>: how long a silence ends a phrase.
-  • <b>Noise filter</b>: raise it in a noisy room, lower it for a soft voice or a quiet
-    microphone.
+  • <b>Pause length</b>: how long a silence ends a phrase. A dryer, a fan or a busy
+    kitchen doesn't count as talking, so the pause is still heard; other people
+    talking nearby does.
   • <b>Punctuation from context</b>: off types each phrase as it was heard, which is
     quicker on a slow graphics chip but puts a period at more pauses.
   • <b>Test</b>: talk and stop now and then, and nothing is typed. The bar moves with
-    your voice, which should go past the green line, and it flashes green wherever a
-    phrase would be typed. If it never flashes when you pause, raise the noise filter.
-    If it flashes while you're still talking, lower it.
+    your voice and flashes green wherever a phrase would be typed. If it flashes while
+    you're still talking, make the pause longer; if it never flashes when you pause,
+    make it shorter.
 
 <span size="large"><b>Transcribe a File</b></span> (TuxTalk menu → Transcribe a File...)
   • Turns a recording or a video into text: MP3, M4A, OGG, WAV, FLAC, MP4, MKV, WebM

@@ -64,8 +64,9 @@ def run_pauses(audio, pause=0.8, sr=SR, block=BLOCK):
 def test_a_pause_after_speech_is_a_boundary():
     fired, det = run_pauses(np.concatenate([speech(1.0), noise(1.5)]))
     assert len(fired) == 1
-    # The last voiced syllable ends at ~0.93 s, so 0.8 s of quiet is reached by ~1.75 s.
-    assert 1.6 <= fired[0] <= 1.9
+    # The voice ends at 1.0 s and the detector's speech a frame or three
+    # later (its hysteresis), so 0.8 s of quiet is reached by about 1.9 s.
+    assert 1.6 <= fired[0] <= 2.0
     assert det.last_pause >= 0.8
 
 
@@ -161,7 +162,7 @@ def test_works_at_48k():
     audio = np.concatenate([speech(1.0, sr=sr), noise(1.5, sr=sr)])
     fired, _ = run_pauses(audio, sr=sr, block=block)
     assert len(fired) == 1
-    assert 1.6 <= fired[0] <= 1.9
+    assert 1.6 <= fired[0] <= 2.0
 
 
 def test_a_quiet_dynamic_mic_still_gets_boundaries():
@@ -183,10 +184,9 @@ def loud_room(seconds, sr=SR):
 
 
 def loud_speech(seconds, sr=SR, level=2000.0):
-    t = np.arange(int(seconds * sr)) / sr
-    voiced = (t % 0.25) < 0.18
-    tone = np.sin(2 * np.pi * 220 * t) * level * voiced
-    return np.clip(tone + loud_room(seconds, sr), -32768, 32767).astype(np.int16)
+    """The reader over cbox's hiss and rumble."""
+    voice = speech(seconds, sr=sr, level=level, noise_level=0.0).astype(np.float64)
+    return np.clip(voice + loud_room(seconds, sr), -32768, 32767).astype(np.int16)
 
 
 def test_a_loud_noisy_room_still_gets_boundaries():
@@ -254,35 +254,16 @@ def test_a_syllable_in_a_pause_still_starts_it_over():
     assert fired == []
 
 
-def test_higher_sensitivity_db_hears_less_as_speech():
-    """Quiet speech over cbox's hiss: +3 dB hears it, +12 dB takes it for room."""
-    from tuxtalk.chunking import PauseDetector
-    audio = np.concatenate([loud_room(1.0), loud_speech(2.0, level=1000.0), loud_room(1.5),
-                            loud_speech(2.0, level=1000.0), loud_room(1.5)])
-    def cuts(db):
-        det = PauseDetector(0.8, SR, speech_db=db)
-        return sum(det.feed(b.tobytes()) for b in blocks(audio))
-    assert cuts(3.0) == 2
-    assert cuts(12.0) == 0
-
-
 def test_snapshot_reports_what_the_detector_hears():
     from tuxtalk.chunking import PauseDetector
     det = PauseDetector(0.8, SR)
-    for b in blocks(np.concatenate([loud_room(2.0), loud_speech(2.0), loud_room(1.2)])):
+    for b in blocks(np.concatenate([loud_room(2.0), loud_speech(2.0), loud_room(1.4)])):
         det.feed(b.tobytes())
     snap = det.snapshot()
-    assert 250 < snap.room < 450
-    assert snap.threshold == pytest.approx(snap.room * 10 ** (6 / 20))
     assert snap.cuts == 1
     assert snap.silence_s > 0.2
     assert snap.level > 0
-
-
-def test_default_sensitivity_is_six_db():
-    from tuxtalk.chunking import DEFAULT_SPEECH_DB, PauseDetector
-    assert DEFAULT_SPEECH_DB == 6.0
-    assert PauseDetector(0.8, SR).speech_over_room == pytest.approx(1.995, abs=0.01)
+    assert not snap.talking
 
 
 # --- the dictation worker ----------------------------------------------------
@@ -643,13 +624,15 @@ def test_a_word_that_ends_the_pause_reaches_the_engine_whole(recording, monkeypa
     """The next word starts 20 ms before the pause would have filled, and
     the microphone sends 4096-sample blocks: the block the cut is heard in
     holds the word's start. It was trimmed with the pause, and the engine
-    heard the phrase without its first sound."""
+    heard the phrase without its first sound. The detector takes a word
+    for speech a few frames in, so the pause still fills and cuts."""
     heard = []
     monkeypatch.setattr(type_at_pause, "transcribe_phrase",
                         lambda frames, *a, **k: heard.append(b"".join(frames)))
     monkeypatch.setattr(dictation_pipeline, "transcribe_and_inject",
                         lambda frames, *a, **k: heard.append(b"".join(frames)))
-    gap = 0.72                              # the quiet: 0.07 + 0.72 s, a window short of 0.8
+    filled, _ = run_pauses(np.concatenate([speech(1.0), noise(2.0)]))
+    gap = filled[0] - 1.0 - 0.04            # the word 20 ms before, at a 20 ms block's end
     audio = np.concatenate([speech(1.0), noise(gap), speech(1.0), noise(0.3)])
     onset = int((1.0 + gap) * SR)
     for i in range(0, len(audio), block):
@@ -718,41 +701,29 @@ def test_a_recording_without_a_pause_says_why(recording, caplog):
                for r in caplog.records)
 
 
-# --- sensitivity and context settings ----------------------------------------
+# --- the context setting -----------------------------------------------------
 
-def test_sensitivity_and_context_defaults():
+def test_punctuation_from_context_is_on_by_default():
     from tuxtalk.config import Settings
-    s = Settings()
-    assert s.chunk_speech_db == 6.0
-    assert s.chunk_context_marks is True
+    assert Settings().chunk_context_marks is True
 
 
-@pytest.mark.parametrize("value,ok", [(6.0, True), (3.0, True), (12.0, True),
-                                      (2.0, False), (13.0, False)])
-def test_chunk_speech_db_range(value, ok):
-    from tuxtalk import config
-    problems = config._validation_problems(config.Settings(chunk_speech_db=value))
-    assert any(k == "chunk_speech_db" for k, _ in problems) is (not ok)
-
-
-def test_service_reads_the_sensitivity_and_context_settings(monkeypatch):
+def test_service_reads_the_context_setting(monkeypatch):
     from tuxtalk.config import Settings
     monkeypatch.setattr(live, "ai_engine", None)
-    live.apply(Settings(
-        chunked_dictation=True, chunk_speech_db=9.0, chunk_context_marks=False))
-    assert live.chunk_speech_db == 9.0
+    live.apply(Settings(chunked_dictation=True, chunk_context_marks=False))
     assert live.chunk_context_marks is False
     live.apply(Settings(chunked_dictation=False))
-    assert live.chunk_speech_db == 6.0
     assert live.chunk_context_marks is True
 
 
-def test_speech_db_reaches_the_detector(monkeypatch):
-    monkeypatch.setattr(live, "chunk_pause_seconds", 0.8)
-    monkeypatch.setattr(live, "chunk_speech_db", 9.0)
-    next_recording(SR)
-    assert rs.state.current.chunker.speech_over_room == pytest.approx(10 ** (9 / 20))
-    rs.state.current.chunker = None
+def test_an_old_config_with_the_noise_filter_still_loads():
+    """The Noise filter (chunk_speech_db) went with the voice detector; a
+    config or a backup that still has it loads, the rest of it intact."""
+    from tuxtalk import config
+    s = config.Settings()
+    assert config.apply_toml(s, {"chunk_speech_db": 9.0, "chunk_pause_seconds": 1.2}) == []
+    assert s.chunk_pause_seconds == 1.2
 
 
 def test_context_marks_off_types_the_engines_mark(pipeline, monkeypatch):
@@ -1110,8 +1081,10 @@ def test_describe_says_how_close_a_pause_came():
     det = PauseDetector(0.8, SR)
     for b in blocks(np.concatenate([speech(1.0), noise(0.5), speech(1.0)])):
         assert not det.feed(b)
-    assert 0.4 < det.longest_quiet < 0.6
-    assert "longest quiet 0.5" in det.describe()
+    # 0.5 s of room: the voice detector's speech runs a frame or so past the
+    # voice, and the noise moves that by a frame (0.38 to 0.42 s over 30 seeds).
+    assert 0.3 < det.longest_quiet < 0.5
+    assert f"longest quiet {det.longest_quiet:.2f}s of the 0.80s" in det.describe()
 
 
 # --- one recording, one Recent Dictations entry -------------------------------

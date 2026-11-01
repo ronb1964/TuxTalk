@@ -41,7 +41,7 @@ def win(monkeypatch):
     monkeypatch.setattr(mic_stream, "input_samplerate", lambda idx, rate: 16000)
     w = PreferencesWindow.__new__(PreferencesWindow)
     w.config = {"chunked_dictation": False, "chunk_pause_seconds": 0.8,
-                "chunk_speech_db": 6.0, "chunk_context_marks": True, "mic": ""}
+                "chunk_context_marks": True, "mic": ""}
     w.updates = []
 
     def update_config(key, value):
@@ -112,7 +112,7 @@ def test_the_entry_has_its_heading_and_switch(win):
     assert win.tap_check.get_label() == "Type each phrase when you pause"
     assert win.tap_fold.button.get_label() == "Adjust Settings"
     summary = win.tap_fold.summary.get_text()
-    assert "pause 0.8 s" in summary and "noise filter 6" in summary
+    assert summary == "pause 0.8 s \u00b7 punctuation from context on"
     assert not win.tap_fold.is_open()
 
 
@@ -127,10 +127,8 @@ def test_the_switch_greys_the_fine_tuning(win):
 
 def test_the_controls_write_their_settings(win):
     win.tap_pause_spin.set_value(1.2)
-    win.tap_db_spin.set_value(9)
     win.tap_context_check.set_active(False)
     assert ("chunk_pause_seconds", 1.2) in win.win.updates
-    assert ("chunk_speech_db", 9.0) in win.win.updates
     assert ("chunk_context_marks", False) in win.win.updates
 
 
@@ -207,11 +205,11 @@ def test_a_mic_that_cant_be_found_says_so(win):
     assert win.tap_test_btn.get_label() == "Test"
 
 
-def test_a_slider_change_applies_to_a_running_test(win):
+def test_a_new_pause_length_applies_to_a_running_test(win):
     win.tap_check.set_active(True)
     win.tap_test_btn.clicked()
-    win.tap_db_spin.set_value(12)
-    assert win._pause_test._detector.speech_over_room == pytest.approx(10 ** (12 / 20))
+    win.tap_pause_spin.set_value(1.5)
+    assert win._pause_test._detector.pause_seconds == 1.5
 
 
 def test_the_advanced_tab_builds_it(prefs_window):
@@ -373,26 +371,6 @@ def _listen(win, seconds=1.5):
     for i in range(0, len(noise), 320):
         callback(noise[i:i + 320].reshape(-1, 1), 320, None, None)
     win._tap_show(win._pause_test)
-
-
-def test_the_mark_follows_the_sensitivity_after_the_test(win):
-    """Stopped, the mark still moves with Sensitivity, using the room level the
-    last test measured."""
-    win.tap_check.set_active(True)
-    win.tap_test_btn.clicked()
-    _listen(win)
-    win.tap_test_btn.clicked()               # Stop
-    before = win.tap_meter.threshold
-    win.tap_db_spin.set_value(12)
-    assert win.tap_meter.threshold > before
-    win.tap_db_spin.set_value(3)
-    assert win.tap_meter.threshold < before
-
-
-def test_no_mark_before_the_first_test(win):
-    win.tap_check.set_active(True)
-    win.tap_db_spin.set_value(12)
-    assert win.tap_meter.threshold == 0.0
 
 
 def test_the_title_follows_the_settings(win):

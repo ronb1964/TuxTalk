@@ -178,29 +178,21 @@ def drop_speechless_rest(rec, frames):
     return []
 
 
-def _rest_holds_speech(chunker, frames, rate) -> bool:
-    """Whether the audio after pause detector *chunker*'s last cut, *frames*
-    at *rate* as recorded, holds speech. Room noise there would otherwise
-    reach the engine, which invents a word for it ("Yeah.").
+def _rest_holds_speech(chunker) -> bool:
+    """Whether the audio after pause detector *chunker*'s last cut holds
+    speech. Room noise there would otherwise reach the engine, which
+    invents a word for it ("Yeah.").
 
-    Talking the stop cut short (heard since the last pause) is kept, as it
-    always was, and so is a phrase's worth (chunking.MIN_SPEECH_S). Less,
-    with a pause after it, is a short word ("yes"), a click, a cough or a
-    creak: kept when it holds a word's worth of sound (silence.has_a_word,
-    the tap check), judged against the whole rest, so before hands-free's
-    quiet end is trimmed (that quiet is the room the word stands out from).
-    Simulated, that kept every short word in a quiet room and 98% or more
-    in a noisy one, and every rest the rule before it sent. In a quiet room
-    it left out two thirds of the clicks and half the knocks the detector
-    counted with hands-free, two fifths of each with the hotkey (a click
-    just before the key comes up counts as talking cut short). A cough, a
-    breath or a creak passes, and Parakeet types a word ("Yeah.", "Okay.")
-    for 2 to 3% of those in a quiet room, about 10% in a noisy one: a known
-    limit (CODE_HEALTH.md), as the hallucination filter can't take the
-    words a short answer is made of."""
-    if chunker.speech_time > 0.0 or chunker.speech_since_cut >= chunking.MIN_SPEECH_S:
-        return True
-    return chunker.speech_since_cut > 0.0 and silence.has_a_word(frames_f32(frames), rate)
+    Speech the voice detector heard since the last cut is kept, however
+    short ("yes"): real short words, said fast and slow, in English and
+    German, in seven noises down to 10 dB under the voice, were all heard.
+    A cough, a breath, a click or a knock isn't speech to it, where by
+    loudness they reached the engine and Parakeet typed "Yeah." for 2 to 3%
+    of them in a quiet room, about 10% in a noisy one. A sound the stop cut
+    short is kept too, whatever it is: a word's first 30 ms is too short
+    for the voice detector to judge."""
+    return (chunker.speech_time > 0.0 or chunker.speech_since_cut > 0.0
+            or chunker.sounding())
 
 
 def frames_f32(frames):
@@ -460,10 +452,9 @@ def finish_capture(rec, beeps_on: bool, notify_on: bool):
         chunker, rec.chunker = rec.chunker, None
         frames = rec.frames
     # The callback adds and hears nothing now, so the detector is read
-    # outside the lock; before the trim below, which would take the quiet
-    # the last word is judged against.
+    # outside the lock.
     if chunker is not None and rec.chunks_submitted:
-        rec.rest_has_speech = _rest_holds_speech(chunker, frames, rec.samplerate)
+        rec.rest_has_speech = _rest_holds_speech(chunker)
     elif chunker is not None:
         logger.info(f"Chunked dictation: no pause found ({chunker.describe()})")
     rs.state.is_recording = False
