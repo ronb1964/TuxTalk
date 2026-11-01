@@ -268,7 +268,7 @@ def test_edit_that_then_only_a_pause_isnt_sent_as_it_was(editing, monkeypatch):
     monkeypatch.setattr(delivery, "send_automatically", lambda *a: sent.append(a))
     rs.state.current.message.add("ok", rs.state.current.message.to)       # the message's words
     assert _said("Edit that.", "middle")                    # waits for what to change
-    type_at_pause.end_in_a_pause(rs.state.current.message, False, True, True, "type")
+    type_at_pause.end_in_a_pause(rs.state.current.message, False, True, True, "type", None)
     assert sent == [] and problems == ["edit_that_what"]
     assert rs.state.current.message.edit_waiting is None
 

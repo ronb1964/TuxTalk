@@ -64,6 +64,7 @@ def fake_pipeline(monkeypatch):
     monkeypatch.setattr(history, "add_entry", lambda text, replaces=None: None)
     monkeypatch.setattr(rs.state, "continue_mid_sentence", False)
     monkeypatch.setattr(rs.state.current.message, "held_mark", None)
+    monkeypatch.setattr(rs.state.current.message, "sentence_audio", [])
     monkeypatch.setattr(rs.state, "last_inserted_text", "")
     return texts, typed, beeps
 

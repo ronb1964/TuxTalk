@@ -17,10 +17,10 @@ class Message:
 
     Enter or Tab mid-recording (type_at_pause.start_afresh) ends the message
     its words make: to, has_words, complete and ends_on start over
-    (start_over), and so do the held mark, cue and open question, and the
-    screen copy (shown, shown_window). The rest lasts the whole recording:
-    serial, cancelled, the Recent Dictations entry (said) and the text
-    "edit that" waits to change.
+    (start_over), and so do the held mark, cue and open question, the
+    sentence's kept audio, and the screen copy (shown, shown_window). The
+    rest lasts the whole recording: serial, cancelled, the Recent
+    Dictations entry (said) and the text "edit that" waits to change.
 
     An automatic Enter and a key said after its words go only where they
     went, and only while all of them went in: a phrase that stopped partway
@@ -42,13 +42,18 @@ class Message:
     # What Type at pause's next phrase of this recording picks up: the last
     # phrase's final mark, held back for it to decide
     # (chunk_text.hold_back_boundary: {"mark", "audio", "raw", "typed",
-    # "where"}); a "No wait." said alone, whose corrected value comes next; a
+    # "where", "may_change"}); a "No wait." said alone, whose corrected value comes next; a
     # "?" heard as mid-sentence, so the question ends with the next phrase
     # (chunk_text.carry_question); and the text "edit that" said alone is to
     # change. Kept out of the repr: they hold what the user said.
     held_mark: dict | None = field(default=None, repr=False)
     held_cue: str = field(default="", repr=False)
     question_open: bool = False
+    # The audio of the phrases of the sentence going on (Type at pause), for
+    # its final mark (type_at_pause.heard_whole_mark), and the window they went
+    # to (a focused_window.look()).
+    sentence_audio: list = field(default_factory=list, repr=False)
+    sentence_where: tuple | None = field(default=None, repr=False)
     edit_waiting: str | None = field(default=None, repr=False)
     # Its recording was cancelled (Esc): a phrase of it still waiting to be
     # typed is dropped.

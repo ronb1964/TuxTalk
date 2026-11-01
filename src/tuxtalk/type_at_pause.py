@@ -27,7 +27,7 @@ from . import live_settings as live
 from . import notify as notify_module
 from . import recording_state as rs
 from .beeps import READY_BEEP
-from .chunk_text import boundary_mark, word_count, words_in_context
+from .chunk_text import boundary_mark, engine_period, word_count, words_in_context
 from .key_commands import log_held_back, split_key_command
 from .logger import setup_logger
 from .normalize import safe_to_lowercase_first_word
@@ -121,6 +121,10 @@ JOINT_GAP_S = 0.5
 CONTEXT_S = 6.0
 
 SENTENCE_ENDS = (".", "?", "!", "…")
+
+# The most of a sentence heard whole for its final mark (heard_whole_mark), in
+# seconds: on the processor Parakeet hears 30 s in about a second.
+WHOLE_SENTENCE_S = 30.0
 
 
 def context_samples() -> int:
@@ -253,23 +257,28 @@ def resolve_boundary(message, audio_f32, language, injection_mode, raw="",
         logger.info("Chunk boundary: another window has the focus now; "
                     "its mark stays with its phrase")
         rs.state.continue_mid_sentence = False
+        message.sentence_audio = []     # its sentence ended there
         return raw
     mark, joint = _heard_in_context(pending, audio_f32, language)
-    if message.cancelled:
-        # Esc while the engine heard both phrases (a second pass, which can
-        # take seconds): nothing more goes in, the mark included.
-        logger.info("Chunk boundary not typed: the recording was cancelled")
-        return raw
-    if (raw and len(raw.split()) <= ENTER_IN_CONTEXT_MAX_WORDS
-            and not split_key_command(raw)[1] and split_key_command(joint)[1] == "ENTER"):
-        logger.info(f"Heard \"press enter\" in context ({live.loggable(raw)} alone)")
-        raw = "press enter"
+    enter = (raw and len(raw.split()) <= ENTER_IN_CONTEXT_MAX_WORDS
+             and not split_key_command(raw)[1] and split_key_command(joint)[1] == "ENTER")
+    if enter:
         # The sentence ends here, as it would after "press enter" said
         # clearly (flush_boundary): its mark, and no space to send.
         mark = mark or ("." if auto_period else "")
+    # A period put here for "press enter", where the engine heard no mark, is ours.
+    may_change = pending.get("may_change", False) or not pending["mark"]
+    mark = heard_whole_mark(message, mark, None, language, may_change)
+    if message.cancelled:
+        # Esc while the engine heard both phrases, or the whole sentence
+        # (passes that can take seconds): nothing more goes in, the mark included.
+        logger.info("Chunk boundary not typed: the recording was cancelled")
+        return raw
+    if enter:
+        logger.info(f"Heard \"press enter\" in context ({live.loggable(raw)} alone)")
         _type_boundary(message, pending, mark, injection_mode)
         rs.state.continue_mid_sentence = False
-        return raw
+        return "press enter"
     if joint and len(audio_f32) <= SHORT_CHUNK_S * engine.SAMPLE_RATE:
         raw = _short_phrase_in_context(raw, pending["raw"], joint)
     _type_boundary(message, pending, (mark + " ") if mark else " ", injection_mode)
@@ -280,6 +289,97 @@ def resolve_boundary(message, audio_f32, language, injection_mode, raw="",
     # so the question ends where this phrase does.
     message.question_open = pending["mark"] == "?" and mark not in SENTENCE_ENDS
     return raw
+
+
+def whole_sentence_samples() -> int:
+    return int(WHOLE_SENTENCE_S * engine.SAMPLE_RATE)
+
+
+def keep_sentence_audio(message, audio_f32) -> None:
+    """A phrase of *message* went in (rs.state.last_inserted_where says
+    where) without ending its sentence: keep its audio for the sentence's
+    final mark (heard_whole_mark). One that went into another window than
+    the phrases kept before it begins a sentence there."""
+    where = rs.state.last_inserted_where
+    if message.sentence_audio and focused_window.changed(message.sentence_where, where):
+        message.sentence_audio = []
+    if not message.sentence_audio:
+        message.sentence_where = where
+    message.sentence_audio = _newest(message.sentence_audio + [audio_f32])
+
+
+def _newest(parts: list) -> list:
+    """*parts* (audio) cut to their newest WHOLE_SENTENCE_S, a copy of the
+    part it cuts into, so the rest of a long phrase isn't kept with it. A
+    sentence longer than that loses its start, often where a question says
+    so: the period then stays."""
+    kept, room = [], whole_sentence_samples()
+    for part in reversed(parts):
+        if len(part) >= room:
+            if room:
+                kept.append(part[len(part) - room:].copy())
+            break
+        kept.append(part)
+        room -= len(part)
+    return kept[::-1]
+
+
+def heard_whole_mark(message, mark: str, last_audio, language, may_change=True) -> str:
+    """The final mark of a sentence of *message* that ends now: *mark*, or
+    "?" for a period ending a sentence said over pauses that, heard whole,
+    is a question. Each phrase was heard alone, so in "don't you think it
+    would be smart" (pause) "to pick more than one" the last, a statement
+    on its own, got a period. Only a period is ever changed, and only to a
+    question mark, and only on Parakeet, whose marks over joined phrases
+    were measured. *last_audio* is its last phrase, when that isn't kept
+    (keep_sentence_audio); *may_change* is False for a period that isn't
+    the engine's (chunk_text.engine_period). The sentence's kept audio goes
+    once it ends, and isn't heard when the focus is known to be in another
+    window now. Where the desktop can't say which window has the focus
+    (GNOME without the extension, two windows of one app on COSMIC), a
+    sentence carried on in another window is heard with the one before.
+    """
+    if mark not in SENTENCE_ENDS:
+        return mark
+    kept, message.sentence_audio = message.sentence_audio, []
+    if (mark != "." or not may_change or not kept or message.cancelled
+            or not engine.is_parakeet()
+            or focused_window.changed(message.sentence_where, focused_window.look())):
+        return mark
+    parts = _newest(kept + ([] if last_audio is None else [last_audio]))
+    if len(parts) < 2:
+        return mark
+    try:
+        # Joined as cut, with no silence put between: each phrase keeps a
+        # little of its pause, and with half a second more Parakeet heard
+        # each pause as a sentence end ("... holiday items? Depending on ...
+        # buying for.").
+        heard = engine.transcribe(np.concatenate(parts), language) or ""
+    except Exception as e:
+        logger.warning("Couldn't hear the sentence whole for its final mark: "
+                       f"{type(e).__name__}")
+        return mark
+    # "..., press enter" said at its end isn't part of the sentence.
+    if not split_key_command(heard)[0].rstrip().endswith("?"):
+        return mark
+    logger.info("Heard whole, the sentence said over pauses is a question: it ends with ?")
+    return "?"
+
+
+def end_sentence(text: str, raw: str, message, last_audio, language) -> str:
+    """*text*, the last phrase of *message* typed so far (*raw* as heard),
+    with its final period a question mark when the sentence it ends, heard
+    whole, is a question (heard_whole_mark). Only a period the engine put
+    after the last word heard: not one the speaker dictated, nor "..." or
+    "p.m."."""
+    core = text.rstrip()
+    if not core.endswith(SENTENCE_ENDS):
+        return text
+    if not engine_period(core, raw):
+        message.sentence_audio = []
+        return text
+    mark = heard_whole_mark(message, ".", last_audio, language)
+    return core[:-1] + mark + text[len(core):]
 
 
 def _heard_in_context(pending: dict, audio_f32, language):
@@ -313,7 +413,8 @@ def _short_phrase_in_context(raw: str, before: str, joint: str) -> str:
     return raw
 
 
-def flush_boundary(message, auto_period: bool, auto_space: bool, injection_mode: str) -> None:
+def flush_boundary(message, auto_period: bool, auto_space: bool, injection_mode: str,
+                   language) -> None:
     """*message*'s dictation ended in a pause: type the mark held back after
     its last chunk, or the auto-period when the engine wrote none, in its
     window only."""
@@ -322,9 +423,13 @@ def flush_boundary(message, auto_period: bool, auto_space: bool, injection_mode:
         return
     now = focused_window.look()
     if focused_window.changed(pending["where"], now):
+        message.sentence_audio = []
         return  # the end of this sentence isn't in the window that has focus
     kind = app_kind(now[0]) if live.adapt_to_app else ""
-    mark = pending["mark"] or ("." if auto_period and not kind else "")
+    mark = heard_whole_mark(message, pending["mark"] or ("." if auto_period and not kind else ""),
+                            None, language, pending.get("may_change", False))
+    if message.cancelled:
+        return  # Esc while the engine heard the whole sentence
     _type_boundary(message, pending, mark + (" " if auto_space and not kind else ""),
                    injection_mode)
 
@@ -340,12 +445,14 @@ def start_afresh(message, ended=True) -> None:
         message.start_over()
         message.shown_window = None
     message.held_mark, message.question_open, message.held_cue = None, False, ""
+    message.sentence_audio = []
     rs.state.continue_mid_sentence = False
     if message.shown is not None:
         message.shown = ""
 
 
-def end_in_a_pause(message, beeps_on, auto_space, auto_period, injection_mode) -> None:
+def end_in_a_pause(message, beeps_on, auto_space, auto_period, injection_mode,
+                   language) -> None:
     """Type at pause's recording ended in a pause, with nothing said after
     it: a held "no wait" is typed as said, the last phrase gets its mark,
     and "Send each dictation automatically" sends *message* if all of it
@@ -361,11 +468,14 @@ def end_in_a_pause(message, beeps_on, auto_space, auto_period, injection_mode) -
     cut_off = _cut_off(message)
     sends = _may_send(message)
     if sends and not cut_off:
-        flush_boundary(message, auto_period, False, injection_mode)
+        flush_boundary(message, auto_period, False, injection_mode, language)
+        if message.cancelled:
+            return      # Esc while the engine heard the whole sentence: nothing is sent
         delivery.send_automatically(" " if auto_space else "", injection_mode, message)
         start_afresh(message)
     else:
-        flush_boundary(message, auto_period and not cut_off, auto_space, injection_mode)
+        flush_boundary(message, auto_period and not cut_off, auto_space, injection_mode,
+                       language)
         if sends:
             send_countdown.say_held_back(cut_off, message)
     if not live.chunk_context_marks:

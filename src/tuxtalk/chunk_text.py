@@ -103,6 +103,15 @@ def hold_back_boundary(text: str, raw: str):
     return core, mark
 
 
+def engine_period(text: str, raw: str) -> bool:
+    """Whether *text* ends with a period the engine put after the last word
+    it heard (*raw*'s), which a question mark may replace: not "...", an
+    abbreviation ("p.m.") or a period the speaker dictated."""
+    core = text.rstrip()
+    return (re.search(r"(?<![.\w])[\w'’-]*\w\.$", core) is not None
+            and _last_word(core) == _last_word(raw))
+
+
 def carry_question(text: str) -> str:
     """End a phrase that finishes an open question with "?" instead of the
     period. Only a phrase holding one sentence: with a second one in it, the

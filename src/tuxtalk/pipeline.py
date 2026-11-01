@@ -29,7 +29,7 @@ from . import live_settings as live
 from . import notify as notify_module
 from . import recording_state as rs
 from .beeps import CANCEL_BEEP, READY_BEEP
-from .chunk_text import carry_question, hold_back_boundary
+from .chunk_text import carry_question, engine_period, hold_back_boundary
 from .key_commands import auto_send, ends_unfinished, split_key_command
 from .logger import setup_logger
 from .window_classes import app_kind, is_document_window, pastes_broken
@@ -148,7 +148,12 @@ def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         raw, in_password = _before_the_words(raw, audio_f32, job)
         # Again after the context pass, which can take seconds: no command
         # runs and no key is pressed for a cancelled recording.
-        if raw is None or _cancelled(job) or _ran_as_command(raw, job):
+        if raw is None or _cancelled(job):
+            return
+        if _ran_as_command(raw, job):
+            # "undo that", "clear everything": the words kept for the
+            # sentence's final mark may be gone from the screen.
+            job.message.sentence_audio = []
             return
         raw, said = split_key_command(raw)
         key = _key_to_press(raw, said, job)
@@ -156,7 +161,11 @@ def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             _press_alone(said, in_password, job)
             return
         words = _shape_text(raw, said, key, job)
-        if words is None or not _still_wanted(words, job):
+        if words is None:
+            return
+        # Before _still_wanted: hearing the whole sentence takes a moment too.
+        words = _end_of_sentence(words, audio_f32, job)
+        if not _still_wanted(words, job):
             return
         _tell_done(words.text, job)
         if words.text:
@@ -204,7 +213,7 @@ def _nothing_in_chunk(what: str, job: _Job) -> bool:
     logger.info(f"Chunk ({job.chunk_role}) {what}; nothing typed for it")
     if job.chunk_role == "last":
         type_at_pause.end_in_a_pause(job.message, job.beeps_on, job.auto_space, job.auto_period,
-                                     job.injection_mode)
+                                     job.injection_mode, job.language)
     return True
 
 
@@ -269,6 +278,7 @@ def _before_the_words(raw: str, audio_f32, job: _Job):
     in_password = focused_window.is_password()
     if in_password:
         job.message.held_mark, job.message.held_cue = None, ""
+        job.message.sentence_audio = []
         if not key_only:
             notices.password_field_refused(job.beeps_on)
             return None, True
@@ -281,7 +291,8 @@ def _before_the_words(raw: str, audio_f32, job: _Job):
             # Only "press enter" after the pause: the sentence before it
             # ends here (its held-back mark, or the auto-period), with no
             # space to go out in the sent message.
-            type_at_pause.flush_boundary(job.message, job.auto_period, False, job.injection_mode)
+            type_at_pause.flush_boundary(job.message, job.auto_period, False, job.injection_mode,
+                                         job.language)
         elif not key_only:
             raw = type_at_pause.resolve_boundary(job.message, audio_f32, job.language,
                                                  job.injection_mode, raw, job.auto_period)
@@ -362,6 +373,15 @@ def _shape_text(raw: str, said: str, key, job: _Job):
     return _Words(text, raw, said, press, space_left_off, taken_back, held_mark, held_back)
 
 
+def _end_of_sentence(words: _Words, audio_f32, job: _Job) -> _Words:
+    """Type at pause: a phrase that ends its sentence gets that sentence's
+    final mark from the engine hearing all of it (type_at_pause.end_sentence)."""
+    if job.chunk_role is None or not words.text or words.held_mark is not None:
+        return words
+    return words._replace(text=type_at_pause.end_sentence(words.text, words.raw, job.message,
+                                                          audio_f32, job.language))
+
+
 def _press_alone(said: str, in_password: bool, job: _Job) -> None:
     """Only "press enter" or "press tab" was said: press it."""
     if job.chunk_role != "middle":
@@ -435,13 +455,22 @@ def _carry_on_after(words: _Words, text: str, audio_f32, job: _Job) -> None:
         # Without the context pass the engine's own mark decides: after
         # a comma or none, the next chunk carries on lowercase.
         rs.state.continue_mid_sentence = not text.rstrip().endswith(type_at_pause.SENTENCE_ENDS)
+    if job.chunk_role == "middle" and not words.press and (
+            words.held_mark is not None
+            or not text.rstrip().endswith(type_at_pause.SENTENCE_ENDS)):
+        # Its sentence goes on: the engine hears all of it for its final
+        # mark. Not after Enter or Tab, which began the next message.
+        type_at_pause.keep_sentence_audio(job.message, audio_f32)
     if words.held_mark is not None:
         # Only the end of the phrase is kept: the engine hears it with
         # the start of the next one to decide the mark between them.
         job.message.held_mark = {"mark": words.held_mark,
                                  "audio": audio_f32[-type_at_pause.context_samples():],
                                  "raw": words.raw, "typed": rs.state.last_inserted_text,
-                                 "where": rs.state.last_inserted_where}
+                                 "where": rs.state.last_inserted_where,
+                                 # No mark held: the period, if any, is the auto-period.
+                                 "may_change": (not words.held_mark or engine_period(
+                                     words.text + words.held_mark, words.raw))}
 
 
 def stop_recording(

@@ -86,6 +86,14 @@ def test_press_tab_at_the_end_of_a_phrase_leaves_the_box_without_a_mark(enter):
     assert typed[2:] == ["Smith"]
 
 
+def test_a_box_left_with_press_tab_isnt_part_of_the_next_sentence(enter):
+    """"Smith" in the next box mustn't be heard with "John" for its final mark."""
+    texts, typed, _ = enter
+    texts.extend(["john, press tab"])
+    type_chunk(frames_of(speech(1.0)), "middle", auto_period=True)
+    assert rs.state.current.message.sentence_audio == []
+
+
 def test_press_tab_after_a_pause_types_no_mark_before_it(enter):
     texts, typed, _ = enter
     texts.extend(["john", "press tab"])

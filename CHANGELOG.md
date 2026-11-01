@@ -42,6 +42,13 @@ before 0.15.0, so older entries use that name.
   a login form that can press its button. TuxTalk now checks for a password
   box right before every line, line break and paste key, also after it has
   got the clipboard ready, and stops there.
+- With Type at pause, a question you paused in the middle of ended with a
+  period: "don't you think it would be smart", a pause, then "to pick more
+  than one" was typed with a full stop, since each part was heard on its
+  own. Now a sentence that runs over a pause is heard whole once more, just
+  to decide whether it ends with a question mark. That costs a moment
+  whenever such a sentence ends, about a fifth of a second on a graphics
+  card. This works with Parakeet, the speech model TuxTalk sets up for you.
 - With Type at pause and AI self-corrections on, "meet at three" ... "no
   wait, four" backspaces the first phrase to type the fixed one. If you
   clicked into another window just as those backspaces went out, they

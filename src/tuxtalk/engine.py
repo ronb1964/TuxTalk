@@ -176,6 +176,14 @@ def rest(minutes):
                 "let go of the speech model until the next dictation")
 
 
+def is_parakeet() -> bool:
+    """Whether the speech model loaded is Parakeet, on the processor or the
+    graphics card."""
+    from .parakeet_engine import ParakeetModel
+    from .parakeet_gpu import ParakeetGpuModel
+    return isinstance(model, (ParakeetModel, ParakeetGpuModel))
+
+
 def wake(fresh: bool = False):
     """The speech model, loaded again first if Power Saving let it go, or
     None if it won't load. Called with *fresh* when a recording starts,
