@@ -22,12 +22,12 @@ Copies of it live outside this folder:
 1. Edit `TT_retro_square_light-Inkscape.svg` in Inkscape and save it.
 2. Write the official icon from it as plain SVG:
    ```bash
-   cd /home/ron/Projects/TalkType/icons
+   cd /home/ron/Projects/TuxTalk/icons
    inkscape TT_retro_square_light-Inkscape.svg --export-plain-svg --export-filename=OFFICIAL_ICON_DO_NOT_CHANGE.svg
    ```
 3. Make the PNG at the project root from it:
    ```bash
-   cd /home/ron/Projects/TalkType
+   cd /home/ron/Projects/TuxTalk
    inkscape icons/OFFICIAL_ICON_DO_NOT_CHANGE.svg --export-type=png --export-width=2606 --export-filename=io.github.ronb1964.TuxTalk.png
    ```
 4. Copy the official icon to `packaging/flatpak/io.github.ronb1964.TuxTalk.svg`

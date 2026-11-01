@@ -3,7 +3,6 @@
 **The app was renamed from TalkType to TuxTalk in 0.15.0** ("TALKTYPE" is
 another company's registered trademark for dictation software). Some names
 deliberately stay TalkType because changing them would hurt users:
-- the project folder `/home/ron/Projects/TalkType` and its `.venv`;
 - the GNOME extension UUID `talktype@ronb1964.github.io` and its schema (a new
   UUID is a new extension: a logout and enabling it again);
 - the D-Bus name, path and interface `io.github.ronb1964.TalkType` (an old,
@@ -15,6 +14,10 @@ deliberately stay TalkType because changing them would hurt users:
 Old folders, launchers and KDE shortcuts are moved or cleaned on start by
 `src/tuxtalk/rename_migration.py`.
 
+The project folder has been `/home/ron/Projects/TuxTalk` since 2026-11-01.
+`/home/ron/Projects/TalkType` beside it is a link to it, so older sessions,
+worktrees and notes that name it still work; don't delete the link.
+
 **READ THIS ENTIRE FILE BEFORE DOING ANYTHING. THESE RULES ARE MANDATORY.**
 
 ---
@@ -24,7 +27,7 @@ Old folders, launchers and KDE shortcuts are moved or cleaned on start by
 **You MUST follow this exact sequence. No skipping steps. No exceptions.**
 
 ### Step 1: Code Changes
-- Make and test code changes in `/home/ron/Projects/TalkType/src/`
+- Make and test code changes in `/home/ron/Projects/TuxTalk/src/`
 - NEVER edit files in `.claude/worktrees/` — Ron's dev version runs from the main project
 
 ### Step 1b: The Code Health Gate, Two Reviews, Then Fix
@@ -84,7 +87,7 @@ may miss."
 
 ### Step 3: Build the AppImage
 ```bash
-cd /home/ron/Projects/TalkType
+cd /home/ron/Projects/TuxTalk
 ./build-release.sh
 ```
 
@@ -99,7 +102,7 @@ Ron, 2026-10-31: the fresh start with him must not begin until everything
 Claude can test alone is done. Run the harness on all eight VMs, two runs
 side by side (each VM uses 8 GB):
 ```bash
-cd /home/ron/Projects/TalkType/tests/vm
+cd /home/ron/Projects/TuxTalk/tests/vm
 python3 -u run.py test kde suse mint debian --appimage ~/AppImages/TuxTalk-vX.X.X-x86_64.AppImage
 python3 -u run.py test silverblue zorin ubuntu pop --appimage ~/AppImages/TuxTalk-vX.X.X-x86_64.AppImage
 ```
@@ -115,7 +118,7 @@ python3 -u run.py test silverblue zorin ubuntu pop --appimage ~/AppImages/TuxTal
 
 ### Step 6: Run Fresh Start and Verify
 ```bash
-cd /home/ron/Projects/TalkType
+cd /home/ron/Projects/TuxTalk
 ./fresh-start-for-testing.sh
 ```
 - Check that ALL items show "✓ Removed" in the output, including
@@ -416,11 +419,11 @@ The setup dialogs (download, speed check, Light/Full choice) live in
 - **Desktop launcher**: "TuxTalk (Dev)" in `~/.local/share/applications/tuxtalk-dev.desktop`
 - **Autostart**: Launches the dev version, NOT the AppImage
 - **DEV_MODE=1**: Shows BOTH tray icons (GTK tray + GNOME extension)
-- **Source code**: `/home/ron/Projects/TalkType/src/tuxtalk/`
+- **Source code**: `/home/ron/Projects/TuxTalk/src/tuxtalk/`
 
 ### Autostart Configuration:
 ```
-Exec=env DEV_MODE=1 PYTHONPATH=/home/ron/Projects/TalkType/src:/usr/lib64/python3.14/site-packages:/usr/lib/python3.14/site-packages /home/ron/Projects/TalkType/.venv/bin/python -m tuxtalk.tray
+Exec=/home/ron/Projects/TuxTalk/run-dev.sh
 ```
 
 ### NEVER set GDK_BACKEND when launching the tray

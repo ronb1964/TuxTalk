@@ -57,7 +57,7 @@ about TuxTalk either way. It disappears as the voice gets better.
 ## Running it
 
 ```bash
-cd /home/ron/Projects/TalkType/tests/vm
+cd /home/ron/Projects/TuxTalk/tests/vm
 python3 -u run.py test silverblue --appimage ~/AppImages/TuxTalk-v0.17.0-x86_64.AppImage
 ```
 
