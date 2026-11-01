@@ -184,6 +184,8 @@ code, kbd, pre { font-family: var(--f-mono); }
 .hero .facts { margin-top: 26px; display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: var(--step--1); font-weight: 600; color: var(--sky-ink-2); list-style: none; padding: 0; }
 .hero .facts li { display: flex; align-items: center; gap: 7px; }
 .hero .facts svg { width: 16px; height: 16px; }
+.hero .poll { margin-top: 22px; max-width: 46ch; font-size: var(--step--1); line-height: 1.5; color: var(--sky-ink); }
+.hero .poll a { color: inherit; font-weight: 700; }
 
 /* The fake text window the demo types into */
 .desk { position: relative; display: grid; gap: 22px; justify-items: center; }
