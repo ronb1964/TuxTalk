@@ -3,7 +3,7 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
-## [Unreleased]
+## [0.19.0] - 2026-10-31
 
 - On GNOME, an update to TuxTalk that came with a new extension only told
   you about TuxTalk. Now you're also told the extension has an update, to

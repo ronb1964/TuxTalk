@@ -95,6 +95,20 @@
   </screenshots>
 
   <releases>
+    <release version="0.19.0" date="2026-10-31">
+      <description>
+        <p>Dictation keys without Fn, Report a Problem, and a long list of fixes</p>
+        <ul>
+          <li>Right Ctrl, Right Alt or Scroll Lock can be the dictation key, so laptops need no Fn</li>
+          <li>Help's Problems tab has a Report a Problem button that gathers what a bug report needs, with no dictated words</li>
+          <li>Help has a Tips section and looks like Preferences</li>
+          <li>"Press tab" at the end of a dictation presses the real Tab key, to move through a form</li>
+          <li>The CUDA download is 580 MB instead of 1.4 GB</li>
+          <li>Quit, Restart Service, updates and uninstall let a dictation finish typing first</li>
+          <li>Downloads are checked against fixed versions, and the log is private</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.18.2" date="2026-10-23">
       <description>
         <p>Double-tap hands-free works on computers that are slow to start a recording</p>
