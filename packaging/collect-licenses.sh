@@ -36,6 +36,8 @@ cp "$HERE/licenses/ctranslate2-LICENSE" "$LIC/ctranslate2/LICENSE"
 cp "$HERE/licenses/tokenizers-LICENSE" "$LIC/tokenizers/LICENSE"
 mkdir -p "$LIC/noto-color-emoji"
 cp "$PROJECT/src/tuxtalk/fonts/LICENSE" "$LIC/noto-color-emoji/LICENSE"
+mkdir -p "$LIC/silero-vad"
+cp "$PROJECT/src/tuxtalk/models/LICENSE" "$LIC/silero-vad/LICENSE"
 
 # --- Libraries copied from Ubuntu: find each one's package --------------------
 # The system file each bundled file came from. Libraries and typelibs are

@@ -19,6 +19,24 @@ double-tap still counts when the start beep is filtered out.
   President in his official duties, so it is in the public domain in the
   United States (17 U.S.C. 105).
 
+## librispeech-7902-96591-0018.wav
+
+A sentence read by a person, "Yes, if other ways failed he could escape up
+the chimney", 3.11 s, used by `tests/test_voice_detector.py`: the voice
+detector's speech. The JFK words are an old broadcast with a crowd and
+reverberation in it, which the detector is unsure of even at full level and
+loses at levels a microphone still gives clearly; this is a voice as a
+microphone hears it.
+
+- Source: LibriSpeech, test-other, utterance 7902-96591-0018 (speaker 7902,
+  chapter 96591), from https://www.openslr.org/12 as converted to Parquet in
+  openslr/librispeech_asr on Hugging Face. 16 kHz mono 16-bit PCM, the
+  samples unchanged.
+- Rights: LibriSpeech is licensed CC BY 4.0, by Vassil Panayotov, Guoguo
+  Chen, Daniel Povey and Sanjeev Khudanpur ("LibriSpeech: an ASR corpus
+  based on public domain audio books", ICASSP 2015); the audio is a
+  LibriVox recording of a public-domain book.
+
 ## How the start beep's filter was measured
 
 `silence.has_a_word(audio, rate, ignoring_hz=...)` counts a 20 ms window as

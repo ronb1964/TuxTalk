@@ -72,6 +72,15 @@ it.
   (`packaging/build-emoji-font.py`), so they show on computers without an
   emoji font. The license is next to it, `tuxtalk/fonts/LICENSE`.
 
+## Models
+
+- **Silero VAD** v6.2.3 (MIT), from https://github.com/snakers4/silero-vad
+  at commit `5cd7945676eb32225748052e2e6a0580e4686a08`: its
+  `silero_vad_16k_op15.onnx`, unchanged, as `tuxtalk/models/silero_vad.onnx`.
+  It tells speech from other sound for hands-free, Type at pause and the
+  checks of whether a word was said. The license is next to it,
+  `tuxtalk/models/LICENSE`.
+
 ## Libraries from Ubuntu 22.04
 
 These are copied unmodified from Ubuntu 22.04: the tray icon libraries
