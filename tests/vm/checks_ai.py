@@ -38,6 +38,14 @@ def _put_ai(run):
     run.vm.put(LOCAL_MODEL.resolve(), f"{snap}/{MODEL_FILE}")
 
 
+def _no_room(run):
+    """Why this VM can't take the AI model (1.1 GB), or None."""
+    free_kb = run.vm.ssh("df --output=avail -k ~ | tail -1", check=False).stdout.strip()
+    if free_kb.isdigit() and int(free_kb) < 1_600_000:
+        return f"only {int(free_kb) // 1024} MB free on this VM's disk for the 1.1 GB AI model"
+    return None
+
+
 def _ai_on(run, **settings):
     """Turn the AI on with *settings*; returns once its engine is ready."""
     mark = run.log_mark()
@@ -48,6 +56,9 @@ def _ai_on(run, **settings):
 
 @check(SECTION, "ai_self_correct", "AI self-corrections: “three, no wait, four” types four")
 def ai_self_correct(run):
+    no_room = _no_room(run)
+    if no_room:
+        return Outcome("skip", no_room)
     _put_ai(run)
     _ai_on(run, ai_corrections=True)
     try:
@@ -68,6 +79,9 @@ def ai_voice_edit(run):
     if "x11" in run.vm.spec.tags:
         return Outcome("skip", "Voice editing works only in a Wayland session, by design "
                        "(it reads the selection with wl-paste)")
+    if run.vm.ssh(f"test -f ~/.cache/huggingface/hub/{MODEL_REPO_DIR}/snapshots/{MODEL_COMMIT}/"
+                  f"{MODEL_FILE}", check=False).returncode != 0:
+        return Outcome("skip", "the AI model isn't on this VM (see the self-corrections check)")
     _ai_on(run, ai_corrections=True, voice_editing=True)
     try:
         run.sink_ready(fresh=True)
