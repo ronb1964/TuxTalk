@@ -65,6 +65,9 @@ def ai_self_correct(run):
 
 @check(SECTION, "ai_voice_edit", "Voice editing: select, Shift+F8, “make this more formal”")
 def ai_voice_edit(run):
+    if "x11" in run.vm.spec.tags:
+        return Outcome("skip", "Voice editing works only in a Wayland session, by design "
+                       "(it reads the selection with wl-paste)")
     _ai_on(run, ai_corrections=True, voice_editing=True)
     try:
         run.sink_ready(fresh=True)

@@ -25,11 +25,14 @@ while IFS= read -r -d '' var; do
     env_args+=("$var")
 done < "/proc/$shell_pid/environ"
 # A launcher also passes the session's systemd environment, which holds the
-# X display. GNOME Shell's own has none (it starts Xwayland itself), and
-# without it TuxTalk's service fell back to native Wayland, where its
-# floating labels take the keyboard: the held-send space "bug" of 2026-10-18.
+# X display and the Wayland one. GNOME Shell's own has neither (it is the
+# Wayland server and starts Xwayland itself). Without DISPLAY TuxTalk's
+# service fell back to native Wayland, where its floating labels take the
+# keyboard: the held-send space "bug" of 2026-10-18. Without WAYLAND_DISPLAY
+# it took the session for X11: it typed instead of pasting, and voice editing
+# said it needs Wayland, unlike after a login.
 while IFS= read -r var; do
     env_args+=("$var")
-done < <(systemctl --user show-environment | grep -E '^(DISPLAY|XAUTHORITY)=')
+done < <(systemctl --user show-environment | grep -E '^(DISPLAY|XAUTHORITY|WAYLAND_DISPLAY)=')
 
 exec systemd-run --user --scope --quiet --collect env -i "${env_args[@]}" "$@"
