@@ -30,6 +30,7 @@ import checks_firstrun  # noqa: F401
 import checks_hotkeys  # noqa: F401
 import checks_prefs  # noqa: F401
 import checks_send  # noqa: F401
+import checks_type_at_pause  # noqa: F401
 import checks_uninstall  # noqa: F401
 import checks_update  # noqa: F401
 import report
@@ -40,7 +41,8 @@ RUNS = TOOLS / "runs"
 # First run must come before Preferences (its defaults), and Preferences
 # before dictation, which changes settings. Uninstall takes it all away: last.
 SECTION_ORDER = ["First run", "Preferences", "Dictation", "Words and numbers",
-                 "Send automatically", "Sound and other windows", "With the GNOME extension",
+                 "Type at pause", "Send automatically", "Sound and other windows",
+                 "With the GNOME extension",
                  "Hotkeys and keyboard layouts", "Parakeet update", "Uninstall"]
 LOG_LINES = 25
 

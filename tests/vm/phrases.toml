@@ -80,3 +80,19 @@ tts = "Meet me at noon, and"
 
 [paste_last]
 say = "Paste this into the other window."
+
+# Type at pause: a question said over two pauses, and a statement over one.
+[pause_question_1]
+say = "So I don't know how you think we should change things, but don't you think it would be smart to be able to pick multiple holiday"
+
+[pause_question_2]
+say = "items"
+
+[pause_question_3]
+say = "depending on the people that you are buying for"
+
+[pause_statement_1]
+say = "We should change the settings so that people"
+
+[pause_statement_2]
+say = "can pick more than one holiday"
