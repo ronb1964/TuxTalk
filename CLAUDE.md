@@ -94,6 +94,21 @@ cp TuxTalk-v*.AppImage ~/AppImages/
 chmod +x ~/AppImages/TuxTalk-v*.AppImage
 ```
 
+### Step 4b: The VM Run, BEFORE Ron Is Asked for Anything
+Ron, 2026-10-31: the fresh start with him must not begin until everything
+Claude can test alone is done. Run the harness on all eight VMs, two runs
+side by side (each VM uses 8 GB):
+```bash
+cd /home/ron/Projects/TalkType/tests/vm
+python3 -u run.py test kde suse mint debian --appimage ~/AppImages/TuxTalk-vX.X.X-x86_64.AppImage
+python3 -u run.py test silverblue zorin ubuntu pop --appimage ~/AppImages/TuxTalk-vX.X.X-x86_64.AppImage
+```
+- Every fail is fixed (back to Step 2) or explained to Ron before Step 5.
+  "Misheard" is the computer voice, not TuxTalk.
+- Then give Ron only what the VMs can't do (the report's last section: the
+  graphics card, the real password, his own voice, real apps, the AI features,
+  file dialogs, and how it feels), as a short list.
+
 ### Step 5: Ask Permission for Fresh Start
 - Say: "I need to run `./fresh-start-for-testing.sh` which will kill all TuxTalk processes, remove AppImage config/data, CUDA libs, cached models, and the GNOME extension. Your dev settings and data stay, but the speech and AI models are shared with dev, so dev downloads them again afterwards. Is that okay?"
 - WAIT for explicit "yes" or "go ahead"
