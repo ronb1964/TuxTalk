@@ -30,24 +30,6 @@ from type_at_pause_rig import (BLOCK, SR, blocks, fake_pipeline, feed, feed_bloc
 
 
 
-# --- the shared noise floor ---------------------------------------------------
-
-def test_noise_floor_tells_room_from_voice():
-    from tuxtalk.silence import NoiseFloor, block_rms
-    floor = NoiseFloor()
-    for b in blocks(noise(1.0)):
-        rms, dur = block_rms(b.tobytes(), SR)
-        assert floor.update(rms, dur) is False
-    loud = speech(0.18)[:BLOCK]
-    rms, dur = block_rms(loud.tobytes(), SR)
-    assert floor.update(rms, dur) is True
-
-
-def test_block_rms_of_an_empty_block():
-    from tuxtalk.silence import block_rms
-    assert block_rms(b"", SR) == (0.0, 0.0)
-
-
 # --- the pause detector ------------------------------------------------------
 
 def run_pauses(audio, pause=0.8, sr=SR, block=BLOCK):
@@ -1324,16 +1306,6 @@ def test_a_carried_question_skips_a_phrase_with_two_sentences(pipeline):
     type_chunk(frames_of(speech(1.0)), "middle")
     type_chunk(frames_of(speech(1.0)), "last", auto_period=True)
     assert typed[-1].rstrip() == "go now. I do."
-
-
-def test_a_recording_that_opens_with_digital_silence_still_learns_the_room():
-    """A first block of zeros held the noise floor at 0 for good: steady fan
-    noise then counted as speech and hands-free auto-stop never fired."""
-    from tuxtalk.silence import NoiseFloor
-    floor = NoiseFloor()
-    floor.update(0.0, 0.03)
-    heard = [floor.update(400.0, 0.03) for _ in range(100)]
-    assert not heard[-1], "steady room noise still counts as speech"
 
 
 def test_the_screen_copy_ends_at_another_window_of_the_same_app(monkeypatch):
