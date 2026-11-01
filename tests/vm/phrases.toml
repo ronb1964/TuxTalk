@@ -83,10 +83,10 @@ say = "Paste this into the other window."
 
 # Type at pause: a question said over two pauses, and a statement over one.
 [pause_question_1]
-say = "So I don't know how you think we should change things, but don't you think it would be smart to be able to pick multiple holiday"
+say = "So don't you think it would be smart to be able to pick"
 
 [pause_question_2]
-say = "items"
+say = "multiple holiday items"
 
 [pause_question_3]
 say = "depending on the people that you are buying for"
@@ -96,3 +96,13 @@ say = "We should change the settings so that people"
 
 [pause_statement_2]
 say = "can pick more than one holiday"
+
+# The AI features (checks_ai.py).
+[ai_self_correct]
+say = "Meet me at three, no wait, four."
+
+[ai_edit_base]
+say = "hey can you send me that file when you get a chance"
+
+[ai_edit_formal]
+say = "make this more formal"

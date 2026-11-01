@@ -1,5 +1,11 @@
 """Type at pause (TuxTalk Labs), each phrase typed at the pause after it.
 CLAUDE.md Step 8: "Type at pause, a question over pauses".
+
+The computer voice's intonation decides where Parakeet hears a question
+end, so the phrases are cut where it hears the question going on. Whether
+the "?" then comes from the mark carried across a pause or from the whole
+sentence heard again (type_at_pause.heard_whole_mark, pinned with a person's
+cut in tests/test_type_at_pause_questions.py), the question must end with one.
 """
 import time
 
