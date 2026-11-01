@@ -142,7 +142,9 @@ sleep 3 && cat /tmp/tuxtalk-output.log && tail -n 40 ~/.config/tuxtalk/tuxtalk.l
 ### Step 8: Ron Tests — WAIT for Results
 Before Ron starts, show him his part as a checklist panel in the chat (the
 visualize show_widget tool): only what the VM run (Step 4b) can't check,
-numbered, each with its steps and Pass / Problem buttons, so he can work
+numbered, one feature per check (never two under one heading: he missed
+Backup tucked under Transcribe a File), each with its steps and Pass /
+Problem buttons, so he can work
 down it and dictate results as he goes (Ron, 2026-11-01). Keep it to what
 needs him: his graphics card, his password, his voice, file dialogs, feel.
 Ron tests against this checklist. Do NOT proceed until he reports back.
