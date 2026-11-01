@@ -171,7 +171,9 @@ def downloads(run):
         downloading = [t for t in titles if t.startswith("Downloading") or t == "Setting Up Vulkan"]
         if downloading and not seen_window:
             seen_window = True
-            bar = run.vm.ui("find", "progress bar", None, downloading[0], timeout=3)
+            # "~" matches any name: the bar is named after its download for
+            # screen readers.
+            bar = run.vm.ui("find", "progress bar", "~", downloading[0], timeout=3)
             seen_bar = bar is not None
             shot = run.shot("download")
         if "TuxTalk - Ready!" in titles:

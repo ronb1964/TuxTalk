@@ -181,13 +181,13 @@ def prefs_audio_defaults(run):
 
 @check("Preferences", "prefs_mic_test", "Preferences mic test records and replays")
 def prefs_mic_test(run):
-    run.vm.ui("click", "button", "● Start Recording", PREFS, check=True)
+    run.vm.ui("click", "button", "Start Recording", PREFS, check=True)
     time.sleep(0.5)
     run.play("basic")
-    stop = states_of(run, "button", "■ Stop Recording") or set()
-    run.vm.ui("click", "button", "■ Stop Recording", PREFS)
+    stop = states_of(run, "button", "Stop Recording") or set()
+    run.vm.ui("click", "button", "Stop Recording", PREFS)
     time.sleep(1)
-    replay = states_of(run, "button", "▶ Replay") or set()
+    replay = states_of(run, "button", "Replay") or set()
     shot = run.shot("prefs-mic-test")
     problems = []
     if "sensitive" not in stop:

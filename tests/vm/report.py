@@ -21,9 +21,8 @@ MANUAL = [
     ("Your own voice", "A few dictations in your own voice and room, until your recordings "
      "replace the computer voice (record_phrases.py)."),
     ("KDE things", "Konsole and KWrite, KDE's volume applet, the KDE shortcut questions "
-     "(F6 and Emoji Selector), until the fedora44-KDE VM is part of the run."),
-    ("Other distros", "Ubuntu and Mint until their VMs are prepared for the harness, and the "
-     "fallback to the input group on a system without systemd."),
+     "(F6 and Emoji Selector). The run types into a plain window of its own."),
+    ("No systemd", "The fallback to the input group on a system without systemd."),
     ("Real apps", "A YouTube video in Brave and a Discord call for pause and sounds-down. The "
      "run uses a pretend player and a test tone, which test TuxTalk's side only."),
     ("AI features", "AI self-corrections, voice editing, “edit that”, select and move by voice "
