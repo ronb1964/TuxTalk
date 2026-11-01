@@ -184,8 +184,19 @@ code, kbd, pre { font-family: var(--f-mono); }
 .hero .facts { margin-top: 26px; display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: var(--step--1); font-weight: 600; color: var(--sky-ink-2); list-style: none; padding: 0; }
 .hero .facts li { display: flex; align-items: center; gap: 7px; }
 .hero .facts svg { width: 16px; height: 16px; }
-.hero .poll { margin-top: 22px; max-width: 46ch; font-size: var(--step--1); line-height: 1.5; color: var(--sky-ink); }
-.hero .poll a { color: inherit; font-weight: 700; }
+/* The live-text poll: a card that stands out on the sky and on paper alike */
+.ask { margin-top: 30px; max-width: 31rem; padding: 20px 22px 18px; border-radius: var(--radius); background: var(--card); color: var(--ink); box-shadow: var(--shadow); border-left: 6px solid var(--link); }
+.ask-tag { font: 700 0.75rem/1 var(--f-body); letter-spacing: 0.08em; text-transform: uppercase; color: var(--link); }
+.ask-q { margin-top: 10px; font-family: var(--f-display); font-weight: 800; font-size: var(--step-1); line-height: 1.25; letter-spacing: -0.01em; }
+.ask-sub { margin-top: 6px; color: var(--ink-2); line-height: 1.45; }
+.ask-btns { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 10px; }
+.ask .btn { padding: 12px 16px; font-size: 0.98rem; }
+.ask .btn svg { width: 16px; height: 16px; }
+.btn-ask { background: var(--ink); color: var(--card); }
+.btn-ask:hover { transform: translateY(-1px); text-decoration: none; }
+.btn-ask-2 { color: var(--ink); box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--ink) 40%, transparent); }
+.btn-ask-2:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); text-decoration: none; }
+.ask-note { margin-top: 12px; font-size: 0.8rem; line-height: 1.45; color: var(--ink-2); }
 
 /* The fake text window the demo types into */
 .desk { position: relative; display: grid; gap: 22px; justify-items: center; }
