@@ -21,7 +21,7 @@
 <p align="center">
   <a href="https://tuxtalk.app/"><b>Website</b></a> &nbsp;&bull;&nbsp;
   <a href="#installation">Install</a> &nbsp;&bull;&nbsp;
-  <a href="#new-in-018">New in 0.18</a> &nbsp;&bull;&nbsp;
+  <a href="#new-in-019">New in 0.19</a> &nbsp;&bull;&nbsp;
   <a href="#what-it-does">What it does</a> &nbsp;&bull;&nbsp;
   <a href="#all-the-features">All the features</a> &nbsp;&bull;&nbsp;
   <a href="#how-its-made">How it's made</a> &nbsp;&bull;&nbsp;
@@ -44,15 +44,17 @@ Claude, Anthropic's AI, writes the code. I test it and use it every day, and I h
 
 ---
 
-## New in 0.18
+## New in 0.19
 
-**It won't type into password boxes.** If your cursor is in a password field when you let go of F8, nothing gets typed, and a note over the window says why. Those words stay out of Recent Dictations too. Saying just "press enter" or "press tab" still works there, so you can log in after typing the password yourself, or go to the next box. TuxTalk can only tell when the app says it's a password box: GTK apps do, so most of GNOME, Cinnamon and Xfce. KDE apps and Firefox do with accessibility switched on, and Chrome-based apps like Discord mostly don't. The desktop's own box asking for your admin password counts too, on GNOME, KDE, Cinnamon, COSMIC and Xfce.
+**Dictation keys that don't need Fn.** You can pick Right Ctrl, Right Alt or Scroll Lock as your dictation key now, in Preferences, General. On a lot of laptops the F keys only work while you hold Fn, which makes holding F8 a two-handed job. Pick Right Ctrl or Right Alt and it's TuxTalk's key, so it stops working as Ctrl or Alt, and the list tells you what else you'd give up, like @ and € if Right Alt is your AltGr key, or the Compose key Pop!_OS puts on Right Ctrl. The hotkey helper needs an update for it, so TuxTalk asks for your password once.
 
-**Typing is about six times faster, and ydotool is gone.** TuxTalk types with its own virtual keyboard now, so there's no background program to keep running. A 25 letter sentence shows up in about a tenth of a second instead of six tenths. You'll notice it most on X11, like Mint, where TuxTalk types everything.
+**Questions said over pauses end with a question mark.** With Type at pause on, each part of a sentence gets typed when you pause, and each part was heard on its own. So "don't you think it would be smart", a pause, then "to pick more than one" ended with a period. Now TuxTalk listens to the whole sentence once more before it decides how to end it.
 
-**COSMIC works now.** On Pop!_OS 24.04 TuxTalk knows which window you're in, so a terminal gets plain text, F8 doesn't leave ^[[19~ in the terminal, and typing follows the keyboard layout set in COSMIC Settings. The same terminal fix reaches Mint, Xfce and MATE.
+**"Press tab" presses Tab.** Saying "tab" in the middle of a sentence used to type a tab character almost every time. Now only "press tab" does, and at the end of a dictation it presses the real Tab key, so you can fill in a form one box at a time.
 
-**Fixes worth knowing about.** On a keyboard that isn't US, a shortcut like Ctrl+Alt+P is the key with that letter printed on it. Alt+F8 resizes a window without starting a dictation too. And every window fits a small laptop screen with its buttons in view, dock or no dock, and on two monitors of different sizes. Emoji show up even on a computer with no emoji font, where they used to be little boxes. The [changelog](CHANGELOG.md) has the rest.
+**Report a Problem.** Help's Problems tab has a button that puts together what I'd ask you for anyway: your distro, desktop, keyboard layout, graphics card and the end of the log, with your username taken out and none of your dictation. You see all of it before anything goes anywhere, and nothing gets sent by itself. Help got a Tips section too, and it looks like Preferences now.
+
+**A big cleanup, and what it turned up.** I had the whole codebase reviewed file by file, by Claude and by Codex, OpenAI's coding AI, and most of this release is fixing what they found. Some of it you'd notice. Hands-free stops by itself in steady noise like a dryer or a fan, the beeps don't get cut short, "Send each dictation automatically" won't send half a sentence that ended on "and" or send into a window you just switched to, and quitting or updating lets a dictation finish typing first. The CUDA download for NVIDIA cards is 580 MB now instead of 1.4 GB. The [changelog](CHANGELOG.md) has the rest.
 
 ---
 
