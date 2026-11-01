@@ -5,9 +5,10 @@ Started by parakeet_gpu.py as
 
     python -m tuxtalk.parakeet_gpu_worker <engine dir> <model> <device> <threads>
 
-It loads whisper.cpp's libparakeet (part of the Vulkan engine, build 2 and
-later) through ctypes, keeps the model on the graphics chip, and transcribes
-whatever the dictation service sends it. It is a separate process because a
+It loads whisper.cpp's libparakeet (part of the Vulkan engine since
+whisper.cpp 1.9.4's second build) through ctypes, keeps the model on the
+graphics chip, and transcribes whatever the dictation service sends it. It
+is a separate process because a
 failed check inside the engine (GGML_ASSERT) aborts the whole process: here
 that loses the helper, not the dictation service.
 

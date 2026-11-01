@@ -150,15 +150,17 @@ class FileEngine:
         with the user's words steered and spelled as dictation does."""
         from . import custom_words, language_limit
         if self.kind == "parakeet":
-            from .parakeet_gpu import _steer
-            _steer(self.model, self.words)      # as dictation does (engine._transcribe_parakeet)
+            from .parakeet_engine import steer
+            steer(self.model, self.words)       # as dictation does (engine._transcribe_parakeet)
             text = self.model.recognize(audio)
         elif self.kind == "vulkan":
-            text, _ = self.model.transcribe(audio, self.language, timeout=600,
-                                            prompt=custom_words.prompt(self.words) or None,
-                                            limit_to=self.limit_to)
+            text = self.model.transcribe(audio, self.language, timeout=600,
+                                         prompt=custom_words.prompt(self.words) or None,
+                                         limit_to=self.limit_to)
         else:
-            options = dict(beam_size=5, vad_filter=False, hotwords=custom_words.prompt(self.words))
+            from .engine import REPETITION_GUARDS
+            options = dict(beam_size=5, vad_filter=False, **REPETITION_GUARDS,
+                           hotwords=custom_words.prompt(self.words))
             segments, _ = language_limit.whisper_held_to(
                 self.model.transcribe, audio, self.language, self.limit_to, **options)
             text = " ".join(s.text.strip() for s in segments)
@@ -193,7 +195,7 @@ def load_engine(cfg):
     that's the device, the processor when the graphics chip can't be used.
     Raises NotDownloaded when the model isn't on this computer."""
     from . import custom_words, language_limit, whisper_vulkan
-    from .model_helper import is_model_cached_fast
+    from .model_helper import is_model_cached_fast, whisper_model
     from .parakeet_engine import is_parakeet, load_parakeet_model
     from .recommend import model_title
 
@@ -232,19 +234,18 @@ def load_engine(cfg):
 
     if not is_model_cached_fast(name):
         raise NotDownloaded(missing)
-    from faster_whisper import WhisperModel
     if device == "cuda":
         try:
             from .cuda_helper import has_cuda_libraries
             if has_cuda_libraries():
-                model = WhisperModel(name, device="cuda", compute_type="float16",
-                                     local_files_only=True)
+                model = whisper_model(name, device="cuda", compute_type="float16",
+                                      local_files_only=True)
                 return FileEngine(model, "whisper", f"{title} on the graphics card (CUDA)",
                                   **common)
         except Exception as e:
             logger.warning(f"File transcription: CUDA not used ({e}); using the processor")
-    model = WhisperModel(name, device="cpu", compute_type="int8",
-                         cpu_threads=os.cpu_count() or 4, local_files_only=True)
+    model = whisper_model(name, device="cpu", compute_type="int8",
+                          cpu_threads=os.cpu_count() or 4, local_files_only=True)
     return FileEngine(model, "whisper", f"{title} on the processor", **common)
 
 

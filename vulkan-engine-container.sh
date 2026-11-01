@@ -34,7 +34,9 @@ if [ "$(git rev-parse HEAD)" != "$WHISPER_CPP_COMMIT" ]; then
     exit 1
 fi
 # TuxTalk's own changes (vulkan-engine-patches/): Your Words for Parakeet's
-# greedy decoder (parakeet_set_word_boost). A patch that doesn't apply
+# greedy decoder (parakeet_set_word_boost), and whisper-server without the
+# /load route any local program could load a model file through. A patch
+# that doesn't apply
 # stops the build rather than ship an engine without it.
 for patch in /build/vulkan-engine-patches/*.patch; do
     [ -e "$patch" ] || continue

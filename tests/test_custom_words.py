@@ -1,9 +1,9 @@
 """Your Words: names and terms TuxTalk should spell the user's way.
 
-Whisper models are told about them before they listen. Every engine,
-Parakeet included, then gets a strict spelling pass: a word that came out
-split up, hyphenated or with the wrong capitals ("tux talk") is written the
-user's way. Parakeet can't be told about words beforehand at all.
+Whisper models are told about them before they listen, and Parakeet
+leans toward them while it decodes. Every engine then gets a strict
+spelling pass: a word that came out split up, hyphenated or with the wrong
+capitals ("tux talk") is written the user's way.
 """
 import pytest
 
@@ -144,7 +144,7 @@ class FakeVulkan(wv.VulkanWhisperModel):
 
     def transcribe(self, audio, language=None, prompt=None, limit_to=()):
         self.prompts.append(prompt)
-        return self.reply, 0.0
+        return self.reply
 
 
 class FakeWhisper:

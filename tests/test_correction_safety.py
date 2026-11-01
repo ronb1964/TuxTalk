@@ -27,6 +27,38 @@ SAFE = [
     ("Book the room for Monday, actually, book it for Tuesday.", "Book the room for Tuesday."),
     ("Email the invoice to George, scratch that, text it to him.",
      "Text the invoice to George."),
+    # fractions, times and ranges corrected whole
+    ("Use 5/6 inch screws, no wait, 7/8 inch screws.", "Use 7/8 inch screws."),
+    ("Meet me at 3:15, no wait, 4:15.", "Meet me at 4:15."),
+    ("Cut 2-3 boards, no wait, 4-5 boards.", "Cut 4-5 boards."),
+    # the negation is in the corrected words, or before the wrong part
+    ("I will, I mean I won't, go.", "I won't go."),
+    ("Do not paint the van red, sorry, blue.", "Do not paint the van blue."),
+    ("Send it, no wait, send the files.", "Send the files."),
+    ("Don't send it, no wait, send it today.", "Send it today."),
+    # a refinement: the corrected words start with the wrong ones
+    ("Call me Monday, sorry, Monday afternoon.", "Call me Monday afternoon."),
+    ("Meet at three, no wait, three thirty.", "Meet at three thirty."),
+    ("Paint it red, no wait, red and blue.", "Paint it red and blue."),
+    ("Order two boxes, no wait, two boxes and a bag.", "Order two boxes and a bag."),
+    ("Ship it Friday, no wait, Friday morning.", "Ship it Friday morning."),
+    # a word before the cut that isn't a number is the sentence's own
+    ("It's red, no wait, dark red.", "It's dark red."),
+    ("Paint it blue, sorry, light blue.", "Paint it light blue."),
+    # spaces around a range's dash or a fraction's slash; a colon or comma
+    # between two numbers keeps them apart
+    ("Set it to 3 - 4, no wait, 5 - 6.", "Set it to 5 - 6."),
+    ("Use 5 / 6 inch screws, no wait, 7 / 8 inch screws.", "Use 7 / 8 inch screws."),
+    ("Step 2: 3 cups of flour, no wait, 4 cups of flour.", "Step 2: 4 cups of flour."),
+    ("Option 1: 5 apples, no wait, 6 apples.", "Option 1: 6 apples."),
+    # a negation that stays: not what the restatement repeats, or said again
+    ("We cannot ship it, no wait, ship it today.", "Ship it today."),
+    ("Not the red one, no wait, the blue one.", "Not the blue one."),
+    ("Not the big box, no wait, the small box.", "Not the small box."),
+    ("Not to Bob, I mean to Jim.", "Not to Jim."),
+    ("It's not a dog, sorry, a cat.", "It's not a cat."),
+    ("No more than 5, sorry, no more than 6 people.", "No more than 6 people."),
+    ("Don't call Bob, call Jim, sorry, call Sue.", "Don't call Bob, call Sue."),
 ]
 
 UNSAFE = [
@@ -59,6 +91,9 @@ UNSAFE = [
     ("Call Dave, I mean Steve.", "Call Dave Steve."),
     ("Turn left at the light, no, right.", "Turn left at the light, right."),
     ("Paint it red, make that blue.", "Paint it red, blue."),
+    # "no" said as a cue before another: the same words as "the answer is no,
+    # sorry, yes", which is why that one is typed as said
+    ("Paint it red, no, sorry, blue.", "Paint it red, blue."),
     # restated clause: kept both instructions, or the first one
     ("Email the invoice to George, scratch that, text it to him.",
      "Email the invoice to George. Text it to him."),
@@ -75,6 +110,47 @@ UNSAFE = [
     # a number's punctuation changed: a different value in many countries
     ("Set it to 1.5, no wait, 2.5.", "Set it to 2,5."),
     ("Order 1,000 bolts, no wait, 2,000 bolts.", "Order 2.000 bolts."),
+    # dropped the restatement and kept the wrong version: the opposite of what was meant
+    ("Do not delete the files, sorry, delete the files.", "Do not delete the files."),
+    ("I will not, I mean I will, go.", "I will not go."),
+    ("I will not, I mean I'll, go.", "I'll not go."),
+    ("Do not send it, no wait, send it.", "Do not send it."),
+    # ... also when the restatement adds a word
+    ("Don't send it, no wait, send it today.", "Don't send it today."),
+    ("Do not delete the files, sorry, delete the files now.", "Do not delete the files now."),
+    ("Never call Bob, I mean call Bob tomorrow.", "Never call Bob tomorrow."),
+    # ... and with a filler, an adverb or "cannot" by the negation
+    ("Do not ever send it, no wait, send it today.", "Do not ever send it today."),
+    ("Do not ever delete the files, sorry, delete the files now.",
+     "Do not ever delete the files now."),
+    ("Don't, uh, send it, no wait, send it today.", "Don't send it today."),
+    ("Don't ever send it, no wait, send it today.", "Don't ever send it today."),
+    ("Do not ever turn it off, no wait, turn it off at night.",
+     "Do not ever turn it off at night."),
+    ("Never ever call Bob, I mean call Bob tomorrow.", "Never ever call Bob tomorrow."),
+    ("We cannot ship it, no wait, ship it today.", "We cannot ship it today."),
+    ("It cannot wait, sorry, it can wait until Monday.", "It cannot wait until Monday."),
+    ("Don't just delete it, sorry, delete it now.", "Don't just delete it now."),
+    # a fraction, a time or a range changed into another
+    ("Use 5/6 inch screws, no wait, 7/8 inch screws.", "Use 7-8 inch screws."),
+    ("Meet me at 3:15, no wait, 4:15.", "Meet me at 4/15."),
+    ("Cut 2-3 boards, no wait, 4-5 boards.", "Cut 4/5 boards."),
+    ("Set it to 3 - 4, no wait, 5 - 6.", "Set it to 5 / 6."),
+    ("Use 5 / 6 inch screws, no wait, 7 / 8 inch screws.", "Use 7 - 8 inch screws."),
+    ("Meet me at 3 : 15, no wait, 4 : 15.", "Meet me at 4 / 15."),
+    # both numbers kept side by side
+    ("Meet at 3 pm, no wait, 4 pm.", "Meet at 3 4 pm."),
+    ("Five minutes, actually ten minutes.", "Five ten minutes."),
+    ("Order two boxes, no wait, three boxes.", "Order two three boxes."),
+    ("Send me 3 copies, no, wait, 4 copies.", "Send me 3 4 copies."),
+    ("It costs 20 dollars, I mean 25 dollars.", "It costs 20 25 dollars."),
+    ("The fuse is 10 amps, no wait, 15 amps.", "The fuse is 10 15 amps."),
+    ("Set the timer for 10 minutes, sorry, 15 minutes.", "Set the timer for 10 15 minutes."),
+    ("Twelve percent, sorry, fifteen percent.", "Twelve fifteen percent."),
+    ("Take the 5 train, no wait, the 7 train.", "Take the 5 the 7 train."),
+    # an added line break or tab, which a chat box could take as Send
+    ("Meet me at 3, no wait, 4.", "Meet me at\n4."),
+    ("Meet me at 3, no wait, 4.", "Meet me at\t4."),
     # "hmm" carries meaning; the AI isn't told to drop it
     ("Hmm, that sounds about right.", "That sounds about right."),
     # doubled for emphasis, which the plain filler rule keeps too
@@ -121,3 +197,31 @@ def test_a_filler_like_may_still_go_with_a_correction():
     check must not then refuse the corrected sentence."""
     assert edit_is_safe("So I was, like, going to order two boxes, no wait, three boxes.",
                            "So I was going to order three boxes.")
+
+
+# Known trades, pinned so that changing one is a decision. Each is a shape
+# whose words can't tell a good answer from a bad one.
+@pytest.mark.parametrize("said, edited, accepted", [
+    # Refused: the same words as "paint it red, no, sorry, blue" -> "paint it
+    # red, blue", which keeps both values. Typed as said.
+    ("The answer is no, sorry, yes.", "The answer is yes.", False),
+    ("Tell her no, I mean yes.", "Tell her yes.", False),
+    # Refused: two changes at once ("yet" goes too). Typed as said.
+    ("Do not send it yet, no wait, send it today.", "Send it today.", False),
+    # Refused: the "don't" is a sentence of its own, which the check can't
+    # see; the same words as a kept reversal. Typed as said.
+    ("Don't tell him. Text him, sorry, tell him in person.",
+     "Don't tell him. Tell him in person.", False),
+    # Accepted: "not a dog, sorry, a cat" can mean either.
+    ("It's not a dog, sorry, a cat.", "It's a cat.", True),
+    # Accepted: only numbers count as values kept side by side, so that
+    # "it's red, no wait, dark red" -> "it's dark red" stays a fix.
+    ("Book it for October 5th, sorry, November 5th.", "Book it for October November 5th.",
+     True),
+    # Accepted: the negated word is looked for in the next two words only;
+    # three would refuse "not the big box, no wait, the small box".
+    ("Don't you ever send it, no wait, send it today.", "Don't you ever send it today.",
+     True),
+])
+def test_known_trades(said, edited, accepted):
+    assert edit_is_safe(said, edited) is accepted

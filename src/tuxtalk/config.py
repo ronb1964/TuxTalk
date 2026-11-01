@@ -1035,6 +1035,7 @@ def custom_commands_unreadable() -> bool:
     the user's, and saving is refused until the file is fixed."""
     return _commands_read_failed and os.path.exists(CUSTOM_COMMANDS_PATH)
 
+
 def _text_snippets(table) -> dict[str, str]:
     """The snippets of a hand-editable table that can be typed: a number
     as its text (`answer = 42`), anything else (a list, a table) left out,

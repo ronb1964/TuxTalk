@@ -674,6 +674,42 @@ before 0.15.0, so older entries use that name.
 - tuxtalk --uninstall run while TuxTalk was quitting said nothing and did
   nothing, as if it had worked. It says it couldn't now. --open does the
   same.
+- AI self-corrections are stricter about what they let through. When you
+  correct yourself by saying the same words again ("do not send it, no
+  wait, send it"), the AI could drop the second half and keep the first, so
+  TuxTalk typed the opposite of what you meant. That answer is thrown away
+  now and the sentence is typed as you said it. The same goes for an answer
+  that changes a fraction, a time or a range ("5/6" into "5-6"), that puts
+  both numbers side by side ("meet at 3 pm, no wait, 4 pm" typed as "meet
+  at 3 4 pm"), or that adds a line break, which in a chat box could send
+  the message early.
+- "Please do not hit the bell." was typed as "Please do not.", and a
+  sentence ending in "please subscribe" lost those words. TuxTalk took them
+  for the YouTube sign-offs Whisper sometimes makes up from silence. It
+  only takes them out now when Whisper says it heard no speech.
+- If Parakeet's downloaded files got damaged, dictation didn't start at
+  all. TuxTalk now uses another speech model you have downloaded for the
+  time being, and says so, as it already did for Whisper.
+- When the AI took more than a minute and a half to start (a slow disk, a
+  weak graphics chip), AI corrections and voice editing stayed off for the
+  rest of the session, while the AI kept its memory. TuxTalk now stops it
+  and tries again a minute later, up to three times.
+- On a computer shared with other people, another user's program could
+  take the spot TuxTalk's graphics engine or AI was about to use, before
+  the engine got there. TuxTalk would then have sent it what you said, and
+  typed whatever it answered. TuxTalk now checks the engine it's talking to
+  is the one it started.
+- A web page could tell TuxTalk's graphics engine (Vulkan) to drop its
+  speech model or load another file in its place. Its controls now sit at
+  a random address each time it starts, which a page can't guess.
+- The speech models and the AI model from Hugging Face now always come
+  from the same version of each model, and the model files are checked as
+  they arrive, the way the engines already were. If someone changed one of
+  those models upstream, or a download arrived damaged, TuxTalk won't use
+  it. Models you already have aren't downloaded again.
+- If Large-v3's download was cut off just before its last small file,
+  TuxTalk counted it as downloaded, and then every dictation with it
+  failed. It now downloads the missing file.
 
 ## [0.18.2] - 2026-10-23
 

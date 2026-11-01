@@ -182,7 +182,7 @@ class FakeServer(wv.VulkanWhisperModel):
 
 def test_graphics_engine_runs_again_in_a_listed_language():
     server = FakeServer("fr", {"fr": 0.66, "es": 0.2, "en": 0.01})
-    text, _ = server.transcribe(np.zeros(16000, dtype=np.float32), None, limit_to=("en", "es"))
+    text = server.transcribe(np.zeros(16000, dtype=np.float32), None, limit_to=("en", "es"))
     assert text == "in es"
     assert [r["language"] for r in server.requests] == ["auto", "es"]
     assert [r["no_language_probabilities"] for r in server.requests] == ["false", "true"]
@@ -190,7 +190,7 @@ def test_graphics_engine_runs_again_in_a_listed_language():
 
 def test_graphics_engine_keeps_a_listed_pick_with_one_request():
     server = FakeServer("es", {"es": 0.8, "en": 0.1})
-    text, _ = server.transcribe(np.zeros(16000, dtype=np.float32), None, limit_to=("en", "es"))
+    text = server.transcribe(np.zeros(16000, dtype=np.float32), None, limit_to=("en", "es"))
     assert text == "in es" and len(server.requests) == 1
 
 

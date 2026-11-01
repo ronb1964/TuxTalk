@@ -13,6 +13,7 @@ import os
 import shutil
 import signal
 import socket
+import struct
 import subprocess
 import sys
 import threading
@@ -20,7 +21,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 from . import engine_launcher
-from .logger import setup_logger
+from .logger import FailureNotes, setup_logger
 
 logger = setup_logger(__name__)
 
@@ -164,15 +165,68 @@ def open_local(request, timeout):
     return _LOCAL.open(request, timeout=timeout)
 
 
-def answers(port) -> bool:
-    """Whether the engine on *port* answers its health check yet. While it
-    loads its model it refuses the connection, answers 503, takes too long
-    or drops the connection mid-reply: each only means "not yet"."""
+def answers(port, pid, path="") -> bool:
+    """Whether the engine *pid* answers its health check on *port* (under
+    *path*, whisper-server's --request-path) yet. While it loads its model
+    it refuses the connection, answers 503, takes too long or drops the
+    connection mid-reply: each only means "not yet". An answer from a
+    program that isn't the engine is "not yet" too (listens_on)."""
     try:
-        with open_local(f"http://127.0.0.1:{port}/health", timeout=1):
-            return True
+        with open_local(f"http://127.0.0.1:{port}{path}/health", timeout=1):
+            pass
     except (OSError, http.client.HTTPException):
         return False
+    return listens_on(pid, port)
+
+
+# 127.0.0.1 as /proc/net/tcp writes it: the address's bytes read as a
+# number in this machine's byte order, in hex.
+_LOOPBACK_HEX = "%08X" % struct.unpack("=I", socket.inet_aton("127.0.0.1"))[0]
+_LISTEN = "0A"
+# The health check polls listens_on several times a second while an engine
+# loads: an unreadable socket table is logged once, not at every poll.
+_unreadable = FailureNotes()
+
+
+def listens_on(pid, port, proc="/proc") -> bool:
+    """Whether process *pid* holds the listening socket on 127.0.0.1:*port*.
+
+    The port is picked before the engine binds it (free_port), the engine
+    binds it only once its model is loaded, and its command line, port and
+    all, is readable by every user. Another user's program could take the
+    port first and answer the health check: it would then be sent the
+    dictation's audio (or the AI's key) and choose the text that's typed.
+    Our engine fails to bind and ends, and the start fails as any other.
+    When the socket table can't be read, nothing proves the answer came
+    from our engine, so it isn't trusted: the start times out and fails
+    as any other (Vulkan falls back to the processor, the AI tries again).
+    """
+    try:
+        with open(f"{proc}/net/tcp") as f:
+            rows = [line.split() for line in f.read().splitlines()[1:]]
+    except OSError as e:
+        if _unreadable.failed("tcp", e):
+            logger.warning(f"Can't tell which program answers on port {port}, so the engine "
+                           f"started there isn't used: {e}")
+        return False
+    if _unreadable.worked("tcp"):
+        logger.info("The socket table is readable again")
+    address = f"{_LOOPBACK_HEX}:{port:04X}"
+    inodes = {row[9] for row in rows if len(row) > 9 and row[1] == address and row[3] == _LISTEN}
+    if not inodes:
+        return False
+    try:
+        fds = os.listdir(f"{proc}/{pid}/fd")
+    except OSError:
+        return False
+    for fd in fds:
+        try:
+            link = os.readlink(f"{proc}/{pid}/fd/{fd}")
+        except OSError:
+            continue                    # closed meanwhile
+        if link.startswith("socket:[") and link[len("socket:["):-1] in inodes:
+            return True
+    return False
 
 
 def remove_other_versions(parent, keep):

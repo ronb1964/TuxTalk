@@ -7,7 +7,7 @@ voice command, so:
 
 - it works for every engine. It rewrites the transcription after the model
   heard it, which catches what steering the model (Whisper's prompt,
-  parakeet_bias for Parakeet on the processor) still misses.
+  Parakeet's word boost) still misses.
 - the corrected word is also added to Your Words (custom_words.py), so
   Whisper models are told about it before they listen, and the fix shows up
   under that word in Preferences > Words, where it can be edited or removed.
@@ -182,7 +182,7 @@ def adopt_fixes():
     if custom_words.has_header():
         return False
     commands = config.load_custom_commands()
-    if config._commands_read_failed:
+    if config.custom_commands_unreadable():
         return False            # try again when the file can be read
     try:
         words = custom_words.load(strict=True)
@@ -239,7 +239,7 @@ def save_word(word, phrases, old=None):
         raise WordProblem("Type the word the way it should be spelled: a name or a "
                           "short term, not a sentence or an address.")
     commands = config.load_custom_commands()
-    if config._commands_read_failed:
+    if config.custom_commands_unreadable():
         raise config.ConfigNotLoadedError("The snippets file couldn't be read.")
     words = custom_words.load(strict=True)
     if old is not None and old not in words:
@@ -270,7 +270,7 @@ def remove_word(word):
     config.ConfigNotLoadedError for a snippets file that can't be read."""
     from . import custom_words
     commands = config.load_custom_commands()
-    if config._commands_read_failed:
+    if config.custom_commands_unreadable():
         raise config.ConfigNotLoadedError("The snippets file couldn't be read.")
     words = custom_words.load(strict=True)
     _save_both({p: r for p, r in commands.items() if r != word},

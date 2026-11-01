@@ -184,7 +184,7 @@ def hub(monkeypatch, tmp_path):
                         lambda repo: [("model.bin", 400 * MB), ("config.json", 2),
                                       ("tokenizer.json", 2), ("vocabulary.txt", 1)])
     monkeypatch.setattr(huggingface_hub, "try_to_load_from_cache",
-                        lambda repo, name: f"/cache/{name}" if name in cached else None)
+                        lambda repo, name, **k: f"/cache/{name}" if name in cached else None)
     monkeypatch.setattr(huggingface_hub, "hf_hub_download",
                         lambda repo_id, filename, **k: fetched.append(filename))
     monkeypatch.setattr(huggingface_hub.constants, "HF_HUB_CACHE", str(tmp_path))

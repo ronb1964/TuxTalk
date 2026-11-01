@@ -33,6 +33,7 @@ import io
 import json
 import os
 import re
+import secrets
 import subprocess
 import threading
 import time
@@ -57,8 +58,9 @@ ENGINE_VERSION = "1.9.5"                           # whisper.cpp release it is b
 # adds TuxTalk's patch (vulkan-engine-patches/): Your Words for Parakeet on
 # the graphics chip. Each build has its own asset and pre-release, because
 # released versions download theirs and check its SHA256, so a published
-# build must stay exactly as it is. The folder inside is named after the
-# whisper.cpp version, and a new version's folder replaces the old one.
+# build must stay exactly as it is. The archive's folder is named after the
+# whisper.cpp version alone; it unpacks into a folder per build
+# (_build_folder), and a new build's folder replaces the old one.
 ENGINE_BUILD = 1
 ENGINE_NAME = f"talktype-whisper-vulkan-{ENGINE_VERSION}"
 ENGINE_ASSET = f"{ENGINE_NAME}-b{ENGINE_BUILD}-x64.tar.gz"
@@ -141,9 +143,18 @@ def has_nvidia() -> bool:
 
 # --- Where things live ---------------------------------------------------------
 
+def _build_folder():
+    """The folder this build unpacks into. With the build in its name, an
+    installed older build doesn't count as this one, which is then
+    downloaded beside it and replaces it once it's there. Build 1 keeps the
+    version's name alone, the folder earlier versions installed it in, so
+    it isn't downloaded again."""
+    return ENGINE_VERSION if ENGINE_BUILD == 1 else f"{ENGINE_VERSION}-b{ENGINE_BUILD}"
+
+
 def _engine_dir():
     from .config import get_data_dir
-    return os.path.join(get_data_dir(), "whisper-vulkan", ENGINE_VERSION, ENGINE_NAME)
+    return os.path.join(get_data_dir(), "whisper-vulkan", _build_folder(), ENGINE_NAME)
 
 
 def _binary(name):
@@ -152,7 +163,8 @@ def _binary(name):
 
 def is_engine_installed(model_name=None) -> bool:
     """The engine is downloaded, and can run *model_name* if one is given.
-    Build 1 has no Parakeet in it but still serves every Whisper model."""
+    whisper.cpp 1.9.4's first build, in a folder of its own that an update
+    removes, had no Parakeet in it."""
     if not os.access(_binary("whisper-server"), os.X_OK):
         return False
     return not is_parakeet(model_name) or os.access(_binary("parakeet-cli"), os.X_OK)
@@ -214,7 +226,8 @@ def make_engine_download_func(model_name=None):
                     restore_cut_off_swap(target, old)
                     if not is_engine_installed(model_name):     # or another download did it
                         replace_folder(os.path.join(folder, ENGINE_NAME), target, old)
-                    engine_process.remove_other_versions(os.path.dirname(parent), ENGINE_VERSION)
+                    engine_process.remove_other_versions(os.path.dirname(parent),
+                                                         _build_folder())
             except Exception as e:
                 logger.error(f"Could not unpack the graphics engine: {e}")
                 progress_callback("Could not unpack the download", 0)
@@ -391,19 +404,18 @@ _MARKER = re.compile(r"\[[A-Z][A-Z _]*\]")
 
 
 def parse_result(reply):
-    """(text, highest no-speech probability) from a verbose_json reply, with
-    whisper.cpp's non-speech markers removed.
+    """The text of a verbose_json reply, with whisper.cpp's non-speech
+    markers removed.
 
-    The no-speech probability is reported but not to be trusted: on the same
-    audio it reads 0.90 for clear speech with the language set and 0.00 for
-    pure silence, so the service doesn't use it."""
+    Its segments' no-speech probability is left out: on the same audio it
+    reads 0.90 for clear speech with the language set and 0.00 for pure
+    silence, so the recording's own loudness stands in for it
+    (engine._transcribe_vulkan)."""
     segments = reply.get("segments") or []
     text = " ".join((s.get("text") or "").strip() for s in segments).strip()
     if not segments:
         text = (reply.get("text") or "").strip()
-    text = " ".join(_MARKER.sub(" ", text).split())
-    no_speech = max((float(s.get("no_speech_prob", 0.0)) for s in segments), default=0.0)
-    return text, no_speech
+    return " ".join(_MARKER.sub(" ", text).split())
 
 
 def request_fields(language=None, prompt=None, scores=False):
@@ -441,6 +453,7 @@ class VulkanWhisperModel:
         self.threads = threads or max(1, (os.cpu_count() or 2) // 2)
         self._proc = None
         self._port = None
+        self._path = ""
         # Re-entrant: a restart inside transcribe() runs a warm-up transcribe().
         self._lock = threading.RLock()
         self._launcher = engine_process.Launcher("vulkan-whisper")
@@ -459,11 +472,17 @@ class VulkanWhisperModel:
                                     engine_process.is_talktype_process, "graphics engine")
         self._port = engine_process.free_port()
         # Unlike llama-server (ai_server.py), whisper-server has no API key
-        # option. It listens on 127.0.0.1 only and sends nothing of the user's
-        # back, so another local program could at most borrow the graphics chip.
+        # option, and its /load route loads any model file it is given the
+        # path of, or frees the model. A random path before every route
+        # keeps web pages, which can post a form to 127.0.0.1 and scan the
+        # ports, away from it. It doesn't stop another user, who can read the
+        # command line: engine build 2 will drop /load
+        # (vulkan-engine-patches/server-no-load-route.patch).
+        self._path = "/" + secrets.token_hex(16)
         command, env = engine_process.parent_death_command(
             [_binary("whisper-server"), "-m", model_path(self.model_name),
              "--host", "127.0.0.1", "--port", str(self._port),
+             "--request-path", self._path,
              "-t", str(self.threads), "-dev", str(self.device_index)], _engine_env())
         self._proc = self._launcher.popen(command, stdout=subprocess.DEVNULL,
                                           stderr=subprocess.PIPE, env=env)
@@ -476,7 +495,7 @@ class VulkanWhisperModel:
                     raise RuntimeError("the graphics engine stopped while starting"
                                        + engine_process.launch_failure(self._proc.returncode,
                                                                        output))
-                if engine_process.answers(self._port):
+                if engine_process.answers(self._port, self._proc.pid, self._path):
                     break
                 time.sleep(0.25)
             else:
@@ -493,7 +512,7 @@ class VulkanWhisperModel:
         logger.info(f"Graphics engine ready (warm-up took {time.time() - started:.1f}s)")
 
     def transcribe(self, audio_f32, language=None, timeout=120, prompt=None, limit_to=()):
-        """(text, highest no-speech probability) for *audio_f32*. *prompt*
+        """The text of *audio_f32*. *prompt*
         is Your Words (custom_words.prompt), to steer Whisper's spelling.
 
         *limit_to* holds auto-detect to those languages (language_limit.py):
@@ -521,7 +540,7 @@ class VulkanWhisperModel:
                 logger.warning("Graphics engine had stopped; starting it again")
                 self._start()
             request = urllib.request.Request(
-                f"http://127.0.0.1:{self._port}/inference", data=body,
+                f"http://127.0.0.1:{self._port}{self._path}/inference", data=body,
                 headers={"Content-Type": content_type})
             with engine_process.open_local(request, timeout=timeout) as response:
                 return json.load(response)

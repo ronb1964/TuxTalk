@@ -27,7 +27,7 @@ def hub(monkeypatch):
     def no_list(repo):
         raise OSError("rate limited")
 
-    def hf_hub_download(repo_id, filename, tqdm_class=None, force_download=False):
+    def hf_hub_download(repo_id, filename, tqdm_class=None, force_download=False, revision=None):
         tries.append(filename)
         if filename in raises:
             raise raises[filename]

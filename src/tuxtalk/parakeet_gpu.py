@@ -11,8 +11,10 @@ talks to over pipes. Like the other engines (engine_process.py) it dies with
 the service.
 
 If the helper fails twice in a row, transcription moves to the processor
-engine for the rest of the session, when that model is downloaded. TuxTalk
-keeps both downloads for exactly this.
+engine for the rest of the session, when Parakeet's processor copy is
+downloaded too. A Vulkan setup downloads only the graphics card's, so
+without it that dictation fails and the next one tries the graphics chip
+again.
 """
 import json
 import os
@@ -26,7 +28,7 @@ import numpy as np
 
 from . import engine_process
 from .logger import setup_logger
-from .parakeet_engine import PARAKEET_MODEL, load_parakeet_model
+from .parakeet_engine import PARAKEET_MODEL, load_parakeet_model, steer
 from .parakeet_gpu_worker import encode_request, encode_words
 
 logger = setup_logger(__name__)
@@ -37,16 +39,6 @@ START_TIMEOUT = 180
 MIN_SAMPLES = SAMPLE_RATE    # shorter recordings are padded with silence to one second
 REPLY_TIMEOUT = 60           # for one recording, plus
 REPLY_PER_AUDIO_S = 1.0      # this many seconds per second of audio
-
-
-def _steer(model, words):
-    """Hand *model* Your Words if it takes them; never in the way of a dictation."""
-    set_words = getattr(model, "set_words", None)
-    if set_words is not None:
-        try:
-            set_words(words)
-        except Exception as e:
-            logger.warning(f"Couldn't hand Parakeet your words: {e}")
 
 
 class ParakeetGpuModel:
@@ -156,7 +148,9 @@ class ParakeetGpuModel:
 
     def _send_words(self):
         """Give the helper Your Words when they changed since it last had them.
-        A problem here costs only the steering, never the dictation."""
+        A helper that answers it can't take them costs only the steering. One
+        that doesn't answer (a broken pipe, a timeout) is raised: it can't
+        take the recording either, so that counts as a failed try."""
         if self._sent_words == self._words:
             return
         try:
@@ -212,7 +206,7 @@ class ParakeetGpuModel:
                 raise RuntimeError("Parakeet failed on the graphics chip, and its processor "
                                    f"version isn't available ({e})") from e
             logger.warning("Parakeet moved to the processor for the rest of this session")
-            _steer(self._cpu, self._words)
+            steer(self._cpu, self._words)
             return self._cpu.recognize(audio)
 
     def set_words(self, words) -> None:
@@ -221,7 +215,7 @@ class ParakeetGpuModel:
         handed to the processor engine if this has fallen back to it."""
         self._words = tuple(words or ())
         if self._cpu is not None:
-            _steer(self._cpu, self._words)
+            steer(self._cpu, self._words)
 
     def close(self):
         """Stop the helper for good."""

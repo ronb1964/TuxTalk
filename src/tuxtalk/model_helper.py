@@ -9,6 +9,7 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk
 from .ui_style import show_message
+from .hub_pins import SHA256 as _HUB_SHA256, revision as _revision
 from .logger import setup_logger
 from .recommend import model_title
 from .parakeet_engine import (
@@ -55,7 +56,7 @@ def _files_to_download(repo_id):
     """(path, size) pairs to fetch: every file in the Hugging Face repo *repo_id*.
     Raises if the file list cannot be fetched (callers fall back)."""
     from huggingface_hub import list_repo_tree
-    files_info = list(list_repo_tree(repo_id, recursive=True))
+    files_info = list(list_repo_tree(repo_id, recursive=True, revision=_revision(repo_id)))
     return [(f.path, f.size) for f in files_info
             if getattr(f, 'size', None) is not None]
 
@@ -63,18 +64,20 @@ def _files_to_download(repo_id):
 def load_model(model_name, device="cpu", compute_type="int8"):
     """Load an already-downloaded model, Whisper or Parakeet.
 
-    Parakeet always runs on the CPU (see parakeet_engine), so *device* and
-    *compute_type* only apply to Whisper.
+    Parakeet loads here only for the processor (on the graphics card it is
+    parakeet_gpu's), so *device* and *compute_type* only apply to Whisper.
     """
     if is_parakeet(model_name):
         return load_parakeet_model()
+    return whisper_model(model_name, device=device, compute_type=compute_type,
+                         cpu_threads=os.cpu_count() or 4)
+
+
+def whisper_model(model_name, **options):
+    """faster-whisper's WhisperModel for *model_name*, from the commit
+    TuxTalk downloads it at (hub_pins), with *options*."""
     from faster_whisper import WhisperModel
-    return WhisperModel(
-        model_name,
-        device=device,
-        compute_type=compute_type,
-        cpu_threads=os.cpu_count() or 4,
-    )
+    return WhisperModel(model_name, revision=_revision(MODEL_REPOS.get(model_name)), **options)
 
 
 # Hugging Face repository for each Whisper model. Parakeet comes from
@@ -111,9 +114,8 @@ def _loads_on_cpu(model_name):
     """Whether a cached Whisper model loads on the processor: after a load has
     failed, this tells broken files from a device or driver problem."""
     try:
-        from faster_whisper import WhisperModel
-        model = WhisperModel(model_name, device="cpu", compute_type="int8",
-                             local_files_only=True)
+        model = whisper_model(model_name, device="cpu", compute_type="int8",
+                              local_files_only=True)
         del model
         return True
     except Exception as e:      # any failure here means it doesn't load
@@ -127,7 +129,7 @@ def is_model_cached_fast(model_name):
     cancelled partway reports False. Safe to call on every Apply/OK click."""
     if is_parakeet(model_name):
         return _parakeet_cached_dir() is not None
-    from .download_utils import cached_hub_snapshot
+    from .download_utils import cached_hub_snapshot, check_owed
     repo_id = MODEL_REPOS.get(model_name)
     snapshot_path = cached_hub_snapshot(repo_id) if repo_id else None
     if snapshot_path is None:
@@ -135,10 +137,13 @@ def is_model_cached_fast(model_name):
     # Offline, snapshot_download does not check completeness: it returns a
     # snapshot holding only config.json just as happily. hf_hub_download
     # links a file into the snapshot only once it has fully downloaded, so
-    # the presence of the files faster-whisper loads means they are complete.
+    # the presence of the files faster-whisper loads means they are complete,
+    # unless the check of their checksum is still owed.
     def has(name):
-        return os.path.isfile(os.path.join(snapshot_path, name))
-    return all(map(has, ESSENTIAL_MODEL_FILES)) and any(map(has, VOCABULARY_FILES))
+        return (os.path.isfile(os.path.join(snapshot_path, name))
+                and not check_owed(repo_id, name))
+    return (all(map(has, ESSENTIAL_MODEL_FILES)) and any(map(has, VOCABULARY_FILES))
+            and (model_name != "large-v3" or has(PREPROCESSOR_FILE)))
 
 
 def _failure_text(error):
@@ -186,7 +191,8 @@ def _disk_space_problem(repo, files, force=False, cancel_event=None):
         missing = list(files)
     else:
         missing = [(name, size) for name, size in files
-                   if not isinstance(try_to_load_from_cache(repo, name), str)]
+                   if not isinstance(try_to_load_from_cache(repo, name, revision=_revision(repo)),
+                                     str)]
     needed = sum(size for _, size in missing) * 1.1
     if not force and free and free < needed:
         needed -= _partial_bytes(HF_HUB_CACHE, repo, missing, cancel_event) * 1.1
@@ -236,7 +242,8 @@ def _current_etag(repo, name):
     from huggingface_hub import get_hf_file_metadata, hf_hub_url
     from huggingface_hub.constants import HF_HUB_ETAG_TIMEOUT
     try:
-        return get_hf_file_metadata(hf_hub_url(repo, name), timeout=HF_HUB_ETAG_TIMEOUT).etag
+        return get_hf_file_metadata(hf_hub_url(repo, name, revision=_revision(repo)),
+                                    timeout=HF_HUB_ETAG_TIMEOUT).etag
     except Exception as e:
         logger.info(f"Couldn't look up {name} for a partial download: {e}")
         return None
@@ -262,7 +269,6 @@ def _fetch_files(repo, model_name, files, all_needed, progress_callback, cancel_
     from huggingface_hub import hf_hub_download
     from huggingface_hub.errors import RemoteEntryNotFoundError
     import tqdm as tqdm_lib
-    from .download_utils import with_retries
     total_bytes = sum(size for _, size in files)
     downloaded_bytes = [0]  # across all files
 
@@ -301,10 +307,11 @@ def _fetch_files(repo, model_name, files, all_needed, progress_callback, cancel_
             # A retried file counts its bytes once.
             downloaded_bytes[0] = bytes_before
             return hf_hub_download(repo_id=repo, filename=filename, tqdm_class=ProgressTqdm,
-                                   force_download=force)
+                                   force_download=force, revision=_revision(repo))
 
         try:
-            with_retries(fetch, filename, cancel_event, give_up_on=(RemoteEntryNotFoundError,))
+            _fetch_and_check(repo, filename, fetch, cancel_event, report,
+                             arrived=lambda before=bytes_before: downloaded_bytes[0] != before)
             # No progress means the file was already cached; count it anyway.
             if downloaded_bytes[0] == bytes_before:
                 downloaded_bytes[0] += file_size
@@ -341,6 +348,57 @@ def _fetch_files(repo, model_name, files, all_needed, progress_callback, cancel_
     return True
 
 
+def _fetch_and_check(repo, filename, fetch, cancel_event, report, arrived):
+    """*fetch*() *filename* from *repo*, with retries, then check its SHA256
+    (_check_download) if hub_pins names one and the file *arrived*() now or
+    its check is owed from an earlier try cut short: its file may be in the
+    cache since, or arrive with no new bytes when it's resumed. Raises what
+    the fetch or the check raised."""
+    from huggingface_hub.errors import RemoteEntryNotFoundError
+    from .download_utils import check_owed, set_check_owed, with_retries
+    pinned = (repo, filename) in _HUB_SHA256
+    owed = pinned and check_owed(repo, filename)
+    if pinned:
+        set_check_owed(repo, filename, True)
+    path = with_retries(fetch, filename, cancel_event, give_up_on=(RemoteEntryNotFoundError,))
+    if pinned and (arrived() or owed):
+        report(f"Checking {filename}...")
+        _check_download(repo, filename, path, cancel_event)
+    if pinned:
+        set_check_owed(repo, filename, False)
+
+
+class ChecksumMismatch(Exception):
+    """A downloaded file isn't the one its SHA256 in hub_pins names."""
+
+
+def _check_download(repo, filename, path, cancel_event):
+    """Raise ChecksumMismatch when *path*, *filename* fetched from *repo*,
+    isn't the file hub_pins' SHA256 names, after taking it out of the cache,
+    so that it is never loaded and the next try fetches it again. A check
+    cut short (InterruptedError, OSError) leaves the file and its owed mark
+    (download_utils.set_check_owed), so it isn't loaded either."""
+    import hashlib
+    from .download_utils import set_check_owed
+    expected = _HUB_SHA256[(repo, filename)]
+    sha = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            if cancel_event.is_set():
+                raise InterruptedError("Download cancelled")
+            sha.update(chunk)
+    if sha.hexdigest() == expected:
+        return
+    # The same path twice without symlinks (HF_HUB_DISABLE_SYMLINKS).
+    for gone in dict.fromkeys((path, os.path.realpath(path))):
+        try:
+            os.remove(gone)
+        except OSError as e:
+            logger.warning(f"Couldn't remove the damaged download {gone}: {e}")
+    set_check_owed(repo, filename, False)
+    raise ChecksumMismatch(f"{filename} arrived damaged (its checksum doesn't match)")
+
+
 def make_model_download_func(model_name, repo_id=None, only_files=None, force=False):
     """
     Build a DownloadTask function that fetches model files into the Hugging Face
@@ -373,10 +431,7 @@ def make_model_download_func(model_name, repo_id=None, only_files=None, force=Fa
             return False
         try:
             from huggingface_hub.utils import disable_progress_bars
-            from .download_utils import mend_damaged_ref
             disable_progress_bars()
-            # Before the disk-space check, which reads the record too.
-            mend_damaged_ref(repo)
             progress_callback("Getting file list...", 1)
             files = _listed_files(repo, model_name, only_files)
             if not files:
@@ -468,8 +523,8 @@ def download_parakeet_update(device, parent=None):
 
 
 class BrokenModelFiles(Exception):
-    """A downloaded model won't load, and the caller can't show the download
-    dialogs to fetch it again."""
+    """A downloaded model won't load, and downloading it again here isn't
+    possible (no dialogs on this thread) or wouldn't help (Parakeet)."""
 
 
 def download_model_with_progress(model_name, device="cpu", compute_type="int8", parent=None,
@@ -500,10 +555,13 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
             return load_model(model_name, device=device, compute_type=compute_type)
         except Exception as e:
             # Broken files are downloaded again; a device problem (the files
-            # load on the processor) is the caller's to report.
-            if is_parakeet(model_name) or _loads_on_cpu(model_name):
+            # load on the processor) is the caller's to report. Parakeet's
+            # files were hash-checked as they arrived, and a download skips
+            # files that are there, so fetching again can't mend them: the
+            # caller falls back to another model.
+            if not is_parakeet(model_name) and _loads_on_cpu(model_name):
                 raise
-            if not dialogs:
+            if not dialogs or is_parakeet(model_name):
                 raise BrokenModelFiles(
                     f"{model_name} looked downloaded but won't load: {e}") from e
             # Afresh (force_download below): the cache's copy is what won't load.

@@ -219,7 +219,7 @@ def reload_commands() -> None:
     global commands
     try:
         fresh = load_custom_commands()
-        if config_module._commands_read_failed:
+        if config_module.custom_commands_unreadable():
             logger.warning("Custom commands unreadable, keeping the current ones")
             return
         commands = fresh

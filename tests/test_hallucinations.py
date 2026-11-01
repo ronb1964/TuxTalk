@@ -1,9 +1,8 @@
 """Whisper invents phrases during silence; stripping them must not eat real words.
 
-The YouTube outro list is stripped from the end of *any* transcription, on the
-grounds that nobody dictates "like and subscribe". That reasoning does not hold
-for a bare verb, nor for sign-offs people really say, which are only stripped
-when Whisper reports the audio was probably not speech.
+YouTube outros and sign-offs are only stripped when Whisper reports the audio
+was probably not speech: people do say "please do not hit the bell" and "thanks
+for watching", and a bare "subscribe" is an ordinary verb.
 """
 
 from tuxtalk import hallucinations
@@ -27,26 +26,33 @@ def test_subscribe_mid_sentence_survives():
     assert hallucinations.strip(text, 0.0) == text
 
 
-# --- genuine YouTube outros are still stripped ------------------------------
+def test_an_outro_said_in_a_real_sentence_is_kept():
+    """Whisper heard speech, so the words were said: cutting "hit the bell"
+    turned a warning into "Please do not."."""
+    for text in ("Please do not hit the bell.", "The sign says please subscribe."):
+        assert hallucinations.strip(text, 0.0) == text
+
+
+# --- YouTube outros invented from silence are stripped ------------------------
 
 def test_like_and_subscribe_is_still_stripped():
-    out = hallucinations.strip("here is my point like and subscribe", 0.0)
+    out = hallucinations.strip("here is my point like and subscribe", 0.9)
     assert "subscribe" not in out
     assert out.strip() == "here is my point"
 
 
 def test_please_subscribe_is_still_stripped():
-    out = hallucinations.strip("here is my point please subscribe", 0.0)
+    out = hallucinations.strip("here is my point please subscribe", 0.9)
     assert out.strip() == "here is my point"
 
 
 def test_dont_forget_to_subscribe_is_still_stripped():
-    out = hallucinations.strip("here is my point don't forget to subscribe", 0.0)
+    out = hallucinations.strip("here is my point don't forget to subscribe", 0.9)
     assert out.strip() == "here is my point"
 
 
 def test_a_whole_text_outro_is_still_dropped():
-    assert hallucinations.strip("Like and subscribe.", 0.0) == ""
+    assert hallucinations.strip("Like and subscribe.", 0.7) == ""
 
 
 # --- sign-offs people really dictate ----------------------------------------
@@ -81,14 +87,14 @@ def test_a_sign_off_appended_to_speech_in_silence_is_stripped():
 def test_stripping_keeps_the_sentences_own_closing_mark():
     """The period belongs to the sentence, not to the phrase that was cut."""
     text = "We shipped the update to every user on Tuesday, like and subscribe."
-    assert hallucinations.strip(text, 0.0) == "We shipped the update to every user on Tuesday."
+    assert hallucinations.strip(text, 0.9) == "We shipped the update to every user on Tuesday."
 
 
 def test_the_cut_lands_in_the_right_place_after_a_dotted_capital_i():
     """"İ".lower() is two characters, so an index found in a lower-cased copy
     would point past the phrase in the original and cut real words."""
     text = "İstanbul İzmir İzmit İnegöl like and subscribe"
-    assert hallucinations.strip(text, 0.0) == "İstanbul İzmir İzmit İnegöl"
+    assert hallucinations.strip(text, 0.9) == "İstanbul İzmir İzmit İnegöl"
 
 
 # --- the whole-text and trailing tiers --------------------------------------
@@ -110,5 +116,5 @@ def test_spaces_trimmed_off_a_dictation_arent_logged_as_a_hallucination(caplog):
     with caplog.at_level("INFO", logger="tuxtalk.app"):
         assert engine._strip_hallucinations(" Hello there. ") == "Hello there."
         assert "Stripped a hallucination" not in caplog.text
-        engine._strip_hallucinations("Hello there. Like and subscribe.")
+        engine._strip_hallucinations("Hello there. Like and subscribe.", 0.9)
     assert "Stripped a hallucination" in caplog.text

@@ -66,8 +66,8 @@ def transcribe(audio_f32, language: str | None) -> str | None:
 def _transcribe_vulkan(engine, audio_f32, language, limit_to, words_prompt, started):
     """transcribe() on whisper.cpp's Vulkan engine."""
     from . import custom_words
-    raw, _no_speech = engine.transcribe(audio_f32, language, prompt=words_prompt or None,
-                                        limit_to=limit_to)
+    raw = engine.transcribe(audio_f32, language, prompt=words_prompt or None,
+                            limit_to=limit_to)
     logger.info(f"TIMING: Transcription completed in {time.time() - started:.2f}s (Vulkan GPU)")
     logger.info(f"Raw transcription (Vulkan GPU): {live.loggable(raw)}")
     # whisper.cpp's no-speech score isn't reliable (0.90 on clear speech,
@@ -90,8 +90,9 @@ def _transcribe_parakeet(engine, audio_f32, started):
     Vulkan engine, a recording with nobody talking counts as no speech, and
     a filler alone is dropped. Your Words steer its decoder (parakeet_bias.py).
     """
-    from .parakeet_gpu import ParakeetGpuModel, _steer
-    _steer(engine, live.words)
+    from .parakeet_engine import steer
+    from .parakeet_gpu import ParakeetGpuModel
+    steer(engine, live.words)
     raw = engine.recognize(audio_f32)
     where = " on GPU" if isinstance(engine, ParakeetGpuModel) else ""
     logger.info(f"TIMING: Transcription completed in {time.time() - started:.2f}s "
@@ -102,6 +103,12 @@ def _transcribe_parakeet(engine, audio_f32, started):
 
 
 # faster-whisper's decoding options for dictation.
+# Whisper can get stuck repeating one phrase many times in a row. A mild
+# penalty plus n-gram blocking breaks the loop without changing normal
+# decoding. Transcribe a File uses them too: its 30 s pieces are where the
+# loops happen most.
+REPETITION_GUARDS = dict(repetition_penalty=1.1, no_repeat_ngram_size=5)
+
 WHISPER_OPTIONS = dict(
     beam_size=5,
     condition_on_previous_text=True,
@@ -109,11 +116,7 @@ WHISPER_OPTIONS = dict(
     # Word-level timestamps strengthen Whisper's long-form seek logic,
     # preventing dropped words at pause boundaries.
     word_timestamps=True,
-    # Repetition-loop guards: Whisper can get stuck repeating one phrase
-    # many times in a row. A mild penalty plus n-gram blocking breaks the
-    # loop without changing normal decoding.
-    repetition_penalty=1.1,
-    no_repeat_ngram_size=5,
+    **REPETITION_GUARDS,
     # vad_filter is off: Silero VAD trims speech onsets at segment
     # boundaries (especially the start of recordings and after sentence
     # pauses), causing leading words to vanish from raw Whisper output.

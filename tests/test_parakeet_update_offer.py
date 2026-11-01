@@ -77,7 +77,7 @@ def disk(tmp_path, monkeypatch):
     old = tmp_path / "hf"
     old.mkdir()
     monkeypatch.setattr("huggingface_hub.hf_hub_download",
-                        lambda repo, name, local_files_only: str(old / name))
+                        lambda repo, name, local_files_only, **k: str(old / name))
     monkeypatch.setattr("tuxtalk.whisper_vulkan.is_engine_installed", lambda m=None: True)
 
     def give_ultra(device):

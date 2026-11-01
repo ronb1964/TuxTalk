@@ -393,6 +393,7 @@ def _engine(kind, monkeypatch):
         engine = whisper_vulkan.VulkanWhisperModel.__new__(
             whisper_vulkan.VulkanWhisperModel)
         engine._lock, engine._proc, engine._port = threading.RLock(), running, 1
+        engine._path = "/route"
         reply = json.dumps({"segments": [{"text": heard, "no_speech_prob": 0.0}]}).encode()
         monkeypatch.setattr(whisper_vulkan.engine_process, "open_local",
                             lambda request, timeout: io.BytesIO(reply))
