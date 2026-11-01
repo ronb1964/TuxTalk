@@ -8,7 +8,8 @@ do. The CI also runs on Ubuntu 22.04's Python 3.10.
 import pathlib
 import re
 
-SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tuxtalk"
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+SRC = ROOT / "src" / "tuxtalk"
 
 
 def test_no_module_imports_tomllib_without_a_fallback():
@@ -19,3 +20,13 @@ def test_no_module_imports_tomllib_without_a_fallback():
     assert not offenders, (
         f"{offenders} import tomllib, which Python 3.10 (the AppImage's) doesn't "
         f"have. Use config._parse_toml_text or config._load_toml_file.")
+
+
+def test_no_test_file_imports_tomllib_without_a_fallback():
+    """CI's Ubuntu 22.04 job collects the tests with Python 3.10 too: one
+    bare import stops the whole run there. (tests/vm runs on the host.)"""
+    offenders = [p.name for p in (ROOT / "tests").glob("*.py")
+                 if re.search(r"^(import tomllib|from tomllib)", p.read_text(), re.M)]
+    assert not offenders, (
+        f"{offenders} import tomllib, which Python 3.10 doesn't have. Use "
+        f"config._parse_toml_text, or import it in a try with toml as the fallback.")
