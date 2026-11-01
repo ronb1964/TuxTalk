@@ -3,7 +3,10 @@ reboot (an extension only loads at login). The reboot also checks that
 TuxTalk and the hotkey helper start by themselves. With the extension the
 checks that need to know the focused window run again.
 """
+import json
+import re
 import time
+from pathlib import Path
 
 from checks_dictation import type_in_terminal
 from checks_prefs import open_fold
@@ -13,6 +16,7 @@ from vmlib import REMOTE
 
 PREFS = "TuxTalk Preferences"
 UUID = "talktype@ronb1964.github.io"
+LOCAL_EXTENSION = Path(__file__).resolve().parents[2] / "gnome-extension" / UUID
 SECTION = "With the GNOME extension"
 
 
@@ -31,12 +35,23 @@ def ext_install(run):
     run.vm.ui("click", "button", "Cancel", PREFS, timeout=5)
     if done is None:
         raise Abort("the extension didn't install (no “Extension Installed Successfully!”)")
-    metadata = f"~/.local/share/gnome-shell/extensions/{UUID}/metadata.json"
-    version = run.vm.ssh(f"grep -o '\"version\": *[0-9]*' {metadata}", check=False).stdout.strip()
+    folder = f"~/.local/share/gnome-shell/extensions/{UUID}"
+    found = re.search(r'"version": *(\d+)', run.vm.read(f"{folder}/metadata.json"))
+    published = int(found.group(1)) if found else None
     # Preferences downloads it from the newest GitHub release, so before a
-    # release goes out this is the previous version's extension.
-    return Outcome("pass", f"“Extension Installed Successfully!” ({version or 'version unknown'}, "
-                   "from the newest published release)", screenshot=shot)
+    # release goes out that's the previous version's extension. The one this
+    # release ships goes in its place before the reboot loads it, so the
+    # checks after it test what users will get.
+    ours = json.loads((LOCAL_EXTENSION / "metadata.json").read_text())["version"]
+    if published is None or published < ours:
+        for part in LOCAL_EXTENSION.iterdir():
+            # scp takes a path without "~/" from the home folder.
+            run.vm.put(part, f"{folder[2:]}/{part.name}")
+        return Outcome("pass", f"“Extension Installed Successfully!” (version {published}, from "
+                       f"the newest published release); replaced by this release's version "
+                       f"{ours} before the reboot", screenshot=shot)
+    return Outcome("pass", f"“Extension Installed Successfully!” (version {published}, from the "
+                   "newest published release)", screenshot=shot)
 
 
 @check(SECTION, "ext_after_reboot",

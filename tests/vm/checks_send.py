@@ -10,6 +10,21 @@ from vmlib import REMOTE
 PLAYER_LOG = f"~/{REMOTE}/player.txt"
 
 
+def focus_unknown(run):
+    """Why TuxTalk can't tell which window has the focus here, or None.
+    There an automatic Enter isn't sent and no countdown runs, by design:
+    COSMIC names only the app, and GNOME says nothing without its extension."""
+    if "cosmic" in run.vm.spec.tags:
+        return "COSMIC names only the focused app, not its window"
+    return run.window_blind()
+
+
+def _no_countdown(run):
+    """The Outcome for a countdown check where focus_unknown() applies."""
+    return Outcome("skip", f"No countdown here, by design: {focus_unknown(run)}. "
+                   "“Sends after the wait” checks that nothing is sent.")
+
+
 def say_then_wait_for_countdown(run, phrase_id):
     """Dictate with the send countdown on; returns the log mark once the
     countdown has started, or None if it never did."""
@@ -23,6 +38,8 @@ def say_then_wait_for_countdown(run, phrase_id):
 def send_plain(run):
     run.set_config(press_enter_after=True, press_enter_delay=2.0)
     run.sink_ready()
+    if focus_unknown(run):
+        return _not_sent_unknown(run)
     mark = say_then_wait_for_countdown(run, "send_plain")
     if mark is None:
         return Outcome("fail", "the countdown never started (no “Sending in” in the log)")
@@ -41,9 +58,31 @@ def send_plain(run):
     return outcome
 
 
+def _not_sent_unknown(run):
+    """Dictate where the focused window isn't known: typed, then not sent,
+    with a space after it for the next dictation."""
+    _t, _h, mark = run.say("send_plain", wait=False)
+    run.wait_log(mark, "Not sent", "Sending in", timeout=25)
+    time.sleep(3.5)     # past the 2 s a countdown would have taken
+    typed, log = run.sink_text(), run.log_since(mark)
+    heard = heard_in(log)
+    problems = []
+    if typed.endswith("\n"):
+        problems.append("it was sent")
+    elif not typed.endswith(" "):
+        problems.append("no space after the words for the next dictation")
+    if "Not sent: which window has the focus isn't known" not in log:
+        problems.append("no “Not sent: which window has the focus isn't known” in the log")
+    detail = "; ".join(problems) or ("Typed and not sent, by design; log: “Not sent: which "
+                                     "window has the focus isn't known”")
+    return Outcome("fail" if problems else "pass", detail, typed=typed, heard=heard)
+
+
 def _held(run, phrase_id, key, label):
     """Dictate, then tap *key* during the wait: nothing sent, no recording
     started, and the space left off before the Enter typed after all."""
+    if focus_unknown(run):
+        return _no_countdown(run)
     run.sink_ready()
     mark = say_then_wait_for_countdown(run, phrase_id)
     if mark is None:
@@ -81,6 +120,8 @@ def send_hold_f9(run):
 
 @check("Send automatically", "send_more", "Hold F8 during the wait adds more, then sends")
 def send_more(run):
+    if focus_unknown(run):
+        return _no_countdown(run)
     run.sink_ready()
     mark = say_then_wait_for_countdown(run, "first_part")
     if mark is None:
@@ -140,7 +181,7 @@ def switch_during_countdown(run, shot_name):
 
 @check("Send automatically", "send_switch", "Switching windows during the wait sends nothing")
 def send_switch(run):
-    blind = run.window_blind()
+    blind = focus_unknown(run)
     outcome = Outcome("skip", blind) if blind else switch_during_countdown(run, "send-switch")
     run.set_config(press_enter_after=False)
     return outcome
