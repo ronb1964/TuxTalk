@@ -25,8 +25,8 @@ MANUAL = [
     ("No systemd", "The fallback to the input group on a system without systemd."),
     ("Real apps", "A YouTube video in Brave and a Discord call for pause and sounds-down. The "
      "run uses a pretend player and a test tone, which test TuxTalk's side only."),
-    ("AI features", "AI self-corrections, voice editing, “edit that”, select and move by voice "
-     "and Type at pause. Not automated yet (the AI download is 1.1 GB)."),
+    ("AI features", "“edit that” and select and move by voice. Self-corrections, voice "
+     "editing and Type at pause's question marks are checked above."),
     ("Transcribe a File and Backup", "These use the desktop's file dialog. Not automated yet."),
     ("Feel", "Whether it feels quick, the indicator looks right, and the wording reads well."),
 ]
