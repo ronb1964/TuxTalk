@@ -226,7 +226,8 @@ def test_a_word_said_before_the_second_tap_is_kept(monkeypatch):
 # With speakers near the microphone, what it records before the second tap
 # holds the start beep. Where in the recording is never known for sure: an
 # output or microphone can be slower than it reports (a Bluetooth speaker,
-# the sound server's own buffers), so the beep is told apart by its pitch.
+# the sound server's own buffers), so the beep must never be speech to the
+# voice detector, wherever it falls.
 # How these limits were measured, and where the recorded words come from:
 # tests/data/README.md.
 
@@ -326,9 +327,7 @@ def test_the_start_beep_is_not_a_word_wherever_it_falls_in_a_block(monkeypatch, 
         assert _nothing_said(monkeypatch, heard), f"the beep {ms} ms into a block"
 
 
-# Rooms from silent to just under speaking level (int16 RMS 500), where the
-# beep's limits were measured; from about 480 up the room itself counts as a
-# word (silence._loud_seconds).
+# Rooms from silent to just under speaking level (int16 RMS 500).
 ROOMS = {"silent room": 6.0, "quiet room": 60.0, "noisy room": 300.0, "loud room": 450.0}
 
 
@@ -616,6 +615,17 @@ def test_a_short_sign_off_said_aloud_is_speech():
     assert not has_no_speech(f32(audio), SR)
 
 
+@pytest.mark.parametrize("word", ["yes", "ask", "not"])
+@pytest.mark.parametrize("gain", [1.0, 0.1], ids=["spoken", "spoken softly"])
+def test_one_quick_word_said_alone_is_speech(word, gain):
+    """"Yes." alone, or "Thanks." (0.4 to 0.5 s of voice): taken for nothing
+    said, a word like it is stripped as one the engine invented. The voice
+    detector counts only its surest frames, against 0.3 s."""
+    said = _yes(gain) if word == "yes" else _real_word(word, gain)
+    audio = np.concatenate([noise(0.5), said, noise(1.0)])
+    assert not has_no_speech(f32(audio), SR)
+
+
 def test_a_quiet_microphone_saying_a_sign_off_is_speech():
     audio = np.concatenate([noise(0.5, 15), speech(1.0, level=250, noise_level=15),
                             noise(1.5, 15)])
@@ -687,13 +697,10 @@ def test_holds_nest_and_release_never_goes_below_zero():
 
 
 # --- A noisy room -------------------------------------------------------------
-# With a clothes dryer running nearby hands-free never stopped: its thumps
-# counted as talking, and steady noise louder than speech's threshold could
-# never be learned. Steady noise well under the voice is learned now, three
-# seconds after the last word, and its bumps pause the wait. Noise close to
-# the voice is left alone, as learning it cut people off during quiet words.
-# How the rules were measured on recorded speech: NoiseFloor and
-# SilenceDetector.
+# Judged by loudness, hands-free never stopped next to a clothes dryer or a
+# gusty fan: each thump or gust counted as talking. Noise isn't speech to the
+# voice detector, however loud or bumpy, so the wait runs through it, and a
+# voice softer than the noise is talking all the same.
 
 def rumble(seconds, level):
     """A dryer: a drum's rumble, mostly below 200 Hz, with a 100 ms thump,
@@ -739,9 +746,9 @@ def _three_words(pause_s=1.2):
 
 @pytest.mark.parametrize("room", ROOM_NOISES)
 def test_in_a_dryer_or_a_fan_it_stops_by_itself_after_the_last_word(room):
-    """Each thump or gust used to start the wait over, for good. Now it stops
-    once the noise is learned, never before the last word, at most the
-    three seconds that takes late (plus a thump or two)."""
+    """Each thump or gust started the wait over, for good. Not speech, they
+    let it stop after the last word: never before it, and within three
+    seconds of the wait."""
     said = _three_words()
     at, det = run(_in(room, np.concatenate([said, np.zeros(8 * SR)])), 1.5)
     assert at is not None, "it never stopped"
@@ -750,9 +757,10 @@ def test_in_a_dryer_or_a_fan_it_stops_by_itself_after_the_last_word(room):
 
 
 @pytest.mark.parametrize("when", ["running from the start", "switched on while talking"])
-def test_steady_noise_louder_than_speech_s_threshold_becomes_the_room(when):
-    """Every block of the hum counts as speech over the floor learned before,
-    so only the steady rule can learn it: then the recording stops."""
+def test_a_loud_hum_doesnt_keep_it_from_stopping(when):
+    """A hum there from the start, or switched on while talking, is louder
+    than any room: it still stops after the last word, and trims no more
+    than the quiet after it."""
     talk = speech(3.0, level=20000.0)
     before = np.zeros(int(1.5 * SR)) if when == "switched on while talking" else hum(1.5, 1000)
     audio = np.concatenate([np.zeros(int(0.5 * SR)), talk, np.zeros(8 * SR)])
@@ -760,22 +768,16 @@ def test_steady_noise_louder_than_speech_s_threshold_becomes_the_room(when):
         :len(audio) - int(0.5 * SR)]
     at, det = run(np.clip(audio, -32768, 32767).astype(np.int16), 1.5)
     assert at is not None, "it never stopped"
-    assert 3.5 + 1.5 - 0.1 <= at <= 3.5 + 3.0 + 1.0     # learned 3 s after the last word
-    assert det.tail_to_trim() <= int(1.5 * SR), "it trimmed what it took back as noise"
+    assert 3.5 + 1.5 - 0.1 <= at <= 3.5 + 3.0 + 1.0
+    assert det.tail_to_trim() <= int(1.5 * SR), "it trimmed more than the quiet after the words"
 
 
-def test_talking_evenly_is_not_taken_for_the_room():
-    """A voice held loud, its syllables swinging by only 6 dB (2.5 then 1.5
-    times its quiet level, every 50 ms) for three seconds, after a quiet
-    start: the room stays quiet, so it neither stops while it talks nor
-    trims any of it."""
-    frames = [np.full(800, 100.0)] * 10 + [
-        np.sin(2 * np.pi * 440 * np.arange(800) / SR) * np.sqrt(2) * (4000 if i % 2 else 1000)
-        for i in range(20)] + [
-        np.sin(2 * np.pi * 440 * np.arange(800) / SR) * np.sqrt(2) * (1500 if i % 2 else 1000)
-        for i in range(120)]
-    at, det = run(np.concatenate(frames).astype(np.int16), 1.0)
-    assert at is None
+def test_talking_on_for_longer_than_the_room_is_measured_never_stops_it():
+    """Eight seconds of talking with a 1 s wait, after a quiet start: longer
+    than the 5 s the room's loudness is measured over, so the voice fills
+    it. It neither stops while the voice goes on nor trims any of it."""
+    at, det = run(np.concatenate([noise(0.5), speech(8.0)]), 1.0)
+    assert det.armed and at is None
     assert det.tail_to_trim() == 0
 
 
@@ -791,19 +793,18 @@ def test_in_a_quiet_room_a_short_first_syllable_starts_the_wait_over():
 
 
 def test_with_a_short_wait_a_short_sound_still_starts_it_over():
-    """A bump is at most a tenth of the wait: with 0.5 s, the start of a quiet
-    word (100 ms) is speech, and a 0.3 s pause each side of it is no stop."""
+    """With a 0.5 s wait, a short sound in the pause (a quiet word's start,
+    100 ms) puts the stop off: a 0.3 s pause each side of it is no stop."""
     det = SilenceDetector(0.5, SR)
     sound = hum(0.1, 1500)
     audio = np.concatenate([speech(1.0), hum(0.3, 60), sound, hum(0.3, 60)])
     assert _feed(det, audio.astype(np.int16)) is None
 
 
-def test_noise_learned_right_after_a_phrase_is_typed_still_gives_the_full_wait():
+def test_after_a_phrase_is_typed_a_loud_hum_still_gives_the_full_wait():
     """Type at pause: the quiet while a phrase was typing (hold) is not the
-    user finished. A hum learned a second after release() mustn't count it,
-    so there is still the whole wait to read the phrase and say "press
-    enter"."""
+    user finished, in a loud hum too: after release() there is still the
+    whole wait to read the phrase and say "press enter"."""
     det = SilenceDetector(1.5, SR)
     assert _feed(det, speech(0.5, level=20000.0)) is None
     det.hold()
@@ -815,9 +816,8 @@ def test_noise_learned_right_after_a_phrase_is_typed_still_gives_the_full_wait()
 
 def test_a_pause_nearly_the_wait_then_a_short_first_syllable_in_a_quiet_room():
     """A 3 s wait, a 2.7 s pause, then a sentence starting with one short
-    syllable and soft words. The learned room took the end of the last
-    sentence for a bump of the room, then that syllable too, and the
-    recording ended 0.3 s into the sentence."""
+    syllable and soft words: it stops only after that sentence, where by
+    loudness it ended 0.3 s into it."""
     said = np.concatenate([speech(1.0), noise(2.7), speech(0.04), speech(0.5, level=250),
                            speech(2.0)])
     at, _ = run(np.concatenate([said, noise(4.0)]), 3.0)
@@ -832,8 +832,8 @@ def _stepping_hum(seconds, low=500.0, high=725.0):
 
 
 def test_when_the_dryer_stops_a_soft_voice_counts_again():
-    """A dryer learned as the room, then switched off: a voice softer than
-    the dryer was is still talking, not the quiet after it."""
+    """A loud hum, then switched off: a voice softer than the hum was is
+    still talking, not the quiet after it."""
     det = SilenceDetector(5.0, SR)
     dryer = np.clip(np.concatenate([speech(0.5, level=20000.0), hum(3.5, 1000)]),
                     -32768, 32767).astype(np.int16)
@@ -938,27 +938,11 @@ def test_steady_noise_20_db_under_the_voice_is_noisy_and_30_db_under_is_not(unde
     assert (silence.speech_over_room_db(take, SR) < silence.NOISY_ROOM_DB) is noisy
 
 
-def test_a_voice_swinging_every_50_ms_isnt_learned_as_the_room():
-    """A loud opening, then a voice alternating between two
-    levels 3.5 dB apart every 50 ms. Its 50 ms frames smooth that out and
-    look as steady as a fan; its blocks don't. Learned, it ended the
-    recording at 3.8 s while the voice went on to 7.5 s."""
-    t = np.arange(800) / SR
-
-    def frame(level):
-        return np.sin(2 * np.pi * 440 * t) * level * np.sqrt(2)
-    audio = np.concatenate([frame(100)] * 10 + [frame(1000 if i % 2 else 20000) for i in range(20)]
-                           + [frame(1000 if i % 2 else 1500) for i in range(120)])
-    at, _ = run(audio.astype(np.int16), 1.0)
-    assert at is None or at >= 7.5
-
-
-def test_a_word_in_the_window_keeps_a_quiet_room_from_turning_bumpy():
-    """A pause nearly the wait long, with a click in the middle of it: the
-    last sentence's tail, the click and the next sentence's first short
-    syllable put short sounds in every third of the window, and without
-    the word-length check the room was taken for bumpy. The next soft
-    words then ended the recording."""
+def test_a_click_in_a_long_pause_doesnt_end_the_soft_sentence_after_it():
+    """A pause nearly the wait long with a click in the middle of it, then a
+    sentence that starts with one short syllable and goes on softly: it
+    stops only after that sentence, where by loudness the soft words ended
+    the recording."""
     said = np.concatenate([speech(1.0), noise(1.3), speech(0.06), noise(1.3), speech(0.04),
                            speech(0.5, level=250), speech(2.0)])
     at, _ = run(np.concatenate([said, noise(4.0)]), 3.0)
