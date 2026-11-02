@@ -1,7 +1,9 @@
 """The fixed windows that loudness is judged over, and how loud a recording
-is against its room in them (RoomLoudness): hands-free auto-stop
-(silence.SilenceDetector), Type at pause (chunking.PauseDetector), and
-silence.py's checks of a whole recording.
+is against its room in them (RoomLoudness). The voice detector says what is
+speech; loudness says where a soft word it missed may still be: hands-free
+(silence.SilenceDetector) waits out a breath, Type at pause
+(chunking.PauseDetector) keeps a word's soft end with its phrase, and the
+microphone test finds a noisy room (silence.speech_over_room_db).
 
 A microphone sends blocks of whatever size its driver picks, about 6 ms on
 some onboard inputs. How steady a noise is, and how long a sound lasts, depend
@@ -14,14 +16,10 @@ import collections
 
 import numpy as np
 
-# The window's length. Every threshold and duration these decisions use was
-# measured with windows this long, so changing it means measuring them all
-# again: when hands-free stops and when Type at pause cuts a phrase; and
-# silence.py's whole-recording checks: a tap of the hold key with no word
-# in it, a word before a double-tap's second tap, a word in what is left
-# after Type at pause's last cut (has_a_word), nothing said, which the
-# engine's filter for invented phrases asks (has_no_speech), and a noisy
-# room in the mic test.
+# The window's length. Every loudness threshold and duration was measured
+# with windows this long, so changing it means measuring them all again:
+# the breath hands-free waits out, the soft word end Type at pause keeps,
+# and the noisy room in the mic test.
 WINDOW_S = 0.02
 
 
@@ -88,8 +86,7 @@ class RoomLoudness:
         self._hp_tail = np.zeros(self._hp_len - 1)
         self.window = window_length(self.sample_rate)
         self._pending = np.zeros(0)
-        self._levels = collections.deque()   # (clock, level) over ROOM_WINDOW_S
-        self._clock = 0.0
+        self._levels = collections.deque()   # (seconds measured, level) over ROOM_WINDOW_S
 
     def threshold(self) -> float:
         """The level (int16 RMS) from which a sound in this room right now
@@ -119,14 +116,14 @@ class RoomLoudness:
         self.level = level
         self.loudest = max(self.loudest, level)
         self.measured += self.window
-        self._clock += self.window / self.sample_rate
+        clock = self.measured / self.sample_rate
         if level >= 1.0:   # digital silence is a dropout, not the room
-            self._levels.append((self._clock, level))
-        while self._levels and self._levels[0][0] < self._clock - ROOM_WINDOW_S:
+            self._levels.append((clock, level))
+        while self._levels and self._levels[0][0] < clock - ROOM_WINDOW_S:
             self._levels.popleft()
         if self._levels:
             levels = [v for _, v in self._levels]
-            self.room = (min(levels) if self._clock < ROOM_START_S
+            self.room = (min(levels) if clock < ROOM_START_S
                          else float(np.percentile(levels, ROOM_PERCENTILE)))
         self.sounding = level >= self.threshold()
         return self.sounding

@@ -1,8 +1,8 @@
 """
-Whether, and when, someone is talking: hands-free auto-stop, judged by the
-voice detector, and from the loudness of 20 ms blocks of audio, an
-accidental tap of the hold key, a start beep the microphone picked up, a
-dead microphone, and a recording in which nobody talked.
+Whether, and when, someone is talking. The voice detector judges
+hands-free auto-stop, an accidental tap of the hold key with no word in it,
+and a recording in which nobody talked; the loudness of 20 ms windows
+judges a dead microphone and a noisy room in the microphone test.
 
 Hands-free auto-stop is used only for toggle recordings (tap the toggle key,
 talk, and it stops on its own). A hold recording already ends when the key
@@ -47,16 +47,15 @@ class SilenceDetector:
     """Feed it audio blocks as they arrive; it says when the speaker is done:
     quiet for silence_seconds, by the voice detector, after talking.
 
-    Measured on 125 recorded readers in seven noises (six of them recorded
-    rooms and a dryer) from 40 to 10 dB under the voice, with a 2 s wait and
-    sentences 1.2 s apart (.superpowers/voice-detector, sim_vad.py hf):
-    where the loudness rules it replaces never stopped by themselves (236
-    of 2,268 recordings, as next to a dryer or in a kitchen), it stops; noise
-    sent to the engine after the last word fell from up to 4 s to under 0.9
-    s; recordings losing speech from 37 to 8, which lost a soft last sound
-    under the noise. Stopping before the speaker was done stayed about as
-    often as before at waits of 2 and 3 s. Other people talking is speech to
-    it, so near a TV it doesn't stop, as before.
+    Simulated with 125 recorded readers in seven noises (six recorded rooms
+    and a dryer) from 40 to 10 dB under the voice, a 2 s wait and sentences
+    1.2 s apart, 2,268 recordings, against stopping by loudness: it stops
+    in the 236 that loudness never stopped (next to a dryer, in a kitchen);
+    noise sent to the engine after the last word is under 0.9 s, where
+    loudness sent up to 4 s; 8 recordings lose speech (a soft last sound
+    under the noise), against 37. It stops before the speaker is done about
+    as often, at waits of 2 and 3 s. Other people talking is speech to it,
+    so near a TV it doesn't stop by itself.
     """
 
     # With nothing said at all for this long, stop anyway (nothing_said is
@@ -191,7 +190,7 @@ class SilenceDetector:
 # measured on real everyday sounds (ESC-50, 40 each of coughs, sneezes,
 # breaths, laughs, claps, knocks, mouse clicks and typing) and real short words
 # (English and German, said normally and fast), at two levels in a quiet and a
-# noisy room (.superpowers/voice-detector/word_checks.py), every word counted;
+# noisy room, every word counted;
 # clicks, typing and claps 0 to 3% of the time, where loudness counted every
 # one; knocks and breaths 5 to 20%; laughs up to 40%; coughs 45 to 70% and
 # sneezes 52 to 80%, voiced as they are. TuxTalk's start beep, which the

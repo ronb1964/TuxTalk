@@ -10,9 +10,9 @@ run through the onnxruntime TuxTalk already ships for Parakeet. It judges 32 ms
 frames of 16 kHz audio and costs under 0.1 ms of one core per frame.
 
 Measured on 125 recorded readers in twelve noises, six of them recorded rooms,
-from 40 to 10 dB under the voice (.superpowers/voice-detector): it hears 97 to
-99% of speech at any voice level and takes under 0.3% of machine and room
-noise for speech down to 20 dB, 1 to 3% at 10 dB. Other people talking is
+from 40 to 10 dB under the voice: it hears 97 to 99% of speech at any voice
+level and takes under 0.3% of machine and room noise for speech down to
+20 dB, 1 to 3% at 10 dB. Other people talking is
 speech to it too; no detector of speech can tell the speaker from a TV.
 """
 import os

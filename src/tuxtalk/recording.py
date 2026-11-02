@@ -192,8 +192,7 @@ def _rest_holds_speech(chunker) -> bool:
     of them in a quiet room, about 10% in a noisy one. A sound the stop cut
     short is kept too, whatever it is: a word's first 30 ms is too short
     for the voice detector to judge."""
-    return (chunker.speech_time > 0.0 or chunker.speech_since_cut > 0.0
-            or chunker.sounding())
+    return chunker.speech_since_cut > 0.0 or chunker.sounding()
 
 
 def frames_f32(frames):
@@ -512,10 +511,11 @@ def _dropped_as_silent(rec, beeps_on: bool, notify_on: bool) -> bool:
     dead. Transcribing room noise can type a stray "Thank you." (see
     silence.is_speechless_tap).
 
-    Not once Type at pause has cut a phrase: it heard talking hands-free
-    didn't (a soft voice, under hands-free's threshold), so the recording
-    stops as usual, its phrases and the rest typed. Cancelled, the phrases
-    still queued and the audio since the last cut were thrown away."""
+    Not once Type at pause has cut a phrase: it heard talking, before the
+    double-tap's second tap perhaps, where hands-free's own detector began,
+    so the recording stops as usual, its phrases and the rest typed.
+    Cancelled, the phrases still queued and the audio since the last cut
+    were thrown away."""
     if rec.silence is None or not rec.silence.nothing_said or rec.chunks_submitted:
         return False
     rec.silence = None
