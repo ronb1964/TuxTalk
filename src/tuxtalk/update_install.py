@@ -173,7 +173,8 @@ def package_install_argv(install_type: str,
         if which("dnf"):
             return ["dnf", "install", "-y"]
         if which("zypper"):
-            return ["zypper", "--non-interactive", "install"]
+            # TuxTalk's .rpm isn't signed; the SHA256 check vouches for it.
+            return ["zypper", "--non-interactive", "install", "--allow-unsigned-rpm"]
         if which("rpm"):
             return ["rpm", "-U"]
     elif install_type == "deb":
@@ -186,24 +187,27 @@ def package_install_argv(install_type: str,
     return None
 
 
-# Run as root by bash, with the downloaded package, its SHA256 and the package
-# manager's command as arguments. The package waits in the user's own updates
-# folder, where any program running as the user could swap it after TuxTalk
-# checked it; so it's copied into a folder only root can write to, checked
-# again there, and that copy is what's installed. The folder can be read by
-# others, as apt hands a local package to its _apt user.
+# Run as root by bash, with the downloaded package, its SHA256 and size and the
+# package manager's command as arguments. The package waits in the user's own
+# updates folder, where any program running as the user could swap it after
+# TuxTalk checked it; so it's copied into a folder only root can write to,
+# checked again there, and that copy is what's installed. The copy reads a
+# plain file only (no symlink to a file the user may not read, no pipe that
+# never ends) and no more than the download's size. The folder opens to others
+# only once the copy is checked, as apt hands a local package to its _apt user.
 _ROOT_INSTALL_SCRIPT = r"""set -eu
-package=$1 sha256=$2
-shift 2
+package=$1 sha256=$2 size=$3
+shift 3
 folder=$(mktemp -d /var/tmp/tuxtalk-update.XXXXXXXX)
 trap 'rm -rf "$folder"' EXIT
-chmod 755 "$folder"
 copy=$folder/$(basename "$package")
-cp -- "$package" "$copy"
-if ! echo "$sha256  $copy" | sha256sum --check --status; then
+if ! dd if="$package" of="$copy" iflag=nofollow,nonblock,count_bytes count="$size" \
+        status=none 2>/dev/null \
+        || ! echo "$sha256  $copy" | sha256sum --check --status; then
     echo "The update changed after TuxTalk checked it, so it wasn't installed." >&2
     exit 3
 fi
+chmod 755 "$folder"
 "$@" "$copy" </dev/null
 """
 
@@ -250,7 +254,8 @@ def install_package_update(download: Downloaded, install_type: str) -> Tuple[boo
     manager = package_install_argv(install_type)
     if not manager:
         return (False, "No supported package manager was found to install the update.")
-    argv = ["pkexec", "/bin/bash", "-s", "--", package_path, download.sha256, *manager]
+    argv = ["pkexec", "/bin/bash", "-s", "--", package_path, download.sha256,
+            str(os.path.getsize(package_path)), *manager]
     # The installer writes to an unnamed file rather than a pipe: a pipe closes
     # when TuxTalk exits, and the installer's next write would then kill it
     # part-way through the transaction. The file disappears once both close it.
@@ -258,15 +263,18 @@ def install_package_update(download: Downloaded, install_type: str) -> Tuple[boo
         try:
             proc = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=output,
                                     stderr=subprocess.STDOUT)
-            # Small enough for the pipe to hold it whole, so bash reads it all
-            # even if TuxTalk exits while the password prompt is open.
-            proc.stdin.write(_ROOT_INSTALL_SCRIPT.encode())
-            proc.stdin.close()
         except FileNotFoundError:
             _remove_package(package_path)
             return (False, "pkexec (PolicyKit) is not available. Please install the "
                            "update through your package manager.")
 
+        try:
+            # Small enough for the pipe to hold it whole, so bash reads it all
+            # even if TuxTalk exits while the password prompt is open.
+            proc.stdin.write(_ROOT_INSTALL_SCRIPT.encode())
+            proc.stdin.close()
+        except BrokenPipeError:
+            pass        # pkexec already ended: its exit code says why
         try:
             proc.wait(timeout=PACKAGE_INSTALL_TIMEOUT_S)
         except subprocess.TimeoutExpired:

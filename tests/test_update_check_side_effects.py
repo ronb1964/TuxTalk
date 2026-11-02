@@ -79,7 +79,9 @@ class TestPackageInstallIsBounded:
                             lambda t: ["apt", "install", "-y"])
         monkeypatch.setattr(uc.subprocess, "Popen", lambda *a, **k: HungProc())
 
-        ok, message = uc.install_package_update(uc.Downloaded(str(tmp_path / "x.deb"), "a" * 64), "deb")
+        (tmp_path / "x.deb").write_bytes(b"package")
+        download = uc.Downloaded(str(tmp_path / "x.deb"), "a" * 64)
+        ok, message = uc.install_package_update(download, "deb")
 
         assert ok is False
         assert "still" in message.lower() or "taking" in message.lower()
@@ -97,7 +99,9 @@ class TestPackageInstallIsBounded:
                             lambda t: ["apt", "install", "-y"])
         monkeypatch.setattr(uc.subprocess, "Popen", lambda *a, **k: GoodProc())
 
-        ok, _ = uc.install_package_update(uc.Downloaded(str(tmp_path / "x.deb"), "a" * 64), "deb")
+        (tmp_path / "x.deb").write_bytes(b"package")
+        download = uc.Downloaded(str(tmp_path / "x.deb"), "a" * 64)
+        ok, _ = uc.install_package_update(download, "deb")
 
         assert ok is True
 
@@ -114,7 +118,9 @@ class TestPackageInstallIsBounded:
                             lambda t: ["apt", "install", "-y"])
         monkeypatch.setattr(uc.subprocess, "Popen", lambda *a, **k: CancelledProc())
 
-        ok, message = uc.install_package_update(uc.Downloaded(str(tmp_path / "x.deb"), "a" * 64), "deb")
+        (tmp_path / "x.deb").write_bytes(b"package")
+        download = uc.Downloaded(str(tmp_path / "x.deb"), "a" * 64)
+        ok, message = uc.install_package_update(download, "deb")
 
         assert ok is False
         assert "cancel" in message.lower()

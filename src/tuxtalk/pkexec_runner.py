@@ -1,5 +1,7 @@
-"""Running a command as root through pkexec, the one place TuxTalk waits
-for the password prompt and what follows it.
+"""Running a command as root through pkexec, waiting for the password
+prompt and what follows it, within a time limit. A .deb or .rpm update is
+the exception (update_install.install_package_update): a package manager
+must never be stopped part way, so it's left to finish however long it takes.
 
 The command is a fixed argv, never a shell string, so no shell ever parses
 it. A root script goes to bash on stdin, never through a file: any program

@@ -122,7 +122,7 @@ def test_install_argv_rpm_prefers_dnf():
 def test_install_argv_rpm_falls_back_to_zypper():
     which = lambda c: "/usr/bin/zypper" if c == "zypper" else None
     argv = package_install_argv("rpm", which=which)
-    assert argv[:2] == ["zypper", "--non-interactive"]
+    assert argv == ["zypper", "--non-interactive", "install", "--allow-unsigned-rpm"]
 
 
 def test_install_argv_deb_prefers_apt():

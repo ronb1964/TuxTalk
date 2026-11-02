@@ -24,6 +24,9 @@ from tuxtalk import desktop_launcher
 from tuxtalk import installation, update_install
 from tuxtalk import update_checker as uc
 
+# What a checked AppImage download hands on, for tests that skip the download.
+APPIMAGE_DOWNLOAD = update_install.Downloaded("/updates/TuxTalk.AppImage", "a" * 64)
+
 
 @pytest.fixture(autouse=True)
 def _never_exec(monkeypatch):
@@ -494,7 +497,7 @@ def test_tray_download_install_restarts_through_restart_app(monkeypatch, idle_qu
     from tuxtalk import tray
     steps = []
     monkeypatch.setattr(update_install, "download_update",
-                        lambda *a, **k: update_install.Downloaded("/updates/TuxTalk.AppImage", "a" * 64))
+                        lambda *a, **k: APPIMAGE_DOWNLOAD)
     monkeypatch.setattr(update_install, "install_appimage_update",
                         lambda path, progress: steps.append(
         ("install", path, threading.current_thread() is threading.main_thread()))
@@ -532,7 +535,7 @@ def test_the_tray_says_why_an_appimage_update_didnt_go_in(monkeypatch, idle_queu
     def raises(path, progress):
         raise OSError("disk full")
     monkeypatch.setattr(update_install, "download_update",
-                        lambda *a, **k: update_install.Downloaded("/updates/TuxTalk.AppImage", "a" * 64))
+                        lambda *a, **k: APPIMAGE_DOWNLOAD)
     monkeypatch.setattr(update_install, "install_appimage_update", raises)
     tray.DictationTray._download_update(stub, release)
     idle_queue(lambda: told)
@@ -631,7 +634,7 @@ def test_preferences_restarts_an_installed_appimage_through_the_tray(
         prefs_update, monkeypatch, idle_queue):
     monkeypatch.setattr(installation, "get_install_type", lambda: "appimage")
     monkeypatch.setattr(update_install, "download_update",
-                        lambda *a, **k: update_install.Downloaded("/updates/TuxTalk.AppImage", "a" * 64))
+                        lambda *a, **k: APPIMAGE_DOWNLOAD)
     monkeypatch.setattr(update_install, "install_appimage_update",
                         lambda path, progress: (True, ""))
     prefs_update._on_download_update_clicked(None)
@@ -710,8 +713,8 @@ def _without_pkexec(monkeypatch):
     The script's folder in /var/tmp is then this user's, and goes the same way."""
     import subprocess
     real_popen = subprocess.Popen
-    monkeypatch.setattr(uc.subprocess, "Popen",
-                        lambda argv, **kw: real_popen(argv[1:] if argv[0] == "pkexec" else argv, **kw))
+    monkeypatch.setattr(uc.subprocess, "Popen", lambda argv, **kw: real_popen(
+        argv[1:] if argv[0] == "pkexec" else argv, **kw))
 
 
 @pytest.mark.parametrize("returncode", [0, 1, 126])
@@ -804,17 +807,21 @@ def test_the_installer_output_does_not_go_through_a_pipe(tmp_path, monkeypatch):
             return 0
 
     def popen(argv, **kwargs):
-        seen.update(kwargs)
+        seen.update(kwargs, argv=argv)
         return Proc()
 
     monkeypatch.setattr(update_install, "package_install_argv",
                         lambda t: ["dpkg", "-i"])
     monkeypatch.setattr(uc.subprocess, "Popen", popen)
 
-    update_install.install_package_update(_checked(package), "deb")
+    download = _checked(package)
+    update_install.install_package_update(download, "deb")
 
     assert seen["stdout"] not in (subprocess.PIPE, None)
     assert seen["stderr"] == subprocess.STDOUT
+    # Root's script on stdin: the package, its checked SHA256 and size, then dpkg.
+    assert seen["argv"] == ["pkexec", "/bin/bash", "-s", "--", str(package), download.sha256,
+                            "7", "dpkg", "-i"]
 
 
 def test_a_failed_install_reports_the_installer_last_lines(tmp_path, monkeypatch):
@@ -863,6 +870,41 @@ def test_a_package_swapped_after_its_check_is_not_installed(tmp_path, monkeypatc
 
     assert not ok and "changed after TuxTalk checked it" in message
     assert not ran.exists()
+
+
+def test_a_package_swapped_for_a_link_is_never_read(tmp_path, monkeypatch):
+    """A link in its place could have root copy a file the user can't read,
+    or read /dev/zero forever. The copy refuses a link, whatever it points to."""
+    package = _package(tmp_path)
+    download = _checked(package)
+    elsewhere = tmp_path / "elsewhere.deb"
+    package.rename(elsewhere)
+    package.symlink_to(elsewhere)               # same bytes, same checksum
+    ran = tmp_path / "ran"
+    monkeypatch.setattr(update_install, "package_install_argv",
+                        lambda t: ["sh", "-c", f"touch {ran}", "sh"])
+    _without_pkexec(monkeypatch)
+
+    ok, message = update_install.install_package_update(download, "deb")
+
+    assert not ok and "changed after TuxTalk checked it" in message
+    assert not ran.exists()
+
+
+def test_the_copy_reads_no_more_than_the_download(tmp_path, monkeypatch):
+    """What grew past the checked size is never read whole: a swap for an
+    endless file ends at the download's size, and then fails its check."""
+    package = _package(tmp_path)
+    download = _checked(package)
+    seen = tmp_path / "seen"
+    monkeypatch.setattr(update_install, "package_install_argv",
+                        lambda t: ["sh", "-c", f'cat "$1" > {seen}', "sh"])
+    monkeypatch.setattr(update_install.os.path, "getsize", lambda path: 4)
+    _without_pkexec(monkeypatch)
+
+    ok, _ = update_install.install_package_update(download, "deb")
+
+    assert not ok and not seen.exists()
 
 
 def test_a_package_left_by_an_earlier_install_is_swept(tmp_path, monkeypatch):
