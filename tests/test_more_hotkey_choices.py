@@ -30,6 +30,9 @@ from tuxtalk import recording
 from tuxtalk import hotkeys
 
 RCTRL, RALT, LCTRL = ecodes.KEY_RIGHTCTRL, ecodes.KEY_RIGHTALT, ecodes.KEY_LEFTCTRL
+# Before any test replaces them: the look at a press on a thread of its own,
+# and a look that asks the tray.
+LOOK_ON_A_THREAD, REAL_LOOK = modifier_hotkeys._look_later, focused_window.look
 
 
 def named(wm_class):
@@ -69,6 +72,8 @@ def service(monkeypatch):
     monkeypatch.setattr(keyboard_output, "send_keys", lambda events, **k: done.append(("keys", events)) or True)
     monkeypatch.setattr(modifier_hotkeys, "guard_alt_tap", lambda: done.append("Ctrl guard"))
     monkeypatch.setattr(modifier_hotkeys, "_compose_keys", frozenset())
+    # A thread of its own could outlive the test's other replacements.
+    monkeypatch.setattr(modifier_hotkeys, "_look_later", modifier_hotkeys._look)
     monkeypatch.setattr(modifier_hotkeys.virtual_keyboard, "send",
                         lambda events, *a, **k: done.append(("pressed", events)) or True)
 
@@ -182,7 +187,8 @@ def right_ctrl_is_compose(monkeypatch):
                         frozenset({(RCTRL, False), (RCTRL, True)}))
     monkeypatch.setattr(modifier_hotkeys, "_compose", None)
     monkeypatch.setattr(modifier_hotkeys, "_hidden", (frozenset(), ()))
-    monkeypatch.setattr(focused_window, "look", lambda: KWRITE)
+    monkeypatch.setattr(focused_window, "look", lambda timeout=None: KWRITE)
+    monkeypatch.setattr(modifier_hotkeys, "_look_later", modifier_hotkeys._look)
 
 
 def compose_hidden(codes):
@@ -306,18 +312,65 @@ def test_a_compose_key_let_go_in_another_window_presses_nothing_there(
     """Held in one window and let go in another after a click: Compose
     pressed again would begin a compose in the second one, which would
     swallow the first keys typed there."""
-    import time
     held = set()
     key(RCTRL, 1, held, hold=RCTRL)
-    press = modifier_hotkeys._compose
-    for _ in range(200):                    # the window is looked at off the hotkey loop
-        if press.where is not None:
-            break
-        time.sleep(0.01)
-    assert press.where == KWRITE
-    monkeypatch.setattr(focused_window, "look", lambda: named("firefox"))
+    assert modifier_hotkeys._compose.where == KWRITE
+    monkeypatch.setattr(focused_window, "look", lambda timeout=None: named("firefox"))
     key(RCTRL, 0, held, hold=RCTRL)
     assert COMPOSE_AGAIN not in service and modifier_hotkeys._compose is None
+
+
+def test_a_compose_key_let_go_in_another_window_before_the_tray_answered_presses_nothing(
+        service, right_ctrl_is_compose, monkeypatch):
+    """The tray was slow to say where the press went, and the click into
+    another window came first: Compose was pressed again there. The look
+    asked at the press still names the first window (the tray answers in
+    the order asked), so the release waits for it."""
+    import threading
+    monkeypatch.setattr(modifier_hotkeys, "_look_later", LOOK_ON_A_THREAD)
+    monkeypatch.setattr(modifier_hotkeys, "_LOOK_WAIT_S", 2.0)
+    answer, looks = threading.Event(), []
+
+    def look(timeout=None):
+        looks.append(timeout)
+        if len(looks) == 1:                 # the press's: the tray answers late
+            answer.wait(2)
+            return KWRITE
+        return named("firefox")
+    monkeypatch.setattr(focused_window, "look", look)
+    held = set()
+    key(RCTRL, 1, held, hold=RCTRL)
+    late = threading.Timer(0.05, answer.set)
+    late.start()
+    key(RCTRL, 0, held, hold=RCTRL)
+    late.join()
+    assert COMPOSE_AGAIN not in service and modifier_hotkeys._compose is None
+
+
+def test_a_busy_tray_at_the_release_doesnt_keep_the_keyboards_grabbed(
+        service, right_ctrl_is_compose, monkeypatch):
+    """The window is asked again as the key comes up, on the hotkey loop
+    with every keyboard grabbed: a tray busy opening Preferences held them,
+    and the dictation's stop, for seconds."""
+    import time
+    from tuxtalk import compositor_focus
+    asked = []
+
+    def reported(timeout=focused_window.TRAY_TIMEOUT_S):
+        asked.append(timeout)
+        if len(asked) == 1:                 # the press's look: answered at once
+            return "kwrite", "{kwrite}", ""
+        time.sleep(timeout)                 # then busy: no answer in time
+        return None
+    monkeypatch.setattr(focused_window, "look", REAL_LOOK)
+    monkeypatch.setattr(focused_window, "reported", reported)
+    monkeypatch.setattr(compositor_focus, "focused_window", lambda: (None, None))
+    held = set()
+    key(RCTRL, 1, held, hold=RCTRL)
+    started = time.monotonic()
+    key(RCTRL, 0, held, hold=RCTRL)
+    assert time.monotonic() - started < 0.5
+    assert service[2:] == [COMPOSE_AGAIN, "let go", "stop"]     # an unknown window isn't another
 
 
 def test_a_shift_right_alt_compose_is_ended_with_shift_too(service, monkeypatch):
@@ -327,7 +380,7 @@ def test_a_shift_right_alt_compose_is_ended_with_shift_too(service, monkeypatch)
     shift = ecodes.KEY_LEFTSHIFT
     monkeypatch.setattr(modifier_hotkeys, "_compose_keys", frozenset({(RALT, True)}))
     monkeypatch.setattr(modifier_hotkeys, "_compose", None)
-    monkeypatch.setattr(focused_window, "look", lambda: KWRITE)
+    monkeypatch.setattr(focused_window, "look", lambda timeout=None: KWRITE)
     modifier_hotkeys.note_compose_key(KeyEvent(RALT, 1), (RALT,), {shift})
     modifier_hotkeys.note_hidden({RALT, shift})
     compose_hidden({RALT, shift})
@@ -367,14 +420,25 @@ def test_keyboard_options_changed_after_start_count_from_the_next_dictation(
     assert modifier_hotkeys._compose is not None
 
 
-def test_scroll_lock_is_never_taken_for_compose():
+def test_scroll_lock_is_never_taken_for_compose(monkeypatch):
     """A desktop holds Scroll Lock back from apps, so with compose:sclk its
     press begins no compose for TuxTalk to end."""
+    monkeypatch.setattr(modifier_hotkeys, "_noted", ([], frozenset({RCTRL})))
+    monkeypatch.setattr(modifier_hotkeys, "_compose_keys", frozenset())
     modifier_hotkeys.note_compose_keys({(ecodes.KEY_SCROLLLOCK, False), (RCTRL, False)})
-    try:
-        assert modifier_hotkeys._compose_keys == {(RCTRL, False)}
-    finally:
-        modifier_hotkeys.note_compose_keys(())
+    assert modifier_hotkeys._compose_keys == {(RCTRL, False)}
+
+
+def test_the_log_names_a_compose_key_only_when_it_is_a_dictation_key(monkeypatch, caplog):
+    """Right Alt dictating, and Pop!_OS's options make Right Ctrl Compose:
+    the log said Right Ctrl was among the dictation keys, which sends
+    someone reading a problem report the wrong way."""
+    import logging
+    monkeypatch.setattr(modifier_hotkeys, "_noted", ([], frozenset({RALT})))
+    monkeypatch.setattr(modifier_hotkeys, "_compose_keys", frozenset())
+    with caplog.at_level(logging.INFO, logger=modifier_hotkeys.logger.name):
+        modifier_hotkeys.note_compose_keys({(RCTRL, False), (RCTRL, True)})
+    assert "Right Ctrl" not in caplog.text and modifier_hotkeys._compose_keys == frozenset()
 
 
 def test_a_compose_begun_by_a_key_no_longer_dictating_still_ends(service, right_ctrl_is_compose):

@@ -553,7 +553,7 @@ def tray(monkeypatch):
     script and the GNOME extension tell it, and asked as the service asks."""
     monkeypatch.setattr(dbus_service, "_focus", dbus_service.FocusReport())
     monkeypatch.setattr(dbus_service, "_clipboard_tool_focused", False)
-    monkeypatch.setattr(focused_window, "reported", lambda: tuple(dbus_service.cached_focus()))
+    monkeypatch.setattr(focused_window, "reported", lambda timeout=None: tuple(dbus_service.cached_focus()))
     monkeypatch.setattr(compositor_focus, "focused_window", lambda: (None, None))
     monkeypatch.setattr("time.sleep", lambda s: None)
     service = object.__new__(dbus_service.TuxTalkDBusService)
@@ -597,7 +597,7 @@ def test_a_tuxtalk_window_however_the_desktop_names_it_gets_no_key(
         if told == "tray":
             dbus_service.TuxTalkDBusService.SetFocusedWindow(service, wm_class, window_id, "")
         else:
-            monkeypatch.setattr(focused_window, "reported", lambda: None)
+            monkeypatch.setattr(focused_window, "reported", lambda timeout=None: None)
             monkeypatch.setattr(compositor_focus, "focused_window", lambda: (wm_class, window_id))
     focus(*before)
     message = rs.Message(focused_window.destination(), has_words=True)
@@ -632,7 +632,7 @@ def test_words_dictated_into_a_tuxtalk_box_get_only_the_key_said_after_them(
     if told == "tray":
         tray(*window)
     else:
-        monkeypatch.setattr(focused_window, "reported", lambda: None)
+        monkeypatch.setattr(focused_window, "reported", lambda timeout=None: None)
         monkeypatch.setattr(compositor_focus, "focused_window", lambda: window)
     message = rs.Message(focused_window.destination(), has_words=True)
     if key == "auto":
@@ -666,7 +666,7 @@ def unknown_window(request, chat, monkeypatch):
     focus, or stops saying it once the words are in."""
     said = list(UNKNOWN_SOURCES[request.param])
     monkeypatch.setattr(focused_window, "look", REAL_LOOK)
-    monkeypatch.setattr(focused_window, "reported", lambda: said[0][0])
+    monkeypatch.setattr(focused_window, "reported", lambda timeout=None: said[0][0])
     monkeypatch.setattr(compositor_focus, "focused_window", lambda: said[0][1])
     deliver = delivery.deliver_text
 

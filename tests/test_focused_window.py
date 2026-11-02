@@ -12,7 +12,7 @@ def test_the_compositors_window_id_says_which_window_it_is(monkeypatch):
     """On X11, Sway or Hyprland the id stays the same when the window moves or
     is re-tiled. Where it is doesn't stand in for one: that changes as it
     moves, and two maximized windows share it."""
-    monkeypatch.setattr(focused_window, "reported", lambda: ("", "", FRAME))
+    monkeypatch.setattr(focused_window, "reported", lambda timeout=None: ("", "", FRAME))
     monkeypatch.setattr(compositor_focus, "focused_window", lambda: ("XTerm", 0x2a00003))
     assert focused_window.look() == ("XTerm", ("compositor", 0x2a00003))
     monkeypatch.setattr(compositor_focus, "focused_window", lambda: (None, None))
@@ -58,8 +58,9 @@ def _tray_reports(monkeypatch):
     monkeypatch.setattr(dbus_service, "_focus", dbus_service.FocusReport())
     monkeypatch.setattr(dbus_service, "_clipboard_tool_focused", False)
     service = object.__new__(dbus_service.TuxTalkDBusService)
-    monkeypatch.setattr(focused_window, "reported",
-                        lambda: dbus_service.TuxTalkDBusService.GetFocusedWindow(service))
+    monkeypatch.setattr(
+        focused_window, "reported",
+        lambda timeout=None: dbus_service.TuxTalkDBusService.GetFocusedWindow(service))
     monkeypatch.setattr(compositor_focus, "focused_window", lambda: (None, None))
 
     def report(window_id, wm_class, frame):
@@ -134,7 +135,7 @@ def test_a_tray_id_is_never_compared_with_an_x11_id(monkeypatch):
     report = _tray_reports(monkeypatch)
     report("{5c1d0e2a}", "kwrite", KWRITE_MAXIMIZED)
     first = focused_window.look()
-    monkeypatch.setattr(focused_window, "reported", lambda: None)
+    monkeypatch.setattr(focused_window, "reported", lambda timeout=None: None)
     monkeypatch.setattr(compositor_focus, "focused_window", lambda: ("kwrite", 0x3200007))
     now = focused_window.look()
     assert not focused_window.changed(first, now)
@@ -148,7 +149,7 @@ def test_one_window_named_by_kwin_and_by_x11_is_still_one_app(monkeypatch):
     report = _tray_reports(monkeypatch)
     report("{5c1d0e2a}", "google-chrome", KWRITE_MAXIMIZED)
     first = focused_window.look()
-    monkeypatch.setattr(focused_window, "reported", lambda: None)
+    monkeypatch.setattr(focused_window, "reported", lambda timeout=None: None)
     monkeypatch.setattr(compositor_focus, "focused_window", lambda: ("Google-chrome", 0x3200007))
     assert not focused_window.changed(first, focused_window.look())
 

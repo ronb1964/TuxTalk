@@ -390,7 +390,8 @@ def compose_rig(tmp_path, monkeypatch):
     monkeypatch.setattr(modifier_hotkeys, "_compose_keys", frozenset({(RCTRL, False)}))
     monkeypatch.setattr(modifier_hotkeys, "_compose", None)
     monkeypatch.setattr(modifier_hotkeys, "_hidden", (frozenset({RCTRL}), ()))
-    monkeypatch.setattr(modifier_hotkeys, "_look_later", lambda press: None)
+    monkeypatch.setattr(focused_window, "look", lambda timeout=None: ("kwrite", ("tray", "{kw}")))
+    monkeypatch.setattr(modifier_hotkeys, "_look_later", modifier_hotkeys._look)
     pressed = []
     monkeypatch.setattr(modifier_hotkeys.virtual_keyboard, "send",
                         lambda events, *a, **k: pressed.append(events) or True)
@@ -432,6 +433,41 @@ def test_a_late_ok_to_hiding_one_press_doesnt_confirm_the_next(compose_rig, monk
     client.active_keys()
     key(0)
     assert pressed == []
+
+def test_typing_that_finds_the_key_up_before_the_helpers_answer_still_ends_the_compose(
+        compose_rig):
+    """Type at pause types a phrase as the key comes up, and can find it up
+    before the helper's OK to hiding its press came in: the compose was
+    forgotten unended, and swallowed the phrase's first letters."""
+    from tuxtalk import modifier_hotkeys
+    client, helpers, key, pressed = compose_rig
+    key(1)
+    answer = threading.Timer(0.05, helpers.sendall, (b"OK HIDE\n",))
+    answer.start()
+    get_ready = modifier_hotkeys.wait_while_held()()    # what typing runs before a key
+    get_ready()
+    answer.join()
+    assert pressed == [[(RCTRL, 1), (RCTRL, 0)]]
+
+
+def test_waiting_for_the_helpers_answer_doesnt_reconnect_to_a_helper_thats_gone(tmp_path):
+    """The release of a Compose dictation key waits a moment for the
+    helper's answer, on the hotkey loop with every keyboard grabbed. With
+    the helper gone, reconnecting from there held them up to a second."""
+    import time
+    path = str(tmp_path / "helper.sock")
+    silent = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    silent.bind(path)
+    silent.listen()                         # takes the connection, never says hello
+    client = HelperKeyboard(path, connect_timeout=1.0)
+    try:
+        started = time.monotonic()
+        client.await_hide(7, 0.25)
+        assert time.monotonic() - started < 0.2
+    finally:
+        client.close()
+        silent.close()
+
 
 def test_an_answer_out_of_step_isnt_taken_as_a_hide(tmp_path, caplog):
     """Each OK names its command; an OK WATCH where HIDE's answer was due
