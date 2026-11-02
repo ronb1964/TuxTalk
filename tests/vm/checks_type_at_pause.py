@@ -35,11 +35,9 @@ def _say_with_pauses(run, phrase_ids):
 
 
 def _with_type_at_pause(run, phrase_ids):
-    run.set_config(chunked_dictation=True)
-    try:
+    with run.settings_put_back("chunked_dictation"):
+        run.set_config(chunked_dictation=True)
         return _say_with_pauses(run, phrase_ids)
-    finally:
-        run.set_config(chunked_dictation=False)
 
 
 @check(SECTION, "pause_question", "A question said over two pauses ends with a question mark")

@@ -436,12 +436,10 @@ def vitamin(run):
 def money(run):
     """The keymaps also put $ on KEY_DOLLAR, which X11 can't carry: "$27.50"
     arrived as "27.50" (0.18 release testing)."""
-    run.set_config(injection_mode="type")
-    try:
+    with run.settings_put_back("injection_mode"):
+        run.set_config(injection_mode="type")
         run.sink_ready()
         return pieces_outcome(run, "money", ["$27.50"])
-    finally:
-        run.set_config(injection_mode="auto")
 
 
 @check("Words and numbers", "kwrite_new_line", "“New line” in KWrite copies nothing from the line above")

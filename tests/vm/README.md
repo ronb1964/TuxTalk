@@ -117,7 +117,10 @@ then in file order. Each returns an `Outcome`; raising `Abort` stops the run
 for that VM when TuxTalk is unusable. `ui.py dump "Window title"` prints a
 window's widget tree, which is the quickest way to find a label to press.
 `ui.py pick "combo box" NAME ITEM` chooses an entry in a dropdown, as
-`prefs_model_switch` does with the Model dropdown.
+`prefs_model_switch` does with the Model dropdown. A check that changes a
+setting for itself does it inside `with run.settings_put_back("key", ...)`,
+which puts back what the VM had afterwards: with `--as-is` that may not be
+what a fresh VM has.
 
 To try a new check without a whole run, leave a VM on after a run
 (`--keep-running`) and run just that check on it as it is:
