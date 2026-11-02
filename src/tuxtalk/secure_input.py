@@ -321,17 +321,31 @@ def is_older(running):
     return running is not None and _version(running) < _version(VERSION)
 
 
-# The oldest helper this TuxTalk works with as it should. Raised only when a
-# feature or fix needs the newer helper, since TuxTalk then asks at every
-# start to update it; a newer helper that only adds to what System check
-# and Report a Problem can say is offered in System check alone.
+# The oldest helper this TuxTalk works with as it should on any computer.
+# Raised only when a feature or fix everyone needs comes with a newer
+# helper, since TuxTalk then asks at every start to update it. A fix only
+# some computers need asks there alone (misses_read_only_keyboard); the
+# rest of a newer helper is offered in System check without asking.
 NEEDED_HELPER_VERSION = "1.11"
+
+# The first helper that reads a keyboard the input group may only read.
+READ_ONLY_KEYBOARDS_SINCE = "1.12"
+
+
+def misses_read_only_keyboard(running):
+    """Whether the running helper (version *running*) is too old to read a
+    keyboard this computer has, one whose node may only be read."""
+    from .uinput_helper import read_only_keyboards
+    return (running is not None and _version(running) < _version(READ_ONLY_KEYBOARDS_SINCE)
+            and bool(read_only_keyboards()))
 
 
 def needs_update(running):
-    """Whether the running helper's version *running* is older than the one
-    this TuxTalk needs (NEEDED_HELPER_VERSION), so it asks at start."""
-    return running is not None and _version(running) < _version(NEEDED_HELPER_VERSION)
+    """Whether this TuxTalk asks at start to update the running helper
+    (version *running*): it's older than NEEDED_HELPER_VERSION, or too old
+    for a keyboard here (misses_read_only_keyboard)."""
+    return running is not None and (_version(running) < _version(NEEDED_HELPER_VERSION)
+                                    or misses_read_only_keyboard(running))
 
 
 # The dictation keys the first helpers didn't report, and the version that

@@ -78,9 +78,14 @@ def helper_update_text(running) -> str:
     from . import secure_input
     from .hotkey_helper import VERSION
     keys = [key for key in secure_input.KEYS_SINCE if not secure_input.hears_key(running, key)]
-    why = (f": until it's updated, {' and '.join(keys)} can't be dictation keys, and it "
-           "misses this version's fixes." if keys else
-           ", with fixes the one you have doesn't get.")
+    if secure_input.misses_read_only_keyboard(running):
+        why = (". Your keyboard can only be read, and the hotkey helper you have can't use "
+               "such a keyboard, so your dictation keys don't work until it's updated.")
+    elif keys:
+        why = (f": until it's updated, {' and '.join(keys)} can't be dictation keys, and it "
+               "misses this version's fixes.")
+    else:
+        why = ", with fixes the one you have doesn't get."
     return ("The hotkey helper is the small background service that reads your dictation "
             f"keys. This computer runs version {running}, and this TuxTalk brings {VERSION}"
             f"{why}\n\nUpdating asks for your password once. No restart is needed. Until "

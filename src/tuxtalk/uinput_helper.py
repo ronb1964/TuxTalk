@@ -19,6 +19,7 @@ import os
 import grp
 import pwd
 import shlex
+import struct
 from . import pkexec_runner
 from .keyboard_devices import close_devices, open_new_keyboards
 from .logger import setup_logger
@@ -115,6 +116,47 @@ def _readable_keyboards():
 # it left out and why, and Report a Problem includes that.
 HELPER_SEES_NO_KEYBOARD = ("The hotkey helper can't see your keyboard, so the dictation keys "
                            "can't work. Help → Problems → Report a Problem has its log")
+
+
+def _sysfs_bits(path):
+    """The bit numbers set in a sysfs capability file (*path*): hex words,
+    each a C long, the highest first. None when it can't be read."""
+    try:
+        with open(path) as f:
+            words = f.read().split()
+    except OSError:
+        return None
+    width = struct.calcsize("l") * 8
+    return {i * width + bit for i, word in enumerate(reversed(words))
+            for bit in range(width) if int(word, 16) >> bit & 1}
+
+
+def read_only_keyboards(input_dir="/dev/input", sys_dir="/sys/class/input", group="input"):
+    """The keyboards' event nodes that *group* may read but not write. A
+    hotkey helper before 1.12 skips such a keyboard without a word (it
+    opened them read-write only). Told from the nodes' permissions and
+    sysfs, which anyone may read: TuxTalk can't open the nodes itself."""
+    from .hotkey_helper import BTN_LEFT, LETTER_KEYS, REL_X
+    try:
+        gid = grp.getgrnam(group).gr_gid
+        names = sorted(n for n in os.listdir(input_dir) if n.startswith("event"))
+    except (KeyError, OSError):
+        return []
+    found = []
+    for name in names:
+        node = os.path.join(input_dir, name)
+        try:
+            st = os.stat(node)
+        except OSError:
+            continue                    # unplugged meanwhile
+        if st.st_gid != gid or not st.st_mode & 0o040 or st.st_mode & 0o020:
+            continue
+        caps = os.path.join(sys_dir, name, "device", "capabilities")
+        keys = _sysfs_bits(os.path.join(caps, "key")) or set()
+        mouse = BTN_LEFT in keys and REL_X in (_sysfs_bits(os.path.join(caps, "rel")) or ())
+        if len(keys & LETTER_KEYS) >= 3 and not mouse:
+            found.append(node)
+    return found
 
 
 def check_input_read_permission():

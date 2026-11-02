@@ -15,6 +15,8 @@ On Ubuntu there is no uinput ACL, so a uinput-only check fails and the group
 membership gets fixed as a side effect, which hides the problem there.
 """
 
+import os
+
 import pytest
 
 from tuxtalk import uinput_helper
@@ -163,3 +165,37 @@ def test_a_hotkey_helper_that_does_not_answer_is_not_called_working(monkeypatch)
     monkeypatch.setattr("tuxtalk.uinput_helper._readable_keyboards", lambda: [])
     ok, reason = check_input_read_permission()
     assert ok is False and "answering" in reason and closed
+
+
+def _capabilities(sys_dir, name, keys, rel=()):
+    """sysfs's capability files for event node *name*: hex longs, highest first."""
+    import struct
+    caps = sys_dir / name / "device" / "capabilities"
+    caps.mkdir(parents=True)
+    width = struct.calcsize("l") * 8
+    for kind, codes in (("key", keys), ("rel", rel)):
+        value = sum(1 << code for code in codes)
+        words = [(value >> (i * width)) & ((1 << width) - 1)
+                 for i in range(max(1, (max(codes, default=0) // width) + 1))]
+        (caps / kind).write_text(" ".join(f"{w:x}" for w in reversed(words)) + "\n")
+
+
+def test_keyboards_the_input_group_may_only_read_are_found(tmp_path):
+    """A helper before 1.12 skips such a keyboard without a word, so
+    TuxTalk asks to update it there (secure_input.misses_read_only_keyboard).
+    It can't open the nodes: it goes by their permissions and sysfs."""
+    import grp
+    group = grp.getgrgid(os.getgid()).gr_name
+    dev, sys_dir = tmp_path / "input", tmp_path / "sys"
+    dev.mkdir()
+    letters = list(range(16, 26)) + [30, 31, 32]
+    for name, mode, keys, rel in (("event3", 0o640, letters, ()),           # read-only keyboard
+                                  ("event4", 0o660, letters, ()),           # writable keyboard
+                                  ("event5", 0o640, [116], ()),             # power button
+                                  ("event6", 0o640, letters + [0x110], [0])):   # a mouse
+        (dev / name).write_text("")
+        (dev / name).chmod(mode)
+        _capabilities(sys_dir, name, keys, rel)
+    found = uinput_helper.read_only_keyboards(str(dev), str(sys_dir), group)
+    assert found == [str(dev / "event3")]
+    assert uinput_helper.read_only_keyboards(str(dev), str(sys_dir), "no-such-group") == []

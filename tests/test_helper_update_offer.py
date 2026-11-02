@@ -14,7 +14,10 @@ from tuxtalk import update_offers as offers
 def helper(monkeypatch):
     """Helper 1.4 installed and running, dictation up: (what was asked,
     updates run, restarts, the answer to give)."""
-    asked, updates, restarts, answer = [], [], [], {"update": True, "result": (True, "")}
+    asked, updates, restarts, answer = [], [], [], {"update": True, "result": (True, ""),
+                                                    "read_only": []}
+    monkeypatch.setattr("tuxtalk.uinput_helper.read_only_keyboards",
+                        lambda: answer["read_only"])
     monkeypatch.setattr("tuxtalk.first_run_marker.is_first_run", lambda: False)
     monkeypatch.setattr("tuxtalk.service_launcher.find_service_pids", lambda: [4242])
     monkeypatch.delenv("FLATPAK_ID", raising=False)
@@ -136,3 +139,20 @@ def test_the_update_runs_off_gtk_s_thread_and_answers_on_it(monkeypatch):
         threading.Event().wait(0.01)
     assert answers == [] and len(queued) == 1      # handed to GTK's loop, not run there
     assert queued[0]() is False and answers == [True]
+
+
+def test_a_helper_too_old_for_a_read_only_keyboard_here_is_asked_about(helper, monkeypatch):
+    """1.11 isn't asked about in general: 1.12 mostly adds what System check
+    can say. But it skips a keyboard whose node may only be read, without a
+    word, and 1.12 reads it: there the update is what makes the keys work."""
+    asked, updates, restarts, answer, parakeet = helper
+    monkeypatch.setattr(secure_input, "running_version", lambda: "1.11")
+    answer["read_only"] = ["/dev/input/event3"]
+    answer["update"] = False
+    offers._offer_in_turn(restarts.append)
+    assert asked == ["1.11"] and parakeet == []
+    text = offers.helper_update_text("1.11")
+    assert "keyboard can only be read" in text and "can't use such a keyboard" in text
+    monkeypatch.setattr(secure_input, "running_version", lambda: hotkey_helper.VERSION)
+    offers._offer_in_turn(restarts.append)
+    assert asked == ["1.11"]                    # 1.12 reads it: nothing to ask
