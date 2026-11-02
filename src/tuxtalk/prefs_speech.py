@@ -17,7 +17,7 @@ from .logger import setup_logger
 from .prefs_language import LanguageRow, language_summary
 from .prefs_tab import Tab, dropdown, fold, section_header, tip_label
 from .ui_style import WARNING_AMBER, message_dialog, show_message
-from .cuda_helper import DOWNLOAD_SIZE_TEXT as CUDA_SIZE_TEXT
+from .cuda_download import DOWNLOAD_SIZE_TEXT as CUDA_SIZE_TEXT
 from .whisper_vulkan import ENGINE_SIZE_TEXT
 
 logger = setup_logger(__name__)

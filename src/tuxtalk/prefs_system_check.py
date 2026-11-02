@@ -7,7 +7,7 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk
 
-from .cuda_helper import DOWNLOAD_SIZE_TEXT as CUDA_SIZE_TEXT
+from .cuda_download import DOWNLOAD_SIZE_TEXT as CUDA_SIZE_TEXT
 from .desktop_detect import is_gnome, is_x11_session
 from .logger import setup_logger
 from .prefs_tab import Tab, fold, subheading

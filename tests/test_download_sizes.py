@@ -1,8 +1,8 @@
 """Download sizes come from one place: the AI's from ai_download (its model
 and the engine that runs it: "1.1 GB" alone left the 30 MB engine out), and
-CUDA's from cuda_helper (typed out by hand in Preferences, Help and System
+CUDA's from cuda_download (typed out by hand in Preferences, Help and System
 check, so one change of size meant finding them all)."""
-from tuxtalk import ai_download, cuda_helper, help_text, prefs_speech
+from tuxtalk import ai_download, cuda_download, help_text, prefs_speech
 
 
 AI_SIZE, CUDA_SIZE = "7.7 GB", "9.9 GB"      # sizes no text would have typed out
@@ -11,7 +11,7 @@ AI_SIZE, CUDA_SIZE = "7.7 GB", "9.9 GB"      # sizes no text would have typed ou
 def test_help_gives_the_ai_and_cuda_sizes_from_their_modules(monkeypatch):
     """Changed in one place, every line of Help follows; a size typed out
     by hand would still read the old one."""
-    real_cuda = cuda_helper.DOWNLOAD_SIZE_TEXT
+    real_cuda = cuda_download.DOWNLOAD_SIZE_TEXT
     monkeypatch.setattr(help_text, "AI_SIZE_TEXT", AI_SIZE)
     monkeypatch.setattr(help_text, "CUDA_SIZE_TEXT", CUDA_SIZE)
     text = "".join(markup for _title, markup in help_text.tabs())
@@ -45,7 +45,7 @@ def test_the_large_v3_question_gives_cudas_size(monkeypatch):
     section = SimpleNamespace(window=None, win=SimpleNamespace(vulkan_offered=lambda: False))
     prefs_speech.SpeechSection._large_v3_on_nvidia(section)
     assert f"~{CUDA_SIZE}" in asked[0]
-    assert cuda_helper.DOWNLOAD_SIZE_TEXT.replace(" ", "") not in asked[0]
+    assert cuda_download.DOWNLOAD_SIZE_TEXT.replace(" ", "") not in asked[0]
 
 
 def test_reading_a_size_doesnt_load_gtk():

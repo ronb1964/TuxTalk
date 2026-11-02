@@ -99,7 +99,7 @@ class DownloadTask:
 
         Args:
             name: Display name (e.g., "CUDA Libraries")
-            size_text: Size indicator (e.g., "~580 MB")
+            size_text: Size indicator (e.g., "~585 MB")
             download_func: Function that performs the download
                           Should accept (progress_callback, cancel_event) args
                           progress_callback signature: func(message, percent)
@@ -466,8 +466,8 @@ def show_cuda_download_dialog(parent=None, on_success_callback=None):
     refresh Preferences. Returns True on success, False on failure and None
     if the user cancelled.
     """
-    from tuxtalk import cuda_download, cuda_helper
-    task = DownloadTask(CUDA_TASK, f"~{cuda_helper.DOWNLOAD_SIZE_TEXT}",
+    from tuxtalk import cuda_download
+    task = DownloadTask(CUDA_TASK, f"~{cuda_download.DOWNLOAD_SIZE_TEXT}",
                         cuda_download.download_cuda_libraries)
     result = run_downloads(parent, "Downloading CUDA Libraries",
                            "This may take several minutes depending on your connection.",
@@ -530,7 +530,7 @@ def show_unified_download_dialog(cuda=False, extension=False, model=None, parent
     if title is None and cuda and model:
         title = f"Downloading {model} and CUDA"
     if description is None and cuda and model:
-        from tuxtalk.cuda_helper import DOWNLOAD_SIZE_TEXT as cuda_size
+        from tuxtalk.cuda_download import DOWNLOAD_SIZE_TEXT as cuda_size
         from tuxtalk.model_helper import MODEL_DISPLAY_SIZES
         model_size = MODEL_DISPLAY_SIZES.get(model, "~3 GB")
         description = (
@@ -546,10 +546,10 @@ def show_unified_download_dialog(cuda=False, extension=False, model=None, parent
     dialog = UnifiedDownloadDialog(parent=parent, title=title, description=description)
 
     if cuda:
-        from tuxtalk import cuda_download, cuda_helper
+        from tuxtalk import cuda_download
         task = DownloadTask(
             name=CUDA_TASK,
-            size_text=f"~{cuda_helper.DOWNLOAD_SIZE_TEXT}",
+            size_text=f"~{cuda_download.DOWNLOAD_SIZE_TEXT}",
             download_func=cuda_download.download_cuda_libraries
         )
         dialog.add_task(task)

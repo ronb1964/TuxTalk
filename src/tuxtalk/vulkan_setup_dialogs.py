@@ -15,7 +15,7 @@ from .ui_style import show_message
 
 from . import whisper_vulkan as wv
 from .download_utils import failure_reason
-from .cuda_helper import DOWNLOAD_SIZE_TEXT as CUDA_SIZE_TEXT
+from .cuda_download import DOWNLOAD_SIZE_TEXT as CUDA_SIZE_TEXT
 from .logger import setup_logger
 from .recommend import model_title
 

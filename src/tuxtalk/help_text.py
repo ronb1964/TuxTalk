@@ -21,7 +21,7 @@ from gi.repository import GLib
 
 from . import commands_reference
 from .ai_download import DOWNLOAD_SIZE_TEXT as AI_SIZE_TEXT
-from .cuda_helper import DOWNLOAD_SIZE_TEXT as CUDA_SIZE_TEXT
+from .cuda_download import DOWNLOAD_SIZE_TEXT as CUDA_SIZE_TEXT
 from .whisper_vulkan import ENGINE_SIZE_TEXT
 
 # Where the Help window's feedback link goes; the Setup Complete screen
