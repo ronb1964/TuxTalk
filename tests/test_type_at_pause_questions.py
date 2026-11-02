@@ -267,6 +267,11 @@ def test_with_whisper_the_period_stays_and_nothing_is_heard_again(pipeline, monk
     ("we meet at 5 p.m.", "we meet at 5 p.m.", False),
     ("and then...", "and then...", False),
     ("is that it.", "is that it period", False),          # a period the speaker dictated
+    ("it would be smart.", "it would be smart", True),    # the auto-period
+    ("should we ask Dr.", "should we ask Dr.", False),
+    ("apples, pears, etc.", "apples, pears, etc.", False),
+    ("is it still 3.14.", "is it still 3.14.", True),
+    ("is that right.", "is that right!", False),          # not the engine's period
 ])
 def test_only_a_period_the_engine_put_after_the_last_word_may_change(text, raw, ours):
     from tuxtalk.chunk_text import engine_period

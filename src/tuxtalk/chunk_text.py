@@ -103,13 +103,28 @@ def hold_back_boundary(text: str, raw: str):
     return core, mark
 
 
+# Words whose period is the abbreviation's own: "etc?" would lose it.
+_ABBREVIATIONS = frozenset({"dr", "mr", "mrs", "ms", "jr", "sr", "st", "etc", "vs",
+                            "usw", "bzw"})
+
+# The last word of a text ending in a period: a number with a decimal point
+# ("3.14."), or a word with no period inside it ("p.m." has one).
+_ENDS_IN_PERIOD = re.compile(r"(?<![.\w])(\d+(?:\.\d+)+|[\w'’-]*\w)\.$")
+
+
 def engine_period(text: str, raw: str) -> bool:
     """Whether *text* ends with a period the engine put after the last word
-    it heard (*raw*'s), which a question mark may replace: not "...", an
-    abbreviation ("p.m.") or a period the speaker dictated."""
-    core = text.rstrip()
-    return (re.search(r"(?<![.\w])[\w'’-]*\w\.$", core) is not None
-            and _last_word(core) == _last_word(raw))
+    it heard (*raw*'s), or the auto-period where it put none, which a
+    question mark may replace: not "...", an abbreviation ("p.m.", "etc.")
+    or a period the speaker dictated. *raw* must end on that word, then
+    nothing or a period: "is that it period" ends on the word the period
+    was dictated with."""
+    m = _ENDS_IN_PERIOD.search(text.rstrip())
+    if m is None or m.group(1).casefold() in _ABBREVIATIONS:
+        return False
+    tail = re.search(r"\w(\W*)$", raw)
+    return (tail is not None and tail.group(1).strip() in ("", ".")
+            and _last_word(m.group(1)) == _last_word(raw))
 
 
 def carry_question(text: str) -> str:
