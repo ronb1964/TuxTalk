@@ -301,3 +301,26 @@ def test_right_ctrl_held_on_a_read_only_keyboard_too_refuses_the_hide(setup):
     say(sock, "HIDE 97")
     assert heard(sock) == ["ERR listen-only keyboard"]
     assert kb.calls == other.calls == [] and helper.hide is None
+
+
+@needs_permissions
+def test_a_read_only_keyboard_isnt_opened_again_while_its_hotkey_is_held(
+        setup, monkeypatch, tmp_path):
+    """Closing it lets every key on it go: a permission fix (udevadm
+    trigger) while F8 was held there ended the recording mid-hold."""
+    helper, fake, connect, say, heard, _seat = setup
+    helper.keyboards.pop(fake.path)
+    node = _device(tmp_path / "input", writable=False)
+    monkeypatch.setattr(hh, "fcntl", FakeEvdev(_LETTERS | {F8}))
+    helper.scan()
+    sock = _ready(connect, say, heard, "66")
+    held = helper.keyboards[str(node)]
+    node.chmod(0o644)
+    helper.on_key(held, F8, 1)
+    assert heard(sock) == ["DOWN 66 -"]
+    helper.scan()
+    assert helper.keyboards[str(node)] is held and heard(sock) == []
+    helper.on_key(held, F8, 0)
+    assert heard(sock) == ["UP 66"]
+    helper.scan()
+    assert helper.keyboards[str(node)].listen_only is None

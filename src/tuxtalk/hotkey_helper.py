@@ -661,9 +661,14 @@ class Helper:
     def reopen_if_writable(self, keyboard):
         """A keyboard opened read-only whose node may now be written to (a
         udev rule reloaded, permissions fixed) is closed, to be opened again
-        read-write by this scan, so it can be held again."""
-        if keyboard.listen_only == READ_ONLY and os.access(keyboard.path, os.W_OK):
-            self.drop_keyboard(keyboard, "writable now, opening it again")
+        read-write by this scan, so it can be held again. Not while a key
+        someone watches is down on it: closing lets it go, which would end a
+        recording mid-hold. A later scan does it."""
+        if keyboard.listen_only != READ_ONLY or not os.access(keyboard.path, os.W_OK):
+            return
+        if any(keyboard.down & (c.bare | c.combos.keys()) for c in self.clients.values()):
+            return
+        self.drop_keyboard(keyboard, "writable now, opening it again")
 
     def open_if_keyboard(self, path):
         """Open the device at *path* if it's a keyboard there's room for. One
