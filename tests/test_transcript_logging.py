@@ -416,6 +416,74 @@ def test_no_speech_engine_writes_the_words(monkeypatch, caplog, capsys, kind):
     assert _leaks(caplog, capsys) == []
 
 
+def _words_in_an_error(*a, **k):
+    """Fails as code can on what was said: the words in the error's text.
+    (Not in this line: a traceback shows the source line raising it.)"""
+    raise ValueError(f"couldn't handle {' '.join(SECRET)!r}")
+
+
+def test_an_engine_error_never_writes_the_words(monkeypatch, caplog, capsys):
+    """An error's text can quote what was said; the log keeps its type."""
+    import numpy as np
+    monkeypatch.setattr(live, "log_transcripts", False)
+    monkeypatch.setattr(speech_engine, "transcribe", _words_in_an_error)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
+    frames = [(np.ones(speech_engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
+    _hear_every_level(caplog)
+    pipeline.transcribe_and_inject(frames, speech_engine.SAMPLE_RATE, beeps_on=False,
+                                   smart_quotes=False, notify_on=False,
+                                   message=rs.state.current.message)
+    assert "Transcription error: ValueError" in caplog.text
+    assert _leaks(caplog, capsys) == []
+
+
+def test_a_typing_error_never_writes_the_words(monkeypatch, caplog, capsys):
+    import numpy as np
+    monkeypatch.setattr(live, "log_transcripts", False)
+    monkeypatch.setattr(speech_engine, "transcribe", lambda audio, language: "zanzibar quokka")
+    monkeypatch.setattr(delivery, "inject_text", _words_in_an_error)
+    monkeypatch.setattr("tuxtalk.beeps.beep", lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda *a, **k: None)
+    monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "org.kde.kwrite")
+    frames = [(np.ones(speech_engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
+    _hear_every_level(caplog)
+    pipeline.transcribe_and_inject(frames, speech_engine.SAMPLE_RATE, beeps_on=False,
+                                   smart_quotes=False, notify_on=False,
+                                   message=rs.state.current.message)
+    assert "Injection error: ValueError" in caplog.text
+    assert _leaks(caplog, capsys) == []
+
+
+def test_a_failed_pass_over_a_pause_never_writes_the_words(monkeypatch, caplog, capsys):
+    """Type at pause hears the phrase before a pause with the next one."""
+    import numpy as np
+    from tuxtalk import type_at_pause
+    monkeypatch.setattr(speech_engine, "transcribe", _words_in_an_error)
+    pending = {"mark": ".", "audio": np.zeros(1600, dtype=np.float32), "raw": "zanzibar"}
+    _hear_every_level(caplog)
+    assert type_at_pause._heard_in_context(pending, np.zeros(1600, dtype=np.float32),
+                                           None) == (".", "")
+    assert "ValueError" in caplog.text and _leaks(caplog, capsys) == []
+
+
+def test_a_failed_dictation_job_never_writes_the_words(caplog, capsys):
+    from tuxtalk import dictation_worker
+    worker = dictation_worker.DictationWorker()
+    _hear_every_level(caplog)
+    worker.submit(_words_in_an_error)
+    assert worker.drain(10)
+    assert "A dictation job failed" in caplog.text and _leaks(caplog, capsys) == []
+
+
+def test_the_graphics_helper_never_sends_back_the_words_of_a_failure():
+    """Its reply to a failed request is logged by the dictation service."""
+    from tuxtalk import parakeet_gpu_worker as worker
+    assert worker.request_error(KeyError("zanzibar")) == "KeyError"
+    code = worker.EngineFailed("the engine failed to transcribe (code 3)")
+    assert worker.request_error(code) == "the engine failed to transcribe (code 3)"
+
+
 def test_a_quoted_whole_number_is_read_as_preferences_shows_it():
     """auto_timeout_minutes = "5.0" was the default to the service but 5 in
     Preferences: both read settings with apply_toml now."""

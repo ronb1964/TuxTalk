@@ -395,7 +395,7 @@ def _heard_in_context(pending: dict, audio_f32, language):
         if found is not None:
             mark = found
     except Exception as e:
-        logger.warning(f"Couldn't hear the chunk boundary in context: {e}")
+        logger.warning(f"Couldn't hear the chunk boundary in context: {type(e).__name__}")
     return mark, joint
 
 

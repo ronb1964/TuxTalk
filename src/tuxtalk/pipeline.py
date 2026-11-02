@@ -31,7 +31,7 @@ from . import recording_state as rs
 from .beeps import CANCEL_BEEP, READY_BEEP
 from .chunk_text import carry_question, engine_period, hold_back_boundary
 from .key_commands import auto_send, ends_unfinished, split_key_command
-from .logger import setup_logger
+from .logger import error_without_words, setup_logger
 from .window_classes import app_kind, is_document_window, pastes_broken
 
 logger = setup_logger(__name__)
@@ -171,7 +171,9 @@ def transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         if words.text:
             _deliver(words, audio_f32, job)
     except Exception as e:
-        logger.error(f"Transcription error: {e}", exc_info=True)
+        # The error's text can quote the words: the notice shows it to the
+        # user, and the log leaves it out.
+        logger.error(f"Transcription error: {error_without_words(e)}")
         # The cancel beep and a notice whatever the notifications setting,
         # like notices.report_undelivered: nothing was typed, and the "done"
         # beep would sound like it worked.
@@ -426,7 +428,7 @@ def _deliver(words: _Words, audio_f32, job: _Job) -> None:
         # The transcription worked; only getting it into the window
         # didn't, so this is reported as undelivered, not as a
         # "Transcription error".
-        logger.error(f"Injection error: {e}", exc_info=True)
+        logger.error(f"Injection error: {error_without_words(e)}")
         outcome = "failed"
         job.message.add(outcome, None)
     if outcome == "password_field":

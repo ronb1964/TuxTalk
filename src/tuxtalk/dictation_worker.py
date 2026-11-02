@@ -13,7 +13,7 @@ import queue
 import threading
 import time
 
-from .logger import setup_logger
+from .logger import error_without_words, setup_logger
 
 logger = setup_logger(__name__)
 
@@ -50,8 +50,9 @@ class DictationWorker:
             job = self._queue.get()
             try:
                 job()
-            except Exception:
-                logger.exception("A dictation job failed; carrying on with the next")
+            except Exception as e:
+                logger.error("A dictation job failed; carrying on with the next: "
+                             f"{error_without_words(e)}")
             finally:
                 self._queue.task_done()
 

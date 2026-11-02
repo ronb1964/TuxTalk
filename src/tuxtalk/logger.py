@@ -3,6 +3,7 @@ import logging
 import logging.handlers
 import os
 import threading
+import traceback
 from pathlib import Path
 
 # The log file in the config folder.
@@ -89,6 +90,14 @@ def redact_text(text, reveal: bool = False) -> str:
     if isinstance(text, str):
         return f"[hidden, {len(text)} chars]"
     return "[hidden]"
+
+def error_without_words(error: BaseException) -> str:
+    """*error* for a log line on the dictation path: its type and the lines
+    it was raised through, without its message, which can quote what was
+    said (a KeyError naming a word, an engine's own error text)."""
+    where = "".join(traceback.format_tb(error.__traceback__)).rstrip()
+    return f"{type(error).__name__}, raised at:\n{where}" if where else type(error).__name__
+
 
 class FailureNotes:
     """The last failure of each check, so a check that runs before every
