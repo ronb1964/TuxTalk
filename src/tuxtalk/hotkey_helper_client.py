@@ -325,11 +325,15 @@ class HelperKeyboard:
 
     def await_hide(self, press, timeout):
         """Take in what the helper says until it has answered the HIDE sent
-        for Compose press *press* (Asked), or for *timeout* s: on the hotkey
-        loop, whose release of that press was read before the answer."""
+        for Compose press *press* (Asked), or for *timeout* s: the key was
+        found up before the answer, by the hotkey loop, which holds every
+        keyboard grabbed meanwhile, or by typing. Not while the helper is
+        gone: no answer will come, and reconnecting can take a second."""
         give_up_at = time.monotonic() + timeout
         while True:
             with self._lock:
+                if self.sock is None:
+                    return
                 self._pump()
                 if all(a.press != press or a.command != "HIDE" for a in self.asked):
                     return

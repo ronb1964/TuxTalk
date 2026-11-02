@@ -754,6 +754,34 @@ def keyboard(monkeypatch):
     return fake
 
 
+class _CtypesLoading:
+    """ctypes as keyboard_layout sees it, loading *library* whatever is
+    asked for; ctypes itself stays as it is for the rest of the process."""
+
+    def __init__(self, library):
+        self.library = library
+
+    def CDLL(self, name):
+        return self.library
+
+    def __getattr__(self, name):
+        import ctypes
+        return getattr(ctypes, name)
+
+
+@pytest.fixture
+def old_libxkbcommon(monkeypatch):
+    """libxkbcommon before 1.0 for keyboard_layout: no
+    xkb_keymap_key_get_mods_for_level, nor any other function it loads."""
+    from tuxtalk import keyboard_layout
+
+    class OldLibrary:
+        pass
+    monkeypatch.setattr(keyboard_layout, "C", _CtypesLoading(OldLibrary()))
+    monkeypatch.setattr(keyboard_layout, "_xkb", None)
+    monkeypatch.setattr(keyboard_layout, "_planners", {})
+
+
 # --- TuxTalk's windows, built for real (under xvfb-run) ---------------------------
 # For tests of what a window shows or does. Reading the source for a label
 # would break when the code moves and pass when the label no longer shows.

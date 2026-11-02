@@ -21,6 +21,10 @@ from tuxtalk import keyboard_output
 
 xkb = pytest.importorskip("ctypes").CDLL("libxkbcommon.so.0")
 P = C.c_void_p
+xkb.xkb_context_new.restype = P
+xkb.xkb_context_new.argtypes = [C.c_int]
+xkb.xkb_keymap_new_from_names.restype = P
+xkb.xkb_keymap_new_from_names.argtypes = [P, C.POINTER(kl._RuleNames), C.c_int]
 xkb.xkb_state_new.restype = P
 xkb.xkb_state_new.argtypes = [P]
 xkb.xkb_state_update_key.argtypes = [P, C.c_uint32, C.c_int]
@@ -41,8 +45,11 @@ COMPOSED, CANCELLED, COMPOSING = 2, 3, 1
 def replay(planner, tokens):
     """The text a compositor using this layout would produce from `tokens`
     ((evdev keycode, pressed) pairs), dead keys included."""
-    state = xkb.xkb_state_new(planner.keymap)
-    table = xkb.xkb_compose_table_new_from_locale(planner.ctx, b"en_US.UTF-8", 0)
+    ctx = xkb.xkb_context_new(0)
+    names = kl._RuleNames(b"evdev", b"pc105", planner.layout.encode(), planner.variant.encode(),
+                          None if planner.options is None else planner.options.encode())
+    state = xkb.xkb_state_new(xkb.xkb_keymap_new_from_names(ctx, C.byref(names), 0))
+    table = xkb.xkb_compose_table_new_from_locale(ctx, b"en_US.UTF-8", 0)
     compose = xkb.xkb_compose_state_new(table, 0)
     buf = C.create_string_buffer(32)
     out = ""
@@ -719,15 +726,10 @@ def test_a_shortcut_on_a_layout_libxkbcommon_doesnt_know_uses_the_us_key(monkeyp
     assert kl.shortcut_keycode("v") == 47
 
 
-def test_a_shortcut_with_an_old_libxkbcommon_uses_the_us_key(monkeypatch):
+def test_a_shortcut_with_an_old_libxkbcommon_uses_the_us_key(monkeypatch, old_libxkbcommon):
     """libxkbcommon before 1.0 lacks a function TuxTalk loads: Ctrl+Alt+V
     as a hotkey is resolved at service start, and must not stop it."""
-    class OldLibrary:
-        """No xkb_keymap_key_get_mods_for_level, nor anything else."""
-    monkeypatch.setattr(kl.C, "CDLL", lambda name: OldLibrary())
-    monkeypatch.setattr(kl, "_xkb", None)
     monkeypatch.setattr(kl, "active_layout", lambda: ("fr", "", ""))
-    monkeypatch.setattr(kl, "_planners", {})
     assert kl.shortcut_keycode("v") == 47
 
 
@@ -786,3 +788,45 @@ def test_a_shortcut_fallback_that_comes_back_after_working_is_logged_again(
         layout["now"] = ("no-such-layout", "", "")
         kl.shortcut_keycode("v")
     assert sum("US letters" in r.getMessage() for r in caplog.records) == 2
+
+
+def test_a_keymap_that_cant_be_read_is_logged_once_not_after_every_dictation(monkeypatch,
+                                                                             caplog):
+    """Which key is Compose is read again after each dictation: a layout
+    libxkbcommon can't build said so in the log every time."""
+    import logging
+    monkeypatch.setattr(kl, "active_layout", lambda: ("no-such-layout", "", ""))
+    monkeypatch.setattr(kl, "_failures", kl.FailureNotes())
+    with caplog.at_level(logging.INFO, logger=kl.logger.name):
+        for _ in range(3):
+            assert kl.compose_keys() == frozenset()
+    assert sum("which key is Compose" in r.getMessage() for r in caplog.records) == 1
+
+
+class _CountingLibrary:
+    """libxkbcommon, noting each keymap and context made and let go."""
+
+    _COUNTED = {"xkb_context_new": ("context", "made"), "xkb_context_unref": ("context", "freed"),
+                "xkb_keymap_new_from_names": ("keymap", "made"),
+                "xkb_keymap_unref": ("keymap", "freed")}
+
+    def __init__(self, library):
+        self.library, self.made, self.freed = library, [], []
+
+    def __getattr__(self, name):
+        function = getattr(self.library, name)
+        if name not in self._COUNTED:
+            return function
+        what, into = self._COUNTED[name]
+        return lambda *args: getattr(self, into).append(what) or function(*args)
+
+
+def test_a_planner_lets_go_of_libxkbcommons_keymap_once_its_keys_are_known(monkeypatch):
+    """The planners are kept for the session, one per layout and option
+    set, and each kept a keymap and its context from libxkbcommon too."""
+    counting = _CountingLibrary(kl._lib())
+    monkeypatch.setattr(kl, "_lib", lambda: counting)
+    planner = kl.KeyPlanner("de", "", "")
+    assert planner.plan("ä") is not None
+    assert sorted(counting.made) == sorted(counting.freed) == ["context", "keymap"]
+

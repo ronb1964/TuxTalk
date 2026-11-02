@@ -84,14 +84,15 @@ def reported(timeout: float = TRAY_TIMEOUT_S):
     return tuple(str(part) for part in answer)
 
 
-def look():
+def look(timeout: float = TRAY_TIMEOUT_S):
     """(class, which window) of the focused window, each None when not
     known. Which window is ("tray", id) or ("compositor", id); one of
     TuxTalk's own is ("own", that or None when it has no id), with no
-    class. Safe from any thread."""
+    class. *timeout* is how long each question to the tray may take. Safe
+    from any thread."""
     from . import compositor_focus
     from .desktop_identity import is_clipboard_tool_class, is_own_window_class
-    wm_class, tray_id, _frame = reported() or ("", "", "")
+    wm_class, tray_id, _frame = reported(timeout) or ("", "", "")
     if is_own_window_class(wm_class):
         return None, ("own", ("tray", tray_id) if tray_id else None)
     if wm_class and tray_id:
