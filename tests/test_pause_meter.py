@@ -1,6 +1,8 @@
 """Type at pause: the meter, upstream's SegmentedVUMeter, flashing a green
 frame where a phrase would be typed. What counts as speech is the voice
 detector's call, so no level is marked on it."""
+from types import SimpleNamespace
+
 import cairo
 
 from tuxtalk.mic_test import SegmentedVUMeter
@@ -16,8 +18,20 @@ def pixel(surface, x, y):
     return r, g, b
 
 
-def test_it_is_the_mic_tests_meter():
-    assert issubclass(PauseMeter, SegmentedVUMeter)
+def _drawn(meter, level, width=200, height=20):
+    """The pixels *meter* draws at *level* on a *width* x *height* widget."""
+    meter.set_value(level)
+    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, width, height)
+    size = SimpleNamespace(get_allocated_width=lambda: width,
+                           get_allocated_height=lambda: height)
+    meter._on_draw(size, cairo.Context(surface))
+    surface.flush()
+    return bytes(surface.get_data())
+
+
+def test_between_cuts_it_looks_like_the_mic_tests_meter():
+    for level in (0.0, 0.45, 0.9):
+        assert _drawn(PauseMeter(), level) == _drawn(SegmentedVUMeter(), level), level
 
 
 def test_show_snapshot_sets_the_level():
