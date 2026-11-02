@@ -64,6 +64,12 @@ before 0.15.0, so older entries use that name.
   a phrase followed by a key you said ("press tab" where it only types
   spaces, say) is heard with the rest of its sentence again when deciding
   on a question mark.
+- The .rpm couldn't be installed on openSUSE at all: it asked for the tray
+  library by Fedora's name. It accepts openSUSE's now. And an update or
+  uninstall through apt or zypper waits a couple of minutes when the
+  desktop's own updater is busy, instead of failing straight away.
+- A screen reader read the light bulb at the start of some messages aloud
+  ("light bulb How It Works"). It reads just the words now.
 - Help and About opened another window every time you clicked them, and
   About asked GitHub for its notes again each time. The open one comes to
   the front now.
