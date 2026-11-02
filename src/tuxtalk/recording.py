@@ -391,6 +391,20 @@ def cancel_recording(rec, beeps_on: bool, notify_on: bool, reason="Cancelled"):
     _leave_held_send_unsent(rec)
 
 
+def cancel_finishing(rec, beeps_on: bool, notify_on: bool) -> None:
+    """Esc after *rec*'s key came up, while the dictation worker is still
+    finishing it (Message.finishing): what isn't typed yet stays out, and
+    nothing is sent or pressed after it. Keys already going in are typed
+    to the end."""
+    if rec.message.cancelled:
+        return
+    rec.message.cancelled = True
+    beeps.beep(beeps_on, *CANCEL_BEEP)
+    logger.info("Recording cancelled: Esc while it was still being finished")
+    if notify_on:
+        notify_module.notify("Cancelled by ESC", "")
+
+
 def _leave_held_send_unsent(rec) -> None:
     """Recording *rec* ended with nothing to add to a send it held, when it
     began (rec.held_send) or one set up for it since: say "Not sent",

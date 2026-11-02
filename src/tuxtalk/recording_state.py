@@ -56,8 +56,11 @@ class Message:
     sentence_where: tuple | None = field(default=None, repr=False)
     edit_waiting: str | None = field(default=None, repr=False)
     # Its recording was cancelled (Esc): a phrase of it still waiting to be
-    # typed is dropped.
+    # typed is dropped, and nothing is sent after it.
     cancelled: bool = False
+    # Its recording has stopped and the dictation worker hasn't finished its
+    # last part yet (pipeline.stop_recording): Esc still cancels it.
+    finishing: bool = False
     # Its recording's entry in Recent Dictations, all its phrases, typed or
     # tried (last_dictation.remember_said).
     said: str = field(default="", repr=False)

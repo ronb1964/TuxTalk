@@ -497,7 +497,7 @@ def stop_recording(
     message = rec.message
     if rec.edit_mode:
         where = focused_window.look()       # the window the edit is for
-        dictation_worker.submit(lambda: voice_edit.transcribe_and_edit(
+        _finish(message, lambda: voice_edit.transcribe_and_edit(
             frames, rec_sr, beeps_on, language, injection_mode, message, where))
         return
     # Type at pause: the rest is the recording's last phrase, typed after
@@ -505,9 +505,24 @@ def stop_recording(
     chunk_role = "last" if rec.chunks_submitted else None
     if chunk_role:
         frames = recording.drop_speechless_rest(rec, frames)
-    dictation_worker.submit(lambda: transcribe_and_inject(
+    _finish(message, lambda: transcribe_and_inject(
         frames, rec_sr, beeps_on, smart_quotes, notify_on, language, auto_space,
         auto_period, injection_mode, chunk_role=chunk_role, message=message))
+
+
+def _finish(message, work) -> None:
+    """Queue *work*, the last part of *message*'s recording, on the dictation
+    worker. Until it's done, Esc cancels what of it is left
+    (recording.cancel_finishing): the key is up, but the words may not be
+    in yet, nor the automatic Enter after them."""
+    message.finishing = True
+
+    def run():
+        try:
+            work()
+        finally:
+            message.finishing = False
+    dictation_worker.submit(run)
 
 
 # Type at pause's phrases, cut while the recording goes on, are transcribed and
