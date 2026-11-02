@@ -122,7 +122,7 @@ def test_engine_download_fetches_again_when_parakeet_is_missing(tmp_path, monkey
 def test_a_failed_engine_download_says_why(tmp_path, monkeypatch):
     """Its window said only "Download failed"."""
     from tuxtalk import download_utils
-    monkeypatch.setattr(wv, "_engine_dir", lambda: str(tmp_path / "1.9.5" / wv.ENGINE_NAME))
+    monkeypatch.setattr(wv, "_engine_dir", lambda: str(tmp_path / wv._build_folder() / wv.ENGINE_NAME))
 
     def offline(url, dest, **kwargs):
         raise download_utils.DownloadError("Name or service not known")
@@ -135,7 +135,7 @@ def test_a_failed_engine_download_says_why(tmp_path, monkeypatch):
 
 def test_a_download_that_fails_to_unpack_leaves_nothing_behind(tmp_path, monkeypatch):
     """Not the 22 MB archive, nor a half-unpacked folder."""
-    engine = tmp_path / "1.9.5" / wv.ENGINE_NAME
+    engine = tmp_path / wv._build_folder() / wv.ENGINE_NAME
     monkeypatch.setattr(wv, "_engine_dir", lambda: str(engine))
 
     def download(url, dest, **kwargs):
@@ -143,7 +143,7 @@ def test_a_download_that_fails_to_unpack_leaves_nothing_behind(tmp_path, monkeyp
         return True
     monkeypatch.setattr("tuxtalk.download_utils.download_file", download)
     assert wv.make_engine_download_func("small")(lambda *a: None, None) is False
-    assert list((tmp_path / "1.9.5").iterdir()) == []
+    assert list((tmp_path / wv._build_folder()).iterdir()) == []
 
 
 def _packed_engine():
@@ -164,33 +164,85 @@ def _runtime_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(runtime))
 
 
-def test_a_new_engine_build_replaces_the_installed_one_once_it_is_there(tmp_path, monkeypatch):
-    """With build 1 installed, a TuxTalk that brings build 2 doesn't take
-    build 1 for it: it downloads build 2, which then replaces build 1. A
-    failed download leaves build 1 as it was."""
+def _installed_build(tmp_path, monkeypatch, build, version=None):
+    """Engine *build* of *version* (default: this one) in the data folder,
+    holding a whisper-server; its folder."""
     from tuxtalk import config
-    _runtime_dir(tmp_path, monkeypatch)
     monkeypatch.setattr(config, "get_data_dir", lambda: str(tmp_path / "data"))
-    monkeypatch.setattr(wv, "ENGINE_BUILD", 1)
-    build_1 = pathlib.Path(wv._engine_dir())
-    build_1.mkdir(parents=True)
-    (build_1 / "whisper-server").write_text("")
-    (build_1 / "whisper-server").chmod(0o755)
-    assert wv.is_engine_installed("small")
+    with monkeypatch.context() as m:
+        m.setattr(wv, "ENGINE_BUILD", build)
+        m.setattr(wv, "ENGINE_VERSION", version or wv.ENGINE_VERSION)
+        m.setattr(wv, "ENGINE_NAME", f"talktype-whisper-vulkan-{version or wv.ENGINE_VERSION}")
+        folder = pathlib.Path(wv._engine_dir())
+    folder.mkdir(parents=True)
+    (folder / "whisper-server").write_text("")
+    (folder / "whisper-server").chmod(0o755)
+    return folder
 
-    monkeypatch.setattr(wv, "ENGINE_BUILD", 2)
-    assert not wv.is_engine_installed("small")
-    monkeypatch.setattr("tuxtalk.download_utils.download_file", lambda *a, **k: False)
-    assert wv.make_engine_download_func("small")(lambda *a: None, None) is False
-    assert (build_1 / "whisper-server").exists()
+
+def _download_build(monkeypatch):
+    """Engine downloads that succeed, each counted in the list returned."""
+    fetched = []
 
     def download(url, dest, **kwargs):
+        fetched.append(url)
         pathlib.Path(dest).write_bytes(_packed_engine())
         return True
     monkeypatch.setattr("tuxtalk.download_utils.download_file", download)
+    return fetched
+
+
+def test_an_earlier_engine_build_dictates_until_the_new_one_replaces_it(tmp_path, monkeypatch):
+    """With build 1 installed, a TuxTalk that brings build 2 keeps dictating
+    on the graphics card with build 1, and still downloads build 2, which
+    then replaces build 1. A failed download leaves build 1 as it was."""
+    _runtime_dir(tmp_path, monkeypatch)
+    monkeypatch.setattr(wv, "ENGINE_BUILD", 2)
+    build_1 = _installed_build(tmp_path, monkeypatch, 1)
+    assert wv.is_engine_installed("small") and wv.engine_dir() == str(build_1)
+
+    monkeypatch.setattr("tuxtalk.download_utils.download_file", lambda *a, **k: False)
+    assert wv.make_engine_download_func("small")(lambda *a: None, None) is False
+    assert wv.engine_dir() == str(build_1)
+
+    _download_build(monkeypatch)
     assert wv.make_engine_download_func("small")(lambda *a: None, None) is True
-    assert wv.is_engine_installed("small")
-    assert pathlib.Path(wv._engine_dir()) != build_1 and not build_1.parent.exists()
+    assert wv.engine_dir() == wv._engine_dir() != str(build_1)
+    assert wv.is_engine_installed("small") and not build_1.parent.exists()
+
+
+def test_another_whisper_cpp_versions_engine_is_never_run(tmp_path, monkeypatch):
+    """TuxTalk calls libparakeet as its own whisper.cpp version declares it."""
+    _installed_build(tmp_path, monkeypatch, 3, version="1.9.4")
+    assert not wv.is_engine_installed("small")
+    assert wv.update_in_background() is None
+
+
+def test_an_earlier_build_in_use_is_updated_in_the_background(tmp_path, monkeypatch):
+    """Nothing to ask: the user chose this engine, and the update changes
+    nothing they see. Once it's there, nothing more is fetched."""
+    _runtime_dir(tmp_path, monkeypatch)
+    monkeypatch.setattr(wv, "ENGINE_BUILD", 2)
+    _installed_build(tmp_path, monkeypatch, 1)
+    fetched = _download_build(monkeypatch)
+    update = wv.update_in_background()
+    update.join(30)
+    assert fetched == [wv.ENGINE_URL] and wv.engine_dir() == wv._engine_dir()
+    assert wv.update_in_background() is None and fetched == [wv.ENGINE_URL]
+
+
+def test_an_engine_update_that_fails_says_why_in_the_log(tmp_path, monkeypatch, caplog):
+    from tuxtalk import download_utils
+    _runtime_dir(tmp_path, monkeypatch)
+    monkeypatch.setattr(wv, "ENGINE_BUILD", 2)
+    build_1 = _installed_build(tmp_path, monkeypatch, 1)
+
+    def offline(url, dest, **kwargs):
+        raise download_utils.DownloadError("Name or service not known")
+    monkeypatch.setattr(download_utils, "fetch_file", offline)
+    wv.update_in_background().join(30)
+    assert "Name or service not known" in caplog.text
+    assert wv.engine_dir() == str(build_1)
 
 
 def test_two_downloads_of_the_engine_at_once_both_end_installed(tmp_path, monkeypatch):
@@ -200,7 +252,7 @@ def test_two_downloads_of_the_engine_at_once_both_end_installed(tmp_path, monkey
     import threading
     from tuxtalk import download_utils
     _runtime_dir(tmp_path, monkeypatch)
-    engine = tmp_path / "1.9.5" / wv.ENGINE_NAME
+    engine = tmp_path / wv._build_folder() / wv.ENGINE_NAME
     monkeypatch.setattr(wv, "_engine_dir", lambda: str(engine))
     packed = _packed_engine()
     both_downloaded = threading.Barrier(2)
@@ -238,7 +290,7 @@ def test_an_engine_update_that_cant_move_in_keeps_the_old_engine(tmp_path, monke
     import io
     import tarfile
     from tuxtalk.parakeet_engine import PARAKEET_MODEL
-    engine = tmp_path / "1.9.5" / wv.ENGINE_NAME
+    engine = tmp_path / wv._build_folder() / wv.ENGINE_NAME
     engine.mkdir(parents=True)
     (engine / "whisper-server").write_text("old")
     (engine / "whisper-server").chmod(0o755)
@@ -272,8 +324,8 @@ def test_an_engine_update_cut_off_part_way_is_put_back_though_the_download_fails
     and there was no engine left at all."""
     from tuxtalk.download_utils import STALE_PARTIAL_S
     from tuxtalk.parakeet_engine import PARAKEET_MODEL
-    engine = tmp_path / "1.9.5" / wv.ENGINE_NAME
-    kept = tmp_path / "1.9.5" / f".{wv.ENGINE_NAME}.old"
+    engine = tmp_path / wv._build_folder() / wv.ENGINE_NAME
+    kept = tmp_path / wv._build_folder() / f".{wv.ENGINE_NAME}.old"
     kept.mkdir(parents=True)
     (kept / "whisper-server").write_text("old")
     (kept / "whisper-server").chmod(0o755)
@@ -288,7 +340,7 @@ def test_an_engine_update_cut_off_part_way_is_put_back_though_the_download_fails
 
 def test_only_the_engines_own_kept_copy_is_put_back(tmp_path, monkeypatch):
     """Every hidden .old in the folder was renamed, a user's .notes.old to notes."""
-    engine = tmp_path / "1.9.5" / wv.ENGINE_NAME
+    engine = tmp_path / wv._build_folder() / wv.ENGINE_NAME
     engine.parent.mkdir()
     (engine.parent / ".notes.old").mkdir()
     monkeypatch.setattr(wv, "_engine_dir", lambda: str(engine))
@@ -666,12 +718,14 @@ def test_speed_check_remembers_which_won(monkeypatch, times, slower):
 # answers with fixed text, or with an error when started with FAKE_FAIL_INFERENCE
 # in its environment (so the warm-up fails); FAKE_FAIL_START makes it print
 # that and end at once. Like whisper-server, it serves its routes only under
-# its --request-path.
+# its --request-path, and like engine build 2, /inference only with the key
+# in its WHISPER_API_KEY.
 FAKE_SERVER = '''
 import json, os, sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 port = int(sys.argv[sys.argv.index("--port") + 1])
 prefix = sys.argv[sys.argv.index("--request-path") + 1]
+key = os.environ.get("WHISPER_API_KEY")
 fail = os.environ.get("FAKE_FAIL_INFERENCE") == "1"
 if os.environ.get("FAKE_FAIL_START"):
     sys.exit(os.environ["FAKE_FAIL_START"])
@@ -686,6 +740,8 @@ class H(BaseHTTPRequestHandler):
         self.rfile.read(int(self.headers["Content-Length"]))
         if self.path != prefix + "/inference":
             self.send_response(404); self.end_headers(); return
+        if key and self.headers.get("Authorization") != "Bearer " + key:
+            self.send_response(401); self.end_headers(); return
         if fail:
             self.send_response(500); self.end_headers(); return
         body = json.dumps({"text": "hello", "segments": []}).encode()
@@ -701,7 +757,7 @@ def fake_server(tmp_path, monkeypatch):
     script = tmp_path / "whisper-server"
     script.write_text(f"#!{sys.executable}\n" + FAKE_SERVER)
     script.chmod(0o755)
-    monkeypatch.setattr(wv, "_binary", lambda name: str(script))
+    monkeypatch.setattr(wv, "engine_dir", lambda: str(tmp_path))
     monkeypatch.setattr(wv, "model_path", lambda name: "model.bin")
     monkeypatch.setattr(wv.engine_process, "kill_orphans", lambda *a, **k: 0)
     return monkeypatch
@@ -749,9 +805,10 @@ def test_the_graphics_engine_starts_through_the_engine_launcher(fake_server, mon
 
 
 def test_the_graphics_engines_routes_sit_behind_a_random_path(fake_server, monkeypatch):
-    """whisper-server's /load route loads any model file it's given the path
-    of, with no key. A web page can post a form to 127.0.0.1, but can't
-    guess a random path in front of every route."""
+    """For engine build 1, which runs until build 2 has downloaded: it takes
+    no key, and its /load route loads any model file it's given the path
+    of. A web page can post a form to 127.0.0.1, but can't guess a random
+    path in front of every route."""
     started = []
     real_popen = wv.subprocess.Popen
     monkeypatch.setattr(wv.subprocess, "Popen",
@@ -764,6 +821,36 @@ def test_the_graphics_engines_routes_sit_behind_a_random_path(fake_server, monke
         finally:
             model.close()
     assert all(len(path) > 30 for path in paths) and paths[0] != paths[1]
+
+
+def test_only_tuxtalk_can_send_the_graphics_engine_audio(fake_server, monkeypatch):
+    """Any program on the computer, another user's too, could send it audio,
+    and through engine build 1's /load route load any file as a model. The
+    key is new at every start and never on the command line, which every
+    user can read."""
+    import urllib.error
+    import urllib.request
+    started = []
+    real_popen = wv.subprocess.Popen
+    monkeypatch.setattr(wv.subprocess, "Popen",
+                        lambda command, **k: started.append((command, k["env"]))
+                        or real_popen(command, **k))
+    keys = []
+    for _ in range(2):
+        model = wv.VulkanWhisperModel("small", 0, threads=1)     # its warm-up dictated
+        try:
+            command, env = started[-1]
+            keys.append(env["WHISPER_API_KEY"])
+            assert len(keys[-1]) >= 32 and not any(keys[-1] in arg for arg in command)
+            body, content_type = wv.multipart(wv.request_fields("en"), wv.wav_bytes(np.zeros(160)))
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{model._port}{model._path}/inference", data=body,
+                headers={"Content-Type": content_type})
+            with pytest.raises(urllib.error.HTTPError, match="401"):
+                wv.engine_process.open_local(request, timeout=10)
+        finally:
+            model.close()
+    assert keys[0] != keys[1]
 
 
 def test_a_server_that_ends_at_start_says_what_it_printed(fake_server, monkeypatch):

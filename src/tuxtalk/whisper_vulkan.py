@@ -22,7 +22,7 @@ parakeet_gpu.py, because whisper-server only serves Whisper models.
 At run time it is a whisper-server process, started and watched the same way
 as the AI engine (ai_server.py, engine_process.py): it dies with the dictation
 service and leftovers from a crash are cleaned up. Each dictation is sent to
-it over 127.0.0.1 as a WAV.
+it over 127.0.0.1 as a WAV, with a key only this user can read.
 
 Not every graphics chip is faster than the processor. A desktop Ryzen 7000's
 built-in graphics has 2 compute units and measured no faster than its own
@@ -56,19 +56,21 @@ DEVICE_LABEL = "Vulkan (any GPU)"       # Preferences' Device dropdown
 ENGINE_VERSION = "1.9.5"                           # whisper.cpp release it is built from
 # 1.9.4 build 2 added Parakeet (libparakeet.so, parakeet-cli). 1.9.5 build 1
 # adds TuxTalk's patch (vulkan-engine-patches/): Your Words for Parakeet on
-# the graphics chip. Each build has its own asset and pre-release, because
-# released versions download theirs and check its SHA256, so a published
-# build must stay exactly as it is. The archive's folder is named after the
-# whisper.cpp version alone; it unpacks into a folder per build
-# (_build_folder), and a new build's folder replaces the old one.
-ENGINE_BUILD = 1
+# the graphics chip. Build 2: whisper-server answers only requests with the
+# key it is started with, and has no /load route. Each build has its own
+# asset and pre-release, because released versions download theirs and check
+# its SHA256, so a published build must stay exactly as it is. The archive's
+# folder is named after the whisper.cpp version alone; it unpacks into a
+# folder per build (_build_folder), and a new build's folder replaces the
+# old one.
+ENGINE_BUILD = 2
 ENGINE_NAME = f"talktype-whisper-vulkan-{ENGINE_VERSION}"
 ENGINE_ASSET = f"{ENGINE_NAME}-b{ENGINE_BUILD}-x64.tar.gz"
 ENGINE_TAG = f"whisper-vulkan-{ENGINE_VERSION}-b{ENGINE_BUILD}"     # TuxTalk GitHub pre-release
 ENGINE_URL = f"https://github.com/ronb1964/TuxTalk/releases/download/{ENGINE_TAG}/{ENGINE_ASSET}"
 # From build-vulkan-engine.sh's .sha256; the download is refused if it doesn't
 # match, so a tampered or truncated engine is never run.
-ENGINE_SHA256 = "053e45a2cf67da523840f01e2d4c3d5b934685e71603c47d6d896ee23ce639f2"
+ENGINE_SHA256 = "dae93f88d3c0e318b7ce517259cdc04fb5524bbb6a17ee0f540cbfd5ec4c6887"
 ENGINE_SIZE_TEXT = "22 MB"
 
 # --- Models, in whisper.cpp's format -------------------------------------------
@@ -152,22 +154,61 @@ def _build_folder():
     return ENGINE_VERSION if ENGINE_BUILD == 1 else f"{ENGINE_VERSION}-b{ENGINE_BUILD}"
 
 
-def _engine_dir():
+def _engines_root():
     from .config import get_data_dir
-    return os.path.join(get_data_dir(), "whisper-vulkan", _build_folder(), ENGINE_NAME)
+    return os.path.join(get_data_dir(), "whisper-vulkan")
+
+
+def _engine_dir():
+    """Where this build is, once downloaded."""
+    return os.path.join(_engines_root(), _build_folder(), ENGINE_NAME)
+
+
+def _earlier_builds():
+    """Folders of earlier builds of this whisper.cpp version on disk, newest
+    first. Only the same version: TuxTalk calls libparakeet's functions as
+    that version declares them (parakeet_gpu_worker.py)."""
+    pattern = re.compile(re.escape(ENGINE_VERSION) + r"(?:-b(\d+))?")
+    try:
+        names = os.listdir(_engines_root())
+    except OSError:
+        return []
+    builds = []
+    for name in names:
+        match = pattern.fullmatch(name)
+        if match and int(match.group(1) or 1) < ENGINE_BUILD:
+            builds.append((int(match.group(1) or 1), name))
+    return [os.path.join(_engines_root(), name, ENGINE_NAME) for _, name in sorted(builds)[::-1]]
+
+
+def engine_dir():
+    """The engine to run: this build, or, until it has downloaded
+    (update_in_background), an earlier build of the same whisper.cpp
+    version, so dictation stays on the graphics card meanwhile."""
+    for folder in (_engine_dir(), *_earlier_builds()):
+        if os.access(os.path.join(folder, "whisper-server"), os.X_OK):
+            return folder
+    return _engine_dir()
 
 
 def _binary(name):
-    return os.path.join(_engine_dir(), name)
+    return os.path.join(engine_dir(), name)
+
+
+def _can_run(folder, model_name=None) -> bool:
+    """The engine in *folder* is there, and can run *model_name* if one is
+    given. whisper.cpp 1.9.4's first build, in a folder of its own that an
+    update removes, had no Parakeet in it."""
+    if not os.access(os.path.join(folder, "whisper-server"), os.X_OK):
+        return False
+    return not is_parakeet(model_name) or os.access(os.path.join(folder, "parakeet-cli"),
+                                                    os.X_OK)
 
 
 def is_engine_installed(model_name=None) -> bool:
-    """The engine is downloaded, and can run *model_name* if one is given.
-    whisper.cpp 1.9.4's first build, in a folder of its own that an update
-    removes, had no Parakeet in it."""
-    if not os.access(_binary("whisper-server"), os.X_OK):
-        return False
-    return not is_parakeet(model_name) or os.access(_binary("parakeet-cli"), os.X_OK)
+    """An engine is downloaded, this build or an earlier one, and can run
+    *model_name* if one is given."""
+    return _can_run(engine_dir(), model_name)
 
 
 def model_path(model_name):
@@ -202,7 +243,7 @@ def make_engine_download_func(model_name=None):
         parent = os.path.dirname(_engine_dir())
         recover_cut_off_swaps(parent, (ENGINE_NAME,), "vulkan-engine",
                               "the graphics engine")
-        if is_engine_installed(model_name):
+        if _can_run(_engine_dir(), model_name):
             progress_callback("Already downloaded", 100)
             return True
 
@@ -224,7 +265,7 @@ def make_engine_download_func(model_name=None):
                     # kill before the move left none.
                     target, old = _engine_dir(), os.path.join(parent, f".{ENGINE_NAME}.old")
                     restore_cut_off_swap(target, old)
-                    if not is_engine_installed(model_name):     # or another download did it
+                    if not _can_run(target, model_name):    # or another download did it
                         replace_folder(os.path.join(folder, ENGINE_NAME), target, old)
                     engine_process.remove_other_versions(os.path.dirname(parent),
                                                          _build_folder())
@@ -235,6 +276,30 @@ def make_engine_download_func(model_name=None):
         progress_callback("Done", 100)
         return True
     return download
+
+
+def update_in_background():
+    """While an earlier build is what runs (engine_dir), download this one
+    on a thread of its own, which the next start of the engine uses: the
+    user chose this engine, and an update changes nothing they see. A
+    download that fails is tried again at the next start. The thread, or
+    None when there's nothing to update."""
+    if engine_dir() == _engine_dir():
+        return None
+
+    def update():
+        reports = []
+        logger.info(f"Updating the graphics engine to build {ENGINE_BUILD}")
+        if make_engine_download_func()(lambda *report: reports.append(report), None):
+            logger.info("Graphics engine updated; it's used from its next start")
+        else:
+            from .download_utils import failure_reason
+            why = failure_reason(*reports[-1]) if reports else None
+            logger.warning(f"The graphics engine update didn't finish ({why or 'stopped'}); "
+                           "trying again at the next start")
+    thread = threading.Thread(target=update, daemon=True, name="vulkan-engine-update")
+    thread.start()
+    return thread
 
 
 def make_model_download_func(model_name):
@@ -272,8 +337,9 @@ def choose_device(devices):
     return sorted(devices, key=lambda d: d[3])[0][0]     # discrete (uma 0) first, stable
 
 
-def _engine_env():
-    return {**os.environ, "LD_LIBRARY_PATH": _engine_dir()}
+def _engine_env(folder=None):
+    """The environment the engine in *folder* (default: engine_dir) runs in."""
+    return {**os.environ, "LD_LIBRARY_PATH": folder or engine_dir()}
 
 
 def find_device():
@@ -454,6 +520,7 @@ class VulkanWhisperModel:
         self._proc = None
         self._port = None
         self._path = ""
+        self._key = ""
         # Re-entrant: a restart inside transcribe() runs a warm-up transcribe().
         self._lock = threading.RLock()
         self._launcher = engine_process.Launcher("vulkan-whisper")
@@ -468,22 +535,28 @@ class VulkanWhisperModel:
         for it to answer, and warm it up with a practice run. Raises
         RuntimeError with the reason when it doesn't come up, with the
         server stopped."""
-        engine_process.kill_orphans(engine_process.processes_of(_binary("whisper-server")),
+        folder = engine_dir()
+        server = os.path.join(folder, "whisper-server")
+        engine_process.kill_orphans(engine_process.processes_of(server),
                                     engine_process.is_talktype_process, "graphics engine")
         self._port = engine_process.free_port()
-        # Unlike llama-server (ai_server.py), whisper-server has no API key
-        # option, and its /load route loads any model file it is given the
-        # path of, or frees the model. A random path before every route
-        # keeps web pages, which can post a form to 127.0.0.1 and scan the
-        # ports, away from it. It doesn't stop another user, who can read the
-        # command line: engine build 2 will drop /load
-        # (vulkan-engine-patches/server-no-load-route.patch).
+        # A random key, so no other program, another user's included, can
+        # send it audio (vulkan-engine-patches/server-api-key.patch). Like
+        # the AI engine's (ai_server.py) it goes in the environment, which
+        # only this user can read: every user can read a command line. The
+        # random path before every route is for an earlier build still
+        # running until this one has downloaded (update_in_background): it
+        # takes no key and has a /load route that loads any model file it
+        # is given the path of, and the path keeps web pages, which can post
+        # a form to 127.0.0.1 and scan the ports, away from it.
+        self._key = secrets.token_hex(16)
         self._path = "/" + secrets.token_hex(16)
         command, env = engine_process.parent_death_command(
-            [_binary("whisper-server"), "-m", model_path(self.model_name),
+            [server, "-m", model_path(self.model_name),
              "--host", "127.0.0.1", "--port", str(self._port),
              "--request-path", self._path,
-             "-t", str(self.threads), "-dev", str(self.device_index)], _engine_env())
+             "-t", str(self.threads), "-dev", str(self.device_index)],
+            {**_engine_env(folder), "WHISPER_API_KEY": self._key})
         self._proc = self._launcher.popen(command, stdout=subprocess.DEVNULL,
                                           stderr=subprocess.PIPE, env=env)
         output = engine_process.OutputTail(self._proc.stderr)
@@ -541,7 +614,8 @@ class VulkanWhisperModel:
                 self._start()
             request = urllib.request.Request(
                 f"http://127.0.0.1:{self._port}{self._path}/inference", data=body,
-                headers={"Content-Type": content_type})
+                headers={"Content-Type": content_type,
+                         "Authorization": f"Bearer {self._key}"})
             with engine_process.open_local(request, timeout=timeout) as response:
                 return json.load(response)
 

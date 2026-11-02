@@ -51,15 +51,8 @@ class ParakeetGpuModel:
         """Start the graphics card's Parakeet helper on *device_index* with
         *threads* processor threads, or *command* instead (the tests'
         stand-in). Raises when the helper doesn't come up."""
-        from . import whisper_vulkan as wv
         self.device_index = device_index
-        threads = threads or max(1, (os.cpu_count() or 2) // 2)
-        if command is None:
-            model = wv.model_path(PARAKEET_MODEL)
-            logger.info(f"Parakeet on the graphics card from {os.path.basename(model)}")
-            command = [sys.executable, "-m", "tuxtalk.parakeet_gpu_worker",
-                       wv._engine_dir(), model, str(device_index), str(threads)]
-            command = engine_process.parent_death_command(command)[0]   # its own environment
+        self._threads = threads or max(1, (os.cpu_count() or 2) // 2)
         self._command = command
         self._proc = None
         self._output = None         # the helper's messages while it starts (OutputTail)
@@ -73,12 +66,25 @@ class ParakeetGpuModel:
 
     # --- the helper process ---------------------------------------------------
 
+    def _helper_command(self):
+        """The helper's command line for the engine and model on disk now.
+        Worked out at every start: an engine update during the session
+        (whisper_vulkan.update_in_background) removes the folder of the
+        build the helper started from."""
+        from . import whisper_vulkan as wv
+        model = wv.model_path(PARAKEET_MODEL)
+        logger.info(f"Parakeet on the graphics card from {os.path.basename(model)}")
+        command = [sys.executable, "-m", "tuxtalk.parakeet_gpu_worker", wv.engine_dir(),
+                   model, str(self.device_index), str(self._threads)]
+        return engine_process.parent_death_command(command)[0]     # its own environment
+
     def _start(self):
         """Start the helper (again) and wait for it to say it's ready. Raises
         RuntimeError with the helper's reason when it doesn't, with the
         helper stopped."""
         self._stop()
-        self._proc = self._launcher.popen(self._command, stdin=subprocess.PIPE,
+        self._proc = self._launcher.popen(self._command or self._helper_command(),
+                                          stdin=subprocess.PIPE,
                                           stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         # Kept to explain a helper that dies while starting, and dropped once
         # it's ready: after a dictation they could hold its words.

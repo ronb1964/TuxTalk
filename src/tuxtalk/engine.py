@@ -351,6 +351,7 @@ def _build_vulkan_model(settings: Settings):
                 model = whisper_vulkan.VulkanWhisperModel(settings.model, device_index)
                 logger.info(f"Model loaded: {settings.model} on vulkan device {device_index}")
                 _record_engine(settings.model, "vulkan")
+                whisper_vulkan.update_in_background()
                 return model
         except Exception as e:      # any failure here falls back to the processor
             logger.warning(f"The graphics engine failed to start: {e}")
@@ -384,6 +385,7 @@ def _build_parakeet_gpu_model(settings: Settings):
             model = parakeet_gpu.ParakeetGpuModel(device_index)
             logger.info(f"Model loaded: {PARAKEET_MODEL} on vulkan device {device_index}")
             _record_engine(PARAKEET_MODEL, "vulkan")
+            whisper_vulkan.update_in_background()
             return model
     except Exception as e:          # any failure here falls back to the processor
         logger.warning(f"Parakeet's graphics helper failed to start: {e}")

@@ -135,6 +135,29 @@ def test_a_crashed_helper_is_started_again(fake):
         model.close()
 
 
+def test_a_helper_started_again_runs_the_engine_on_disk_now(fake, monkeypatch):
+    """An engine update during the session (whisper_vulkan.update_in_background)
+    removes the folder of the build the helper started from: a crashed
+    helper must start from the new one, or it fails at every dictation."""
+    from tuxtalk import whisper_vulkan as wv
+    started = []
+
+    def launch(argv, env=None):
+        started.append(argv[argv.index("tuxtalk.parakeet_gpu_worker") + 1])
+        return fake("once"), env
+    monkeypatch.setattr(parakeet_gpu.engine_process, "parent_death_command", launch)
+    monkeypatch.setattr(wv, "model_path", lambda name: "/models/parakeet.bin")
+    monkeypatch.setattr(wv, "engine_dir", lambda: "/engines/build-1")
+    model = parakeet_gpu.ParakeetGpuModel(0)
+    try:
+        assert model.recognize(_audio()) == "16000 samples"
+        monkeypatch.setattr(wv, "engine_dir", lambda: "/engines/build-2")
+        assert model.recognize(_audio(2)) == "32000 samples"    # through a new helper
+        assert started == ["/engines/build-1", "/engines/build-2"]
+    finally:
+        model.close()
+
+
 def test_falls_back_to_the_processor_when_the_helper_keeps_failing(fake, monkeypatch):
     class Cpu:
         def recognize(self, audio):
