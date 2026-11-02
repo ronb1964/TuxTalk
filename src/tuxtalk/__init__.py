@@ -9,7 +9,7 @@ MIGRATION_LOG = _rename_migration.run_at_startup()
 import ctypes.util  # noqa: E402
 import os  # noqa: E402
 
-__version__ = "0.19.0"
+__version__ = "0.20.0"
 
 # Where the AppImage (and the .deb/.rpm made from it) keeps its own PortAudio:
 # <root>/usr/src/tuxtalk/ -> <root>/usr/lib/portaudio/. In a dev checkout or

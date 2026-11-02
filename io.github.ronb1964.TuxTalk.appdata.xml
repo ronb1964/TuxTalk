@@ -95,6 +95,19 @@
   </screenshots>
 
   <releases>
+    <release version="0.20.0" date="2026-11-01">
+      <description>
+        <p>A voice detector that tells your voice from the noise around you</p>
+        <ul>
+          <li>Hands-free and Type at pause tell speech from a dryer, a fan or a kitchen, so hands-free stops by itself there</li>
+          <li>A cough or a click after you finish is typed as "Yeah." far less often</li>
+          <li>A soft voice is heard as well as a loud one</li>
+          <li>"Quote" said as a word is typed as the word, and "unquote" closes a quotation</li>
+          <li>Esc right after you let go cancels what's still being finished</li>
+          <li>.deb and .rpm updates are checked again by root before they're installed, and the CUDA download is pinned to tested files</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.19.0" date="2026-10-31">
       <description>
         <p>Dictation keys without Fn, Report a Problem, and a long list of fixes</p>
