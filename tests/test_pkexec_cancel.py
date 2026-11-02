@@ -43,7 +43,6 @@ def test_a_real_failure_still_reports_the_error(monkeypatch):
 
 
 def test_prefs_says_cancelled_instead_of_setup_failed(monkeypatch):
-    pytest.importorskip("gi")
     from tuxtalk import prefs_system_check as P
 
     dialogs = []
@@ -71,7 +70,6 @@ def test_a_cancelled_switch_to_the_helper_offers_the_switch_again():
     """The button read Fix Typing Permissions after a cancelled password
     prompt, so the next click ran the plain fix, which leaves the user in
     the input group."""
-    pytest.importorskip("gi")
     from tuxtalk import prefs_system_check as P
     d, button = _system_check_offering(P.SWITCH_TO_HELPER_LABEL)
     P.SystemCheck._finish_fix_typing(d, button, False, "Authentication cancelled", switching=True)

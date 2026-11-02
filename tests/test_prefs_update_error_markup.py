@@ -5,9 +5,7 @@ exactly when the user needs the error.
 """
 from types import SimpleNamespace
 
-import pytest
-
-gi = pytest.importorskip("gi")
+import gi
 gi.require_version("Pango", "1.0")
 from gi.repository import Pango  # noqa: E402
 

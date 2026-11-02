@@ -14,12 +14,7 @@ import pytest
 
 @pytest.fixture
 def indicator():
-    gi = pytest.importorskip("gi")
-    gi.require_version("Gtk", "3.0")
     from gi.repository import Gtk
-
-    if not Gtk.init_check(None)[0]:
-        pytest.skip("no display available")
 
     from tuxtalk.recording_indicator import RecordingIndicator
 

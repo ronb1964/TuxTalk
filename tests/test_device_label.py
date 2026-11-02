@@ -38,11 +38,7 @@ def test_relabelling_the_cuda_entry_again_changes_nothing():
     selected entry's label makes the shown dropdown fire "changed", whose
     handler relabels it again: unless an unchanged label is left alone, that
     never stops, and Preferences crashed (RecursionError)."""
-    gi = pytest.importorskip("gi")
-    gi.require_version("Gtk", "3.0")
     from gi.repository import Gtk
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
 
     picks = []
 

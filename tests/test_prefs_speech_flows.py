@@ -6,11 +6,9 @@ from contextlib import nullcontext
 
 import pytest
 
-gi = pytest.importorskip("gi")
-gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk  # noqa: E402
+from gi.repository import Gtk
 
-from tuxtalk import (model_helper, prefs, prefs_speech, recommend,  # noqa: E402
+from tuxtalk import (model_helper, prefs, prefs_speech, recommend,
                      vulkan_setup_dialogs)
 
 

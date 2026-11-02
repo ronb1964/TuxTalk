@@ -4,11 +4,9 @@ import os
 
 import pytest
 
-gi = pytest.importorskip("gi")
-gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk  # noqa: E402
+from gi.repository import Gtk
 
-from tuxtalk import app_icon, splash_screen as ss  # noqa: E402
+from tuxtalk import app_icon, splash_screen as ss
 
 
 def test_the_splash_finds_the_projects_own_icon_from_any_folder(monkeypatch, tmp_path):
@@ -25,8 +23,6 @@ def test_the_splash_finds_the_projects_own_icon_from_any_folder(monkeypatch, tmp
 def test_a_window_closed_while_it_fades_in_stops_the_fade(monkeypatch):
     """The welcome screen closed in its first half second kept getting
     opacity changes, and its "then" ran for a window that was gone."""
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
     steps, done = [], []
     monkeypatch.setattr(ss.GLib, "timeout_add", lambda ms, fn: steps.append(fn))
     window = Gtk.Window()
@@ -39,8 +35,6 @@ def test_a_window_closed_while_it_fades_in_stops_the_fade(monkeypatch):
 
 
 def test_the_fade_in_reaches_full_opacity_then_goes_on(monkeypatch):
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
     steps, done = [], []
     monkeypatch.setattr(ss.GLib, "timeout_add", lambda ms, fn: steps.append(fn))
     window = Gtk.Window()

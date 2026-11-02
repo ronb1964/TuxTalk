@@ -5,11 +5,9 @@ import types
 
 import pytest
 
-gi = pytest.importorskip("gi")
-gi.require_version("Gtk", "3.0")
-from gi.repository import Gdk  # noqa: E402
+from gi.repository import Gdk
 
-from tuxtalk import notes_text  # noqa: E402
+from tuxtalk import notes_text
 
 AUR = "https://aur.archlinux.org/packages/tuxtalk-appimage"
 NOTES = (f"Using TuxTalk on Arch? A [vote on the AUR page]({AUR}) helps. "

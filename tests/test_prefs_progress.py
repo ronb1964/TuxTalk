@@ -4,11 +4,9 @@ from types import SimpleNamespace
 
 import pytest
 
-gi = pytest.importorskip("gi")
-gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk  # noqa: E402
+from gi.repository import Gtk
 
-from tuxtalk import progress_window  # noqa: E402
+from tuxtalk import progress_window
 
 
 class SameThread:
@@ -25,8 +23,6 @@ class SameThread:
 def run(monkeypatch):
     """run_with_progress with its thread and idle callbacks run in place;
     returns (run it, the windows it opened, what finish got)."""
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
     windows, finished = [], []
     # Only progress_window's threads: the sound thread must stay a real one.
     monkeypatch.setattr(progress_window, "threading", SimpleNamespace(Thread=SameThread))
@@ -75,8 +71,6 @@ def test_the_work_runs_off_the_windows_thread_and_its_updates_come_back_to_it(mo
     import threading
     import time
     from gi.repository import GLib
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
     here, seen = threading.current_thread(), {}
     real = progress_window._progress_window
 

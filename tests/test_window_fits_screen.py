@@ -9,11 +9,9 @@ from types import SimpleNamespace
 
 import pytest
 
-gi = pytest.importorskip("gi")
-gi.require_version("Gtk", "3.0")
-from gi.repository import GObject, Gtk  # noqa: E402
+from gi.repository import GObject, Gtk
 
-from tuxtalk import ui_style  # noqa: E402
+from tuxtalk import ui_style
 
 USABLE = 600                   # three quarters of an 800 px screen
 CAP = USABLE - ui_style._TITLE_BAR
@@ -22,8 +20,6 @@ MEASURE_THE_MONITOR = ui_style.workarea_height    # short_screen stands in for i
 
 @pytest.fixture(autouse=True)
 def short_screen(monkeypatch):
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
     monkeypatch.setattr(ui_style, "workarea_height", lambda near=None: USABLE)
 
 

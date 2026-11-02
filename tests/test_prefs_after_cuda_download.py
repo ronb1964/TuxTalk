@@ -19,8 +19,6 @@ from gtk_text import widgets
 
 @pytest.fixture
 def prefs():
-    gi = pytest.importorskip("gi")
-    gi.require_version("Gtk", "3.0")
     from tuxtalk import prefs
     return prefs
 
@@ -298,8 +296,6 @@ def test_the_download_no_longer_writes_the_config_itself(prefs, monkeypatch):
 
 
 def test_the_question_offers_every_whisper_model_with_large_v3_picked(prefs, monkeypatch):
-    if not prefs.Gtk.init_check()[0]:
-        pytest.skip("no display")
     shown = {}
 
     def run_and_record(box):

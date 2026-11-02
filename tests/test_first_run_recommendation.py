@@ -5,13 +5,12 @@ Intel too), and Other options change it with every choice explained.
 """
 import pytest
 
-gi = pytest.importorskip("gi")
-gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk  # noqa: E402
+import gi
+from gi.repository import Gtk
 
-from gtk_text import find  # noqa: E402
-from tuxtalk import recommend as r  # noqa: E402
-from tuxtalk import welcome_dialog as wd  # noqa: E402
+from gtk_text import find
+from tuxtalk import recommend as r
+from tuxtalk import welcome_dialog as wd
 
 
 @pytest.fixture

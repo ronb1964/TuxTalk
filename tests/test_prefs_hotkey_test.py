@@ -3,17 +3,11 @@ and hotkey test mode never outlasts the window. The window itself is never
 opened here: its test mode reaches the real dictation service."""
 import pytest
 
-gi = pytest.importorskip("gi")
-gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk  # noqa: E402
-
-import gtk_text  # noqa: E402
-from tuxtalk import prefs_hotkey_test, service_launcher  # noqa: E402
+import gtk_text
+from tuxtalk import prefs_hotkey_test, service_launcher
 
 
 def test_a_key_the_service_hears_lights_its_row():
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
     dialog, mark_tested = prefs_hotkey_test._test_window(None, "F6", "F9")
     try:
         mark_tested("toggle")

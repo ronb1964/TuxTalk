@@ -218,8 +218,6 @@ def test_new_appimage_launcher_has_the_shortcuts():
 
 # ----- the menu window -----
 
-gi = pytest.importorskip("gi")
-gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
 
 # The tray menu's order (CLAUDE.md), less the on/off switch and the model line.
@@ -249,8 +247,6 @@ def _fake_tray(running=True):
 
 
 def _menu_window(**kw):
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
     from tuxtalk.menu_window import MenuWindow
     tray = _fake_tray(kw.pop("running", True))
     win = MenuWindow(tray, **kw)
@@ -483,8 +479,6 @@ def test_hotkey_test_without_the_helper():
 def test_fix_typing_success_updates_the_status_lines(monkeypatch):
     """After Fix Typing worked, the ❌ "needed" line above the button stayed
     (Silverblue VM, 2026-10-16)."""
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
     from tuxtalk import welcome_dialog
     fake_msg = types.SimpleNamespace(format_secondary_text=lambda t: None,
                                      set_position=lambda p: None,

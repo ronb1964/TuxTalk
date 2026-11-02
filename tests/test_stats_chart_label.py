@@ -2,8 +2,6 @@
 import datetime
 from types import SimpleNamespace
 
-import pytest
-
 
 class _RecordingCairo:
     """Stands in for the cairo context; keeps what show_text() was given."""
@@ -22,8 +20,6 @@ class _RecordingCairo:
 
 
 def _draw(words_per_day):
-    gi = pytest.importorskip("gi")
-    gi.require_version("Gtk", "3.0")
     from tuxtalk.prefs_stats import StatsTab
     start = datetime.date(2026, 10, 1)
     owner = SimpleNamespace(_daily=[(start + datetime.timedelta(days=i), w)

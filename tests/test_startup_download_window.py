@@ -9,8 +9,7 @@ are the download window's own, in test_download_dialog_cancel.)
 """
 import pytest
 
-pytest.importorskip("gi")
-from tuxtalk import download_progress_dialog, model_helper as mh  # noqa: E402
+from tuxtalk import download_progress_dialog, model_helper as mh
 
 
 class _Window:

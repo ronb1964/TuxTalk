@@ -32,18 +32,8 @@ import pytest
 
 @pytest.fixture
 def gtk():
-    """Import Gtk, skipping when there is no usable display."""
-    try:
-        import gi
-
-        gi.require_version("Gtk", "3.0")
-        from gi.repository import Gtk
-
-        if not Gtk.init_check(None)[0]:
-            pytest.skip("no display available")
-        return Gtk
-    except (ImportError, ValueError) as exc:
-        pytest.skip(f"GTK stack unavailable: {exc}")
+    from gi.repository import Gtk
+    return Gtk
 
 
 class _FakeDisplay:
@@ -63,7 +53,6 @@ def test_list_mode_only_on_x11():
     start at 0,0 that shoves the popup off screen, so the value can't be
     changed. Menu mode uses xdg_popup positioning and works."""
     import gi
-    gi.require_version("Gdk", "3.0")
     gi.require_version("GdkX11", "3.0")
     from gi.repository import Gdk, GdkX11
     from tuxtalk.ui_style import is_x11

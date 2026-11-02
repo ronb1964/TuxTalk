@@ -149,8 +149,6 @@ def board(monkeypatch):
     (this thread's, pumped by _pump_until), and the display's clipboard
     ownerless to start with."""
     from gi.repository import Gdk, Gtk
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
     for name, value in (("_owner", None), ("_offer", None),
                         ("_dictation_read", threading.Event()),
                         ("_dictation_at", float("-inf"))):

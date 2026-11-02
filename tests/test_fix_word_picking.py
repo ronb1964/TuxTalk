@@ -7,19 +7,15 @@ box never saw the button come up and ignored every later click.
 """
 import pytest
 
-gi = pytest.importorskip("gi")
-gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk  # noqa: E402
+from gi.repository import Gtk
 
-from tuxtalk import fix_word_dialog as F  # noqa: E402
+from tuxtalk import fix_word_dialog as F
 
 TEXT = "What's the reply to Goul's? Is it thanks."
 
 
 @pytest.fixture
 def dialog(monkeypatch):
-    if Gtk.init_check()[0] is False:
-        pytest.skip("no display")
     d = F._FixWordDialog([TEXT], 0, lambda t: None)
     yield d
     d.window.destroy() if hasattr(d, "window") else None

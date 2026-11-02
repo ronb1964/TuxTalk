@@ -5,12 +5,10 @@ import types
 
 import pytest
 
-gi = pytest.importorskip("gi")
-gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk  # noqa: E402
+from gi.repository import Gtk
 
-from gtk_text import widgets  # noqa: E402
-from tuxtalk import prefs_speech, ui_style  # noqa: E402
+from gtk_text import widgets
+from tuxtalk import prefs_speech, ui_style
 
 
 def _spoken(root, shown_start):

@@ -213,7 +213,6 @@ def test_restart_now_goes_straight_on_without_a_copy(monkeypatch):
     assert rebooted == [True]
 
 
-
 def test_a_copy_still_going_after_the_wait_doesnt_reboot(monkeypatch):
     """A very slow disk: after two minutes it rebooted anyway, and the menu
     launcher pointed at a half-copied AppImage."""
@@ -256,7 +255,6 @@ def test_first_run_copy_thread_is_not_a_daemon(first_run):
     assert appimage_copy._thread is copies[0]
 
 
-
 def test_first_run_writes_start_at_login_before_the_copy_begins(first_run):
     """A copy that failed at once (no room) pointed start-at-login back at
     the running AppImage, and first run, writing it afterwards, pointed it
@@ -266,8 +264,6 @@ def test_first_run_writes_start_at_login_before_the_copy_begins(first_run):
 
 def test_the_restart_button_waits_for_the_first_run_copy(monkeypatch):
     """Setup Complete's Restart computer now goes through the wait above."""
-    import gi
-    gi.require_version("Gtk", "3.0")
     from gi.repository import Gtk
     from gtk_text import find
     from tuxtalk import appimage_copy
@@ -494,9 +490,7 @@ def test_tray_download_install_restarts_through_restart_app(monkeypatch, idle_qu
     """The install (a copy of the whole AppImage) runs off the GTK thread:
     on it, the update's window and the tray menu froze. Not a daemon thread:
     a Quit's fallback exit waits for it."""
-    import gi
     import threading
-    gi.require_version("Gtk", "3.0")
     from gi.repository import Gtk
     from tuxtalk import tray
     steps = []
@@ -620,8 +614,6 @@ def test_preferences_explains_when_the_tray_is_unreachable(monkeypatch):
 def prefs_update(prefs_window, monkeypatch):
     """Preferences with an update found, its dialogs answered Yes, and the
     tray's restart recorded."""
-    import gi
-    gi.require_version("Gtk", "3.0")
     from gi.repository import Gtk
     from tuxtalk import update_ui
     asked = []
@@ -1022,7 +1014,6 @@ def test_a_cancelled_password_prompt_says_cancelled(tmp_path, monkeypatch, retur
 def test_an_unexpected_install_error_closes_the_update_window_and_says_why(monkeypatch):
     """The "Updating TuxTalk" window refuses to close while it works; an
     exception in the install left it on screen until TuxTalk quit."""
-    pytest.importorskip("gi")
     from tuxtalk import update_ui
 
     monkeypatch.setattr(update_ui.update_install, "get_package_asset",

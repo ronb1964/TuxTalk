@@ -7,13 +7,8 @@ missing from the dropdown.
 """
 from types import SimpleNamespace
 
-import pytest
-
-gi = pytest.importorskip("gi")
-gi.require_version("Gtk", "3.0")
-
-from tuxtalk import fix_word_dialog as F  # noqa: E402
-from tuxtalk.fix_word_dialog import _FixWordDialog  # noqa: E402
+from tuxtalk import fix_word_dialog as F
+from tuxtalk.fix_word_dialog import _FixWordDialog
 
 
 class FakeCombo:

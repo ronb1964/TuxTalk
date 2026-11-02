@@ -10,14 +10,12 @@ from types import SimpleNamespace
 
 import pytest
 
-gi = pytest.importorskip("gi")
-gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk  # noqa: E402
+from gi.repository import Gtk
 
-from tuxtalk import prefs, prefs_words  # noqa: E402
-from tuxtalk import ui_style  # noqa: E402
-from tuxtalk.config import Settings  # noqa: E402
-from dataclasses import asdict  # noqa: E402
+from tuxtalk import prefs, prefs_words
+from tuxtalk import ui_style
+from tuxtalk.config import Settings
+from dataclasses import asdict
 
 
 def _fake_display(height, workarea_height=None):
@@ -32,8 +30,6 @@ def _fake_display(height, workarea_height=None):
 
 
 def _build(monkeypatch, screen_height):
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
     display = _fake_display(screen_height)
     monkeypatch.setattr(ui_style.Gdk.Display, "get_default", lambda: display)
     monkeypatch.setattr(prefs.PreferencesWindow, "load_config",
@@ -99,8 +95,6 @@ def test_tall_screen_opens_with_words_shown_whole(monkeypatch):
 def test_windows_never_count_on_the_whole_screen(monkeypatch, screen, panels, usable):
     """Pop!_OS, 1280x800: Setup Complete was as tall as the screen and its
     buttons sat behind COSMIC's floating dock, which Wayland doesn't report."""
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
     display = _fake_display(screen, screen - panels)
     monkeypatch.setattr(ui_style.Gdk.Display, "get_default", lambda: display)
     assert ui_style.workarea_height() == usable

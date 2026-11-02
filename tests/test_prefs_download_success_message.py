@@ -6,10 +6,7 @@ and then "Model download failed!".
 """
 import pytest
 
-gi = pytest.importorskip("gi")
-gi.require_version("Gtk", "3.0")
-
-from tuxtalk import download_progress_dialog, model_helper, prefs_speech  # noqa: E402
+from tuxtalk import download_progress_dialog, model_helper, prefs_speech
 
 
 class FinishedDownloads:

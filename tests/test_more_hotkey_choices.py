@@ -1352,7 +1352,6 @@ def test_right_alt_warns_about_euro_where_libxkbcommon_names_it_otherwise(monkey
 def test_the_first_run_hotkey_test_says_what_right_alt_gives_up(monkeypatch):
     """Picked there, or set already, Right Alt took a German keyboard's @
     and € away unsaid."""
-    pytest.importorskip("gi")
     from gi.repository import Gdk, Gtk
     from gtk_text import widgets
     from test_hotkey_test_unreadable_keyboard import _key, _run_dialog

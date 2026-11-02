@@ -67,8 +67,6 @@ def test_prefs_window_carries_the_scope_class(prefs_window):
 
 def test_stylesheet_parses():
     """A syntax error would silently drop the rest of the file."""
-    gi = pytest.importorskip("gi")
-    gi.require_version("Gtk", "3.0")
     from gi.repository import Gtk
 
     provider = Gtk.CssProvider()
