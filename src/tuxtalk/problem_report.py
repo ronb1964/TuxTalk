@@ -50,10 +50,12 @@ def build(layout, home=None, user=None) -> Report:
 
 def scrub(text, home, user, real_name="") -> str:
     """*text* with the home folder written as ~, the user name taken out,
-    "Ron's headset" too, and each word of the account's *real_name*. A
-    one-letter name is left: a user called "a" or "i" would have that word
-    replaced all through the settings and the log. The real name's words go
-    only as written, capitalised: a "Will" mustn't take "will" out of the log."""
+    "Ron's headset" too, and each capitalised word of the account's
+    *real_name*. A one-letter name is left: a user called "a" or "i" would
+    have that word replaced all through the settings and the log. The real
+    name's words go only as written, and only those starting with a capital:
+    a "Will" mustn't take "will" out of the log, nor "Maria de la Cruz" the
+    language "de"."""
     home = (home or "").rstrip("/")
     if home:
         text = re.sub(rf"{re.escape(home)}(?![^/\s'\"])", "~", text)
@@ -61,7 +63,7 @@ def scrub(text, home, user, real_name="") -> str:
         text = re.sub(rf"(?<![A-Za-z0-9]){re.escape(user)}(?![A-Za-z0-9])", "<user>", text,
                       flags=re.IGNORECASE)
     for word in (real_name or "").split():
-        if len(word) > 1:
+        if len(word) > 1 and word[0].isupper():
             text = re.sub(rf"(?<![A-Za-z0-9]){re.escape(word)}(?![A-Za-z0-9])", "<name>", text)
     return text
 
@@ -105,14 +107,21 @@ def hide_dictations(log):
     return log, hid > 0
 
 
+# What a live session's account is called instead of a person's name
+# (Fedora's livesys, and casper on Ubuntu, Mint, Pop!_OS and Zorin): its
+# words would take every "System" and "User" out of the log.
+_LIVE_SESSION_NAMES = {"live system user", "live session user"}
+
+
 def _real_name():
     """The account's full name ("Ron Brand"), the first field of its GECOS
-    entry, or "" when it has none."""
+    entry, or "" when it has none or it's a live session's."""
     try:
         import pwd
-        return pwd.getpwuid(os.getuid()).pw_gecos.split(",")[0].strip()
+        name = pwd.getpwuid(os.getuid()).pw_gecos.split(",")[0].strip()
     except (ImportError, KeyError):
         return ""
+    return "" if name.lower() in _LIVE_SESSION_NAMES else name
 
 
 def _user_name():

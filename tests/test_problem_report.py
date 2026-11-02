@@ -93,6 +93,22 @@ def test_the_accounts_real_name_goes_too(text, scrubbed):
     assert problem_report.scrub(text, "/home/ronb1964", "ronb1964", "Ron Will Brand") == scrubbed
 
 
+def test_a_lowercase_part_of_a_name_stays_in_the_report():
+    """Maria de la Cruz's report kept saying which language she picked."""
+    assert (problem_report.scrub("language = 'de', Maria's mic", "/home/mdlc", "mdlc",
+                                 "Maria de la Cruz") == "language = 'de', <name>'s mic")
+
+
+@pytest.mark.parametrize("gecos", ["Live System User,,,", "Live session user,,,"])
+def test_a_live_sessions_account_name_is_no_persons_name(gecos, monkeypatch):
+    """On a Fedora live USB every "System" and "User" in the log became <name>."""
+    import pwd
+    account = pwd.getpwuid(os.getuid())
+    monkeypatch.setattr(pwd, "getpwuid", lambda uid: type(
+        "Account", (), {"pw_gecos": gecos, "pw_name": account.pw_name})())
+    assert problem_report._real_name() == ""
+
+
 def test_the_real_name_goes_from_the_settings_and_log(report, monkeypatch):
     from tuxtalk import config
     monkeypatch.setattr(problem_report, "_real_name", lambda: "Sterling Archer")
