@@ -76,34 +76,34 @@ def _set_layout(run, layout):
 @check(SECTION, "layout_letter_hotkey",
        "On a German keyboard, Ctrl+Alt+Y is the key labelled Y", desktops=("kde", "gnome", "cosmic"))
 def layout_letter_hotkey(run):
-    restore = _set_layout(run, "de")
-    try:
-        # QEMU names keys by where they sit on a US keyboard: "y" is the key
-        # labelled Z on a German one, "z" the key labelled Y.
-        run.sink_ready("other", "TT Other", fresh=True)
-        run.vm.tap("z")
-        time.sleep(1)
-        if run.sink_text("other") != "y":
-            return Outcome("error", "The VM's keyboard didn't switch to German (the key "
-                           f"labelled Y typed {run.sink_text('other')!r})")
-        run.set_config(paste_last_hotkey="Ctrl+Alt+Y")
-        run.sink_ready(fresh=True)
-        typed, heard, _log = run.say("paste_last")
-        run.sink_ready("other", "TT Other", fresh=True)
-        mark = run.log_mark()
-        run.vm.tap("ctrl", "alt", "y")
-        time.sleep(3)
-        wrong_key = "Paste last dictation" in run.log_since(mark)
-        mark = run.log_mark()
-        run.vm.tap("ctrl", "alt", "z")
-        run.wait_log(mark, "Paste last dictation", timeout=10)
-        time.sleep(3)
-        pasted = run.sink_text("other")
-        shot = run.shot("german-ctrl-alt-y")
-    finally:
-        run.close_sink("other")
-        restore()
-        run.set_config(paste_last_hotkey="Ctrl+Alt+P")
+    with run.settings_put_back("paste_last_hotkey"):
+        restore = _set_layout(run, "de")
+        try:
+            # QEMU names keys by where they sit on a US keyboard: "y" is the key
+            # labelled Z on a German one, "z" the key labelled Y.
+            run.sink_ready("other", "TT Other", fresh=True)
+            run.vm.tap("z")
+            time.sleep(1)
+            if run.sink_text("other") != "y":
+                return Outcome("error", "The VM's keyboard didn't switch to German (the key "
+                               f"labelled Y typed {run.sink_text('other')!r})")
+            run.set_config(paste_last_hotkey="Ctrl+Alt+Y")
+            run.sink_ready(fresh=True)
+            typed, heard, _log = run.say("paste_last")
+            run.sink_ready("other", "TT Other", fresh=True)
+            mark = run.log_mark()
+            run.vm.tap("ctrl", "alt", "y")
+            time.sleep(3)
+            wrong_key = "Paste last dictation" in run.log_since(mark)
+            mark = run.log_mark()
+            run.vm.tap("ctrl", "alt", "z")
+            run.wait_log(mark, "Paste last dictation", timeout=10)
+            time.sleep(3)
+            pasted = run.sink_text("other")
+            shot = run.shot("german-ctrl-alt-y")
+        finally:
+            run.close_sink("other")
+            restore()
     if wrong_key:
         return Outcome("fail", "Ctrl+Alt with the key labelled Z pasted too",
                        typed=pasted, screenshot=shot)
@@ -152,7 +152,7 @@ BASIC = "This is a test of the dictation system."
 
 @check(SECTION, "no_fn_hold_keys", "Right Ctrl and Right Alt dictate as the hold key")
 def no_fn_hold_keys(run):
-    try:
+    with run.settings_put_back("hotkey"):
         for name, qcode in (("Right Ctrl", "ctrl_r"), ("Right Alt", "alt_r")):
             run.set_config(hotkey=name)
             run.sink_ready(fresh=True)
@@ -162,8 +162,6 @@ def no_fn_hold_keys(run):
                 outcome.detail = f"held {name}: {outcome.detail}".rstrip(": ")
                 outcome.screenshot = run.shot(f"hold-{qcode}")
                 return outcome
-    finally:
-        run.set_config(hotkey="F8")
     return Outcome("pass", "Held Right Ctrl, then Right Alt: each dictated",
                    expected=BASIC, typed=typed.rstrip(" "), heard=heard)
 
@@ -171,8 +169,8 @@ def no_fn_hold_keys(run):
 @check(SECTION, "right_ctrl_toggle",
        "Right Ctrl as the tap key: one tap starts, the next tap stops")
 def right_ctrl_toggle(run):
-    run.set_config(toggle_hotkey="Right Ctrl")
-    try:
+    with run.settings_put_back("toggle_hotkey"):
+        run.set_config(toggle_hotkey="Right Ctrl")
         run.sink_ready(fresh=True)
         mark = run.log_mark()
         run.vm.tap("ctrl_r")
@@ -182,8 +180,6 @@ def right_ctrl_toggle(run):
         run.vm.tap("ctrl_r")
         typed = run.wait_dictation(mark)
         heard = heard_in(run.log_since(mark))
-    finally:
-        run.set_config(toggle_hotkey="F9")
     return run.expect_typed("basic", BASIC, typed, heard)
 
 
@@ -193,8 +189,6 @@ def scroll_lock_terminal(run):
     blind = run.window_blind()
     if blind:
         return Outcome("skip", blind)
-    run.set_config(hotkey="Scroll Lock")
-    try:
+    with run.settings_put_back("hotkey"):
+        run.set_config(hotkey="Scroll Lock")
         return type_in_terminal(run, "terminal-scroll-lock", key="scroll_lock")
-    finally:
-        run.set_config(hotkey="F8")

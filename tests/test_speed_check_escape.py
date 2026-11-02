@@ -7,11 +7,8 @@ run_speed_check() would raise KeyError on the missing result.
 import threading
 import types
 
-import pytest
-
-pytest.importorskip("gi")
-from conftest import AnyWidget  # noqa: E402
-from tuxtalk import vulkan_setup_dialogs as vsd  # noqa: E402
+from conftest import AnyWidget
+from tuxtalk import vulkan_setup_dialogs as vsd
 
 
 def test_escape_is_refused_while_the_check_runs(monkeypatch):

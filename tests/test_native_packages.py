@@ -34,9 +34,10 @@ if [ -z "$TUXTALK_NO_LICENSES" ]; then
 fi
 """
 
-# fpm: copies the staged tree (-C) and its after-install script to
-# $RECORD, and writes the package (-p).
+# fpm: keeps its arguments, copies the staged tree (-C) and its after-install
+# script to $RECORD, and writes the package (-p).
 FAKE_FPM = """#!/bin/bash
+printf '%s\\0' "$@" > "$RECORD/fpm-args"
 while [ $# -gt 0 ]; do
     case "$1" in
         -C) stage="$2"; shift ;;
@@ -83,6 +84,12 @@ def _build(project, script, **extra):
     copy, env, _record = project
     return subprocess.run(["bash", str(copy / script)], cwd=copy, env={**env, **extra},
                           capture_output=True, text=True, timeout=60)
+
+
+def _fpm_option(project, flag):
+    """Every value fpm was given for *flag*, in order."""
+    args = (project[2] / "fpm-args").read_text().split("\0")[:-1]
+    return [value for option, value in zip(args, args[1:]) if option == flag]
 
 
 def _desktop_exec_lines(tree):
@@ -198,3 +205,25 @@ def test_the_deb_and_the_rpm_install_the_same_tree(project):
         shutil.rmtree(record / "tree")
     assert trees["build-deb.sh"] == trees["build-rpm.sh"]
     assert "opt/talktype/AppRun" in trees["build-deb.sh"]
+
+
+@pytest.mark.parametrize("script", ["build-deb.sh", "build-rpm.sh"])
+def test_both_packages_replace_the_talktype_package(project, script):
+    """apt and dnf move a 0.14.x talktype install over to tuxtalk."""
+    assert _build(project, script).returncode == 0
+    assert _fpm_option(project, "-n") == ["tuxtalk"]
+    assert _fpm_option(project, "--replaces") == ["talktype < 0.15.0"]
+    assert _fpm_option(project, "--conflicts") == ["talktype < 0.15.0"]
+    assert _fpm_option(project, "--provides") == ["talktype"]
+
+
+@pytest.mark.parametrize("script, pactl", [
+    # Zorin OS has no pactl, so "turn other sounds down" did nothing there.
+    ("build-deb.sh", "pulseaudio-utils"),
+    # By path, which Fedora (pulseaudio-utils) and openSUSE resolve to their
+    # own package: the .rpm had no pactl dependency at all.
+    ("build-rpm.sh", "/usr/bin/pactl"),
+])
+def test_both_packages_bring_pactl_for_turning_other_sounds_down(project, script, pactl):
+    assert _build(project, script).returncode == 0
+    assert pactl in _fpm_option(project, "--depends")

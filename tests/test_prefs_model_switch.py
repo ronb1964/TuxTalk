@@ -9,17 +9,13 @@ from dataclasses import asdict
 
 import pytest
 
-gi = pytest.importorskip("gi")
-gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk  # noqa: E402
+from gi.repository import Gtk
 
-from tuxtalk import prefs, prefs_speech, prefs_words  # noqa: E402
-from tuxtalk.config import Settings  # noqa: E402
+from tuxtalk import prefs, prefs_speech, prefs_words
+from tuxtalk.config import Settings
 
 
 def _build(monkeypatch, model, device):
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
     monkeypatch.setattr(prefs.PreferencesWindow, "load_config",
                         lambda self: {**asdict(Settings()), "model": model, "device": device})
     monkeypatch.setattr(prefs.PreferencesWindow, "cuda_files_present", lambda self: True)

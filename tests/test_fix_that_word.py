@@ -59,7 +59,6 @@ def test_a_window_that_cannot_start_says_so(monkeypatch):
 
 def test_the_voice_window_shows_only_the_newest_dictation(monkeypatch):
     """No dropdown: it would break on XWayland, where the window is placed."""
-    pytest.importorskip("gi")
     from tuxtalk import fix_word_dialog as fw
     built = {}
 
@@ -203,7 +202,6 @@ def test_fix_in_text_swaps_only_the_word(monkeypatch):
     assert pressed[1] == [((), "RIGHT")] * after       # back to the end
 
 
-
 @pytest.fixture
 def selection(monkeypatch):
     """fix_in_text's keys, and what the app's primary selection reads as."""
@@ -331,7 +329,6 @@ def test_fix_in_text_leaves_another_window_of_the_same_app_alone(monkeypatch):
 
 
 def test_the_checkbox_says_what_it_does(monkeypatch):
-    pytest.importorskip("gi")
     from gtk_text import widgets
     from tuxtalk import fix_word_dialog as fw
     # Built, never shown: a test must not flash windows on the user's screen.
@@ -355,7 +352,6 @@ def test_the_checkbox_says_what_it_does(monkeypatch):
 def test_fixing_in_the_text_uses_the_users_speed_and_waits_for_the_last_keys(monkeypatch, tmp_path):
     """This window types from its own process: the service's speed setting
     isn't there unless it reads it, and its keyboard goes when it ends."""
-    pytest.importorskip("gi")
     import json
     from tuxtalk import config, fix_word_dialog as fw
     path = tmp_path / "fix.json"
@@ -381,7 +377,6 @@ def test_the_flatpak_doesnt_offer_to_fix_it_in_the_text(monkeypatch, tmp_path):
     """There the app's selection can't be read back, so a fix in place
     selected words, gave up and said the text wasn't changed: the window
     copies the corrected dictation instead."""
-    pytest.importorskip("gi")
     import json
     from tuxtalk import fix_word_dialog as fw
     monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TuxTalk")
@@ -401,7 +396,6 @@ def test_the_flatpak_doesnt_offer_to_fix_it_in_the_text(monkeypatch, tmp_path):
     assert made == [(["Mary had a lamb."], False)] and typed == []
 
 def test_a_fix_the_keyboard_dropped_partway_is_not_done(monkeypatch, keyboard):
-    pytest.importorskip("gi")
     from tuxtalk import fix_word_dialog as fw
     monkeypatch.setattr(fw.time, "sleep", lambda s: None)
     monkeypatch.setattr(focused_window, "window_class", lambda: "org.kde.kwrite")

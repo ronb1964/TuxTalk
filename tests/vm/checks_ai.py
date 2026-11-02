@@ -60,12 +60,10 @@ def ai_self_correct(run):
     if no_room:
         return Outcome("skip", no_room)
     _put_ai(run)
-    _ai_on(run, ai_corrections=True)
-    try:
+    with run.settings_put_back("ai_corrections"):
+        _ai_on(run, ai_corrections=True)
         run.sink_ready(fresh=True)
         typed, heard, log = run.say("ai_self_correct")
-    finally:
-        run.set_config(ai_corrections=False)
     typed = (typed or "").rstrip()
     if "four" in typed.lower() and "three" not in typed.lower():
         return Outcome("pass", "log: “AI cleanup fixed a self-correction”"
@@ -82,8 +80,8 @@ def ai_voice_edit(run):
     if run.vm.ssh(f"test -f ~/.cache/huggingface/hub/{MODEL_REPO_DIR}/snapshots/{MODEL_COMMIT}/"
                   f"{MODEL_FILE}", check=False).returncode != 0:
         return Outcome("skip", "the AI model isn't on this VM (see the self-corrections check)")
-    _ai_on(run, ai_corrections=True, voice_editing=True)
-    try:
+    with run.settings_put_back("ai_corrections", "voice_editing"):
+        _ai_on(run, ai_corrections=True, voice_editing=True)
         run.sink_ready(fresh=True)
         before, _heard, _log = run.say("ai_edit_base")
         run.vm.tap("ctrl", "a")
@@ -101,8 +99,6 @@ def ai_voice_edit(run):
             time.sleep(1)
             after = run.sink_text()
         log = run.log_since(mark)
-    finally:
-        run.set_config(ai_corrections=False, voice_editing=False)
     shot = run.shot("voice-edit")
     if after and after.strip() != (before or "").strip() and "Voice edit" in log:
         return Outcome("pass", "the selection was rewritten", typed=after.strip(),

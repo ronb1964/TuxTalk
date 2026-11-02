@@ -3,6 +3,7 @@ of a check, and Run, which holds one VM's test session (its TuxTalk log,
 config, the text window TuxTalk types into, the pretend microphone).
 """
 import ast
+import contextlib
 import json
 import re
 import shlex
@@ -77,6 +78,15 @@ def squash(text):
     return re.sub(r"[\W_]+", "", text)
 
 
+def _toml(value):
+    """*value* as config.toml writes it."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, str):
+        return json.dumps(value)
+    return str(value)
+
+
 class Run:
     def __init__(self, vm, out_dir: Path, appimage: Path):
         self.vm = vm
@@ -130,19 +140,37 @@ class Run:
     def set_config(self, **changes):
         """Write *changes* into config.toml and restart the dictation
         service, which reads its settings when it starts."""
+        self._write_config({key: _toml(value) for key, value in changes.items()})
+
+    @contextlib.contextmanager
+    def settings_put_back(self, *keys):
+        """The block may change *keys*; afterwards each is as config.toml
+        had it, and one it didn't have is taken out again. A VM set up
+        otherwise (run.py --as-is) is left as it was found, not set to
+        what a fresh one has."""
+        before = self.config()
+        try:
+            yield
+        finally:
+            now = self.config()
+            if any(now.get(key) != before.get(key) for key in keys):
+                self._write_config({key: before.get(key) for key in keys})
+
+    def _write_config(self, entries):
+        """Each of *entries* written into config.toml as its TOML text, or
+        its line taken out for None; then the dictation service restarted,
+        as it reads its settings when it starts."""
         lines = self.vm.read(CONFIG).splitlines()
-        for key, value in changes.items():
-            if isinstance(value, bool):
-                value = "true" if value else "false"
-            elif isinstance(value, str):
-                value = json.dumps(value)
-            entry = f"{key} = {value}"
-            for i, line in enumerate(lines):
-                if line.split("=", 1)[0].strip() == key:
-                    lines[i] = entry
-                    break
+        for key, value in entries.items():
+            at = next((i for i, line in enumerate(lines)
+                       if line.split("=", 1)[0].strip() == key), None)
+            if value is None:
+                if at is not None:
+                    del lines[at]
+            elif at is None:
+                lines.append(f"{key} = {value}")
             else:
-                lines.append(entry)
+                lines[at] = f"{key} = {value}"
         self.vm.ssh(f"cat > {CONFIG}.tt && mv {CONFIG}.tt {CONFIG}", input="\n".join(lines) + "\n")
         self.restart_service()
 

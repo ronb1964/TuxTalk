@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from stand_ins import ShownWidget
 from tuxtalk import pkexec_runner, uinput_helper
 
 NOT_AUTHORIZED = ("Error executing command as another user: Not authorized\n\n"
@@ -41,25 +42,7 @@ def test_a_real_failure_still_reports_the_error(monkeypatch):
     assert "usermod" in message
 
 
-class _Recorder:
-    def __init__(self):
-        self.label, self.sensitive, self.markup = None, None, None
-
-    def set_label(self, text):
-        self.label = text
-
-    def get_label(self):
-        return self.label
-
-    def set_sensitive(self, value):
-        self.sensitive = value
-
-    def set_markup(self, markup):
-        self.markup = markup
-
-
 def test_prefs_says_cancelled_instead_of_setup_failed(monkeypatch):
-    pytest.importorskip("gi")
     from tuxtalk import prefs_system_check as P
 
     dialogs = []
@@ -77,8 +60,8 @@ def test_prefs_says_cancelled_instead_of_setup_failed(monkeypatch):
 
 def _system_check_offering(label):
     """System check, its button and what checking the state offers (*label*)."""
-    button = _Recorder()
-    d = SimpleNamespace(window=None, typing_status_label=_Recorder())
+    button = ShownWidget()
+    d = SimpleNamespace(window=None, typing_status_label=ShownWidget())
     d._check_typing_status = lambda: (button.set_label(label), button.set_sensitive(True))
     return d, button
 
@@ -87,7 +70,6 @@ def test_a_cancelled_switch_to_the_helper_offers_the_switch_again():
     """The button read Fix Typing Permissions after a cancelled password
     prompt, so the next click ran the plain fix, which leaves the user in
     the input group."""
-    pytest.importorskip("gi")
     from tuxtalk import prefs_system_check as P
     d, button = _system_check_offering(P.SWITCH_TO_HELPER_LABEL)
     P.SystemCheck._finish_fix_typing(d, button, False, "Authentication cancelled", switching=True)

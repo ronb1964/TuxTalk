@@ -4,10 +4,8 @@ show_welcome_dialog runs a nested Gtk.main() that only the welcome dialog's
 callback quits. An exception there would leave the loop running for good:
 nothing on screen, onboarding never finishing, and the service never starting.
 """
-import pytest
 
-pytest.importorskip("gi")
-from tuxtalk import welcome_dialog as wd  # noqa: E402
+from tuxtalk import welcome_dialog as wd
 
 
 class _InstantSplash:

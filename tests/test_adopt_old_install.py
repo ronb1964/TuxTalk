@@ -168,3 +168,38 @@ def test_tray_finishes_cut_off_installs_and_restores_before_the_settings_are_cop
     started = tray_main()
     assert started.index("finishes a cut-off restore") < started.index("snapshots the settings")
     assert started.index("puts back a cut-off extension install") < started.index("makes the tray")
+
+
+def test_only_the_running_appimage_is_renamed(tmp_path):
+    # Running a downloaded TuxTalk while 0.14.6 is installed must not turn the
+    # old 0.14.6 file into "the installed TuxTalk".
+    h = str(tmp_path)
+    _write(f"{h}/AppImages/TalkType.AppImage", "0.14.6")
+    _write(f"{h}/.config/autostart/talktype.desktop", _entry(f"{h}/AppImages/TalkType.AppImage"))
+    rm.adopt_old_install(home=h, running_appimage=f"{h}/Downloads/TuxTalk-v0.15.0-x86_64.AppImage")
+    assert _read(f"{h}/AppImages/TalkType.AppImage") == "0.14.6"
+    assert not os.path.exists(f"{h}/AppImages/TuxTalk.AppImage")
+    # ...and the login entry keeps starting a file that exists.
+    autostart = _read(f"{h}/.config/autostart/tuxtalk.desktop")
+    assert f"Exec={h}/AppImages/TalkType.AppImage\n" in autostart
+
+
+def test_the_updated_appimage_renames_itself(tmp_path):
+    h = str(tmp_path)
+    _write(f"{h}/AppImages/TalkType.AppImage", "0.15.0")
+    _write(f"{h}/.config/autostart/talktype.desktop", _entry(f"{h}/AppImages/TalkType.AppImage"))
+    rm.adopt_old_install(home=h, running_appimage=f"{h}/AppImages/TalkType.AppImage")
+    assert _read(f"{h}/AppImages/TuxTalk.AppImage") == "0.15.0"
+    autostart = _read(f"{h}/.config/autostart/tuxtalk.desktop")
+    assert f"Exec={h}/AppImages/TuxTalk.AppImage\n" in autostart
+
+
+def test_an_aur_login_entry_points_at_the_new_opt_path(tmp_path, monkeypatch):
+    h = str(tmp_path)
+    _write(f"{h}/.config/autostart/talktype.desktop", _entry("/opt/talktype/TalkType.AppImage"))
+    real_exists = os.path.exists
+    monkeypatch.setattr(rm.os.path, "exists",
+                        lambda p: p == "/opt/tuxtalk/TuxTalk.AppImage" or real_exists(p))
+    rm.adopt_old_install(home=h, running_appimage="/opt/tuxtalk/TuxTalk.AppImage")
+    autostart_entry = _read(f"{h}/.config/autostart/tuxtalk.desktop")
+    assert "Exec=/opt/tuxtalk/TuxTalk.AppImage\n" in autostart_entry

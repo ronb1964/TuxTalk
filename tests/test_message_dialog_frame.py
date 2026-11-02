@@ -15,8 +15,6 @@ SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tuxtalk"
 
 @pytest.fixture
 def Gtk():
-    gi = pytest.importorskip("gi")
-    gi.require_version("Gtk", "3.0")
     from gi.repository import Gtk
     return Gtk
 

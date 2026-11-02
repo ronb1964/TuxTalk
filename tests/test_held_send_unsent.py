@@ -10,7 +10,8 @@ import types
 import pytest
 from evdev import ecodes
 
-from test_send_destination import FIRST, HELD_TITLE, Countdown
+from conftest import CHAT_WINDOW as FIRST, HELD_TITLE
+from stand_ins import held_timers
 from tuxtalk import (delivery, dictation_worker, focused_window, hotkeys, keyboard_grab,
                      modifier_hotkeys, recording, send_countdown)
 from tuxtalk import recording_state as rs
@@ -115,7 +116,7 @@ def words_done(space=" "):
 def counting_down(monkeypatch):
     """The last dictation's send counts down (2 s), owing its space if held."""
     monkeypatch.setattr(send_countdown, "_delay", 2.0)
-    monkeypatch.setattr(send_countdown.threading, "Timer", Countdown)
+    held_timers(monkeypatch)
     words_done()
 
 

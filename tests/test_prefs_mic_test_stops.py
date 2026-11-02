@@ -14,7 +14,7 @@ import sounddevice
 gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
-from test_mic_test import Microphone  # noqa: E402
+from stand_ins import Microphone  # noqa: E402
 from tuxtalk import mic_stream  # noqa: E402
 
 AUDIO_TAB = 1

@@ -4,6 +4,7 @@ Nothing may ever be lost: settings and multi-GB models move by rename, the old
 name is left as a symlink so an old copy still installed keeps working, and
 when both names exist or the folder is on another disk nothing is overwritten.
 """
+import errno
 import os
 
 from tuxtalk import rename_migration as rm
@@ -277,3 +278,29 @@ def test_preferences_sets_the_dbus_main_loop_before_anything_else(prefs_main):
     connection that already exists. main() must set it before the window."""
     started = prefs_main()
     assert started.index("sets the D-Bus main loop") < started.index("opens the window")
+
+
+def test_a_user_link_to_another_disk_is_followed_not_skipped(tmp_path):
+    # Models moved to a bigger disk with a symlink is common. Skipping it as
+    # "already migrated" would give an empty new install and re-download
+    # everything.
+    h = str(tmp_path / "home")
+    _mk(str(tmp_path / "bigdisk" / "TalkType" / "models"), "m.bin")
+    os.makedirs(f"{h}/.local/share")
+    os.symlink(str(tmp_path / "bigdisk" / "TalkType"), f"{h}/.local/share/TalkType")
+    rm.migrate(home=h)
+    assert os.path.isfile(f"{h}/.local/share/TuxTalk/models/m.bin")
+    assert os.path.isfile(f"{h}/.local/share/TalkType/models/m.bin")    # old path still works
+    # never moved
+    assert os.path.isfile(str(tmp_path / "bigdisk" / "TalkType" / "models" / "m.bin"))
+
+
+def test_a_mount_point_at_the_old_path_is_linked_not_lost(tmp_path, monkeypatch):
+    h = str(tmp_path)
+    _mk(f"{h}/.local/share/TalkType", "m.bin")
+
+    def busy(a, b):
+        raise OSError(errno.EBUSY, "Device or resource busy")
+    monkeypatch.setattr(rm.os, "rename", busy)
+    rm.migrate(home=h)
+    assert os.path.isfile(f"{h}/.local/share/TuxTalk/m.bin")

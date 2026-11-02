@@ -6,16 +6,9 @@ that does nothing. Hiding it later on a timer makes it flash on screen first.
 """
 from types import SimpleNamespace
 
+from stand_ins import ShownWidget
 from tuxtalk.prefs import PreferencesWindow
 from tuxtalk.prefs_general import GeneralTab
-
-
-class FakeWidget:
-    def __init__(self):
-        self.visible = False
-
-    def set_visible(self, value):
-        self.visible = value
 
 
 class FakeWindow:
@@ -34,7 +27,7 @@ class FakeWindow:
 
 
 def _stub(config):
-    rows = {name: FakeWidget() for name in
+    rows = {name: ShownWidget() for name in
             ("timeout_label", "timeout_spin", "timeout_minutes_label", "timeout_note")}
     tab = SimpleNamespace(config=config, **rows)
     tab.update_timeout_ui_state = GeneralTab.update_timeout_ui_state.__get__(tab)

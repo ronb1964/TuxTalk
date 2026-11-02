@@ -12,7 +12,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from conftest import next_recording
+from conftest import audio_rng, next_recording
 from tuxtalk import delivery, engine, resampling, tray_link
 from tuxtalk import live_settings as live
 from tuxtalk import pipeline as dictation_pipeline
@@ -21,7 +21,7 @@ from tuxtalk import recording_state as rs
 
 SR = 16000
 BLOCK = 320   # 20 ms at 16 kHz
-rng = np.random.default_rng(1)
+rng = audio_rng(1)
 
 
 def noise(seconds, level=60.0, sr=SR):

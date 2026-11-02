@@ -15,7 +15,8 @@ import numpy as np
 import pytest
 from evdev import ecodes
 
-from conftest import CHAT_WINDOW as FIRST, next_recording
+from conftest import CHAT_WINDOW as FIRST, HELD_TITLE, next_recording
+from stand_ins import held_timers
 from tuxtalk import (atspi_helper, compositor_focus, dbus_service, focused_window, history,
                      modifier_hotkeys, send_countdown)
 from tuxtalk import recording_state as rs
@@ -344,19 +345,6 @@ def test_right_away_a_tap_the_hotkey_loop_reads_holds_the_enter(chat, keyboard, 
     assert keyboard.events == [] and notices == [send_countdown.HELD_NOTICE]
 
 
-class Countdown:
-    """threading.Timer for a send counting down: it never fires by itself."""
-
-    def __init__(self, delay, run, args):
-        self.daemon = False
-
-    def start(self):
-        pass
-
-    def cancel(self):
-        pass
-
-
 @pytest.mark.parametrize("hold_key", [RCTRL, F8])
 def test_the_hold_key_holds_the_send_before_it_hides_itself(chat, keyboard, monkeypatch,
                                                             hold_key):
@@ -392,12 +380,9 @@ def test_the_hold_key_holds_the_send_before_it_hides_itself(chat, keyboard, monk
         rs.state.current.stream = None
 
 
-HELD_TITLE = "Not sent: you held it"
-
-
 def counting_down(monkeypatch):
     monkeypatch.setattr(send_countdown, "_delay", 2.0)
-    monkeypatch.setattr(send_countdown.threading, "Timer", Countdown)
+    held_timers(monkeypatch)
     send_automatically(focused_window.destination())
 
 
@@ -924,50 +909,27 @@ def test_a_tray_too_busy_for_one_tick_doesnt_call_off_the_countdown(chat, keyboa
     """Preferences opening or a model loading kept the tray from answering
     for a second: the countdown gave up on a send that could still go."""
     focus, heard, typed, notices = chat
-    timers = []
     monkeypatch.setattr(send_countdown, "_delay", 3.0)
-
-    class Timer:
-        def __init__(self, delay, run, args):
-            self.run, self.args, self.daemon = run, args, False
-            timers.append(self)
-
-        def start(self):
-            pass
-
-        def cancel(self):
-            pass
-    monkeypatch.setattr(send_countdown.threading, "Timer", Timer)
+    timers = held_timers(monkeypatch)
     send_automatically(focused_window.destination())
     focus[:] = [None, None]                         # the tray doesn't answer
-    timers[1].run(*timers[1].args)                  # "Sending in 2 s"
+    timers[1].fire()                                # "Sending in 2 s"
     focus[:] = FIRST
-    timers[2].run(*timers[2].args)
-    timers[0].run(*timers[0].args)                  # the Enter
+    timers[2].fire()
+    timers[0].fire()                                # the Enter
     assert keyboard.typed_keys() == [ENTER] and notices == []
 
 
 def test_a_countdown_says_nothing_aloud_until_it_ends(chat, keyboard, monkeypatch):
     from tuxtalk import notify
-    sent, timers = [], []
+    sent = []
     monkeypatch.setattr(notify, "_send", lambda title, body: sent.append(title))
     monkeypatch.setattr(send_countdown, "_delay", 3.0)
-
-    class Timer:
-        def __init__(self, delay, run, args):
-            self.run, self.args, self.daemon = run, args, False
-            timers.append(self)
-
-        def start(self):
-            pass
-
-        def cancel(self):
-            pass
-    monkeypatch.setattr(send_countdown.threading, "Timer", Timer)
+    timers = held_timers(monkeypatch)
     send_automatically(focused_window.destination())
     for timer in timers[1:]:                    # "Sending in 2 s", then 1
-        timer.run(*timer.args)
-    timers[0].run(*timers[0].args)              # the Enter
+        timer.fire()
+    timers[0].fire()                            # the Enter
     assert keyboard.typed_keys() == [ENTER] and sent == []
 
 
@@ -1222,24 +1184,12 @@ def test_a_countdown_called_off_partway_still_gives_back_its_space(chat, keyboar
     off; the space left off for the Enter goes in front of the next
     dictation into the first window, not lost ("noon.How")."""
     focus, heard, typed, notices = chat
-    timers = []
     monkeypatch.setattr(send_countdown, "_delay", 3.0)
-
-    class Timer:
-        def __init__(self, delay, run, args):
-            self.run, self.args, self.daemon = run, args, False
-            timers.append(self)
-
-        def start(self):
-            pass
-
-        def cancel(self):
-            pass
-    monkeypatch.setattr(send_countdown.threading, "Timer", Timer)
+    timers = held_timers(monkeypatch)
     send_countdown.send_automatically("test", rs.Message(focused_window.destination()),
                                       keyboard_output.press_key, delivery.type_onto_dictation, " ")
     focus[:] = SECOND
-    timers[1].run(*timers[1].args)                  # "Sending in 2 s": another window
+    timers[1].fire()                                # "Sending in 2 s": another window
     focus[:] = FIRST
     typed.clear()
     heard.append("how are you")

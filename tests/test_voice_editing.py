@@ -220,9 +220,8 @@ def no_engine(monkeypatch):
     FakeEngine.started = 0
 
 
-def test_off_by_default_and_applied_without_a_restart():
+def test_off_by_default():
     assert config.Settings().voice_editing is False
-    assert "voice_editing" in config.LIVE_APPLIED_KEYS
 
 
 def test_voice_editing_alone_starts_the_engine_but_not_self_corrections(no_engine):

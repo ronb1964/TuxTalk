@@ -173,11 +173,10 @@ def test_hardware_facts_are_cached(monkeypatch):
     assert sorted(asked) == ["nvidia-smi", "vulkan"]
 
 
-def test_new_settings_exist_and_are_live():
-    from tuxtalk.config import LIVE_APPLIED_KEYS, Settings
+def test_new_settings_start_unset():
+    from tuxtalk.config import Settings
     s = Settings()
     assert (s.dictation_language, s.recommend_notice_shown, s.vulkan_slower) == ("", False, False)
-    assert {"dictation_language", "recommend_notice_shown", "vulkan_slower"} <= LIVE_APPLIED_KEYS
 
 
 @pytest.mark.parametrize("hw", [r.Hardware("NVIDIA GeForce RTX 4070 SUPER", True), r.Hardware(None)])

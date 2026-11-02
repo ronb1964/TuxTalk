@@ -65,7 +65,6 @@ def test_every_explanation_has_a_label_and_a_notice():
 
 
 def test_the_window_has_the_title_text_tickbox_and_got_it():
-    pytest.importorskip("gi")
     dialog, check = explain.build_dialog("nothing_said")
     try:
         assert dialog.get_property("text") == "Select works right after you dictate"

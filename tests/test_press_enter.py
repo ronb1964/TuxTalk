@@ -7,6 +7,7 @@ import numpy as np
 import time
 import pytest
 
+from stand_ins import held_timers
 from tuxtalk import config, focused_window, key_commands, send_countdown, window_classes
 from tuxtalk import hotkeys
 from tuxtalk import pipeline
@@ -200,7 +201,6 @@ def test_both_typing_paths_know_the_enter_key():
 
 def test_setting_is_off_by_default_and_applies_live():
     assert config.Settings().press_enter_after is False
-    assert "press_enter_after" in config.LIVE_APPLIED_KEYS
     cfg = config.Settings(press_enter_after=True)
     live.apply(cfg)
     try:
@@ -212,25 +212,7 @@ def test_setting_is_off_by_default_and_applies_live():
 
 # --- The wait before an automatic send, and holding it ---
 
-class FakeTimer:
-    """threading.Timer that fires only when the test says so."""
-    made = []
-
-    def __init__(self, delay, fn, args=()):
-        self.delay, self.fn, self.args, self.cancelled = delay, fn, args, False
-        FakeTimer.made.append(self)
-
-    def start(self):
-        pass
-
-    def cancel(self):
-        self.cancelled = True
-
-    def fire(self):
-        if not self.cancelled:
-            self.fn(*self.args)
-
-
+TIMERS = []  # the timers the countdown fixtures made, in order
 TYPED = []   # what the countdown fixture's _inject_text was given
 BRAVE = ("brave-browser", ("tray", "{b4a7}"))   # the countdown fixture's window
 
@@ -243,8 +225,8 @@ def start_send(why="test", space="", mode="type"):
 
 @pytest.fixture
 def countdown(monkeypatch):
-    FakeTimer.made = []
-    monkeypatch.setattr(send_countdown.threading, "Timer", FakeTimer)
+    global TIMERS
+    TIMERS = held_timers(monkeypatch)
     monkeypatch.setattr(send_countdown, "_delay", 2.0)
     pressed, labels = [], []
     press_key = keyboard_output.press_key
@@ -284,7 +266,7 @@ def test_right_away_sends_at_once(countdown, monkeypatch):
     pressed, labels = countdown
     monkeypatch.setattr(send_countdown, "_delay", 0.0)
     start_send("test")
-    assert pressed == ["test"] and labels == [] and FakeTimer.made == []
+    assert pressed == ["test"] and labels == [] and TIMERS == []
 
 
 def test_a_tap_of_the_toggle_key_holds_the_send(countdown):
@@ -372,7 +354,7 @@ def test_a_tap_too_short_to_dictate_says_not_sent(countdown, monkeypatch):
 
 def sends():
     """The timers that press Enter, not the countdown's ticks."""
-    return [t for t in FakeTimer.made if t.fn is send_countdown._send]
+    return [t for t in TIMERS if t.fn is send_countdown._send]
 
 
 def test_a_new_send_replaces_one_still_counting(countdown):
@@ -393,7 +375,7 @@ def test_the_label_counts_down_each_second(countdown, monkeypatch):
     monkeypatch.setattr(send_countdown, "_delay", 4.0)
     monkeypatch.setattr(send_countdown, "_hold_key_name", "F8")
     start_send("test")
-    ticks = [t for t in FakeTimer.made if t.fn is send_countdown._count_down]
+    ticks = [t for t in TIMERS if t.fn is send_countdown._count_down]
     assert [t.delay for t in ticks] == [1.0, 2.0, 3.0]
     for tick in ticks:
         tick.fire()
@@ -410,8 +392,8 @@ def test_a_held_send_stops_counting(countdown, monkeypatch):
     monkeypatch.setattr(send_countdown, "_delay", 3.0)
     start_send("test")
     send_countdown.hold(announce=True)
-    assert all(t.cancelled for t in FakeTimer.made)
-    for tick in [t for t in FakeTimer.made if t.fn is send_countdown._count_down]:
+    assert all(t.cancelled for t in TIMERS)
+    for tick in [t for t in TIMERS if t.fn is send_countdown._count_down]:
         tick.fn(*tick.args)          # even a tick already on its way
     assert relabels == []
 
@@ -430,7 +412,7 @@ def test_a_tap_during_a_ticks_focus_check_leaves_no_countdown(countdown, monkeyp
         send_countdown.hold(announce=True)
         return where
     monkeypatch.setattr(focused_window, "destination", tapped_meanwhile)
-    tick = next(t for t in FakeTimer.made if t.fn is send_countdown._count_down)
+    tick = next(t for t in TIMERS if t.fn is send_countdown._count_down)
     tick.fn(*tick.args)
     assert relabels == []
 
@@ -443,11 +425,17 @@ def test_saying_press_enter_never_waits(monkeypatch):
     assert events[-1] == ("enter", 'said "press enter"')
 
 
-def test_the_wait_is_a_setting_applied_live():
+def test_the_wait_is_a_setting_applied_live(monkeypatch):
+    """Changed in Preferences, the wait and the key that holds the send are in
+    force at the service's next settings reload, without a restart."""
+    from tuxtalk import service_tick
     assert config.Settings().press_enter_delay == 2.0
-    assert "press_enter_delay" in config.LIVE_APPLIED_KEYS
-    live.apply(config.Settings(press_enter_delay=3.0, hotkey="F7"))
+    cfg = config.Settings()
+    live.apply(cfg)
+    monkeypatch.setattr(service_tick, "load_config",
+                        lambda: config.Settings(press_enter_delay=3.0, hotkey="F7"))
     try:
+        service_tick._reload_live_settings(cfg, None)
         assert send_countdown._delay == 3.0 and send_countdown._hold_key_name == "F7"
     finally:
         live.apply(config.Settings())
@@ -679,11 +667,11 @@ def test_switching_windows_stops_the_countdown_at_once(countdown, monkeypatch):
     start_send("test")
     monkeypatch.setattr("tuxtalk.focused_window.window_class", lambda: "konsole")
     monkeypatch.setattr(focused_window, "look", lambda: ("konsole", None))
-    ticks = [t for t in FakeTimer.made if t.fn is send_countdown._count_down]
+    ticks = [t for t in TIMERS if t.fn is send_countdown._count_down]
     ticks[0].fire()
     assert relabels == [send_countdown.SWITCHED_WINDOW_NOTICE]
     assert send_countdown._pending is None
-    assert all(t.cancelled for t in FakeTimer.made)
+    assert all(t.cancelled for t in TIMERS)
     sends()[0].fire()
     assert pressed == []
 
@@ -752,8 +740,7 @@ def test_a_pause_at_the_end_after_switching_windows_sends_nothing(monkeypatch, k
     monkeypatch.setattr(live, "usage_stats", False)
     monkeypatch.setattr(history, "add_entry", lambda text, replaces=None: None)
     monkeypatch.setattr(send_countdown, "_delay", wait)
-    FakeTimer.made = []
-    monkeypatch.setattr(send_countdown.threading, "Timer", FakeTimer)
+    timers = held_timers(monkeypatch)
     frames = [(np.ones(engine.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
     pipeline.transcribe_and_inject(frames, engine.SAMPLE_RATE, beeps_on=False, smart_quotes=False,
                                notify_on=False, chunk_role="middle",
@@ -761,7 +748,7 @@ def test_a_pause_at_the_end_after_switching_windows_sends_nothing(monkeypatch, k
     focus[:] = ["org.kde.konsole", ("compositor", 0x3400004)]     # the click into Konsole
     pipeline.transcribe_and_inject([], engine.SAMPLE_RATE, beeps_on=False, smart_quotes=False,
                                notify_on=False, chunk_role="last", message=rs.state.current.message)
-    for timer in FakeTimer.made:
+    for timer in timers:
         timer.fire()
     assert keyboard.events == []
 

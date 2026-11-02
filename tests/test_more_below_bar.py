@@ -8,16 +8,12 @@ bar while there's more to see.
 """
 import pytest
 
-gi = pytest.importorskip("gi")
-gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk  # noqa: E402
+from gi.repository import Gtk
 
-from tuxtalk import ui_style  # noqa: E402
+from tuxtalk import ui_style
 
 
 def _scrolled(value, upper, page):
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
     scrolled = Gtk.ScrolledWindow()
     scrolled.get_vadjustment().configure(value, 0, upper, 10, page * 0.9, page)
     return scrolled

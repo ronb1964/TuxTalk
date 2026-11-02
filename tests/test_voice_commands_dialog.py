@@ -81,12 +81,7 @@ def test_the_tip_names_the_key_that_opens_the_window(monkeypatch):
 
 def _open_window(monkeypatch):
     """The window, built but never on the desktop."""
-    import pytest
-    gi = pytest.importorskip("gi")
-    gi.require_version("Gtk", "3.0")
     from gi.repository import Gtk
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
     from tuxtalk import voice_commands_dialog as vcd
     monkeypatch.setattr(Gtk.Window, "show_all", lambda self: None)
     monkeypatch.setattr(Gtk.Window, "present", lambda self: None)

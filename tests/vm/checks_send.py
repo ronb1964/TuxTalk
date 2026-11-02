@@ -209,15 +209,15 @@ def paste_last(run):
 
 @check("Sound and other windows", "duck_audio", "Turn other sounds down while dictating")
 def duck_audio(run):
-    run.set_config(duck_audio=True)
-    run.sink_ready()
-    run.vm.ssh(f"setsid -f timeout 25 pw-play ~/{REMOTE}/tone.wav > /dev/null 2>&1 < /dev/null")
-    time.sleep(1.5)
-    _t, _h, mark = run.say("basic", wait=False)
-    time.sleep(0.2)
-    log = run.wait_log(mark, "Put 1 sound(s) back", timeout=30) or run.log_since(mark)
-    run.vm.ssh("pkill -x pw-play", check=False)
-    run.set_config(duck_audio=False)
+    with run.settings_put_back("duck_audio"):
+        run.set_config(duck_audio=True)
+        run.sink_ready()
+        run.vm.ssh(f"setsid -f timeout 25 pw-play ~/{REMOTE}/tone.wav > /dev/null 2>&1 < /dev/null")
+        time.sleep(1.5)
+        _t, _h, mark = run.say("basic", wait=False)
+        time.sleep(0.2)
+        log = run.wait_log(mark, "Put 1 sound(s) back", timeout=30) or run.log_since(mark)
+        run.vm.ssh("pkill -x pw-play", check=False)
     down = "Turned 1 other sound(s) down" in log
     back = "Put 1 sound(s) back" in log
     if down and back:

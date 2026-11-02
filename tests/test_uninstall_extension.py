@@ -21,7 +21,6 @@ def test_uninstall_removes_the_files_and_both_list_entries(monkeypatch, tmp_path
 
 
 def test_the_install_button_says_install_again_after_an_uninstall(monkeypatch):
-    pytest.importorskip("gi")
     from tuxtalk.prefs_system_check import SystemCheck   # first: it picks GTK 3
     from gi.repository import Gtk
 
@@ -42,7 +41,6 @@ def test_no_extension_needs_attention_only_without_a_tray(monkeypatch, has_tray)
     """Without a tray it's the only menu on screen: System check opens on
     Install Extension, where the menu window's "Add TuxTalk to the Top Bar"
     sends the user. With a tray, not installing it is just a choice."""
-    pytest.importorskip("gi")
     from tuxtalk.prefs_system_check import SystemCheck
     from tuxtalk import desktop_detect
     from gi.repository import Gtk

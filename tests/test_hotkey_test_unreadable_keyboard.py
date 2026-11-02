@@ -12,10 +12,9 @@ from types import SimpleNamespace
 
 import pytest
 
-pytest.importorskip("gi")
-from gtk_text import widgets  # noqa: E402
-from tuxtalk import keyboard_devices, uinput_helper  # noqa: E402
-from tuxtalk import hotkey_test_dialog as hkd  # noqa: E402
+from gtk_text import widgets
+from tuxtalk import keyboard_devices, uinput_helper
+from tuxtalk import hotkey_test_dialog as hkd
 
 EV_KEY = 1
 KEYBOARD_KEYS = [30, 48, 46, 32, 66]        # KEY_A, KEY_B, KEY_C, KEY_D, KEY_F8
@@ -179,8 +178,6 @@ def _run_dialog(monkeypatch, evdev_paths, during, denied=(), hotkeys=("F8", "F9"
     alone, and call *during(dialog)* while it is up. *hotkeys* are the
     (hold, toggle) keys it starts with; *queued* as for _input_device."""
     from gi.repository import Gtk
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
     evdev = pytest.importorskip("evdev")
     from tuxtalk import config, gnome_keybindings, service_launcher
 

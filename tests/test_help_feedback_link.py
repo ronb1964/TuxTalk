@@ -6,18 +6,14 @@ whichever section is open.
 """
 import pytest
 
-gi = pytest.importorskip("gi")
-gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk  # noqa: E402
+from gi.repository import Gtk
 
-from gtk_text import widgets  # noqa: E402
-from tuxtalk import help_dialog  # noqa: E402
+from gtk_text import widgets
+from tuxtalk import help_dialog
 
 
 @pytest.fixture
 def dialog(monkeypatch):
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
     shown = []
     # Build the window without putting it on screen.
     monkeypatch.setattr(Gtk.Window, "show_all", lambda self: shown.append(self))
@@ -110,8 +106,6 @@ def test_help_has_the_look_of_preferences(dialog):
 def shown_help(monkeypatch):
     """Help as it opens on the (hidden) test display, on the section asked
     for, ready for key presses."""
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
     opened = []
 
     def show(tab=None):

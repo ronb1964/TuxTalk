@@ -30,12 +30,6 @@ def test_log_transcripts_defaults_off():
     assert config.Settings().log_transcripts is False
 
 
-def test_log_transcripts_applies_live_no_restart():
-    """Toggling it in Preferences should take effect without a service restart."""
-    assert "log_transcripts" in config.LIVE_APPLIED_KEYS
-    assert "log_transcripts" not in config.RESTART_REQUIRED_KEYS
-
-
 # --- redaction helper ------------------------------------------------------
 
 def test_redact_hides_content_but_keeps_length_by_default():
@@ -150,47 +144,11 @@ def _fake_check(active):
     return check, reverted
 
 
-def _install_fake_dialog(monkeypatch, response):
-    seen = {}
-
-    class _FakeStyle:
-        def add_class(self, *a):
-            pass
-
-    class _FakeButton:
-        def get_style_context(self):
-            return _FakeStyle()
-
-    class _FakeDialog:
-        def __init__(self, **kw):
-            seen["message_type"] = kw.get("message_type")
-            seen["transient_for"] = kw.get("transient_for")
-
-        def format_secondary_text(self, t):
-            seen["secondary"] = t
-
-        def add_button(self, label, resp):
-            seen.setdefault("buttons", []).append(label)
-            return _FakeButton()
-
-        def set_default_response(self, r):
-            seen["default"] = r
-
-        def run(self):
-            return response
-
-        def destroy(self):
-            pass
-
-    monkeypatch.setattr("tuxtalk.ui_style.message_dialog", _FakeDialog)
-    return seen
-
-
-def test_checking_the_box_without_confirming_does_not_enable_logging(monkeypatch):
+def test_checking_the_box_without_confirming_does_not_enable_logging(message_boxes):
     import types
     from tuxtalk import prefs
     from tuxtalk.prefs_advanced import AdvancedTab
-    seen = _install_fake_dialog(monkeypatch, prefs.Gtk.ResponseType.CANCEL)
+    message_boxes.answer = prefs.Gtk.ResponseType.CANCEL
     saved = []
     window = object()  # stands in for the real Gtk.Window at self.window
     self = types.SimpleNamespace(update_config=lambda k, v: saved.append((k, v)),
@@ -200,19 +158,20 @@ def test_checking_the_box_without_confirming_does_not_enable_logging(monkeypatch
 
     AdvancedTab._on_log_transcripts_toggled(self, check)
 
-    assert seen["message_type"] == prefs.Gtk.MessageType.WARNING  # a warning was shown
+    [warning] = message_boxes.shown
+    assert warning.kind == prefs.Gtk.MessageType.WARNING
     # The dialog must be parented to the real window, not the wrapper — passing
     # the wrapper makes GTK reject it and no modal ever appears.
-    assert seen["transient_for"] is window
+    assert warning.parent is window
     assert ("log_transcripts", True) not in saved                 # cancel → not enabled
     assert reverted == [False]                                    # box snapped back off
 
 
-def test_confirming_the_warning_enables_logging(monkeypatch):
+def test_confirming_the_warning_enables_logging(message_boxes):
     import types
     from tuxtalk import prefs
     from tuxtalk.prefs_advanced import AdvancedTab
-    _install_fake_dialog(monkeypatch, prefs.Gtk.ResponseType.OK)
+    message_boxes.answer = prefs.Gtk.ResponseType.OK
     saved = []
     self = types.SimpleNamespace(update_config=lambda k, v: saved.append((k, v)),
                                  window=object(),
@@ -224,12 +183,9 @@ def test_confirming_the_warning_enables_logging(monkeypatch):
     assert ("log_transcripts", True) in saved                     # confirmed → enabled
 
 
-def test_unchecking_needs_no_dialog_and_disables(monkeypatch):
+def test_unchecking_needs_no_dialog_and_disables(message_boxes):
     import types
     from tuxtalk.prefs_advanced import AdvancedTab
-    # If a dialog were constructed while unchecking, this would blow up.
-    monkeypatch.setattr("tuxtalk.ui_style.message_dialog",
-                        lambda **k: (_ for _ in ()).throw(AssertionError("no dialog on uncheck")))
     saved = []
     self = types.SimpleNamespace(update_config=lambda k, v: saved.append((k, v)),
                                  _on_log_transcripts_toggled=lambda *a: None)
@@ -237,6 +193,7 @@ def test_unchecking_needs_no_dialog_and_disables(monkeypatch):
 
     AdvancedTab._on_log_transcripts_toggled(self, check)
 
+    assert message_boxes.shown == []
     assert ("log_transcripts", False) in saved
 
 
@@ -275,15 +232,6 @@ def test_clear_log_says_when_it_could_not_erase(tmp_path):
     """Preferences said "Log cleared." even when the log stayed on disk."""
     (tmp_path / "tuxtalk.log").mkdir()          # can't be truncated
     assert tlog.clear_log(tmp_path) is False
-
-
-def test_a_quoted_false_turns_a_setting_off_not_on():
-    """bool("false") is True: a hand-edited log_transcripts = "false" wrote
-    every dictation to the log."""
-    s = config.Settings()
-    assert config.apply_toml(s, {"log_transcripts": "false", "beeps": "TRUE"}) == []
-    assert s.log_transcripts is False and s.beeps is True
-    assert config.apply_toml(s, {"beeps": "loud"}) == ["beeps"]
 
 
 def test_prefs_has_clear_log_button(prefs_window, dialogs, monkeypatch):
@@ -520,11 +468,3 @@ def test_the_graphics_helper_never_sends_back_the_words_of_a_failure():
     assert worker.request_error(KeyError("zanzibar")) == "KeyError"
     code = worker.EngineFailed("the engine failed to transcribe (code 3)")
     assert worker.request_error(code) == "the engine failed to transcribe (code 3)"
-
-
-def test_a_quoted_whole_number_is_read_as_preferences_shows_it():
-    """auto_timeout_minutes = "5.0" was the default to the service but 5 in
-    Preferences: both read settings with apply_toml now."""
-    s = config.Settings()
-    assert config.apply_toml(s, {"auto_timeout_minutes": "5.0", "key_delay": "3"}) == []
-    assert s.auto_timeout_minutes == 5 and s.key_delay == 3

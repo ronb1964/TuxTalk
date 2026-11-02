@@ -6,11 +6,9 @@ packages. Elsewhere it says how this desktop asks for the keys.
 """
 import pytest
 
-gi = pytest.importorskip("gi")
-gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk  # noqa: E402
+from gi.repository import Gtk
 
-from gtk_text import find, shown_text  # noqa: E402
+from gtk_text import find, shown_text
 
 
 @pytest.fixture

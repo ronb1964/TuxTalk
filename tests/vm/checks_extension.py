@@ -103,7 +103,6 @@ def ext_terminal(run):
 @check(SECTION, "ext_send_switch", "Switching windows during the send wait (with the extension)",
        desktops=("gnome",))
 def ext_send_switch(run):
-    run.set_config(press_enter_after=True, press_enter_delay=2.0)
-    outcome = switch_during_countdown(run, "ext-send-switch")
-    run.set_config(press_enter_after=False)
-    return outcome
+    with run.settings_put_back("press_enter_after", "press_enter_delay"):
+        run.set_config(press_enter_after=True, press_enter_delay=2.0)
+        return switch_during_countdown(run, "ext-send-switch")

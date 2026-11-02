@@ -20,15 +20,13 @@ from tuxtalk import engine
 from tuxtalk import notices
 from tuxtalk import recording
 from tuxtalk import pipeline
+from conftest import audio_rng
+from type_at_pause_rig import noise
 from type_at_pause_rig import speech as _reading
 
 SR = 16000
 BLOCK = 320   # 20 ms
-rng = np.random.default_rng(0)
-
-
-def noise(seconds, level=60.0):
-    return (rng.normal(0, level, int(seconds * SR))).astype(np.int16)
+rng = audio_rng(0)
 
 
 def speech(seconds, level=3000.0, noise_level=60.0):
@@ -472,11 +470,6 @@ def test_the_silent_tail_is_trimmed_and_speech_is_kept(monkeypatch):
     assert 1.7 <= kept_s <= 1.7 + LATE_S
     assert frames[:50] == speech_blocks  # every speech block untouched
     assert rs.state.current.silence is None
-
-
-def test_auto_stop_settings_apply_without_a_restart():
-    from tuxtalk.config import LIVE_APPLIED_KEYS
-    assert {"auto_stop_silence", "auto_stop_seconds"} <= LIVE_APPLIED_KEYS
 
 
 def test_setting_follows_config(monkeypatch):

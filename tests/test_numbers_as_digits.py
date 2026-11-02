@@ -130,11 +130,6 @@ def test_off_by_default():
     assert config.Settings().numbers_small_as_words is False
 
 
-def test_it_applies_without_a_restart():
-    assert "numbers_as_digits" in config.LIVE_APPLIED_KEYS
-    assert "numbers_small_as_words" in config.LIVE_APPLIED_KEYS
-
-
 def _prepare(monkeypatch, mode, raw="i have three cats and twenty five chickens"):
     monkeypatch.setattr(live, "numbers_mode", mode)
     monkeypatch.setattr(live, "numbers_language", "en")

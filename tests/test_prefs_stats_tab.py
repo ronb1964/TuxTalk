@@ -11,8 +11,6 @@ from tuxtalk import prefs_stats, stats
 
 @pytest.fixture
 def tab(monkeypatch):
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
     saved = {}
     win = SimpleNamespace(config={"typing_wpm": 40}, window=None,
                           update_config=lambda key, value: saved.__setitem__(key, value))

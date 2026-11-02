@@ -3,9 +3,8 @@ KDE already uses the key, as first run does, instead of leaving KDE's refusal
 in the log only."""
 import pytest
 
-pytest.importorskip("gi")
-from tuxtalk.hotkey_labels import hands_free_label, hotkey_label  # noqa: E402
-from tuxtalk.prefs_general import hotkey_change_message  # noqa: E402
+from tuxtalk.hotkey_labels import hands_free_label, hotkey_label
+from tuxtalk.prefs_general import hotkey_change_message
 
 CFG = {"hotkey": "F7", "toggle_hotkey": "F9", "voice_commands_hotkey": "Ctrl+Alt+V"}
 

@@ -16,6 +16,7 @@ import time
 import types
 
 import gi
+import numpy as np
 import pytest
 
 # No program a test starts can reach the speakers, nor this one. Every
@@ -251,6 +252,25 @@ def next_recording(samplerate=16000):
                                           press_t0=time.time() - 10, samplerate=samplerate)
     type_at_pause.arm_chunker(rec)
     return rec
+
+
+_AUDIO_RNGS = []
+
+
+def audio_rng(seed):
+    """A random generator for a test file's made-up audio (room noise, the
+    noise over a voice), put back to *seed* before every test: a test then
+    hears the same audio alone, in its file, or after any other test, and a
+    failure seen once is seen again."""
+    rng = np.random.default_rng(seed)
+    _AUDIO_RNGS.append((rng, rng.bit_generator.state))
+    return rng
+
+
+@pytest.fixture(autouse=True)
+def _audio_rngs_from_their_seed():
+    for rng, state in _AUDIO_RNGS:
+        rng.bit_generator.state = state
 
 
 class InlineWorker:
@@ -1093,21 +1113,38 @@ def about_window(monkeypatch):
 
 
 @pytest.fixture
-def welcome_window(monkeypatch):
-    """The first-run welcome screen, built for an English system with an
-    NVIDIA card (any graphics card gets the same card and choices)."""
+def welcome_screen(monkeypatch):
+    """Builds the first-run welcome screen, not yet shown: by default for an
+    English system with an NVIDIA card where typing and recording already
+    work, outside GNOME. *card* (a recommend.Hardware), *language*,
+    *typing_ok*, *portaudio* and *gnome* change that. Each screen built is
+    closed after the test."""
     from tuxtalk import recommend, welcome_dialog
-    monkeypatch.setattr(recommend, "detect_hardware",
-                        lambda cfg=None: recommend.Hardware("NVIDIA GeForce RTX 4070 SUPER", True))
-    monkeypatch.setattr(recommend, "system_language", lambda env=None: "en")
-    monkeypatch.setattr(welcome_dialog, "detect_uinput_access", lambda: (True, ""))
-    monkeypatch.setattr(welcome_dialog, "portaudio_installed", lambda: True)
-    window = welcome_dialog.WelcomeDialog(force_gnome=False)
+    built = []
+
+    def build(card=recommend.Hardware("NVIDIA GeForce RTX 4070 SUPER", True), language="en",
+              typing_ok=True, portaudio=True, gnome=False):
+        monkeypatch.setattr(recommend, "detect_hardware", lambda cfg=None: card)
+        monkeypatch.setattr(recommend, "system_language", lambda env=None: language)
+        monkeypatch.setattr(welcome_dialog, "detect_uinput_access",
+                            lambda: (True, "") if typing_ok else (False, "not in input group"))
+        monkeypatch.setattr(welcome_dialog, "portaudio_installed", lambda: portaudio)
+        built.append(welcome_dialog.WelcomeDialog(force_gnome=gnome))
+        return built[-1]
+    yield build
+    for window in built:
+        window.destroy()
+
+
+@pytest.fixture
+def welcome_window(welcome_screen):
+    """The first-run welcome screen as it opens, for an English system with
+    an NVIDIA card (any graphics card gets the same card and choices)."""
+    window = welcome_screen()
     window.dialog.show_all()                # as run() does, without waiting for an answer
     while Gtk.events_pending():
         Gtk.main_iteration()
-    yield window
-    window.destroy()
+    return window
 
 
 @pytest.fixture
@@ -1233,6 +1270,9 @@ def idle_service(monkeypatch):
 
 # The chat window the chat fixture dictates into.
 CHAT_WINDOW = ("brave-browser", ("tray", "{5c1d0e2a}"))
+
+# The notification's title when the user holds an automatic send.
+HELD_TITLE = "Not sent: you held it"
 
 
 @pytest.fixture

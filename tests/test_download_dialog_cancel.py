@@ -5,8 +5,6 @@ chunks. The per-task Cancel button sets it, and closing the window must too;
 otherwise multi-gigabyte downloads carry on in background threads writing to
 disk, invisible, uncancellable, and reported to the caller as failures.
 """
-
-
 import pytest
 
 from tuxtalk.download_progress_dialog import DownloadTask, UnifiedDownloadDialog
@@ -313,7 +311,6 @@ def test_the_cuda_download_says_why_it_failed_once(monkeypatch):
     """The shared window shows a failure's reason and waits for Close; the
     same reason in a box after it was said twice. A Cancel shows nothing
     more; a failure with no reason in the window gets the box."""
-    pytest.importorskip("gi")
     from tuxtalk import download_progress_dialog as dpd
     said = []
     monkeypatch.setattr(dpd, "_say_how_the_cuda_download_went",
@@ -333,7 +330,6 @@ def test_the_cuda_download_says_why_it_failed_once(monkeypatch):
 
 
 def test_a_cuda_failure_the_window_couldnt_explain_says_where_to_try_again(monkeypatch):
-    pytest.importorskip("gi")
     from tuxtalk import download_progress_dialog as dpd, ui_style
     said = []
     monkeypatch.setattr(ui_style, "show_message",

@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from stand_ins import ShownWidget
 from shell_stubs import recorders, stub
 from tuxtalk import secure_input as si
 from tuxtalk import hotkey_helper
@@ -146,26 +147,11 @@ def test_first_run_fix_with_the_helper_asks_for_no_restart(monkeypatch):
 def test_preferences_offers_the_helper_to_input_group_users(monkeypatch):
     from tuxtalk import prefs_system_check as P, uinput_helper
 
-    class Label:
-        markup = ""
-
-        def set_markup(self, m):
-            self.markup = m
-
-    class Button:
-        label, sensitive = "", None
-
-        def set_label(self, v):
-            self.label = v
-
-        def set_sensitive(self, v):
-            self.sensitive = v
-
     monkeypatch.setattr(uinput_helper, "check_all_device_permissions", lambda: (True, ""))
     monkeypatch.setattr(uinput_helper, "check_user_in_input_group", lambda: False)
     monkeypatch.setattr(si, "can_install", lambda: (True, ""))
     prefs = P.SystemCheck(SimpleNamespace(config={}))
-    prefs.typing_status_label, prefs.fix_typing_button = Label(), Button()
+    prefs.typing_status_label, prefs.fix_typing_button = ShownWidget(), ShownWidget()
     prefs._show_typing_status()
     assert prefs.fix_typing_button.label == P.SWITCH_TO_HELPER_LABEL
     assert prefs.fix_typing_button.sensitive
@@ -179,28 +165,12 @@ def test_preferences_offers_the_helper_to_input_group_users(monkeypatch):
 def _typing_prefs(monkeypatch, *, running, installed=True, in_group=False):
     from tuxtalk import prefs_system_check as P, uinput_helper
 
-    class Widget:
-        markup = label = ""
-        sensitive = visible = None
-
-        def set_markup(self, m):
-            self.markup = m
-
-        def set_label(self, v):
-            self.label = v
-
-        def set_sensitive(self, v):
-            self.sensitive = v
-
-        def set_visible(self, v):
-            self.visible = v
-
     monkeypatch.setattr(uinput_helper, "check_all_device_permissions", lambda: (True, ""))
     monkeypatch.setattr(uinput_helper, "check_user_in_input_group", lambda: in_group)
     monkeypatch.setattr(si, "running_version", lambda: running)
     monkeypatch.setattr(si, "is_installed", lambda: installed)
     prefs = P.SystemCheck(SimpleNamespace(config={}))
-    prefs.typing_status_label, prefs.fix_typing_button = Widget(), Widget()
+    prefs.typing_status_label, prefs.fix_typing_button = ShownWidget(), ShownWidget()
     prefs._show_typing_status()
     return P, prefs
 
@@ -274,24 +244,11 @@ def test_which_shortcuts_the_helper_refuses(shortcut, refused):
 def test_a_hand_edited_shortcut_that_cant_work_is_warned_about(monkeypatch):
     from tuxtalk import prefs_system_check as P, uinput_helper
 
-    class Widget:
-        markup = label = ""
-        sensitive = None
-
-        def set_markup(self, m):
-            self.markup = m
-
-        def set_label(self, v):
-            self.label = v
-
-        def set_sensitive(self, v):
-            self.sensitive = v
-
     monkeypatch.setattr(uinput_helper, "check_all_device_permissions", lambda: (True, ""))
     monkeypatch.setattr(uinput_helper, "check_user_in_input_group", lambda: False)
     monkeypatch.setattr(si, "running_version", lambda: hotkey_helper.VERSION)
     prefs = P.SystemCheck(SimpleNamespace(config={}))
-    prefs.typing_status_label, prefs.fix_typing_button = Widget(), Widget()
+    prefs.typing_status_label, prefs.fix_typing_button = ShownWidget(), ShownWidget()
     prefs.win.config = {"voice_commands_hotkey": "Ctrl+Shift+H", "paste_last_hotkey": "Ctrl+Alt+P"}
     prefs._show_typing_status()
     assert "Ctrl+Shift+H won't work" in prefs.typing_status_label.markup

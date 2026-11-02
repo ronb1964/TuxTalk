@@ -256,10 +256,9 @@ def test_the_same_window_is_trusted(dictation, monkeypatch):
     assert dictation["pressed"] == [[((), "LEFT")] + [((S,), "LEFT")] * 5]
 
 
-def test_the_setting_is_off_by_default_and_live():
+def test_the_setting_is_off_by_default():
     from tuxtalk import config
     assert config.Settings().voice_navigation is False
-    assert "voice_navigation" in config.LIVE_APPLIED_KEYS
 
 
 # --- exact word moves in what TuxTalk typed -----------------------------

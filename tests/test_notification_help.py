@@ -3,17 +3,13 @@ focused and default, so Enter or Space closes it, and Escape closes it as
 it does a dialog. A plain window had neither."""
 import pytest
 
-gi = pytest.importorskip("gi")
-gi.require_version("Gtk", "3.0")
-from gi.repository import Gdk, Gtk  # noqa: E402
+from gi.repository import Gdk, Gtk
 
-from tuxtalk import notification_help  # noqa: E402
+from tuxtalk import notification_help
 
 
 @pytest.fixture
 def guide():
-    if not Gtk.init_check()[0]:
-        pytest.skip("no display")
     win = notification_help.show_notification_help_window()
     yield win
     if notification_help._window is not None:

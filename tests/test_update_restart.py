@@ -20,9 +20,9 @@ import types
 
 import pytest
 
+from stand_ins import progress_in_place
 from tuxtalk import desktop_launcher
 from tuxtalk import installation, update_install
-from tuxtalk import update_checker as uc
 
 # What a checked AppImage download hands on, for tests that skip the download.
 APPIMAGE_DOWNLOAD = update_install.Downloaded("/updates/TuxTalk.AppImage", "a" * 64, 7)
@@ -213,7 +213,6 @@ def test_restart_now_goes_straight_on_without_a_copy(monkeypatch):
     assert rebooted == [True]
 
 
-
 def test_a_copy_still_going_after_the_wait_doesnt_reboot(monkeypatch):
     """A very slow disk: after two minutes it rebooted anyway, and the menu
     launcher pointed at a half-copied AppImage."""
@@ -256,7 +255,6 @@ def test_first_run_copy_thread_is_not_a_daemon(first_run):
     assert appimage_copy._thread is copies[0]
 
 
-
 def test_first_run_writes_start_at_login_before_the_copy_begins(first_run):
     """A copy that failed at once (no room) pointed start-at-login back at
     the running AppImage, and first run, writing it afterwards, pointed it
@@ -266,8 +264,6 @@ def test_first_run_writes_start_at_login_before_the_copy_begins(first_run):
 
 def test_the_restart_button_waits_for_the_first_run_copy(monkeypatch):
     """Setup Complete's Restart computer now goes through the wait above."""
-    import gi
-    gi.require_version("Gtk", "3.0")
     from gi.repository import Gtk
     from gtk_text import find
     from tuxtalk import appimage_copy
@@ -424,12 +420,16 @@ def test_restart_refuses_a_missing_appimage(tmp_path):
 
 
 class FakeTray:
-    from tuxtalk import tray as _tray
-    restart_app = _tray.DictationTray.restart_app
+    """The tray's own restart_app on a tray with no menu or window, counting
+    the quit_app calls it makes."""
 
     def __init__(self):
         self.quit = 0
         self._quitting = False
+
+    def restart_app(self):
+        from tuxtalk import tray
+        return tray.DictationTray.restart_app(self)
 
     def quit_app(self, _):
         self.quit += 1
@@ -490,9 +490,7 @@ def test_tray_download_install_restarts_through_restart_app(monkeypatch, idle_qu
     """The install (a copy of the whole AppImage) runs off the GTK thread:
     on it, the update's window and the tray menu froze. Not a daemon thread:
     a Quit's fallback exit waits for it."""
-    import gi
     import threading
-    gi.require_version("Gtk", "3.0")
     from gi.repository import Gtk
     from tuxtalk import tray
     steps = []
@@ -616,8 +614,6 @@ def test_preferences_explains_when_the_tray_is_unreachable(monkeypatch):
 def prefs_update(prefs_window, monkeypatch):
     """Preferences with an update found, its dialogs answered Yes, and the
     tray's restart recorded."""
-    import gi
-    gi.require_version("Gtk", "3.0")
     from gi.repository import Gtk
     from tuxtalk import update_ui
     asked = []
@@ -714,7 +710,7 @@ def _without_pkexec(monkeypatch):
     The script's folder in /var/tmp is then this user's, and goes the same way."""
     import subprocess
     real_popen = subprocess.Popen
-    monkeypatch.setattr(uc.subprocess, "Popen", lambda argv, **kw: real_popen(
+    monkeypatch.setattr(update_install.subprocess, "Popen", lambda argv, **kw: real_popen(
         argv[1:] if argv[0] == "pkexec" else argv, **kw))
 
 
@@ -732,7 +728,7 @@ def test_the_package_is_deleted_once_installed_or_refused(tmp_path, monkeypatch,
 
     monkeypatch.setattr(update_install, "package_install_argv",
                         lambda t: ["dpkg", "-i"])
-    monkeypatch.setattr(uc.subprocess, "Popen", lambda *a, **k: Proc())
+    monkeypatch.setattr(update_install.subprocess, "Popen", lambda *a, **k: Proc())
 
     update_install.install_package_update(_checked(package), "deb")
 
@@ -746,7 +742,7 @@ def test_the_package_is_deleted_when_pkexec_is_missing(tmp_path, monkeypatch):
         raise FileNotFoundError("pkexec")
     monkeypatch.setattr(update_install, "package_install_argv",
                         lambda t: ["dpkg", "-i"])
-    monkeypatch.setattr(uc.subprocess, "Popen", no_pkexec)
+    monkeypatch.setattr(update_install.subprocess, "Popen", no_pkexec)
 
     ok, message = update_install.install_package_update(_checked(package), "deb")
 
@@ -778,7 +774,7 @@ def test_a_slow_installer_keeps_its_package_until_it_finishes(tmp_path, monkeypa
 
     monkeypatch.setattr(update_install, "package_install_argv",
                         lambda t: ["dpkg", "-i"])
-    monkeypatch.setattr(uc.subprocess, "Popen", lambda *a, **k: SlowProc())
+    monkeypatch.setattr(update_install.subprocess, "Popen", lambda *a, **k: SlowProc())
 
     ok, _ = update_install.install_package_update(_checked(package), "deb")
 
@@ -813,7 +809,7 @@ def test_the_installer_output_does_not_go_through_a_pipe(tmp_path, monkeypatch):
 
     monkeypatch.setattr(update_install, "package_install_argv",
                         lambda t: ["dpkg", "-i"])
-    monkeypatch.setattr(uc.subprocess, "Popen", popen)
+    monkeypatch.setattr(update_install.subprocess, "Popen", popen)
 
     download = _checked(package)
     update_install.install_package_update(download, "deb")
@@ -908,7 +904,7 @@ def test_the_copy_reads_no_more_than_the_checked_download(tmp_path, monkeypatch)
 
         def wait(self, timeout=None):
             return 0
-    monkeypatch.setattr(uc.subprocess, "Popen", lambda argv, **kw: seen.append(argv) or Proc())
+    monkeypatch.setattr(update_install.subprocess, "Popen", lambda argv, **kw: seen.append(argv) or Proc())
     monkeypatch.setattr(update_install, "package_install_argv", lambda t: ["dpkg", "-i"])
 
     update_install.install_package_update(download, "deb")
@@ -935,7 +931,7 @@ def test_a_pkexec_that_ends_before_the_script_is_sent_says_why(tmp_path, monkeyp
 
         def wait(self, timeout=None):
             return self.returncode
-    monkeypatch.setattr(uc.subprocess, "Popen", lambda argv, **kw: GoneAtOnce())
+    monkeypatch.setattr(update_install.subprocess, "Popen", lambda argv, **kw: GoneAtOnce())
     monkeypatch.setattr(update_install, "package_install_argv", lambda t: ["dpkg", "-i"])
 
     ok, message = update_install.install_package_update(_checked(package), "deb")
@@ -1008,7 +1004,7 @@ def test_a_cancelled_password_prompt_says_cancelled(tmp_path, monkeypatch, retur
 
     monkeypatch.setattr(update_install, "package_install_argv",
                         lambda t: ["dpkg", "-i"])
-    monkeypatch.setattr(uc.subprocess, "Popen", lambda argv, stdin, stdout, stderr: Proc(stdout))
+    monkeypatch.setattr(update_install.subprocess, "Popen", lambda argv, stdin, stdout, stderr: Proc(stdout))
 
     ok, message = update_install.install_package_update(_checked(package), "deb")
     assert not ok
@@ -1018,7 +1014,6 @@ def test_a_cancelled_password_prompt_says_cancelled(tmp_path, monkeypatch, retur
 def test_an_unexpected_install_error_closes_the_update_window_and_says_why(monkeypatch):
     """The "Updating TuxTalk" window refuses to close while it works; an
     exception in the install left it on screen until TuxTalk quit."""
-    pytest.importorskip("gi")
     from tuxtalk import update_ui
 
     monkeypatch.setattr(update_ui.update_install, "get_package_asset",
@@ -1029,22 +1024,9 @@ def test_an_unexpected_install_error_closes_the_update_window_and_says_why(monke
     def broken_install(path, kind):
         raise OSError("no space left")
     monkeypatch.setattr(update_ui.update_install, "install_package_update", broken_install)
-    _progress_in_place(monkeypatch)
+    progress_in_place(monkeypatch)
     errors = []
     monkeypatch.setattr(update_ui, "_error", errors.append)
 
     update_ui.run_package_update({}, "deb")
     assert errors and "no space left" in errors[0]
-
-
-def _progress_in_place(monkeypatch):
-    """progress_window.run_with_progress with no window, its work run at
-    once on this thread."""
-    from tuxtalk import progress_window
-    monkeypatch.setattr(progress_window, "_progress_window", lambda *a: (
-        types.SimpleNamespace(destroy=lambda: None),
-        types.SimpleNamespace(set_text=lambda t: None),
-        types.SimpleNamespace(set_fraction=lambda f: None, set_text=lambda t: None)))
-    monkeypatch.setattr(progress_window.GLib, "idle_add", lambda fn, *a: fn(*a))
-    monkeypatch.setattr(progress_window, "threading", types.SimpleNamespace(
-        Thread=lambda target, daemon=None, name=None: types.SimpleNamespace(start=target)))
