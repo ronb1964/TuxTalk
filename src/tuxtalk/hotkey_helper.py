@@ -964,14 +964,17 @@ class Helper:
 
     def listen_only_holding(self, presses, mods):
         """Whether a listen-only keyboard holds part of what a HIDE asks
-        for: one of *presses*, or one of *mods* in a press's group. Such a
+        for: one of *presses* came from it, or it holds one of the pressed
+        keys or *mods* in a press's group (Right Ctrl held on two keyboards
+        at once: the desktop sees it down while either holds it). Such a
         keyboard is never held nor written to, so that part can't be
         hidden. Logged once per keyboard."""
         origins = {path for path, _ in presses}
         groups = {self.keyboards[path].group for path in origins}
+        wanted = set(mods) | {code for _, code in presses}
         for keyboard in self.keyboards.values():
             if keyboard.listen_only and (keyboard.path in origins or (
-                    keyboard.group in groups and keyboard.down.intersection(mods))):
+                    keyboard.group in groups and keyboard.down & wanted)):
                 if not keyboard.said_listen_only:
                     keyboard.said_listen_only = True
                     log(f"not holding keyboard {keyboard.name!r}: {keyboard.listen_only}")

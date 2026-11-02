@@ -285,3 +285,19 @@ def test_an_input_folder_that_cant_be_listed_is_said_once(setup, tmp_path, capsy
     out = capsys.readouterr().out
     assert out.count(f"couldn't list {helper.input_dir} (ENOENT") == 1
     assert out.count("watching no keyboard at all") == 1
+
+
+def test_right_ctrl_held_on_a_read_only_keyboard_too_refuses_the_hide(setup):
+    """Right Ctrl down on a writable keyboard, then on a read-only one as
+    well: hiding it on the writable one alone was answered OK while the
+    read-only one still held Ctrl for the desktop."""
+    helper, kb, connect, say, heard, _seat = setup
+    other = _read_only_beside(helper, kb)
+    sock = _ready(connect, say, heard, "97")
+    kb.press(RCTRL)
+    assert heard(sock) == ["DOWN 97 -"]
+    other.press(RCTRL)
+    assert heard(sock) == []                        # held already: no second DOWN
+    say(sock, "HIDE 97")
+    assert heard(sock) == ["ERR listen-only keyboard"]
+    assert kb.calls == other.calls == [] and helper.hide is None
