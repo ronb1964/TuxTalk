@@ -33,8 +33,8 @@
 # Output: talktype-whisper-vulkan-<version>-b<build>-x64.tar.gz and its
 # .sha256. The folder inside is always talktype-whisper-vulkan-<version>;
 # TuxTalk unpacks each build into a folder of its own (whisper-vulkan/
-# <version>-b<build>) and removes the earlier one once the new one is in
-# place. Afterwards put the version, build and SHA256 into
+# <version>-b<build>), keeps the build it used before, and removes older
+# ones. Afterwards put the version, build and SHA256 into
 # src/tuxtalk/whisper_vulkan.py.
 set -e
 if [ $# -ne 2 ]; then

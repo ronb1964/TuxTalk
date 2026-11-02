@@ -27,8 +27,19 @@ LD_LIBRARY_PATH="$ENGINE" WHISPER_API_KEY="$KEY" "$ENGINE/whisper-server" -m "$M
     -ng -t 2 >/dev/null 2>&1 &
 SERVER=$!
 trap 'kill $SERVER 2>/dev/null; rm -rf "$PUBLIC"' EXIT
-for _ in $(seq 120); do
-    [ "$(curl -s -o /dev/null -w '%{http_code}' "$URL/health")" = 200 ] && break
+# Up to a minute to load the model; each try bounded, so a server that
+# takes the connection and never answers can't hang the build.
+for try in $(seq 120); do
+    if ! kill -0 "$SERVER" 2>/dev/null; then
+        echo "  FAIL  whisper-server ended while starting"
+        exit 1
+    fi
+    [ "$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 2 --max-time 5 \
+        "$URL/health")" = 200 ] && break
+    if [ "$try" = 120 ]; then
+        echo "  FAIL  whisper-server didn't answer its health check within a minute"
+        exit 1
+    fi
     sleep 0.5
 done
 

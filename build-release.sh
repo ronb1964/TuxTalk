@@ -34,22 +34,46 @@ echo ""
 # first. Otherwise every new Vulkan setup fails its download, and first run
 # then saves the processor as the device, which stays after the engine is
 # published.
-ENGINE_PY="$PROJECT_DIR/src/tuxtalk/whisper_vulkan.py"
-ENGINE_VERSION=$(sed -n 's/^ENGINE_VERSION = "\([^"]*\)".*/\1/p' "$ENGINE_PY")
-ENGINE_BUILD=$(sed -n 's/^ENGINE_BUILD = \([0-9]*\).*/\1/p' "$ENGINE_PY")
-ENGINE_SHA256=$(sed -n 's/^ENGINE_SHA256 = "\([0-9a-f]*\)".*/\1/p' "$ENGINE_PY")
-ENGINE_ASSET="talktype-whisper-vulkan-${ENGINE_VERSION}-b${ENGINE_BUILD}-x64.tar.gz"
-ENGINE_URL="https://github.com/ronb1964/TuxTalk/releases/download/whisper-vulkan-${ENGINE_VERSION}-b${ENGINE_BUILD}/$ENGINE_ASSET"
-PUBLISHED_SHA256=$(curl -fsL --max-time 30 "$ENGINE_URL.sha256" | cut -d' ' -f1 || true)
-if [ -z "$ENGINE_SHA256" ] || [ "$PUBLISHED_SHA256" != "$ENGINE_SHA256" ] ||
-        ! curl -fsIL --max-time 30 "$ENGINE_URL" >/dev/null; then
-    echo "❌ The Vulkan engine this version downloads isn't published as it expects:"
+# ENGINE_URL and ENGINE_SHA256 as whisper_vulkan.py works them out, its
+# ENGINE_ lines run alone (importing the module needs numpy and the rest).
+read -r ENGINE_URL ENGINE_SHA256 < <(python3 - "$PROJECT_DIR/src/tuxtalk/whisper_vulkan.py" <<'PY'
+import ast, sys
+tree = ast.parse(open(sys.argv[1]).read())
+names = {}
+for node in tree.body:
+    if (isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name)
+            and node.targets[0].id.startswith("ENGINE_")):
+        exec(compile(ast.Module([node], []), sys.argv[1], "exec"), names)
+print(names["ENGINE_URL"], names["ENGINE_SHA256"])
+PY
+)
+if [ -z "$ENGINE_URL" ] || [ -z "$ENGINE_SHA256" ]; then
+    echo "❌ Could not read ENGINE_URL and ENGINE_SHA256 from src/tuxtalk/whisper_vulkan.py"
+    exit 1
+fi
+# Each answer is the body (or nothing) and the HTTP status; 000 is no answer.
+SHA256_REPLY=$(curl -sL --max-time 30 -w ' %{http_code}' "$ENGINE_URL.sha256" || true)
+ASSET_STATUS=$(curl -sIL -o /dev/null --max-time 30 -w '%{http_code}' "$ENGINE_URL" || true)
+SHA256_STATUS=${SHA256_REPLY##* }
+PUBLISHED_SHA256=""
+if [ "$SHA256_STATUS" = 200 ]; then
+    PUBLISHED_SHA256=$(echo "$SHA256_REPLY" | head -1 | cut -d' ' -f1)
+fi
+if [ "$SHA256_STATUS" = 000 ] || [ "$ASSET_STATUS" = 000 ]; then
+    echo "❌ Couldn't reach GitHub to check the Vulkan engine this version downloads:"
     echo "   $ENGINE_URL"
-    echo "   SHA256 in whisper_vulkan.py: ${ENGINE_SHA256:-none}, published: ${PUBLISHED_SHA256:-none}"
+    echo "   Build again once you're online."
+    exit 1
+fi
+if [ "$SHA256_STATUS" != 200 ] || [ "$ASSET_STATUS" != 200 ] ||
+        [ "$PUBLISHED_SHA256" != "$ENGINE_SHA256" ]; then
+    echo "❌ The Vulkan engine this version downloads isn't published as it expects:"
+    echo "   $ENGINE_URL (HTTP $ASSET_STATUS, its .sha256 HTTP $SHA256_STATUS)"
+    echo "   SHA256 in whisper_vulkan.py: $ENGINE_SHA256, published: ${PUBLISHED_SHA256:-none}"
     echo "   Publish its pre-release (build-vulkan-engine.sh says how) before building."
     exit 1
 fi
-echo "✅ Vulkan engine check: build $ENGINE_BUILD of whisper.cpp $ENGINE_VERSION is published"
+echo "✅ Vulkan engine check: $(basename "$ENGINE_URL") is published"
 echo ""
 
 # Use podman if available, otherwise docker
