@@ -4,6 +4,8 @@ line-break marker, and the result gets tidy punctuation, spacing and capitals.
 """
 import re
 
+from .spoken_quotes import mark_spoken_quotes
+
 # A line break in a dictation ("new line"). Typed, it's a Shift+Enter: a plain
 # Enter would send a chat message or run a terminal's half-typed command.
 LINE_BREAK = "\xa7SHIFT_ENTER\xa7"
@@ -87,7 +89,7 @@ _LITERAL_PATTERNS = [
 ]
 
 # --- _protect_command_words: command words used as English nouns ---
-# Words like "period", "comma", "return", "dash", "quote" are command triggers
+# Words like "period", "comma", "return" and "dash" are command triggers
 # in dictation, but they are also normal English nouns in phrases like "period
 # of time", "in return", "a dash of salt", "the comma operator". Without this
 # pass, those phrases get corrupted: "period of time" → "period. Of time".
@@ -145,14 +147,6 @@ _CONTEXT_PROTECT_PATTERNS = [
     # "dash of [word]"
     (re.compile(r"\bdash(\s+of\b)", re.IGNORECASE), r"__LIT_DASH__\1"),
 
-    # "[article/adj/possessive] quote"
-    (re.compile(
-        r"\b(a|an|the|this|that|my|his|her|its|our|their|your|every|each|"
-        r"any|some|famous|great|good|nice|important|brief|long|short|"
-        r"memorable|favorite|powerful|funny|inspiring)\s+quote\b",
-        re.IGNORECASE,
-    ), r"\1 __LIT_QUOTE__"),
-
     # "ended with a question mark", "add a comma": with an article the mark
     # is being talked about, not dictated. Nobody dictates "a question mark"
     # to end a sentence (without this, "ended with a question mark" typed
@@ -206,20 +200,15 @@ _MULTI_WORD_REPLACEMENTS = [
     (re.compile(r"\bclose\s+bracket\b", re.IGNORECASE), "]"),
     (re.compile(r"\bopen\s+brace\b", re.IGNORECASE), "{"),
     (re.compile(r"\bclose\s+brace\b", re.IGNORECASE), "}"),
-    (re.compile(r"\bopen\s+quote\b|\bopen\s+quotes\b", re.IGNORECASE), "\u201c"),
-    (re.compile(r"\bclose\s+quote\b|\bclose\s+quotes\b", re.IGNORECASE), "\u201d"),
 ]
 
 # --- _spoken_marks_to_symbols: single words ---
-# A bare "quote" opens or closes depending on its place: _pair_spoken_quotes.
-_SPOKEN_QUOTE = "\x00QUOTE\x00"
 _SINGLE_WORD_REPLACEMENTS = [
     (re.compile(r"\bcomma\b,?", re.IGNORECASE), ","),
     (re.compile(r"\bsemicolon\b;?", re.IGNORECASE), ";"),
     (re.compile(r"\bcolon\b:?", re.IGNORECASE), ":"),
     (re.compile(r"\bperiod\b\.?", re.IGNORECASE), "."),
     (re.compile(r"\bapostrophe\b", re.IGNORECASE), "'"),
-    (re.compile(r"\bquote\b", re.IGNORECASE), _SPOKEN_QUOTE),
     # "em dash" MUST run before the bare hyphen/dash rule — otherwise
     # "em dash" is rewritten to "em -" first and this pattern never matches.
     (re.compile(r"\bem\s*dash\b", re.IGNORECASE), "—"),
@@ -228,19 +217,6 @@ _SINGLE_WORD_REPLACEMENTS = [
     # " - " the engine wrote for a pause is never mistaken for one.
     (re.compile(r" *\b(?:hyphen|dash)\b *", re.IGNORECASE), "-"),
 ]
-
-def _pair_spoken_quotes(text: str) -> str:
-    """Each bare "quote" said, as an opening and then a closing smart quote
-    in turn ("he said quote hello quote"), so _tidy_punctuation tidies their spaces as
-    it does an "open quote". A last one without a partner is a plain ".
-    """
-    parts = text.split(_SPOKEN_QUOTE)
-    said = len(parts) - 1
-    marks = ["\u201d" if i % 2 else "\u201c" for i in range(said)]
-    if said % 2:
-        marks[-1] = '"'
-    return "".join(part + mark for part, mark in zip(parts, marks + [""]))
-
 
 # --- _tidy_punctuation: spaces inside brackets and quotes, before marks,
 #     and runs of marks, in this order ---
@@ -600,11 +576,12 @@ def _protect_command_words(text: str) -> str:
 
 def _spoken_marks_to_symbols(text: str) -> str:
     """Spoken punctuation and breaks as symbols: "comma" is ",", "new line"
-    LINE_BREAK. The phrases go before single words ("question mark" before
-    "mark"), and bare quotes are paired last."""
+    LINE_BREAK. Quotes first, each a mark or the word (spoken_quotes), then
+    the phrases before single words ("question mark" before "mark")."""
+    text = mark_spoken_quotes(text)
     for pat, repl in (*_MULTI_WORD_REPLACEMENTS, *_SINGLE_WORD_REPLACEMENTS):
         text = pat.sub(repl, text)
-    return _pair_spoken_quotes(text)
+    return text
 
 
 def _tidy_punctuation(text: str) -> str:
